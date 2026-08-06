@@ -50,6 +50,66 @@ use fub_abi::{Actor, Event, Notice, Origin};
 /// rincorrere.
 const BACKLOG_CEILING: usize = 1024;
 
+/// Il modulo esiste per una parola sola: `rx` è privato **qui dentro**.
+mod intake {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc::Receiver;
+    use std::sync::Arc;
+
+    use fub_abi::Notice;
+
+    /// Il canale di un abbonamento **con il conto attaccato**, e col `Receiver`
+    /// privato apposta.
+    ///
+    /// La ragione è un difetto misurato: il conto degli arretrati si sottraeva
+    /// in una funzione che i **tre** rami di ritiro dovevano ricordarsi di
+    /// chiamare, e due di loro — l'attesa bloccante di `recv` e quella di
+    /// `recv_timeout` — non la chiamavano. La finestra era stretta (ci si arriva
+    /// solo quando la coda è vuota al primo tentativo e chi emette la riempie
+    /// subito dopo), ma il conto sbagliato non si ripara più: cresce a ogni
+    /// passaggio, e arrivato al tetto degli arretrati il bus comincia a buttare
+    /// gli eventi recuperabili di un abbonato che non è indietro di niente.
+    ///
+    /// Qui il ramo dimenticabile non esiste: fuori da questo modulo il
+    /// `Receiver` non si può nominare, quindi un notice non può uscire dal
+    /// canale se non da [`Intake::take`], che sottrae **per costruzione**. Chi
+    /// aggiunge un modo di aspettare sceglie *quanto* attendere — è ciò che
+    /// passa nella chiusura — non *se* scalare l'arretrato; e se prova a
+    /// scavalcare la porta non compila.
+    pub(super) struct Intake {
+        rx: Receiver<Notice>,
+        queued: Arc<AtomicUsize>,
+    }
+
+    impl Intake {
+        pub(super) fn new(rx: Receiver<Notice>, queued: Arc<AtomicUsize>) -> Self {
+            Self { rx, queued }
+        }
+
+        /// L'**unico** posto in cui un notice esce dal canale.
+        ///
+        /// `attesa` dice come aspettarlo — subito, per sempre, o fino a un
+        /// tempo —: qualunque sia, ciò che esce è già stato sottratto dal conto.
+        pub(super) fn take<E>(
+            &self,
+            attesa: impl FnOnce(&Receiver<Notice>) -> Result<Notice, E>,
+        ) -> Result<Notice, E> {
+            let notice = attesa(&self.rx)?;
+            self.queued.fetch_sub(1, Ordering::Relaxed);
+            Ok(notice)
+        }
+
+        /// Quanti notice risultano accodati e non ancora ritirati: è la
+        /// grandezza che il tetto legge, e i banchi la guardano da qui.
+        #[cfg(test)]
+        pub(super) fn queued(&self) -> usize {
+            self.queued.load(Ordering::Relaxed)
+        }
+    }
+}
+
+use intake::Intake;
+
 /// Il capo ricevente di un abbonamento, **col proprio conto degli arretrati**.
 ///
 /// Non è un `Receiver<Notice>` nudo perché il conto va sottratto quando un
@@ -57,8 +117,7 @@ const BACKLOG_CEILING: usize = 1024;
 /// sono quelle di `std` e si comportano allo stesso modo: chi le usava prima non
 /// cambia una riga.
 pub struct Subscription {
-    rx: Receiver<Notice>,
-    queued: Arc<AtomicUsize>,
+    intake: Intake,
     dropped: Arc<AtomicU64>,
 }
 
@@ -68,32 +127,32 @@ impl Subscription {
         // aspettare: chi ha finito di ritirare è esattamente chi può
         // riconciliare, e farlo aspettare un evento nuovo per dirglielo
         // vorrebbe dire non dirglielo affatto in un vault fermo.
-        match self.rx.try_recv() {
-            Ok(notice) => Ok(self.taken(notice)),
+        match self.intake.take(Receiver::try_recv) {
+            Ok(notice) => Ok(notice),
             Err(TryRecvError::Empty) => match self.debt() {
                 Some(overflow) => Ok(overflow),
-                None => self.rx.recv(),
+                None => self.intake.take(Receiver::recv),
             },
             Err(TryRecvError::Disconnected) => match self.debt() {
                 Some(overflow) => Ok(overflow),
-                None => self.rx.recv(),
+                None => self.intake.take(Receiver::recv),
             },
         }
     }
 
     pub fn try_recv(&self) -> Result<Notice, TryRecvError> {
-        match self.rx.try_recv() {
-            Ok(notice) => Ok(self.taken(notice)),
+        match self.intake.take(Receiver::try_recv) {
+            Ok(notice) => Ok(notice),
             Err(vuota) => self.debt().ok_or(vuota),
         }
     }
 
     pub fn recv_timeout(&self, timeout: Duration) -> Result<Notice, RecvTimeoutError> {
-        match self.rx.try_recv() {
-            Ok(notice) => Ok(self.taken(notice)),
+        match self.intake.take(Receiver::try_recv) {
+            Ok(notice) => Ok(notice),
             Err(TryRecvError::Empty) => match self.debt() {
                 Some(overflow) => Ok(overflow),
-                None => self.rx.recv_timeout(timeout),
+                None => self.intake.take(|rx| rx.recv_timeout(timeout)),
             },
             Err(TryRecvError::Disconnected) => match self.debt() {
                 Some(overflow) => Ok(overflow),
@@ -121,9 +180,22 @@ impl Subscription {
         }
     }
 
-    fn taken(&self, notice: Notice) -> Notice {
-        self.queued.fetch_sub(1, Ordering::Relaxed);
-        notice
+    /// Quanti notice risultano accodati e non ancora ritirati.
+    #[cfg(test)]
+    fn queued(&self) -> usize {
+        self.intake.queued()
+    }
+
+    /// Ritira passando dalla porta con un'attesa **fabbricata dal banco**: è il
+    /// solo modo di costruire la finestra stretta invece di sperarla, cioè di
+    /// far succedere l'emissione *dopo* che il ramo non bloccante ha trovato
+    /// vuoto e *prima* che quello bloccante riceva.
+    #[cfg(test)]
+    fn take_waiting<E>(
+        &self,
+        attesa: impl FnOnce(&Receiver<Notice>) -> Result<Notice, E>,
+    ) -> Result<Notice, E> {
+        self.intake.take(attesa)
     }
 }
 
@@ -197,8 +269,7 @@ impl EventBus {
             dropped: Arc::clone(&dropped),
         });
         Subscription {
-            rx,
-            queued,
+            intake: Intake::new(rx, queued),
             dropped,
         }
     }
@@ -298,6 +369,59 @@ mod tests {
                 .iter()
                 .any(|n| matches!(&n.event, Event::JobDone { id, .. } if *id == JobId(7))),
             "l'esito del job è stato buttato col resto: chi lo aspettava aspetta per sempre"
+        );
+    }
+
+    #[test]
+    fn a_notice_that_arrives_while_waiting_is_subtracted_too() {
+        let bus = EventBus::new();
+        let rx = bus.subscribe();
+        // La finestra si **costruisce**, non si spera: la coda è vuota (nessuno
+        // ha ancora emesso), l'emissione avviene dentro l'attesa — cioè dopo
+        // che il ramo non bloccante avrebbe trovato vuoto — e il notice esce
+        // dal ramo che aspetta. È la sequenza esatta del difetto, senza
+        // scheduler e senza tempi.
+        let ricevuto = rx.take_waiting(|canale| {
+            bus.emit(cambiato(1));
+            canale.recv()
+        });
+        assert!(ricevuto.is_ok());
+        assert_eq!(
+            rx.queued(),
+            0,
+            "il notice è uscito dal canale senza essere sottratto dagli \
+             arretrati: il conto non si ripara più, e a BACKLOG_CEILING passaggi \
+             il bus butta i recuperabili di chi non è indietro di niente"
+        );
+    }
+
+    #[test]
+    fn the_count_survives_a_race_between_emitting_and_waiting() {
+        // La stessa proprietà dalla porta pubblica, con chi emette che parte
+        // solo quando chi ritira sta per mettersi ad aspettare: qui la finestra
+        // non è garantita a ogni giro, ma ciò che si accumula quando capita
+        // resta accumulato, e alla fine il conto o è zero o non lo è più.
+        const GIRI: usize = 256;
+        let bus = EventBus::new();
+        let rx = bus.subscribe();
+        let (pronto_tx, pronto_rx) = channel::<()>();
+        let emettitore = std::thread::spawn(move || {
+            for n in 0..GIRI {
+                if pronto_rx.recv().is_err() {
+                    return;
+                }
+                bus.emit(cambiato(n));
+            }
+        });
+        for _ in 0..GIRI {
+            pronto_tx.send(()).unwrap();
+            rx.recv().unwrap();
+        }
+        emettitore.join().unwrap();
+        assert_eq!(
+            rx.queued(),
+            0,
+            "ritirati tutti i notice, l'arretrato deve essere zero"
         );
     }
 

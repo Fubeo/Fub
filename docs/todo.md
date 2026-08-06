@@ -437,15 +437,6 @@ sbagliato. Otto delle quattordici affermazioni ricevute erano false o già
 risolte in codice, e non stanno qui: la loro smentita sta nel resoconto della
 verifica, non in un elenco di lavoro.
 
-- [ ] **Il conto della coda non torna se il notice arriva mentre si aspetta**
-  (`crates/fub-kernel/src/bus.rs`). In `Subscription::recv` e
-  `recv_timeout`, i rami `self.rx.recv()` e `self.rx.recv_timeout(timeout)`
-  restituiscono il notice **senza passare da `taken`**: solo `try_recv` lo
-  sottrae. La finestra è stretta — ci si arriva quando la coda era vuota al
-  `try_recv` e chi emette la riempie subito dopo — ma il conto sbagliato **non
-  si ripara più**, cresce a ogni passaggio, e arrivato a `BACKLOG_CEILING` il
-  bus comincia a buttare gli eventi ricuperabili di un abbonato che in realtà
-  non è indietro di niente. Il rimedio è di una riga per ramo.
 - [ ] **Il lucchetto esclusivo del watcher tiene dentro il disco**
   (`crates/fub-host/src/watcher.rs`). Il lotto prende `workspace.write()` e
   sotto quel lucchetto fa il parse di ogni file cambiato **e** `flush_indexes()`,
