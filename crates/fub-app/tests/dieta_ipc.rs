@@ -484,9 +484,20 @@ fn comandi_definiti(src: &str) -> BTreeSet<&str> {
 ///
 /// Il blocco dev'essere uno solo. Con due, uno dei due sarebbe la superficie
 /// vera e l'altro un elenco che questo test non guarda — che è il modo più
-/// comodo di aggiungere un comando senza che nessuno lo veda.
+/// comodo di aggiungere un comando senza che nessuno lo veda. Il conto **non**
+/// legge il primo blocco che trova: li conta tutti e pretende che siano uno,
+/// che è la sola forma che sa dire di no a un secondo (la stessa di
+/// `i_ponti_restano_sei` e di `file-con-superficie-ipc`).
+///
+/// L'apertura si riconosce **senza il prefisso** `tauri::`, e non è pedanteria:
+/// `la_superficie_ipc_sta_in_un_file_solo` cerca `generate_handler!` nudo negli
+/// altri file del crate, e cercare qui la forma lunga voleva dire che le due
+/// domande — *uno solo in questo file* e *nessuno negli altri* — leggevano due
+/// stringhe diverse. Un `use tauri::generate_handler;` più un secondo
+/// `generate_handler![…]` in questo stesso file passava la pretesa, e i suoi
+/// nomi non arrivavano né all'allowlist né a nessun altro banco.
 fn comandi_registrati(src: &str) -> BTreeSet<&str> {
-    const APERTURA: &str = "tauri::generate_handler![";
+    const APERTURA: &str = "generate_handler![";
 
     let righe: Vec<(usize, &str)> = src
         .lines()
@@ -798,6 +809,30 @@ pub fn con_un_attributo_in_mezzo() {}\n\
     let attesi = BTreeSet::from(["vero", "con_un_attributo_in_mezzo"]);
     assert_eq!(comandi_definiti(finto), attesi);
     assert_eq!(comandi_registrati(finto), attesi);
+}
+
+/// **E deve accorgersi del secondo blocco, comunque sia scritto.**
+///
+/// La pretesa «i blocchi sono uno» c'è da sempre, ed è la forma giusta: un
+/// parser che *fondesse* due elenchi renderebbe normale averne due, mentre la
+/// superficie IPC di questo crate è **una**. Ma la pretesa cercava
+/// `tauri::generate_handler![`, e il macro si può chiamare anche senza il
+/// percorso — `use tauri::generate_handler;` e poi `generate_handler![…]`. Con
+/// la forma corta il secondo blocco non veniva contato, l'`assert` vedeva un
+/// blocco solo e passava, e i comandi di quel secondo elenco non arrivavano
+/// all'allowlist: registrati e invocabili dal webview, e dichiarati da nessuno.
+///
+/// Era anche l'unico punto in cui questo file leggeva la domanda con una
+/// stringa diversa da `la_superficie_ipc_sta_in_un_file_solo`, che negli altri
+/// file cerca `generate_handler!` nudo. Adesso è la stessa.
+#[test]
+#[should_panic(expected = "sono 2, e dev'essercene esattamente")]
+fn l_estrattore_vede_il_secondo_blocco_scritto_senza_il_prefisso() {
+    comandi_registrati(
+        "        .invoke_handler(tauri::generate_handler![vero])\n\
+         use tauri::generate_handler;\n\
+                 .invoke_handler(generate_handler![di_nascosto])\n",
+    );
 }
 
 /// E deve fermarsi su ciò che non capisce, invece di far sparire un comando.

@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Sessantuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Sessanta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -563,7 +563,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0102 | fra `scrivi_meta` riuscita e `scrivi_index` fallita un `meta.json` resta «viva» sotto un indice «cestinata»: una ricostruzione dai meta risuscita la nota — gemello del 0044 | `fub-features` · `versioning.rs` `applica` | versioning |
 | 0104 | `intestazioniSchede` ricostruisce **tutte** le linguette a ogni riconciliazione, e chi ci sta sopra col tab perde il fuoco | `frontend` · `ui/node.ts` `intestazioniSchede` | shell |
 | 0105 | nei casi `select` e `radio` il lettore registrato da `valore` cattura `node` una volta sola e `aggiorna` non lo rilega: un campo riusato legge la forma di ieri — gemello del 0025 | `frontend` · `ui/node.ts` `disegna` | shell |
-| 0108 | `comandi_registrati` legge il **primo** `generate_handler!` che trova: la superficie IPC è intera perché un `assert` lo pretende, non perché il parser la veda | `fub-app` · `tests/dieta_ipc.rs` `comandi_registrati` | presidi |
 
 ## Gli allegati
 
