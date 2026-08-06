@@ -39,15 +39,29 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::format::SourceKind;
 use crate::text::{Localize, Text};
 
 /// Errore prodotto da un `FormatProvider`.
 ///
-/// Resta a `String` di proposito, e la differenza con [`PluginError`] è chi
-/// legge: questo lo produce un parser su un sorgente, dice *dove* e *cosa* di un
-/// documento — un numero di riga, un delimitatore non chiuso — e chi lo consuma
-/// è il codice che l'ha chiamato. Non è la frase che compare sotto un pulsante.
-/// Quando lo diventerà, sarà perché qualcuno l'avrà avvolto in un `PluginError`.
+/// Le prime tre restano a `String` di proposito, e la differenza con
+/// [`PluginError`] è chi legge: quelle le produce un parser su un sorgente,
+/// dicono *dove* e *cosa* di un documento — un numero di riga, un delimitatore
+/// non chiuso — e chi le consuma è il codice che le ha chiamate. Non sono la
+/// frase che compare sotto un pulsante, e il kernel le porta a
+/// [`Internal`](PluginError::Internal), cioè a un log.
+///
+/// [`Unsupported`](FormatError::Unsupported) **non è come le altre tre**, ed è
+/// la ragione per cui è l'unica che non porta prosa. Non è una diagnosi su un
+/// documento: è il **disaccordo fra due dati già dichiarati** — la forma che il
+/// provider ha chiesto in [`FormatDescriptor::source`] e quella che ha ricevuto
+/// —, il kernel la porta a [`Unserved`](PluginError::Unserved), cioè sotto gli
+/// occhi di chi ha appena aperto un file, e la frase è **derivabile per intero**
+/// da quei due dati. Un payload di prosa lì voleva dire una cosa sola: che a
+/// scriverla fosse chi ha implementato il provider, nella lingua in cui gli
+/// veniva, e che nessuno potesse più comporla diversamente.
+///
+/// [`FormatDescriptor::source`]: crate::format::FormatDescriptor::source
 #[derive(Clone, Debug, PartialEq, thiserror::Error, Serialize, Deserialize)]
 pub enum FormatError {
     #[error("parse fallito: {0}")]
@@ -56,8 +70,23 @@ pub enum FormatError {
     Render(String),
     #[error("serialize fallito: {0}")]
     Serialize(String),
-    #[error("formato non supportato: {0}")]
-    Unsupported(String),
+    /// **La sorgente non è la sua**: il provider aveva dichiarato di volere
+    /// l'altra forma (§3.4).
+    ///
+    /// È una **variante di struct**, e non per gusto: senza `..` un campo nuovo
+    /// qui dà `E0027` a chi la costruisce e a chi la legge — la forma di
+    /// `Inline`/`Block` in `fub-format-markdown::serialize`. Chi la costruisce
+    /// non può dimenticarsi di dire *chi* ha rifiutato e *cosa* ha ricevuto,
+    /// perché sono i due dati con cui la frase si compone, e la frase la
+    /// compone chi sta sulla via d'uscita — non lui.
+    #[error("il formato «{format}» non legge una sorgente di tipo {got:?}")]
+    Unsupported {
+        /// L'id del formato che ha detto di no — quello del suo
+        /// [`FormatDescriptor::id`](crate::format::FormatDescriptor::id).
+        format: String,
+        /// La forma di sorgente che ha ricevuto, e che non è la sua.
+        got: SourceKind,
+    },
 }
 
 /// Errore prodotto da un plugin (nativo o WASM), e **la forma con cui ogni

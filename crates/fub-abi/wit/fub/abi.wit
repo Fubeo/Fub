@@ -423,11 +423,23 @@ interface format {
         target: render-target,
         options: option-map,
     }
+    /// Il rifiuto di una sorgente: **non prosa, i due dati da cui la prosa si
+    /// compone** (§24.3). La frase la scrive chi la mostra, che è l'unico a
+    /// sapere in che lingua legge chi guarda.
+    record format-error-unsupported {
+        /// L'id del formato che ha detto di no (`format-descriptor.id`).
+        format: string,
+        /// La forma di sorgente che ha ricevuto, e che non è la sua.
+        got: source-kind,
+    }
     variant format-error {
         parse(string),
         render(string),
         serialize(string),
-        unsupported(string),
+        /// A differenza delle altre tre non è una diagnosi su un documento: è
+        /// il disaccordo fra `format-descriptor.source` e ciò che è arrivato, e
+        /// l'unica delle quattro che l'host porta davanti a una persona.
+        unsupported(format-error-unsupported),
     }
 
     descriptor: func() -> format-descriptor;

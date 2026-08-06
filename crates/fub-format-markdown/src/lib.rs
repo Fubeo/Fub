@@ -63,10 +63,9 @@ impl FormatProvider for MarkdownProvider {
     ) -> Result<DocumentModel, FormatError> {
         // Un provider testuale non indovina l'encoding: dei byte sono un «non
         // so», non un tentativo. Vedi `FormatDescriptor::source`.
-        let text = source.text().ok_or_else(|| {
-            FormatError::Unsupported(
-                "il provider markdown vuole testo UTF-8, non byte grezzi".to_string(),
-            )
+        let text = source.text().ok_or_else(|| FormatError::Unsupported {
+            format: self.descriptor().id,
+            got: source.kind(),
         })?;
         parse::parse_markdown(text, ctx)
     }

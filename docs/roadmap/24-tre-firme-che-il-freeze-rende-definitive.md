@@ -1,6 +1,6 @@
 # 24. Tre firme che il freeze rende definitive
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): un punto del contratto che oggi costa un campo e dopo il freeze di M4 costa una migrazione di versione. Erano tre, e **due sono state chiuse scoprendo che non scadevano affatto**: la §24.1 con la [0130](../decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md) — i tipi invisibili dalla radice erano sessantuno e non sette, e un `pub use` è additivo — e la §24.2 con la [0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md), perché `enabled` è un metodo Rust di comodo e al confine WIT non esiste: la `option-map` i tre stati li portava già tutti.
+Una **seduta chiusa** della [roadmap infrastrutturale](../todo.md): un punto del contratto che oggi costa un campo e dopo il freeze di M4 costa una migrazione di versione. **Tutte e tre le voci sono chiuse, e due delle tre non scadevano affatto**: la §24.1 con la [0130](../decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md) — i tipi invisibili dalla radice erano sessantuno e non sette, e un `pub use` è additivo — e la §24.2 con la [0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md), perché `enabled` è un metodo Rust di comodo e al confine WIT non esiste: la `option-map` i tre stati li portava già tutti. La §24.3 sì, e a dirlo è stata la sola cosa che poteva dirlo: la [0132](../decisions/0132-un-rifiuto-non-e-una-frase.md) ha dovuto **ritagliare la linea di base congelata**, perché `format-error` è il tipo d'errore delle funzioni che un plugin di formato *esporta* e ritiparne un caso non è un'aggiunta in nessuna lettura.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -27,8 +27,10 @@ scade col freeze: oggi costa un campo, dopo costa una migrazione di versione* �
 e non la loro importanza, che è modesta. **Il criterio, su due delle tre, non
 reggeva**, e a scoprirlo è stato ogni volta il giro che l'ha chiusa — non chi le
 ha scritte: quello che scade non si deduce leggendo la voce, si misura andando a
-vedere se la firma attraversa davvero il confine. Sulla §24.3 non è ancora stato
-verificato da nessuno, e chi la prende faccia quella misura per prima.
+vedere se la firma attraversa davvero il confine. Sulla §24.3 quella misura ha
+dato **sì**, ed è l'unica delle tre.
+
+---
 
 **Perché stanno insieme.** Sono la stessa domanda a tre distanze dal confine:
 *ciò che il contratto dice, arriva a chi deve leggerlo?* La §24.1 era ciò che il
@@ -46,31 +48,29 @@ cambiare è che adesso è una **proiezione** di quella che risponde per intero.
 
 ---
 
-### 24.3 `Unsupported` è l'unico errore che non è testo che qualcuno legge
+## Com'è finita, e cosa lascia
 
-*aperta · strato **contratto** · **P0***
+**Due P0 su tre erano P0 per la ragione sbagliata**, ed è il consuntivo che
+questa seduta lascia al piano. Non è un caso di tre: è un caso di **come sono
+state aperte**. Le tre voci sono nate da un criterio dichiarato — *tocca una
+firma, quindi scade col freeze* — applicato **leggendo**, e leggendo si vede che
+un simbolo esiste, non dove arriva. La §24.1 nominava una firma che si ripara
+per aggiunta; la §24.2 nominava una firma che al confine **non c'è**; solo la
+§24.3 nominava un caso di variant pubblicato, ed è l'unica che ha acceso il
+presidio che quella promessa la sorveglia (`wit_additivity`).
 
-La [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) ha stabilito
-che un errore è testo, e che il testo si localizza sulla via d'uscita col catalogo
-di chi ha scritto la frase. `FormatError::Unsupported(String)`
-(`crates/fub-abi/src/error.rs:60`) porta una `String` nuda: non un `Text` con la
-sua chiave e i suoi argomenti, cioè non qualcosa che la
-[0040](../decisions/0040-chi-localizza.md) sappia tradurre.
+La regola che ne esce, e che vale per la prossima P0 di firma di questo piano:
+**«scade col freeze» non è una lettura, è una misura**, e la misura è una sola —
+il simbolo attraversa `crates/fub-abi/wit/`, e la riparazione tocca
+`wit/frozen/`? Finché quella misura non è fatta, la sigla «P0» dice quanto si è
+preoccupato chi scriveva la voce, non quanto costa aspettare. Le tre volte in cui
+è stata fatta, ha cambiato la conclusione due volte su tre.
 
-- [ ] **È la variante che un utente vede più spesso di tutte.** È la risposta
-      che il contratto prescrive a un `FormatProvider` testuale che riceve un
-      `DocumentSource::Bytes`, ed è quindi ciò che compare quando si apre un file
-      col provider sbagliato — il caso normale in un vault che contiene anche
-      allegati (§14.1), non un caso di frontiera. Un utente italiano legge una
-      frase inglese scritta da chi ha implementato il provider.
-- [ ] **La domanda che decide la forma: `Unsupported` di chi è?** Se è del
-      *contratto*, la frase la scrive `fub-abi` e la chiave sta nel suo catalogo,
-      e allora il campo giusto non è un `Text` libero ma i due dati che rendono la
-      frase componibile — il formato che ha rifiutato e la specie di sorgente che
-      ha ricevuto. Se è del *provider*, allora è un `Text` con il catalogo di chi
-      lo emette, come ogni altro errore dopo la 0041. Sono due firme diverse, e
-      sceglierne una dentro un'implementazione vorrebbe dire che nessuno la trova
-      più.
-
-*Provenienza: `issues.md` 0014, misurata il 2026-07-31 e riverificata il
-2026-08-06 (`crates/fub-abi/src/error.rs:60`: `Unsupported(String)`).*
+Il consuntivo ha però un verso opposto, e va scritto insieme all'altro: **tutte
+e tre sono valse il giro lo stesso**, e per una ragione che non era nella loro
+urgenza. Ognuna delle tre ha trovato la cosa vera un centimetro più in là di
+dove la voce guardava — sessantuno tipi invece di sette, due funzioni che
+leggevano la stessa mappa in due modi, un banco della
+[0054](../decisions/0054-il-banco-del-lato-provider.md) che citava una regola nel
+commento e ne provava metà nel corpo. Una voce sbagliata sulla scadenza può
+essere giusta sul posto dove guardare.

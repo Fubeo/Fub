@@ -39,6 +39,7 @@
 
 use std::collections::BTreeSet;
 
+use fub_abi::error::FormatError;
 use fub_abi::format::{DocumentSource, ParseContext, SourceKind};
 use fub_abi::model::{
     heading_slugs, Block, DocId, DocumentModel, Inline, Link, LinkTarget, Span, Tag,
@@ -353,12 +354,40 @@ pub fn un_provider_testuale_rifiuta_i_byte<F: FormatProvider + ?Sized>(formato: 
         &DocumentSource::Bytes(vec![0xff, 0xfe, 0x00, 0x41]),
         &ParseContext::bare("conformita/byte.bin"),
     );
-    assert!(
-        esito.is_err(),
-        "`{}` si dichiara `SourceKind::Text` ma ha parsato dei byte grezzi\n\
-         invece di rifiutarli. Indovinare un encoding riesce quasi sempre, e\n\
-         quando sbaglia produce un documento leggibile e **sbagliato**: un danno\n\
-         che si vede solo dopo averlo salvato sopra l'originale.",
+    let Err(e) = esito else {
+        panic!(
+            "`{}` si dichiara `SourceKind::Text` ma ha parsato dei byte grezzi\n\
+             invece di rifiutarli. Indovinare un encoding riesce quasi sempre, e\n\
+             quando sbaglia produce un documento leggibile e **sbagliato**: un danno\n\
+             che si vede solo dopo averlo salvato sopra l'originale.",
+            d.id
+        );
+    };
+    // Rifiutare non basta: `parse`/`render`/`serialize` finiscono in un log, e
+    // solo `unsupported` arriva sotto gli occhi di chi ha aperto il file, dove
+    // vale «nessuno lo serve» e il consiglio è installare un plugin. Un provider
+    // che rifiutasse con `Parse` direbbe a un utente che il suo allegato è
+    // malformato, cioè la cosa sbagliata sul file sbagliato.
+    let FormatError::Unsupported { format, got } = &e else {
+        panic!(
+            "`{}` ha rifiutato dei byte grezzi con `{e:?}` invece che con\n\
+             `Unsupported`. Le altre tre varianti dicono «questo documento è\n\
+             storto» e finiscono in un log; questa dice «questa sorgente non è la\n\
+             mia» ed è l'unica che il kernel porta a `Unserved`, cioè davanti a\n\
+             chi ha appena provato ad aprire il file.",
+            d.id
+        );
+    };
+    // I due campi sono ciò da cui la frase si compone sulla via d'uscita, e il
+    // compilatore obbliga a *portarli*, non a portarli **giusti**: un provider
+    // che si nomini con l'id di un altro manda l'utente a cercare il plugin
+    // sbagliato.
+    assert_eq!(
+        (format.as_str(), *got),
+        (d.id.as_str(), SourceKind::Bytes),
+        "`{}` ha rifiutato dicendo di essere `{format}` e di aver ricevuto\n\
+         `{got:?}`. Sono i due dati con cui il kernel compone la frase che\n\
+         l'utente legge: sbagliarli manda a installare il plugin sbagliato.",
         d.id
     );
 }
