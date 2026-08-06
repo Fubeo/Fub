@@ -1022,6 +1022,15 @@ impl IndexProvider for CoreIndex {
             }
             IndexQuery::Drafts { page } => {
                 let drafts = self.drafts.read();
+                // **Qui `Paged::from_source` non guadagna niente**, ed è un
+                // fatto misurato dal banco del §17.1 (decisione 0113) e non una
+                // scelta di comodo: la linearità di questa famiglia sta *a
+                // monte*, in `drafts.read()`, che apre e deserializza ogni
+                // bozza del disco prima che questa riga cominci; e il `map` qui
+                // sotto **sposta** il testo invece di copiarlo, quindi
+                // costruirlo fuori dalla finestra non alloca. Chi volesse
+                // rendere costante il prezzo di questa pagina deve paginare la
+                // lettura, che è un'altra cosa e sta dall'altra parte.
                 let items = drafts
                     .drafts
                     .into_iter()
@@ -1052,17 +1061,20 @@ impl IndexProvider for CoreIndex {
                 of_kind,
                 within,
                 page,
-            } => Ok(IndexResult::Entries(Paged::window(
+            } => Ok(IndexResult::Entries(Paged::from_source(
                 self.entries
                     .values()
                     .filter(|e| of_kind.is_none_or(|k| e.kind == k))
                     .filter(|e| match &within {
                         Some(scope) => in_folder(&e.id, &scope.path, scope.descendants),
                         None => true,
-                    })
-                    .cloned()
-                    .collect(),
+                    }),
                 page,
+                // La clonazione è **qui dentro** e non un `.cloned()` sulla
+                // catena: il filtro cammina l'anagrafe intera per dire quanti
+                // sono, ma una `VaultEntry` la si copia solo se sta nella
+                // finestra.
+                VaultEntry::clone,
             ))),
             IndexQuery::Folders { under, page } => Ok(IndexResult::Folders(Paged::window(
                 self.folders_under(under.as_ref()),

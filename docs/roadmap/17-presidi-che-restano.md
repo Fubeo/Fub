@@ -1,6 +1,6 @@
 # 17. I presidi che restano
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): senza precedenze e senza scadenza — il criterio è se il costo cresce con l'attesa.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): senza precedenze e senza scadenza — il criterio è se il costo cresce con l'attesa. **Tutte e tre le voci sono chiuse.**
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -15,8 +15,8 @@ ma **se il costo cresce con l'attesa**. Per il corpus cresce (ogni sintassi nuov
 
 E quel criterio ha **tagliato la prima voce**, che è la cosa più utile che un
 criterio di seduta possa fare: dentro la §17.1 il corpus e il fuzzing sono la
-parte il cui costo cresceva, il banco delle prestazioni quella che aspetta una
-macchina e non una decisione.
+parte il cui costo cresceva, il banco delle prestazioni quella che sembrava
+aspettare una macchina e non una decisione.
 
 Il criterio però ordina ciò che vede, e una riga della voce non stava né di qua né
 di là: il round-trip rifatto sul corpus non aveva un costo che cresceva e non
@@ -25,9 +25,18 @@ taglio fatto guardando le voci dall'esterno non poteva vederla, ed è la ragione
 cui la §17.1 si è chiusa a pezzi invece che a metà. Lo stato dei pezzi sta nella
 riga in corsivo qui sotto, e non qui.
 
+**E sull'ultimo pezzo il criterio aveva torto**, il che vale la riga più di tutto
+il resto: il banco non aspettava una macchina, aspettava che qualcuno
+smettesse di dargli un tempo da misurare. La
+[0113](../decisions/0113-il-banco-conta-le-operazioni.md) lo ha chiuso da un
+portatile qualunque contando **operazioni** — attraversamenti del confine, parse,
+allocazioni — e trovando per strada che la promessa scritta su `Page` non era
+tenuta da nessuno. La macchina serve ancora, ma per una cosa sola, ed è un buco
+dichiarato invece di una casella.
+
 ### 17.1 Corpus, fuzzing, prestazioni
 
-*ex §4.3 · presidi · **P2** — **chiusa in tre parti** meno il banco delle prestazioni: il corpus e il fuzzing con la [decisione 0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md), il round-trip sul corpus con la [0061](../decisions/0061-un-giro-che-non-passa-dal-modello.md); restano le due caselle del banco, che aspetta una macchina e non una decisione*
+*ex §4.3 · presidi · **P2** — **chiusa in quattro pezzi**, e il quarto ha smentito il taglio che aveva fatto gli altri tre: il corpus e il fuzzing con la [decisione 0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md), il round-trip sul corpus con la [0061](../decisions/0061-un-giro-che-non-passa-dal-modello.md), il **banco** con la [0113](../decisions/0113-il-banco-conta-le-operazioni.md) — che misura operazioni e non tempi, perché su una macchina condivisa il tempo non è un segnale, e questo repo aveva già la misura che lo dimostrava*
 
 - [x] **Fuzzing del parser** markdown: 5.3 lo chiede esplicitamente, e un parser
       che pania è un vault che non si apre. **Fatto** con la
@@ -56,10 +65,46 @@ riga in corsivo qui sotto, e non qui.
       i `custom_kind` del registro, le sintassi di `capabilities()`): un costrutto
       nuovo che nessun caso esercita è rosso subito. Cinque difetti di produzione
       trovati, tredici divergenze fra modello e file **dichiarate** una per riga.
-- [ ] **Benchmark su vault sintetici grandi** (10k/100k note) in CI, con soglie:
+- [x] **Benchmark su vault sintetici grandi** (10k/100k note) in CI, con soglie:
       tempo di apertura, ricerca, memoria. Senza numeri, "supporto vault enormi"
-      non è verificabile.
-- [ ] **E questo banco ha già un abitante che aspetta**, che è il modo in cui la
+      non è verificabile. **Fatto** con la
+      [0113](../decisions/0113-il-banco-conta-le-operazioni.md), e con due
+      differenze rispetto a come la riga lo chiedeva — tutte e due misurate, non
+      scelte. La prima: le **soglie di tempo sono scartate avendolo detto**. La
+      riga ne nomina tre e tutte e tre sono tempi, ma il presidio della §8.4 —
+      che confronta due tempi nella stessa corsa, cioè la forma *migliore* di una
+      misura di tempo — in CI ha dato 0,97 su ubuntu e 0,89 su windows con la
+      suite verde in locale: a quella scala il tempo se lo prendono lo spawn dei
+      thread e lo scheduling, e il rapporto ha smesso di misurare la propria
+      proprietà per misurare il vicino di banco. Se non tiene quella forma, una
+      soglia assoluta tiene meno. Il banco misura **operazioni**: quante volte si
+      attraversa il confine per aprire un vault (`ceil(N/512)`, il numero che la
+      [0051](../decisions/0051-l-alimentazione-risponde.md) ha scelto e che
+      nessuno verificava — nessuna delle nove spie del repo conta le **chiamate**,
+      e contando i documenti `FEED_BATCH = 1` è indistinguibile da 512), quanti
+      parse costa **riaprirlo** (zero, non una frazione), e quante allocazioni
+      costa una pagina di venti righe — di cui non si guarda il valore ma se
+      **cresce col vault**, che è un rapporto fra due misure sulla stessa
+      macchina e non una soglia. La seconda: le note sono **seicento** e non
+      centomila, perché un conto esatto è esatto a qualunque taglia e seicento è
+      il minimo che attraversa il lotto due volte; centomila comprerebbero solo
+      un numero di secondi. Il pezzo che valeva il giro stava **fuori**: il doc
+      di `Page` prometteva che chi serve una query tronchi *prima* di costruire
+      il risultato, e nessuna delle nove famiglie paginate dell'indice del kernel
+      lo faceva — venti righe su seicento note costavano milleduecentonove
+      allocazioni, due per nota. Adesso le strade sono tre e quale sia percorsa è
+      un fatto misurato: `Paged::from_source` per chi ha un iteratore e un
+      filtro, `Paged::window` per chi deve ordinare o aggregare prima di
+      tagliare, e paginare alla sorgente per chi ha un motore che sa fermarsi.
+      Convertita **una** famiglia sola, `Entries`, e le altre due candidate sono
+      cadute misurando: `Drafts` non guadagna niente (la linearità sta a monte,
+      in `drafts.read()`, e il `map` sposta il testo invece di copiarlo — un ramo
+      che non guadagna è un ramo che nessun presidio difende, e la verifica del
+      rosso l'ha confermato), `Folders` costa otto allocazioni per nota ma il
+      prezzo sta **dentro** `make`, che per ogni cartella conta il proprio
+      sottoalbero. È il limite della forma, e va saputo: la finestra toglie ciò
+      che si costruisce di troppo, non ciò che costa costruire ciò che si tiene.
+- [x] **E questo banco ha già un abitante che aspetta**, che è il modo in cui la
       voce ha smesso di essere teorica: il presidio della §8.4
       ([0026](../decisions/0026-due-query-insieme.md)) — *due ricerche stanno
       nell'indice insieme* — è oggi `#[ignore]` in `features/src/search.rs`.
@@ -73,6 +118,21 @@ riga in corsivo qui sotto, e non qui.
       chiede, ed è la ragione per cui un test di prestazioni non può stare in
       mezzo agli altri e girare a ogni push. Finché non c'è, si lancia a mano
       (`cargo test -p fub-features --lib due_ricerche -- --ignored`).
+      **Il banco c'è, e non lo ospita**, e la
+      [0113](../decisions/0113-il-banco-conta-le-operazioni.md) lo scrive invece
+      di rimandarlo un'altra volta: quel presidio misura un rapporto fra due
+      **tempi**, e un banco che ha deciso di misurare operazioni non ha dove
+      metterlo. Non è pigrizia di progetto — la proprietà non è esprimibile come
+      conto, e il test stesso dice perché: contare chi è *dentro* `query` non
+      distingue il caso buono da quello cattivo, perché con un `Mutex` interno ci
+      starebbero in due lo stesso, uno dei quali fermo ad aspettare. Il
+      compilatore non la vede (`Send + Sync` chiede che chiamare da N thread sia
+      *lecito*, non che sia *parallelo*) e un conto sui lock del sorgente
+      prenderebbe la variante sbagliata, perché una query un lock lo prende
+      davvero ed è giusto: la `RwLock::read` sui pesi dei campi, condivisa, che
+      non serializza niente. Resta il tempo, e il tempo su una macchina condivisa
+      è ciò che quel verbale scarta: **buco dichiarato n. 6**, e un buco
+      dichiarato non è una casella e non entra in nessun totale.
 - [x] **Round-trip import/export**: il primo giro c'era con la
       [decisione 0006](../decisions/0006-import-export-come-trait.md)
       (`transfer_e2e.rs`: un vault esce in artefatti e rientra identico), ma su

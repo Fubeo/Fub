@@ -29,9 +29,9 @@ verbali di fila) — e **due** da una
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centoventinove sono
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centotrenta sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-quattro [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
+tre [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -220,7 +220,7 @@ che questo piano passa il tempo a togliere dal codice.
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | lo stesso lavoro visto da quattro lati: entry, metadati, cartelle, lista | — | 3 |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | — | 2 |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 1 | 1 |
-| **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | senza precedenze e senza scadenza: il criterio è se il costo cresce con l'attesa | 1 | 1 |
+| **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | **chiusa** — senza precedenze e senza scadenza: il criterio è se il costo cresce con l'attesa, e su una voce ha deciso in tre pezzi invece che in due | — | 2 |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell e non appartiene a nessuna delle sedute sopra, code delle sedute 1-4 comprese | 2 | 1 |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: rimandi ai quattro giri di audit, e il lavoro sta nelle sedute che li hanno assorbiti | — | 2 |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | **chiusa** — lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | — | — |
@@ -230,7 +230,7 @@ che questo piano passa il tempo a togliere dal codice.
 
 ## Le voci
 
-Quattro [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
+Tre [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -242,7 +242,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-quattro [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+tre [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -251,7 +251,7 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-La colonna *Voci* somma **quattro** [conta: voci-aperte], e le **sedute 20 e 23
+La colonna *Voci* somma **tre** [conta: voci-aperte], e le **sedute 20 e 23
 sono a zero**. Della 20 non resta nemmeno una casella: si è chiusa con la
 [0111](decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), l'ultima delle cinque
 voci nate dalla domanda «cosa fallisce senza produrre nessun segnale». La 23 era
@@ -263,7 +263,7 @@ una voce per volta senza mai aspettare le altre. Il taglio che a un certo punto
 sembrava servire — spezzarla per **lente**, le §23.9–§23.17 rispondono a una
 domanda più stretta delle prime otto — non è mai servito.
 
-Le caselle residue oggi sono **diciassette**, e stanno in quattordici posti:
+Le caselle residue oggi sono **diciotto**, e stanno in quindici posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
@@ -333,7 +333,17 @@ secondo cliente per quelle tabelle) e la
 politica di esclusione un dato per-vault, e un **file** come sorgente di quel
 dato è un'altra cosa: ha una sintassi propria — pattern, non nomi — una
 precedenza propria e un proprietario che non è Fub. La casella ha il posto dove
-atterrare, un terzo modo di costruire un `IgnorePolicy`, e non ha la forma).
+atterrare, un terzo modo di costruire un `IgnorePolicy`, e non ha la forma) e la
+[§17.1](roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni) (una:
+le otto famiglie dell'indice del kernel che continuano a costruire tutto per
+mostrarne venti — la
+[0113](decisions/0113-il-banco-conta-le-operazioni.md) ha portato al banco la
+sola anagrafe, e delle altre ne ha misurata una: `Folders` costa otto
+allocazioni per nota, e non è un caso di ritaglio sbagliato — il prezzo sta
+*dentro* la costruzione di ogni riga che si tiene, non fuori dalla finestra.
+Per quelle che **ordinano** o **aggregano** il ritaglio in memoria resta la
+risposta giusta; ciò che manca a tutte è la riga di banco che dica quanto
+costano).
 Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte.
@@ -368,7 +378,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
 | **§16.3** | [Un crate per bundle di feature](roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
-| **§17.1** | [Corpus, fuzzing, prestazioni](roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni) | 17. I presidi che restano | presidi | **P2** |
 
 ## Gli allegati
 
@@ -380,7 +389,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centododici** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centotredici** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

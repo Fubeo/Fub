@@ -547,8 +547,8 @@ sequenceDiagram
 | `UndoStack` | [undo.rs:73](../../crates/fub-kernel/src/undo.rs) | `Vec<Entry>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
 | `undo::Entry` | [undo.rs:66](../../crates/fub-kernel/src/undo.rs) | la voce **e il conto dell'operazione**: i due arrivano dallo stesso esito e si separano una riga dopo, quindi o si appaiano lì o non si appaiano più (§23.14) |
 | `Undo` / `UndoStep` | [command.rs:712](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:4391](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:4433](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
+| dove si spinge | [workspace.rs:4401](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:4443](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
 | `Partial` / `Failure` | [command.rs:605](../../crates/fub-abi/src/command.rs) | di N cose quante e quali; i guasti uno per uno col `PluginError` intero, perché la specie dice se ha senso riprovare |
 | `Undone` | [command.rs:822](../../crates/fub-abi/src/command.rs) | l'etichetta e i **due** conti: `operation` (era già a metà) e `replay` (l'annullamento si è fermato) |
 | `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
@@ -720,9 +720,15 @@ normale disgiuntiva esprime ogni combinazione booleana.
 **La finestra è nella domanda.** `Page { offset, limit }` sta nella query e
 `Paged<T> { items, offset, total }` nella risposta: `None` al posto della `Page`
 significa "tutto", e `total` è il conteggio *prima* della finestra — senza, chi
-disegna non sa se esiste una pagina dopo. Chi sa paginare alla sorgente lo fa
-(tantivy usa `offset`/`limit` del collector e un `Count` per il totale); chi
-risponde da una mappa in memoria ritaglia con `Paged::window`. L'unica risposta
+disegna non sa se esiste una pagina dopo. Le famiglie che chiedono una finestra
+sono **dieci** [conta: famiglie-paginate], e le strade sono **tre**, e quale sia
+percorsa è un fatto che il banco del §17.1 misura invece di una promessa
+([0113](../decisions/0113-il-banco-conta-le-operazioni.md)): chi sa paginare
+alla sorgente lo fa (tantivy usa `offset`/`limit` del collector e un `Count` per
+il totale); chi ha un iteratore e un filtro conta con `Paged::from_source` e
+costruisce **solo la finestra**; chi deve **ordinare** o **aggregare** prima di
+tagliare non può fare altro che ritagliare in memoria con `Paged::window`, e lì
+la linearità non è uno spreco — è la domanda. L'unica risposta
 senza finestra è `Outline`: cresce con **un** documento, non col vault. Al
 confine WIT i generici non esistono, e ogni istanza è un record a sé
 (`backlinks-page`, `documents-page`, …). Anche `HostApi::list_documents` ha la

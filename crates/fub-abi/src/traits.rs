@@ -1929,6 +1929,31 @@ pub trait ViewProvider: Send + Sync {
 /// (24.1). `None` al posto di una `Page` significa "tutto": è la forma che
 /// tiene onesti i clienti che davvero vogliono l'insieme intero (il pannello
 /// tag, l'autocompletamento) senza costringerli a inventarsi un tetto.
+///
+/// # «Deve poter» non è «lo fa», ed è la differenza che il banco misura
+///
+/// Quella frase dice cosa la firma **permette**, non cosa succede: la `Page` in
+/// ingresso è una facoltà di chi serve, e per anni nessuno ha guardato se
+/// qualcuno la esercitasse. Il banco del §17.1
+/// ([decisione 0113](../../../docs/decisions/0113-il-banco-conta-le-operazioni.md))
+/// l'ha guardato contando le allocazioni, e la risposta era **no** per ogni
+/// famiglia dell'indice del kernel: si costruiva l'insieme intero e poi lo si
+/// tagliava, quindi mostrare venti righe di un vault costava quanto il vault.
+///
+/// Le strade sono **tre**, e quale sia percorsa è un fatto misurabile e non una
+/// promessa:
+///
+/// 1. **Paginare alla sorgente**: chi ha un motore che sa fermarsi (tantivy)
+///    costruisce il [`Paged`] da sé e non passa da qui.
+/// 2. [`Paged::from_source`]: una passata sola su un iteratore — si **conta**
+///    tutto, si **materializza** solo la finestra. È la strada di chi ha una
+///    mappa e un filtro, e il costo di una pagina smette di dipendere da quanto
+///    è grande il vault.
+/// 3. [`Paged::window`]: il ritaglio in memoria, che resta l'unica risposta
+///    possibile quando la risposta va **ordinata** o **aggregata** prima di
+///    essere tagliata (un `sort` per proprietà deve vedere tutte le righe per
+///    sapere quali sono le prime venti). Lì la linearità non è uno spreco: è la
+///    domanda.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Page {
     /// Elementi da saltare. Oltre la fine → pagina vuota, non un errore.
@@ -1980,10 +2005,16 @@ impl<T> Paged<T> {
 
     /// Ritaglia una risposta **già in memoria**.
     ///
-    /// È la strada di chi la finestra non la sa applicare alla fonte (il kernel
-    /// interroga mappe che ha già in mano): il conteggio resta quello vero,
-    /// solo gli elementi si riducono. Un indice che sappia paginare alla
-    /// sorgente — tantivy sa — costruisce il [`Paged`] da sé e non passa di qui.
+    /// È la strada di chi la risposta la deve avere intera per costruirla: chi
+    /// la **ordina** o la **aggrega** non sa quali sono le prime venti righe
+    /// finché non le ha viste tutte. Il conteggio resta quello vero, solo gli
+    /// elementi si riducono.
+    ///
+    /// **Non è la strada di chi ha solo un filtro**: quella è
+    /// [`from_source`](Paged::from_source), che fa la stessa passata senza
+    /// costruire ciò che butta. Chiamare `window` su un `.collect()` appena
+    /// fatto è il modo in cui una pagina finisce per costare quanto il vault, ed
+    /// è ciò che il banco del §17.1 ha misurato.
     pub fn window(items: Vec<T>, page: Option<Page>) -> Self {
         let total = items.len() as u32;
         let Some(page) = page else {
@@ -2000,6 +2031,53 @@ impl<T> Paged<T> {
             .collect();
         Paged {
             items,
+            offset: page.offset,
+            total,
+        }
+    }
+
+    /// Conta tutta la sorgente e **costruisce solo la finestra**, in una
+    /// passata sola.
+    ///
+    /// È la forma che mancava, e che rende vera la promessa scritta su
+    /// [`Page`]: la fonte è un iteratore — i valori di una mappa, un filtro
+    /// sull'anagrafe, l'elenco delle bozze — e `make` è ciò che costa (una
+    /// clonazione, un record da comporre). Chi resta fuori dalla finestra viene
+    /// **contato e non costruito**, quindi il prezzo di una pagina smette di
+    /// dipendere da quanto è grande il vault.
+    ///
+    /// **`make` è un argomento e non un `.map()` sulla sorgente** proprio per
+    /// questo: un `.map()` è pigro ma `from_source` arriva in fondo per contare,
+    /// quindi lo applicherebbe a tutti e il guadagno sarebbe zero. Chi legge un
+    /// `Paged::from_source(iter.map(caro), …)` sta guardando la stessa
+    /// linearità di prima con un nome diverso.
+    ///
+    /// E un `skip`/`take` da solo non basterebbe, che è l'altra metà del perché
+    /// questa funzione esiste invece di essere una riga nei chiamanti: darebbe
+    /// la finestra giusta e un `total` sbagliato, cioè una barra di scorrimento
+    /// che mente.
+    ///
+    /// Senza `page` è [`all`](Paged::all): «tutto» resta tutto, e si paga tutto.
+    pub fn from_source<I, U, F>(items: I, page: Option<Page>, mut make: F) -> Self
+    where
+        I: IntoIterator<Item = U>,
+        F: FnMut(U) -> T,
+    {
+        let Some(page) = page else {
+            return Paged::all(items.into_iter().map(make).collect());
+        };
+        let inizio = page.offset as usize;
+        let fine = inizio.saturating_add(page.limit as usize);
+        let mut total: u32 = 0;
+        let mut items_in_finestra = Vec::new();
+        for (i, item) in items.into_iter().enumerate() {
+            total = total.saturating_add(1);
+            if i >= inizio && i < fine {
+                items_in_finestra.push(make(item));
+            }
+        }
+        Paged {
+            items: items_in_finestra,
             offset: page.offset,
             total,
         }
