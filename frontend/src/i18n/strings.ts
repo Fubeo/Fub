@@ -39,6 +39,7 @@
 import { impostazioni } from "../host/query";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
+import type { Smontaggio } from "../ui/vita";
 
 /// Il catalogo italiano. È anche la **forma** del catalogo: le altre lingue
 /// devono avere le sue chiavi, tutte, o non compilano.
@@ -867,8 +868,21 @@ export function applicaStringhe(root: ParentNode = document): void {
 /// qui invece di essere chiamate da `main.ts`: chi disegna del testo sa di
 /// disegnarlo, e il punto di montaggio non deve tenere un elenco di chi lo fa
 /// — un elenco che si scopre incompleto solo cambiando lingua e guardando bene.
-export function onLingua(ascoltatore: () => void): void {
+///
+/// Torna **come smettere**, come `onKernelEvent` in `host/ipc.ts` e come
+/// `intrappolaFuoco`. I quattro chiamanti di oggi lo ignorano, ed è corretto:
+/// sono superfici montate una volta che vivono quanto la finestra, e per loro
+/// non c'è niente da disfare. Il difetto non morde adesso — morde il primo
+/// chiamante che sia un pannello, che si iscriverebbe di nuovo a ogni
+/// montaggio senza che la vecchia iscrizione se ne vada, e ridisegnerebbe N
+/// volte una superficie che non esiste più. Chi ha una `Vita` scrive
+/// `vita.aggiungi(onLingua(ridisegna))` e non ci pensa.
+export function onLingua(ascoltatore: () => void): Smontaggio {
   ascoltatori.push(ascoltatore);
+  return () => {
+    const i = ascoltatori.indexOf(ascoltatore);
+    if (i >= 0) ascoltatori.splice(i, 1);
+  };
 }
 
 /// Rilegge la scelta dall'impostazione, se c'è un vault che possa rispondere.
@@ -881,7 +895,10 @@ async function rileggi(): Promise<void> {
     scelta = prossima;
     localStorage.setItem(CACHE, scelta);
     applicaStringhe();
-    for (const ascoltatore of ascoltatori) ascoltatore();
+    // Una copia: un ascoltatore che si disiscrive mentre viene chiamato
+    // altrimenti accorcerebbe l'array sotto l'iteratore, e il successivo
+    // salterebbe il turno.
+    for (const ascoltatore of [...ascoltatori]) ascoltatore();
   } catch {
     // Nessun vault aperto, o il canale dati che non risponde: si resta su ciò
     // che la cache diceva. Una lingua è la cosa meno urgente da cui far fallire

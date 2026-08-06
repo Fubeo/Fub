@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Ottantaquattro** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Ottantuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -511,10 +511,8 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0008 | `set_plugin_enabled(false)` non ferma i job in volo, e salta `Plugin::deactivate` | `fub-host` · `session.rs` `set_plugin_enabled` | spegnimento |
 | 0010 | `close_vault` e `set_plugin_enabled` tornano `Vec<String>`: le notifiche perdono la variante tipizzata sul confine | `fub-app` · `lib.rs:118` | errori |
 | 0015 | `basicSetup` da `codemirror` accanto agli import da `@codemirror/*`: due copie dello stato a un aggiornamento di distanza | `frontend` · `editor/editor.ts:9` | shell |
-| 0016 | `onLingua` non torna una funzione di disiscrizione | `frontend` · `i18n/strings.ts:870` | shell |
 | 0018 | risoluzione dei link rotti: scansione lineare con `resolution_key` per voce, per ogni riferimento | `fub-kernel` · `index/core.rs` `resolve_entry_in` | prestazioni |
 | 0019 | `Vault::open` non rende assoluta la radice: un `set_current_dir` sposta `.fub` e `.trash` | `fub-kernel` · `vault.rs:137` | vault che sparisce |
-| 0024 | il listener `click` di `showContextMenu` resta appeso se il menu si chiude con Escape | `frontend` · `ui/menu.ts:50` | shell |
 | 0025 | `aggiorna` non riallinea le etichette di `select`/`radio` né `placeholder`/`min`/`max`/`step` | `frontend` · `ui/node.ts` `aggiorna` | shell |
 | 0027 | `openWikilink` esce su `if (!page) return`: `[[#Sezione]]` e `[[#^blocco]]` non portano da nessuna parte | `frontend` · `panels/document.ts:902` | shell |
 | 0028 | `argsFromForm` scrive `false` per un booleano opzionale mai toccato, e copre il default del kernel | `frontend` · `ui/palette.ts:163` | shell |
@@ -562,7 +560,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0079 | `render_link` scrive `data-embed-heading` e ignora `block`: `![[Nota#^b]]` perde l'ancora | `fub-format-markdown` · `render.rs:285` | markdown |
 | 0080 | `write_link` serializza `[[page^b]]` invece di `[[page#^b]]` quando `heading` è `None` | `fub-format-markdown` · `serialize.rs:519` | markdown |
 | 0081 | lo span di un embed include il `!` nel ripiego testuale e non nel ramo comrak | `fub-format-markdown` · `parse.rs:642` | markdown |
-| 0083 | `pickIcon` rimuove il nodo senza chiamare `chiudi()`: listener e trappola del fuoco restano appesi | `frontend` · `ui/menu.ts:68` | shell |
 | 0085 | il nome del gruppo `radio` è globale al documento: due form con lo stesso `field` si deselezionano a vicenda | `frontend` · `ui/node.ts:825` | shell |
 | 0086 | `viewAction` non è avvolta in un `try/catch`: un errore lascia la vista com'era, senza dirlo | `frontend` · `ui/views.ts:391` | errori |
 | 0087 | il ripiego da `patch` a `renderDeclaredView` non ha token di sequenza | `frontend` · `ui/views.ts` `disegna` | corse |
@@ -598,7 +595,7 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentadue** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentatré** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

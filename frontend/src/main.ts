@@ -30,6 +30,7 @@ import {
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
+import { apriVita } from "./ui/vita";
 import { mountSidebarCommands } from "./panels/sidebar";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
@@ -76,6 +77,17 @@ const paletteHost = {
       .catch(() => []),
 };
 
+/// Quanto vivono gli ascolti globali della shell: **quanto la finestra**.
+///
+/// Nessuno la chiude, e la riga che lo dice è questa. Non è un `Vita` per
+/// finta: è la risposta vera alla domanda che `ui/vita.ts` obbliga a farsi —
+/// «di chi è questo ascoltatore?» — per i tre che il locale, il tema e la
+/// tastiera mettono su `document` e su `window`. Il giorno in cui la shell
+/// dovrà rimontarsi senza ricaricare la pagina, il manico c'è già ed è qui, in
+/// un posto solo, invece di essere tre `removeEventListener` da inventare in
+/// tre file.
+const vitaFinestra = apriVita();
+
 async function init(): Promise<void> {
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
@@ -83,7 +95,7 @@ async function init(): Promise<void> {
   // `mountDocument` anche per una ragione meno cosmetica: l'editor nasce col
   // tema che trova sulla radice, e nascere col tema sbagliato vorrebbe dire
   // riconfigurarlo subito dopo.
-  mountTheme(setEditorTheme);
+  mountTheme(vitaFinestra, setEditorTheme);
 
   // Le stringhe accanto al tema, e per la stessa ragione (§12.4): sono le due
   // cose che vanno applicate **prima** che qualcosa disegni, o il primo
@@ -182,7 +194,7 @@ async function init(): Promise<void> {
   // funziona senza toccare questo file. Cos'è un accordo e quando è finito lo
   // sa `ui/keyboard.ts`, che è il posto in cui una sequenza a metà ha un tempo
   // e una via d'uscita (§18.2).
-  mountKeyboard((entry) => startCommand(entry, paletteHost));
+  mountKeyboard(vitaFinestra, (entry) => startCommand(entry, paletteHost));
 
   // Chi ascolta i guasti si iscrive **prima** che il router parta (§20.2): un
   // vault che va storto mentre si apre è esattamente il caso in cui l'utente
@@ -196,7 +208,7 @@ async function init(): Promise<void> {
   // giro con la lingua indeterminata e correggersi dopo. Chi lo cambia da fuori
   // — impostazioni del sistema, ora legale — se ne accorge al ritorno del
   // focus, e allora si ridisegna ciò che è appeso al contesto.
-  mountLocale(() => void mountDeclaredViews());
+  mountLocale(vitaFinestra, () => void mountDeclaredViews());
 
   // Gli accordi riconfigurati, **prima** di sapere se un vault c'è (§16.3).
   // Quelli dei comandi di shell vivono nella macchina e non nel vault, quindi

@@ -12,6 +12,7 @@
 // chiavi `locale.*` (§11.1), e a comporre le due cose è il kernel. Qui si
 // riferisce un fatto, non si applica una preferenza.
 import { api } from "../host/ipc";
+import type { Vita } from "../ui/vita";
 import type { HourCycle, Locale, Weekday } from "../host/contract";
 
 // I sette giorni nell'ordine di `Intl.Locale.getWeekInfo()`, che è quello di
@@ -107,9 +108,9 @@ export async function publishSystemLocale(): Promise<boolean> {
 //
 // `onChange` scatta solo quando qualcosa è davvero cambiato: chi ridisegna
 // perché la finestra ha ripreso il focus ridisegnerebbe a ogni alt-tab.
-export function mountLocale(onChange: () => void): void {
+export function mountLocale(vita: Vita, onChange: () => void): void {
   void publishSystemLocale();
-  window.addEventListener("focus", () => {
+  vita.ascolta(window, "focus", () => {
     void publishSystemLocale().then((cambiato) => {
       if (cambiato) onChange();
     });

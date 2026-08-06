@@ -38,6 +38,7 @@
 import { impostazioni } from "../host/query";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
+import type { Vita } from "../ui/vita";
 
 /// Le due luci. Non c'è un terzo valore: «come il sistema» è una **scelta**,
 /// non un tema, e tenerli nello stesso tipo è il modo in cui poi si finisce a
@@ -131,7 +132,7 @@ async function rileggi(): Promise<void> {
 
 /// Accende il tema: applica subito ciò che si sa, poi insegue le due sorgenti
 /// che lo possono cambiare — il sistema e l'impostazione.
-export function mountTheme(onChange: (tema: Tema) => void): void {
+export function mountTheme(vita: Vita, onChange: (tema: Tema) => void): void {
   try {
     scelta = localStorage.getItem(CACHE) ?? "";
   } catch {
@@ -146,7 +147,10 @@ export function mountTheme(onChange: (tema: Tema) => void): void {
   // Il sistema che cambia luce mentre l'app è aperta. Riguarda solo chi ha
   // lasciato «come il sistema», e `applica()` lo sa già: se la scelta è
   // esplicita, ricalcola lo stesso valore e non fa niente.
-  window.matchMedia?.(QUERY_SCURO).addEventListener("change", applica);
+  // `matchMedia` non c'è in ogni motore (i banchi con `happy-dom` ne sono la
+  // prova): l'elenco delle sorgenti resta lo stesso, ne manca una.
+  const media = window.matchMedia?.(QUERY_SCURO);
+  if (media) vita.ascolta(media, "change", applica);
 
   // L'impostazione che cambia: da questo pannello, da un'altra finestra, da un
   // `settings.json` riscritto sotto. L'evento non porta il valore (§11.1), e
