@@ -166,7 +166,8 @@ un mondo che non importa `host-vault-write` non ha quella funzione da chiamare.
 
 ```rust
 // La somma, e le sue parti (le firme sono quelle di prima).
-pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv {}
+pub trait ReadApi: VaultRead + DataRead + HostQuery + HostEnv
+    + SettingsRead + ViewStateRead + TransferRead {}
 pub trait HostApi:
     ReadApi + VaultWrite + VaultStructure + DataWrite + HostEvents + HostCommands + HostServices
     + HostNetwork + SettingsRead + SettingsWrite + ViewStateRead + ViewStateWrite {}
@@ -174,7 +175,7 @@ pub trait HostApi:
 pub trait VaultRead: Send + Sync {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError>;
     // il documento intero (chi ce l'ha in mano) …
-    fn write_document(&mut self, id: &DocId, source: &str, base: Option<Revision>)
+    fn write_document(&mut self, id: &DocId, source: &str, base: WriteBase)
         -> Result<Revision, PluginError>;
     // … e un pezzo solo, sopra la revisione su cui è stato calcolato
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError>;
@@ -211,7 +212,7 @@ pub trait VaultRead: Send + Sync {
     fn run_command(&mut self, command: &str, args: serde_json::Value)
         -> Result<CommandOutcome, PluginError>;
     // tornare indietro: la pila è del kernel ([decisione 0045](../decisions/0045-l-undo-ha-due-pile.md), §13.3)
-    fn undo_last(&mut self) -> Result<Option<Text>, PluginError>;
+    fn undo_last(&mut self) -> Result<Option<Undone>, PluginError>;
     // chiamare un altro plugin ([decisione 0021](../decisions/0021-il-confine.md), §7.5)
     fn call_service(&mut self, service: &str, method: &str, args: serde_json::Value)
         -> Result<serde_json::Value, PluginError>;
@@ -909,7 +910,7 @@ segue gli estratti: arriva già dal primo giro, perché serve a ordinare — e
 ordinare è ciò che si fa prima di sapere quale pagina resta.
 
 Il passo che il disegno non mostra sta dentro le frecce 6 e 8: `resolve_for`
-([plan.rs:246](../../crates/fub-kernel/src/index/plan.rs)) riscrive ogni
+([plan.rs:373](../../crates/fub-kernel/src/index/plan.rs)) riscrive ogni
 letterale che il destinatario **non** sa valutare in un `QueryPredicate::Docs`
 già risolto. È il motivo per cui una foglia sola può arrivare a un indice che
 della domanda originale conosceva metà.
@@ -1133,13 +1134,18 @@ Il capitolo 17 di FEATURES è ~120 voci: o ognuna è un provider, o il capitolo 
 *è* l'app. Quattro decisioni stanno nella forma dei tipi, e valgono per tutte e
 centoventi.
 
-- **Il confine è di byte, non di path.** `ImportSource { name, media_type, bytes }`
+- **Il confine è di byte, non di path.** `ImportSource { name, media_type, content }`
   arriva **già letta**; `ExportReport { artifacts, log }` esce come
-  `ExportArtifact { path, media_type, bytes }`, dove `path` è il posto *dentro
+  `ExportArtifact { path, media_type, content }`, dove `path` è il posto *dentro
   l'esito*. Chi apre il dialogo di sistema e chi posa i byte è l'host. È ciò che
-  rende import ed export esprimibili **senza** una capacità filesystem. Prezzo
-  dichiarato: sorgente e artefatti stanno in memoria — lo streaming è additivo,
-  un `path: String` non lo sarebbe.
+  rende import ed export esprimibili **senza** una capacità filesystem. Il prezzo
+  che questa riga dichiarava — *sorgente e artefatti stanno in memoria* — l'ha
+  tolto la [decisione 0102](../decisions/0102-i-byte-non-stanno-nel-record.md):
+  `content` è un `SourceContent`/`ArtifactContent`, cioè i byte **o** una chiave
+  che l'host risolve, e la lettura è **posizionale** perché la directory di un
+  archivio sta in fondo. Restare in memoria è ancora il caso comune, e adesso è
+  una scelta dichiarata invece dell'unica strada; un `path: String` resta ciò
+  che non entra.
 - **Il piano è il rapporto di una prova a vuoto.** Niente `MigrationPlan` gemello
   di `ImportReport`: c'è `ImportMode { Preview, Apply }`, e in `Preview` lo stesso
   import restituisce lo stesso rapporto senza scrivere. Due tipi che dicono la
@@ -1300,7 +1306,7 @@ materializza in `crates/fub-abi/wit/fub/*.wit` + test abi↔WIT.
 | `Actor` | `variant { user, watcher, kernel, plugin(actor-plugin) }` — il payload è un record col solo `id` |
 | `BatchId` | `type batch-id = u64` — sul confine JSON è una **stringa** (regola di `fub_abi::ipc`), come `job-id` |
 | `TransferNote`/`NoteLevel` | `record` / `enum` (interface `transfer`: due interfacce le condividono, quindi il tipo sta in una terza) |
-| `ImportSource`/`ImportRequest`/`ImportedDocument`/`ImportReport` | `record` (interface `importer`); `bytes: list<u8>` — nessun campo porta un percorso |
+| `ImportSource`/`ImportRequest`/`ImportedDocument`/`ImportReport` | `record` (interface `importer`); `content: source-content` — byte o una chiave che l'host risolve ([0102](../decisions/0102-i-byte-non-stanno-nel-record.md)), e nessun campo porta un percorso |
 | `ImportMode`/`ConflictPolicy` | `enum` |
 | `ImportOutcome` | `variant` (solo `failed` porta un payload) |
 | `ExportTarget`/`ExportRequest`/`ExportArtifact`/`ExportReport` | `record` (interface `exporter`) |

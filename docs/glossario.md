@@ -600,15 +600,21 @@ la ricerca è passata da 1,0× a 6,8× su otto thread.
 
 Un documento che risponde a una query, con quello che serve per mostrarlo: il
 punteggio, lo snippet, ciò che ha fatto scattare la corrispondenza. È il tipo su
-cui pesano tre delle voci P0 della [seduta 21](roadmap/21-la-ricerca-predefinita.md).
+cui pesavano tre delle voci di firma della
+[seduta 21](roadmap/21-la-ricerca-predefinita.md): sono state prese prima del
+freeze, e in tutto il repo non resta aperta **nessuna** P0.
 
 ### query di testo
 `TextQuery` · [`abi/query.rs:132`](../crates/fub-abi/src/query.rs) · [0025](decisions/0025-la-ricerca-predefinita.md)
 
 Come si chiede una ricerca full-text: il testo, il modo, i campi. La 0025 ha
 stabilito che la ricerca di Fub è **built-in e di classe *omnisearch***, e da
-lì viene tutto ciò che a questo record ancora manca — tolleranza ai refusi,
-prefisso mentre si digita, ricerca dentro la nota aperta.
+lì è venuto ciò che a questo record mancava: `tolerance` — un'intenzione
+(`Exact`/`Typos`), mai una distanza di edit — e `partial_last_term` per il
+prefisso mentre si digita ([0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)),
+e le occorrenze dentro la nota aperta
+([0049](decisions/0049-una-posizione-dentro-un-documento.md)). Il fuzzy vero
+resta lavoro di provider, e non scade.
 
 ---
 
@@ -855,17 +861,30 @@ kernel — ed è la prova che il canale dati basta.
 ## Il metodo
 
 ### buco dichiarato
-— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md), [0106](decisions/0106-un-formato-si-presenta.md), [0109](decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
+— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md), [0106](decisions/0106-un-formato-si-presenta.md), [0109](decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md), [0112](decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md), [0113](decisions/0113-il-banco-conta-le-operazioni.md)
 
 Un fatto sulla forma del contratto che chi legge dedurrebbe **al contrario**,
 scritto nel posto in cui ci si inciampa mentre ci si chiede se una cosa si può —
 non in fondo a un verbale e non come casella da spuntare. Non entra in nessun
-totale e non è lavoro rimandato: è ciò che si sarebbe scoperto dopo. Sono
-**quattro**: `plugin_data_dir` (0064), la superficie di scrittura (0104), il
-formato su disco che nasce senza costante nominata e senza riga in tabella
-(0106), e ciò che di Windows da qui non si può provare (0109) — questa riga
-diceva «due» mentre erano tre, che è precisamente il difetto per cui i totali si
-riscrivono a ogni chiusura.
+totale e non è lavoro rimandato: è ciò che si sarebbe scoperto dopo.
+
+Sono **sette** [conta: buchi-dichiarati]: `plugin_data_dir`, che consegna a un
+provider nativo una cartella vera (0064); «su task completato» che non ha un
+campo nel modello, quindi in `DocChange` non si può nominare (0069); la
+superficie di scrittura di un terzo, che non è vietata ma non è attrezzata
+(0104); il formato su disco che nasce senza costante nominata e senza riga in
+tabella (0106); ciò che di Windows da qui non si può provare (0109); che il
+ponte Tauri serializzi davvero questi record e che la webview li disegni (0112);
+e il rapporto fra due tempi, che nessun conto di operazioni sa sostituire
+(0113).
+
+Il numero ha una storia sua, ed è la ragione per cui adesso porta un conto
+accanto: questa riga ha detto «due» mentre erano tre e poi «quattro» mentre
+erano sei, cioè è rimasta indietro **tre volte** — e la serie che i verbali si
+timbrano a vicenda (*n. 5* nella 0112, *n. 6* nella 0113) è l'ordinale dei soli
+buchi numerati, non dell'inventario: la 0069 ne aveva dichiarato uno prima che
+la numerazione esistesse, e nessun consuntivo l'aveva raccolto. Un verbale non
+si riscrive, quindi il posto dove il conto torna è questo.
 
 ### giro
 — · [todo.md](todo.md) · —

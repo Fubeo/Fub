@@ -272,8 +272,10 @@ dice che è finito ciò che qualcuno ha già trovato, non che non ci sia altro.
       `ImportProvider`/`ExportProvider` in `abi/transfer.rs`, con
       `MarkdownImport`/`MarkdownExport` come **primo cliente** vero attraverso
       il kernel. La decisione che il freeze avrebbe reso definitiva è la forma
-      della sorgente: **byte, non path** (`ImportSource.bytes`,
-      `ExportArtifact.bytes`), che è ciò per cui il capitolo 17 non chiede
+      della sorgente: **byte, non path** (allora `ImportSource.bytes` e
+      `ExportArtifact.bytes`, oggi un `content` che è i byte **o** una chiave
+      che l'host risolve — [0102](../decisions/0102-i-byte-non-stanno-nel-record.md)),
+      che è ciò per cui il capitolo 17 non chiede
       nessuna capacità filesystem e la sandbox di M5 non deve concedere niente.
       Con essa: `ImportMode::Preview` invece di un `MigrationPlan` gemello, e
       `HostApi::free_name` — una capacità in più nell'elenco della [decisione 0013](../decisions/0013-elenco-delle-capacita.md), trovata
@@ -338,9 +340,12 @@ dice che è finito ciò che qualcuno ha già trovato, non che non ci sia altro.
 - [x] **Contesto di una view: `active_document()` o `ViewContext`?** — **deciso
       pre-freeze**: `HostApi::active_context() -> Option<ViewContext>`, con
       `ViewContext { pane, doc, selection, mode }` (interface `session` nel
-      WIT). La selezione attraversa il confine come
+      WIT). La selezione attraversava il confine come
       `Selection { span: Option<Span>, text: String }`: il testo sempre, lo span
-      solo quando le sue coordinate valgono anche per il sorgente del kernel.
+      solo quando le sue coordinate valgono anche per il sorgente del kernel — e
+      il campo è diventato `selections: option<selection-set>` con la
+      [0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md), perché
+      i punti d'inserimento sono N e il buffer è uno.
       `ViewSpec` guadagna `follows: ContextMask`, o "ridisegna al cambio di nota
       attiva" diventerebbe "ridisegna a ogni battuta di tasto". Verbale in
       [decisione 0007](../decisions/0007-contesto-di-sessione.md); `crates/fub-abi/wit/frozen/0.1.0.wit` **ritagliato** (la
