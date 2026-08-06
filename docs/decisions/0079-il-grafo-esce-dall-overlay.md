@@ -157,10 +157,15 @@ Il registro ha portato con sé una cosa che non era nel piano: un renderer custo
 può possedere qualcosa che il DOM non raccoglie da sé — un ciclo di animazione,
 un timer, un `ResizeObserver` — quindi restituisce **come smontarsi**, e a
 invocarlo è il riconciliatore, in tutti e cinque i punti in cui un elemento esce
-dall'albero. Questo chiude anche la
-[issue 0084](../issues.md#0084--memory-leak-di-listener-keydown-su-document-alla-riapertura-del-grafo),
-e nel modo per cui era stata *promossa* invece che riparata: la disciplina è del
-protocollo di disegno, non della buona memoria di chi scrive un renderer.
+dall'albero. Questo chiude anche l'osservazione **0084** dell'audit del
+2026-07-31 — «memory leak di listener `keydown` su `document` alla riapertura del
+grafo» —, e nel modo per cui era stata *promossa* invece che riparata: la
+disciplina è del protocollo di disegno, non della buona memoria di chi scrive un
+renderer. Quell'elenco stava in `docs/issues.md`, che è stato consumato
+riga per riga: ciò che reggeva è nei
+[difetti misurati](../todo.md#i-difetti-misurati) e nella
+[seduta 24](../roadmap/24-tre-firme-che-il-freeze-rende-definitive.md), questa
+riga no, perché era già chiusa da qui.
 
 ## Cosa è cambiato di misurabile, e cosa è sparito
 

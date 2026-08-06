@@ -5,7 +5,7 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 133 voci: novantanove da sette giri sulla stessa domanda, due da una
+Sono uscite 136 voci: novantanove da sette giri sulla stessa domanda, due da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md); e la §20.5, nata
 misurando la [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) contro il
@@ -29,11 +29,17 @@ verbali di fila) — e **due** da una
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centotrentatré sono
-chiuse — **tutte** — e i loro verbali stanno in
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)) — e tre da un
+**consuntivo**: la seduta 24, nata rileggendo contro i sorgenti le novantadue
+osservazioni che `docs/issues.md` teneva da un audit e che nessuno aveva mai
+lavorato. Centotrentatré sono
+chiuse, e i loro verbali stanno in
 [decisions/](decisions/README.md); le voci ancora aperte sono
-**zero** [conta: voci-aperte], e questo file resta il loro **indice** e il
+**tre** [conta: voci-aperte], e questo file resta il loro **indice** e il
 consuntivo di come sono finite.
+
+Da quello stesso consuntivo viene la **terza specie** che questo file conta: i
+[difetti misurati](#i-difetti-misurati), che non sono voci e non sono caselle.
 
 ## Come è organizzato
 
@@ -229,11 +235,17 @@ che questo piano passa il tempo a togliere dal codice.
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
+| **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | la stessa domanda a tre distanze dal confine: ciò che il contratto dice, arriva a chi deve leggerlo? | 3 | — |
 
 ## Le voci
 
-**Zero** [conta: voci-aperte]: la tabella è vuota, ed è così che si sa che la
-roadmap infrastrutturale di M4 è finita. Il numero di ogni voce resta quello con
+**Tre** [conta: voci-aperte], e sono tutte e tre della
+[seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md). La tabella
+era vuota — la roadmap infrastrutturale di M4 era finita — e queste tre l'hanno
+riaperta per il criterio con cui è stata scritta la prima riga di questo file:
+**toccano una firma**, e una firma scade col freeze. Nessuna delle tre è
+importante; tutte e tre diventano una migrazione di versione se il freeze passa
+sopra. Il numero di ogni voce resta quello con
 cui la nomina il resto del repo, e si ritrova in
 [decisions/](decisions/README.md) e nella
 [corrispondenza](roadmap/numerazione.md).
@@ -248,7 +260,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-**zero** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+**tre** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -257,8 +269,16 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-La colonna *Voci* somma **zero** [conta: voci-aperte]: **ogni** seduta è a zero,
-e l'ultima ad arrivarci è la 16, con la
+**E poi c'è una terza specie, che ha voluto un terzo conto per lo stesso
+argomento.** Un [difetto misurato](#i-difetti-misurati) non chiede una decisione
+— quindi non è una voce — e non è il residuo di un verbale — quindi non è una
+casella: è lavoro che nessuno ha ancora deciso di fare *e* che non ha niente da
+decidere. La forma di questo file era già pronta a riceverlo, e la prova è che
+non è servito inventare un criterio nuovo: è bastato rileggere quello con cui
+*Caselle* si era staccata da *Voci*.
+
+La colonna *Voci* somma **tre** [conta: voci-aperte]: ogni seduta è a zero
+tranne la 24, e l'ultima ad arrivare a zero è stata la 16, con la
 [0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md).
 Della 20 non resta nemmeno una casella: si è chiusa con la
 [0111](decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), l'ultima delle cinque
@@ -427,6 +447,110 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
+| **§24.1** | [Sette tipi del contratto non si vedono dalla radice del crate](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md#241-sette-tipi-del-contratto-non-si-vedono-dalla-radice-del-crate) | 24. Tre firme che il freeze rende definitive | contratto | **P0** |
+| **§24.2** | [`enabled()` risponde con un booleano a una domanda che ha tre risposte](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md#242-enabled-risponde-con-un-booleano-a-una-domanda-che-ha-tre-risposte) | 24. Tre firme che il freeze rende definitive | contratto | **P0** |
+| **§24.3** | [`Unsupported` è l'unico errore che non è testo che qualcuno legge](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md#243-unsupported-è-lunico-errore-che-non-è-testo-che-qualcuno-legge) | 24. Tre firme che il freeze rende definitive | contratto | **P0** |
+
+## I difetti misurati
+
+**Sessantasette** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
+è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
+Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
+*Caselle* è nata separata da *Voci*: sommarli avrebbe dato un numero che non
+risponde a nessuna domanda.
+
+**Da dove vengono.** Da un audit del 2026-07-31 che aveva prodotto novantadue
+osservazioni in `docs/issues.md`, un file che nessuno ha mai lavorato e in cui
+settantuno righe rimandavano a voci **mai committate** — il rimando cieco che
+[`roadmap/numerazione.md`](roadmap/numerazione.md) esiste per impedire, arrivato
+dal lato che quella disciplina non copre. Rilette una per una contro i sorgenti
+del 2026-08-06: sedici erano già chiuse, una era **falsa il giorno stesso**
+(`note.task.toggle` che «non spunta mai un task» — c'è un banco che prova il
+contrario, `commands_e2e.rs:688`, e la premessa sul parser era sbagliata), cinque
+non erano difetti ma comportamenti decisi. Settanta reggevano: **tre** sono
+diventate la [seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md)
+perché toccano una firma, queste sessantasette sono il resto. `issues.md` non
+esiste più: il file si è **svuotato**, non è stato tolto.
+
+**Il numero è quello di `issues.md` e non scala**, per la stessa regola dei `§`:
+è citato dai verbali e dai messaggi di commit, e rinumerarlo trasformerebbe ogni
+citazione in un rimando cieco. I buchi nella sequenza sono le ventidue righe che
+non sono sopravvissute alla rilettura.
+
+**L'ancora è al simbolo, non alla riga.** Ogni riga porta il posto misurato al
+2026-08-06: i numeri di riga si saranno mossi, il simbolo no. Chi ne prende una
+**riconta**, non deduce.
+
+| # | Difetto | Dove | Famiglia |
+|---|---|---|---|
+| 0001 | `VersionRef` attraversa l'IPC, e per lui `fub-app` dipende da `fub-features` | `fub-app/Cargo.toml` | confini |
+| 0002 | `restore_from_trash` ripristina i documenti e non gli asset | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
+| 0003 | il contesto di `Session` sopravvive alla disattivazione del plugin che l'ha pubblicato | `fub-kernel` · `workspace.rs` `deactivate_plugin` | spegnimento |
+| 0004 | i sidecar orfani in `.fub/data/trash/` non li pota nessuno fino a `empty_trash` | `fub-kernel` · `vault.rs` `remove_trashed` | cestino |
+| 0007 | `close_vault` e `with_session` fanno `canonical()` per primo: un vault sparito dal disco non si chiude più | `fub-host` · `session.rs:1015` | vault che sparisce |
+| 0008 | `set_plugin_enabled(false)` non ferma i job in volo, e salta `Plugin::deactivate` | `fub-host` · `session.rs` `set_plugin_enabled` | spegnimento |
+| 0010 | `close_vault` e `set_plugin_enabled` tornano `Vec<String>`: le notifiche perdono la variante tipizzata sul confine | `fub-app` · `lib.rs:118` | errori |
+| 0015 | `basicSetup` da `codemirror` accanto agli import da `@codemirror/*`: due copie dello stato a un aggiornamento di distanza | `frontend` · `editor/editor.ts:9` | shell |
+| 0016 | `onLingua` non torna una funzione di disiscrizione | `frontend` · `i18n/strings.ts:870` | shell |
+| 0018 | risoluzione dei link rotti: scansione lineare con `resolution_key` per voce, per ogni riferimento | `fub-kernel` · `index/core.rs` `resolve_entry_in` | prestazioni |
+| 0019 | `Vault::open` non rende assoluta la radice: un `set_current_dir` sposta `.fub` e `.trash` | `fub-kernel` · `vault.rs:137` | vault che sparisce |
+| 0024 | il listener `click` di `showContextMenu` resta appeso se il menu si chiude con Escape | `frontend` · `ui/menu.ts:50` | shell |
+| 0025 | `aggiorna` non riallinea le etichette di `select`/`radio` né `placeholder`/`min`/`max`/`step` | `frontend` · `ui/node.ts` `aggiorna` | shell |
+| 0027 | `openWikilink` esce su `if (!page) return`: `[[#Sezione]]` e `[[#^blocco]]` non portano da nessuna parte | `frontend` · `panels/document.ts:902` | shell |
+| 0028 | `argsFromForm` scrive `false` per un booleano opzionale mai toccato, e copre il default del kernel | `frontend` · `ui/palette.ts:163` | shell |
+| 0029 | il wrapper dell'editor non espone `EditorView.destroy` | `frontend` · `editor/editor.ts` `createEditor` | shell |
+| 0030 | `saveCurrent` non ha una coda: due salvataggi si accavallano e si contendono `dirty` | `frontend` · `panels/document.ts` | corse |
+| 0031 | `updatePreview` innesta senza token: una risposta in ritardo riempie un'anteprima già chiusa | `frontend` · `panels/preview.ts:58` | corse |
+| 0033 | `openDocument` non verifica di essere ancora quello atteso dopo l'`await` | `frontend` · `panels/document.ts:851` | corse |
+| 0034 | `refreshFromKernel` non ha contatore di generazione: due giri si sovrascrivono fuori ordine | `frontend` · `panels/explorer.ts:141` | corse |
+| 0035 | `dispatch_pending` gira solo `if removed_indexes`: un plugin senza indici lascia i `JobDone` in coda | `fub-kernel` · `workspace.rs:1160` | eventi persi |
+| 0036 | gli eventi emessi prima dell'`AppHandle` spariscono senza traccia | `fub-app` · `lib.rs:74` | eventi persi |
+| 0037 | `let _ = app.emit(...)`: un payload che non serializza si perde in silenzio | `fub-app` · `lib.rs:79` | eventi persi |
+| 0038 | i comandi Tauri sono sincroni e prendono lock + I/O sul thread pool dell'IPC | `fub-app` · `lib.rs` | lock e I/O |
+| 0039 | `free_name` non riserva il nome: la corsa è dichiarata e chi la perde va gestito | `fub-kernel` · `workspace.rs` `free_name` | corse |
+| 0040 | `vault_replace` senza `docs` legge **ogni** documento del vault invece di chiedere all'indice | `fub-features` · `commands.rs:1287` | prestazioni |
+| 0041 | il doppio controllo di `dirty` in `SearchIndex::commit` ferma le letture per tutta la durata del commit | `fub-features` · `search.rs` `commit` | prestazioni |
+| 0042 | `up_to_date` fa `announced.clear()` in testa e perde le revisioni annunciate a lotti | `fub-features` · `search.rs:1585` | indice |
+| 0043 | senza finestra il tetto della ricerca è `total`: `TopDocs::with_limit(total)` su un vault grande | `fub-features` · `search.rs:1146` | prestazioni |
+| 0044 | `read_meta` converte un `meta.json` corrotto in `None` con `.ok()`, e la cartella risulta libera | `fub-features` · `versioning.rs:895` | versioning |
+| 0045 | `rebuild_from_store` carica ogni snapshot in memoria solo per calcolarne l'impronta | `fub-features` · `versioning.rs:938` | prestazioni |
+| 0046 | `VersionStore` tiene il proprio `Mutex` attraverso `data_read`/`data_write` | `fub-features` · `versioning.rs` | lock e I/O |
+| 0047 | l'azione `reveal` dell'outline rilegge il documento attivo invece di portarsi dietro il proprio `doc_id` | `fub-features` · `outline.rs:109` | corse |
+| 0048 | `escape_attr` non copre l'apice singolo | `fub-features` · `blocks.rs:299` | rendering |
+| 0049 | `StatsView` dichiara `ContextMask::all()` e rilegge il documento intero a ogni movimento del cursore | `fub-features` · `stats.rs:82` | prestazioni |
+| 0050 | `count` attraversa il testo due volte, su un percorso caldo | `fub-features` · `stats.rs:57` | prestazioni |
+| 0051 | il filtro dei tag alloca un `to_lowercase()` per tag a ogni battuta | `fub-features` · `tags.rs:232` | prestazioni |
+| 0052 | la chiave di stato del filtro tag è cablata e si fida dell'isolamento implicito dell'host | `fub-features` · `tags.rs:74` | stato di vista |
+| 0056 | export verso `markdown.single` con `frontmatter = true`: i frontmatter dal secondo in poi finiscono nel corpo | `fub-format-markdown` · `transfer.rs:225` | markdown |
+| 0057 | `link.context` si valorizza solo nel ramo `Paragraph`: i link in intestazioni e tabelle restano senza | `fub-format-markdown` · `parse.rs:570` | markdown |
+| 0058 | `restore_from_trash` scrive prima di cancellare: un crash in mezzo lascia due copie | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
+| 0059 | `link_rewrite_plan` cerca l'omonimia in `metas` e non in `entries`: gli allegati omonimi sfuggono | `fub-kernel` · `workspace.rs:3352` | anagrafe |
+| 0062 | `backlinks()` torna duplicati quando un documento linka due volte lo stesso target, e il contratto non lo dice | `fub-kernel` · `graph.rs:231` | grafo |
+| 0064 | un `Overflow` su un canale già disconnesso dice «riconcilia» a chi non riceverà mai la conferma | `fub-kernel` · `bus.rs:234` | eventi persi |
+| 0065 | il debouncer del watcher tiene il prestito esclusivo per tutta la raffica **e** per `flush_indexes` | `fub-host` · `watcher.rs:225` | lock e I/O |
+| 0067 | `Arc::get_mut` fallisce con un job in volo e `deactivate` non viene chiamato: nessun assert lo presidia | `fub-host` · `registry.rs:396` | spegnimento |
+| 0068 | `check(_, Naming::New)` accetta gli spazi in testa che `normalized` trasforma in file nascosti | `fub-abi` · `rules/path_policy.rs:286` | regole |
+| 0069 | un panico dentro `workspace.batch()` salta `end_batch` e blocca il dispatch per sempre | `fub-kernel` · `workspace.rs:5044` | eventi persi |
+| 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
+| 0071 | `UndoStack::push` usa `Vec::remove(0)` oltre il tetto | `fub-kernel` · `undo.rs:99` | prestazioni |
+| 0072 | `cancel_job` con un `JobId` mai accodato lascia una bandiera orfana in `Flags::live` per sempre | `fub-host` · `runner.rs:135` | spegnimento |
+| 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
+| 0074 | riaprire un vault già aperto non aggiorna `last_opened`: i recenti restano nell'ordine vecchio | `fub-host` · `session.rs` `open` | registro vault |
+| 0075 | `set_look` con `name: None` non azzera: non c'è modo di tornare al nome della cartella | `fub-host` · `vaults.rs:205` | registro vault |
+| 0077 | `portable_dir` non verifica di essere scrivibile e non ripiega su `~/.config/fub` | `fub-host` · `config.rs:133` | configurazione |
+| 0078 | il thread del ponte esce dal `while let Ok(...)` senza una riga di log | `fub-host` · `bridge.rs:76` | eventi persi |
+| 0079 | `render_link` scrive `data-embed-heading` e ignora `block`: `![[Nota#^b]]` perde l'ancora | `fub-format-markdown` · `render.rs:285` | markdown |
+| 0080 | `write_link` serializza `[[page^b]]` invece di `[[page#^b]]` quando `heading` è `None` | `fub-format-markdown` · `serialize.rs:519` | markdown |
+| 0081 | lo span di un embed include il `!` nel ripiego testuale e non nel ramo comrak | `fub-format-markdown` · `parse.rs:642` | markdown |
+| 0083 | `pickIcon` rimuove il nodo senza chiamare `chiudi()`: listener e trappola del fuoco restano appesi | `frontend` · `ui/menu.ts:68` | shell |
+| 0085 | il nome del gruppo `radio` è globale al documento: due form con lo stesso `field` si deselezionano a vicenda | `frontend` · `ui/node.ts:825` | shell |
+| 0086 | `viewAction` non è avvolta in un `try/catch`: un errore lascia la vista com'era, senza dirlo | `frontend` · `ui/views.ts:391` | errori |
+| 0087 | il ripiego da `patch` a `renderDeclaredView` non ha token di sequenza | `frontend` · `ui/views.ts` `disegna` | corse |
+| 0088 | `mountDeclaredViews` smonta prima di sapere se `listViews` riesce | `frontend` · `ui/views.ts:219` | corse |
+| 0089 | `forget_vault` esce al primo errore I/O e lascia le forme successive dentro `view_states` | `fub-host` · `session.rs:668` | stato divergente |
+| 0090 | `set_plugin_enabled` muta memoria e registro, poi propaga l'errore di `set_setting`: il disco resta indietro | `fub-host` · `session.rs` `set_plugin_enabled` | stato divergente |
+| 0091 | chiudendo il vault corrente ne diventa corrente il primo in ordine **alfabetico** | `fub-host` · `session.rs:1024` | registro vault |
 
 ## Gli allegati
 
