@@ -66,10 +66,18 @@ pub mod traits;
 pub mod transfer;
 pub mod ui;
 
-// Re-export dei tipi più usati, per import ergonomici.
+// **Ogni tipo pubblico del contratto si vede da qui.** Non è un elenco dei
+// "tipi più usati" — quella formula lasciava decidere a chi scriveva, e chi
+// scriveva decideva per omissione: un tipo nuovo nasceva raggiungibile solo per
+// il path lungo, che passa dal modulo di implementazione in cui è dichiarato.
+// L'elenco è presidiato da `tests/superficie_della_radice.rs`, che lo confronta
+// coi tipi `pub` letti dai sorgenti: chi ne aggiunge uno e non lo mette qui
+// trova rosso, e chi lo toglie pure. Gli unici moduli che restano qualificati
+// sono quelli dichiarati là dentro, con la ragione per cui lo sono.
 pub use command::{
     Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
-    CommandSpec, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undone,
+    CommandSpec, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
+    Undone,
 };
 pub use custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
@@ -77,21 +85,28 @@ pub use custom::{
 };
 pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit, WriteBase};
 pub use error::{FormatError, PluginError};
-pub use event::{Actor, BatchId, Event, EventKind, EventMask, Notice, Origin, Severity, Subject};
+pub use event::{
+    Actor, BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Notice, Origin, Severity,
+    Subject,
+};
 pub use format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
-    RenderOptions, RenderTarget, SourceKind,
+    DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
+    ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
 pub use locale::{HourCycle, Locale, Weekday};
 pub use model::{
-    Block, DocId, DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, Span, Tag,
+    Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter, Heading,
+    HeadingSlugs, Inline, Link, LinkTarget, ListItem, ParsedWikilink, PropertyDate, PropertyScalar,
+    PropertyTime, PropertyValue, Span, TableCell, TableRow, Tag, TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::OptionMap;
+pub use organization::Organization;
 pub use query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TextField,
-    TextMode, TextQuery,
+    TextMode, TextQuery, TextTolerance,
 };
+pub use schema::SchemaVersion;
 pub use session::{
     AnchoredSelection, AnchoredSelections, ContextKind, ContextMask, FloatingSelection,
     FloatingSelections, PaneId, PaneMode, SelectionSet, ViewContext,
@@ -101,13 +116,16 @@ pub use settings::{
 };
 pub use text::{Arg, ArgValue, Localize, Message, StringCatalog, Strings, Text};
 pub use traits::{
-    BacklinkRef, CommandProvider, DataRead, DataWrite, DocumentMatch, EventHandler, HealthCheck,
-    HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices,
-    IndexLoss, IndexProvider, IndexQuery, IndexResult, LinkDirection, NeighborRef, Page, Paged,
-    Plugin, PluginManifest, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter,
-    PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ServiceProvider,
-    SettingsRead, SettingsWrite, TransferRead, TrashEntry, VaultRead, VaultStructure, VaultWrite,
-    ViewInstance, ViewProvider, ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface,
+    BacklinkRef, CivilTime, CommandProvider, DataRead, DataWrite, DocPosition, DocumentMatch,
+    DraftInfo, EntryKind, EventHandler, Excerpts, FolderScope, HealthCheck, HealthIssue, HostApi,
+    HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices, IndexLoss,
+    IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobSpec, JobStatus,
+    LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
+    PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertySort,
+    PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef, ServiceProvider, SettingsRead,
+    SettingsWrite, TagCount, TimerSchedule, TimerSpec, TransferRead, TrashEntry, VaultEntry,
+    VaultFolder, VaultRead, VaultStatus, VaultStructure, VaultWrite, ViewInstance, ViewInterests,
+    ViewProvider, ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface, WallClock,
     MAX_RANDOM_BYTES,
 };
 pub use transfer::{
