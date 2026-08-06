@@ -96,6 +96,20 @@ riga in corsivo qui sotto, e non qui.
 
 *ex §4.4 · presidi · **P2** — gira contro l'host finto della 1.3*
 
+**Una metà di questa voce è già stata presa, e da un'altra parte.** La
+[§23.16](23-cosa-costano-le-decisioni-chiuse.md#2316-su-windows-un-hardlink-si-stacca-in-silenzio)
+la nominava come *«la §17.2 vista da un lato che quella voce non nomina — non i
+test della shell ma i test di ciò che cambia con la piattaforma»*, e la
+[0109](../decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md) l'ha
+decisa misurando: un test sotto `#[cfg(unix)]` su Windows non fallisce, **non
+viene compilato**, e una suite che si svuota in silenzio è indistinguibile da una
+suite verde. La forma che ne è uscita — il ramo che dipende dall'OS si **passa**
+invece di essere nominato, e quanti test restano fuori dal `cfg` è un **numero**
+scritto accanto a come lo si ricava — sta in
+[platforms-ci.md](../appendix/platforms-ci.md) e vale per chiunque scriva un
+presidio di piattaforma, qui dentro compresi gli E2E: un E2E che gira su un OS
+solo ha lo stesso difetto in un altro travestimento.
+
 - [ ] **E2E** dell'app reale (tauri-driver/Playwright) sui flussi critici:
       apri vault, scrivi, rinomina, cerca, ripristina.
 - [x] **Il check di accessibilità automatico è stato spostato al §12.4**, che

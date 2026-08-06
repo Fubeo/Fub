@@ -25,9 +25,37 @@ push/PR:
 4. `cargo clippy --workspace -- -D warnings`.
 5. `cargo fmt --check`.
 6. Frontend: install + `vite build` (type-check TS) su almeno un OS.
+7. `cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc`,
+   **dal job Linux** — vedi qui sotto.
 
 Dipendenze di sistema per Tauri (WebKitGTK/librerie su Linux, ecc.) installate nel
 job Linux; Windows/macOS usano i toolchain nativi.
+
+### Cosa una matrice a tre OS **non** verifica
+
+La riga «build + test in CI» accanto a Windows è vera e per anni ha detto meno di
+quanto sembrasse. Un test sotto `#[cfg(unix)]` su Windows non fallisce: **non
+viene compilato**, e una suite che si svuota in silenzio è indistinguibile da una
+suite verde. È il difetto che la
+[0109](../decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md) ha
+misurato sui presidi della durabilità (§15.2), dove i quattro che interrogavano
+il caso erano tutti gated e il job Windows passava **proprio per quello**.
+
+Da lì due abitudini, e valgono per qualunque codice che cambi con la piattaforma:
+
+- il ramo che dipende dall'OS si **passa** invece di essere nominato, così la
+  regola che ci sta sopra si prova ovunque, e ciò che resta gated è solo la parte
+  che la piattaforma deve davvero fornire;
+- quanti test di un file restano fuori da `#[cfg(unix)]` è un **numero**, e si
+  scrive accanto a come lo si ricava (`conteggi.mjs`, conto
+  `durabilita-su-ogni-piattaforma`). Nessun `cargo test` può accorgersi di un
+  presidio che non è stato compilato; un conto che legge il sorgente da fuori sì.
+
+E il passo 7: `clippy` e `fmt` girano sul job Linux, il job `windows-latest`
+compila ma non ha né l'uno né l'altro, quindi il codice `#[cfg(windows)]` del
+kernel — il conteggio dei nomi di un file — resterebbe l'unico pezzo del repo che
+nessuno legge finché non rompe. Sei secondi da Linux lo portano sotto il
+compilatore: **una FFI che non compila è una FFI che non è stata scritta.**
 
 ### Estensioni per milestone
 

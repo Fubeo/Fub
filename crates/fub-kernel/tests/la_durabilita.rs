@@ -1,4 +1,4 @@
-//! Cosa promette una scrittura del supporto (§15.2), e i due casi in cui la
+//! Cosa promette una scrittura del supporto (§15.2), e i tre casi in cui la
 //! promessa si rifiuta di pagare il suo prezzo.
 //!
 //! Sta in un file suo e **solo su `FsStorage`**, e non è una preferenza di
@@ -14,9 +14,35 @@
 //! proprietà — il temporaneo che non resta indietro, l'inode che cambia solo
 //! quando è lecito, i permessi che sopravvivono — e la parte non osservabile
 //! (`sync_all`) resta una riga letta in review.
+//!
+//! # La metà che la piattaforma non porta via (§23.16)
+//!
+//! Quattro dei presidi qui sotto chiedono un inode, un hardlink o un `mode`, e
+//! sono `#[cfg(unix)]`: su Windows **non vengono nemmeno compilati**. Per anni
+//! il job Windows della CI è passato verde girando una suite di durabilità che
+//! là dentro era quasi vuota, ed è la specie di difetto che nessun colore
+//! segnala — *una suite che si svuota in silenzio è indistinguibile da una suite
+//! verde*.
+//!
+//! Da qui i test che esercitano la scelta «sostituire o scrivere sul posto»
+//! passano da `FsStorage::write_con`, che prende il rilevatore invece di
+//! nominarlo, e da `come_scrivere`, che è pura: i test di questo file che si
+//! compilano ed eseguono su ogni piattaforma sono
+//! **undici** [conta: durabilita-su-ogni-piattaforma].
+//! Quel numero è il presidio del presidio: se qualcuno riportasse
+//! questa metà sotto un `#[cfg(…)]` qualunque, il conto scenderebbe e
+//! `check-prosa` diventerebbe rosso — mentre `cargo test` su Windows resterebbe
+//! verde, perché è esattamente ciò che non sa vedere.
+//!
+//! **Quello che il conto non prende, e va saputo**: un `if cfg!(windows) {
+//! return; }` dentro il corpo. Lì il test si vede correre e passa a vuoto, che è
+//! la forma peggiore della stessa cosa — un attributo lo si legge, una riga in
+//! mezzo a un corpo no. Non esiste un conto che la prenda senza leggere Rust:
+//! resta una riga da fermare in review, ed è scritta qui perché chi ci
+//! inciampasse sappia che non è una svista del presidio.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_kernel::storage::{FsStorage, VaultStorage};
+use fub_kernel::storage::{come_scrivere, ComeScrivere, FsStorage, NomiDelFile, VaultStorage};
 
 fn banco() -> (tempfile::TempDir, Utf8PathBuf) {
     let tmp = tempfile::tempdir().expect("cartella temporanea");
@@ -48,6 +74,165 @@ fn una_scrittura_non_lascia_niente_dietro_di_se() {
         .collect();
     assert_eq!(rimasti, vec!["Idea.md"], "il temporaneo se n'è andato");
     assert_eq!(storage.read(&nota).unwrap(), b"seconda");
+}
+
+/// La regola intera, come tabella: otto ingressi, otto risposte, e nessun
+/// filesystem.
+///
+/// È la sola forma in cui questa decisione si può leggere tutta insieme, ed è
+/// anche la sola che gira dove gli inode non ci sono. La riga che vale la voce è
+/// l'ultima coppia: **`Ignoto` sceglie come `PiuDiUno`**, non come `Uno`.
+#[test]
+fn la_regola_sta_in_una_tabella_e_la_tabella_gira_ovunque() {
+    let casi = [
+        (false, NomiDelFile::Nessuno, ComeScrivere::Sostituendo),
+        (false, NomiDelFile::Uno, ComeScrivere::Sostituendo),
+        (false, NomiDelFile::PiuDiUno, ComeScrivere::SulPosto),
+        (false, NomiDelFile::Ignoto, ComeScrivere::SulPosto),
+        // Un collegamento ha già un altro titolare: il conteggio non lo cambia.
+        (true, NomiDelFile::Nessuno, ComeScrivere::SulPosto),
+        (true, NomiDelFile::Uno, ComeScrivere::SulPosto),
+        (true, NomiDelFile::PiuDiUno, ComeScrivere::SulPosto),
+        (true, NomiDelFile::Ignoto, ComeScrivere::SulPosto),
+    ];
+    for (collegamento, nomi, atteso) in casi {
+        assert_eq!(
+            come_scrivere(collegamento, nomi),
+            atteso,
+            "collegamento={collegamento}, nomi={nomi:?}"
+        );
+    }
+}
+
+/// Un file con più nomi non si sostituisce — **su qualunque piattaforma**, e non
+/// solo dove il test sa costruire un hardlink.
+///
+/// Il gemello `un_file_con_due_nomi_non_si_sdoppia` prova la stessa cosa con un
+/// hardlink vero e sta sotto `#[cfg(unix)]`, cioè non esiste dove il difetto
+/// della §23.16 viveva. Questo prova la stessa regola col rilevamento passato:
+/// gli manca la prova che il conteggio sia giusto, e ha in cambio di esistere.
+#[test]
+fn un_file_con_piu_nomi_non_si_sostituisce_dovunque_giri_questo_test() {
+    let (_tmp, root) = banco();
+    let nota = root.join("Idea.md");
+    FsStorage.write(&nota, b"prima").unwrap();
+
+    let come = FsStorage
+        .write_con(&nota, b"seconda", |_, _| NomiDelFile::PiuDiUno)
+        .unwrap();
+
+    assert_eq!(come, ComeScrivere::SulPosto, "l'inode ha altri titolari");
+    assert_eq!(
+        std::fs::read(&nota).unwrap(),
+        b"seconda",
+        "e i byte sono arrivati lo stesso"
+    );
+}
+
+/// **Il caso della voce.** Un conteggio che non si sa non è «un nome solo»: è un
+/// dubbio, e davanti a un dubbio si rinuncia all'atomicità invece di rischiare
+/// di staccare un nome.
+///
+/// Finché il rilevamento era un `bool`, questo caso e quello sopra erano lo
+/// stesso valore, e su Windows era sempre quello sbagliato.
+#[test]
+fn un_conteggio_che_non_si_sa_non_e_un_nome_solo() {
+    let (_tmp, root) = banco();
+    let nota = root.join("Idea.md");
+    FsStorage.write(&nota, b"prima").unwrap();
+
+    let come = FsStorage
+        .write_con(&nota, b"seconda", |_, _| NomiDelFile::Ignoto)
+        .unwrap();
+
+    assert_eq!(
+        come,
+        ComeScrivere::SulPosto,
+        "chi non sa quanti nomi ha un file non lo sostituisce"
+    );
+    assert_eq!(std::fs::read(&nota).unwrap(), b"seconda");
+}
+
+/// E il verso opposto, che è quello che si paga tutti i giorni: un nome solo
+/// **compra** l'atomicità.
+#[test]
+fn un_nome_solo_compra_l_atomicita() {
+    let (_tmp, root) = banco();
+    let nota = root.join("Idea.md");
+    FsStorage.write(&nota, b"prima").unwrap();
+
+    let come = FsStorage
+        .write_con(&nota, b"seconda", |_, _| NomiDelFile::Uno)
+        .unwrap();
+
+    assert_eq!(come, ComeScrivere::Sostituendo);
+    assert_eq!(std::fs::read(&nota).unwrap(), b"seconda");
+}
+
+/// A un file che non c'è il conteggio non si chiede: non c'è niente da
+/// conservare, e su Windows chiederlo vorrebbe dire aprire un file inesistente
+/// per sentirsi rispondere di no.
+#[test]
+fn a_un_file_che_non_c_e_non_si_chiede_niente() {
+    let (_tmp, root) = banco();
+    let nota = root.join("sotto/Nuova.md");
+    let chiesto = std::cell::Cell::new(false);
+
+    let come = FsStorage
+        .write_con(&nota, b"prima", |_, _| {
+            chiesto.set(true);
+            NomiDelFile::PiuDiUno
+        })
+        .unwrap();
+
+    assert_eq!(come, ComeScrivere::Sostituendo);
+    assert!(
+        !chiesto.get(),
+        "nessuno ha contato i nomi di ciò che non c'è"
+    );
+    assert_eq!(std::fs::read(&nota).unwrap(), b"prima");
+}
+
+/// E nemmeno a un **collegamento** si chiede il conteggio: la risposta non
+/// cambierebbe la decisione, e su Windows costerebbe un'apertura che seguirebbe
+/// il collegamento invece di guardarlo.
+///
+/// Sta sotto `#[cfg(unix)]` perché per fare un symlink serve un filesystem che
+/// li faccia, ma **il ramo che presidia non è di unix**: è la trappola misurata
+/// dalla verifica del rosso. Togliere questa riga *da sola* non rende rosso
+/// niente; toglierla **insieme** al corto-circuito di `come_scrivere` — cioè la
+/// semplificazione «ovvia», un ramo solo che chiede sempre il conteggio — fa sì
+/// che su unix `nlink` di un symlink valga `1`, quindi `Uno`, quindi
+/// `Sostituendo`: **il collegamento verrebbe rimpiazzato**, che è precisamente
+/// ciò che la 0065 esiste per non fare. Chi tocca queste due righe insieme deve
+/// trovare un rosso, e questo è il rosso.
+#[cfg(unix)]
+#[test]
+fn su_un_collegamento_il_conteggio_non_si_chiede() {
+    let (_tmp, root) = banco();
+    let vera = root.join("altrove/Vera.md");
+    FsStorage.write(&vera, b"prima").unwrap();
+    let collegata = root.join("Collegata.md");
+    std::os::unix::fs::symlink(&vera, &collegata).unwrap();
+    let chiesto = std::cell::Cell::new(false);
+
+    let come = FsStorage
+        .write_con(&collegata, b"seconda", |_, _| {
+            chiesto.set(true);
+            NomiDelFile::Uno
+        })
+        .unwrap();
+
+    assert_eq!(come, ComeScrivere::SulPosto);
+    assert!(!chiesto.get(), "a un collegamento non si contano i nomi");
+    assert!(
+        std::fs::symlink_metadata(&collegata)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "il collegamento è ancora un collegamento"
+    );
+    assert_eq!(std::fs::read(&vera).unwrap(), b"seconda");
 }
 
 /// Il prezzo dichiarato, e il presidio che dice che lo stiamo pagando davvero:

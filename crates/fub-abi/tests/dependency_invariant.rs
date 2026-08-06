@@ -87,6 +87,16 @@ const ALLOWED_DIRECT: &[(&str, &[&str])] = &[
     // e `tracing` è già nell'albero per via di tauri — prenderlo diretto non
     // aggiunge un crate, e l'assenza di `tracing-attributes` è presidiata dal
     // `default-features = false` nel workspace.
+    //
+    // `windows-sys` è dichiarato sotto `[target.'cfg(windows)'.dependencies]` e
+    // compare **lo stesso** in questo elenco, perché la fotografia è del
+    // manifesto e non della macchina che la scatta: una dipendenza che entra
+    // solo su una piattaforma è precisamente quella che nessuno rilegge, ed è la
+    // ragione per cui il presidio guarda ciò che è dichiarato. Serve a una
+    // syscall sola — `GetFileInformationByHandle`, il conteggio dei nomi di un
+    // file (§23.16) — e non intacca l'invariante di agnosticità: non è markdown,
+    // non è una UI, non è un runtime. Il perché di questa e non di una FFI a
+    // mano sta nel `Cargo.toml` del kernel.
     (
         "fub-kernel",
         &[
@@ -96,6 +106,7 @@ const ALLOWED_DIRECT: &[(&str, &[&str])] = &[
             "camino",
             "thiserror",
             "tracing",
+            "windows-sys",
         ],
     ),
 ];

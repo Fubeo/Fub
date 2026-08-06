@@ -29,9 +29,9 @@ verbali di fila) — e **due** da una
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centoventicinque sono
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centoventisei sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-otto [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
+sette [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -226,11 +226,11 @@ che questo piano passa il tempo a togliere dal codice.
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | 1 | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
-| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | 1 | 3 |
+| **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
 
 ## Le voci
 
-Otto [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
+Sette [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -242,7 +242,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-otto [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+sette [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -251,13 +251,15 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-La colonna *Voci* somma **otto** [conta: voci-aperte], e la seduta 23 ne
-tiene una da sola. Non è uno squilibrio da correggere: è ciò che succede
-quando una strada nuova viene percorsa tre volte di fila e produce voci ogni
-volta, e la sua forma — *prezzi dichiarati e mai risommati* — attraversa tutte le
-altre sedute invece di stare accanto a loro. Se un giorno converrà spezzarla, il
-taglio naturale non è il numero ma la **lente**: le §23.9–§23.17 rispondono a una
-domanda più stretta delle prime otto.
+La colonna *Voci* somma **sette** [conta: voci-aperte], e la **seduta 23 è a
+zero**: era diciassette voci, la più grande mai aperta qui dentro, e la sua riga
+resta con la sola colonna *Caselle* — un consuntivo invece di un elenco di
+lavoro. Vale la pena scrivere com'è finita, perché era anche la più squilibrata:
+la sua forma — *prezzi dichiarati e mai risommati* — attraversa tutte le altre
+sedute invece di stare accanto a loro, e questo è ciò che l'ha resa chiudibile
+una voce per volta senza mai aspettare le altre. Il taglio che a un certo punto
+sembrava servire — spezzarla per **lente**, le §23.9–§23.17 rispondono a una
+domanda più stretta delle prime otto — non è mai servito.
 
 Le caselle residue oggi sono **sedici**, e stanno in tredici posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
@@ -360,7 +362,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | **§17.1** | [Corpus, fuzzing, prestazioni](roadmap/17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni) | 17. I presidi che restano | presidi | **P2** |
 | **§17.2** | [Test della shell](roadmap/17-presidi-che-restano.md#172-test-della-shell) | 17. I presidi che restano | presidi | **P2** |
 | **§20.5** | [Il budget del dispatch tronca senza guardare cosa sta troncando](roadmap/20-quando-qualcosa-va-storto.md#205-il-budget-del-dispatch-tronca-senza-guardare-cosa-sta-troncando) | 20. Quando qualcosa va storto | kernel | **P2** |
-| **§23.16** | [Su Windows un hardlink si stacca in silenzio](roadmap/23-cosa-costano-le-decisioni-chiuse.md#2316-su-windows-un-hardlink-si-stacca-in-silenzio) | 23. Cosa le decisioni chiuse costano | kernel | **P2** |
 
 ## Gli allegati
 
@@ -372,7 +373,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centotto** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centonove** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

@@ -844,13 +844,17 @@ kernel — ed è la prova che il canale dati basta.
 ## Il metodo
 
 ### buco dichiarato
-— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md)
+— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md), [0106](decisions/0106-un-formato-si-presenta.md), [0109](decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 
 Un fatto sulla forma del contratto che chi legge dedurrebbe **al contrario**,
 scritto nel posto in cui ci si inciampa mentre ci si chiede se una cosa si può —
 non in fondo a un verbale e non come casella da spuntare. Non entra in nessun
 totale e non è lavoro rimandato: è ciò che si sarebbe scoperto dopo. Sono
-**due**: `plugin_data_dir` (0064) e la superficie di scrittura (0104).
+**quattro**: `plugin_data_dir` (0064), la superficie di scrittura (0104), il
+formato su disco che nasce senza costante nominata e senza riga in tabella
+(0106), e ciò che di Windows da qui non si può provare (0109) — questa riga
+diceva «due» mentre erano tre, che è precisamente il difetto per cui i totali si
+riscrivono a ogni chiusura.
 
 ### giro
 — · [todo.md](todo.md) · —
