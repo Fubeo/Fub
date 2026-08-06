@@ -446,14 +446,6 @@ verifica, non in un elenco di lavoro.
   pausa dell'interfaccia. La regola della [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
   è esattamente questa, applicata qui: mutare in memoria sotto il lucchetto,
   rilasciarlo, rendere durevole fuori.
-- [ ] **L'eco del proprio salvataggio si conta troppo tardi**
-  (`frontend/src/panels/document.ts`). `buf.echi += 1` sta **dopo**
-  `await api.writeDocument`, ma l'evento che quell'eco descrive lo emette il
-  kernel *dentro* la scrittura, cioè prima che la promise risolva. Se arriva per
-  primo, `cambioSotto` non trova nessun eco da consumare e classifica
-  `riscrittura`: compare «il file è cambiato sotto di te» per una scrittura
-  nostra, che è esattamente l'avviso a vuoto che quella funzione esiste per non
-  dare. Va incrementato prima di chiamare, e sottratto nei rami di fallimento.
 - [ ] **I campi di testo restano attaccati all'azione del primo disegno**
   (`frontend/src/ui/node.ts`). `collega` toglie e rimette l'ascoltatore a ogni
   riconciliazione; `scatta` e il `keydown` dell'Invio no — vengono registrati

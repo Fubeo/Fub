@@ -104,3 +104,37 @@ export function cambioSotto(
   if (daFuori) return "altra_app";
   return buf.echi > 0 ? "eco" : "riscrittura";
 }
+
+/// Scrive **contando l'eco**, e possiede tutte e due le metà del conto.
+///
+/// L'eco si annuncia **prima** della scrittura, e non è un dettaglio d'ordine:
+/// l'evento che quell'eco descrive lo emette il kernel *dentro* la scrittura,
+/// cioè prima che la promise risolva. Contarlo dopo vuol dire che l'evento
+/// arriva quando il contatore è ancora a zero, `cambioSotto` non trova niente
+/// da consumare e risponde `riscrittura` — «il file è cambiato sotto di te»
+/// detto di una scrittura nostra, che è esattamente l'avviso a vuoto per cui
+/// `cambioSotto` esiste. Il difetto era nella riga giusta al posto sbagliato.
+///
+/// E la scrittura che fallisce toglie il suo: se il kernel ha rifiutato — disco
+/// pieno, conflitto — non ha scritto niente, quindi nessun evento arriverà mai
+/// a consumare quell'eco. Lasciarlo appeso è il difetto **simmetrico e
+/// peggiore**: il prossimo cambio vero, quello di un kernel o di un plugin,
+/// verrebbe scambiato per l'eco di una scrittura che non c'è stata, e l'avviso
+/// che doveva comparire non comparirebbe.
+///
+/// Le due metà stanno qui, in un `try/catch` solo, invece che nei rami di chi
+/// salva: i rami di fallimento di `saveDoc` sono due oggi e chi ne aggiungesse
+/// un terzo — o un secondo chiamante di `writeDocument` — non deve doversi
+/// ricordare di sottrarre. Un ramo dimenticato non si vede provando l'app.
+export async function scriviContandoEco<T>(
+  buf: { echi: number },
+  scrivi: () => Promise<T>,
+): Promise<T> {
+  buf.echi += 1;
+  try {
+    return await scrivi();
+  } catch (e) {
+    buf.echi -= 1;
+    throw e;
+  }
+}

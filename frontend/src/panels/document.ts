@@ -46,7 +46,13 @@ import type { PaneMode, SelectionSet, ViewContext, WriteBase } from "../host/con
 import { onEvent } from "../state/kernel";
 import { noteRecentiEsistenti } from "../state/recenti";
 import { emit, on, state } from "../state/store";
-import { cambioSotto, esitoDelFallimento, statoDi, type Esito } from "../state/salvataggio";
+import {
+  cambioSotto,
+  esitoDelFallimento,
+  scriviContandoEco,
+  statoDi,
+  type Esito,
+} from "../state/salvataggio";
 import { CHIAVE_CASO, casoDi, daRecuperare } from "../state/bozze";
 import { bozzeNonSalvate } from "../host/query";
 import type { DraftInfo } from "../host/contract";
@@ -141,9 +147,11 @@ interface Buffer {
   /// è cambiato su disco, ed è cambiato perché l'abbiamo cambiato noi. Il kernel
   /// non ci dà modo di riconoscerlo — l'evento non porta una revisione, e
   /// l'origine di una scrittura della shell è `user`, la stessa di un comando
-  /// che l'utente lancia — quindi lo si riconosce contando: una scrittura
-  /// riuscita mette un eco in attesa, il primo evento non-watcher su quel
-  /// documento lo consuma.
+  /// che l'utente lancia — quindi lo si riconosce contando: una scrittura mette
+  /// un eco in attesa **prima di partire**, e il primo evento non-watcher su
+  /// quel documento lo consuma. Prima di partire perché l'evento nasce dentro
+  /// la scrittura e può arrivare mentre la si aspetta; se la scrittura poi
+  /// fallisce l'eco lo toglie `scriviContandoEco`, che è l'unica a metterlo.
   ///
   /// Il modo in cui questo conto può sbagliare è uno solo ed è **limitato**: se
   /// un eco non arrivasse (coda troncata), il contatore resterebbe alto e si
@@ -1103,7 +1111,16 @@ async function saveDoc(doc: string): Promise<void> {
     // La base viaggia con la scrittura: se il file non è più quello da cui
     // questo buffer è partito, il kernel risponde `conflict` e **non scrive
     // niente** (§18.1).
-    prodotta = await api.writeDocument(doc, text, buf.base);
+    //
+    // L'eco lo conta `scriviContandoEco`, e lo conta **prima** di chiamare: il
+    // `document_changed` che questa scrittura produce lo emette il kernel
+    // *dentro* la scrittura, cioè prima che questa `await` risolva. Contarlo
+    // qui sotto voleva dire arrivare tardi ogni volta che l'evento vinceva la
+    // corsa, e dire «il file è cambiato sotto di te» di ciò che abbiamo appena
+    // scritto noi. I due rami di `catch` qui sotto non devono sottrarre niente:
+    // la sottrazione è dentro quella funzione, che è l'unico posto che non si
+    // può dimenticare di aggiornare aggiungendo un ramo.
+    prodotta = await scriviContandoEco(buf, () => api.writeDocument(doc, text, buf.base));
   } catch (e) {
     // Un conflitto non è un disco pieno, ed è la ragione per cui questo ramo è
     // suo (0041 ha reso la specie interrogabile proprio per poterlo fare). Il
@@ -1138,9 +1155,6 @@ async function saveDoc(doc: string): Promise<void> {
   // senza, il secondo salvataggio nominerebbe una base ormai vecchia e
   // fallirebbe contro sé stesso.
   buf.base = { kind: "descends_from", value: prodotta };
-  // La scrittura è arrivata sul disco: il `document_changed` che ne segue è
-  // nostro, e chi lo riceve non deve raccontarlo come se fosse di qualcun altro.
-  buf.echi += 1;
   // Pulito solo se nel frattempo non è arrivato altro input: `dirty` è stato
   // rimesso a true da `scritto` se l'utente ha continuato a scrivere.
   if (buf.text === text) {
