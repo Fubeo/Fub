@@ -58,17 +58,39 @@ const MAX_DOCS: usize = 64;
 /// Solo le foglie di testo **non negate**: una clausola `NOT text` seleziona i
 /// documenti che *non* la contengono, e cercarla dentro di loro sarebbe cercare
 /// ciò che si è chiesto di non trovare.
+///
+/// I doppioni si tolgono **con la stessa regola con cui poi si cercherà**, cioè
+/// [`same_needle`], che è [`prefix_len_ci`] — quella di [`locate`]. Non è un
+/// dettaglio di stile: `Rust rust` sono due testi diversi per `==` e uno solo
+/// per chi cerca, quindi con l'uguaglianza esatta il vault si scandiva **due
+/// volte per trovare le stesse posizioni**, su ognuno dei [`MAX_DOCS`] documenti
+/// aperti. E il verso opposto è la ragione per cui la regola si **riusa** invece
+/// di riscriverla: un dedup più largo di quello con cui si cerca — per esempio
+/// `to_lowercase` sull'intera stringa — fonderebbe testi che `locate` distingue,
+/// e allora non sarebbe più lavoro risparmiato ma un'occorrenza persa.
 pub(crate) fn wanted(query: &IndexQuery) -> Vec<String> {
     let IndexQuery::Documents { matching, .. } = query else {
         return Vec::new();
     };
     let mut out: Vec<String> = Vec::new();
     for needle in needles_of(matching) {
-        if !out.contains(&needle) {
+        if !out.iter().any(|già| same_needle(già, &needle)) {
             out.push(needle);
         }
     }
     out
+}
+
+/// Se due testi da cercare sono lo **stesso** testo per chi cercherà.
+///
+/// È [`prefix_len_ci`] usata per intero invece che come prefisso: `b` combacia
+/// con `a` a meno del caso **e** lo consuma tutto. Una funzione e non un
+/// `to_lowercase().eq()` perché il confronto di `locate` è carattere per
+/// carattere sulle forme minuscole, e quella scorciatoia non è la stessa regola
+/// — `İ` e `i̇` sono uguali per `to_lowercase` e diversi per `prefix_len_ci`,
+/// che è chi decide davvero cosa si trova.
+fn same_needle(a: &str, b: &str) -> bool {
+    prefix_len_ci(a, b) == Some(a.len())
 }
 
 fn needles_of(expr: &QueryExpr) -> Vec<String> {
@@ -238,6 +260,72 @@ mod tests {
         assert_eq!(
             wanted(&text_query("rust async", TextMode::Phrase, false)),
             vec!["rust async".to_string()]
+        );
+    }
+
+    /// **Il conto delle scansioni, che è il conto che questo modulo paga.**
+    ///
+    /// `wanted` non produce una lista: produce **quante volte ogni documento
+    /// verrà percorso**, perché [`locate`] fa una scansione per testo, su
+    /// ognuno dei [`MAX_DOCS`] documenti che apre. `Rust rust` sono due testi
+    /// per `==` e uno solo per chi cerca, quindi con l'uguaglianza esatta il
+    /// conto era **due** — due passate identiche per le stesse posizioni.
+    ///
+    /// È un conto di operazioni e non un cronometro (decisione 0113): su una
+    /// macchina condivisa un tempo non è un segnale, un numero di passate sì.
+    #[test]
+    fn due_scritture_dello_stesso_testo_sono_una_scansione_sola() {
+        let scansioni = |q: &str| wanted(&text_query(q, TextMode::Terms, false)).len();
+        assert_eq!(scansioni("Rust rust"), 1, "una passata, non due");
+        assert_eq!(scansioni("rust RUST Rust rUsT"), 1);
+        // E il caso vero: chi scrive due parole di cui una ripetuta col
+        // maiuscolo paga due passate, non tre.
+        assert_eq!(scansioni("Rust async rust"), 2);
+    }
+
+    /// **Era lavoro sprecato, non verità** — e questa è la misura del verso
+    /// opposto, cioè la sola che lo dimostra: la risposta con i doppioni e
+    /// quella senza devono essere **identiche**. Se differissero, il difetto
+    /// non sarebbe un costo ma un'occorrenza che compariva solo scrivendo il
+    /// termine due volte.
+    #[test]
+    fn togliere_il_doppione_non_cambia_una_riga_della_risposta() {
+        let source = "Rust è rust, e RUST resta Rust. Poi però architettura.";
+        let uno = locate(source, &["rust".to_string()]);
+        let due = locate(source, &["Rust".to_string(), "rust".to_string()]);
+        assert_eq!(uno, due, "le due passate davano già la stessa risposta");
+        assert_eq!(
+            uno.len(),
+            4,
+            "e la risposta non è vuota, se no non prova niente"
+        );
+    }
+
+    /// L'altro verso della stessa riga, ed è il motivo per cui la regola si
+    /// **riusa** invece di riscriverla: un dedup più largo di quello con cui si
+    /// cerca fonderebbe testi che [`locate`] tiene distinti, e allora la
+    /// scansione risparmiata sarebbe un'occorrenza persa. Un corpus è cieco a
+    /// chi fonde di troppo tanto quanto a chi fonde di meno.
+    #[test]
+    fn non_si_fonde_ciò_che_chi_cerca_distingue() {
+        let due = |a: &str, b: &str| {
+            let n = wanted(&text_query(&format!("{a} {b}"), TextMode::Terms, false));
+            assert_eq!(n.len(), 2, "`{a}` e `{b}` sono due testi da cercare: {n:?}");
+        };
+        // Prefisso e termine intero: `arch` sta dentro `architettura`, e chi ha
+        // cercato tutti e due vuole tutti e due.
+        due("arch", "architettura");
+        // Accenti e forme flesse: il caso si ignora, il resto no — è la riga
+        // scritta su `locate`, e vale anche di qua.
+        due("però", "pero");
+        due("gatto", "gatti");
+        // E il caso in cui `to_lowercase()` sull'intera stringa avrebbe fuso
+        // due testi che `prefix_len_ci` distingue: `İ` minuscolo è **due**
+        // caratteri, e `locate` confronta carattere per carattere.
+        due("İ", "i\u{307}");
+        assert!(
+            locate("i\u{307}", &["İ".to_string()]).is_empty(),
+            "chi cerca deve distinguerli, altrimenti il dedup poteva fonderli"
         );
     }
 
