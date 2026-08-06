@@ -18,17 +18,29 @@
 //!    `#[tauri::command]`;
 //! 2. **i comandi registrati**, cioè i nomi dentro `tauri::generate_handler!`.
 //!
-//! **Questo test sa di `lib.rs`, e di nient'altro** — ed è la sua zona cieca,
-//! misurata provandola: una seconda superficie IPC dichiarata in un altro file
-//! dello stesso crate e montata con un `.plugin()` che porti il proprio
-//! `generate_handler!` passerebbe di qui **verde**, e sarebbe raggiungibile dal
-//! webview come `plugin:<nome>|<comando>`. Un presidio che legge un file sa quel
-//! file; a vedere gli altri è un conto che cammina la cartella, e i file di
-//! `crates/fub-app/src` in cui compare un `#[tauri::command]` o un
-//! `generate_handler!` sono **uno** [conta: file-con-superficie-ipc]. È la stessa
-//! zona cieca che la [0106](../../../docs/decisions/0106-un-formato-si-presenta.md)
-//! ha misurato sul presidio che da qui ha copiato la forma, e ha la stessa
-//! risposta: il conto prende ciò che sta fuori dal file che il test legge.
+//! **Questo test giudica `lib.rs`, e la superficie IPC sta tutta lì** — e la
+//! seconda metà di quella frase, che prima era una speranza, adesso è un
+//! presidio. La zona cieca misurata dalla
+//! [0106](../../../docs/decisions/0106-un-formato-si-presenta.md) era questa:
+//! una seconda superficie IPC dichiarata in un altro file dello stesso crate e
+//! montata con un `.plugin()` che porti il proprio `generate_handler!` passava
+//! di qui **verde**, ed era raggiungibile dal webview come
+//! `plugin:<nome>|<comando>`. La riparazione di allora fu un conto —
+//! `file-con-superficie-ipc` —, e un conto dice *quanti*, mai *quale*: chi lo
+//! trova rosso ha davanti due riparazioni che si somigliano, togliere la
+//! seconda superficie o **portare il numero a due**, e la seconda lascia il
+//! difetto in piedi con la prosa aggiornata.
+//!
+//! Adesso il file che il test legge non è più una scelta del test: è
+//! `cammina_i_sorgenti`, che apre la cartella `src/` e la guarda tutta
+//! (`la_superficie_ipc_sta_in_un_file_solo`). **La superficie IPC di questo
+//! crate è un file**, e un secondo file che ne dichiari una diventa rosso per
+//! nome, con i comandi che ha dentro elencati. Il conto resta e non è un
+//! doppione: guarda gli stessi file da fuori, con un `grep` che non condivide
+//! niente con questo estrattore — se una forma sfugge a uno dei due, l'altra
+//! metà del difetto la prende comunque. I file di `crates/fub-app/src` in cui
+//! compare un `#[tauri::command]` o un `generate_handler!` sono
+//! **uno** [conta: file-con-superficie-ipc].
 //!
 //! Poi li confronta fra loro e con l'allowlist, **in tutte e due le direzioni**
 //! ogni volta. La direzione che si vede subito è «ne è comparso uno»; quella che
@@ -52,6 +64,71 @@ use std::collections::{BTreeMap, BTreeSet};
 /// legame è una dipendenza di compilazione e non un path da tenere aggiornato a
 /// mano — se il file si sposta, non compila.
 const SORGENTE: &str = include_str!("../src/lib.rs");
+
+/// Il nome del file che porta la superficie, dentro `src/`.
+const IL_FILE: &str = "lib.rs";
+
+/// **Tutti** i sorgenti del crate, letti dal disco: `(nome, contenuto)`.
+///
+/// È l'unico posto di questo file che usa `std::fs` invece di `include_str!`, e
+/// la ragione è precisamente il contrario di quella che vale per [`SORGENTE`]:
+/// `include_str!` lega il test a un file **che qualcuno ha nominato**, e ciò che
+/// serve qui è vedere i file che nessuno ha nominato. Un elenco di
+/// `include_str!` sarebbe l'elenco a mano di cui questa zona cieca è fatta.
+///
+/// La cartella si cammina in profondità: un modulo può stare in
+/// `src/qualcosa/mod.rs`.
+fn cammina_i_sorgenti() -> Vec<(String, String)> {
+    fn raccogli(dir: &std::path::Path, prefisso: &str, out: &mut Vec<(String, String)>) {
+        let voci = std::fs::read_dir(dir)
+            .unwrap_or_else(|e| panic!("non si legge `{}`: {e}", dir.display()));
+        for voce in voci {
+            let voce = voce.expect("una voce della cartella dei sorgenti");
+            let nome = voce.file_name().to_string_lossy().into_owned();
+            let path = voce.path();
+            let relativo = if prefisso.is_empty() {
+                nome.clone()
+            } else {
+                format!("{prefisso}/{nome}")
+            };
+            if path.is_dir() {
+                raccogli(&path, &relativo, out);
+            } else if nome.ends_with(".rs") {
+                let testo = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("non si legge `{relativo}`: {e}"));
+                out.push((relativo, testo));
+            }
+        }
+    }
+
+    let radice = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut out = Vec::new();
+    raccogli(&radice, "", &mut out);
+    out.sort();
+
+    // **Una suite che si svuota in silenzio è indistinguibile da una suite
+    // verde**, e una camminata è il modo più facile di svuotarsi: basta che la
+    // cartella non sia quella. Le due righe qui sotto sono ciò che lo dice —
+    // la seconda pretende che il file camminato sia **lo stesso byte per byte**
+    // di quello che `include_str!` ha inglobato, cioè che questa camminata e il
+    // resto del file stiano guardando lo stesso albero.
+    let lib = out
+        .iter()
+        .find(|(nome, _)| nome == IL_FILE)
+        .unwrap_or_else(|| {
+            panic!(
+                "camminando `{}` non si trova `{IL_FILE}`: questa camminata sta \n\
+                 guardando la cartella sbagliata, e un presidio che guarda la \n\
+                 cartella sbagliata passa sempre.",
+                radice.display()
+            )
+        });
+    assert_eq!(
+        lib.1, SORGENTE,
+        "il `{IL_FILE}` camminato non è quello che `include_str!` ha inglobato"
+    );
+    out
+}
 
 /// Il contratto, letto per una ragione sola: una riga dell'allowlist che dice
 /// «questa è la capacità `X`» deve nominare una `X` che **esiste**.
@@ -507,6 +584,49 @@ fn definiti_e_registrati_sono_lo_stesso_insieme() {
          {}\n\
          (Non dovrebbe compilare: se sei qui, l'estrattore ha letto male.)",
         elenca(&fantasmi)
+    );
+}
+
+/// **La superficie IPC di questo crate è un file, e questo lo prova.**
+///
+/// È la riparazione della zona cieca che la 0106 ha dichiarato leggendo questo
+/// presidio: tutti gli altri banchi di questo file giudicano `lib.rs`, e un
+/// `#[tauri::command]` scritto in un altro file del crate — montato con un
+/// `.plugin()` che porti il proprio `generate_handler!` — passava di là verde
+/// ed era raggiungibile dal webview.
+///
+/// La forma non è «leggi anche il secondo file»: quella sarebbe l'elenco a mano
+/// una riga più lunga, e il terzo file resterebbe fuori. È **la cartella**, e
+/// quello che dice è una regola: da qui si entra da un posto solo. Un secondo
+/// file con dei comandi non si dichiara, si toglie — o, se davvero non si può,
+/// si toglie questa regola sapendo di toglierla, che è il costo giusto.
+#[test]
+fn la_superficie_ipc_sta_in_un_file_solo() {
+    let mut colpevoli: Vec<String> = Vec::new();
+    for (nome, testo) in cammina_i_sorgenti() {
+        if nome == IL_FILE {
+            continue;
+        }
+        let righe: Vec<String> = testo
+            .lines()
+            .enumerate()
+            .filter(|(_, r)| !e_prosa(r))
+            .filter(|(_, r)| r.contains("#[tauri::command") || r.contains("generate_handler!"))
+            .map(|(n, r)| format!("{nome}:{} {}", n + 1, r.trim()))
+            .collect();
+        if !righe.is_empty() {
+            colpevoli.extend(righe);
+        }
+    }
+    assert!(
+        colpevoli.is_empty(),
+        "in `crates/fub-app/src` c'è una superficie IPC fuori da `{IL_FILE}`:\n  {}\n\
+         Nessuno degli altri banchi di questo file la vede — leggono `{IL_FILE}` —\n\
+         e dal webview un comando montato con un `.plugin()` si chiama comunque,\n\
+         come `plugin:<nome>|<comando>`. La superficie di questo crate è **un**\n\
+         file: o quel comando torna in `{IL_FILE}` e passa dall'allowlist, o non\n\
+         è un comando IPC.",
+        colpevoli.join("\n  ")
     );
 }
 
