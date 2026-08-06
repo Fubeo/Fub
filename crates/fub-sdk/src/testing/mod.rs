@@ -136,6 +136,9 @@ pub struct MemoryHost {
     /// vuole provare, e senza questo elenco si potrebbe solo provare cosa ne ha
     /// fatto.
     richieste: Mutex<Vec<HttpRequest>>,
+    /// I path dello spazio dati su cui `data_write` rifiuta. Vuoto è il
+    /// default. Si accende con [`MemoryHost::nega_scrittura`].
+    scritture_negate: Mutex<std::collections::BTreeSet<String>>,
 }
 
 impl MemoryHost {
@@ -208,6 +211,21 @@ impl MemoryHost {
             .unwrap()
             .push_back(Err(PluginError::Io(why.to_string().into())));
         self
+    }
+
+    /// D'ora in poi `data_write` su questo path **fallisce**.
+    ///
+    /// Non è una crudeltà del doppio: è il disco pieno, la quota finita, il
+    /// permesso tolto sotto i piedi mentre l'app è aperta. Serve perché la
+    /// forma «muta lo stato, poi persisti» si giudica soltanto sul ramo in cui
+    /// la persistenza non riesce, e un banco che sa solo riuscire non lo
+    /// esercita mai. Si accende a metà partita di proposito — la storia si
+    /// costruisce con le scritture buone, e poi cede quella che interessa.
+    pub fn nega_scrittura(&self, path: &str) {
+        self.scritture_negate
+            .lock()
+            .unwrap()
+            .insert(path.to_string());
     }
 
     /// Le richieste di rete che questo doppio ha visto, in ordine.
@@ -673,6 +691,11 @@ impl DataRead for MemoryHost {
 
 impl DataWrite for MemoryHost {
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
+        if self.scritture_negate.lock().unwrap().contains(path) {
+            return Err(PluginError::Io(
+                format!("scrittura negata su `{path}`").into(),
+            ));
+        }
         self.blobs
             .lock()
             .unwrap()

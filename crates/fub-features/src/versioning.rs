@@ -397,9 +397,25 @@ impl VersionStore {
         // "il vault al tempo T" la crederebbe cancellata per sempre.
         doc.deleted_at = None;
 
-        inner.prune(id, host);
+        // La potatura decide **prima** e cancella **dopo**: `prune` tocca solo
+        // l'elenco in memoria e dice quali contenuti avanzano, l'indice va sul
+        // disco, e solo un indice già scritto autorizza a togliere i blob. Se
+        // `write_index` fallisce si esce di qui con tutti i contenuti al loro
+        // posto e un indice vecchio che li nomina tutti: si perde la potatura,
+        // non una versione. Stessa forma di `rename`, stessa ragione di
+        // `trasloca` — vedi il commento là.
+        let potati = inner.prune(id, host);
         inner.write_meta(id, host)?;
         inner.write_index(host)?;
+        if !potati.is_empty() {
+            tracing::info!(
+                target: "fub.versioning",
+                "{} version{} di {id} potate dalle fasce di ritenzione",
+                potati.len(),
+                if potati.len() == 1 { "e" } else { "i" }
+            );
+        }
+        spazza(&potati, host);
         Ok(Some(version))
     }
 
@@ -434,11 +450,7 @@ impl VersionStore {
         inner.write_index(host)?;
         // Ultimo ciò che resta indietro: è spazio sprecato, non una bugia, e
         // non vale la pena di far fallire un rename già andato a buon fine.
-        for path in trasloco.da_ripulire {
-            if let Err(e) = host.data_remove(&path) {
-                tracing::warn!(target: "fub.versioning", "{path} è rimasto indietro e non se ne va: {e}");
-            }
-        }
+        spazza(&trasloco.da_ripulire, host);
         Ok(())
     }
 
@@ -589,12 +601,21 @@ impl Inner {
         ts.max(minimo)
     }
 
-    /// Applica le fasce di ritenzione (D6) e **dice quante versioni ha buttato**:
-    /// una potatura silenziosa sarebbe indistinguibile da un bug.
-    fn prune(&mut self, id: &DocId, host: &mut dyn HostApi) {
+    /// Applica le fasce di ritenzione (D6) all'elenco in memoria e **restituisce
+    /// i contenuti che avanzano**, senza cancellarne nessuno.
+    ///
+    /// Non cancella perché non può saperlo: finché l'indice potato non è sul
+    /// disco, i blob che qui risultano di troppo sono ancora nominati
+    /// dall'indice che c'è, e toglierli lo renderebbe bugiardo. Li spazza chi
+    /// chiama, dopo [`Inner::write_index`], con [`spazza`]. La direzione
+    /// innocua dell'errore è il blob orfano — costa spazio; quella rovinosa è
+    /// l'indice che nomina un contenuto sparito, che rompe ogni
+    /// [`VersionStore::read`].
+    #[must_use = "sono i contenuti da spazzare dopo aver scritto l'indice"]
+    fn prune(&mut self, id: &DocId, host: &dyn HostApi) -> Vec<String> {
         let ora = host.now_unix_millis();
         let Some(doc) = self.docs.get(id.as_str()) else {
-            return;
+            return Vec::new();
         };
         let mut tenute: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
         let mut fasce_viste: Vec<(u8, u64)> = Vec::new();
@@ -622,31 +643,20 @@ impl Inner {
         }
         tenute.reverse();
         if tenute.len() == doc.versions.len() {
-            return;
+            return Vec::new();
         }
 
-        let da_buttare: Vec<VersionRef> = doc
+        let dir = doc.dir.clone();
+        let avanzati: Vec<String> = doc
             .versions
             .iter()
             .filter(|v| !tenute.iter().any(|t| t.ts == v.ts))
-            .copied()
+            .map(|v| blob(&dir, &snapshot_name(v.ts, id.as_str())))
             .collect();
-        let dir = doc.dir.clone();
-        for v in &da_buttare {
-            let path = blob(&dir, &snapshot_name(v.ts, id.as_str()));
-            if let Err(e) = host.data_remove(&path) {
-                tracing::warn!(target: "fub.versioning", "non riesco a potare {path}: {e}");
-            }
-        }
-        tracing::info!(
-            target: "fub.versioning",
-            "{} version{} di {id} potate dalle fasce di ritenzione",
-            da_buttare.len(),
-            if da_buttare.len() == 1 { "e" } else { "i" }
-        );
         if let Some(doc) = self.docs.get_mut(id.as_str()) {
             doc.versions = tenute;
         }
+        avanzati
     }
 
     fn write_meta(&self, id: &DocId, host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -678,6 +688,21 @@ impl Inner {
             ))
         })?;
         host.data_write(INDEX_FILE, &raw)
+    }
+}
+
+/// Toglie dallo store contenuti che l'indice **già scritto** non nomina più.
+///
+/// È il posto unico in cui il versioning cancella un blob, e non rende un
+/// errore di proposito: qui si arriva solo a indice persistito, e a quel punto
+/// un contenuto che non se ne va è spazio sprecato — non una bugia. Chiamarla
+/// prima di [`Inner::write_index`] è l'inversione che rompe tutto, ed è la
+/// ragione per cui [`Inner::prune`] restituisce path invece di cancellarli.
+fn spazza(paths: &[String], host: &mut dyn HostApi) {
+    for path in paths {
+        if let Err(e) = host.data_remove(path) {
+            tracing::warn!(target: "fub.versioning", "{path} è rimasto indietro e non se ne va: {e}");
+        }
     }
 }
 
@@ -1434,7 +1459,7 @@ mod tests {
     use fub_sdk::testing::MemoryHost;
 
     use super::*;
-    use fub_abi::traits::{DataWrite, HostEnv, VaultWrite};
+    use fub_abi::traits::{DataRead, DataWrite, HostEnv, VaultWrite};
 
     fn id(s: &str) -> DocId {
         DocId::new(s)
@@ -1733,11 +1758,72 @@ mod tests {
             tenute.len() < 6,
             "le fasce devono aver assottigliato qualcosa: {eta:?}"
         );
-        // E i contenuti potati non restano a occupare spazio nello store.
+        // E i contenuti potati non restano a occupare spazio nello store: la
+        // cartella del documento contiene il suo `meta.json` e **solo** gli
+        // snapshot che l'indice nomina, nessuno di più.
         for v in &tenute {
             assert!(
                 store.read(&id("a.md"), v.ts, &host).is_ok(),
                 "una versione tenuta deve essere leggibile"
+            );
+        }
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+        let mut rimasti = host.data_list(&dir).unwrap();
+        rimasti.sort();
+        let mut attesi: Vec<String> = tenute
+            .iter()
+            .map(|v| blob(&dir, &snapshot_name(v.ts, "a.md")))
+            .chain(std::iter::once(blob(&dir, META_FILE)))
+            .collect();
+        attesi.sort();
+        assert_eq!(rimasti, attesi, "un blob potato è rimasto nello store");
+    }
+
+    /// La forma «muta lo stato, poi persisti col `?`» giudicata sul ramo che
+    /// conta: la potatura decide di buttare qualcosa e la scrittura dell'indice
+    /// non riesce.
+    ///
+    /// Ciò che non deve succedere è che sul disco resti un indice che nomina
+    /// versioni già cancellate — `read` fallirebbe su ognuna, e il versioning
+    /// sembrerebbe intero mentre non lo è. La direzione innocua dell'errore è
+    /// l'opposta: il blob che avanza costa spazio e basta.
+    #[test]
+    fn a_prune_that_cannot_write_the_index_leaves_every_named_version_readable() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        // Due salvataggi nella stessa ora e poi due giorni di silenzio: al
+        // prossimo salvataggio i primi due finiscono nella fascia oraria, dove
+        // ne sopravvive uno solo — cioè la potatura ha qualcosa da buttare.
+        for (n, salto) in [0, 60_000].into_iter().enumerate() {
+            host.avanza(salto);
+            store
+                .snapshot(&id("a.md"), &format!("versione {n}"), &mut host)
+                .unwrap();
+        }
+        let prima = store.list(&id("a.md")).len();
+        assert_eq!(prima, 2);
+
+        // Il disco si rifiuta proprio sull'indice, e proprio sul salvataggio
+        // che pota.
+        host.nega_scrittura(INDEX_FILE);
+        host.avanza(2 * MS_GIORNO);
+        let esito = store.snapshot(&id("a.md"), "l'ultima", &mut host);
+        assert!(esito.is_err(), "una scrittura negata non è un successo");
+        assert!(
+            store.list(&id("a.md")).len() < prima + 1,
+            "il banco non prova niente se la potatura non ha buttato nulla"
+        );
+
+        // Si riapre dall'indice che è rimasto sul disco: qualunque versione
+        // dica di avere, deve poterla leggere.
+        let store = VersionStore::open(&mut host).unwrap();
+        let versioni = store.list(&id("a.md"));
+        assert!(!versioni.is_empty(), "l'indice sul disco non è vuoto");
+        for v in &versioni {
+            assert!(
+                store.read(&id("a.md"), v.ts, &host).is_ok(),
+                "l'indice nomina la versione {} e il contenuto non c'è più",
+                v.ts
             );
         }
     }
