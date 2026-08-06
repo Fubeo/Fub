@@ -24,16 +24,22 @@
 //!
 //! # I posti da cui un evento sparisce
 //!
-//! Sono **tre** [conta: code-che-si-svuotano], tutti in questo file, e ognuno
-//! ha una ragione scritta accanto: il drenaggio senza osservatori
+//! Sono **quattro** [conta: code-che-si-svuotano], tutti in questo file, e
+//! ognuno ha una ragione scritta accanto: il drenaggio senza osservatori
 //! (`begin_drain`, dove non si perde niente perché sul bus quegli eventi sono
-//! già passati), il troncamento a budget esaurito (`next_of_tail`, che conta
+//! già passati), il travaso verso `salvaged` al troncamento (`next_to_deliver`,
+//! che non butta niente — degrada), il tratto finale (`next_of_tail`, che conta
 //! ciò che butta) e l'ultimissimo giro (`end_drain`, che è il prezzo della
-//! terminazione). Il quarto — quello che fino al §20.5 stava dentro
-//! `next_to_deliver` e svuotava `pending` in blocco senza guardare
-//! [`Event::is_recoverable`] — non c'è più, e il conto è qui perché un quinto
-//! si aggiunge con una riga: `self.pending.clear()` è la cosa più facile da
-//! scrivere per uscire da una situazione difficile.
+//! terminazione). Quello che fino al §20.5 stava dentro `next_to_deliver` e
+//! svuotava `pending` in blocco senza guardare [`Event::is_recoverable`] non
+//! c'è più.
+//!
+//! Il conto è qui perché un quinto posto si aggiunge con una riga, e per due
+//! giri ha contato **la sillaba invece della proprietà**: cercava
+//! `self.pending.clear();` e non vedeva né il travaso che già c'era, né la
+//! seconda coda (`salvaged`), né `truncate`, né un `clear()` con un commento in
+//! coda. Adesso le due code sono di un tipo — [`EventQueue`] — che si svuota in
+//! blocco da due sole porte, e il conto conta quelle.
 //!
 //! Per la stessa ragione le due guardie di stato — l'attore corrente e il flag
 //! `in_provider_call` — qui sono coppie *scambia/ripristina*
@@ -91,18 +97,86 @@ enum Drain {
     Chiuso,
 }
 
+/// Una coda di eventi in attesa, col `VecDeque` **privato apposta**.
+///
+/// La ragione è un difetto misurato: il conto che presidiava i posti da cui un
+/// evento sparisce cercava la riga `self.pending.clear();`, cioè una
+/// **sillaba**. `truncate`, `drain(..)`, un `= VecDeque::new()` o lo stesso
+/// `clear()` con un commento in coda gli passavano accanto, e la coda si
+/// svuotava lo stesso. Qui a svuotarla in blocco ci sono **due sole porte** —
+/// [`EventQueue::take_all`], che travasa senza perdere niente, e
+/// [`EventQueue::discard_all`], che rende *quanti* ne ha buttati perché chi
+/// butta debba farci qualcosa — e nessun'altra forma compila. Il conto
+/// `code-che-si-svuotano` conta le chiamate a quelle due: la proprietà, non la
+/// sillaba.
+///
+/// Il tipo è privato al modulo, e questo è ciò che rende onesto un conto che
+/// legge **un file solo**: una seconda coda in un altro file non potrebbe
+/// nominarlo.
+#[derive(Default)]
+struct EventQueue(VecDeque<Notice>);
+
+impl EventQueue {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn push_back(&mut self, notice: Notice) {
+        self.0.push_back(notice);
+    }
+
+    fn pop_front(&mut self) -> Option<Notice> {
+        self.0.pop_front()
+    }
+
+    fn iter(&self) -> std::collections::vec_deque::Iter<'_, Notice> {
+        self.0.iter()
+    }
+
+    /// Svuota la coda **travasandone** il contenuto: qui non sparisce niente,
+    /// e chi chiama deve farne qualcosa perché il valore torna indietro.
+    fn take_all(&mut self) -> VecDeque<Notice> {
+        std::mem::take(&mut self.0)
+    }
+
+    /// Svuota la coda **buttando** ciò che c'era, e rende quanti erano.
+    ///
+    /// Il `#[must_use]` è la metà che vale: chi butta o conta ciò che ha
+    /// buttato, o scrive `let _ =` — cioè dichiara di saperlo.
+    #[must_use]
+    fn discard_all(&mut self) -> usize {
+        let quanti = self.0.len();
+        self.0.clear();
+        quanti
+    }
+
+    /// Riempie una coda **vuota**.
+    ///
+    /// Non è un `=` sul campo: un'assegnazione butta in silenzio ciò che c'era,
+    /// ed è l'unico modo di svuotare una coda che questo tipo non può vietare.
+    /// Qui la condizione si dichiara invece di darsi per scontata.
+    fn fill(&mut self, notices: impl IntoIterator<Item = Notice>) {
+        debug_assert!(
+            self.0.is_empty(),
+            "una coda si riempie da vuota: riempirne una piena butterebbe \
+             ciò che c'era senza passare da discard_all",
+        );
+        self.0.extend(notices);
+    }
+}
+
 pub struct Dispatcher {
     bus: EventBus,
     /// Eventi in attesa di dispatch verso gli handler, ognuno con l'origine
     /// che aveva **al momento dell'emissione** — non quella del drenaggio, che
     /// può avvenire sotto un altro attore.
-    pending: VecDeque<Notice>,
+    pending: EventQueue,
     /// Il tratto finale di un drenaggio troncato: ciò che il budget non poteva
     /// buttare, più l'`Overflow` al posto di ciò che ha buttato, nell'ordine in
     /// cui le cose sono successe. È **una fotografia** della coda al momento
     /// del troncamento: finita quella, il drenaggio finisce — ed è ciò che
     /// tiene il tratto finale limitato senza un secondo budget da indovinare.
-    salvaged: VecDeque<Notice>,
+    salvaged: EventQueue,
     /// Quanti eventi il tratto finale ha buttato senza consegnarli: è il conto
     /// dell'`Overflow` di congedo.
     tail_dropped: u64,
@@ -140,8 +214,8 @@ impl Dispatcher {
     pub(crate) fn new(bus: EventBus) -> Self {
         Self {
             bus,
-            pending: VecDeque::new(),
-            salvaged: VecDeque::new(),
+            pending: EventQueue::default(),
+            salvaged: EventQueue::default(),
             tail_dropped: 0,
             drain: Drain::Aperto,
             dispatching: false,
@@ -313,7 +387,7 @@ impl Dispatcher {
             // si perde niente e non c'è niente da classificare — questa coda
             // serve i soli handler, e sul bus quegli eventi sono già passati
             // interi al momento dell'emissione.
-            self.pending.clear();
+            let _ = self.pending.discard_all();
             return false;
         }
         self.dispatching = true;
@@ -349,8 +423,8 @@ impl Dispatcher {
                 }
                 let mut burst = Vec::with_capacity(self.pending.len() + 1);
                 burst.push(notice);
-                burst.extend(self.pending.drain(..));
-                self.salvaged = degrade(burst).into();
+                burst.extend(self.pending.take_all());
+                self.salvaged.fill(degrade(burst));
                 // L'`Overflow` che la regola ha messo al posto dei buttati
                 // nasce **qui**, quindi va anche sul bus: i salvati ci sono già
                 // passati al momento dell'emissione, e rimetterceli sarebbe
@@ -360,7 +434,7 @@ impl Dispatcher {
                 // scrivendo, e attribuirglielo direbbe a un'automazione
                 // «questa l'hai causata tu» proprio nel momento in cui le si
                 // chiede di riconciliare — l'origine gliela dà `degrade`.
-                for notice in &self.salvaged {
+                for notice in self.salvaged.iter() {
                     if matches!(notice.event, Event::Overflow { .. }) {
                         self.bus.emit(notice.clone());
                     }
@@ -382,8 +456,7 @@ impl Dispatcher {
     /// consegnare» e «non si può dire» sono due cose diverse, e la seconda era
     /// il difetto di questa voce un passo più in là.
     fn next_of_tail(&mut self) -> Option<Notice> {
-        self.tail_dropped += self.pending.len() as u64;
-        self.pending.clear();
+        self.tail_dropped += self.pending.discard_all() as u64;
         if let Some(notice) = self.salvaged.pop_front() {
             return Some(notice);
         }
@@ -409,7 +482,7 @@ impl Dispatcher {
             // emette **ricevendo** l'`Overflow` di congedo si scarta senza
             // dirlo, perché dirlo vorrebbe dire un altro evento, che ne
             // produrrebbe altri. Il conto si ferma dove si è potuto dire.
-            self.pending.clear();
+            let _ = self.pending.discard_all();
         }
         self.drain = Drain::Aperto;
     }

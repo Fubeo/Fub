@@ -212,7 +212,8 @@ contratto»* è scritto nell'architettura ed è vero della sola coda eventi.
 Cercandola, il presupposto da non dare per buono è che un `Result` restituito sia
 un `Result` letto, e che un messaggio scritto sia un messaggio arrivato: i
 messaggi che vanno alla console della webview — dove, in un'app impacchettata,
-non ha un lettore nessuno — erano **sedici** e oggi sono **tre** [conta: diagnostica-shell],
+non ha un lettore nessuno — erano **sedici** e oggi sono **zero** [conta: diagnostica-shell]
+(il conto diceva tre contando le righe che li *nominano* in un commento),
 e quelli che andavano a `stderr` erano
 **ventisette** e oggi sono zero in codice di produzione, distribuiti fra due
 destinazioni dalla [decisione 0062](../decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)
