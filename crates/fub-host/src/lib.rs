@@ -93,6 +93,7 @@ pub mod registry;
 pub mod runner;
 pub mod session;
 pub mod settings;
+pub mod shell;
 pub mod vaults;
 pub mod watcher;
 

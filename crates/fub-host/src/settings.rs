@@ -232,7 +232,27 @@ pub fn core_settings() -> Vec<SettingSpec> {
     // questo il suo default è scritto due volte in un posto solo — lo schema e
     // il valutatore ne condividono l'elenco.
     settings.extend(fub_kernel::ignore::ignore_settings());
+    // Le scorciatoie dei comandi **della shell** (§16.3). Stanno nel bundle di
+    // core per la ragione di `plugins.disabled`: la shell non è una feature e
+    // non porta un manifest, quindi l'unico posto in cui può dichiarare è
+    // questo. Sono le sole chiavi `keys.*` che il core dichiara — quelle dei
+    // comandi del kernel le fabbrica il `Workspace` registrando il provider che
+    // le possiede, e queste un provider non ce l'hanno.
+    settings.extend(crate::shell::shell_keybinding_specs());
     settings
+}
+
+/// Le chiavi di [`core_settings`] che vivono nel **livello macchina**.
+///
+/// Si ricavano filtrando invece di essere un secondo elenco, e la ragione è
+/// quella di sempre: due elenchi della stessa cosa sono due elenchi che nessuno
+/// confronta, e il giorno che una famiglia diventa di macchina questo sarebbe
+/// l'unico a non saperlo.
+pub fn core_machine_settings() -> Vec<SettingSpec> {
+    core_settings()
+        .into_iter()
+        .filter(|spec| spec.scope == fub_abi::settings::SettingScope::Machine)
+        .collect()
 }
 
 /// La memoria di ciò che si è cercato e aperto come [`SettingSpec`] (§21.7).

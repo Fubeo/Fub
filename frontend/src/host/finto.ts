@@ -52,6 +52,7 @@ import type {
   QueryExpr,
   QueryPredicate,
   SettingEntry,
+  SettingValue,
   UiNode,
   VaultEntry,
   VaultFolder,
@@ -213,6 +214,29 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
     }
   }
 
+  /// Le impostazioni **come stanno adesso**: una scrittura le cambia.
+  ///
+  /// Un finto che accettasse `setSetting` e poi rispondesse il valore di prima
+  /// farebbe passare verde ogni gesto che scrive una configurazione — e la
+  /// regola di questo file è l'opposta (ciò che non sa fare lancia).
+  const impostazioni: SettingEntry[] = (opzioni.impostazioni ?? []).map((e) => ({
+    ...e,
+    spec: { ...e.spec },
+  }));
+
+  /// Scrive, e **lo dice**: il backend vero emette `setting_changed` da tutte e
+  /// due le porte — dal `Workspace` con un vault aperto, dall'host senza
+  /// (§16.3) — e chi ascolta è la tastiera, che rilegge gli accordi. Un finto
+  /// che scrivesse in silenzio farebbe passare verde una shell che continua a
+  /// rispondere alla combinazione vecchia.
+  function scriviImpostazione(key: string, value: SettingValue | null): void {
+    const riga = impostazioni.find((e) => e.spec.key === key);
+    if (!riga) throw new Error(`host finto: nessuno ha dichiarato l'impostazione «${key}»`);
+    riga.value = value ?? riga.spec.kind.default;
+    riga.source = value === null ? "default" : riga.spec.scope;
+    emetti({ type: "setting_changed", key, scope: riga.spec.scope });
+  }
+
   function query(q: IndexQuery): IndexResult {
     switch (q.kind) {
       case "entries": {
@@ -264,7 +288,7 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
           },
         };
       case "settings":
-        return { kind: "settings", value: opzioni.impostazioni ?? [] };
+        return { kind: "settings", value: impostazioni.map((e) => ({ ...e })) };
       case "organization": {
         const org: Organization = { icons: {}, pinned: [], order: {}, spaces: [] };
         return { kind: "organization", value: org };
@@ -404,8 +428,10 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
       setPinned: (id, pinned) => porta("setPinned", [id, pinned], Promise.resolve()),
       setSpace: (path, space) => porta("setSpace", [path, space], Promise.resolve()),
       setOrder: (folder, names) => porta("setOrder", [folder, names], Promise.resolve()),
-      setSetting: (key, value) => porta("setSetting", [key, value], Promise.resolve()),
-      resetSetting: (key) => porta("resetSetting", [key], Promise.resolve()),
+      setSetting: (key, value) =>
+        porta("setSetting", [key, value], Promise.resolve(scriviImpostazione(key, value))),
+      resetSetting: (key) =>
+        porta("resetSetting", [key], Promise.resolve(scriviImpostazione(key, null))),
       listBundles: () => porta("listBundles", [], Promise.resolve([] as BundleInfo[])),
       setPluginEnabled: (id, enabled) =>
         porta("setPluginEnabled", [id, enabled], Promise.resolve([])),

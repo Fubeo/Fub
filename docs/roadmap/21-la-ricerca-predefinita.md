@@ -188,10 +188,14 @@ che lo ha prodotto.
       ([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)): il
       riquadro col fuoco è una domanda con una risposta, quindi «aprire il
       risultato *dove*» ha dove atterrare.~~ Il risultato apre nel riquadro col
-      fuoco, come ogni altra apertura. La §18.2 **resta**, e non per questa voce:
-      l'accordo è dichiarato in `SHELL_KEYS` e visto dal presidio della
-      [0081](../decisions/0081-un-accordo-ha-un-proprietario.md), ma una
-      scorciatoia di un comando di shell non è ancora riconfigurabile.
+      fuoco, come ogni altra apertura. L'accordo è dichiarato in `SHELL_KEYS` e visto
+      dal presidio della
+      [0081](../decisions/0081-un-accordo-ha-un-proprietario.md); che una
+      scorciatoia di un comando di shell non fosse riconfigurabile è stato vero
+      fino alla
+      [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md),
+      che le ha dato una chiave — di macchina, perché un comando di shell esiste
+      prima di ogni vault.
 
 ### 21.6 I pesi dei campi sono una costante di compilazione
 

@@ -255,6 +255,24 @@ impl Default for Host {
     }
 }
 
+/// Dichiara al livello macchina le chiavi del core che gli appartengono (§16.3).
+///
+/// Passa di qui **ogni** livello macchina che un host adotta — quello in memoria
+/// di [`Host::new`] e quello del file di [`Host::with_config_dir`] — perché uno
+/// dei due senza schema sarebbe un host in cui `log.level` esiste e non si legge,
+/// cioè il difetto di prima in metà dei casi.
+///
+/// Una dichiarazione che fallisce è un difetto di questo repo e non un caso
+/// dell'utente — un doppione fra le chiavi del core, o una chiave di vault
+/// arrivata nel filtro — quindi si **panica** invece di degradare in silenzio,
+/// che è la stessa scelta di `mount` davanti a un bundle di core malformato.
+fn con_lo_schema(machine: Arc<MachineSettings>) -> Arc<MachineSettings> {
+    machine
+        .declare(&crate::settings::core_machine_settings())
+        .expect("le chiavi di macchina del core");
+    machine
+}
+
 impl Host {
     /// Un host col rilevatore di default e nessun ponte eventi.
     ///
@@ -276,7 +294,7 @@ impl Host {
             // esegue. Un'app vera chiama `installed()` o `with_config_dir`, e se
             // se ne dimentica il difetto si vede subito (il tema non sopravvive
             // alla chiusura) invece che mai.
-            machine: MachineSettings::in_memory(),
+            machine: con_lo_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
             vaults: VaultRegistry::in_memory(),
             job_threads: DEFAULT_JOB_THREADS,
@@ -328,7 +346,7 @@ impl Host {
         if let Some(warning) = warning {
             tracing::warn!(target: "fub.host", "stato di vista: {warning}");
         }
-        self.machine = machine;
+        self.machine = con_lo_schema(machine);
         self.vaults = vaults;
         self.view_states = view_states;
         self
@@ -835,6 +853,10 @@ impl Host {
         key: &str,
         value: fub_abi::settings::SettingValue,
     ) -> Result<(), PluginError> {
+        if self.solo_la_macchina(vault, key) {
+            self.machine.set(key, value)?;
+            return self.dillo_a_chi_guarda(key);
+        }
         self.with_session(vault, |session| {
             session
                 .workspace
@@ -852,6 +874,10 @@ impl Host {
         vault: Option<&str>,
         key: &str,
     ) -> Result<(), PluginError> {
+        if self.solo_la_macchina(vault, key) {
+            self.machine.reset(key)?;
+            return self.dillo_a_chi_guarda(key);
+        }
         self.with_session(vault, |session| {
             session
                 .workspace
@@ -860,6 +886,100 @@ impl Host {
                 .reset_setting(key)
         })??;
         self.se_e_un_tasto_ricordalo(vault, key)
+    }
+
+    /// Le impostazioni **che esistono senza un vault**: le righe del livello
+    /// macchina, risolte (§16.3).
+    ///
+    /// È la risposta a [`IndexQuery::Settings`] quando non c'è nessun vault
+    /// aperto, e non è un ripiego: `log.*` e le scorciatoie della shell sono
+    /// dichiarate di macchina proprio perché il caso in cui servono è questo.
+    /// Con un vault aperto la domanda passa dal canale dati come sempre, e le
+    /// stesse chiavi arrivano di là con lo stesso valore — la mappa è una sola.
+    ///
+    /// [`IndexQuery::Settings`]: fub_abi::traits::IndexQuery::Settings
+    pub fn machine_settings(&self) -> Vec<fub_abi::settings::SettingEntry> {
+        self.machine.entries()
+    }
+
+    /// **Il canale dati**, con la sola domanda che si può servire senza vault.
+    ///
+    /// Le impostazioni di macchina esistono anche a finestra vuota (§16.3):
+    /// `log.*` è dichiarata così perché il momento in cui serve è quello in cui
+    /// un vault non si apre, e le scorciatoie della shell perché
+    /// `shell.vault.open` è il comando che apre il primo. È una famiglia sola e
+    /// resta su **questa** porta invece di averne una sua, perché un elenco è
+    /// dati e i dati hanno un canale solo (0019).
+    ///
+    /// Sta qui e non nel comando IPC per la ragione di sempre: il livello
+    /// macchina è dell'host, e la regola che decide quando risponde lui va dove
+    /// un banco la può interrogare.
+    pub fn query_index(
+        &self,
+        vault: Option<&str>,
+        query: fub_abi::traits::IndexQuery,
+    ) -> Result<fub_abi::traits::IndexResult, PluginError> {
+        if vault.is_none()
+            && !self.has_current_vault()
+            && matches!(
+                query,
+                fub_abi::traits::IndexQuery::Settings { plugin: None }
+            )
+        {
+            return Ok(fub_abi::traits::IndexResult::Settings(
+                self.machine_settings(),
+            ));
+        }
+        let ws = self.workspace(vault)?;
+        let ws = ws.read().expect("workspace avvelenato");
+        ws.query_index(query)
+    }
+
+    /// Questa scrittura riguarda una chiave che **un vault non le serve**, e
+    /// vault aperti non ce ne sono?
+    ///
+    /// Le tre condizioni insieme, e nessuna si può togliere. Senza la prima, chi
+    /// nomina un vault che non è aperto riceverebbe un successo dal livello
+    /// sbagliato; senza la seconda, una chiave di macchina scritta con un vault
+    /// aperto salterebbe il `Workspace`, cioè l'evento `setting_changed` che i
+    /// pannelli aspettano; senza la terza, una chiave di vault scritta senza
+    /// vault direbbe «non dichiarata» invece di «nessun vault aperto», che è la
+    /// frase che dice cosa fare.
+    fn solo_la_macchina(&self, vault: Option<&str>, key: &str) -> bool {
+        vault.is_none() && !self.has_current_vault() && self.machine.declares(key)
+    }
+
+    /// **Scrivere si dice**, anche quando a scrivere non è stato un vault.
+    ///
+    /// Con un vault aperto l'evento lo emette il `Workspace`, e chi ascolta —
+    /// la tastiera, che rilegge gli accordi; il pannello, che si ridisegna — non
+    /// sa da dove venga. Senza vault il `Workspace` non c'è, e senza questa riga
+    /// una scorciatoia rimappata nella finestra vuota resterebbe scritta, letta
+    /// e mostrata giusta mentre la tastiera continua a rispondere a quella
+    /// vecchia: è il difetto che la 0090 aveva già trovato una volta per l'altra
+    /// metà della stessa famiglia, e la risposta è la stessa.
+    ///
+    /// [`Actor::User`], perché di qui passa la persona davanti allo schermo: è
+    /// la stessa distinzione per cui `set_setting` è un comando IPC e non
+    /// `settings.set` del registro.
+    fn dillo_a_chi_guarda(&self, key: &str) -> Result<(), PluginError> {
+        if let Some(sink) = &self.sink {
+            sink.emit(&fub_abi::Notice::new(
+                fub_abi::Event::SettingChanged {
+                    key: key.to_string(),
+                    scope: fub_abi::settings::SettingScope::Machine,
+                },
+                fub_abi::event::Origin::by(fub_abi::event::Actor::User),
+            ));
+        }
+        Ok(())
+    }
+
+    /// C'è un vault corrente? È la domanda che distingue «la shell sta lavorando
+    /// su un archivio» da «la finestra è aperta e basta», e la pone chi deve
+    /// decidere se una domanda si può servire senza vault.
+    pub fn has_current_vault(&self) -> bool {
+        self.sessions.lock().unwrap().current.is_some()
     }
 
     /// Il promemoria costa una riscrittura del registro, quindi si paga solo

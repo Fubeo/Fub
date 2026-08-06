@@ -471,9 +471,7 @@ fn query_index(
     query: IndexQuery,
     vault: Option<String>,
 ) -> Result<IndexResult, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
-    ws.query_index(query)
+    host.query_index(vault.as_deref(), query)
 }
 
 /// **Ferma un lavoro lungo** (§10.3): l'altro capo di `Host::cancel_job`, che

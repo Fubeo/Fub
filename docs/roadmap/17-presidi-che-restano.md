@@ -188,9 +188,12 @@ solo ha lo stesso difetto in un altro travestimento.
       `main.ts` vero, `index.html` vera — contro `host/finto.ts`, un vault in
       memoria che il compilatore tiene fermo al confine (`typeof
       import("./ipc")`: una porta nuova non compila finché il finto non la sa
-      rispondere). I gesti sono **sette** [conta: gesti-della-shell] e non cinque, perché «rinomina» ne è
+      rispondere). I gesti erano **sette** e non cinque, perché «rinomina» ne è
       due — quella che chiede questa finestra e quella che arriva da fuori — ed
-      è la seconda quella in cui il difetto c'era.
+      è la seconda quella in cui il difetto c'era; adesso sono
+      **nove** [conta: gesti-della-shell], perché la
+      [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
+      ne ha aggiunti due sulle scorciatoie.
       Due difetti veri, tutti e due nel cablaggio, che è la classe che la
       [0015](../decisions/0015-la-forma-della-shell.md) dichiarava di non poter
       vedere: l'Invio che conferma una rinomina in posto risaliva

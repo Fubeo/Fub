@@ -975,9 +975,12 @@ sbagliato si vede, una scorciatoia spostata si scopre premendola.
       da `program_writable`.
 - [x] **Chi lo chiede.** Serviti tutti nella stessa forma, perché la domanda sta
       sulla **chiave** e non sull'elenco dei comandi: FEATURES 1.4, 17.1 e 25 non
-      chiedono niente di nuovo, e la §16.3 nemmeno — quando la tastiera della shell
-      diventerà configurabile come le altre, i comandi rimappabili dall'esterno
-      saranno tutti e questa domanda li coprirà senza cambiare forma.
+      chiedono niente di nuovo, e la §16.3 nemmeno — e adesso si può dire meglio
+      che «nemmeno»: da quando la
+      [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
+      ha reso riconfigurabili anche le scorciatoie della shell, i comandi
+      rimappabili dall'esterno **sono tutti**, e questa domanda li copre senza
+      aver cambiato forma.
 
 ### 23.14 Un'operazione a metà non sa di essere a metà
 

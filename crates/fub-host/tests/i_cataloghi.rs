@@ -124,10 +124,46 @@ fn ogni_chiave_che_il_kernel_dichiara_e_montata_dal_core() {
     );
 }
 
+/// **La sola famiglia la cui etichetta è un dato e non una frase** (§16.3): le
+/// scorciatoie dei comandi della shell.
+///
+/// Non è un indebolimento del presidio, è la mossa che la
+/// [0071](../../../docs/decisions/0071-una-feature-si-spegne-dove-si-dichiara.md)
+/// ha chiamato per nome — un presidio che diventa rosso per un caso nuovo e
+/// legittimo si **circoscrive**. La ragione: la chiave `keys.shell.*` la
+/// dichiara il bundle di core, ma il nome del comando che nomina («Apri il
+/// pannello dei file») l'ha scritto la shell, e una frase la localizza chi l'ha
+/// scritta ([0040](../../../docs/decisions/0040-chi-localizza.md)). Portarne una
+/// copia nel catalogo del core vorrebbe dire trentadue stringhe tradotte due
+/// volte, che è la famiglia di difetto della
+/// [0072](../../../docs/decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).
+/// L'etichetta è quindi l'**id**, che è un dato: chi disegna la riga ci mette il
+/// titolo (`disegnaRiga(entry, comando.title, …)`), e chi elenca le impostazioni
+/// senza la shell davanti legge comunque di quale comando si tratti.
+///
+/// L'esenzione si **calcola** invece di essere un prefisso scritto a mano, e la
+/// si pretende **esatta**: un'etichetta cablata in una chiave di shell che non è
+/// più in tabella resta rossa, e una cablata altrove pure.
+fn etichette_che_sono_un_id() -> std::collections::BTreeSet<String> {
+    fub_host::shell::shell_keybinding_specs()
+        .into_iter()
+        .map(|s| format!("`{}`", s.key))
+        .collect()
+}
+
 #[test]
 fn le_impostazioni_dell_app_hanno_tutte_una_voce_in_tutte_le_lingue() {
     let cataloghi = cataloghi_del_core();
-    let (chiavi_core, cablate) = chiavi(&fub_host::settings::core_settings());
+    let (chiavi_core, tutte_cablate) = chiavi(&fub_host::settings::core_settings());
+    let esentate = etichette_che_sono_un_id();
+    let (esenti, cablate): (Vec<String>, Vec<String>) = tutte_cablate
+        .into_iter()
+        .partition(|riga| esentate.contains(riga.split(':').next().unwrap_or("")));
+    assert_eq!(
+        esenti.len(),
+        esentate.len(),
+        "l'esenzione delle etichette-id non è più esatta: {esenti:?} contro {esentate:?}"
+    );
     assert!(
         cablate.is_empty(),
         "un'etichetta cablata dentro uno schema è prosa che nessun catalogo \

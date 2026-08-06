@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { state } from "../state/store";
 import {
@@ -17,8 +17,32 @@ import {
   prefissiOscurati,
   registerShellCommand,
   resetShellCommands,
+  loadKeyOverrides,
   type CommandEntry,
 } from "./commands";
+
+/// L'unica cosa che questo modulo chiede al backend è l'elenco delle
+/// impostazioni, e la chiede in un punto solo (`loadKeyOverrides`): il doppio è
+/// una funzione, non un host finto, perché di superficie ce n'è una.
+const dalBackend = vi.fn(async (): Promise<SettingEntry[]> => []);
+vi.mock("../host/query", () => ({ impostazioni: () => dalBackend() }));
+
+/// Una riga di impostazione che è un accordo, come la manda il backend.
+function accordo(key: string, value: string): SettingEntry {
+  return {
+    spec: {
+      key,
+      label: key,
+      description: "",
+      group: "",
+      scope: "machine",
+      kind: { kind: "text", default: "" },
+      program_writable: false,
+    },
+    value,
+    source: "machine",
+  } as SettingEntry;
+}
 
 function spec(over: Partial<CommandSpec> = {}): CommandSpec {
   return {
@@ -54,9 +78,13 @@ const chord = (over: Partial<Parameters<typeof matchesBinding>[0]> = {}) => ({
   ...over,
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetShellCommands();
   state.commandSpecs = [];
+  // Gli accordi riconfigurati vivono in una mappa di modulo: un banco che non
+  // la svuota erediterebbe quelli del banco precedente.
+  dalBackend.mockResolvedValue([]);
+  await loadKeyOverrides();
 });
 
 // La chiave d'impostazione è il gemello di `fub_abi::settings::keybinding_key`,
@@ -130,6 +158,67 @@ describe("l'accordo che vale adesso", () => {
     // E il registro lo riduce a «niente»: `matchesBinding` su una stringa di
     // spazi troverebbe un accordo senza tasto.
     expect(matchesBinding(chord({ ctrlKey: true }), "   ")).toBe(false);
+  });
+});
+
+describe("la scorciatoia di un comando di shell si riconfigura", () => {
+  // La casella che la 0090 aveva trasferito alla §16.3, chiusa dalla 0116: la
+  // chiave `keys.shell.*` la dichiara il bundle di core ed è di **macchina**,
+  // perché un comando di shell esiste prima di ogni vault. Di qua non cambia
+  // niente se non che questa riga smette di essere un'eccezione.
+  it("l'impostazione vince sull'accordo dichiarato, come per un comando del kernel", async () => {
+    registerShellCommand({
+      id: "shell.graph",
+      title: "commands.graph",
+      description: "commands.graph.desc",
+      run: () => {},
+    });
+    // Prima: quello dichiarato dalla tabella generata.
+    expect(allCommands()[0]!.binding).toBe("Mod-Shift-g");
+
+    dalBackend.mockResolvedValue([accordo("keys.shell.graph", "Mod-Alt-g")]);
+    await loadKeyOverrides();
+
+    const voce = allCommands()[0]!;
+    expect(voce.binding).toBe("Mod-Alt-g");
+    // E `declared` continua a dire quello di fabbrica, che è ciò da cui il
+    // pannello sa scrivere «questo l'hai cambiato tu».
+    expect(voce.declared).toBe("Mod-Shift-g");
+  });
+
+  it("la combinazione nuova è quella che la tastiera trova", async () => {
+    let fatto = false;
+    registerShellCommand({
+      id: "shell.graph",
+      title: "commands.graph",
+      description: "commands.graph.desc",
+      run: () => {
+        fatto = true;
+      },
+    });
+    dalBackend.mockResolvedValue([accordo("keys.shell.graph", "Mod-Alt-g")]);
+    await loadKeyOverrides();
+
+    // La vecchia non risponde più, e la nuova sì: senza la seconda metà, una
+    // scorciatoia «riconfigurata» che risponde a tutte e due sarebbe un
+    // conflitto che nessuno ha dichiarato.
+    expect(findByChord(allCommands(), chord({ key: "g", ctrlKey: true, shiftKey: true }))).toBeUndefined();
+    const trovato = findByChord(allCommands(), chord({ key: "g", ctrlKey: true, altKey: true }));
+    expect(trovato?.id).toBe("shell.graph");
+    trovato!.run!();
+    expect(fatto).toBe(true);
+  });
+
+  it("un accordo azzerato lascia il comando senza scorciatoia", async () => {
+    registerShellCommand({
+      id: "shell.graph",
+      title: "commands.graph",
+      description: "commands.graph.desc",
+      run: () => {},
+    });
+    dalBackend.mockResolvedValue([accordo("keys.shell.graph", "")]);
+    await loadKeyOverrides();
+    expect(allCommands()[0]!.binding).toBeNull();
   });
 });
 

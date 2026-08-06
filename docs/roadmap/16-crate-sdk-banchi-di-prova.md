@@ -6,14 +6,17 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): i banchi e i confin
 
 ---
 
-Delle sette voci con cui questa seduta è nata ne resta **una**: il secondo tempo
-della 16.3, cioè il confine fra crate, che è fuori con una condizione e non con
-una scadenza — e da oggi quella condizione la **valuta un banco** invece di
-starsene scritta in italiano ([decisione 0073](../decisions/0073-una-condizione-che-nessuno-valuta.md)),
-che è l'ultima cosa successa in questa seduta e non chiude niente. La 16.8 — il
-presidio sulla prosa, nata qui — è chiusa dalla
-[decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md),
-ed è l'ultima ad andarsene. Le precedenze che la seduta dichiarava sono tutte
+Delle sette voci con cui questa seduta è nata non ne resta **nessuna**: la 16.3
+si è chiusa per ultima, con la
+[decisione 0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md),
+e questa riga è un **consuntivo**. Il secondo tempo della 16.3 — il confine fra
+crate — non è stato fatto e non era da fare: è tenuto fuori da una condizione che
+non è una scadenza, e da oggi quella condizione la **valuta un banco** invece di
+starsene scritta in italiano ([decisione 0073](../decisions/0073-una-condizione-che-nessuno-valuta.md)).
+La casella resta, con il suo guardiano; la voce no, perché di deciso non c'era
+più niente. La 16.8 — il presidio sulla prosa, nata qui — è chiusa dalla
+[decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).
+Le precedenze che la seduta dichiarava sono tutte
 **decadute**, e vale la pena dire come, perché due sono decadute insieme alla
 voce e una si è rivelata falsa.
 
@@ -70,7 +73,7 @@ dichiarata guardando le voci insieme, come la seduta chiede.
 
 ### 16.3 Un crate per bundle di feature
 
-*ex §4.7 · presidi · **P1** · **in due tempi**: il primo è **chiuso** dalla [decisione 0071](../decisions/0071-una-feature-si-spegne-dove-si-dichiara.md), il secondo resta*
+*ex §4.7 · presidi · **P1** · **chiusa** dalla [decisione 0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md) — il primo tempo era della [0071](../decisions/0071-una-feature-si-spegne-dove-si-dichiara.md); lo split in crate **resta come casella**, tenuto fuori da una condizione che un banco valuta ([0073](../decisions/0073-una-condizione-che-nessuno-valuta.md))*
 
 - [x] **`fub-features` era un crate solo**: tantivy era dipendenza dell'intero
       crate, quindi compilare il pannello outline compilava un motore di ricerca.
@@ -99,7 +102,8 @@ dichiarata guardando le voci insieme, come la seduta chiede.
       `tests/le_cargo_feature.rs` confronta i due elenchi **senza una tabella di
       corrispondenza**: l'id è `fub.<nome del modulo>` e la cargo feature ha il
       nome del modulo, quindi si calcola.
-- [ ] **Secondo tempo: lo split in crate.** Resta, ed è l'unica forma che compra
+- [ ] **Secondo tempo: lo split in crate — la casella che la voce lascia.** È
+      l'unica forma che compra
       il **confine contro l'accoppiamento feature↔feature**, perché dentro un
       crate solo `pub(crate)` lascia passare tutto. È giustificato dai venti
       moduli di 21.2 — che oggi non esistono: i moduli di feature sono
@@ -127,33 +131,39 @@ dichiarata guardando le voci insieme, come la seduta chiede.
       confine stesso a insegnarla; per questo la domanda si pone ai sorgenti,
       cioè prima del `cfg`. Un modulo condiviso legittimo non indebolisce la
       soglia: entra in `RADICE` con la sua ragione.
-- [ ] **Un cliente in più, arrivato dalla ~~§18.2~~**
+- [x] **Un cliente in più, arrivato dalla ~~§18.2~~**
       ([0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)): **la
       scorciatoia di un comando di shell non si riconfigura.** La chiave `keys.*`
-      la fabbrica il kernel registrando un `CommandProvider`
+      la fabbricava il kernel registrando un `CommandProvider`
       ([0077](../decisions/0077-una-scorciatoia-e-una-chiave.md)), e un comando
       che vive nella webview un provider non ce l'ha — il pannello impostazioni
-      le mostra di sola lettura. È la stessa domanda di questa voce vista da
+      le mostrava di sola lettura. Era la stessa domanda di questa voce vista da
       fuori: *la shell diventa un componente come gli altri*.
 
-      La 0090 ha misurato la scorciatoia che eviterebbe di aspettarla — un
-      `CommandProvider` **di prossimità** registrato da `fub-host` per conto
-      della shell, che dichiari i comandi `shell.*` al solo scopo di far nascere
-      le chiavi, lasciando l'esecuzione di là — e ha trovato cinque ostacoli, che
-      si scrivono qui perché chi esegue questa voce non li rimisuri. Quattro sono
-      lavoro: `CommandProvider` non ha una forma solo dichiarativa (`invoke` è
-      obbligatorio, e il kernel non ha un canale verso la webview); `PluginError`
-      non ha un caso che significhi «dichiarato qui, eseguito altrove»;
-      `allCommands()` concatena senza deduplicare, quindi ogni comando di shell
-      comparirebbe due volte e in conflitto con sé stesso; e la fixture
-      `command-keys.json` nasce dal solo `CoreCommands::specs()`, quindi il
-      presidio della [0081](../decisions/0081-un-accordo-ha-un-proprietario.md)
-      resterebbe verde. Il quinto invece è una **contraddizione**, ed è quello
-      che dice che la scorciatoia non esiste: i provider si registrano **per
-      vault** e le chiavi `keys.*` sono di scope `Vault`
-      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), ma `shell.vault.open` è il
-      comando che esiste *prima* di ogni vault — la sua chiave nascerebbe solo
-      dopo che un vault è aperto, e vivrebbe dentro il vault che serve ad aprire.
+      **Fatto** dalla [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md),
+      e non dandole un provider. La 0090 aveva misurato la scorciatoia che
+      eviterebbe di aspettare — un `CommandProvider` **di prossimità** registrato
+      da `fub-host` per conto della shell, al solo scopo di far nascere le chiavi
+      — e ne aveva scritto cinque ostacoli perché chi esegue questa voce non li
+      rimisuri. Rimisurati: **reggono tutti e cinque**, ed è la prima volta in
+      molti giri che le premesse di una casella sono tutte vere. A cambiare è la
+      conclusione: **non sono cinque ostacoli, è uno visto da cinque lati** —
+      nascono tutti dall'aver chiesto un *comando* dove serviva una *chiave*. I
+      primi tre (`invoke` obbligatorio; nessun `PluginError` che dica «dichiarato
+      qui, eseguito altrove»; `allCommands()` che concatena senza deduplicare)
+      esistono solo se il comando di shell entra nel registro del kernel, dove
+      non deve entrare; il quarto — la fixture `command-keys.json` cieca a un
+      provider nuovo, cioè il buco della
+      [0081](../decisions/0081-un-accordo-ha-un-proprietario.md) — non si chiude
+      aggiungendo un confronto ma **spostando la sorgente**, e la tabella degli
+      accordi della shell adesso sta in Rust; e il quinto, che la 0090 chiamava
+      una **contraddizione** — i provider si registrano per vault e le chiavi
+      `keys.*` sono di scope `Vault`
+      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), ma
+      `shell.vault.open` è il comando che esiste *prima* di ogni vault — non è
+      una contraddizione della strada: è **la regola mancante**. *Lo scope di una
+      chiave segue la vita di ciò che la dichiara*, quindi le `keys.shell.*` sono
+      di macchina, non per eccezione ma per conseguenza.
 
 ### 16.6 Dieta dell'IPC
 
