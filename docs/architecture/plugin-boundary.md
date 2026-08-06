@@ -570,8 +570,8 @@ arriva in fondo.
 
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
-| la coda | [dispatcher.rs:487](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
-| il campanello | [dispatcher.rs:401](../../crates/fub-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
+| la coda | [dispatcher.rs:560](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
+| il campanello | [dispatcher.rs:589](../../crates/fub-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
 | i thread | [runner.rs:307](../../crates/fub-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
 | l'host per chiamata | [jobs.rs:9](../../crates/fub-host/src/jobs.rs) | tiene l'`Arc<RwLock<Workspace>>` e prende un prestito **per capacità** |
 | la bandiera | [runner.rs:42](../../crates/fub-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |

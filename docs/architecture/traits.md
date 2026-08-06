@@ -721,7 +721,7 @@ normale disgiuntiva esprime ogni combinazione booleana.
 `Paged<T> { items, offset, total }` nella risposta: `None` al posto della `Page`
 significa "tutto", e `total` è il conteggio *prima* della finestra — senza, chi
 disegna non sa se esiste una pagina dopo. Le famiglie che chiedono una finestra
-sono **dieci** [conta: famiglie-paginate], e le strade sono **tre**, e quale sia
+sono **nove** [conta: famiglie-paginate], e le strade sono **tre**, e quale sia
 percorsa è un fatto che il banco del §17.1 misura invece di una promessa
 ([0113](../decisions/0113-il-banco-conta-le-operazioni.md)): chi sa paginare
 alla sorgente lo fa (tantivy usa `offset`/`limit` del collector e un `Count` per

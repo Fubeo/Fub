@@ -32,9 +32,13 @@ export const CONTEGGI = [
       "Le funzioni che un plugin può chiamare sull'host: la superficie dell'`HostApi` " +
       "come la vede chi sta dall'altra parte del confine. È il numero della " +
       "decisione 0013 — l'elenco è chiuso alla sottrazione, non alla crescita — e " +
-      "prima di questo presidio lo stesso documento ne dichiarava due diversi.",
+      "prima di questo presidio lo stesso documento ne dichiarava due diversi. " +
+      "I commenti si saltano: in un contratto che è per metà prosa italiana, " +
+      "una riga di documentazione che nomina una funzione con i due punti " +
+      "conterebbe come una funzione.",
     comando:
-      "awk '/^[[:space:]]*interface host-/{i=1} i&&/^}/{i=0} i&&/:[[:space:]]*func/{n++} END{print n+0}'" +
+      "awk '/^[[:space:]]*\\/\\//{next} /^[[:space:]]*interface host-/{i=1}" +
+      " i&&/^}/{i=0} i&&/:[[:space:]]*func/{n++} END{print n+0}'" +
       " crates/fub-abi/wit/fub/abi.wit",
   },
   {
@@ -61,10 +65,12 @@ export const CONTEGGI = [
     ragione:
       "I metodi di `VaultStructure`, cioè quante sono le operazioni strutturali " +
       "che il varco della decisione 0010 copre. Due documenti dicevano «tutte e " +
-      "sei» e poi ne elencavano cinque.",
+      "sei» e poi ne elencavano cinque. L'ancora pretendeva una firma **nuda**: " +
+      "una `async fn`, una `unsafe fn` o una `fn c<T>() where …` sarebbe entrata " +
+      "nel varco senza entrare nel conto.",
     comando:
       "sed -n '/^pub trait VaultStructure/,/^}/p' crates/fub-abi/src/traits.rs" +
-      " | grep -cE '^[[:space:]]+fn '",
+      " | grep -cE '^[[:space:]]+(default |const |async |unsafe )*fn '",
   },
   {
     nome: "superfici-di-vista",
@@ -98,9 +104,18 @@ export const CONTEGGI = [
       "**proprietà** — una costante intera che dichiara una versione — e non il " +
       "nome `SCHEMA_VERSION`: finché guardava il nome, `DIAGNOSTICS_VERSION` " +
       "gli passava accanto, e chi l'aveva chiamata così non aveva sbagliato " +
-      "niente (§15.3).",
+      "niente (§15.3). La forma di allora però guardava ancora mezza sillaba: " +
+      "misurato su un file con sette versioni vere ne contava **una**, perché " +
+      "pretendeva `pub(<una parola>)`, un tipo senza segno fino a 64 bit, il " +
+      "rientro a spazi e almeno un `_` prima di `VERSION`. Adesso ammette " +
+      "qualunque visibilità (`pub(in crate::x)`), qualunque intero (`u128`, " +
+      "`i32`), il TAB e il nome nudo `const VERSION`. Resta **fuori** ciò che " +
+      "una versione la dichiara senza dirlo nel nome (`const E_SCHEMA_REV`): il " +
+      "buco è dichiarato dalla 0106 ed è il suo, non di questo comando — la " +
+      "porta è che una versione di schema si chiama `VERSION`.",
     comando:
-      "grep -rhE '^ *(pub(\\([a-z]+\\))? )?const [A-Z_]+VERSION: u(8|16|32|64|size) = '" +
+      "grep -rhE '^[[:space:]]*(pub([[:space:]]*\\([^)]*\\))?[[:space:]]+)?" +
+      "const [A-Z_]*VERSION[A-Z_]*: [ui](8|16|32|64|128|size) = '" +
       " crates/*/src | wc -l",
   },
   {
@@ -125,9 +140,14 @@ export const CONTEGGI = [
       "un altro file dello stesso crate — un `.plugin()` col suo " +
       "`generate_handler!` — gli è invisibile e resta raggiungibile dal webview " +
       "come `plugin:<nome>|<comando>`. Un presidio che legge un file sa quel " +
-      "file; a vedere gli altri è un conto che cammina la cartella.",
+      "file; a vedere gli altri è un conto che cammina la cartella. L'ancora " +
+      "pretendeva la `]` **subito**: misurato, un file di soli comandi " +
+      "parametrizzati — `#[tauri::command(rename_all = \"snake_case\")]`, " +
+      "`#[tauri::command(async)]` — era invisibile a questo conto *e* a " +
+      "`dieta_ipc.rs`, che legge `lib.rs`. Ora la parentesi vale quanto la " +
+      "quadra.",
     comando:
-      "grep -rlE '#\\[(tauri::)?command\\]|generate_handler!' crates/fub-app/src | wc -l",
+      "grep -rlE '#\\[(tauri::)?command[](]|generate_handler!' crates/fub-app/src | wc -l",
   },
   {
     nome: "cataloghi-del-kernel",
@@ -139,8 +159,12 @@ export const CONTEGGI = [
       "**catalogo** che manca — `maintenance` è stato fuori a lungo senza che " +
       "niente diventasse rosso. È la forma che la 0105 nomina per questa specie " +
       "di buco, e nessun `assert` dentro Rust la può prendere: la prende un " +
-      "conto che guarda il sorgente da fuori.",
-    comando: "grep -rcE '^pub fn catalog\\(\\)' crates/fub-kernel/src | grep -vc ':0'",
+      "conto che guarda il sorgente da fuori. Conta **dichiarazioni**, non " +
+      "file: la prima forma contava i file in cui ne compariva almeno una, e un " +
+      "`pub mod calendar { pub fn catalog() }` dentro un file già contato " +
+      "lasciava il numero fermo con la suite verde — misurato. Per la stessa " +
+      "ragione l'ancora ammette il rientro.",
+    comando: "grep -rhE '^[[:space:]]*pub fn catalog\\(\\)' crates/fub-kernel/src | wc -l",
   },
   {
     nome: "impostazioni-del-kernel",
@@ -151,14 +175,20 @@ export const CONTEGGI = [
       "che il bundle del core non monta non è rossa da nessuna parte — le sue " +
       "chiavi spariscono dal pannello e chi le legge prende il default in " +
       "silenzio, che è precisamente il comportamento giusto per un vault che " +
-      "non ha dichiarato niente. Misurato togliendo la riga (§15.6).",
-    comando: "grep -rlE '^pub fn [a-z_]*settings\\(\\)' crates/fub-kernel/src | wc -l",
+      "non ha dichiarato niente. Misurato togliendo la riga (§15.6). Conta " +
+      "**dichiarazioni**, non file, e per la stessa ragione del gemello: una " +
+      "`pub fn calendar_settings()` aggiunta dentro `locale.rs` — file già " +
+      "contato — lasciava il numero a quattro con `cargo test --workspace` " +
+      "verde, perché l'elenco del banco `i_cataloghi.rs` è scritto a mano e " +
+      "vede una chiave che manca, mai una famiglia che nessuno ha montato.",
+    comando:
+      "grep -rhE '^[[:space:]]*pub fn [a-z_]*settings\\(\\)' crates/fub-kernel/src | wc -l",
   },
   {
     nome: "durabilita-su-ogni-piattaforma",
     ragione:
-      "Quanti test di `crates/fub-kernel/tests/la_durabilita.rs` non hanno " +
-      "**nessun** `#[cfg(…)]` davanti, cioè quanti ne restano dove la " +
+      "Quanti test di `crates/fub-kernel/tests/la_durabilita.rs` **girano " +
+      "davvero su ogni piattaforma**, cioè quanti ne restano dove la " +
       "piattaforma non regala inode né hardlink. È il presidio contro una specie " +
       "di difetto che nessun colore segnala: la CI gira `cargo test --workspace` " +
       "anche su windows-latest, e per anni quel job è passato verde perché i " +
@@ -166,15 +196,23 @@ export const CONTEGGI = [
       "suite che si svuota in silenzio è indistinguibile da una suite verde** " +
       "(§23.16). Un test non può accorgersene, perché il test che se ne " +
       "accorgerebbe è proprio quello che non c'è: se ne accorge un conto che " +
-      "legge il sorgente da fuori. Guarda `#[cfg`, non `#[cfg(unix)]`, e la " +
-      "differenza è stata misurata: la prima forma di questo comando cercava la " +
-      "stringa esatta, e mettendo `#[cfg(not(windows))]` davanti a tutti e " +
-      "undici i test la suite su Windows si svuotava del tutto mentre il conto " +
-      "restava undici — cioè il presidio era cieco proprio al gesto che esiste " +
-      "per prendere.",
+      "legge il sorgente da fuori. Guarda **quattro** modi di svuotare la " +
+      "suite, tutti misurati uno per uno su questo file: un `#[cfg` davanti a " +
+      "un test (la prima forma cercava la stringa esatta `#[cfg(unix)]` e a " +
+      "`#[cfg(not(windows))]` restava undici); un `#[ignore]`, che lascia " +
+      "`0 passed; 0 failed; 16 ignored` e la prosa verde; un `#![cfg(…)]` come " +
+      "**attributo interno** in cima al file, che svuota tutto in una riga " +
+      "senza toccare nessun test; e un `if cfg!(windows) { return; }` **dentro " +
+      "un corpo** — la forma peggiore, perché lì il test si vede correre e passa " +
+      "a vuoto. Gli ultimi tre azzerano il conto invece di scalarlo: in un file " +
+      "che esiste per girare ovunque non c'è un uso legittimo di `cfg!`, e un " +
+      "presidio che non sa scalare sa almeno spegnersi rumorosamente.",
     comando:
-      "awk '/^[[:space:]]*#\\[cfg/{g=1;next} /^[[:space:]]*#\\[test\\]/{if(g==1){g=0}else{n++}}" +
-      " END{print n+0}' crates/fub-kernel/tests/la_durabilita.rs",
+      "awk '/^[[:space:]]*\\/\\//{next} /^[[:space:]]*#!\\[cfg/{fuori=1}" +
+      " /cfg!\\(/{fuori=1} /^[[:space:]]*#\\[/{a=a $0 \" \"; next}" +
+      " /^[[:space:]]*(pub )?(async )?(unsafe )?fn /{if(a ~ /#\\[test\\]/ &&" +
+      " a !~ /#\\[cfg/ && a !~ /#\\[ignore/) n++; a=\"\"; next} {a=\"\"}" +
+      " END{print fuori?0:n+0}' crates/fub-kernel/tests/la_durabilita.rs",
   },
   {
     nome: "famiglie-paginate",
@@ -184,13 +222,26 @@ export const CONTEGGI = [
       "alla sorgente, con `Paged::from_source`, o ritagliando in memoria — e che " +
       "per anni tutte quelle del kernel usavano il terzo, costruendo l'insieme " +
       "intero per mostrarne venti. Il numero sta accanto alla prosa che descrive " +
-      "le tre strade, così chi ne aggiunge una decima passa da lì e sceglie.",
-    comando: "grep -c 'page: Option<Page>,' crates/fub-abi/src/traits.rs",
+      "le tre strade, così chi ne aggiunge una decima passa da lì e sceglie. " +
+      "**Il conto si contava addosso**: cercava `page: Option<Page>,` in tutto " +
+      "il file e trovava anche il *parametro* di `Paged::from_source`, cioè la " +
+      "funzione nata con la 0113 per servirle — dieci dove le varianti erano " +
+      "nove, e la prosa dell'architettura diceva «dieci» contraddicendo il " +
+      "verbale che l'aveva scritta. Ora legge il corpo dell'enum, e ammette " +
+      "l'ultimo campo senza virgola (rustfmt scrive in linea una variante a un " +
+      "campo solo, e quella sfuggiva nell'altro verso).",
+    comando:
+      "sed -n '/^pub enum IndexQuery {/,/^}/p' crates/fub-abi/src/traits.rs" +
+      " | grep -cE '^[[:space:]]+page: Option<Page>,?$'",
   },
   {
     nome: "crate-del-workspace",
-    ragione: "I crate che ereditano la versione dal `Cargo.toml` della radice.",
-    comando: "ls -d crates/*/ | wc -l",
+    ragione:
+      "I crate che ereditano la versione dal `Cargo.toml` della radice. " +
+      "Dichiarava questo e contava le **cartelle** di `crates/`: un crate che " +
+      "si scrivesse la versione a mano — cioè precisamente quello che la frase " +
+      "esclude — sarebbe stato contato lo stesso.",
+    comando: "grep -lE '^version\\.workspace *= *true' crates/*/Cargo.toml | wc -l",
   },
   {
     nome: "wit-righe",
@@ -222,8 +273,17 @@ export const CONTEGGI = [
       "I `console.warn`/`console.error` rimasti nella shell: ciò che va storto e " +
       "che la decisione 0052 vuole far diventare un evento invece che una riga " +
       "nella console di qualcuno. È un numero che deve **scendere**, e il " +
-      "presidio è ciò che lo fa notare quando risale.",
-    comando: "grep -rEc 'console\\.(warn|error)' frontend/src | awk -F: '{n+=$2} END{print n+0}'",
+      "presidio è ciò che lo fa notare quando risale. Conta le **chiamate**, e " +
+      "prima non lo faceva in due modi opposti: contava le *righe* (due " +
+      "`console.warn` sulla stessa riga contavano uno, e in un numero che deve " +
+      "scendere è il verso che perdona) e contava anche le volte in cui la " +
+      "prosa li **nomina** — le tre che il conto dichiarava erano tutte e tre " +
+      "dentro un commento, e di chiamate vere in `frontend/src` non ce n'è " +
+      "nessuna. La `(` è ciò che distingue una chiamata da un nome.",
+    comando:
+      "find frontend/src -name '*.ts' -o -name '*.tsx' | xargs awk" +
+      " '/^[[:space:]]*(\\/\\/|\\*|\\/\\*)/{next}" +
+      " {n+=gsub(/console\\.(warn|error)[[:space:]]*\\(/,\"\")} END{print n+0}'",
   },
   {
     nome: "moduli-di-feature",
@@ -236,9 +296,12 @@ export const CONTEGGI = [
       "invece che ricordarlo. Le due esclusioni sono le stesse di `RADICE` in " +
       "`crates/fub-features/tests/i_moduli_non_si_parlano.rs`: se là si aggiunge " +
       "un modulo condiviso, qui va tolto anche lui, o il banco e il conto " +
-      "smettono di parlare dello stesso insieme.",
+      "smettono di parlare dello stesso insieme. Un modulo **a cartella** " +
+      "(`canvas/mod.rs`) è un modulo quanto un file, e la prima forma non lo " +
+      "vedeva: il nono si sarebbe aggiunto lasciando il conto a otto.",
     comando:
-      "ls crates/fub-features/src/*.rs | grep -vE '/(lib|inventario)\\.rs$' | wc -l",
+      "ls crates/fub-features/src/*.rs crates/fub-features/src/*/mod.rs 2>/dev/null" +
+      " | grep -vE '/(lib|inventario)\\.rs$' | wc -l",
   },
   {
     nome: "permessi-dichiarabili",
@@ -258,19 +321,24 @@ export const CONTEGGI = [
   {
     nome: "code-che-si-svuotano",
     ragione:
-      "I posti da cui la coda degli eventi verso gli handler si svuota, cioè da " +
-      "cui un evento può sparire senza arrivare a nessuno. Ognuno dei tre ha una " +
-      "ragione scritta accanto in `dispatcher.rs`; il quarto — quello che " +
-      "svuotava `pending` in blocco a budget esaurito, senza guardare " +
-      "`is_recoverable` — era il difetto del §20.5, e nessun test lo vedeva " +
-      "perché sul bus quegli eventi passavano lo stesso. Un quinto si aggiunge " +
-      "con una riga: `self.pending.clear()` è la cosa più facile da scrivere per " +
-      "uscire da una situazione difficile, e questo conto è l'attore che se ne " +
-      "accorge — un test non può, perché il test che se ne accorgerebbe è " +
-      "proprio quello che chi butta non ha scritto.",
+      "I posti da cui una coda di eventi del dispatcher si svuota in blocco, " +
+      "cioè da cui un evento può sparire senza arrivare a nessuno. Ognuno dei " +
+      "quattro ha una ragione scritta accanto in `dispatcher.rs`. La prima " +
+      "forma di questo comando cercava la riga `self.pending.clear();`: " +
+      "presidiava **una sillaba**, e il difetto mordeva già — il travaso verso " +
+      "`salvaged` (`self.pending.drain(..)`) era un posto da cui la coda si " +
+      "svuotava e il conto diceva tre. Restavano fuori anche `truncate`, un " +
+      "`= VecDeque::new()`, un `clear()` con un commento in coda (l'ancora `$` " +
+      "cade) e la **seconda coda**, `salvaged`, che nessuna riconciliazione " +
+      "ripara. Ora le due code sono un tipo — `EventQueue`, col `VecDeque` " +
+      "privato — che si svuota in blocco da due sole porte, `take_all` (travasa) " +
+      "e `discard_all` (butta, e rende quanti): il conto conta quelle chiamate, " +
+      "cioè la proprietà, e ogni altra forma non compila. Legge **un file solo** " +
+      "e può permetterselo perché il tipo è privato al modulo: una coda in un " +
+      "altro file non potrebbe nominarlo.",
     comando:
-      "grep -cE '^[[:space:]]+self\\.pending\\.clear\\(\\);$'" +
-      " crates/fub-kernel/src/dispatcher.rs",
+      "grep -oE '\\.(discard_all|take_all)\\(\\)'" +
+      " crates/fub-kernel/src/dispatcher.rs | wc -l",
   },
   {
     nome: "gesti-della-shell",
@@ -278,12 +346,22 @@ export const CONTEGGI = [
       "I gesti che l'e2e della shell percorre da capo a fondo (§17.2): un `it` " +
       "per gesto in `frontend/src/shell.e2e.test.ts`. È la disciplina della " +
       "0109 applicata a una suite che non si svuota per un `cfg` ma per una " +
-      "riga cancellata o un `it.skip` — che il conto vede tutti e due, perché " +
-      "`it.skip(` non è `it(`. Serve un attore che guardi il file da fuori: un " +
-      "gesto che sparisce lascia una suite verde e più piccola, e più piccola " +
-      "non si vede. Quel che il conto NON vede è un `it` che non asserisce " +
-      "niente; per quello l'attore è la verifica del rosso, che si fa a mano.",
-    comando: "grep -c '^  it(' frontend/src/shell.e2e.test.ts",
+      "riga cancellata o un `.skip`. Serve un attore che guardi il file da " +
+      "fuori: un gesto che sparisce lascia una suite verde e più piccola, e più " +
+      "piccola non si vede. La prima forma leggeva `^  it(`, cioè **il rientro " +
+      "di oggi**: misurato, un `.skip` sui sei `describe` — che stanno in " +
+      "colonna zero — lasciava il conto a sette, `npm run test` a exit 0 con " +
+      "`7 skipped` e la prosa verde, cioè tutti e sette i gesti spariti senza " +
+      "un colore. Ora il rientro non conta, i gesti si riconoscono anche come " +
+      "`it.each(`/`test(`, e uno `.skip`/`.only`/`.todo` su un `describe` o su " +
+      "un `it` azzera il conto: una suite che si può *non eseguire* non si " +
+      "scala, si spegne rumorosamente. Quel che il conto NON vede è un `it` che " +
+      "non asserisce niente; per quello l'attore è la verifica del rosso, che " +
+      "si fa a mano.",
+    comando:
+      "awk '/^[[:space:]]*\\/\\//{next} /(describe|it|test)\\.(skip|only|todo)/{fuori=1}" +
+      " /^[[:space:]]*(it|test)[[:space:]]*(\\.each\\([^)]*\\))?\\(/{n++}" +
+      " END{print fuori?0:n+0}' frontend/src/shell.e2e.test.ts",
   },
   {
     nome: "verbali",

@@ -34,12 +34,17 @@
 //! `check-prosa` diventerebbe rosso — mentre `cargo test` su Windows resterebbe
 //! verde, perché è esattamente ciò che non sa vedere.
 //!
-//! **Quello che il conto non prende, e va saputo**: un `if cfg!(windows) {
-//! return; }` dentro il corpo. Lì il test si vede correre e passa a vuoto, che è
-//! la forma peggiore della stessa cosa — un attributo lo si legge, una riga in
-//! mezzo a un corpo no. Non esiste un conto che la prenda senza leggere Rust:
-//! resta una riga da fermare in review, ed è scritta qui perché chi ci
-//! inciampasse sappia che non è una svista del presidio.
+//! **I quattro modi di svuotare questa suite**, e cosa fa il conto di ciascuno.
+//! Un `#[cfg` davanti a un test lo **scala**. Gli altri tre lo **azzerano**,
+//! perché non c'è modo di scalare ciò che si applica a tutti insieme: un
+//! `#[ignore]` (che lascerebbe `0 passed; 0 failed`), un `#![cfg(…)]` come
+//! attributo *interno* in cima al file, e un `if cfg!(windows) { return; }`
+//! dentro un corpo — la forma peggiore, perché lì il test si vede correre e
+//! passa a vuoto. Quest'ultima la prima versione di questo cappello la
+//! dichiarava non prendibile «senza leggere Rust», e non era vero: in un file
+//! che esiste per girare ovunque non esiste un uso legittimo di `cfg!`, quindi
+//! la sua sola presenza è la risposta. Un presidio che non sa scalare sa
+//! almeno spegnersi rumorosamente.
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_kernel::storage::{come_scrivere, ComeScrivere, FsStorage, NomiDelFile, VaultStorage};

@@ -284,9 +284,9 @@ sequenceDiagram
 |---|---|---|
 | debounce del rilevatore | [watcher.rs:151](../../crates/fub-host/src/watcher.rs) | **300 ms** |
 | tetto della coda di un iscritto | [bus.rs:51](../../crates/fub-kernel/src/bus.rs) | **1024** notice |
-| budget di un drenaggio | [dispatcher.rs:44](../../crates/fub-kernel/src/dispatcher.rs) | **1024** consegne |
+| budget di un drenaggio | [dispatcher.rs:64](../../crates/fub-kernel/src/dispatcher.rs) | **1024** consegne |
 | tetto della raffica del ponte | [bridge.rs:61](../../crates/fub-host/src/bridge.rs) | **128** notice |
-| chi timbra l'origine | [dispatcher.rs:157](../../crates/fub-kernel/src/dispatcher.rs) | un punto solo |
+| chi timbra l'origine | [dispatcher.rs:273](../../crates/fub-kernel/src/dispatcher.rs) | un punto solo |
 | chi decide cosa è sacrificabile | [event.rs `is_recoverable`](../../crates/fub-abi/src/event.rs) | un punto solo, nel contratto |
 | chi decide se un pannello è invecchiato | [panel-host.ts:186](../../frontend/src/ui/panel-host.ts) via [rules/mirrored.ts](../../frontend/src/rules/mirrored.ts) | la gemella di `mask_wants` del kernel |
 

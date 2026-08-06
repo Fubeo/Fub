@@ -304,6 +304,13 @@ function autoprova() {
     ["centoventuno righe ", 121],
     ["duecentocinquanta ", 250],
     ["nessun numero qui dentro ", null],
+    // **Zero non è «nessun numero»**, e la distinzione è di questo lettore: chi
+    // lo chiama distingue `null` (l'annotazione non presidia niente, ed è un
+    // problema) da un numero che vale zero (una cosa che è stata contata e non
+    // c'è, ed è il caso normale di un conteggio che deve **scendere** —
+    // `diagnostica-shell` ci è arrivato). Se le due si confondessero, un
+    // conteggio a zero diventerebbe rosso per la ragione sbagliata.
+    ["oggi sono **zero** ", 0],
     // Le parole che *sembrano* numeri e non lo sono: «sei» verbo, che in questi
     // documenti compare quanto «sei» numero. Il presidio non sa distinguerle, e
     // va bene così — il caso è qui per ricordare che l'annotazione si mette

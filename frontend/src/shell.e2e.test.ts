@@ -28,8 +28,12 @@
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
 // suite verde*, e un file come questo si svuota nel modo più facile che ci sia
-// — un `it.skip` messo per sbloccare un giro e mai tolto. Il conto lo vede,
-// perché `it.skip(` non è `it(`.
+// — un `.skip` messo per sbloccare un giro e mai tolto. La prima forma del
+// conto leggeva `^  it(`, cioè **il rientro di oggi**: misurato, un `.skip` sui
+// sei `describe`, che stanno in colonna zero, lasciava il conto a sette e
+// `npm run test` verde con `7 skipped`. Adesso il rientro non conta e un
+// `.skip`/`.only`/`.todo` — su un `describe` o su un `it` — azzera il conto:
+// una suite che si può *non eseguire* non si scala, si spegne rumorosamente.
 //
 // # I limiti, dichiarati qui perché nessuno li deduca
 //

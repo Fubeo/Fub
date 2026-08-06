@@ -24,7 +24,9 @@ use fub_abi::text::{StringCatalog, Text};
 /// nemmeno il gemello di `fub-features` lo vedrebbe. A prenderlo è l'attore che
 /// la 0105 nomina per questa specie di buco: un conto che legge i sorgenti da
 /// fuori. Se ne nasce uno che non è in questa lista, `check-prosa` diventa
-/// rosso su questa riga.
+/// rosso su questa riga — da adesso anche se nasce **dentro un file già
+/// contato**, che è il caso in cui il conto guardava i file invece delle
+/// dichiarazioni e restava fermo.
 fn cataloghi_del_core() -> Vec<StringCatalog> {
     [
         fub_host::settings::core_catalog(),
@@ -93,7 +95,9 @@ fn mancanti(chiavi: &[String], cataloghi: &[StringCatalog]) -> Vec<String> {
 /// Le famiglie del kernel che dichiarano impostazioni sono
 /// **quattro** [conta: impostazioni-del-kernel], e il conto sta qui perché
 /// anche questo elenco è a mano: stessa forma della riga di
-/// `cataloghi_del_core`.
+/// `cataloghi_del_core`, e stessa riparazione — una `pub fn calendar_settings()`
+/// aggiunta dentro `locale.rs` lasciava il conto a quattro e la suite verde,
+/// perché il comando contava i file.
 #[test]
 fn ogni_chiave_che_il_kernel_dichiara_e_montata_dal_core() {
     let montate: std::collections::BTreeSet<String> = fub_host::settings::core_settings()
