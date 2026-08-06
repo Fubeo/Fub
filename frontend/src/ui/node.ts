@@ -284,6 +284,10 @@ function aggiorna(
       // sovrascrive sotto le dita. Lo vedrà al prossimo giro, quando avrà
       // smesso — e intanto l'azione gli manda ciò che c'è davvero.
       if (document.activeElement !== campo && campo.value !== valore) campo.value = valore;
+      // L'azione del nodo nuovo, non quella con cui il campo era nato: un campo
+      // riusato che manda l'azione di ieri funziona, ed è il modo peggiore di
+      // sbagliare.
+      azioniDelCampo(campo, next.action, onAction);
       etichetta(el, "label" in next ? next.label : null);
       return true;
     }
@@ -292,6 +296,7 @@ function aggiorna(
       const campo = el.querySelector<HTMLInputElement>("input");
       if (!campo) return false;
       if (document.activeElement !== campo) campo.checked = next.value;
+      azioniDelCampo(campo, next.action, onAction);
       const testo = el.querySelector<HTMLElement>(".ui-field-label");
       if (testo) testo.textContent = next.label;
       return true;
@@ -306,6 +311,7 @@ function aggiorna(
           opt.selected = next.value.includes(opt.value);
         }
       }
+      azioniDelCampo(campo, next.action, onAction);
       etichetta(el, next.label);
       return true;
     }
@@ -316,6 +322,7 @@ function aggiorna(
       if (scelte.length !== next.options.length) return false;
       scelte.forEach((input, i) => {
         input.checked = next.options[i]!.value === next.value;
+        azioniDelCampo(input, next.action, onAction);
       });
       etichetta(el, next.label);
       return true;
@@ -704,7 +711,7 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
       area.rows = node.rows;
       area.value = node.value;
       valore(el, () => ({ type: "text", value: area.value }));
-      scatta(area, node.action, onAction, "change");
+      azioniDelCampo(area, node.action, onAction);
       el.appendChild(area);
       return campoConNome(el, node.field);
     }
@@ -719,7 +726,7 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
       if (node.step !== null) input.step = String(node.step);
       if (node.value !== null) input.value = String(node.value);
       valore(el, () => ({ type: "number", value: Number(input.value) }));
-      scatta(input, node.action, onAction, "change");
+      azioniDelCampo(input, node.action, onAction);
       el.appendChild(input);
       return campoConNome(el, node.field);
     }
@@ -735,7 +742,7 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
       testo.textContent = node.label;
       el.append(input, testo);
       valore(el, () => ({ type: "bool", value: input.checked }));
-      scatta(input, node.action, onAction, "change");
+      azioniDelCampo(input, node.action, onAction);
       return campoConNome(el, node.field);
     }
     case "select": {
@@ -756,7 +763,7 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
           ? { type: "choices", value: scelte }
           : { type: "text", value: scelte[0] ?? "" };
       });
-      scatta(select, node.action, onAction, "change");
+      azioniDelCampo(select, node.action, onAction);
       el.appendChild(select);
       return campoConNome(el, node.field);
     }
@@ -780,7 +787,7 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
         const testo = document.createElement("span");
         testo.textContent = opzione.label;
         riga.append(input, testo);
-        scatta(input, node.action, onAction, "change");
+        azioniDelCampo(input, node.action, onAction);
         el.appendChild(riga);
       }
       valore(el, () => ({
@@ -912,17 +919,7 @@ function campoTestuale(
   input.value = value;
   if (placeholder) input.placeholder = placeholder;
   valore(el, () => ({ type: "text", value: input.value }));
-  scatta(input, action, onAction, "change");
-  // Invio = «ho finito»: senza, un campo di ricerca costringerebbe a uscirne
-  // per essere ascoltato.
-  if (action) {
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        void invia(input, action, onAction);
-      }
-    });
-  }
+  azioniDelCampo(input, action, onAction);
   el.appendChild(input);
   return campoConNome(el, field);
 }
@@ -1007,49 +1004,113 @@ function valore(el: HTMLElement, leggi: () => UiValue): void {
   resi.set(el, { ...(resi.get(el) ?? { node: { node: "separator" } as UiNode }), leggi });
 }
 
+/// Cosa manda un elemento quando un suo evento scatta, **adesso**.
+///
+/// # Perché una mappa e non una chiusura
+///
+/// Un ascoltatore registrato una volta sola con l'`ActionRef` catturato dentro
+/// la chiusura è giusto finché l'elemento è nuovo, e diventa **silenziosamente
+/// sbagliato** il primo giro che il riconciliatore (§2.8) lo riusa: il campo
+/// mostra il valore nuovo, ha il focus giusto, e manda l'azione di ieri. Non
+/// smette di funzionare — fa la cosa sbagliata funzionando, che è peggio.
+///
+/// La riparazione non è togliere e rimettere l'ascoltatore a ogni
+/// riconciliazione (funziona, e va ripetuta a mano dal prossimo che ne aggiunge
+/// uno): è che la chiusura **non abbia niente da invecchiare**. Qui dentro
+/// l'ascoltatore cattura solo l'elemento e il nome dell'evento — due cose che
+/// non cambiano mai — e legge l'azione da questa mappa quando l'evento scatta.
+/// Un ascoltatore nuovo registrato da `ascolta` eredita la proprietà gratis.
+interface Legame {
+  action: ActionRef;
+  onAction: ActionHandler;
+}
+
+/// L'azione in vigore per ogni evento di ogni elemento. `null` = l'elemento ha
+/// l'ascoltatore ma il nodo che rappresenta adesso non ha azione.
+const legami = new WeakMap<HTMLElement, Map<string, Legame | null>>();
+
+/// **L'unica porta da cui si registra un ascoltatore d'azione.**
+///
+/// Chiamarla due volte sullo stesso elemento e sullo stesso evento non
+/// accumula: la seconda aggiorna l'azione e basta. È ciò che rende sicuro
+/// richiamarla dal riconciliatore con la stessa disinvoltura con cui la chiama
+/// il disegno.
+function ascolta(
+  el: HTMLElement,
+  evento: string,
+  action: ActionRef | null,
+  onAction: ActionHandler,
+  quando?: (e: Event) => boolean,
+): void {
+  let per = legami.get(el);
+  if (!per) {
+    per = new Map();
+    legami.set(el, per);
+  }
+  const registrato = per.has(evento);
+  per.set(evento, action ? { action, onAction } : null);
+  if (registrato) return;
+  el.addEventListener(evento, (e) => {
+    if (!legami.get(el)?.get(evento)) return;
+    if (quando && !quando(e)) return;
+    e.preventDefault();
+    void invia(el, evento);
+  });
+}
+
 /// Un'azione su un elemento cliccabile.
 function collega(el: HTMLElement, action: ActionRef | null, onAction: ActionHandler): void {
-  const precedente = azioni.get(el);
-  if (precedente) el.removeEventListener("click", precedente);
   if (!action) {
     el.classList.remove("clickable");
     // Non basta togliere il click: se questo elemento era attivabile e viene
     // riusato dal riconciliatore (§2.8) per un nodo senza azione, resterebbe
     // nel giro del tab senza fare niente.
     nonAttivabile(el);
-    azioni.delete(el);
-    return;
+  } else {
+    el.classList.add("clickable");
+    // Cliccabile e attivabile sono la stessa cosa, e da qui in poi lo sono per
+    // costruzione: passa di qui **ogni** azione di **ogni** nodo dichiarativo,
+    // quindi anche quelli dei pannelli che non sono ancora stati scritti.
+    attivabile(el);
   }
-  el.classList.add("clickable");
-  // Cliccabile e attivabile sono la stessa cosa, e da qui in poi lo sono per
-  // costruzione: passa di qui **ogni** azione di **ogni** nodo dichiarativo,
-  // quindi anche quelli dei pannelli che non sono ancora stati scritti.
-  attivabile(el);
-  const handler = (e: Event) => {
-    e.preventDefault();
-    void invia(el, action, onAction);
-  };
-  el.addEventListener("click", handler);
-  azioni.set(el, handler);
+  ascolta(el, "click", action, onAction);
 }
 
-const azioni = new WeakMap<HTMLElement, EventListener>();
-
-/// Un'azione che scatta al cambio di un campo (`change`), invece che al click.
-function scatta(
-  el: HTMLElement,
+/// **Tutti** gli ascoltatori d'azione di un campo, in un posto solo.
+///
+/// La chiamano il disegno e la riconciliazione, con le stesse due righe: chi
+/// aggiungerà un terzo ascoltatore a un campo lo scrive qui, e lo ha in
+/// entrambe le vite del campo senza ricordarsene.
+function azioniDelCampo(
+  controllo: HTMLElement,
   action: ActionRef | null,
   onAction: ActionHandler,
-  evento: string,
 ): void {
-  if (!action) return;
-  el.addEventListener(evento, () => void invia(el, action, onAction));
+  ascolta(controllo, "change", action, onAction);
+  // Invio = «ho finito»: senza, un campo di ricerca costringerebbe a uscirne
+  // per essere ascoltato. Solo dove Invio non vuol già dire altro — in un
+  // `<textarea>` è un a capo, su una casella di spunta è la spunta.
+  if (accettaInvio(controllo)) {
+    ascolta(controllo, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter");
+  }
 }
 
-/// Manda l'azione col suo payload e con i campi **in vigore**: quelli del form
-/// che la contiene, o quelli dell'albero intero fuori da un form.
-async function invia(da: HTMLElement, action: ActionRef, onAction: ActionHandler): Promise<void> {
-  await onAction(action, campiInVigore(da));
+function accettaInvio(controllo: HTMLElement): boolean {
+  if (!(controllo instanceof HTMLInputElement)) return false;
+  return controllo.type === "text" || controllo.type === "date";
+}
+
+/// Manda l'azione **in vigore** per questo evento, col suo payload e coi campi
+/// in vigore: quelli del form che la contiene, o quelli dell'albero intero
+/// fuori da un form.
+///
+/// Non prende un `ActionRef`, e la mancanza è il presidio: un'azione qui non si
+/// può passare, quindi non si può catturare in una chiusura e non può
+/// invecchiare. Chi ci riprovasse non compila.
+async function invia(da: HTMLElement, evento: string): Promise<void> {
+  const legame = legami.get(da)?.get(evento);
+  if (!legame) return;
+  await legame.onAction(legame.action, campiInVigore(da));
 }
 
 export function campiInVigore(da: HTMLElement): FieldValue[] {
