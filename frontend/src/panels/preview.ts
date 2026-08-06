@@ -14,7 +14,7 @@
 // documento, che a sua volta mostra questo in Lettura. Importarsi a vicenda
 // sarebbe un ciclo, e la forma iniettata è la stessa dei tre moduli
 // dell'editor.
-import type { RenderedDocument } from "../host/contract";
+import type { EmbedContent, RenderedDocument } from "../host/contract";
 import { api } from "../host/ipc";
 import { mountTree } from "../ui/node";
 import { setSanitizedHtml } from "../ui/sanitize";
@@ -58,7 +58,7 @@ export function clearPreview(previewEl: HTMLElement): void {
 export async function updatePreview(previewEl: HTMLElement, id: string): Promise<void> {
   const reso = await api.renderPreview(id);
   innesta(previewEl, reso);
-  await hydrateEmbeds(previewEl, new Set([id]));
+  await hydrateEmbeds(previewEl, new Set([id]), new Map());
 }
 
 /// Innesta un documento reso: l'HTML **sanitizzato**, e poi le parti
@@ -119,7 +119,32 @@ function wireWikilinks(container: HTMLElement): void {
 // per-documento); qui si chiede al kernel il contenuto e lo si innesta,
 // ricorsivamente. La catena dei documenti già aperti spezza i cicli
 // (`![[A]]` dentro A) e MAX_EMBED_DEPTH limita la profondità.
-async function hydrateEmbeds(container: HTMLElement, chain: Set<string>): Promise<void> {
+//
+// # La stessa pagina si chiede una volta sola (§2.9)
+//
+// La profondità era limitata; la **larghezza** no, e le due si moltiplicano.
+// Una nota che trascluda dieci note, ognuna delle quali ne trascluda altre
+// dieci, faceva partire diecimila `render_embed` attraverso il ponte per un
+// documento che di note distinte ne nomina venti — e ogni `![[Glossario]]`
+// ripetuto tre volte nella stessa nota erano tre viaggi identici.
+//
+// Il memo è per **corsa di idratazione**, e la sua correttezza non è una
+// scommessa sul kernel: è scritta nella firma di `FormatProvider::render_html`,
+// che promette che *«la resa di un blocco dipende dal blocco, non dal resto del
+// documento»* — cioè che chiedere due volte la stessa pagina con lo stesso
+// heading rende due volte la stessa cosa. Un memo che sopravvivesse alla corsa
+// sarebbe invece una cache, con la domanda «quando si invalida» attaccata; qui
+// muore con l'anteprima che l'ha aperta, e la prossima apertura ricomincia.
+//
+// **Non è lazy loading**, e la differenza va detta: caricare un embed solo
+// quando lo si vede è una domanda di layout, che in `happy-dom` non esiste
+// (buco dichiarato n. 5 della 0112) e che qui resta scoperta. Questo toglie i
+// viaggi *ripetuti*, non quelli *anticipati*.
+async function hydrateEmbeds(
+  container: HTMLElement,
+  chain: Set<string>,
+  memo: Map<string, Promise<EmbedContent>>,
+): Promise<void> {
   const slots = Array.from(
     container.querySelectorAll<HTMLElement>(".embed[data-embed-page]"),
   );
@@ -132,7 +157,14 @@ async function hydrateEmbeds(container: HTMLElement, chain: Set<string>): Promis
         return;
       }
       try {
-        const content = await api.renderEmbed(page, slot.dataset.embedHeading ?? null);
+        const heading = slot.dataset.embedHeading ?? null;
+        const chiave = `${page} ${heading ?? ""}`;
+        let atteso = memo.get(chiave);
+        if (!atteso) {
+          atteso = api.renderEmbed(page, heading);
+          memo.set(chiave, atteso);
+        }
+        const content = await atteso;
         if (chain.has(content.doc_id)) {
           slot.classList.add("embed-cycle");
           return;
@@ -142,7 +174,7 @@ async function hydrateEmbeds(container: HTMLElement, chain: Set<string>): Promis
         // che servono — sanitizza, ricuce i link, monta le parti.
         innesta(slot, content);
         slot.classList.add("embed-loaded");
-        await hydrateEmbeds(slot, new Set([...chain, content.doc_id]));
+        await hydrateEmbeds(slot, new Set([...chain, content.doc_id]), memo);
       } catch {
         slot.classList.add("unresolved");
       }

@@ -20,10 +20,15 @@ azioni (§2.7) e la chiave col riconciliatore (§2.8). Cosa è una view **adesso
 sta scritto nel verbale, e la forma del protocollo in
 [architecture/ui-protocol.md](../architecture/ui-protocol.md).
 
-Resta la nona, e resta per la ragione per cui era già P2: non scade col freeze,
-non è precondizione di niente, e si paga quando le liste diventano lunghe — cioè
-quando ci sarà un vault che le rende lunghe. Non è una decisione: è lavoro di
-shell, e sta nella
-[§2.9 in coda alla seduta 18](18-editor-e-tastiera.md#29-prestazioni-della-ui),
+Restava la nona, e restava per la ragione per cui era già P2: non scade col
+freeze, non è precondizione di niente, e si paga quando le liste diventano
+lunghe — cioè quando ci sarà un vault che le rende lunghe. Non era una
+decisione: era lavoro di shell, ed è andata nella
+[~~§2.9~~ in coda alla seduta 18](18-editor-e-tastiera.md#29-prestazioni-della-ui),
 insieme alle altre code delle sedute chiuse. Il numero si trasferisce, non si
-rinomina.
+rinomina. È chiusa dalla
+[0114](../decisions/0114-una-finestra-non-si-omette.md), che di quella
+previsione ha smentito la parte pratica: non ha aspettato il vault che rende le
+liste lunghe, perché il prezzo si conta invece di misurarlo — un vault sintetico
+da seimila note in un banco dice quanto costa un ridisegno senza che nessuno
+debba averne uno vero.

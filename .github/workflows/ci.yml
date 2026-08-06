@@ -202,8 +202,14 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
-      # `vite build` traspila senza controllare i tipi: il type-check è questo.
-      - run: npx tsc --noEmit
+      # `vite build` traspila senza controllare i tipi, e `vitest` nemmeno: il
+      # type-check è questo, ed è il **terzo** comando della shell. Era scritto
+      # qui come `npx tsc --noEmit` e in nessuno `script` di `package.json`,
+      # quindi chi verificava il proprio lavoro con la coppia che tutti citano
+      # — `npm run test && npm run build` — mandava in CI del codice che non
+      # compila e lo scopriva da un'altra parte. Adesso ha un nome che si può
+      # eseguire a mano (§2.9).
+      - run: npm run typecheck
         working-directory: frontend
       # I test di unità del frontend (oggi: il ponte byte↔UTF-16, `offsets.ts`).
       - run: npm test

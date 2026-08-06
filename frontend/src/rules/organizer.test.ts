@@ -23,6 +23,8 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
       path: "Progetti",
       folders: [cartella("Progetti/Zeta", 0, 2), cartella("Progetti/Archivio")],
       notes: ["Progetti/beta.md", "Progetti/Alfa.md"],
+      altreCartelle: 0,
+      altreNote: 0,
     };
     const ordinato = sortContent(content, meta());
     expect(ordinato.folders.map((f) => f.path)).toEqual([
@@ -38,6 +40,8 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
       path: "",
       folders: [cartella("b"), cartella("a")],
       notes: ["z.md", "k.md"],
+      altreCartelle: 0,
+      altreNote: 0,
     };
     const ordinato = sortContent(content, meta({ "": ["b", "z.md"] }));
     expect(ordinato.folders.map((f) => f.path)).toEqual(["b", "a"]);

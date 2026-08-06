@@ -24,13 +24,18 @@
 //
 // ## Come è diviso, e perché
 //
-// La **politica** (cosa è ammesso) è un pugno di funzioni pure, in fondo al file
-// e sotto test. Il **cammino sul DOM** non è testato: questa shell non ha un
-// ambiente DOM nei test, che è il §17.2, e aggiungere una dipendenza per farlo
-// qui sarebbe una decisione di un'altra seduta presa di straforo. È la stessa
-// divisione con cui la decisione 0016 ha trattato il riconciliatore, e per la
-// stessa ragione: la parte in cui si sbaglia in un modo che non si vede è la
-// decisione, non l'`appendChild`.
+// La **politica** (cosa è ammesso, e cosa si impone) è un pugno di funzioni pure
+// e di tabelle, in fondo al file e sotto test. È la stessa divisione con cui la
+// decisione 0016 ha trattato il riconciliatore, e per la stessa ragione: la
+// parte in cui si sbaglia in un modo che non si vede è la decisione, non
+// l'`appendChild`.
+//
+// Qui c'era scritto che il **cammino sul DOM** non è testato «perché questa
+// shell non ha un ambiente DOM nei test, che è il §17.2». Era vero quando è
+// stato scritto e ha smesso di esserlo: `happy-dom` c'è, ed è una delle tre
+// righe che la [0112](../../../docs/decisions/0112-un-e2e-contro-un-host-finto.md)
+// ha misurato false in tre posti. Il cammino ora si prova dove ha un cliente
+// vero — l'anteprima, in `ridisegno.test.ts` — invece che a vuoto.
 //
 // ## Cosa NON fa
 //
@@ -124,6 +129,32 @@ export function attributoConsentito(tag: string, attributo: string): boolean {
   return ATTR_AMMESSI[tag.toLowerCase()]?.has(nome) ?? false;
 }
 
+/// Gli attributi che questo varco **impone**, per tag, a prescindere da ciò che
+/// il produttore aveva scritto (§2.9).
+///
+/// Un `<a>` che esce dall'app riceve già `rel`/`target` qui sotto per la stessa
+/// ragione di forma: c'è una cosa che vale per **ogni** HTML che entra nella
+/// webview, e il posto dove scriverla è il punto che tutti attraversano — non i
+/// produttori, che sono il provider markdown di oggi più chiunque a M5.
+///
+/// Per un'immagine quella cosa è **quando si carica**. Un `<img>` senza
+/// `loading` parte appena è nel documento: aprire in Lettura una nota con
+/// duecento immagini apre duecento letture di file prima che se ne veda una, e
+/// una galleria in fondo alla nota si paga per intero anche se non ci si arriva
+/// mai. `loading="lazy"` sposta la decisione al browser, che è il solo a sapere
+/// dove sta la finestra — ed è la ragione per cui questa metà della voce si
+/// poteva fare **senza** layout: la shell non calcola cosa si vede, dichiara
+/// che non lo vuole decidere lei. `decoding="async"` è la stessa frase per la
+/// decodifica, che altrimenti blocca il thread che disegna.
+///
+/// Sono **imposti dopo** la copia degli attributi, quindi un documento che
+/// scrivesse `loading="eager"` non vince — e non vincerebbe comunque, perché
+/// `loading` non è in `ATTR_AMMESSI`: le due cose sono d'accordo di proposito,
+/// e l'ordine dice quale delle due è la regola.
+export const ATTR_IMPOSTI: Record<string, Record<string, string>> = {
+  img: { loading: "lazy", decoding: "async" },
+};
+
 export function styleConsentito(valore: string): boolean {
   return STYLE_AMMESSO.test(valore.trim());
 }
@@ -214,6 +245,9 @@ function pulisci(node: Node): Node | null {
     if (nome === "href" && !linkConsentito(attr.value)) continue;
     if (nome === "src" && !risorsaConsentita(attr.value)) continue;
     nuovo.setAttribute(nome, attr.value);
+  }
+  for (const [nome, valore] of Object.entries(ATTR_IMPOSTI[tag] ?? {})) {
+    nuovo.setAttribute(nome, valore);
   }
   if (tag === "a" && esterno(nuovo.getAttribute("href") ?? "")) {
     nuovo.setAttribute("rel", "noopener noreferrer");

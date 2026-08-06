@@ -36,7 +36,7 @@ export function refreshDocuments(): void {
 /// prendere il primo: è ciò che serve a chi deve aprire *qualcosa* dopo aver
 /// chiuso il documento che stava guardando.
 export async function primaNota(): Promise<string | null> {
-  const page = await vociDelVault("document", undefined, { offset: 0, limit: 1 });
+  const page = await vociDelVault({ offset: 0, limit: 1 }, "document");
   return page.items[0]?.id ?? null;
 }
 

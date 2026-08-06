@@ -41,7 +41,7 @@
 import { createEditor, type Editor } from "../editor/editor";
 import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
-import { noteDalNome, riferimentoRisolto, tagDelVault } from "../host/query";
+import { SENZA_FINESTRA, noteDalNome, riferimentoRisolto, tagDelVault } from "../host/query";
 import type { PaneMode, SelectionSet, ViewContext, WriteBase } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { noteRecentiEsistenti } from "../state/recenti";
@@ -613,7 +613,13 @@ function riquadro(id: string): Riquadro {
       // quel modulo non conosce né il vault né la memoria corta.
       cercaNote: (prefisso: string) =>
         (prefisso.trim() ? noteDalNome(prefisso) : noteRecentiEsistenti()).catch(() => []),
-      listTags: () => tagDelVault().catch(() => []),
+      // `SENZA_FINESTRA`, e dichiarato: i tag sono il **vocabolario** di un
+      // vault, non il suo contenuto — cresce col numero di concetti e non col
+      // numero di note — e il filtro per prefisso lo fa CodeMirror in locale su
+      // ciò che ha in mano. Una finestra qui non taglierebbe una risposta
+      // grande: taglierebbe l'alfabeto, e i tag dopo la lettera del taglio
+      // smetterebbero di completarsi senza che nessuno lo dica.
+      listTags: () => tagDelVault(SENZA_FINESTRA).catch(() => []),
     },
   });
   // Un riquadro nato dopo il tema deve nascere nella luce giusta, non
