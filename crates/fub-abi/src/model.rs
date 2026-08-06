@@ -201,16 +201,24 @@ impl Frontmatter {
     /// La proprietà `key` **normalizzata** ([`PropertyValue`]), o `None` se la
     /// chiave non c'è (che è diverso da `Some(PropertyValue::Empty)`: quello è
     /// `key:` senza valore).
-    pub fn property(&self, key: &str) -> Option<PropertyValue> {
-        self.0.get(key).map(PropertyValue::normalize)
+    ///
+    /// `formats` sono i formati di data che **il vault dichiara**
+    /// ([`DateFormats`]); chi non ne ha nessuno passa [`DateFormats::ISO`], che
+    /// è la regola della 0003 intera. È un parametro e non un default perché
+    /// leggere lo stesso file con due dichiarazioni diverse dà due risposte
+    /// diverse, e un chiamante che non se ne accorge è un filtro che non trova.
+    pub fn property(&self, key: &str, formats: &DateFormats) -> Option<PropertyValue> {
+        self.0
+            .get(key)
+            .map(|v| PropertyValue::normalize(v, formats))
     }
 
     /// Tutte le proprietà normalizzate, **nell'ordine del file** (il workspace
     /// abilita `serde_json/preserve_order`).
-    pub fn properties(&self) -> Vec<(String, PropertyValue)> {
+    pub fn properties(&self, formats: &DateFormats) -> Vec<(String, PropertyValue)> {
         self.0
             .iter()
-            .map(|(k, v)| (k.clone(), PropertyValue::normalize(v)))
+            .map(|(k, v)| (k.clone(), PropertyValue::normalize(v, formats)))
             .collect()
     }
 
@@ -824,6 +832,143 @@ pub struct PropertyDate {
     pub time: Option<PropertyTime>,
 }
 
+/// L'ordine dei campi in una data che **non** è ISO-8601: ciò che un vault può
+/// dichiarare di sé.
+///
+/// Tre ordini e non un formato con dei segnaposto (`%d/%m/%Y`) perché il
+/// separatore non è mai stato l'ambiguità: `05/07/2026` e `05-07-2026` sono la
+/// stessa scrittura, mentre `05/07/2026` e `07/05/2026` sono la **stessa
+/// stringa** letta da due parti del mondo come due giorni diversi. È
+/// esattamente questo che nessun parser può dedurre e che solo chi possiede il
+/// vault può dire.
+///
+/// Serializzabile e in `snake_case` non per attraversare il contratto — non lo
+/// attraversa — ma perché la parola con cui il vault lo dichiara *è* il suo
+/// nome in minuscolo, e le due forme devono restare la stessa: che
+/// [`as_key`](DateOrder::as_key) e serde dicano `dmy` tutte e due lo prova
+/// `the_word_of_the_setting_is_the_word_of_the_wire`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DateOrder {
+    /// `05/07/2026`, `5-7-2026`: giorno, mese, anno.
+    Dmy,
+    /// `07/05/2026`: mese, giorno, anno.
+    Mdy,
+    /// `2026/07/05`, `2026-7-5`: anno, mese, giorno.
+    Ymd,
+}
+
+impl DateOrder {
+    /// Tutti gli ordini, in ordine di dichiarazione.
+    pub const ALL: [DateOrder; 3] = [DateOrder::Dmy, DateOrder::Mdy, DateOrder::Ymd];
+
+    /// La parola con cui il vault lo dichiara.
+    ///
+    /// Sta qui e non accanto all'impostazione che la scrive: la stringa che
+    /// l'utente sceglie e l'ordine che il parser applica sono **una tabella
+    /// sola**, e due copie sarebbero due tendine che promettono cose diverse.
+    pub fn as_key(self) -> &'static str {
+        match self {
+            DateOrder::Dmy => "dmy",
+            DateOrder::Mdy => "mdy",
+            DateOrder::Ymd => "ymd",
+        }
+    }
+
+    /// L'ordine che quella parola nomina, o `None` se non ne nomina nessuno.
+    pub fn from_key(s: &str) -> Option<DateOrder> {
+        DateOrder::ALL.into_iter().find(|o| o.as_key() == s)
+    }
+
+    /// Legge `s` in quest'ordine, o `None`.
+    ///
+    /// Rigido quanto [`parse_iso_date`], su un insieme diverso: tre campi
+    /// numerici separati dallo **stesso** segno fra `/`, `-` e `.`, l'anno a
+    /// quattro cifre, mese e giorno a una o due. Le due cifre dell'anno non si
+    /// accettano — `05/07/26` chiederebbe di indovinare il secolo, e indovinare
+    /// è la cosa che la 0003 ha rifiutato.
+    fn read(self, s: &str) -> Option<PropertyDate> {
+        let sep = s.chars().find(|c| matches!(c, '/' | '-' | '.'))?;
+        let mut parts = s.split(sep);
+        let (a, b, c) = (parts.next()?, parts.next()?, parts.next()?);
+        if parts.next().is_some() {
+            return None;
+        }
+        let (year, month, day) = match self {
+            DateOrder::Dmy => (c, b, a),
+            DateOrder::Mdy => (c, a, b),
+            DateOrder::Ymd => (a, b, c),
+        };
+        if year.len() != 4 {
+            return None;
+        }
+        let year = i32::try_from(digits(year, 4)?).ok()?;
+        let month = u8::try_from(digits(month, 2)?).ok()?;
+        let day = u8::try_from(digits(day, 2)?).ok()?;
+        if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+            return None;
+        }
+        Some(PropertyDate {
+            year,
+            month,
+            day,
+            time: None,
+        })
+    }
+}
+
+/// I formati di data che **questo vault dichiara**, oltre all'ISO-8601.
+///
+/// La [decisione 0003](../../../docs/decisions/0003-modello-del-documento.md)
+/// ha rifiutato il parser tollerante con l'argomento giusto — *un parser
+/// tollerante trasformerebbe in date le stringhe dell'utente* — e quell'argomento
+/// resta intero. Ciò che cambia non è la **tolleranza**: è **chi dichiara il
+/// formato**. Un formato dichiarato non è un indovinello, ed è la differenza
+/// esatta fra questo tipo e la cosa che la 0003 ha rifiutato.
+///
+/// Il default è [`DateFormats::ISO`], cioè nessuna dichiarazione e la regola di
+/// prima parola per parola: un vault che non dice niente si legge oggi come si
+/// leggeva ieri.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct DateFormats {
+    declared: Option<DateOrder>,
+}
+
+impl DateFormats {
+    /// Nessuna dichiarazione: **solo** l'ISO-8601.
+    pub const ISO: DateFormats = DateFormats { declared: None };
+
+    /// I formati di un vault che ne dichiara uno.
+    pub fn declaring(order: DateOrder) -> DateFormats {
+        DateFormats {
+            declared: Some(order),
+        }
+    }
+
+    /// L'ordine dichiarato, se c'è.
+    pub fn declared(&self) -> Option<DateOrder> {
+        self.declared
+    }
+
+    /// Legge `s` coi soli formati dichiarati. Senza dichiarazione non legge
+    /// niente, ed è il punto.
+    fn read(&self, s: &str) -> Option<PropertyDate> {
+        self.declared.and_then(|o| o.read(s))
+    }
+
+    /// `s` **sembra** una data a qualcuno?
+    ///
+    /// È il rilevatore del controllo di salute, e non è una seconda regola: è
+    /// lo **stesso** parser con tutti gli ordini insieme. Ciò che due
+    /// dichiarazioni diverse leggerebbero in due modi è esattamente ciò su cui
+    /// vale la pena chiedere all'utente — e siccome la risposta è una domanda e
+    /// non un valore, qui la larghezza è legittima dove nel parser non lo era.
+    pub fn looks_like_a_date(s: &str) -> bool {
+        let t = s.trim();
+        DateOrder::ALL.iter().any(|o| o.read(t).is_some())
+    }
+}
+
 /// L'orario di una [`PropertyDate`], col fuso **come era scritto**.
 ///
 /// `offset_minutes` è `None` per un orario locale-senza-fuso: convertirlo
@@ -839,13 +984,16 @@ pub struct PropertyTime {
 }
 
 impl PropertyValue {
-    /// Normalizza un valore JSON del frontmatter.
-    pub fn normalize(v: &serde_json::Value) -> PropertyValue {
+    /// Normalizza un valore JSON del frontmatter, coi formati di data che il
+    /// vault dichiara ([`DateFormats`]).
+    pub fn normalize(v: &serde_json::Value, formats: &DateFormats) -> PropertyValue {
         match v {
-            serde_json::Value::Array(a) => {
-                PropertyValue::List(a.iter().map(PropertyScalar::normalize).collect())
-            }
-            scalar => PropertyScalar::normalize(scalar).into(),
+            serde_json::Value::Array(a) => PropertyValue::List(
+                a.iter()
+                    .map(|v| PropertyScalar::normalize(v, formats))
+                    .collect(),
+            ),
+            scalar => PropertyScalar::normalize(scalar, formats).into(),
         }
     }
 }
@@ -853,7 +1001,7 @@ impl PropertyValue {
 impl PropertyScalar {
     /// Normalizza un valore JSON che **non** può essere una lista: una lista
     /// annidata resta JSON.
-    pub fn normalize(v: &serde_json::Value) -> PropertyScalar {
+    pub fn normalize(v: &serde_json::Value, formats: &DateFormats) -> PropertyScalar {
         match v {
             serde_json::Value::Null => PropertyScalar::Empty,
             serde_json::Value::Bool(b) => PropertyScalar::Bool(*b),
@@ -863,23 +1011,29 @@ impl PropertyScalar {
                 // perdite non è un numero da fare i conti: è un'identità.
                 None => PropertyScalar::Text(n.to_string()),
             },
-            serde_json::Value::String(s) => PropertyScalar::from_text(s),
+            serde_json::Value::String(s) => PropertyScalar::from_text(s, formats),
             serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
                 PropertyScalar::Unknown(v.clone())
             }
         }
     }
 
-    /// La normalizzazione di una stringa: wikilink, poi data, poi testo.
-    fn from_text(s: &str) -> PropertyScalar {
+    /// La normalizzazione di una stringa: wikilink, poi data ISO, poi il
+    /// formato che il vault **dichiara**, poi testo.
+    ///
+    /// L'ordine non è un dettaglio: l'ISO-8601 si legge sempre e per primo,
+    /// quindi una dichiarazione non può cambiare come si legge una data già
+    /// scritta bene. Ciò che una dichiarazione fa è **aggiungere** una lettura
+    /// a stringhe che oggi restano [`PropertyScalar::Text`].
+    fn from_text(s: &str, formats: &DateFormats) -> PropertyScalar {
         let t = s.trim();
         if let Some(inner) = t.strip_prefix("[[").and_then(|r| r.strip_suffix("]]")) {
             return PropertyScalar::Link(parse_wikilink_inner(inner).target);
         }
-        match parse_iso_date(t) {
-            Some(d) => PropertyScalar::Date(d),
-            None => PropertyScalar::Text(s.to_string()),
+        if let Some(d) = parse_iso_date(t).or_else(|| formats.read(t)) {
+            return PropertyScalar::Date(d);
         }
+        PropertyScalar::Text(s.to_string())
     }
 }
 
@@ -971,6 +1125,18 @@ fn parse_iso_time(s: &str) -> Option<PropertyTime> {
 /// ISO da un'espressione: `2026-7-5` non è una data ISO.
 fn fixed_width(s: &str, width: usize) -> Option<u8> {
     if s.len() != width || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    s.parse().ok()
+}
+
+/// Un campo numerico di una data **dichiarata**: da una a `max` cifre ASCII.
+///
+/// Il gemello largo di [`fixed_width`], e la larghezza è il punto: `2026-7-5`
+/// non è una data ISO e resta tale, ma un vault che dichiara `ymd` sta dicendo
+/// che quella è la sua scrittura del cinque luglio.
+fn digits(s: &str, max: usize) -> Option<u32> {
+    if s.is_empty() || s.len() > max || !s.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     s.parse().ok()
@@ -1087,13 +1253,19 @@ mod tests {
             .clone(),
         );
         assert_eq!(
-            fm.property("titolo"),
+            fm.property("titolo", &DateFormats::ISO),
             Some(PropertyValue::Text("Una nota".into()))
         );
-        assert_eq!(fm.property("rating"), Some(PropertyValue::Number(4.0)));
-        assert_eq!(fm.property("pubblicata"), Some(PropertyValue::Bool(true)));
         assert_eq!(
-            fm.property("scadenza"),
+            fm.property("rating", &DateFormats::ISO),
+            Some(PropertyValue::Number(4.0))
+        );
+        assert_eq!(
+            fm.property("pubblicata", &DateFormats::ISO),
+            Some(PropertyValue::Bool(true))
+        );
+        assert_eq!(
+            fm.property("scadenza", &DateFormats::ISO),
             Some(PropertyValue::Date(PropertyDate {
                 year: 2026,
                 month: 7,
@@ -1102,7 +1274,7 @@ mod tests {
             }))
         );
         assert_eq!(
-            fm.property("creata"),
+            fm.property("creata", &DateFormats::ISO),
             Some(PropertyValue::Date(PropertyDate {
                 year: 2026,
                 month: 7,
@@ -1115,9 +1287,12 @@ mod tests {
                 }),
             }))
         );
-        assert_eq!(fm.property("vuota"), Some(PropertyValue::Empty));
         assert_eq!(
-            fm.property("tag"),
+            fm.property("vuota", &DateFormats::ISO),
+            Some(PropertyValue::Empty)
+        );
+        assert_eq!(
+            fm.property("tag", &DateFormats::ISO),
             Some(PropertyValue::List(vec![
                 PropertyScalar::Text("a".into()),
                 PropertyScalar::Text("b".into())
@@ -1126,36 +1301,37 @@ mod tests {
         // La lista di liste non è rappresentabile al confine e non si perde:
         // resta JSON dentro la voce.
         assert!(matches!(
-            PropertyValue::normalize(&serde_json::json!([["a"], "b"])),
+            PropertyValue::normalize(&serde_json::json!([["a"], "b"]), &DateFormats::ISO),
             PropertyValue::List(v) if matches!(v[0], PropertyScalar::Unknown(_))
         ));
         // La relazione (8.2) è l'unica stringa che cambia specie...
         assert_eq!(
-            fm.property("autore"),
+            fm.property("autore", &DateFormats::ISO),
             Some(PropertyValue::Link(LinkTarget::wiki("Mario Rossi")))
         );
         // ...un URL no: distinguerlo sarebbe indovinare, e `Text` non perde nulla.
         assert_eq!(
-            fm.property("sito"),
+            fm.property("sito", &DateFormats::ISO),
             Some(PropertyValue::Text("https://esempio.it".into()))
         );
         assert!(matches!(
-            fm.property("annidata"),
+            fm.property("annidata", &DateFormats::ISO),
             Some(PropertyValue::Unknown(_))
         ));
         // Chiave assente ≠ chiave senza valore.
-        assert_eq!(fm.property("mai-scritta"), None);
-        assert_eq!(fm.properties().len(), 10);
+        assert_eq!(fm.property("mai-scritta", &DateFormats::ISO), None);
+        assert_eq!(fm.properties(&DateFormats::ISO).len(), 10);
     }
 
     /// Il parser di date dice di **no** più spesso di quanto dica di sì: ogni
     /// falso positivo qui è una stringa dell'utente trasformata in data.
     #[test]
     fn only_iso_8601_is_a_date() {
-        let date = |s: &str| match PropertyValue::normalize(&serde_json::json!(s)) {
-            PropertyValue::Date(d) => Some(d),
-            _ => None,
-        };
+        let date =
+            |s: &str| match PropertyValue::normalize(&serde_json::json!(s), &DateFormats::ISO) {
+                PropertyValue::Date(d) => Some(d),
+                _ => None,
+            };
         assert!(date("2026-07-25").is_some());
         assert!(date("2026-07-25 10:30").is_some());
         assert!(
@@ -1188,6 +1364,111 @@ mod tests {
         ] {
             assert!(date(non_data).is_none(), "`{non_data}` non è una data");
         }
+    }
+
+    /// Una dichiarazione **aggiunge** una lettura, non ne cambia nessuna: ciò
+    /// che era una data ISO resta quella data, ciò che era testo può diventare
+    /// una data, e niente si muove al contrario.
+    #[test]
+    fn a_declared_format_only_adds_readings() {
+        let dmy = DateFormats::declaring(DateOrder::Dmy);
+        let leggi =
+            |s: &str, f: &DateFormats| match PropertyValue::normalize(&serde_json::json!(s), f) {
+                PropertyValue::Date(d) => Some((d.year, d.month, d.day)),
+                _ => None,
+            };
+        // L'ISO si legge sempre e per primo, dichiarazione o no.
+        assert_eq!(leggi("2026-07-25", &dmy), Some((2026, 7, 25)));
+        assert_eq!(leggi("2026-07-25", &DateFormats::ISO), Some((2026, 7, 25)));
+        // Senza dichiarazione niente cambia rispetto a ieri.
+        assert_eq!(leggi("05/07/2026", &DateFormats::ISO), None);
+        assert_eq!(leggi("2026-7-5", &DateFormats::ISO), None);
+        // Con la dichiarazione, e **solo** nell'ordine dichiarato.
+        assert_eq!(leggi("05/07/2026", &dmy), Some((2026, 7, 5)));
+        assert_eq!(leggi("5-7-2026", &dmy), Some((2026, 7, 5)));
+        assert_eq!(leggi("5.7.2026", &dmy), Some((2026, 7, 5)));
+        assert_eq!(
+            leggi("2026-7-5", &DateFormats::declaring(DateOrder::Ymd)),
+            Some((2026, 7, 5))
+        );
+        // La stessa stringa, due dichiarazioni, due giorni: è precisamente ciò
+        // che nessun parser può dedurre e che solo il vault può dire.
+        assert_eq!(
+            leggi("07/05/2026", &DateFormats::declaring(DateOrder::Mdy)),
+            Some((2026, 7, 5))
+        );
+        assert_eq!(leggi("07/05/2026", &dmy), Some((2026, 5, 7)));
+    }
+
+    /// Un formato dichiarato non è un parser tollerante: l'insieme si allarga
+    /// di poco e per una ragione dichiarata, e tutto il resto continua a dire
+    /// di no.
+    #[test]
+    fn declaring_a_format_is_not_a_tolerant_parser() {
+        let ogni = |s: &str| {
+            DateOrder::ALL.into_iter().any(|o| {
+                let f = DateFormats::declaring(o);
+                matches!(
+                    PropertyValue::normalize(&serde_json::json!(s), &f),
+                    PropertyValue::Date(_)
+                )
+            })
+        };
+        for non_data in [
+            // L'anno a due cifre chiederebbe di indovinare il secolo.
+            "05/07/26",
+            // Un codice prodotto: è il caso del foglio di calcolo, e resta testo.
+            "1-2-3",
+            "12-3456-78",
+            // Separatori mescolati: due scritture in una non sono una scrittura.
+            "05/07-2026",
+            // Campi che non sono un giorno né un mese.
+            "45/07/2026",
+            "00/00/2026",
+            // Un campo più largo del suo posto: `007` non è un mese scritto
+            // storto, è un'altra cosa. Questo caso è nato dalla verifica del
+            // rosso — togliendo il limite di larghezza non diventava rosso
+            // niente, perché sul mese e sul giorno ci pensava già `u8` e
+            // sull'anno il vincolo delle quattro cifre.
+            "5/007/2026",
+            // Cifre non ASCII, testo attaccato, e la data con la coda.
+            "٠٥/٠٧/٢٠٢٦",
+            "05/07/2026 e poi",
+            "2026-07-05T10:30 fine",
+            "domani",
+            "",
+        ] {
+            assert!(!ogni(non_data), "`{non_data}` non è una data");
+        }
+    }
+
+    /// Il rilevatore è lo stesso parser con tutti gli ordini insieme, e dice di
+    /// sì esattamente a ciò su cui varrebbe la pena chiedere.
+    #[test]
+    fn what_looks_like_a_date_is_what_a_declaration_would_read() {
+        for sembra in ["05/07/2026", "2026-7-5", "5.7.2026", " 12/12/2026 "] {
+            assert!(DateFormats::looks_like_a_date(sembra), "`{sembra}`");
+        }
+        for non_sembra in ["1-2-3", "domani", "05/07/26", "v1.2.3", "capitolo 3"] {
+            assert!(
+                !DateFormats::looks_like_a_date(non_sembra),
+                "`{non_sembra}`"
+            );
+        }
+    }
+
+    /// La parola che l'utente sceglie nell'impostazione e quella che serde
+    /// scrive sono la **stessa tabella**: due copie sarebbero due modi di
+    /// nominare lo stesso ordine, e il secondo lo leggerebbe solo metà del
+    /// codice.
+    #[test]
+    fn the_word_of_the_setting_is_the_word_of_the_wire() {
+        for order in DateOrder::ALL {
+            let json = serde_json::to_string(&order).expect("un enum senza payload");
+            assert_eq!(json, format!("\"{}\"", order.as_key()));
+            assert_eq!(DateOrder::from_key(order.as_key()), Some(order));
+        }
+        assert_eq!(DateOrder::from_key("dd/mm/yyyy"), None);
     }
 
     #[test]

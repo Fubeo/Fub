@@ -53,7 +53,7 @@ alfabetico.
 ## Il documento
 
 ### ancora
-`Anchor` · [`abi/model.rs:644`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Anchor` · [`abi/model.rs:652`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'identificatore che un blocco si porta dentro il testo — la forma `^id` in coda
 a un paragrafo — perché un link possa puntare a *quel* punto e non alla nota
@@ -62,7 +62,7 @@ regole di forma (`canonical_anchor`, `valid_anchor`) stanno in `rules/`, dove
 vanno le regole condivise con la shell.
 
 ### blocco
-`Block` · [`abi/model.rs:287`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Block` · [`abi/model.rs:295`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'unità di primo livello del documento: paragrafo, titolo, lista, tabella,
 citazione, blocco di codice, riga orizzontale, e l'escape hatch `Custom`. È un
@@ -77,13 +77,13 @@ conserva (`serde_json` con `preserve_order`), perché riscrivere un file
 dell'utente non deve riordinargli le proprietà: è fedeltà, non estetica.
 
 ### inline
-`Inline` · [`abi/model.rs:467`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Inline` · [`abi/model.rs:475`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Ciò che sta *dentro* un blocco: testo, enfasi, codice, link, immagine, tag,
 interruzione. Stessa logica del blocco, incluso il `Custom`.
 
 ### modello del documento
-`DocumentModel` · [`abi/model.rs:233`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`DocumentModel` · [`abi/model.rs:241`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Il documento parsato in una forma che **nessun formato possiede**: né markdown né
 altro. È il centro dell'idea architetturale — il kernel lavora su questo, e il
@@ -91,7 +91,7 @@ markdown è solo il primo provider che sa produrlo. Dettaglio in
 [architecture/data-model.md](architecture/data-model.md).
 
 ### proprietà
-`PropertyValue` · [`abi/model.rs:781`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`PropertyValue` · [`abi/model.rs:789`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Un valore del frontmatter letto con un tipo invece che come JSON nudo: scalare,
 data, ora, lista. Serve a chi interroga (ordinare per data, filtrare per stato)
@@ -413,7 +413,7 @@ rottura deliberata prima del freeze si fa *ritagliandola*, con un commit che la
 tocca e dice perché — così si vede in review.
 
 ### manifest
-`PluginManifest` · [`abi/traits.rs:3686`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`PluginManifest` · [`abi/traits.rs:3701`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e i
 permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria: se
@@ -541,7 +541,7 @@ accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
 ## Il canale dati
 
 ### canale dati
-`IndexQuery` / `IndexResult` · [`abi/traits.rs:2468`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
+`IndexQuery` / `IndexResult` · [`abi/traits.rs:2483`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
 
 L'unico modo in cui chi disegna chiede dati al kernel: si costruisce una query,
 si ottiene un risultato. Esiste perché una view non deve poter chiamare il
@@ -563,14 +563,14 @@ Il modo di chiedere *venti* invece di tutto, con il totale nella risposta.
 inventarsi un tetto; ma senza finestra ogni giro clona il vault.
 
 ### indice
-`IndexProvider` · [`abi/traits.rs:3353`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`IndexProvider` · [`abi/traits.rs:3368`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Chi sa rispondere a una parte delle query. Ce n'è più di uno — il grafo e
 l'anagrafe stanno nel kernel, la ricerca full-text è un provider su tantivy — e
 il canale dati esiste anche per non far sapere a chi chiede quale sia quale.
 
 ### instradamento
-`QueryRoute` · [`abi/traits.rs:3018`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`QueryRoute` · [`abi/traits.rs:3033`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Come il kernel decide **a chi** mandare una query. Si dichiara alla
 registrazione, non si scopre per tentativi: la tabella delle rotte
@@ -578,7 +578,7 @@ registrazione, non si scopre per tentativi: la tabella delle rotte
 sceglierne uno a caso.
 
 ### pianificatore
-`QueryPlan` · [`kernel/index/plan.rs:434`](../crates/fub-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
+`QueryPlan` · [`kernel/index/plan.rs:439`](../crates/fub-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
 
 Chi decide come eseguire una query che tocca più di un indice. Dalla 0026 può
 mandarne due **insieme**: non è una dichiarazione nel contratto, è una misura —

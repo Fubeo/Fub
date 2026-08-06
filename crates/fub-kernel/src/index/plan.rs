@@ -123,9 +123,14 @@ fn documents(
     }
 
     let matches = router.expr(&matching)?;
-    let mut answer = properties::finish(matches, sort.as_ref(), &select, page, |id| {
-        indexes.core.frontmatter(id)
-    });
+    let mut answer = properties::finish(
+        matches,
+        sort.as_ref(),
+        &select,
+        page,
+        &indexes.core.date_formats(),
+        |id| indexes.core.frontmatter(id),
+    );
     if excerpts.wanted() {
         rehydrate(indexes, &router.asked.borrow(), &mut answer.items)?;
     }

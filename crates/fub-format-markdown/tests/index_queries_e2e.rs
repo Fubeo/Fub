@@ -10,12 +10,13 @@
 use camino::Utf8PathBuf;
 use fub_abi::model::{DocId, PropertyValue};
 use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate};
+use fub_abi::traits::PluginManifest;
 use fub_abi::traits::{
     Excerpts, HealthCheck, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter,
     PropertySelect, PropertySort, PropertyTest,
 };
 use fub_format_markdown::MarkdownProvider;
-use fub_kernel::{FormatRegistry, Workspace};
+use fub_kernel::{FormatRegistry, Trust, Workspace};
 
 /// Un vault a quattro note:
 ///
@@ -386,4 +387,131 @@ fn backlinks_and_tags_keep_their_answer_and_gain_a_window() {
         .map(|t| (t.name.as_str(), t.count))
         .collect();
     assert_eq!(names, [("archivio", 1), ("lavoro", 2)]);
+}
+
+// --- il formato delle date, dichiarato dal vault (§8.2) ---------------------
+
+/// Un vault con una data non-ISO, e la chiave `properties.date-format`
+/// dichiarata come la dichiara il core.
+fn vault_con_date() -> (tempfile::TempDir, Workspace) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(
+        root.join("Iso.md"),
+        "---\nscadenza: 2026-07-05\n---\nGià a posto.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("Vecchia.md"),
+        "---\nscadenza: 5/7/2026\n---\nCome l'ha scritta chi l'ha scritta.\n",
+    )
+    .unwrap();
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::new(&root, registry);
+    ws.register_plugin(
+        PluginManifest::core("fub.core", "Core")
+            .configuring(fub_kernel::properties::properties_settings()),
+        Trust::Core,
+    )
+    .expect("dichiarata");
+    ws.reindex().expect("reindex");
+    (dir, ws)
+}
+
+fn scadenze_dopo(ws: &Workspace) -> Vec<String> {
+    let IndexResult::Documents(page) = query(
+        ws,
+        IndexQuery::Documents {
+            matching: all_of(vec![PropertyFilter {
+                key: "scadenza".into(),
+                test: PropertyTest::GreaterThan(PropertyValue::Date(
+                    fub_abi::model::PropertyDate {
+                        year: 2026,
+                        month: 1,
+                        day: 1,
+                        time: None,
+                    },
+                )),
+            }]),
+            sort: None,
+            select: PropertySelect::None,
+            page: None,
+            excerpts: Excerpts::Omit,
+        },
+    ) else {
+        panic!("attesi documenti");
+    };
+    page.items.iter().map(|r| r.doc.to_string()).collect()
+}
+
+/// **Il giro intero**: l'impostazione che l'utente scrive arriva fino al parser
+/// del frontmatter, e il controllo di salute smette di chiedere ciò che gli è
+/// stato risposto.
+///
+/// Non è un dettaglio di plumbing: fra l'impostazione e il parser ci sono un
+/// crate senza accesso alle impostazioni (`fub-abi`), un indice che le legge a
+/// ogni domanda e quattro funzioni di regola. Un banco che provasse solo il
+/// parser passerebbe verde con l'impostazione scollegata.
+#[test]
+fn il_formato_dichiarato_arriva_fino_al_filtro_e_zittisce_il_controllo() {
+    let (_g, mut ws) = vault_con_date();
+
+    assert_eq!(
+        scadenze_dopo(&ws),
+        ["Iso.md"],
+        "senza dichiarazione `5/7/2026` è un testo, e il filtro non la trova"
+    );
+    let IndexResult::VaultHealth(page) = query(
+        &ws,
+        IndexQuery::VaultHealth {
+            check: HealthCheck::UnrecognizedDates,
+            page: None,
+        },
+    ) else {
+        panic!("atteso un rapporto");
+    };
+    assert_eq!(
+        page.items
+            .iter()
+            .map(|i| (i.doc.to_string(), i.detail.clone()))
+            .collect::<Vec<_>>(),
+        [(
+            "Vecchia.md".to_string(),
+            Some("scadenza: 5/7/2026".to_string())
+        )],
+        "e chi non trova ha il diritto di sapere perché"
+    );
+
+    // L'utente dichiara com'è scritto il **suo** vault.
+    ws.set_setting(
+        fub_kernel::properties::DATE_FORMAT,
+        fub_abi::settings::SettingValue::Text("dmy".into()),
+    )
+    .expect("scritta");
+
+    assert_eq!(
+        scadenze_dopo(&ws),
+        ["Iso.md", "Vecchia.md"],
+        "l'indice rilegge la dichiarazione a ogni domanda: senza reindicizzare, \
+         e senza toccare un file"
+    );
+    let IndexResult::VaultHealth(page) = query(
+        &ws,
+        IndexQuery::VaultHealth {
+            check: HealthCheck::UnrecognizedDates,
+            page: None,
+        },
+    ) else {
+        panic!("atteso un rapporto");
+    };
+    assert!(
+        page.items.is_empty(),
+        "una data dichiarata è una data: il controllo non ripete una domanda \
+         a cui è stato risposto"
+    );
 }

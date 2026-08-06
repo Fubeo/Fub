@@ -2379,6 +2379,20 @@ pub enum HealthCheck {
     /// una chiave che il caso l'ha già collassato. Quando l'ambiguità non è
     /// esprimibile nella lingua dei link, l'unica risposta possibile è dirlo.
     CollidingPaths,
+    /// Proprietà che **sembrano** una data e non lo sono: `scadenza: 5/7/2026`
+    /// resta un [`PropertyValue::Text`](crate::model::PropertyValue::Text)
+    /// finché il vault non dichiara il proprio formato.
+    ///
+    /// È il segnale che mancava a una famiglia intera: un testo che sembra una
+    /// data non produce un errore da nessuna parte — produce un filtro che non
+    /// trova, una faccetta per ogni scrittura diversa dello stesso giorno, e un
+    /// ordinamento *plausibile e arbitrario*, perché fra due specie diverse non
+    /// c'è ordine e «nessun ordine» diventa «pari». Il rilevatore è lo stesso
+    /// parser con tutti i formati insieme
+    /// ([`DateFormats::looks_like_a_date`](crate::model::DateFormats::looks_like_a_date)):
+    /// ciò che due dichiarazioni leggerebbero in due modi è esattamente ciò su
+    /// cui vale la pena chiedere a chi possiede il vault.
+    UnrecognizedDates,
 }
 
 impl HealthCheck {
@@ -2390,10 +2404,11 @@ impl HealthCheck {
     /// verde: il rapporto continua a essere un array, ha solo una riga in meno,
     /// e nessuno confronta quell'array con l'enum. È la stessa forma di
     /// [`ViewSurface::ALL`], e ha lo stesso presidio dei discriminanti.
-    pub const ALL: [HealthCheck; 3] = [
+    pub const ALL: [HealthCheck; 4] = [
         HealthCheck::BrokenLinks,
         HealthCheck::OrphanDocuments,
         HealthCheck::CollidingPaths,
+        HealthCheck::UnrecognizedDates,
     ];
 }
 
@@ -4383,6 +4398,7 @@ mod tests {
             HealthCheck::BrokenLinks => 0,
             HealthCheck::OrphanDocuments => 1,
             HealthCheck::CollidingPaths => 2,
+            HealthCheck::UnrecognizedDates => 3,
         }
     }
 
@@ -4390,7 +4406,7 @@ mod tests {
     fn i_discriminanti_coprono_ogni_controllo_di_salute() {
         assert_eq!(
             HealthCheck::ALL.len(),
-            posto_del_controllo(HealthCheck::CollidingPaths) + 1,
+            posto_del_controllo(HealthCheck::UnrecognizedDates) + 1,
             "`HealthCheck::ALL` è più corto dell'enum: c'è un controllo che il \
              compilatore conosce e che l'elenco non nomina, quindi il rapporto \
              diagnostico non lo eseguirà mai."

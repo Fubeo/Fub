@@ -219,6 +219,13 @@ pub fn core_settings() -> Vec<SettingSpec> {
     // registro (§23.9) è la prima chiave del kernel che, appena dichiarata,
     // **fa qualcosa** — vedi `Workspace::pota_il_registro`.
     settings.extend(fub_kernel::journal::journal_settings());
+    // Come le due sopra, e per il criterio di §11.1: una chiave sta dove sta
+    // chi la legge, e il formato delle date lo legge il parser del frontmatter.
+    // **Non** è una chiave `locale.*`, e la ragione sta nel modulo: la famiglia
+    // del locale è quella in cui il sistema ha una risposta, e qui la risposta
+    // del sistema sarebbe sbagliata per costruzione — lo stesso vault, aperto
+    // su due macchine, porterebbe due date diverse per lo stesso byte.
+    settings.extend(fub_kernel::properties::properties_settings());
     settings
 }
 

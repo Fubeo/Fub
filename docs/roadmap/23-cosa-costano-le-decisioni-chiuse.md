@@ -605,7 +605,7 @@ reso.
 
 ### 23.7 Una data scritta come la scrive l'utente non è una data, e non c'è modo di dirlo
 
-*kernel · **P2** — nessuna firma: `PropertyValue` c'è già e la via d'uscita è una regola, non un tipo*
+*chiusa dalla [0108](../decisions/0108-una-data-la-dichiara-chi-possiede-il-vault.md) — la regola della [0003](../decisions/0003-modello-del-documento.md) non si tocca e non deve: ciò che cambia non è la **tolleranza** del parser, è **chi dichiara il formato**. L'ISO si legge sempre e per primo, una dichiarazione **aggiunge** una lettura e non ne cambia nessuna, e senza dichiarazione il comportamento resta identico. **La premessa sulla collocazione era falsa**: non è la quinta riga di `locale_settings()` — la famiglia del locale è quella in cui *il sistema ha una risposta*, e qui la risposta del sistema sarebbe sbagliata per costruzione, perché `05/07/2026` letto su due macchine è due giorni diversi, che è il difetto rifiutato dalla [0004](../decisions/0004-il-grafo-e-i-link-non-wiki.md). Il formato è un fatto **dei file**: `properties.date-format`, di vault, con default *solo ISO*. Il pezzo di progetto vero — come il formato arriva a un parser che sta in un crate senza impostazioni — è un `DateFormats` **passato**, e la versione senza parametro **non** è stata tenuta: il chiamante che non c'è ancora lo prende solo il compilatore. Il difetto peggiore stava **fuori dalla voce**: anche l'ordinamento degrada, e il comparatore che ne esce su un vault misto **non è un ordine** — `a == b`, `a == c`, `b < c` — quindi l'ordine che si vede è una permutazione che nessuno ha deciso. Il segnale è `HealthCheck::UnrecognizedDates`, e il suo rilevatore non è una seconda regola: è lo stesso parser con tutti gli ordini insieme — **un parser largo che produce un valore inventa, uno che produce una domanda avvisa***
 
 La [0003](../decisions/0003-modello-del-documento.md) decide che *«solo
 l'ISO-8601 a larghezza fissa è una data»*, con l'argomento giusto: *«`2026-7-5`
@@ -621,23 +621,31 @@ che il filtro non trova, il raggruppamento per giorno del 10.4 non raggruppa, e
 **nessuno dice perché**. Una proprietà che non è una data si comporta esattamente
 come una data che non c'è.
 
-- [ ] **Dove sta la dichiarazione.** Il verbale la nomina già — *«sceglierle è lo
-      schema per tipo nota, non un indovinello del parser»* — e quello schema è il
-      §8.2 di FEATURES, che non esiste. Ma la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)
+- [x] **Dove sta la dichiarazione.** Il verbale la nomina già — *«sceglierle è lo
+      schema per tipo nota, non un indovinello del parser»* — e quello schema è
+      dentro il §8.2 di FEATURES. (Questa riga diceva *«che non esiste»*, ed era
+      **falsa**: il §8.2 c'è, e ha una casella «Schema per tipo nota»; ciò che non
+      esiste è l'implementazione.) Ma la [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)
       ha costruito nel frattempo un posto dove una dichiarazione del vault può
       stare, con due livelli e due cancelli: va deciso se il formato delle date è
       una **impostazione del vault** — una riga, additiva, disponibile domani — o
       se aspetta lo schema per tipo nota, che è un capitolo intero. Le due
       risposte non si escludono: la prima è il default della seconda.
-- [ ] **La regola resta «non si indovina», e va scritta così.** Ciò che cambia non
+- [x] **La regola resta «non si indovina», e va scritta così.** Ciò che cambia non
       è la tolleranza del parser: è **chi** dichiara il formato. Un formato
       dichiarato dall'utente non è un indovinello, ed è la differenza esatta fra
       questa voce e la cosa che la 0003 ha giustamente rifiutato.
-- [ ] **Il segnale, che è metà del difetto.** Anche prima di qualunque formato in
+- [x] **Il segnale, che è metà del difetto.** Anche prima di qualunque formato in
       più, una proprietà che *sembra* una data e non lo è dovrebbe potersi
       **vedere** — è la sesta domanda del [criterio](../todo.md), «cosa fallisce
       senza produrre nessun segnale», applicata a un dato invece che a un
       `Result`. Oggi la sola strada è aprire la nota e guardare.
+- [ ] **I nomi dei mesi restano fuori** (`5 luglio 2026`). Un nome di mese è una
+      **parola di una lingua**, quindi non è un ordine di campi ma una tabella per
+      locale, e quelle tabelle nel repo non ci sono: il parser saprebbe leggere e
+      il rilevatore saprebbe avvisare **solo** nelle lingue che conosce, cioè
+      tacerebbe di più proprio sui vault più lontani. Si riapre quando ci sarà un
+      secondo cliente per le tabelle di locale.
 
 ### 23.8 Due file che differiscono per una maiuscola sono lo stesso arco
 

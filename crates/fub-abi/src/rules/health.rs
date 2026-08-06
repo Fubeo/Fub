@@ -24,7 +24,9 @@
 //!
 //! [`IndexQuery::VaultHealth`]: crate::traits::IndexQuery::VaultHealth
 
-use crate::model::{DocId, Link, LinkTarget};
+use crate::model::{
+    DateFormats, DocId, Frontmatter, Link, LinkTarget, PropertyScalar, PropertyValue,
+};
 
 /// Chi sa dire a quale documento arriva un riferimento.
 ///
@@ -116,6 +118,50 @@ pub fn is_attachment(path: &str, doc_extensions: &[String]) -> bool {
         None => false,
         Some((_, ext)) => !doc_extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)),
     }
+}
+
+/// Le proprietà che **sembrano** una data e non lo sono, con la chiave e il
+/// testo che le ha fatte sembrare tali: `[(chiave, testo)]`, in ordine di
+/// chiave.
+///
+/// È il segnale che mancava, ed è metà del difetto: `scadenza: 5/7/2026` non
+/// produce un errore, produce un filtro che non trova, un raggruppamento che
+/// non raggruppa e — peggio — un ordinamento **plausibile e arbitrario**, perché
+/// due specie diverse non si confrontano e il confronto che rende `None`
+/// diventa «pari». Finché nessuno lo dice, l'unica strada per accorgersene è
+/// aprire la nota e guardarla.
+///
+/// La regola sta qui, accanto a quella dei link rotti, per la ragione di questo
+/// modulo: la risposta è una sola e almeno due possono darla — il kernel oggi, e
+/// chiunque rivendichi la famiglia domani.
+///
+/// Chi ha già dichiarato il proprio formato non vede niente di ciò che quel
+/// formato legge: una data dichiarata **è** una data, e segnalarla sarebbe
+/// chiedere due volte la stessa cosa.
+pub fn unrecognized_dates(fm: &Frontmatter, formats: &DateFormats) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (key, value) in fm.properties(formats) {
+        // Solo i testi: ciò che è già diventato una data non è un problema, e
+        // un numero o un booleano non somigliano a una data in nessun formato.
+        let testi: Vec<String> = match value {
+            PropertyValue::Text(t) => vec![t],
+            PropertyValue::List(items) => items
+                .into_iter()
+                .filter_map(|s| match s {
+                    PropertyScalar::Text(t) => Some(t),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        for testo in testi {
+            if DateFormats::looks_like_a_date(&testo) {
+                out.push((key.clone(), testo));
+            }
+        }
+    }
+    out.sort();
+    out
 }
 
 #[cfg(test)]

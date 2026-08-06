@@ -873,11 +873,11 @@ sequenceDiagram
 |---|---|---|
 | `Workspace::query_index` | [workspace.rs:368](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
 | `plan::run` | [plan.rs:54](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
-| `sole_evaluator` | [plan.rs:335](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
+| `sole_evaluator` | [plan.rs:340](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
 | `RouteTable` | [routing.rs:57](../../crates/fub-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |
-| `CoreIndex` | [core.rs:118](../../crates/fub-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
+| `CoreIndex` | [core.rs:119](../../crates/fub-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
 | `Matches::and` | [query.rs:389](../../crates/fub-abi/src/query.rs) | la fusione; `QueryEvaluator` ha una implementazione sola, quella del contratto |
-| `properties::finish` | [properties.rs:232](../../crates/fub-abi/src/rules/properties.rs) | ordine, colonne e finestra, in coda e per tutti: rompe la parità per `DocId` o la paginazione ripete righe |
+| `properties::finish` | [properties.rs:237](../../crates/fub-abi/src/rules/properties.rs) | ordine, colonne e finestra, in coda e per tutti: rompe la parità per `DocId` o la paginazione ripete righe |
 
 **Le due chiamate sono in fila, non insieme.** Il kernel non parallelizza una
 query per conto proprio, ed è una decisione e non un debito: la concorrenza gliela

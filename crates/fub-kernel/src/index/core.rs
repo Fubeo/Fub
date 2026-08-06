@@ -35,13 +35,14 @@ use crate::drafts::Drafts;
 use fub_abi::edit::Revision;
 use fub_abi::event::{DocChange, DocChanges};
 use fub_abi::model::{
-    canonical_anchor, canonical_tag, heading_slug, Anchor, DocId, DocumentModel, Frontmatter,
-    Heading, Link, LinkTarget, Tag,
+    canonical_anchor, canonical_tag, heading_slug, Anchor, DateFormats, DocId, DocumentModel,
+    Frontmatter, Heading, Link, LinkTarget, Tag,
 };
 use fub_abi::query::{
     in_folder, parent_folder, within_folder, Matches, QueryEvaluator, QueryPredicate,
 };
 use fub_abi::rules::properties;
+use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
     DocPosition, DraftInfo, EntryKind, FolderScope, HostApi, IndexLoss, IndexProvider, IndexQuery,
     IndexResult, IndexingState, JobId, JobProgress, JobStatus, LinkDirection, Paged, PredicateKind,
@@ -428,6 +429,26 @@ impl JobsState {
 }
 
 impl CoreIndex {
+    /// I formati di data che **questo vault dichiara** (§8.2), letti adesso.
+    ///
+    /// A ogni domanda e non una volta al montaggio, per la ragione per cui le
+    /// impostazioni sono condivise e non copiate: chi cambia la dichiarazione
+    /// cambia il valore di ogni proprietà data del vault, e un indice che
+    /// rispondesse con com'era al montaggio direbbe che il filtro non trova
+    /// **anche dopo** che l'utente ha riparato la causa.
+    pub(crate) fn date_formats(&self) -> DateFormats {
+        let declared = self
+            .settings
+            .read()
+            .ok()
+            .and_then(|s| s.effective(crate::properties::DATE_FORMAT).ok())
+            .and_then(|(v, _)| match v {
+                SettingValue::Text(s) => Some(s),
+                _ => None,
+            });
+        crate::properties::date_formats(declared.as_deref())
+    }
+
     pub(crate) fn new(
         registry: Arc<FormatRegistry>,
         settings: SharedSettings,
@@ -748,12 +769,15 @@ impl QueryEvaluator for CoreIndex {
 
     fn predicate(&self, predicate: &QueryPredicate) -> Result<Matches, PluginError> {
         match predicate {
-            QueryPredicate::Property { filter } => Ok(Matches::of_docs(
-                self.metas
-                    .iter()
-                    .filter(|(_, meta)| properties::test(&meta.frontmatter, filter))
-                    .map(|(id, _)| id.clone()),
-            )),
+            QueryPredicate::Property { filter } => {
+                let formats = self.date_formats();
+                Ok(Matches::of_docs(
+                    self.metas
+                        .iter()
+                        .filter(|(_, meta)| properties::test(&meta.frontmatter, filter, &formats))
+                        .map(|(id, _)| id.clone()),
+                ))
+            }
             QueryPredicate::Tag { name, descendants } => {
                 let wanted = canonical_tag(name);
                 Ok(Matches::of_docs(self.tags.docs_with(&wanted, *descendants)))
@@ -919,6 +943,7 @@ impl IndexProvider for CoreIndex {
                     sort.as_ref(),
                     &select,
                     page,
+                    &self.date_formats(),
                     |id| self.frontmatter(id),
                 )))
             }
@@ -971,13 +996,16 @@ impl IndexProvider for CoreIndex {
                         .ids()
                         .filter_map(|id| self.metas.get(id).map(|m| (id, &m.frontmatter))),
                     &key,
+                    &self.date_formats(),
                 );
                 Ok(IndexResult::PropertyValues(Paged::window(facets, page)))
             }
             IndexQuery::VaultHealth { check, page } => {
                 let issues = health::run(
                     check,
-                    self.metas.iter().map(|(id, m)| (id, m.links.as_slice())),
+                    self.metas
+                        .iter()
+                        .map(|(id, m)| (id, m.links.as_slice(), &m.frontmatter)),
                     // Il risolutore è il grafo **più l'anagrafe** (§14.1): il
                     // grafo sa dove arriva un link fra note, l'anagrafe sa se
                     // il PNG che una nota mostra c'è davvero. Con il solo grafo
@@ -988,6 +1016,7 @@ impl IndexProvider for CoreIndex {
                         entries: &self.entries,
                     },
                     &self.registry.all_extensions(),
+                    &self.date_formats(),
                 );
                 Ok(IndexResult::VaultHealth(Paged::window(issues, page)))
             }
