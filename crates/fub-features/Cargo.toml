@@ -75,7 +75,7 @@ fub-sdk = { workspace = true }
 # Il banco del lato host, per i test end-to-end che montano il kernel (§16.2).
 fub-testkit = { workspace = true }
 fub-format-markdown.workspace = true
-tempfile = "3.27.0"
+tempfile = { workspace = true }
 
 # Il banco della §21.9 (decisione 0074): quanto costa una query, e **dove** vanno
 # i millisecondi. `required-features` e non un `#![cfg]` in testa al file: un

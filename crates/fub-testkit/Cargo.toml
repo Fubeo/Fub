@@ -17,4 +17,4 @@ camino = { workspace = true }
 fub-abi = { workspace = true }
 fub-kernel = { workspace = true }
 serde_json = { workspace = true }
-tempfile = "3.27.0"
+tempfile = { workspace = true }

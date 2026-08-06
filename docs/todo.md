@@ -428,6 +428,97 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
 
+## I difetti da correggere
+
+Non sono voci di roadmap: sono **difetti nel codice di oggi**, arrivati da una
+lettura esterna e tenuti solo quelli che hanno retto al confronto coi sorgenti.
+Chi li prende non deve decidere niente — c'è già il file, la riga e cosa fa di
+sbagliato. Otto delle quattordici affermazioni ricevute erano false o già
+risolte in codice, e non stanno qui: la loro smentita sta nel resoconto della
+verifica, non in un elenco di lavoro.
+
+- [ ] **Il conto della coda non torna se il notice arriva mentre si aspetta**
+  (`crates/fub-kernel/src/bus.rs`). In `Subscription::recv` e
+  `recv_timeout`, i rami `self.rx.recv()` e `self.rx.recv_timeout(timeout)`
+  restituiscono il notice **senza passare da `taken`**: solo `try_recv` lo
+  sottrae. La finestra è stretta — ci si arriva quando la coda era vuota al
+  `try_recv` e chi emette la riempie subito dopo — ma il conto sbagliato **non
+  si ripara più**, cresce a ogni passaggio, e arrivato a `BACKLOG_CEILING` il
+  bus comincia a buttare gli eventi ricuperabili di un abbonato che in realtà
+  non è indietro di niente. Il rimedio è di una riga per ramo.
+- [ ] **Il lucchetto esclusivo del watcher tiene dentro il disco**
+  (`crates/fub-host/src/watcher.rs`). Il lotto prende `workspace.write()` e
+  sotto quel lucchetto fa il parse di ogni file cambiato **e** `flush_indexes()`,
+  che scrive gli indici sul disco. Chi legge — ricerca, autocompletamento, il
+  disegno dei pannelli — aspetta la fine di un'I/O che non ha niente a che fare
+  con lui, e su un vault grande la sincronizzazione da fuori si vede come una
+  pausa dell'interfaccia. La regola della [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+  è esattamente questa, applicata qui: mutare in memoria sotto il lucchetto,
+  rilasciarlo, rendere durevole fuori.
+- [ ] **Un frontmatter che non si serializza sparisce senza dirlo**
+  (`crates/fub-format-markdown/src/serialize.rs`). L'`if let Ok(yaml)` salta il
+  blocco intero quando `to_string` fallisce: il documento si riscrive **senza il
+  suo frontmatter**, e il giro completo modello → sorgente → disco diventa una
+  perdita di dati muta. È il caso in cui il fallimento deve risalire, non
+  essere assorbito. Accanto, e più lieve, `parse_frontmatter`
+  (`crates/fub-format-markdown/src/parse.rs`): uno YAML rotto cade in
+  `Frontmatter::default()` con un `_ =>`, e chi ha sbagliato una virgola nelle
+  proprietà vede le proprietà svanire senza un avviso.
+- [ ] **L'eco del proprio salvataggio si conta troppo tardi**
+  (`frontend/src/panels/document.ts`). `buf.echi += 1` sta **dopo**
+  `await api.writeDocument`, ma l'evento che quell'eco descrive lo emette il
+  kernel *dentro* la scrittura, cioè prima che la promise risolva. Se arriva per
+  primo, `cambioSotto` non trova nessun eco da consumare e classifica
+  `riscrittura`: compare «il file è cambiato sotto di te» per una scrittura
+  nostra, che è esattamente l'avviso a vuoto che quella funzione esiste per non
+  dare. Va incrementato prima di chiamare, e sottratto nei rami di fallimento.
+- [ ] **I campi di testo restano attaccati all'azione del primo disegno**
+  (`frontend/src/ui/node.ts`). `collega` toglie e rimette l'ascoltatore a ogni
+  riconciliazione; `scatta` e il `keydown` dell'Invio no — vengono registrati
+  una volta sola alla costruzione del campo, con l'`ActionRef` catturato nella
+  chiusura. Un `text_input` riusato dal riconciliatore (§2.8) aggiorna il valore
+  e continua a mandare l'azione **vecchia**. Non è un accumulo di ascoltatori,
+  come era stato riferito: è peggio, perché il campo funziona e manda la cosa
+  sbagliata.
+- [ ] **Che il vault avvelenato uccida l'applicazione è una scelta, e non è stata
+  fatta** (`crates/fub-app/src/lib.rs`, `crates/fub-host/src/watcher.rs`,
+  `crates/fub-host/src/runner.rs`). Il runner scrive `.expect("workspace
+  avvelenato")` — sembra una decisione presa; gli handler IPC scrivono
+  `.unwrap()` nudo, che è la stessa cosa detta per abitudine. In tutti e due i
+  casi, un panico qualunque mentre si tiene il lucchetto rende l'app muta a
+  ogni chiamata successiva, senza una riga che dica perché. Delle due l'una:
+  se il fallimento è irrecuperabile va detto **una volta**, con un messaggio,
+  invece di ripetersi a ogni IPC; se non lo è, si ricupera con `into_inner`.
+  Quello che non va bene è che i due strati rispondano in modo diverso alla
+  stessa domanda.
+- [ ] **`id` e `class` del contenuto di una nota entrano nel DOM della shell**
+  (`frontend/src/ui/sanitize.ts`). Sono ammessi apposta — l'`id` è l'ancora di
+  blocco, la `class` è il contratto col provider markdown — ma la shell cerca i
+  propri elementi con `document.getElementById` (`save-state`, `activity-panel`,
+  `context-menu`, `key-pending`, …), e una nota che contenga HTML con uno di
+  quegli `id` glielo prende. Non è un'esecuzione di codice e non arriva da un
+  estraneo: arriva da un vault, che però può essere stato scaricato. Il rimedio
+  non è togliere l'attributo ma **separare i due spazi di nomi** — un prefisso
+  sugli `id` che vengono dal contenuto, con la risoluzione delle ancore che lo
+  applica dalla stessa parte — e va scritto tenendo insieme le due metà, o
+  l'ancora di blocco si rompe.
+- [ ] **Due occorrenze dello stesso termine possono sovrapporsi**
+  (`crates/fub-kernel/src/occurrences.rs`). Ripartire da `span.start` invece che
+  da `span.end` è **giusto** e la ragione sta scritta lì accanto: `arch` dentro
+  `architettura` andrebbe perso altrimenti. Ma la stessa riga vale anche
+  all'interno di un solo termine, e `aa` dentro `aaaa` produce span
+  sovrapposti che il `dedup` non tocca, perché non sono uguali — mentre
+  l'intestazione della funzione promette «senza sovrapposizioni fra occorrenze
+  uguali». O si riparte da `span.end` **per lo stesso needle** tenendo
+  `span.start` fra needle diversi, o si corregge la frase.
+- [ ] **Una potatura riuscita a metà lascia l'indice che nomina blob che non ci
+  sono** (`crates/fub-features/src/versioning.rs`). `prune` cancella i blob e
+  aggiorna la mappa in memoria, e solo dopo `write_meta`/`write_index` col `?`:
+  se la scrittura dell'indice fallisce, sul disco resta un indice che elenca
+  versioni ormai cancellate, e `read` fallirà su ognuna. È il caso meno grave
+  dell'elenco — si perde un derivato, non un dato dell'utente — ma la
+  riparazione non c'è.
+
 ## Gli allegati
 
 - [Le voci a leva più alta](roadmap/leva.md) — non *quando* prendere una voce ma

@@ -44,4 +44,4 @@ fub-abi = { workspace = true }
 # legittimo perché è di sola prova: cargo lo risolve, e la libreria non lo vede.
 fub-testkit = { workspace = true }
 serde_json = { workspace = true }
-tempfile = "3.27.0"
+tempfile = { workspace = true }
