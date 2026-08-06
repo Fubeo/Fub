@@ -133,7 +133,8 @@ un verde da produrre.
 
 - **Il flush è ancora esclusivo**, e lo sarà finché `IndexProvider::flush`
   riceve un `HostApi`. Sta scritto sul tipo che lo chiama, non solo qui.
-- **`index_batch` ha la stessa forma e non è stato toccato** (sopra).
+- **`index_batch` ha la stessa forma e non è stato toccato** (sopra). Lo ha
+  preso la [0124](0124-una-fetta-dell-apertura-e-un-piano-anche-lei.md).
 - Un piano resta valido rispetto a chi scrive **attraverso il kernel**. Un
   secondo programma che riscrivesse lo stesso file fra il piano e
   l'applicazione non alza nessuna impronta: il piano vince, e il lotto seguente

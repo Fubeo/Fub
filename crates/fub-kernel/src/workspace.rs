@@ -89,7 +89,7 @@ use crate::bus::EventBus;
 use crate::dispatcher::{Dispatcher, JobBell, PendingJob};
 use crate::documents::{extension_of, DocumentStore};
 use crate::drafts::{Bozze, Drafts};
-use crate::entries::{EntryStore, StoredEntry};
+use crate::entries::{EntryStore, StoredEntry, StoredMeta};
 use crate::error::{KernelError, Result};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
@@ -196,7 +196,9 @@ impl Apertura {
 /// indicizzare, e cosa si è raccolto finora.
 ///
 /// La consegna [`scan_vault`](crate::Workspace::scan_vault), la porta avanti
-/// [`index_batch`](crate::Workspace::index_batch) una fetta alla volta, la
+/// [`plan_batch`](crate::Workspace::plan_batch) +
+/// [`index_batch_prepared`](crate::Workspace::index_batch_prepared) una fetta
+/// alla volta, la
 /// chiude [`finish_index`](crate::Workspace::finish_index). Vive **fuori** dal
 /// `Workspace` e non dentro, ed è la scelta che rende l'apertura interrompibile
 /// senza aggiungere uno stato al kernel: chi la tiene in mano è chi ha i thread
@@ -284,6 +286,37 @@ pub struct ParsedChange {
     /// L'impronta che l'anagrafe aveva **al momento del piano**. Vedi
     /// [`Workspace::sync_path_prepared`].
     seen: Option<Revision>,
+}
+
+/// **Una fetta dell'apertura già letta e già parsata**, che aspetta di entrare
+/// nel workspace.
+///
+/// È il [`ParsedChange`] di un lotto invece che di un file, e il nome dice la
+/// parentela apposta: la forma è la stessa della
+/// [decisione 0119](../../../docs/decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)
+/// — leggere e parsare sotto prestito condiviso
+/// ([`Workspace::plan_batch`]), mutare sotto quello esclusivo
+/// ([`Workspace::index_batch_prepared`]) — su un percorso dove i file non sono
+/// quattro ma quattromila.
+///
+/// I campi sono chiusi per la stessa ragione: chi ne tiene uno in mano ha per
+/// forza già rilasciato il prestito condiviso, perché il tipo non ne porta con
+/// sé nessun pezzo.
+#[derive(Default)]
+pub struct ParsedBatch {
+    /// Le voci della fetta, con l'impronta che la lettura ha imparato.
+    letti: Vec<VaultEntry>,
+    /// Ciò che si è ripreso dalla cache invece di riparsarlo.
+    ripresi: Vec<(DocId, StoredMeta)>,
+    /// Ciò che si è letto e parsato.
+    models: Vec<DocumentModel>,
+    /// **L'impronta che l'anagrafe attribuiva a ogni voce quando il piano è
+    /// stato fatto.** Vedi [`Workspace::index_batch_prepared`].
+    ///
+    /// È per documento e non per fetta: fra il piano e l'applicazione l'utente
+    /// salva *una* nota, e buttare le altre novecentonovantanove vorrebbe dire
+    /// rileggerle dal disco per niente.
+    seen: BTreeMap<DocId, Option<Revision>>,
 }
 
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
@@ -1593,7 +1626,8 @@ impl Workspace {
     /// Al ritorno il vault è **utilizzabile** — l'anagrafe c'è, le cartelle ci
     /// sono, una nota si apre — e *non* è indicizzato: la ricerca e il grafo
     /// sono vuoti finché la [`Indicizzazione`] che questa funzione consegna non
-    /// è stata portata in fondo da [`index_batch`](Workspace::index_batch) e
+    /// è stata portata in fondo a fette da
+    /// [`plan_batch`](Workspace::plan_batch) e
     /// chiusa da [`finish_index`](Workspace::finish_index).
     ///
     /// **Il `Result` è qui e non altrove**, ed è tutta la ragione per cui il
@@ -1693,10 +1727,40 @@ impl Workspace {
     /// fetta serve a chi riceve, qui serve a chi guarda.
     ///
     /// Chiamarla su un'[`Indicizzazione`] già finita non fa niente.
-    pub fn index_batch(&mut self, work: &mut Indicizzazione) {
+    ///
+    /// **Non è la porta di chi ha i thread**, ed è `pub(crate)` apposta: da
+    /// fuori dal kernel una fetta si prepara con [`plan_batch`](Workspace::plan_batch)
+    /// e si applica con
+    /// [`index_batch_prepared`](Workspace::index_batch_prepared), così la forma
+    /// che tiene il prestito esclusivo attraverso il disco **non si scrive**.
+    /// Qui resta perché `reindex` è sincrono per definizione: chi lo chiama ha
+    /// già il `&mut`, e non c'è nessuno da non far aspettare.
+    pub(crate) fn index_batch(&mut self, work: &mut Indicizzazione) {
+        let prepared = self.plan_batch(work);
+        self.index_batch_prepared(prepared);
+    }
+
+    /// **La metà di una fetta che non ha bisogno del prestito esclusivo**:
+    /// legge dal disco e parsa fino a [`FEED_BATCH`] documenti, sotto `&self`.
+    ///
+    /// È la regola della
+    /// [decisione 0119](../../../docs/decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)
+    /// sul suo secondo sito, che quella voce aveva già nominato: la stessa forma
+    /// del lotto del watcher, sul percorso dove i file da leggere non sono
+    /// quattro ma quattromila. Chi guarda il vault appena aperto — la ricerca,
+    /// l'albero, l'autocompletamento — non ha niente a che fare con l'I/O di una
+    /// fetta, e prima di questa riga la aspettava tutta.
+    ///
+    /// Il cursore avanza **qui**, perché è qui che la fetta si prende in carico:
+    /// l'[`Indicizzazione`] vive fuori dal workspace, quindi avanzarla non vuole
+    /// nessun prestito. E siccome `work` è un `&mut`, due piani sulla stessa
+    /// indicizzazione non compilano — l'ordine delle fette lo dice il tipo, come
+    /// nella 0119 lo diceva `ExternalSync::batch`.
+    pub fn plan_batch(&self, work: &mut Indicizzazione) -> ParsedBatch {
         let fetta = work.prossima_fetta();
+        let mut prepared = ParsedBatch::default();
         if fetta.is_empty() {
-            return;
+            return prepared;
         }
 
         // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
@@ -1710,8 +1774,13 @@ impl Workspace {
         // fallirebbe, e la sua impronta si prende sui byte — che per una
         // sorgente di testo è lo stesso numero di prima.
         let mut sources: BTreeMap<DocId, DocumentSource> = BTreeMap::new();
-        let mut letti: Vec<VaultEntry> = Vec::with_capacity(fetta.len());
+        prepared.letti.reserve(fetta.len());
         for mut entry in fetta {
+            // L'impronta che l'anagrafe dà a questa voce **adesso**: è ciò che
+            // il piano si porta dietro per accorgersi di essere invecchiato.
+            prepared
+                .seen
+                .insert(entry.id.clone(), self.entry_fingerprint(&entry.id));
             if entry.fingerprint.is_none() {
                 match self.docs.source_from_disk(&entry.id) {
                     Ok(source) => {
@@ -1725,7 +1794,7 @@ impl Workspace {
                     Err(why) => work.apertura.scarta(entry.id.clone(), why),
                 }
             }
-            letti.push(entry);
+            prepared.letti.push(entry);
         }
 
         // **La domanda agli indici è per fetta**, come lo è l'alimentazione. Un
@@ -1733,16 +1802,9 @@ impl Workspace {
         // risposta perché gliela si chiede in dieci volte; chiederla una volta
         // sola vorrebbe dire tenere in mano l'elenco intero prima di alimentare
         // il primo documento, che è esattamente ciò che questa voce toglie.
-        let already = self.indexes.up_to_date(&letti);
+        let already = self.indexes.up_to_date(&prepared.letti);
 
-        let mut models = Vec::new();
-        for entry in &letti {
-            // L'impronta appena calcolata torna in anagrafe: la voce c'era già
-            // dalla prima fase, quello che qui si aggiunge è ciò che si è
-            // imparato leggendola.
-            if entry.fingerprint.is_some() {
-                self.indexes.core.set_entry(entry.clone());
-            }
+        for entry in &prepared.letti {
             if work.apertura.ha_scartato(&entry.id) {
                 continue;
             }
@@ -1753,7 +1815,7 @@ impl Workspace {
                 .and_then(|known| known.meta.clone());
             match remembered {
                 Some(meta) if already.contains(&entry.id) => {
-                    self.indexes.core.restore(&entry.id, meta)
+                    prepared.ripresi.push((entry.id.clone(), meta))
                 }
                 _ => {
                     let source = match sources.remove(&entry.id) {
@@ -1767,13 +1829,70 @@ impl Workspace {
                         },
                     };
                     match self.docs.parse_source(&entry.id, source) {
-                        Ok(model) => models.push(model),
+                        Ok(model) => prepared.models.push(model),
                         Err(why) => work.apertura.scarta(entry.id.clone(), why),
                     }
                 }
             }
         }
-        drop(sources);
+        prepared
+    }
+
+    /// L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
+    /// [`plan_batch`](Workspace::plan_batch).
+    ///
+    /// **Il piano dichiara cosa credeva di sapere, e chi applica lo verifica**
+    /// (0119). Fra la fase condivisa e questa il prestito esclusivo passa di
+    /// mano, e un'apertura dura secondi: in mezzo ci sta comodo un salvataggio
+    /// dell'utente, che il vault è utilizzabile da quando la scansione è finita.
+    /// Applicare qui un modello parsato *prima* di quella scrittura la
+    /// cancellerebbe dalla memoria del kernel — sul disco resta, in anagrafe e
+    /// negli indici no, e non se ne accorge nessuno fino alla riapertura.
+    ///
+    /// Il confronto è sull'impronta che l'anagrafe dà al documento, ed è la
+    /// stessa di [`sync_path_prepared`](Workspace::sync_path_prepared): ogni
+    /// scrittura che passa dal kernel la alza (`touch_entry`), quindi «l'impronta
+    /// è un'altra» vuol dire esattamente «qualcuno ha scritto mentre leggevo».
+    /// Non è mtime+size: quelli bastano a *saltare* un file, non a credergli
+    /// (§14.1).
+    ///
+    /// Un documento invecchiato si **butta e basta**, senza rifare la strada:
+    /// chi ha scritto in mezzo lo ha già parsato, alimentato agli indici e messo
+    /// in anagrafe con l'impronta giusta. Rileggerlo dal disco vorrebbe dire
+    /// rifare il lavoro di qualcun altro per arrivare al suo stesso risultato —
+    /// ed è la differenza con la 0119, dove il piano buttato era l'unica notizia
+    /// che quel file fosse cambiato.
+    pub fn index_batch_prepared(&mut self, prepared: ParsedBatch) {
+        let ParsedBatch {
+            letti,
+            ripresi,
+            models,
+            seen,
+        } = prepared;
+        let invecchiati: BTreeSet<DocId> = seen
+            .into_iter()
+            .filter(|(id, atteso)| self.entry_fingerprint(id) != *atteso)
+            .map(|(id, _)| id)
+            .collect();
+
+        for entry in letti {
+            // L'impronta appena calcolata torna in anagrafe: la voce c'era già
+            // dalla prima fase, quello che qui si aggiunge è ciò che si è
+            // imparato leggendola.
+            if entry.fingerprint.is_some() && !invecchiati.contains(&entry.id) {
+                self.indexes.core.set_entry(entry);
+            }
+        }
+        for (id, meta) in ripresi {
+            if invecchiati.contains(&id) {
+                continue;
+            }
+            self.indexes.core.restore(&id, meta);
+        }
+        let models: Vec<DocumentModel> = models
+            .into_iter()
+            .filter(|model| !invecchiati.contains(&model.id))
+            .collect();
 
         // **Il kernel taglia** (§20.1): la fetta di lavoro è già grande quanto
         // il lotto di alimentazione, quindi qui non si taglia una seconda
@@ -5871,7 +5990,7 @@ impl Workspace {
     /// ([0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)) e porta
     /// l'impronta di ogni documento che qualcuno ha letto, e l'impronta di ciò
     /// che è comparso oggi l'ha appena calcolata
-    /// [`index_batch`](Workspace::index_batch) leggendolo.
+    /// [`plan_batch`](Workspace::plan_batch) leggendolo.
     ///
     /// # Le tre regole, e perché nessuna si poteva scrivere senza deciderla
     ///

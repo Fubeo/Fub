@@ -400,7 +400,11 @@ fn le_fette_arrivano_dove_arriva_il_giro_intero() {
 
     let mut lavoro = banco.scan_vault().expect("scansiona");
     while !lavoro.finita() {
-        banco.index_batch(&mut lavoro);
+        // Le due fasi della 0119, che sono la sola forma che chi ha i thread
+        // può scrivere: il piano sotto prestito condiviso, l'applicazione sotto
+        // quello esclusivo.
+        let piano = banco.plan_batch(&mut lavoro);
+        banco.index_batch_prepared(piano);
     }
     let apertura = banco.finish_index(lavoro);
 

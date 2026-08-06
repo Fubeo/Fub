@@ -548,8 +548,8 @@ sequenceDiagram
 | `UndoStack` | [undo.rs:73](../../crates/fub-kernel/src/undo.rs) | `Vec<Entry>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito |
 | `undo::Entry` | [undo.rs:66](../../crates/fub-kernel/src/undo.rs) | la voce **e il conto dell'operazione**: i due arrivano dallo stesso esito e si separano una riga dopo, quindi o si appaiano lì o non si appaiano più (§23.14) |
 | `Undo` / `UndoStep` | [command.rs:712](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:4512](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:4566](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
+| dove si spinge | [workspace.rs:4631](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:4685](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
 | `Partial` / `Failure` | [command.rs:605](../../crates/fub-abi/src/command.rs) | di N cose quante e quali; i guasti uno per uno col `PluginError` intero, perché la specie dice se ha senso riprovare |
 | `Undone` | [command.rs:822](../../crates/fub-abi/src/command.rs) | l'etichetta e i **due** conti: `operation` (era già a metà) e `replay` (l'annullamento si è fermato) |
 | `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
@@ -878,7 +878,7 @@ sequenceDiagram
 
 | Riquadro | Dove | Cosa fa qui |
 |---|---|---|
-| `Workspace::query_index` | [workspace.rs:393](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
+| `Workspace::query_index` | [workspace.rs:426](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
 | `plan::run` | [plan.rs:56](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
 | `sole_evaluator` | [plan.rs:337](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
 | `RouteTable` | [routing.rs:57](../../crates/fub-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |

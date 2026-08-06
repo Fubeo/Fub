@@ -390,9 +390,20 @@ impl Shared {
 
         if !smettere && !in_corso.work.finita() {
             let label = in_corso.work.prossimo().map(|id| id.to_string());
+            // **Il disco sotto prestito condiviso** (0119, secondo sito): la
+            // fetta si legge e si parsa qui, dove chi guarda il vault appena
+            // aperto — la ricerca, l'albero, l'autocompletamento — entra
+            // accanto. Il piano si porta dietro l'impronta che l'anagrafe dava
+            // a ogni documento adesso, e chi applica la confronta: fra le due
+            // fasi il prestito esclusivo passa di mano, e su un'apertura che
+            // dura secondi in mezzo ci sta un salvataggio dell'utente.
+            let prepared = {
+                let ws = self.workspace.read()?;
+                ws.plan_batch(&mut in_corso.work)
+            };
             {
                 let mut ws = self.workspace.write()?;
-                ws.index_batch(&mut in_corso.work);
+                ws.index_batch_prepared(prepared);
                 // Il `total` c'è perché la scansione lo sa: l'apertura è il
                 // caso in cui una barra può dire il vero, e
                 // [`JobProgress::total`] è opzionale proprio per distinguerlo
@@ -970,24 +981,164 @@ mod tests {
         );
     }
 
+    /// Il cancello che rende **osservabile** un parse lento senza dormire.
+    ///
+    /// `dentro` dice al test che il parse è cominciato, `via` gli lascia
+    /// decidere quando finisce. Finché non è armato il formato parsa come
+    /// qualunque altro.
+    #[derive(Default)]
+    struct Cancello {
+        dentro: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+        via: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
+    }
+
+    impl Cancello {
+        fn arma(&self) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+            let (dentro_tx, dentro_rx) = std::sync::mpsc::channel();
+            let (via_tx, via_rx) = std::sync::mpsc::channel();
+            *self.dentro.lock().unwrap() = Some(dentro_tx);
+            *self.via.lock().unwrap() = Some(via_rx);
+            (dentro_rx, via_tx)
+        }
+
+        fn attraversa(&self) {
+            let dentro = self.dentro.lock().unwrap().take();
+            let via = self.via.lock().unwrap().take();
+            if let (Some(dentro), Some(via)) = (dentro, via) {
+                dentro.send(()).expect("il test aspetta il parse");
+                via.recv().expect("il test lascia uscire il parse");
+            }
+        }
+    }
+
+    /// Un formato di testo nudo che, a cancello armato, si ferma dentro `parse`.
+    struct Lento(Arc<Cancello>);
+
+    impl fub_abi::FormatProvider for Lento {
+        fn descriptor(&self) -> fub_abi::format::FormatDescriptor {
+            fub_abi::format::FormatDescriptor::text("prova.lento", "Lento", &["md"])
+        }
+        fn capabilities(&self) -> fub_abi::format::FormatCapabilities {
+            fub_abi::format::FormatCapabilities::default()
+        }
+        fn parse(
+            &self,
+            source: &fub_abi::format::DocumentSource,
+            ctx: &fub_abi::format::ParseContext,
+        ) -> Result<fub_abi::model::DocumentModel, fub_abi::error::FormatError> {
+            self.0.attraversa();
+            let mut model = fub_abi::model::DocumentModel::empty(fub_abi::model::DocId::new(
+                ctx.doc_id.clone(),
+            ));
+            model.text = source.text().unwrap_or_default().to_string();
+            Ok(model)
+        }
+        fn render_html(
+            &self,
+            m: &fub_abi::model::DocumentModel,
+            _o: &fub_abi::format::RenderOptions,
+        ) -> Result<String, fub_abi::error::FormatError> {
+            Ok(m.text.clone())
+        }
+        fn serialize(
+            &self,
+            m: &fub_abi::model::DocumentModel,
+        ) -> Result<String, fub_abi::error::FormatError> {
+            Ok(m.text.clone())
+        }
+    }
+
+    /// **La proprietà** (0119, secondo sito): mentre la fetta dell'apertura
+    /// legge e parsa il disco, chi legge entra nel workspace.
+    ///
+    /// È la stessa proprietà del lotto del watcher
+    /// (`tests/il_lotto_del_watcher.rs`) sul percorso dove i file non sono
+    /// quattro ma quattromila — cioè dove l'attesa è l'app ferma all'avvio di un
+    /// vault grosso. Qui non si cronometra niente: un tempo su una macchina
+    /// condivisa non è un segnale, e la proprietà comprata non è «più veloce» —
+    /// è che *durante* quella lettura il prestito condiviso si prende ancora.
+    ///
+    /// `try_read` e non `read`: un `read` che aspettasse sarebbe verde anche col
+    /// prestito esclusivo, perché aspetterebbe la fine del parse e poi
+    /// passerebbe.
+    #[test]
+    fn chi_legge_entra_mentre_la_fetta_dell_apertura_legge_il_disco() {
+        let cancello: Arc<Cancello> = Arc::default();
+        let mut formats = fub_kernel::FormatRegistry::new();
+        formats
+            .register(Box::new(Lento(cancello.clone())))
+            .expect("un provider solo non va in conflitto");
+        // Una nota sola: una fetta sola, quindi il cancello si attraversa una
+        // volta e il test non deve indovinare quante.
+        let (_dir, shared, _id, _root) = un_vault_scansionato(1, formats);
+
+        let (dentro, via) = cancello.arma();
+        let fetta = {
+            let shared = Arc::clone(&shared);
+            std::thread::spawn(move || shared.avanza_apertura())
+        };
+
+        // Il parse è cominciato: da qui in poi la fetta sta facendo I/O.
+        dentro.recv().expect("la fetta entra nel parse");
+        let letto = shared.workspace.try_read();
+        assert!(
+            letto.is_some(),
+            "il workspace non si presta mentre la fetta dell'apertura legge il \
+             disco: la fase che legge e parsa tiene il prestito esclusivo, e chi \
+             guarda il vault appena aperto — la ricerca, l'albero — aspetta \
+             un'I/O che non lo riguarda (0024, 0119)"
+        );
+        // E non è un prestito vuoto: da lì si interroga davvero.
+        assert!(letto
+            .expect("il prestito condiviso c'è")
+            .query_index(fub_abi::traits::IndexQuery::VaultStatus)
+            .is_ok());
+        via.send(()).expect("la fetta può finire");
+        assert!(
+            fetta
+                .join()
+                .expect("il thread finisce")
+                .expect("nessun veleno"),
+            "c'era un'apertura da portare avanti"
+        );
+
+        // E la fetta ha fatto il suo lavoro.
+        assert_eq!(
+            shared.workspace.read().unwrap().documents().len(),
+            1,
+            "la fetta ha letto e parsato, ma non ha applicato niente"
+        );
+    }
+
     /// Un vault seminato, scansionato e con la sua identità di job: il punto in
     /// cui `Host::open` consegna la seconda fase al pool.
     fn un_vault_da_indicizzare() -> (tempfile::TempDir, Arc<Shared>, JobId) {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let root =
-            camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("una radice utf8");
-        for n in 0..3 {
-            std::fs::write(root.join(format!("Nota{n}.md")), "# Titolo\n\nCorpo.\n")
-                .expect("semina");
-        }
         let mut formats = fub_kernel::FormatRegistry::new();
         formats
             .register(fub_format_markdown::MarkdownProvider::boxed())
             .expect("un provider solo non va in conflitto");
+        let (dir, shared, id, _) = un_vault_scansionato(3, formats);
+        (dir, shared, id)
+    }
+
+    /// Lo stesso, con il registro dei formati in mano al chiamante: è la leva
+    /// con cui il presidio del prestito mette un parse **lento** sul percorso
+    /// dell'apertura.
+    fn un_vault_scansionato(
+        quante: usize,
+        formats: fub_kernel::FormatRegistry,
+    ) -> (tempfile::TempDir, Arc<Shared>, JobId, camino::Utf8PathBuf) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root =
+            camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("una radice utf8");
+        for n in 0..quante {
+            std::fs::write(root.join(format!("Nota{n}.md")), "# Titolo\n\nCorpo.\n")
+                .expect("semina");
+        }
 
         let mut ws = Workspace::new(&root, formats);
         let work = ws.scan_vault().expect("la scansione riesce");
-        assert_eq!(work.totale(), 3, "tre note da leggere");
+        assert_eq!(work.totale(), quante as u64, "le note seminate si leggono");
         let id = ws.begin_index_job();
 
         let shared = Shared {
@@ -1008,7 +1159,7 @@ mod tests {
             flags: Custodia::vuota("le bandiere di prova"),
             sveglie: Custodia::vuota("le sveglie di prova"),
         };
-        (dir, Arc::new(shared), id)
+        (dir, Arc::new(shared), id, root)
     }
 
     #[test]
