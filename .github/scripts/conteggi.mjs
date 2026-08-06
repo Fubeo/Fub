@@ -534,7 +534,12 @@ export const CONTEGGI = [
       "perché gli id **non scalano**: vengono da `issues.md` e sono citati dai " +
       "verbali, quindi la sequenza ha buchi e l'ultimo numero non dice quanti " +
       "sono. Il `|| true` è quello di `voci-aperte`, per la stessa ragione: " +
-      "zero difetti aperti è la cosa che questo conto deve poter dire.",
-    comando: "grep -c '^| 00[0-9][0-9] |' docs/todo.md || true",
+      "zero difetti aperti è la cosa che questo conto deve poter dire. " +
+      "Il pattern prende **quattro cifre qualunque** e non `00NN`: nato quando " +
+      "gli id arrivavano tutti da `issues.md` si fermava a 0099, e il primo " +
+      "blocco nuovo — la rilettura del 2026-08-06 — l'avrebbe scavalcato " +
+      "facendo contare al presidio meno righe di quante ce ne sono, cioè " +
+      "mentendo verso il basso proprio mentre la tabella cresce.",
+    comando: "grep -c '^| [0-9][0-9][0-9][0-9] |' docs/todo.md || true",
   },
 ];

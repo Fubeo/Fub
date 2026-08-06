@@ -453,7 +453,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Sessantasette** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Ottantaquattro** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -473,10 +473,21 @@ diventate la [seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md)
 perché toccano una firma, queste sessantasette sono il resto. `issues.md` non
 esiste più: il file si è **svuotato**, non è stato tolto.
 
+**Il secondo blocco, `0093` in su**, viene da un'altra parte e per questo
+comincia dove l'altro finisce: diciassette misure che vivevano in un file-diario
+non tracciato, riscritto a ogni giro e che **nessun presidio guardava**. Una
+misura che vive in due posti invecchia nel posto che nessuno presidia, ed è
+l'unica ragione per cui sono qui. Rimisurate una per una contro i sorgenti del
+2026-08-06 prima di entrare: nessuna era scaduta, e una diciottesima è rimasta
+fuori perché non è un difetto ma una firma ([§24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md)
+è il posto di quelle).
+
 **Il numero è quello di `issues.md` e non scala**, per la stessa regola dei `§`:
 è citato dai verbali e dai messaggi di commit, e rinumerarlo trasformerebbe ogni
 citazione in un rimando cieco. I buchi nella sequenza sono le ventidue righe che
-non sono sopravvissute alla rilettura.
+non sono sopravvissute alla rilettura. Il conto perciò **conta le righe**, e da
+`0100` ha voluto un pattern più largo: quello vecchio si fermava a `0099` e
+avrebbe dichiarato meno difetti di quanti ce ne sono.
 
 **L'ancora è al simbolo, non alla riga.** Ogni riga porta il posto misurato al
 2026-08-06: i numeri di riga si saranno mossi, il simbolo no. Chi ne prende una
@@ -551,6 +562,23 @@ non sono sopravvissute alla rilettura.
 | 0089 | `forget_vault` esce al primo errore I/O e lascia le forme successive dentro `view_states` | `fub-host` · `session.rs:668` | stato divergente |
 | 0090 | `set_plugin_enabled` muta memoria e registro, poi propaga l'errore di `set_setting`: il disco resta indietro | `fub-host` · `session.rs` `set_plugin_enabled` | stato divergente |
 | 0091 | chiudendo il vault corrente ne diventa corrente il primo in ordine **alfabetico** | `fub-host` · `session.rs:1024` | registro vault |
+| 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
+| 0094 | un `Block::Custom` senza figli e senza renderer registrato si rende `<div>` vuoto: math, diagrammi e HTML grezzo spariscono dall'anteprima | `fub-format-markdown` · `render.rs` `render_block` | rendering |
+| 0095 | non c'è modo di chiedere a un `custom_kind` «sei esprimibile in questo formato?»: l'elenco è una catena di `if`, e un secondo `FormatProvider` la riscrive da zero | `fub-format-markdown` · `serialize.rs` `write_custom_block` | confini |
+| 0096 | `read_version` prende il prestito **esclusivo** del workspace per una lettura, e ferma chi scrive | `fub-host` · `session.rs` `read_version` | lock e I/O |
+| 0097 | `finish_index` cammina il disco con `collect_doc_data` sotto il prestito esclusivo, una volta per apertura | `fub-kernel` · `workspace.rs` `finish_index` | lock e I/O |
+| 0098 | `JobBell` ha sei `.expect("campanello avvelenato")`: la ragione è legittima ma è **una frase**, non una decisione presa | `fub-kernel` · `dispatcher.rs` `JobBell` | errori |
+| 0099 | `FileSink` pania sul proprio `Mutex`: se muore chi scrive, muore per primo il canale con cui il guasto si denuncia | `fub-kernel` · `log.rs` `FileSink` | errori |
+| 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |
+| 0101 | `EntryStore::store` mette la cache a posto **prima** di scrivere: se la scrittura fallisce, memoria e disco divergono fino alla riapertura | `fub-kernel` · `entries.rs` `EntryStore::store` | stato divergente |
+| 0102 | fra `scrivi_meta` riuscita e `scrivi_index` fallita un `meta.json` resta «viva» sotto un indice «cestinata»: una ricostruzione dai meta risuscita la nota — gemello del 0044 | `fub-features` · `versioning.rs` `applica` | versioning |
+| 0103 | la guardia sui riquadri sta **prima** di `consumaCambioSotto`: l'eco di un documento con un buffer e nessun riquadro non viene consumato mai | `frontend` · `panels/document.ts` `onEvent("document_changed")` | eventi persi |
+| 0104 | `intestazioniSchede` ricostruisce **tutte** le linguette a ogni riconciliazione, e chi ci sta sopra col tab perde il fuoco | `frontend` · `ui/node.ts` `intestazioniSchede` | shell |
+| 0105 | nei casi `select` e `radio` il lettore registrato da `valore` cattura `node` una volta sola e `aggiorna` non lo rilega: un campo riusato legge la forma di ieri — gemello del 0025 | `frontend` · `ui/node.ts` `disegna` | shell |
+| 0106 | il `.speaking()` delle tre irregolari (search, versioning, blocks) è scritto a mano ramo per ramo, e la somma del versioning non la confronta col montaggio nessuno | `fub-host` · `mount.rs` + `tests/i_cataloghi.rs` | presidi |
+| 0107 | `crateDelWorkspace` enumera `crates/*` **leggendo la cartella** invece di `[workspace] members`: un membro fuori da lì è invisibile a **entrambi** gli script, e nessuno dei due lo dichiara | `.github/scripts` · `check-cargo-versioni.mjs`, `check-cargo-feature-default.mjs` `crateDelWorkspace` | presidi |
+| 0108 | `comandi_registrati` legge il **primo** `generate_handler!` che trova: la superficie IPC è intera perché un `assert` lo pretende, non perché il parser la veda | `fub-app` · `tests/dieta_ipc.rs` `comandi_registrati` | presidi |
+| 0109 | gli ancoraggi **fuori tabella** di `versionamento.md` non li verifica nessuno, e oggi sono di nuovo sbagliati tutt'e due: `ABI_VERSION` è a 3773 e non 3650, `abi_compatible` a 4321 e non 4198 | `docs/versionamento.md` | presidi |
 
 ## Gli allegati
 
