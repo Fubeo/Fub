@@ -68,6 +68,16 @@ pub fn broken_target<R: LinkResolver + ?Sized>(
     doc_extensions: &[String],
     resolver: &R,
 ) -> Option<String> {
+    // Un riferimento **dentro** la nota che lo scrive (`[[#Sezione]]`,
+    // `[[#^blocco]]`) non ha una destinazione da cercare: la sua destinazione è
+    // `source`, che esiste per costruzione — è la nota che stiamo controllando.
+    // Prima cadeva nel ramo dei wikilink, non risolveva a nessun nome, e
+    // finiva nel rapporto con la **stringa vuota** come destinazione: un
+    // difetto segnalato che nessuno poteva correggere, perché non c'era niente
+    // di sbagliato da riscrivere.
+    if link.target.names_host() {
+        return None;
+    }
     match &link.target {
         // Un URL non punta al vault.
         LinkTarget::Url(_) => None,

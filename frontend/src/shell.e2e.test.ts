@@ -23,7 +23,7 @@
 //
 // # Dieci gesti, contati da fuori
 //
-// I gesti sono **dieci** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **undici** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -525,5 +525,31 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
     // E il path vecchio **non** rinasce: era il difetto gemello, e sarebbe
     // passato per una nota duplicata invece che per una battuta persa.
     expect(Object.keys(host.file())).not.toContain("Benvenuto.md");
+  });
+});
+
+describe("segui un link dentro la nota", () => {
+  it("un `[[#Sezione]]` chiede al kernel col documento che lo ospita", async () => {
+    // Il gesto è ctrl-click su un wikilink **senza pagina**, e la cosa che si
+    // guarda sta di qua dal confine: *quale domanda* è partita. Un
+    // `[[#Sezione]]` non nomina una nota, nomina questa — e chi lo risolve non
+    // può saperlo se non gli si dice da dove si sta guardando. La shell si
+    // fermava un passo prima, con un `if (!page) return`: nessuna domanda,
+    // nessuna risposta, un click che non faceva niente e non diceva perché.
+    const host = await avvia({
+      "Benvenuto.md": "Vedi [[#Appunti]] più sotto.\n\n## Appunti\n\nEccoli.\n",
+    });
+    const link = document.querySelector<HTMLElement>(".cm-fub-wikilink");
+    expect(link, "il live preview non ha decorato il wikilink").not.toBeNull();
+    link!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, ctrlKey: true }));
+    await riposa();
+
+    const chieste = host
+      .aPorta("queryIndex")
+      .map((c) => c.args[0] as { kind: string; target?: { value: { page: string } }; from?: string | null })
+      .filter((q) => q.kind === "resolve");
+    expect(chieste).toHaveLength(1);
+    expect(chieste[0]!.target?.value.page).toBe("");
+    expect(chieste[0]!.from).toBe("Benvenuto.md");
   });
 });

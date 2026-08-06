@@ -321,7 +321,15 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
       case "resolve": {
         const target = q.target;
         if (target.kind !== "wiki") return { kind: "resolved", value: null };
-        const atteso = `${target.value.page}.md`;
+        // Un wikilink **senza pagina** (`[[#Sezione]]`, `[[#^blocco]]`) nomina
+        // il documento che lo ospita: il finto lo risponde come il kernel, o
+        // sarebbe un finto accomodante — e un finto accomodante fa passare un
+        // e2e mentre la shell chiede la cosa sbagliata.
+        const { page, heading, block } = target.value;
+        if (page.trim() === "" && (heading !== null || block !== null)) {
+          return { kind: "resolved", value: q.from ? { doc: q.from } : null };
+        }
+        const atteso = `${page}.md`;
         const trovato = [...docs.keys()].find((id) => id === atteso || id.endsWith(`/${atteso}`));
         return { kind: "resolved", value: trovato ? { doc: trovato } : null };
       }

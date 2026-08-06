@@ -530,6 +530,35 @@ impl LinkTarget {
         }
     }
 
+    /// Questo riferimento nomina il documento che lo **ospita**?
+    ///
+    /// È il caso di `[[#Sezione]]` e `[[#^blocco]]`: un wikilink senza pagina
+    /// non è un link rotto e non è un link a niente — è un link *qui dentro*, e
+    /// il documento che nomina è quello in cui è scritto. Il parser lo produce
+    /// dal primo giorno (`page` vuota, `heading` o `block` pieni); a leggerlo
+    /// non era nessuno, e le due conseguenze erano che la risoluzione
+    /// rispondeva `None` e il controllo di salute lo dichiarava rotto con la
+    /// stringa vuota come destinazione.
+    ///
+    /// La regola sta qui e non nei due chiamanti perché è una regola della
+    /// **grammatica**, non della risoluzione: chi chiede «a cosa punta» e chi
+    /// chiede «è rotto» devono avere la stessa risposta, e due copie
+    /// divergerebbero al primo che se ne dimentica.
+    ///
+    /// `[[]]` non passa: senza pagina *e* senza punto non c'è niente da
+    /// nominare, e «questo documento in cima» non è ciò che quel link chiede —
+    /// è ciò che si otterrebbe non chiedendo niente.
+    pub fn names_host(&self) -> bool {
+        match self {
+            LinkTarget::Wiki {
+                page,
+                heading,
+                block,
+            } => page.trim().is_empty() && (heading.is_some() || block.is_some()),
+            _ => false,
+        }
+    }
+
     /// La destinazione di un link scritto "alla markdown" (`[t](qui)`): è del
     /// **vault** o del mondo esterno?
     ///

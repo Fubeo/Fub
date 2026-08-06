@@ -718,6 +718,14 @@ impl CoreIndex {
     /// che è più di quel che faceva prima e meno di una bugia.
     fn resolve(&self, target: &LinkTarget, from: Option<&DocId>) -> Option<ResolvedRef> {
         let doc = match target {
+            // `[[#Sezione]]` e `[[#^blocco]]` nominano il documento che li
+            // ospita, e senza un ospite non nominano niente: è la stessa
+            // ragione per cui `from` esiste per i path relativi — la domanda
+            // non è intera finché non si dice da dove la si fa.
+            _ if target.names_host() => {
+                let host = from?;
+                self.metas.contains_key(host).then(|| host.clone())?
+            }
             LinkTarget::Wiki { page, .. } => self.graph.resolve_wiki(page)?,
             // Un path relativo senza un documento che lo ospiti è relativo alla
             // radice: `DocId("")` non è un documento, è la cartella da cui
