@@ -89,6 +89,16 @@ jiff = { version = "0.2.35", default-features = false, features = [
 # rimediare dall'app. Otto pacchetti per non togliere all'utente una decisione
 # che ha già preso sul proprio computer.
 #
+# `rustls-no-provider` + `_ring` e **non** `rustls`, che è l'ombrello: `rustls`
+# vuol dire `rustls-no-provider` + `_ring` + `rustls-webpki-roots`, e quel terzo
+# rimetteva dentro le radici di Mozilla che la scelta qui sopra aveva appena
+# rifiutato. Nominare i due pezzi al posto dell'ombrello è come si toglie il
+# terzo. Non è un dettaglio di packaging: finché `webpki-roots` era nel grafo,
+# `cargo deny` lo respingeva per licenza (`CDLA-Permissive-2.0`, che questo
+# workspace non consente) — la CI diceva rossa una decisione mai applicata, ed è
+# così che ce ne si è accorti. La riga che la applica davvero sta in
+# `src/net.rs`: senza quella, il verificatore si compila e non si usa.
+#
 # `default-features = false` e poi l'elenco per esteso, così le feature sono
 # **scelte** e non ereditate: i default di `ureq` sono `rustls` e `gzip`, e
 # tacerli vorrebbe dire non sapere quale delle due si sta prendendo.
@@ -107,7 +117,8 @@ jiff = { version = "0.2.35", default-features = false, features = [
 # condiviso da tutti i plugin sarebbe uno stato che passa **fra plugin
 # diversi** senza che nessuno lo abbia dichiarato.
 ureq = { version = "3", default-features = false, features = [
-    "rustls",
+    "rustls-no-provider",
+    "_ring",
     "platform-verifier",
     "gzip",
 ], optional = true }
