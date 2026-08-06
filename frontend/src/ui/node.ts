@@ -951,6 +951,11 @@ function applicaCampo(el: HTMLElement, node: Campo, onAction: Porta): boolean {
   }
   // Ciò che vale per ogni campo, e in fondo perché il controllo e l'etichetta
   // devono esistere già.
+  //
+  // Il nome del campo sta **sul contenitore** e in nessun altro posto: c'era
+  // anche un `data-field` su ogni controllo, e non lo leggeva nessuno — un
+  // secondo posto dove scrivere la stessa cosa è la prima metà di due cose che
+  // divergono, che è il difetto di cui questa sezione è la cura.
   el.dataset.campo = node.field;
   etichetta(el, node.label);
   legaEtichetta(el, node.field);
@@ -1013,7 +1018,6 @@ function bottoniRadio(el: HTMLElement, node: Campo & { node: "radio" }, onAction
     const input = riga.querySelector<HTMLInputElement>("input")!;
     input.name = el.id;
     input.value = opzione.value;
-    input.dataset.field = node.field;
     input.checked = opzione.value === node.value;
     riga.querySelector<HTMLElement>("span")!.textContent = opzione.label;
     azioniDelCampo(input, node.action, onAction);
