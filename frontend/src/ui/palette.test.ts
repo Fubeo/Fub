@@ -162,6 +162,32 @@ describe("gli argomenti che la palette costruisce", () => {
     const args = argsFromForm(s, { find: "x", replace: "y", limit: "molti" });
     expect(args).not.toHaveProperty("limit");
   });
+
+  it("una casella facoltativa mai spuntata non viene mandata affatto", () => {
+    // `false` non è «non toccato». Mandandolo, la palette decide al posto del
+    // comando — e a decidere cosa succede quando un parametro facoltativo manca
+    // è il comando, che è l'unico a saperlo: sta scritto accanto a
+    // `ParamSpec::required`, dove il contratto rifiuta esplicitamente di avere
+    // un default. La regola vale per ogni specie di campo, e il booleano era
+    // l'unico ramo che non la applicava.
+    const args = argsFromForm(s, { find: "x", replace: "y" });
+    expect(args).not.toHaveProperty("whole_word");
+    // E nemmeno quando la casella c'è ed è spenta: nella palette una casella
+    // non spuntata **è** il suo stato iniziale, e non c'è modo di dire «falso
+    // per scelta» che non sia già detto dal default del comando.
+    expect(argsFromForm(s, { find: "x", replace: "y", whole_word: false })).not.toHaveProperty(
+      "whole_word",
+    );
+  });
+
+  it("una casella obbligatoria si manda anche a falso", () => {
+    // L'altro verso, e presidia la forma nuova invece del difetto: un parametro
+    // obbligatorio si manda sempre, vuoto compreso, o il comando riceve un
+    // rifiuto di serde al posto della risposta che l'utente ha dato.
+    const obbligatoria = spec({ params: [param("loud", { kind: "bool" }, true)] });
+    expect(argsFromForm(obbligatoria, {})).toEqual({ loud: false });
+    expect(argsFromForm(obbligatoria, { loud: true })).toEqual({ loud: true });
+  });
 });
 
 // Le scorciatoie non si provano più qui: riconoscere un accordo è del registro
