@@ -81,6 +81,21 @@ impl UreqNetwork {
             // della risposta `3xx`: qui la vogliamo, perché è ciò che permette
             // a chi ha chiesto di decidere se seguirla.
             .max_redirects_will_error(false)
+            // **Di chi ci si fida.** La decisione
+            // [0097](../../../docs/decisions/0097-il-filo-verso-fuori.md) la
+            // prende in `Cargo.toml` e la argomenta là: con il verificatore
+            // della piattaforma, Fub si fida di ciò di cui si fida la macchina
+            // — la CA aziendale installata, il certificato interno, il proxy
+            // dell'amministratore. Ma `ureq` di suo parte da
+            // `RootCerts::WebPki`, cioè dalle radici di Mozilla imbarcate:
+            // pagare gli otto pacchetti del verificatore e non nominarlo qui
+            // significava compilarlo e non usarlo mai. Una dipendenza tirata
+            // dentro non è una configurazione.
+            .tls_config(
+                ureq::tls::TlsConfig::builder()
+                    .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+                    .build(),
+            )
             .build();
         UreqNetwork {
             agent: ureq::Agent::new_with_config(config),
@@ -174,6 +189,27 @@ mod tests {
             !net.agent.config().max_redirects_will_error(),
             "un `3xx` deve tornare a chi ha chiesto, non diventare un errore: \
              è chi ha chiesto a decidere se seguirlo"
+        );
+    }
+
+    /// E che ci si fidi della **macchina** e non delle radici imbarcate. È il
+    /// presidio che mancava: la scelta era argomentata in `Cargo.toml` da
+    /// quando il filo esiste, il verificatore era compilato dentro, e nessuno
+    /// lo nominava — il default di `ureq` è `WebPki`, quindi la decisione era
+    /// scritta e disattesa insieme. Se qualcuno toglie la riga, o rimette la
+    /// feature-ombrello `rustls` che si porta dietro le radici di Mozilla, qui
+    /// diventa rosso invece di diventare un utente in rete aziendale che non
+    /// si connette e non sa perché.
+    #[test]
+    fn ci_si_fida_di_chi_si_fida_la_macchina() {
+        let net = UreqNetwork::new();
+        assert!(
+            matches!(
+                net.agent.config().tls_config().root_certs(),
+                ureq::tls::RootCerts::PlatformVerifier
+            ),
+            "con le radici imbarcate la CA aziendale non vale, e dall'app non \
+             c'è modo di rimediare (decisione 0097)"
         );
     }
 
