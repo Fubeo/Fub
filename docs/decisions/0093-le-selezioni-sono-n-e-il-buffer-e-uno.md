@@ -26,7 +26,7 @@ Non è la regola di CodeMirror. `EditorSelection` ha `ranges` **e** `mainIndex`,
 cioè un indice a parte, e `state.selection.main` è `ranges[mainIndex]`, non
 `ranges[0]`. La sua documentazione dice di più: quell'indice è *«usually the
 range that was added last»*
-([`@codemirror/state/dist/index.d.ts:435`](../../frontend/node_modules/@codemirror/state/dist/index.d.ts)).
+([`@codemirror/state/dist/index.d.ts:435`](https://codemirror.net/docs/ref/#state.EditorSelection.mainIndex)).
 Di norma la primaria è **l'ultima aggiunta**, ed è esattamente ciò che succede
 col gesto per cui il multi-cursore esiste: si tiene Alt e si clicca il punto
 nuovo, e quello nuovo è quello su cui si sta lavorando.
