@@ -1,5 +1,7 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { accoppia } from "./node";
+import type { ActionRef, UiNode } from "../host/contract";
+import { accoppia, mountTree } from "./node";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
 //
@@ -13,6 +15,11 @@ import { accoppia } from "./node";
 // Le due letture da tenere a mente leggendo i casi: `{ riusa: i }` = "questo
 // nodo nuovo è il vecchio in posizione i", `{ crea: true }` = "disegnalo da
 // capo".
+//
+// Il secondo `describe` è invece la parte che tocca il DOM, e sta qui perché il
+// difetto che presidia **non si vede** nella funzione pura: l'accoppiamento
+// decide giusto, l'elemento si riusa giusto, e l'azione che quell'elemento
+// manda è quella di ieri.
 
 const K = (...chiavi: (string | undefined)[]) => chiavi;
 
@@ -77,5 +84,87 @@ describe("accoppiamento dei figli (§2.8)", () => {
 
   it("una chiave che non c'era prima non ruba il posto di un'altra", () => {
     expect(accoppia(K("a", "b"), K("c", "d"))).toEqual([{ crea: true }, { crea: true }]);
+  });
+});
+
+// Un campo riusato dal riconciliatore manda l'azione del nodo **nuovo**.
+//
+// La forma del difetto che questi casi difendono: gli ascoltatori si
+// registravano una volta sola alla costruzione del campo, con l'`ActionRef`
+// catturato nella chiusura, e la riconciliazione aggiornava il valore ma non
+// l'azione. Il campo continuava a funzionare — mandava la cosa sbagliata, che è
+// il modo peggiore di essere rotti.
+//
+// Ogni caso verifica **anche** che l'elemento sia lo stesso di prima: senza
+// quella riga il presidio passerebbe a vuoto il giorno in cui qualcuno facesse
+// ricostruire i campi invece di riusarli.
+describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => {
+  const cerca = (azione: string | null, value = ""): UiNode =>
+    ({
+      node: "text_input",
+      field: "q",
+      label: "Cerca",
+      value,
+      placeholder: null,
+      action: azione === null ? null : { action: azione, payload: null },
+    }) as UiNode;
+
+  function riconciliato(prima: UiNode, dopo: UiNode) {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const mandate: string[] = [];
+    const onAction = async (a: ActionRef) => {
+      mandate.push(a.action);
+    };
+    mountTree(host, prima, onAction);
+    const input = host.querySelector("input")!;
+    mountTree(host, dopo, onAction);
+    // Se questo non è vero, tutto il resto del caso non prova niente.
+    expect(host.querySelector("input")).toBe(input);
+    return { input, mandate };
+  }
+
+  it("il cambio del valore manda l'azione nuova, non quella del primo disegno", () => {
+    const { input, mandate } = riconciliato(cerca("prima"), cerca("dopo"));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(mandate).toEqual(["dopo"]);
+  });
+
+  it("l'Invio manda l'azione nuova, non quella del primo disegno", () => {
+    const { input, mandate } = riconciliato(cerca("prima"), cerca("dopo"));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(mandate).toEqual(["dopo"]);
+  });
+
+  it("riconciliare non accumula ascoltatori: un evento, un'azione", () => {
+    // L'altra metà della stessa riparazione, e la diagnosi che era arrivata da
+    // fuori: chi ribinda togliendo e rimettendo a mano sbaglia in un verso, chi
+    // ribinda e basta sbaglia nell'altro. Qui si riconcilia tre volte.
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const mandate: string[] = [];
+    const onAction = async (a: ActionRef) => {
+      mandate.push(a.action);
+    };
+    mountTree(host, cerca("uno"), onAction);
+    const input = host.querySelector("input")!;
+    for (const azione of ["due", "tre", "quattro"]) mountTree(host, cerca(azione), onAction);
+    expect(host.querySelector("input")).toBe(input);
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(mandate).toEqual(["quattro", "quattro"]);
+  });
+
+  it("un campo che perde l'azione smette di mandarla", () => {
+    const { input, mandate } = riconciliato(cerca("prima"), cerca(null));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(mandate).toEqual([]);
+  });
+
+  it("un tasto che non è Invio non manda niente", () => {
+    const { input, mandate } = riconciliato(cerca("prima"), cerca("dopo"));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    expect(mandate).toEqual([]);
   });
 });

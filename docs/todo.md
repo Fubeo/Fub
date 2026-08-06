@@ -446,14 +446,6 @@ verifica, non in un elenco di lavoro.
   pausa dell'interfaccia. La regola della [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
   è esattamente questa, applicata qui: mutare in memoria sotto il lucchetto,
   rilasciarlo, rendere durevole fuori.
-- [ ] **I campi di testo restano attaccati all'azione del primo disegno**
-  (`frontend/src/ui/node.ts`). `collega` toglie e rimette l'ascoltatore a ogni
-  riconciliazione; `scatta` e il `keydown` dell'Invio no — vengono registrati
-  una volta sola alla costruzione del campo, con l'`ActionRef` catturato nella
-  chiusura. Un `text_input` riusato dal riconciliatore (§2.8) aggiorna il valore
-  e continua a mandare l'azione **vecchia**. Non è un accumulo di ascoltatori,
-  come era stato riferito: è peggio, perché il campo funziona e manda la cosa
-  sbagliata.
 - [ ] **Che il vault avvelenato uccida l'applicazione è una scelta, e non è stata
   fatta** (`crates/fub-app/src/lib.rs`, `crates/fub-host/src/watcher.rs`,
   `crates/fub-host/src/runner.rs`). Il runner scrive `.expect("workspace
@@ -487,7 +479,7 @@ verifica, non in un elenco di lavoro.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centodiciassette** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centodiciotto** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue
