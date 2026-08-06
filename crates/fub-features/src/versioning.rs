@@ -361,20 +361,21 @@ impl VersionStore {
     ) -> Result<Option<VersionRef>, PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         let hash = fingerprint(source);
-        let dir_doc = inner.ensure_dir(id, host)?;
+        let dir_doc = inner.dir_per(id, host)?;
 
-        {
-            let doc = inner.docs.entry(id.to_string()).or_default();
+        if let Some(doc) = inner.docs.get(id.as_str()) {
             if doc.versions.last().is_some_and(|v| v.hash == hash) {
                 // Niente di nuovo da salvare — ma ci hanno chiesto di
                 // fotografare una nota VIVA: se portava un tombstone
                 // (cestinata e ripristinata con lo stesso identico contenuto)
                 // il tombstone se ne va comunque, o "il vault al tempo T" la
                 // crederebbe cancellata per sempre.
-                let risorta = doc.deleted_at.take().is_some();
-                if risorta {
-                    inner.write_meta(id, host)?;
-                    inner.write_index(host)?;
+                if doc.deleted_at.is_some() {
+                    let mut piano = inner.docs.clone();
+                    if let Some(doc) = piano.get_mut(id.as_str()) {
+                        doc.deleted_at = None;
+                    }
+                    inner.applica(piano, id, host)?;
                 }
                 return Ok(None);
             }
@@ -391,22 +392,23 @@ impl VersionStore {
             hash,
             size: source.len() as u64,
         };
-        let doc = inner.docs.entry(id.to_string()).or_default();
+        let mut piano = inner.docs.clone();
+        let doc = piano.entry(id.to_string()).or_default();
+        doc.dir = dir_doc;
         doc.versions.push(version);
         // Una nota che torna in vita non è più morta: il tombstone se ne va, o
         // "il vault al tempo T" la crederebbe cancellata per sempre.
         doc.deleted_at = None;
 
-        // La potatura decide **prima** e cancella **dopo**: `prune` tocca solo
-        // l'elenco in memoria e dice quali contenuti avanzano, l'indice va sul
+        // La potatura decide **prima** e cancella **dopo**: `pota` tocca solo
+        // l'elenco del piano e dice quali contenuti avanzano, l'indice va sul
         // disco, e solo un indice già scritto autorizza a togliere i blob. Se
-        // `write_index` fallisce si esce di qui con tutti i contenuti al loro
-        // posto e un indice vecchio che li nomina tutti: si perde la potatura,
-        // non una versione. Stessa forma di `rename`, stessa ragione di
-        // `trasloca` — vedi il commento là.
-        let potati = inner.prune(id, host);
-        inner.write_meta(id, host)?;
-        inner.write_index(host)?;
+        // `applica` fallisce si esce di qui con tutti i contenuti al loro posto
+        // e un indice vecchio che li nomina tutti: si perde la potatura, non
+        // una versione. Stessa forma di `rename`, stessa ragione di `trasloca`
+        // — vedi il commento là.
+        let potati = pota(&mut piano, id, host);
+        inner.applica(piano, id, host)?;
         if !potati.is_empty() {
             tracing::info!(
                 target: "fub.versioning",
@@ -444,10 +446,10 @@ impl VersionStore {
         let esistente = inner.docs.get(to.as_str()).cloned();
         let trasloco = trasloca(&doc, from, esistente.as_ref(), to, host)?;
         // Da qui l'indice si muove, e si muove su contenuti già al loro posto.
-        inner.docs.remove(from.as_str());
-        inner.docs.insert(to.to_string(), trasloco.doc);
-        inner.write_meta(to, host)?;
-        inner.write_index(host)?;
+        let mut piano = inner.docs.clone();
+        piano.remove(from.as_str());
+        piano.insert(to.to_string(), trasloco.doc);
+        inner.applica(piano, to, host)?;
         // Ultimo ciò che resta indietro: è spazio sprecato, non una bugia, e
         // non vale la pena di far fallire un rename già andato a buon fine.
         spazza(&trasloco.da_ripulire, host);
@@ -463,15 +465,17 @@ impl VersionStore {
     pub fn tombstone(&self, id: &DocId, host: &mut dyn HostApi) -> Result<(), PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         let now = host.now_unix_millis();
-        let Some(doc) = inner.docs.get_mut(id.as_str()) else {
+        let Some(doc) = inner.docs.get(id.as_str()) else {
             return Ok(());
         };
         if doc.deleted_at.is_some() {
             return Ok(());
         }
-        doc.deleted_at = Some(now);
-        inner.write_meta(id, host)?;
-        inner.write_index(host)
+        let mut piano = inner.docs.clone();
+        if let Some(doc) = piano.get_mut(id.as_str()) {
+            doc.deleted_at = Some(now);
+        }
+        inner.applica(piano, id, host)
     }
 
     /// Questo documento risulta cancellato?
@@ -558,9 +562,13 @@ impl Inner {
     /// impossibile — si prende la successiva libera. Meglio un nome brutto che
     /// due storie mescolate.
     ///
-    /// Non crea niente: le directory intermedie nascono alla prima scrittura,
-    /// e uno store senza contenuti non deve lasciare cartelle vuote in giro.
-    fn ensure_dir(&mut self, id: &DocId, host: &dyn HostApi) -> Result<String, PluginError> {
+    /// Non crea niente — né sul disco né in memoria: le directory intermedie
+    /// nascono alla prima scrittura, uno store senza contenuti non deve
+    /// lasciare cartelle vuote in giro, e il nome trovato entra nell'anagrafe
+    /// solo passando per [`Inner::applica`]. Prenotarlo qui vorrebbe dire
+    /// lasciare in memoria, dopo un salvataggio fallito, un documento che il
+    /// disco non ha mai visto.
+    fn dir_per(&self, id: &DocId, host: &dyn HostApi) -> Result<String, PluginError> {
         if let Some(doc) = self.docs.get(id.as_str()) {
             if !doc.dir.is_empty() {
                 return Ok(doc.dir.clone());
@@ -578,7 +586,6 @@ impl Inner {
                 Some(meta) => meta.doc_id == id.as_str(),
             };
             if libera {
-                self.docs.entry(id.to_string()).or_default().dir = nome.clone();
                 return Ok(nome);
             }
         }
@@ -590,7 +597,7 @@ impl Inner {
     /// ma sovrascriversi a vicenda no — e se l'orologio torna indietro fra due
     /// salvataggi (NTP, fuso, VM), `versions` deve restare ordinato per tempo:
     /// è dato persistito, e su di esso ragionano "attuale" in `list` e la
-    /// protezione della più recente in `prune`.
+    /// protezione della più recente in [`pota`].
     fn free_ts(&self, id: &DocId, host: &dyn HostApi) -> u64 {
         let ts = host.now_unix_millis();
         let minimo = self
@@ -601,94 +608,127 @@ impl Inner {
         ts.max(minimo)
     }
 
-    /// Applica le fasce di ritenzione (D6) all'elenco in memoria e **restituisce
-    /// i contenuti che avanzano**, senza cancellarne nessuno.
+    /// Rende vero sul disco lo stato che i documenti **avranno**, e solo se il
+    /// disco l'ha accettato lo installa in memoria.
     ///
-    /// Non cancella perché non può saperlo: finché l'indice potato non è sul
-    /// disco, i blob che qui risultano di troppo sono ancora nominati
-    /// dall'indice che c'è, e toglierli lo renderebbe bugiardo. Li spazza chi
-    /// chiama, dopo [`Inner::write_index`], con [`spazza`]. La direzione
-    /// innocua dell'errore è il blob orfano — costa spazio; quella rovinosa è
-    /// l'indice che nomina un contenuto sparito, che rompe ogni
-    /// [`VersionStore::read`].
-    #[must_use = "sono i contenuti da spazzare dopo aver scritto l'indice"]
-    fn prune(&mut self, id: &DocId, host: &dyn HostApi) -> Vec<String> {
-        let ora = host.now_unix_millis();
-        let Some(doc) = self.docs.get(id.as_str()) else {
-            return Vec::new();
+    /// È il posto **unico** in cui `Inner::docs` cambia, ed è la ragione per
+    /// cui [`Inner::dir_per`] e [`pota`] lavorano su un piano invece che sullo
+    /// stato vivo: la mutazione qui è il *prodotto* della scrittura riuscita,
+    /// non il suo presupposto. Nella forma opposta — muta, poi persisti col
+    /// `?` — un disco che dice di no lascia la memoria avanti di un passo, e
+    /// non c'è nessun ramo d'errore da ricordarsi di scrivere: chi aggiunge un
+    /// campo a [`DocVersions`] eredita l'ordine giusto senza saperlo.
+    ///
+    /// Il `meta.json` va **prima** dell'indice perché l'autorità è l'indice
+    /// (vedi [`VersionStore::open`]: si ricostruisce dai meta solo quando
+    /// l'indice manca o è illeggibile). Se il meta passa e l'indice no, il
+    /// disco resta com'era per chi lo legge, e la memoria pure: concordano.
+    /// L'ordine inverso lascerebbe un'autorità avanti e una memoria indietro.
+    fn applica(
+        &mut self,
+        piano: BTreeMap<String, DocVersions>,
+        meta_di: &DocId,
+        host: &mut dyn HostApi,
+    ) -> Result<(), PluginError> {
+        if let Some(doc) = piano.get(meta_di.as_str()) {
+            scrivi_meta(meta_di, doc, host)?;
+        }
+        scrivi_index(&piano, host)?;
+        self.docs = piano;
+        Ok(())
+    }
+}
+
+fn scrivi_meta(id: &DocId, doc: &DocVersions, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    let meta = Meta {
+        doc_id: id.to_string(),
+        deleted_at: doc.deleted_at,
+    };
+    let raw = serde_json::to_vec(&meta).map_err(|e| {
+        PluginError::Internal(Text::message(
+            META_UNWRITABLE,
+            vec![Arg::text(REASON, e.to_string())],
+        ))
+    })?;
+    host.data_write(&blob(&doc.dir, META_FILE), &raw)
+}
+
+fn scrivi_index(
+    docs: &BTreeMap<String, DocVersions>,
+    host: &mut dyn HostApi,
+) -> Result<(), PluginError> {
+    let index = Index {
+        schema_version: SCHEMA_VERSION,
+        docs: docs.clone(),
+    };
+    let raw = serde_json::to_vec(&index).map_err(|e| {
+        PluginError::Internal(Text::message(
+            INDEX_UNWRITABLE,
+            vec![Arg::text(REASON, e.to_string())],
+        ))
+    })?;
+    host.data_write(INDEX_FILE, &raw)
+}
+
+/// Applica le fasce di ritenzione (D6) all'elenco **del piano** e
+/// **restituisce i contenuti che avanzano**, senza cancellarne nessuno.
+///
+/// Non cancella perché non può saperlo: finché l'indice potato non è sul disco,
+/// i blob che qui risultano di troppo sono ancora nominati dall'indice che c'è,
+/// e toglierli lo renderebbe bugiardo. Li spazza chi chiama, dopo
+/// [`Inner::applica`], con [`spazza`]. La direzione innocua dell'errore è il
+/// blob orfano — costa spazio; quella rovinosa è l'indice che nomina un
+/// contenuto sparito, che rompe ogni [`VersionStore::read`].
+///
+/// Pota il **piano** e non lo stato vivo per la stessa ragione: assottigliare
+/// l'elenco in memoria e poi non riuscire a scrivere l'indice toglierebbe da
+/// sotto gli occhi versioni che sul disco ci sono ancora.
+#[must_use = "sono i contenuti da spazzare dopo aver scritto l'indice"]
+fn pota(docs: &mut BTreeMap<String, DocVersions>, id: &DocId, host: &dyn HostApi) -> Vec<String> {
+    let ora = host.now_unix_millis();
+    let Some(doc) = docs.get(id.as_str()) else {
+        return Vec::new();
+    };
+    let mut tenute: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
+    let mut fasce_viste: Vec<(u8, u64)> = Vec::new();
+    // Dalla più recente: dentro ogni fascia vince la più recente.
+    for (i, v) in doc.versions.iter().rev().enumerate() {
+        let eta = ora.saturating_sub(v.ts);
+        // La più recente non si pota mai: è la versione che rappresenta lo
+        // stato attuale della nota, anche se la nota è ferma da un anno.
+        let chiave = if i == 0 || eta < FASCIA_TUTTO {
+            None
+        } else if eta < FASCIA_ORARIA {
+            Some((1, v.ts / MS_ORA))
+        } else if eta < FASCIA_GIORNALIERA {
+            Some((2, v.ts / MS_GIORNO))
+        } else {
+            continue; // oltre l'ultima fascia: non si conserva
         };
-        let mut tenute: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
-        let mut fasce_viste: Vec<(u8, u64)> = Vec::new();
-        // Dalla più recente: dentro ogni fascia vince la più recente.
-        for (i, v) in doc.versions.iter().rev().enumerate() {
-            let eta = ora.saturating_sub(v.ts);
-            // La più recente non si pota mai: è la versione che rappresenta lo
-            // stato attuale della nota, anche se la nota è ferma da un anno.
-            let chiave = if i == 0 || eta < FASCIA_TUTTO {
-                None
-            } else if eta < FASCIA_ORARIA {
-                Some((1, v.ts / MS_ORA))
-            } else if eta < FASCIA_GIORNALIERA {
-                Some((2, v.ts / MS_GIORNO))
-            } else {
-                continue; // oltre l'ultima fascia: non si conserva
-            };
-            if let Some(chiave) = chiave {
-                if fasce_viste.contains(&chiave) {
-                    continue;
-                }
-                fasce_viste.push(chiave);
+        if let Some(chiave) = chiave {
+            if fasce_viste.contains(&chiave) {
+                continue;
             }
-            tenute.push(*v);
+            fasce_viste.push(chiave);
         }
-        tenute.reverse();
-        if tenute.len() == doc.versions.len() {
-            return Vec::new();
-        }
-
-        let dir = doc.dir.clone();
-        let avanzati: Vec<String> = doc
-            .versions
-            .iter()
-            .filter(|v| !tenute.iter().any(|t| t.ts == v.ts))
-            .map(|v| blob(&dir, &snapshot_name(v.ts, id.as_str())))
-            .collect();
-        if let Some(doc) = self.docs.get_mut(id.as_str()) {
-            doc.versions = tenute;
-        }
-        avanzati
+        tenute.push(*v);
+    }
+    tenute.reverse();
+    if tenute.len() == doc.versions.len() {
+        return Vec::new();
     }
 
-    fn write_meta(&self, id: &DocId, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let Some(doc) = self.docs.get(id.as_str()) else {
-            return Ok(());
-        };
-        let meta = Meta {
-            doc_id: id.to_string(),
-            deleted_at: doc.deleted_at,
-        };
-        let raw = serde_json::to_vec(&meta).map_err(|e| {
-            PluginError::Internal(Text::message(
-                META_UNWRITABLE,
-                vec![Arg::text(REASON, e.to_string())],
-            ))
-        })?;
-        host.data_write(&blob(&doc.dir, META_FILE), &raw)
+    let dir = doc.dir.clone();
+    let avanzati: Vec<String> = doc
+        .versions
+        .iter()
+        .filter(|v| !tenute.iter().any(|t| t.ts == v.ts))
+        .map(|v| blob(&dir, &snapshot_name(v.ts, id.as_str())))
+        .collect();
+    if let Some(doc) = docs.get_mut(id.as_str()) {
+        doc.versions = tenute;
     }
-
-    fn write_index(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let index = Index {
-            schema_version: SCHEMA_VERSION,
-            docs: self.docs.clone(),
-        };
-        let raw = serde_json::to_vec(&index).map_err(|e| {
-            PluginError::Internal(Text::message(
-                INDEX_UNWRITABLE,
-                vec![Arg::text(REASON, e.to_string())],
-            ))
-        })?;
-        host.data_write(INDEX_FILE, &raw)
-    }
+    avanzati
 }
 
 /// Toglie dallo store contenuti che l'indice **già scritto** non nomina più.
@@ -696,8 +736,8 @@ impl Inner {
 /// È il posto unico in cui il versioning cancella un blob, e non rende un
 /// errore di proposito: qui si arriva solo a indice persistito, e a quel punto
 /// un contenuto che non se ne va è spazio sprecato — non una bugia. Chiamarla
-/// prima di [`Inner::write_index`] è l'inversione che rompe tutto, ed è la
-/// ragione per cui [`Inner::prune`] restituisce path invece di cancellarli.
+/// prima di [`Inner::applica`] è l'inversione che rompe tutto, ed è la
+/// ragione per cui [`pota`] restituisce path invece di cancellarli.
 fn spazza(paths: &[String], host: &mut dyn HostApi) {
     for path in paths {
         if let Err(e) = host.data_remove(path) {
@@ -1502,7 +1542,7 @@ mod tests {
         assert_eq!(versioni.len(), 2);
         // `versions` è dato persistito e deve restare ordinato per tempo:
         // su di esso ragionano "attuale" in `list` e la protezione della più
-        // recente in `prune`.
+        // recente in `pota`.
         assert!(
             versioni[0].ts > versioni[1].ts,
             "la versione nuova deve avere ts maggiore anche a orologio arretrato: {versioni:?}"
@@ -1779,9 +1819,8 @@ mod tests {
         assert_eq!(rimasti, attesi, "un blob potato è rimasto nello store");
     }
 
-    /// La forma «muta lo stato, poi persisti col `?`» giudicata sul ramo che
-    /// conta: la potatura decide di buttare qualcosa e la scrittura dell'indice
-    /// non riesce.
+    /// La potatura giudicata sul ramo che conta: decide di buttare qualcosa e
+    /// la scrittura dell'indice non riesce.
     ///
     /// Ciò che non deve succedere è che sul disco resti un indice che nomina
     /// versioni già cancellate — `read` fallirebbe su ognuna, e il versioning
@@ -1826,6 +1865,132 @@ mod tests {
                 v.ts
             );
         }
+    }
+
+    /// Porta una nota cestinata fino all'orlo della resurrezione, poi nega al
+    /// disco **una** delle due scritture dell'anagrafe e chiede il salvataggio
+    /// che la riporterebbe in vita col contenuto identico (il ramo del dedup,
+    /// dove non c'è nessun blob da scrivere e l'unica cosa che cambia è il
+    /// tombstone). Rende ciò che memoria e disco dicono, in quest'ordine.
+    fn resurrezione_negata(nega: impl Fn(&MemoryHost, &str)) -> (bool, bool) {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
+        store.tombstone(&id("a.md"), &mut host).unwrap();
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+
+        nega(&host, &dir);
+        host.avanza(1_000);
+        assert!(
+            store.snapshot(&id("a.md"), "identico", &mut host).is_err(),
+            "una scrittura negata non è un successo"
+        );
+
+        let in_memoria = store.is_deleted(&id("a.md"));
+        let sul_disco = VersionStore::open(&mut host)
+            .unwrap()
+            .is_deleted(&id("a.md"));
+        (in_memoria, sul_disco)
+    }
+
+    /// La forma «muta lo stato, poi persisti col `?`» — quella che [`Inner::applica`]
+    /// toglie di mezzo — giudicata sul campo che l'utente vede: il tombstone.
+    ///
+    /// Ciò che non deve succedere è che la nota torni viva **solo in memoria**:
+    /// l'app la mostrerebbe ripristinata, il disco continuerebbe a dirla
+    /// cestinata, e al riavvio sarebbe di nuovo nel cestino senza che nessuno
+    /// abbia detto perché. Vale per tutte e due le scritture dell'anagrafe —
+    /// il `meta.json` della cartella e l'indice — perché a fallire può essere
+    /// l'una o l'altra.
+    #[test]
+    fn a_resurrection_the_disk_refuses_leaves_the_note_dead_in_memory_too() {
+        for (chi, nega) in [
+            (
+                "meta.json",
+                &(|host: &MemoryHost, dir: &str| host.nega_scrittura(&blob(dir, META_FILE)))
+                    as &dyn Fn(&MemoryHost, &str),
+            ),
+            ("l'indice", &|host: &MemoryHost, _: &str| {
+                host.nega_scrittura(INDEX_FILE)
+            }),
+        ] {
+            let (in_memoria, sul_disco) = resurrezione_negata(nega);
+            assert!(
+                in_memoria,
+                "{chi} ha detto di no e la memoria è andata avanti da sola: \
+                 mostra viva una nota che al riavvio è di nuovo cestinata"
+            );
+            assert_eq!(
+                in_memoria, sul_disco,
+                "{chi} ha detto di no e memoria e disco raccontano due storie diverse"
+            );
+        }
+    }
+
+    /// L'altro verso: un presidio che guarda solo il ramo d'errore è cieco a
+    /// una riparazione che impedisce anche alla resurrezione riuscita di
+    /// arrivare sul disco.
+    #[test]
+    fn a_resurrection_the_disk_accepts_is_alive_in_memory_and_on_disk() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
+        store.tombstone(&id("a.md"), &mut host).unwrap();
+
+        host.avanza(1_000);
+        store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
+
+        assert!(!store.is_deleted(&id("a.md")), "la nota è tornata viva");
+        // Riaperto, e non da zero: uno store che sul disco non ha trovato
+        // niente direbbe «non cancellata» anche di una nota che non conosce,
+        // e il banco passerebbe a vuoto.
+        let riaperto = VersionStore::open(&mut host).unwrap();
+        assert_eq!(
+            riaperto.list(&id("a.md")).len(),
+            1,
+            "il disco non sa niente di questa nota: la domanda sul tombstone non vuol dire nulla"
+        );
+        assert!(
+            !riaperto.is_deleted(&id("a.md")),
+            "viva in memoria e cestinata sul disco: al riavvio risorge il cestino"
+        );
+    }
+
+    /// La stessa forma sull'altro verso del tombstone: chi lo posa lo eredita
+    /// gratis, senza nessun ramo d'errore da ricordarsi di scrivere.
+    #[test]
+    fn a_tombstone_the_disk_refuses_leaves_the_note_alive_in_memory_too() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
+
+        host.nega_scrittura(INDEX_FILE);
+        host.avanza(1_000);
+        assert!(store.tombstone(&id("a.md"), &mut host).is_err());
+
+        assert!(
+            !store.is_deleted(&id("a.md")),
+            "la memoria l'ha già sepolta e il disco no: il cestino si svuota al riavvio"
+        );
+        assert!(!VersionStore::open(&mut host)
+            .unwrap()
+            .is_deleted(&id("a.md")));
+    }
+
+    /// E un salvataggio che non arriva sul disco non lascia in memoria un
+    /// documento che il disco non ha mai visto: la cartella si sceglie
+    /// leggendo, si registra scrivendo.
+    #[test]
+    fn a_snapshot_the_disk_refuses_does_not_invent_a_document() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        host.nega_scrittura(INDEX_FILE);
+
+        assert!(store.snapshot(&id("a.md"), "contenuto", &mut host).is_err());
+        assert!(
+            store.documents().is_empty(),
+            "l'anagrafe nomina un documento che sul disco non esiste"
+        );
     }
 
     #[test]
