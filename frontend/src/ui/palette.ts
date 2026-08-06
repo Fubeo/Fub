@@ -21,6 +21,7 @@ import type {
   CommandOutcome,
   CommandPlan,
   CommandSpec,
+  ParamKind,
   ParamSpec,
 } from "../host/contract";
 import { pageName } from "../rules/organizer";
@@ -147,45 +148,76 @@ export function scopeLabel(spec: CommandSpec): string {
 
 /// Gli argomenti JSON a partire da ciò che l'utente ha compilato.
 ///
-/// Un campo lasciato vuoto di un parametro **non obbligatorio** non viene
-/// mandato: assente e vuoto sono cose diverse (per `docs`, assente = tutto il
-/// vault, elenco vuoto = nessuna nota), e la palette non ha modo di esprimere
-/// la seconda — quindi dice la prima invece di inventare.
+/// **Un parametro non obbligatorio lasciato com'era non si manda**, di
+/// qualunque specie sia: assente e vuoto sono cose diverse (per `docs`, assente
+/// = tutto il vault, elenco vuoto = nessuna nota), e la palette non ha modo di
+/// esprimere la seconda — quindi dice la prima invece di inventare.
+///
+/// La regola è **questa riga**, e sta qui e non in un ramo per specie perché
+/// era il ramo per specie a farla saltare: il booleano scriveva `false` anche
+/// per una casella mai spuntata, cioè decideva al posto del comando. E a
+/// decidere cosa succede quando un parametro facoltativo manca è il comando,
+/// che è l'unico a saperlo — il contratto lo scrive accanto a
+/// [`ParamSpec::required`], dove rifiuta esplicitamente di avere un default
+/// («un default qui sarebbe una seconda verità accanto alla sua»).
+///
+/// [`ParamSpec::required`]: ../../../crates/fub-abi/src/command.rs
 export function argsFromForm(
   spec: CommandSpec,
   raw: Record<string, string | boolean>,
 ): Record<string, unknown> {
   const args: Record<string, unknown> = {};
   for (const param of spec.params) {
-    const value = raw[param.name];
-    switch (param.kind.kind) {
-      case "bool":
-        args[param.name] = value === true || value === "true";
-        break;
-      case "number": {
-        const n = Number(String(value ?? "").trim());
-        if (String(value ?? "").trim() !== "" && !Number.isNaN(n)) args[param.name] = n;
-        break;
-      }
-      case "documents": {
-        const ids = String(value ?? "")
-          .split(/[\n,]/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-        if (ids.length > 0) args[param.name] = ids;
-        break;
-      }
-      default: {
-        const s = String(value ?? "");
-        // Un testo obbligatorio si manda com'è, anche vuoto: `replace: ""`
-        // cancella le occorrenze, ed è una richiesta legittima. È il comando a
-        // sapere se il vuoto ha senso per lui.
-        if (s !== "" || param.required) args[param.name] = s;
-        break;
-      }
-    }
+    const letto = leggiParametro(param.kind, raw[param.name]);
+    if (letto === null) continue;
+    if (letto.vuoto && !param.required) continue;
+    args[param.name] = letto.value;
   }
   return args;
+}
+
+/// Cosa c'è nel campo di questa specie, e se è **il suo vuoto**.
+///
+/// Le due cose insieme, e nessuna terza: chi aggiunge una specie di parametro
+/// dice come si legge e cos'è il vuoto, e la regola di quando si manda la
+/// eredita senza toccarla.
+///
+/// `null` = non si è letto niente di sensato — un numero che non è un numero —
+/// e quello non si manda **mai**, nemmeno obbligatorio: un `NaN` al posto di un
+/// argomento mancante toglie al comando l'unico errore che dice cosa manca.
+function leggiParametro(
+  kind: ParamKind,
+  raw: string | boolean | undefined,
+): { value: unknown; vuoto: boolean } | null {
+  switch (kind.kind) {
+    case "bool": {
+      // Una casella non spuntata **è** il vuoto di un booleano: nella palette
+      // non c'è modo di dire «falso per scelta» diverso da «lasciata com'era»,
+      // e inventarne uno vorrebbe dire scrivere un default che non è nostro.
+      const spuntata = raw === true || raw === "true";
+      return { value: spuntata, vuoto: !spuntata };
+    }
+    case "number": {
+      const testo = String(raw ?? "").trim();
+      if (testo === "") return { value: 0, vuoto: true };
+      const n = Number(testo);
+      return Number.isNaN(n) ? null : { value: n, vuoto: false };
+    }
+    case "documents": {
+      const ids = String(raw ?? "")
+        .split(/[\n,]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      return { value: ids, vuoto: ids.length === 0 };
+    }
+    default: {
+      // Un testo obbligatorio si manda com'è, anche vuoto: `replace: ""`
+      // cancella le occorrenze, ed è una richiesta legittima. È il comando a
+      // sapere se il vuoto ha senso per lui.
+      const s = String(raw ?? "");
+      return { value: s, vuoto: s === "" };
+    }
+  }
 }
 
 // Il riconoscimento di un accordo — `matchesBinding`, `findByChord` — sta in
