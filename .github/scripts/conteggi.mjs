@@ -522,4 +522,19 @@ export const CONTEGGI = [
       "direbbe «non ha contato» invece di «zero».",
     comando: "grep -c '^| \\*\\*§' docs/todo.md || true",
   },
+  {
+    nome: "difetti-aperti",
+    ragione:
+      "I difetti misurati ancora aperti: le righe della tabella «I difetti " +
+      "misurati» di `todo.md`. È la **terza specie** di lavoro che quel file " +
+      "tiene, e ha un conto suo per la stessa ragione per cui *Caselle* ha una " +
+      "colonna separata da *Voci* — un difetto non chiede una decisione e non è " +
+      "il residuo di un verbale, quindi sommarlo alle altre due darebbe un " +
+      "numero che non risponde a nessuna domanda. Conta la riga e non l'id " +
+      "perché gli id **non scalano**: vengono da `issues.md` e sono citati dai " +
+      "verbali, quindi la sequenza ha buchi e l'ultimo numero non dice quanti " +
+      "sono. Il `|| true` è quello di `voci-aperte`, per la stessa ragione: " +
+      "zero difetti aperti è la cosa che questo conto deve poter dire.",
+    comando: "grep -c '^| 00[0-9][0-9] |' docs/todo.md || true",
+  },
 ];
