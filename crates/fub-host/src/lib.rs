@@ -106,7 +106,7 @@ pub use runner::{InCorso, JobRunner, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use vaults::{VaultEntry, VaultRegistry};
-pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
+pub use watcher::{ExternalChange, ExternalSync, NoWatcher, VaultWatcher, WatcherFactory};
 
 #[cfg(feature = "notify-watcher")]
 pub use watcher::NotifyWatcher;

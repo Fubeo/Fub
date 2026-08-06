@@ -437,15 +437,6 @@ sbagliato. Otto delle quattordici affermazioni ricevute erano false o già
 risolte in codice, e non stanno qui: la loro smentita sta nel resoconto della
 verifica, non in un elenco di lavoro.
 
-- [ ] **Il lucchetto esclusivo del watcher tiene dentro il disco**
-  (`crates/fub-host/src/watcher.rs`). Il lotto prende `workspace.write()` e
-  sotto quel lucchetto fa il parse di ogni file cambiato **e** `flush_indexes()`,
-  che scrive gli indici sul disco. Chi legge — ricerca, autocompletamento, il
-  disegno dei pannelli — aspetta la fine di un'I/O che non ha niente a che fare
-  con lui, e su un vault grande la sincronizzazione da fuori si vede come una
-  pausa dell'interfaccia. La regola della [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
-  è esattamente questa, applicata qui: mutare in memoria sotto il lucchetto,
-  rilasciarlo, rendere durevole fuori.
 - [ ] **Che il vault avvelenato uccida l'applicazione è una scelta, e non è stata
   fatta** (`crates/fub-app/src/lib.rs`, `crates/fub-host/src/watcher.rs`,
   `crates/fub-host/src/runner.rs`). Il runner scrive `.expect("workspace
@@ -479,7 +470,7 @@ verifica, non in un elenco di lavoro.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centodiciotto** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centodiciannove** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue
