@@ -113,6 +113,16 @@ export interface HostFinto {
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
   rinominaDaFuori(da: string, a: string): void;
+  /// Tiene in volo ciò che una porta risponde, finché non si chiama ciò che
+  /// torna.
+  ///
+  /// È il modo di **costruire** una corsa invece di aspettarla: un tempo non è
+  /// un segnale, e due `setTimeout` che si sperano nell'ordine giusto sono un
+  /// banco che passa verde su una macchina scarica. Con questo l'ordine di
+  /// arrivo lo scrive il banco — è la stessa forma della finta scrittura di
+  /// `state/salvataggio.test.ts`, portata sul confine invece che sul modulo.
+  frena(porta: string): () => void;
+
   /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
   ///
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
@@ -143,8 +153,17 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
+  /// I freni accesi, per nome di porta: finché la promessa non si risolve, ciò
+  /// che quella porta risponde resta in volo.
+  const freni = new Map<string, Promise<void>>();
+
   function porta<T>(nome: string, args: unknown[], esito: T): T {
     chiamate.push({ porta: nome, args });
+    const freno = freni.get(nome);
+    // La chiamata è **già registrata**: un banco che aspetta «la scrittura è
+    // partita» deve vederla partire anche mentre è frenata, o non avrebbe modo
+    // di far cominciare la seconda.
+    if (freno && esito instanceof Promise) return freno.then(() => esito) as T;
     return esito;
   }
 
@@ -491,6 +510,19 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
     cestino: () => [...cestino].map(([id, d]) => ({ id, originale: d.originale })),
     chiamate,
     aPorta: (nome) => chiamate.filter((c) => c.porta === nome),
+    frena: (nome) => {
+      let sblocca!: () => void;
+      freni.set(
+        nome,
+        new Promise<void>((res) => {
+          sblocca = res;
+        }),
+      );
+      return () => {
+        freni.delete(nome);
+        sblocca();
+      };
+    },
     emetti,
   };
 }

@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0015-la-forma-della-shell.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Sette gesti, contati da fuori
+// # Dieci gesti, contati da fuori
 //
-// I gesti sono **nove** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **dieci** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -275,6 +275,49 @@ describe("scrivi", () => {
     // `dictated` che copre in silenzio ciò che c'era.
     expect(scritta.args[2]).toEqual({ kind: "descends_from", value: "r1" });
     expect(host.file()["Benvenuto.md"]).toContain("Una riga nuova.");
+  });
+});
+
+describe("due salvataggi della stessa nota", () => {
+  it("non si accavallano: chi flussa non ne fa partire un secondo", async () => {
+    // Il difetto 0030, **costruito** e non aspettato. La prima stesura di questo
+    // banco batteva due volte e sperava che i due salvataggi si sovrapponessero:
+    // passava verde anche togliendo la coda, perché il debounce di 400 ms li
+    // metteva in fila da sé. Non provava niente, ed è stato quel verde a dire
+    // dove la finestra è davvero.
+    //
+    // È qui: `flushPendingSave` — che parte a ogni cambio documento, a ogni
+    // rinomina, a ogni azione di view che scrive — chiama `saveDoc` **subito**,
+    // e il `clearTimeout` che fa prima non richiama indietro un salvataggio che
+    // il timer ha già fatto partire. Senza coda erano due scritture in volo con
+    // la **stessa** `base` letta tutte e due prima, e la seconda si prendeva un
+    // `conflict` dal kernel su un file che aveva toccato solo l'utente.
+    const host = await avvia(VAULT);
+
+    const sblocca = host.frena("writeDocument");
+    battiNellEditor("Prima battuta.");
+    await attendi("la prima scrittura parte", () => host.aPorta("writeDocument").length === 1);
+
+    // Il gesto vero che flussa: si apre un'altra nota mentre la scrittura è
+    // ancora in volo. Non si aspetta — `openDocument` è ferma dentro il flush,
+    // che è ferma dentro la scrittura frenata, ed è esattamente il momento.
+    const cartella = document.querySelector<HTMLElement>("#file-list .row.folder");
+    cartella?.click();
+    await attendi("la cartella si apre", () => righeDelleNote().length === 3);
+    void riga("Riunione").click();
+    await riposa();
+
+    // **Il momento che conta.** Senza la coda qui le scritture sono due.
+    expect(host.aPorta("writeDocument").length).toBe(1);
+
+    sblocca();
+    await attendi("la nota si apre", () => host.aPorta("readDocument").length > 1);
+    await riposa();
+
+    // Una scrittura sola, e nessun conflitto: il flush ha aspettato quella in
+    // volo invece di affiancarle una gemella con la base di prima.
+    expect(host.aPorta("writeDocument").length).toBe(1);
+    expect(host.file()["Benvenuto.md"]).toContain("Prima battuta.");
   });
 });
 

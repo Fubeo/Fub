@@ -230,3 +230,54 @@ describe("ogni superficie del contratto è classificata", () => {
     });
   }
 });
+
+describe("un rimontaggio che non riesce", () => {
+  it("non svuota la shell: si chiede prima e si smonta dopo", async () => {
+    // Il difetto 0088, e il caso che lo rende grave è quello **senza nessuna
+    // concorrenza**: un solo rigetto. Prima, `mountDeclaredViews` buttava giù
+    // pannelli, alberi, mappe e i sette contenitori, e *poi* chiedeva l'elenco;
+    // se la domanda falliva non c'era nessun `catch` da nessuna parte, e la
+    // shell restava vuota per sempre — nemmeno un riquadro poteva più riaprire
+    // una view principale, perché `viewPrincipali()` era diventata vuota.
+    listViews.mockResolvedValueOnce([spec("tags", "left_sidebar"), spec("graph", "main")]);
+    const views = await moduli();
+    await views.mountDeclaredViews();
+    const primaSidebar = document.querySelector("#views-left")!.childElementCount;
+    expect(primaSidebar).toBeGreaterThan(0);
+    expect(views.viewPrincipali().map((s) => s.id)).toEqual(["graph"]);
+
+    listViews.mockRejectedValueOnce(new Error("kernel in riavvio"));
+    await expect(views.mountDeclaredViews()).rejects.toThrow("kernel in riavvio");
+
+    // Vecchio, ma vivo: è la peggiore delle due cose che si possono avere e la
+    // migliore delle due che si possono scegliere.
+    expect(document.querySelector("#views-left")!.childElementCount).toBe(primaSidebar);
+    expect(views.viewPrincipali().map((s) => s.id)).toEqual(["graph"]);
+  });
+
+  it("due rimontaggi insieme: il vecchio non smonta ciò che il nuovo ha montato", async () => {
+    // L'altra metà del 0088, quella che un token chiude. L'ordine di arrivo lo
+    // decide il banco, non due latenze sperate.
+    const views = await moduli();
+    let risolviVecchio!: (v: ViewSpec[]) => void;
+    listViews.mockImplementationOnce(
+      () =>
+        new Promise<ViewSpec[]>((res) => {
+          risolviVecchio = res;
+        }),
+    );
+    const vecchio = views.mountDeclaredViews();
+
+    listViews.mockResolvedValueOnce([spec("tags", "left_sidebar")]);
+    await views.mountDeclaredViews();
+    const dopoIlNuovo = document.querySelector("#views-left")!.innerHTML;
+
+    // Il vecchio risponde adesso, con un elenco diverso: se arrivasse a montare,
+    // smonterebbe prima tutto ciò che il nuovo ha appena messo.
+    risolviVecchio([spec("backlinks", "left_sidebar"), spec("stats", "right_sidebar")]);
+    await vecchio;
+
+    expect(document.querySelector("#views-left")!.innerHTML).toBe(dopoIlNuovo);
+    expect(document.querySelector("#views-right")!.childElementCount).toBe(0);
+  });
+});

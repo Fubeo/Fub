@@ -197,7 +197,30 @@ const NON_OSPITATE: Record<string, string> = {
 /// Si riparte da zero a ogni vault aperto: i provider registrati possono essere
 /// altri, e una view rimasta nel registro sarebbe un pannello che chiede di
 /// ridisegnarsi a un provider che non c'è più.
+/// I rimontaggi, di cui conta solo l'ultimo: due aperture di vault ravvicinate
+/// smontano e rimontano tutto due volte, e senza un padrone la prima
+/// finirebbe di montare dentro un mondo che la seconda ha appena svuotato.
+const corsaDelMontaggio = new Corsa();
+
 export async function mountDeclaredViews(): Promise<void> {
+  // **Si chiede prima, si smonta dopo**, ed è il difetto 0088: l'ordine di
+  // prima buttava giù tutto — pannelli, alberi, le due mappe, i sette
+  // contenitori, il nome della superficie modale — e *poi* chiedeva l'elenco.
+  // Se la domanda falliva, e basta un vault che si apre male o un kernel che si
+  // sta riavviando, non c'era nessun `catch` da nessuna parte: la shell restava
+  // vuota, `viewPrincipali()` tornava una lista vuota, e quindi nemmeno un
+  // riquadro poteva più riaprire una view principale. Nessuna concorrenza,
+  // nessun token: un solo rigetto, e non c'era niente da cui tornare indietro.
+  //
+  // Chiedere prima toglie il caso alla radice invece di ripararlo: se la
+  // domanda non risponde, ciò che c'è sullo schermo è vecchio ma **vivo**, che
+  // è la peggiore delle due cose che si possono avere e la migliore delle due
+  // che si possono scegliere.
+  const specs = await corsaDelMontaggio.ultimo(async (atteso) => await atteso(api.listViews()));
+  // Il giro è scaduto: un rimontaggio più nuovo sta già lavorando, e questo non
+  // deve smontare ciò che quello ha montato.
+  if (!specs) return;
+
   for (const [id, montata] of montate) {
     unregisterPanel(id);
     unmountTree(montata.container);
@@ -222,7 +245,6 @@ export async function mountDeclaredViews(): Promise<void> {
   // l'`aria-label` di ripiego che `index.html` porta di suo.
   viewsModalEl.removeAttribute("aria-labelledby");
 
-  const specs = await api.listViews();
   // L'ordine fra le view di una stessa superficie lo dichiara la view (§2.6);
   // i pari merito restano nell'ordine di registrazione, che è ciò che
   // `sort` stabile garantisce.

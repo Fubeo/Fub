@@ -191,7 +191,7 @@ solo ha lo stesso difetto in un altro travestimento.
       rispondere). I gesti erano **sette** e non cinque, perché «rinomina» ne è
       due — quella che chiede questa finestra e quella che arriva da fuori — ed
       è la seconda quella in cui il difetto c'era; adesso sono
-      **nove** [conta: gesti-della-shell], perché la
+      **dieci** [conta: gesti-della-shell], perché la
       [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
       ne ha aggiunti due sulle scorciatoie.
       Due difetti veri, tutti e due nel cablaggio, che è la classe che la
