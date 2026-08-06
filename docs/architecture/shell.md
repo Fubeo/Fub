@@ -322,7 +322,11 @@ l'area principale è un albero di riquadri, ognuno con le sue tab e la sua
 modalità, e la finestra si ricorda com'era. Restano queste, che sono altre voci:
 
 - **I workspace salvati con un nome.** La casa è decisa — nel vault, come le
-  note e le scorciatoie ([0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)),
+  note e le scorciatoie dei comandi del kernel
+  ([0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md); quelle dei
+  comandi **della shell** stanno nella macchina, perché un comando di shell
+  esiste prima di ogni vault —
+  [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)),
   perché li ha creati l'utente apposta — e il formato aspetta di vedere assetti
   veri. È l'altra metà della distinzione che la 0078 ha fatto: *com'era aperta
   la finestra* non ha un nome ed è stato di vista (file della macchina), *un

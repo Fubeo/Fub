@@ -15,7 +15,7 @@
 import { describe, expect, it } from "vitest";
 import kernelKeys from "../__fixtures__/command-keys.json";
 import { conflitti, normalizza, prefissiOscurati, type CommandEntry } from "./commands";
-import { SHELL_KEYS } from "./shell-keys";
+import { SHELL_KEYS } from "./shell-keys.generated";
 
 /// Una voce come la vedono `conflitti` e la tastiera. Titolo e descrizione sono
 /// l'id perché qui non si legge testo: si contano accordi, e un id dice meglio

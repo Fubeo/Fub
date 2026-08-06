@@ -29,9 +29,11 @@ verbali di fila) — e **due** da una
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centotrentadue sono
-chiuse e i loro verbali stanno in [decisions/](decisions/README.md); l'altra
-una [conta: voci-aperte] è qui, e questo file è il loro **indice**.
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centotrentatré sono
+chiuse — **tutte** — e i loro verbali stanno in
+[decisions/](decisions/README.md); le voci ancora aperte sono
+**zero** [conta: voci-aperte], e questo file resta il loro **indice** e il
+consuntivo di come sono finite.
 
 ## Come è organizzato
 
@@ -219,7 +221,7 @@ che questo piano passa il tempo a togliere dal codice.
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | la stessa domanda a tre distanze: l'identità, ciò che le sta attaccato, la sua storia | — | — |
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | lo stesso lavoro visto da quattro lati: entry, metadati, cartelle, lista | — | 3 |
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | — | 3 |
-| **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 1 | 1 |
+| **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | **chiusa** — i banchi e i confini fra crate, **prima** di ciò che li moltiplica; l'ultima voce è andata via lasciando la casella che una condizione tiene fuori | — | 2 |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | **chiusa** — senza precedenze e senza scadenza: il criterio è se il costo cresce con l'attesa, e su una voce ha deciso in tre pezzi invece che in due | — | 2 |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | **chiusa** — definita per esclusione: ciò che resta della shell e non appartiene a nessuna delle sedute sopra, code delle sedute 1-4 comprese | — | 4 |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: rimandi ai quattro giri di audit, e il lavoro sta nelle sedute che li hanno assorbiti | — | 2 |
@@ -230,7 +232,11 @@ che questo piano passa il tempo a togliere dal codice.
 
 ## Le voci
 
-Una [conta: voci-aperte]. Il numero è quello con cui la nomina il resto del repo.
+**Zero** [conta: voci-aperte]: la tabella è vuota, ed è così che si sa che la
+roadmap infrastrutturale di M4 è finita. Il numero di ogni voce resta quello con
+cui la nomina il resto del repo, e si ritrova in
+[decisions/](decisions/README.md) e nella
+[corrispondenza](roadmap/numerazione.md).
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -242,7 +248,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-una [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+**zero** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -251,8 +257,10 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-La colonna *Voci* somma **una** [conta: voci-aperte], e le **sedute 18, 20 e 23
-sono a zero**. Della 20 non resta nemmeno una casella: si è chiusa con la
+La colonna *Voci* somma **zero** [conta: voci-aperte]: **ogni** seduta è a zero,
+e l'ultima ad arrivarci è la 16, con la
+[0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md).
+Della 20 non resta nemmeno una casella: si è chiusa con la
 [0111](decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), l'ultima delle cinque
 voci nate dalla domanda «cosa fallisce senza produrre nessun segnale». La 23 era
 diciassette voci, la più grande mai aperta qui dentro, e la sua riga resta con
@@ -263,14 +271,20 @@ una voce per volta senza mai aspettare le altre. Il taglio che a un certo punto
 sembrava servire — spezzarla per **lente**, le §23.9–§23.17 rispondono a una
 domanda più stretta delle prime otto — non è mai servito.
 
-Le caselle residue oggi sono **ventidue**, e stanno in diciassette posti:
+Le caselle residue oggi sono **ventitré**, e stanno in diciotto posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
 (tre: l'impronta degli allegati, la politica della cartella allegati, le
 derivate),
 [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
-(una: l'implementazione additiva delle due radici), il
+(una: l'implementazione additiva delle due radici), la
+[§16.3](roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature)
+(una: lo **split di `fub-features` in un crate per bundle** — l'unica casella di
+questo elenco che non aspetta qualcuno ma una **condizione**, il primo import fra
+due moduli di feature che non sia un link di documentazione, e l'unica che ha un
+guardiano che la valuta invece di una riga che la ricorda
+([0073](decisions/0073-una-condizione-che-nessuno-valuta.md))), il
 [§16.6](roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) (una: i due bespoke
 del render ancora da migrare — erano cinque fino alla
 [0075](decisions/0075-una-view-non-chiede-con-una-finestra.md) — ed è la prima
@@ -413,7 +427,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
-| **§16.3** | [Un crate per bundle di feature](roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 
 ## Gli allegati
 
@@ -425,7 +438,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centoquindici** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centosedici** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

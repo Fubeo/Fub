@@ -29,17 +29,25 @@
 // **zero**. `CommandSpec.keybinding` è una stringa dalla 0009, e una stringa con
 // uno spazio dentro ci sta senza chiedere niente a nessuno.
 //
-// Ne resta scoperta una cosa, ed è nominata nella
-// [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md): la
-// scorciatoia di un comando di shell **non è ancora riconfigurabile**, perché la
-// chiave che la terrebbe la fabbrica il kernel registrando un provider, e qui un
-// provider non c'è.
+// # E la scorciatoia di un comando di shell si riconfigura
+//
+// Fino alla [0116](../../../docs/decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
+// no, e la ragione stava nella [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md):
+// la chiave che la tiene la fabbrica il kernel registrando un `CommandProvider`,
+// e un comando che vive nella webview un provider non ce l'ha. La via d'uscita
+// non è stata dargliene uno finto — sarebbe un comando che il registro elenca e
+// non sa invocare — ma osservare che di quel provider serviva **solo** la
+// chiave: `keys.shell.*` è dichiarata dal bundle di core come le altre
+// impostazioni dell'app, e di **macchina**, perché un comando di shell esiste
+// prima di ogni vault. Da qui in poi la tabella degli accordi arriva generata
+// (`shell-keys.generated.ts`) e questo modulo non distingue più i due registri
+// se non per chi esegue.
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { impostazioni } from "../host/query";
 import { type Chiave, t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
 import { state } from "../state/store";
-import { SHELL_KEYS, type ShellCommandId } from "./shell-keys";
+import { SHELL_KEYS, type ShellCommandId } from "./shell-keys.generated";
 
 /// La chiave d'impostazione che tiene la scorciatoia di un comando.
 ///
@@ -192,7 +200,11 @@ export function allCommands(): CommandEntry[] {
     id: c.id,
     title: t(c.title),
     description: t(c.description),
-    binding: vuotoENull(SHELL_KEYS[c.id]),
+    // La stessa riga dei comandi del kernel, e da questa voce lo è per davvero
+    // (§16.3): l'accordo riconfigurato se c'è, il dichiarato se no. La chiave si
+    // compone allo stesso modo, perché la regola è una sola — cambia solo il
+    // livello in cui il valore vive, che per un comando di shell è la macchina.
+    binding: vuotoENull(overrides.get(keybindingKey(c.id)) ?? SHELL_KEYS[c.id]),
     declared: SHELL_KEYS[c.id] ?? null,
     spec: null,
     run: c.run,

@@ -442,7 +442,11 @@ export const CONTEGGI = [
       "Le voci ancora aperte del piano infrastrutturale: le righe della tabella " +
       "di `todo.md`. Il piano dichiara che «se una voce è in questa tabella è " +
       "aperta» e che una voce chiusa **sparisce** — quindi il numero non è una " +
-      "cosa da ricordare, è una cosa da contare, e finora nessuno lo faceva.",
-    comando: "grep -c '^| \\*\\*§' docs/todo.md",
+      "cosa da ricordare, è una cosa da contare, e finora nessuno lo faceva. " +
+      "Il `|| true` in coda non è pigrizia: `grep -c` esce **1** quando non " +
+      "trova niente, e zero voci aperte è la cosa che questo conto è nato per " +
+      "poter dire — senza, il giorno in cui la tabella si svuota il registro " +
+      "direbbe «non ha contato» invece di «zero».",
+    comando: "grep -c '^| \\*\\*§' docs/todo.md || true",
   },
 ];

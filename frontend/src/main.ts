@@ -198,6 +198,14 @@ async function init(): Promise<void> {
   // focus, e allora si ridisegna ciò che è appeso al contesto.
   mountLocale(() => void mountDeclaredViews());
 
+  // Gli accordi riconfigurati, **prima** di sapere se un vault c'è (§16.3).
+  // Quelli dei comandi di shell vivono nella macchina e non nel vault, quindi
+  // esistono anche adesso: senza questa riga la finestra vuota risponderebbe
+  // solo agli accordi dichiarati, cioè chi ha rimappato «Apri un vault»
+  // troverebbe la sua combinazione muta esattamente nella schermata in cui
+  // serve. Con un vault aperto la riga dopo la rifà, e costa una domanda.
+  await loadKeyOverrides();
+
   const initial = await api.initialVault();
   // Chi apre un vault ripristina anche la sua disposizione (§1.2): è là dentro
   // che si sa quale fosse. Senza vault iniziale si disegna comunque il layout di

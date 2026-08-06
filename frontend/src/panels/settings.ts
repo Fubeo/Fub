@@ -217,13 +217,17 @@ async function disegna(): Promise<void> {
 /// Le chiavi che sono **scorciatoie**, e non righe di configurazione.
 ///
 /// Non si riconoscono dal prefisso della chiave — sarebbe indovinare — ma
-/// componendole: per ogni comando che il kernel dichiara si sa quale chiave il
-/// kernel gli ha fabbricato, perché la regola è una sola e sta scritta in
-/// `keybindingKey` (§18.2). È la stessa mossa con cui questa shell riconosce
-/// qualunque altra cosa attraversi il confine: rifà il conto invece di leggere
-/// una convenzione.
+/// componendole: per ogni comando si sa quale chiave gli è stata fabbricata,
+/// perché la regola è una sola e sta scritta in `keybindingKey` (§18.2). È la
+/// stessa mossa con cui questa shell riconosce qualunque altra cosa attraversi
+/// il confine: rifà il conto invece di leggere una convenzione.
+///
+/// **Tutti i comandi**, e non più i soli comandi del kernel: da quando anche
+/// quelli della shell hanno una chiave (§16.3), un filtro su `c.spec` lascerebbe
+/// le sedici `keys.shell.*` in fondo alla scheda della configurazione, senza
+/// gruppo e con l'id per etichetta.
 function chiaviDelleScorciatoie(): Set<string> {
-  return new Set(allCommands().filter((c) => c.spec).map((c) => keybindingKey(c.id)));
+  return new Set(allCommands().map((c) => keybindingKey(c.id)));
 }
 
 async function disegnaForm(): Promise<HTMLElement[]> {
@@ -254,18 +258,29 @@ async function disegnaForm(): Promise<HTMLElement[]> {
   return nodi;
 }
 
-function disegnaRiga(entry: SettingEntry): HTMLElement {
+/// Una riga di impostazione.
+///
+/// `nome` sostituisce l'etichetta dichiarata, e c'è per una sola famiglia: le
+/// scorciatoie dei comandi **della shell** (§16.3). La loro chiave la dichiara
+/// il bundle di core, che il titolo del comando non ce l'ha — la frase la
+/// localizza chi l'ha scritta ([0040]), e chi ha scritto «Apri il pannello dei
+/// file» è questa shell. Passarlo di qua costa un parametro; portarne una copia
+/// di là costerebbe trentaquattro stringhe tradotte due volte.
+///
+/// [0040]: ../../../docs/decisions/0040-chi-localizza.md
+function disegnaRiga(entry: SettingEntry, nome?: string, descrizione?: string): HTMLElement {
   const el = document.createElement("div");
   el.className = "setting-row";
 
   const testo = document.createElement("div");
   testo.className = "setting-text";
   const label = document.createElement("label");
-  label.textContent = entry.spec.label;
+  label.textContent = nome ?? entry.spec.label;
   label.htmlFor = `setting-${entry.spec.key}`;
   testo.append(label);
-  if (entry.spec.description) {
-    testo.append(riga("muted", entry.spec.description));
+  const sotto = descrizione ?? entry.spec.description;
+  if (sotto) {
+    testo.append(riga("muted", sotto));
   }
   testo.append(riga("setting-source", provenienza(entry)));
 
@@ -500,22 +515,18 @@ async function disegnaScorciatoie(): Promise<HTMLElement[]> {
     titolo.className = "panel-title";
     titolo.textContent = t("settings.shortcuts.shell");
     nodi.push(titolo);
-    // Di sola lettura, e la ragione sta nel verbale: la chiave che le terrebbe
-    // la fabbrica il kernel registrando un `CommandProvider`, e un comando che
-    // vive nella webview un provider non ce l'ha. Mostrarle comunque è ciò che
-    // permette di sapere quali tasti sono già presi prima di rimapparne uno.
+    // **Righe come le altre**, dalla 0116: la chiave che le tiene è
+    // `keys.shell.*`, dichiarata dal bundle di core e di scope macchina perché
+    // un comando di shell esiste prima di ogni vault. Il campo di testo, la
+    // provenienza e l'«azzera» arrivano dalla stessa `disegnaRiga` di tutte le
+    // altre; quello che il pannello ci mette è il **nome**, che di là non c'è.
+    //
+    // Una riga che non arrivasse — un id in tabella che il montaggio non
+    // dichiara — si salta invece di disegnare un campo che non scrive da
+    // nessuna parte.
     for (const comando of di_shell) {
-      const el = document.createElement("div");
-      el.className = "setting-row";
-      const testo = document.createElement("div");
-      testo.className = "setting-text";
-      const label = document.createElement("label");
-      label.textContent = comando.title;
-      testo.append(label, riga("muted", comando.description));
-      const kbd = document.createElement("kbd");
-      kbd.textContent = comando.binding ?? "";
-      el.append(testo, kbd);
-      nodi.push(el);
+      const entry = per_chiave.get(keybindingKey(comando.id));
+      if (entry) nodi.push(disegnaRiga(entry, comando.title, comando.description));
     }
   }
   if (nodi.length === intestazione) nodi.push(riga("muted", t("settings.shortcuts.none")));

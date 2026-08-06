@@ -137,10 +137,17 @@ Stato delle due divisioni dichiarate dal piano:
   riusare un composition root dentro un `#[tauri::command]`. Nello stesso crate
   stanno il **registry dei bundle** ([0031](decisions/0031-chi-possiede-i-bundle.md))
   e il **runner dei job** ([0032](decisions/0032-il-runner-dei-job.md), §9.3).
-- **Da fare** — **un crate per bundle di feature** (§16.3): oggi compilare il
-  pannello outline compila un motore di ricerca. La sua precondizione — il §16.2,
-  cioè il banco condiviso — è **soddisfatta** dalla
-  [0055](decisions/0055-il-banco-del-lato-host.md).
+- **Fatta a metà, e la metà che manca ha un guardiano** — **un crate per bundle
+  di feature** (§16.3, chiusa dalla
+  [0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)):
+  compilare il pannello outline compilava un motore di ricerca, e adesso no —
+  una **cargo feature** per bundle, con tantivy dietro la sua, porta il grafo di
+  `fub-features` da 120 crate a 26 ([0071](decisions/0071-una-feature-si-spegne-dove-si-dichiara.md)).
+  Lo **split in crate** vero resta fuori, ed è l'unica forma che compri il
+  confine contro l'accoppiamento feature↔feature: si sblocca al primo import fra
+  due moduli di feature che non sia un link di documentazione, e quella
+  condizione la valuta un banco invece di una riga in italiano
+  ([0073](decisions/0073-una-condizione-che-nessuno-valuta.md)).
 
 `frontend/` è un albero, non un elenco di file: la mappa sta in
 [architecture/shell.md](architecture/shell.md), il perché nella

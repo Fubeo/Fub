@@ -23,7 +23,7 @@
 //
 // # Sette gesti, contati da fuori
 //
-// I gesti sono **sette** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **nove** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -44,6 +44,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorView } from "@codemirror/view";
 import type { HostFinto } from "./host/finto";
+import type { SettingEntry } from "./host/contract";
+import { SHELL_KEYS } from "./ui/shell-keys.generated";
 
 // L'host finto vive in una scatola che `vi.mock` possa vedere: i factory dei
 // mock sono issati sopra gli import, quindi non possono chiudere su una
@@ -97,12 +99,18 @@ function montaLaScocca(): void {
 }
 
 /// Monta la shell su un vault finto e **aspetta che l'avvio sia finito**.
-async function avvia(file: Record<string, string>): Promise<HostFinto> {
+async function avvia(
+  file: Record<string, string>,
+  impostazioni: SettingEntry[] = [],
+  radice: string | null | undefined = undefined,
+): Promise<HostFinto> {
   vi.resetModules();
   scatola.conferma = true;
   scatola.host = creaHostFinto({
     file,
     view: [specDiProva(CESTINO_VIEW, "left_sidebar")],
+    impostazioni,
+    radice,
   });
   montaLaScocca();
   const main = await import("./main");
@@ -156,6 +164,43 @@ async function menuContestuale(su: HTMLElement, voce: string): Promise<void> {
   }
   scelto.click();
   await riposa();
+}
+
+/// Una riga di impostazione che è la scorciatoia di un comando **della shell**,
+/// come la manda il backend: di macchina, col dichiarato per default.
+function scorciatoia(id: keyof typeof SHELL_KEYS): SettingEntry {
+  return {
+    spec: {
+      key: `keys.${id}`,
+      label: id,
+      description: "",
+      group: "",
+      scope: "machine",
+      kind: { kind: "text", default: SHELL_KEYS[id] ?? "" },
+      program_writable: false,
+    },
+    value: SHELL_KEYS[id] ?? "",
+    source: "default",
+  };
+}
+
+/// Apre le impostazioni sulla scheda delle scorciatoie e rende il campo della
+/// riga che porta quel titolo.
+async function campoDellaScorciatoia(titolo: string): Promise<HTMLInputElement> {
+  document.querySelector<HTMLButtonElement>("#open-settings")!.click();
+  await riposa();
+  document.querySelector<HTMLButtonElement>('#settings-tabs button[data-scheda="scorciatoie"]')!
+    .click();
+  await riposa();
+  const righe = [...document.querySelectorAll<HTMLElement>("#settings-body .setting-row")];
+  const riga = righe.find((r) => r.querySelector("label")?.textContent === titolo);
+  if (!riga) {
+    const viste = righe.map((r) => r.querySelector("label")?.textContent);
+    throw new Error(`fra le scorciatoie non c'è «${titolo}», ci sono: ${viste.join(", ")}`);
+  }
+  const campo = riga.querySelector("input");
+  if (!campo) throw new Error(`la scorciatoia «${titolo}» è di sola lettura: non ha un campo`);
+  return campo;
 }
 
 /// Il testo dell'editor, letto dal DOM di CodeMirror come lo legge chi guarda.
@@ -338,6 +383,86 @@ function battiNellEditor(testo: string): void {
   if (!view) throw new Error("l'editor non è montato");
   view.dispatch({ changes: { from: view.state.doc.length, insert: testo } });
 }
+
+describe("riconfigura una scorciatoia", () => {
+  it("una scorciatoia della shell si cambia dal pannello, e da lì risponde la nuova", async () => {
+    // L'ottavo gesto, e il primo che attraversa il pannello delle impostazioni.
+    // È la casella che la 0090 aveva trasferito alla §16.3: la chiave
+    // `keys.shell.*` la dichiara il bundle di core ed è di **macchina**, perché
+    // un comando di shell esiste prima di ogni vault. Qui il gesto è quello che
+    // l'utente fa — apri le impostazioni, vai alle scorciatoie, scrivi una
+    // combinazione — e ciò che si asserisce è che la tastiera la onori.
+    const host = await avvia(VAULT, [scorciatoia("shell.palette")]);
+
+    const campo = await campoDellaScorciatoia("Apri la palette dei comandi");
+    expect(campo.value).toBe(SHELL_KEYS["shell.palette"]);
+    campo.value = "Mod-Alt-p";
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+    await riposa();
+
+    // È arrivata alla porta con la chiave giusta: senza questa riga il gesto
+    // potrebbe scrivere la chiave di un altro comando e sembrare a posto.
+    const scritte = host.aPorta("setSetting");
+    const scritta = scritte[scritte.length - 1];
+    expect(scritta?.args[0]).toBe("keys.shell.palette");
+    expect(scritta?.args[1]).toBe("Mod-Alt-p");
+
+    // Il pannello intrappola il fuoco, quindi si chiude prima di premere —
+    // come fa chi ha finito di configurare.
+    document.querySelector<HTMLButtonElement>("#settings-close")!.click();
+    await riposa();
+
+    // La combinazione nuova apre la palette, premuta sul documento come da un
+    // browser: è la riga che dice che il giro è chiuso — scritta, riletta, e
+    // onorata senza riavviare niente.
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, altKey: true }),
+    );
+    await riposa();
+    expect(document.getElementById("command-palette")).not.toBeNull();
+
+    // E la vecchia non è più di nessuno. La domanda si pone al **registro** e
+    // non premendola, per un limite di questo banco che vale la pena scrivere:
+    // `document` è uno solo per tutto il file e nessuno smonta i suoi
+    // ascoltatori, quindi ogni `avvia()` ne lascia uno addosso — premere
+    // `Mod-Shift-p` qui farebbe rispondere la tastiera di un gesto precedente,
+    // che ha un registro suo e non sa niente di questa scrittura. È un fatto
+    // del banco, non della shell.
+    const registro = await import("./ui/commands");
+    expect(
+      registro.avanza(registro.allCommands(), null, {
+        key: "p",
+        ctrlKey: true,
+        metaKey: false,
+        shiftKey: true,
+        altKey: false,
+      }),
+    ).toEqual({ tipo: "passa" });
+  });
+});
+
+describe("la finestra senza vault", () => {
+  it("conosce comunque le scorciatoie riconfigurate, che sono della macchina", async () => {
+    // Il caso per cui la famiglia `keys.shell.*` è di macchina e non di vault
+    // (§16.3): `shell.vault.open` è il comando che serve ad aprire il primo
+    // vault, e una sua chiave che vivesse dentro un vault esisterebbe solo dopo
+    // — cioè quando serve meno. Qui non c'è nessun vault, e l'accordo che
+    // l'utente ha scelto è già quello che vale.
+    const accordo = { ...scorciatoia("shell.palette"), value: "Mod-Alt-p", source: "machine" };
+    await avvia({}, [accordo as SettingEntry], null);
+    expect(document.querySelector("#vault-path")?.textContent).not.toBe("/vault");
+
+    // La domanda si pone al **registro** e non premendo, per il limite del banco
+    // scritto qui sopra: su un `document` che nessuno smonta, un tasto premuto
+    // qui lo riceve anche la tastiera dei gesti precedenti. Ciò che questa riga
+    // difende è l'**ordine dell'avvio** — gli accordi si rileggono prima di
+    // sapere se un vault c'è — e quello si vede dal registro.
+    const registro = await import("./ui/commands");
+    const palette = registro.allCommands().find((e) => e.id === "shell.palette");
+    expect(palette?.binding).toBe("Mod-Alt-p");
+    expect(palette?.declared).toBe(SHELL_KEYS["shell.palette"]);
+  });
+});
 
 describe("una rinomina che questa finestra non ha chiesto", () => {
   it("porta con sé il buffer sporco, e il salvataggio in attesa con lui", async () => {

@@ -194,6 +194,14 @@ fn non_lo_sovrascrivo(path: &Utf8Path) -> String {
     )
 }
 
+/// Il rifiuto di chi non trova lo schema di una chiave, detto **una volta** per
+/// tutti e due gli store: il livello macchina e quello di un vault rispondono
+/// alla stessa domanda, e due frasi diverse per lo stesso guasto manderebbero a
+/// cercare la differenza dove non c'è.
+fn non_dichiarata(key: &str) -> PluginError {
+    PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
+}
+
 /// Il livello **macchina**, condiviso da tutti i vault aperti.
 ///
 /// Condiviso e non copiato: i vault aperti insieme sono N
@@ -207,12 +215,30 @@ fn non_lo_sovrascrivo(path: &Utf8Path) -> String {
 /// esegue la suite. Un livello che non ha un file non lo scrive, e lo dice
 /// rispondendo `Ok` senza fare niente: non è un errore, è un host che ha detto
 /// di non averne uno.
+///
+/// # Perché tiene anche uno **schema**
+///
+/// Perché una chiave di macchina esiste quando un vault non c'è, e fino alla
+/// [0116](../../../docs/decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
+/// esisteva solo il suo *valore*: lo schema stava nello [`SettingsStore`] di un
+/// vault, cioè nell'unico posto che sparisce proprio nel caso per cui lo scope
+/// `Machine` era nato. `log.level` si poteva leggere e scrivere **solo con un
+/// vault aperto**, che è il contrario di ciò che il suo doc-comment prometteva.
+///
+/// Lo schema qui dentro è quello del **core** e di nessun altro: chi dichiara
+/// vive quanto ciò che dichiara, e un plugin si registra per vault. Una spec di
+/// scope [`SettingScope::Vault`] viene **rifiutata**, o questo livello
+/// risponderebbe per una chiave che non gli appartiene.
 pub struct MachineSettings {
     path: Option<Utf8PathBuf>,
     /// Il file si è letto? Se no **non lo si riscrive**: vedi
     /// [`non_lo_sovrascrivo`].
     readable: bool,
     values: RwLock<BTreeMap<String, SettingValue>>,
+    /// Lo schema delle chiavi di macchina. Dietro un lock come i valori, e per
+    /// la stessa ragione: l'`Arc` è condiviso da ogni vault aperto, e chi
+    /// dichiara è l'host una volta sola all'avvio.
+    specs: RwLock<BTreeMap<String, SettingSpec>>,
 }
 
 impl MachineSettings {
@@ -230,6 +256,7 @@ impl MachineSettings {
                 path: Some(path.to_owned()),
                 readable: warning.is_none(),
                 values: RwLock::new(values),
+                specs: RwLock::new(BTreeMap::new()),
             }),
             warning,
         )
@@ -241,7 +268,114 @@ impl MachineSettings {
             path: None,
             readable: true,
             values: RwLock::new(BTreeMap::new()),
+            specs: RwLock::new(BTreeMap::new()),
         })
+    }
+
+    /// Dichiara le chiavi di macchina del core.
+    ///
+    /// Una spec di scope [`SettingScope::Vault`] è un errore del chiamante e
+    /// non un valore da ignorare: chi la passa crede di aver dichiarato
+    /// qualcosa, e un livello che accettasse in silenzio risponderebbe per una
+    /// chiave che vive altrove — cioè con un default, dove il vault ha il valore
+    /// vero. Un doppione è un errore per la stessa ragione dello
+    /// [`SettingsStore::declare`]: due schemi sulla stessa chiave sono due
+    /// default, e a vincere sarebbe l'ordine di montaggio.
+    pub fn declare(&self, specs: &[SettingSpec]) -> Result<(), String> {
+        let mut mie = self.specs.write().expect("schema della macchina");
+        for spec in specs {
+            if spec.scope != SettingScope::Machine {
+                return Err(format!(
+                    "l'impostazione `{}` è del vault: il livello macchina non la tiene",
+                    spec.key
+                ));
+            }
+            if mie.contains_key(&spec.key) {
+                return Err(format!(
+                    "l'impostazione `{}` è già dichiarata nel livello macchina",
+                    spec.key
+                ));
+            }
+            mie.insert(spec.key.clone(), spec.clone());
+        }
+        Ok(())
+    }
+
+    /// Questa chiave è dichiarata qui? È la domanda con cui chi riceve una
+    /// scrittura **senza nessun vault aperto** distingue «non c'è vault» da
+    /// «questa chiave un vault non le serve».
+    pub fn declares(&self, key: &str) -> bool {
+        self.specs
+            .read()
+            .expect("schema della macchina")
+            .contains_key(key)
+    }
+
+    /// Tutte le righe di macchina risolte, in ordine di chiave.
+    ///
+    /// La stessa forma di [`SettingsStore::entries`], e i valori sono gli stessi
+    /// che vede un vault aperto: la mappa è una sola.
+    pub fn entries(&self) -> Vec<SettingEntry> {
+        self.specs
+            .read()
+            .expect("schema della macchina")
+            .values()
+            .map(|spec| {
+                let (value, source) = self.risolvi(spec);
+                SettingEntry {
+                    spec: spec.clone(),
+                    value,
+                    source,
+                }
+            })
+            .collect()
+    }
+
+    /// Il valore che vale adesso per una chiave di macchina, e da dove viene.
+    pub fn effective(&self, key: &str) -> Result<(SettingValue, SettingSource), PluginError> {
+        let specs = self.specs.read().expect("schema della macchina");
+        let spec = specs.get(key).ok_or_else(|| non_dichiarata(key))?;
+        Ok(self.risolvi(spec))
+    }
+
+    /// Scrive una chiave di macchina, con lo stesso cancello dello store di un
+    /// vault: dichiarata, e di una forma che lo schema accetta.
+    pub fn set(&self, key: &str, value: SettingValue) -> Result<(), PluginError> {
+        let spec = self.spec_di(key)?;
+        if let Some(why) = spec.kind.rejects(&value) {
+            return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
+        }
+        self.write(key, Some(value))
+            .map_err(|e| PluginError::Internal(e.into()))
+    }
+
+    /// Dimentica ciò che era stato deciso: la chiave ricade sul default dello
+    /// schema, che per una chiave di macchina è l'unico livello sotto.
+    pub fn reset(&self, key: &str) -> Result<(), PluginError> {
+        self.spec_di(key)?;
+        self.write(key, None)
+            .map_err(|e| PluginError::Internal(e.into()))
+    }
+
+    fn spec_di(&self, key: &str) -> Result<SettingSpec, PluginError> {
+        self.specs
+            .read()
+            .expect("schema della macchina")
+            .get(key)
+            .cloned()
+            .ok_or_else(|| non_dichiarata(key))
+    }
+
+    /// Il valore scritto se regge lo schema, altrimenti il default — la stessa
+    /// regola di [`SettingsStore::resolve`], che per un livello solo si scrive
+    /// in quattro righe.
+    fn risolvi(&self, spec: &SettingSpec) -> (SettingValue, SettingSource) {
+        if let Some(value) = self.get(&spec.key) {
+            if spec.kind.rejects(&value).is_none() {
+                return (value, SettingSource::Machine);
+            }
+        }
+        (spec.kind.default_value(), SettingSource::Default)
     }
 
     fn get(&self, key: &str) -> Option<SettingValue> {
@@ -485,9 +619,7 @@ impl SettingsStore {
     }
 
     fn declared(&self, key: &str) -> Result<&Declared, PluginError> {
-        self.specs.get(key).ok_or_else(|| {
-            PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
-        })
+        self.specs.get(key).ok_or_else(|| non_dichiarata(key))
     }
 
     /// Il valore che vale adesso, e da dove viene.

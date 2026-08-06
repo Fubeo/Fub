@@ -197,8 +197,15 @@ raccoglie.
       componente come gli altri, cioè la domanda della §16.3.~~
       **Trasferita alla
       [§16.3](16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature)**
-      con la [0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md),
-      e non per abitudine: prima si è misurata una terza strada che la casella
+      con la [0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)
+      e **fatta** là, dalla
+      [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md):
+      dei cinque punti qui sotto nessuno era sbagliato, e la conclusione che se
+      ne trae sì — di quel `CommandProvider` serviva **solo la chiave**, e il
+      quinto punto non è una contraddizione ma la regola che mancava (*lo scope
+      di una chiave segue la vita di ciò che la dichiara*, quindi le
+      `keys.shell.*` sono di macchina). Il trasferimento non è stato per
+      abitudine, perché prima si era misurata una terza strada che la casella
       non aveva guardato — un `CommandProvider` **di prossimità**, registrato
       dall'host per conto della shell al solo scopo di far nascere le chiavi
       `keys.shell.*`. Gli id passerebbero davvero, e si rompe in cinque punti,
