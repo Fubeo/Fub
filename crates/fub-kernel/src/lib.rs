@@ -52,6 +52,7 @@ pub mod documents;
 pub mod drafts;
 mod entries;
 pub mod error;
+pub mod famiglie;
 pub mod graph;
 mod health;
 pub mod host;

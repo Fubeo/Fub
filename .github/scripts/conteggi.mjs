@@ -167,6 +167,24 @@ export const CONTEGGI = [
     comando: "grep -rhE '^[[:space:]]*pub fn catalog\\(\\)' crates/fub-kernel/src | wc -l",
   },
   {
+    nome: "famiglie-del-kernel",
+    ragione:
+      "Le famiglie del kernel che il montaggio conosce: le varianti di " +
+      "`Famiglia` in `crates/fub-kernel/src/famiglie.rs`. Vive nella stessa " +
+      "frase di `cataloghi-del-kernel` e la chiude dall'altro capo. Quel conto " +
+      "guarda i sorgenti — quanti `pub fn catalog()` esistono —, questo guarda " +
+      "l'elenco che li monta, e i due numeri devono essere lo stesso: una " +
+      "famiglia che nasce nel kernel e non entra nell'elenco li fa divergere, " +
+      "e una variante tolta dall'elenco mentre il suo `catalog()` resta li fa " +
+      "divergere dall'altro verso. Dentro l'elenco non serve nessuno dei due — " +
+      "là il `match` è esaustivo e una variante muta non compila —, e fuori " +
+      "non basta nessun `assert`: un modulo che nessuno cita non esiste per " +
+      "chi compila.",
+    comando:
+      "sed -n '/^pub enum Famiglia {/,/^}/p' crates/fub-kernel/src/famiglie.rs" +
+      " | grep -cE '^    [A-Z]'",
+  },
+  {
     nome: "impostazioni-del-kernel",
     ragione:
       "Quante famiglie di `fub-kernel` dichiarano delle impostazioni, cioè " +

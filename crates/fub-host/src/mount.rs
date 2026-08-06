@@ -52,7 +52,7 @@ use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewState
 use fub_kernel::RegistryError;
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
-use crate::settings::{core_catalog, core_settings, disabled_plugins, CORE_ID};
+use crate::settings::{core_catalog_montato, core_settings, disabled_plugins, CORE_ID};
 #[cfg(feature = "versioning")]
 use crate::settings::{versioning_enabled, versioning_settings, versioning_settings_catalog};
 
@@ -241,22 +241,11 @@ pub fn mount(
         Arc::new(
             CoreBundle::new(CORE_ID, "Fub", register_maintenance)
                 .configuring(core_settings())
-                // **Due** cataloghi per lingua, e si sommano: le chiavi del
-                // core stanno in `fub-host` accanto al loro schema, quelle
-                // del locale in `fub-kernel` accanto al proprio. Chi somma è
-                // `Strings::template`, e il perché sta nel suo doc.
-                .speaking(
-                    "it",
-                    [
-                        core_catalog(),
-                        fub_kernel::locale::catalog(),
-                        fub_kernel::maintenance::catalog(),
-                        fub_kernel::journal::catalog(),
-                        fub_kernel::properties::catalog(),
-                        fub_kernel::ignore::catalog(),
-                    ]
-                    .concat(),
-                ),
+                // La somma dei due cataloghi — quello dell'host e quelli
+                // delle famiglie del kernel — è una funzione sola, e la
+                // chiama anche il banco che la giudica: qui c'era un elenco
+                // a mano, e il banco ne teneva una seconda copia.
+                .speaking("it", core_catalog_montato()),
         ),
     ];
     for feature in fub_features::ogni_feature_ufficiale() {
