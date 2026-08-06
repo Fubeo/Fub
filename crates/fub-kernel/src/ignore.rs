@@ -33,6 +33,39 @@
 //! stessa ragione della [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)
 //! e la stessa forma di [`properties`](crate::properties).
 //!
+//! # Quando un nome dichiarato è **quel** nome
+//!
+//! Una dichiarazione è una frase scritta una volta e portata su ogni macchina,
+//! e per questo la domanda «l'utente che ha scritto `node_modules` intendeva
+//! questa cartella?» non può avere due risposte a seconda di dove il vault è
+//! aperto. La risposta è la stessa del resto del progetto: la chiave di
+//! [`resolution_key`](fub_abi::rules::path::resolution_key) — trim, NFC,
+//! minuscolo — che è l'unico punto in cui si decide *quando due nomi sono lo
+//! stesso nome*. Ci passano sia i nomi dichiarati sia il nome che arriva dal
+//! disco, e ci passa anche [`e_struttura`]: `.Fub` su un filesystem
+//! insensibile al caso **è** `.fub`, e non escluderla sarebbe indicizzare
+//! l'indice.
+//!
+//! Le due riproduzioni per cui la regola esiste, misurate: un `files.excluded-folders`
+//! che dice `Café` scritto in NFC non escludeva la stessa cartella scritta in
+//! NFD da macOS, e un `node_modules` dichiarato non escludeva `Node_Modules`
+//! su un filesystem insensibile al caso — cioè la stessa dichiarazione, sullo
+//! stesso vault sincronizzato, diceva due cose diverse.
+//!
+//! **Il verso opposto è stato misurato e scelto, non subito.** Piegare il caso
+//! vuol dire che su Linux, dove `Build` e `build` possono coesistere davvero,
+//! dichiararne una esclude entrambe. Fra i due errori si preferisce questo, per
+//! tre ragioni: un'esclusione mancata è **silenziosa** e dipende dalla macchina
+//! (una cartella di moduli che entra nell'indice, e un vault con due idee di
+//! cosa contiene), mentre un'esclusione di troppo si **vede** — la cartella non
+//! è nell'elenco dei file, e chi l'ha dichiarata sa cosa ha scritto; un vault
+//! che contiene `Build` e `build` non è portabile a prescindere da noi, ed è
+//! ciò che `HealthCheck::CollidingPaths` è lì per dire; e la stessa regola vale
+//! già per i wikilink, dove `[[Nota]]` e `[[nota]]` sono lo stesso riferimento
+//! ([0107](../../../docs/decisions/0107-il-caso-di-una-lettera.md)).
+//! Sarebbe incoerente che due nomi fossero lo stesso documento per il grafo e
+//! due cartelle diverse per la scansione.
+//!
 //! # I collegamenti: decisi, e non configurabili oggi
 //!
 //! Un symlink non partecipa. Dalla [0058] è ciò che *succede* — la scansione
@@ -70,6 +103,7 @@
 
 use std::collections::BTreeSet;
 
+use fub_abi::rules::path::resolution_key;
 use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
 use fub_abi::text::{StringCatalog, Text};
 
@@ -87,7 +121,7 @@ pub const SHOW_HIDDEN: &str = "files.show-hidden";
 /// che nessuna dichiarazione può togliere.
 pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules"];
 
-/// Questo nome è **struttura**, cioè non è roba dell'utente?
+/// Questa **chiave** è struttura, cioè non è roba dell'utente?
 ///
 /// È la metà della politica che nessuna impostazione può spostare, e le tre
 /// righe che contiene sono tre danni diversi: la cartella di Fub è dove sta
@@ -95,8 +129,12 @@ pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules"];
 /// note che qualcuno ha buttato (mostrarle è riesumarle), e il temporaneo di
 /// una scrittura è un file che fra un istante non esiste — chi lo vedesse gli
 /// darebbe un [`DocId`](fub_abi::DocId) e lo perderebbe subito dopo.
-pub(crate) fn e_struttura(name: &str) -> bool {
-    name == FUB_DIR || name == TRASH_DIR || crate::storage::e_temporaneo_di_scrittura(name)
+///
+/// Riceve una chiave di [`resolution_key`] e non un nome di directory grezzo:
+/// le tre costanti che confronta sono già in quella forma, e su un filesystem
+/// insensibile al caso `.Fub` è la cartella di Fub.
+pub(crate) fn e_struttura(key: &str) -> bool {
+    key == FUB_DIR || key == TRASH_DIR || crate::storage::e_temporaneo_di_scrittura(key)
 }
 
 /// La politica di esclusione che vale per un albero, come **valore**.
@@ -124,9 +162,14 @@ impl Default for IgnorePolicy {
 
 impl IgnorePolicy {
     /// La politica dichiarata: le cartelle escluse, e se i nascosti si vedono.
+    ///
+    /// Le cartelle entrano come **chiavi** ([`resolution_key`]): chi dichiara
+    /// scrive un nome, e il nome che il disco restituirà per quella cartella
+    /// dipende dalla macchina — la composizione Unicode e il caso non sono
+    /// scelte di chi ha scritto la frase.
     pub fn declaring(folders: impl IntoIterator<Item = String>, mostra_i_nascosti: bool) -> Self {
         IgnorePolicy {
-            folders: folders.into_iter().collect(),
+            folders: folders.into_iter().map(|f| resolution_key(&f)).collect(),
             mostra_i_nascosti,
         }
     }
@@ -136,14 +179,20 @@ impl IgnorePolicy {
     /// La struttura per prima e senza appello: è ciò che rende «mostra i
     /// nascosti» una preferenza sicura invece di un interruttore che apre la
     /// cartella di Fub alla scansione.
+    ///
+    /// Il nome diventa una chiave **una volta sola e in cima**, e da lì in giù
+    /// il nome grezzo non è più raggiungibile: le tre domande sono la stessa
+    /// domanda, e il quarto ramo che qualcuno aggiungerà eredita la regola
+    /// invece di doverla ripetere.
     pub fn esclude(&self, name: &str) -> bool {
-        if e_struttura(name) {
+        let name = resolution_key(name);
+        if e_struttura(&name) {
             return true;
         }
         if !self.mostra_i_nascosti && name.starts_with('.') {
             return true;
         }
-        self.folders.contains(name)
+        self.folders.contains(&name)
     }
 }
 
@@ -222,7 +271,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                 I_EXCLUDED_DESC,
                 "Le cartelle che non fanno parte di questo vault: non sono \
                  documenti, non si cercano, non compaiono nell'elenco dei file. \
-                 Vale a qualunque profondità, per nome. La cartella di Fub \
+                 Vale a qualunque profondità, per nome, senza distinzione fra \
+                 maiuscole e minuscole: `node_modules` esclude anche \
+                 `Node_Modules`, perché su alcuni sistemi sono la stessa \
+                 cartella e il vault è lo stesso su tutti. La cartella di Fub \
                  (`.fub`), il cestino (`.trash`) e i temporanei di una \
                  scrittura restano esclusi comunque: non sono una preferenza. \
                  Un cambiamento vale dal prossimo «Ricostruisci gli indici».",
@@ -242,7 +294,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 I_EXCLUDED_DESC,
                 "The folders that are not part of this vault: not documents, \
-                 not searched, not listed. Matched by name, at any depth. Fub's \
+                 not searched, not listed. Matched by name, at any depth, \
+                 ignoring case: `node_modules` also excludes `Node_Modules`, \
+                 because on some systems they are the same folder and the vault \
+                 is the same everywhere. Fub's \
                  own folder (`.fub`), the trash (`.trash`) and the temporary \
                  files of a write stay excluded regardless: they are not a \
                  preference. A change applies from the next «Rebuild indexes».",
@@ -299,6 +354,59 @@ mod tests {
         assert!(!p.esclude("node_modules"));
         // I nascosti sono l'altra metà e non si muovono con questa.
         assert!(p.esclude(".git"));
+    }
+
+    /// **La riparazione della 0110 con la 0107 in mano**: la stessa cartella
+    /// scritta in NFC e in NFD è la stessa cartella.
+    ///
+    /// Non si presidia sul filesystem, e non per comodità: il caso vero è un
+    /// vault sincronizzato con macOS, dove i nomi arrivano in NFD, e un banco
+    /// `#[cfg(target_os = "macos")]` in questa CI non verrebbe nemmeno
+    /// compilato — cioè presidierebbe **niente** restando verde. Le due
+    /// scritture della stessa stringa si costruiscono qui, e la funzione è
+    /// pura.
+    #[test]
+    fn una_cartella_dichiarata_in_nfc_e_la_stessa_scritta_in_nfd() {
+        let nfc = "Caf\u{e9}"; // «Café» come lo scrive una tastiera
+        let nfd = "Cafe\u{301}"; // «Café» come lo scrive macOS sul disco
+        assert_ne!(nfc, nfd, "le due scritture sono byte diversi");
+
+        let p = IgnorePolicy::declaring([nfc.to_string()], false);
+        assert!(p.esclude(nfd), "la cartella di macOS non veniva esclusa");
+        // E nell'altro verso, perché la dichiarazione può nascere su macOS.
+        let p = IgnorePolicy::declaring([nfd.to_string()], false);
+        assert!(p.esclude(nfc));
+    }
+
+    /// La seconda riproduzione: su un filesystem insensibile al caso
+    /// `Node_Modules` è `node_modules`, e la dichiarazione non lo sapeva.
+    ///
+    /// Vale anche per la **struttura**, che non è dichiarata da nessuno: `.FUB`
+    /// e `.fub` sono la stessa cartella dove c'è l'indice.
+    #[test]
+    fn il_caso_di_una_lettera_non_fa_due_cartelle() {
+        let p = IgnorePolicy::default();
+        assert!(p.esclude("Node_Modules"));
+        assert!(p.esclude("NODE_MODULES"));
+
+        let tutto = IgnorePolicy::declaring(Vec::new(), true);
+        assert!(tutto.esclude(".FUB"), "l'indice si sarebbe indicizzato");
+        assert!(tutto.esclude(".Trash"), "il cestino sarebbe risorto");
+    }
+
+    /// Il verso opposto, **scelto e non subito**: piegare il caso esclude anche
+    /// ciò che su Linux è una seconda cartella, e la regola si ferma lì.
+    ///
+    /// Fra i due errori si è preferito questo (il modulo dice perché); ciò che
+    /// resta da presidiare è che non se ne mangi altro: una dichiarazione è un
+    /// **nome intero**, non un prefisso, e non diventa un pattern.
+    #[test]
+    fn piegare_il_caso_non_allarga_la_dichiarazione() {
+        let p = IgnorePolicy::declaring(["build".to_string()], false);
+        assert!(p.esclude("Build"), "è la scelta, ed è dichiarata");
+        assert!(!p.esclude("building"));
+        assert!(!p.esclude("build.md"));
+        assert!(!p.esclude("rebuild"));
     }
 
     /// Le due chiavi viaggiano col vault e nessun programma le scrive.
