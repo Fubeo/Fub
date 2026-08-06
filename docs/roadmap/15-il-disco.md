@@ -334,7 +334,7 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 
 ### 15.6 La politica di esclusione è una costante di compilazione
 
-*ex §2.16 · kernel · **P2** — **chiusa dalla [0110](../decisions/0110-la-struttura-non-e-una-preferenza.md)**: ci sono due politiche di esclusione, non una — quella che l'utente dichiara (`files.excluded-folders`, `files.show-hidden`, per-vault) e quella che nessuno può dichiarare (`.fub/`, `.trash/`, il temporaneo di una scrittura), e finché erano una lista sola «escluso» voleva dire insieme *ciò che nessuno può cambiare* e *ciò che nessuno può scegliere*. Resta una casella: leggere il `.gitignore`*
+*ex §2.16 · kernel · **P2** — **chiusa dalla [0110](../decisions/0110-la-struttura-non-e-una-preferenza.md)**: ci sono due politiche di esclusione, non una — quella che l'utente dichiara (`files.excluded-folders`, `files.show-hidden`, per-vault) e quella che nessuno può dichiarare (`.fub/`, `.trash/`, il temporaneo di una scrittura), e finché erano una lista sola «escluso» voleva dire insieme *ciò che nessuno può cambiare* e *ciò che nessuno può scegliere*. Restano due caselle: leggere il `.gitignore`, e un modo di cambiare l'elenco delle cartelle escluse dall'app*
 
 - [x] **`IGNORED_DIRS` (`vault.rs`) era un `&[&str]` nel sorgente**, e la voce
       aveva ragione sul dove e torto sul cosa: la costante era il sintomo. Quella
@@ -371,6 +371,17 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
       nomini. Il campo su una query di listing che la voce temeva prima del
       freeze **non serve**: la politica sta sul vault, quindi un plugin vede lo
       stesso vault che vede l'utente.
+- [ ] **Casella residua, nata dal collaudo**: `files.excluded-folders` è una
+      `SettingKind::List`, e la shell disegna le liste **in sola lettura** —
+      chi le cambia è il comando che le scrive, e per questa chiave quel comando
+      **non esiste**. È una preferenza per-vault che l'utente non può muovere
+      dall'app, mentre la sua descrizione gli spiega da quando vale un
+      cambiamento. Non è una svista da due righe: la chiave non è
+      `program_writable` di proposito — un componente che aggiungesse una
+      cartella toglierebbe dal vault le note che ci stanno dentro — quindi ciò
+      che manca è un gesto **dell'utente** su una lista, cioè un pezzo di shell
+      e la decisione su chi lo scrive. Vale per ogni `List` che nascerà, non
+      solo per questa.
 - [x] È il gemello del §15.5, chiuso dalla
       [0058](../decisions/0058-un-nome-che-nasce.md), sul lato **quali file** e
       non **quali nomi** — e il difetto peggiore stava **fuori**, in un presidio

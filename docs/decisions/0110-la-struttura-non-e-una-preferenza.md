@@ -191,3 +191,48 @@ Una famiglia nuova nel kernel fa scendere il numero scritto accanto all'elenco e
   vedesse il conto rosso e **aggiornasse il numero** senza aggiungere la riga
   all'elenco resterebbe verde. Il conto lo costringe a mettere le mani nel
   commento che sta sopra l'elenco, e questo è quanto un conto può fare.
+
+## Cosa la verifica ha trovato dopo (aggiunto il 2026-08-06)
+
+Questa sezione si **aggiunge** e non riscrive niente di quanto sta sopra: un
+verbale racconta cosa si è deciso quel giorno, non cosa si è scoperto poi.
+
+Il collaudo del giro ha misurato che `IgnorePolicy` confrontava i nomi per
+**uguaglianza di byte** — un `BTreeSet<String>` interrogato col nome di
+directory grezzo che la scansione riceve dal supporto — mentre la
+[0107](0107-il-caso-di-una-lettera.md), decisa nello stesso giro e tre commit
+prima, aveva appena stabilito *quando due path sono lo stesso path*
+(`resolution_key`: trim, NFC, minuscolo). Le due firme non si conoscevano, e il
+buco stava dove si toccano: questa decisione ha perfino **modificato la prosa**
+di `path_policy` — la riga che dice «la normalizzazione Unicode è la stessa
+NFC di `resolution_key`, applicata ai nomi» — senza usarne la funzione.
+
+Le due riproduzioni, misurate sulla funzione pura: `files.excluded-folders`
+dichiarato `Café` in NFC non escludeva la stessa cartella scritta in NFD, che è
+come macOS la scrive sul disco; e `node_modules` non escludeva `Node_Modules`
+su un filesystem insensibile al caso, dove le due sono **la stessa cartella**.
+È il difetto che la voce si vietava da sola: la riga *«un vault che nasconde una
+cartella su una macchina sola sarebbe due idee di cosa c'è dentro»* è la ragione
+per cui la chiave è di livello vault, e una dichiarazione che esclude su Linux e
+non su macOS produce esattamente quelle due idee. Il caso non era nemmeno nuovo:
+stava in `docs/issues.md` come 0005, scritto quando la politica era ancora
+`IGNORED_DIRS`, e questa voce l'ha portato dentro la forma nuova insieme al
+resto.
+
+La riparazione sta nel commit che nomina questo verbale, e ha una forma sola: il
+nome diventa una chiave **una volta e in cima a `esclude`**, dove il nome grezzo
+smette di essere raggiungibile, e i nomi dichiarati diventano chiavi in
+`declaring`. `e_struttura` riceve la chiave e non il nome, così `.Fub` su un
+filesystem insensibile al caso è la cartella dove sta l'indice. Le quattro
+politiche che erediteranno il valutatore (§9.1, §18.1, §23.2, §3.1) ereditano
+anche questo, che è il punto: la regola sta nel posto che tutti attraversano.
+
+**Fra i due errori possibili si è preferito quello largo, e lo si dice.**
+Piegare il caso vuol dire che su Linux, dove `Build` e `build` possono
+coesistere davvero, dichiararne una esclude entrambe. Si preferisce perché
+un'esclusione mancata è silenziosa e dipende dalla macchina, mentre
+un'esclusione di troppo si vede nell'elenco dei file; perché un vault che
+contiene `Build` e `build` non è portabile a prescindere da noi, ed è ciò che
+`HealthCheck::CollidingPaths` è lì per dire; e perché la regola opposta sarebbe
+incoerente col grafo, dove `[[Nota]]` e `[[nota]]` sono già lo stesso
+riferimento.

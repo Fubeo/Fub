@@ -267,7 +267,10 @@ l'esclusione era una costante nel sorgente; adesso sono due chiavi di questo
 vault — le **cartelle escluse** (`files.excluded-folders`, con `.obsidian`,
 `.git` e `node_modules` per default) e i **file nascosti visibili su richiesta**
 (`files.show-hidden`) — perché entrambe descrivono *questi file* e viaggiano con
-loro. Restano fuori comunque, e non sono una preferenza: la cartella di Fub
+loro. Il confronto fra il nome dichiarato e il nome che sta sul disco ignora le
+maiuscole e la composizione Unicode, perché la dichiarazione viaggia col vault e
+`Node_Modules` su macOS è la cartella che `node_modules` nomina. Restano fuori
+comunque, e non sono una preferenza: la cartella di Fub
 (`.fub/`), il cestino (`.trash/`) e i temporanei di una scrittura — mostrarli
 vorrebbe dire indicizzare l'indice e riesumare come documenti le note appena
 cestinate. Le tre caselle di questa sezione stanno quindi così: *ignore

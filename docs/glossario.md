@@ -196,7 +196,7 @@ dipende da chi è registrato adesso, e un file diventa una nota il giorno in cui
 qualcuno sa parsarlo.
 
 ### esclusione
-`IgnorePolicy` · [`kernel/ignore.rs:111`](../crates/fub-kernel/src/ignore.rs) · [0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
+`IgnorePolicy` · [`kernel/ignore.rs:149`](../crates/fub-kernel/src/ignore.rs) · [0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
 
 Cosa di una cartella **non** fa parte del vault, e sono **due** cose che non si
 somigliano. La *preferenza* è dato di questo vault e si dichiara — le cartelle
@@ -204,7 +204,12 @@ escluse (`files.excluded-folders`) e se i file nascosti siano documenti
 (`files.show-hidden`). La *struttura* — `.fub/`, `.trash/`, il temporaneo di una
 scrittura — non la dichiara nessuno e nessuna impostazione la rivela: mostrarla
 vorrebbe dire indicizzare l'indice e riesumare il cestino. Le due porte che la
-chiedono sono la scansione e il watcher, e chiedono alla stessa politica.
+chiedono sono la scansione e il watcher, e chiedono alla stessa politica. Un
+nome dichiarato e un nome che arriva dal disco si confrontano per **chiave**
+(`resolution_key`, [`abi/rules/path.rs:49`](../crates/fub-abi/src/rules/path.rs))
+e non per byte: la stessa dichiarazione deve escludere la stessa cartella su
+ogni macchina da cui il vault si apre, e `Node_Modules` su macOS è la cartella
+che `node_modules` nomina.
 
 ### finestra di conservazione
 `journal.retention.days` · [`kernel/journal.rs:172`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
