@@ -634,7 +634,7 @@ chiuso, perché un campo su cui ognuno inventa la propria convenzione non serve 
 decidere. La domanda per cui esiste è una sola: «questa l'ho scritta io?».
 
 ### bus
-`EventBus` · [`kernel/bus.rs:180`](../crates/fub-kernel/src/bus.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
+`EventBus` · [`kernel/bus.rs:252`](../crates/fub-kernel/src/bus.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
 
 Dove gli eventi del kernel passano, e da dove chi si è abbonato li ritira.
 L'abbonamento ha una grana: un *topic*, un *soggetto*, **cosa è cambiato**, e
