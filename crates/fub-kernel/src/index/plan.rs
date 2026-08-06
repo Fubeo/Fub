@@ -24,9 +24,12 @@
 //!    che stanno nel contratto ([`QueryEvaluator`]) e non in questo modulo:
 //!    quello che AND e OR significano non deve poter divergere fra il kernel e
 //!    chi implementa un indice. Per la stessa ragione la **coda** — ordine,
-//!    colonne, finestra — è [`fub_abi::rules::properties::finish`]: la
-//!    chiamano il pianificatore, l'indice del kernel e chiunque rivendichi
-//!    `Documents`.
+//!    colonne, finestra — è [`fub_abi::rules::properties::finish`]: la chiama
+//!    chiunque rivendichi `Documents`, e dal kernel ci si passa da un punto
+//!    solo — `CoreIndex::finish_documents` — perché quella coda vuole anche i
+//!    formati di data che il vault dichiara (decisione 0108) e due chiamanti
+//!    che se li passano per conto loro sono due risposte diverse alla stessa
+//!    domanda.
 //!
 //! Quando una domanda porta un'espressione ma la serve **un altro** (i tag di un
 //! sottoinsieme, i vicini di una selezione), ciò che quel destinatario non
@@ -41,7 +44,6 @@ use fub_abi::model::DocId;
 use fub_abi::query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate,
 };
-use fub_abi::rules::properties;
 use fub_abi::traits::{
     DocumentMatch, Excerpts, IndexQuery, IndexResult, Page, PredicateKind, PropertySelect,
     PropertySort, QueryKind,
@@ -91,7 +93,7 @@ fn documents(
 
     // Pushdown intero: una sola clausola, un solo valutatore, e niente che
     // questo modulo debba aggiungere dopo. Vale **solo verso il core**, e la
-    // restrizione è la coda di [`properties::finish`].
+    // restrizione è la coda di [`CoreIndex::finish_documents`].
     //
     // La coda di una risposta a `Documents` — ordine, colonne, finestra — è del
     // contratto (decisione 0020): a pari rilevanza la parità si rompe per
@@ -123,14 +125,9 @@ fn documents(
     }
 
     let matches = router.expr(&matching)?;
-    let mut answer = properties::finish(
-        matches,
-        sort.as_ref(),
-        &select,
-        page,
-        &indexes.core.date_formats(),
-        |id| indexes.core.frontmatter(id),
-    );
+    let mut answer = indexes
+        .core
+        .finish_documents(matches, sort.as_ref(), &select, page);
     if excerpts.wanted() {
         rehydrate(indexes, &router.asked.borrow(), &mut answer.items)?;
     }
@@ -245,7 +242,7 @@ impl Router<'_> {
     /// Chiede a un indice i documenti di un'espressione che gli appartiene.
     ///
     /// **Senza estratti**: qui si sta selezionando, e quali righe resteranno lo
-    /// deciderà la finestra di [`properties::finish`]. Chiederli adesso vorrebbe
+    /// deciderà la finestra di `CoreIndex::finish_documents`. Chiederli adesso vorrebbe
     /// dire farne uno per ogni documento che combacia — misurato: duemila
     /// estratti per mostrarne venti, ventuno millisecondi su ventitré (§21.9).
     /// Li richiede [`rehydrate`], quando le righe sono quelle vere.
