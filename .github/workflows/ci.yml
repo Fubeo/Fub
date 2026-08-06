@@ -41,6 +41,13 @@ jobs:
         run: cargo test -p fub-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fub-abi --test dependency_invariant
+      # Le altre invarianti di dipendenza dicono *chi* può dipendere da cosa;
+      # questa dice *dove si scrive la versione*. Il difetto era misurato:
+      # `tempfile = "3.27.0"` copiato identico in cinque Cargo.toml, cioè cinque
+      # righe da cambiare per un `cargo update` — e la prima dimenticata non
+      # diventa un errore, diventa una seconda versione nell'albero.
+      - name: le versioni delle dipendenze si scrivono in un posto solo
+        run: node .github/scripts/check-cargo-versioni.mjs
       # Il terzo confine, e l'unico che si GENERA: le union di stringhe del
       # mirror TS sono emesse dagli enum senza payload del contratto
       # (decisione 0053). Sta qui e non solo nel `cargo test --workspace`

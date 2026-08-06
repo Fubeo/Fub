@@ -31,6 +31,13 @@ serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
 regex = "1"
 camino = { version = "1", features = ["serde1"] }
+# La cartella usa-e-getta dei test. Non è una dipendenza della libreria — nei
+# crate compare quasi sempre fra i `[dev-dependencies]` — ma era dichiarata con
+# la versione scritta a mano in cinque `Cargo.toml`, e cinque posti da toccare
+# per un `cargo update` sono quattro di troppo: la prima riga dimenticata
+# diventa una seconda versione di `tempfile` nell'albero senza che nessuno lo
+# scelga. Presidiata da `.github/scripts/check-cargo-versioni.mjs`.
+tempfile = "3.27.0"
 # Il vocabolario del log (§17.3, decisione 0062). **Era già nell'albero** —
 # 0.1.44, tirato da tauri — e prenderlo come dipendenza diretta non aggiunge un
 # crate: aggiunge un nome che descrive una cosa che c'era. Il collettore invece
