@@ -15,15 +15,19 @@ import { nomeDaCercato } from "../rules/nome-cercato";
 import { ricordaRicerca } from "../state/recenti";
 import { createNote } from "../state/vault";
 import { notify } from "../ui/notify";
+import { Corsa } from "../ui/corsa";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
 const searchResultsEl = $("#search-results");
 
 let searchTimer: number | undefined;
-/// Ogni ricerca porta il proprio numero d'ordine: una risposta lenta di una
-/// query vecchia non deve sovrascrivere i risultati di una più recente.
-let searchSeq = 0;
+/// Una risposta lenta di una query vecchia non deve sovrascrivere i risultati di
+/// una più recente. Il contatore scritto a mano che stava qui è diventato il
+/// tipo di `ui/corsa.ts` (decisione 0134), che questo pannello usava già in
+/// tutt'e tre i modi: un giro per ricerca, il controllo anche nel ramo
+/// d'errore, e l'annullamento a mani vuote.
+const corsa = new Corsa();
 
 export function mountSearch(): void {
   searchInputEl.addEventListener("input", scheduleSearch);
@@ -54,9 +58,9 @@ function scheduleSearch(): void {
 export function clearSearch(): void {
   window.clearTimeout(searchTimer);
   searchInputEl.value = "";
-  // Il numero d'ordine avanza anche qui: una risposta già in volo non deve
+  // I giri in volo scadono anche qui: una risposta già in volo non deve
   // ripopolare un pannello che l'utente ha appena chiuso.
-  searchSeq++;
+  corsa.annulla();
   showPanel("files");
   searchResultsEl.innerHTML = "";
 }
@@ -75,9 +79,7 @@ async function runSearch(): Promise<void> {
     clearSearch();
     return;
   }
-  const seq = ++searchSeq;
-  let hits: DocumentMatch[];
-  try {
+  await corsa.ultimo(async (atteso) => {
     // Ciò che l'utente digita è **testo cercato**, non una sintassi: la stringa
     // è il campo di una foglia, e non c'è più un parser di terzi che possa
     // rifiutarla a metà parola (§5.3).
@@ -86,38 +88,46 @@ async function runSearch(): Promise<void> {
     // digita, quindi `arch` deve trovare *architettura* prima che la parola sia
     // finita (§21.2). Lo dice la query, non un `*` appeso qui: la lingua è una
     // sola per la casella, la CLI, l'API locale e le automazioni.
-    hits = (
-      await documentiCheCombaciano(testoCercato(query, true), { offset: 0, limit: 50 })
-    ).items;
-  } catch (e) {
-    // Resta il caso in cui **nessuno** serve la ricerca: un vault aperto senza
-    // indice full-text. È una mancanza, non zero risultati, e va detta.
-    if (seq === searchSeq) showSearchResults([], errorText(e));
-    return;
-  }
-  if (seq !== searchSeq) return;
-
-  // **Zero risultati mentre il vault indicizza non è «niente trovato»** (§15.7).
-  // Un vault si apre in due tempi: appena scansionato è utilizzabile, e la
-  // ricerca si popola dopo. Nei primi secondi di un vault grande la risposta
-  // vera è *non lo so ancora*, e disegnarla come una risposta negativa
-  // manderebbe a cercare altrove chi aveva cercato bene.
-  //
-  // Lo si chiede **solo quando la risposta è vuota**: è l'unico caso in cui la
-  // distinzione cambia cosa si scrive, e a ogni tasto premuto su una ricerca
-  // che trova non si paga niente.
-  let parziale = false;
-  if (hits.length === 0) {
-    try {
-      parziale = (await statoDelVault()).indexing === "running";
-    } catch {
-      // Lo stato del vault è una **rifinitura del messaggio**: se non si
-      // riesce a chiederlo, si dice «nessun risultato» come si è sempre fatto.
-      // Un errore qui non deve togliere all'utente i risultati che ha.
+    //
+    // **L'errore diventa un valore prima del cancello.** Resta il caso in cui
+    // nessuno serve la ricerca — un vault aperto senza indice full-text — ed è
+    // una mancanza, non zero risultati, quindi va detta; ma dirla è una
+    // scrittura come le altre, e passa dallo stesso `atteso` dei risultati
+    // invece di essere un secondo posto in cui ricordarsi il controllo. Un
+    // `try` attorno all'`atteso` ingoierebbe la scadenza insieme all'errore.
+    const esito = await atteso(
+      documentiCheCombaciano(testoCercato(query, true), { offset: 0, limit: 50 })
+        .then((p) => ({ hits: p.items }))
+        .catch((e: unknown) => ({ errore: errorText(e) })),
+    );
+    if ("errore" in esito) {
+      showSearchResults([], esito.errore);
+      return;
     }
-    if (seq !== searchSeq) return;
-  }
-  showSearchResults(hits, null, parziale);
+    const hits: DocumentMatch[] = esito.hits;
+
+    // **Zero risultati mentre il vault indicizza non è «niente trovato»** (§15.7).
+    // Un vault si apre in due tempi: appena scansionato è utilizzabile, e la
+    // ricerca si popola dopo. Nei primi secondi di un vault grande la risposta
+    // vera è *non lo so ancora*, e disegnarla come una risposta negativa
+    // manderebbe a cercare altrove chi aveva cercato bene.
+    //
+    // Lo si chiede **solo quando la risposta è vuota**: è l'unico caso in cui la
+    // distinzione cambia cosa si scrive, e a ogni tasto premuto su una ricerca
+    // che trova non si paga niente.
+    let parziale = false;
+    if (hits.length === 0) {
+      // Lo stato del vault è una **rifinitura del messaggio**: se non si riesce
+      // a chiederlo, si dice «nessun risultato» come si è sempre fatto. Un
+      // errore qui non deve togliere all'utente i risultati che ha.
+      parziale = await atteso(
+        statoDelVault()
+          .then((s) => s.indexing === "running")
+          .catch(() => false),
+      );
+    }
+    showSearchResults(hits, null, parziale);
+  });
 }
 
 function showSearchResults(

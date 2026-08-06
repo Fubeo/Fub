@@ -36,6 +36,7 @@
 // due registri del §1.2 si incontrano, che `ui/panel-host.ts` diceva sarebbe
 // arrivato con questa voce e non prima.
 import { api } from "../host/ipc";
+import { Corsa } from "./corsa";
 import type { ActionRef, FieldValue, UiNode, ViewSpec, ViewSurface } from "../host/contract";
 import { $ } from "./dom";
 import { attivabile, intrappolaFuoco } from "./a11y";
@@ -65,6 +66,11 @@ interface Montata {
   container: HTMLElement;
   instance: string;
   params: unknown;
+  /// I ridisegni di questo pannello, di cui conta solo l'ultimo (0134). Sta
+  /// dentro la `Montata` e non in una mappa accanto perché è **della stessa
+  /// cosa**: quando la montata se ne va, i suoi giri in volo se ne vanno con
+  /// lei, e non c'è una seconda mappa da ricordarsi di ripulire.
+  corsa: Corsa;
 }
 
 /// Le istanze montate, per **id di pannello**: il registro dei pannelli sa
@@ -120,7 +126,7 @@ export async function montaVistaInRiquadro(
     // L'esemplare **è il riquadro**: è la stessa identità che il `ViewContext`
     // porta di là dal confine (`pane`), quindi lo stato di vista di una view
     // aperta in due riquadri si separa esattamente dove l'utente vede due cose.
-    montate.set(id, { view, container, instance: pane, params: null });
+    montate.set(id, { view, container, instance: pane, params: null, corsa: new Corsa() });
     registerPanel({
       id,
       title: spec.title,
@@ -337,7 +343,13 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
   // sua specie e non ha parametri (§2.3). Le istanze multiple arrivano con chi
   // le apre — `CommandEffect::OpenView` — e con il modello di layout che dà
   // loro dove stare.
-  montate.set(spec.id, { view: spec.id, container, instance: spec.id, params: null });
+  montate.set(spec.id, {
+    view: spec.id,
+    container,
+    instance: spec.id,
+    params: null,
+    corsa: new Corsa(),
+  });
 
   registerPanel({
     id: spec.id,
@@ -367,8 +379,21 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
 async function renderDeclaredView(id: string): Promise<void> {
   const montata = montate.get(id);
   if (!montata) return;
-  const albero = await api.renderView(montata.view, montata.instance, montata.params);
-  disegna(id, montata, albero);
+  // La corsa è **del pannello montato**, non del modulo: le view dichiarate si
+  // ridisegnano tutte insieme (un `stale-views`, un `batch_ended`), e un
+  // contatore unico le farebbe annullare a vicenda lasciando disegnata solo
+  // l'ultima che risponde.
+  //
+  // Il difetto misurato nominava il ripiego da `patch` — `patchTree` fallisce e
+  // si ridisegna l'albero intero — ma la finestra non è là: è **qui**, in
+  // `renderDeclaredView` e basta, e il ripiego è solo il chiamante più
+  // evidentemente concorrente. Riparandola al posto nominato sarebbero rimasti
+  // scoperti il ramo `replace` e ogni ridisegno che arriva da un evento, che
+  // sono i più frequenti.
+  await montata.corsa.ultimo(async (atteso) => {
+    const albero = await atteso(api.renderView(montata.view, montata.instance, montata.params));
+    disegna(id, montata, albero);
+  });
 }
 
 /// Disegna un albero nel contenitore della sua istanza e chiude il giro

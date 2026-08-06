@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Settantanove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Settantasei** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -516,9 +516,7 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0027 | `openWikilink` esce su `if (!page) return`: `[[#Sezione]]` e `[[#^blocco]]` non portano da nessuna parte | `frontend` · `panels/document.ts:902` | shell |
 | 0028 | `argsFromForm` scrive `false` per un booleano opzionale mai toccato, e copre il default del kernel | `frontend` · `ui/palette.ts:163` | shell |
 | 0030 | `saveCurrent` non ha una coda: due salvataggi si accavallano e si contendono `dirty` | `frontend` · `panels/document.ts` | corse |
-| 0031 | `updatePreview` innesta senza token: una risposta in ritardo riempie un'anteprima già chiusa | `frontend` · `panels/preview.ts:58` | corse |
 | 0033 | `openDocument` non verifica di essere ancora quello atteso dopo l'`await` | `frontend` · `panels/document.ts:851` | corse |
-| 0034 | `refreshFromKernel` non ha contatore di generazione: due giri si sovrascrivono fuori ordine | `frontend` · `panels/explorer.ts:141` | corse |
 | 0035 | `dispatch_pending` gira solo `if removed_indexes`: un plugin senza indici lascia i `JobDone` in coda | `fub-kernel` · `workspace.rs:1160` | eventi persi |
 | 0036 | gli eventi emessi prima dell'`AppHandle` spariscono senza traccia | `fub-app` · `lib.rs:74` | eventi persi |
 | 0037 | `let _ = app.emit(...)`: un payload che non serializza si perde in silenzio | `fub-app` · `lib.rs:79` | eventi persi |
@@ -560,7 +558,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0081 | lo span di un embed include il `!` nel ripiego testuale e non nel ramo comrak | `fub-format-markdown` · `parse.rs:642` | markdown |
 | 0085 | il nome del gruppo `radio` è globale al documento: due form con lo stesso `field` si deselezionano a vicenda | `frontend` · `ui/node.ts:825` | shell |
 | 0086 | `viewAction` non è avvolta in un `try/catch`: un errore lascia la vista com'era, senza dirlo | `frontend` · `ui/views.ts:391` | errori |
-| 0087 | il ripiego da `patch` a `renderDeclaredView` non ha token di sequenza | `frontend` · `ui/views.ts` `disegna` | corse |
 | 0088 | `mountDeclaredViews` smonta prima di sapere se `listViews` riesce | `frontend` · `ui/views.ts:219` | corse |
 | 0089 | `forget_vault` esce al primo errore I/O e lascia le forme successive dentro `view_states` | `fub-host` · `session.rs:668` | stato divergente |
 | 0090 | `set_plugin_enabled` muta memoria e registro, poi propaga l'errore di `set_setting`: il disco resta indietro | `fub-host` · `session.rs` `set_plugin_enabled` | stato divergente |
@@ -593,7 +590,7 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentatré** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentaquattro** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

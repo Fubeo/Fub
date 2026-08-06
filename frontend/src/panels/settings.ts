@@ -26,6 +26,7 @@
 // stessa strada, o l'utente non potrebbe cambiare le proprie impostazioni di
 // privacy, o un plugin potrebbe.
 import { api } from "../host/ipc";
+import { Corsa } from "../ui/corsa";
 import { impostazioni } from "../host/query";
 import type { BundleInfo, SettingEntry, SettingValue, KnownVault } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -186,10 +187,9 @@ function chiudi(): void {
 /// due schede mescolate. Qui si costruisce prima e si sostituisce dopo, in un
 /// colpo solo, e il disegno che arriva in ritardo si accorge di non essere più
 /// l'ultimo e si ritira.
-let generazione = 0;
+const corsa = new Corsa();
 
 async function disegna(): Promise<void> {
-  const mia = ++generazione;
   for (const bottone of tabsEl.querySelectorAll<HTMLButtonElement>("button[data-scheda]")) {
     const scelta = bottone.dataset.scheda === scheda;
     bottone.classList.toggle("active", scelta);
@@ -197,19 +197,29 @@ async function disegna(): Promise<void> {
     // stessa informazione detta a metà delle persone.
     bottone.setAttribute("aria-selected", String(scelta));
   }
-  let nodi: HTMLElement[];
-  try {
-    if (scheda === "impostazioni") nodi = await disegnaForm();
-    else if (scheda === "componenti") nodi = await disegnaComponenti();
-    else if (scheda === "scorciatoie") nodi = await disegnaScorciatoie();
-    else nodi = await disegnaVault();
-  } catch (e) {
+  await corsa.ultimo(async (atteso) => {
+    // Il `catch` sta **sulla promessa e non attorno all'attesa**, ed è la
+    // differenza che questa migrazione ha reso visibile: un `try` attorno
+    // all'`atteso` ingoierebbe il segnale di scadenza insieme all'errore di
+    // lettura, e il giro vecchio tornerebbe a scrivere. Qui l'errore è già un
+    // valore quando arriva al cancello.
+    //
     // Un pannello che non riesce a leggere lo dice: il §20.2 avrà il canale
     // vero, e finché non c'è questo è il posto più visibile che ha.
-    nodi = [riga("muted", t("settings.read_failed", { reason: errorText(e) }))];
-  }
-  if (mia !== generazione) return;
-  bodyEl.replaceChildren(...nodi);
+    const nodi = await atteso(
+      contenutoDellaScheda().catch((e: unknown) => [
+        riga("muted", t("settings.read_failed", { reason: errorText(e) })),
+      ]),
+    );
+    bodyEl.replaceChildren(...nodi);
+  });
+}
+
+function contenutoDellaScheda(): Promise<HTMLElement[]> {
+  if (scheda === "impostazioni") return disegnaForm();
+  if (scheda === "componenti") return disegnaComponenti();
+  if (scheda === "scorciatoie") return disegnaScorciatoie();
+  return disegnaVault();
 }
 
 // --- la scheda delle impostazioni -------------------------------------------

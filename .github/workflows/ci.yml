@@ -246,6 +246,16 @@ jobs:
       # era misurato ed era sei volte la stessa riga (decisione 0133).
       - name: ogni ascoltatore globale della shell ha una Vita (decisione 0133)
         run: node .github/scripts/check-ascoltatori.mjs
+      # La stessa mossa sul tempo invece che sulla vita: dentro il corpo di un
+      # giro (`corsa.ultimo(async (atteso) => …)`) non si aspetta di nascosto.
+      # `atteso` è l'unico modo di ottenere il risultato di un'attesa, e quella
+      # metà la tiene il compilatore — per averlo bisogna già essere dentro un
+      # giro. Le due che non può tenere sono un `await` nudo e un `catch` scritto
+      # per gli errori veri, che ingoia anche il segnale di scadenza: è come
+      # erano scritte tutte e quattro le implementazioni a mano che la decisione
+      # 0134 ha sostituito.
+      - name: dentro un giro non si aspetta di nascosto (decisione 0134)
+        run: node .github/scripts/check-corse.mjs
       # E la stessa domanda delle versioni Rust, dall'altro lato: un pacchetto
       # npm in due copie. Non è un caso ipotetico scelto a caso — l'albero della
       # shell porta `@codemirror/state` sia diretto sia dentro `codemirror`, e
