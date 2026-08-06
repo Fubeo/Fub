@@ -18,6 +18,7 @@ import {
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
 import { createNote, refreshDocuments, renameNote } from "../state/vault";
 import {
+  FINESTRA_DEL_LIVELLO,
   childName,
   folderNoteCandidates,
   folderNoteIn,
@@ -163,7 +164,9 @@ async function caricaVisibili(): Promise<Map<string, FolderContent>> {
   const out = new Map<string, FolderContent>();
   let livello = [state.activeSpace ?? ""];
   while (livello.length > 0) {
-    const contenuti = await Promise.all(livello.map((path) => contenutoDiCartella(path)));
+    const contenuti = await Promise.all(
+      livello.map((path) => contenutoDiCartella(path, FINESTRA_DEL_LIVELLO)),
+    );
     const prossimo: string[] = [];
     contenuti.forEach((contenuto, i) => {
       const path = livello[i]!;
@@ -380,6 +383,23 @@ function renderChildren(path: string, ul: HTMLElement): void {
     if (id === state.currentDoc) li.setAttribute("aria-selected", "true");
     ul.appendChild(li);
   }
+  // Ciò che la finestra ha lasciato fuori **si dice**. Un livello troncato in
+  // silenzio è peggio di un livello lento: chi guarda conclude che la cartella
+  // contiene ciò che vede, e cerca altrove una nota che c'è. La riga non è
+  // attivabile perché non c'è ancora un gesto che la apra — «mostra le altre»
+  // è la casella residua di questa voce — e dirlo senza saperlo fare è più
+  // onesto che non dirlo.
+  const altre = node.altreCartelle + node.altreNote;
+  if (altre > 0) ul.appendChild(rigaTroncata(altre));
+}
+
+/// La riga che dice quante voci di questo livello non sono disegnate.
+function rigaTroncata(quante: number): HTMLElement {
+  const li = document.createElement("li");
+  li.className = "row troncata";
+  li.setAttribute("role", "none");
+  li.textContent = t("explorer.altre_voci", { n: quante });
+  return li;
 }
 
 /// Fa di un `<li>` una voce d'albero: il ruolo, il nome preso dalla riga, e il
@@ -635,19 +655,22 @@ function removeSpace(path: string): void {
 /// ed è esattamente quella che si vuole poter eleggere a spazio prima di
 /// riempirla.
 async function pickNewSpace(at: MouseEvent): Promise<void> {
-  const tutte = await cartelleDelVault();
+  // Un menu contestuale con una voce per cartella del vault non è un menu: la
+  // finestra è la stessa dell'albero, e le altre si dicono invece di sparire.
+  const tutte = await cartelleDelVault(FINESTRA_DEL_LIVELLO);
   const candidate = tutte.items.filter((f) => !state.meta.spaces.includes(f.path));
   if (candidate.length === 0) {
     showContextMenu(at, [{ label: t("explorer.no_folders"), run: () => {} }]);
     return;
   }
-  showContextMenu(
-    at,
-    candidate.map((f) => ({
+  const altre = Math.max(0, tutte.total - tutte.items.length);
+  showContextMenu(at, [
+    ...candidate.map((f) => ({
       label: `${state.meta.icons[f.path] ?? "📁"} ${f.path}`,
       run: () => addSpace(f.path),
     })),
-  );
+    ...(altre > 0 ? [{ label: t("explorer.altre_cartelle", { n: altre }), run: () => {} }] : []),
+  ]);
 }
 
 /// Il nome dello spazio nel titolo apre la sua folder note, se esiste.

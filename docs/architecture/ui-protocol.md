@@ -390,8 +390,12 @@ perché costi troppo ma perché una porta non c'è, e il caso che trova è la
   porta un buco `data-ui-slot="N"` e la shell ci monta la parte con lo stesso
   `mountTree`. Così il blocco di un plugin arriva a schermo **senza una riga in
   questo bundle** (l'iframe sandboxato resta la strada del widget vero, a M5).
-- **Resta aperto** — la virtualizzazione delle liste lunghe
-  ([§2.9](../roadmap/02-cosa-e-una-view.md)) e il ramo «la shell conosce `ns`» di
+- **Resta aperto** — la virtualizzazione delle liste lunghe, che la
+  ~~[§2.9](../roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui)~~ ha
+  chiuso solo per la metà che sta *prima* del layout
+  ([0114](../decisions/0114-una-finestra-non-si-omette.md): quanto attraversa il
+  ponte e quanti elementi nascono; disegnare *ciò che si vede* resta una casella
+  residua, perché vuole il layout) — e il ramo «la shell conosce `ns`» di
   `Custom`. Il primo cliente è arrivato — il diagramma, `ns: "fub:diagram"` — e
   ha mostrato che quel ramo **ancora non serve**: il `fallback` dichiarativo è la
   resa giusta finché non c'è un motore da invocare.

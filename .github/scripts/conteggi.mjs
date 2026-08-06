@@ -382,6 +382,30 @@ export const CONTEGGI = [
       " END{print fuori?0:n+0}' frontend/src/shell.e2e.test.ts",
   },
   {
+    nome: "finestre-aperte",
+    ragione:
+      "Le domande del canale dati che la shell fa **senza finestra**, cioè " +
+      "chiedendo tutto il vault: quante superfici hanno il permesso di crescere " +
+      "col numero di note (§2.9). Il numero non deve essere zero — i tag di un " +
+      "vault sono il suo vocabolario, e troncare un alfabeto è peggio che " +
+      "portarlo intero — ma deve essere **piccolo e nominato**, perché ognuna di " +
+      "queste è una promessa che la UI fa al §24.1 e che non può mantenere. " +
+      "Prima di questo conto la riga che lo prometteva era scritta in un " +
+      "commento di `host/query.ts` e il conto non esisteva: un presidio " +
+      "promesso e mai scritto, che è peggio di nessun commento. L'ancora è " +
+      "`SENZA_FINESTRA` in posizione di **argomento** — dopo una parentesi o " +
+      "una virgola — così l'`import` e la riga che lo confronta restano fuori. " +
+      "Il conto regge perché il valore è un `unique symbol`: la costante non si " +
+      "può riscrivere a mano, quindi non c'è modo di aprire una finestra senza " +
+      "nominarla. Zona cieca dichiarata: un argomento mandato a capo " +
+      "(`f(\\n  SENZA_FINESTRA,\\n)`) non ha la virgola sulla stessa riga e " +
+      "sfugge — `prettier` non spezza una chiamata così corta, ma se lo facesse " +
+      "il conto scenderebbe invece di salire, cioè si vedrebbe.",
+    comando:
+      "find frontend/src -name '*.ts' | xargs grep -ohE '[(,] ?SENZA_FINESTRA'" +
+      " | wc -l",
+  },
+  {
     nome: "buchi-dichiarati",
     ragione:
       "I verbali che dichiarano un buco proprio: un fatto sulla forma del " +

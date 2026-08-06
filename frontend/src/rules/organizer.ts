@@ -25,7 +25,27 @@ export interface FolderContent {
   /// DocId completi delle note dirette (folder note inclusa: la nasconde chi
   /// disegna).
   notes: string[];
+  /// Quante ne ha lasciate fuori la finestra (§2.9): un livello troncato **si
+  /// dice**, e per dirlo bisogna portarselo fin qui. Zero è il caso normale.
+  altreCartelle: number;
+  altreNote: number;
 }
+
+/// Quante voci di un livello l'albero chiede e disegna (§2.9).
+///
+/// Duecento, e il numero è **il costo di un ridisegno**, non una stima di
+/// quanto sia grande una cartella. L'albero si ricostruisce intero a ogni
+/// cambiamento (`renderFileList`), e ogni voce costa tre elementi e sette
+/// ascoltatori: senza un tetto, il prezzo di un salvataggio in una cartella da
+/// tremila note sono novemila elementi creati e buttati — cioè il §24.1 («vault
+/// enormi») rotto dalla UI prima che il kernel se ne accorga.
+///
+/// **La finestra non è virtualizzazione.** Virtualizzare vuol dire disegnare
+/// ciò che si vede, e *cosa si vede* è una domanda di layout; questa è la metà
+/// che sta prima del layout — quanto attraversa il ponte e quanti elementi
+/// nascono — ed è la metà che si conta (`ridisegno.test.ts`). Ciò che resta
+/// fuori si dice, non si tace: `altreNote`/`altreCartelle`.
+export const FINESTRA_DEL_LIVELLO = { offset: 0, limit: 200 };
 
 const collator = new Intl.Collator("it", { sensitivity: "base", numeric: true });
 
@@ -45,6 +65,8 @@ export function sortContent(content: FolderContent, meta: Organization): FolderC
       compareNames(childName(a.path), childName(b.path), custom),
     ),
     notes: [...content.notes].sort((a, b) => compareNames(childName(a), childName(b), custom)),
+    altreCartelle: content.altreCartelle,
+    altreNote: content.altreNote,
   };
 }
 

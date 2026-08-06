@@ -21,7 +21,12 @@ che nessuna delle quattro sedute poteva vedere da sola:
 **il modello di layout (~~§1.2~~) → il grafo nell'area principale (§3.3)**, e di
 lato la tastiera (~~§18.2~~) che deve arbitrare fra i comandi del kernel e quelli
 della shell prima che §4.4 le chieda un secondo livello di decorazioni. La
-§2.9 non è in coda a nessuno: si paga quando le liste diventano lunghe.
+~~§2.9~~ non era in coda a nessuno — si pagava quando le liste diventano lunghe —
+ed è chiusa con la
+[0114](../decisions/0114-una-finestra-non-si-omette.md): «non essere in coda a
+nessuno» si è rivelata la sua proprietà migliore, perché è ciò che le ha
+permesso di essere presa per ultima senza che nel frattempo qualcun altro
+decidesse al posto suo.
 
 Di quell'ordine, **l'anello della tastiera si è sciolto senza essere servito a
 niente**. La §18.2 è chiusa
@@ -269,29 +274,54 @@ decidere per loro.
       due volte è un buffer**. Due riquadri con due testi propri sarebbero due
       note, e il salvataggio più recente coprirebbe l'altro senza dirlo.
 
-### 2.9 Prestazioni della UI
+### ~~2.9 Prestazioni della UI~~
 
-*ex §3.6 · shell · **P2** — dalla [seduta 2](02-cosa-e-una-view.md) ([decisione 0016](../decisions/0016-cosa-e-una-view.md)); si paga quando le liste diventano lunghe*
+*ex §3.6 · shell · **P2** — dalla [seduta 2](02-cosa-e-una-view.md) ([decisione 0016](../decisions/0016-cosa-e-una-view.md)); **chiusa** con la [0114](../decisions/0114-una-finestra-non-si-omette.md), che lascia due caselle*
 
-- [ ] **Virtualizzazione** di file tree, risultati di ricerca, liste lunghe e
-      tabelle: senza, "vault enormi" (24.1) è una promessa che la UI rompe prima
-      del kernel. Il nodo `Table` della
-      [decisione 0016](../decisions/0016-cosa-e-una-view.md) ha reso il caso più
-      concreto, non più urgente: una tabella dichiarata con diecimila righe le
-      manda tutte attraverso l'IPC prima ancora che qualcuno provi a disegnarle, e
-      la finestra che serve è quella che `Page` già esprime nelle query — il pezzo
-      che manca è chi la chiede.
-- [ ] **Rendering incrementale dell'anteprima** e lazy loading di immagini/embed.
-      Il rendering incrementale ha una precondizione che la
-      [decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha
-      nominato e **non** costruito: sapere da quale byte del sorgente viene un
-      elemento reso. La forma decisa è una chiave di `RenderOptions` che fa
-      scrivere le coordinate nell'HTML — non un secondo canale che porta il
-      modello — e si costruisce quando questa voce diventa il suo primo cliente.
-- [ ] **Il numero che dice se è ora**: le soglie su vault sintetici da 10k/100k
-      note stanno nel [§17.1](17-presidi-che-restano.md#171-corpus-fuzzing-prestazioni),
-      e sono il presidio che dice *quando* questa voce ha smesso di essere P2. Le
-      due si leggono insieme: là si misura, qui si fa.
+- [x] **Virtualizzazione** di file tree, risultati di ricerca, liste lunghe e
+      tabelle — con la precisazione che la misura ha imposto: quel che si è
+      fatto **non è virtualizzazione**, ed è la metà che sta *prima* del layout.
+      Virtualizzare vuol dire disegnare ciò che si vede, e *cosa si vede* è una
+      domanda di layout, che in `happy-dom` non esiste (**buco dichiarato n. 5**
+      della [0112](../decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md)):
+      qui si decide **quanto attraversa il ponte e quanti elementi nascono**,
+      cioè esattamente ciò che la voce nominava — «le manda tutte attraverso
+      l'IPC prima ancora che qualcuno provi a disegnarle». La finestra che
+      `Page` già esprimeva adesso qualcuno la chiede, e non per gentilezza: è il
+      **primo argomento e non ha default**, quindi chiedere tutto è un caso da
+      nominare (`SENZA_FINESTRA`) e non un'omissione.
+      **Casella residua**: la finestra scorrevole vera, e con lei il gesto
+      «mostra le altre» — oggi la riga che dice quante ne sono rimaste fuori non
+      è attivabile, perché dirlo senza saperlo fare è più onesto che non dirlo.
+- [x] **Lazy loading di immagini/embed**, che la voce teneva insieme al
+      rendering incrementale e che la misura ha separato. Le immagini si sono
+      potute fare senza layout, perché la shell non calcola cosa si vede ma può
+      **dichiarare che non vuole deciderlo lei** (`loading="lazy"`), e la regola
+      sta nel punto unico in cui dell'HTML entra nella webview (§3.6) invece che
+      nell'anteprima. Gli embed no — caricarli quando si vedono è ancora
+      layout — ma misurando è saltato fuori di peggio: la profondità
+      dell'idratazione era limitata, la **larghezza** no, e la stessa pagina si
+      chiedeva al kernel una volta per segnaposto.
+      **Casella residua**: il **rendering incrementale**, e con due ragioni
+      misurate invece di una. La precondizione della
+      [decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md) — una
+      chiave di `RenderOptions` che faccia scrivere nell'HTML da quale byte
+      viene un elemento — è lavoro di `fub-abi` e del provider markdown, non di
+      strato shell; e soprattutto **il suo primo cliente non esiste**:
+      `updatePreview` gira quando cambia il documento del riquadro e quando si
+      entra in Lettura, mai a ogni battuta, perché `PaneMode` è un enum di
+      modalità esclusive e ciò che si rende è il sorgente **salvato**. Rendere
+      incrementalmente vuol dire non rifare la parte che non è cambiata; se si
+      rifà quando è cambiato il *documento*, sono cambiate tutte.
+- [x] **Il numero che dice se è ora**, e il rimando al §17.1 è **scaduto**: la
+      [0113](../decisions/0113-il-banco-conta-le-operazioni.md) ha chiuso quella
+      voce decidendo l'opposto di ciò che questa si aspettava — un banco conta
+      **operazioni**, non millisecondi, perché su una macchina condivisa il
+      tempo non è un segnale, e qui il tempo di un fotogramma in `happy-dom` non
+      esiste proprio. `ridisegno.test.ts` conta elementi nel DOM e domande al
+      ponte, e la forma che dice di più non è una soglia ma un'**uguaglianza**:
+      due vault che differiscono per quattromila note disegnano lo stesso
+      albero.
 
 ### ~~3.3 La UI di un plugin non ha modo di entrare nella shell~~
 

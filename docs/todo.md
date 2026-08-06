@@ -29,9 +29,9 @@ verbali di fila) — e **due** da una
 ([0056](decisions/0056-un-elenco-che-e-la-sorgente.md)), e la §22.4, staccata
 dalla §22.1 allo stesso modo — «alle 9» non è la stessa domanda di «ogni ora»,
 perché vuole un fuso e una regola sull'ora legale
-([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centotrenta sono
+([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)). Centotrentuno sono
 chiuse e i loro verbali stanno in [decisions/](decisions/README.md); le altre
-tre [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
+due [conta: voci-aperte] sono qui, e questo file è il loro **indice**.
 
 ## Come è organizzato
 
@@ -221,7 +221,7 @@ che questo piano passa il tempo a togliere dal codice.
 | **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | — | 3 |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | i banchi e i confini fra crate, **prima** di ciò che li moltiplica | 1 | 1 |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | **chiusa** — senza precedenze e senza scadenza: il criterio è se il costo cresce con l'attesa, e su una voce ha deciso in tre pezzi invece che in due | — | 2 |
-| **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell e non appartiene a nessuna delle sedute sopra, code delle sedute 1-4 comprese | 2 | 1 |
+| **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | ciò che resta della shell e non appartiene a nessuna delle sedute sopra, code delle sedute 1-4 comprese | 1 | 3 |
 | **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: rimandi ai quattro giri di audit, e il lavoro sta nelle sedute che li hanno assorbiti | — | 2 |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | **chiusa** — lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | — | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
@@ -230,7 +230,7 @@ che questo piano passa il tempo a togliere dal codice.
 
 ## Le voci
 
-Tre [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
+Due [conta: voci-aperte]. Il numero è quello con cui le nomina il resto del repo.
 
 **Se una voce è in questa tabella, è aperta.** Non ci sono spunte da leggere:
 una voce chiusa **sparisce** — dalla tabella, dal conteggio della sua seduta e
@@ -242,7 +242,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-tre [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+due [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -251,7 +251,7 @@ aperta è lavoro che qualcuno deve ancora **decidere**, una casella residua è
 lavoro già deciso che qualcuno deve ancora **fare**. Sommarle avrebbe dato un
 numero che non risponde a nessuna domanda.
 
-La colonna *Voci* somma **tre** [conta: voci-aperte], e le **sedute 20 e 23
+La colonna *Voci* somma **due** [conta: voci-aperte], e le **sedute 20 e 23
 sono a zero**. Della 20 non resta nemmeno una casella: si è chiusa con la
 [0111](decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), l'ultima delle cinque
 voci nate dalla domanda «cosa fallisce senza produrre nessun segnale». La 23 era
@@ -263,7 +263,7 @@ una voce per volta senza mai aspettare le altre. Il taglio che a un certo punto
 sembrava servire — spezzarla per **lente**, le §23.9–§23.17 rispondono a una
 domanda più stretta delle prime otto — non è mai servito.
 
-Le caselle residue oggi sono **diciannove**, e stanno in quindici posti:
+Le caselle residue oggi sono **ventuno**, e stanno in sedici posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
@@ -347,7 +347,27 @@ allocazioni per nota, e non è un caso di ritaglio sbagliato — il prezzo sta
 *dentro* la costruzione di ogni riga che si tiene, non fuori dalla finestra.
 Per quelle che **ordinano** o **aggregano** il ritaglio in memoria resta la
 risposta giusta; ciò che manca a tutte è la riga di banco che dica quanto
-costano).
+costano) e la
+[§2.9](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) (due: la
+**finestra scorrevole** vera, e con lei il gesto «mostra le altre» — la
+[0114](decisions/0114-una-finestra-non-si-omette.md) ha fatto la metà che sta
+*prima* del layout, cioè quanto attraversa il ponte e quanti elementi nascono, e
+la riga che dice quante voci sono rimaste fuori non è attivabile perché il gesto
+che la aprirebbe non c'è; disegnare *ciò che si vede* vuole il layout, che in
+`happy-dom` non esiste — è il buco n. 5 della
+[0112](decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md) — e
+scriverlo qui vorrebbe dire scrivere codice che nessun presidio di questo repo
+può guardare. E il **rendering incrementale dell'anteprima**, che è la casella
+con l'indirizzo più preciso e il cliente più incerto: la precondizione è quella
+della [0018](decisions/0018-chi-vede-il-modello-parsato.md) — una chiave di
+`RenderOptions` che faccia scrivere nell'HTML da quale byte viene un elemento —
+e non è di strato shell; ma la ragione per cui la casella resta ferma è
+un'altra, ed è misurata: **il suo primo cliente non esiste**. `updatePreview`
+gira quando cambia il documento del riquadro e quando si entra in Lettura, mai a
+ogni battuta, perché `PaneMode` è un enum di modalità esclusive e ciò che si
+rende è il sorgente *salvato* — rendere incrementalmente vuol dire non rifare la
+parte che non è cambiata, e lì sono cambiate tutte. Il cliente vero è
+un'anteprima affiancata che segue chi scrive, e quella superficie non c'è).
 Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte.
@@ -379,7 +399,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
-| **§2.9** | [Prestazioni della UI](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) | 18. L'editor e la tastiera *(da 2)* | shell | **P2** |
 | **§4.4** | [Due parser per la stessa sintassi](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | 18. L'editor e la tastiera *(da 4)* | shell | **P1** |
 | **§16.3** | [Un crate per bundle di feature](roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature) | 16. I crate, l'SDK, i banchi di prova | presidi | **P1** |
 
@@ -393,7 +412,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centotredici** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centoquattordici** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue
