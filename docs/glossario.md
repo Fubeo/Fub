@@ -589,7 +589,7 @@ registrazione, non si scopre per tentativi: la tabella delle rotte
 sceglierne uno a caso.
 
 ### pianificatore
-`QueryPlan` · [`kernel/index/plan.rs:439`](../crates/fub-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
+`QueryPlan` · [`kernel/index/plan.rs:436`](../crates/fub-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
 
 Chi decide come eseguire una query che tocca più di un indice. Dalla 0026 può
 mandarne due **insieme**: non è una dichiarazione nel contratto, è una misura —

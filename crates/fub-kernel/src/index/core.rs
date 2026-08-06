@@ -44,9 +44,10 @@ use fub_abi::query::{
 use fub_abi::rules::properties;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
-    DocPosition, DraftInfo, EntryKind, FolderScope, HostApi, IndexLoss, IndexProvider, IndexQuery,
-    IndexResult, IndexingState, JobId, JobProgress, JobStatus, LinkDirection, Paged, PredicateKind,
-    QueryKind, QueryRoute, ResolvedRef, VaultEntry, VaultFolder, VaultStatus,
+    DocPosition, DocumentMatch, DraftInfo, EntryKind, FolderScope, HostApi, IndexLoss,
+    IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobStatus,
+    LinkDirection, Page, Paged, PredicateKind, PropertySelect, PropertySort, QueryKind, QueryRoute,
+    ResolvedRef, VaultEntry, VaultFolder, VaultStatus,
 };
 use fub_abi::PluginError;
 
@@ -447,6 +448,35 @@ impl CoreIndex {
                 _ => None,
             });
         crate::properties::date_formats(declared.as_deref())
+    }
+
+    /// La **coda** di una risposta `Documents`, con dentro le due cose che il
+    /// kernel sa e [`properties::finish`] no: i formati che il vault dichiara e
+    /// dove si legge il frontmatter.
+    ///
+    /// Esiste perché i chiamanti sono **due** — questo indice quando la domanda
+    /// gli arriva intera, e il pianificatore quando la ricompone — e ognuno dei
+    /// due passava i formati per conto suo. Due siti che devono passare lo
+    /// stesso valore sono un sito che prima o poi passa l'altro: chi ricompone
+    /// avrebbe ordinato le date come testo mentre chi risponde intero le
+    /// ordinava per istante, sulla **stessa** domanda, e nessuno avrebbe
+    /// confrontato le due risposte perché non si vedono fra loro. Con la coda
+    /// qui, il terzo chiamante eredita la dichiarazione senza saperla.
+    ///
+    /// I punti da cui il kernel monta quella coda a mano sono
+    /// **uno** [conta: code-delle-documents-nel-kernel], ed è un conto e non un
+    /// test perché nessun test può vedere una rotta che ancora non esiste, e il
+    /// compilatore non sa distinguere un `&DateFormats` giusto da uno sbagliato.
+    pub(crate) fn finish_documents(
+        &self,
+        matches: Matches,
+        sort: Option<&PropertySort>,
+        select: &PropertySelect,
+        page: Option<Page>,
+    ) -> Paged<DocumentMatch> {
+        properties::finish(matches, sort, select, page, &self.date_formats(), |id| {
+            self.frontmatter(id)
+        })
     }
 
     pub(crate) fn new(
@@ -938,13 +968,11 @@ impl IndexProvider for CoreIndex {
                 excerpts: _,
             } => {
                 let matches = self.expr(&matching)?;
-                Ok(IndexResult::Documents(properties::finish(
+                Ok(IndexResult::Documents(self.finish_documents(
                     matches,
                     sort.as_ref(),
                     &select,
                     page,
-                    &self.date_formats(),
-                    |id| self.frontmatter(id),
                 )))
             }
             IndexQuery::Backlinks { target, page } => Ok(IndexResult::Backlinks(Paged::window(

@@ -391,22 +391,20 @@ fn backlinks_and_tags_keep_their_answer_and_gain_a_window() {
 
 // --- il formato delle date, dichiarato dal vault (§8.2) ---------------------
 
-/// Un vault con una data non-ISO, e la chiave `properties.date-format`
-/// dichiarata come la dichiara il core.
-fn vault_con_date() -> (tempfile::TempDir, Workspace) {
+/// Un vault di sole scadenze — una nota per riga, col valore di `scadenza`
+/// scritto **come lo scriverebbe chi possiede il vault** — e la chiave
+/// `properties.date-format` dichiarata come la dichiara il core.
+fn vault_di_scadenze(note: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
     std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(
-        root.join("Iso.md"),
-        "---\nscadenza: 2026-07-05\n---\nGià a posto.\n",
-    )
-    .unwrap();
-    std::fs::write(
-        root.join("Vecchia.md"),
-        "---\nscadenza: 5/7/2026\n---\nCome l'ha scritta chi l'ha scritta.\n",
-    )
-    .unwrap();
+    for (nome, scadenza) in note {
+        std::fs::write(
+            root.join(nome),
+            format!("---\nscadenza: {scadenza}\n---\nCome l'ha scritta chi l'ha scritta.\n"),
+        )
+        .unwrap();
+    }
 
     let mut registry = FormatRegistry::new();
     registry
@@ -421,6 +419,20 @@ fn vault_con_date() -> (tempfile::TempDir, Workspace) {
     .expect("dichiarata");
     ws.reindex().expect("reindex");
     (dir, ws)
+}
+
+/// Lo stesso giorno scritto nei due modi in cui lo si trova in un vault vero.
+fn vault_con_date() -> (tempfile::TempDir, Workspace) {
+    vault_di_scadenze(&[("Iso.md", "2026-07-05"), ("Vecchia.md", "5/7/2026")])
+}
+
+/// L'utente dichiara com'è scritto il **suo** vault.
+fn dichiara(ws: &mut Workspace, ordine: &str) {
+    ws.set_setting(
+        fub_kernel::properties::DATE_FORMAT,
+        fub_abi::settings::SettingValue::Text(ordine.into()),
+    )
+    .expect("scritta");
 }
 
 fn scadenze_dopo(ws: &Workspace) -> Vec<String> {
@@ -487,12 +499,7 @@ fn il_formato_dichiarato_arriva_fino_al_filtro_e_zittisce_il_controllo() {
         "e chi non trova ha il diritto di sapere perché"
     );
 
-    // L'utente dichiara com'è scritto il **suo** vault.
-    ws.set_setting(
-        fub_kernel::properties::DATE_FORMAT,
-        fub_abi::settings::SettingValue::Text("dmy".into()),
-    )
-    .expect("scritta");
+    dichiara(&mut ws, "dmy");
 
     assert_eq!(
         scadenze_dopo(&ws),
@@ -513,5 +520,123 @@ fn il_formato_dichiarato_arriva_fino_al_filtro_e_zittisce_il_controllo() {
         page.items.is_empty(),
         "una data dichiarata è una data: il controllo non ripete una domanda \
          a cui è stato risposto"
+    );
+}
+
+/// Le faccette di `scadenza`: il valore e quante note lo portano.
+fn faccette_di_scadenza(ws: &Workspace) -> Vec<(PropertyValue, u32)> {
+    let IndexResult::PropertyValues(page) = query(
+        ws,
+        IndexQuery::PropertyValues {
+            key: "scadenza".to_string(),
+            matching: QueryExpr::all(),
+            page: None,
+        },
+    ) else {
+        panic!("attese faccette");
+    };
+    page.items
+        .iter()
+        .map(|f| (f.value.clone(), f.count))
+        .collect()
+}
+
+/// **Il primo dei due danni che la dichiarazione esiste per togliere**: senza
+/// di essa lo stesso giorno scritto in due modi fa *una faccetta per ogni
+/// scrittura*, che è ciò che il doc di `HealthCheck::UnrecognizedDates`
+/// promette di non far succedere a chi ha dichiarato.
+///
+/// Il filtro e il controllo di salute avevano già il loro banco; il
+/// raggruppamento no, e ci si arriva da una rotta sua
+/// (`IndexQuery::PropertyValues`), non dalla coda dei documenti.
+#[test]
+fn lo_stesso_giorno_scritto_in_due_modi_e_una_faccetta_sola() {
+    let (_g, mut ws) = vault_con_date();
+
+    assert_eq!(
+        faccette_di_scadenza(&ws),
+        [
+            (
+                PropertyValue::Date(fub_abi::model::PropertyDate {
+                    year: 2026,
+                    month: 7,
+                    day: 5,
+                    time: None,
+                }),
+                1
+            ),
+            (PropertyValue::Text("5/7/2026".to_string()), 1),
+        ],
+        "senza dichiarazione il cinque luglio è due faccette: una data e un \
+         testo che le somiglia"
+    );
+
+    dichiara(&mut ws, "dmy");
+
+    assert_eq!(
+        faccette_di_scadenza(&ws),
+        [(
+            PropertyValue::Date(fub_abi::model::PropertyDate {
+                year: 2026,
+                month: 7,
+                day: 5,
+                time: None,
+            }),
+            2
+        )],
+        "dichiarato l'ordine, le due scritture sono lo stesso giorno: una \
+         faccetta sola, che conta due note — e il valore è una **data**, \
+         perché è quello che finisce nel pannello e nel raggruppamento"
+    );
+}
+
+/// **Il secondo danno**: l'ordinamento. Due scadenze si ordinano per
+/// **istante**, non per come sono scritte — e questo è il vault *misto*
+/// (due scritture dichiarate e una ISO) su cui la 0108 aveva misurato che il
+/// comparatore non è nemmeno un ordine.
+///
+/// I tre valori sono scelti perché l'ordine per stringa **contraddice** quello
+/// per istante: `1/1/2026` viene prima di `2/1/2020` fra i testi e dopo fra i
+/// giorni. E si guarda anche il verso discendente, perché un comparatore
+/// incoerente non è il rovescio di sé stesso: è lì che la permutazione «che
+/// nessuno ha deciso» si vede.
+#[test]
+fn due_scadenze_si_ordinano_per_istante_e_non_per_stringa() {
+    let (_g, mut ws) = vault_di_scadenze(&[
+        ("Duemilaventi.md", "2/1/2020"),
+        ("Gennaio.md", "1/1/2026"),
+        ("Giugno.md", "2026-06-30"),
+    ]);
+    let per_scadenza = |ws: &Workspace, descending: bool| -> Vec<String> {
+        rows(
+            ws,
+            IndexQuery::Documents {
+                matching: all_of(vec![filter("scadenza", PropertyTest::Exists)]),
+                sort: Some(PropertySort {
+                    key: "scadenza".to_string(),
+                    descending,
+                }),
+                select: PropertySelect::None,
+                page: None,
+                excerpts: Excerpts::Omit,
+            },
+        )
+        .0
+    };
+
+    dichiara(&mut ws, "dmy");
+
+    assert_eq!(
+        per_scadenza(&ws, false),
+        ["Duemilaventi.md", "Gennaio.md", "Giugno.md"],
+        "due gennaio 2020, primo gennaio 2026, trenta giugno 2026: l'ordine \
+         dei giorni. Per stringa `1/1/2026` verrebbe per primo"
+    );
+    assert_eq!(
+        per_scadenza(&ws, true),
+        ["Giugno.md", "Gennaio.md", "Duemilaventi.md"],
+        "e il verso discendente è il rovescio, che è ciò che un ordine è: con \
+         un comparatore che rende `Equal` fra specie diverse i due versi non \
+         si rovesciano, e la risposta è una permutazione che nessuno ha deciso"
     );
 }

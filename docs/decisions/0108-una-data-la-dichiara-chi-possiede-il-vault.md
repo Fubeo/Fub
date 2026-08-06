@@ -202,3 +202,29 @@ ha già descritto e che non è di questo giro. Riparato nello stesso commit anch
 un difetto vero dentro quel banco: pretendeva ogni chiave in **ogni** catalogo
 invece che in ogni **lingua**, cioè non avrebbe mai permesso a due cataloghi della
 stessa lingua di sommarsi — che è precisamente ciò che il montaggio fa.
+
+## Cosa la verifica ha trovato dopo (aggiunto il 2026-08-06)
+
+Questa riga si **aggiunge** e non riscrive niente di quanto sta sopra: un verbale
+racconta cosa si è deciso quel giorno, non cosa si è scoperto poi.
+
+Il collaudo del giro ha misurato che il formato dichiarato veniva letto da
+**cinque** punti del kernel e che il presidio ne copriva **due** — il filtro e
+`VaultHealth`, cioè i due che stanno nella «verifica del rosso» qui sopra.
+Sostituendo il formato con `DateFormats::ISO` negli altri tre — la coda delle
+`Documents` nell'indice, le faccette di `PropertyValues`, e la coda delle
+`Documents` nel pianificatore — la suite intera restava **verde**. I due danni
+scoperti erano esattamente i due che il doc di `HealthCheck::UnrecognizedDates`
+elenca come ragione d'essere della decisione: *una faccetta per ogni scrittura
+diversa dello stesso giorno*, e *un ordinamento plausibile e arbitrario*. Cioè
+l'ordinamento che questo verbale ha già registrato come «difetto fuori dalla
+voce» era stato **scritto e non presidiato**.
+
+La riparazione sta nel commit che nomina questo verbale: i due punti che
+montavano la coda delle `Documents` sono diventati **uno**
+(`CoreIndex::finish_documents`), così i formati li passa un posto solo e il
+chiamante successivo li eredita; il raggruppamento e l'ordinamento hanno il loro
+banco end-to-end; e il fatto che quel punto resti uno lo guarda un conto
+(`code-delle-documents-nel-kernel`), perché il compilatore non sa distinguere un
+`&DateFormats` giusto da uno sbagliato e nessun test vede una rotta che non c'è
+ancora.

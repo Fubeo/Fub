@@ -235,6 +235,24 @@ export const CONTEGGI = [
       " | grep -cE '^[[:space:]]+page: Option<Page>,?$'",
   },
   {
+    nome: "code-delle-documents-nel-kernel",
+    ragione:
+      "Da quanti punti di `crates/fub-kernel/src` si chiama `properties::finish`, " +
+      "cioè quante volte il kernel monta a mano la coda di una risposta " +
+      "`Documents`. Deve essere **uno**: quella coda vuole i formati di data che " +
+      "il vault dichiara (decisione 0108), e finché i punti erano due — l'indice " +
+      "quando la domanda gli arriva intera, il pianificatore quando la ricompone " +
+      "— ognuno se li passava per conto suo. Misurato: sostituendo i formati con " +
+      "`DateFormats::ISO` in quello del pianificatore **nessun** test in tutta la " +
+      "suite diventava rosso, quindi le due rotte potevano ordinare la stessa " +
+      "domanda in due modi senza che niente le confrontasse. Ora la coda sta in " +
+      "`CoreIndex::finish_documents` e i formati li passa lei; un secondo " +
+      "chiamante che ricominci a montarla da sé lo vede questo conto, perché il " +
+      "compilatore non ha modo di distinguere un `&DateFormats` giusto da uno " +
+      "sbagliato e nessun test può vedere una rotta che non c'è ancora.",
+    comando: "grep -rhoE 'properties::finish\\(' crates/fub-kernel/src | wc -l",
+  },
+  {
     nome: "crate-del-workspace",
     ragione:
       "I crate che ereditano la versione dal `Cargo.toml` della radice. " +
