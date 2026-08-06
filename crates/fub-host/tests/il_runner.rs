@@ -211,7 +211,7 @@ fn banco(v: &Vault, passi: &Passi) -> (Host, Subscription) {
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();
         s.bundles()
-            .lock()
+            .write()
             .unwrap()
             .mount(
                 &BundleLavoratore {
@@ -630,7 +630,7 @@ fn una_sveglia_dichiarata_suona_da_sola() {
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();
         s.bundles()
-            .lock()
+            .write()
             .unwrap()
             .mount(&BundleConSveglia, &mut ws)
             .expect("il bundle si monta");

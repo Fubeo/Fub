@@ -41,7 +41,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, RwLock};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -52,6 +52,7 @@ use jiff::Timestamp;
 
 use crate::parete::{verdetto, Fuso, Posizione};
 
+use crate::custodia::Custodia;
 use crate::jobs::JobHost;
 use crate::records::UnreadDoc;
 use crate::registry::BundleRegistry;
@@ -319,8 +320,8 @@ impl Sveglie {
 /// Ciò che i thread condividono: il vault, chi possiede i bundle, il campanello,
 /// le bandiere di chi è stato annullato, e i quadranti delle sveglie.
 struct Shared {
-    workspace: Arc<RwLock<Workspace>>,
-    bundles: Arc<Mutex<BundleRegistry>>,
+    workspace: Custodia<Workspace>,
+    bundles: Custodia<BundleRegistry>,
     bell: Arc<JobBell>,
     /// Il pool sta chiudendo: nessun job nuovo parte.
     stopping: AtomicBool,
@@ -331,11 +332,11 @@ struct Shared {
     /// dedicato all'indicizzazione avrebbe voluto una seconda cancellazione, un
     /// secondo modo di chiudere e un secondo posto da cui il workspace si
     /// prende in esclusiva — cioè tre cose che il §9.3 ha già deciso una volta.
-    apertura: Mutex<Option<InCorso>>,
-    flags: Mutex<Flags>,
+    apertura: Custodia<Option<InCorso>>,
+    flags: Custodia<Flags>,
     /// Le sveglie sono **una** per pool e non una per thread: due thread con due
     /// quadranti farebbero suonare ogni sveglia due volte.
-    sveglie: Mutex<Sveglie>,
+    sveglie: Custodia<Sveglie>,
 }
 
 /// L'indicizzazione dell'apertura mentre gira: il lavoro, la sua identità di
@@ -351,7 +352,7 @@ pub struct InCorso {
     /// questo esito: chi apre non aspetta l'indicizzazione, quindi il posto
     /// dove gli scarti si depositano deve esserci già quando ancora non ce n'è
     /// nessuno.
-    pub(crate) unread: Arc<Mutex<Vec<UnreadDoc>>>,
+    pub(crate) unread: Custodia<Vec<UnreadDoc>>,
     /// **Quando l'indicizzazione ha finito**, per chi deve aspettarla.
     ///
     /// Una condizione e non un'attesa a intervalli, per la stessa ragione per
@@ -376,21 +377,21 @@ impl Shared {
     /// da un provider all'apertura del vault vede un indice che si sta
     /// popolando, e farlo aspettare la fine è il verso che gli fa vedere di
     /// più. Non è fame: una fetta è limitata, e fra due fette la coda si drena.
-    fn avanza_apertura(&self) -> bool {
-        let Some(mut in_corso) = self.apertura.lock().expect("apertura avvelenata").take() else {
-            return false;
+    fn avanza_apertura(&self) -> Result<bool, PluginError> {
+        let Some(mut in_corso) = self.apertura.write()?.take() else {
+            return Ok(false);
         };
         // La bandiera è **quella di tutti**: annullare l'indicizzazione è
         // premere lo stesso pulsante che annulla un export, e passa dalla
         // stessa `Flags`. Senza questo, «annulla» avrebbe avuto due
         // implementazioni e una delle due sarebbe stata dimenticata.
-        let flag = self.flag(in_corso.id);
+        let flag = self.flag(in_corso.id)?;
         let smettere = flag.load(Ordering::Relaxed) || self.stopping.load(Ordering::Acquire);
 
         if !smettere && !in_corso.work.finita() {
             let label = in_corso.work.prossimo().map(|id| id.to_string());
             {
-                let mut ws = self.workspace.write().expect("workspace avvelenato");
+                let mut ws = self.workspace.write()?;
                 ws.index_batch(&mut in_corso.work);
                 // Il `total` c'è perché la scansione lo sa: l'apertura è il
                 // caso in cui una barra può dire il vero, e
@@ -405,18 +406,18 @@ impl Shared {
                     },
                 );
             }
-            *self.apertura.lock().expect("apertura avvelenata") = Some(in_corso);
-            return true;
+            *self.apertura.write()? = Some(in_corso);
+            return Ok(true);
         }
 
         // Finita, o smessa: si chiude comunque — `finish_index` fa il grafo e
         // il flush di ciò che è stato alimentato, e **non riconcilia** se il
         // giro non è arrivato in fondo.
         let apertura = {
-            let mut ws = self.workspace.write().expect("workspace avvelenato");
+            let mut ws = self.workspace.write()?;
             ws.finish_index(in_corso.work)
         };
-        *in_corso.unread.lock().expect("scarti avvelenati") = apertura
+        *in_corso.unread.write()? = apertura
             .scartati
             .iter()
             .map(|scarto| UnreadDoc {
@@ -436,64 +437,61 @@ impl Shared {
         } else {
             Ok(serde_json::json!({ "scartati": apertura.scartati.len() }))
         };
-        self.forget(in_corso.id);
-        self.workspace
-            .write()
-            .expect("workspace avvelenato")
-            .complete_job(in_corso.id, fub_kernel::INDEX_JOB.to_string(), outcome);
+        self.forget(in_corso.id)?;
+        self.workspace.write()?.complete_job(
+            in_corso.id,
+            fub_kernel::INDEX_JOB.to_string(),
+            outcome,
+        );
         // Ultimo, e dopo l'esito: chi si sveglia qui deve trovare il vault
         // nello stato in cui l'indicizzazione lo ha lasciato, non mentre ce lo
         // sta mettendo.
         let (fatto, campana) = &*in_corso.fine;
         *fatto.lock().expect("fine avvelenata") = true;
         campana.notify_all();
-        true
+        Ok(true)
     }
 
     /// Prende in carico un lotto appena drenato ([`Flags::claim`]).
-    fn claim(&self, jobs: &[PendingJob]) {
-        let mut flags = self.flags.lock().expect("bandiere avvelenate");
+    fn claim(&self, jobs: &[PendingJob]) -> Result<(), PluginError> {
+        let mut flags = self.flags.write()?;
         for job in jobs {
             flags.claim(job.id);
         }
+        Ok(())
     }
 
     /// La bandiera di un job, creandola se non c'è.
-    fn flag(&self, id: JobId) -> Arc<AtomicBool> {
-        let mut flags = self.flags.lock().expect("bandiere avvelenate");
+    fn flag(&self, id: JobId) -> Result<Arc<AtomicBool>, PluginError> {
+        let mut flags = self.flags.write()?;
         flags.claim(id);
-        Arc::clone(&flags.live[&id])
+        Ok(Arc::clone(&flags.live[&id]))
     }
 
-    fn cancel(&self, id: JobId) {
-        self.flags.lock().expect("bandiere avvelenate").cancel(id);
+    fn cancel(&self, id: JobId) -> Result<(), PluginError> {
+        self.flags.write()?.cancel(id);
+        Ok(())
     }
 
-    fn forget(&self, id: JobId) {
-        self.flags
-            .lock()
-            .expect("bandiere avvelenate")
-            .live
-            .remove(&id);
+    fn forget(&self, id: JobId) -> Result<(), PluginError> {
+        self.flags.write()?.live.remove(&id);
+        Ok(())
     }
 
-    fn cancel_all(&self) {
-        self.flags.lock().expect("bandiere avvelenate").cancel_all();
+    fn cancel_all(&self) -> Result<(), PluginError> {
+        self.flags.write()?.cancel_all();
+        Ok(())
     }
 
     /// Esegue un job e ne riconsegna l'esito. **Sempre** un esito: un job che
     /// sparisce senza dire niente è un chiamante che aspetta per sempre, ed è la
     /// regola che la [0028](../../../docs/decisions/0028-come-un-componente-smette.md)
     /// ha già scritto per i job di chi si disattiva.
-    fn run(&self, job: PendingJob) {
-        let flag = self.flag(job.id);
+    fn run(&self, job: PendingJob) -> Result<(), PluginError> {
+        let flag = self.flag(job.id)?;
         // Il corpo lo tiene il registry, e lo si prende **senza tenere il suo
         // lock** per la durata del job: chi chiude deve poterci passare.
-        let plugin = self
-            .bundles
-            .lock()
-            .expect("registry avvelenato")
-            .body(&job.plugin);
+        let plugin = self.bundles.read()?.body(&job.plugin);
 
         let outcome = match plugin {
             None => Err(PluginError::Internal(
@@ -531,23 +529,22 @@ impl Shared {
             }
         };
 
-        self.forget(job.id);
+        self.forget(job.id)?;
         self.workspace
-            .write()
-            .expect("workspace avvelenato")
+            .write()?
             .complete_job(job.id, job.spec.job, outcome);
+        Ok(())
     }
 
     /// Riconsegna un job **senza eseguirlo**: è stato chiesto, e chi lo ha
     /// chiesto aspetta un `JobDone`.
-    fn refuse(&self, job: PendingJob, why: &str) -> PluginError {
+    fn refuse(&self, job: PendingJob, why: &str) -> Result<PluginError, PluginError> {
         let refusal = PluginError::Cancelled(format!("il job `{}` {why}", job.spec.job).into());
-        self.forget(job.id);
+        self.forget(job.id)?;
         self.workspace
-            .write()
-            .expect("workspace avvelenato")
+            .write()?
             .complete_job(job.id, job.spec.job, Err(refusal.clone()));
-        refusal
+        Ok(refusal)
     }
 
     /// Il fuso della **macchina**, per le sveglie di parete che non ne
@@ -563,39 +560,27 @@ impl Shared {
     /// — l'utente lo scrive nelle impostazioni, o si porta il portatile in un
     /// altro paese — e non c'è niente da invalidare perché non c'è niente di
     /// derivato.
-    fn fuso_macchina(&self) -> String {
-        self.workspace
-            .read()
-            .expect("workspace avvelenato")
-            .locale()
-            .timezone
+    fn fuso_macchina(&self) -> Result<String, PluginError> {
+        Ok(self.workspace.read()?.locale().timezone)
     }
 
     /// Fra quanto suona la prima sveglia, riallineando prima i quadranti a ciò
     /// che è dichiarato adesso (§22.1).
-    fn fra_quanto_suona(&self) -> Option<Duration> {
-        let dichiarate = self
-            .workspace
-            .read()
-            .expect("workspace avvelenato")
-            .declared_timers();
+    fn fra_quanto_suona(&self) -> Result<Option<Duration>, PluginError> {
+        let dichiarate = self.workspace.read()?.declared_timers();
         if dichiarate.is_empty() {
             // Nessuna sveglia: si torna esattamente al pool di prima, che
             // dorme senza scadenza. Vale la pena che sia un ramo e non un
             // `Duration::MAX`, perché è la promessa che chi non dichiara timer
             // non paga nemmeno un risveglio.
-            self.sveglie
-                .lock()
-                .expect("sveglie avvelenate")
-                .quadranti
-                .clear();
-            return None;
+            self.sveglie.write()?.quadranti.clear();
+            return Ok(None);
         }
-        let fuso = self.fuso_macchina();
+        let fuso = self.fuso_macchina()?;
         let ora = Instant::now();
-        let mut sveglie = self.sveglie.lock().expect("sveglie avvelenate");
+        let mut sveglie = self.sveglie.write()?;
         sveglie.riconcilia(&dichiarate, ora, &fuso);
-        sveglie.fra_quanto(ora)
+        Ok(sveglie.fra_quanto(ora))
     }
 
     /// Fa suonare ciò che è scaduto.
@@ -604,45 +589,59 @@ impl Shared {
     /// **dopo** averlo lasciato: emettere è un giro sincrono del kernel, e
     /// tenere due lock nello stesso ordine in due posti è il modo di scoprire un
     /// giorno che l'ordine era tre.
-    fn suona(&self) {
+    fn suona(&self) -> Result<(), PluginError> {
         // Il fuso si prende **prima** del lock delle sveglie, e non dentro: è
         // una lettura del workspace, e l'ordine fra i due lock è già stabilito
         // da `fra_quanto_suona`. Invertirlo qui sarebbe la seconda metà di un
         // abbraccio mortale che nessuno vedrebbe finché non capita.
-        let fuso = self.fuso_macchina();
+        let fuso = self.fuso_macchina()?;
         let scadute = {
-            let mut sveglie = self.sveglie.lock().expect("sveglie avvelenate");
+            let mut sveglie = self.sveglie.write()?;
             sveglie.scadute(Instant::now(), &fuso)
         };
         for (owner, timer) in scadute {
             if self.stopping.load(Ordering::Acquire) {
-                return;
+                return Ok(());
             }
-            self.workspace
-                .write()
-                .expect("workspace avvelenato")
-                .fire_timer(&owner, &timer);
+            self.workspace.write()?.fire_timer(&owner, &timer);
         }
+        Ok(())
     }
 
     /// Il mestiere di un thread del pool.
+    ///
+    /// **Un vault avvelenato ferma il pool** (decisione 0120). Qui non c'è un
+    /// chiamante a cui dire di no: un thread di sfondo che trovasse il vault
+    /// irrecuperabile e continuasse il giro girerebbe a vuoto per sempre — o,
+    /// col vecchio `.expect("workspace avvelenato")`, si porterebbe via il
+    /// thread e con lui ogni job successivo, in silenzio. Il giro esce, e alza
+    /// `stopping` così che escano anche gli altri: da quel momento chi accoda un
+    /// job riceve il rifiuto invece di aspettare per sempre.
+    ///
+    /// La riga che dice *perché* l'ha già scritta la porta, una volta sola:
+    /// questa non la ripete, dice solo chi si è fermato.
     fn work(&self) {
+        if let Err(e) = self.giro() {
+            tracing::error!(target: "fub.host", "il pool dei job si ferma: {e}");
+            self.stopping.store(true, Ordering::Release);
+            self.bell.ring();
+        }
+    }
+
+    /// Il giro vero, fino a quando c'è da lavorare o fino al primo veleno.
+    fn giro(&self) -> Result<(), PluginError> {
         while !self.stopping.load(Ordering::Acquire) {
             // L'apertura prima di tutto, e **prima del biglietto**: finché c'è
             // una fetta da fare questo thread non deve nemmeno considerare di
             // dormire.
-            if self.avanza_apertura() {
+            if self.avanza_apertura()? {
                 continue;
             }
             // Il biglietto si prende **prima** di drenare: un job accodato fra
             // il drenaggio e l'attesa cambia il conto, e l'attesa torna subito
             // invece di dormire su lavoro che c'è.
             let ticket = self.bell.ticket();
-            let jobs = self
-                .workspace
-                .write()
-                .expect("workspace avvelenato")
-                .take_pending_jobs();
+            let jobs = self.workspace.write()?.take_pending_jobs();
             if jobs.is_empty() {
                 // La bandiera si rilegge **dopo** aver preso il biglietto, e non
                 // basta quella in cima al ciclo: `stop` alza `stopping` e *poi*
@@ -657,16 +656,16 @@ impl Shared {
                 // il biglietto passa dal mutex del campanello che la suonata ha
                 // rilasciato).
                 if self.stopping.load(Ordering::Acquire) {
-                    return;
+                    return Ok(());
                 }
                 // Le sveglie si guardano **qui**, cioè nel solo momento in cui
                 // questo thread stava per non fare niente: uno scheduler che
                 // gira accanto al pool sarebbe un thread in più, e uno che gira
                 // dentro il ciclo dei job pagherebbe un orologio a ogni job.
-                match self.fra_quanto_suona() {
+                match self.fra_quanto_suona()? {
                     Some(fra) => {
                         self.bell.wait_beyond_or(ticket, fra);
-                        self.suona();
+                        self.suona()?;
                     }
                     None => {
                         self.bell.wait_beyond(ticket);
@@ -674,7 +673,7 @@ impl Shared {
                 }
                 continue;
             }
-            self.claim(&jobs);
+            self.claim(&jobs)?;
             for job in jobs {
                 // Il controllo è **dentro** il ciclo e non solo in cima: un
                 // drenaggio prende tutta la coda, e senza questa riga chiudere
@@ -682,12 +681,13 @@ impl Shared {
                 // si è trovato in mano. Chi chiude aspetta chi ha *già*
                 // cominciato, non chi non è ancora partito.
                 if self.stopping.load(Ordering::Acquire) {
-                    self.refuse(job, "non parte: il vault si sta chiudendo");
+                    self.refuse(job, "non parte: il vault si sta chiudendo")?;
                     continue;
                 }
-                self.run(job);
+                self.run(job)?;
             }
         }
+        Ok(())
     }
 }
 
@@ -708,20 +708,25 @@ impl JobRunner {
     /// con un thread in più: nessuno accende niente dopo, e non c'è una
     /// finestra in cui l'indicizzazione esiste ma non la sta facendo nessuno.
     pub fn start(
-        workspace: Arc<RwLock<Workspace>>,
-        bundles: Arc<Mutex<BundleRegistry>>,
+        workspace: Custodia<Workspace>,
+        bundles: Custodia<BundleRegistry>,
         threads: usize,
         apertura: Option<InCorso>,
-    ) -> Self {
-        let bell = workspace.read().expect("workspace avvelenato").job_bell();
+    ) -> Result<Self, PluginError> {
+        // Un `Result` per una riga che in pratica non fallisce mai — questo
+        // workspace lo ha appena costruito chi apre — e non è una formalità: è
+        // che dopo la 0120 *prendere un prestito è una domanda*, e una funzione
+        // che se la ponesse per conto suo sarebbe il secondo posto in cui la
+        // politica è scritta.
+        let bell = workspace.read()?.job_bell();
         let shared = Arc::new(Shared {
             workspace,
             bundles,
             bell,
             stopping: AtomicBool::new(false),
-            apertura: Mutex::new(apertura),
-            flags: Mutex::new(Flags::default()),
-            sveglie: Mutex::new(Sveglie::default()),
+            apertura: Custodia::new("l'apertura in corso", apertura),
+            flags: Custodia::vuota("le bandiere dei job"),
+            sveglie: Custodia::vuota("le sveglie del vault"),
         });
         let workers = (0..threads.max(1))
             .map(|n| {
@@ -732,7 +737,7 @@ impl JobRunner {
                     .expect("thread del pool")
             })
             .collect();
-        JobRunner { shared, workers }
+        Ok(JobRunner { shared, workers })
     }
 
     /// **Annulla** un job: alzare la sua bandiera è tutto ciò che vuol dire.
@@ -748,7 +753,9 @@ impl JobRunner {
     /// tardi — che è il caso normale di un pulsante premuto mentre il lavoro
     /// finisce — lascerebbe dietro di sé una bandiera che nessuno toglie.
     pub fn cancel(&self, id: JobId) {
-        self.shared.cancel(id);
+        // Su un vault avvelenato non c'è niente da annullare: il pool si è già
+        // fermato da sé, e la riga che spiega perché è già stata scritta.
+        let _ = self.shared.cancel(id);
     }
 
     /// **Ferma il pool**: annulla tutti, sveglia chi dorme, aspetta chi lavora,
@@ -761,7 +768,7 @@ impl JobRunner {
     /// risposta vera, ed è il deadline dell'host WASM.
     pub fn stop(&mut self) -> Vec<PluginError> {
         self.shared.stopping.store(true, Ordering::Release);
-        self.shared.cancel_all();
+        let mut errors: Vec<PluginError> = self.shared.cancel_all().err().into_iter().collect();
         // Sveglia chi aspetta il campanello: si sveglia, vede `stopping`, esce.
         self.shared.bell.ring();
         for worker in self.workers.drain(..) {
@@ -773,8 +780,12 @@ impl JobRunner {
         // lascerebbe un job vivo per sempre — e la regola che vale per i job
         // dei plugin («sempre un esito», 0028) non vale meno per questo.
         // `stopping` è già alto: la chiamata prende il ramo che chiude.
-        self.shared.avanza_apertura();
-        self.refuse_pending()
+        // Ciò che va storto **chiudendo** si raccoglie e si dice: un vault
+        // avvelenato è uno dei modi in cui l'apertura non arriva a un esito, ed
+        // è la stessa lista in cui finiscono gli altri.
+        errors.extend(self.shared.avanza_apertura().err());
+        errors.extend(self.refuse_pending());
+        errors
     }
 
     /// Ha ancora dei thread vivi?
@@ -785,17 +796,19 @@ impl JobRunner {
     /// I job rimasti in coda quando il pool si ferma ricevono un esito: sono
     /// stati chiesti, e chi li ha chiesti aspetta un `JobDone`.
     fn refuse_pending(&self) -> Vec<PluginError> {
-        let pending = self
-            .shared
-            .workspace
-            .write()
-            .expect("workspace avvelenato")
-            .take_pending_jobs();
+        // Se il vault è avvelenato la coda non si può nemmeno leggere: ciò che
+        // resta da dire è *quello*, e va nella stessa lista in cui vanno gli
+        // altri guasti della chiusura.
+        let pending = match self.shared.workspace.write() {
+            Ok(mut ws) => ws.take_pending_jobs(),
+            Err(e) => return vec![e],
+        };
         pending
             .into_iter()
             .map(|job| {
                 self.shared
                     .refuse(job, "non parte: il vault si sta chiudendo")
+                    .unwrap_or_else(|e| e)
             })
             .collect()
     }
@@ -904,11 +917,11 @@ mod tests {
     #[test]
     fn con_la_bandiera_alzata_nessuna_fetta_parte() {
         let (_dir, shared, id) = un_vault_da_indicizzare();
-        shared.flags.lock().unwrap().claim(id);
-        shared.flags.lock().unwrap().cancel(id);
+        shared.flags.write().unwrap().claim(id);
+        shared.flags.write().unwrap().cancel(id);
 
         assert!(
-            shared.avanza_apertura(),
+            shared.avanza_apertura().unwrap(),
             "c'era un'apertura da portare avanti"
         );
 
@@ -919,7 +932,7 @@ mod tests {
         // E l'apertura è **chiusa**, non sospesa: chi smette riceve un esito
         // come chiunque altro (0028), e non resta niente da portare avanti.
         assert!(
-            !shared.avanza_apertura(),
+            !shared.avanza_apertura().unwrap(),
             "l'apertura annullata è rimasta in mano a qualcuno"
         );
     }
@@ -937,7 +950,7 @@ mod tests {
     fn fermare_il_pool_da_un_esito_all_apertura_rimasta() {
         let (_dir, shared, _id) = un_vault_da_indicizzare();
         let fine = {
-            let apertura = shared.apertura.lock().unwrap();
+            let apertura = shared.apertura.read().unwrap();
             Arc::clone(&apertura.as_ref().expect("un'apertura in corso").fine)
         };
         let mut runner = JobRunner {
@@ -948,7 +961,7 @@ mod tests {
         runner.stop();
 
         assert!(
-            shared.apertura.lock().unwrap().is_none(),
+            shared.apertura.read().unwrap().is_none(),
             "l'apertura è rimasta appesa a pool fermo"
         );
         assert!(
@@ -978,19 +991,22 @@ mod tests {
         let id = ws.begin_index_job();
 
         let shared = Shared {
-            workspace: Arc::new(RwLock::new(ws)),
-            bundles: Arc::new(Mutex::new(BundleRegistry::new())),
+            workspace: Custodia::new("il vault di prova", ws),
+            bundles: Custodia::new("i componenti di prova", BundleRegistry::new()),
             bell: Arc::new(JobBell::default()),
             stopping: AtomicBool::new(false),
-            apertura: Mutex::new(Some(InCorso {
-                id,
-                totale: work.totale(),
-                work,
-                unread: Arc::new(Mutex::new(Vec::new())),
-                fine: Arc::new((Mutex::new(false), Condvar::new())),
-            })),
-            flags: Mutex::new(Flags::default()),
-            sveglie: Mutex::new(Sveglie::default()),
+            apertura: Custodia::new(
+                "l'apertura di prova",
+                Some(InCorso {
+                    id,
+                    totale: work.totale(),
+                    work,
+                    unread: Custodia::vuota("gli scarti di prova"),
+                    fine: Arc::new((Mutex::new(false), Condvar::new())),
+                }),
+            ),
+            flags: Custodia::vuota("le bandiere di prova"),
+            sveglie: Custodia::vuota("le sveglie di prova"),
         };
         (dir, Arc::new(shared), id)
     }

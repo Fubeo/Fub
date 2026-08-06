@@ -437,17 +437,6 @@ sbagliato. Otto delle quattordici affermazioni ricevute erano false o già
 risolte in codice, e non stanno qui: la loro smentita sta nel resoconto della
 verifica, non in un elenco di lavoro.
 
-- [ ] **Che il vault avvelenato uccida l'applicazione è una scelta, e non è stata
-  fatta** (`crates/fub-app/src/lib.rs`, `crates/fub-host/src/watcher.rs`,
-  `crates/fub-host/src/runner.rs`). Il runner scrive `.expect("workspace
-  avvelenato")` — sembra una decisione presa; gli handler IPC scrivono
-  `.unwrap()` nudo, che è la stessa cosa detta per abitudine. In tutti e due i
-  casi, un panico qualunque mentre si tiene il lucchetto rende l'app muta a
-  ogni chiamata successiva, senza una riga che dica perché. Delle due l'una:
-  se il fallimento è irrecuperabile va detto **una volta**, con un messaggio,
-  invece di ripetersi a ogni IPC; se non lo è, si ricupera con `into_inner`.
-  Quello che non va bene è che i due strati rispondano in modo diverso alla
-  stessa domanda.
 - [ ] **`id` e `class` del contenuto di una nota entrano nel DOM della shell**
   (`frontend/src/ui/sanitize.ts`). Sono ammessi apposta — l'`id` è l'ancora di
   blocco, la `class` è il contratto col provider markdown — ma la shell cerca i
@@ -470,7 +459,7 @@ verifica, non in un elenco di lavoro.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centodiciannove** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centoventi** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

@@ -51,7 +51,9 @@
 //! [decisione 0035](../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md)).
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+
+use crate::custodia::Custodia;
 
 use fub_abi::command::CommandOutcome;
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
@@ -89,7 +91,7 @@ use fub_kernel::Workspace;
 ///
 /// [decisione 0024]: ../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md
 pub struct JobHost {
-    workspace: Arc<RwLock<Workspace>>,
+    workspace: Custodia<Workspace>,
     plugin: String,
     /// **L'identità che il job non ha** (§10.3,
     /// [decisione 0035](../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md)).
@@ -123,7 +125,7 @@ impl JobHost {
     /// dichiarato riceve un host che nega tutto dicendo perché — la stessa
     /// risposta di `Workspace::with_host`, e per la stessa ragione (il kernel
     /// non presta capacità a una stringa).
-    pub fn new(workspace: Arc<RwLock<Workspace>>, plugin: impl Into<String>) -> Self {
+    pub fn new(workspace: Custodia<Workspace>, plugin: impl Into<String>) -> Self {
         JobHost {
             workspace,
             plugin: plugin.into(),
@@ -171,7 +173,7 @@ impl JobHost {
         f: impl FnOnce(&dyn ReadApi) -> Result<R, PluginError>,
     ) -> Result<R, PluginError> {
         self.stopped()?;
-        self.reading(f)
+        self.reading(f)?
     }
 
     /// Una scrittura che può **rifiutare**. Tutto ciò che cambia il vault passa
@@ -183,22 +185,30 @@ impl JobHost {
         f: impl FnOnce(&mut dyn HostApi) -> Result<R, PluginError>,
     ) -> Result<R, PluginError> {
         self.stopped()?;
-        self.writing(f)
+        self.writing(f)?
     }
 
     /// Una lettura: prestito **condiviso**, e N job che leggono non si aspettano
     /// né fra loro né con le view che disegnano.
-    fn reading<R>(&self, f: impl FnOnce(&dyn ReadApi) -> R) -> R {
-        let ws = self.workspace.read().expect("workspace avvelenato");
-        ws.with_read_host(&self.plugin, f)
+    ///
+    /// **Può rispondere di no** da quando prendere il prestito è una domanda
+    /// (decisione 0120). Le capacità che un esito ce l'hanno lo propagano; le
+    /// cinque che non ce l'hanno — `free_name`, `format_of`, `now_unix_millis`,
+    /// `user_locale`, `active_context`, e `emit` di là — degradano al valore che
+    /// il contratto già prevede per «non lo so», e la ragione per cui va bene è
+    /// che quel job è **già finito**: il pool si ferma al primo veleno, quindi
+    /// nessuna di quelle risposte fa più da premessa a niente.
+    fn reading<R>(&self, f: impl FnOnce(&dyn ReadApi) -> R) -> Result<R, PluginError> {
+        let ws = self.workspace.read()?;
+        Ok(ws.with_read_host(&self.plugin, f))
     }
 
     /// Una scrittura: prestito **esclusivo**, tenuto per il tempo di una
     /// capacità sola. Ciò che ne nasce — parse, grafo, indici, eventi, handler —
     /// succede lì dentro, come per ogni altra scrittura del kernel.
-    fn writing<R>(&self, f: impl FnOnce(&mut dyn HostApi) -> R) -> R {
-        let mut ws = self.workspace.write().expect("workspace avvelenato");
-        ws.with_host(&self.plugin, f)
+    fn writing<R>(&self, f: impl FnOnce(&mut dyn HostApi) -> R) -> Result<R, PluginError> {
+        let mut ws = self.workspace.write()?;
+        Ok(ws.with_host(&self.plugin, f))
     }
 }
 
@@ -226,6 +236,7 @@ impl VaultRead for JobHost {
 
     fn free_name(&self, id: &DocId) -> DocId {
         self.reading(|h| h.free_name(id))
+            .unwrap_or_else(|_| id.clone())
     }
 
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
@@ -233,7 +244,7 @@ impl VaultRead for JobHost {
     }
 
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
-        self.reading(|h| h.format_of(id))
+        self.reading(|h| h.format_of(id)).unwrap_or_default()
     }
 
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
@@ -337,14 +348,14 @@ impl SettingsWrite for JobHost {
 
 impl HostEnv for JobHost {
     fn now_unix_millis(&self) -> u64 {
-        self.reading(|h| h.now_unix_millis())
+        self.reading(|h| h.now_unix_millis()).unwrap_or_default()
     }
 
     /// Come il contesto qui sotto: quello di **adesso**. Un job che dura può
     /// attraversare un cambio di lingua o l'ora legale, e ciò che scrive dopo va
     /// scritto come lo legge chi lo sta aspettando.
     fn user_locale(&self) -> Locale {
-        self.reading(|h| h.user_locale())
+        self.reading(|h| h.user_locale()).unwrap_or_default()
     }
 
     /// La sola delle quattro capacità di `HostEnv` che passa da `read_result`, e
@@ -362,7 +373,7 @@ impl HostEnv for JobHost {
     /// job dura, e un contesto congelato all'avvio sarebbe una risposta vecchia
     /// che nessuno saprebbe riconoscere come tale.
     fn active_context(&self) -> Option<ViewContext> {
-        self.reading(|h| h.active_context())
+        self.reading(|h| h.active_context()).unwrap_or_default()
     }
 }
 
@@ -370,7 +381,7 @@ impl HostEvents for JobHost {
     /// Emettere prende il prestito **esclusivo**: un evento entra nella coda del
     /// dispatcher e da lì raggiunge gli handler, che scrivono.
     fn emit(&mut self, event: Event) {
-        self.writing(|h| h.emit(event))
+        let _ = self.writing(|h| h.emit(event));
     }
 
     /// Un job può chiederne un altro: la coda è la stessa, e a drenarla è sempre
@@ -394,10 +405,9 @@ impl HostEvents for JobHost {
         let Some(id) = self.job else {
             return;
         };
-        self.workspace
-            .write()
-            .expect("workspace avvelenato")
-            .note_job_progress(id, progress);
+        if let Ok(mut ws) = self.workspace.write() {
+            ws.note_job_progress(id, progress);
+        }
     }
 }
 
@@ -473,7 +483,7 @@ impl HostNetwork for JobHost {
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
         self.stopped()?;
         let (client, granted) = {
-            let ws = self.workspace.read().expect("workspace avvelenato");
+            let ws = self.workspace.read()?;
             (ws.network(), ws.granted_policy(&self.plugin))
         };
         self.stopped()?;

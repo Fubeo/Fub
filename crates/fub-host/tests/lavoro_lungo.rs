@@ -322,7 +322,7 @@ fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
         job.passo().expect("la camminata prosegue");
     }
     assert!(
-        ws.try_write().is_ok(),
+        ws.try_write().is_some(),
         "il primo spiraglio c'era e a metà camminata no: il prestito non si \
          rilascia a ogni chiamata"
     );
@@ -365,7 +365,7 @@ fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
         "anche di qua la camminata ha letto la prima nota"
     );
     assert!(
-        ws.try_write().is_err(),
+        ws.try_write().is_none(),
         "la colonna di controllo non sta più controllando niente: con un \
          prestito solo, tenuto per tutta la camminata, chi salva non può entrare \
          — e dopo una nota su {NOTE} è entrato. È cambiato il senso delle righe \
@@ -378,7 +378,7 @@ fn mentre_un_job_cammina_il_vault_chi_salva_non_aspetta() {
             .expect("la camminata di controllo prosegue");
     }
     assert!(
-        ws.try_write().is_err(),
+        ws.try_write().is_none(),
         "e a metà camminata nemmeno: dove il prestito per chiamata apriva uno \
          spiraglio, il prestito unico non ne apre nessuno. Se questa riga è rossa \
          non lo tiene più per tutta la camminata, e le due colonne non si stanno \
