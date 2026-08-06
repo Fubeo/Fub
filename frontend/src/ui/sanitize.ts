@@ -76,7 +76,8 @@ const TAG_DA_CANCELLARE = new Set(["script", "style", "template", "iframe", "obj
 /// `class`, `id` e i `data-*` ci sono perché **sono il contratto** fra il
 /// rendering e la shell: `data-wikilink-page` è come si naviga, `data-embed-page`
 /// come si trascludono, `data-ui-slot` dove va una parte dichiarativa (§3.2),
-/// `id` è l'ancora di blocco. Toglierli spegnerebbe metà dell'anteprima.
+/// `id` è l'ancora di blocco. Toglierli spegnerebbe metà dell'anteprima — per
+/// questo l'`id` non si toglie ma si **trasloca**, vedi `SPAZIO_CONTENUTO`.
 const ATTR_AMMESSI: Record<string, Set<string>> = {
   "*": new Set(["class", "id", "title", "dir", "lang"]),
   a: new Set(["href"]),
@@ -127,6 +128,74 @@ export function attributoConsentito(tag: string, attributo: string): boolean {
   if (nome.startsWith("data-")) return true;
   if (ATTR_AMMESSI["*"].has(nome)) return true;
   return ATTR_AMMESSI[tag.toLowerCase()]?.has(nome) ?? false;
+}
+
+// ---------------------------------------------------------------------------
+// I due spazi di nomi (§5.3)
+// ---------------------------------------------------------------------------
+//
+// Un `id` è **globale nel documento**, e finché il documento è uno solo per
+// tutti gli inquilini della webview, la shell e il contenuto di una nota
+// pescano dallo stesso sacchetto. La shell cerca i propri elementi per nome —
+// `document.getElementById("save-state")`, `#context-menu`, `#activity-panel`,
+// `#toast`, più tutti quelli che `identificatore()` genera per l'accessibilità
+// — e `getElementById` restituisce il **primo** elemento in ordine di
+// documento con quel nome: una nota che porti quel nome se lo prende, e la
+// shell smette di trovare la propria barra di stato o ne rimuove un pezzo
+// (`#toast` e `#context-menu` si tolgono per nome).
+//
+// Non è esecuzione di codice e non arriva da un estraneo: arriva da un vault.
+// Ma un vault si scarica, e l'`id` del contenuto non è nemmeno HTML grezzo —
+// basta un titolo. `## save-state` diventa uno slug, e lo slug diventa l'`id`
+// dell'`<h2>`; `^save-state` in coda a un paragrafo fa lo stesso.
+//
+// **Il rimedio non è togliere l'attributo**: l'`id` è l'ancora di blocco, ed è
+// ciò che rende un blocco indirizzabile. È tenere i due spazi di nomi
+// **separati** — ogni nome che viene dal contenuto vive sotto un prefisso, e
+// nessun nome della shell ce l'ha (lo tiene fermo un presidio che legge
+// `index.html`).
+//
+// # Perché una funzione sola, e non una costante usata due volte
+//
+// Le metà sono due: l'`id` che si **scrive** e il `#frammento` che lo
+// **cerca** — `[testo](#sezione)` è come un documento rimanda a se stesso, e lo
+// risolve il browser confrontando la stringa dopo il `#` con gli `id` della
+// pagina. Prefissare solo la prima rompe ogni link interno; prefissare solo la
+// seconda non ripara niente. Sono la classe di difetti in cui *si aggiorna il
+// lato che si stava guardando*.
+//
+// Per questo il prefisso non è una costante che due rami si copiano: è
+// `nelloSpazioDelContenuto`, e sopra ci sta **una** funzione —
+// `valoreDellAttributo` — che prende il nome dell'attributo e decide. Il
+// cammino sul DOM la chiama una volta sola, per ogni attributo, senza sapere
+// quali riguardi: i due lati non possono divergere perché non sono due posti.
+
+/// Il prefisso sotto cui vive ogni nome che viene dal contenuto.
+///
+/// Nessun `id` della shell comincia così, e non è una speranza: `sanitize.dom`
+/// legge `index.html` e i nomi letterali dei moduli e lo verifica.
+const SPAZIO_CONTENUTO = "fub-contenuto-";
+
+/// L'unico posto in cui un nome che viene dal contenuto diventa un nome del DOM.
+export function nelloSpazioDelContenuto(nome: string): string {
+  return SPAZIO_CONTENUTO + nome;
+}
+
+/// Il valore con cui un attributo ammesso entra davvero nel documento.
+///
+/// È l'identità per tutti tranne i due che **nominano un identificatore**, e le
+/// due riscritture stanno qui accanto di proposito: si leggono insieme, e chi
+/// ne cambiasse una vedrebbe l'altra.
+///
+/// Il `#` nudo non si tocca: è il segnaposto che il provider markdown mette sui
+/// wikilink (`href="#"` con la navigazione presa da `data-wikilink-page`), e
+/// prefissarlo lo trasformerebbe in un salto verso un blocco che non esiste.
+export function valoreDellAttributo(nome: string, valore: string): string {
+  if (nome === "id") return nelloSpazioDelContenuto(valore);
+  if (nome === "href" && valore.startsWith("#") && valore.length > 1) {
+    return `#${nelloSpazioDelContenuto(valore.slice(1))}`;
+  }
+  return valore;
 }
 
 /// Gli attributi che questo varco **impone**, per tag, a prescindere da ciò che
@@ -244,7 +313,10 @@ function pulisci(node: Node): Node | null {
     if (nome === "style" && !styleConsentito(attr.value)) continue;
     if (nome === "href" && !linkConsentito(attr.value)) continue;
     if (nome === "src" && !risorsaConsentita(attr.value)) continue;
-    nuovo.setAttribute(nome, attr.value);
+    // Il consenso si decide sul valore **come l'ha scritto il produttore**; la
+    // traslazione nello spazio di nomi del contenuto viene dopo, ed è l'ultima
+    // cosa che succede a un valore prima che sia nel documento.
+    nuovo.setAttribute(nome, valoreDellAttributo(nome, attr.value));
   }
   for (const [nome, valore] of Object.entries(ATTR_IMPOSTI[tag] ?? {})) {
     nuovo.setAttribute(nome, valore);

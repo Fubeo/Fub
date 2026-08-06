@@ -428,27 +428,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
 
-## I difetti da correggere
-
-Non sono voci di roadmap: sono **difetti nel codice di oggi**, arrivati da una
-lettura esterna e tenuti solo quelli che hanno retto al confronto coi sorgenti.
-Chi li prende non deve decidere niente — c'è già il file, la riga e cosa fa di
-sbagliato. Otto delle quattordici affermazioni ricevute erano false o già
-risolte in codice, e non stanno qui: la loro smentita sta nel resoconto della
-verifica, non in un elenco di lavoro.
-
-- [ ] **`id` e `class` del contenuto di una nota entrano nel DOM della shell**
-  (`frontend/src/ui/sanitize.ts`). Sono ammessi apposta — l'`id` è l'ancora di
-  blocco, la `class` è il contratto col provider markdown — ma la shell cerca i
-  propri elementi con `document.getElementById` (`save-state`, `activity-panel`,
-  `context-menu`, `key-pending`, …), e una nota che contenga HTML con uno di
-  quegli `id` glielo prende. Non è un'esecuzione di codice e non arriva da un
-  estraneo: arriva da un vault, che però può essere stato scaricato. Il rimedio
-  non è togliere l'attributo ma **separare i due spazi di nomi** — un prefisso
-  sugli `id` che vengono dal contenuto, con la risoluzione delle ancore che lo
-  applica dalla stessa parte — e va scritto tenendo insieme le due metà, o
-  l'ancora di blocco si rompe.
-
 ## Gli allegati
 
 - [Le voci a leva più alta](roadmap/leva.md) — non *quando* prendere una voce ma
@@ -459,7 +438,7 @@ verifica, non in un elenco di lavoro.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centoventi** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centoventuno** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

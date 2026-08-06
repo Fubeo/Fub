@@ -4,15 +4,22 @@ import {
   esitoDelTag,
   esterno,
   linkConsentito,
+  nelloSpazioDelContenuto,
   risorsaConsentita,
   styleConsentito,
+  valoreDellAttributo,
 } from "./sanitize";
 
-// La **politica** del punto unico di sanitizzazione (§3.6). Il cammino sul DOM
-// non è qui e non è testato: questa shell non ha un ambiente DOM nei test
-// (§17.2). La divisione è deliberata ed è la stessa della decisione 0016 col
-// riconciliatore — ciò in cui si sbaglia in un modo che non si vede è la
-// decisione, non l'`appendChild`.
+// La **politica** del punto unico di sanitizzazione (§3.6): funzioni pure, e
+// per questo il file gira **senza DOM**. Qui c'era scritto che il cammino sul
+// DOM «non è testato perché questa shell non ha un ambiente DOM nei test
+// (§17.2)»: la seconda metà ha smesso di essere vera con `happy-dom` (0112), e
+// il cammino si prova in `sanitize.dom.test.ts`, che l'ambiente ce l'ha —
+// l'ambiente è per file, quindi sono due file e non due `describe`.
+//
+// La divisione fra politica e cammino resta deliberata ed è la stessa della
+// decisione 0016 col riconciliatore — ciò in cui si sbaglia in un modo che non
+// si vede è la decisione, non l'`appendChild`.
 
 describe("cosa entra nella webview", () => {
   it("un tag sconosciuto perde il tag e tiene i figli, uno eseguibile sparisce", () => {
@@ -90,5 +97,30 @@ describe("cosa entra nella webview", () => {
     expect(esterno("http://esempio.invalid")).toBe(true);
     expect(esterno("nota.md")).toBe(false);
     expect(esterno("#sezione")).toBe(false);
+  });
+
+  it("le due metà del prefisso sono la stessa espressione, non due", () => {
+    // È la riga che tiene insieme lo scrivere e il cercare. Se qualcuno
+    // prefissasse l'`id` e non il frammento — o li prefissasse in due modi —
+    // qui i due lati non si toccherebbero più, e ogni link interno di ogni nota
+    // cadrebbe nel vuoto. Il comportamento sta in `sanitize.dom.test.ts`;
+    // questa è l'**identità** fra i due lati, che è ciò che si rompe per primo.
+    expect(valoreDellAttributo("id", "blocco-1")).toBe(
+      valoreDellAttributo("href", "#blocco-1").slice(1),
+    );
+    expect(valoreDellAttributo("id", "blocco-1")).toBe(nelloSpazioDelContenuto("blocco-1"));
+  });
+
+  it("l'attributo che non nomina un identificatore passa com'è", () => {
+    // La traslazione è per due attributi, non per tutti: un `title` prefissato
+    // sarebbe testo mostrato all'utente con dentro il nostro prefisso.
+    expect(valoreDellAttributo("title", "blocco-1")).toBe("blocco-1");
+    expect(valoreDellAttributo("class", "callout")).toBe("callout");
+    expect(valoreDellAttributo("data-wikilink-page", "Nota")).toBe("Nota");
+    expect(valoreDellAttributo("href", "https://esempio.invalid/#x")).toBe(
+      "https://esempio.invalid/#x",
+    );
+    // Il segnaposto dei wikilink: un `#` solo non nomina niente.
+    expect(valoreDellAttributo("href", "#")).toBe("#");
   });
 });
