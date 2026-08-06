@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Settantuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Settanta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -540,7 +540,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0065 | il debouncer del watcher tiene il prestito esclusivo per tutta la raffica **e** per `flush_indexes` | `fub-host` · `watcher.rs:225` | lock e I/O |
 | 0067 | `Arc::get_mut` fallisce con un job in volo e `deactivate` non viene chiamato: nessun assert lo presidia | `fub-host` · `registry.rs:396` | spegnimento |
 | 0068 | `check(_, Naming::New)` accetta gli spazi in testa che `normalized` trasforma in file nascosti | `fub-abi` · `rules/path_policy.rs:286` | regole |
-| 0069 | un panico dentro `workspace.batch()` salta `end_batch` e blocca il dispatch per sempre | `fub-kernel` · `workspace.rs:5044` | eventi persi |
 | 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
 | 0071 | `UndoStack::push` usa `Vec::remove(0)` oltre il tetto | `fub-kernel` · `undo.rs:99` | prestazioni |
 | 0072 | `cancel_job` con un `JobId` mai accodato lascia una bandiera orfana in `Flags::live` per sempre | `fub-host` · `runner.rs:135` | spegnimento |
