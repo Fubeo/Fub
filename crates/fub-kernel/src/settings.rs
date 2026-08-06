@@ -75,16 +75,17 @@ use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
 use crate::storage::{update_atomic, VaultStorage};
+use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
 /// giorno**, perché il file che non ce l'ha è quello che poi non si sa da che
 /// versione viene.
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Il file di un livello, com'è su disco.
 #[derive(Default, Serialize, Deserialize)]
 struct SettingsFile {
-    version: u32,
+    version: SchemaVersion,
     #[serde(default)]
     values: BTreeMap<String, SettingValue>,
 }

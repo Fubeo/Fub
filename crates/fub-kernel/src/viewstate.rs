@@ -51,9 +51,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::update_atomic;
+use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3).
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// chiave → valore, per un esemplare.
 type Keys = BTreeMap<String, serde_json::Value>;
@@ -64,7 +65,7 @@ type Owners = BTreeMap<String, Instances>;
 
 #[derive(Default, Serialize, Deserialize)]
 struct ViewStateFile {
-    version: u32,
+    version: SchemaVersion,
     /// root del vault → ciò che su questa macchina si ricorda di lui.
     #[serde(default)]
     vaults: BTreeMap<String, Owners>,

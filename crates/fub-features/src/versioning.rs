@@ -80,6 +80,7 @@ use fub_abi::command::{
 use fub_abi::edit::WriteBase;
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::DocId;
+use fub_abi::schema::SchemaVersion;
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -250,7 +251,7 @@ pub fn catalog() -> Vec<StringCatalog> {
     ]
 }
 
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 const INDEX_FILE: &str = "versions.json";
 const META_FILE: &str = "meta.json";
@@ -298,7 +299,7 @@ struct DocVersions {
 
 #[derive(Serialize, Deserialize)]
 struct Index {
-    schema_version: u32,
+    schema_version: SchemaVersion,
     docs: BTreeMap<String, DocVersions>,
 }
 

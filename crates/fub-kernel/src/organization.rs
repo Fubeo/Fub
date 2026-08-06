@@ -62,6 +62,7 @@ use fub_abi::organization::Organization;
 use serde::{Deserialize, Serialize};
 
 use crate::storage::VaultStorage;
+use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3).
 ///
@@ -71,13 +72,13 @@ use crate::storage::VaultStorage;
 /// questa voce si apre e si legge; la prima scrittura lo porta alla 1. È il
 /// motivo per cui la versione va messa *dal primo giorno* — la si aggiunge dopo
 /// solo indovinando che ciò che non ce l'ha venga da prima.
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Il file com'è su disco: l'organizzazione, più il numero di formato.
 #[derive(Default, Serialize, Deserialize)]
 struct OrganizationFile {
     #[serde(default)]
-    version: u32,
+    version: SchemaVersion,
     #[serde(flatten)]
     organization: Organization,
 }
