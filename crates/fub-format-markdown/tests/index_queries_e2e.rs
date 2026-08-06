@@ -47,9 +47,23 @@ fn vault() -> (tempfile::TempDir, Workspace) {
         "Archivio/Gamma.md",
         "---\ntipo: nota\nstato: attivo\n---\nCita [[Beta]]. #archivio\n",
     );
+    // Il `[[#^oggi]]` è un riferimento **dentro** questa nota, e sta qui perché
+    // il controllo di salute lo giudicava senza sapere cos'era: un wikilink
+    // senza pagina non risolve a nessuna nota, quindi risultava rotto — con la
+    // stringa vuota come destinazione da correggere.
+    //
+    // È un riferimento a **blocco** e non a heading (`[[#Oggi]]`) per una
+    // ragione che non è di questa voce: il `#Oggi` dentro le parentesi finisce
+    // anche nello scanner dei tag, e la nota si ritrova un tag `Oggi` che
+    // nessuno ha scritto. È la divergenza già dichiarata dalla
+    // [0060](../../../docs/decisions/0060-il-modello-dice-il-vero-sui-byte.md)
+    // e ripetuta dalla 0115 — *«il modello inventa un tag dentro
+    // `[[#Sezione]]`»* — e non si chiude di straforo dentro un presidio che
+    // guarda un'altra cosa.
     write(
         "Diario.md",
-        "---\ntipo: nota\n---\nNessuno mi nomina. ![foto](img/foto.png)\n",
+        "---\ntipo: nota\n---\nNessuno mi nomina. ![foto](img/foto.png)\n\n\
+         Oggi è andata così. ^oggi\n\nE [[#^oggi]] rimanda quassù.\n",
     );
     // Il PNG esiste **davvero**, e da qui in poi la differenza si vede (§14.1):
     // prima il kernel non sapeva che gli allegati esistessero e il controllo di
@@ -324,7 +338,9 @@ fn the_health_of_the_vault_is_a_query_like_the_others() {
             "Progetti/Alpha.md".to_string(),
             Some("Nota che non c'è".to_string())
         )],
-        "solo il wikilink che non risolve; l'immagine di Diario.md non è un link rotto (§14.1)"
+        "solo il wikilink che non risolve; l'immagine di Diario.md non è un link rotto (§14.1), \
+         e nemmeno il `[[#Oggi]]` della stessa nota: un wikilink senza pagina nomina chi lo \
+         ospita, e chi lo ospita c'è per costruzione"
     );
     let issue = &broken.items[0];
     let span = issue.span.expect("un link rotto ha un punto nel sorgente");

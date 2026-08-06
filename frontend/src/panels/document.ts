@@ -939,16 +939,23 @@ export function isOpen(id: string): boolean {
 /// nota in cima e niente lo diceva. Adesso la posizione torna dal kernel e la
 /// si porta a schermo con lo stesso `revealByteOffset` dell'outline — byte
 /// UTF-8 → posizione editor, come per ogni altro span del modello.
+///
+/// **Da dove si sta guardando** è la seconda metà, ed era il buco: un
+/// `[[#Sezione]]` non nomina una pagina, nomina *questa*, e chi arrivava qui
+/// usciva su un `if (!page) return` — cioè un click che non faceva niente e non
+/// diceva perché. Il documento corrente non si rilegge dallo stato: lo dice
+/// `docAttivo()`, che è il proprietario di quella domanda (il riquadro col
+/// fuoco, la sua tab attiva). A saperne fare qualcosa è il kernel, dove la
+/// regola vale anche per chi non è questa shell.
 export async function openWikilink(
   page: string,
   heading?: string,
   block?: string,
 ): Promise<void> {
-  if (!page) return; // [[#Sezione]]: link interno alla nota, per ora nulla
-  const target = await riferimentoRisolto({
-    kind: "wiki",
-    value: { page, heading: heading ?? null, block: block ?? null },
-  });
+  const target = await riferimentoRisolto(
+    { kind: "wiki", value: { page, heading: heading ?? null, block: block ?? null } },
+    docAttivo() ?? undefined,
+  );
   if (target) {
     await openDocument(target.doc);
     // Il punto può non esserci — un heading rinominato, un `^abc` cancellato —
@@ -957,6 +964,10 @@ export async function openWikilink(
     if (target.at) revealByteOffset(target.at.span.start);
     return;
   }
+  // Un link senza pagina che non ha risolto non crea niente: non c'è un nome da
+  // dare alla nota che si creerebbe, e crearla col nome vuoto sarebbe la
+  // risposta peggiore di tutte.
+  if (!page) return;
   const creata = await createNote(page);
   if (creata) await openDocument(creata);
 }

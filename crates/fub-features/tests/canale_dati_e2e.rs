@@ -879,6 +879,63 @@ fn un_riferimento_a_un_punto_sa_dire_dove_punta() {
     assert_eq!(sparito.at, None);
 }
 
+/// Un wikilink **senza pagina** — `[[#Sezione]]`, `[[#^blocco]]` — nomina il
+/// documento che lo ospita.
+///
+/// La regola sta nel kernel e non in chi risolve, e la ragione è la solita: a
+/// chiedere `resolve` non è solo questa shell, e la metà dei wikilink che un
+/// documento contiene può essere di questa specie. Chi ci arrivava prima
+/// riceveva `None` — cioè «link rotto» — e la shell, che è l'unica ad averci
+/// provato, si fermava un passo prima con un `if` che sapeva solo tacere.
+#[test]
+fn un_riferimento_senza_pagina_nomina_chi_lo_ospita() {
+    let (_g, ws, _root) = vault_con_punti();
+    let risolve = |target: LinkTarget, from: Option<&str>| match ws
+        .query_index(IndexQuery::Resolve {
+            target,
+            from: from.map(DocId::new),
+        })
+        .expect("il kernel serve `resolve`")
+    {
+        IndexResult::Resolved(found) => found,
+        other => panic!("risposta fuori tema: {}", other.kind_name()),
+    };
+    let dentro = |heading: Option<&str>, block: Option<&str>| LinkTarget::Wiki {
+        page: String::new(),
+        heading: heading.map(str::to_string),
+        block: block.map(str::to_string),
+    };
+
+    // L'heading: il documento è quello che ospita il link, e il punto si cerca
+    // dentro di lui come per ogni altro riferimento.
+    let sezione = risolve(dentro(Some("Il gatto"), None), Some("Note/Doppia.md"))
+        .expect("il documento che ospita il link");
+    assert_eq!(sezione.doc.as_str(), "Note/Doppia.md");
+    assert_eq!(
+        sezione.at.expect("e il punto dentro").anchor.as_deref(),
+        Some("il-gatto")
+    );
+
+    // Il blocco: altro spazio di nomi, stessa risposta.
+    let blocco = risolve(dentro(None, Some("risveglio")), Some("Note/Doppia.md"))
+        .expect("il documento che ospita il link");
+    assert_eq!(blocco.doc.as_str(), "Note/Doppia.md");
+    assert_eq!(
+        blocco.at.expect("e il punto dentro").anchor.as_deref(),
+        Some("risveglio")
+    );
+
+    // **Senza un ospite non c'è niente da nominare**: `[[#Sezione]]` non è un
+    // riferimento a un documento in particolare, è un riferimento a *questo*, e
+    // chi chiede senza dire quale non ha fatto una domanda intera. È la stessa
+    // regola che `from` ha già per i path relativi, letta in un caso in più.
+    assert_eq!(risolve(dentro(Some("Il gatto"), None), None), None);
+
+    // E un wikilink senza pagina **e senza punto** non nomina niente: `[[]]`
+    // non è «questo documento», è un link vuoto.
+    assert_eq!(risolve(dentro(None, None), Some("Note/Doppia.md")), None);
+}
+
 /// Un vault con **due sezioni omonime** nella stessa nota: è lo stato in cui
 /// un id generato e un frammento cercato si scoprono d'accordo o no.
 fn vault_con_omonimi() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {

@@ -131,8 +131,12 @@ function wireWikilinks(container: HTMLElement): void {
   container.querySelectorAll<HTMLAnchorElement>("a.wikilink").forEach((a) => {
     a.addEventListener("click", async (e) => {
       e.preventDefault();
-      const page = a.dataset.wikilinkPage;
-      if (!page) return;
+      // Vuoto e assente sono la stessa cosa per un `data-`, e non per un link:
+      // `[[#Sezione]]` scrive `data-wikilink-page=""` ed è un riferimento
+      // dentro la nota che si sta leggendo. Un `if (!page) return` qui era il
+      // gemello di quello di `openWikilink` — due click che non facevano
+      // niente, in due superfici, per la stessa premessa sbagliata.
+      const page = a.dataset.wikilinkPage ?? "";
       try {
         await apriPagina(page, a.dataset.wikilinkHeading, a.dataset.wikilinkBlock);
       } catch (err) {
