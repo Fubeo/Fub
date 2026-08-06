@@ -8,7 +8,7 @@
 // il guasto — cioè esattamente il difetto che questa voce esiste per togliere,
 // rimesso al suo posto da un'altra parte.
 import { describe, expect, it } from "vitest";
-import { cambioSotto, esitoDelFallimento, scriviContandoEco, statoDi } from "./salvataggio";
+import { consumaCambioSotto, esitoDelFallimento, scriviContandoEco, statoDi } from "./salvataggio";
 
 describe("lo stato del salvataggio", () => {
   it("non dice niente di un documento che non ha un buffer", () => {
@@ -64,25 +64,79 @@ describe("lo stato del salvataggio", () => {
 
 describe("chi ha riscritto il file sotto un buffer sporco", () => {
   it("a buffer pulito non c'è niente da dire", () => {
-    expect(cambioSotto({ dirty: false, echi: 0 }, false)).toBe("muto");
-    expect(cambioSotto({ dirty: false, echi: 0 }, true)).toBe("muto");
-    expect(cambioSotto(undefined, true)).toBe("muto");
+    expect(consumaCambioSotto({ dirty: false, echi: 0 }, false)).toBe("muto");
+    expect(consumaCambioSotto({ dirty: false, echi: 0 }, true)).toBe("muto");
+    expect(consumaCambioSotto(undefined, true)).toBe("muto");
   });
 
   it("riconosce l'eco del proprio salvataggio", () => {
     // Il caso che si vedeva scrivendo: autosave, si continua a battere, il
     // buffer torna sporco, e l'evento della nostra scrittura arriva adesso.
-    expect(cambioSotto({ dirty: true, echi: 1 }, false)).toBe("eco");
+    expect(consumaCambioSotto({ dirty: true, echi: 1 }, false)).toBe("eco");
   });
 
   it("un'altra applicazione non è mai un eco, nemmeno con echi in attesa", () => {
     // L'invariante: se il contatore restasse alto per un evento perso, non deve
     // poter zittire il caso in cui il lavoro coperto non è nostro.
-    expect(cambioSotto({ dirty: true, echi: 3 }, true)).toBe("altra_app");
+    expect(consumaCambioSotto({ dirty: true, echi: 3 }, true)).toBe("altra_app");
   });
 
   it("senza echi in attesa, un cambio non nostro è una riscrittura", () => {
-    expect(cambioSotto({ dirty: true, echi: 0 }, false)).toBe("riscrittura");
+    expect(consumaCambioSotto({ dirty: true, echi: 0 }, false)).toBe("riscrittura");
+  });
+});
+
+describe("chi possiede il conto degli echi", () => {
+  // La metà che **toglie** stava fuori: chi avvisa faceva `echi -= 1` nel suo
+  // `case "eco"`. Queste sono le prove che adesso non serve più, e che chi le
+  // scrive non ha modo di dimenticarsene — nessun chiamante tocca il campo.
+  it("chi decide consuma: chi chiama non deve sottrarre niente", () => {
+    const buf = { dirty: true, echi: 1 };
+    expect(consumaCambioSotto(buf, false)).toBe("eco");
+    expect(buf.echi).toBe(0);
+    // E la prova che serve davvero: il cambio vero che arriva subito dopo non
+    // viene scambiato per il nostro.
+    expect(consumaCambioSotto(buf, false)).toBe("riscrittura");
+  });
+
+  // **Il caso che nessuna delle due metà copriva**, ed è la strada normale:
+  // l'autosave parte 400 ms dopo l'ultima battuta, quindi quando la scrittura
+  // torna il buffer è quasi sempre pulito. L'evento arriva, non c'è niente da
+  // dire — e finché il `muto` tornava senza toccare il conto, quell'eco restava
+  // appeso per sempre.
+  it("un eco che arriva a buffer pulito viene consumato lo stesso", () => {
+    const buf = { dirty: false, echi: 1 };
+    expect(consumaCambioSotto(buf, false)).toBe("muto");
+    expect(buf.echi).toBe(0);
+    // La prova che conta: l'utente ricomincia a battere e un plugin riscrive il
+    // file. Con l'eco appeso questo era `eco`, cioè silenzio — un avviso vero
+    // che non compariva.
+    buf.dirty = true;
+    expect(consumaCambioSotto(buf, false)).toBe("riscrittura");
+  });
+
+  it("un evento di un'altra applicazione non consuma niente", () => {
+    // L'altro verso dell'invariante: se un watcher consumasse, basterebbe una
+    // scrittura esterna fra la nostra e il suo eco per far diventare la nostra
+    // una «riscrittura», cioè un avviso a vuoto. E a buffer pulito il watcher
+    // resta muto come prima: non c'è nessun lavoro da coprire.
+    const buf = { dirty: true, echi: 1 };
+    expect(consumaCambioSotto(buf, true)).toBe("altra_app");
+    expect(buf.echi).toBe(1);
+    expect(consumaCambioSotto({ dirty: false, echi: 1 }, true)).toBe("muto");
+  });
+
+  it("nessun eco in attesa non scende sotto zero", () => {
+    const buf = { dirty: false, echi: 0 };
+    expect(consumaCambioSotto(buf, false)).toBe("muto");
+    expect(buf.echi).toBe(0);
+  });
+
+  it("le due metà si chiudono a vicenda, dalla scrittura al suo evento", async () => {
+    const buf = { dirty: true, echi: 0 };
+    await scriviContandoEco(buf, () => Promise.resolve("rev-2"));
+    expect(consumaCambioSotto(buf, false)).toBe("eco");
+    expect(buf.echi).toBe(0);
   });
 });
 
@@ -124,7 +178,7 @@ describe("quando l'eco si conta", () => {
     const buf = { dirty: true, echi: 0 };
     let visto: string | undefined;
     await scriviContandoEco(buf, async () => {
-      visto = cambioSotto(buf, false);
+      visto = consumaCambioSotto(buf, false);
       return "rev-2";
     });
     // Contando l'eco dopo la scrittura qui si leggeva `riscrittura`, cioè «il
@@ -136,7 +190,7 @@ describe("quando l'eco si conta", () => {
     const buf = { dirty: true, echi: 0 };
     await scriviContandoEco(buf, () => Promise.resolve("rev-2"));
     expect(buf.echi).toBe(1);
-    expect(cambioSotto(buf, false)).toBe("eco");
+    expect(consumaCambioSotto(buf, false)).toBe("eco");
   });
 
   // L'altro verso, ed è il difetto simmetrico: un eco che resta appeso si
@@ -153,7 +207,7 @@ describe("quando l'eco si conta", () => {
       expect(buf.echi).toBe(0);
       // E la prova che serve davvero: il cambio vero che arriva dopo viene
       // ancora annunciato.
-      expect(cambioSotto(buf, false)).toBe("riscrittura");
+      expect(consumaCambioSotto(buf, false)).toBe("riscrittura");
     });
   }
 
@@ -165,13 +219,14 @@ describe("quando l'eco si conta", () => {
   });
 
   it("due scritture di fila mettono due echi, e due eventi li consumano tutti e due", async () => {
+    // Prima questo banco sottraeva a mano fra un evento e l'altro, perché la
+    // metà che toglie stava dal chiamante: il test rifaceva il lavoro del
+    // chiamante, e quindi non poteva accorgersi che quel lavoro era suo.
     const buf = { dirty: true, echi: 0 };
     await scriviContandoEco(buf, () => Promise.resolve("rev-2"));
     await scriviContandoEco(buf, () => Promise.resolve("rev-3"));
-    expect(cambioSotto(buf, false)).toBe("eco");
-    buf.echi -= 1;
-    expect(cambioSotto(buf, false)).toBe("eco");
-    buf.echi -= 1;
-    expect(cambioSotto(buf, false)).toBe("riscrittura");
+    expect(consumaCambioSotto(buf, false)).toBe("eco");
+    expect(consumaCambioSotto(buf, false)).toBe("eco");
+    expect(consumaCambioSotto(buf, false)).toBe("riscrittura");
   });
 });

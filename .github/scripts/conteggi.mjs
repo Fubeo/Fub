@@ -406,6 +406,60 @@ export const CONTEGGI = [
       " | wc -l",
   },
   {
+    nome: "stati-salvataggio",
+    ragione:
+      "Gli stati che la barra può dire di un documento: i casi di " +
+      "`StatoSalvataggio` in `frontend/src/state/salvataggio.ts`. Il commento " +
+      "che li introduce diceva «quattro e non due» ed era vero il giorno in cui " +
+      "è stato scritto; poi il §18.1 ha aggiunto `conflitto` e la frase è " +
+      "rimasta indietro senza che niente diventasse rosso — un numero in un " +
+      "commento è meno di una costante di stringa, e il compilatore non lo " +
+      "guarda. È esattamente la specie del §16.7, e il posto giusto per " +
+      "presidiarla è questo registro: quel numero **parla dei sorgenti**, e non " +
+      "conta se sta in `docs/` o in una riga di `///`. L'ancora legge le " +
+      "varianti dalla dichiarazione, e si ferma al primo `;` — anche quando sta " +
+      "sulla stessa riga, che è ciò che un intervallo `sed` non sa fare. Zona " +
+      "cieca dichiarata: una variante che non fosse un letterale in minuscolo " +
+      "non entrerebbe nel conto.",
+    comando:
+      "awk '/^export type StatoSalvataggio =/{f=1} f{print; if(/;/) exit}'" +
+      " frontend/src/state/salvataggio.ts | grep -oE '\"[a-z_]+\"' | wc -l",
+  },
+  {
+    nome: "esiti-cambio-sotto",
+    ragione:
+      "Le risposte di `CambioSotto`, cioè in quanti modi la shell sa dire chi " +
+      "ha riscritto un file sotto un buffer. Vive accanto a " +
+      "`stati-salvataggio` e sta nello stesso file per la stessa ragione: il " +
+      "commento che le elenca **le conta**, e oggi il numero è giusto. Un " +
+      "conteggio si presidia quando è giusto — quando è sbagliato non è più un " +
+      "presidio, è una riparazione.",
+    comando:
+      "awk '/^export type CambioSotto =/{f=1} f{print; if(/;/) exit}'" +
+      " frontend/src/state/salvataggio.ts | grep -oE '\"[a-z_]+\"' | wc -l",
+  },
+  {
+    nome: "echi-fuori-dal-padrone",
+    ragione:
+      "Le righe di `frontend/src` che muovono il contatore degli echi **fuori " +
+      "da chi lo possiede**, cioè fuori da `state/salvataggio.ts`. Deve essere " +
+      "**zero**. Il conto degli echi ha due eventi — nasce con la scrittura, " +
+      "muore con l'evento che quella scrittura produce — e per un po' la metà " +
+      "che toglie è stata un `-= 1` scritto a mano dentro il `case \"eco\"` di " +
+      "chi avvisa: una riga che il prossimo ramo, o il prossimo ascoltatore di " +
+      "`document_changed`, si dimentica. Nessun tipo lo vieta (è un `number` in " +
+      "un oggetto) e nessun test lo vede, perché il test che lo vedrebbe è " +
+      "quello del chiamante che non c'è ancora: lo vede un conto che guarda i " +
+      "sorgenti da fuori. Salta le righe di commento, e non per eleganza — la " +
+      "prosa che racconta questo difetto scrive la forma vecchia per esteso, e " +
+      "misurato senza il salto il conto diceva **uno** contando il proprio " +
+      "racconto, che è il difetto di `diagnostica-shell` rifatto uguale.",
+    comando:
+      "find frontend/src -name '*.ts' ! -name 'salvataggio.ts' | xargs awk" +
+      " '/^[[:space:]]*(\\/\\/|\\*|\\/\\*)/{next}" +
+      " {n+=gsub(/echi[[:space:]]*(\\+=|-=|\\+\\+|--)/,\"\")} END{print n+0}'",
+  },
+  {
     nome: "buchi-dichiarati",
     ragione:
       "I verbali che dichiarano un buco proprio: un fatto sulla forma del " +
