@@ -17,7 +17,7 @@ use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fub_abi::model::{DocId, DocumentModel};
-use fub_abi::FormatProvider;
+use fub_abi::{FormatProvider, OptionMap};
 
 /// Un formato di testo nudo: il modello è la sorgente, e basta.
 ///
@@ -32,6 +32,9 @@ pub struct TestoDiProva {
     /// cui le nove copie differivano — una sola su nove, ed è quella che prova
     /// che il kernel non guarda dentro l'HTML che gli torna.
     pre: bool,
+    /// Cosa dichiara di saper fare. Vuoto per default, che è ciò che nove copie
+    /// su nove dicevano.
+    sintassi: OptionMap,
 }
 
 impl TestoDiProva {
@@ -42,6 +45,7 @@ impl TestoDiProva {
             id: format!("prova.{ext}"),
             estensioni: vec![ext.to_string()],
             pre: false,
+            sintassi: OptionMap::new(),
         }
     }
 
@@ -52,6 +56,7 @@ impl TestoDiProva {
             id,
             estensioni: exts.iter().map(|e| e.to_string()).collect(),
             pre: false,
+            sintassi: OptionMap::new(),
         }
     }
 
@@ -68,6 +73,17 @@ impl TestoDiProva {
         self
     }
 
+    /// Cosa dichiara di saper fare, per esteso.
+    ///
+    /// Prende una [`OptionMap`] e non un elenco di nomi come
+    /// [`FormatCapabilities::of`] perché il caso che serve provare è quello che
+    /// un elenco di nomi non sa esprimere: una sintassi dichiarata **e spenta**
+    /// (`.with(nome, false)`), cioè «la conosco, e qui non la faccio».
+    pub fn con_sintassi(mut self, sintassi: OptionMap) -> Self {
+        self.sintassi = sintassi;
+        self
+    }
+
     /// In una `Box`, che è la forma in cui il registro lo vuole.
     pub fn boxed(self) -> Box<dyn FormatProvider> {
         Box::new(self)
@@ -81,7 +97,9 @@ impl FormatProvider for TestoDiProva {
     }
 
     fn capabilities(&self) -> FormatCapabilities {
-        FormatCapabilities::default()
+        FormatCapabilities {
+            syntax: self.sintassi.clone(),
+        }
     }
 
     fn parse(

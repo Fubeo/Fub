@@ -31,6 +31,22 @@
 //! quattro sedi, così chi ne impara una le sa tutte — e vale in particolare per
 //! le [`FormatCapabilities`](crate::format::FormatCapabilities), dove il valore
 //! è ciò che un booleano non poteva dire.
+//!
+//! # Gli stati sono **tre**, e uno dei tre non è «no»
+//!
+//! *Assente*, *spenta*, *accesa*: la regola qui sopra ne distingue tre, e
+//! [`OptionMap::enabled`] ne dice due — perché la domanda che gli si fa ne
+//! ammette due sole. Chi parsa deve sapere se accendere una sintassi, e *perché*
+//! non è accesa non gli cambia una riga. Ma chi **mostra**, chi **negozia** e chi
+//! **sovrappone** una mappa a un'altra la terza risposta ce l'ha eccome: una
+//! voce che nessuno ha mai nominato è una voce su cui non si è deciso, una voce
+//! messa a `false` è una voce su cui qualcuno ha deciso di no.
+//!
+//! [`OptionMap::status`] è la firma che non butta via quella differenza, e
+//! [`OptionMap::enabled`] è la sua **proiezione** — scritta come tale, così che
+//! le due non possano dire cose diverse. Non è una migrazione: il dato ce
+//! l'aveva già (`get` torna un `Option<&Value>`), e ciò che mancava era il nome
+//! con cui chiederlo.
 
 use std::collections::BTreeMap;
 
@@ -87,15 +103,41 @@ impl OptionMap {
         self.entries.get(key)
     }
 
+    /// In che **stato** è una voce: assente, spenta, o accesa col suo
+    /// parametro.
+    ///
+    /// È la firma che risponde per intero, e [`enabled`](Self::enabled) è la sua
+    /// proiezione sulla domanda a due valori. Le due stanno in quest'ordine e
+    /// non nell'altro perché la tabella dei casi è **una**: finché `enabled`
+    /// aveva il proprio `match`, aggiungere qui una riga senza aggiungerla là
+    /// era una cosa che si poteva fare compilando.
+    pub fn status(&self, key: &str) -> OptionStatus<'_> {
+        self.entries.get(key).map_or(OptionStatus::Unset, status_of)
+    }
+
     /// La voce è **accesa**? Assente = no; `false` esplicito = no; qualunque
     /// altro valore = sì, ed è il valore a portare il dettaglio.
+    ///
+    /// I due «no» non vogliono dire la stessa cosa — vedi
+    /// [`status`](Self::status) — e questa firma li unisce di proposito: chi
+    /// parsa, chi rende e chi apre un cancello fa la stessa cosa nei due casi, e
+    /// obbligarli a un `match` a tre rami di cui due identici sarebbe rumore.
     pub fn enabled(&self, key: &str) -> bool {
-        match self.entries.get(key) {
-            None => false,
-            Some(serde_json::Value::Bool(b)) => *b,
-            Some(serde_json::Value::Null) => false,
-            Some(_) => true,
-        }
+        self.status(key).is_on()
+    }
+
+    /// Le voci **accese**, col loro parametro.
+    ///
+    /// È [`iter`](Self::iter) meno quelle spente, e serve a chi deve *elencare*
+    /// ciò che è acceso invece di chiederlo per nome. Che non ci fosse è la
+    /// ragione per cui `DocumentStore::syntax_forms` e `format_of` rispondevano
+    /// due cose diverse sulla stessa mappa: la prima iterava, la seconda
+    /// chiedeva, e la differenza era esattamente una voce a `false`.
+    pub fn active(&self) -> impl Iterator<Item = (&str, &serde_json::Value)> {
+        self.entries
+            .iter()
+            .filter(|(_, v)| status_of(v).is_on())
+            .map(|(k, v)| (k.as_str(), v))
     }
 
     /// Il parametro come stringa, per le voci che ne portano una.
@@ -171,6 +213,72 @@ impl OptionMap {
             self.entries.insert(k.clone(), v.clone());
         }
         self
+    }
+}
+
+/// **La tabella dei casi, in una copia sola.**
+///
+/// Sta qui e non dentro `status` perché [`OptionMap::active`] ha bisogno della
+/// stessa risposta partendo da un valore che ha già in mano, e passare da
+/// `status` vorrebbe dire ricercare la chiave che si sta iterando.
+fn status_of(value: &serde_json::Value) -> OptionStatus<'_> {
+    match value {
+        serde_json::Value::Bool(false) | serde_json::Value::Null => OptionStatus::Off,
+        altro => OptionStatus::On(altro),
+    }
+}
+
+/// Lo stato di una voce di [`OptionMap`]: **tre** casi, non due.
+///
+/// # Perché non è un `Option<bool>`
+///
+/// Perché il terzo caso porta un dato che gli altri due non hanno. `On` non è
+/// «sì»: è «sì, **con questo parametro**», e il parametro è metà del valore
+/// della mappa — l'allowlist di `fub:network`, i tipi di callout che un provider
+/// sa fare. Un `Option<bool>` avrebbe distinto i tre stati e buttato via
+/// esattamente la cosa per cui questa mappa esiste, cioè avrebbe riprodotto il
+/// difetto un gradino più su.
+///
+/// # Perché `Unset` e `Off` sono separati e nessuno dei due è un errore
+///
+/// Sono la differenza fra *non si è deciso* e *si è deciso di no*, ed è la
+/// differenza che [`OptionMap::overlay`] esiste per far viaggiare: una nota che
+/// scrive `fub:wikilinks: false` sopra un vault che li accende sta dicendo
+/// qualcosa, e se il livello di sotto non l'avesse detto affatto sarebbe un'altra
+/// frase. Chi sovrappone tiene la distinzione (la mappa la conserva); chi legge
+/// per agire la perde, e va bene — è il verso in cui si può perdere.
+///
+/// Non attraversa il confine: al confine c'è la **mappa**, e un `option-entry`
+/// assente o messo a `false` porta i tre stati per conto suo. Questo tipo è il
+/// nome che quei tre stati hanno di qua, e per questo non ha una forma WIT né
+/// una `Serialize`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum OptionStatus<'a> {
+    /// Nessuno ha nominato questa voce.
+    Unset,
+    /// Qualcuno l'ha nominata per spegnerla (`false`, o `null`).
+    Off,
+    /// Accesa, col suo parametro — che è `true` quando non ne porta uno.
+    On(&'a serde_json::Value),
+}
+
+impl<'a> OptionStatus<'a> {
+    /// La proiezione sulla domanda a due valori.
+    pub fn is_on(&self) -> bool {
+        matches!(self, OptionStatus::On(_))
+    }
+
+    /// Il **parametro**, che esiste solo se la voce è accesa: una voce spenta
+    /// non ne ha uno, e una assente nemmeno.
+    ///
+    /// Non torna il `Value` di una voce spenta di proposito — sarebbe
+    /// `Bool(false)`, cioè un parametro che non parametrizza niente, e chi lo
+    /// leggesse per sbaglio troverebbe un dato dove non c'è una scelta.
+    pub fn parameter(&self) -> Option<&'a serde_json::Value> {
+        match self {
+            OptionStatus::On(v) => Some(v),
+            _ => None,
+        }
     }
 }
 
@@ -396,6 +504,82 @@ mod tests {
         // un booleano non poteva fare.
         assert!(m.enabled(permission::NETWORK));
         assert_eq!(m.as_strings(permission::NETWORK), vec!["api.example.com"]);
+    }
+
+    /// **Gli stati sono tre**, e la firma comoda ne dice due *proiettando*
+    /// invece di rispondere per conto suo.
+    ///
+    /// L'elenco qui sotto è tutte e sole le forme che un valore JSON può avere,
+    /// e va provato rosso **togliendone una**: se si toglie `null`, o il
+    /// booleano `true`, nessuno si accorge che la tabella non le copre più.
+    #[test]
+    fn gli_stati_di_una_voce_sono_tre_e_non_due() {
+        let m = OptionMap::new()
+            .with("fub:spenta", false)
+            .with("fub:nulla", serde_json::Value::Null)
+            .with("fub:accesa", true)
+            .with("fub:parametrica", json!(["api.example.com"]))
+            .with("fub:zero", json!(0));
+
+        // Il caso che il booleano non sapeva dire: due `false` diversi.
+        assert_eq!(m.status("fub:mai-nominata"), OptionStatus::Unset);
+        assert_eq!(m.status("fub:spenta"), OptionStatus::Off);
+        assert_eq!(m.status("fub:nulla"), OptionStatus::Off);
+        assert_eq!(m.status("fub:accesa"), OptionStatus::On(&json!(true)));
+        assert_eq!(
+            m.status("fub:parametrica"),
+            OptionStatus::On(&json!(["api.example.com"]))
+        );
+        // `0` è un parametro, non uno spegnimento: la regola è «presente =
+        // acceso», non «il valore è veritiero».
+        assert_eq!(m.status("fub:zero"), OptionStatus::On(&json!(0)));
+
+        // E `enabled` è la proiezione: stessa tabella, meno informazione.
+        for key in [
+            "fub:mai-nominata",
+            "fub:spenta",
+            "fub:nulla",
+            "fub:accesa",
+            "fub:parametrica",
+            "fub:zero",
+        ] {
+            assert_eq!(
+                m.enabled(key),
+                m.status(key).is_on(),
+                "`enabled` e `status` non dicono la stessa cosa su `{key}`"
+            );
+        }
+
+        // Il parametro c'è solo dove c'è una scelta: una voce spenta non ne ha
+        // uno, e `Bool(false)` non deve poter passare per tale.
+        assert_eq!(m.status("fub:spenta").parameter(), None);
+        assert_eq!(m.status("fub:mai-nominata").parameter(), None);
+        assert_eq!(
+            m.status("fub:parametrica").parameter(),
+            Some(&json!(["api.example.com"]))
+        );
+    }
+
+    /// **Elencare ciò che è acceso** non è iterare la mappa, ed è la differenza
+    /// che faceva divergere `syntax_forms` da `format_of`.
+    #[test]
+    fn active_e_iter_meno_le_spente() {
+        let m = OptionMap::new()
+            .on(syntax::TAGS)
+            .with(syntax::WIKILINKS, false)
+            .with(syntax::MATH, serde_json::Value::Null)
+            .with(syntax::CALLOUTS, json!(["note", "warning"]));
+
+        let accese: Vec<&str> = m.active().map(|(k, _)| k).collect();
+        assert_eq!(accese, vec![syntax::CALLOUTS, syntax::TAGS]);
+        assert_eq!(
+            m.iter().count(),
+            4,
+            "`iter` le porta tutte, spente comprese"
+        );
+        // E il parametro viaggia con la voce: elencare non è perdere.
+        let callouts = m.active().find(|(k, _)| *k == syntax::CALLOUTS).unwrap().1;
+        assert_eq!(callouts, &json!(["note", "warning"]));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # 24. Tre firme che il freeze rende definitive
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): due punti del contratto che oggi costano un campo e dopo il freeze di M4 costano una migrazione di versione. Erano tre; la §24.1 l'ha chiusa la [0130](../decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md), misurando che i tipi invisibili dalla radice erano sessantuno e non sette, e che quel punto non scadeva col freeze — un `pub use` è additivo.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): un punto del contratto che oggi costa un campo e dopo il freeze di M4 costa una migrazione di versione. Erano tre, e **due sono state chiuse scoprendo che non scadevano affatto**: la §24.1 con la [0130](../decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md) — i tipi invisibili dalla radice erano sessantuno e non sette, e un `pub use` è additivo — e la §24.2 con la [0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md), perché `enabled` è un metodo Rust di comodo e al confine WIT non esiste: la `option-map` i tre stati li portava già tutti.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -24,55 +24,25 @@ a una domanda che non è la sua.
 **Tre lo erano, e sono nate qui per un criterio solo**: toccano una **firma**.
 È il criterio che questo piano usa per le P0 fin dalla prima riga — *la forma
 scade col freeze: oggi costa un campo, dopo costa una migrazione di versione* —
-e non la loro importanza, che è modesta. Nessuna delle due che restano rompe
-niente adesso; tutte e due diventano irreparabili senza una migrazione il giorno
-del freeze. La terza il criterio non lo soddisfaceva, e a scoprirlo è stato il
-giro che l'ha chiusa.
+e non la loro importanza, che è modesta. **Il criterio, su due delle tre, non
+reggeva**, e a scoprirlo è stato ogni volta il giro che l'ha chiusa — non chi le
+ha scritte: quello che scade non si deduce leggendo la voce, si misura andando a
+vedere se la firma attraversa davvero il confine. Sulla §24.3 non è ancora stato
+verificato da nessuno, e chi la prende faccia quella misura per prima.
 
 **Perché stanno insieme.** Sono la stessa domanda a tre distanze dal confine:
 *ciò che il contratto dice, arriva a chi deve leggerlo?* La §24.1 era ciò che il
-contratto **espone** e che non si vedeva da dove tutti guardano; la §24.2 è ciò
-che il contratto **sa** e che la firma con cui lo si chiede non riesce a dire; la
-§24.3 è ciò che il contratto **rifiuta**, senza dire a nessuno perché. Decise
-separate darebbero tre rattoppi in tre file; decise insieme sono un criterio —
-*una risposta a due valori per una domanda che ne ha tre non è una
+contratto **espone** e che non si vedeva da dove tutti guardano; la §24.2 era ciò
+che il contratto **sa** e che la firma con cui lo si chiedeva non riusciva a
+dire; la §24.3 è ciò che il contratto **rifiuta**, senza dire a nessuno perché.
+Decise separate darebbero tre rattoppi in tre file; decise insieme sono un
+criterio — *una risposta a due valori per una domanda che ne ha tre non è una
 semplificazione, è una perdita* — che la [0094](../decisions/0094-un-tetto-che-si-fa-sentire.md)
-ha già preso una volta, su `random-bytes`, e che qui si ripresenta due volte su
-tre.
-
----
-
-### 24.2 `enabled()` risponde con un booleano a una domanda che ha tre risposte
-
-*aperta · strato **contratto** · **P0***
-
-La [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) ha
-sostituito gli elenchi di booleani con `OptionMap` — `ns:nome` → valore JSON — e
-ne ha scritto la regola: *presente = acceso, il valore è il dettaglio, un `false`
-esplicito spegne*. La regola distingue tre stati. La firma che la legge ne
-distingue due: `OptionMap::enabled(&self, key: &str) -> bool`
-(`crates/fub-abi/src/options.rs:92`) torna `false` sia per la chiave assente sia
-per la chiave presente e messa a `false`.
-
-- [ ] **I due `false` non vogliono dire la stessa cosa, e chi legge non può
-      saperlo.** «Questa sintassi il provider non la conosce» e «questa sintassi
-      il provider la conosce ed è spenta in questo `ParseContext`» sono la
-      differenza fra *non si può* e *non adesso*: la prima è una capacità che
-      manca, la seconda un'impostazione. Chi disegna un pannello delle opzioni le
-      deve mostrare in due modi; chi negozia un formato deve ripiegare solo sulla
-      prima.
-- [ ] **È esattamente la forma della [0094](../decisions/0094-un-tetto-che-si-fa-sentire.md),
-      e quella è la strada da valutare per prima.** Là i significati di
-      `random-bytes` erano tre e la firma ne diceva due, e la risposta non è stata
-      un tipo nuovo: è stato dare al risultato la forma che il dominio aveva già.
-      Qui la forma esiste già anche lei — `get()` torna un `Option<&Value>` e sa
-      distinguere — e ciò che manca è che la firma comoda non butti via quello che
-      la firma completa sa. Un `status(&self, key) -> OptionStatus` è una via; che
-      `enabled` sparisca in favore di quella che non mente è l'altra, e va guardata
-      prima, perché una funzione che risponde male è peggio di una che non c'è.
-
-*Provenienza: `issues.md` 0013, misurata il 2026-07-31 e riverificata il
-2026-08-06 (`crates/fub-abi/src/options.rs:92`: `enabled` c'è, `status` no).*
+ha già preso una volta, su `random-bytes`, e la
+[0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md) una seconda,
+scoprendo che il verso opposto vale insieme al primo: la firma a due valori
+resta, perché sei chiamanti su sei fanno la stessa cosa nei due casi, e a
+cambiare è che adesso è una **proiezione** di quella che risponde per intero.
 
 ---
 
