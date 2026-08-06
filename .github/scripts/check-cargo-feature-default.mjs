@@ -44,6 +44,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { crateDelWorkspace } from "./membri-del-workspace.mjs";
+
 // Feature che possono restare fuori dal `default`, ognuna con il **comando di
 // CI** che la compila. Vuoto è lo stato giusto: ogni voce qui è una feature che
 // `cargo test --workspace` non prova, e la riga accanto è la promessa che
@@ -112,18 +114,6 @@ function featureDi(file) {
   return { trovate, dubbi };
 }
 
-/** I `Cargo.toml` dei crate membri, in ordine. */
-function crateDelWorkspace(radice) {
-  const dir = path.join(radice, "crates");
-  if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => path.join(dir, e.name, "Cargo.toml"))
-    .filter((f) => fs.existsSync(f))
-    .sort();
-}
-
 /**
  * Le feature di *questo* crate che il `default` accende, direttamente o no.
  *
@@ -147,8 +137,11 @@ function raggiunte(feature) {
 
 function main() {
   const radice = path.resolve(process.argv[2] ?? ".");
-  const file = crateDelWorkspace(radice);
-  const violazioni = [];
+  // Stesso elenco, stessa funzione: chi sono i crate lo dice `[workspace]
+  // members`. È l'altro chiamante di `membri-del-workspace.mjs`, e il verso
+  // «una cartella che nessun membro dichiara» lo eredita senza scriverlo.
+  const { file, violazioni: sullElenco } = crateDelWorkspace(radice);
+  const violazioni = [...sullElenco];
   let dichiarate = 0;
   let conFeature = 0;
 
