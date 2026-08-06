@@ -403,7 +403,7 @@ fn riaprire_lo_stesso_vault_non_lo_rimonta() {
     host.open(&v.root).expect("seconda apertura");
     let ancora = host.workspace(None).unwrap();
     assert!(
-        Arc::ptr_eq(&ws, &ancora),
+        fub_host::Custodia::ptr_eq(&ws, &ancora),
         "è la stessa sessione, non una nuova"
     );
     assert_eq!(host.vaults().len(), 1, "e non se ne è aggiunta una seconda");
@@ -424,7 +424,7 @@ fn riaprire_lo_stesso_vault_non_lo_rimonta() {
         .workspace(Some(storto.as_str()))
         .expect("il vault si trova anche nominandolo storto");
     assert!(
-        Arc::ptr_eq(&ws, &per_nome),
+        fub_host::Custodia::ptr_eq(&ws, &per_nome),
         "`{storto}` è lo stesso vault, non un secondo"
     );
 
@@ -532,7 +532,7 @@ impl WatcherFactory for FintoWatcher {
     fn start(
         &self,
         _root: &Utf8Path,
-        _workspace: Arc<std::sync::RwLock<fub_kernel::Workspace>>,
+        _workspace: fub_host::Custodia<fub_kernel::Workspace>,
         watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String> {
         watching.store(true, Ordering::Relaxed);

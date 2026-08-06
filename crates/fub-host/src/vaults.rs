@@ -29,8 +29,8 @@
 //! un'altra cosa e va tenuta separata — o riaprire l'app riaprirebbe da sé
 //! tutto ciò che era aperto tre settimane fa.
 
+use crate::custodia::Custodia;
 use std::collections::BTreeMap;
-use std::sync::Mutex;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::PluginError;
@@ -111,7 +111,7 @@ pub struct VaultRegistry {
     /// riscriverebbe il file intero da un elenco vuoto, e i preferiti di chi ha
     /// sbagliato una virgola sparirebbero senza che nessuno glielo dica.
     readable: bool,
-    entries: Mutex<Vec<VaultEntry>>,
+    entries: Custodia<Vec<VaultEntry>>,
 }
 
 impl VaultRegistry {
@@ -127,7 +127,7 @@ impl VaultRegistry {
             VaultRegistry {
                 path: Some(path.to_owned()),
                 readable: warning.is_none(),
-                entries: Mutex::new(entries),
+                entries: Custodia::new("il registro dei vault", entries),
             },
             warning,
         )
@@ -138,7 +138,7 @@ impl VaultRegistry {
         VaultRegistry {
             path: None,
             readable: true,
-            entries: Mutex::new(Vec::new()),
+            entries: Custodia::vuota("il registro dei vault"),
         }
     }
 
@@ -146,7 +146,13 @@ impl VaultRegistry {
     /// recente. L'ordine è **del registro** e non di chi disegna: due elenchi
     /// ordinati in due posti sarebbero due idee di cosa vuol dire "recente".
     pub fn list(&self) -> Vec<VaultEntry> {
-        let mut entries = self.entries.lock().expect("registro dei vault").clone();
+        // Nessun canale d'errore in questa firma (decisione 0120): un registro
+        // avvelenato risponde «non ne conosco», e la porta ha già scritto la
+        // riga che dice perché. È un elenco di comodità, non un dato del vault.
+        let Ok(guardia) = self.entries.read() else {
+            return Vec::new();
+        };
+        let mut entries = guardia.clone();
         entries.sort_by(|a, b| {
             b.favorite
                 .cmp(&a.favorite)
@@ -170,9 +176,10 @@ impl VaultRegistry {
     /// ne ha mai portata nessuna: sono lo stesso caso, ed è giusto — in
     /// entrambi non c'è niente che qualcuno debba adottare.
     pub fn seen_keys(&self, root: &Utf8Path) -> BTreeMap<String, String> {
-        self.entries
-            .lock()
-            .expect("registro dei vault")
+        let Ok(entries) = self.entries.read() else {
+            return BTreeMap::new();
+        };
+        entries
             .iter()
             .find(|e| e.root == root.as_str())
             .map(|e| e.keys_seen.clone())
@@ -283,7 +290,7 @@ impl VaultRegistry {
     /// e il tetto si applica dopo la fusione: se l'altra installazione ha
     /// aperto dei vault, quelli sono nell'elenco e il tetto li conta.
     fn muta(&self, f: impl FnOnce(&mut Vec<VaultEntry>)) -> Result<(), PluginError> {
-        let mut entries = self.entries.lock().expect("registro dei vault");
+        let mut entries = self.entries.write()?;
         let Some(path) = &self.path else {
             f(&mut entries);
             return Ok(());

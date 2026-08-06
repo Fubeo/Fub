@@ -28,7 +28,7 @@
 //! e la misura racconterebbe il costo del futex, non quello del disegno.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -37,7 +37,7 @@ use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{Excerpts, IndexQuery, Page, PropertySelect, ViewInstance};
 use fub_features::{BACKLINKS_VIEW, OUTLINE_VIEW, STATS_VIEW, TAGS_VIEW};
-use fub_host::{Host, NoWatcher};
+use fub_host::{Custodia, Host, NoWatcher};
 use fub_kernel::Workspace;
 
 const NOTES: usize = 2000;
@@ -63,7 +63,7 @@ impl Modo {
     }
 
     /// Esegue `f` sotto il prestito che questo modo prevede.
-    fn leggi<R>(self, ws: &RwLock<Workspace>, f: impl FnOnce(&Workspace) -> R) -> R {
+    fn leggi<R>(self, ws: &Custodia<Workspace>, f: impl FnOnce(&Workspace) -> R) -> R {
         match self {
             Modo::Esclusivo => f(&ws.write().unwrap()),
             Modo::Condiviso => f(&ws.read().unwrap()),
@@ -117,7 +117,7 @@ impl Lettura {
 }
 
 /// Gira `mix` su `threads` thread per [`DUR`], e rende le operazioni al secondo.
-fn misura(ws: &Arc<RwLock<Workspace>>, modo: Modo, threads: usize, mix: &[Lettura]) -> f64 {
+fn misura(ws: &Custodia<Workspace>, modo: Modo, threads: usize, mix: &[Lettura]) -> f64 {
     let stop = Arc::new(AtomicBool::new(false));
     let ops = Arc::new(AtomicU64::new(0));
     let inizio = Instant::now();
@@ -149,7 +149,7 @@ fn misura(ws: &Arc<RwLock<Workspace>>, modo: Modo, threads: usize, mix: &[Lettur
 /// La contropartita: quanto aspetta chi **scrive** mentre `threads` lettori
 /// tengono il workspace. Rende (mediana, massimo) in millisecondi.
 fn latenza_di_chi_scrive(
-    ws: &Arc<RwLock<Workspace>>,
+    ws: &Custodia<Workspace>,
     modo: Modo,
     threads: usize,
 ) -> (f64, f64, usize) {

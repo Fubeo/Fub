@@ -18,7 +18,7 @@
 //! non si vede in nessuna diff che non sia questa.
 
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fub_abi::error::FormatError;
@@ -28,7 +28,7 @@ use fub_abi::format::{
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{IndexQuery, IndexResult, VaultEntry};
 use fub_abi::{FormatProvider, Revision, WriteBase};
-use fub_host::{ExternalChange, ExternalSync};
+use fub_host::{Custodia, ExternalChange, ExternalSync};
 use fub_kernel::{FormatRegistry, Workspace};
 
 /// Il cancello che rende **osservabile** una lettura lenta senza dormire.
@@ -96,7 +96,7 @@ struct Banco {
     _dir: tempfile::TempDir,
     root: Utf8PathBuf,
     cancello: Arc<Cancello>,
-    ws: Arc<RwLock<Workspace>>,
+    ws: Custodia<Workspace>,
 }
 
 fn banco() -> Banco {
@@ -117,7 +117,7 @@ fn banco() -> Banco {
         _dir: dir,
         root,
         cancello,
-        ws: Arc::new(RwLock::new(ws)),
+        ws: Custodia::new("il vault di prova", ws),
     }
 }
 
@@ -162,7 +162,7 @@ fn chi_legge_entra_mentre_il_lotto_legge_il_disco() {
     dentro.recv().expect("il lotto entra nel parse");
     let letto = banco.ws.try_read();
     assert!(
-        letto.is_ok(),
+        letto.is_some(),
         "il workspace non si presta mentre il lotto legge il disco: la fase che \
          legge e parsa tiene il prestito esclusivo, e chi legge — la ricerca, il \
          disegno dei pannelli — aspetta un'I/O che non lo riguarda (0024)"

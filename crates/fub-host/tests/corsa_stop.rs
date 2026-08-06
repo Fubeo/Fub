@@ -19,11 +19,10 @@
 //! un tetto largo per distinguere «piantato» da «lento», e in mezzo non c'è
 //! niente che questa proprietà possa produrre.
 
-use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
-use fub_host::{BundleRegistry, JobRunner};
+use fub_host::{BundleRegistry, Custodia, JobRunner};
 use fub_kernel::Workspace;
 
 /// Quanti giri, e con quanti thread per giro.
@@ -44,9 +43,14 @@ fn chi_chiude_un_pool_torna_sempre() {
     let (fatto, esito) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         for _ in 0..GIRI {
-            let workspace = Arc::new(RwLock::new(Workspace::new(&root, Default::default())));
-            let registry = Arc::new(Mutex::new(BundleRegistry::new()));
-            JobRunner::start(workspace, registry, THREAD, None).stop();
+            let workspace = Custodia::new(
+                "il vault di prova",
+                Workspace::new(&root, Default::default()),
+            );
+            let registry = Custodia::new("i componenti di prova", BundleRegistry::new());
+            JobRunner::start(workspace, registry, THREAD, None)
+                .expect("il pool parte")
+                .stop();
         }
         let _ = fatto.send(());
     });

@@ -164,7 +164,7 @@ fn read_document(
     vault: Option<String>,
 ) -> Result<DocumentSource, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
+    let ws = ws.read()?;
     let text = ws.read_source(&doc_id(&id)?).map_err(PluginError::from)?;
     let revision = Revision::of(&text).0;
     Ok(DocumentSource { text, revision })
@@ -187,7 +187,7 @@ fn write_document(
     vault: Option<String>,
 ) -> Result<String, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write().unwrap();
+    let mut ws = ws.write()?;
     ws.write_document(&doc_id(&id)?, &source, base)
         .map(|r| r.0)
         .map_err(PluginError::from)
@@ -213,7 +213,7 @@ fn save_draft(
     vault: Option<String>,
 ) -> Result<(), PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write().unwrap();
+    let mut ws = ws.write()?;
     ws.save_draft(&doc_id(&id)?, &text, base.map(Revision::new))
         .map_err(|e| PluginError::Internal(format!("bozza non scritta: {e}").into()))
 }
@@ -223,7 +223,7 @@ fn save_draft(
 #[tauri::command]
 fn discard_draft(host: State<Host>, id: String, vault: Option<String>) -> Result<(), PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write().unwrap();
+    let mut ws = ws.write()?;
     ws.discard_draft(&doc_id(&id)?)
         .map_err(|e| PluginError::Internal(format!("bozza non buttata: {e}").into()))
 }
@@ -256,7 +256,7 @@ fn render_embed(
     vault: Option<String>,
 ) -> Result<EmbedContent, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
+    let ws = ws.read()?;
     let (doc_id, content) = ws.render_embed(&page, heading.as_deref())?;
     Ok(EmbedContent {
         doc_id: doc_id.0,
@@ -271,7 +271,7 @@ fn render_preview(
     vault: Option<String>,
 ) -> Result<RenderedDocument, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
+    let ws = ws.read()?;
     ws.render_preview(&DocId::new(id))
         .map_err(PluginError::from)
 }
@@ -300,7 +300,7 @@ fn set_active_context(
     vault: Option<String>,
 ) -> Result<Vec<String>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write().unwrap();
+    let mut ws = ws.write()?;
     Ok(ws.set_active_context(context))
 }
 
@@ -327,7 +327,7 @@ fn set_system_locale(host: State<Host>, locale: Locale) -> bool {
 #[tauri::command]
 fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
+    let ws = ws.read()?;
     Ok(ws.views())
 }
 
@@ -348,7 +348,7 @@ fn render_view(
     vault: Option<String>,
 ) -> Result<UiNode, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
+    let ws = ws.read()?;
     ws.render_view(&istanza(view, instance, params))
 }
 
@@ -373,7 +373,7 @@ fn view_action(
     vault: Option<String>,
 ) -> Result<ViewUpdate, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write().unwrap();
+    let mut ws = ws.write()?;
     ws.view_action(
         &istanza(view, instance, params),
         UiAction {
@@ -416,7 +416,7 @@ fn list_commands(
     vault: Option<String>,
 ) -> Result<Vec<CommandSpec>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
+    let ws = ws.read()?;
     Ok(ws.commands())
 }
 
@@ -443,7 +443,7 @@ fn invoke_command(
     vault: Option<String>,
 ) -> Result<CommandOutcome, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write().unwrap();
+    let mut ws = ws.write()?;
     ws.invoke_command(
         &command,
         args.unwrap_or(serde_json::Value::Null),
@@ -636,7 +636,7 @@ fn view_state(
     vault: Option<String>,
 ) -> Result<Option<serde_json::Value>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read().unwrap();
+    let ws = ws.read()?;
     Ok(ws.view_state(SHELL_OWNER, SHELL_INSTANCE, &key))
 }
 
@@ -652,7 +652,7 @@ fn set_view_state(
     // Prestito **condiviso**: lo store ha il suo lucchetto dentro, e prendere
     // qui quello esclusivo del workspace bloccherebbe chi legge per il tempo di
     // una scrittura su disco — per salvare uno scroll.
-    let ws = ws.read().unwrap();
+    let ws = ws.read()?;
     ws.set_view_state(SHELL_OWNER, SHELL_INSTANCE, &key, value)
         .map_err(|e| PluginError::Io(e.into()))
 }

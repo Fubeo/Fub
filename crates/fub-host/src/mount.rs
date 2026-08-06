@@ -30,7 +30,7 @@
 use std::sync::Arc;
 // Solo lo store delle versioni ha bisogno di un lock qui dentro.
 #[cfg(feature = "versioning")]
-use std::sync::Mutex;
+use crate::custodia::Custodia;
 
 use camino::Utf8Path;
 use fub_abi::settings::SettingSpec;
@@ -214,7 +214,7 @@ pub fn mount(
     // composizione delle due metà, e il contenitore è il modo in cui chi monta
     // la riceve senza che il kernel debba sapere che il versioning esiste.
     #[cfg(feature = "versioning")]
-    let store: Arc<Mutex<Option<VersionStore>>> = Arc::default();
+    let store: Custodia<Option<VersionStore>> = Custodia::vuota("lo store delle versioni");
     // **Il core, e poi l'inventario.** Chi siano le feature ufficiali e in che
     // ordine si montino non è più scritto qui: è
     // [`fub_features::ogni_feature_ufficiale`], e la differenza è tutto il
@@ -419,7 +419,7 @@ pub fn mount(
     }
 
     #[cfg(feature = "versioning")]
-    let versions = store.lock().expect("store delle versioni").clone();
+    let versions = store.read().map_err(|e| e.to_string())?.clone();
     Ok(Mounted {
         workspace: ws,
         registry,
@@ -491,7 +491,7 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
 #[cfg(feature = "versioning")]
 fn register_versioning(
     ws: &mut Workspace,
-    store: &Mutex<Option<VersionStore>>,
+    store: &Custodia<Option<VersionStore>>,
     view: Option<fn() -> Box<dyn fub_abi::ViewProvider>>,
     commands: Option<fn() -> Box<dyn fub_abi::traits::CommandProvider>>,
 ) -> Vec<String> {
@@ -502,7 +502,10 @@ fn register_versioning(
         Ok(opened) => opened,
         Err(e) => return vec![format!("versioning non disponibile: {e}")],
     };
-    *store.lock().expect("store delle versioni") = Some(opened.clone());
+    match store.write() {
+        Ok(mut slot) => *slot = Some(opened.clone()),
+        Err(e) => return vec![format!("versioning non composto: {e}")],
+    }
     let mut guai = Vec::new();
     if let Err(e) =
         ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(opened)))

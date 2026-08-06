@@ -37,7 +37,7 @@
 //! lettura, che compila e rimette tutti in fila in silenzio.
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
@@ -49,6 +49,7 @@ use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates, Workspace};
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
+use crate::custodia::Custodia;
 use crate::mount::mount;
 use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{BundleInfo, BundleRegistry};
@@ -89,7 +90,7 @@ pub struct VaultSession {
     /// il `Mutex` i lettori in ciclo stretto scavalcavano chi aspettava di
     /// scrivere, senza nessun limite: 6,4 secondi di attesa misurati per un
     /// salvataggio, contro 0,12 ms adesso. Il banco è `examples/contesa.rs`.
-    workspace: Arc<RwLock<Workspace>>,
+    workspace: Custodia<Workspace>,
     /// **Chi possiede i bundle** di questo vault (§9.3): i plugin montati, in
     /// ordine di montaggio. Vive quanto la sessione perché è chi chiama
     /// `Plugin::deactivate` quando si chiude — il kernel quei plugin non li ha
@@ -98,7 +99,7 @@ pub struct VaultSession {
     /// Condiviso col runner, che da qui prende il **corpo** di un job. Il lock
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
     /// chiude deve poterci passare mentre un export cammina il vault.
-    registry: Arc<Mutex<BundleRegistry>>,
+    registry: Custodia<BundleRegistry>,
     /// **Cosa questa apertura non ha letto** (§15.7): l'esito dell'apertura,
     /// tenuto per la vita della sessione.
     ///
@@ -112,7 +113,7 @@ pub struct VaultSession {
     /// necessariamente vuota e si riempie mentre l'indicizzazione cammina. Il
     /// campo non dice più «cosa non si è letto» ma «cosa non si è letto
     /// **finora**», e le due frasi coincidono solo da `IndexUpdated` in poi.
-    unread: Arc<Mutex<Vec<UnreadDoc>>>,
+    unread: Custodia<Vec<UnreadDoc>>,
     /// **Quando l'indicizzazione di questa apertura ha finito** (§15.7): la
     /// condizione su cui aspetta chi non può proseguire con una ricerca
     /// parziale — un test, e la CLI che indicizza ed esce.
@@ -139,14 +140,14 @@ impl VaultSession {
         &self.root
     }
 
-    pub fn workspace(&self) -> &Arc<RwLock<Workspace>> {
+    pub fn workspace(&self) -> &Custodia<Workspace> {
         &self.workspace
     }
 
     /// Chi possiede i bundle di questo vault (§9.3): serve a chi ne monta uno a
     /// mano — un test, e a M5 il caricatore che installa un plugin a vault già
     /// aperto.
-    pub fn bundles(&self) -> &Arc<Mutex<BundleRegistry>> {
+    pub fn bundles(&self) -> &Custodia<BundleRegistry> {
         &self.registry
     }
 
@@ -190,8 +191,13 @@ impl VaultSession {
         drop(watcher);
         let mut errors = runner.stop();
         drop(runner);
-        let mut ws = workspace.write().expect("workspace avvelenato");
-        errors.extend(registry.lock().expect("registry avvelenato").close(&mut ws));
+        // Il veleno, qui, **è** uno degli errori di chiusura: chi chiude ha già
+        // un canale per ciò che va storto chiudendo, e non serviva inventarne
+        // un secondo. Ciò che non si chiude non si chiude, e si dice.
+        match (workspace.write(), registry.write()) {
+            (Ok(mut ws), Ok(mut reg)) => errors.extend(reg.close(&mut ws)),
+            (Err(e), _) | (Ok(_), Err(e)) => errors.push(e),
+        }
         errors
     }
 
@@ -215,7 +221,7 @@ struct Sessions {
 
 /// Chi monta Fub e tiene aperti i vault.
 pub struct Host {
-    sessions: Mutex<Sessions>,
+    sessions: Custodia<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
     /// Il **livello macchina** della configurazione (§11.1), condiviso da tutti
@@ -285,7 +291,7 @@ impl Host {
         #[cfg(not(feature = "notify-watcher"))]
         let watcher: Box<dyn WatcherFactory> = Box::new(crate::watcher::NoWatcher);
         Self {
-            sessions: Mutex::new(Sessions::default()),
+            sessions: Custodia::vuota("le sessioni aperte"),
             watcher,
             sink: None,
             // **In memoria di default**, come `Workspace::new`, e per la stessa
@@ -432,9 +438,9 @@ impl Host {
         let root = canonical(root)?;
 
         {
-            let mut sessions = self.sessions.lock().unwrap();
+            let mut sessions = self.sessions.write()?;
             if let Some(session) = sessions.open.get(&root) {
-                let info = info_of(session);
+                let info = info_of(session)?;
                 sessions.current = Some(root);
                 return Ok(info);
             }
@@ -456,7 +462,7 @@ impl Host {
         // in conflitto con sé stesso e il bundle di core che non si monta: è
         // ciò che questo binario si porta dietro, non il disco di chi apre.
         .map_err(|e| PluginError::Internal(e.into()))?;
-        let registry = Arc::new(Mutex::new(registry));
+        let registry = Custodia::new("i componenti montati", registry);
 
         // **I tasti che questo vault propone e che nessuno ha guardato**
         // (§23.13). Qui, e non più tardi: da questa riga in poi il vault è
@@ -501,21 +507,21 @@ impl Host {
         // nello stesso silenzio della scansione — e la shell avrebbe visto un
         // lavoro progredire e finire senza averlo mai visto cominciare.
         let index_job = ws.begin_index_job();
-        let unread: Arc<Mutex<Vec<UnreadDoc>>> = Arc::new(Mutex::new(Vec::new()));
+        let unread: Custodia<Vec<UnreadDoc>> = Custodia::vuota("gli scarti dell'apertura");
         let indicizzato = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
         let in_corso = crate::runner::InCorso {
             id: index_job,
             totale: work.totale(),
             work,
-            unread: Arc::clone(&unread),
+            unread: unread.clone(),
             fine: Arc::clone(&indicizzato),
         };
 
-        let workspace = Arc::new(RwLock::new(ws));
+        let workspace = Custodia::new("il vault aperto", ws);
         // La bandiera del rilevamento è **del kernel** e la tiene chi guarda
         // (§9.7): così `Host::is_watching` e `IndexQuery::VaultStatus`
         // rispondono dallo stesso bit, e non da due idee di com'è andata.
-        let watching = workspace.read().expect("workspace avvelenato").watch_flag();
+        let watching = workspace.read()?.watch_flag();
         // La fabbrica del watcher resta a `String`: è una cucitura interna
         // dell'host — chi la sostituisce sostituisce un modo di guardare una
         // cartella, non parla col contratto — e il suo unico fallimento è il
@@ -541,7 +547,7 @@ impl Host {
             registry.clone(),
             self.job_threads,
             Some(in_corso),
-        );
+        )?;
 
         let session = VaultSession {
             root: root.clone(),
@@ -575,7 +581,7 @@ impl Host {
         // §15.7 che resta aperta, cioè la **forma** dell'apertura: la 0068 le
         // ha tolto il tutto-o-niente, non la sincronia.
         let (info, perdente) = {
-            let mut sessions = self.sessions.lock().unwrap();
+            let mut sessions = self.sessions.write()?;
             let perdente = if sessions.open.contains_key(&root) {
                 // Ha vinto l'altro: la sessione buona è la sua — riaprire un
                 // vault già aperto non lo riapre, e vale anche quando il
@@ -586,7 +592,7 @@ impl Host {
                 None
             };
             let vinta = sessions.open.get(&root).expect("appena inserita, o già lì");
-            let info = info_of(vinta);
+            let info = info_of(vinta)?;
             sessions.current = Some(root.clone());
             (info, perdente)
         };
@@ -677,9 +683,7 @@ impl Host {
 
     /// Chi questo host sa montare, e chi è acceso in questo vault.
     pub fn bundles(&self, vault: Option<&str>) -> Result<Vec<BundleInfo>, PluginError> {
-        self.with_session(vault, |s| {
-            s.registry.lock().expect("registry avvelenato").inventory()
-        })
+        self.in_session(vault, |s| Ok(s.registry.write()?.inventory()))
     }
 
     /// **Accende o spegne un componente**, adesso e per i prossimi avvii.
@@ -709,8 +713,8 @@ impl Host {
             ));
         }
         self.with_session(vault, |session| {
-            let mut ws = session.workspace.write().expect("workspace avvelenato");
-            let mut registry = session.registry.lock().expect("registry avvelenato");
+            let mut ws = session.workspace.write()?;
+            let mut registry = session.registry.write()?;
             let mut errors = Vec::new();
 
             // Prima il fatto, poi la memoria del fatto: se il montaggio fallisce
@@ -756,14 +760,15 @@ impl Host {
         &self,
         vault: Option<&str>,
     ) -> Result<std::collections::BTreeMap<String, String>, PluginError> {
-        self.with_session(vault, |session| {
-            let ws = session.workspace.read().expect("workspace avvelenato");
+        self.in_session(vault, |session| {
+            let ws = session.workspace.read()?;
             let proposti = ws.vault_keybindings();
-            ws.suspended_settings()
+            Ok(ws
+                .suspended_settings()
                 .into_iter()
                 .filter(|key| ws.setting_is_declared(key))
                 .filter_map(|key| proposti.get(&key).map(|c| (key, c.clone())))
-                .collect()
+                .collect())
         })
     }
 
@@ -773,12 +778,9 @@ impl Host {
     pub fn adopt_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
         let mostrate: std::collections::BTreeSet<String> =
             self.pending_keybindings(vault)?.into_keys().collect();
-        self.with_session(vault, |session| {
-            session
-                .workspace
-                .write()
-                .expect("workspace avvelenato")
-                .resume_settings(&mostrate);
+        self.in_session(vault, |session| {
+            session.workspace.write()?.resume_settings(&mostrate);
+            Ok(())
         })?;
         self.ricorda_i_tasti_visti(vault)
     }
@@ -797,8 +799,8 @@ impl Host {
     /// era già proprio.
     pub fn discard_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
         let mostrate: Vec<String> = self.pending_keybindings(vault)?.into_keys().collect();
-        let mancate = self.with_session(vault, |session| {
-            let mut ws = session.workspace.write().expect("workspace avvelenato");
+        let mancate = self.in_session(vault, |session| {
+            let mut ws = session.workspace.write()?;
             // Il `reset` **risveglia** la chiave che azzera — è la riga in
             // `SettingsStore::write` — quindi alla fine del giro non resta
             // sospeso niente di ciò che è stato mostrato, e non serve una
@@ -810,14 +812,14 @@ impl Host {
             // cioè esattamente l'ambiguità che questa risposta esiste per
             // togliere — e senza nemmeno arrivare al promemoria, così la volta
             // dopo si richiede di un insieme che è già stato in parte distrutto.
-            mostrate
+            Ok(mostrate
                 .iter()
                 .filter_map(|key| {
                     ws.reset_setting(key)
                         .err()
                         .map(|why| format!("`{key}`: {why}"))
                 })
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>())
         })?;
         // Il promemoria si scrive **comunque**, e dice il vero da solo: ricorda
         // ciò che il file porta meno ciò che è rimasto sospeso, quindi le chiavi
@@ -858,11 +860,7 @@ impl Host {
             return self.dillo_a_chi_guarda(key);
         }
         self.with_session(vault, |session| {
-            session
-                .workspace
-                .write()
-                .expect("workspace avvelenato")
-                .set_setting(key, value)
+            session.workspace.write()?.set_setting(key, value)
         })??;
         self.se_e_un_tasto_ricordalo(vault, key)
     }
@@ -879,11 +877,7 @@ impl Host {
             return self.dillo_a_chi_guarda(key);
         }
         self.with_session(vault, |session| {
-            session
-                .workspace
-                .write()
-                .expect("workspace avvelenato")
-                .reset_setting(key)
+            session.workspace.write()?.reset_setting(key)
         })??;
         self.se_e_un_tasto_ricordalo(vault, key)
     }
@@ -931,7 +925,7 @@ impl Host {
             ));
         }
         let ws = self.workspace(vault)?;
-        let ws = ws.read().expect("workspace avvelenato");
+        let ws = ws.read()?;
         ws.query_index(query)
     }
 
@@ -979,7 +973,7 @@ impl Host {
     /// su un archivio» da «la finestra è aperta e basta», e la pone chi deve
     /// decidere se una domanda si può servire senza vault.
     pub fn has_current_vault(&self) -> bool {
-        self.sessions.lock().unwrap().current.is_some()
+        self.sessions.read().is_ok_and(|s| s.current.is_some())
     }
 
     /// Il promemoria costa una riscrittura del registro, quindi si paga solo
@@ -1001,12 +995,12 @@ impl Host {
     /// entrambi i casi è la stessa cosa — le chiavi che nessuno dichiara, che
     /// non sono state mostrate e quindi non sono state approvate.
     fn ricorda_i_tasti_visti(&self, vault: Option<&str>) -> Result<(), PluginError> {
-        let (root, visti) = self.with_session(vault, |session| {
-            let ws = session.workspace.read().expect("workspace avvelenato");
+        let (root, visti) = self.in_session(vault, |session| {
+            let ws = session.workspace.read()?;
             let sospese = ws.suspended_settings();
             let mut visti = ws.vault_keybindings();
             visti.retain(|key, _| !sospese.contains(key));
-            (session.root.clone(), visti)
+            Ok((session.root.clone(), visti))
         })?;
         self.vaults.note_keys_seen(&root, visti)
     }
@@ -1020,7 +1014,7 @@ impl Host {
     pub fn close_vault(&self, root: &Utf8Path) -> Result<Vec<PluginError>, PluginError> {
         let root = canonical(root)?;
         let session = {
-            let mut sessions = self.sessions.lock().unwrap();
+            let mut sessions = self.sessions.write()?;
             let Some(session) = sessions.open.remove(&root) else {
                 return Err(PluginError::NotFound(
                     format!("Nessun vault aperto su {root}.").into(),
@@ -1047,7 +1041,12 @@ impl Host {
     /// suoi plugin — e lo tiene [`Workspace::close`].
     pub fn close(&self) -> Vec<PluginError> {
         let sessions = {
-            let mut sessions = self.sessions.lock().unwrap();
+            // La mappa non è più leggibile: non si sa più *cosa* chiudere, e
+            // rispondere con un elenco vuoto vorrebbe dire «chiuso tutto».
+            let mut sessions = match self.sessions.write() {
+                Ok(sessions) => sessions,
+                Err(e) => return vec![e],
+            };
             sessions.current = None;
             std::mem::take(&mut sessions.open)
         };
@@ -1059,18 +1058,25 @@ impl Host {
 
     /// I vault aperti, in ordine di path.
     pub fn vaults(&self) -> Vec<Utf8PathBuf> {
-        self.sessions.lock().unwrap().open.keys().cloned().collect()
+        // Queste due firme un canale d'errore non ce l'hanno, e non gliene si
+        // aggiunge uno per un caso in cui la porta ha **già** scritto la sua
+        // riga: chi chiede quali vault siano aperti riceve ciò che se ne sa
+        // ancora, che è niente.
+        self.sessions
+            .read()
+            .map(|s| s.open.keys().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Il vault corrente, se ce n'è uno.
     pub fn current(&self) -> Option<Utf8PathBuf> {
-        self.sessions.lock().unwrap().current.clone()
+        self.sessions.read().ok().and_then(|s| s.current.clone())
     }
 
     /// Rende corrente un vault già aperto.
     pub fn set_current(&self, root: &Utf8Path) -> Result<(), PluginError> {
         let root = canonical(root)?;
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.write()?;
         if !sessions.open.contains_key(&root) {
             return Err(PluginError::NotFound(
                 format!("Nessun vault aperto su {root}.").into(),
@@ -1091,7 +1097,7 @@ impl Host {
         vault: Option<&str>,
         f: impl FnOnce(&VaultSession) -> R,
     ) -> Result<R, PluginError> {
-        let sessions = self.sessions.lock().unwrap();
+        let sessions = self.sessions.read()?;
         let key = match vault {
             Some(path) => canonical(Utf8Path::new(path))?,
             None => sessions
@@ -1105,9 +1111,24 @@ impl Host {
         Ok(f(session))
     }
 
+    /// Come [`with_session`](Host::with_session), per chi **dentro** la sessione
+    /// può fallire — cioè per chiunque prenda un prestito del workspace, da
+    /// quando prenderlo è una domanda che può rispondere di no (decisione 0120).
+    ///
+    /// Esiste per non lasciare in giro `Result<Result<_, _>, _>`: due errori
+    /// della stessa specie, uno dentro l'altro, si appiattiscono qui una volta
+    /// invece che a ogni chiamante.
+    pub fn in_session<R>(
+        &self,
+        vault: Option<&str>,
+        f: impl FnOnce(&VaultSession) -> Result<R, PluginError>,
+    ) -> Result<R, PluginError> {
+        self.with_session(vault, f)?
+    }
+
     /// Un handle clonato al workspace di un vault (o del corrente), o l'errore
     /// se non è aperto.
-    pub fn workspace(&self, vault: Option<&str>) -> Result<Arc<RwLock<Workspace>>, PluginError> {
+    pub fn workspace(&self, vault: Option<&str>) -> Result<Custodia<Workspace>, PluginError> {
         self.with_session(vault, |s| s.workspace.clone())
     }
 
@@ -1163,7 +1184,7 @@ impl Host {
     ) -> Result<String, PluginError> {
         let store = self.versions(vault)?;
         let ws = self.workspace(vault)?;
-        let mut ws = ws.write().unwrap();
+        let mut ws = ws.write()?;
         ws.with_host(VERSIONING_ID, |host| store.read(id, ts, host))
     }
 
@@ -1179,7 +1200,7 @@ impl Host {
     ) -> Result<(), PluginError> {
         let source = self.read_version(vault, id, ts)?;
         let ws = self.workspace(vault)?;
-        let mut ws = ws.write().unwrap();
+        let mut ws = ws.write()?;
         // **Detta**, come l'importer (§18.1): un ripristino non discende dal
         // testo che c'è adesso — lo sostituisce **apposta**, ed è il gesto con
         // cui l'utente dice che quello di adesso non gli va bene. È l'altra
@@ -1264,14 +1285,14 @@ impl Host {
 }
 
 /// Ciò che la shell sa di un vault appena aperto.
-fn info_of(session: &VaultSession) -> VaultInfo {
-    let ws = session.workspace.read().expect("workspace avvelenato");
-    VaultInfo {
+fn info_of(session: &VaultSession) -> Result<VaultInfo, PluginError> {
+    let ws = session.workspace.read()?;
+    Ok(VaultInfo {
         root: ws.root().to_string(),
         extensions: ws.extensions(),
         plugins: ws.plugins(),
-        unread: session.unread.lock().expect("scarti avvelenati").clone(),
-    }
+        unread: session.unread.read()?.clone(),
+    })
 }
 
 /// La forma **canonica** di una radice: è la chiave delle sessioni.

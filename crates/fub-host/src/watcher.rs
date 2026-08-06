@@ -22,19 +22,31 @@
 //! (`IndexQuery::VaultStatus`).
 
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::event::Event;
 use fub_abi::{PluginError, Severity};
 use fub_kernel::{ParsedChange, Workspace};
 
+use crate::custodia::Custodia;
+
 /// Un rilevatore vivo: si tiene, e quando cade smette di guardare.
 ///
 /// Il metodo è uno solo perché uno solo è ciò che l'host vorrà davvero sapere
 /// di un watcher. Senza di lui il trait sarebbe `Box<dyn Any + Send>` con un
 /// nome nuovo, che è esattamente il punto di partenza.
-pub trait VaultWatcher: Send {
+/// **`Sync` e non solo `Send`**, e non è un vezzo: un rilevatore vive dentro la
+/// mappa delle sessioni, e da quando quella mappa sta dietro la porta unica
+/// della [decisione 0120] la si presta **in condivisione** a più thread insieme.
+/// La premessa che quella decisione ha rotto è che «un `RwLock` sia un `Mutex`
+/// con un permesso in più»: `Mutex<T>` è `Sync` per ogni `T: Send`, perché
+/// presta a uno alla volta; `RwLock<T>` lo è solo per `T: Send + Sync`. Il
+/// rilevatore stava in una mappa condivisa contando su un lucchetto che non lo
+/// prestava mai a due lettori — cioè su una proprietà che nessuno aveva scelto.
+///
+/// [decisione 0120]: ../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md
+pub trait VaultWatcher: Send + Sync {
     /// `true` se questo vault ha il rilevamento delle modifiche esterne
     /// **adesso**.
     ///
@@ -60,7 +72,7 @@ pub trait WatcherFactory: Send + Sync {
     fn start(
         &self,
         root: &Utf8Path,
-        workspace: Arc<RwLock<Workspace>>,
+        workspace: Custodia<Workspace>,
         watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String>;
 }
@@ -89,7 +101,7 @@ impl WatcherFactory for NoWatcher {
     fn start(
         &self,
         _root: &Utf8Path,
-        _workspace: Arc<RwLock<Workspace>>,
+        _workspace: Custodia<Workspace>,
         _watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String> {
         Ok(Box::new(NoWatcher))
@@ -148,15 +160,19 @@ pub enum ExternalChange {
 /// chi aspetta non aspetta più il lotto **intero**: fra la 2 e la 3 il lucchetto
 /// si rilascia, e i lettori in coda passano.
 pub struct ExternalSync {
-    workspace: Arc<RwLock<Workspace>>,
+    workspace: Custodia<Workspace>,
 }
 
 impl ExternalSync {
-    pub fn new(workspace: Arc<RwLock<Workspace>>) -> Self {
+    pub fn new(workspace: Custodia<Workspace>) -> Self {
         ExternalSync { workspace }
     }
 
     /// Applica un lotto di cambiamenti. Vedi le tre fasi nel doc del tipo.
+    /// **Un vault avvelenato smette di sincronizzarsi** (decisione 0120), e
+    /// smette in silenzio *qui*: la riga che dice perché l'ha già scritta la
+    /// porta, una volta sola. Ciò che si perde è il rilevamento — cioè un
+    /// derivato — su un vault che è già irrecuperabile.
     pub fn batch(&mut self, changes: &[ExternalChange]) {
         if changes.is_empty() {
             return;
@@ -166,7 +182,9 @@ impl ExternalSync {
         // specie, un file sparito) e per una lettura che non è riuscita: la
         // fase 2 li rifà per intero, dove stavano già.
         let prepared: Vec<Option<ParsedChange>> = {
-            let ws = self.workspace.read().unwrap();
+            let Ok(ws) = self.workspace.read() else {
+                return;
+            };
             changes
                 .iter()
                 .map(|change| match change {
@@ -177,7 +195,9 @@ impl ExternalSync {
         };
         // Fase 2 — la memoria, sotto prestito esclusivo.
         {
-            let mut ws = self.workspace.write().unwrap();
+            let Ok(mut ws) = self.workspace.write() else {
+                return;
+            };
             for (change, plan) in changes.iter().zip(prepared) {
                 match change {
                     ExternalChange::Touched(path) => {
@@ -202,7 +222,9 @@ impl ExternalSync {
     /// prossima apertura, riceve una risposta incompleta. Pavimento e porta
     /// insieme (0062): una riga nel log, una nel canale.
     fn flush(&mut self) {
-        let mut ws = self.workspace.write().unwrap();
+        let Ok(mut ws) = self.workspace.write() else {
+            return;
+        };
         let flush_errors = ws.flush_indexes();
         if flush_errors.is_empty() {
             return;
@@ -233,10 +255,15 @@ impl ExternalSync {
     /// rilevatore ha da dire al workspace sono «ecco cosa è cambiato» e «ho
     /// smesso di vedere», e la seconda non è meno di `notify` della prima.
     pub fn watch_died(&mut self, motivi: Vec<String>) {
-        let mut ws = self.workspace.write().unwrap();
+        // I motivi si scrivono nel log **prima** del prestito: se il vault è
+        // avvelenato il canale degli eventi non c'è più, e la ragione per cui
+        // il rilevamento è morto resterebbe l'unica cosa che nessuno ha detto.
         for motivo in &motivi {
             tracing::error!(target: "fub.host", "{motivo}");
         }
+        let Ok(mut ws) = self.workspace.write() else {
+            return;
+        };
         ws.with_host("fub.host", |host| {
             for motivo in motivi {
                 host.emit(Event::Trouble {
@@ -255,7 +282,9 @@ pub use notify_watcher::NotifyWatcher;
 #[cfg(feature = "notify-watcher")]
 mod notify_watcher {
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
+
+    use crate::custodia::Custodia;
     use std::time::Duration;
 
     use camino::{Utf8Path, Utf8PathBuf};
@@ -273,7 +302,10 @@ mod notify_watcher {
     /// parametrico sul backend della piattaforma, quindi resta cancellato: qui
     /// interessa solo che stia in piedi finché la sessione è aperta.
     struct Debounced {
-        _debouncer: Box<dyn std::any::Any + Send>,
+        /// `+ Sync` da quando le sessioni si prestano in condivisione
+        /// (decisione 0120): il debouncer non lo tocca nessuno — sta qui per
+        /// restare vivo — ma il tipo che lo contiene sì.
+        _debouncer: Box<dyn std::any::Any + Send + Sync>,
         /// La bandiera del kernel, che questo debouncer possiede finché è vivo.
         watching: Arc<AtomicBool>,
     }
@@ -354,7 +386,7 @@ mod notify_watcher {
         fn start(
             &self,
             root: &Utf8Path,
-            workspace: Arc<RwLock<Workspace>>,
+            workspace: Custodia<Workspace>,
             watching: Arc<AtomicBool>,
         ) -> Result<Box<dyn VaultWatcher>, String> {
             let failed = watching.clone();
