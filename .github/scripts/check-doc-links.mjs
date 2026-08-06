@@ -420,6 +420,9 @@ function main() {
   let totaleLink = 0;
   let totaleRighe = 0;
   let righeSenzaNome = 0;
+  // Le ancore che stanno accanto a un link e non dentro la sua etichetta, già
+  // viste: una riga con due link allo stesso file le farebbe contare due volte.
+  const ancoreAccanto = new Set();
   const problemi = [];
 
   for (const percorso of file) {
@@ -470,27 +473,73 @@ function main() {
         continue;
       }
 
-      // Il `:N` dell'etichetta, se c'è. Vale per i sorgenti (un `.md` linkato
-      // si àncora col `#`, non con un numero di riga).
-      const conRiga = etichetta.replace(/`/g, "").trim().match(/^(\S+):(\d+)$/);
-      if (conRiga && fs.statSync(bersaglio).isFile() && !bersaglio.toLowerCase().endsWith(".md")) {
+      // Verifica un `:N` contro il file linkato. `ancora` è il tratto di codice
+      // che porta il numero — l'etichetta del link, o quello che gli sta
+      // accanto — e serve a due cose: leggerne il numero, ed escluderlo dai
+      // nomi da cercare (sé stesso non è la cosa che promette).
+      const verificaAncora = (ancora, numero) => {
         totaleRighe += 1;
-        const nomi = nomiPromessi(testoRiga, etichetta);
+        const nomi = nomiPromessi(testoRiga, ancora);
         const righeBersaglio = fs.readFileSync(bersaglio, "utf8").split("\n");
-        const attesa = Number(conRiga[2]);
 
         if (nomi.length === 0) {
           // Non si inventa un nome: la riga non promette niente di cercabile, e
           // il conto in fondo lo dice invece di far finta di aver controllato.
           righeSenzaNome += 1;
-        } else if (attesa > righeBersaglio.length) {
-          segnala(`il file ha ${righeBersaglio.length} righe, il link ne cita ${attesa}`);
-        } else if (!nomi.some((n) => new RegExp(`\\b${n}\\b`).test(righeBersaglio[attesa - 1]))) {
+        } else if (numero > righeBersaglio.length) {
+          segnala(`il file ha ${righeBersaglio.length} righe, il link ne cita ${numero}`);
+        } else if (!nomi.some((n) => new RegExp(`\\b${n}\\b`).test(righeBersaglio[numero - 1]))) {
           const dove = dovEFinito(righeBersaglio, nomi);
           segnala(
-            `alla riga ${attesa} non c'è ${nomi.map((n) => `\`${n}\``).join(" né ")}` +
+            `alla riga ${numero} non c'è ${nomi.map((n) => `\`${n}\``).join(" né ")}` +
               (dove === null ? " (e non c'è da nessuna parte)" : `: è a ${dove}`),
           );
+        }
+      };
+
+      // Un numero di riga si verifica solo contro un sorgente: un `.md` linkato
+      // si àncora col `#`, non con un numero di riga.
+      const bersaglioNumerabile =
+        fs.statSync(bersaglio).isFile() && !bersaglio.toLowerCase().endsWith(".md");
+
+      // Il `:N` dell'etichetta, se c'è.
+      const etichettaNuda = etichetta.replace(/`/g, "").trim();
+      const conRiga = etichettaNuda.match(/^(\S+):(\d+)$/);
+      if (conRiga && bersaglioNumerabile) verificaAncora(etichetta, Number(conRiga[2]));
+
+      // **E il `:N` che viaggia ACCANTO al link invece che dentro l'etichetta.**
+      //
+      // `docs/versionamento.md` lo scrive così, due volte:
+      //
+      //     [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3773`)
+      //
+      // La promessa è la stessa di un'etichetta `file:N` — *quel simbolo è a
+      // quella riga* — ma il numero sta in un secondo tratto di codice, e per
+      // questo controllo era invisibile: erano gli unici due ancoraggi del
+      // documento fuori dalla tabella degli schemi, cioè gli unici che
+      // `crates/fub-app/tests/schemi_su_disco.rs` non giudica. Nessuno li
+      // guardava, ed erano sbagliati tutt'e due — la stessa specie di
+      // invecchiamento che ha fatto scrivere il blocco qui sopra.
+      //
+      // A quale file si riferiscano non si indovina: si legge dal link accanto.
+      // L'ancora vale se il suo nome di file è quello in fondo alla
+      // destinazione, e allora è **la stessa espressione** che verifica le
+      // etichette. Un tratto `file:N` che nessun link della riga risolve non è
+      // un ancoraggio: è prosa che nomina un punto senza portarci (le righe
+      // della tabella dei difetti di `docs/todo.md` sono così, e sono misure
+      // datate che non devono diventare rosse). Quella è la zona cieca, ed è
+      // dichiarata qui invece che taciuta.
+      if (bersaglioNumerabile) {
+        const nomeFile = path.basename(parteFile);
+        for (const m of testoRiga.matchAll(/`([^`]+)`/g)) {
+          const tratto = m[1].trim();
+          if (tratto === etichettaNuda) continue; // già verificato come etichetta
+          const accanto = tratto.match(/^(\S+):(\d+)$/);
+          if (accanto === null || path.basename(accanto[1]) !== nomeFile) continue;
+          const chiave = `${percorso}|${riga}|${tratto}`;
+          if (ancoreAccanto.has(chiave)) continue; // due link uguali sulla stessa riga
+          ancoreAccanto.add(chiave);
+          verificaAncora(`\`${tratto}\``, Number(accanto[2]));
         }
       }
 
