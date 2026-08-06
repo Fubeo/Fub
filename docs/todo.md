@@ -32,10 +32,10 @@ perché vuole un fuso e una regola sull'ora legale
 ([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)) — e tre da un
 **consuntivo**: la seduta 24, nata rileggendo contro i sorgenti le novantadue
 osservazioni che `docs/issues.md` teneva da un audit e che nessuno aveva mai
-lavorato. Centotrentatré sono
+lavorato. Centotrentaquattro sono
 chiuse, e i loro verbali stanno in
 [decisions/](decisions/README.md); le voci ancora aperte sono
-**tre** [conta: voci-aperte], e questo file resta il loro **indice** e il
+**due** [conta: voci-aperte], e questo file resta il loro **indice** e il
 consuntivo di come sono finite.
 
 Da quello stesso consuntivo viene la **terza specie** che questo file conta: i
@@ -235,17 +235,20 @@ che questo piano passa il tempo a togliere dal codice.
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
-| **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | la stessa domanda a tre distanze dal confine: ciò che il contratto dice, arriva a chi deve leggerlo? | 3 | — |
+| **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | la stessa domanda a tre distanze dal confine: ciò che il contratto dice, arriva a chi deve leggerlo? | 2 | — |
 
 ## Le voci
 
-**Tre** [conta: voci-aperte], e sono tutte e tre della
+**Due** [conta: voci-aperte], e sono tutte e due della
 [seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md). La tabella
-era vuota — la roadmap infrastrutturale di M4 era finita — e queste tre l'hanno
+era vuota — la roadmap infrastrutturale di M4 era finita — e tre voci l'hanno
 riaperta per il criterio con cui è stata scritta la prima riga di questo file:
-**toccano una firma**, e una firma scade col freeze. Nessuna delle tre è
-importante; tutte e tre diventano una migrazione di versione se il freeze passa
-sopra. Il numero di ogni voce resta quello con
+**toccano una firma**, e una firma scade col freeze. Nessuna delle due che
+restano è importante; tutte e due diventano una migrazione di versione se il
+freeze passa sopra. La terza — la §24.1, chiusa dalla
+[0130](decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md) — quel
+criterio non lo soddisfaceva affatto: un `pub use` è additivo e non scade, e a
+scadere era il frattempo. Il numero di ogni voce resta quello con
 cui la nomina il resto del repo, e si ritrova in
 [decisions/](decisions/README.md) e nella
 [corrispondenza](roadmap/numerazione.md).
@@ -260,7 +263,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-**tre** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+**due** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -277,7 +280,7 @@ decidere. La forma di questo file era già pronta a riceverlo, e la prova è che
 non è servito inventare un criterio nuovo: è bastato rileggere quello con cui
 *Caselle* si era staccata da *Voci*.
 
-La colonna *Voci* somma **tre** [conta: voci-aperte]: ogni seduta è a zero
+La colonna *Voci* somma **due** [conta: voci-aperte]: ogni seduta è a zero
 tranne la 24, e l'ultima ad arrivare a zero è stata la 16, con la
 [0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md).
 Della 20 non resta nemmeno una casella: si è chiusa con la
@@ -447,7 +450,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
-| **§24.1** | [Sette tipi del contratto non si vedono dalla radice del crate](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md#241-sette-tipi-del-contratto-non-si-vedono-dalla-radice-del-crate) | 24. Tre firme che il freeze rende definitive | contratto | **P0** |
 | **§24.2** | [`enabled()` risponde con un booleano a una domanda che ha tre risposte](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md#242-enabled-risponde-con-un-booleano-a-una-domanda-che-ha-tre-risposte) | 24. Tre firme che il freeze rende definitive | contratto | **P0** |
 | **§24.3** | [`Unsupported` è l'unico errore che non è testo che qualcuno legge](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md#243-unsupported-è-lunico-errore-che-non-è-testo-che-qualcuno-legge) | 24. Tre firme che il freeze rende definitive | contratto | **P0** |
 
@@ -590,7 +592,7 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centoventinove** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrenta** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

@@ -1,6 +1,6 @@
 # 24. Tre firme che il freeze rende definitive
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): tre punti del contratto che oggi costano un campo e dopo il freeze di M4 costano una migrazione di versione.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): due punti del contratto che oggi costano un campo e dopo il freeze di M4 costano una migrazione di versione. Erano tre; la §24.1 l'ha chiusa la [0130](../decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md), misurando che i tipi invisibili dalla radice erano sessantuno e non sette, e che quel punto non scadeva col freeze — un `pub use` è additivo.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -21,55 +21,24 @@ nessuna è il residuo di un verbale. Sono lavoro già deciso che qualcuno deve
 ancora fare, e aprirle come voci vorrebbe dire chiedere a `todo.md` di rispondere
 a una domanda che non è la sua.
 
-**Tre lo sono, e sono qui per un criterio solo**: toccano una **firma**. È il
-criterio che questo piano usa per le P0 fin dalla prima riga — *la forma scade
-col freeze: oggi costa un campo, dopo costa una migrazione di versione* — e non
-la loro importanza, che è modesta. Nessuna delle tre rompe niente adesso. Tutte e
-tre diventano irreparabili senza una migrazione il giorno del freeze.
+**Tre lo erano, e sono nate qui per un criterio solo**: toccano una **firma**.
+È il criterio che questo piano usa per le P0 fin dalla prima riga — *la forma
+scade col freeze: oggi costa un campo, dopo costa una migrazione di versione* —
+e non la loro importanza, che è modesta. Nessuna delle due che restano rompe
+niente adesso; tutte e due diventano irreparabili senza una migrazione il giorno
+del freeze. La terza il criterio non lo soddisfaceva, e a scoprirlo è stato il
+giro che l'ha chiusa.
 
 **Perché stanno insieme.** Sono la stessa domanda a tre distanze dal confine:
-*ciò che il contratto dice, arriva a chi deve leggerlo?* La §24.1 è ciò che il
-contratto **espone** e che non si vede da dove tutti guardano; la §24.2 è ciò che
-il contratto **sa** e che la firma con cui lo si chiede non riesce a dire; la
+*ciò che il contratto dice, arriva a chi deve leggerlo?* La §24.1 era ciò che il
+contratto **espone** e che non si vedeva da dove tutti guardano; la §24.2 è ciò
+che il contratto **sa** e che la firma con cui lo si chiede non riesce a dire; la
 §24.3 è ciò che il contratto **rifiuta**, senza dire a nessuno perché. Decise
 separate darebbero tre rattoppi in tre file; decise insieme sono un criterio —
 *una risposta a due valori per una domanda che ne ha tre non è una
 semplificazione, è una perdita* — che la [0094](../decisions/0094-un-tetto-che-si-fa-sentire.md)
 ha già preso una volta, su `random-bytes`, e che qui si ripresenta due volte su
 tre.
-
----
-
-### 24.1 Sette tipi del contratto non si vedono dalla radice del crate
-
-*aperta · strato **contratto** · **P0***
-
-`crates/fub-abi/src/lib.rs:103` dichiara di riesportare «i tipi più usati per un
-import ergonomico dai crate consumatori». Sette tipi
-primari definiti in `src/traits.rs` non ci sono: `DocPosition`, `ResolvedRef`,
-`JobSpec`, `JobId`, `JobProgress`, `JobStatus`, `PluginPermissions`. Chi li usa
-scrive `fub_abi::traits::JobId` mentre il suo vicino di riga scrive
-`fub_abi::Paged`.
-
-- [ ] **È una firma e non un'ergonomia.** Un `pub use` è la superficie pubblica
-      del crate: aggiungerlo dopo il freeze è additivo e si può fare sempre — ma
-      *nel frattempo* ogni consumatore ha scritto il path lungo, e il path lungo
-      passa da `traits`, che è un modulo di implementazione. Il giorno in cui
-      `traits.rs` si spezza — ed è la direzione in cui il crate si muove da
-      quando la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) ha dato
-      al contratto una sorgente — quei path si rompono tutti, e si rompono per
-      chi sta fuori.
-- [ ] **La domanda vera non è quali sette mancano, è chi decide l'elenco.**
-      Aggiungerli a mano è la risposta che l'ostacolo suggerisce, ed è la
-      peggiore: il prossimo tipo nascerà fuori dall'elenco esattamente come questi
-      sette. Un `pub use traits::*` è l'altro estremo e rinuncia a dire cosa è
-      superficie. La terza forma — un presidio che confronta i tipi pubblici di
-      `traits.rs` con il blocco di re-export e diventa rosso su chi manca — è la
-      stessa forma che `check-prosa` ha per i numeri e `dieta_ipc` per i comandi,
-      ed è l'unica che il secondo chiamante eredita gratis.
-
-*Provenienza: `issues.md` 0011, misurata il 2026-07-31 e riverificata il
-2026-08-06 (`crates/fub-abi/src/lib.rs:103-112`: nessuno dei sette c'è).*
 
 ---
 
