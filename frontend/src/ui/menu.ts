@@ -8,6 +8,7 @@
 
 import { t } from "../i18n/strings";
 import { intrappolaFuoco } from "./a11y";
+import { apriVita, type Vita } from "./vita";
 
 export interface MenuItem {
   label: string;
@@ -16,11 +17,18 @@ export interface MenuItem {
   run: () => void;
 }
 
-/// Come si scioglie la trappola del fuoco del menu aperto.
-let sciogliMenu: (() => void) | null = null;
+/// Quanto vive il menu aperto, se ce n'è uno.
+///
+/// Una `Vita` e non più «la funzione che scioglie la trappola»: quella era una
+/// delle tre cose da disfare, e le altre due — il nodo e l'ascoltatore sul
+/// documento — erano scritte altrove, ognuna con la sua occasione di essere
+/// dimenticata. Adesso il posto è uno, e chiudere il menu è chiuderlo.
+let vitaMenu: Vita | null = null;
 
 export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   closeContextMenu();
+  const vita = apriVita();
+  vitaMenu = vita;
   const menu = document.createElement("div");
   menu.id = "context-menu";
   // Un menu è un menu: il ruolo è ciò che fa annunciare «menu, cinque voci» e
@@ -41,19 +49,25 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
     menu.appendChild(b);
   }
   document.body.appendChild(menu);
+  vita.aggiungi(() => menu.remove());
   // Il fuoco entra nel menu e non ne esce col tab, ed Escape lo chiude. Senza,
   // un menu contestuale era raggiungibile **solo** col tasto destro del mouse:
   // per chi naviga da tastiera, rinominare o eliminare una nota non esisteva.
-  sciogliMenu = intrappolaFuoco(menu, closeContextMenu);
-  // Il primo click fuori chiude: `once` evita di dover disiscrivere a mano, e
-  // il ritardo evita che sia questo stesso click ad attivarlo.
-  setTimeout(() => document.addEventListener("click", closeContextMenu, { once: true }), 0);
+  vita.aggiungi(intrappolaFuoco(menu, closeContextMenu));
+  // Il primo click fuori chiude, e il ritardo evita che sia questo stesso click
+  // ad attivarlo. Il `once` **non** bastava: se il menu si chiudeva prima —
+  // Escape, o una voce scelta da tastiera — l'ascoltatore non era ancora
+  // registrato, e si registrava un istante dopo su un menu che non c'era più.
+  // Restava lì fino al prossimo click qualunque, che chiudeva un menu inesistente
+  // e, se nel frattempo se n'era aperto un altro, chiudeva quello. Su una vita
+  // già chiusa `ascolta` non fa niente, e il caso non è da ricordarsi: non c'è.
+  setTimeout(() => vita.ascolta(document, "click", closeContextMenu, { once: true }), 0);
 }
 
 export function closeContextMenu(): void {
-  document.getElementById("context-menu")?.remove();
-  sciogliMenu?.();
-  sciogliMenu = null;
+  const vita = vitaMenu;
+  vitaMenu = null;
+  vita?.chiudi();
 }
 
 const ICON_PRESETS = [
@@ -65,7 +79,14 @@ const ICON_PRESETS = [
 /// campo per incollarne una qualsiasi, e il ritorno a "senza icona"
 /// (`null` al callback).
 export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void): void {
-  document.getElementById("icon-picker")?.remove();
+  // Chiudere il precedente, non togliergli il nodo da sotto. La riga di prima
+  // era `document.getElementById("icon-picker")?.remove()`: il selettore
+  // spariva dallo schermo e il suo ascoltatore su `document` restava — e con
+  // lui la trappola del fuoco, che è la parte che si sentiva, perché Escape
+  // continuava a rispondere per un selettore che nessuno vedeva più.
+  chiudiPickIcon();
+  const vita = apriVita();
+  vitaIcone = vita;
   const pop = document.createElement("div");
   pop.id = "icon-picker";
   pop.setAttribute("role", "dialog");
@@ -74,12 +95,9 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   pop.style.left = `${Math.min(at.clientX, window.innerWidth - 240)}px`;
   pop.style.top = `${at.clientY}px`;
 
-  let sciogli: (() => void) | null = null;
   const chiudi = () => {
-    pop.remove();
-    document.removeEventListener("mousedown", fuori, true);
-    sciogli?.();
-    sciogli = null;
+    if (vitaIcone === vita) vitaIcone = null;
+    vita.chiudi();
   };
   const fuori = (e: MouseEvent) => {
     if (!pop.contains(e.target as Node)) chiudi();
@@ -124,13 +142,25 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   pop.appendChild(rimuovi);
 
   document.body.appendChild(pop);
+  vita.aggiungi(() => pop.remove());
   // La trappola prima del `focus()` esplicito: `intrappolaFuoco` metterebbe il
   // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
   // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare
   // venti pulsanti. Le due righe non sono in conflitto: la seconda sposta il
   // fuoco dentro la stessa superficie, che è dove la trappola lo vuole.
-  const sciogliPop = intrappolaFuoco(pop, chiudi);
-  sciogli = sciogliPop;
+  vita.aggiungi(intrappolaFuoco(pop, chiudi));
   input.focus();
-  document.addEventListener("mousedown", fuori, true);
+  vita.ascolta(document, "mousedown", fuori, { capture: true });
+}
+
+/// Quanto vive il selettore di icona aperto, se ce n'è uno.
+let vitaIcone: Vita | null = null;
+
+/// Chiude il selettore di icona, se è aperto. Non è esportata perché nessuno
+/// fuori di qui lo chiudeva prima; il posto che ne aveva bisogno era `pickIcon`
+/// stessa, che è anche l'unico modo di aprirne un secondo.
+function chiudiPickIcon(): void {
+  const vita = vitaIcone;
+  vitaIcone = null;
+  vita?.chiudi();
 }

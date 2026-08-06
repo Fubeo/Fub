@@ -14,6 +14,7 @@
 // nella barra di stato — e non contiene nessuna regola. È la stessa divisione
 // che `ui/notify.ts` fa fra un avviso e il suo disegno.
 import { t } from "../i18n/strings";
+import type { Vita } from "./vita";
 import {
   ATTESA_MS,
   allCommands,
@@ -34,8 +35,8 @@ let scadenza: ReturnType<typeof setTimeout> | undefined;
 
 /// Monta l'ascoltatore. `esegui` è cosa fare del comando trovato — l'avvio vero
 /// sta in `main.ts`, che è l'unico a sapere dove chiedere i parametri.
-export function mountKeyboard(esegui: (entry: CommandEntry) => void): void {
-  document.addEventListener("keydown", (e) => {
+export function mountKeyboard(vita: Vita, esegui: (entry: CommandEntry) => void): void {
+  vita.ascolta(document, "keydown", (e) => {
     const esito = avanza(allCommands(), attesa, e);
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.

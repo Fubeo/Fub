@@ -12,6 +12,7 @@
 // Il presidio che le tiene ferme è `ui/a11y.test.ts`, ed è la metà che la 0014
 // chiede: *una promessa senza presidio meccanico decade*, e questa decadrebbe
 // alla prima view nuova.
+import { apriVita, type Smontaggio } from "./vita";
 
 /// Un id unico nel documento, per legare due elementi (`for`, `aria-labelledby`,
 /// `aria-controls`).
@@ -105,8 +106,22 @@ export function fuocabili(root: HTMLElement): HTMLElement[] {
 /// Rende la funzione che scioglie la trappola: chi apre una modale la tiene, e
 /// la chiama quando la chiude. Senza, il secondo `apri()` metterebbe un secondo
 /// ascoltatore sopra il primo e a quel punto Escape chiuderebbe due volte.
-export function intrappolaFuoco(root: HTMLElement, chiudi: () => void): () => void {
+///
+/// Lo `Smontaggio` che torna è il tipo di `ui/vita.ts`, ed è pensato per finire
+/// in una `Vita` (`vita.aggiungi(intrappolaFuoco(...))`) invece che in una
+/// variabile che qualcuno deve ricordarsi di chiamare — è così che lo prendono
+/// il menu contestuale e il selettore di icona.
+export function intrappolaFuoco(root: HTMLElement, chiudi: () => void): Smontaggio {
+  const vita = apriVita();
   const precedente = document.activeElement as HTMLElement | null;
+  // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
+  // chiudere una modale rimanda chi naviga da tastiera all'inizio del
+  // documento, e deve rifare tutta la strada per tornare dov'era. Sta *prima*
+  // dell'ascoltatore perché `chiudi()` disfa in ordine inverso: così a spostare
+  // il fuoco è l'ultimo passo, quando la trappola non è più attaccata.
+  vita.aggiungi(() => {
+    if (precedente?.isConnected) precedente.focus();
+  });
 
   const suTasto = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -140,16 +155,10 @@ export function intrappolaFuoco(root: HTMLElement, chiudi: () => void): () => vo
   // In **cattura**: un pannello che gestisce le frecce o Escape per conto suo
   // (la palette dei comandi) non deve poter mangiare il tasto prima che la
   // trappola lo veda.
-  document.addEventListener("keydown", suTasto, true);
+  vita.ascolta(document, "keydown", suTasto, { capture: true });
 
   const dentro = fuocabili(root);
   (dentro[0] ?? root).focus();
 
-  return () => {
-    document.removeEventListener("keydown", suTasto, true);
-    // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
-    // chiudere una modale rimanda chi naviga da tastiera all'inizio del
-    // documento, e deve rifare tutta la strada per tornare dov'era.
-    if (precedente?.isConnected) precedente.focus();
-  };
+  return () => vita.chiudi();
 }

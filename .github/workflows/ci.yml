@@ -236,3 +236,13 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      # E la domanda che né `tsc` né i test si fanno: **fino a quando** vive un
+      # ascoltatore messo su `document` o su `window`? La porta è
+      # `frontend/src/ui/vita.ts` — `ascolta` è un metodo di `Vita`, quindi non
+      # lo si chiama senza avere in mano ciò che sa anche smettere — e il
+      # compilatore quella metà la tiene da sé. Non può tenere l'altra: che
+      # nessuno chiami `document.addEventListener` per conto suo, perché quella
+      # funzione è del DOM e non c'è niente di sbagliato nel suo tipo. Il difetto
+      # era misurato ed era sei volte la stessa riga (decisione 0133).
+      - name: ogni ascoltatore globale della shell ha una Vita (decisione 0133)
+        run: node .github/scripts/check-ascoltatori.mjs
