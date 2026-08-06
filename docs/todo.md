@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Ottantuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Ottanta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -516,7 +516,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0025 | `aggiorna` non riallinea le etichette di `select`/`radio` né `placeholder`/`min`/`max`/`step` | `frontend` · `ui/node.ts` `aggiorna` | shell |
 | 0027 | `openWikilink` esce su `if (!page) return`: `[[#Sezione]]` e `[[#^blocco]]` non portano da nessuna parte | `frontend` · `panels/document.ts:902` | shell |
 | 0028 | `argsFromForm` scrive `false` per un booleano opzionale mai toccato, e copre il default del kernel | `frontend` · `ui/palette.ts:163` | shell |
-| 0029 | il wrapper dell'editor non espone `EditorView.destroy` | `frontend` · `editor/editor.ts` `createEditor` | shell |
 | 0030 | `saveCurrent` non ha una coda: due salvataggi si accavallano e si contendono `dirty` | `frontend` · `panels/document.ts` | corse |
 | 0031 | `updatePreview` innesta senza token: una risposta in ritardo riempie un'anteprima già chiusa | `frontend` · `panels/preview.ts:58` | corse |
 | 0033 | `openDocument` non verifica di essere ancora quello atteso dopo l'`await` | `frontend` · `panels/document.ts:851` | corse |

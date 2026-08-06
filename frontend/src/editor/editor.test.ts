@@ -20,7 +20,7 @@ import { createEditor, type Editor } from "./editor";
 // tastiera: il tipo `Editor` non la espone, e allargarlo per un banco di prova
 // vorrebbe dire che il resto della shell può prenderla.
 
-function editor(): { ed: Editor; view: () => EditorView } {
+function editor(): { ed: Editor; view: () => EditorView; parent: HTMLElement } {
   const parent = document.createElement("div");
   document.body.appendChild(parent);
   const ed = createEditor(parent, {
@@ -32,6 +32,7 @@ function editor(): { ed: Editor; view: () => EditorView } {
   });
   return {
     ed,
+    parent,
     view: () => {
       const v = EditorView.findFromDOM(parent);
       if (!v) throw new Error("l'editor non è montato");
@@ -144,5 +145,57 @@ describe("selections", () => {
     const sel = ed.selections();
     expect(sel.primary).toEqual({ start: 4, end: 4, text: "" });
     expect(sel.secondary).toEqual([]);
+  });
+});
+
+describe("smontare un editor", () => {
+  // Un riquadro si chiude (§1.2), e `costruisciStruttura` in
+  // `panels/document.ts` gli stacca la radice dal documento. Staccare un nodo
+  // non smonta un `EditorView`: i suoi osservatori guardano il **proprio** DOM
+  // e la finestra, e non sanno niente di chi sta sopra. Finché il wrapper non
+  // esponeva `destroy`, ogni divisione chiusa ne lasciava indietro uno vivo — e
+  // la mappa dei riquadri era l'unico riferimento che lo teneva, quindi spariva
+  // anche il modo di accorgersene.
+  it("porta via la vista dal contenitore", () => {
+    const { ed, parent } = editor();
+    expect(EditorView.findFromDOM(parent)).not.toBeNull();
+    expect(parent.children.length).toBeGreaterThan(0);
+
+    ed.destroy();
+
+    expect(EditorView.findFromDOM(parent)).toBeNull();
+    expect(parent.children.length).toBe(0);
+  });
+
+  it("e la vista è smontata, non solo staccata", () => {
+    // La riga sopra da sola non distingue le due cose, ed è stato **misurato**:
+    // un `destroy` scritto come `view.dom.remove()` la fa passare identica. È la
+    // differenza che conta — un nodo staccato porta con sé osservatori e
+    // ascoltatori ancora vivi — quindi la si guarda per il verso in cui si vede.
+    //
+    // Una vista smontata non aggiorna più il suo DOM: `update` esce prima di
+    // toccarlo. Quindi la si riattacca a mano e le si manda una modifica; se
+    // fosse stata solo staccata, il testo comparirebbe.
+    const { ed, parent, view } = editor();
+    const v = view();
+    ed.destroy();
+
+    parent.appendChild(v.dom);
+    v.dispatch({ changes: { from: 0, insert: "questo non deve comparire" } });
+    expect(v.dom.textContent).not.toContain("questo non deve comparire");
+  });
+
+  it("e chi resta non se ne accorge", () => {
+    // Due editor come due riquadri sulla stessa nota: chiuderne uno non deve
+    // toccare l'altro. È la metà che un `destroy` scritto sul contenitore
+    // sbagliato romperebbe, e che nessun'altra prova qui guarda.
+    const uno = editor();
+    const due = editor();
+    due.ed.setDoc("resto io");
+
+    uno.ed.destroy();
+
+    expect(due.ed.getDoc()).toBe("resto io");
+    expect(EditorView.findFromDOM(due.parent)).not.toBeNull();
   });
 });

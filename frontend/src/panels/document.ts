@@ -544,6 +544,13 @@ function costruisciStruttura(): void {
   const vivi = new Set(panes());
   for (const [id, r] of riquadri) {
     if (!vivi.has(id)) {
+      // **Prima** la vista, poi il nodo. Staccare la radice dal documento non
+      // smonta un `EditorView`: i suoi osservatori e i suoi ascoltatori restano,
+      // perché guardano il proprio DOM e la finestra e non sanno niente di chi
+      // sta sopra. Finché qui c'era il solo `remove()`, ogni divisione chiusa ne
+      // lasciava indietro uno vivo — e la mappa era l'unico riferimento che lo
+      // teneva, quindi spariva anche il modo di accorgersene.
+      r.editor.destroy();
       r.root.remove();
       riquadri.delete(id);
     }
