@@ -1877,6 +1877,11 @@ interface index {
         /// In radice quell'ambiguità non è esprimibile con un wikilink, quindi
         /// l'unica risposta possibile all'utente è dirgliela.
         colliding-paths,
+        /// Proprietà che sembrano una data e non lo sono: `5/7/2026` resta un
+        /// testo finché il vault non dichiara il proprio formato, e un testo non
+        /// si filtra né si ordina come una data. Chi ha dichiarato il formato
+        /// non vede qui ciò che quel formato legge.
+        unrecognized-dates,
     }
 
     record index-query-backlinks {

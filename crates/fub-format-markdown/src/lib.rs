@@ -87,7 +87,9 @@ impl FormatProvider for MarkdownProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fub_abi::model::{custom_kind, Block, ColumnAlign, Inline, LinkTarget, PropertyValue};
+    use fub_abi::model::{
+        custom_kind, Block, ColumnAlign, DateFormats, Inline, LinkTarget, PropertyValue,
+    };
 
     fn parse(src: &str) -> DocumentModel {
         MarkdownProvider::new()
@@ -484,19 +486,19 @@ mod tests {
     fn frontmatter_properties_come_out_typed() {
         let doc = parse("---\nscadenza: 2026-07-25\nrating: 4\nautore: \"[[Mario]]\"\ntag: [a, b]\n---\n\nCorpo.");
         assert!(matches!(
-            doc.frontmatter.property("scadenza"),
+            doc.frontmatter.property("scadenza", &DateFormats::ISO),
             Some(PropertyValue::Date(d)) if (d.year, d.month, d.day) == (2026, 7, 25)
         ));
         assert_eq!(
-            doc.frontmatter.property("rating"),
+            doc.frontmatter.property("rating", &DateFormats::ISO),
             Some(PropertyValue::Number(4.0))
         );
         assert_eq!(
-            doc.frontmatter.property("autore"),
+            doc.frontmatter.property("autore", &DateFormats::ISO),
             Some(PropertyValue::Link(LinkTarget::wiki("Mario")))
         );
         assert!(matches!(
-            doc.frontmatter.property("tag"),
+            doc.frontmatter.property("tag", &DateFormats::ISO),
             Some(PropertyValue::List(v)) if v.len() == 2
         ));
     }

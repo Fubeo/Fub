@@ -63,6 +63,7 @@ pub mod maintenance;
 mod occurrences;
 pub mod organization;
 pub mod plugins;
+pub mod properties;
 mod providers;
 pub mod random;
 pub mod registry;

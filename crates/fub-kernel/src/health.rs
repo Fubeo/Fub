@@ -13,8 +13,8 @@
 //!
 //! [`IndexQuery::VaultHealth`]: fub_abi::traits::IndexQuery::VaultHealth
 
-use fub_abi::model::{DocId, Link, LinkTarget};
-use fub_abi::rules::health::{broken_target, LinkResolver};
+use fub_abi::model::{DateFormats, DocId, Frontmatter, Link, LinkTarget};
+use fub_abi::rules::health::{broken_target, unrecognized_dates, LinkResolver};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::traits::{HealthCheck, HealthIssue};
 
@@ -62,29 +62,35 @@ impl LinkResolver for VaultView<'_> {
 /// poi quello dei link nel sorgente: deterministico, perché è paginato.
 pub(crate) fn run<'a>(
     check: HealthCheck,
-    docs: impl Iterator<Item = (&'a DocId, &'a [Link])>,
+    docs: impl Iterator<Item = (&'a DocId, &'a [Link], &'a Frontmatter)>,
     view: &VaultView<'_>,
     doc_extensions: &[String],
+    formats: &DateFormats,
 ) -> Vec<HealthIssue> {
     match check {
         HealthCheck::BrokenLinks => broken_links(docs, view, doc_extensions),
-        HealthCheck::OrphanDocuments => orphans(docs.map(|(id, _)| id), view.graph),
+        HealthCheck::OrphanDocuments => orphans(docs.map(|(id, _, _)| id), view.graph),
         // Non `docs` ma `view.entries`: i documenti sono le note, e due file
         // che collidono possono essere due allegati (`foto.PNG` e `foto.png`
         // collidono esattamente come due note). L'anagrafe è l'unico elenco che
         // li contiene tutti, ed è la ragione per cui questo controllo non
         // esisteva prima del §14.1.
         HealthCheck::CollidingPaths => collisions(view.entries),
+        // Il frontmatter e non l'anagrafe: una proprietà sta in una nota, e le
+        // note sono i documenti. È la simmetria opposta a quella qui sopra, ed
+        // è la ragione per cui questi due controlli non condividono l'elenco su
+        // cui camminano.
+        HealthCheck::UnrecognizedDates => dates(docs.map(|(id, _, fm)| (id, fm)), formats),
     }
 }
 
 fn broken_links<'a>(
-    docs: impl Iterator<Item = (&'a DocId, &'a [Link])>,
+    docs: impl Iterator<Item = (&'a DocId, &'a [Link], &'a Frontmatter)>,
     graph: &VaultView<'_>,
     doc_extensions: &[String],
 ) -> Vec<HealthIssue> {
     let mut issues = Vec::new();
-    for (id, links) in docs {
+    for (id, links, _) in docs {
         for link in links {
             let Some(written) = broken_target(id, link, doc_extensions, graph) else {
                 continue;
@@ -159,6 +165,39 @@ fn collisions(entries: &BTreeMap<DocId, VaultEntry>) -> Vec<HealthIssue> {
         .collect()
 }
 
+/// Le proprietà che sembrano una data e non lo sono: una issue per documento,
+/// col dettaglio che nomina le chiavi e come sono scritte.
+///
+/// Una per documento e non una per proprietà — al contrario delle collisioni —
+/// perché qui il gesto che ripara è **uno**: una nota scritta con `5/7/2026`
+/// ha quasi sempre tutte le sue date in quel formato, e tre righe per tre
+/// proprietà della stessa nota direbbero tre volte la stessa cosa.
+fn dates<'a>(
+    docs: impl Iterator<Item = (&'a DocId, &'a Frontmatter)>,
+    formats: &DateFormats,
+) -> Vec<HealthIssue> {
+    docs.filter_map(|(id, fm)| {
+        let sospette = unrecognized_dates(fm, formats);
+        if sospette.is_empty() {
+            return None;
+        }
+        let detail = sospette
+            .iter()
+            .map(|(key, testo)| format!("{key}: {testo}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        Some(HealthIssue {
+            doc: id.clone(),
+            check: HealthCheck::UnrecognizedDates,
+            detail: Some(detail),
+            // Il frontmatter non ha span nel modello: ciò che si nomina è la
+            // chiave, ed è ciò che serve per trovarla.
+            span: None,
+        })
+    })
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,11 +263,23 @@ mod tests {
         graph: &LinkGraph,
         entries: &BTreeMap<DocId, VaultEntry>,
     ) -> Vec<HealthIssue> {
+        issues_con_formati(check, docs, graph, entries, &DateFormats::ISO)
+    }
+
+    fn issues_con_formati(
+        check: HealthCheck,
+        docs: &[DocumentModel],
+        graph: &LinkGraph,
+        entries: &BTreeMap<DocId, VaultEntry>,
+        formats: &DateFormats,
+    ) -> Vec<HealthIssue> {
         run(
             check,
-            docs.iter().map(|d| (&d.id, d.links.as_slice())),
+            docs.iter()
+                .map(|d| (&d.id, d.links.as_slice(), &d.frontmatter)),
             &VaultView { graph, entries },
             &md(),
+            formats,
         )
     }
 
@@ -411,5 +462,75 @@ mod tests {
             2,
             "due nomi che a schermo sono identici: è il caso che nessuno vede"
         );
+    }
+
+    /// Un documento col frontmatter dato, per i controlli sulle proprietà.
+    fn con_proprieta(id: &str, json: serde_json::Value) -> DocumentModel {
+        let mut m = DocumentModel::empty(DocId::new(id));
+        m.frontmatter = Frontmatter(json.as_object().expect("un oggetto").clone());
+        m
+    }
+
+    #[test]
+    fn una_proprieta_che_sembra_una_data_si_dice() {
+        let docs = vec![
+            con_proprieta("a.md", serde_json::json!({"scadenza": "5/7/2026"})),
+            // Già ISO: non c'è niente da dire.
+            con_proprieta("b.md", serde_json::json!({"scadenza": "2026-07-05"})),
+            // Un testo che non somiglia a nessuna data non è rumore da fare.
+            con_proprieta("c.md", serde_json::json!({"titolo": "capitolo 3"})),
+        ];
+        let graph = LinkGraph::build(docs.iter());
+        let found = issues(HealthCheck::UnrecognizedDates, &docs, &graph);
+        let detto: Vec<(&str, &str)> = found
+            .iter()
+            .map(|i| (i.doc.as_str(), i.detail.as_deref().unwrap_or("")))
+            .collect();
+        assert_eq!(
+            detto,
+            vec![("a.md", "scadenza: 5/7/2026")],
+            "il dettaglio nomina la chiave e come è scritta: è ciò che serve \
+             per decidere quale formato dichiarare"
+        );
+    }
+
+    #[test]
+    fn chi_ha_dichiarato_il_formato_non_se_lo_sente_ripetere() {
+        let docs = vec![
+            con_proprieta("a.md", serde_json::json!({"scadenza": "5/7/2026"})),
+            // Questa resta illeggibile anche con `dmy`: il mese non esiste.
+            con_proprieta("b.md", serde_json::json!({"scadenza": "2026/13/40"})),
+        ];
+        let graph = LinkGraph::build(docs.iter());
+        let entries = anagrafe(&[]);
+        let found = issues_con_formati(
+            HealthCheck::UnrecognizedDates,
+            &docs,
+            &graph,
+            &entries,
+            &DateFormats::declaring(fub_abi::model::DateOrder::Dmy),
+        );
+        assert!(
+            found.is_empty(),
+            "una data dichiarata **è** una data, e `2026/13/40` non somiglia a \
+             nessuna: chiedere due volte la stessa cosa rende il controllo \
+             inutile, e un controllo rumoroso è un controllo spento"
+        );
+    }
+
+    #[test]
+    fn anche_una_data_dentro_un_elenco_si_dice() {
+        // Le proprietà a elenco sono la forma normale di 8.2 (`autore: [a, b]`),
+        // e una data ci sta dentro come ci sta da sola: guardare solo gli
+        // scalari nudi vorrebbe dire tacere su metà del frontmatter di un vault
+        // vero.
+        let docs = vec![con_proprieta(
+            "a.md",
+            serde_json::json!({"tappe": ["2026-07-05", "6/7/2026"]}),
+        )];
+        let graph = LinkGraph::build(docs.iter());
+        let found = issues(HealthCheck::UnrecognizedDates, &docs, &graph);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].detail.as_deref(), Some("tappe: 6/7/2026"));
     }
 }

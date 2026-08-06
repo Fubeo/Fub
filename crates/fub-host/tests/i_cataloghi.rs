@@ -20,7 +20,14 @@ fn cataloghi_del_core() -> Vec<StringCatalog> {
     [
         fub_host::settings::core_catalog(),
         fub_kernel::locale::catalog(),
+        // `maintenance` mancava, e non se ne accorgeva nessuno: questo elenco è
+        // scritto a mano, quindi si accorge di una **chiave** che manca e non di
+        // un **catalogo** che manca. La forma della riparazione è già scritta
+        // (0105) — un `match` esaustivo più un conto — e non è di questa voce;
+        // ciò che è di questa voce è non allungare una bugia.
+        fub_kernel::maintenance::catalog(),
         fub_kernel::journal::catalog(),
+        fub_kernel::properties::catalog(),
     ]
     .concat()
 }
@@ -107,11 +114,17 @@ fn le_due_metà_del_core_non_si_pestano_i_piedi() {
         .filter(|c| c.locale == "it")
         .flat_map(|c| c.entries.keys().cloned())
         .collect();
-    let kernel: std::collections::BTreeSet<String> = fub_kernel::locale::catalog()
-        .iter()
-        .filter(|c| c.locale == "it")
-        .flat_map(|c| c.entries.keys().cloned())
-        .collect();
+    let kernel: std::collections::BTreeSet<String> = [
+        fub_kernel::locale::catalog(),
+        fub_kernel::maintenance::catalog(),
+        fub_kernel::journal::catalog(),
+        fub_kernel::properties::catalog(),
+    ]
+    .concat()
+    .iter()
+    .filter(|c| c.locale == "it")
+    .flat_map(|c| c.entries.keys().cloned())
+    .collect();
     let doppie: Vec<&String> = host.intersection(&kernel).collect();
     assert!(
         doppie.is_empty(),

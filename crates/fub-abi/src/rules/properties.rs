@@ -29,7 +29,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use crate::model::{DocId, Frontmatter, PropertyDate, PropertyScalar, PropertyValue};
+use crate::model::{DateFormats, DocId, Frontmatter, PropertyDate, PropertyScalar, PropertyValue};
 use crate::query::Matches;
 use crate::traits::{
     DocumentMatch, Page, Paged, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect,
@@ -43,13 +43,14 @@ use crate::traits::{
 pub fn facets<'a>(
     docs: impl Iterator<Item = (&'a DocId, &'a Frontmatter)>,
     key: &str,
+    formats: &DateFormats,
 ) -> Vec<PropertyCount> {
     // Chiave di raggruppamento: la serializzazione del valore normalizzato. Un
     // `PropertyValue` porta un `f64`, quindi non è `Hash` né `Ord`; la sua forma
     // JSON sì, ed è la stessa che attraversa il confine.
     let mut counts: BTreeMap<String, (PropertyValue, u32)> = BTreeMap::new();
     for (_, fm) in docs {
-        let Some(value) = fm.property(key) else {
+        let Some(value) = fm.property(key, formats) else {
             continue;
         };
         // Un elenco è una nota per ciascuno dei suoi elementi.
@@ -84,8 +85,8 @@ pub fn facets<'a>(
 /// valutata: prima era dentro un filtro in AND che solo questo modulo sapeva
 /// applicare, adesso è una funzione che il linguaggio chiama una volta per
 /// letterale — e l'AND, l'OR e la negazione stanno nel contratto.
-pub fn test(fm: &Frontmatter, filter: &PropertyFilter) -> bool {
-    let value = fm.property(&filter.key);
+pub fn test(fm: &Frontmatter, filter: &PropertyFilter, formats: &DateFormats) -> bool {
+    let value = fm.property(&filter.key, formats);
     match (&filter.test, value) {
         (PropertyTest::Exists, v) => v.is_some(),
         (PropertyTest::Missing, v) => v.is_none(),
@@ -189,7 +190,11 @@ fn days_from_civil(year: i64, month: u8, day: u8) -> i64 {
 
 /// Le proprietà da restituire, in ordine di chiave. Una chiave chiesta e
 /// assente non compare: l'assenza è un fatto, non un valore da inventare.
-pub fn entries(fm: &Frontmatter, select: &PropertySelect) -> Vec<PropertyEntry> {
+pub fn entries(
+    fm: &Frontmatter,
+    select: &PropertySelect,
+    formats: &DateFormats,
+) -> Vec<PropertyEntry> {
     let select = match select {
         PropertySelect::None => return Vec::new(),
         PropertySelect::All => None,
@@ -197,14 +202,14 @@ pub fn entries(fm: &Frontmatter, select: &PropertySelect) -> Vec<PropertyEntry> 
     };
     let mut entries: Vec<PropertyEntry> = match select {
         None => fm
-            .properties()
+            .properties(formats)
             .into_iter()
             .map(|(key, value)| PropertyEntry { key, value })
             .collect(),
         Some(keys) => keys
             .iter()
             .filter_map(|key| {
-                fm.property(key).map(|value| PropertyEntry {
+                fm.property(key, formats).map(|value| PropertyEntry {
                     key: key.clone(),
                     value,
                 })
@@ -234,6 +239,7 @@ pub fn finish<'a>(
     sort: Option<&PropertySort>,
     select: &PropertySelect,
     page: Option<Page>,
+    formats: &DateFormats,
     frontmatter: impl Fn(&DocId) -> Option<&'a Frontmatter>,
 ) -> Paged<DocumentMatch> {
     let mut rows = matches.into_vec();
@@ -241,7 +247,7 @@ pub fn finish<'a>(
     if !select.is_none() {
         for row in rows.iter_mut() {
             if let Some(fm) = frontmatter(&row.doc) {
-                row.properties = entries(fm, select);
+                row.properties = entries(fm, select, formats);
             }
         }
     }
@@ -257,8 +263,8 @@ pub fn finish<'a>(
                 .then_with(|| a.doc.cmp(&b.doc))
         }),
         Some(sort) => rows.sort_by(|a, b| {
-            let av = frontmatter(&a.doc).and_then(|fm| fm.property(&sort.key));
-            let bv = frontmatter(&b.doc).and_then(|fm| fm.property(&sort.key));
+            let av = frontmatter(&a.doc).and_then(|fm| fm.property(&sort.key, formats));
+            let bv = frontmatter(&b.doc).and_then(|fm| fm.property(&sort.key, formats));
             order_of(av.as_ref(), bv.as_ref(), sort.descending).then_with(|| a.doc.cmp(&b.doc))
         }),
     }
@@ -269,7 +275,7 @@ pub fn finish<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::PropertyTime;
+    use crate::model::{DateOrder, PropertyTime};
 
     fn fm(json: serde_json::Value) -> Frontmatter {
         Frontmatter(json.as_object().expect("oggetto").clone())
@@ -309,10 +315,10 @@ mod tests {
         let vault = vault();
         let matches: Matches = vault
             .iter()
-            .filter(|(_, fm)| filter.iter().all(|f| test(fm, f)))
+            .filter(|(_, fm)| filter.iter().all(|f| test(fm, f, &DateFormats::ISO)))
             .map(|(id, _)| DocumentMatch::of(id.clone()))
             .collect();
-        finish(matches, sort, select, None, |id| {
+        finish(matches, sort, select, None, &DateFormats::ISO, |id| {
             vault
                 .iter()
                 .find(|(other, _)| other == id)
@@ -456,7 +462,11 @@ mod tests {
     #[test]
     fn a_facet_counts_every_element_of_a_list() {
         let vault = vault();
-        let facets = facets(vault.iter().map(|(id, fm)| (id, fm)), "autore");
+        let facets = facets(
+            vault.iter().map(|(id, fm)| (id, fm)),
+            "autore",
+            &DateFormats::ISO,
+        );
         let seen: Vec<(String, u32)> = facets
             .iter()
             .map(|f| match &f.value {
@@ -484,9 +494,9 @@ mod tests {
         )];
         let selected = vault
             .iter()
-            .filter(|(_, fm)| only_b.iter().all(|f| test(fm, f)))
+            .filter(|(_, fm)| only_b.iter().all(|f| test(fm, f, &DateFormats::ISO)))
             .map(|(id, fm)| (id, fm));
-        let facets = facets(selected, "autore");
+        let facets = facets(selected, "autore", &DateFormats::ISO);
         assert_eq!(facets.len(), 1);
         assert_eq!(facets[0].count, 1, "solo b.md è nel sottoinsieme");
     }
@@ -522,6 +532,119 @@ mod tests {
             ),
             Some(Ordering::Equal),
             "il fuso scavalla la mezzanotte: senza istante, il confronto mentirebbe"
+        );
+    }
+
+    /// **Il difetto intero, in un banco.** Un vault misto — metà note in ISO,
+    /// metà no, cioè lo stato normale di una migrazione — e le tre domande che
+    /// 8.2 fa su una data. Senza dichiarazione tutte e tre rispondono male, e
+    /// nessuna delle tre lo dice: il filtro non trova, la faccetta conta due
+    /// giorni dove ce n'è uno, l'ordinamento rende un ordine plausibile e
+    /// arbitrario perché fra due specie non c'è ordine e «nessun ordine»
+    /// diventa «pari».
+    #[test]
+    fn a_mixed_vault_answers_wrong_and_says_nothing_until_the_format_is_declared() {
+        let misto = vec![
+            (
+                DocId::new("a.md"),
+                fm(serde_json::json!({"q": "2026-07-05"})),
+            ),
+            (DocId::new("b.md"), fm(serde_json::json!({"q": "5/7/2026"}))),
+            (DocId::new("c.md"), fm(serde_json::json!({"q": "1/1/2020"}))),
+        ];
+        let dopo = filter(
+            "q",
+            PropertyTest::GreaterThan(PropertyValue::Date(PropertyDate {
+                year: 2026,
+                month: 1,
+                day: 1,
+                time: None,
+            })),
+        );
+        let passano = |formats: &DateFormats| -> Vec<&str> {
+            misto
+                .iter()
+                .filter(|(_, fm)| test(fm, &dopo, formats))
+                .map(|(id, _)| id.as_str())
+                .collect()
+        };
+        assert_eq!(
+            passano(&DateFormats::ISO),
+            vec!["a.md"],
+            "`b.md` è del cinque luglio e il filtro non la trova: per `compare`              un testo e una data non sono confrontabili, e non confrontabile              vale falso"
+        );
+        let dmy = DateFormats::declaring(DateOrder::Dmy);
+        assert_eq!(passano(&dmy), vec!["a.md", "b.md"]);
+
+        // La faccetta: lo stesso giorno scritto in due modi conta due volte.
+        let conta = |formats: &DateFormats| {
+            facets(misto.iter().map(|(id, fm)| (id, fm)), "q", formats).len()
+        };
+        assert_eq!(conta(&DateFormats::ISO), 3);
+        let mut uguali = misto.clone();
+        uguali[1].1 = fm(serde_json::json!({"q": "5/7/2026"}));
+        assert_eq!(
+            facets(uguali.iter().map(|(id, fm)| (id, fm)), "q", &dmy).len(),
+            2,
+            "col formato dichiarato `2026-07-05` e `5/7/2026` sono lo stesso              giorno, quindi la stessa faccetta"
+        );
+
+        // L'ordinamento: senza dichiarazione le due specie sono «pari», quindi
+        // l'ordine è quello degli id — plausibile, e senza rapporto con le date.
+        let per_data = PropertySort {
+            key: "q".into(),
+            descending: false,
+        };
+        let ordine = |formats: &DateFormats| -> Vec<String> {
+            let matches: Matches = misto
+                .iter()
+                .map(|(id, _)| DocumentMatch::of(id.clone()))
+                .collect();
+            finish(
+                matches,
+                Some(&per_data),
+                &PropertySelect::None,
+                None,
+                formats,
+                |id| {
+                    misto
+                        .iter()
+                        .find(|(other, _)| other == id)
+                        .map(|(_, fm)| fm)
+                },
+            )
+            .items
+            .iter()
+            .map(|r| r.doc.as_str().to_string())
+            .collect()
+        };
+        // E non è nemmeno «l'ordine degli id»: le due `Text` si confrontano
+        // fra loro come stringhe (`1/1/2020` < `5/7/2026`) mentre ognuna delle
+        // due è **pari** alla `Date`. Il comparatore che ne esce non è un
+        // ordine — `a == b`, `a == c`, `b < c` — e un `sort_by` con un
+        // comparatore incoerente rende una permutazione che nessuno ha deciso.
+        // È la forma peggiore in cui questa famiglia può rompersi, perché
+        // l'ordine che si vede è plausibile.
+        assert_eq!(ordine(&DateFormats::ISO), vec!["a.md", "c.md", "b.md"]);
+        assert_eq!(
+            order_of(
+                Some(&PropertyValue::Text("1/1/2020".into())),
+                Some(&PropertyValue::Date(PropertyDate {
+                    year: 2026,
+                    month: 7,
+                    day: 5,
+                    time: None,
+                })),
+                false
+            ),
+            Ordering::Equal,
+            "una data e un testo sono «pari», ed è da qui che nasce l'ordine \
+             che non è un ordine"
+        );
+        assert_eq!(
+            ordine(&dmy),
+            vec!["c.md", "a.md", "b.md"],
+            "il 2020 prima del cinque luglio 2026, che è la risposta vera"
         );
     }
 }

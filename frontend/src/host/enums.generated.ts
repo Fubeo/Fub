@@ -23,6 +23,8 @@ export type ConflictPolicy = "skip" | "replace" | "rename";
 
 export type ContextKind = "document" | "selection" | "mode";
 
+export type DateOrder = "dmy" | "mdy" | "ymd";
+
 export type DocChange = "body" | "frontmatter" | "tags" | "links" | "outline" | "anchors";
 
 export type EntryKind = "document" | "asset" | "unknown";
@@ -51,7 +53,12 @@ export type EventKind =
 
 export type Excerpts = "attach" | "omit";
 
-export type HealthCheck = "broken_links" | "orphan_documents" | "colliding_paths";
+export type HealthCheck =
+  | "broken_links"
+  | "orphan_documents"
+  | "colliding_paths"
+  | "unrecognized_dates"
+;
 
 export type HourCycle = "h23" | "h12";
 

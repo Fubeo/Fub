@@ -213,10 +213,23 @@ fn le_impostazioni_del_core_parlano_anche_loro() {
     // stessa strada vuole lo stesso presidio. Qui si guarda quelle del kernel,
     // che è l'unico dei due che questo crate vede; le altre le guarda il banco
     // di `fub-host`.
-    let cataloghi = fub_kernel::locale::catalog();
+    let cataloghi = [
+        fub_kernel::locale::catalog(),
+        fub_kernel::properties::catalog(),
+    ]
+    .concat();
     let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
-    for spec in fub_kernel::locale::locale_settings() {
-        let dove = format!("locale: `{}`", spec.key);
+    // Le due famiglie insieme e non solo il locale: questo elenco è scritto a
+    // mano, quindi una famiglia nuova dichiarata dal kernel resta scoperta
+    // restando verde — è la stessa forma per cui `cataloghi_del_core()` in
+    // `fub-host` aveva perso `maintenance`.
+    let specs = [
+        fub_kernel::locale::locale_settings(),
+        fub_kernel::properties::properties_settings(),
+    ]
+    .concat();
+    for spec in specs {
+        let dove = format!("kernel: `{}`", spec.key);
         chiave(&spec.label, &dove, &mut chiavi, &mut cablate);
         chiave(&spec.description, &dove, &mut chiavi, &mut cablate);
         chiave(&spec.group, &dove, &mut chiavi, &mut cablate);
@@ -227,13 +240,22 @@ fn le_impostazioni_del_core_parlano_anche_loro() {
         }
     }
     assert!(cablate.is_empty(), "{cablate:?}");
+    // Le lingue si guardano una per una e non catalogo per catalogo: una chiave
+    // può stare in uno qualsiasi dei cataloghi di quella lingua, ed è
+    // precisamente la somma che il montaggio fa (`Strings::template`).
+    let lingue: std::collections::BTreeSet<&str> =
+        cataloghi.iter().map(|c| c.locale.as_str()).collect();
     let mancanti: Vec<String> = chiavi
         .iter()
         .flat_map(|k| {
-            cataloghi
+            lingue
                 .iter()
-                .filter(move |c| !c.entries.contains_key(k))
-                .map(move |c| format!("«{k}» manca in «{}»", c.locale))
+                .filter(|lingua| {
+                    !cataloghi
+                        .iter()
+                        .any(|c| c.locale == **lingua && c.entries.contains_key(k))
+                })
+                .map(move |lingua| format!("«{k}» manca in «{lingua}»"))
         })
         .collect();
     assert!(mancanti.is_empty(), "{}", mancanti.join(", "));
