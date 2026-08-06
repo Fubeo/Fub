@@ -725,9 +725,14 @@ impl Event {
     /// deducono da come il vault è fatto, e un `Overflow` buttato via è
     /// esattamente il messaggio che stava dicendo di aver buttato via qualcosa.
     ///
-    /// Sta qui e non in chi frena perché i freni sono **due** — il tetto del bus
-    /// e il raggruppamento del ponte — e una seconda idea di cosa sia sacrificabile
-    /// sarebbe un evento perso in silenzio da uno dei due.
+    /// Sta qui e non in chi frena perché i freni sono **tre** — il tetto del
+    /// bus, il raggruppamento del ponte e il budget del dispatch — e una
+    /// seconda idea di cosa sia sacrificabile sarebbe un evento perso in
+    /// silenzio da uno dei tre. Che questa riga dicesse «due» **contandoli** e
+    /// non guardandoli è il §20.5: il terzo c'era, non chiedeva niente a questa
+    /// funzione, e svuotava la coda in blocco. Cosa se ne fa della risposta è
+    /// scritto una volta sola accanto alla domanda
+    /// ([`rules::events::degrade`](crate::rules::events::degrade)).
     pub fn is_recoverable(&self) -> bool {
         match self {
             Event::DocumentChanged { .. }

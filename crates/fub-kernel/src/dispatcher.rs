@@ -22,6 +22,19 @@
 //! `Workspace` non conta nulla e non decide nulla: chiede il prossimo e lo
 //! passa agli handler.
 //!
+//! # I posti da cui un evento sparisce
+//!
+//! Sono **tre** [conta: code-che-si-svuotano], tutti in questo file, e ognuno
+//! ha una ragione scritta accanto: il drenaggio senza osservatori
+//! (`begin_drain`, dove non si perde niente perché sul bus quegli eventi sono
+//! già passati), il troncamento a budget esaurito (`next_of_tail`, che conta
+//! ciò che butta) e l'ultimissimo giro (`end_drain`, che è il prezzo della
+//! terminazione). Il quarto — quello che fino al §20.5 stava dentro
+//! `next_to_deliver` e svuotava `pending` in blocco senza guardare
+//! [`Event::is_recoverable`] — non c'è più, e il conto è qui perché un quinto
+//! si aggiunge con una riga: `self.pending.clear()` è la cosa più facile da
+//! scrivere per uscire da una situazione difficile.
+//!
 //! Per la stessa ragione le due guardie di stato — l'attore corrente e il flag
 //! `in_provider_call` — qui sono coppie *scambia/ripristina*
 //! (`Dispatcher::swap_actor`, `Dispatcher::enter_provider_call`) e non
@@ -32,6 +45,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 
 use fub_abi::model::DocId;
+use fub_abi::rules::events::degrade;
 use fub_abi::traits::{JobId, JobSpec};
 use fub_abi::{Actor, BatchId, Event, Notice, Origin};
 
@@ -57,14 +71,24 @@ struct BatchState {
     index_dirty: bool,
 }
 
-/// Cosa il dispatcher chiede di consegnare adesso.
-pub(crate) enum ToDeliver {
-    /// Un evento della coda, con il budget ancora capiente.
-    Notice(Notice),
-    /// Il budget è finito. Questo `Overflow` è l'**ultima** consegna del
-    /// drenaggio: ciò che gli handler emettono gestendolo è già stato scartato,
-    /// perché è l'unico modo di garantire la terminazione.
-    Overflow(Notice),
+/// A che punto è un drenaggio.
+///
+/// I tre stati esistono perché **il budget è un tetto sul lavoro, non sui
+/// fatti**: quando finisce, ciò che si riscopre riguardando il vault si butta e
+/// ciò che porta l'unica copia di un fatto si consegna lo stesso. Il tratto
+/// finale è quindi una fase a sé — si consegna, ma non si accetta più niente di
+/// nuovo — e senza uno stato esplicito sarebbe una condizione dedotta dalla
+/// coda vuota, cioè indistinguibile dal drenaggio normale.
+enum Drain {
+    /// Si serve la coda, e ogni consegna costa un'unità di budget.
+    Aperto,
+    /// Il budget è finito: si serve ciò che il troncamento ha **salvato**, e
+    /// ciò che gli handler emettono da qui in poi si conta invece di
+    /// consegnarlo.
+    Troncato,
+    /// L'ultimo `Overflow` è stato consegnato: da qui non esce più niente, o il
+    /// drenaggio non terminerebbe.
+    Chiuso,
 }
 
 pub struct Dispatcher {
@@ -73,6 +97,17 @@ pub struct Dispatcher {
     /// che aveva **al momento dell'emissione** — non quella del drenaggio, che
     /// può avvenire sotto un altro attore.
     pending: VecDeque<Notice>,
+    /// Il tratto finale di un drenaggio troncato: ciò che il budget non poteva
+    /// buttare, più l'`Overflow` al posto di ciò che ha buttato, nell'ordine in
+    /// cui le cose sono successe. È **una fotografia** della coda al momento
+    /// del troncamento: finita quella, il drenaggio finisce — ed è ciò che
+    /// tiene il tratto finale limitato senza un secondo budget da indovinare.
+    salvaged: VecDeque<Notice>,
+    /// Quanti eventi il tratto finale ha buttato senza consegnarli: è il conto
+    /// dell'`Overflow` di congedo.
+    tail_dropped: u64,
+    /// A che punto è il drenaggio in corso.
+    drain: Drain,
     /// Guardia anti-rientranza: un drenaggio non si annida mai.
     dispatching: bool,
     /// Siamo dentro una chiamata a un provider (view `on_action`, `handle`,
@@ -106,6 +141,9 @@ impl Dispatcher {
         Self {
             bus,
             pending: VecDeque::new(),
+            salvaged: VecDeque::new(),
+            tail_dropped: 0,
+            drain: Drain::Aperto,
             dispatching: false,
             in_provider_call: false,
             pending_jobs: Vec::new(),
@@ -271,34 +309,92 @@ impl Dispatcher {
             return false;
         }
         if !has_handlers {
-            // Nessun osservatore: non accumulare eventi all'infinito.
+            // Nessun osservatore: non accumulare eventi all'infinito. Qui non
+            // si perde niente e non c'è niente da classificare — questa coda
+            // serve i soli handler, e sul bus quegli eventi sono già passati
+            // interi al momento dell'emissione.
             self.pending.clear();
             return false;
         }
         self.dispatching = true;
+        self.drain = Drain::Aperto;
+        self.tail_dropped = 0;
         true
     }
 
     /// Il prossimo evento da consegnare, o `None` quando il drenaggio è finito.
     ///
     /// È qui che vive il budget, ed è deliberato: il ciclo che sta sul
-    /// `Workspace` consegna e basta: non conta, non decide quando fermarsi e
+    /// `Workspace` consegna e basta — non conta, non decide quando fermarsi e
     /// non sa cosa sia un `Overflow`.
-    pub(crate) fn next_to_deliver(&mut self, budget: &mut usize) -> Option<ToDeliver> {
-        let notice = self.pending.pop_front()?;
-        if *budget > 0 {
-            *budget -= 1;
-            return Some(ToDeliver::Notice(notice));
+    ///
+    /// # Cosa succede quando il budget finisce
+    ///
+    /// **Non si svuota la coda.** Il budget esiste per fermare una cascata di
+    /// handler che si rimbalzano eventi, cioè per mettere un tetto al
+    /// *lavoro*; buttare con essa anche i fatti che la cascata non ha causato è
+    /// un'altra cosa, e per un evento non recuperabile è una perdita che
+    /// nessuna riconciliazione ripara (§20.5). Quindi la coda si **degrada**
+    /// con la regola del contratto ([`degrade`]), la stessa che applica il
+    /// ponte verso la shell: ciò che si riscopre riguardando il vault diventa
+    /// un `Overflow`, e ciò che porta l'unica copia di un fatto — un
+    /// `trouble`, l'esito di un job, un custom — si consegna lo stesso.
+    pub(crate) fn next_to_deliver(&mut self, budget: &mut usize) -> Option<Notice> {
+        match self.drain {
+            Drain::Aperto => {
+                let notice = self.pending.pop_front()?;
+                if *budget > 0 {
+                    *budget -= 1;
+                    return Some(notice);
+                }
+                let mut burst = Vec::with_capacity(self.pending.len() + 1);
+                burst.push(notice);
+                burst.extend(self.pending.drain(..));
+                self.salvaged = degrade(burst).into();
+                // L'`Overflow` che la regola ha messo al posto dei buttati
+                // nasce **qui**, quindi va anche sul bus: i salvati ci sono già
+                // passati al momento dell'emissione, e rimetterceli sarebbe
+                // raccontare due volte lo stesso fatto a chi guarda.
+                //
+                // Il troncamento è del **kernel**: non lo ha chiesto chi stava
+                // scrivendo, e attribuirglielo direbbe a un'automazione
+                // «questa l'hai causata tu» proprio nel momento in cui le si
+                // chiede di riconciliare — l'origine gliela dà `degrade`.
+                for notice in &self.salvaged {
+                    if matches!(notice.event, Event::Overflow { .. }) {
+                        self.bus.emit(notice.clone());
+                    }
+                }
+                self.drain = Drain::Troncato;
+                self.next_of_tail()
+            }
+            Drain::Troncato => self.next_of_tail(),
+            Drain::Chiuso => None,
         }
-        // L'evento estratto e i rimanenti non verranno consegnati.
-        let dropped = (self.pending.len() + 1) as u64;
+    }
+
+    /// Il tratto finale: si consegna la fotografia, e ciò che gli handler
+    /// emettono mentre la ricevono **si conta**.
+    ///
+    /// Contarlo è la differenza fra questa e la versione di prima, che lo
+    /// buttava in silenzio: la coda deve terminare — un handler che risponde a
+    /// ogni evento con un evento non si ferma da sé — ma «non si può
+    /// consegnare» e «non si può dire» sono due cose diverse, e la seconda era
+    /// il difetto di questa voce un passo più in là.
+    fn next_of_tail(&mut self) -> Option<Notice> {
+        self.tail_dropped += self.pending.len() as u64;
         self.pending.clear();
-        // Il troncamento è del **kernel**: non lo ha chiesto chi stava
-        // scrivendo, e attribuirglielo direbbe a un'automazione «questa l'hai
-        // causata tu» proprio nel momento in cui le si chiede di riconciliare.
+        if let Some(notice) = self.salvaged.pop_front() {
+            return Some(notice);
+        }
+        self.drain = Drain::Chiuso;
+        let dropped = std::mem::take(&mut self.tail_dropped);
+        if dropped == 0 {
+            return None;
+        }
         let overflow = Notice::new(Event::Overflow { dropped }, Origin::by(Actor::Kernel));
         self.bus.emit(overflow.clone());
-        Some(ToDeliver::Overflow(overflow))
+        Some(overflow)
     }
 
     /// Il budget iniziale di un drenaggio.
@@ -306,14 +402,16 @@ impl Dispatcher {
         DISPATCH_BUDGET
     }
 
-    /// Scarta ciò che resta: usato dopo un `Overflow`, perché ciò che gli
-    /// handler hanno emesso gestendolo non deve riaprire il ciclo.
-    pub(crate) fn drop_pending(&mut self) {
-        self.pending.clear();
-    }
-
     pub(crate) fn end_drain(&mut self) {
         self.dispatching = false;
+        if matches!(self.drain, Drain::Chiuso) {
+            // L'ultimissimo giro non si può raccontare: ciò che un handler
+            // emette **ricevendo** l'`Overflow` di congedo si scarta senza
+            // dirlo, perché dirlo vorrebbe dire un altro evento, che ne
+            // produrrebbe altri. Il conto si ferma dove si è potuto dire.
+            self.pending.clear();
+        }
+        self.drain = Drain::Aperto;
     }
 
     // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------

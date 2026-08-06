@@ -29,7 +29,8 @@
 //! - [`doc_data`] — **dove sta ciò che è attaccato a una nota**: il prefisso
 //!   che il kernel migra al rename e raccoglie alla cancellazione (§13.2);
 //! - [`events`] — **chi riceve cosa**: la maschera di un abbonamento, col
-//!   prefisso di topic e il soggetto (§10.1);
+//!   prefisso di topic e il soggetto (§10.1), e **cosa resta sopra il tetto**
+//!   quando un canale è pieno (§20.5);
 //! - [`media`] — **che specie di file è**: documento, allegato o ignoto, e che
 //!   tipo di contenuto porta (§14.1);
 //! - [`path`] — la chiave di risoluzione (trim, NFC, minuscolo), i link

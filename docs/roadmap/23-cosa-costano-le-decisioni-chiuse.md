@@ -182,8 +182,10 @@ e va guardato per primo:
 - **gli avvisi che finiscono su `stderr`** sembravano una classe aperta contata
   cinque volte. Sono la [seduta 20](20-quando-qualcosa-va-storto.md), e quattro
   voci su cinque sono chiuse — i quattordici della shell dalla
-  [0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md). Resta il solo
-  §20.5;
+  [0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md), e la quinta —
+  il §20.5, il troncamento che buttava anche i guasti — dalla
+  [0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md). Non ne resta
+  nessuna;
 - **l'indice di ricerca fuori dalla cifratura** è vero e non è una voce: la
   [0064](../decisions/0064-il-supporto-sta-sotto.md) lo scrive come **buco
   dichiarato**, cioè nella forma che la [§23.2](#232-linvariante-dei-terzi-ha-una-seconda-eccezione-e-non-è-scritta)

@@ -1,6 +1,6 @@
 # 20. Quando qualcosa va storto, chi lo dice e a chi
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): il canale che dice cosa è andato storto, visto da chi non può dirlo, da chi lo butta via e da chi non ha dove scriverlo. **Quattro voci su cinque sono chiuse**; resta un troncamento.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): il canale che dice cosa è andato storto, visto da chi non può dirlo, da chi lo butta via e da chi non ha dove scriverlo. **Tutte e cinque le voci sono chiuse.**
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -15,7 +15,7 @@ ascoltatore che **lo buttava via** (§20.3), e chi lo ascoltava non aveva **dove
 scriverlo** perché nel contratto la variante non c'era (§20.2) e nella shell la
 superficie non c'è (§20.4).
 
-**Quattro sono chiuse**, e in tre verbali perché sono tre ragionamenti e non quattro:
+**Quattro di quelle si sono chiuse in tre verbali**, perché sono tre ragionamenti e non quattro:
 la [0051](../decisions/0051-l-alimentazione-risponde.md) ha dato un esito
 all'alimentazione — a lotti, perché forma e grana avevano una risposta sola — e
 la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) ha dato a quell'esito
@@ -34,8 +34,10 @@ dell'`Event::Overflow`: *«è la versione rumorosa del troncamento: perdite
 silenziose non esistono per contratto»*. Era vero, ed era vero soltanto lì.
 Adesso vale su quattro canali: l'alimentazione degli indici, l'esito di un
 handler, il flush e — con la 0080 — quello che va dallo schermo indietro, cioè i
-guasti che la shell produce di suo. Resta falso su un caso solo, il troncamento
-che la 0052 ha scoperto misurandosi (§20.5).
+guasti che la shell produce di suo. E vale anche sul caso che la 0052 aveva
+scoperto misurandosi, il troncamento a budget esaurito: lo ha chiuso la
+[0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), che è la quinta e
+ultima voce di questa seduta.
 
 Restava anche il fatto strutturale, e la ragione per cui sette giri non avevano
 trovato queste voci: di quelle quattro **una sola scadeva col freeze**. Le altre
@@ -45,7 +47,10 @@ si diagnosticavano. È il criterio di [seduta 17](17-presidi-che-restano.md)
 applicato al contrario: il costo dell'attesa non cresceva, era già massimo. Le due
 che restavano avevano esattamente quella forma, ed è la ragione per cui sono
 state prese guardandole e non aspettando che scadessero. Della seconda — la
-§20.5 — vale ancora parola per parola.
+§20.5 — è valso parola per parola fino alla misura che l'ha chiusa, che ne ha
+corretto il conto (i posti da cui un evento sparisce erano quattro, non tre) e
+la scelta finale (le due strade che proponeva non erano alternative: servono
+tutt'e due, in due punti diversi).
 
 ### 20.2 Ciò che va storto ha un canale nel contratto e nessuna destinazione
 
@@ -194,9 +199,9 @@ vogliono la stessa superficie), 10.5.
 
 ### 20.5 Il budget del dispatch tronca senza guardare cosa sta troncando
 
-*nata misurando la [decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) · kernel · **P2** — non è una firma, ed è la seconda volta che questa classificazione viene creduta invece che verificata*
+*nata misurando la [decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) · kernel · **P2** — **chiusa** dalla [0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), e con lei la seduta intera: il budget è un tetto sul lavoro, non sui fatti, e i posti da cui un evento spariva erano quattro invece di tre*
 
-- [ ] **Un documento dice una cosa che il codice smentisce.**
+- [x] **Un documento dice una cosa che il codice smentisce.**
       `Event::is_recoverable` (`abi/event.rs`) si presenta così: *«è la
       classificazione su cui poggia **ogni freno del canale** (§10.2,
       [decisione 0034](../decisions/0034-il-freno-e-il-raggruppamento.md)) …
@@ -209,6 +214,12 @@ vogliono la stessa superficie), 10.5.
       che a budget esaurito fa `self.pending.clear()` — tutta la coda, senza
       leggere `is_recoverable`.
 
+      **Erano quattro, non tre**, e il quarto stava a quattro righe dal terzo:
+      `drop_pending`, che scartava ciò che gli handler emettevano *gestendo*
+      l'`Overflow` — un guasto compreso, e senza contarlo. La riga qui sopra
+      guardava chi **decide** di troncare invece di chi **butta**, ed è per
+      questo che il quarto le è sfuggito.
+
       E l'architettura diceva di più, e più esplicitamente:
       [traits.md](../architecture/traits.md) elencava le **tre** sorgenti di
       `Overflow` — «il budget del dispatch, il tetto degli arretrati di un
@@ -218,7 +229,7 @@ vogliono la stessa superficie), 10.5.
       questa famiglia dopo il §21.10 e la riga morta del §20.2: **un documento
       che afferma una proprietà del codice va riletto contro il codice, non
       contro sé stesso**.
-- [ ] **Perché adesso si vede, e prima no.** Finché ciò che poteva essere
+- [x] **Perché adesso si vede, e prima no.** Finché ciò che poteva essere
       buttato erano `document-changed` e `index-updated`, il troncamento a
       budget era ciò che dice di essere: una rete contro le cascate, con un
       `Overflow` che dice «riconcilia da zero» ed è più forte di ognuno dei
@@ -229,13 +240,13 @@ vogliono la stessa superficie), 10.5.
       c'è niente da riconciliare. Un guasto emesso mentre la coda è satura può
       quindi non arrivare mai a un `EventHandler`, ed è il caso in cui le cose
       stanno già andando male — cioè quello per cui la variante esiste.
-- [ ] **La portata, misurata e non temuta.** Non riguarda la shell: il ponte
+- [x] **La portata, misurata e non temuta.** Non riguarda la shell: il ponte
       verso la webview parte dal **bus**, che `is_recoverable` la guarda, quindi
       il centro notifiche riceve comunque. Riguarda gli `EventHandler` — cioè i
       plugin, e il primo è già scritto: un handler di diagnostica, un log su
       file, un'automazione che reagisce ai guasti (16.3) sono esattamente i
       clienti di questa variante, e sono tutti dall'altra parte del troncamento.
-- [ ] Cosa serve, ed è una scelta fra due: che il troncamento **conservi** ciò
+- [x] Cosa serve, ed è una scelta fra due: che il troncamento **conservi** ciò
       che non è recuperabile invece di svuotare (il budget resta un tetto sul
       lavoro, non sui fatti), oppure che l'`Overflow` **dica quanti** ne ha
       buttati di non recuperabili, così che chi legge sappia di aver perso
@@ -244,6 +255,15 @@ vogliono la stessa superficie), 10.5.
       alla domanda che nessuno ha posto: *se un budget esiste per fermare una
       cascata, perché la ferma buttando via anche ciò che la cascata non ha
       causato?*
+
+      **Non era una scelta fra due**: servono tutt'e due, in due punti diversi.
+      La prima vale per ciò che è già in coda quando il budget finisce — una
+      fotografia, quindi finita, quindi consegnabile per intero; la seconda per
+      ciò che gli handler emettono *mentre* ricevono quel tratto finale, che non
+      si può consegnare (la coda deve terminare) ma si può contare. Applicata da
+      sola, la prima **spegne il segnale**: un ping-pong di `custom` — che non
+      sono recuperabili — non lascerebbe niente da buttare, quindi nessun
+      `Overflow`, quindi un troncamento muto. Lo dice un test che diventa rosso.
 
 *Sblocca:* 16.3 (automation error handling, retries, notifications: il primo
 consumatore non-shell di `trouble`), 24.2 (diagnostica), e ogni handler che

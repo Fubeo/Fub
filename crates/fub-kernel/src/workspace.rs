@@ -86,7 +86,7 @@ use fub_abi::rules::path::{resolution_key, strip_ext};
 use fub_abi::rules::path_policy::{self, Naming};
 
 use crate::bus::EventBus;
-use crate::dispatcher::{Dispatcher, JobBell, PendingJob, ToDeliver};
+use crate::dispatcher::{Dispatcher, JobBell, PendingJob};
 use crate::documents::{extension_of, DocumentStore};
 use crate::drafts::{Bozze, Drafts};
 use crate::entries::{EntryStore, StoredEntry};
@@ -4813,11 +4813,13 @@ impl Workspace {
     /// ritorna subito e lascia drenare il ciclo esterno.
     ///
     /// Se il budget si esaurisce (handler che si rimbalzano eventi senza
-    /// convergere) il troncamento è **rumoroso**: gli eventi restanti vengono
-    /// scartati ma al loro posto viene consegnato — al bus e agli handler —
-    /// un [`Event::Overflow`] con il conteggio dei persi. Gli eventi emessi
-    /// *durante* la gestione dell'`Overflow` sono a loro volta scartati (è
-    /// l'unico modo di garantire la terminazione).
+    /// convergere) il troncamento è **rumoroso e non cieco**: ciò che si
+    /// riscopre riguardando il vault viene scartato e al suo posto viene
+    /// consegnato — al bus e agli handler — un [`Event::Overflow`] con il
+    /// conteggio dei persi, mentre ciò che porta l'unica copia di un fatto
+    /// viene consegnato lo stesso (§20.5). Gli eventi emessi *durante* quel
+    /// tratto finale non si consegnano — la coda deve terminare — ma si
+    /// contano, e il conto esce in un ultimo `Overflow`.
     ///
     /// Un lotto aperto rimanda il drenaggio come lo rimanda una chiamata a un
     /// provider, e per la stessa ragione: dentro, il vault è a metà di
@@ -4841,17 +4843,8 @@ impl Workspace {
             return;
         }
         let mut budget = Dispatcher::budget();
-        while let Some(next) = self.dispatch.next_to_deliver(&mut budget) {
-            match next {
-                ToDeliver::Notice(notice) => self.deliver_to_handlers(&notice),
-                ToDeliver::Overflow(overflow) => {
-                    self.deliver_to_handlers(&overflow);
-                    // Ciò che gli handler hanno emesso gestendo l'Overflow è
-                    // scartato: la coda deve terminare qui.
-                    self.dispatch.drop_pending();
-                    break;
-                }
-            }
+        while let Some(notice) = self.dispatch.next_to_deliver(&mut budget) {
+            self.deliver_to_handlers(&notice);
         }
         self.dispatch.end_drain();
     }
