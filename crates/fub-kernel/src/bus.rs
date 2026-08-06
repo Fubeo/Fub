@@ -32,12 +32,11 @@
 //! chiudere — la scansione di un vault grande, o una sincronizzazione che tocca
 //! mille note — è tutto dall'altra parte.
 
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fub_abi::{Actor, Event, Notice, Origin};
+use fub_abi::Notice;
 
 /// Quanti notice possono restare non ritirati da un subscriber prima che il bus
 /// cominci a buttare ciò che si riscopre riguardando il vault.
@@ -50,13 +49,87 @@ use fub_abi::{Actor, Event, Notice, Origin};
 /// rincorrere.
 const BACKLOG_CEILING: usize = 1024;
 
-/// Il modulo esiste per una parola sola: `rx` è privato **qui dentro**.
+/// Il modulo esiste per una ragione sola: **i conti di un abbonamento sono del
+/// canale**, e il canale è tutto qui dentro — tutti e due i capi, tutte e due
+/// le metà di ogni conto.
 mod intake {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::mpsc::Receiver;
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+    use std::sync::mpsc::{channel, Receiver, Sender};
     use std::sync::Arc;
 
-    use fub_abi::Notice;
+    use fub_abi::{Actor, Event, Notice, Origin};
+
+    /// I due capi di un abbonamento e i due conti che ci stanno in mezzo: chi
+    /// li vuole passa da qui, perché fuori non si possono costruire.
+    pub(super) fn abbonamento() -> (Outbox, Intake) {
+        let (tx, rx) = channel();
+        let queued = Arc::new(AtomicUsize::new(0));
+        let dropped = Arc::new(AtomicU64::new(0));
+        (
+            Outbox {
+                tx,
+                queued: Arc::clone(&queued),
+                dropped: Arc::clone(&dropped),
+            },
+            Intake {
+                rx,
+                queued,
+                dropped,
+            },
+        )
+    }
+
+    /// Il capo da cui il bus **mette dentro**, col `Sender` privato apposta.
+    ///
+    /// La ragione è la gemella di quella di [`Intake`], scoperta dopo: la
+    /// sottrazione stava dentro la porta e l'**aggiunta** era rimasta fuori,
+    /// nel mittente, dove un secondo modo di accodare l'avrebbe potuta
+    /// dimenticare esattamente come i due rami di ritiro avevano dimenticato la
+    /// sottrazione. Un conto con due padroni non è un conto: qui il `Sender`
+    /// fuori da questo modulo non si può nominare, quindi un notice non può
+    /// entrare nel canale se non da [`Outbox::put`].
+    pub(super) struct Outbox {
+        tx: Sender<Notice>,
+        queued: Arc<AtomicUsize>,
+        /// Buttati e **non ancora dichiarati**, condiviso con l'[`Intake`]: lo
+        /// riscuote chi arriva primo — chi emette, mettendo l'`Overflow` davanti
+        /// al fatto nuovo, o chi ritira, trovando la coda vuota. Lo `swap` fa sì
+        /// che a riscuoterlo sia **uno solo**: dirlo due volte sarebbe chiedere
+        /// due riconciliazioni per una perdita sola.
+        dropped: Arc<AtomicU64>,
+    }
+
+    impl Outbox {
+        /// L'**unico** posto in cui un notice entra nel canale.
+        ///
+        /// Rende `false` se il capo ricevente è sparito — e allora ciò che era
+        /// stato aggiunto al conto se lo riprende qui, non altrove: chi non è
+        /// mai entrato non è un arretrato.
+        pub(super) fn put(&self, notice: Notice) -> bool {
+            self.queued.fetch_add(1, Ordering::Relaxed);
+            if self.tx.send(notice).is_ok() {
+                true
+            } else {
+                self.queued.fetch_sub(1, Ordering::Relaxed);
+                false
+            }
+        }
+
+        /// Quanti notice risultano accodati e non ancora ritirati: è la
+        /// grandezza che il tetto legge.
+        pub(super) fn queued(&self) -> usize {
+            self.queued.load(Ordering::Relaxed)
+        }
+
+        /// Uno buttato perché l'abbonato è oltre il tetto.
+        pub(super) fn dropped(&self) {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
+        }
+
+        pub(super) fn debt(&self) -> Option<Notice> {
+            debito(&self.dropped)
+        }
+    }
 
     /// Il canale di un abbonamento **con il conto attaccato**, e col `Receiver`
     /// privato apposta.
@@ -79,13 +152,10 @@ mod intake {
     pub(super) struct Intake {
         rx: Receiver<Notice>,
         queued: Arc<AtomicUsize>,
+        dropped: Arc<AtomicU64>,
     }
 
     impl Intake {
-        pub(super) fn new(rx: Receiver<Notice>, queued: Arc<AtomicUsize>) -> Self {
-            Self { rx, queued }
-        }
-
         /// L'**unico** posto in cui un notice esce dal canale.
         ///
         /// `attesa` dice come aspettarlo — subito, per sempre, o fino a un
@@ -99,6 +169,10 @@ mod intake {
             Ok(notice)
         }
 
+        pub(super) fn debt(&self) -> Option<Notice> {
+            debito(&self.dropped)
+        }
+
         /// Quanti notice risultano accodati e non ancora ritirati: è la
         /// grandezza che il tetto legge, e i banchi la guardano da qui.
         #[cfg(test)]
@@ -106,9 +180,25 @@ mod intake {
             self.queued.load(Ordering::Relaxed)
         }
     }
+
+    /// Il conto di ciò che il bus ha buttato mentre questo abbonato era
+    /// indietro, riscosso **una volta sola**: lo `swap` è ciò che impedisce di
+    /// dire due volte «riconcilia», dal lato di chi ritira e da quello di chi
+    /// emette. Che la frase sia una sola funzione e non due copie è la stessa
+    /// ragione: due `Overflow` costruiti in due posti sono due verità da tenere
+    /// allineate a mano.
+    fn debito(dropped: &AtomicU64) -> Option<Notice> {
+        match dropped.swap(0, Ordering::Relaxed) {
+            0 => None,
+            dropped => Some(Notice::new(
+                Event::Overflow { dropped },
+                Origin::by(Actor::Kernel),
+            )),
+        }
+    }
 }
 
-use intake::Intake;
+use intake::{Intake, Outbox};
 
 /// Il capo ricevente di un abbonamento, **col proprio conto degli arretrati**.
 ///
@@ -118,7 +208,6 @@ use intake::Intake;
 /// cambia una riga.
 pub struct Subscription {
     intake: Intake,
-    dropped: Arc<AtomicU64>,
 }
 
 impl Subscription {
@@ -168,16 +257,9 @@ impl Subscription {
     }
 
     /// Il conto di ciò che il bus ha buttato mentre questo abbonato era
-    /// indietro, riscosso **una volta sola**: lo `swap` è ciò che impedisce di
-    /// dire due volte «riconcilia», qui e dal lato di chi emette.
+    /// indietro, riscosso **una volta sola** dal canale che lo tiene.
     fn debt(&self) -> Option<Notice> {
-        match self.dropped.swap(0, Ordering::Relaxed) {
-            0 => None,
-            dropped => Some(Notice::new(
-                Event::Overflow { dropped },
-                Origin::by(Actor::Kernel),
-            )),
-        }
+        self.intake.debt()
     }
 
     /// Quanti notice risultano accodati e non ancora ritirati.
@@ -202,49 +284,27 @@ impl Subscription {
 /// Un abbonato visto dal bus: dove mandargli i notice, quanti ne ha in arretrato
 /// e quanti gliene sono stati buttati da quando non glielo si dice.
 struct Subscriber {
-    tx: Sender<Notice>,
-    queued: Arc<AtomicUsize>,
-    /// Buttati e **non ancora dichiarati**, condiviso con la
-    /// [`Subscription`]: lo riscuote chi arriva primo — chi emette, mettendo
-    /// l'`Overflow` davanti al fatto nuovo, o chi ritira, trovando la coda
-    /// vuota. Lo `swap` fa sì che a riscuoterlo sia **uno solo**: dirlo due
-    /// volte sarebbe chiedere due riconciliazioni per una perdita sola.
-    dropped: Arc<AtomicU64>,
+    out: Outbox,
 }
 
 impl Subscriber {
     /// Accoda, o butta e conta. Rende `false` se il capo ricevente è sparito —
     /// e allora il bus si dimentica di questo abbonato.
-    fn deliver(&mut self, notice: &Notice) -> bool {
-        if self.queued.load(Ordering::Relaxed) >= BACKLOG_CEILING && notice.event.is_recoverable() {
-            self.dropped.fetch_add(1, Ordering::Relaxed);
+    fn deliver(&self, notice: &Notice) -> bool {
+        if self.out.queued() >= BACKLOG_CEILING && notice.event.is_recoverable() {
+            self.out.dropped();
             return true;
         }
         // L'`Overflow` viene **prima** di ciò che lo ha sbloccato: chi legge
         // vede «hai perso N» e poi il fatto nuovo, che è l'ordine in cui le due
-        // cose sono successe.
-        match self.dropped.swap(0, Ordering::Relaxed) {
-            0 => {}
-            dropped => {
-                // Il troncamento è del kernel, non di chi stava scrivendo: vale
-                // la stessa attribuzione del budget del dispatch.
-                let overflow = Notice::new(Event::Overflow { dropped }, Origin::by(Actor::Kernel));
-                if !self.send(overflow) {
-                    return false;
-                }
+        // cose sono successe. Il troncamento è del kernel, non di chi stava
+        // scrivendo: vale la stessa attribuzione del budget del dispatch.
+        if let Some(overflow) = self.out.debt() {
+            if !self.out.put(overflow) {
+                return false;
             }
         }
-        self.send(notice.clone())
-    }
-
-    fn send(&self, notice: Notice) -> bool {
-        self.queued.fetch_add(1, Ordering::Relaxed);
-        if self.tx.send(notice).is_ok() {
-            true
-        } else {
-            self.queued.fetch_sub(1, Ordering::Relaxed);
-            false
-        }
+        self.out.put(notice.clone())
     }
 }
 
@@ -260,30 +320,23 @@ impl EventBus {
 
     /// Crea un nuovo subscriber e restituisce il capo ricevente.
     pub fn subscribe(&self) -> Subscription {
-        let (tx, rx) = channel();
-        let queued = Arc::new(AtomicUsize::new(0));
-        let dropped = Arc::new(AtomicU64::new(0));
-        self.subscribers.lock().unwrap().push(Subscriber {
-            tx,
-            queued: Arc::clone(&queued),
-            dropped: Arc::clone(&dropped),
-        });
-        Subscription {
-            intake: Intake::new(rx, queued),
-            dropped,
-        }
+        let (out, intake) = intake::abbonamento();
+        self.subscribers.lock().unwrap().push(Subscriber { out });
+        Subscription { intake }
     }
 
     /// Emette un evento a tutti i subscriber vivi; scarta quelli chiusi.
     pub fn emit(&self, notice: Notice) {
         let mut subs = self.subscribers.lock().unwrap();
-        subs.retain_mut(|sub| sub.deliver(&notice));
+        subs.retain(|sub| sub.deliver(&notice));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc::channel;
+
     use fub_abi::event::{Actor, BatchId, Origin};
     use fub_abi::model::DocId;
     use fub_abi::traits::JobId;
@@ -440,5 +493,57 @@ mod tests {
         let dopo: Vec<Notice> = rx.try_iter().collect();
         assert_eq!(dopo.len(), 1, "dopo aver ritirato, il tetto non frena più");
         assert!(!matches!(dopo[0].event, Event::Overflow { .. }));
+    }
+
+    /// Ciò che, fuori dalla porta, non deve più comparire.
+    ///
+    /// Sono i due conti dell'abbonamento e il capo che li muove: se uno di
+    /// questi si legge fuori da `mod intake`, vuol dire che una metà del conto
+    /// è tornata ad avere un secondo padrone — che è esattamente il difetto.
+    const FUORI_DALLA_PORTA: &[&str] = &[
+        "fetch_add",
+        "fetch_sub",
+        "AtomicUsize",
+        "AtomicU64",
+        "Sender<",
+        "tx.send(",
+    ];
+
+    /// **Il conto che verifica che la porta abbia agganciato davvero.**
+    ///
+    /// Una porta strutturale rende una forma inesprimibile, ma solo per chi ci
+    /// passa: niente impedisce di riscrivere accanto un `Sender` e un contatore
+    /// nudi, e il compilatore direbbe di sì perché non c'è niente di illegale
+    /// da dire. È la zona cieca già misurata sulla
+    /// [0120](../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md),
+    /// dove quattordici siti erano rimasti col codice vecchio a crate verde.
+    ///
+    /// **Ciò che questo conto non vede, dichiarato**: i banchi, che sono
+    /// tagliati via apposta (un canale di prova è roba loro, e ne usano uno per
+    /// sincronizzare i thread); e un conto scritto in un *altro* file del
+    /// kernel, che questo presidio non apre. La porta è di `bus.rs` e il conto
+    /// guarda `bus.rs`.
+    #[test]
+    fn i_conti_dell_abbonamento_non_si_toccano_da_fuori() {
+        let sorgente = include_str!("bus.rs");
+        let (produzione, _banchi) = sorgente
+            .split_once("#[cfg(test)]\nmod tests {")
+            .expect("il taglio dei banchi: se cambia, questo conto guarda di meno e non di più");
+        let (prima, resto) = produzione
+            .split_once("mod intake {")
+            .expect("la porta dei conti si chiama `mod intake`");
+        let (_dentro, dopo) = resto
+            .split_once("\nuse intake::")
+            .expect("il modulo finisce dove lo si importa");
+        let fuori = format!("{prima}{dopo}");
+        for vietato in FUORI_DALLA_PORTA {
+            assert!(
+                !fuori.contains(vietato),
+                "`{vietato}` compare fuori da `mod intake`: una metà di un conto \
+                 dell'abbonamento ha di nuovo due padroni, e quella dimenticata \
+                 non si ripara più — a BACKLOG_CEILING passaggi il bus butta i \
+                 recuperabili di chi non è indietro di niente"
+            );
+        }
     }
 }
