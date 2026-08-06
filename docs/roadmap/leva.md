@@ -166,7 +166,10 @@ guardarle. Ma il conto non era rimandato: erano le voci il cui prezzo si paga in
 difetti che non lasciano traccia, e un difetto che non lascia traccia non entra
 in nessuna lista di priorità perché nessuno lo ha visto. Averle prese guardandole
 invece che aspettando che scadessero è il criterio, e ha prodotto una voce nuova
-(§20.5) che nessuno stava cercando.
+(§20.5) che nessuno stava cercando — chiusa a sua volta dalla
+[decisione 0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), che ne
+ha corretto due premesse: i posti da cui un evento spariva erano quattro invece
+di tre, e le due strade che la voce dava per alternative servivano tutt'e due.
 
 Il sesto giro ha applicato quel criterio e ha trovato il secondo caso, **§5.1**,
 adesso chiuso con la [decisione 0019](../decisions/0019-il-canale-dati.md).

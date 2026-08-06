@@ -264,7 +264,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5787`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5780`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
@@ -664,7 +664,7 @@ confrontarlo con `<` assume un ordine che un host con più sessioni non deve a
 nessuno.
 
 ### maschera
-`EventMask` · [`abi/event.rs:940`](../crates/fub-abi/src/event.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
+`EventMask` · [`abi/event.rs:945`](../crates/fub-abi/src/event.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
 
 Cosa un abbonato vuole ricevere. Dalla 0033 dice anche **dove** — non solo la
 specie dell'evento ma il suo soggetto, così un pannello che guarda una cartella

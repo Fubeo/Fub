@@ -36,15 +36,18 @@
 //!    [`Event::Overflow`] solo, e ciò che non si riscopre passa comunque, al
 //!    proprio posto.
 //!
-//! Nessuna delle due riduzioni inventa una classificazione: cosa sia
-//! sacrificabile lo dice il contratto, in un posto solo
-//! ([`Event::is_recoverable`]).
+//! Nessuna delle due riduzioni inventa una classificazione, e la seconda non
+//! inventa nemmeno la riduzione: cosa sia sacrificabile lo dice il contratto
+//! ([`Event::is_recoverable`]) e cosa farne lo dice sempre lui
+//! ([`fub_abi::rules::events::degrade`]), perché i freni che se lo chiedono
+//! sono **tre** e il terzo — il budget del dispatch — rispondeva da sé (§20.5).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fub_abi::model::DocId;
-use fub_abi::{Actor, Event, Notice, Origin};
+use fub_abi::rules::events::degrade;
+use fub_abi::{Event, Notice};
 use fub_kernel::Subscription;
 
 use crate::session::EventSink;
@@ -207,45 +210,11 @@ fn coalesce(burst: Vec<Notice>) -> Vec<Notice> {
     tenuti
 }
 
-/// Sopra il tetto: ciò che si riscopre riguardando il vault diventa **un**
-/// invito a riconciliare, e ciò che non si riscopre passa al proprio posto.
-///
-/// L'`Overflow` non va in coda né in testa ma **dove stava l'ultimo evento che
-/// sostituisce**: è l'unico punto in cui dice la verità sull'ordine — tutto ciò
-/// che lo precede è successo prima, tutto ciò che lo segue dopo. In coda
-/// direbbe a chi ha appena ricevuto un `vault-closed` di andare a rileggere un
-/// vault che non c'è più.
-///
-/// Se nella raffica c'era già un `Overflow` (il tetto del bus, o il budget del
-/// dispatch) il suo conto **si somma** a questo invece di aggiungere un secondo
-/// invito: due riconciliazioni di fila sono una riconciliazione e mezzo lavoro
-/// buttato.
-fn degrade(burst: Vec<Notice>) -> Vec<Notice> {
-    let mut tenuti: Vec<Notice> = Vec::new();
-    let mut dropped: u64 = 0;
-    let mut dove: Option<usize> = None;
-    for notice in burst {
-        match &notice.event {
-            Event::Overflow { dropped: gia } => {
-                dropped += gia;
-                dove = Some(tenuti.len());
-            }
-            event if event.is_recoverable() => {
-                dropped += 1;
-                dove = Some(tenuti.len());
-            }
-            _ => tenuti.push(notice),
-        }
-    }
-    if let Some(dove) = dove {
-        tenuti.insert(
-            dove,
-            Notice::new(Event::Overflow { dropped }, Origin::by(Actor::Kernel)),
-        );
-    }
-    tenuti
-}
-
+/// Sopra il tetto la riduzione non è più del ponte: è la regola del contratto
+/// ([`fub_abi::rules::events::degrade`]), la stessa che il budget del dispatch
+/// applica quando tronca (§20.5). Qui resta il **quando** — cioè il tetto —
+/// perché quello sì è del ponte: misura quante consegne separate valga la pena
+/// di fare verso *questo* consumatore.
 /// Quanti eventi di ogni specie ci sono in una raffica: serve solo ai test, e
 /// sta qui perché è la lettura con cui si controlla una riduzione.
 #[cfg(test)]

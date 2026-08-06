@@ -1,5 +1,6 @@
 //! **Chi riceve cosa** — la regola di un abbonamento agli eventi (§10.1,
-//! decisione 0033).
+//! decisione 0033) — e **cosa passa quando non può passare tutto**, che è la
+//! stessa domanda posta da un canale pieno ([`degrade`], §20.5).
 //!
 //! Una [`EventMask`] dice tre cose — le specie, il topic dei custom, il
 //! soggetto — e questo modulo è il posto in cui quelle tre diventano un sì o un
@@ -21,7 +22,7 @@
 //! prefisso deve essere un separatore del contratto, `:` o `.` per i nomi
 //! ([`ids`](super::ids)) e `/` per i path.
 
-use crate::event::{Event, EventMask};
+use crate::event::{Actor, Event, EventMask, Notice, Origin};
 
 /// Questo topic sta sotto questo prefisso?
 ///
@@ -112,10 +113,63 @@ pub fn mask_wants(mask: &EventMask, event: &Event) -> bool {
     true
 }
 
+/// **Sopra il tetto**: ciò che si riscopre riguardando il vault diventa un
+/// invito a riconciliare, e ciò che non si riscopre passa al proprio posto.
+///
+/// È la seconda regola di questo modulo, e sta qui per la ragione della prima:
+/// chi la applica non è uno solo. La applicano **tre** freni — il budget del
+/// dispatch (`Dispatcher::next_to_deliver`), il tetto della raffica del ponte
+/// verso la shell, e in forma di singolo evento il tetto degli arretrati di un
+/// abbonato del bus, che non ha una raffica sotto gli occhi ma la stessa
+/// domanda: *questo si può buttare?* Finché la risposta viveva in due copie —
+/// una scritta nel ponte, e nel dispatch nessuna — il terzo freno buttava ciò
+/// che gli altri due tenevano, e a nessun test risultava.
+///
+/// L'`Overflow` non va in coda né in testa ma **dove stava l'ultimo evento che
+/// sostituisce**: è l'unico punto in cui dice la verità sull'ordine — tutto ciò
+/// che lo precede è successo prima, tutto ciò che lo segue dopo. In coda
+/// direbbe a chi ha appena ricevuto un `vault-closed` di andare a rileggere un
+/// vault che non c'è più.
+///
+/// Se nella raffica c'era già un `Overflow` (il tetto del bus, o il budget del
+/// dispatch) il suo conto **si somma** a questo invece di aggiungere un secondo
+/// invito: due riconciliazioni di fila sono una riconciliazione e mezzo lavoro
+/// buttato.
+///
+/// Se non c'è niente da buttare — cioè se nella raffica è tutto insostituibile
+/// — **non nasce nessun `Overflow`**: un invito a riconciliare che non
+/// corrisponde a nessuna perdita è una riconciliazione chiesta per niente.
+pub fn degrade(burst: Vec<Notice>) -> Vec<Notice> {
+    let mut tenuti: Vec<Notice> = Vec::new();
+    let mut dropped: u64 = 0;
+    let mut dove: Option<usize> = None;
+    for notice in burst {
+        match &notice.event {
+            Event::Overflow { dropped: gia } => {
+                dropped += gia;
+                dove = Some(tenuti.len());
+            }
+            event if event.is_recoverable() => {
+                dropped += 1;
+                dove = Some(tenuti.len());
+            }
+            _ => tenuti.push(notice),
+        }
+    }
+    if let Some(dove) = dove {
+        tenuti.insert(
+            dove,
+            Notice::new(Event::Overflow { dropped }, Origin::by(Actor::Kernel)),
+        );
+    }
+    tenuti
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{BatchId, DocChange, DocChanges, EventKind, Subject};
+    use crate::error::PluginError;
+    use crate::event::{BatchId, DocChange, DocChanges, EventKind, Severity, Subject};
     use crate::model::DocId;
 
     #[test]
@@ -256,5 +310,71 @@ mod tests {
                  perderlo in silenzio proprio a chi si è abbonato a poco"
             );
         }
+    }
+
+    fn guasto() -> Notice {
+        Notice::of(Event::Trouble {
+            severity: Severity::Failure,
+            subject: Some(DocId::new("a.md")),
+            error: PluginError::Io("disco pieno".into()),
+        })
+    }
+
+    /// Sopra il tetto si butta ciò che si riscopre, **e nient'altro**: il
+    /// guasto resta, e resta al proprio posto rispetto a ciò che è passato.
+    #[test]
+    fn what_cannot_be_rediscovered_survives_a_ceiling() {
+        let burst = vec![
+            Notice::of(Event::IndexUpdated),
+            guasto(),
+            Notice::of(Event::DocumentChanged {
+                id: DocId::new("b.md"),
+                changes: None,
+            }),
+        ];
+        let out = degrade(burst);
+        assert_eq!(out.len(), 2, "il guasto e un invito solo: {out:?}");
+        assert!(matches!(out[0].event, Event::Trouble { .. }));
+        // I due buttati diventano un invito solo, e l'invito sta **dove stava
+        // l'ultimo di loro**: dopo il guasto, perché dopo il guasto è successo.
+        assert!(matches!(out[1].event, Event::Overflow { dropped: 2 }));
+
+        // E dall'altro verso, che è l'argomento per cui l'invito non va in
+        // coda: chi ha appena ricevuto un `vault-closed` non deve sentirsi
+        // dire di andare a rileggere un vault che non c'è più.
+        let out = degrade(vec![
+            Notice::of(Event::IndexUpdated),
+            Notice::of(Event::VaultClosed { root: "/v".into() }),
+        ]);
+        assert!(
+            matches!(out[0].event, Event::Overflow { dropped: 1 }),
+            "l'invito sta dove stava il buttato, cioè PRIMA della chiusura: {out:?}"
+        );
+        assert!(matches!(out[1].event, Event::VaultClosed { .. }));
+    }
+
+    /// Due riconciliazioni di fila sono una riconciliazione e mezzo lavoro
+    /// buttato: un `Overflow` che arriva già nella raffica si **somma**.
+    #[test]
+    fn an_overflow_in_the_burst_adds_up_instead_of_doubling() {
+        let out = degrade(vec![
+            Notice::of(Event::Overflow { dropped: 40 }),
+            Notice::of(Event::IndexUpdated),
+        ]);
+        assert_eq!(out.len(), 1);
+        assert!(matches!(out[0].event, Event::Overflow { dropped: 41 }));
+    }
+
+    /// Il caso che il budget del dispatch incontra per primo, e che il ponte
+    /// non aveva mai incontrato: **una raffica in cui non c'è niente da
+    /// buttare**. Un invito a riconciliare senza una perdita è lavoro chiesto
+    /// per niente.
+    #[test]
+    fn nothing_to_drop_is_no_invitation() {
+        let out = degrade(vec![guasto(), guasto()]);
+        assert_eq!(out.len(), 2);
+        assert!(out
+            .iter()
+            .all(|n| !matches!(n.event, Event::Overflow { .. })));
     }
 }

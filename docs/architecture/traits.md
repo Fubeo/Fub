@@ -1056,17 +1056,21 @@ dal bus attraverso il ponte, che non passa da nessuna maschera.
   un custom, l'apertura e la chiusura di un vault, un guasto, l'`Overflow`
   stesso).
 
-  **E vale per due delle tre**, non per tre: qui c'era scritto che «il secondo
-  gruppo passa sempre», e il codice lo smentisce. Il tetto del bus (`bus.rs`) e
-  la raffica del ponte guardano `is_recoverable`; il **budget del dispatch** no —
-  `Dispatcher::next_to_deliver` svuota `pending` in blocco e annuncia un
-  `Overflow`. Finché in coda passavano solo `document-changed` e `index-updated`
-  la differenza non si vedeva, perché «riconcilia da zero» li ricostruisce tutti;
-  con `Event::Trouble` ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md))
-  in coda c'è un fatto che nessuna riconciliazione riporta indietro. È il
-  [§20.5](../roadmap/20-quando-qualcosa-va-storto.md#205-il-budget-del-dispatch-tronca-senza-guardare-cosa-sta-troncando),
-  e la riga è rimasta qui a dire il falso finché qualcuno non ha avuto una
-  ragione per verificarla.
+  **E adesso vale per tutte e tre.** Qui c'era scritto che «il secondo gruppo
+  passa sempre», e per due giri il codice lo smentiva: il tetto del bus
+  (`bus.rs`) e la raffica del ponte guardavano `is_recoverable`, il **budget del
+  dispatch** no — `Dispatcher::next_to_deliver` svuotava `pending` in blocco e
+  annunciava un `Overflow`. Finché in coda passavano solo `document-changed` e
+  `index-updated` la differenza non si vedeva, perché «riconcilia da zero» li
+  ricostruisce tutti; con `Event::Trouble`
+  ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) in coda c'è un
+  fatto che nessuna riconciliazione riporta indietro. Lo ha chiuso la
+  [0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), che ha spostato
+  la riduzione nel contratto (`rules::events::degrade`) invece di scriverla una
+  terza volta: **il budget è un tetto sul lavoro, non sui fatti**. Ciò che il
+  tratto finale del troncamento non può consegnare — la coda deve terminare —
+  non si butta più in silenzio: si conta, e il conto esce in un ultimo
+  `Overflow`.
 - `Custom { topic, payload }` è il varco per gli eventi dei plugin (topic
   namespaced `ns:nome`, §7.4), ed è il canale con cui i plugin comunicano fra
   loro.

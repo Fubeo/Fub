@@ -245,6 +245,23 @@ export const CONTEGGI = [
       " | grep -cE '^        [A-Z_]+,'",
   },
   {
+    nome: "code-che-si-svuotano",
+    ragione:
+      "I posti da cui la coda degli eventi verso gli handler si svuota, cioè da " +
+      "cui un evento può sparire senza arrivare a nessuno. Ognuno dei tre ha una " +
+      "ragione scritta accanto in `dispatcher.rs`; il quarto — quello che " +
+      "svuotava `pending` in blocco a budget esaurito, senza guardare " +
+      "`is_recoverable` — era il difetto del §20.5, e nessun test lo vedeva " +
+      "perché sul bus quegli eventi passavano lo stesso. Un quinto si aggiunge " +
+      "con una riga: `self.pending.clear()` è la cosa più facile da scrivere per " +
+      "uscire da una situazione difficile, e questo conto è l'attore che se ne " +
+      "accorge — un test non può, perché il test che se ne accorgerebbe è " +
+      "proprio quello che chi butta non ha scritto.",
+    comando:
+      "grep -cE '^[[:space:]]+self\\.pending\\.clear\\(\\);$'" +
+      " crates/fub-kernel/src/dispatcher.rs",
+  },
+  {
     nome: "verbali",
     ragione:
       "I verbali delle decisioni chiuse. È il conteggio che `todo.md` scriveva " +

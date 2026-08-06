@@ -61,10 +61,14 @@ comportamento: le 51 suite di test passano identiche, prima e dopo.
   vorrebbe `&mut Workspace`, che è esattamente ciò che il componente non deve
   avere.
 - **Il budget del drenaggio sta nel `Dispatcher`, il ciclo sul `Workspace`.**
-  `next_to_deliver` rende un `ToDeliver::Notice` o un `ToDeliver::Overflow`, e
-  con esso decide quando fermarsi, cosa scartare e cosa mettere al posto di ciò
-  che si scarta. Il ciclo che sta sul `Workspace` non conta nulla e non sa cosa
-  sia un `Overflow`: chiede il prossimo e lo passa agli handler. La semantica di
+  `next_to_deliver` rende il prossimo `Notice`, e con esso decide quando
+  fermarsi, cosa scartare e cosa mettere al posto di ciò che si scarta. Il ciclo
+  che sta sul `Workspace` non conta nulla e non sa cosa sia un `Overflow`:
+  chiede il prossimo e lo passa agli handler. *(Allora rendeva un
+  `ToDeliver::Notice` o un `ToDeliver::Overflow`, e il ciclo del `Workspace`
+  scartava il resto dopo il secondo: cioè un pezzo di decisione era rimasto di
+  qua. La [0111](0111-il-budget-e-un-tetto-sul-lavoro.md) lo ha riportato dentro
+  il componente, e il tipo di ritorno è tornato uno.)* La semantica di
   consegna — che è **contratto** dal freeze di M4 — è quindi scritta in un posto
   solo, e quel posto non è quello che presta l'host.
 - **`Session::publish` rende la maschera, non gli id delle view.** Pubblicare un

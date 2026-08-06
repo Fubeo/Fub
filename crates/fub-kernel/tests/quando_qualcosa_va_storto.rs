@@ -16,7 +16,7 @@
 use camino::Utf8PathBuf;
 use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
-use fub_abi::event::{Event, EventMask, Notice, Severity};
+use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
     EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute,
@@ -220,4 +220,167 @@ fn un_handler_che_fallisce_non_fa_fallire_la_scrittura() {
     ws.create_note(Some("Nota.txt")).unwrap();
     ws.write_document(&DocId::new("Nota.txt"), "corpo", WriteBase::Dictated)
         .expect("la scrittura riesce anche se un handler ha detto di no");
+}
+
+// ---------------------------------------------------------------------------
+// Il troncamento a budget esaurito (§20.5): un guasto non è sacrificabile
+// ---------------------------------------------------------------------------
+
+/// Riempie la coda oltre il budget e ci mette **in fondo** un guasto: è la
+/// forma di ogni cascata reale — tanti eventi che si riscoprono guardando il
+/// vault, e dentro un fatto che non si riscopre.
+struct Cascata {
+    quanti: usize,
+    gia: bool,
+}
+
+impl EventHandler for Cascata {
+    fn subscribed(&self) -> EventMask {
+        EventMask::of([EventKind::DocumentChanged])
+    }
+    fn handle(&mut self, _notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        if std::mem::replace(&mut self.gia, true) {
+            return Ok(());
+        }
+        for _ in 0..self.quanti {
+            host.emit(Event::IndexUpdated);
+        }
+        host.emit(Event::Trouble {
+            severity: Severity::Failure,
+            subject: None,
+            error: PluginError::Io("il flush non è andato".into()),
+        });
+        Ok(())
+    }
+}
+
+/// Due handler che si rimbalzano un custom per sempre. Un custom **non** è
+/// recuperabile — il suo payload non lo ricostruisce nessuno — quindi qui il
+/// troncamento non ha niente da buttare fra ciò che è in coda, e ciò che si
+/// perde si perde nel **tratto finale**.
+struct PingPong;
+
+impl EventHandler for PingPong {
+    fn subscribed(&self) -> EventMask {
+        EventMask::of([EventKind::DocumentChanged, EventKind::Custom])
+    }
+    fn handle(&mut self, _notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        host.emit(Event::Custom {
+            topic: "fub:pong".into(),
+            payload: serde_json::Value::Null,
+        });
+        Ok(())
+    }
+}
+
+/// Tutto ciò che è arrivato a un `EventHandler`, in ordine: è l'unico punto di
+/// vista da cui il difetto del §20.5 si vede, perché sul bus quegli eventi ci
+/// sono passati comunque.
+#[derive(Default, Clone)]
+struct Registratore(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl EventHandler for Registratore {
+    fn subscribed(&self) -> EventMask {
+        // **Non** `EventMask::all()`, e la scoperta vale la riga: `all()` non
+        // contiene `Trouble`, di proposito e per una ragione che è di un'altra
+        // voce (§20.2). Chi vuole i guasti li nomina.
+        EventMask::of([
+            EventKind::DocumentChanged,
+            EventKind::IndexUpdated,
+            EventKind::Custom,
+            EventKind::Overflow,
+            EventKind::Trouble,
+        ])
+    }
+    fn handle(&mut self, notice: &Notice, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let riga = match &notice.event {
+            Event::Overflow { dropped } => format!("overflow:{dropped}"),
+            Event::Trouble { error, .. } => format!("trouble:{error}"),
+            altro => format!("{:?}", altro.kind()),
+        };
+        self.0.lock().unwrap().push(riga);
+        Ok(())
+    }
+}
+
+fn con_due_handler(fx: &Fixture, cascata: Box<dyn EventHandler>) -> (Workspace, Registratore) {
+    let mut ws = fx.workspace();
+    let registratore = Registratore::default();
+    ws.register_core_feature("test.cascata", "test.cascata")
+        .expect("dichiarato");
+    ws.register_core_feature("test.registra", "test.registra")
+        .expect("dichiarato");
+    ws.register_event_handler("test.cascata", cascata)
+        .expect("registrato");
+    ws.register_event_handler("test.registra", Box::new(registratore.clone()))
+        .expect("registrato");
+    (ws, registratore)
+}
+
+/// **Il budget è un tetto sul lavoro, non sui fatti.** Quando la coda si tronca,
+/// ciò che si riscopre riguardando il vault diventa un `Overflow`; il guasto,
+/// che porta l'unica copia di un fatto, arriva lo stesso — e arriva **dopo**
+/// l'invito a riconciliare, che è l'ordine in cui le due cose sono successe.
+#[test]
+fn un_troncamento_non_butta_un_guasto() {
+    let fx = Fixture::new();
+    let (mut ws, registratore) = con_due_handler(
+        &fx,
+        Box::new(Cascata {
+            quanti: 2_000,
+            gia: false,
+        }),
+    );
+    ws.reindex().unwrap();
+    ws.create_note(Some("Nota.txt")).unwrap();
+    ws.write_document(&DocId::new("Nota.txt"), "corpo", WriteBase::Dictated)
+        .unwrap();
+
+    let visti = registratore.0.lock().unwrap().clone();
+    let overflow = visti
+        .iter()
+        .position(|r| r.starts_with("overflow:"))
+        .expect("con duemila eventi in coda il budget deve troncare");
+    let trouble = visti.iter().position(|r| r.starts_with("trouble:")).expect(
+        "il guasto era in coda dietro il troncamento, e svuotare la coda in \
+             blocco lo perdeva: nessuna riconciliazione lo riporta indietro",
+    );
+    assert!(
+        overflow < trouble,
+        "l'invito a riconciliare sta dove stava l'ultimo evento che sostituisce, \
+         cioè prima del guasto: {visti:?}"
+    );
+    assert!(
+        visti[trouble].contains("il flush non è andato"),
+        "{:?}",
+        visti[trouble]
+    );
+}
+
+/// L'altra metà, ed è il difetto che stava **fuori** dalla voce: ciò che gli
+/// handler emettono mentre ricevono il tratto finale non si può consegnare (la
+/// coda deve terminare), ma si può **dire**. Prima si buttava in silenzio, e
+/// con un ping-pong di custom — che non sono recuperabili — il troncamento
+/// finiva per non dire proprio niente.
+#[test]
+fn il_tratto_finale_dice_quanti_ne_ha_buttati() {
+    let fx = Fixture::new();
+    let (mut ws, registratore) = con_due_handler(&fx, Box::new(PingPong));
+    ws.reindex().unwrap();
+    ws.create_note(Some("Nota.txt")).unwrap();
+    ws.write_document(&DocId::new("Nota.txt"), "corpo", WriteBase::Dictated)
+        .unwrap();
+
+    let visti = registratore.0.lock().unwrap().clone();
+    let ultimo = visti.last().expect("qualcosa è arrivato");
+    assert!(
+        ultimo.starts_with("overflow:"),
+        "l'ultima cosa che un handler riceve da un drenaggio troncato è il conto \
+         di ciò che non gli è arrivato: {ultimo}"
+    );
+    assert_ne!(
+        ultimo, "overflow:0",
+        "un conto a zero vorrebbe dire che non si è perso niente, e invece il \
+         ping-pong stava ancora emettendo"
+    );
 }
