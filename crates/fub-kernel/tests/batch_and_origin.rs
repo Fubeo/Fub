@@ -599,3 +599,45 @@ fn a_batch_id_is_new_every_time() {
          promette, e basta a correlare gli eventi col loro terminale"
     );
 }
+
+/// **Chi muore dentro un lotto non porta con sé il dispatch.**
+///
+/// È il difetto che il `Drop` di `Lotto` esiste per non avere: con la chiusura
+/// scritta come una riga *dopo* la chiamata, un panico dentro `f` la saltava, il
+/// campo del lotto restava pieno, e da lì in poi ogni drenaggio trovava
+/// `batch.is_some()` e tornava subito — per sempre, e senza dire niente.
+///
+/// Il panico si produce come lo produce la vita — dentro `f`, non fabbricato
+/// attorno — e l'hook tace per la sua durata, o una traccia stampata farebbe
+/// sembrare rotto un banco verde.
+#[test]
+fn un_panico_dentro_un_lotto_non_lascia_il_lotto_aperto() {
+    let dir = TempDir::new("panico");
+    let mut ws = workspace(&dir.0);
+    let visto = Arc::new(Mutex::new(Vec::new()));
+    ws.register_event_handler("test.spia", Box::new(Spia(visto.clone())))
+        .expect("registrato");
+
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let esito = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ws.batch(|ws| {
+            ws.write_document(&DocId::new("dentro.lnk"), "x", WriteBase::Dictated)
+                .unwrap();
+            panic!("a metà del lotto");
+        })
+    }));
+    std::panic::set_hook(hook);
+    assert!(esito.is_err(), "il misfatto deve essere successo");
+
+    // Il vault è di nuovo un vault: un'operazione qualunque arriva agli handler.
+    ws.write_document(&DocId::new("dopo.lnk"), "y", WriteBase::Dictated)
+        .unwrap();
+    let visto = visto.lock().unwrap();
+    assert!(
+        !visto.is_empty(),
+        "il lotto è rimasto aperto: `dispatch_pending` trova `batch.is_some()` e \
+         torna subito, quindi da qui in poi nessun handler riceve più niente e \
+         nessuno dice perché — la coda del vault è morta con chi è panicato dentro"
+    );
+}

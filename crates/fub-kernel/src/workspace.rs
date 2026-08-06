@@ -5041,16 +5041,17 @@ impl Workspace {
     /// Annidato, entra nel lotto che c'è invece di aprirne un secondo: chiudere
     /// quello interno farebbe arrivare un `batch-ended` mentre l'operazione
     /// esterna è ancora in corso.
+    ///
+    /// **La chiusura è un `Drop`, non una riga da ricordare.** `f` è codice del
+    /// kernel e dei provider, e può panicare: con la chiusura scritta *dopo* la
+    /// chiamata, un panico la saltava e il lotto restava aperto — cioè
+    /// `dispatch_pending` trovava `batch.is_some()` e tornava subito **per
+    /// sempre**, senza consegnare più niente a nessun handler. Non è il panico
+    /// che si vuole gestire (chi pania se lo tiene, decisione 0032): è che
+    /// l'uscita da un lotto non dipenda da chi la scrive.
     pub fn batch<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        if !self.dispatch.open_batch() {
-            // Entra in quello che c'è, e non lo chiude: a chiudere è chi lo ha
-            // aperto. Contare le aperture non servirebbe a niente — chi trova il
-            // campo pieno non lo tocca in nessun caso.
-            return f(self);
-        }
-        let result = f(self);
-        self.end_batch();
-        result
+        let mut lotto = Lotto::apri(self);
+        f(&mut lotto)
     }
 
     /// Chiude il lotto più esterno: emette il terminale (se c'è qualcosa da
@@ -6341,4 +6342,76 @@ fn section_of(model: &DocumentModel, heading: &str) -> Option<DocumentModel> {
         .cloned()
         .collect();
     Some(section)
+}
+
+/// **Un lotto aperto è un prestito, e si chiude cadendo.**
+///
+/// Esiste perché la chiusura di un lotto non è una riga che chi apre debba
+/// ricordarsi di scrivere. `Workspace::batch` la scriveva *dopo* la chiamata
+/// alla chiusura del chiamante, e su quella riga passa tutto ciò che pania:
+/// il parse di un formato storto, un provider senza la rete della
+/// [`safety`](crate::safety), una `expect` del kernel. Un panico saltava
+/// `end_batch`, il campo del lotto restava pieno, e da lì in poi
+/// [`Workspace::dispatch_pending`] trovava `batch.is_some()` e tornava subito —
+/// **per sempre**: nessun handler riceveva più niente, e nessuno diceva perché.
+///
+/// La forma è un `Drop` e non un `catch_unwind` perché il panico non lo si
+/// vuole né prendere né tradurre (chi pania se lo tiene, decisione 0032): si
+/// vuole soltanto che l'uscita dal lotto avvenga **su tutte** le strade
+/// d'uscita, e un `Drop` è l'unica cosa che le veda tutte. E si eredita: chi
+/// aggiungesse un secondo modo di aprire un lotto non ha una chiusura da
+/// ricordare, perché non c'è una chiusura da chiamare.
+struct Lotto<'w> {
+    ws: &'w mut Workspace,
+    /// Se questo prestito è **quello esterno**, cioè se tocca a lui chiudere.
+    /// Annidato, entra nel lotto che c'è e non lo tocca: contare le aperture
+    /// non servirebbe a niente, perché chi trova il campo pieno non lo tocca in
+    /// nessun caso.
+    mio: bool,
+}
+
+impl<'w> Lotto<'w> {
+    fn apri(ws: &'w mut Workspace) -> Self {
+        let mio = ws.dispatch.open_batch();
+        Lotto { ws, mio }
+    }
+}
+
+impl Drop for Lotto<'_> {
+    fn drop(&mut self) {
+        if !self.mio {
+            return;
+        }
+        if std::thread::panicking() {
+            // Srotolando si chiude il lotto e **non** si drena. Le due metà di
+            // `end_batch` non hanno lo stesso prezzo qui: chiudere è mettere a
+            // posto un campo di questo oggetto, drenare è chiamare codice di
+            // terzi mentre il panico corre — e un panico che scappasse da lì
+            // dentro non sarebbe un secondo errore, sarebbe un `abort` del
+            // processo. Ciò che resta in coda non è perso: lo drena la prima
+            // operazione che riesce, e adesso può, che è tutto il punto.
+            self.ws.dispatch.close_batch();
+            tracing::error!(
+                target: "fub.kernel",
+                "qualcuno è morto dentro un lotto: il lotto è chiuso lo stesso, e ciò \
+                 che aveva in coda sarà consegnato dalla prossima operazione che riesce"
+            );
+            return;
+        }
+        self.ws.end_batch();
+    }
+}
+
+impl std::ops::Deref for Lotto<'_> {
+    type Target = Workspace;
+
+    fn deref(&self) -> &Workspace {
+        self.ws
+    }
+}
+
+impl std::ops::DerefMut for Lotto<'_> {
+    fn deref_mut(&mut self) -> &mut Workspace {
+        self.ws
+    }
 }
