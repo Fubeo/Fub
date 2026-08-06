@@ -50,12 +50,31 @@ pub enum DocumentSource {
 
 impl DocumentSource {
     /// Il testo, se questa sorgente è testo. Un provider testuale che riceve dei
-    /// byte deve dire di no (`Unsupported`), non indovinare: l'encoding è una
-    /// decisione, non un tentativo.
+    /// byte deve dire di no — [`FormatError::Unsupported`] con
+    /// [`kind`](DocumentSource::kind) dentro — e non indovinare: l'encoding è
+    /// una decisione, non un tentativo.
+    ///
+    /// [`FormatError::Unsupported`]: crate::error::FormatError::Unsupported
     pub fn text(&self) -> Option<&str> {
         match self {
             DocumentSource::Text(s) => Some(s),
             DocumentSource::Bytes(_) => None,
+        }
+    }
+
+    /// Di che **specie** è questa sorgente, cioè quale
+    /// [`FormatDescriptor::source`] l'avrebbe chiesta.
+    ///
+    /// Esiste perché il rifiuto la nomina: chi costruisce
+    /// [`FormatError::Unsupported`] deve dire cosa ha ricevuto, e scriverlo a
+    /// mano vuol dire poterlo scrivere sbagliato — è la stessa specie che il
+    /// `match` qui sotto ha già in mano.
+    ///
+    /// [`FormatError::Unsupported`]: crate::error::FormatError::Unsupported
+    pub fn kind(&self) -> SourceKind {
+        match self {
+            DocumentSource::Text(_) => SourceKind::Text,
+            DocumentSource::Bytes(_) => SourceKind::Bytes,
         }
     }
 
@@ -277,7 +296,9 @@ pub trait FormatProvider: Send + Sync {
     ///
     /// La sorgente arriva nella forma dichiarata da
     /// [`FormatDescriptor::source`]: un provider testuale che ricevesse dei byte
-    /// risponde [`FormatError::Unsupported`] invece di indovinare l'encoding.
+    /// risponde [`FormatError::Unsupported`] invece di indovinare l'encoding —
+    /// col proprio id e con [`DocumentSource::kind`], non con una frase: la
+    /// frase la compone chi la mostra.
     fn parse(
         &self,
         source: &DocumentSource,

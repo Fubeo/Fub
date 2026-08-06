@@ -32,10 +32,10 @@ perché vuole un fuso e una regola sull'ora legale
 ([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)) — e tre da un
 **consuntivo**: la seduta 24, nata rileggendo contro i sorgenti le novantadue
 osservazioni che `docs/issues.md` teneva da un audit e che nessuno aveva mai
-lavorato. Centotrentacinque sono
-chiuse, e i loro verbali stanno in
-[decisions/](decisions/README.md); la voce ancora aperta è
-**una** [conta: voci-aperte], e questo file resta il loro **indice** e il
+lavorato. Centotrentasei sono
+chiuse — **tutte**, di nuovo — e i loro verbali stanno in
+[decisions/](decisions/README.md); le voci ancora aperte sono
+**zero** [conta: voci-aperte], e questo file resta il loro **indice** e il
 consuntivo di come sono finite.
 
 Da quello stesso consuntivo viene la **terza specie** che questo file conta: i
@@ -235,21 +235,26 @@ che questo piano passa il tempo a togliere dal codice.
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
-| **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | la stessa domanda a tre distanze dal confine: ciò che il contratto dice, arriva a chi deve leggerlo? | 1 | — |
+| **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | **chiusa** — tre voci aperte perché toccavano una firma, e su due delle tre quel criterio non reggeva | — | — |
 
 ## Le voci
 
-**Una** [conta: voci-aperte], ed è della
-[seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md). La tabella
-era vuota — la roadmap infrastrutturale di M4 era finita — e tre voci l'hanno
-riaperta per il criterio con cui è stata scritta la prima riga di questo file:
-**toccano una firma**, e una firma scade col freeze. **Su due delle tre il
-criterio non reggeva**, e a scoprirlo è stato ogni volta il giro che le ha
-chiuse: la §24.1 ([0130](decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md))
-perché un `pub use` è additivo — a scadere era il frattempo — e la §24.2
+**Zero** [conta: voci-aperte]: la tabella è vuota, ed è così che si sa che la
+roadmap infrastrutturale di M4 è finita. C'era già arrivata una volta, e la
+[seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) l'ha
+riaperta per tre voci con un criterio solo — **toccano una firma**, e una firma
+scade col freeze. **Su due delle tre quel criterio non reggeva**, e a scoprirlo
+è stato ogni volta il giro che le ha chiuse, mai chi le aveva scritte: la §24.1
+([0130](decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md)) perché
+un `pub use` è additivo — a scadere era il frattempo — e la §24.2
 ([0131](decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md)) perché
-`enabled` è un metodo Rust di comodo che al confine WIT non esiste. Sulla terza
-la stessa misura non l'ha ancora fatta nessuno. Il numero di ogni voce resta quello con
+`enabled` è un metodo Rust di comodo che al confine WIT non esiste. Solo la
+§24.3 ([0132](decisions/0132-un-rifiuto-non-e-una-frase.md)) scadeva davvero, e
+si è vista perché la linea di base congelata si è dovuta ritagliare. **Ciò che
+la seduta lascia è quel due su tre**: che una firma scada non si deduce
+leggendo la voce, si misura andando a vedere se attraversa il confine — e
+finché la misura non è fatta, «P0» dice quanto si è preoccupato chi scriveva,
+non quanto costa aspettare. Il numero di ogni voce resta quello con
 cui la nomina il resto del repo, e si ritrova in
 [decisions/](decisions/README.md) e nella
 [corrispondenza](roadmap/numerazione.md).
@@ -264,7 +269,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-**una** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+**zero** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -281,8 +286,10 @@ decidere. La forma di questo file era già pronta a riceverlo, e la prova è che
 non è servito inventare un criterio nuovo: è bastato rileggere quello con cui
 *Caselle* si era staccata da *Voci*.
 
-La colonna *Voci* somma **una** [conta: voci-aperte]: ogni seduta è a zero
-tranne la 24, e l'ultima ad arrivare a zero è stata la 16, con la
+La colonna *Voci* somma **zero** [conta: voci-aperte]: **ogni** seduta è a
+zero, e l'ultima ad arrivarci è la 24, con la
+[0132](decisions/0132-un-rifiuto-non-e-una-frase.md) — prima di lei c'era la 16,
+con la
 [0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md).
 Della 20 non resta nemmeno una casella: si è chiusa con la
 [0111](decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), l'ultima delle cinque
@@ -451,7 +458,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
-| **§24.3** | [`Unsupported` è l'unico errore che non è testo che qualcuno legge](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md#243-unsupported-è-lunico-errore-che-non-è-testo-che-qualcuno-legge) | 24. Tre firme che il freeze rende definitive | contratto | **P0** |
 
 ## I difetti misurati
 
@@ -592,7 +598,7 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentuno** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentadue** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

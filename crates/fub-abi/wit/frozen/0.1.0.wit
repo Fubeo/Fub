@@ -388,11 +388,23 @@ interface format {
         target: render-target,
         options: option-map,
     }
+    /// RITAGLIO DELIBERATO (decisione 0132, §24.3): `unsupported` portava una
+    /// `string` di prosa scritta da chi implementa il provider — l'unico errore
+    /// del contratto che arrivava a uno schermo senza che nessuno potesse
+    /// comporne la frase — e adesso porta i due dati da cui la frase si compone.
+    /// È un caso di variant **ritipato**, quindi non additivo, ed è il solo
+    /// modo di farlo: una variante in coda avrebbe lasciato per sempre due modi
+    /// di rifiutare una sorgente, di cui uno intraducibile. Prima del freeze di
+    /// M4 costa questa riga; dopo costerebbe una major.
+    record format-error-unsupported {
+        format: string,
+        got: source-kind,
+    }
     variant format-error {
         parse(string),
         render(string),
         serialize(string),
-        unsupported(string),
+        unsupported(format-error-unsupported),
     }
 
     descriptor: func() -> format-descriptor;

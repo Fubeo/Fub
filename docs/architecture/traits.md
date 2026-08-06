@@ -82,7 +82,9 @@ provider vuole testo UTF-8 o byte grezzi, e il kernel legge di conseguenza:
 «leggi il file» e «decodificalo come UTF-8» erano la stessa operazione, e per un
 canvas (12), un CSV con un encoding suo (11.4, 2.3) o un PDF (13.2) la seconda
 metà è sbagliata. Un provider testuale che riceva dei byte risponde
-`Unsupported`, non indovina.
+`Unsupported`, non indovina — col proprio id e con la specie che ha ricevuto,
+non con una frase: quella la compone chi la mostra
+([0132](../decisions/0132-un-rifiuto-non-e-una-frase.md)).
 
 ### `SyntaxRule` e `CustomRenderer` — ciò che il core non conosce
 

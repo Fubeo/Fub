@@ -2234,7 +2234,11 @@ fn format_error_case(e: &FormatError) -> Case {
         FormatError::Parse(s) => case_ty("parse", wit(s)),
         FormatError::Render(s) => case_ty("render", wit(s)),
         FormatError::Serialize(s) => case_ty("serialize", wit(s)),
-        FormatError::Unsupported(s) => case_ty("unsupported", wit(s)),
+        FormatError::Unsupported { format, got } => case_rec(
+            "unsupported",
+            "format-error-unsupported",
+            vec![("format", wit(format)), ("got", wit(got))],
+        ),
     }
 }
 
@@ -2943,7 +2947,10 @@ fn conform(source: &str) -> Result<(), String> {
             format_error_case(&FormatError::Parse(String::new())),
             format_error_case(&FormatError::Render(String::new())),
             format_error_case(&FormatError::Serialize(String::new())),
-            format_error_case(&FormatError::Unsupported(String::new())),
+            format_error_case(&FormatError::Unsupported {
+                format: String::new(),
+                got: SourceKind::Text,
+            }),
         ],
     );
 

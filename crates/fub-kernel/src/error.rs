@@ -1,7 +1,7 @@
 //! Errori del kernel.
 
 use camino::Utf8PathBuf;
-use fub_abi::{FormatError, PluginError};
+use fub_abi::{FormatError, PluginError, SourceKind};
 
 #[derive(Debug, thiserror::Error)]
 pub enum KernelError {
@@ -107,6 +107,23 @@ pub type Result<T> = std::result::Result<T, KernelError>;
 ///   contratto non ha un «questo documento è malformato», e non gliene si
 ///   aggiunge uno finché non c'è chi lo legge — il payload porta comunque il
 ///   `Display` del [`FormatError`], che dice quale delle tre cose è fallita.
+///
+///   **La frase di `Unsupported` nasce qui**, e non nel provider (§24.3):
+///   quella variante non porta prosa, porta i due dati che la compongono. Qui è
+///   l'unico posto che ogni provider attraversa quando il suo rifiuto va verso
+///   uno schermo, e la frase esce quindi identica per tutti e nella lingua del
+///   kernel invece che in quella di chi ha implementato il provider.
+///
+///   È anche il posto in cui si vede **perché non è un [`Text::Message`]**:
+///   questa è una `impl From`, senza `&self` — niente registro, niente locale,
+///   niente cataloghi —, e la via su cui viaggia (aprire un documento) non passa
+///   da `Workspace::localized`, che si applica al solo `?` che porta l'errore
+///   *di un provider* nelle vie d'uscita di view e comandi. Una chiave lì
+///   arriverebbe allo schermo **nuda**, cioè peggio di una frase. Resta prosa
+///   del kernel come ogni altra riga di questo `match`, e diventerà traducibile
+///   quando lo diventeranno tutte, in un posto solo.
+///
+///   [`Text::Message`]: fub_abi::text::Text::Message
 impl From<KernelError> for PluginError {
     fn from(e: KernelError) -> Self {
         match e {
@@ -132,13 +149,86 @@ impl From<KernelError> for PluginError {
             KernelError::NoDefaultFormat => PluginError::Unserved(
                 "nessun formato registrato: non so con quale creare una nota".into(),
             ),
-            KernelError::Format(FormatError::Unsupported(what)) => {
-                PluginError::Unserved(format!("formato non supportato: {what}").into())
-            }
+            KernelError::Format(FormatError::Unsupported { format, got }) => PluginError::Unserved(
+                format!(
+                    "il formato «{format}» non sa leggere questo file: gli è \
+                         arrivato {}, che non è la forma di sorgente che ha \
+                         dichiarato di volere",
+                    specie_di_sorgente(got)
+                )
+                .into(),
+            ),
             e @ (KernelError::Io { .. }
             | KernelError::NonUtf8Path(_)
             | KernelError::LinkRewrite(_)) => PluginError::Io(e.to_string().into()),
             e @ KernelError::Format(_) => PluginError::Internal(e.to_string().into()),
+        }
+    }
+}
+
+/// Come si chiama una [`SourceKind`] in una frase che legge una persona.
+///
+/// Il `match` è **senza `_`** di proposito: una specie di sorgente in più nel
+/// contratto — l'encoding da rilevare del §2.3, un flusso — non compila finché
+/// non le si è data una parola. È la metà che il tipo di
+/// [`FormatError::Unsupported`] non può prendere da sé: quello obbliga a *dire*
+/// cosa è arrivato, questo obbliga a saperlo **nominare**.
+fn specie_di_sorgente(k: SourceKind) -> &'static str {
+    match k {
+        SourceKind::Text => "testo",
+        SourceKind::Bytes => "una sequenza di byte grezzi",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **Cosa vede chi apre un allegato con un provider testuale**: una frase
+    /// che nomina tutti e due i dati del rifiuto.
+    ///
+    /// È il presidio del §24.3 dal lato che il compilatore non prende. Il tipo
+    /// obbliga chi costruisce `Unsupported` a *portare* il formato e la specie;
+    /// non obbliga chi compone la frase a **spenderli**, e un `format!` che ne
+    /// dimentichi uno compila benissimo — è esattamente il difetto di prima,
+    /// spostato di un file.
+    #[test]
+    fn il_rifiuto_di_un_formato_nomina_chi_e_e_cosa_ha_ricevuto() {
+        let e: PluginError = KernelError::Format(FormatError::Unsupported {
+            format: "markdown".into(),
+            got: SourceKind::Bytes,
+        })
+        .into();
+        let PluginError::Unserved(testo) = &e else {
+            panic!("un formato che rifiuta la sorgente è un nessuno-lo-serve, non {e:?}");
+        };
+        let frase = testo.to_string();
+        assert!(
+            frase.contains("markdown"),
+            "la frase non dice QUALE formato ha rifiutato: {frase}"
+        );
+        assert!(
+            frase.contains(specie_di_sorgente(SourceKind::Bytes)),
+            "la frase non dice COSA gli è arrivato: {frase}"
+        );
+    }
+
+    /// Le altre tre restano una diagnosi per chi legge un log, e vanno in
+    /// `Internal`: è la riga che tiene separate le due metà di `FormatError`.
+    #[test]
+    fn le_altre_tre_restano_un_difetto_e_non_un_nessuno_lo_serve() {
+        for e in [
+            FormatError::Parse("riga 3".into()),
+            FormatError::Render("riga 3".into()),
+            FormatError::Serialize("riga 3".into()),
+        ] {
+            assert!(
+                matches!(
+                    PluginError::from(KernelError::Format(e.clone())),
+                    PluginError::Internal(_)
+                ),
+                "{e:?} non è un nessuno-lo-serve: nessun plugin da installare la ripara"
+            );
         }
     }
 }
