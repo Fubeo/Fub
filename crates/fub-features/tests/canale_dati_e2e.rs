@@ -878,3 +878,96 @@ fn un_riferimento_a_un_punto_sa_dire_dove_punta() {
     assert_eq!(sparito.doc.as_str(), "Note/Doppia.md");
     assert_eq!(sparito.at, None);
 }
+
+/// Un vault con **due sezioni omonime** nella stessa nota: è lo stato in cui
+/// un id generato e un frammento cercato si scoprono d'accordo o no.
+fn vault_con_omonimi() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+    std::fs::create_dir_all(root.join("Note")).unwrap();
+    std::fs::write(
+        root.join("Note/Omonime.md"),
+        "## Note\n\nla prima sezione parla di alberi.\n\n\
+         ## Corpo\n\nin mezzo.\n\n\
+         ## Note\n\nla seconda sezione parla di radici.\n",
+    )
+    .unwrap();
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::new(&root, registry);
+    ws.reindex().expect("reindex");
+    (dir, ws, root)
+}
+
+/// Chi **genera** l'id di un titolo e chi **risolve** un `#frammento` devono
+/// nominare lo stesso punto, e questo è il verso che nessun test per-crate
+/// prende: il generatore sta nel provider markdown, il resolver nel kernel, e
+/// finché la disambiguazione non esisteva erano d'accordo per la ragione
+/// sbagliata — atterravano **entrambi** sul primo di due omonimi, e il secondo
+/// non era nominabile da nessuna sintassi.
+///
+/// Il presidio si prova rosso cambiando **uno solo** dei due lati.
+#[test]
+fn chi_genera_un_id_e_chi_risolve_un_frammento_nominano_lo_stesso_punto() {
+    let (_g, ws, root) = vault_con_omonimi();
+    let source = std::fs::read_to_string(root.join("Note/Omonime.md")).expect("il sorgente");
+
+    let risolve = |heading: &str| match ws
+        .query_index(IndexQuery::Resolve {
+            target: LinkTarget::Wiki {
+                page: "Omonime".into(),
+                heading: Some(heading.into()),
+                block: None,
+            },
+            from: None,
+        })
+        .expect("il kernel serve `resolve`")
+    {
+        IndexResult::Resolved(found) => found.expect("la nota c'è").at,
+        other => panic!("risposta fuori tema: {}", other.kind_name()),
+    };
+
+    let prima = risolve("Note").expect("il punto della prima");
+    assert_eq!(prima.anchor.as_deref(), Some("note"));
+    assert!(
+        source[prima.span.start..].starts_with("## Note\n\nla prima"),
+        "`#Note` resta la prima sezione: nessun link già scritto cambia destinazione"
+    );
+
+    // E la seconda, che prima di questa firma era irraggiungibile.
+    let seconda = risolve("Note 1").expect("il punto della seconda");
+    assert_eq!(seconda.anchor.as_deref(), Some("note-1"));
+    assert!(
+        source[seconda.span.start..].starts_with("## Note\n\nla seconda"),
+        "il frammento disambiguato atterra sulla SECONDA sezione omonima"
+    );
+
+    // L'accordo, detto per intero: l'ancora che il resolver restituisce è un
+    // id che esiste davvero nell'HTML, per ogni titolo del documento.
+    let reso = ws
+        .render_preview(&DocId::new("Note/Omonime.md"))
+        .expect("la resa");
+    for heading in ["Note", "Note 1", "Corpo"] {
+        let punto = risolve(heading).expect("ogni titolo si risolve");
+        let id = punto.anchor.expect("con la sua ancora");
+        assert!(
+            reso.html.contains(&format!("id=\"{id}\"")),
+            "il resolver nomina `{id}`, che nell'HTML non esiste: html={}",
+            reso.html
+        );
+    }
+
+    // Anche l'embed guarda la stessa sezione del link: `![[Nota#Note 1]]` e
+    // `[[Nota#Note 1]]` non possono mostrare due cose.
+    let (_id, embed) = ws
+        .render_embed("Omonime", Some("Note 1"))
+        .expect("l'embed della seconda");
+    assert!(
+        embed.html.contains("radici") && !embed.html.contains("alberi"),
+        "l'embed disambiguato ritaglia la seconda sezione: {}",
+        embed.html
+    );
+}

@@ -196,6 +196,46 @@ mod tests {
         assert_eq!(doc.outline[1].slug, "sotto-sezione");
     }
 
+    /// Due `## Note` nella stessa nota davano lo **stesso** `id` nell'HTML, e
+    /// un link interno atterrava sempre sul primo — in silenzio, che è il modo
+    /// peggiore di sbagliare destinazione.
+    ///
+    /// Qui si guarda il verso che l'utente vede (gli `id` dell'HTML sono
+    /// diversi) e quello che tiene fermo il resto (l'ancora del blocco È lo
+    /// slug dell'outline: sono la stessa assegnazione, non due chiamate che si
+    /// danno la stessa risposta per fortuna).
+    #[test]
+    fn two_headings_with_the_same_text_get_different_ids() {
+        let doc = parse("## Note\n\ntesto\n\n## Note 1\n\naltro\n\n## Note\n");
+        let slugs: Vec<&str> = doc.outline.iter().map(|h| h.slug.as_str()).collect();
+        assert_eq!(slugs, ["note", "note-1", "note-2"]);
+
+        let ancore: Vec<Option<&str>> = doc
+            .body
+            .iter()
+            .filter(|b| matches!(b, Block::Heading { .. }))
+            .map(Block::anchor)
+            .collect();
+        assert_eq!(
+            ancore,
+            [Some("note"), Some("note-1"), Some("note-2")],
+            "l'ancora del blocco e lo slug dell'outline sono la stessa assegnazione"
+        );
+
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &RenderOptions::preview())
+            .unwrap();
+        assert!(html.contains("<h2 id=\"note\">"), "html: {html}");
+        assert!(html.contains("<h2 id=\"note-1\">"), "html: {html}");
+        assert!(html.contains("<h2 id=\"note-2\">"), "html: {html}");
+
+        // E il verso che protegge i link già scritti: senza omonimi, gli id
+        // sono quelli di sempre.
+        let doc = parse("# Titolo Uno\n\n## Sotto Sezione\n");
+        assert_eq!(doc.outline[0].slug, "titolo-uno");
+        assert_eq!(doc.outline[1].slug, "sotto-sezione");
+    }
+
     #[test]
     fn parses_callout_as_custom_block() {
         let doc = parse("> [!note] Attenzione\n> corpo del callout\n");

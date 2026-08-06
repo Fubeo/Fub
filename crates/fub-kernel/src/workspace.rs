@@ -60,7 +60,7 @@ use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
 use fub_abi::locale::Locale;
-use fub_abi::model::{DocId, DocumentModel, LinkTarget, Span};
+use fub_abi::model::{heading_matches, DocId, DocumentModel, LinkTarget, Span};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
@@ -6193,14 +6193,16 @@ pub(crate) fn collect_data_files(
 }
 
 /// Sottomodello con i soli blocchi della sezione di un heading: da esso
-/// (incluso) fino al prossimo heading di livello pari o superiore. `heading`
-/// matcha per slug o per testo, case-insensitive.
+/// (incluso) fino al prossimo heading di livello pari o superiore.
+///
+/// Chi matcha è `heading_matches`, la stessa regola con cui il canale dati
+/// risolve un `[[Nota#Sezione]]`: un embed che trovasse una sezione diversa da
+/// quella che il link apre sarebbe la stessa scritta che mostra due cose.
 fn section_of(model: &DocumentModel, heading: &str) -> Option<DocumentModel> {
-    let want = resolution_key(heading);
     let idx = model
         .outline
         .iter()
-        .position(|h| resolution_key(&h.slug) == want || resolution_key(&h.text) == want)?;
+        .position(|h| heading_matches(heading, h))?;
     let start = model.outline[idx].span.start;
     let level = model.outline[idx].level;
     let end = model.outline[idx + 1..]

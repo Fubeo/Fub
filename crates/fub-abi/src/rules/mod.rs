@@ -45,7 +45,9 @@
 //!
 //! Le regole che erano **già** nel contratto restano dove sono e si raggiungono
 //! anche da qui, perché il posto in cui si cerca «la regola X» dev'essere uno:
-//! [`canonical_tag`], [`canonical_anchor`], [`valid_anchor`], [`heading_slug`] e
+//! [`canonical_tag`], [`canonical_anchor`], [`valid_anchor`], [`heading_slug`]
+//! con [`HeadingSlugs`] e [`heading_matches`] — la regola che scrive un'ancora
+//! di heading e quella che la cerca, che sono una sola cosa in due versi — e
 //! il metodo [`DocId::page_name`](crate::model::DocId::page_name).
 //!
 //! ## Ciò che NON è una regola condivisa
@@ -74,4 +76,7 @@ pub mod properties;
 pub mod tag;
 pub mod text_policy;
 
-pub use crate::model::{canonical_anchor, canonical_tag, heading_slug, valid_anchor};
+pub use crate::model::{
+    canonical_anchor, canonical_tag, heading_matches, heading_slug, heading_slugs, valid_anchor,
+    HeadingSlugs,
+};

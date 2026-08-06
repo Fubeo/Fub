@@ -21,6 +21,13 @@
     "task": []
   },
   {
+    "nome": "due heading omonimi",
+    "source": "## Note\n\nprima\n\n## Note\n\nseconda\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
     "nome": "paragrafo",
     "source": "Un paragrafo qualunque.\n",
     "tag": [],

@@ -35,7 +35,7 @@ use crate::drafts::Drafts;
 use fub_abi::edit::Revision;
 use fub_abi::event::{DocChange, DocChanges};
 use fub_abi::model::{
-    canonical_anchor, canonical_tag, heading_slug, Anchor, DateFormats, DocId, DocumentModel,
+    canonical_anchor, canonical_tag, heading_matches, Anchor, DateFormats, DocId, DocumentModel,
     Frontmatter, Heading, Link, LinkTarget, Tag,
 };
 use fub_abi::query::{
@@ -762,10 +762,16 @@ impl CoreIndex {
                 let found = meta.anchors.iter().find(|a| a.id == wanted)?;
                 (found.span, wanted)
             }
+            // La regola sta nel contratto (`heading_matches`) e non qui: chi
+            // **scrive** l'ancora di un titolo e chi la **cerca** sono la
+            // stessa cosa in due versi, e due copie non saprebbero nominare la
+            // seconda di due sezioni omonime allo stesso modo. L'ancora che
+            // torna è quella del titolo trovato, non quella ricalcolata sulla
+            // domanda: `#Ciao, Mondo!` trova `ciao-mondo`, e il chiamante ha
+            // diritto all'id vero.
             (None, Some(text)) => {
-                let wanted = heading_slug(text);
-                let found = meta.outline.iter().find(|h| h.slug == wanted)?;
-                (found.span, wanted)
+                let found = meta.outline.iter().find(|h| heading_matches(text, h))?;
+                (found.span, found.slug.clone())
             }
             (None, None) => return None,
         };
