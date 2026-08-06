@@ -213,25 +213,17 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
-    settings.extend(fub_kernel::locale::locale_settings());
-    // Come quelle del locale: dichiarate dal kernel accanto a chi le legge, e
-    // montate da qui perché è qui che si monta il core (§11.1). La finestra del
-    // registro (§23.9) è la prima chiave del kernel che, appena dichiarata,
-    // **fa qualcosa** — vedi `Workspace::pota_il_registro`.
-    settings.extend(fub_kernel::journal::journal_settings());
-    // Come le due sopra, e per il criterio di §11.1: una chiave sta dove sta
-    // chi la legge, e il formato delle date lo legge il parser del frontmatter.
-    // **Non** è una chiave `locale.*`, e la ragione sta nel modulo: la famiglia
-    // del locale è quella in cui il sistema ha una risposta, e qui la risposta
-    // del sistema sarebbe sbagliata per costruzione — lo stesso vault, aperto
-    // su due macchine, porterebbe due date diverse per lo stesso byte.
-    settings.extend(fub_kernel::properties::properties_settings());
-    // E per lo stesso criterio: quali file sono di questo vault lo legge la
-    // scansione, che sta nel kernel (§15.6). È la prima famiglia del kernel che
-    // dichiara **cosa il vault contiene** invece di come lo si legge, e per
-    // questo il suo default è scritto due volte in un posto solo — lo schema e
-    // il valutatore ne condividono l'elenco.
-    settings.extend(fub_kernel::ignore::ignore_settings());
+    // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
+    // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
+    // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
+    // il formato delle date lo legge il parser del frontmatter, quali file sono
+    // di questo vault lo legge la scansione. Ciò che *non* era di nessuno era
+    // l'elenco: una famiglia nuova che nessuno aggiungeva qui restava senza
+    // chiavi nel pannello, chi le legge tornava al default in silenzio, e
+    // niente diventava rosso. Adesso l'elenco è
+    // [`Famiglia::TUTTE`](fub_kernel::famiglie::Famiglia::TUTTE), e chi ne
+    // aggiunge una la aggiunge in un posto solo.
+    settings.extend(fub_kernel::famiglie::Famiglia::impostazioni());
     // Le scorciatoie dei comandi **della shell** (§16.3). Stanno nel bundle di
     // core per la ragione di `plugins.disabled`: la shell non è una feature e
     // non porta un manifest, quindi l'unico posto in cui può dichiarare è
@@ -375,6 +367,27 @@ fn level_label_en(level: fub_kernel::log::Level) -> &'static str {
 }
 
 /// Le stringhe del bundle di core: le sue, non quelle del locale.
+/// **Il catalogo che il bundle di core monta davvero**: quello di `fub-host`
+/// più quelli delle famiglie del kernel, sommati.
+///
+/// Esiste perché di questa somma esistevano **due** scritture — la riga
+/// `.speaking(…)` di [`crate::mount`] e il banco `tests/i_cataloghi.rs`, che la
+/// ricostruiva a mano per giudicarla — e un banco che riscrive ciò che
+/// giudica giudica sé stesso. La seconda scrittura elencava le famiglie una a
+/// una, quindi vedeva benissimo una **chiave** che mancava e mai un
+/// **catalogo** che mancava: `maintenance` è rimasta fuori dal montaggio a
+/// lungo, con la suite verde.
+///
+/// Adesso la somma è una funzione, la chiamano tutti e due, e la metà del
+/// kernel viene da [`Famiglia::TUTTE`](fub_kernel::famiglie::Famiglia::TUTTE).
+pub fn core_catalog_montato() -> Vec<StringCatalog> {
+    // **Due** cataloghi per lingua, e si sommano: le chiavi del core stanno in
+    // `fub-host` accanto al loro schema, quelle delle famiglie in `fub-kernel`
+    // accanto al proprio. Chi somma è `Strings::template`, e il perché sta nel
+    // suo doc.
+    [core_catalog(), fub_kernel::famiglie::Famiglia::cataloghi()].concat()
+}
+
 pub fn core_catalog() -> Vec<StringCatalog> {
     // Le etichette dei gradini si piegano sopra il catalogo invece che scritte
     // una a una: sono sei, nascono da [`Level::ALL`], e tenerle generate è ciò

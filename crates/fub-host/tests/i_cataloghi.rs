@@ -14,29 +14,54 @@
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{StringCatalog, Text};
 
-/// I cataloghi che il bundle di core porta al montaggio, uniti come li unisce
-/// `mount`.
+/// I cataloghi che il bundle di core porta al montaggio.
 ///
-/// **I cataloghi del kernel sono cinque** [conta: cataloghi-del-kernel], e il
-/// numero sta scritto qui perché l'elenco è a mano: `maintenance` c'è mancato
-/// per un pezzo, e non se ne accorgeva nessuno — un elenco scritto a mano si
-/// accorge di una **chiave** che manca, mai di un **catalogo** che manca, e
-/// nemmeno il gemello di `fub-features` lo vedrebbe. A prenderlo è l'attore che
-/// la 0105 nomina per questa specie di buco: un conto che legge i sorgenti da
-/// fuori. Se ne nasce uno che non è in questa lista, `check-prosa` diventa
-/// rosso su questa riga — da adesso anche se nasce **dentro un file già
-/// contato**, che è il caso in cui il conto guardava i file invece delle
-/// dichiarazioni e restava fermo.
+/// **Non è più un elenco**: è la stessa funzione che `mount` chiama per
+/// riempire il suo `.speaking(…)`. Qui c'erano sei righe scritte a mano, ed è
+/// il difetto che questo giro ripara — un banco che riscrive ciò che giudica
+/// giudica sé stesso, e infatti `maintenance` è mancata al montaggio per un
+/// pezzo senza che questo file battesse ciglio. Un elenco a mano si accorge di
+/// una **chiave** che manca, mai di un **catalogo** che manca, perché tutti i
+/// presidi delle stringhe guardano dalle chiavi verso le frasi: le chiavi di
+/// una famiglia non montata non le nomina nessuno, e le sue frasi non le
+/// pretende nessuno.
+///
+/// **I cataloghi del kernel sono cinque** [conta: cataloghi-del-kernel], e le
+/// famiglie che il montaggio conosce sono **cinque** [conta: famiglie-del-kernel]
+/// anche loro. I due conti stanno in questa frase apposta: il
+/// primo legge i `pub fn catalog()` dei sorgenti, il secondo le varianti di
+/// `Famiglia`, e una famiglia che nasce nel kernel senza entrare nell'elenco
+/// li fa divergere. È l'attore che la 0105 nomina per questa specie di buco —
+/// nessun `assert` dentro Rust può vedere un modulo che nessuno cita.
 fn cataloghi_del_core() -> Vec<StringCatalog> {
-    [
-        fub_host::settings::core_catalog(),
-        fub_kernel::locale::catalog(),
-        fub_kernel::maintenance::catalog(),
-        fub_kernel::journal::catalog(),
-        fub_kernel::properties::catalog(),
-        fub_kernel::ignore::catalog(),
-    ]
-    .concat()
+    fub_host::settings::core_catalog_montato()
+}
+
+/// **Ciò che una famiglia dichiara, il montaggio lo dice.**
+///
+/// Il conto prende la famiglia che nessuno ha elencato; questo test prende
+/// l'altra metà, cioè il montaggio che smette di sommare una famiglia che
+/// nell'elenco c'è — e la **nomina**, che è ciò che un conto non sa fare.
+#[test]
+fn ogni_famiglia_del_kernel_arriva_al_montaggio() {
+    let montati = cataloghi_del_core();
+    for famiglia in fub_kernel::famiglie::Famiglia::TUTTE {
+        for catalogo in famiglia.catalog() {
+            for chiave in catalogo.entries.keys() {
+                let c_e = montati
+                    .iter()
+                    .filter(|c| c.locale == catalogo.locale)
+                    .any(|c| c.entries.contains_key(chiave));
+                assert!(
+                    c_e,
+                    "la famiglia «{}» dichiara «{chiave}» in «{}», e il bundle \
+                     di core non la monta: quelle frasi non le raggiunge nessuno",
+                    famiglia.nome(),
+                    catalogo.locale
+                );
+            }
+        }
+    }
 }
 
 /// Le chiavi che uno schema dichiara, e la prosa che ci fosse rimasta.
@@ -93,24 +118,20 @@ fn mancanti(chiavi: &[String], cataloghi: &[StringCatalog]) -> Vec<String> {
 /// perché guardano dalle chiavi verso le frasi e non al contrario.
 ///
 /// Le famiglie del kernel che dichiarano impostazioni sono
-/// **quattro** [conta: impostazioni-del-kernel], e il conto sta qui perché
-/// anche questo elenco è a mano: stessa forma della riga di
-/// `cataloghi_del_core`, e stessa riparazione — una `pub fn calendar_settings()`
-/// aggiunta dentro `locale.rs` lasciava il conto a quattro e la suite verde,
-/// perché il comando contava i file.
+/// **quattro** [conta: impostazioni-del-kernel] — una in meno delle cinque che
+/// parlano, perché `maintenance` porta delle etichette e non si configura. Qui
+/// l'elenco non è più a mano nemmeno lui: è `Famiglia::impostazioni()`, la
+/// stessa fetta che `core_settings` monta. Il conto resta, e resta perché
+/// guarda ciò che nessun elenco può guardare: una `pub fn calendar_settings()`
+/// nata dentro `locale.rs` — file già contato — non è in nessuna variante, e a
+/// vederla è solo un comando che legge i sorgenti da fuori.
 #[test]
 fn ogni_chiave_che_il_kernel_dichiara_e_montata_dal_core() {
     let montate: std::collections::BTreeSet<String> = fub_host::settings::core_settings()
         .iter()
         .map(|s| s.key.clone())
         .collect();
-    let dal_kernel = [
-        fub_kernel::locale::locale_settings(),
-        fub_kernel::journal::journal_settings(),
-        fub_kernel::properties::properties_settings(),
-        fub_kernel::ignore::ignore_settings(),
-    ]
-    .concat();
+    let dal_kernel = fub_kernel::famiglie::Famiglia::impostazioni();
     let dimenticate: Vec<&str> = dal_kernel
         .iter()
         .map(|s| s.key.as_str())
