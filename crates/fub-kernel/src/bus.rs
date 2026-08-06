@@ -193,6 +193,16 @@ mod intake {
             debito(&self.dropped)
         }
 
+        /// **Estingue** il debito invece di riscuoterlo, e rende quanto valeva.
+        ///
+        /// È la stessa mossa di [`debito`] — lo `swap` che impedisce di dirlo
+        /// due volte — con l'altra risposta: si usa quando il bus non c'è più,
+        /// e serve che stia qui dentro perché la sottrazione di questo conto è
+        /// del modulo che lo possiede, non di chi ritira.
+        pub(super) fn estingui(&self) -> u64 {
+            self.dropped.swap(0, Ordering::Relaxed)
+        }
+
         /// Quanti notice risultano accodati e non ancora ritirati: è la
         /// grandezza che il tetto legge, e i banchi la guardano da qui.
         #[cfg(test)]
@@ -242,17 +252,23 @@ impl Subscription {
                 Some(overflow) => Ok(overflow),
                 None => self.intake.take(Receiver::recv),
             },
-            Err(TryRecvError::Disconnected) => match self.debt() {
-                Some(overflow) => Ok(overflow),
-                None => self.intake.take(Receiver::recv),
-            },
+            // Il bus non c'è più, e il debito **si estingue invece di essere
+            // riscosso**: vedi `chiudi_il_conto`.
+            Err(TryRecvError::Disconnected) => {
+                self.chiudi_il_conto();
+                self.intake.take(Receiver::recv)
+            }
         }
     }
 
     pub fn try_recv(&self) -> Result<Notice, TryRecvError> {
         match self.intake.take(Receiver::try_recv) {
             Ok(notice) => Ok(notice),
-            Err(vuota) => self.debt().ok_or(vuota),
+            Err(TryRecvError::Empty) => self.debt().ok_or(TryRecvError::Empty),
+            Err(TryRecvError::Disconnected) => {
+                self.chiudi_il_conto();
+                Err(TryRecvError::Disconnected)
+            }
         }
     }
 
@@ -263,10 +279,10 @@ impl Subscription {
                 Some(overflow) => Ok(overflow),
                 None => self.intake.take(|rx| rx.recv_timeout(timeout)),
             },
-            Err(TryRecvError::Disconnected) => match self.debt() {
-                Some(overflow) => Ok(overflow),
-                None => Err(RecvTimeoutError::Disconnected),
-            },
+            Err(TryRecvError::Disconnected) => {
+                self.chiudi_il_conto();
+                Err(RecvTimeoutError::Disconnected)
+            }
         }
     }
 
@@ -280,6 +296,35 @@ impl Subscription {
     /// indietro, riscosso **una volta sola** dal canale che lo tiene.
     fn debt(&self) -> Option<Notice> {
         self.intake.debt()
+    }
+
+    /// **Il bus è sparito**: il debito si estingue invece di essere riscosso.
+    ///
+    /// Un `Overflow` non è una notizia, è una **richiesta**: dice «riconcilia da
+    /// zero», e chi lo riceve la esegue — la shell ricarica l'albero, le view,
+    /// il documento aperto. Ha senso finché c'è qualcosa da rileggere. Un canale
+    /// disconnesso vuol dire che il bus è caduto, cioè che il vault si sta
+    /// chiudendo: la riconciliazione partirebbe contro un vault che non c'è più,
+    /// e ciò che ne torna sono errori a schermo sopra un'operazione — chiudere —
+    /// che è riuscita. Chiedere di riconciliare a chi non riceverà mai la
+    /// conferma non è dire la verità in ritardo: è dare un ordine impossibile.
+    ///
+    /// Il conto sparisce comunque, e questo è il posto in cui ciò che si è perso
+    /// viene detto: un debito estinto è l'unico caso in cui nessuno recupererà
+    /// quegli eventi, e il log è l'unico canale che resta quando il bus non c'è
+    /// (stessa ragione della [0126] per la riga dell'avvelenamento).
+    ///
+    /// [0126]: ../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md
+    fn chiudi_il_conto(&self) {
+        let persi = self.intake.estingui();
+        if persi > 0 {
+            tracing::debug!(
+                target: "fub.kernel",
+                persi,
+                "il bus si è chiuso mentre un abbonato era indietro: nessuna \
+                 riconciliazione, perché non c'è più niente da rileggere"
+            );
+        }
     }
 
     /// Quanti notice risultano accodati e non ancora ritirati.
@@ -677,6 +722,47 @@ mod tests {
                  nessuno"
             );
         }
+    }
+
+    /// **A un bus chiuso non si chiede di riconciliare.**
+    ///
+    /// Il debito è vero — quegli eventi sono stati buttati davvero — ma
+    /// l'`Overflow` con cui lo si dice non è un'informazione: è l'ordine
+    /// «rileggi il vault da zero». Consegnarlo quando il bus è già caduto vuol
+    /// dire mandare la shell a rileggere un vault che si sta chiudendo, e ciò
+    /// che ne torna sono errori a schermo sopra una chiusura riuscita.
+    #[test]
+    fn un_bus_chiuso_non_chiede_di_riconciliare() {
+        let bus = EventBus::new();
+        let rx = bus.subscribe();
+        // Uno sopra il tetto: il primo di troppo viene buttato e diventa debito.
+        for n in 0..=BACKLOG_CEILING {
+            bus.emit(cambiato(n));
+        }
+        drop(bus);
+
+        let mut visti = Vec::new();
+        while let Ok(notice) = rx.try_recv() {
+            visti.push(notice);
+        }
+        assert!(
+            !visti
+                .iter()
+                .any(|n| matches!(n.event, Event::Overflow { .. })),
+            "l'ultimo messaggio di un bus caduto è «riconcilia», detto a chi non \
+             riceverà mai la conferma: la shell rilegge un vault che non c'è più \
+             e mostra i suoi errori sopra una chiusura riuscita"
+        );
+        assert_eq!(
+            visti.len(),
+            BACKLOG_CEILING,
+            "ciò che era in coda si ritira lo stesso: il bus caduto non porta \
+             via ciò che aveva già consegnato"
+        );
+        assert!(
+            rx.recv().is_err(),
+            "e dopo non c'è nient'altro: il canale è finito"
+        );
     }
 
     /// La politica della 0126, dal comportamento: il veleno si produce come lo
