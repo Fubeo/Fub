@@ -16,18 +16,23 @@ use fub_abi::text::{StringCatalog, Text};
 
 /// I cataloghi che il bundle di core porta al montaggio, uniti come li unisce
 /// `mount`.
+///
+/// **I cataloghi del kernel sono cinque** [conta: cataloghi-del-kernel], e il
+/// numero sta scritto qui perché l'elenco è a mano: `maintenance` c'è mancato
+/// per un pezzo, e non se ne accorgeva nessuno — un elenco scritto a mano si
+/// accorge di una **chiave** che manca, mai di un **catalogo** che manca, e
+/// nemmeno il gemello di `fub-features` lo vedrebbe. A prenderlo è l'attore che
+/// la 0105 nomina per questa specie di buco: un conto che legge i sorgenti da
+/// fuori. Se ne nasce uno che non è in questa lista, `check-prosa` diventa
+/// rosso su questa riga.
 fn cataloghi_del_core() -> Vec<StringCatalog> {
     [
         fub_host::settings::core_catalog(),
         fub_kernel::locale::catalog(),
-        // `maintenance` mancava, e non se ne accorgeva nessuno: questo elenco è
-        // scritto a mano, quindi si accorge di una **chiave** che manca e non di
-        // un **catalogo** che manca. La forma della riparazione è già scritta
-        // (0105) — un `match` esaustivo più un conto — e non è di questa voce;
-        // ciò che è di questa voce è non allungare una bugia.
         fub_kernel::maintenance::catalog(),
         fub_kernel::journal::catalog(),
         fub_kernel::properties::catalog(),
+        fub_kernel::ignore::catalog(),
     ]
     .concat()
 }
@@ -75,6 +80,46 @@ fn mancanti(chiavi: &[String], cataloghi: &[StringCatalog]) -> Vec<String> {
     out
 }
 
+/// **Ciò che il kernel dichiara, il core lo monta.**
+///
+/// La verifica del rosso della §15.6 ha misurato che togliere una riga da
+/// `core_settings()` — la riga che estende l'elenco con una famiglia del
+/// kernel — non rendeva rosso **niente**: le chiavi sparivano dal pannello, chi
+/// le legge tornava al default in silenzio (è la regola giusta: un vault senza
+/// dichiarazione si comporta come ieri), e la sola cosa che restava era il
+/// catalogo di stringhe che nessuno cita — che questi banchi non pretendono,
+/// perché guardano dalle chiavi verso le frasi e non al contrario.
+///
+/// Le famiglie del kernel che dichiarano impostazioni sono
+/// **quattro** [conta: impostazioni-del-kernel], e il conto sta qui perché
+/// anche questo elenco è a mano: stessa forma della riga di
+/// `cataloghi_del_core`.
+#[test]
+fn ogni_chiave_che_il_kernel_dichiara_e_montata_dal_core() {
+    let montate: std::collections::BTreeSet<String> = fub_host::settings::core_settings()
+        .iter()
+        .map(|s| s.key.clone())
+        .collect();
+    let dal_kernel = [
+        fub_kernel::locale::locale_settings(),
+        fub_kernel::journal::journal_settings(),
+        fub_kernel::properties::properties_settings(),
+        fub_kernel::ignore::ignore_settings(),
+    ]
+    .concat();
+    let dimenticate: Vec<&str> = dal_kernel
+        .iter()
+        .map(|s| s.key.as_str())
+        .filter(|k| !montate.contains(*k))
+        .collect();
+    assert!(
+        dimenticate.is_empty(),
+        "il kernel dichiara queste chiavi e il bundle del core non le monta: \
+         nessuno può scriverle, e chi le legge prende il default per sempre \
+         {dimenticate:?}"
+    );
+}
+
 #[test]
 fn le_impostazioni_dell_app_hanno_tutte_una_voce_in_tutte_le_lingue() {
     let cataloghi = cataloghi_del_core();
@@ -119,6 +164,7 @@ fn le_due_metà_del_core_non_si_pestano_i_piedi() {
         fub_kernel::maintenance::catalog(),
         fub_kernel::journal::catalog(),
         fub_kernel::properties::catalog(),
+        fub_kernel::ignore::catalog(),
     ]
     .concat()
     .iter()

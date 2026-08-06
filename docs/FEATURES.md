@@ -260,6 +260,22 @@ vale più.
 
 ## 3.1 Vault
 
+**Cosa fa parte di un vault lo dichiara il vault, con due eccezioni che nessuno
+può dichiarare.** Fino alla
+[decisione 0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
+l'esclusione era una costante nel sorgente; adesso sono due chiavi di questo
+vault — le **cartelle escluse** (`files.excluded-folders`, con `.obsidian`,
+`.git` e `node_modules` per default) e i **file nascosti visibili su richiesta**
+(`files.show-hidden`) — perché entrambe descrivono *questi file* e viaggiano con
+loro. Restano fuori comunque, e non sono una preferenza: la cartella di Fub
+(`.fub/`), il cestino (`.trash/`) e i temporanei di una scrittura — mostrarli
+vorrebbe dire indicizzare l'indice e riesumare come documenti le note appena
+cestinate. Le tre caselle di questa sezione stanno quindi così: *ignore
+file/cartelle* è piena, *visualizzazione file nascosti opzionale* è piena, e il
+supporto a `.gitignore` è **vuoto e indirizzato** — un file come sorgente di
+politica ha una sintassi propria (pattern, non nomi), una precedenza propria e
+un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
+
 - [ ] Creazione nuovo vault
 - [ ] Apertura vault esistente
 - [ ] Vault multipli simultanei

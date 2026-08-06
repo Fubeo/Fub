@@ -216,6 +216,7 @@ fn le_impostazioni_del_core_parlano_anche_loro() {
     let cataloghi = [
         fub_kernel::locale::catalog(),
         fub_kernel::properties::catalog(),
+        fub_kernel::ignore::catalog(),
     ]
     .concat();
     let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
@@ -226,6 +227,7 @@ fn le_impostazioni_del_core_parlano_anche_loro() {
     let specs = [
         fub_kernel::locale::locale_settings(),
         fub_kernel::properties::properties_settings(),
+        fub_kernel::ignore::ignore_settings(),
     ]
     .concat();
     for spec in specs {

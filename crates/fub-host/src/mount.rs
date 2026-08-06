@@ -253,6 +253,7 @@ pub fn mount(
                         fub_kernel::maintenance::catalog(),
                         fub_kernel::journal::catalog(),
                         fub_kernel::properties::catalog(),
+                        fub_kernel::ignore::catalog(),
                     ]
                     .concat(),
                 ),

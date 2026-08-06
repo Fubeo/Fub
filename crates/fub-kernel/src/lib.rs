@@ -55,6 +55,7 @@ pub mod error;
 pub mod graph;
 mod health;
 pub mod host;
+pub mod ignore;
 pub mod index;
 pub mod journal;
 pub mod locale;

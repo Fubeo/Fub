@@ -46,14 +46,22 @@
 //!   ai nomi invece che alle chiavi: [`normalized`]. Non c'è una seconda
 //!   implementazione, c'è un secondo cliente.
 //! - **Se un file *partecipa*** — se la scansione lo guarda, se la ricerca lo
-//!   indicizza, se il sync lo porta — non è una domanda sul nome ed è il §15.6,
-//!   il gemello di questa voce sul lato *quali file*. L'unico punto in cui i due
-//!   si toccano è il punto iniziale, e si toccano in un modo che vale la pena
-//!   dire: `.nota.md` è **legale** su ogni filesystem, quindi non è un problema
-//!   di portabilità; è un problema perché `is_ignored_name` la salterebbe, cioè
-//!   Fub creerebbe una nota che Fub non vede. Per questo
-//!   [`NameFault::Hidden`] c'è, ed è la sola regola del modulo che non è di un
-//!   filesystem ma nostra.
+//!   indicizza, se il sync lo porta — non è una domanda sul nome, è la politica
+//!   di esclusione del §15.6 (`fub_kernel::ignore`), il gemello di questa voce
+//!   sul lato *quali file*. L'unico punto in cui i due si toccano è il punto
+//!   iniziale, e si toccano in un modo che vale la pena dire: `.nota.md` è
+//!   **legale** su ogni filesystem, quindi non è un problema di portabilità; è
+//!   un problema perché di norma la scansione la salterebbe, cioè Fub creerebbe
+//!   una nota che Fub non vede. Per questo [`NameFault::Hidden`] c'è, ed è la
+//!   sola regola del modulo che non è di un filesystem ma nostra.
+//!
+//!   **Resta vera anche in un vault che mostra i nascosti**, e l'asimmetria è
+//!   voluta: quella politica dice cosa fare dei file che *ci sono già* — un
+//!   `.gitignore`, una cartella che arriva da un altro strumento — e non
+//!   autorizza Fub a **crearne** uno. Un nome che di default sparirebbe alla
+//!   vista è un nome che l'utente non deve poter scegliere per una nota nuova:
+//!   la preferenza si può ribaltare in un clic, e le note create mentre era
+//!   accesa resterebbero invisibili senza che nessuno le nomini.
 //! - **La lunghezza del path assoluto.** Windows tronca a 260 caratteri il path
 //!   *intero*, che dipende da dove sta il vault: `C:\v\nota.md` e un vault dentro
 //!   sette cartelle con nomi lunghi hanno lo stesso nome di file e due esiti
