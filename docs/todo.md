@@ -502,15 +502,6 @@ verifica, non in un elenco di lavoro.
   sugli `id` che vengono dal contenuto, con la risoluzione delle ancore che lo
   applica dalla stessa parte — e va scritto tenendo insieme le due metà, o
   l'ancora di blocco si rompe.
-- [ ] **Due occorrenze dello stesso termine possono sovrapporsi**
-  (`crates/fub-kernel/src/occurrences.rs`). Ripartire da `span.start` invece che
-  da `span.end` è **giusto** e la ragione sta scritta lì accanto: `arch` dentro
-  `architettura` andrebbe perso altrimenti. Ma la stessa riga vale anche
-  all'interno di un solo termine, e `aa` dentro `aaaa` produce span
-  sovrapposti che il `dedup` non tocca, perché non sono uguali — mentre
-  l'intestazione della funzione promette «senza sovrapposizioni fra occorrenze
-  uguali». O si riparte da `span.end` **per lo stesso needle** tenendo
-  `span.start` fra needle diversi, o si corregge la frase.
 - [ ] **Una potatura riuscita a metà lascia l'indice che nomina blob che non ci
   sono** (`crates/fub-features/src/versioning.rs`). `prune` cancella i blob e
   aggiorna la mappa in memoria, e solo dopo `write_meta`/`write_index` col `?`:
@@ -529,7 +520,7 @@ verifica, non in un elenco di lavoro.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centosedici** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centodiciassette** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue

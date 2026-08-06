@@ -109,7 +109,13 @@ pub(crate) fn max_docs() -> usize {
 }
 
 /// Dove compaiono, nei byte di `source`, i testi cercati — in ordine di
-/// posizione e senza sovrapposizioni fra occorrenze uguali.
+/// posizione, senza doppioni e **senza che due occorrenze dello stesso testo si
+/// sovrappongano**.
+///
+/// Termini *diversi* invece si sovrappongono eccome, ed è voluto: `arch` sta
+/// dentro `architettura`, e chi ha cercato tutte e due vuole tutte e due. Il
+/// confine è lì — dentro un termine le occorrenze sono un elenco di punti a cui
+/// saltare, e `aa` in `aaaa` sono **due** punti, non tre.
 ///
 /// Il confronto ignora il **caso**, come lo ignora ogni motore di ricerca di
 /// note: chi cerca `rust` vuole anche il `Rust` in cima al paragrafo. Ignora
@@ -139,10 +145,13 @@ pub(crate) fn locate(source: &str, needles: &[String]) -> Vec<Span> {
             };
             spans.push(span);
             trovate += 1;
-            // Si riparte **dopo l'inizio** e non dopo la fine: due termini
-            // diversi possono cadere sullo stesso pezzo di testo (`arch` dentro
-            // `architettura`), e saltare la coda ne perderebbe uno.
-            from = next_boundary(source, span.start);
+            // Si riparte **dopo la fine**: dentro un termine le occorrenze non
+            // si sovrappongono, altrimenti `aa` in `aaaa` sarebbe tre punti a
+            // cui saltare invece di due, e il secondo cadrebbe in mezzo al
+            // primo. La sovrapposizione fra termini *diversi* (`arch` dentro
+            // `architettura`) non c'entra e non si perde: ogni termine ha la
+            // sua scansione, che riparte da zero.
+            from = span.end;
         }
     }
     // I duplicati si tolgono **dopo** l'ordinamento, non impedendoli a ogni
@@ -171,14 +180,6 @@ fn first_at_or_after(source: &str, needle: &str, from: usize) -> Option<Span> {
         at += 1;
     }
     None
-}
-
-fn next_boundary(source: &str, from: usize) -> usize {
-    let mut at = from + 1;
-    while at < source.len() && !source.is_char_boundary(at) {
-        at += 1;
-    }
-    at
 }
 
 /// Quanti **byte** di `hay` occupa il prefisso uguale a `needle` a meno del
@@ -283,6 +284,46 @@ mod tests {
         assert_eq!(spans.len(), 2);
         assert_eq!(spans[0], Span::new(0, 4));
         assert_eq!(spans[1], Span::new(0, source.len()));
+    }
+
+    /// **Un termine non si sovrappone a se stesso.** `aa` dentro `aaaa` sono
+    /// due punti a cui saltare, non tre: la scansione riparte dopo la fine di
+    /// ciò che ha trovato. Il `dedup` qui non serve a niente — gli span
+    /// sovrapposti non sono uguali, quindi passerebbero interi.
+    #[test]
+    fn lo_stesso_termine_non_si_sovrappone_a_se_stesso() {
+        let spans = locate("aaaa", &["aa".to_string()]);
+        assert_eq!(spans, vec![Span::new(0, 2), Span::new(2, 4)]);
+        assert!(
+            spans.windows(2).all(|w| w[0].end <= w[1].start),
+            "due occorrenze dello stesso termine non si accavallano: {spans:?}"
+        );
+        // E il caso vero che si vede in un vault: i separatori di una tabella.
+        let righello = "|-----|";
+        let trattini = locate(righello, &["--".to_string()]);
+        assert_eq!(trattini, vec![Span::new(1, 3), Span::new(3, 5)]);
+    }
+
+    /// L'altro verso della stessa riga: riparando la sovrapposizione **dentro**
+    /// un termine non si deve perdere quella **fra** termini diversi, che è
+    /// voluta. Sta accanto a
+    /// `un_prefisso_e_un_termine_intero_non_si_mangiano_a_vicenda` perché la
+    /// prova che conta è la coppia: un corpus può essere cieco a chi riconosce
+    /// di troppo tanto quanto a chi riconosce di meno.
+    #[test]
+    fn due_termini_diversi_continuano_a_sovrapporsi() {
+        let source = "architettura architettura";
+        let spans = locate(source, &["arch".to_string(), "architettura".to_string()]);
+        assert_eq!(
+            spans,
+            vec![
+                Span::new(0, 4),
+                Span::new(0, 12),
+                Span::new(13, 17),
+                Span::new(13, 25),
+            ],
+            "ogni termine ha la sua scansione, e le due si accavallano"
+        );
     }
 
     #[test]
