@@ -261,6 +261,31 @@ impl Indicizzazione {
     }
 }
 
+/// Un documento **già letto e già parsato**, che aspetta di entrare nel
+/// workspace.
+///
+/// È il valore che permette a una sincronizzazione da fuori di stare nella
+/// forma della [decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md):
+/// leggere e parsare sotto prestito condiviso
+/// ([`Workspace::plan_sync`]), mutare sotto quello esclusivo
+/// ([`Workspace::sync_path_prepared`]).
+///
+/// I campi sono chiusi apposta: fuori dal kernel non c'è niente da guardarci
+/// dentro, e ciò che si può fare con questo valore è **darlo a chi lo applica**.
+/// È anche ciò che lo rende un presidio invece di una comodità — chi tiene un
+/// `ParsedChange` in mano ha per forza già rilasciato il prestito condiviso,
+/// perché il tipo non ne porta con sé nessun pezzo.
+pub struct ParsedChange {
+    id: DocId,
+    model: DocumentModel,
+    /// L'impronta del sorgente che è stato letto: è quella che finirà in
+    /// anagrafe.
+    fingerprint: Revision,
+    /// L'impronta che l'anagrafe aveva **al momento del piano**. Vedi
+    /// [`Workspace::sync_path_prepared`].
+    seen: Option<Revision>,
+}
+
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
 ///
 /// L'incrementale è il percorso normale; il rebuild completo resta disponibile
@@ -2318,6 +2343,92 @@ impl Workspace {
     /// [`IndexQuery::VaultStatus`].
     pub fn sync_path(&mut self, abs: &Utf8Path) -> Result<bool> {
         let outcome = self.sync_path_here(abs);
+        self.note_sync(&outcome);
+        outcome
+    }
+
+    /// **La metà di [`sync_path`] che non ha bisogno del prestito esclusivo**:
+    /// legge il file dal disco e lo parsa, sotto `&self`.
+    ///
+    /// È la regola della
+    /// [decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+    /// applicata alla porta da cui il vault cambia da fuori: leggere e parsare
+    /// N file è l'I/O più lungo di un lotto del watcher, e chi legge — la
+    /// ricerca, il disegno dei pannelli — non ha niente a che farci. Il
+    /// chiamante prepara sotto prestito **condiviso** e applica con
+    /// [`sync_path_prepared`](Workspace::sync_path_prepared).
+    ///
+    /// `None` vuol dire «qui non c'è niente da preparare», e non è un
+    /// fallimento: un path ignorato, un file di un'altra specie, un file
+    /// sparito, o una lettura che non è riuscita. In tutti e quattro i casi
+    /// [`sync_path_prepared`] rifà la strada intera sotto il prestito
+    /// esclusivo, che è dove quei rami stavano già — e dove un errore viene
+    /// registrato come sempre (§9.7).
+    pub fn plan_sync(&self, abs: &Utf8Path) -> Option<ParsedChange> {
+        if self.docs.vault.is_ignored(abs) {
+            return None;
+        }
+        let id = self.docs.vault.doc_id_for_path(abs).ok()?;
+        let ext = extension_of(&id).unwrap_or_default();
+        self.docs.registry.provider_for_ext(&ext)?;
+        if !abs.exists() {
+            return None;
+        }
+        let source = self.docs.vault.read(&id).ok()?;
+        let model = self.docs.parse(&id, &source).ok()?;
+        Some(ParsedChange {
+            seen: self.entry_fingerprint(&id),
+            fingerprint: Revision::of(&source),
+            id,
+            model,
+        })
+    }
+
+    /// L'impronta che l'anagrafe attribuisce **adesso** a un documento: è ciò
+    /// che un piano si porta dietro per accorgersi di essere invecchiato.
+    fn entry_fingerprint(&self, id: &DocId) -> Option<Revision> {
+        self.indexes
+            .core
+            .entries
+            .get(id)
+            .and_then(|e| e.fingerprint.clone())
+    }
+
+    /// [`sync_path`] con il lavoro di lettura **già fatto** da
+    /// [`plan_sync`](Workspace::plan_sync).
+    ///
+    /// **Il piano dichiara cosa credeva di sapere, e chi applica lo verifica.**
+    /// Fra la fase condivisa e questa il prestito esclusivo è passato di mano, e
+    /// in mezzo può esserci stato un salvataggio dell'utente: applicare un
+    /// modello parsato *prima* di quella scrittura la cancellerebbe dalla
+    /// memoria del kernel, in silenzio. Il piano porta quindi l'impronta che
+    /// l'anagrafe aveva quando è stato fatto; se adesso è un'altra, il piano si
+    /// butta e si rifà la strada intera — che è ciò che il codice faceva sempre,
+    /// e qui succede solo nel caso raro.
+    pub fn sync_path_prepared(
+        &mut self,
+        abs: &Utf8Path,
+        prepared: Option<ParsedChange>,
+    ) -> Result<bool> {
+        let Some(plan) = prepared else {
+            return self.sync_path(abs);
+        };
+        // Il file può anche essere sparito nel frattempo: è un `stat`, non una
+        // lettura, e il ramo che toglie un documento sta di là.
+        if self.entry_fingerprint(&plan.id) != plan.seen || !abs.exists() {
+            return self.sync_path(abs);
+        }
+        let ParsedChange {
+            id,
+            model,
+            fingerprint,
+            ..
+        } = plan;
+        let outcome = self.as_actor(Actor::Watcher, |ws| {
+            ws.ingest_model(&id, model, fingerprint);
+            ws.dispatch_pending();
+            Ok(true)
+        });
         self.note_sync(&outcome);
         outcome
     }

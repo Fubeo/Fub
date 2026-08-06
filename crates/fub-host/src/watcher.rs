@@ -24,8 +24,10 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 
-use camino::Utf8Path;
-use fub_kernel::Workspace;
+use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::event::Event;
+use fub_abi::{PluginError, Severity};
+use fub_kernel::{ParsedChange, Workspace};
 
 /// Un rilevatore vivo: si tiene, e quando cade smette di guardare.
 ///
@@ -94,6 +96,159 @@ impl WatcherFactory for NoWatcher {
     }
 }
 
+/// Un cambiamento visto da fuori, **nel vocabolario di nessun rilevatore**.
+///
+/// I tipi di `notify` restano di là dietro la cargo feature: qui passa ciò che
+/// un lotto significa, e significa la stessa cosa se un giorno a formarlo sarà
+/// il rilevamento di una piattaforma diversa — o un test, che è il primo
+/// cliente non-`notify` che questo tipo ha.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExternalChange {
+    /// Un path che è cambiato: creato, riscritto, sparito. Chi lo riceve non sa
+    /// quale dei tre, e non deve: lo scopre il kernel guardando il disco.
+    Touched(Utf8PathBuf),
+    /// Una rinomina **accoppiata**: la stessa identità, un nome nuovo. Non è
+    /// remove+add — la storia del versioning resta attaccata alla nota, e
+    /// `DocumentRenamed` viene emesso anche per i rename fatti da
+    /// Finder/Obsidian/sync.
+    Renamed { from: Utf8PathBuf, to: Utf8PathBuf },
+}
+
+/// Chi porta nel workspace ciò che è cambiato da fuori, **un lotto alla volta**.
+///
+/// # Perché è un tipo e non una funzione
+///
+/// Perché `batch` prende `&mut self`, e questo è l'unico posto in cui l'ordine
+/// dei lotti è scritto invece che sperato. Un lotto legge il disco in una fase
+/// e muta in un'altra: due lotti che si accavallassero potrebbero applicare in
+/// ordine invertito, e il secondo lascerebbe nel workspace lo stato più vecchio
+/// dei due. Oggi non si accavallano — il debouncer di `notify` chiama il
+/// proprio handler da un thread solo, e l'handler è un `FnMut` — ma «oggi non
+/// succede» è la forma di garanzia che la
+/// [0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha
+/// già dovuto scrivere in prosa una volta. Qui la dice il prestito: da un
+/// `&mut ExternalSync` non se ne ricava un secondo, quindi due lotti sullo
+/// stesso sincronizzatore non compilano.
+///
+/// # Le tre fasi, e perché sono tre
+///
+/// È la regola della 0024 applicata alla porta da cui il vault cambia da fuori:
+///
+/// 1. **leggere e parsare** i file cambiati sotto prestito **condiviso** — è
+///    l'I/O più lungo del lotto, e chi legge (la ricerca, il disegno dei
+///    pannelli) non ha niente a che farci;
+/// 2. **mutare** il workspace sotto quello esclusivo, con i modelli già in
+///    mano;
+/// 3. **rendere durevole** con un prestito suo.
+///
+/// La terza fase resta esclusiva, e non per distrazione: `IndexProvider::flush`
+/// riceve un `&mut dyn HostApi`, che il kernel costruisce su `&mut Workspace` —
+/// finché la firma è quella, la durevolezza degli indici *non può* stare fuori
+/// dal prestito esclusivo. Ciò che si compra tenendola in una fase sua è che
+/// chi aspetta non aspetta più il lotto **intero**: fra la 2 e la 3 il lucchetto
+/// si rilascia, e i lettori in coda passano.
+pub struct ExternalSync {
+    workspace: Arc<RwLock<Workspace>>,
+}
+
+impl ExternalSync {
+    pub fn new(workspace: Arc<RwLock<Workspace>>) -> Self {
+        ExternalSync { workspace }
+    }
+
+    /// Applica un lotto di cambiamenti. Vedi le tre fasi nel doc del tipo.
+    pub fn batch(&mut self, changes: &[ExternalChange]) {
+        if changes.is_empty() {
+            return;
+        }
+        // Fase 1 — il disco, sotto prestito condiviso. Un piano è `None` per i
+        // rami che non leggono niente (un path ignorato, un file di un'altra
+        // specie, un file sparito) e per una lettura che non è riuscita: la
+        // fase 2 li rifà per intero, dove stavano già.
+        let prepared: Vec<Option<ParsedChange>> = {
+            let ws = self.workspace.read().unwrap();
+            changes
+                .iter()
+                .map(|change| match change {
+                    ExternalChange::Touched(path) => ws.plan_sync(path),
+                    ExternalChange::Renamed { .. } => None,
+                })
+                .collect()
+        };
+        // Fase 2 — la memoria, sotto prestito esclusivo.
+        {
+            let mut ws = self.workspace.write().unwrap();
+            for (change, plan) in changes.iter().zip(prepared) {
+                match change {
+                    ExternalChange::Touched(path) => {
+                        let _ = ws.sync_path_prepared(path, plan);
+                    }
+                    ExternalChange::Renamed { from, to } => {
+                        let _ = ws.sync_renamed_path(from, to);
+                    }
+                }
+            }
+        }
+        // Fase 3 — la durevolezza.
+        self.flush();
+    }
+
+    /// Fine del lotto: è il punto tranquillo in cui rendere durevoli gli indici.
+    /// Il kernel non sa quando finisce un lotto — lo sa chi il lotto lo ha
+    /// formato.
+    ///
+    /// Un flush che non scrive perde un **derivato** (0052: `Warning`), ed è una
+    /// perdita che l'utente ha il diritto di sapere: chi cerca, fino alla
+    /// prossima apertura, riceve una risposta incompleta. Pavimento e porta
+    /// insieme (0062): una riga nel log, una nel canale.
+    fn flush(&mut self) {
+        let mut ws = self.workspace.write().unwrap();
+        let flush_errors = ws.flush_indexes();
+        if flush_errors.is_empty() {
+            return;
+        }
+        for e in &flush_errors {
+            tracing::warn!(target: "fub.host", "flush indice: {e}");
+        }
+        ws.with_host("fub.host", |host| {
+            for e in flush_errors {
+                host.emit(Event::Trouble {
+                    severity: Severity::Warning,
+                    subject: None,
+                    error: PluginError::Internal(format!("flush indice: {e}").into()),
+                });
+            }
+        });
+    }
+
+    /// **Il rilevamento è finito, e da adesso si vede** (§9.7). Un errore del
+    /// debouncer non è un evento perso: è che questo vault ha smesso di sapere
+    /// quando cambia da fuori — limite di inotify su un vault grande, un network
+    /// share che si stacca. Non è la perdita di un dato ma la perdita di un
+    /// meccanismo: da qui in poi l'indice drifta in silenzio, e non sapere che
+    /// il rilevamento è morto è esattamente il caso in cui il canale serve.
+    /// `Failure` perché ciò che si perde non si ricostruisce riaprendo il vault
+    /// — il rilevamento va riallacciato a mano.
+    /// È `pub` come `batch`, e per la stessa ragione: le due cose che un
+    /// rilevatore ha da dire al workspace sono «ecco cosa è cambiato» e «ho
+    /// smesso di vedere», e la seconda non è meno di `notify` della prima.
+    pub fn watch_died(&mut self, motivi: Vec<String>) {
+        let mut ws = self.workspace.write().unwrap();
+        for motivo in &motivi {
+            tracing::error!(target: "fub.host", "{motivo}");
+        }
+        ws.with_host("fub.host", |host| {
+            for motivo in motivi {
+                host.emit(Event::Trouble {
+                    severity: Severity::Failure,
+                    subject: None,
+                    error: PluginError::Internal(motivo.into()),
+                });
+            }
+        });
+    }
+}
+
 #[cfg(feature = "notify-watcher")]
 pub use notify_watcher::NotifyWatcher;
 
@@ -104,14 +259,12 @@ mod notify_watcher {
     use std::time::Duration;
 
     use camino::{Utf8Path, Utf8PathBuf};
-    use fub_abi::event::Event;
-    use fub_abi::{PluginError, Severity};
     use fub_kernel::Workspace;
     use notify::event::{EventKind, MetadataKind, ModifyKind, RenameMode};
     use notify::RecursiveMode;
     use notify_debouncer_full::{new_debouncer, DebounceEventResult};
 
-    use super::{VaultWatcher, WatcherFactory};
+    use super::{ExternalChange, ExternalSync, VaultWatcher, WatcherFactory};
 
     /// Il rilevatore di default: `notify` con un debouncer da 300 ms.
     pub struct NotifyWatcher;
@@ -155,6 +308,36 @@ mod notify_watcher {
         is_a_change_kind(&event.kind)
     }
 
+    /// Il vocabolario di `notify` tradotto in quello del lotto.
+    ///
+    /// Un rename accoppiato (`paths = [from, to]`) è una migrazione d'identità e
+    /// non remove+add; tutto il resto è un path toccato, e cosa gli sia successo
+    /// lo scopre il kernel guardando il disco.
+    fn changes(events: Vec<notify_debouncer_full::DebouncedEvent>) -> Vec<ExternalChange> {
+        let mut out = Vec::new();
+        for event in events {
+            if matches!(
+                event.kind,
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both))
+            ) && event.paths.len() == 2
+            {
+                if let (Ok(from), Ok(to)) = (
+                    Utf8PathBuf::from_path_buf(event.paths[0].clone()),
+                    Utf8PathBuf::from_path_buf(event.paths[1].clone()),
+                ) {
+                    out.push(ExternalChange::Renamed { from, to });
+                    continue;
+                }
+            }
+            for path in &event.paths {
+                if let Ok(p) = Utf8PathBuf::from_path_buf(path.clone()) {
+                    out.push(ExternalChange::Touched(p));
+                }
+            }
+        }
+        out
+    }
+
     fn is_a_change_kind(kind: &EventKind) -> bool {
         match kind {
             // Aperture, letture, chiusure: nessun byte è diverso da prima.
@@ -175,6 +358,10 @@ mod notify_watcher {
             watching: Arc<AtomicBool>,
         ) -> Result<Box<dyn VaultWatcher>, String> {
             let failed = watching.clone();
+            // Il sincronizzatore è **uno** e la chiusura lo possiede: è il modo
+            // in cui l'ordine dei lotti smette di dipendere da quanti thread
+            // `notify` decide di usare (vedi il doc di `ExternalSync`).
+            let mut sync = ExternalSync::new(workspace);
             let mut debouncer = new_debouncer(
                 Duration::from_millis(300),
                 None,
@@ -203,87 +390,18 @@ mod notify_watcher {
                         if events.is_empty() {
                             return;
                         }
-                        let mut ws = workspace.write().unwrap();
-                        for event in events {
-                            // Un rename accoppiato (`paths = [from, to]`) è una
-                            // migrazione d'identità, non remove+add: la storia del
-                            // versioning resta attaccata alla nota, il frontend migra
-                            // i meta, e `DocumentRenamed` viene emesso anche per i
-                            // rename fatti da Finder/Obsidian/sync. Tutto il resto
-                            // passa dal fallback per-path qui sotto.
-                            if matches!(
-                                event.kind,
-                                EventKind::Modify(ModifyKind::Name(RenameMode::Both))
-                            ) && event.paths.len() == 2
-                            {
-                                if let (Ok(from), Ok(to)) = (
-                                    Utf8PathBuf::from_path_buf(event.paths[0].clone()),
-                                    Utf8PathBuf::from_path_buf(event.paths[1].clone()),
-                                ) {
-                                    let _ = ws.sync_renamed_path(&from, &to);
-                                    continue;
-                                }
-                            }
-                            for path in &event.paths {
-                                if let Ok(p) = Utf8PathBuf::from_path_buf(path.clone()) {
-                                    let _ = ws.sync_path(&p);
-                                }
-                            }
-                        }
-                        // Fine del lotto debounced: è il punto tranquillo in cui
-                        // rendere durevoli gli indici. Il kernel non sa quando finisce
-                        // un lotto — lo sa il watcher, che il lotto lo ha formato.
-                        // Un flush che non scrive perde un **derivato** (0052:
-                        // `Warning`), ed è una perdita che l'utente ha il diritto
-                        // di sapere: chi cerca, fino alla prossima apertura,
-                        // riceve una risposta incompleta. Pavimento e porta
-                        // insieme (0062): una riga nel log, una nel canale.
-                        let flush_errors = ws.flush_indexes();
-                        if !flush_errors.is_empty() {
-                            for e in &flush_errors {
-                                tracing::warn!(target: "fub.host", "flush indice: {e}");
-                            }
-                            ws.with_host("fub.host", |host| {
-                                for e in flush_errors {
-                                    host.emit(Event::Trouble {
-                                        severity: Severity::Warning,
-                                        subject: None,
-                                        error: PluginError::Internal(
-                                            format!("flush indice: {e}").into(),
-                                        ),
-                                    });
-                                }
-                            });
-                        }
+                        sync.batch(&changes(events));
                     }
                     Err(errors) => {
-                        // **Il rilevamento è finito, e da adesso si vede**
-                        // (§9.7). Un errore del debouncer non è un evento
-                        // perso: è che questo vault ha smesso di sapere quando
-                        // cambia da fuori — limite di inotify su un vault
-                        // grande, un network share che si stacca. Non è la
-                        // perdita di un dato ma la perdita di un meccanismo: da
-                        // qui in poi l'indice drifta in silenzio, e non sapere
-                        // che il rilevamento è morto è esattamente il caso in
-                        // cui il canale serve. `Failure` perché ciò che si perde
-                        // non si ricostruisce riaprendo il vault — il rilevamento
-                        // va riallacciato a mano.
+                        // Il rilevamento è finito, e da adesso si vede (§9.7):
+                        // il perché sta sul metodo che lo racconta.
                         failed.store(false, Ordering::Relaxed);
-                        let mut ws = workspace.write().unwrap();
-                        for e in &errors {
-                            tracing::error!(target: "fub.host", "watch error: {e:?}");
-                        }
-                        ws.with_host("fub.host", |host| {
-                            for e in errors {
-                                host.emit(Event::Trouble {
-                                    severity: Severity::Failure,
-                                    subject: None,
-                                    error: PluginError::Internal(
-                                        format!("watch error: {e:?}").into(),
-                                    ),
-                                });
-                            }
-                        });
+                        sync.watch_died(
+                            errors
+                                .iter()
+                                .map(|e| format!("watch error: {e:?}"))
+                                .collect(),
+                        );
                     }
                 },
             )
