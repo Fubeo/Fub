@@ -57,7 +57,8 @@ export function refreshOn(...kinds: EventType[]): EventMask {
 
 /// Dove sta un pannello.
 ///
-/// Le superfici del contratto (`ViewSurface`, dieci dal §2.2), più l'overlay che
+/// Le superfici del contratto — `ViewSurface`, **dieci** [conta: superfici-di-vista]
+/// dal §2.2 — più l'overlay che
 /// esiste solo qui — il grafo, che è una superficie privilegiata decisa in M2 e
 /// non un `UiNode`. Che l'alias sia questo e non un elenco scritto a mano è ciò
 /// che ha reso il §2.2 una riga sola da questa parte: le sette superfici nuove
