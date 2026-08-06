@@ -30,6 +30,15 @@
 // form). Leggerli dal DOM e non da uno stato parallelo è deliberato: lo stato
 // parallelo è la seconda verità che diverge appena il riconciliatore tocca un
 // nodo, ed è esattamente ciò che questo file esiste per evitare.
+//
+// # Chi instrada le azioni (0118, e un piano più in su)
+//
+// Vale la stessa regola, applicata a due altezze: **in un riconciliatore, una
+// chiusura non cattura ciò che il riconciliatore aggiorna**. L'azione di un
+// nodo sta in `legami` e la si legge quando l'evento scatta; l'handler di tutto
+// l'albero sta in `Montaggio.corrente` e ci si arriva attraverso la `Porta`.
+// Fuori da `mountTree` un `ActionHandler` non passa: dentro gira solo la porta,
+// che per un contenitore è una sola per sempre.
 import type { ActionRef, FieldValue, UiNode, UiValue } from "../host/contract";
 import { customRenderer } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
@@ -41,6 +50,24 @@ import { t } from "../i18n/strings";
 /// l'utente ha compilato.
 export type ActionHandler = (action: ActionRef, fields: FieldValue[]) => void | Promise<void>;
 
+declare const PORTA: unique symbol;
+
+/// **La porta di un albero montato**: ciò che gira dentro questo file al posto
+/// di un `ActionHandler`.
+///
+/// È un handler marchiato, e il marchio è il presidio. Un `ActionHandler` nudo
+/// entra da `mountTree` e non va oltre: tutto il resto — il disegno, la
+/// riconciliazione, gli ascoltatori, i renderer custom — riceve una `Porta`, che
+/// per un contenitore è **una sola per sempre** e a ogni chiamata inoltra
+/// all'handler dell'ultimo montaggio. Chi la cattura in una chiusura cattura un
+/// rinvio, non una destinazione, e non può invecchiare.
+///
+/// La sola fabbrica è `instrada`. Un `ActionHandler` passato a una di queste
+/// funzioni **non compila**: è la stessa forma con cui la
+/// [0118](../../../docs/decisions/0118-una-chiusura-non-cattura-cio-che-il-riconciliatore-aggiorna.md)
+/// ha tolto a `invia` la facoltà di ricevere un `ActionRef`, un piano più in su.
+export type Porta = ActionHandler & { readonly [PORTA]: true };
+
 /// Ciò che la shell ricorda di un elemento che ha disegnato: il nodo da cui
 /// viene (per il confronto al giro dopo) e, se è un campo, come si legge il suo
 /// valore adesso.
@@ -51,8 +78,39 @@ interface Reso {
 
 const resi = new WeakMap<HTMLElement, Reso>();
 
-/// L'albero attualmente montato in un contenitore, per il confronto.
-const montati = new WeakMap<HTMLElement, HTMLElement>();
+/// Ciò che un contenitore ricorda fra un montaggio e l'altro: l'albero (per il
+/// confronto) e **chi instrada le sue azioni adesso**.
+interface Montaggio {
+  radice: HTMLElement | null;
+  /// L'handler dell'ultimo montaggio. Cambia; nessuno lo tiene.
+  corrente: ActionHandler;
+  /// Il rinvio a `corrente`. Non cambia mai identità: è ciò che tutti tengono.
+  porta: Porta;
+}
+
+const montati = new WeakMap<HTMLElement, Montaggio>();
+
+/// Dichiara chi instrada le azioni di questo contenitore **da adesso**.
+///
+/// È l'unico posto in cui un `ActionHandler` entra nel renderer, e l'unico in
+/// cui una `Porta` nasce. Un rimontaggio non rifà la porta: aggiorna ciò a cui
+/// rinvia, e con una riga sola raggiunge ogni chiusura che l'aveva già presa —
+/// un ascoltatore di campo, la linguetta di una scheda, il canvas di un
+/// renderer custom che è sopravvissuto alla riconciliazione.
+function instrada(container: HTMLElement, onAction: ActionHandler): Montaggio {
+  const gia = montati.get(container);
+  if (gia) {
+    gia.corrente = onAction;
+    return gia;
+  }
+  const montaggio: Montaggio = {
+    radice: null,
+    corrente: onAction,
+    porta: ((action, fields) => montaggio.corrente(action, fields)) as Porta,
+  };
+  montati.set(container, montaggio);
+  return montaggio;
+}
 
 // ---------------------------------------------------------------------------
 // Montaggio e riconciliazione
@@ -64,17 +122,17 @@ const montati = new WeakMap<HTMLElement, HTMLElement>();
 /// sapere quale delle due sta succedendo: è la stessa chiamata, ed è ciò che
 /// impedisce che qualcuno "ottimizzi" ricostruendo.
 export function mountTree(container: HTMLElement, node: UiNode, onAction: ActionHandler): void {
-  const precedente = montati.get(container);
+  const montaggio = instrada(container, onAction);
+  const precedente = montaggio.radice;
   if (precedente && precedente.parentElement === container) {
-    const aggiornato = riconcilia(precedente, node, onAction);
-    montati.set(container, aggiornato);
+    montaggio.radice = riconcilia(precedente, node, montaggio.porta);
     return;
   }
   for (const figlio of [...container.children]) smonta(figlio);
   container.replaceChildren();
-  const el = renderUiNode(node, onAction);
+  const el = renderUiNode(node, montaggio.porta);
   container.appendChild(el);
-  montati.set(container, el);
+  montaggio.radice = el;
 }
 
 /// Rimpiazza il solo nodo con questa chiave (`ViewUpdate::Patch`).
@@ -82,20 +140,28 @@ export function mountTree(container: HTMLElement, node: UiNode, onAction: Action
 /// Torna `false` se la chiave non c'è: **non è un errore** — è una view
 /// cambiata sotto — e chi chiama ridisegna intero.
 export function patchTree(container: HTMLElement, key: string, node: UiNode): boolean {
-  const radice = montati.get(container);
-  if (!radice) return false;
-  const bersaglio = trovaPerChiave(radice, key);
+  const montaggio = montati.get(container);
+  if (!montaggio?.radice) return false;
+  const bersaglio = trovaPerChiave(montaggio.radice, key);
   if (!bersaglio) return false;
-  const onAction = handlerDi(bersaglio);
-  if (!onAction) return false;
-  const aggiornato = riconcilia(bersaglio, node, onAction);
-  if (bersaglio === radice) montati.set(container, aggiornato);
+  // La porta del contenitore, non un handler ripescato dal sottoalbero: un
+  // patch arriva senza il contesto del render, e ciò che risale dall'elemento è
+  // **il primo** montaggio, non l'ultimo. Riconciliare con quello riscriverebbe
+  // i legami del sottoalbero patchato con l'handler di ieri — cioè disferebbe
+  // la 0118 proprio dove nessuno guarda.
+  const aggiornato = riconcilia(bersaglio, node, montaggio.porta);
+  if (bersaglio === montaggio.radice) montaggio.radice = aggiornato;
   return true;
 }
 
 /// Dimentica ciò che è montato qui: il prossimo giro ridisegna da zero.
+///
+/// La **porta** invece resta, ed è deliberato: è l'identità che dura quanto il
+/// contenitore, e rifarla lascerebbe in giro rinvii che non inoltrano più a
+/// nessuno.
 export function unmountTree(container: HTMLElement): void {
-  montati.delete(container);
+  const montaggio = montati.get(container);
+  if (montaggio) montaggio.radice = null;
   for (const figlio of [...container.children]) smonta(figlio);
   container.replaceChildren();
 }
@@ -122,20 +188,6 @@ function smonta(el: Element): void {
   }
 }
 
-/// L'handler di un sottoalbero, per il patch: sta sull'elemento perché un patch
-/// arriva senza il contesto del render che lo ha creato.
-const handlers = new WeakMap<HTMLElement, ActionHandler>();
-
-function handlerDi(el: HTMLElement): ActionHandler | undefined {
-  let corrente: HTMLElement | null = el;
-  while (corrente) {
-    const h = handlers.get(corrente);
-    if (h) return h;
-    corrente = corrente.parentElement;
-  }
-  return undefined;
-}
-
 function trovaPerChiave(radice: HTMLElement, key: string): HTMLElement | null {
   if (resi.get(radice)?.node.key === key) return radice;
   return radice.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`);
@@ -143,7 +195,7 @@ function trovaPerChiave(radice: HTMLElement, key: string): HTMLElement | null {
 
 /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
 /// Restituisce l'elemento che ora rappresenta il nodo (lo stesso, o il nuovo).
-function riconcilia(el: HTMLElement, next: UiNode, onAction: ActionHandler): HTMLElement {
+function riconcilia(el: HTMLElement, next: UiNode, onAction: Porta): HTMLElement {
   const prev = resi.get(el)?.node;
   if (!prev || prev.node !== next.node) {
     const nuovo = renderUiNode(next, onAction);
@@ -173,7 +225,7 @@ function aggiorna(
   el: HTMLElement,
   prev: UiNode,
   next: UiNode,
-  onAction: ActionHandler,
+  onAction: Porta,
 ): boolean {
   switch (next.node) {
     case "stack": {
@@ -389,7 +441,7 @@ export function accoppia(
 
 /// Applica l'accoppiamento al DOM: riconcilia ciò che si riusa, disegna il
 /// resto, toglie ciò che non serve più e **sposta** invece di ricreare.
-function figli(parent: HTMLElement, nodi: UiNode[], onAction: ActionHandler): void {
+function figli(parent: HTMLElement, nodi: UiNode[], onAction: Porta): void {
   const esistenti = Array.from(parent.children).filter(
     (c): c is HTMLElement => c instanceof HTMLElement && resi.has(c),
   );
@@ -431,10 +483,9 @@ function figli(parent: HTMLElement, nodi: UiNode[], onAction: ActionHandler): vo
 // Disegno
 // ---------------------------------------------------------------------------
 
-export function renderUiNode(node: UiNode, onAction: ActionHandler): HTMLElement {
+function renderUiNode(node: UiNode, onAction: Porta): HTMLElement {
   const el = disegna(node, onAction);
   resi.set(el, { ...(resi.get(el) ?? {}), node });
-  handlers.set(el, onAction);
   chiave(el, node);
   return el;
 }
@@ -444,7 +495,7 @@ function chiave(el: HTMLElement, node: UiNode): void {
   else delete el.dataset.key;
 }
 
-function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
+function disegna(node: UiNode, onAction: Porta): HTMLElement {
   switch (node.node) {
     case "stack": {
       const el = div("ui-stack");
@@ -831,6 +882,11 @@ function disegna(node: UiNode, onAction: ActionHandler): HTMLElement {
         // un `requestAnimationFrame` in volo su un elemento che nessuno guarda
         // più è un ciclo che continua a girare per sempre, e a saperlo è solo
         // chi lo ha acceso.
+        // Quello che il renderer riceve è la **porta**, e conta perché lui è
+        // l'unico a cui il riconciliatore non ridà niente: se il payload non
+        // cambia, l'elemento resta e il widget dentro pure, per quanti
+        // ridisegni faccia la view intorno. Un handler nudo qui invecchierebbe
+        // e ci resterebbe.
         const smonta = disegna(el, node.payload, onAction);
         if (smonta) disposizioni.set(el, smonta);
       } else {
@@ -910,7 +966,7 @@ function campoTestuale(
   placeholder: string | null,
   type: "text" | "date",
   action: ActionRef | null,
-  onAction: ActionHandler,
+  onAction: Porta,
 ): HTMLElement {
   const el = campo(type === "date" ? "ui-date-picker" : "ui-text-input", label);
   const input = document.createElement("input");
@@ -1022,7 +1078,7 @@ function valore(el: HTMLElement, leggi: () => UiValue): void {
 /// Un ascoltatore nuovo registrato da `ascolta` eredita la proprietà gratis.
 interface Legame {
   action: ActionRef;
-  onAction: ActionHandler;
+  onAction: Porta;
 }
 
 /// L'azione in vigore per ogni evento di ogni elemento. `null` = l'elemento ha
@@ -1039,7 +1095,7 @@ function ascolta(
   el: HTMLElement,
   evento: string,
   action: ActionRef | null,
-  onAction: ActionHandler,
+  onAction: Porta,
   quando?: (e: Event) => boolean,
 ): void {
   let per = legami.get(el);
@@ -1059,7 +1115,7 @@ function ascolta(
 }
 
 /// Un'azione su un elemento cliccabile.
-function collega(el: HTMLElement, action: ActionRef | null, onAction: ActionHandler): void {
+function collega(el: HTMLElement, action: ActionRef | null, onAction: Porta): void {
   if (!action) {
     el.classList.remove("clickable");
     // Non basta togliere il click: se questo elemento era attivabile e viene
@@ -1084,7 +1140,7 @@ function collega(el: HTMLElement, action: ActionRef | null, onAction: ActionHand
 function azioniDelCampo(
   controllo: HTMLElement,
   action: ActionRef | null,
-  onAction: ActionHandler,
+  onAction: Porta,
 ): void {
   ascolta(controllo, "change", action, onAction);
   // Invio = «ho finito»: senza, un campo di ricerca costringerebbe a uscirne
@@ -1141,7 +1197,7 @@ function radiceDi(el: HTMLElement): HTMLElement | null {
 
 /// Le linguette di un gruppo di schede: le disegna la shell, perché cambiare
 /// scheda è una piega — non serve un giro dal provider (§2.1).
-function intestazioniSchede(el: HTMLElement, tabs: UiNode[], onAction: ActionHandler): void {
+function intestazioniSchede(el: HTMLElement, tabs: UiNode[], onAction: Porta): void {
   const barra = el.querySelector<HTMLElement>(":scope > .ui-tab-bar");
   if (!barra) return;
   barra.replaceChildren();
