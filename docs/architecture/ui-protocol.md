@@ -268,8 +268,12 @@ Il sanitizer restituisce un `DocumentFragment` e non una stringa **di proposito*
 una stringa ripulita che il chiamante rimetta in `innerHTML` viene parsata due
 volte, e la doppia parsatura è la classe di difetti che i sanitizer pagano più
 cara. La **politica** — quale tag, quale attributo, quale URL — è un pugno di
-funzioni pure sotto test; il cammino sul DOM no, perché questa shell non ha un
-ambiente DOM nei test (§17.2).
+funzioni pure sotto test; il cammino sul DOM no — e la ragione che si leggeva
+qui, «questa shell non ha un ambiente DOM nei test», **non è più vera**: `happy-dom`
+c'è, e ci girano dentro sia il presidio di accessibilità sia l'e2e della shell
+([0112](../decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md)).
+Ciò che manca al cammino sul DOM non è dove girare: è che nessuno l'abbia ancora
+scritto.
 
 Due regole che non sono simmetriche:
 

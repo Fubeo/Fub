@@ -354,7 +354,14 @@ async function avvisaSeNessunoGuarda(): Promise<void> {
 // cosa è successo mentre succede, la barra dice perché quella finestra è a metà
 // anche a chi la guarda un minuto dopo — che è la stessa coppia «una volta /
 // finché non è riparato» dello stato di salvataggio.
-init().catch((e) => {
+//
+// **L'avvio si esporta** (§17.2): non perché qualcuno lo attenda in produzione
+// — in produzione questo è l'ultimo file che viene eseguito, e non c'è nessuno
+// dopo — ma perché senza questa riga l'avvio non è *osservabile*. Un E2E che
+// non può aspettare la fine del montaggio deve dormire un tempo a caso e
+// sperare, cioè diventa un presidio che ogni tanto passa; e questa è l'unica
+// promessa che la shell fa sul proprio boot. Chi la esporta la dichiara.
+export const avvio: Promise<void> = init().catch((e) => {
   const reason = errorText(e);
   notify(t("app.start_failed", { reason }), "guasto");
   vaultPathEl.textContent = t("app.start_failed", { reason });

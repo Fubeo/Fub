@@ -252,6 +252,17 @@ export function mountDocument(d: DocumentDeps): void {
     if (buf) {
       buffers.delete(e.from);
       buffers.set(e.to, buf);
+      // **E il salvataggio in attesa segue col buffer** (§17.2). Il timer del
+      // debounce porta il nome vecchio dentro la sua chiusura, quindi allo
+      // scadere cercava un buffer che non c'è più e usciva subito: il testo
+      // restava in RAM per sempre, senza che nulla lo dicesse.
+      //
+      // Non succede quando è questa finestra a rinominare — `renameDoc` mette
+      // in salvo i buffer prima di chiedere — e succede per la specie di
+      // rinomina che nessuno qui ha chiesto: un'altra applicazione, un `mv` da
+      // terminale, un sync. È il caso in cui l'utente non ha fatto niente di
+      // strano ed è quello in cui si perde la sua battuta.
+      if (buf.dirty) scheduleSave(e.to);
     }
     rinomina(e.from, e.to);
   });
