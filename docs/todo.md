@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Settantadue** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Settantuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -526,7 +526,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0044 | `read_meta` converte un `meta.json` corrotto in `None` con `.ok()`, e la cartella risulta libera | `fub-features` · `versioning.rs:895` | versioning |
 | 0045 | `rebuild_from_store` carica ogni snapshot in memoria solo per calcolarne l'impronta | `fub-features` · `versioning.rs:938` | prestazioni |
 | 0046 | `VersionStore` tiene il proprio `Mutex` attraverso `data_read`/`data_write` | `fub-features` · `versioning.rs` | lock e I/O |
-| 0047 | l'azione `reveal` dell'outline rilegge il documento attivo invece di portarsi dietro il proprio `doc_id` | `fub-features` · `outline.rs:109` | corse |
 | 0048 | `escape_attr` non copre l'apice singolo | `fub-features` · `blocks.rs:299` | rendering |
 | 0049 | `StatsView` dichiara `ContextMask::all()` e rilegge il documento intero a ogni movimento del cursore | `fub-features` · `stats.rs:82` | prestazioni |
 | 0050 | `count` attraversa il testo due volte, su un percorso caldo | `fub-features` · `stats.rs:57` | prestazioni |

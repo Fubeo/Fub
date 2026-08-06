@@ -32,11 +32,17 @@ pub const OUTLINE_ID: &str = "fub.outline";
 pub const OUTLINE_VIEW: &str = "outline";
 
 /// L'azione di salto a un heading. L'intervallo viaggia nel payload
-/// (`{"start":…,"end":…}`) e non concatenato nell'id (§2.7). Il documento è
-/// quello attivo — lo stesso di cui la view mostra la struttura — e in
-/// `on_action` lo si chiede all'host.
+/// (`{"doc":…,"start":…,"end":…}`) e non concatenato nell'id (§2.7).
+///
+/// **Il documento viaggia con lui**, ed è il difetto 0047. Prima il payload
+/// portava solo l'intervallo e `on_action` chiedeva il documento all'host: le due
+/// metà di uno stesso salto venivano da due istanti diversi — gli offset dal
+/// documento disegnato, l'id da quello attivo *adesso* — e fra i due ci sta il
+/// tempo in cui l'albero vecchio è ancora sotto il dito di chi clicca, perché il
+/// ridisegno che segue un cambio di documento arriva dopo.
 const REVEAL: &str = "reveal";
-/// Le due chiavi del payload di [`REVEAL`].
+/// Le tre chiavi del payload di [`REVEAL`].
+const DOC: &str = "doc";
 const START: &str = "start";
 const END: &str = "end";
 
@@ -80,7 +86,9 @@ impl ViewProvider for OutlineView {
         let Some(active) = context.doc else {
             return Ok(placeholder(NO_ACTIVE_DOC));
         };
-        let headings = match host.query_index(IndexQuery::Outline { doc: active })? {
+        let headings = match host.query_index(IndexQuery::Outline {
+            doc: active.clone(),
+        })? {
             IndexResult::Outline(h) => h,
             other => {
                 return Err(PluginError::Internal(
@@ -88,7 +96,11 @@ impl ViewProvider for OutlineView {
                 ))
             }
         };
-        Ok(build_outline_view(&headings, caret_of(&context.selections)))
+        Ok(build_outline_view(
+            &headings,
+            caret_of(&context.selections),
+            active.as_str(),
+        ))
     }
 
     fn on_action(
@@ -104,14 +116,31 @@ impl ViewProvider for OutlineView {
         let Some(span) = payload_span(&action.payload) else {
             return Ok(ViewUpdate::None);
         };
-        // Il documento è quello di cui la view mostra la struttura: l'attivo.
-        // Cliccare l'outline non cambia il documento attivo, quindi è ancora lui.
+        let Some(disegnato) = action.payload.get(DOC).and_then(|v| v.as_str()) else {
+            return Ok(ViewUpdate::None);
+        };
+        // **Le due metà vengono dallo stesso istante, o non si va da nessuna
+        // parte.** Il documento attivo può essere cambiato fra il disegno di
+        // questo albero e il click: gli offset sono di quello disegnato, e
+        // pagarli su un altro documento vuol dire portare chi legge in un punto
+        // che non c'entra niente.
+        //
+        // Si **butta**, e non si porta con sé il documento vecchio: aprire
+        // d'autorità la nota di prima è la risposta peggiore delle due, perché
+        // porta via chi non ha chiesto di andarsene — e `ViewUpdate::Reveal` la
+        // nota la apre, se non è aperta (`ui/intents.ts`). Un salto scaduto non
+        // fa niente, e il click successivo — sull'albero giusto, che nel
+        // frattempo è arrivato — lo fa.
+        //
+        // È la stessa scelta della 0134 sul lato shell, con l'identità al posto
+        // del numero d'ordine: qui un contatore non servirebbe, perché ciò che
+        // dice se la risposta è scaduta è già un dato del dominio.
         match host.active_context().and_then(|c| c.doc) {
-            Some(doc) => Ok(ViewUpdate::Reveal {
-                doc_id: doc.as_str().to_string(),
+            Some(attivo) if attivo.as_str() == disegnato => Ok(ViewUpdate::Reveal {
+                doc_id: attivo.as_str().to_string(),
                 span,
             }),
-            None => Ok(ViewUpdate::None),
+            _ => Ok(ViewUpdate::None),
         }
     }
 }
@@ -196,12 +225,12 @@ fn section_of(headings: &[Heading], caret: usize) -> Option<usize> {
 /// attraversava il confine come *spaziatura*. Ora attraversa come annidamento,
 /// e la sezione col cursore è `selected` invece di essere un sottotitolo che
 /// dice «cursore qui».
-pub fn build_outline_view(headings: &[Heading], caret: Option<usize>) -> UiNode {
+pub fn build_outline_view(headings: &[Heading], caret: Option<usize>, doc: &str) -> UiNode {
     if headings.is_empty() {
         return placeholder(EMPTY);
     }
     let corrente = caret.and_then(|c| section_of(headings, c));
-    let (roots, _) = subtree(headings, 0, 0, corrente);
+    let (roots, _) = subtree(headings, 0, 0, corrente, doc);
     UiNode::column(2, vec![UiNode::new(UiKind::Tree { roots })])
 }
 
@@ -219,6 +248,7 @@ fn subtree(
     at: usize,
     parent_level: u8,
     corrente: Option<usize>,
+    doc: &str,
 ) -> (Vec<UiNode>, usize) {
     let mut nodi = Vec::new();
     let mut i = at;
@@ -226,7 +256,7 @@ fn subtree(
         if h.level <= parent_level {
             break;
         }
-        let (children, next) = subtree(headings, i + 1, h.level, corrente);
+        let (children, next) = subtree(headings, i + 1, h.level, corrente, doc);
         nodi.push(
             UiNode::new(UiKind::TreeItem {
                 label: h.text.clone().into(),
@@ -234,7 +264,7 @@ fn subtree(
                 expanded: true,
                 action: Some(ActionRef::with(
                     REVEAL,
-                    serde_json::json!({ START: h.span.start, END: h.span.end }),
+                    serde_json::json!({ DOC: doc, START: h.span.start, END: h.span.end }),
                 )),
                 selected: Some(i) == corrente,
                 children,
@@ -296,14 +326,18 @@ mod tests {
     #[test]
     fn empty_shows_placeholder() {
         assert!(matches!(
-            &build_outline_view(&[], None).kind,
+            &build_outline_view(&[], None, "nota.md").kind,
             UiKind::EmptyState { .. }
         ));
     }
 
     #[test]
     fn nested_headings_become_a_tree_and_carry_reveal_payloads() {
-        let tree = build_outline_view(&[h(1, "Titolo", 0, 8), h(2, "Sezione", 20, 30)], None);
+        let tree = build_outline_view(
+            &[h(1, "Titolo", 0, 8), h(2, "Sezione", 20, 30)],
+            None,
+            "nota.md",
+        );
         assert_eq!(
             voci(&tree),
             vec![
@@ -333,6 +367,7 @@ mod tests {
                 h(1, "Uno", 30, 35),
             ],
             None,
+            "nota.md",
         );
         assert_eq!(
             voci(&tree)
@@ -363,27 +398,27 @@ mod tests {
 
         // Dentro la seconda sezione: dopo il suo heading, prima del terzo.
         assert_eq!(
-            selezionate(&build_outline_view(&headings, Some(30))),
+            selezionate(&build_outline_view(&headings, Some(30), "nota.md")),
             ["Due"]
         );
         // Sull'heading stesso: la sezione è la sua.
         assert_eq!(
-            selezionate(&build_outline_view(&headings, Some(40))),
+            selezionate(&build_outline_view(&headings, Some(40), "nota.md")),
             ["Tre"]
         );
         assert_eq!(
-            selezionate(&build_outline_view(&headings, Some(0))),
+            selezionate(&build_outline_view(&headings, Some(0), "nota.md")),
             ["Uno"],
             "il byte 0 è l'inizio del primo heading: ci sta dentro"
         );
         // Nel preambolo, prima di ogni heading: nessuna sezione, non la prima.
         let dopo_preambolo = [h(1, "Uno", 10, 15)];
         assert!(
-            selezionate(&build_outline_view(&dopo_preambolo, Some(3))).is_empty(),
+            selezionate(&build_outline_view(&dopo_preambolo, Some(3), "nota.md")).is_empty(),
             "il preambolo non appartiene alla sezione che lo segue"
         );
         // Nessun cursore (o buffer sporco): nessun segno.
-        assert!(selezionate(&build_outline_view(&headings, None)).is_empty());
+        assert!(selezionate(&build_outline_view(&headings, None, "nota.md")).is_empty());
     }
 
     #[test]
@@ -439,7 +474,8 @@ mod tests {
         let update = OutlineView
             .on_action(
                 &ViewInstance::only(OUTLINE_VIEW),
-                UiAction::new(REVEAL).with_payload(serde_json::json!({START: 10, END: 15})),
+                UiAction::new(REVEAL)
+                    .with_payload(serde_json::json!({DOC: "nota.md", START: 10, END: 15})),
                 &mut host,
             )
             .unwrap();
@@ -450,6 +486,82 @@ mod tests {
                 span: Span::new(10, 15),
             }
         );
+    }
+
+    /// **Il documento sta nell'albero, non solo nella mano di chi lo scrive a
+    /// mano in un banco.**
+    ///
+    /// Il banco qui sopra costruisce il payload da sé, quindi passerebbe verde
+    /// anche se `render_view` il documento non ce lo mettesse — e sarebbe un
+    /// presidio che prova metà di ciò che dichiara. Questo prende il payload
+    /// **dall'albero disegnato**, che è l'unico modo di legare le due metà.
+    #[test]
+    fn the_drawn_tree_carries_the_document_it_was_drawn_from() {
+        let host = MemoryHost::new().con_outline("nota.md", &[h(1, "Uno", 10, 15)]);
+        host.set_active(Some("nota.md"));
+        let tree = OutlineView
+            .render_view(&ViewInstance::only(OUTLINE_VIEW), &host)
+            .unwrap();
+        let azione = prima_azione(&tree).expect("l'albero ha un'azione");
+        assert_eq!(
+            azione.payload.get(DOC).and_then(|v| v.as_str()),
+            Some("nota.md")
+        );
+    }
+
+    /// **Un salto disegnato su un altro documento non porta via nessuno.**
+    ///
+    /// Il difetto 0047: gli offset sono di ciò che è disegnato, l'id lo si
+    /// chiedeva all'host al momento del click, e fra i due ci sta la finestra in
+    /// cui l'albero vecchio è ancora sotto il dito — il ridisegno che segue un
+    /// cambio di documento arriva dopo. Ne usciva un `Reveal` con l'id di B e
+    /// gli offset di A.
+    ///
+    /// Si butta invece di portarsi dietro A, e la ragione è che `ViewUpdate::Reveal`
+    /// **apre** la nota se non è aperta: portarsi dietro il documento vecchio
+    /// vorrebbe dire strappare via dalla nota B chi non ha chiesto di andarsene,
+    /// che è la peggiore delle due risposte sbagliate.
+    #[test]
+    fn a_heading_clicked_after_the_document_changed_reveals_nothing() {
+        let mut host = MemoryHost::new();
+        host.set_active(Some("altra.md"));
+        let update = OutlineView
+            .on_action(
+                &ViewInstance::only(OUTLINE_VIEW),
+                // L'albero è quello di `nota.md`, l'attivo è `altra.md`.
+                UiAction::new(REVEAL)
+                    .with_payload(serde_json::json!({DOC: "nota.md", START: 10, END: 15})),
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(
+            update,
+            ViewUpdate::None,
+            "un salto scaduto non fa niente, e non porta via chi sta leggendo altro"
+        );
+    }
+
+    /// La prima azione che si incontra scendendo l'albero.
+    fn prima_azione(node: &UiNode) -> Option<&ActionRef> {
+        if let UiKind::TreeItem {
+            action, children, ..
+        } = &node.kind
+        {
+            if let Some(a) = action {
+                return Some(a);
+            }
+            for c in children {
+                if let Some(a) = prima_azione(c) {
+                    return Some(a);
+                }
+            }
+        }
+        for c in node.children() {
+            if let Some(a) = prima_azione(c) {
+                return Some(a);
+            }
+        }
+        None
     }
 
     /// Un payload che non è quello che questa view attacca ai propri nodi non
