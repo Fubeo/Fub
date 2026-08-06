@@ -17,7 +17,7 @@
 //! ritenzione del versioning senza piantare timestamp finti dentro lo store.
 
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 pub mod conformita;
@@ -93,6 +93,13 @@ pub struct MemoryHost {
     /// ripristino che rifiuta un path occupato — perché è quella forma che le
     /// feature provano.
     trash: Mutex<BTreeMap<String, (TrashEntry, String)>>,
+    /// Acceso, la **prossima** `free_name` occupa il nome che risponde.
+    ///
+    /// Si spegne da sé, perché la corsa da provare è quella di *una* domanda: un
+    /// interruttore che restasse acceso renderebbe ogni nome libero occupato, e
+    /// il banco proverebbe «create_document rifiuta sempre» invece di «rifiuta
+    /// chi ha perso la corsa».
+    ruba_il_nome_libero: AtomicBool,
     /// Contatore per timbrare le voci del cestino con id distinti.
     trashed: AtomicU64,
     /// Le impostazioni **dichiarate** (§11.1) e ciò che è stato scritto: il
@@ -146,6 +153,17 @@ impl MemoryHost {
         let host = MemoryHost::default();
         host.now.store(1_700_000_000_000, Ordering::Relaxed);
         host
+    }
+
+    /// La prossima domanda di un nome libero la **perde**: qualcun altro prende
+    /// quel nome fra la risposta e la scrittura.
+    ///
+    /// È la finestra che `VaultRead::free_name` dichiara di lasciare aperta, e
+    /// che senza questa maniglia non si costruisce se non con dei thread — cioè
+    /// con una speranza sulla schedulazione al posto di un fatto.
+    pub fn la_prossima_corsa_del_nome_si_perde(&self) -> &Self {
+        self.ruba_il_nome_libero.store(true, Ordering::SeqCst);
+        self
     }
 
     /// Il locale che questo doppio serve: chi prova una feature che formatta o
@@ -527,20 +545,33 @@ impl VaultRead for MemoryHost {
     /// `nome 1.md`, … Nel kernel la stessa risposta guarda anche il disco
     /// (`Workspace::free_name`), che qui non c'è.
     fn free_name(&self, id: &DocId) -> DocId {
-        let docs = self.docs.lock().unwrap();
+        let mut docs = self.docs.lock().unwrap();
         let (stem, ext) = match id.as_str().rsplit_once('.') {
             Some((stem, ext)) if !stem.is_empty() && !ext.contains('/') => {
                 (stem, format!(".{ext}"))
             }
             _ => (id.as_str(), String::new()),
         };
-        (0u32..)
+        let libero = (0u32..)
             .map(|n| match n {
                 0 => id.clone(),
                 n => DocId::new(format!("{stem} {n}{ext}")),
             })
             .find(|c| !docs.contains_key(c.as_str()))
-            .expect("la sequenza dei candidati è infinita")
+            .expect("la sequenza dei candidati è infinita");
+        // **Qualcun altro prende il nome fra la domanda e la scrittura.**
+        //
+        // È la corsa che `free_name` dichiara di non chiudere — *«non prenota
+        // niente: fra la domanda e la scrittura il nome può diventare occupato,
+        // e a quel punto è la scrittura a dirlo»* — e che nessun banco di questo
+        // repo costruiva. Senza una maniglia non è costruibile senza thread, e
+        // con i thread sarebbe una speranza sulla schedulazione invece di un
+        // fatto: qui la finestra si apre dove è dichiarata, cioè dentro la
+        // risposta, e chi legge il banco vede il momento esatto.
+        if self.ruba_il_nome_libero.swap(false, Ordering::SeqCst) {
+            docs.insert(libero.as_str().to_string(), b"di qualcun altro".to_vec());
+        }
+        libero
     }
 
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {

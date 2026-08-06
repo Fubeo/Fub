@@ -1450,3 +1450,67 @@ fn cammina(dir: &std::path::Path, dentro: &mut Vec<std::path::PathBuf>) {
         }
     }
 }
+
+/// **Chi perde la corsa del nome libero non cancella la nota di chi l'ha vinta.**
+///
+/// `VaultRead::free_name` dichiara di non prenotare — *«fra la domanda e la
+/// scrittura il nome può diventare occupato, e a quel punto è la scrittura a
+/// dirlo»* — e la [0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md)
+/// scarica la corsa sulla stessa frase. Nessun banco di questo repo la
+/// costruiva: tutti quelli che nominano `free_name` occupano il path **prima**
+/// della domanda, che è il caso ordinario e non la corsa.
+///
+/// E costruendola si vede che la discarica era **falsa proprio per il chiamante
+/// più esposto**: l'import con `ConflictPolicy::Rename` scriveva con
+/// `WriteBase::Dictated`, che non sa dire di no, quindi il perdente copriva in
+/// silenzio la nota che qualcun altro aveva appena creato con quel nome. Fra la
+/// domanda e la scrittura ci stanno un `parse` e — su un import di più file —
+/// tutto il tempo dei documenti precedenti.
+///
+/// La corsa si apre **dentro la risposta** (`MemoryHost::la_prossima_corsa_del_nome_si_perde`)
+/// e non con dei thread: un tempo non è un segnale, e due thread qui sarebbero
+/// una speranza sulla schedulazione invece di un fatto.
+#[test]
+fn losing_the_free_name_race_fails_the_import_instead_of_overwriting() {
+    use fub_abi::traits::VaultRead;
+    use fub_abi::transfer::ImportProvider;
+    use fub_sdk::testing::MemoryHost;
+
+    let mut host = MemoryHost::new().con_documento("Progetti/Alpha.md", "quella che c'era già");
+    let source = ImportSource::text_source("Alpha.md", "# Alpha\n\nimportata\n");
+
+    // Il nome che `free_name` risponderà — `Progetti/Alpha 1.md` — se lo prende
+    // qualcun altro un istante dopo la risposta.
+    host.la_prossima_corsa_del_nome_si_perde();
+
+    let report = MarkdownImport
+        .import(
+            &source,
+            &ImportRequest::apply()
+                .into_folder("Progetti")
+                .on_conflict(ConflictPolicy::Rename),
+            &mut host,
+        )
+        .expect("l'import nel suo insieme riesce: è la riga che fallisce");
+
+    assert!(
+        matches!(report.documents[0].outcome, ImportOutcome::Failed(_)),
+        "chi perde la corsa lo dice, invece di scrivere lo stesso: {:?}",
+        report.documents[0].outcome
+    );
+    // La parte che vale: la nota di chi ha vinto la corsa è ancora la sua.
+    assert_eq!(
+        host.read_document(&DocId::new("Progetti/Alpha 1.md"))
+            .ok()
+            .as_deref(),
+        Some("di qualcun altro"),
+        "il perdente ha coperto la nota del vincitore"
+    );
+    // E quella che c'era prima non è stata toccata da nessuno dei due.
+    assert_eq!(
+        host.read_document(&DocId::new("Progetti/Alpha.md"))
+            .ok()
+            .as_deref(),
+        Some("quella che c'era già")
+    );
+}

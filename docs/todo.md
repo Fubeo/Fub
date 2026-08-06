@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Settantatré** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Settantadue** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -519,7 +519,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0036 | gli eventi emessi prima dell'`AppHandle` spariscono senza traccia | `fub-app` · `lib.rs:74` | eventi persi |
 | 0037 | `let _ = app.emit(...)`: un payload che non serializza si perde in silenzio | `fub-app` · `lib.rs:79` | eventi persi |
 | 0038 | i comandi Tauri sono sincroni e prendono lock + I/O sul thread pool dell'IPC | `fub-app` · `lib.rs` | lock e I/O |
-| 0039 | `free_name` non riserva il nome: la corsa è dichiarata e chi la perde va gestito | `fub-kernel` · `workspace.rs` `free_name` | corse |
 | 0040 | `vault_replace` senza `docs` legge **ogni** documento del vault invece di chiedere all'indice | `fub-features` · `commands.rs:1287` | prestazioni |
 | 0041 | il doppio controllo di `dirty` in `SearchIndex::commit` ferma le letture per tutta la durata del commit | `fub-features` · `search.rs` `commit` | prestazioni |
 | 0042 | `up_to_date` fa `announced.clear()` in testa e perde le revisioni annunciate a lotti | `fub-features` · `search.rs:1585` | indice |
