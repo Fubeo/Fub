@@ -39,7 +39,7 @@
 // l'albero sta in `Montaggio.corrente` e ci si arriva attraverso la `Porta`.
 // Fuori da `mountTree` un `ActionHandler` non passa: dentro gira solo la porta,
 // che per un contenitore è una sola per sempre.
-import type { ActionRef, FieldValue, UiNode, UiValue } from "../host/contract";
+import type { ActionRef, FieldValue, UiKind, UiNode, UiOption, UiValue } from "../host/contract";
 import { customRenderer } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
 import { attivabile, identificatore, nonAttivabile } from "./a11y";
@@ -319,66 +319,23 @@ function aggiorna(
       figli(el, next.fallback, onAction);
       return true;
     }
+    // **I campi non hanno un elenco da riallineare qui.** Ce l'avevano — il
+    // valore, l'azione, il testo di un'etichetta che c'era già — ed era per
+    // costruzione un *secondo* elenco accanto a quello che scrive il disegno:
+    // due elenchi che nessuno confronta divergono, e divergevano su nove voci
+    // (segnaposto, righe, estremi, `multiple`, le opzioni, il nome del campo,
+    // l'etichetta che compare o sparisce, e il lettore del valore). Adesso
+    // l'elenco è uno solo, e lo scrive `applicaCampo` in tutte e due le vite
+    // del campo.
     case "text_input":
     case "text_area":
     case "date_picker":
     case "number":
-    case "slider": {
-      const campo = el.querySelector<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
-      if (!campo) return false;
-      const valore =
-        next.node === "number" || next.node === "slider"
-          ? next.value === null
-            ? ""
-            : String(next.value)
-          : (next.value ?? "");
-      // Chi sta scrivendo ha ragione: il valore del provider non gli si
-      // sovrascrive sotto le dita. Lo vedrà al prossimo giro, quando avrà
-      // smesso — e intanto l'azione gli manda ciò che c'è davvero.
-      if (document.activeElement !== campo && campo.value !== valore) campo.value = valore;
-      // L'azione del nodo nuovo, non quella con cui il campo era nato: un campo
-      // riusato che manda l'azione di ieri funziona, ed è il modo peggiore di
-      // sbagliare.
-      azioniDelCampo(campo, next.action, onAction);
-      etichetta(el, "label" in next ? next.label : null);
-      return true;
-    }
-    case "checkbox": {
-      if (prev.node !== "checkbox") return false;
-      const campo = el.querySelector<HTMLInputElement>("input");
-      if (!campo) return false;
-      if (document.activeElement !== campo) campo.checked = next.value;
-      azioniDelCampo(campo, next.action, onAction);
-      const testo = el.querySelector<HTMLElement>(".ui-field-label");
-      if (testo) testo.textContent = next.label;
-      return true;
-    }
-    case "select": {
-      if (prev.node !== "select") return false;
-      const campo = el.querySelector<HTMLSelectElement>("select");
-      if (!campo || prev.options.length !== next.options.length) return false;
-      if (prev.options.some((o, i) => o.value !== next.options[i]!.value)) return false;
-      if (document.activeElement !== campo) {
-        for (const opt of Array.from(campo.options)) {
-          opt.selected = next.value.includes(opt.value);
-        }
-      }
-      azioniDelCampo(campo, next.action, onAction);
-      etichetta(el, next.label);
-      return true;
-    }
-    case "radio": {
-      if (prev.node !== "radio") return false;
-      if (prev.options.length !== next.options.length) return false;
-      const scelte = el.querySelectorAll<HTMLInputElement>("input[type=radio]");
-      if (scelte.length !== next.options.length) return false;
-      scelte.forEach((input, i) => {
-        input.checked = next.options[i]!.value === next.value;
-        azioniDelCampo(input, next.action, onAction);
-      });
-      etichetta(el, next.label);
-      return true;
-    }
+    case "slider":
+    case "checkbox":
+    case "select":
+    case "radio":
+      return applicaCampo(el, next, onAction);
     // Le foglie: niente da conservare, il disegno costa meno del confronto.
     default:
       return false;
@@ -751,102 +708,19 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       }
       return el;
     }
+    // Un campo si disegna come si riconcilia: lo scheletro, e poi lo stesso
+    // `applicaCampo` che gli riscriverà addosso ogni nodo successivo.
     case "text_input":
-      return campoTestuale(node.field, node.label, node.value, node.placeholder, "text", node.action, onAction);
     case "date_picker":
-      return campoTestuale(node.field, node.label, node.value ?? "", null, "date", node.action, onAction);
-    case "text_area": {
-      const el = campo("ui-text-area", node.label);
-      const area = document.createElement("textarea");
-      area.dataset.field = node.field;
-      area.rows = node.rows;
-      area.value = node.value;
-      valore(el, () => ({ type: "text", value: area.value }));
-      azioniDelCampo(area, node.action, onAction);
-      el.appendChild(area);
-      return campoConNome(el, node.field);
-    }
+    case "text_area":
     case "number":
-    case "slider": {
-      const el = campo(node.node === "slider" ? "ui-slider" : "ui-number", node.label);
-      const input = document.createElement("input");
-      input.type = node.node === "slider" ? "range" : "number";
-      input.dataset.field = node.field;
-      if (node.min !== null) input.min = String(node.min);
-      if (node.max !== null) input.max = String(node.max);
-      if (node.step !== null) input.step = String(node.step);
-      if (node.value !== null) input.value = String(node.value);
-      valore(el, () => ({ type: "number", value: Number(input.value) }));
-      azioniDelCampo(input, node.action, onAction);
-      el.appendChild(input);
-      return campoConNome(el, node.field);
-    }
-    case "checkbox": {
-      const el = document.createElement("label");
-      el.className = "ui-checkbox";
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.dataset.field = node.field;
-      input.checked = node.value;
-      const testo = document.createElement("span");
-      testo.className = "ui-field-label";
-      testo.textContent = node.label;
-      el.append(input, testo);
-      valore(el, () => ({ type: "bool", value: input.checked }));
-      azioniDelCampo(input, node.action, onAction);
-      return campoConNome(el, node.field);
-    }
-    case "select": {
-      const el = campo("ui-select", node.label);
-      const select = document.createElement("select");
-      select.dataset.field = node.field;
-      select.multiple = node.multiple;
-      for (const opzione of node.options) {
-        const opt = document.createElement("option");
-        opt.value = opzione.value;
-        opt.textContent = opzione.label;
-        opt.selected = node.value.includes(opzione.value);
-        select.appendChild(opt);
-      }
-      valore(el, () => {
-        const scelte = Array.from(select.selectedOptions).map((o) => o.value);
-        return node.multiple
-          ? { type: "choices", value: scelte }
-          : { type: "text", value: scelte[0] ?? "" };
-      });
-      azioniDelCampo(select, node.action, onAction);
-      el.appendChild(select);
-      return campoConNome(el, node.field);
-    }
+    case "slider":
+    case "checkbox":
+    case "select":
     case "radio": {
-      const el = campo("ui-radio", node.label);
-      // Il nome del gruppo rende esclusive le scelte anche quando due `radio`
-      // dello stesso campo finiscono in due punti dell'albero.
-      const gruppo = `radio-${node.field}`;
-      let scelto = node.value ?? "";
-      for (const opzione of node.options) {
-        const riga = document.createElement("label");
-        riga.className = "ui-radio-option";
-        const input = document.createElement("input");
-        input.type = "radio";
-        input.name = gruppo;
-        input.value = opzione.value;
-        input.checked = opzione.value === node.value;
-        input.addEventListener("change", () => {
-          scelto = input.value;
-        });
-        const testo = document.createElement("span");
-        testo.textContent = opzione.label;
-        riga.append(input, testo);
-        azioniDelCampo(input, node.action, onAction);
-        el.appendChild(riga);
-      }
-      valore(el, () => ({
-        type: "text",
-        value:
-          el.querySelector<HTMLInputElement>("input[type=radio]:checked")?.value ?? scelto,
-      }));
-      return campoConNome(el, node.field);
+      const el = scheletroCampo(node);
+      applicaCampo(el, node, onAction);
+      return el;
     }
     case "form": {
       const el = document.createElement("form");
@@ -934,64 +808,259 @@ function div(className: string): HTMLElement {
   return el;
 }
 
-/// Il contenitore di un campo, con la sua etichetta.
+// ---------------------------------------------------------------------------
+// I campi (§2.1)
+// ---------------------------------------------------------------------------
+//
+// **Un campo ha un elenco solo di attributi, e lo attraversano tutte e due le
+// sue vite.** Prima ne aveva due — quello che il disegno scriveva e quello che
+// la riconciliazione riscriveva — e due elenchi che nessuno confronta
+// divergono: divergevano su nove voci, e ogni voce era un campo riusato che
+// mostrava o mandava la forma di ieri funzionando. È la stessa regola della
+// [0118](../../../docs/decisions/0118-una-chiusura-non-cattura-cio-che-il-riconciliatore-aggiorna.md)
+// spostata dagli ascoltatori agli attributi: chi ne aggiunge uno lo scrive qui
+// dentro e ce l'ha in tutte e due le vite senza saperlo.
+
+/// I nodi che sono un **campo**: portano un `field`, un valore che l'utente
+/// cambia, un'etichetta e un'azione.
+type Campo = Extract<UiKind, { field: string }>;
+
+/// Lo scheletro di un campo: gli elementi che vivono quanto il campo.
 ///
-/// L'etichetta era un `<div>`, e questa è la riga più costosa di tutta la
-/// passata: un `<div>` accanto a un `<input>` è testo che *sembra* un'etichetta
-/// ma non lo è per nessuno tranne che per chi guarda. Un lettore di schermo che
-/// arriva su quel campo annuncia «casella di testo», e basta — il nome del
-/// campo lo ha letto un attimo prima, come frase sciolta, senza modo di
-/// collegarlo. Adesso è un `<label>` vero, e `campoConNome` lo lega al
-/// controllo che gli sta dentro.
-function campo(className: string, label: string | null): HTMLElement {
-  const el = div(className);
-  if (label) {
-    const testo = document.createElement("label");
-    testo.className = "ui-field-label";
-    testo.textContent = label;
-    el.appendChild(testo);
+/// Non scrive **niente** che venga dal nodo se non la sua specie — che è
+/// l'unica cosa che il riconciliatore non può cambiare senza ricostruire.
+function scheletroCampo(node: Campo): HTMLElement {
+  switch (node.node) {
+    case "text_input":
+    case "date_picker": {
+      const el = div(node.node === "date_picker" ? "ui-date-picker" : "ui-text-input");
+      el.appendChild(document.createElement("input"));
+      return el;
+    }
+    case "text_area": {
+      const el = div("ui-text-area");
+      el.appendChild(document.createElement("textarea"));
+      return el;
+    }
+    case "number":
+    case "slider": {
+      const el = div(node.node === "slider" ? "ui-slider" : "ui-number");
+      el.appendChild(document.createElement("input"));
+      return el;
+    }
+    case "checkbox": {
+      // Il contenitore **è** la `<label>`: la spunta la nomina l'avvolgimento,
+      // che vale quanto un `for` e non ha bisogno di un id.
+      const el = document.createElement("label");
+      el.className = "ui-checkbox";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      const testo = document.createElement("span");
+      testo.className = "ui-field-label";
+      el.append(input, testo);
+      return el;
+    }
+    case "select": {
+      const el = div("ui-select");
+      el.appendChild(document.createElement("select"));
+      return el;
+    }
+    case "radio":
+      return div("ui-radio");
   }
-  return el;
 }
 
+/// **Tutto ciò che di un campo dipende dal nodo, in un posto solo.**
+///
+/// La chiamano il disegno e la riconciliazione con la stessa riga. `false` =
+/// lo scheletro non è quello di questa specie, cioè ricostruiscilo.
+function applicaCampo(el: HTMLElement, node: Campo, onAction: Porta): boolean {
+  switch (node.node) {
+    case "text_input":
+    case "date_picker": {
+      const input = el.querySelector("input");
+      if (!input) return false;
+      input.type = node.node === "date_picker" ? "date" : "text";
+      attributo(input, "placeholder", node.node === "text_input" ? node.placeholder : null);
+      scriviValore(input, node.value ?? "");
+      valore(el, () => ({ type: "text", value: input.value }));
+      azioniDelCampo(input, node.action, onAction);
+      break;
+    }
+    case "text_area": {
+      const area = el.querySelector("textarea");
+      if (!area) return false;
+      area.rows = node.rows;
+      scriviValore(area, node.value);
+      valore(el, () => ({ type: "text", value: area.value }));
+      azioniDelCampo(area, node.action, onAction);
+      break;
+    }
+    case "number":
+    case "slider": {
+      const input = el.querySelector("input");
+      if (!input) return false;
+      input.type = node.node === "slider" ? "range" : "number";
+      // Gli estremi **prima** del valore: un `range` con i suoi limiti ancora
+      // da scrivere ritaglia il valore che gli si dà, e il ritaglio non si
+      // disfa quando i limiti arrivano.
+      attributo(input, "min", node.min === null ? null : String(node.min));
+      attributo(input, "max", node.max === null ? null : String(node.max));
+      attributo(input, "step", node.step === null ? null : String(node.step));
+      scriviValore(input, node.value === null ? "" : String(node.value));
+      valore(el, () => ({ type: "number", value: Number(input.value) }));
+      azioniDelCampo(input, node.action, onAction);
+      break;
+    }
+    case "checkbox": {
+      const input = el.querySelector("input");
+      if (!input) return false;
+      if (document.activeElement !== input) input.checked = node.value;
+      valore(el, () => ({ type: "bool", value: input.checked }));
+      azioniDelCampo(input, node.action, onAction);
+      break;
+    }
+    case "select": {
+      const select = el.querySelector("select");
+      if (!select) return false;
+      select.multiple = node.multiple;
+      opzioni(select, node.options, node.value);
+      valore(el, () => {
+        const scelte = Array.from(select.selectedOptions).map((o) => o.value);
+        // `multiple` si legge **dal DOM**, non dal nodo di questo giro: quel
+        // nodo è vecchio al giro dopo, e un select diventato multiplo
+        // continuerebbe a riportare un `text` — la 0118 applicata al valore.
+        return select.multiple
+          ? { type: "choices", value: scelte }
+          : { type: "text", value: scelte[0] ?? "" };
+      });
+      azioniDelCampo(select, node.action, onAction);
+      break;
+    }
+    case "radio": {
+      bottoniRadio(el, node, onAction);
+      // Il valore di un gruppo di radio è ciò che è spuntato adesso, e basta:
+      // niente variabile catturata a fare da memoria: sarebbe la «seconda
+      // verità» che la testata di questo file esiste per non avere.
+      valore(el, () => ({
+        type: "text",
+        value: el.querySelector<HTMLInputElement>("input[type=radio]:checked")?.value ?? "",
+      }));
+      break;
+    }
+  }
+  // Ciò che vale per ogni campo, e in fondo perché il controllo e l'etichetta
+  // devono esistere già.
+  el.dataset.campo = node.field;
+  etichetta(el, node.label);
+  legaEtichetta(el, node.field);
+  return true;
+}
+
+/// Un attributo che c'è o non c'è: `null` lo toglie.
+///
+/// La differenza si vede solo al riuso — un campo che perde il segnaposto e se
+/// lo tiene scritto sotto suggerisce quello di un altro nodo — ed è la ragione
+/// per cui non basta assegnare la proprietà quando c'è.
+function attributo(el: HTMLElement, nome: string, valore: string | null): void {
+  if (valore === null) el.removeAttribute(nome);
+  else el.setAttribute(nome, valore);
+}
+
+/// Il valore del provider, senza sovrascrivere chi sta scrivendo.
+///
+/// Chi ha le dita sul campo ha ragione: il valore nuovo lo vedrà al prossimo
+/// giro, quando avrà smesso — e intanto l'azione manda ciò che c'è davvero.
+function scriviValore(controllo: HTMLInputElement | HTMLTextAreaElement, v: string): void {
+  if (document.activeElement !== controllo && controllo.value !== v) controllo.value = v;
+}
+
+/// Le opzioni di un `select`, riconciliate invece che rifatte.
+///
+/// Un'opzione in più o in meno non ricostruisce il campo: prima lo faceva —
+/// `aggiorna` tornava `false` appena l'elenco cambiava — e un `select` che
+/// perdeva il fuoco a ogni cambio di opzioni è la stessa cosa che il §2.8
+/// esiste per non fare.
+function opzioni(select: HTMLSelectElement, options: UiOption[], value: string[]): void {
+  while (select.options.length > options.length) select.remove(select.options.length - 1);
+  options.forEach((opzione, i) => {
+    const opt = select.options[i] ?? select.appendChild(document.createElement("option"));
+    opt.value = opzione.value;
+    opt.textContent = opzione.label;
+  });
+  if (document.activeElement === select) return;
+  for (const opt of Array.from(select.options)) opt.selected = value.includes(opt.value);
+}
+
+/// I bottoni di un gruppo di radio, riconciliati.
+///
+/// **Il nome del gruppo è l'identità di questo gruppo**, non il nome del campo.
+/// Era `radio-${field}`, cioè una stringa sola per tutto il documento: due view
+/// che mostrano lo stesso campo — due pannelli, che è la forma normale di una
+/// view — erano per il browser un gruppo solo, e scegliere di qua deselezionava
+/// di là. Dentro un `<form>` non succedeva, e non per merito di questo codice:
+/// il browser scopa già un gruppo al suo form, per specifica.
+///
+/// Il nome è l'id del contenitore, che è **lo stesso elemento** che porta
+/// `role="radiogroup"`: l'esclusività nativa e quella dichiarata sono lo stesso
+/// gruppo, o sono due gruppi che dicono due cose diverse allo stesso utente.
+function bottoniRadio(el: HTMLElement, node: Campo & { node: "radio" }, onAction: Porta): void {
+  if (!el.id) el.id = identificatore("gruppo-radio");
+  const righe = Array.from(el.querySelectorAll<HTMLElement>(":scope > .ui-radio-option"));
+  for (const riga of righe.slice(node.options.length)) riga.remove();
+  node.options.forEach((opzione, i) => {
+    const riga = righe[i] ?? nuovaOpzione(el);
+    const input = riga.querySelector<HTMLInputElement>("input")!;
+    input.name = el.id;
+    input.value = opzione.value;
+    input.dataset.field = node.field;
+    input.checked = opzione.value === node.value;
+    riga.querySelector<HTMLElement>("span")!.textContent = opzione.label;
+    azioniDelCampo(input, node.action, onAction);
+  });
+}
+
+function nuovaOpzione(el: HTMLElement): HTMLElement {
+  const riga = document.createElement("label");
+  riga.className = "ui-radio-option";
+  const input = document.createElement("input");
+  input.type = "radio";
+  riga.append(input, document.createElement("span"));
+  el.appendChild(riga);
+  return riga;
+}
+
+/// L'etichetta di un campo — **anche quando compare o sparisce**.
+///
+/// Riallineava solo il testo di un'etichetta che c'era già, e sono i due versi
+/// dello stesso difetto: un campo riusato che perdeva l'etichetta se la teneva
+/// addosso, e uno che la guadagnava restava anonimo. Non si vedono finché non è
+/// lo stesso elemento a fare due nodi diversi.
 function etichetta(el: HTMLElement, label: string | null): void {
   const esistente = el.querySelector<HTMLElement>(":scope > .ui-field-label");
-  if (label && esistente) esistente.textContent = label;
-}
-
-function campoTestuale(
-  field: string,
-  label: string | null,
-  value: string,
-  placeholder: string | null,
-  type: "text" | "date",
-  action: ActionRef | null,
-  onAction: Porta,
-): HTMLElement {
-  const el = campo(type === "date" ? "ui-date-picker" : "ui-text-input", label);
-  const input = document.createElement("input");
-  input.type = type;
-  input.dataset.field = field;
-  input.value = value;
-  if (placeholder) input.placeholder = placeholder;
-  valore(el, () => ({ type: "text", value: input.value }));
-  azioniDelCampo(input, action, onAction);
-  el.appendChild(input);
-  return campoConNome(el, field);
-}
-
-function campoConNome(el: HTMLElement, field: string): HTMLElement {
-  el.dataset.campo = field;
-  legaEtichetta(el, field);
-  return el;
+  if (label === null) {
+    esistente?.remove();
+    return;
+  }
+  if (esistente) {
+    esistente.textContent = label;
+    return;
+  }
+  // Un `<div>` accanto a un `<input>` è testo che *sembra* un'etichetta e non
+  // lo è per nessuno tranne che per chi guarda: un lettore di schermo su quel
+  // campo annuncia «casella di testo», e il nome lo ha letto un attimo prima
+  // come frase sciolta, senza modo di collegarlo.
+  const testo = document.createElement("label");
+  testo.className = "ui-field-label";
+  testo.textContent = label;
+  el.prepend(testo);
 }
 
 /// Lega l'etichetta di un campo al controllo che nomina.
 ///
 /// Passa da qui **ogni** campo del protocollo, che è il motivo per cui sta qui
-/// e non in sei posti: `campoConNome` è l'ultima cosa che ogni ramo dei campi
-/// chiama prima di restituire, quindi è l'unico punto in cui il controllo
-/// esiste già e l'etichetta pure.
+/// e non in sei posti: è l'ultima cosa che `applicaCampo` fa, quindi è l'unico
+/// punto in cui il controllo esiste già e l'etichetta pure.
 ///
 /// I due casi che non lega, e vanno bene entrambi:
 ///
@@ -1029,20 +1098,28 @@ function legaEtichetta(el: HTMLElement, field: string): void {
   // decidere se **legarlo** vale solo la `<label>`, che è l'unica ad avere un
   // `for`.
   const visibile = el.querySelector<HTMLElement>(":scope > .ui-field-label");
+  const controllo = el.querySelector<HTMLElement>("input, textarea, select");
   if (!visibile) {
+    // Un'etichetta che se ne va si porta via il proprio legame: un
+    // `aria-labelledby` verso un elemento che non c'è più è un nome che nessuno
+    // legge, ed è il difetto che `verificaAccessibilita` chiama «riferimento
+    // nel vuoto».
+    el.removeAttribute("aria-labelledby");
     if (radio) {
       el.setAttribute("role", "radiogroup");
       el.setAttribute("aria-label", field);
       return;
     }
-    el.querySelector<HTMLElement>("input, textarea, select")?.setAttribute("aria-label", field);
+    controllo?.setAttribute("aria-label", field);
     return;
   }
 
+  // E il verso opposto: un campo che *guadagna* un'etichetta non tiene il
+  // ripiego, o si ritroverebbe nominato due volte e la seconda col nome brutto.
+  el.removeAttribute("aria-label");
+  controllo?.removeAttribute("aria-label");
   const etichetta = el.querySelector<HTMLLabelElement>(":scope > label.ui-field-label");
-  if (!etichetta || etichetta.htmlFor) return;
-  const controllo = el.querySelector<HTMLElement>("input, textarea, select");
-  if (!controllo) return;
+  if (!etichetta || !controllo) return;
   // Il nome va al **gruppo**, che è ciò che `radiogroup` esiste per rendere
   // nominabile.
   if (radio) {
@@ -1051,6 +1128,7 @@ function legaEtichetta(el: HTMLElement, field: string): void {
     el.setAttribute("aria-labelledby", etichetta.id);
     return;
   }
+  if (etichetta.htmlFor) return;
   if (!controllo.id) controllo.id = identificatore("campo");
   etichetta.htmlFor = controllo.id;
 }
@@ -1185,8 +1263,15 @@ export function campiInVigore(da: HTMLElement): FieldValue[] {
   return [...trovati].map(([field, value]) => ({ field, value }));
 }
 
+/// La radice dell'albero disegnato che contiene `el`.
+///
+/// Si sale **prima** fino al primo elemento che il renderer ha disegnato, e poi
+/// fino alla cima: chi manda un'azione può stare su un pezzo di scocca che
+/// questo file ha messo lì senza che sia un nodo — la linguetta di una scheda è
+/// il caso —, e partire da lui dava «nessuna radice», cioè nessun campo.
 function radiceDi(el: HTMLElement): HTMLElement | null {
   let corrente: HTMLElement | null = el;
+  while (corrente && !resi.has(corrente)) corrente = corrente.parentElement;
   let ultimo: HTMLElement | null = null;
   while (corrente && resi.has(corrente)) {
     ultimo = corrente;
@@ -1197,10 +1282,22 @@ function radiceDi(el: HTMLElement): HTMLElement | null {
 
 /// Le linguette di un gruppo di schede: le disegna la shell, perché cambiare
 /// scheda è una piega — non serve un giro dal provider (§2.1).
+///
+/// **Si riusano, non si rifanno.** Erano l'ultimo pezzo d'albero che non
+/// passava da `figli`: un `barra.replaceChildren()` a ogni riconciliazione, cioè
+/// esattamente ciò che il §2.8 esiste per non fare. Chi ci stava sopra col tab
+/// perdeva il fuoco a ogni ridisegno della view attorno — e siccome un ridisegno
+/// arriva anche da un `IndexUpdated`, bastava salvare per far saltare via il
+/// fuoco di chi stava navigando le schede.
+///
+/// I due pezzi della riparazione non si separano. La posizione della linguetta
+/// vive quanto il bottone e si può catturare; **l'azione no**, e passa da
+/// `ascolta` per la ragione della 0118: una chiusura che cattura `tab`
+/// manderebbe l'azione del giro in cui è nata, e finché i bottoni si
+/// ricostruivano quella chiusura era fresca per caso.
 function intestazioniSchede(el: HTMLElement, tabs: UiNode[], onAction: Porta): void {
   const barra = el.querySelector<HTMLElement>(":scope > .ui-tab-bar");
   if (!barra) return;
-  barra.replaceChildren();
   barra.setAttribute("role", "tablist");
   // I pannelli, nell'ordine in cui stanno: servono a legare ogni linguetta al
   // suo (`aria-controls`) e viceversa (`aria-labelledby`). È la coppia che
@@ -1209,29 +1306,38 @@ function intestazioniSchede(el: HTMLElement, tabs: UiNode[], onAction: Porta): v
   const pannelli = Array.from(
     el.querySelectorAll<HTMLElement>(":scope > .ui-children > .ui-tab"),
   );
+  const esistenti = Array.from(barra.querySelectorAll<HTMLElement>(":scope > .ui-tab-button"));
+  const usate = new Set<HTMLElement>();
   tabs.forEach((tab, i) => {
     if (tab.node !== "tab") return;
-    const bottone = document.createElement("button");
-    bottone.className = "ui-tab-button";
+    const bottone = esistenti[i] ?? nuovaLinguetta(barra, el, i);
+    usate.add(bottone);
     bottone.textContent = tab.label;
-    bottone.setAttribute("role", "tab");
     const pannello = pannelli[i];
     if (pannello) {
-      const idLinguetta = identificatore("linguetta");
-      bottone.id = idLinguetta;
+      if (!bottone.id) bottone.id = identificatore("linguetta");
       bottone.setAttribute("aria-controls", pannello.id);
-      pannello.setAttribute("aria-labelledby", idLinguetta);
+      pannello.setAttribute("aria-labelledby", bottone.id);
     }
-    bottone.addEventListener("click", () => {
-      mostraScheda(el, i);
-      // Chi ha chiesto di saperlo lo sa; chi non ha dichiarato un'azione non
-      // viene disturbato per una piega.
-      if (tab.action) void onAction(tab.action, campiInVigore(el));
-    });
-    barra.appendChild(bottone);
+    // Chi ha chiesto di saperlo lo sa; chi non ha dichiarato un'azione non
+    // viene disturbato per una piega — e se smette di dichiararla, `ascolta`
+    // spegne la sua senza togliere l'ascoltatore.
+    ascolta(bottone, "click", tab.action, onAction);
   });
+  for (const bottone of esistenti) if (!usate.has(bottone)) bottone.remove();
   frecceFraSchede(barra, el);
   segnaSchedaAttiva(el);
+}
+
+/// Una linguetta nuova, con l'unica cosa che è sua per sempre: **quale scheda
+/// mostra**, cioè la sua posizione, che non cambia per la vita del bottone.
+function nuovaLinguetta(barra: HTMLElement, gruppo: HTMLElement, indice: number): HTMLElement {
+  const bottone = document.createElement("button");
+  bottone.className = "ui-tab-button";
+  bottone.setAttribute("role", "tab");
+  bottone.addEventListener("click", () => mostraScheda(gruppo, indice));
+  barra.appendChild(bottone);
+  return bottone;
 }
 
 /// Le frecce dentro una barra di schede: ← → per spostarsi, Home/Fine per

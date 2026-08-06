@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Sessanta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Cinquantasei** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -512,7 +512,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0010 | `close_vault` e `set_plugin_enabled` tornano `Vec<String>`: le notifiche perdono la variante tipizzata sul confine | `fub-app` · `lib.rs:118` | errori |
 | 0018 | risoluzione dei link rotti: scansione lineare con `resolution_key` per voce, per ogni riferimento | `fub-kernel` · `index/core.rs` `resolve_entry_in` | prestazioni |
 | 0019 | `Vault::open` non rende assoluta la radice: un `set_current_dir` sposta `.fub` e `.trash` | `fub-kernel` · `vault.rs:137` | vault che sparisce |
-| 0025 | `aggiorna` non riallinea le etichette di `select`/`radio` né `placeholder`/`min`/`max`/`step` | `frontend` · `ui/node.ts` `aggiorna` | shell |
 | 0027 | `openWikilink` esce su `if (!page) return`: `[[#Sezione]]` e `[[#^blocco]]` non portano da nessuna parte | `frontend` · `panels/document.ts:902` | shell |
 | 0028 | `argsFromForm` scrive `false` per un booleano opzionale mai toccato, e copre il default del kernel | `frontend` · `ui/palette.ts:163` | shell |
 | 0038 | i comandi Tauri sono sincroni e prendono lock + I/O sul thread pool dell'IPC | `fub-app` · `lib.rs` | lock e I/O |
@@ -546,7 +545,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0079 | `render_link` scrive `data-embed-heading` e ignora `block`: `![[Nota#^b]]` perde l'ancora | `fub-format-markdown` · `render.rs:285` | markdown |
 | 0080 | `write_link` serializza `[[page^b]]` invece di `[[page#^b]]` quando `heading` è `None` | `fub-format-markdown` · `serialize.rs:519` | markdown |
 | 0081 | lo span di un embed include il `!` nel ripiego testuale e non nel ramo comrak | `fub-format-markdown` · `parse.rs:642` | markdown |
-| 0085 | il nome del gruppo `radio` è globale al documento: due form con lo stesso `field` si deselezionano a vicenda | `frontend` · `ui/node.ts:825` | shell |
 | 0086 | `viewAction` non è avvolta in un `try/catch`: un errore lascia la vista com'era, senza dirlo | `frontend` · `ui/views.ts:391` | errori |
 | 0089 | `forget_vault` esce al primo errore I/O e lascia le forme successive dentro `view_states` | `fub-host` · `session.rs:668` | stato divergente |
 | 0090 | `set_plugin_enabled` muta memoria e registro, poi propaga l'errore di `set_setting`: il disco resta indietro | `fub-host` · `session.rs` `set_plugin_enabled` | stato divergente |
@@ -561,8 +559,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |
 | 0101 | `EntryStore::store` mette la cache a posto **prima** di scrivere: se la scrittura fallisce, memoria e disco divergono fino alla riapertura | `fub-kernel` · `entries.rs` `EntryStore::store` | stato divergente |
 | 0102 | fra `scrivi_meta` riuscita e `scrivi_index` fallita un `meta.json` resta «viva» sotto un indice «cestinata»: una ricostruzione dai meta risuscita la nota — gemello del 0044 | `fub-features` · `versioning.rs` `applica` | versioning |
-| 0104 | `intestazioniSchede` ricostruisce **tutte** le linguette a ogni riconciliazione, e chi ci sta sopra col tab perde il fuoco | `frontend` · `ui/node.ts` `intestazioniSchede` | shell |
-| 0105 | nei casi `select` e `radio` il lettore registrato da `valore` cattura `node` una volta sola e `aggiorna` non lo rilega: un campo riusato legge la forma di ieri — gemello del 0025 | `frontend` · `ui/node.ts` `disegna` | shell |
 
 ## Gli allegati
 
