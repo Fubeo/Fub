@@ -515,6 +515,36 @@ const V_GROUP: &str = "versioning.group";
 const V_ENABLED: &str = "versioning.enabled.label";
 const V_ENABLED_DESC: &str = "versioning.enabled.desc";
 
+/// **Il catalogo che una feature ufficiale monta davvero**: il suo, più quello
+/// che l'host le aggiunge accanto.
+///
+/// Quasi tutte montano il proprio e basta, e per loro questa funzione è
+/// l'identità. Il versioning no: il suo interruttore è **dell'host** e non
+/// della feature (§11.1) — il versioning non sa di poter essere spento — quindi
+/// le tre chiavi che lo descrivono stanno qui, e al montaggio i due cataloghi
+/// si sommano.
+///
+/// Esiste per la ragione di [`core_catalog_montato`] e per lo stesso difetto.
+/// Quella somma era scritta **una volta sola**, dentro l'espressione
+/// `.speaking(…)` di [`crate::mount`], e nessuno la confrontava con niente: il
+/// banco `tests/i_cataloghi.rs` giudicava i due addendi **separatamente**,
+/// quindi vedeva benissimo una *chiave* che mancava e mai un *addendo* che
+/// mancava. Toglierne uno dalla somma lasciava la suite verde e le etichette
+/// dell'interruttore nude a schermo — che è la 0105 di nuovo: *il conto prende
+/// ciò che nessuno ha elencato, il test prende ciò che è elencato male*, e una
+/// somma scritta in un posto solo non è né elencata né contata.
+///
+/// Adesso la somma è una funzione, la chiamano il montaggio e il banco, e non
+/// ci sono due copie da far divergere. Una seconda feature a cui l'host debba
+/// aggiungere delle chiavi aggiunge **un ramo qui**, e le eredita tutt'e due.
+pub fn catalogo_montato(feature_id: &str, della_feature: Vec<StringCatalog>) -> Vec<StringCatalog> {
+    match feature_id {
+        #[cfg(feature = "versioning")]
+        fub_features::VERSIONING_ID => [versioning_settings_catalog(), della_feature].concat(),
+        _ => della_feature,
+    }
+}
+
 /// Le stringhe dell'interruttore del versioning.
 pub fn versioning_settings_catalog() -> Vec<StringCatalog> {
     vec![
