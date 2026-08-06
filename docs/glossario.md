@@ -269,7 +269,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6032`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6033`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
@@ -647,7 +647,7 @@ chiuso, perché un campo su cui ognuno inventa la propria convenzione non serve 
 decidere. La domanda per cui esiste è una sola: «questa l'ho scritta io?».
 
 ### bus
-`EventBus` · [`kernel/bus.rs:414`](../crates/fub-kernel/src/bus.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
+`EventBus` · [`kernel/bus.rs:459`](../crates/fub-kernel/src/bus.rs) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
 
 Dove gli eventi del kernel passano, e da dove chi si è abbonato li ritira.
 L'abbonamento ha una grana: un *topic*, un *soggetto*, **cosa è cambiato**, e
