@@ -41,6 +41,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { crateDelWorkspace } from "./membri-del-workspace.mjs";
+
 // Dipendenze che possono ripetersi con la versione scritta a mano, ognuna con
 // la ragione per cui non sale nella radice. Vuoto è lo stato giusto: ogni voce
 // aggiunta qui è un punto di verità in meno.
@@ -150,18 +152,6 @@ function dipendenzeDi(file) {
   return { trovate, dubbi };
 }
 
-/** I `Cargo.toml` dei crate membri, in ordine. */
-function crateDelWorkspace(radice) {
-  const dir = path.join(radice, "crates");
-  if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => path.join(dir, e.name, "Cargo.toml"))
-    .filter((f) => fs.existsSync(f))
-    .sort();
-}
-
 function main() {
   const radice = path.resolve(process.argv[2] ?? ".");
   const manifestRadice = path.join(radice, "Cargo.toml");
@@ -186,7 +176,10 @@ function main() {
     }
   }
 
-  const file = crateDelWorkspace(radice);
+  // Chi sono i crate lo dice `[workspace] members`, non la cartella `crates/`:
+  // la ragione sta in `membri-del-workspace.mjs`, e le divergenze fra l'elenco
+  // e il disco arrivano di là già scritte.
+  const { file, violazioni: sullElenco } = crateDelWorkspace(radice);
   const letterali = new Map(); // nome -> [{ crate, riga, versione }]
   const dubbi = [];
   let dichiarazioni = 0;
@@ -202,7 +195,7 @@ function main() {
     }
   }
 
-  const violazioni = [];
+  const violazioni = [...sullElenco];
   for (const [nome, posti] of [...letterali].sort()) {
     if (ECCEZIONI.has(nome)) continue;
     if (posti.length > 1) {
