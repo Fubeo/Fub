@@ -262,6 +262,19 @@ export const CONTEGGI = [
       " crates/fub-kernel/src/dispatcher.rs",
   },
   {
+    nome: "gesti-della-shell",
+    ragione:
+      "I gesti che l'e2e della shell percorre da capo a fondo (§17.2): un `it` " +
+      "per gesto in `frontend/src/shell.e2e.test.ts`. È la disciplina della " +
+      "0109 applicata a una suite che non si svuota per un `cfg` ma per una " +
+      "riga cancellata o un `it.skip` — che il conto vede tutti e due, perché " +
+      "`it.skip(` non è `it(`. Serve un attore che guardi il file da fuori: un " +
+      "gesto che sparisce lascia una suite verde e più piccola, e più piccola " +
+      "non si vede. Quel che il conto NON vede è un `it` che non asserisce " +
+      "niente; per quello l'attore è la verifica del rosso, che si fa a mano.",
+    comando: "grep -c '^  it(' frontend/src/shell.e2e.test.ts",
+  },
+  {
     nome: "verbali",
     ragione:
       "I verbali delle decisioni chiuse. È il conteggio che `todo.md` scriveva " +

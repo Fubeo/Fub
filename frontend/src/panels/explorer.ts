@@ -258,10 +258,23 @@ function roving(preferita?: string): void {
 /// risalire, Invio per aprire la nota. L'ascoltatore è **uno**, sul contenitore
 /// — le voci si ridisegnano a ogni giro, e un ascoltatore per riga sarebbe un
 /// ascoltatore in più a ogni ridisegno su elementi già buttati via.
+///
+/// **Un ascoltatore solo sul contenitore vede anche i tasti che non sono suoi**,
+/// ed è il prezzo di quella scelta: la rinomina in posto mette un campo di testo
+/// *dentro* una voce dell'albero (`startRename`), quindi ogni battuta là dentro
+/// risaliva fin qui. Invio confermava la rinomina **e** faceva il `click` sulla
+/// riga, cioè riapriva il path vecchio — che dopo la rinomina non esiste più:
+/// una tab fantasma, e il salvataggio successivo che **ricrea il file appena
+/// rinominato**. Le frecce erano lo stesso difetto in tono minore: il `preventDefault`
+/// impediva di muovere il cursore nel nome che si stava scrivendo. La regola sta
+/// qui e non nel campo — chi mette un input dentro l'albero non deve saperlo —
+/// ed è la stessa che vale per ogni contenitore che ascolta la tastiera dei
+/// propri figli: **i tasti di un campo sono del campo**.
 function frecceNellAlbero(): void {
   fileListEl.addEventListener("keydown", (e) => {
     const target = e.target;
     if (!(target instanceof HTMLElement)) return;
+    if (target.closest("input, textarea, select, [contenteditable]")) return;
     const corrente = target.closest<HTMLElement>('li[role="treeitem"]');
     if (!corrente) return;
 

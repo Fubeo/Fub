@@ -94,7 +94,7 @@ riga in corsivo qui sotto, e non qui.
 
 ### 17.2 Test della shell
 
-*ex §4.4 · presidi · **P2** — gira contro l'host finto della 1.3*
+*ex §4.4 · presidi · **P2** — **chiusa** con la [decisione 0112](../decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md): la shell si monta intera contro un host finto e si guida con dei gesti; il runner di browser è scartato avendolo detto, e ciò che si prova è il **cablaggio** — che è l'unica cosa che nessun altro presidio guardava*
 
 **Una metà di questa voce è già stata presa, e da un'altra parte.** La
 [§23.16](23-cosa-costano-le-decisioni-chiuse.md#2316-su-windows-un-hardlink-si-stacca-in-silenzio)
@@ -110,8 +110,34 @@ scritto accanto a come lo si ricava — sta in
 presidio di piattaforma, qui dentro compresi gli E2E: un E2E che gira su un OS
 solo ha lo stesso difetto in un altro travestimento.
 
-- [ ] **E2E** dell'app reale (tauri-driver/Playwright) sui flussi critici:
-      apri vault, scrivi, rinomina, cerca, ripristina.
+- [x] **E2E** dell'app reale (tauri-driver/Playwright) sui flussi critici:
+      apri vault, scrivi, rinomina, cerca, ripristina. **Fatti** con la
+      [0112](../decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md),
+      e non con un runner di browser: `@playwright/test` porta un binario
+      scaricato a parte che nessun SBOM di questo repo saprebbe dichiarare
+      ([0001](../decisions/0001-supply-chain-e-sbom.md)), `tauri-driver` vuole
+      un'app impacchettata e un webdriver di sistema diverso per piattaforma —
+      cioè un presidio che gira su una macchina sola, il secondo di questa
+      seduta a non girare. Ma la ragione che decide non è il costo: delle tre
+      cose che un e2e dell'app proverebbe in più, una — che il kernel faccia
+      ciò che gli si chiede — ce l'ha già `cargo test`, e le altre due (il
+      ponte serializza, la webview disegna) sono il **buco dichiarato** che
+      quel verbale scrive.
+      Le due metà di questa voce non chiedevano lo stesso presidio, e a
+      decidere è stata la riga in corsivo: la shell si monta **intera** —
+      `main.ts` vero, `index.html` vera — contro `host/finto.ts`, un vault in
+      memoria che il compilatore tiene fermo al confine (`typeof
+      import("./ipc")`: una porta nuova non compila finché il finto non la sa
+      rispondere). I gesti sono **sette** [conta: gesti-della-shell] e non cinque, perché «rinomina» ne è
+      due — quella che chiede questa finestra e quella che arriva da fuori — ed
+      è la seconda quella in cui il difetto c'era.
+      Due difetti veri, tutti e due nel cablaggio, che è la classe che la
+      [0015](../decisions/0015-la-forma-della-shell.md) dichiarava di non poter
+      vedere: l'Invio che conferma una rinomina in posto risaliva
+      all'ascoltatore dell'albero e **riapriva il path vecchio**, col
+      salvataggio successivo che ricreava il file appena rinominato; e una
+      rinomina arrivata **da fuori** faceva scadere il debounce su un nome che
+      non esiste più, lasciando la battuta dell'utente in RAM e basta.
 - [x] **Il check di accessibilità automatico è stato spostato al §12.4**, che
       possedeva già l'argomento («passata di accessibilità strutturale: ruoli
       ARIA, focus visibile, focus trap, navigazione da tastiera, skip link»). Due

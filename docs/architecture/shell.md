@@ -135,8 +135,11 @@ aggira con una parola.
 Il presidio è `host/no-tauri-outside-host.test.ts`, che legge i sorgenti con
 `import.meta.glob` e fallisce nominando il file colpevole. Non è una regola di
 stile: è il prerequisito del PWA (26.3), del mobile (26.2) e degli e2e della
-shell ([§17.2](../roadmap/17-presidi-che-restano.md)), che girano contro un host
-finto — e prima bastava **una riga** in `main.ts` per perderlo.
+shell, che girano contro un host finto — e prima bastava **una riga** in
+`main.ts` per perderlo. Gli e2e adesso ci sono
+([0112](../decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md)): la
+shell si monta intera contro `host/finto.ts`, che il compilatore tiene fermo a
+essere un modulo intero (`typeof import("./ipc")`) e non un pezzo di modulo.
 
 Per la stessa ragione `host/ipc.ts` dichiara il ritorno del canale eventi come
 `() => void` invece che `UnlistenFn`, e `tsconfig.json` non ha i tipi di Node: la
