@@ -6,6 +6,16 @@
 // completamenti) da chi crea l'editor: qui si compone, non si decide.
 import { EditorView, keymap } from "@codemirror/view";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
+// `basicSetup` viene dal pacchetto ombrello `codemirror`, che a sua volta
+// dipende da `@codemirror/state` come questo file. È l'import che il difetto
+// 0015 chiamava «due copie dello stato a un aggiornamento di distanza», e la
+// misura ha corretto la frase: la copia oggi è **una** — `npm ls
+// @codemirror/state` risponde `6.7.1` e undici `deduped`, e nel lock non c'è
+// nessun `node_modules/x/node_modules/y`. Due copie sarebbero due insiemi di
+// identità per i `Facet`, cioè estensioni che la configurazione non vede, e la
+// rottura sarebbe muta: nessun errore di tipo, nessuna eccezione, solo una live
+// preview che non fa niente. A tenerle una è `.github/scripts/check-npm-copie.mjs`,
+// perché quella promessa la mantiene l'albero delle dipendenze e non questa riga.
 import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";

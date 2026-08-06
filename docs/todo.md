@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Ottanta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Settantanove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -510,7 +510,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0007 | `close_vault` e `with_session` fanno `canonical()` per primo: un vault sparito dal disco non si chiude più | `fub-host` · `session.rs:1015` | vault che sparisce |
 | 0008 | `set_plugin_enabled(false)` non ferma i job in volo, e salta `Plugin::deactivate` | `fub-host` · `session.rs` `set_plugin_enabled` | spegnimento |
 | 0010 | `close_vault` e `set_plugin_enabled` tornano `Vec<String>`: le notifiche perdono la variante tipizzata sul confine | `fub-app` · `lib.rs:118` | errori |
-| 0015 | `basicSetup` da `codemirror` accanto agli import da `@codemirror/*`: due copie dello stato a un aggiornamento di distanza | `frontend` · `editor/editor.ts:9` | shell |
 | 0018 | risoluzione dei link rotti: scansione lineare con `resolution_key` per voce, per ogni riferimento | `fub-kernel` · `index/core.rs` `resolve_entry_in` | prestazioni |
 | 0019 | `Vault::open` non rende assoluta la radice: un `set_current_dir` sposta `.fub` e `.trash` | `fub-kernel` · `vault.rs:137` | vault che sparisce |
 | 0025 | `aggiorna` non riallinea le etichette di `select`/`radio` né `placeholder`/`min`/`max`/`step` | `frontend` · `ui/node.ts` `aggiorna` | shell |

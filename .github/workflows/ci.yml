@@ -246,3 +246,14 @@ jobs:
       # era misurato ed era sei volte la stessa riga (decisione 0133).
       - name: ogni ascoltatore globale della shell ha una Vita (decisione 0133)
         run: node .github/scripts/check-ascoltatori.mjs
+      # E la stessa domanda delle versioni Rust, dall'altro lato: un pacchetto
+      # npm in due copie. Non è un caso ipotetico scelto a caso — l'albero della
+      # shell porta `@codemirror/state` sia diretto sia dentro `codemirror`, e
+      # due copie di quel modulo sono due insiemi di identità per i `Facet`: le
+      # estensioni costruite con l'una la configurazione dell'altra non le vede.
+      # Nessun errore di tipo, nessuna eccezione, solo una live preview che non
+      # fa niente. Oggi la copia è una e questo passo non costa niente; serve il
+      # giorno in cui un `npm install` le separa, che è l'unico in cui nessuno
+      # guarderebbe.
+      - name: nessun pacchetto npm in due copie
+        run: node .github/scripts/check-npm-copie.mjs
