@@ -1,6 +1,6 @@
 # 18. L'editor e la tastiera, e ciò che resta della shell
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): ciò che resta della shell e non appartiene a nessuna delle sedute sopra.
+Una **seduta** della [roadmap infrastrutturale](../todo.md): ciò che resta della shell e non appartiene a nessuna delle sedute sopra. **Tutte le voci sono chiuse.**
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -11,7 +11,7 @@ appartiene a nessuna delle sedute sopra — e con le sedute 1, 2, 3 e 4 chiuse
 quella definizione si è messa a lavorare: le loro decisioni sono prese, ma
 quattro code sono rimaste, **tutte di strato shell**, e sono finite qui invece di
 restare a fare da appendice a un capitolo concluso (§1.2, §2.9, §3.3, §4.4, in
-fondo). I numeri non cambiano — un `§X.Y` è citato nei commit e nei commenti, e
+fondo — e adesso chiuse tutte e quattro). I numeri non cambiano — un `§X.Y` è citato nei commit e nei commenti, e
 si ritira, non si rinomina — quindi una voce trasferita porta con sé il proprio,
 e la [corrispondenza](numerazione.md) dice dove è andata a finire.
 
@@ -19,8 +19,8 @@ Ne esce l'ordine in cui quelle quattro si sbloccano a vicenda, che era la cosa
 che nessuna delle quattro sedute poteva vedere da sola:
 
 **il modello di layout (~~§1.2~~) → il grafo nell'area principale (§3.3)**, e di
-lato la tastiera (~~§18.2~~) che deve arbitrare fra i comandi del kernel e quelli
-della shell prima che §4.4 le chieda un secondo livello di decorazioni. La
+lato la tastiera (~~§18.2~~) che doveva arbitrare fra i comandi del kernel e quelli
+della shell prima che la ~~§4.4~~ le chiedesse un secondo livello di decorazioni. La
 ~~§2.9~~ non era in coda a nessuno — si pagava quando le liste diventano lunghe —
 ed è chiusa con la
 [0114](../decisions/0114-una-finestra-non-si-omette.md): «non essere in coda a
@@ -30,8 +30,8 @@ decidesse al posto suo.
 
 Di quell'ordine, **l'anello della tastiera si è sciolto senza essere servito a
 niente**. La §18.2 è chiusa
-([0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)) e la §4.4 è
-ancora aperta, ma non stava aspettando *lei*: l'arbitrato fra i due registri era
+([0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)) e la ~~§4.4~~
+si è chiusa dopo di lei senza averla mai aspettata: l'arbitrato fra i due registri era
 già arrivato con la [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md), e
 ciò che restava — l'accordo in sequenza — non tocca le decorazioni da nessun
 lato. È il secondo dei tre anelli che si scioglie invece di sbloccarsi, dopo il
@@ -381,7 +381,7 @@ decidere per loro.
 
 ### 4.4 Due parser per la stessa sintassi
 
-*ex §3.8 · shell · **P1** — dalla [seduta 4](04-chi-vede-il-modello-parsato.md) ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)); il blocco è tolto, resta il moltiplicatore*
+*ex §3.8 · shell · **P1** — dalla [seduta 4](04-chi-vede-il-modello-parsato.md) ([decisione 0018](../decisions/0018-chi-vede-il-modello-parsato.md)); **chiusa dalla [0115](../decisions/0115-la-verita-e-la-dichiarazione.md) — i parser non erano due ma tredici, e la verità non è nessuno dei due: è la dichiarazione, che la shell adesso legge invece di riscrivere***
 
 - [x] **Il blocco è tolto, e non nel modo che questa voce si aspettava.** Il
       secondo livello della §18.1 (semantica dagli `Span` del modello) chiedeva un
@@ -389,44 +389,40 @@ decidere per loro.
       (`HostApi::read_model`) e che verso il webview **non ci sarà**: il modello è
       quello del **file**, la live preview decora un **buffer** che può essere
       sporco, e un modello spedito di là sarebbe vero solo quando serve meno.
-- [ ] **Il confine, dichiarato**: il **buffer** è di Lezer, il **file** è del
-      modello. Le due grammatiche restano — il tree Lezer è già in code unit e non
-      costa IPC — ma restano perché sono su **due oggetti diversi**, non perché
-      nessuno abbia deciso. Le voci di lista, oggi, sono parsate una seconda volta
-      anche in `editor-commands.ts`, ed è lo stesso confine visto da un gesto
-      invece che da una decorazione.
-- [ ] **Togliere il moltiplicatore, non il canale.** Le estensioni del capitolo
-      5.2 sono ~50 (callout, footnote, definition list, embed, apici/pedici, tabs,
-      timeline, stepper, math…) e ognuna andrebbe scritta due volte, in due
-      linguaggi, con due nozioni di offset. La strada decisa: la sintassi si
-      dichiara **una volta sola** — `SyntaxRuleSpec` porta già il trigger come dato
-      (`Inline { open, close }`, `Fence { info }`) e `HostApi::format_of` dice
-      quali sintassi sono accese per quel documento — e il lato TS *genera* le sue
-      decorazioni da quella dichiarazione invece di riscriverne la grammatica a
-      mano. Serve un canale che porti alla shell le spec registrate, e la parte di
-      `livepreview.ts` che oggi è un elenco di regex diventa un interprete di
-      trigger.
-- [ ] **Finché le due grammatiche restano due, la loro divergenza non è rossa da
-      nessuna parte.** È la parte di questa voce che si paga **adesso** e non
-      quando la si chiude, ed è la ragione per cui la
-      [seduta 23](23-cosa-costano-le-decisioni-chiuse.md) l'ha incontrata
-      guardando i prezzi: il difetto che ne esce non è un crash — è che *ciò che
-      si vede mentre si scrive* e *ciò che viene reso e indicizzato* dicono due
-      cose diverse sullo stesso testo, sul caso che nessuno prova, e in un
-      editor quel caso lo trova l'utente tutti i giorni. Il presidio non aspetta
-      la dichiarazione condivisa e non costa quanto lei: un **corpus** di
-      frammenti su cui le due passate devono concordare — stessi confini, stessa
-      specie — e che diventa rosso quando una delle due cambia idea da sola. È
-      la mossa della [0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)
-      applicata all'altro asse: là il corpus teneva onesto il round-trip fra il
-      modello e i byte, qui tiene onesti due parser sullo stesso testo. E ha la
-      proprietà che rende un presidio utile prima della cura: quando la
-      dichiarazione condivisa arriverà, il corpus è già lo strumento con cui si
-      prova che il generato fa ciò che le regex facevano.
-- [ ] **Il secondo livello della ~~§18.1~~ è arrivato qui**, ed è la stessa cosa
-      vista dall'editor: «le decorazioni semantiche vengono dal modello» diventa
-      scrivibile solo quando la dichiarazione è condivisa, e a buffer pulito. Con
-      la [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md) non è più
-      una nota di coordinamento fra due voci: la §18.1 è chiusa, e la sua casella
-      è **questa**. Chi la esegue non deve andare a cercare cosa chiedeva di là —
-      chiedeva un canale che le tre righe qui sopra dichiarano già inesistente.
+- [x] **Il confine, dichiarato** — e il conto era sbagliato di undici. Il buffer
+      è di Lezer, il file è del modello: quello resta. Ma dentro `frontend/` la
+      stessa sintassi era scritta **tredici** volte in **sei** costrutti, in tre
+      moduli che non si parlavano, e le tre non erano d'accordo fra loro né col
+      modello: su `> - [ ] x` la live preview disegnava una casella che
+      `Mod-Enter` non spuntava, su `vedi.#tag` il modello indicizzava un tag che
+      la live preview non decorava, su `#Café` decomposto il tag visto era più
+      lungo di quello indicizzato. Adesso il posto è **uno**
+      (`frontend/src/rules/sintassi.ts`), e le tre specie di regola che ci
+      convivono sono dichiarate: generata, rispecchiata, scritta una volta.
+- [x] **Togliere il moltiplicatore, non il canale.** La sintassi si dichiara una
+      volta sola — `SyntaxRuleSpec` porta il trigger come dato, ed è la sola
+      premessa della voce che si è rivelata vera — e la shell la **legge**:
+      `sintassi.generated.ts` è emesso da un montaggio vero, quindi `==` non è
+      più scritto nella shell ed è il trigger di `HighlightRule`. Una sintassi
+      inline registrata in Rust si decora da sé. La casella residua è **il
+      canale a runtime**: il generato è compilato, quindi conosce le regole del
+      core e non quelle di un plugin di terzi, e il perché non si apre qui è
+      misurato nel verbale (il `SyntaxRegistry` sta sotto il prestito di chi
+      scrive, e condividerlo è una decisione sulla concorrenza del kernel).
+      L'accessore che quel canale servirebbe esiste già:
+      `Workspace::syntax_forms`.
+- [x] **Finché le due grammatiche restano due, la loro divergenza non è rossa da
+      nessuna parte.** Adesso lo è: `il_corpus.rs` emette ciò che il modello dice
+      delle proprie sorgenti e `frontend/src/editor/corpus.test.ts` ci passa la
+      passata della shell, con le divergenze **dichiarate** una per una e la loro
+      ragione — nella forma della [0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md),
+      applicata all'altro asse. Il difetto peggiore stava nel presidio stesso:
+      saltando i casi che il modello legge **vuoti**, il corpus era cieco a una
+      passata che riconosce *di troppo* — togliere l'esclusione delle righe di
+      codice lo lasciava verde su tutte e sessantatré le sorgenti.
+- [x] **Il secondo livello della ~~§18.1~~ è arrivato qui**, e la sua risposta è
+      quella della prima casella letta fino in fondo: «le decorazioni semantiche
+      vengono dal modello» non si scriverà mai, perché il canale che chiedeva è
+      dichiarato inesistente. Ciò che diventa scrivibile con la dichiarazione
+      condivisa non è *il modello di là*, è **la forma di qua** — ed è la casella
+      del canale a runtime, dove quel lavoro adesso vive.

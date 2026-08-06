@@ -104,7 +104,7 @@ export interface EditorOptions {
   onSelectionChange(): void;
   /// Mod-click su un wikilink nella live preview: `page` è la pagina nuda,
   /// senza alias né `#heading` (stringa vuota per i link interni `[[#…]]`).
-  onOpenWikilink(page: string): void;
+  onOpenWikilink(page: string, heading: string | null, block: string | null): void;
   /// Click su un `#tag` nella live preview: `tag` è il nome senza `#`.
   onSearchTag(tag: string): void;
   /// Da dove arrivano i completamenti di `[[` e `#`: la shell passa l'IPC,

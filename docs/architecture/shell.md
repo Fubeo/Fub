@@ -86,6 +86,8 @@ frontend/src/
   rules/         le regole condivise col Rust
     organizer.ts   alberatura, folder note, nome pagina
     offsets.ts     il ponte byte UTF-8 ↔ code unit UTF-16
+    sintassi.ts    l'unico posto in cui la shell riconosce sintassi (§4.4)
+    sintassi.generated.ts   la dichiarazione, emessa da un montaggio vero
 
   theme/         i token
     tokens.css

@@ -73,13 +73,15 @@
 //! byte**, su markdown perfettamente normale, e finché non è deciso *cosa sia*
 //! quello span la coerenza non è una cosa che si possa pretendere.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 use fub_abi::format::{FormatProvider, ParseContext};
 use fub_abi::model::{Block, DocumentModel, Inline, LinkTarget, Span};
 use fub_abi::options::syntax;
 use fub_format_markdown::MarkdownProvider;
 use fub_sdk::testing::conformita;
+use serde_json::{json, Value};
 
 mod corpus;
 
@@ -938,5 +940,232 @@ fn nessuna_mutazione_del_corpus_rompe_una_proprieta() {
         "su {casi} mutazioni solo {modelli} hanno prodotto un modello. Il\n\
          generatore sta producendo quasi solo sorgenti rifiutate, e le proprietà\n\
          non le sta verificando quasi mai."
+    );
+}
+
+// ---------------------------------------------------------------------------
+// §4.4 — il corpus su cui le DUE PASSATE devono concordare
+// ---------------------------------------------------------------------------
+//
+// Fin qui il file ha chiesto una cosa sola: che il modello dica il vero sui
+// byte. Da qui ne chiede una seconda, sullo stesso ingresso e con lo stesso
+// argomento, spostato di un asse: che **la passata della shell** dica del testo
+// la stessa cosa che ne dice il modello.
+//
+// Sono due riconoscitori che non si vedono. Il modello legge il **file**; la
+// live preview legge il **buffer**, che è sporco e che al di qua del confine
+// non conosce nessuno (0018), quindi le due grammatiche restano due — non per
+// pigrizia, ma perché stanno su due oggetti diversi. Il prezzo di quel «due» è
+// che la loro divergenza non era rossa da nessuna parte, e il difetto che ne
+// esce non è un crash: è che ciò che si vede scrivendo e ciò che viene reso e
+// indicizzato dicono due cose diverse sullo stesso testo, sul caso che nessuno
+// prova. In un editor quel caso lo trova l'utente tutti i giorni.
+//
+// Qui si **emette** ciò che il modello dice delle stesse sorgenti; il gemello
+// `frontend/src/editor/corpus.test.ts` ci passa la passata della shell. È la
+// mossa della 0060 applicata all'altro asse, ed è la parte della §4.4 che non
+// aspetta la dichiarazione condivisa e non costa quanto lei.
+//
+// Perché sta in questo file e non in un binario suo: `corpus/mod.rs` non ha un
+// `allow(dead_code)`, e il perché sta scritto lì — `clippy --all-targets` è il
+// solo posto che si accorgerebbe di un caso del corpus che nessuno semina più.
+// Un terzo binario che ne usasse **una parte** avrebbe reso quel guardiano
+// rumoroso, e il modo di zittirlo sarebbe stato spegnerlo.
+
+/// Da byte UTF-8 a code unit UTF-16, come `byte_to_utf16` del mirror.
+fn code_unit(text: &str, byte: usize) -> usize {
+    let byte = byte.min(text.len());
+    text[..byte].encode_utf16().count()
+}
+
+fn span_in_code_unit(text: &str, span: &Span) -> (usize, usize) {
+    (code_unit(text, span.start), code_unit(text, span.end))
+}
+
+/// I marcatori di task del modello, in ordine di apparizione.
+///
+/// Lo span di un [`TaskMarker`](fub_abi::model::TaskMarker) è il **simbolo**,
+/// non le parentesi: `[x]` → la `x`. La shell decora `[x]` intero, quindi la
+/// fixture porta il simbolo e chi confronta ci allarga di uno per lato — la
+/// differenza è dichiarata qui e non nascosta in un `-1` di là.
+fn task_del_modello(model: &DocumentModel, text: &str, out: &mut Vec<Value>) {
+    fn walk(blocks: &[Block], text: &str, out: &mut Vec<Value>) {
+        for b in blocks {
+            match b {
+                Block::List { items, .. } => {
+                    for item in items {
+                        if let Some(t) = &item.task {
+                            let (from, to) = span_in_code_unit(text, &t.span);
+                            out.push(json!({"symbol": t.symbol, "from": from, "to": to}));
+                        }
+                        walk(&item.blocks, text, out);
+                    }
+                }
+                Block::Quote { blocks, .. } => walk(blocks, text, out),
+                Block::Custom { blocks, .. } => walk(blocks, text, out),
+                _ => {}
+            }
+        }
+    }
+    walk(&model.body, text, out);
+    out.sort_by_key(|v| v["from"].as_u64().unwrap_or(0));
+}
+
+/// I wikilink del modello, cioè i riferimenti con bersaglio `Wiki`.
+///
+/// Si leggono dagli inline e non da `model.links`, per una ragione che è tutto
+/// il punto della voce: `links` è l'**estratto** — la stessa nota linkata due
+/// volte ci sta due volte, ma senza il `!` dell'embed e senza garanzia
+/// d'ordine — mentre qui serve dove sta ogni occorrenza sul testo.
+fn wikilink_del_modello(model: &DocumentModel, text: &str) -> Vec<Value> {
+    fn inline(nodes: &[Inline], text: &str, out: &mut Vec<Value>) {
+        for n in nodes {
+            match n {
+                Inline::Link {
+                    target: LinkTarget::Wiki { page, .. },
+                    embed,
+                    span,
+                    ..
+                } => {
+                    let (from, to) = span_in_code_unit(text, span);
+                    out.push(json!({"page": page, "embed": embed, "from": from, "to": to}));
+                }
+                Inline::Emph(kids) | Inline::Strong(kids) => inline(kids, text, out),
+                Inline::Link {
+                    label: Some(kids), ..
+                } => inline(kids, text, out),
+                _ => {}
+            }
+        }
+    }
+    fn walk(blocks: &[Block], text: &str, out: &mut Vec<Value>) {
+        for b in blocks {
+            match b {
+                Block::Paragraph { inlines, .. } | Block::Heading { inlines, .. } => {
+                    inline(inlines, text, out)
+                }
+                Block::List { items, .. } => {
+                    for item in items {
+                        walk(&item.blocks, text, out);
+                    }
+                }
+                Block::Quote { blocks, .. } => walk(blocks, text, out),
+                Block::Custom { blocks, .. } => walk(blocks, text, out),
+                Block::Table { head, rows, .. } => {
+                    for row in head.iter().chain(rows) {
+                        for cell in &row.cells {
+                            inline(&cell.inlines, text, out);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&model.body, text, &mut out);
+    out.sort_by_key(|v| v["from"].as_u64().unwrap_or(0));
+    out
+}
+
+fn corpus_per_la_shell() -> Value {
+    let mut casi = Vec::new();
+    for caso in corpus() {
+        let model = parse(caso.source);
+        let tags: Vec<Value> = model
+            .tags
+            .iter()
+            .map(|t| {
+                let (from, to) = span_in_code_unit(caso.source, &t.span);
+                json!({"name": t.name, "from": from, "to": to})
+            })
+            .collect();
+        let mut task = Vec::new();
+        task_del_modello(&model, caso.source, &mut task);
+        casi.push(json!({
+            "nome": caso.nome,
+            "source": caso.source,
+            "tag": tags,
+            "wikilink": wikilink_del_modello(&model, caso.source),
+            "task": task,
+        }));
+    }
+    Value::Array(casi)
+}
+
+fn percorso_fixture() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../frontend/src/__fixtures__/corpus-sintassi.json")
+}
+
+#[test]
+fn la_fixture_del_corpus_e_quella_del_modello() {
+    let atteso = corpus_per_la_shell();
+    let path = percorso_fixture();
+
+    if std::env::var_os("UPDATE_MIRROR").is_some() {
+        let mut json = serde_json::to_string_pretty(&atteso).expect("pretty");
+        json.push('\n');
+        std::fs::write(&path, json).expect("scrive la fixture del corpus");
+        return;
+    }
+
+    let committata = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "fixture del corpus mancante ({}): {e}. Rigenerala con \
+             `UPDATE_MIRROR=1 cargo test -p fub-format-markdown --test corpus_della_shell`.",
+            path.display()
+        )
+    });
+    let committata: Value = serde_json::from_str(&committata).expect("fixture JSON valida");
+
+    assert_eq!(
+        committata, atteso,
+        "la fixture del corpus è stantia: il modello dice qualcosa di diverso \
+         di queste sorgenti. Rigenerala con `UPDATE_MIRROR=1 cargo test -p \
+         fub-format-markdown --test corpus_della_shell`, poi guarda se \
+         `frontend/src/editor/corpus.test.ts` è ancora d'accordo — se non lo è, \
+         le due passate hanno cominciato a dire due cose diverse."
+    );
+}
+
+/// **Il test del test**: un corpus in cui nessun caso porta niente non
+/// presidierebbe niente.
+///
+/// Non conta i casi — quelli li conta `il_corpus.rs` contro il contratto — ma
+/// pretende che ognuna delle tre famiglie abbia dei portatori, e che almeno un
+/// caso ne porti due insieme: è la forma in cui i riconoscitori si disturbano a
+/// vicenda (un `#tag` dentro un `[[wikilink]]`, una task con dentro un link), ed
+/// è dove una divergenza si nasconde.
+#[test]
+fn il_corpus_esercita_tutte_e_tre_le_famiglie() {
+    let casi = corpus_per_la_shell();
+    let casi = casi.as_array().expect("array");
+    let mut conti: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut misti = 0;
+    for c in casi {
+        let mut famiglie = 0;
+        for f in ["tag", "wikilink", "task"] {
+            let n = c[f].as_array().map(|a| a.len()).unwrap_or(0);
+            *conti.entry(f).or_default() += n;
+            if n > 0 {
+                famiglie += 1;
+            }
+        }
+        if famiglie >= 2 {
+            misti += 1;
+        }
+    }
+    for (famiglia, n) in &conti {
+        assert!(
+            *n >= 3,
+            "la famiglia `{famiglia}` ha {n} occorrenze in tutto il corpus: \
+             troppo poche perché una divergenza si veda"
+        );
+    }
+    assert!(
+        misti >= 2,
+        "solo {misti} casi mescolano due famiglie: è lì che i riconoscitori si \
+         disturbano a vicenda, ed è lì che una divergenza si nasconde"
     );
 }

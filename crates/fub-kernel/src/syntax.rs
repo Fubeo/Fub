@@ -28,7 +28,9 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use fub_abi::custom::{SyntaxMatch, SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger};
+use fub_abi::custom::{
+    SyntaxForm, SyntaxMatch, SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+};
 use fub_abi::format::ParseContext;
 use fub_abi::model::{Block, DocumentModel, Inline, ListItem, Span, TableRow};
 
@@ -233,6 +235,31 @@ impl SyntaxRegistry {
             .filter(|r| r.spec.format == format)
             .filter_map(|r| r.spec.option.as_deref())
             .fold(OptionMap::new(), |m, option| m.on(option))
+    }
+
+    /// La **forma dichiarata** delle sintassi innestate su un formato: il nome
+    /// che le accende, e il trigger con cui si riconoscono (§4.4).
+    ///
+    /// È `grafted_syntax` che non butta via il trigger, e la differenza è tutta
+    /// per chi sta dall'altra parte del confine: una `OptionMap` dice *che
+    /// `fub:highlight` è acceso*, non che si scrive `==…==`. Finché diceva solo
+    /// la prima, la shell il `==` se lo scriveva a mano — che è la §4.4 vista
+    /// da vicino, e sta scritto nel doc di [`crate::syntax`]'s `HighlightRule`.
+    ///
+    /// Una regola senza `option` non compare, per la ragione di
+    /// `grafted_syntax`: non ha un nome da accendere, quindi chi legge questo
+    /// elenco non ha niente da dichiarare su di lei.
+    pub fn forms(&self, format: &str) -> Vec<SyntaxForm> {
+        self.rules
+            .iter()
+            .filter(|r| r.spec.format == format)
+            .filter_map(|r| {
+                r.spec.option.as_ref().map(|option| SyntaxForm {
+                    name: option.clone(),
+                    trigger: Some(r.spec.trigger.clone()),
+                })
+            })
+            .collect()
     }
 
     /// Applica le regole di questo formato al modello.

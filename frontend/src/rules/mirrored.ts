@@ -152,6 +152,76 @@ export function normalizedName(path: string): string {
     .join("/");
 }
 
+/// Dove comincia e finisce un `#tag`.
+export interface TagTrovato {
+  /// Il nome senza il `#`.
+  name: string;
+  /// In **code unit**, `#` compreso: è la valuta di CodeMirror, e la gemella
+  /// Rust risponde in byte perché è la valuta del modello. La conversione la fa
+  /// la fixture, componendo `byte_to_utf16` — che è già rispecchiata qui sopra.
+  from: number;
+  to: number;
+}
+
+/// «Alfanumerico» nel senso di `char::is_alphanumeric()` di Rust: Alphabetic
+/// più le tre categorie di numero. **Non** include i segni combinanti, ed è la
+/// riga da cui dipende che `#Café` scritto decomposto sia lo stesso tag di qua
+/// e di là — cioè uno solo per il vault (0107, `568874c`).
+export const ALFANUMERICO = /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}]/u;
+/// I caratteri che stanno **dentro** il nome di un tag. Esportata perché il
+/// completamento deve conoscere la stessa classe mentre il tag è a metà: due
+/// classi vorrebbero dire un popup che si apre su un token che, finito di
+/// scrivere, non è un tag.
+export const CARATTERE_DI_TAG = /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}_/-]/u;
+
+/// I `#tag` di un frammento di **testo semplice** (chi chiama deve già aver
+/// escluso codice inline, blocchi di codice e frontmatter).
+///
+/// Gemella di `fub_abi::rules::tag::scan_tags`, ed è la regola che la §4.4 ha
+/// trovato scritta **tre** volte nella shell e diversa in tutte e tre — nessuna
+/// delle quali era questa. Le differenze non erano di stile: la live preview
+/// pretendeva spazio o parentesi prima del `#` (quindi `vedi.#tag` non era un
+/// tag mentre lo era per il modello), accettava i segni combinanti dentro il
+/// nome (quindi `#Café` decomposto ne dava uno più lungo), e scartava come
+/// «tutte cifre» anche le cifre non ASCII.
+///
+/// Non è una regex: la condizione sul carattere **precedente** guarda un punto
+/// di codice e non una code unit, e una regex con lookbehind su `.` avrebbe
+/// riguardato mezza coppia surrogata.
+export function scanTags(text: string): TagTrovato[] {
+  const out: TagTrovato[] = [];
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== "#") {
+      i += 1;
+      continue;
+    }
+    // Il `#` non deve seguire un carattere alfanumerico. `codePointAt` sul
+    // carattere prima: se è un low surrogate, si torna indietro di due.
+    if (i > 0) {
+      const primaBassa = text.charCodeAt(i - 1);
+      const inizioPrec = primaBassa >= 0xdc00 && primaBassa <= 0xdfff && i >= 2 ? i - 2 : i - 1;
+      if (ALFANUMERICO.test(text.slice(inizioPrec, i))) {
+        i += 1;
+        continue;
+      }
+    }
+    let j = i + 1;
+    while (j < text.length) {
+      const cp = text.codePointAt(j)!;
+      const c = String.fromCodePoint(cp);
+      if (!CARATTERE_DI_TAG.test(c)) break;
+      j += c.length;
+    }
+    const name = text.slice(i + 1, j);
+    if (name !== "" && !/^[0-9]+$/.test(name)) {
+      out.push({ name, from: i, to: j });
+    }
+    i = Math.max(j, i + 1);
+  }
+  return out;
+}
+
 /// Una casella è spuntata?
 ///
 /// Gemella di `TaskMarker::checked()`: `x`/`X` è fatta, ogni altro simbolo — gli

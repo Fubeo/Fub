@@ -71,8 +71,8 @@ pub use command::{
     CommandSpec, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undone,
 };
 pub use custom::{
-    CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
-    SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+    CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
+    SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
 pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit, WriteBase};
 pub use error::{FormatError, PluginError};

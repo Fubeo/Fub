@@ -56,7 +56,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandSpec, Failure, InvokeMode, Partial, UndoStep, Undone,
 };
-use fub_abi::custom::{CustomRenderer, SyntaxRule};
+use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
 use fub_abi::locale::Locale;
@@ -3419,6 +3419,18 @@ impl Workspace {
     /// regola può dichiarare.
     pub fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
         self.docs.format_of(id)
+    }
+
+    /// Le sintassi di questo documento **con la loro forma**, per chi deve
+    /// disegnare invece di parsare (§4.4).
+    ///
+    /// Vedi [`crate::documents::DocumentStore::syntax_forms`]: è `format_of`
+    /// per una superficie di scrittura, che il modello non ce l'ha e non può
+    /// averlo — il buffer che ha in mano è sporco, e un modello spedito di là
+    /// sarebbe vero solo quando serve meno
+    /// ([0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)).
+    pub fn syntax_forms(&self, id: &DocId) -> Vec<SyntaxForm> {
+        self.docs.syntax_forms(id)
     }
 
     /// Rende l'anteprima di un documento: l'HTML del provider, e le parti

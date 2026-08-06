@@ -23,6 +23,8 @@ import {
 } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
 import { childName, pageName, resolutionKey } from "../rules/mirrored";
+import { CARATTERE_DI_TAG } from "../rules/mirrored";
+import { tagInCorso } from "../rules/sintassi";
 
 /// Le sorgenti dati dei completamenti.
 ///
@@ -65,22 +67,17 @@ export function wikilinkContext(before: string): ContextMatch | null {
   return { from: open + 2, query };
 }
 
-/// Il cursore è su un token `#...` a inizio parola? Regole:
-/// - i caratteri di tag sono lettere/cifre Unicode, `_`, `-`, `/` (le
-///   gerarchie `area/lavoro` passano intere);
-/// - il carattere prima del `#` non dev'essere di parola (`a#b` no) né un
-///   altro `#` (il `##` di un heading no);
-/// - il `#` di un heading «vero» (`# Titolo`) non matcha mai da solo: lo
-///   spazio dopo il `#` non è un carattere di tag, quindi il token si spezza.
+/// Il cursore è su un token `#...` a inizio parola?
+///
+/// Le regole non sono di questo file: sono quelle di `tagInCorso`, cioè le
+/// stesse classi di caratteri con cui la live preview decora e con cui il
+/// contratto indicizza (§4.4). Erano scritte qui una seconda volta, e diverse:
+/// il carattere prima del `#` doveva non essere `[\p{L}\p{N}_#]`, mentre la
+/// regola vera è «non alfanumerico» — quindi su `vedi.#tag` il popup si apriva
+/// e la decorazione non compariva, e su `_#tag` succedeva l'inverso.
 export function tagContext(before: string): ContextMatch | null {
-  const lineStart = before.lastIndexOf("\n") + 1;
-  const line = before.slice(lineStart);
-  const m = /#([\p{L}\p{N}_/-]*)$/u.exec(line);
-  if (!m) return null;
-  const hash = lineStart + (m.index ?? 0);
-  const prev = before.charAt(hash - 1);
-  if (prev && /[\p{L}\p{N}_#]/u.test(prev)) return null;
-  return { from: hash, query: m[1] };
+  const m = tagInCorso(before);
+  return m && { from: m.from, query: m.query };
 }
 
 /// Il testo da inserire completando una nota: il nome (o il path, per gli
@@ -189,7 +186,9 @@ export function tagSource(listTags: CompletionSources["listTags"]): CompletionSo
     return {
       from: line.from + match.from,
       options: tagCompletions(tags),
-      validFor: /^#[\p{L}\p{N}_/-]*$/u,
+      // La stessa classe di `tagInCorso`, presa da lì: un `validFor` più
+      // stretto chiuderebbe il popup su un carattere che il tag accetta.
+      validFor: new RegExp(`^#${CARATTERE_DI_TAG.source}*$`, "u"),
     };
   };
 }
