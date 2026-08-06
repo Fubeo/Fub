@@ -36,7 +36,7 @@ use fub_abi::settings::SettingValue;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
-use fub_host::{doc_id, EventSink, Host};
+use fub_host::{doc_id, Consegna, EventSink, Host};
 use fub_kernel::RenderedDocument;
 
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -67,16 +67,50 @@ pub struct OpenVaults {
 /// dichiarato al **primo**, o una `invoke` che arrivasse da una finestra già
 /// aperta troverebbe `State<Host>` non gestito — che in Tauri è un panico, non
 /// un errore. Quindi l'host si registra subito con questo sink vuoto, e il
-/// `setup` ci mette dentro l'handle: nel frattempo un evento si perde invece di
-/// far cadere l'app, e nel frattempo non c'è nessun vault aperto che possa
-/// emetterne.
+/// `setup` ci mette dentro l'handle.
+///
+/// **Ciò che succede in quella finestra adesso si dice.** Prima erano due rami
+/// vuoti — `if let Some(app)` senza `else`, e un `let _ =` sulla consegna — e
+/// due rami vuoti sono la stessa frase: *l'evento non è uscito, e nessuno lo
+/// saprà*. Il commento che stava qui diceva che nella finestra non c'è nessun
+/// vault aperto che possa emettere, ed è probabilmente vero oggi; ma «probabile»
+/// è un argomento, non un presidio, e la seconda strada — una consegna che torna
+/// con un errore — non ha nemmeno quell'argomento. Adesso tutte e due rendono
+/// [`Consegna::Persa`], il ponte le conta, e chi riceve prende un `Overflow`
+/// appena l'uscita torna a funzionare.
 #[derive(Default)]
 struct WebviewEvents(std::sync::OnceLock<AppHandle>);
 
 impl EventSink for WebviewEvents {
-    fn emit(&self, notice: &Notice) {
-        if let Some(app) = self.0.get() {
-            let _ = app.emit("fub://event", notice);
+    fn emit(&self, notice: &Notice) -> Consegna {
+        let Some(app) = self.0.get() else {
+            tracing::warn!(
+                target: "fub.app",
+                evento = ?notice.kind(),
+                "un evento è nato prima che il webview esistesse: nessuno lo vedrà, \
+                 e chi si abbona riceverà un Overflow appena l'uscita si apre"
+            );
+            return Consegna::Persa;
+        };
+        match app.emit("fub://event", notice) {
+            Ok(()) => Consegna::Fatta,
+            Err(e) => {
+                // Un notice che non attraversa l'IPC è un **bug del programma**,
+                // non un guasto d'ambiente: la forma è nostra, e `Event::Custom`
+                // porta un `serde_json::Value`, che si serializza sempre. Per
+                // questo non è un `expect`, che trasformerebbe il bug di un
+                // plugin in un'app che cade, e non è un ramo vuoto, che lo
+                // trasformerebbe in una shell ferma senza motivo: si dice, e si
+                // conta.
+                tracing::error!(
+                    target: "fub.app",
+                    evento = ?notice.kind(),
+                    errore = %e,
+                    "un evento non ha attraversato l'IPC: chi riceve resta indietro \
+                     di questo fatto e riconcilierà alla prossima consegna riuscita"
+                );
+                Consegna::Persa
+            }
         }
     }
 }

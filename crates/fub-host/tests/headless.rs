@@ -25,7 +25,7 @@ use fub_abi::traits::{
 };
 use fub_abi::Notice;
 use fub_features::BACKLINKS_VIEW;
-use fub_host::{EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
+use fub_host::{Consegna, EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
 use fub_kernel::data_root;
 
 struct Vault {
@@ -232,8 +232,9 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
 struct Collected(Arc<Mutex<Vec<Notice>>>);
 
 impl EventSink for Collected {
-    fn emit(&self, notice: &Notice) {
+    fn emit(&self, notice: &Notice) -> Consegna {
         self.0.lock().unwrap().push(notice.clone());
+        Consegna::Fatta
     }
 }
 
@@ -500,12 +501,13 @@ fn manifest_dell_indice(root: &Utf8Path) -> String {
 struct Registratore(Arc<Mutex<Vec<String>>>);
 
 impl EventSink for Registratore {
-    fn emit(&self, notice: &Notice) {
+    fn emit(&self, notice: &Notice) -> Consegna {
         let nome = serde_json::to_value(&notice.event)
             .ok()
             .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
             .unwrap_or_default();
         self.0.lock().unwrap().push(nome);
+        Consegna::Fatta
     }
 }
 

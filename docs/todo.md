@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Sessantanove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Sessantasei** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -516,8 +516,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0027 | `openWikilink` esce su `if (!page) return`: `[[#Sezione]]` e `[[#^blocco]]` non portano da nessuna parte | `frontend` · `panels/document.ts:902` | shell |
 | 0028 | `argsFromForm` scrive `false` per un booleano opzionale mai toccato, e copre il default del kernel | `frontend` · `ui/palette.ts:163` | shell |
 | 0035 | `dispatch_pending` gira solo `if removed_indexes`: un plugin senza indici lascia i `JobDone` in coda | `fub-kernel` · `workspace.rs:1160` | eventi persi |
-| 0036 | gli eventi emessi prima dell'`AppHandle` spariscono senza traccia | `fub-app` · `lib.rs:74` | eventi persi |
-| 0037 | `let _ = app.emit(...)`: un payload che non serializza si perde in silenzio | `fub-app` · `lib.rs:79` | eventi persi |
 | 0038 | i comandi Tauri sono sincroni e prendono lock + I/O sul thread pool dell'IPC | `fub-app` · `lib.rs` | lock e I/O |
 | 0040 | `vault_replace` senza `docs` legge **ogni** documento del vault invece di chiedere all'indice | `fub-features` · `commands.rs:1287` | prestazioni |
 | 0041 | il doppio controllo di `dirty` in `SearchIndex::commit` ferma le letture per tutta la durata del commit | `fub-features` · `search.rs` `commit` | prestazioni |
@@ -546,7 +544,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0074 | riaprire un vault già aperto non aggiorna `last_opened`: i recenti restano nell'ordine vecchio | `fub-host` · `session.rs` `open` | registro vault |
 | 0075 | `set_look` con `name: None` non azzera: non c'è modo di tornare al nome della cartella | `fub-host` · `vaults.rs:205` | registro vault |
 | 0077 | `portable_dir` non verifica di essere scrivibile e non ripiega su `~/.config/fub` | `fub-host` · `config.rs:133` | configurazione |
-| 0078 | il thread del ponte esce dal `while let Ok(...)` senza una riga di log | `fub-host` · `bridge.rs:76` | eventi persi |
 | 0079 | `render_link` scrive `data-embed-heading` e ignora `block`: `![[Nota#^b]]` perde l'ancora | `fub-format-markdown` · `render.rs:285` | markdown |
 | 0080 | `write_link` serializza `[[page^b]]` invece di `[[page#^b]]` quando `heading` è `None` | `fub-format-markdown` · `serialize.rs:519` | markdown |
 | 0081 | lo span di un embed include il `!` nel ripiego testuale e non nel ramo comrak | `fub-format-markdown` · `parse.rs:642` | markdown |

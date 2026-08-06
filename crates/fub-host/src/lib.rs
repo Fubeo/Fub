@@ -106,7 +106,7 @@ pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, UnreadDoc, VaultInfo};
 pub use registry::{Bundle, BundleError, BundleInfo, BundleRegistry, OnlyProviders};
 pub use runner::{InCorso, JobRunner, DEFAULT_JOB_THREADS};
-pub use session::{doc_id, EventSink, Host, VaultSession};
+pub use session::{doc_id, Consegna, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use vaults::{VaultEntry, VaultRegistry};
 pub use watcher::{ExternalChange, ExternalSync, NoWatcher, VaultWatcher, WatcherFactory};

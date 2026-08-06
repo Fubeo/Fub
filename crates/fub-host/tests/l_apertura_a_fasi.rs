@@ -22,7 +22,7 @@ use camino::Utf8PathBuf;
 use fub_abi::event::EventKind;
 use fub_abi::traits::{IndexQuery, IndexResult, IndexingState};
 use fub_abi::Notice;
-use fub_host::{EventSink, Host, NoWatcher};
+use fub_host::{Consegna, EventSink, Host, NoWatcher};
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -50,8 +50,9 @@ impl Vault {
 struct Collected(Arc<Mutex<Vec<Notice>>>);
 
 impl EventSink for Collected {
-    fn emit(&self, notice: &Notice) {
+    fn emit(&self, notice: &Notice) -> Consegna {
         self.0.lock().unwrap().push(notice.clone());
+        Consegna::Fatta
     }
 }
 

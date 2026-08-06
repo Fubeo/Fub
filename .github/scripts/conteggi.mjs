@@ -479,6 +479,28 @@ export const CONTEGGI = [
       " {n+=gsub(/echi[[:space:]]*(\\+=|-=|\\+\\+|--)/,\"\")} END{print n+0}'",
   },
   {
+    nome: "uscite-fuori-dal-ponte",
+    ragione:
+      "Le righe di `crates/fub-host/src` che consegnano a un `EventSink` **fuori " +
+      "dal ponte**, cioè fuori da `bridge.rs`. Il ponte è il posto in cui un " +
+      "evento che non esce viene contato e ridetto come `Overflow` appena " +
+      "l'uscita riapre: chi consegna altrove quel conto non ce l'ha, e un evento " +
+      "perso lì è perso davvero. Ce n'è **una**, e ha una ragione — un'" +
+      "impostazione di macchina scritta senza nessun vault aperto non ha un bus, " +
+      "quindi non ha un ponte — ma è una ragione che vale per lei sola: una " +
+      "seconda consegna scritta a mano vorrebbe o passare dal ponte o " +
+      "dichiarare perché non può. Zona cieca dichiarata: il conto guarda la " +
+      "forma `sink.emit(`, quindi chi si copiasse il sink in una variabile con " +
+      "un altro nome, o chiamasse `EventSink::emit(&*s, …)` per esteso, non " +
+      "verrebbe contato — il verso in cui il conto sbaglia è quello che " +
+      "richiede di *volerlo* aggirare. Salta le righe di commento, o la prosa " +
+      "che racconta questo difetto conterebbe sé stessa.",
+    comando:
+      "find crates/fub-host/src -name '*.rs' ! -name 'bridge.rs' | xargs awk" +
+      " '/^[[:space:]]*(\\/\\/|\\*|\\/\\*)/{next}" +
+      " {n+=gsub(/sink\\.emit\\(/,\"\")} END{print n+0}'",
+  },
+  {
     nome: "buchi-dichiarati",
     ragione:
       "I verbali che dichiarano un buco proprio: un fatto sulla forma del " +
