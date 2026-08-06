@@ -10,7 +10,7 @@ documento esiste.
 |---|---|---|---|
 | **versione dei crate** | [`Cargo.toml:19`](../Cargo.toml), ereditata dagli otto crate [conta: crate-del-workspace]; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila Fub, o ci compila contro | la build rossa, subito |
 | **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3650`) e `package fub:abi@0.1.0` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
-| **versione degli schemi su disco** | undici numeri di versione [conta: schemi-su-disco] indipendenti nei crate, uno per formato (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
+| **versione degli schemi su disco** | undici costanti `SchemaVersion` [conta: schemi-su-disco] indipendenti nei crate, una per formato (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
 
 ## 1. La versione dei crate
 
@@ -99,6 +99,19 @@ file dell'utente scritto male resta scritto male. Ogni file che Fub scrive
 porta il **suo** numero, indipendente dagli altri, perché gli schemi cambiano in
 momenti diversi e legarli vorrebbe dire migrare sei file per una modifica a uno.
 
+**Il numero è un tipo, e il tipo si chiama `SchemaVersion`**
+([`crates/fub-abi/src/schema.rs`](../crates/fub-abi/src/schema.rs)). Non è
+igiene: è chi tiene in piedi l'elenco. Un conto che li cerca nei sorgenti deve
+saper dire *questa costante è una versione di schema*, e per due giri l'ha detto
+guardando il **nome** — prima `SCHEMA_VERSION`, che lasciava fuori
+`DIAGNOSTICS_VERSION`, poi un qualunque intero il cui nome finisse per `VERSION`,
+che lasciava fuori un `const E_SCHEMA_REV`. Un nome però non si fa rispettare da
+nessuno: chi lo sceglie diverso non sta violando una regola, sta scegliendo un
+nome, e il presidio si elude senza che nessuno lo voglia. Un tipo invece lo si
+attraversa — il campo del record lo pretende, e un `u32` non lo soddisfa — e chi
+lo fa rispettare è il compilatore. Il conto passa dal nome al tipo e diventa
+insensibile alle rinomine ([0128](decisions/0128-una-versione-di-schema-e-un-tipo.md)).
+
 I formati sono **undici** [conta: schemi-in-tabella], e la tabella qui sotto è
 l'elenco: che sia **tutto** l'elenco lo verifica
 [`schemi_su_disco.rs`](../crates/fub-app/tests/schemi_su_disco.rs), che legge
@@ -110,17 +123,17 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 
 | Schema | Dove | Oggi | Cosa contiene |
 |---|---|---|---|
-| registro dei vault | [`crates/fub-host/src/vaults.rs:40`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
-| organizzazione | [`crates/fub-kernel/src/organization.rs:74`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
-| stato di vista | [`crates/fub-kernel/src/viewstate.rs:56`](../crates/fub-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
-| anagrafe | [`crates/fub-kernel/src/entries.rs:89`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
-| impostazioni | [`crates/fub-kernel/src/settings.rs:82`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
-| versioning | [`crates/fub-features/src/versioning.rs:253`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
-| indice di ricerca | [`crates/fub-features/src/search.rs:89`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
-| registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:156`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
-| bozze | [`crates/fub-kernel/src/drafts.rs:109`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |
-| bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:231`](../crates/fub-kernel/src/maintenance.rs) | 1 | una copia di fatti che stanno altrove, per chi cerca un guasto |
-| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:77`](../crates/fub-kernel/src/vault.rs) | 1 | da quale cartella veniva una voce cestinata |
+| registro dei vault | [`crates/fub-host/src/vaults.rs:41`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
+| organizzazione | [`crates/fub-kernel/src/organization.rs:75`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
+| stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../crates/fub-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
+| anagrafe | [`crates/fub-kernel/src/entries.rs:90`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
+| impostazioni | [`crates/fub-kernel/src/settings.rs:83`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
+| versioning | [`crates/fub-features/src/versioning.rs:254`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
+| indice di ricerca | [`crates/fub-features/src/search.rs:90`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
+| registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:157`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
+| bozze | [`crates/fub-kernel/src/drafts.rs:110`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |
+| bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:232`](../crates/fub-kernel/src/maintenance.rs) | 1 | una copia di fatti che stanno altrove, per chi cerca un guasto |
+| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:78`](../crates/fub-kernel/src/vault.rs) | 1 | da quale cartella veniva una voce cestinata |
 
 **La regola comune è il rifiuto in avanti.** Un file la cui `version` è
 **maggiore** di quella che questa copia di Fub conosce non si legge e non si

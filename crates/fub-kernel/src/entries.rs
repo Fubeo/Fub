@@ -72,6 +72,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::storage::VaultStorage;
 use crate::vault::data_root;
+use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3).
 ///
@@ -86,7 +87,7 @@ use crate::vault::data_root;
 /// nota in cima — la §21.10 riaperta dalla cache dopo essere stata chiusa nella
 /// firma. Un derivato di una versione che non si conosce si rifà, e qui il
 /// costo è una riapertura lenta sola.
-const SCHEMA_VERSION: u32 = 2;
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
 
 /// Il nome del file dentro [`data_root`].
 const FILE: &str = "entries.json";
@@ -157,7 +158,7 @@ impl StoredEntry {
 /// Il file com'è su disco.
 #[derive(Default, Serialize, Deserialize)]
 struct EntriesFile {
-    version: u32,
+    version: SchemaVersion,
     /// Quando questa tabella è stata scritta, in millisecondi UNIX: è la soglia
     /// della regola *racily clean* (vedi il § in testa al modulo).
     #[serde(default)]

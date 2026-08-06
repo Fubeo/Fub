@@ -33,11 +33,12 @@ use crate::custodia::Custodia;
 use std::collections::BTreeMap;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::schema::SchemaVersion;
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
 /// La versione di schema del file (§15.3).
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Quanti vault **non preferiti** si ricordano. I preferiti non si contano e
 /// non scadono: sono una scelta, i recenti sono una traccia.
@@ -92,7 +93,7 @@ pub struct VaultEntry {
 
 #[derive(Default, Serialize, Deserialize)]
 struct RegistryFile {
-    version: u32,
+    version: SchemaVersion,
     #[serde(default)]
     vaults: Vec<VaultEntry>,
 }

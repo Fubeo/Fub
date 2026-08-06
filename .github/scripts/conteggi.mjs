@@ -100,22 +100,23 @@ export const CONTEGGI = [
     ragione:
       "Le versioni di schema indipendenti: quanti formati su disco Fub versiona " +
       "separatamente. È il numero il cui errore non si annulla, perché la " +
-      "promessa è fatta ai file dell'utente e non a chi compila. Conta la " +
-      "**proprietà** — una costante intera che dichiara una versione — e non il " +
-      "nome `SCHEMA_VERSION`: finché guardava il nome, `DIAGNOSTICS_VERSION` " +
-      "gli passava accanto, e chi l'aveva chiamata così non aveva sbagliato " +
-      "niente (§15.3). La forma di allora però guardava ancora mezza sillaba: " +
-      "misurato su un file con sette versioni vere ne contava **una**, perché " +
-      "pretendeva `pub(<una parola>)`, un tipo senza segno fino a 64 bit, il " +
-      "rientro a spazi e almeno un `_` prima di `VERSION`. Adesso ammette " +
-      "qualunque visibilità (`pub(in crate::x)`), qualunque intero (`u128`, " +
-      "`i32`), il TAB e il nome nudo `const VERSION`. Resta **fuori** ciò che " +
-      "una versione la dichiara senza dirlo nel nome (`const E_SCHEMA_REV`): il " +
-      "buco è dichiarato dalla 0106 ed è il suo, non di questo comando — la " +
-      "porta è che una versione di schema si chiama `VERSION`.",
+      "promessa è fatta ai file dell'utente e non a chi compila. Conta il " +
+      "**tipo**: una costante di tipo `SchemaVersion`, comunque si chiami. " +
+      "Le due forme di prima guardavano un nome — prima `SCHEMA_VERSION` " +
+      "letterale, che lasciava fuori `DIAGNOSTICS_VERSION`, poi un qualunque " +
+      "intero il cui nome finisse per `VERSION`, che lasciava fuori un " +
+      "`const E_SCHEMA_REV` — e la 0106 aveva già misurato perché un nome non " +
+      "regge: chi la chiama in un altro modo non sbaglia niente, ed è il conto " +
+      "a essersi fatto eludere. Il tipo lo si attraversa invece di ricordarselo, " +
+      "e questo conto serve anche a dire che la porta ha **agganciato**: un " +
+      "sito rimasto indietro col `u32` non è contato, e diverge da " +
+      "`schemi-in-tabella`. Resta **fuori** una versione scritta al volo dentro " +
+      "il record (`v: SchemaVersion::new(1)`, senza una costante che la nomini): " +
+      "è di tipo giusto e non la conta nessuno — il tipo rende impossibile " +
+      "scrivere `v: 1`, non rende impossibile non dare un nome all'1.",
     comando:
       "grep -rhE '^[[:space:]]*(pub([[:space:]]*\\([^)]*\\))?[[:space:]]+)?" +
-      "const [A-Z_]*VERSION[A-Z_]*: [ui](8|16|32|64|128|size) = '" +
+      "const [A-Z_0-9]+: SchemaVersion = '" +
       " crates/*/src | wc -l",
   },
   {

@@ -148,7 +148,7 @@ disambigua — non si sceglie affatto: lo dice `HealthCheck::CollidingPaths`
 ## Il vault
 
 ### anagrafe
-`VaultEntry` (il tipo del contratto) reso durevole da `EntryStore` · [`kernel/entries.rs:170`](../crates/fub-kernel/src/entries.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
+`VaultEntry` (il tipo del contratto) reso durevole da `EntryStore` · [`kernel/entries.rs:171`](../crates/fub-kernel/src/entries.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
 
 Ciò che il kernel si ricorda di ogni file per **non doverlo rileggere**:
 frontmatter, outline, e quanto basta a decidere se il file su disco è ancora
@@ -160,7 +160,7 @@ Elenca ciò che **esiste**, che non è ciò che è **indicizzato**: dalla
 che non si è potuto leggere resta in anagrafe e non arriva a nessun indice.
 
 ### autorevole
-`FUB_DIR` · [`kernel/vault.rs:31`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
+`FUB_DIR` · [`kernel/vault.rs:32`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 
 Un dato che, perso, **non si ricostruisce da niente**: l'organizzazione della
 sidebar, le impostazioni del vault, gli snapshot del versioning. Chi lo tiene, se
@@ -177,7 +177,7 @@ sicurezza dell'utente, ed è per questo che [SECURITY.md](SECURITY.md) tratta un
 percorso che la aggira come un problema di sicurezza e non come un bug.
 
 ### derivato
-`data_root` · [`kernel/vault.rs:48`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
+`data_root` · [`kernel/vault.rs:49`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 
 Un dato che si può **buttare e rifare** dal vault: l'indice di ricerca,
 l'anagrafe, le cache. Chi lo tiene, se non riesce a leggerlo, non avvisa nessuno:
@@ -212,7 +212,7 @@ ogni macchina da cui il vault si apre, e `Node_Modules` su macOS è la cartella
 che `node_modules` nomina.
 
 ### finestra di conservazione
-`journal.retention.days` · [`kernel/journal.rs:172`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+`journal.retention.days` · [`kernel/journal.rs:173`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
 
 Per quanti giorni una riga resta nel [registro delle
 mutazioni](#registro-delle-mutazioni): fuori dalla finestra cade, qualunque sia
@@ -232,7 +232,7 @@ presa da make.md, e una delle regole che stanno in `rules/` perché il Rust e la
 shell devono applicarla nello stesso modo.
 
 ### impronta di una modifica
-`EditFootprint` · [`kernel/journal.rs:297`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+`EditFootprint` · [`kernel/journal.rs:298`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
 
 Ciò che il [registro](#registro-delle-mutazioni) tiene di una modifica
 chirurgica: **dove** ha toccato — lo [span](#span) — e **quanti** byte c'erano al
@@ -253,7 +253,7 @@ spazi. Non è nel vault come contenuto, sta nel *sidecar*, e dalla 0038 è il
 kernel a possederlo — con la migrazione al rename inclusa.
 
 ### registro delle mutazioni
-`Journal` / `JournalOp` · [`kernel/journal.rs:251`](../crates/fub-kernel/src/journal.rs) · [0067](decisions/0067-il-registro-di-cio-che-e-successo.md), [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+`Journal` / `JournalOp` · [`kernel/journal.rs:252`](../crates/fub-kernel/src/journal.rs) · [0067](decisions/0067-il-registro-di-cio-che-e-successo.md), [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
 
 `.fub/journal.jsonl`: una riga per ogni mutazione che il kernel ha fatto al
 vault — quando, chi l'ha chiesta (l'[origine](#origine)), dentro quale
@@ -329,8 +329,21 @@ il derivato — e `.trash/`, che sta fuori perché è il cestino **condiviso con
 Obsidian**. La mappa è
 [architecture/on-disk-layout.md](architecture/on-disk-layout.md).
 
+### versione di schema
+`SchemaVersion` · [`abi/schema.rs:76`](../crates/fub-abi/src/schema.rs) · [0106](decisions/0106-un-formato-si-presenta.md), [0128](decisions/0128-una-versione-di-schema-e-un-tipo.md)
+
+Quale **formato** sono i byte di un file che Fub ha scritto. Ce n'è una per
+formato e sono indipendenti fra loro (undici oggi, la tabella è in
+[versionamento.md](versionamento.md#3-le-versioni-degli-schemi-su-disco)): gli
+schemi cambiano in momenti diversi, e legarli vorrebbe dire migrare dieci file
+per una modifica a uno. È un **tipo** e non una costante che si è chiamata bene:
+finché il presidio che le cerca guardava il nome, una versione chiamata in un
+altro modo gli passava accanto senza che nessuno avesse sbagliato niente. Su
+disco resta un intero nudo (`#[serde(transparent)]`), perché quei file sono già
+sui dischi delle persone.
+
 ### versioning
-`SCHEMA_VERSION` · [`features/versioning.rs:253`](../crates/fub-features/src/versioning.rs) · —
+`SCHEMA_VERSION` · [`features/versioning.rs:254`](../crates/fub-features/src/versioning.rs) · —
 
 Gli snapshot che Fub tiene di ogni nota mentre la si modifica: la memoria di
 com'era il file prima. Vive in `.fub/data/`, che è ignorato da git — anche in
@@ -866,22 +879,24 @@ kernel — ed è la prova che il canale dati basta.
 ## Il metodo
 
 ### buco dichiarato
-— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md), [0106](decisions/0106-un-formato-si-presenta.md), [0109](decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md), [0112](decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md), [0113](decisions/0113-il-banco-conta-le-operazioni.md)
+— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md), [0106](decisions/0106-un-formato-si-presenta.md), [0109](decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md), [0112](decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md), [0113](decisions/0113-il-banco-conta-le-operazioni.md), [0128](decisions/0128-una-versione-di-schema-e-un-tipo.md)
 
 Un fatto sulla forma del contratto che chi legge dedurrebbe **al contrario**,
 scritto nel posto in cui ci si inciampa mentre ci si chiede se una cosa si può —
 non in fondo a un verbale e non come casella da spuntare. Non entra in nessun
 totale e non è lavoro rimandato: è ciò che si sarebbe scoperto dopo.
 
-Sono **sette** [conta: buchi-dichiarati]: `plugin_data_dir`, che consegna a un
+Sono **otto** [conta: buchi-dichiarati]: `plugin_data_dir`, che consegna a un
 provider nativo una cartella vera (0064); «su task completato» che non ha un
 campo nel modello, quindi in `DocChange` non si può nominare (0069); la
 superficie di scrittura di un terzo, che non è vietata ma non è attrezzata
 (0104); il formato su disco che nasce senza costante nominata e senza riga in
 tabella (0106); ciò che di Windows da qui non si può provare (0109); che il
 ponte Tauri serializzi davvero questi record e che la webview li disegni (0112);
-e il rapporto fra due tempi, che nessun conto di operazioni sa sostituire
-(0113).
+il rapporto fra due tempi, che nessun conto di operazioni sa sostituire (0113);
+e la versione di schema scritta al volo dentro il record — `SchemaVersion::new(1)`
+senza una costante che la nomini: è del tipo giusto, quindi il compilatore è
+contento, e non la conta nessuno (0128).
 
 Il numero ha una storia sua, ed è la ragione per cui adesso porta un conto
 accanto: questa riga ha detto «due» mentre erano tre e poi «quattro» mentre

@@ -150,10 +150,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::storage::VaultStorage;
 use crate::vault::FUB_DIR;
+use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema di **un record** (§15.3). Vedi il § in testa al modulo
 /// per il perché non stia in testa al file.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Il nome del file dentro [`FUB_DIR`].
 const FILE: &str = "journal.jsonl";
@@ -345,7 +346,7 @@ impl JournalOp {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JournalRecord {
     /// La versione di schema di **questa riga**.
-    pub v: u32,
+    pub v: SchemaVersion,
     /// Millisecondi UNIX.
     pub at: u64,
     /// Chi ha chiesto, e dentro quale lotto (decisioni 0011 e 0012).

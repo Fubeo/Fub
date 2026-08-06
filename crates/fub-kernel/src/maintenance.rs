@@ -76,6 +76,7 @@
 //! dell'utente raggiungeva**.
 
 use fub_abi::command::{CommandReach, CommandScope, CommandSpec};
+use fub_abi::schema::SchemaVersion;
 use fub_abi::text::Text;
 
 /// Id del provider: lo spazio dati e la registrazione, come per gli altri.
@@ -205,7 +206,7 @@ pub const BUNDLE_FILE: &str = "diagnostics.json";
 pub struct Diagnostics {
     /// La versione di schema (§15.3): ce l'ha anche un derivato, perché senza,
     /// la versione dopo dovrebbe indovinare che un file senza campo è di prima.
-    pub v: u32,
+    pub v: SchemaVersion,
     /// Millisecondi UNIX in cui è stato scritto.
     pub at: u64,
     /// La versione di Fub che l'ha scritto.
@@ -228,7 +229,7 @@ pub struct Diagnostics {
 }
 
 /// La versione di schema del bundle.
-pub const DIAGNOSTICS_VERSION: u32 = 1;
+pub const DIAGNOSTICS_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Le frasi dei tre comandi, nelle due lingue che il progetto porta (0040,
 /// 0041).

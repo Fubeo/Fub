@@ -138,10 +138,14 @@ fn righe_della_tabella() -> Vec<RigaDiTabella> {
 
 /// Le costanti di versione di un sorgente, per numero di riga.
 ///
-/// Cerca la **proprietà** — una costante intera che dichiara una versione di
-/// schema — e non il nome `SCHEMA_VERSION`: `DIAGNOSTICS_VERSION` è sfuggita per
-/// un anno a un conto che guardava il nome, e chi l'ha chiamata così non ha
-/// sbagliato niente.
+/// Cerca la **proprietà**, e da questo giro la proprietà è il **tipo**: una
+/// `const` di tipo [`SchemaVersion`](fub_abi::schema::SchemaVersion). Prima
+/// cercava un intero il cui nome finisse per `VERSION`, ed era mezza sillaba
+/// meglio del `const SCHEMA_VERSION` letterale da cui veniva — ma restava un
+/// nome, e la 0106 aveva già misurato che un nome non regge: `DIAGNOSTICS_VERSION`
+/// era sfuggita per un anno, e chi l'aveva chiamata così non aveva sbagliato
+/// niente. Adesso una versione rinominata resta trovata, e un intero che si
+/// chiama `VERSION` senza essere una versione di schema non entra più.
 fn versioni_dichiarate(sorgente: &str) -> Vec<(usize, u32)> {
     let mut out = Vec::new();
     for (i, riga) in sorgente.lines().enumerate() {
@@ -157,22 +161,32 @@ fn versioni_dichiarate(sorgente: &str) -> Vec<(usize, u32)> {
                 None => continue,
             },
         };
-        let Some((nome, tipo_e_valore)) = resto.split_once(": ") else {
+        let Some((_nome, tipo_e_valore)) = resto.split_once(": ") else {
             continue;
         };
-        if !nome.ends_with("VERSION") {
-            continue;
-        }
-        // E nemmeno la larghezza dell'intero lo è.
         let Some((tipo, valore)) = tipo_e_valore.split_once(" = ") else {
             continue;
         };
-        if !matches!(tipo, "u8" | "u16" | "u32" | "u64" | "usize") {
+        if tipo != "SchemaVersion" {
             continue;
         }
-        if let Ok(v) = valore.trim_end_matches(';').trim().parse::<u32>() {
-            out.push((i + 1, v));
-        }
+        let valore = valore.trim().trim_end_matches(';');
+        let numero = valore
+            .strip_prefix("SchemaVersion::new(")
+            .and_then(|v| v.strip_suffix(')'))
+            .unwrap_or_else(|| {
+                panic!(
+                    "riga {}: una `const` di tipo `SchemaVersion` scritta in una forma \
+                     che questo estrattore non sa leggere:\n  {riga}\n\
+                     Se la forma è legittima, allargalo — non lasciare che un formato \
+                     su disco sparisca da un elenco che serve a vederli tutti.",
+                    i + 1
+                )
+            });
+        let numero: u32 = numero
+            .parse()
+            .unwrap_or_else(|_| panic!("riga {}: `{numero}` non è un numero", i + 1));
+        out.push((i + 1, numero));
     }
     out
 }

@@ -15,6 +15,7 @@ use crate::ignore::IgnorePolicy;
 use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FsStorage, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
+use fub_abi::schema::SchemaVersion;
 
 /// La **radice unica** di ciò che Fub scrive dentro un vault
 /// ([decisione 0048](../../../docs/decisions/0048-una-radice-sola.md)).
@@ -74,13 +75,13 @@ const TRASH_META_DIR: &str = "trash";
 /// previsto: senza un numero in testa, la versione dopo dovrebbe **indovinare**
 /// che un file senza campo viene da prima — e qui indovinare male vuol dire
 /// riportare la nota di qualcuno nella cartella sbagliata.
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Il contenuto di un sidecar del cestino.
 #[derive(Serialize, Deserialize)]
 struct TrashSidecar {
     /// La versione di schema di **questo** file, indipendente dalle altre.
-    v: u32,
+    v: SchemaVersion,
     /// Il path (relativo al vault) da cui la voce è stata cestinata.
     original: String,
 }

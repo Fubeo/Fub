@@ -54,6 +54,7 @@ use fub_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery, TextTolerance,
 };
+use fub_abi::schema::SchemaVersion;
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -86,7 +87,7 @@ pub const SEARCH_ID: &str = "fub.search";
 /// linguaggio (§5.3) chiedono e che i campi di prima non sapevano distinguere —
 /// «in questa cartella» contro «in questa o sotto», e lo stesso per un tag.
 /// v5: `headings`, il campo che `TextField::Heading` chiede (decisione 0050).
-const SCHEMA_VERSION: u32 = 5;
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 
 /// **La forma che quel numero versiona** (§15.3,
 /// [0106](../../../docs/decisions/0106-un-formato-si-presenta.md)).
@@ -263,7 +264,7 @@ impl FieldWeights {
 /// mentire in silenzio.
 #[derive(Debug, Serialize, Deserialize)]
 struct Manifest {
-    schema_version: u32,
+    schema_version: SchemaVersion,
     opstamp: u64,
     /// `DocId` → impronta del contenuto indicizzato.
     docs: HashMap<String, u64>,
@@ -2423,7 +2424,7 @@ mod tests {
             idx.flush(&mut host).unwrap();
         }
         let mut m = manifest_of(&host);
-        m.schema_version = SCHEMA_VERSION + 1;
+        m.schema_version = SCHEMA_VERSION.successiva();
         put_manifest(&mut host, &m);
 
         let idx = open(&path, &mut host);

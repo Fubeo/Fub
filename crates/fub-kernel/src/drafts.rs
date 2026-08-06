@@ -100,13 +100,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::storage::VaultStorage;
 use crate::vault::FUB_DIR;
+use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema di **una bozza** (§15.3).
 ///
 /// In testa al record e non in testa a un file di indice, perché ogni bozza è un
 /// file suo: la versione dopo che non riconoscesse questo formato salta *quella*
 /// bozza e legge le altre, invece di perdere l'elenco intero.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Il nome della cartella dentro [`FUB_DIR`].
 const DIR: &str = "drafts";
@@ -125,7 +126,7 @@ pub fn drafts_dir(root: &Utf8Path) -> Utf8PathBuf {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Draft {
     /// La versione di schema di **questa** bozza.
-    pub v: u32,
+    pub v: SchemaVersion,
     /// Di quale documento è la bozza. Per una nota che non è mai stata salvata è
     /// il nome che avrebbe: un documento che non esiste ancora sul disco.
     pub doc: DocId,
