@@ -603,14 +603,6 @@ fn divergenze_dichiarate() -> Vec<(&'static str, Perche, fn(&DocumentModel, &str
             |d, _| testo_piatto(d) == "un grassetto inline" && nomi_dei_kind(d).is_empty(),
         ),
         (
-            "un frontmatter che non si parsa non lascia traccia",
-            Perche::AccesaEnonMappata,
-            // `frontmatter.is_empty()` da solo è vero su qualunque documento senza
-            // frontmatter, cioè sulla maggior parte: la divergenza è che il **file**
-            // apre con i delimitatori e il modello non ne sa niente.
-            |d, src| src.starts_with("---\n") && d.frontmatter.is_empty(),
-        ),
-        (
             "l'ancora esplicita di un heading non è raggiungibile dall'albero",
             Perche::RappresentataEnonRaggiungibile,
             |d, _| {
@@ -720,12 +712,16 @@ fn le_divergenze_sono_quelle_dichiarate() {
     let dichiarate = divergenze_dichiarate();
     let sorgenti = divergenti();
     assert!(
-        dichiarate.len() >= 13,
-        "l'elenco delle divergenze si è svuotato: {} righe su tredici. Se sono\n\
-         state riparate è una bella notizia e va scritta nel verbale — e allora si\n\
-         abbassa questo numero **nello stesso commit**, che è ciò che lo tiene una\n\
-         soglia e non un desiderio; se è l'elenco che si è rotto, questo file ha\n\
-         smesso di presidiare la cosa per cui esiste.",
+        dichiarate.len() >= 12,
+        "l'elenco delle divergenze si è svuotato: {} righe su dodici. Se sono\n\
+         state riparate è una bella notizia e va scritta dove la riparazione sta\n\
+         — e allora si abbassa questo numero **nello stesso commit**, che è ciò\n\
+         che lo tiene una soglia e non un desiderio; se è l'elenco che si è\n\
+         rotto, questo file ha smesso di presidiare la cosa per cui esiste.\n\
+         L'ultima scesa: «un frontmatter che non si parsa non lascia traccia» —\n\
+         adesso la traccia c'è, e il caso è passato nel corpus curato col nome\n\
+         «frontmatter illeggibile» (vedi\n\
+         `tests/il_frontmatter_non_si_perde.rs`).",
         dichiarate.len()
     );
 

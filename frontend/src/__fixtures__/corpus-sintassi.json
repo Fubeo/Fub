@@ -428,6 +428,13 @@
     "task": []
   },
   {
+    "nome": "frontmatter illeggibile",
+    "source": "---\n--- non una chiave\nb: 2\n---\n\nx\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
     "nome": "ancora di paragrafo",
     "source": "Un paragrafo ^abc123\n",
     "tag": [],

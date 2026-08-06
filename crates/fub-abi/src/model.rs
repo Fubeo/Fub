@@ -759,6 +759,17 @@ pub mod custom_kind {
     /// L'ultima spiaggia: un blocco che il provider non sa nominare ma di cui
     /// ha ricostruito i figli.
     pub const BLOCK: &str = "block";
+    /// Un frontmatter che il provider **non è riuscito a proiettare su JSON**:
+    /// YAML rotto, chiavi duplicate, o un documento che non è una mappa.
+    /// `attrs: { text: string, error: string }`, dove `text` è il blocco
+    /// **verbatim** — delimitatori compresi — così com'era sul disco.
+    ///
+    /// Esiste perché senza di lui quel testo spariva due volte: dal modello,
+    /// che ricadeva su un frontmatter vuoto, e poi dal file, alla prima
+    /// riscrittura che passa dal modello. Un frontmatter illeggibile è
+    /// *contenuto dell'utente*, e chi non l'ha capito non è autorizzato a
+    /// cancellarlo: lo conserva così com'è, e dice perché in `error`.
+    pub const FRONTMATTER_UNPARSED: &str = "frontmatter-unparsed";
 }
 
 /// Il valore di una proprietà del frontmatter, **normalizzato**.

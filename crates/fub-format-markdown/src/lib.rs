@@ -80,7 +80,7 @@ impl FormatProvider for MarkdownProvider {
     }
 
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
-        Ok(serialize::serialize(model))
+        serialize::serialize(model)
     }
 }
 

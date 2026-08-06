@@ -621,7 +621,7 @@ const FUORI_DAL_CAPPELLO: [(&str, &str); 3] = [
          un paragrafo, tagliato non ha niente",
     ),
     (
-        "un frontmatter che non si parsa non lascia traccia",
+        "frontmatter illeggibile",
         "col cappello davanti diventa un doppio frontmatter, che è la maglia già \
          dichiarata da `and_that_fixed_point_is_a_fact_about_this_corpus_not_about_the_format`",
     ),

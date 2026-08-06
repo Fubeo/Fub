@@ -455,15 +455,6 @@ verifica, non in un elenco di lavoro.
   pausa dell'interfaccia. La regola della [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
   è esattamente questa, applicata qui: mutare in memoria sotto il lucchetto,
   rilasciarlo, rendere durevole fuori.
-- [ ] **Un frontmatter che non si serializza sparisce senza dirlo**
-  (`crates/fub-format-markdown/src/serialize.rs`). L'`if let Ok(yaml)` salta il
-  blocco intero quando `to_string` fallisce: il documento si riscrive **senza il
-  suo frontmatter**, e il giro completo modello → sorgente → disco diventa una
-  perdita di dati muta. È il caso in cui il fallimento deve risalire, non
-  essere assorbito. Accanto, e più lieve, `parse_frontmatter`
-  (`crates/fub-format-markdown/src/parse.rs`): uno YAML rotto cade in
-  `Frontmatter::default()` con un `_ =>`, e chi ha sbagliato una virgola nelle
-  proprietà vede le proprietà svanire senza un avviso.
 - [ ] **L'eco del proprio salvataggio si conta troppo tardi**
   (`frontend/src/panels/document.ts`). `buf.echi += 1` sta **dopo**
   `await api.writeDocument`, ma l'evento che quell'eco descrive lo emette il

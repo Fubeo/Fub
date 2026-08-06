@@ -131,6 +131,17 @@ pub fn corpus() -> Vec<Caso> {
             "frontmatter con ogni specie di proprietà",
             "---\ntesto: X\nnumero: 4\nvero: true\nvuota:\ndata: 2026-07-30\nquando: 2026-07-30T10:30:00+02:00\nelenco: [a, b]\nrelazione: \"[[Nota]]\"\nannidata:\n  a: 1\n---\n\nx\n",
         ),
+        // Uno YAML che non si proietta su una mappa. Non è un caso di scuola: è
+        // la virgola sbagliata di chi scrive le proprietà a mano, e fino alla
+        // riparazione del difetto stava fra le [`divergenti`] col nome «un
+        // frontmatter che non si parsa non lascia traccia» — spariva due volte,
+        // dal modello che ricadeva su un frontmatter vuoto e poi dal file alla
+        // prima riscrittura. Adesso la traccia c'è, ed è
+        // `custom_kind::FRONTMATTER_UNPARSED`.
+        caso(
+            "frontmatter illeggibile",
+            "---\n--- non una chiave\nb: 2\n---\n\nx\n",
+        ),
         // --- ancore ---
         caso("ancora di paragrafo", "Un paragrafo ^abc123\n"),
         caso("ancora su riga propria", "Un paragrafo\n\n^abc123\n"),
@@ -205,10 +216,6 @@ pub fn divergenti() -> Vec<Caso> {
         caso(
             "l'html inline sparisce, mentre quello a blocco resta",
             "un <b>grassetto</b> inline\n",
-        ),
-        caso(
-            "un frontmatter che non si parsa non lascia traccia",
-            "---\n--- non una chiave\nb: 2\n---\n\nx\n",
         ),
         caso(
             "l'ancora esplicita di un heading non è raggiungibile dall'albero",
