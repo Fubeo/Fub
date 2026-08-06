@@ -100,7 +100,7 @@ pub use model::{
     PropertyTime, PropertyValue, Span, TableCell, TableRow, Tag, TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
-pub use options::OptionMap;
+pub use options::{OptionMap, OptionStatus};
 pub use organization::Organization;
 pub use query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TextField,

@@ -61,6 +61,16 @@ dettaglio, un `false` esplicito spegne. Il namespace è di chi definisce la voce
 in `options::{syntax, render_option, permission}`. Prima erano N booleani, e con
 quella forma ogni sintassi del capitolo 5.2 costava un campo del contratto.
 
+Gli stati sono **tre** e si chiedono con `status(key) -> OptionStatus`
+(`Unset` / `Off` / `On(&Value)`, col parametro attaccato): *nessuno l'ha
+nominata* non è *qualcuno l'ha spenta*, ed è la differenza che `overlay` fa
+viaggiare fra vault, cartella e nota. `enabled(key) -> bool` resta ed è la sua
+**proiezione** — chi parsa, chi rende e chi apre un cancello fa la stessa cosa
+nei due «no» — e `active()` è `iter()` meno le spente, per chi deve *elencare*
+ciò che è acceso ([decisione 0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md)).
+`OptionStatus` non attraversa il confine: al confine c'è la mappa, e i tre stati
+un `option-entry` li porta già tutti e tre.
+
 `FormatCapabilities` e `ParseContext` **condividono il vocabolario** (`syntax`):
 «cosa so fare» e «cosa devi accendere» sono la stessa domanda vista da due lati.
 `RenderTarget` resta un `enum` (`Screen`, `Print`, `Pdf`, `StaticSite`) perché i

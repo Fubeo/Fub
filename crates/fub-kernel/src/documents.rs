@@ -244,6 +244,18 @@ impl DocumentStore {
     /// precedenza di `format_of` letta al contrario — là il provider vince
     /// perché il suo *dettaglio* è più informativo, qui la regola vince perché
     /// il suo *trigger* lo è.
+    ///
+    /// # Solo le **accese**
+    ///
+    /// Si legge `active()` e non `iter()`, cioè la stessa domanda che
+    /// [`format_of`](Self::format_of) fa con `enabled`. Finché era `iter()` le
+    /// due rispondevano diverso sulla stessa mappa: una sintassi che un provider
+    /// dichiara *e spegne* — `.with(nome, false)`, l'unico modo che ha di dire
+    /// «questa la conosco e qui non la faccio» — non compariva fra le capacità e
+    /// compariva fra le forme, cioè la superficie di scrittura l'avrebbe
+    /// decorata e il parse non l'avrebbe letta. Nessun provider di questo repo
+    /// la usa, il che è precisamente il motivo per cui la divergenza poteva
+    /// restare lì.
     pub fn syntax_forms(&self, id: &DocId) -> Vec<SyntaxForm> {
         let Ok(provider) = self.provider_for(id) else {
             return Vec::new();
@@ -252,7 +264,7 @@ impl DocumentStore {
         let mut out: Vec<SyntaxForm> = provider
             .capabilities()
             .syntax
-            .iter()
+            .active()
             .filter(|(name, _)| !grafted.iter().any(|g| g.name == *name))
             .map(|(name, _)| SyntaxForm {
                 name: name.to_string(),
