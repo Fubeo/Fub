@@ -48,6 +48,19 @@ jobs:
       # diventa un errore, diventa una seconda versione nell'albero.
       - name: le versioni delle dipendenze si scrivono in un posto solo
         run: node .github/scripts/check-cargo-versioni.mjs
+      # E la domanda che nessun altro passo si fa: **questa feature, qualcuno la
+      # compila?** Una feature spenta non è codice che fallisce, è codice che non
+      # esiste — e con lui spariscono i suoi `#[test]`, che non diventano rossi e
+      # nemmeno `ignored`: escono dal conto. Misurato: togliendo `http-client`
+      # dal `default` di `fub-host`, `cargo test --workspace` passa da 1331 a
+      # 1328 test — spariscono le tre prove di `net.rs`, cioè quelle che tengono
+      # in piedi le due decisioni della 0097 (non seguire i redirect, fidarsi del
+      # verificatore della piattaforma) — e nient'altro se ne accorge: le righe
+      # `test result: ok` restano 119, `clippy` resta a zero, gli altri presidi
+      # restano verdi. È la classe che questo repo ha già incontrato più di dodici
+      # volte, e qui bastava togliere una parola da un elenco.
+      - name: ogni cargo feature è compilata da qualcuno (decisione 0129)
+        run: node .github/scripts/check-cargo-feature-default.mjs
       # Il terzo confine, e l'unico che si GENERA: le union di stringhe del
       # mirror TS sono emesse dagli enum senza payload del contratto
       # (decisione 0053). Sta qui e non solo nel `cargo test --workspace`
