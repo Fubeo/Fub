@@ -47,7 +47,7 @@ import { onEvent } from "../state/kernel";
 import { noteRecentiEsistenti } from "../state/recenti";
 import { emit, on, state } from "../state/store";
 import {
-  cambioSotto,
+  consumaCambioSotto,
   esitoDelFallimento,
   scriviContandoEco,
   statoDi,
@@ -149,9 +149,14 @@ interface Buffer {
   /// l'origine di una scrittura della shell è `user`, la stessa di un comando
   /// che l'utente lancia — quindi lo si riconosce contando: una scrittura mette
   /// un eco in attesa **prima di partire**, e il primo evento non-watcher su
-  /// quel documento lo consuma. Prima di partire perché l'evento nasce dentro
-  /// la scrittura e può arrivare mentre la si aspetta; se la scrittura poi
-  /// fallisce l'eco lo toglie `scriviContandoEco`, che è l'unica a metterlo.
+  /// quel documento lo consuma — **anche se non c'è niente da dire**, che è la
+  /// parte che per un po' questa riga ha promesso e il codice non ha fatto.
+  /// Prima di partire perché l'evento nasce dentro la scrittura e può arrivare
+  /// mentre la si aspetta.
+  ///
+  /// Le due metà del conto stanno tutte e due in `state/salvataggio.ts`, e da
+  /// qui non si tocca: `scriviContandoEco` lo mette e lo riprende se la
+  /// scrittura fallisce, `consumaCambioSotto` lo toglie quando l'evento arriva.
   ///
   /// Il modo in cui questo conto può sbagliare è uno solo ed è **limitato**: se
   /// un eco non arrivasse (coda troncata), il contatore resterebbe alto e si
@@ -973,7 +978,7 @@ function scheduleDraft(doc: string): void {
 /// Mette la bozza sul disco. Non racconta il proprio fallimento all'utente, ed è
 /// una scelta: è una rete di sicurezza che gira di fianco al lavoro vero, e un
 /// avviso per ogni bozza non scritta insegnerebbe a ignorare gli avvisi — che è
-/// il difetto che `cambioSotto` esiste per non avere. Chi vuole saperlo lo trova
+/// il difetto che `consumaCambioSotto` esiste per non avere. Chi vuole saperlo lo trova
 /// nel rapporto diagnostico.
 async function writeDraft(doc: string): Promise<void> {
   const buf = buffers.get(doc);
@@ -1204,12 +1209,15 @@ async function saveDoc(doc: string): Promise<void> {
 /// ignorare gli altri tredici.
 function avvisaSeIlBufferCopre(id: string, daFuori: boolean): void {
   const buf = buffers.get(id);
-  switch (cambioSotto(buf, daFuori)) {
+  // Il conto degli echi non si tocca da qui: `consumaCambioSotto` lo consuma
+  // decidendo, perché la nascita e la morte di quell'eco sono due eventi dello
+  // stesso conto e stanno da chi lo possiede. Questa funzione decide solo se e
+  // come **parlare**, che è ciò che sa fare — e ciò che il modulo dello stato,
+  // che non ha un DOM, non saprebbe.
+  switch (consumaCambioSotto(buf, daFuori)) {
     case "muto":
       return;
     case "eco":
-      // Consumato: la scrittura successiva ne metterà un altro.
-      buf!.echi -= 1;
       return;
     case "altra_app":
       notify(t("document.overwritten", { doc: id }), "guasto");

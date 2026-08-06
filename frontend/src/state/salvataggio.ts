@@ -23,9 +23,16 @@ export type Esito = "ok" | "in_corso" | "fallito" | "conflitto";
 
 /// Cosa la barra di stato dice del documento che si sta guardando.
 ///
-/// Quattro e non due, perché due sarebbero «salvato» e «non salvato» e il caso
-/// che questa voce esiste per coprire — *ho provato e non ci sono riuscito* —
-/// finirebbe indistinguibile da *devo ancora provare*, che è quello innocuo.
+/// **Cinque** [conta: stati-salvataggio] e non due, perché due sarebbero
+/// «salvato» e «non salvato» e i due casi che questo tipo esiste per coprire —
+/// *ho provato e non ci sono riuscito*, *è cambiato sotto e devo decidere* —
+/// finirebbero indistinguibili da *devo ancora provare*, che è quello innocuo.
+///
+/// Il numero sta fra parentesi quadre e non a memoria: quando questa riga è
+/// stata scritta diceva «quattro», ed era vera; poi è arrivato `conflitto` e la
+/// riga è rimasta indietro senza che niente diventasse rosso. Un conteggio
+/// scritto in una frase è **prosa che parla dei sorgenti** (§16.8), e da qui in
+/// avanti lo rifà `check-prosa` a ogni giro.
 export type StatoSalvataggio =
   | "salvato"
   | "in_corso"
@@ -77,7 +84,8 @@ export function esitoDelFallimento(e: unknown): "conflitto" | "fallito" {
 
 /// Cosa è successo quando qualcuno riscrive un file **sotto un buffer sporco**.
 ///
-/// Quattro risposte e non due, e la quarta è quella che mancava:
+/// **Quattro** [conta: esiti-cambio-sotto] risposte e non due, e la quarta è
+/// quella che mancava:
 ///
 ///   - `muto` — il buffer è pulito: non c'è niente da coprire, e la ricarica se
 ///     ne occupa da sé;
@@ -93,19 +101,50 @@ export function esitoDelFallimento(e: unknown): "conflitto" | "fallito" {
 /// di te» — del file che contiene ciò che abbiamo appena scritto noi. È il
 /// difetto peggiore che un centro notifiche possa avere: **un avviso che compare
 /// quando non è successo niente insegna a ignorare quelli che contano**.
+export type CambioSotto = "muto" | "eco" | "altra_app" | "riscrittura";
+
+/// Chi ha riscritto il file, **consumando l'eco che quell'evento era**.
 ///
-/// L'eco non può mangiarsi il caso grave, ed è l'unico invariante di questa
-/// funzione: `daFuori` risponde prima del contatore, sempre.
-export function cambioSotto(
+/// Questa funzione non è pura, ed è l'unica di questo file a non esserlo: è la
+/// **seconda metà** del conto degli echi, e la prima è `scriviContandoEco` qui
+/// sotto. Il conto ha due eventi — nasce con la scrittura, muore con l'evento
+/// che quella scrittura produce — e chi possiede un conto deve possedere i due
+/// **eventi**, non i due segni. Finché la sottrazione stava nel `case "eco"` di
+/// chi avvisa, la metà che toglie era una riga che il prossimo ramo (o il
+/// prossimo ascoltatore di `document_changed`) si dimentica, e un ramo
+/// dimenticato non si vede provando l'app: si vede un avviso di troppo, o di
+/// meno, tre settimane dopo.
+///
+/// **L'eco si consuma anche quando non c'è niente da dire**, ed è la riga che
+/// prima non c'era. Il `muto` di un buffer pulito tornava senza toccare il
+/// conto: ogni salvataggio finito mentre l'utente aveva già smesso di battere —
+/// cioè quasi tutti, perché l'autosave parte 400 ms dopo l'ultima battuta —
+/// lasciava il suo eco appeso, e ogni eco appeso si mangia **il prossimo cambio
+/// vero**. Bastava tornare a battere e una riscrittura del kernel o di un
+/// plugin veniva scambiata per la nostra: l'avviso che doveva comparire non
+/// compariva. Il commento su `Buffer.echi` dichiarava già la regola giusta — «il
+/// primo evento non-watcher su quel documento lo consuma» — ed era il codice a
+/// non applicarla.
+///
+/// `daFuori` risponde **prima** del contatore e non lo tocca mai, ed è
+/// l'invariante che resta intero: un watcher non è mai un eco nostro, quindi il
+/// caso grave — il lavoro di un'altra applicazione che stiamo per coprire — non
+/// si può zittire, e un evento non nostro non può consumare l'attesa di una
+/// nostra scrittura.
+export function consumaCambioSotto(
   buf: { dirty: boolean; echi: number } | undefined,
   daFuori: boolean,
-): "muto" | "eco" | "altra_app" | "riscrittura" {
-  if (!buf?.dirty) return "muto";
-  if (daFuori) return "altra_app";
-  return buf.echi > 0 ? "eco" : "riscrittura";
+): CambioSotto {
+  if (!buf) return "muto";
+  if (daFuori) return buf.dirty ? "altra_app" : "muto";
+  const nostro = buf.echi > 0;
+  if (nostro) buf.echi -= 1;
+  if (!buf.dirty) return "muto";
+  return nostro ? "eco" : "riscrittura";
 }
 
-/// Scrive **contando l'eco**, e possiede tutte e due le metà del conto.
+/// Scrive **contando l'eco**, e possiede tutta la nascita di quel conto: lo
+/// mette prima di partire e se lo riprende se il kernel rifiuta.
 ///
 /// L'eco si annuncia **prima** della scrittura, e non è un dettaglio d'ordine:
 /// l'evento che quell'eco descrive lo emette il kernel *dentro* la scrittura,
@@ -126,6 +165,13 @@ export function cambioSotto(
 /// salva: i rami di fallimento di `saveDoc` sono due oggi e chi ne aggiungesse
 /// un terzo — o un secondo chiamante di `writeDocument` — non deve doversi
 /// ricordare di sottrarre. Un ramo dimenticato non si vede provando l'app.
+///
+/// E l'altra metà — quella che toglie l'eco quando l'evento **arriva** — è
+/// `consumaCambioSotto` qui sopra: il conto vive tutto in questo file, e fuori
+/// di qui le righe che lo muovono sono **zero** [conta: echi-fuori-dal-padrone].
+/// Non è una promessa di stile: è la sola cosa che rende vero il paragrafo
+/// precedente, perché un padrone che possiede metà di un conto non ne possiede
+/// nessuna.
 export async function scriviContandoEco<T>(
   buf: { echi: number },
   scrivi: () => Promise<T>,
