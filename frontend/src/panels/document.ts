@@ -242,10 +242,23 @@ export function mountDocument(d: DocumentDeps): void {
   });
 
   onEvent("document_changed", (e, origin) => {
-    // La nota è cambiata (anche da fuori: watcher, altra app). Riguarda ogni
-    // riquadro che la sta mostrando, non «il» riquadro.
-    if (paneConDoc(e.id).length === 0) return;
+    // La nota è cambiata (anche da fuori: watcher, altra app).
+    //
+    // **Il conto degli echi risponde per primo, prima di qualunque guardia.**
+    // È del *buffer*, e un buffer può benissimo esistere senza che nessun
+    // riquadro mostri quel documento: succede fra la chiusura di una tab e il
+    // `flush` che la congeda, ed è esattamente il momento in cui una scrittura
+    // in volo produrrà il suo eco. Con la guardia davanti, quell'eco non veniva
+    // consumato da nessuno — e il commento su `Buffer.echi` promette il
+    // contrario, «il primo evento non-watcher su quel documento lo consuma,
+    // anche se non c'è niente da dire». Un eco non consumato non si ripara più:
+    // si mangia il prossimo avviso vero.
     avvisaSeIlBufferCopre(e.id, origin.actor.kind === "watcher");
+    // Ciò che segue riguarda invece ogni riquadro che la sta mostrando, non
+    // «il» riquadro — e se non ce n'è nessuno non c'è niente da rileggere né da
+    // ridisegnare: la guardia sta davanti a ciò che disegna, che è ciò di cui
+    // parla.
+    if (paneConDoc(e.id).length === 0) return;
     void reloadIfClean(e.id);
     void ridisegnaLettura(e.id);
   });

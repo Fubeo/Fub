@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Sessantasei** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Sessantacinque** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -562,7 +562,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |
 | 0101 | `EntryStore::store` mette la cache a posto **prima** di scrivere: se la scrittura fallisce, memoria e disco divergono fino alla riapertura | `fub-kernel` · `entries.rs` `EntryStore::store` | stato divergente |
 | 0102 | fra `scrivi_meta` riuscita e `scrivi_index` fallita un `meta.json` resta «viva» sotto un indice «cestinata»: una ricostruzione dai meta risuscita la nota — gemello del 0044 | `fub-features` · `versioning.rs` `applica` | versioning |
-| 0103 | la guardia sui riquadri sta **prima** di `consumaCambioSotto`: l'eco di un documento con un buffer e nessun riquadro non viene consumato mai | `frontend` · `panels/document.ts` `onEvent("document_changed")` | eventi persi |
 | 0104 | `intestazioniSchede` ricostruisce **tutte** le linguette a ogni riconciliazione, e chi ci sta sopra col tab perde il fuoco | `frontend` · `ui/node.ts` `intestazioniSchede` | shell |
 | 0105 | nei casi `select` e `radio` il lettore registrato da `valore` cattura `node` una volta sola e `aggiorna` non lo rilega: un campo riusato legge la forma di ieri — gemello del 0025 | `frontend` · `ui/node.ts` `disegna` | shell |
 | 0106 | il `.speaking()` delle tre irregolari (search, versioning, blocks) è scritto a mano ramo per ramo, e la somma del versioning non la confronta col montaggio nessuno | `fub-host` · `mount.rs` + `tests/i_cataloghi.rs` | presidi |
