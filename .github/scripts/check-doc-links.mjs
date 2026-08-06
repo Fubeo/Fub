@@ -454,6 +454,17 @@ function main() {
           motivo,
         });
 
+      // Un link dentro `node_modules/` è la sola specie che passa qui e fallisce
+      // in CI: sulla macchina di chi scrive le dipendenze sono installate, nel
+      // job `docs` no (non esegue `npm ci`, perché non gli serve altro). Il
+      // verde locale diceva il falso, e il rosso arrivava da un'altra parte —
+      // per questo si rifiuta **prima** di guardare se il file c'è, invece di
+      // lasciarlo dipendere da com'è fatta la macchina.
+      if (relativo.split(path.sep).includes("node_modules")) {
+        segnala("punta dentro node_modules/ — non è nel repo e in CI non esiste");
+        continue;
+      }
+
       if (!fs.existsSync(bersaglio)) {
         segnala("il file non esiste");
         continue;
