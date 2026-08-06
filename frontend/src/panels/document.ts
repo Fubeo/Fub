@@ -39,6 +39,7 @@
 // quella domanda lì, e obbligarli a nominare un riquadro vorrebbe dire far
 // sapere a tutti cos'è un riquadro per non guadagnare niente.
 import { createEditor, type Editor } from "../editor/editor";
+import { Coda } from "../ui/corsa";
 import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
 import { SENZA_FINESTRA, noteDalNome, riferimentoRisolto, tagDelVault } from "../host/query";
@@ -131,6 +132,13 @@ interface Riquadro {
 /// Uno per documento, non uno per riquadro: vedi la nota in testa al file.
 interface Buffer {
   text: string;
+  /// I salvataggi di **questo** documento, uno alla volta (0134, difetto 0030).
+  ///
+  /// Sta sul buffer e non in una mappa accanto perché è del documento: due note
+  /// che si salvano insieme non hanno niente da spartire, e una coda unica le
+  /// metterebbe in fila per niente. Che sia un campo obbligatorio è la parte che
+  /// non si dimentica: un buffer nuovo senza coda non compila.
+  coda: Coda;
   /// Ha modifiche non ancora scritte su disco? Finché è sporco, questo testo è
   /// la verità del documento: non va MAI sovrascritto da un reload.
   dirty: boolean;
@@ -226,7 +234,7 @@ export function mountDocument(d: DocumentDeps): void {
   // non si ridisegnano l'utente si accorge comunque — sono metà della finestra —
   // e non avere dove leggerne la causa è l'esito buttato via del §20.3. Il
   // centro notifiche è la superficie che il §20.4 chiedeva e che dal §10.3 c'è.
-  // La coda intanto si riprende al giro dopo (`coda.then(disegna, disegna)`).
+  // La coda intanto si riprende al giro dopo (la coda dei disegni).
   on("layout", () => {
     void sincronizza().catch((e) => {
       notify(t("panes.redraw_failed", { reason: errorText(e) }), "guasto");
@@ -498,7 +506,21 @@ function dimentica(doc: string): void {
 /// pubblicherebbe il contesto di un buffer che non c'è ancora. Accodare invece
 /// di saltare il secondo giro: chi aspetta deve aspettare il disegno che
 /// comprende la sua mutazione, non uno qualunque.
-let coda: Promise<void> = Promise.resolve();
+const codaDeiDisegni = new Coda();
+
+/// Le aperture, in fila (difetto 0033).
+///
+/// `openDocument` non ha niente da datare: l'`id` è il suo parametro e non
+/// scade — il difetto era descritto come una identità da ricontrollare dopo
+/// l'`await`, e quell'identità non esiste. Ciò che manca è **l'ordine**: due
+/// aperture ravvicinate (un doppio click nell'esploratore, due Invio nel quick
+/// switcher) aspettano tutte e due `flushPendingSave`, e chi finisce di aspettare
+/// per primo apre per primo. Se è quella chiesta per prima a finire per seconda,
+/// il documento che resta col fuoco è quello che l'utente aveva chiesto **prima**.
+///
+/// Buttare la vecchia sarebbe sbagliato: sono due note che l'utente ha chiesto
+/// di aprire, e le vuole aperte tutte e due. Vanno in fila.
+const codaDelleAperture = new Coda();
 
 /// Porta il DOM in accordo col layout: la struttura, le tab, i documenti
 /// caricati, la modalità, il fuoco.
@@ -507,8 +529,7 @@ let coda: Promise<void> = Promise.resolve();
 /// file può limitarsi a mutare il layout e non pensarci più — la stessa forma
 /// con cui `ui/panel-host.ts` ha tolto ai pannelli il «quando ridisegnarsi».
 export function sincronizza(): Promise<void> {
-  coda = coda.then(disegna, disegna);
-  return coda;
+  return codaDeiDisegni.accoda(disegna);
 }
 
 async function disegna(): Promise<void> {
@@ -772,6 +793,7 @@ async function leggiBuffer(doc: string): Promise<string> {
     dirty: false,
     esito: "ok",
     echi: 0,
+    coda: new Coda(),
     base: { kind: "descends_from", value: revision },
   });
   return text;
@@ -845,6 +867,7 @@ export async function recuperaBozze(): Promise<number> {
       dirty: true,
       esito: "ok",
       echi: 0,
+      coda: new Coda(),
       base: b.base === null ? DETTA : { kind: "descends_from", value: b.base },
     });
     notify(`${b.doc}: ${t(CHIAVE_CASO[casoDi(b)])}`, "info");
@@ -856,17 +879,19 @@ export async function recuperaBozze(): Promise<number> {
 
 /// Apre un documento nel riquadro col fuoco.
 export async function openDocument(id: string): Promise<void> {
-  // Cambio documento: prima si mette in salvo ciò che è appeso al debounce, così
-  // nessuna modifica resta indietro. Tutti i buffer e non solo quello che si sta
-  // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
-  // azioni di view.
-  await flushPendingSave();
-  apriIn(layout.focus, id);
-  await sincronizza();
-  // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
-  // selezione sarebbe quello del documento precedente.
-  await publishContext();
-  focusEditor();
+  await codaDelleAperture.accoda(async () => {
+    // Cambio documento: prima si mette in salvo ciò che è appeso al debounce, così
+    // nessuna modifica resta indietro. Tutti i buffer e non solo quello che si sta
+    // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
+    // azioni di view.
+    await flushPendingSave();
+    apriIn(layout.focus, id);
+    await sincronizza();
+    // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
+    // selezione sarebbe quello del documento precedente.
+    await publishContext();
+    focusEditor();
+  });
 }
 
 /// Chiude il documento aperto **in ogni riquadro**, senza salvarlo: lo si usa
@@ -938,7 +963,14 @@ function scritto(paneId: string, text: string): void {
   // Un buffer che nasce qui non ha mai letto il disco — è il testo che sta
   // arrivando dall'editor su un documento che nessuno aveva aperto — quindi non
   // discende da niente che si possa nominare.
-  const buf = buffers.get(doc) ?? { text, dirty: false, esito: "ok" as Esito, echi: 0, base: DETTA };
+  const buf = buffers.get(doc) ?? {
+    text,
+    dirty: false,
+    esito: "ok" as Esito,
+    echi: 0,
+    coda: new Coda(),
+    base: DETTA,
+  };
   buf.text = text;
   buf.dirty = true;
   buffers.set(doc, buf);
@@ -1115,6 +1147,29 @@ export function resumeSave(): void {
 async function saveDoc(doc: string): Promise<void> {
   const buf = buffers.get(doc);
   if (!buf) return;
+  // **Uno alla volta**, ed è il difetto 0030. Due salvataggi dello stesso
+  // documento potevano essere in volo insieme — `flushDoc` toglie il timer, ma
+  // un `saveDoc` che il timer ha già fatto partire il `clearTimeout` non lo
+  // richiama indietro — e allora leggevano tutti e due la stessa `buf.base`.
+  // Il primo scriveva e ne produceva una nuova; il secondo arrivava con quella
+  // vecchia in mano, e il kernel faceva esattamente ciò per cui la guardia
+  // esiste: rispondeva `conflict`. Cioè l'utente vedeva «il file è cambiato
+  // sotto di te» di un file che aveva toccato solo lui, e la seconda scrittura
+  // non arrivava sul disco.
+  //
+  // Una corsa qui sarebbe il rimedio sbagliato: il testo del secondo
+  // salvataggio è ciò che l'utente ha scritto, e buttarlo perché ne è partito
+  // un altro vuol dire perdere delle battute. Va in fila, non nel cestino.
+  await buf.coda.accoda(() => scriviBuffer(doc));
+}
+
+async function scriviBuffer(doc: string): Promise<void> {
+  // Riletto dentro la coda e non catturato fuori: fra l'accodamento e il turno
+  // il documento può essere stato dimenticato (chiuso, rinominato, cancellato),
+  // e scrivere su un buffer staccato dalla mappa vuol dire scrivere in un
+  // oggetto che nessuno legge più.
+  const buf = buffers.get(doc);
+  if (!buf?.dirty) return;
   const text = buf.text;
   buf.esito = "in_corso";
   disegnaSalvataggio();
