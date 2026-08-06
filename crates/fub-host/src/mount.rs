@@ -52,9 +52,11 @@ use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewState
 use fub_kernel::RegistryError;
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
-use crate::settings::{core_catalog_montato, core_settings, disabled_plugins, CORE_ID};
+use crate::settings::{
+    catalogo_montato, core_catalog_montato, core_settings, disabled_plugins, CORE_ID,
+};
 #[cfg(feature = "versioning")]
-use crate::settings::{versioning_enabled, versioning_settings, versioning_settings_catalog};
+use crate::settings::{versioning_enabled, versioning_settings};
 
 /// Ciò che esce dal montaggio: il workspace con tutto registrato, chi possiede i
 /// bundle, e la metà dello store delle versioni che resta in mano a chi ha
@@ -271,8 +273,7 @@ pub fn mount(
                     // monta — un motore di ricerca sa di avere dei pesi — e per
                     // la stessa ragione le sue etichette stanno già dentro il
                     // catalogo della feature, senza un secondo da sommare.
-                    .configuring(fub_features::search::settings())
-                    .speaking("it", (feature.catalog)()),
+                    .configuring(fub_features::search::settings()),
             );
         }
         #[cfg(feature = "versioning")]
@@ -290,21 +291,16 @@ pub fn mount(
                 })
                 // L'interruttore è **dell'host** e non della feature (§11.1): il
                 // versioning non sa di poter essere spento, e le sue chiavi stanno
-                // qui accanto allo schema che le descrive. Da qui i due cataloghi
-                // che si sommano, come per il core.
-                .configuring(versioning_settings())
-                .speaking(
-                    "it",
-                    [versioning_settings_catalog(), (feature.catalog)()].concat(),
-                ),
+                // qui accanto allo schema che le descrive. Il catalogo che le
+                // traduce si somma al suo in `catalogo_montato`, qui sotto — non
+                // in questo ramo, o sarebbe di nuovo l'unica scrittura di una
+                // somma che nessuno riconfronta.
+                .configuring(versioning_settings()),
             );
         }
         #[cfg(feature = "blocks")]
         if feature.id == BLOCKS_ID {
-            irregolare = Some(
-                CoreBundle::new(feature.id, feature.nome, register_blocks)
-                    .speaking("it", (feature.catalog)()),
-            );
+            irregolare = Some(CoreBundle::new(feature.id, feature.nome, register_blocks));
         }
         // **Prima l'irregolare.** Era in fondo, e andava bene finché una riga
         // irregolare non offriva anche una view: dal §1.2 il versioning ne offre
@@ -321,12 +317,10 @@ pub fn mount(
             CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
                 register_view(ws, feature.id, costruisci())
             })
-            .speaking("it", (feature.catalog)())
         } else if let Some(costruisci) = feature.commands {
             CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
                 register_commands(ws, feature.id, costruisci())
             })
-            .speaking("it", (feature.catalog)())
         } else {
             // Una feature nell'inventario che qui nessuno sa registrare. Non è
             // uno stato che l'utente possa produrre: è qualcuno che ha aggiunto
@@ -341,6 +335,18 @@ pub fn mount(
                 feature.id
             ));
         };
+        // **Le stringhe si dichiarano qui, una volta, per tutti e cinque i
+        // rami.** Erano scritte in ognuno — `.speaking("it", (feature.catalog)())`
+        // quattro volte identiche, e la quinta con una somma dentro — e cinque
+        // scritture della stessa cosa sono cinque posti in cui una può restare
+        // indietro: un ramo nuovo che si dimentichi la riga monta un bundle
+        // **muto**, e un bundle muto non è rosso da nessuna parte — le sue
+        // chiavi restano nude a schermo solo per chi legge in un'altra lingua.
+        // Qui la riga non si può dimenticare, perché non è in nessun ramo.
+        //
+        // Cosa una feature monta davvero lo dice `catalogo_montato`, e lo dice
+        // **anche al banco che lo giudica**: è la forma di `core_catalog_montato`.
+        let bundle = bundle.speaking("it", catalogo_montato(feature.id, (feature.catalog)()));
         bundles.push(Arc::new(bundle));
     }
 

@@ -37,6 +37,31 @@ fn cataloghi_del_core() -> Vec<StringCatalog> {
     fub_host::settings::core_catalog_montato()
 }
 
+/// I cataloghi che il bundle del **versioning** porta al montaggio.
+///
+/// Stessa forma e stessa ragione di [`cataloghi_del_core`], un giro dopo. Il
+/// versioning è l'unica feature ufficiale che al montaggio somma due cataloghi
+/// — il suo, e quello dell'interruttore che è dell'host (§11.1) — e quella
+/// somma stava scritta **una volta sola**, dentro l'espressione `.speaking(…)`
+/// di `mount.rs`. Questo file giudicava i due addendi separatamente: chiedeva
+/// che le chiavi di `versioning_settings()` avessero una voce in
+/// `versioning_settings_catalog()`, il che è vero **anche se al montaggio
+/// quell'addendo non arriva**. Toglierlo dalla somma lasciava tutta la suite
+/// verde e le tre etichette dell'interruttore nude nel pannello.
+///
+/// Adesso la somma è `fub_host::settings::catalogo_montato`, e a chiamarla sono
+/// il montaggio e questo banco. La feature si cerca **nell'inventario**, non si
+/// nomina: è la stessa `fn` che `mount` invoca, quindi fra ciò che si monta e
+/// ciò che si giudica non c'è una copia da tenere allineata.
+#[cfg(feature = "versioning")]
+fn cataloghi_del_versioning() -> Vec<StringCatalog> {
+    let feature = fub_features::ogni_feature_ufficiale()
+        .iter()
+        .find(|f| f.id == fub_features::VERSIONING_ID)
+        .expect("il versioning è nell'inventario delle feature ufficiali");
+    fub_host::settings::catalogo_montato(feature.id, (feature.catalog)())
+}
+
 /// **Ciò che una famiglia dichiara, il montaggio lo dice.**
 ///
 /// Il conto prende la famiglia che nessuno ha elencato; questo test prende
@@ -194,13 +219,58 @@ fn le_impostazioni_dell_app_hanno_tutte_una_voce_in_tutte_le_lingue() {
     let buchi = mancanti(&chiavi_core, &cataloghi);
     assert!(buchi.is_empty(), "{}", buchi.join("\n  "));
 
+    // Contro ciò che il versioning monta **davvero**, non contro il solo
+    // catalogo dell'interruttore: quello lo si confronterebbe con sé stesso.
     let (chiavi_v, cablate_v) = chiavi(&fub_host::settings::versioning_settings());
     assert!(cablate_v.is_empty(), "{cablate_v:?}");
-    let buchi_v = mancanti(
-        &chiavi_v,
-        &fub_host::settings::versioning_settings_catalog(),
+    let buchi_v = mancanti(&chiavi_v, &cataloghi_del_versioning());
+    assert!(
+        buchi_v.is_empty(),
+        "l'interruttore del versioning dichiara delle chiavi che il bundle non \
+         monta:\n  {}\n\
+         Il catalogo che le traduce si somma in `settings::catalogo_montato`, ed è \
+         la sola scrittura di quella somma: se è sparita di là, queste etichette \
+         restano nude nel pannello.",
+        buchi_v.join("\n  ")
     );
-    assert!(buchi_v.is_empty(), "{}", buchi_v.join("\n  "));
+}
+
+/// **Ciò che una feature dichiara, il montaggio non lo perde per strada.**
+///
+/// `catalogo_montato` somma; una somma può anche **sostituire**, e la differenza
+/// non la vede nessuno degli altri banchi. `fub-features/tests/i_cataloghi.rs`
+/// giudica il catalogo di ogni feature leggendolo dall'inventario, cioè senza
+/// sapere se al montaggio ci arrivi; questo file, fino a qui, guardava la sola
+/// riga del versioning. Misurato: riscrivendo la somma come il solo catalogo
+/// dell'interruttore — cioè buttando via quello della feature — **tutto
+/// `cargo test -p fub-host` resta verde**, e nell'app spariscono le etichette
+/// della cronologia.
+///
+/// La domanda vale per tutte e dieci e non per il versioning soltanto: è la
+/// prova che il secondo chiamante eredita: la riga che un giorno aggiungerà un
+/// catalogo dell'host a un'altra feature nasce già presidiata da qui.
+#[test]
+fn ogni_feature_ufficiale_monta_il_proprio_catalogo() {
+    for feature in fub_features::ogni_feature_ufficiale() {
+        let proprio = (feature.catalog)();
+        let montato = fub_host::settings::catalogo_montato(feature.id, proprio.clone());
+        for catalogo in &proprio {
+            for chiave in catalogo.entries.keys() {
+                let arriva = montato
+                    .iter()
+                    .filter(|c| c.locale == catalogo.locale)
+                    .any(|c| c.entries.contains_key(chiave));
+                assert!(
+                    arriva,
+                    "«{}» dichiara «{chiave}» in «{}» e il montaggio non la porta: \
+                     `settings::catalogo_montato` **somma** al catalogo della feature, \
+                     non lo sostituisce — chi legge in quella lingua vedrebbe la chiave \
+                     nuda.",
+                    feature.id, catalogo.locale
+                );
+            }
+        }
+    }
 }
 
 #[test]
@@ -220,18 +290,16 @@ fn le_due_metà_del_core_non_si_pestano_i_piedi() {
         .filter(|c| c.locale == "it")
         .flat_map(|c| c.entries.keys().cloned())
         .collect();
-    let kernel: std::collections::BTreeSet<String> = [
-        fub_kernel::locale::catalog(),
-        fub_kernel::maintenance::catalog(),
-        fub_kernel::journal::catalog(),
-        fub_kernel::properties::catalog(),
-        fub_kernel::ignore::catalog(),
-    ]
-    .concat()
-    .iter()
-    .filter(|c| c.locale == "it")
-    .flat_map(|c| c.entries.keys().cloned())
-    .collect();
+    // Le famiglie non si elencano qui: le somma `Famiglia::cataloghi()`, cioè
+    // la stessa espressione che il montaggio usa. Erano cinque righe a mano, ed
+    // erano l'ultima copia dell'elenco rimasta in questo file — una famiglia
+    // nuova non entrava in questo confronto, quindi una chiave doppia fra host
+    // e kernel poteva nascere restando verde.
+    let kernel: std::collections::BTreeSet<String> = fub_kernel::famiglie::Famiglia::cataloghi()
+        .iter()
+        .filter(|c| c.locale == "it")
+        .flat_map(|c| c.entries.keys().cloned())
+        .collect();
     let doppie: Vec<&String> = host.intersection(&kernel).collect();
     assert!(
         doppie.is_empty(),
@@ -241,10 +309,7 @@ fn le_due_metà_del_core_non_si_pestano_i_piedi() {
 
 #[test]
 fn ogni_lingua_del_core_dice_le_stesse_cose() {
-    for cataloghi in [
-        cataloghi_del_core(),
-        fub_host::settings::versioning_settings_catalog(),
-    ] {
+    for cataloghi in [cataloghi_del_core(), cataloghi_del_versioning()] {
         let per_lingua: std::collections::BTreeMap<&str, std::collections::BTreeSet<&String>> =
             cataloghi.iter().fold(Default::default(), |mut acc, c| {
                 acc.entry(c.locale.as_str())
