@@ -461,6 +461,41 @@ fn i_job_in_coda_di_chi_si_spegne_ricevono_un_esito() {
     );
 }
 
+/// E quell'esito arriva **anche agli handler**, non solo al bus.
+///
+/// Le due strade non sono la stessa e il banco qui sopra ne guarda una sola: il
+/// bus riceve al momento dell'emissione, gli handler ricevono da un
+/// **drenaggio**. Che il drenaggio ci sia, qui, non lo decide `deactivate_plugin`
+/// — che drena solo se il plugin aveva degli indici — ma `complete_job`, che
+/// drena per conto suo a ogni esito. È una coincidenza fra due funzioni, e
+/// finché nessuno la guarda è anche una che si può disfare cambiando l'altra:
+/// questo banco la guarda. Toglietelo da `complete_job` e diventa rosso.
+#[test]
+fn e_l_esito_arriva_anche_a_chi_ascolta_dal_kernel() {
+    let banco = Banco::nuovo();
+    let mut ws = banco.workspace();
+    let sentiti = Arc::new(Mutex::new(0));
+    ws.register_event_handler("prova.due", Box::new(Ascoltatore(sentiti.clone())))
+        .expect("handler");
+    ws.with_host("prova.uno", |host| {
+        host.spawn_job(JobSpec {
+            job: "lungo".into(),
+            payload: serde_json::Value::Null,
+        })
+    })
+    .expect("il job si accoda");
+    // `prova.uno` non ha indici: è il caso in cui il drenaggio non partiva.
+    *sentiti.lock().unwrap() = 0;
+
+    ws.deactivate_plugin("prova.uno").expect("disattivato");
+
+    assert!(
+        *sentiti.lock().unwrap() > 0,
+        "il `JobDone` è rimasto in coda: chi ascolta dal kernel non sa che quel \
+         job non partirà, e lo saprà solo quando qualcun altro toccherà il vault"
+    );
+}
+
 /// Un id che nessuno ha dichiarato non si disattiva: è la stessa risposta che
 /// riceve chi prova a registrare qualcosa a suo nome.
 #[test]
