@@ -31,9 +31,29 @@
 //! traffico raro e di chi lo emette; il caso che questo tetto esiste per
 //! chiudere — la scansione di un vault grande, o una sincronizzazione che tocca
 //! mille note — è tutto dall'altra parte.
+//!
+//! # Il veleno (decisione 0126): un bus che tace non lo scopre nessuno
+//!
+//! L'elenco degli abbonati sta dietro un lucchetto, e un panico avvenuto mentre
+//! qualcuno lo teneva lo avvelena. La politica dell'host — irrecuperabile, e da
+//! lì in poi `Internal` a ogni chiamata ([decisione 0120]) — **qui non si può
+//! applicare**: [`EventBus::emit`] non rende niente a nessuno, quindi «rispondi
+//! di no» diventerebbe «taci per sempre», cioè una shell ferma su uno stato
+//! vecchio senza una riga che dica perché.
+//!
+//! La differenza non è di comodo, ed è la regola della 0120 applicata bene: la
+//! politica segue **cosa il lucchetto protegge**. Qui protegge un elenco di
+//! destinatari indipendenti, non uno stato mutato a metà: `retain` lascia il
+//! `Vec` valido anche se una consegna muore in mezzo, e ciò che si può essere
+//! perso è **una consegna**, che in questo file ha già il suo vocabolario. Il
+//! bus quindi si riprende, lo scrive una volta nel log, e mette in debito
+//! **tutti** gli abbonati di un notice — così ognuno riceve un
+//! [`Event::Overflow`] e riconcilia. Chi l'aveva ricevuto riconcilia per
+//! niente: è il verso giusto in cui sbagliare.
+//!
+//! [decisione 0120]: ../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use fub_abi::Notice;
@@ -290,6 +310,13 @@ struct Subscriber {
 impl Subscriber {
     /// Accoda, o butta e conta. Rende `false` se il capo ricevente è sparito —
     /// e allora il bus si dimentica di questo abbonato.
+    /// Mettilo in debito di un notice senza avergliene buttato uno: è ciò che
+    /// il bus fa a tutti quando si riprende da un veleno, perché una consegna
+    /// interrotta a metà dell'elenco non dice quali metà.
+    fn perso_uno(&self) {
+        self.out.dropped();
+    }
+
     fn deliver(&self, notice: &Notice) -> bool {
         if self.out.queued() >= BACKLOG_CEILING && notice.event.is_recoverable() {
             self.out.dropped();
@@ -308,9 +335,84 @@ impl Subscriber {
     }
 }
 
+/// Il modulo esiste per una ragione sola: il lucchetto dell'elenco è privato
+/// **qui dentro**, e con lui la risposta alla domanda «e se è avvelenato?».
+mod roster {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+
+    use super::Subscriber;
+
+    /// L'elenco degli abbonati, col suo lucchetto e la sua politica.
+    ///
+    /// `.lock()` su un `Roster` non esiste, quindi non compila: chi vuole
+    /// l'elenco passa da [`Roster::with`], e la domanda «cosa si fa se è
+    /// avvelenato?» ha una risposta sola, scritta una volta.
+    #[derive(Clone, Default)]
+    pub(super) struct Roster {
+        subs: Arc<Mutex<Vec<Subscriber>>>,
+        /// Quante volte questo bus si è ripreso da un veleno. È **del bus** e
+        /// non del processo: due vault aperti sono due elenchi.
+        denunce: Arc<AtomicU32>,
+    }
+
+    impl Roster {
+        /// L'**unico** posto in cui si tiene l'elenco.
+        pub(super) fn with<T>(&self, f: impl FnOnce(&mut Vec<Subscriber>) -> T) -> T {
+            let mut subs = match self.subs.lock() {
+                Ok(subs) => subs,
+                Err(veleno) => self.riprendi(veleno),
+            };
+            f(&mut subs)
+        }
+
+        /// La politica, in un posto solo: **riprenditi, dillo una volta, e
+        /// paga il debito a tutti**.
+        ///
+        /// `into_inner` qui non è mentire — ed è la ragione per cui la risposta
+        /// è l'opposta di quella dell'host. Ciò che il lucchetto protegge è un
+        /// elenco di destinatari indipendenti: `Vec::retain` tiene il vettore
+        /// valido anche se il predicato pania in mezzo, e nessun abbonato è
+        /// mezzo-mutato dall'infortunio di un altro. Ciò che si può essere
+        /// perso è **una consegna**, e per quella c'è già l'`Overflow`.
+        ///
+        /// `clear_poison` fa sì che «una volta» sia una volta *per
+        /// avvelenamento* e non per sempre: un secondo panico è un secondo
+        /// incidente, e merita la sua riga.
+        #[cold]
+        fn riprendi<'a>(
+            &self,
+            veleno: PoisonError<MutexGuard<'a, Vec<Subscriber>>>,
+        ) -> MutexGuard<'a, Vec<Subscriber>> {
+            let subs = veleno.into_inner();
+            self.subs.clear_poison();
+            self.denunce.fetch_add(1, Ordering::Relaxed);
+            tracing::error!(
+                target: "fub.kernel",
+                abbonati = subs.len(),
+                "il bus degli eventi si è avvelenato: qualcuno è morto mentre teneva \
+                 l'elenco degli abbonati. Nessun file sul disco è toccato; una consegna \
+                 può essersi persa, e chi è abbonato riceve un Overflow per riconciliare."
+            );
+            for sub in subs.iter() {
+                sub.perso_uno();
+            }
+            subs
+        }
+
+        /// Quante volte questo bus si è ripreso.
+        #[cfg(test)]
+        pub(super) fn denunce(&self) -> u32 {
+            self.denunce.load(Ordering::Relaxed)
+        }
+    }
+}
+
+use roster::Roster;
+
 #[derive(Clone, Default)]
 pub struct EventBus {
-    subscribers: Arc<Mutex<Vec<Subscriber>>>,
+    subscribers: Roster,
 }
 
 impl EventBus {
@@ -321,14 +423,14 @@ impl EventBus {
     /// Crea un nuovo subscriber e restituisce il capo ricevente.
     pub fn subscribe(&self) -> Subscription {
         let (out, intake) = intake::abbonamento();
-        self.subscribers.lock().unwrap().push(Subscriber { out });
+        self.subscribers.with(|subs| subs.push(Subscriber { out }));
         Subscription { intake }
     }
 
     /// Emette un evento a tutti i subscriber vivi; scarta quelli chiusi.
     pub fn emit(&self, notice: Notice) {
-        let mut subs = self.subscribers.lock().unwrap();
-        subs.retain(|sub| sub.deliver(&notice));
+        self.subscribers
+            .with(|subs| subs.retain(|sub| sub.deliver(&notice)));
     }
 }
 
@@ -495,48 +597,57 @@ mod tests {
         assert!(!matches!(dopo[0].event, Event::Overflow { .. }));
     }
 
-    /// Ciò che, fuori dalla porta, non deve più comparire.
-    ///
-    /// Sono i due conti dell'abbonamento e il capo che li muove: se uno di
-    /// questi si legge fuori da `mod intake`, vuol dire che una metà del conto
-    /// è tornata ad avere un secondo padrone — che è esattamente il difetto.
-    const FUORI_DALLA_PORTA: &[&str] = &[
-        "fetch_add",
-        "fetch_sub",
-        "AtomicUsize",
-        "AtomicU64",
-        "Sender<",
-        "tx.send(",
-    ];
-
-    /// **Il conto che verifica che la porta abbia agganciato davvero.**
+    /// Il codice di produzione di questo file **meno** ciò che sta dentro le
+    /// due porte, che è dove quelle parole devono stare.
     ///
     /// Una porta strutturale rende una forma inesprimibile, ma solo per chi ci
     /// passa: niente impedisce di riscrivere accanto un `Sender` e un contatore
-    /// nudi, e il compilatore direbbe di sì perché non c'è niente di illegale
-    /// da dire. È la zona cieca già misurata sulla
+    /// nudi, o un secondo `Mutex` con la sua politica improvvisata, e il
+    /// compilatore direbbe di sì perché non c'è niente di illegale da dire. È la
+    /// zona cieca già misurata sulla
     /// [0120](../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md),
     /// dove quattordici siti erano rimasti col codice vecchio a crate verde.
     ///
     /// **Ciò che questo conto non vede, dichiarato**: i banchi, che sono
     /// tagliati via apposta (un canale di prova è roba loro, e ne usano uno per
-    /// sincronizzare i thread); e un conto scritto in un *altro* file del
-    /// kernel, che questo presidio non apre. La porta è di `bus.rs` e il conto
-    /// guarda `bus.rs`.
-    #[test]
-    fn i_conti_dell_abbonamento_non_si_toccano_da_fuori() {
+    /// sincronizzare i thread); un lucchetto o un conto scritto in un *altro*
+    /// file del kernel, che questo presidio non apre — la porta è di `bus.rs` e
+    /// il conto guarda `bus.rs`; e un terzo modulo aggiunto qui dentro, che non
+    /// verrebbe tagliato e quindi risulterebbe rosso: è il verso giusto in cui
+    /// sbagliare, perché costringe a dichiararlo.
+    fn fuori_dalle_porte() -> String {
         let sorgente = include_str!("bus.rs");
         let (produzione, _banchi) = sorgente
             .split_once("#[cfg(test)]\nmod tests {")
             .expect("il taglio dei banchi: se cambia, questo conto guarda di meno e non di più");
-        let (prima, resto) = produzione
-            .split_once("mod intake {")
-            .expect("la porta dei conti si chiama `mod intake`");
-        let (_dentro, dopo) = resto
-            .split_once("\nuse intake::")
-            .expect("il modulo finisce dove lo si importa");
-        let fuori = format!("{prima}{dopo}");
-        for vietato in FUORI_DALLA_PORTA {
+        let mut fuori = produzione.to_string();
+        for (apre, chiude) in [
+            ("mod intake {", "\nuse intake::"),
+            ("mod roster {", "\nuse roster::"),
+        ] {
+            let (prima, resto) = fuori
+                .split_once(apre)
+                .unwrap_or_else(|| panic!("la porta `{apre}` non c'è più"));
+            let (_dentro, dopo) = resto
+                .split_once(chiude)
+                .unwrap_or_else(|| panic!("`{apre}` finisce dove lo si importa"));
+            let potato = format!("{prima}{dopo}");
+            fuori = potato;
+        }
+        fuori
+    }
+
+    /// **Il conto che verifica che la porta dei conti abbia agganciato.**
+    #[test]
+    fn i_conti_dell_abbonamento_non_si_toccano_da_fuori() {
+        let fuori = fuori_dalle_porte();
+        for vietato in [
+            "fetch_add",
+            "fetch_sub",
+            "AtomicUsize",
+            "AtomicU64",
+            "tx.send(",
+        ] {
             assert!(
                 !fuori.contains(vietato),
                 "`{vietato}` compare fuori da `mod intake`: una metà di un conto \
@@ -545,5 +656,66 @@ mod tests {
                  recuperabili di chi non è indietro di niente"
             );
         }
+    }
+
+    /// **Il conto che verifica che la porta del lucchetto abbia agganciato.**
+    #[test]
+    fn il_lucchetto_dell_elenco_non_si_prende_da_fuori() {
+        let fuori = fuori_dalle_porte();
+        for vietato in [
+            "Mutex",
+            ".lock()",
+            "PoisonError",
+            "clear_poison",
+            "into_inner",
+        ] {
+            assert!(
+                !fuori.contains(vietato),
+                "`{vietato}` compare fuori da `mod roster`: la domanda «e se è \
+                 avvelenato?» ha di nuovo due posti dove rispondere, e il secondo \
+                 non ha nessuno a cui rispondere — un bus che tace non lo scopre \
+                 nessuno"
+            );
+        }
+    }
+
+    /// La politica della 0126, dal comportamento: il veleno si produce come lo
+    /// produce la vita — un panico mentre qualcuno tiene l'elenco.
+    #[test]
+    fn un_bus_avvelenato_continua_a_consegnare_e_mette_tutti_in_debito() {
+        let bus = EventBus::new();
+        let rx = bus.subscribe();
+        // L'hook dei panici tace per la durata del misfatto, o un panico voluto
+        // stamperebbe la sua traccia e farebbe sembrare rotto un banco verde.
+        let hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let altro = bus.clone();
+        let morto = std::thread::spawn(move || altro.subscribers.with(|_| panic!("a metà")));
+        assert!(morto.join().is_err(), "il misfatto deve essere successo");
+        std::panic::set_hook(hook);
+
+        bus.emit(cambiato(1));
+        let arrivati: Vec<Notice> = rx.try_iter().collect();
+        assert!(
+            arrivati
+                .iter()
+                .any(|n| matches!(n.event, Event::DocumentChanged { .. })),
+            "il bus ha smesso di consegnare: la shell resta ferma su uno stato \
+             vecchio e nessuno dice perché"
+        );
+        assert!(
+            arrivati
+                .iter()
+                .any(|n| matches!(n.event, Event::Overflow { .. })),
+            "l'abbonato non è stato messo in debito: una consegna può essersi \
+             persa in mezzo all'elenco e lui non lo saprà mai"
+        );
+        assert_eq!(bus.subscribers.denunce(), 1);
+        bus.emit(cambiato(2));
+        assert_eq!(
+            bus.subscribers.denunce(),
+            1,
+            "una denuncia per avvelenamento, non una per chiamata"
+        );
     }
 }
