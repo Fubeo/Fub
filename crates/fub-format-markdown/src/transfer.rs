@@ -120,17 +120,44 @@ impl ImportProvider for MarkdownImport {
         let writes = matches!(outcome, ImportOutcome::Created | ImportOutcome::Replaced)
             && request.mode == ImportMode::Apply;
         let outcome = if writes {
-            // **Detta**, ed è il caso in cui la parola si guadagna il nome: un
-            // importer non sta correggendo un testo che ha letto, lo sta
-            // dettando, e una base inventata sarebbe una guardia che dice
-            // sempre di sì (§18.1). Con `ConflictPolicy::Replace` la
-            // sovrascrittura è per di più **richiesta**, e l'ha chiesta chi ha
-            // scelto la politica: le altre due strade di quel `match` esistono
-            // apposta per chi non la vuole.
-            match host.write_document(&doc, &text, WriteBase::Dictated) {
-                Ok(_) => outcome,
+            // **Le due scritture non sono la stessa scrittura**, e l'esito lo
+            // dice già: `Replaced` copre un documento che c'era, e l'ha chiesto
+            // chi ha scelto la politica; `Created` va su un path che questo
+            // codice ha scelto **perché era libero**.
+            //
+            // Fino a qui erano tutte e due `WriteBase::Dictated`, cioè «se ne
+            // copre uno è voluto», e per il primo caso è giusto: un importer non
+            // sta correggendo un testo che ha letto, lo sta dettando, e una base
+            // inventata sarebbe una guardia che dice sempre di sì (§18.1).
+            //
+            // Per il secondo era sbagliato, ed è il difetto 0039. `free_name`
+            // **non prenota** — lo dichiara il suo doc-comment, lo dichiara il
+            // contratto, e la 0027 discarica la corsa dicendo che «a quel punto è
+            // la scrittura a dirlo». Qui la scrittura non poteva dirlo: `Dictated`
+            // copre in silenzio. Fra la domanda del nome libero e la scrittura ci
+            // stanno un `parse` e — con `ConflictPolicy::Rename` — tutto il tempo
+            // che l'import impiega sui documenti precedenti; se in quella
+            // finestra qualcuno crea `Alpha 1.md`, l'import lo **cancellava**.
+            // Cioè la discarica valeva per ogni chiamante di `free_name` tranne
+            // il più esposto.
+            //
+            // La composizione giusta la scrive già il contratto di
+            // `create_document`: *«chi vuole un nome comunque libero lo chiede a
+            // `free_name` e passa quello»*. Qui la prima metà c'era e la seconda
+            // no.
+            let esito = match outcome {
+                ImportOutcome::Replaced => host
+                    .write_document(&doc, &text, WriteBase::Dictated)
+                    .map(|_| ()),
+                _ => host.create_document(&doc, &text),
+            };
+            match esito {
+                Ok(()) => outcome,
                 // Un rifiuto del recinto o un errore di scrittura riguardano
                 // QUESTO documento: il rapporto lo dice e l'import resta valido.
+                // E adesso c'è un rifiuto in più che prima non esisteva: il nome
+                // libero non lo era più. È un import fallito su una riga, non una
+                // nota dell'utente sparita.
                 Err(e) => ImportOutcome::Failed(e.to_string()),
             }
         } else {
