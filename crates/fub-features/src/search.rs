@@ -944,10 +944,20 @@ impl SearchIndex {
     /// Committa se ci sono scritture in sospeso, e riallinea il reader.
     ///
     /// Prende `&self` perché il commit può essere deciso anche da una `query`
-    /// (chi interroga vede le proprie scritture), ed è **l'unico punto** in cui
-    /// una query tocca un lock. Quando non c'è niente in sospeso — cioè sempre,
-    /// tranne subito dopo una scrittura — questa funzione è la lettura di un
-    /// atomico e nient'altro.
+    /// (chi interroga vede le proprie scritture), ed è **l'unico punto in cui
+    /// una query tocca un lock esclusivo**. Quando non c'è niente in sospeso —
+    /// cioè sempre, tranne subito dopo una scrittura — questa funzione è la
+    /// lettura di un atomico e nient'altro.
+    ///
+    /// Qui c'era scritto «l'unico punto in cui una query tocca un lock», senza
+    /// *esclusivo*, e la frase era **falsa**: [`FieldWeights`] sta dietro un
+    /// `RwLock` e `text_query` ne prende la `read()` a ogni ricerca di testo.
+    /// La differenza è tutta la §8.4 — una `read()` condivisa non mette nessuno
+    /// in fila, un `Mutex` sì — e una parola mancante la cancellava. L'ha
+    /// trovata il banco del §17.1
+    /// ([decisione 0113](../../../docs/decisions/0113-il-banco-conta-le-operazioni.md)),
+    /// che è quello che il commento accanto ai pesi chiedeva quando diceva «*il
+    /// banco della seduta è lì per smentirmi se sbaglio*».
     ///
     /// Il doppio controllo di `dirty` non è prudenza: due query concorrenti
     /// possono trovarlo alzato insieme, e la seconda non deve committare a

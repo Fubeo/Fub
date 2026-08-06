@@ -1754,6 +1754,16 @@ impl Workspace {
         // il lotto di alimentazione, quindi qui non si taglia una seconda
         // volta. I modelli interi vivono solo dentro questa chiamata, il tempo
         // di alimentare indici e conteggi: in cache restano i metadati.
+        //
+        // **Una fetta senza modelli non attraversa il confine** (§17.1,
+        // decisione 0113): è il caso normale di una riapertura a caldo, dove
+        // ogni documento è stato ripreso dalla cache, e un lotto vuoto non
+        // porta nessuna notizia a nessuno — a M5 sarebbe una serializzazione
+        // per dire niente. Lo ha trovato il banco contando le chiamate: nessun
+        // altro presidio le conta.
+        if models.is_empty() {
+            return;
+        }
         let lost = self.indexes.on_documents_indexed(&models);
         self.report_losses(lost);
     }

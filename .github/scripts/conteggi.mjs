@@ -177,6 +177,17 @@ export const CONTEGGI = [
       " END{print n+0}' crates/fub-kernel/tests/la_durabilita.rs",
   },
   {
+    nome: "famiglie-paginate",
+    ragione:
+      "Le domande del canale dati che chiedono una finestra. Il banco del §17.1 " +
+      "(decisione 0113) ha misurato che la finestra si può applicare in tre modi — " +
+      "alla sorgente, con `Paged::from_source`, o ritagliando in memoria — e che " +
+      "per anni tutte quelle del kernel usavano il terzo, costruendo l'insieme " +
+      "intero per mostrarne venti. Il numero sta accanto alla prosa che descrive " +
+      "le tre strade, così chi ne aggiunge una decima passa da lì e sceglie.",
+    comando: "grep -c 'page: Option<Page>,' crates/fub-abi/src/traits.rs",
+  },
+  {
     nome: "crate-del-workspace",
     ragione: "I crate che ereditano la versione dal `Cargo.toml` della radice.",
     comando: "ls -d crates/*/ | wc -l",
