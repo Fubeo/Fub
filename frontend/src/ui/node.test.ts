@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import type { ActionRef, UiNode } from "../host/contract";
-import { accoppia, mountTree } from "./node";
+import { accoppia, mountTree, patchTree } from "./node";
+import { registerCustomRenderer, type OnAction } from "./custom";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
 //
@@ -166,5 +167,96 @@ describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => 
     const { input, mandate } = riconciliato(cerca("prima"), cerca("dopo"));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
     expect(mandate).toEqual([]);
+  });
+});
+
+// La stessa specie della 0118 **un piano più in su**: non l'azione di un nodo,
+// ma l'`ActionHandler` di tutto l'albero.
+//
+// La coincidenza che teneva il difetto senza farlo mordere: `views.ts` fabbrica
+// una chiusura nuova a ogni ridisegno, ma tutte catturano `id` e `montata`, che
+// non cambiano — cioè sono oggetti diversi che fanno la stessa cosa. Nessuno
+// l'aveva scritto e nessun attore lo verificava; il giorno che due montaggi
+// dello stesso contenitore instradano davvero altrove, i due clienti qui sotto
+// mandano al posto sbagliato.
+//
+// I casi montano lo stesso contenitore **due volte con due handler diversi** —
+// ciò che nessun caso della 0118 fa, perché tutti riusano lo stesso `onAction`.
+describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () => {
+  const campo = (azione: string): UiNode =>
+    ({
+      node: "text_input",
+      field: "q",
+      label: "Cerca",
+      value: "",
+      placeholder: null,
+      key: "campo",
+      action: { action: azione, payload: null },
+    }) as UiNode;
+
+  const albero = (azione: string): UiNode =>
+    ({ node: "stack", dir: "column", gap: 4, children: [campo(azione)] }) as UiNode;
+
+  /// Due montaggi dello stesso contenitore con due handler **distinti**, e i due
+  /// registri separati per vedere dove è finita l'azione.
+  function montatoDueVolte(primo: UiNode, secondo: UiNode) {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const vecchio: string[] = [];
+    const nuovo: string[] = [];
+    mountTree(host, primo, async (a: ActionRef) => {
+      vecchio.push(a.action);
+    });
+    const input = host.querySelector("input");
+    mountTree(host, secondo, async (a: ActionRef) => {
+      nuovo.push(a.action);
+    });
+    // Se il secondo montaggio ha ricostruito invece di riusare, il caso non
+    // prova niente: il difetto vive solo nel riuso.
+    expect(host.querySelector("input")).toBe(input);
+    return { host, vecchio, nuovo };
+  }
+
+  it("un patch instrada al montaggio di adesso, non al primo", () => {
+    const { host, vecchio, nuovo } = montatoDueVolte(albero("uno"), albero("due"));
+    const input = host.querySelector("input")!;
+    expect(patchTree(host, "campo", campo("tre"))).toBe(true);
+    expect(host.querySelector("input")).toBe(input);
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(nuovo).toEqual(["tre"]);
+    // Il patch non riporta indietro ciò che la 0118 aveva rimesso a posto: un
+    // handler ripescato risalendo dall'elemento è quello del **primo** disegno,
+    // e riconciliare con lui riscriverebbe i legami del sottoalbero patchato.
+    expect(vecchio).toEqual([]);
+  });
+
+  it("un renderer custom che sopravvive alla riconciliazione instrada al montaggio di adesso", () => {
+    const NS = "prova.porta";
+    const porte: OnAction[] = [];
+    registerCustomRenderer(NS, (_host, _payload, onAction) => {
+      porte.push(onAction);
+    });
+    const nodo = (): UiNode =>
+      ({ node: "custom", ns: NS, payload: { n: 1 }, fallback: [] }) as UiNode;
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const vecchio: string[] = [];
+    const nuovo: string[] = [];
+    mountTree(host, nodo(), async (a: ActionRef) => {
+      vecchio.push(a.action);
+    });
+    const el = host.querySelector(".ui-custom");
+    mountTree(host, nodo(), async (a: ActionRef) => {
+      nuovo.push(a.action);
+    });
+    // Il payload non è cambiato: l'elemento resta, il widget dentro resta, e
+    // resta la porta che il renderer si è tenuto. È il punto del caso.
+    expect(host.querySelector(".ui-custom")).toBe(el);
+    expect(porte).toHaveLength(1);
+
+    porte[0]!({ action: "tocca", payload: null }, []);
+    expect(nuovo).toEqual(["tocca"]);
+    expect(vecchio).toEqual([]);
   });
 });
