@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import type { ActionRef, UiNode } from "../host/contract";
-import { accoppia, mountTree, patchTree } from "./node";
+import type { ActionRef, FieldValue, UiNode } from "../host/contract";
+import { accoppia, campiInVigore, mountTree, patchTree } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
@@ -258,5 +258,342 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
     porte[0]!({ action: "tocca", payload: null }, []);
     expect(nuovo).toEqual(["tocca"]);
     expect(vecchio).toEqual([]);
+  });
+});
+
+// La 0118 sui **valori** invece che sulle azioni, e la sua metà mancante.
+//
+// Il riconciliatore riusava un campo e ne riscriveva a mano un **elenco** di
+// attributi — il valore, l'azione, il testo dell'etichetta se c'era già —, e
+// quell'elenco era per costruzione un secondo elenco accanto a quello che il
+// disegno scrive: divergeva su `placeholder`, `rows`, `min`/`max`/`step`,
+// `multiple`, le etichette delle opzioni, i valori delle opzioni di un `radio`,
+// il nome del campo, l'etichetta che compare o sparisce, e il lettore del
+// valore registrato da `valore`. Un campo riusato mostrava e mandava la forma
+// di ieri, funzionando.
+//
+// Ogni caso verifica **anche** che il controllo sia lo stesso di prima: senza
+// quella riga il presidio passerebbe a vuoto il giorno in cui il riconciliatore
+// ricostruisse invece di riusare.
+describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
+  const SELETTORE = "input, textarea, select";
+
+  function riusato(prima: UiNode, dopo: UiNode): HTMLElement {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const onAction = async () => {};
+    mountTree(host, prima, onAction);
+    const controllo = host.querySelector(SELETTORE);
+    mountTree(host, dopo, onAction);
+    expect(host.querySelector(SELETTORE)).toBe(controllo);
+    return host;
+  }
+
+  /// Il campo, letto come lo leggerebbe un'azione che scatta adesso.
+  const letto = (host: HTMLElement) => campiInVigore(host.querySelector("[data-campo]")!);
+
+  const testo = (over: Record<string, unknown>): UiNode =>
+    ({
+      node: "text_input",
+      field: "q",
+      label: "Cerca",
+      value: "",
+      placeholder: null,
+      action: null,
+      ...over,
+    }) as UiNode;
+
+  const numero = (over: Record<string, unknown>): UiNode =>
+    ({
+      node: "number",
+      field: "n",
+      label: "Quanti",
+      value: 1,
+      min: null,
+      max: null,
+      step: null,
+      action: null,
+      ...over,
+    }) as UiNode;
+
+  const scelta = (over: Record<string, unknown>): UiNode =>
+    ({
+      node: "select",
+      field: "s",
+      label: "Scegli",
+      value: ["a"],
+      options: [
+        { value: "a", label: "Uno" },
+        { value: "b", label: "Due" },
+      ],
+      multiple: false,
+      action: null,
+      ...over,
+    }) as UiNode;
+
+  const bottoni = (over: Record<string, unknown>): UiNode =>
+    ({
+      node: "radio",
+      field: "r",
+      label: "Scegli",
+      value: "a",
+      options: [
+        { value: "a", label: "Uno" },
+        { value: "b", label: "Due" },
+      ],
+      action: null,
+      ...over,
+    }) as UiNode;
+
+  it("il segnaposto è quello del nodo nuovo", () => {
+    const host = riusato(testo({ placeholder: "prima" }), testo({ placeholder: "dopo" }));
+    expect(host.querySelector("input")!.placeholder).toBe("dopo");
+  });
+
+  it("un segnaposto che sparisce sparisce davvero", () => {
+    const host = riusato(testo({ placeholder: "prima" }), testo({ placeholder: null }));
+    expect(host.querySelector("input")!.placeholder).toBe("");
+  });
+
+  it("gli estremi di un numero sono quelli del nodo nuovo", () => {
+    const host = riusato(
+      numero({ min: 0, max: 10, step: 1 }),
+      numero({ min: 5, max: 50, step: 5 }),
+    );
+    const input = host.querySelector("input")!;
+    expect([input.min, input.max, input.step]).toEqual(["5", "50", "5"]);
+  });
+
+  it("le righe di un'area di testo sono quelle del nodo nuovo", () => {
+    const area = (rows: number): UiNode =>
+      ({ node: "text_area", field: "t", label: null, value: "", rows, action: null }) as UiNode;
+    const host = riusato(area(3), area(7));
+    // `Number` perché `happy-dom` restituisce l'attributo com'è scritto, e in
+    // un browser vero è già un numero: il presidio guarda il valore, non il
+    // tipo che gli dà l'ambiente.
+    expect(Number(host.querySelector("textarea")!.rows)).toBe(7);
+  });
+
+  it("un'etichetta che sparisce sparisce, e una che compare compare", () => {
+    const via = riusato(testo({ label: "Cerca" }), testo({ label: null }));
+    expect(via.querySelector(".ui-field-label")).toBeNull();
+    const arriva = riusato(testo({ label: null }), testo({ label: "Cerca" }));
+    const etichetta = arriva.querySelector<HTMLLabelElement>("label.ui-field-label")!;
+    expect(etichetta.textContent).toBe("Cerca");
+    // E l'etichetta arrivata **nomina** il campo: un `<label>` slegato è testo
+    // che sembra un'etichetta e non lo è per chi non vede.
+    expect(etichetta.htmlFor).toBe(arriva.querySelector("input")!.id);
+  });
+
+  it("il nome del campo è quello del nodo nuovo", () => {
+    const host = riusato(testo({ field: "prima" }), testo({ field: "dopo" }));
+    expect(letto(host).map((f) => f.field)).toEqual(["dopo"]);
+  });
+
+  it("un select che diventa multiplo riporta una scelta multipla", () => {
+    // Il caso del lettore invecchiato: la chiusura registrata da `valore`
+    // catturava `node.multiple` al primo disegno, e un select diventato
+    // multiplo continuava a riportare un `text`.
+    const host = riusato(scelta({ multiple: false }), scelta({ multiple: true }));
+    expect(host.querySelector("select")!.multiple).toBe(true);
+    expect(letto(host)).toEqual([{ field: "s", value: { type: "choices", value: ["a"] } }]);
+  });
+
+  it("le etichette delle opzioni di un select sono quelle del nodo nuovo", () => {
+    const host = riusato(
+      scelta({}),
+      scelta({
+        options: [
+          { value: "a", label: "Primo" },
+          { value: "b", label: "Secondo" },
+        ],
+      }),
+    );
+    const opzioni = Array.from(host.querySelectorAll("option"));
+    expect(opzioni.map((o) => o.textContent)).toEqual(["Primo", "Secondo"]);
+  });
+
+  it("le opzioni di un radio sono quelle del nodo nuovo, valore compreso", () => {
+    const host = riusato(
+      bottoni({}),
+      bottoni({
+        value: "x",
+        options: [
+          { value: "x", label: "Ics" },
+          { value: "y", label: "Ipsilon" },
+        ],
+      }),
+    );
+    const scelte = Array.from(host.querySelectorAll<HTMLInputElement>("input[type=radio]"));
+    expect(scelte.map((i) => i.value)).toEqual(["x", "y"]);
+    expect(scelte.map((i) => i.checked)).toEqual([true, false]);
+    expect(letto(host)).toEqual([{ field: "r", value: { type: "text", value: "x" } }]);
+  });
+});
+
+// A chi appartiene l'identità di un gruppo di radio.
+//
+// Era il **nome del campo**, cioè una stringa sola per tutto il documento: ogni
+// `radio` con quel `field` finiva nello stesso gruppo nativo, dovunque fosse.
+//
+// La metà che `todo.md` nominava — *«due form con lo stesso `field` si
+// deselezionano a vicenda»* — è **falsa**, e il caso qui sotto la tiene ferma:
+// un gruppo di radio dentro un `<form>` il browser lo scopa già al form, per
+// specifica, e la shell disegna un `form` vero. Vera è l'altra metà, che
+// nessuno aveva guardato: due view **senza** form — due pannelli che mostrano
+// lo stesso campo, che è la forma normale di una view — erano per il browser un
+// gruppo solo.
+//
+// Il nome adesso è l'id del contenitore, cioè lo stesso elemento che porta
+// `role="radiogroup"`: l'esclusività nativa e quella dichiarata sono lo stesso
+// gruppo, o non sono niente.
+describe("un gruppo di radio è il nodo che lo dichiara (§2.1)", () => {
+  const scelta = (): UiNode =>
+    ({
+      node: "radio",
+      field: "r",
+      label: "Scegli",
+      value: null,
+      options: [
+        { value: "a", label: "Uno" },
+        { value: "b", label: "Due" },
+      ],
+      action: null,
+    }) as UiNode;
+
+  const dentroUnForm = (): UiNode =>
+    ({
+      node: "form",
+      submit_label: "Vai",
+      submit: { action: "vai", payload: null },
+      children: [scelta()],
+    }) as UiNode;
+
+  const monta = (nodo: UiNode) => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, nodo, async () => {});
+    return host;
+  };
+
+  const sceltaDi = (host: HTMLElement, valore: string) =>
+    host.querySelector<HTMLInputElement>(`input[type=radio][value="${valore}"]`)!;
+
+  it("due view senza form con lo stesso campo non si deselezionano a vicenda", () => {
+    const primo = monta(scelta());
+    const secondo = monta(scelta());
+
+    sceltaDi(primo, "a").click();
+    sceltaDi(secondo, "b").click();
+
+    expect(sceltaDi(primo, "a").checked).toBe(true);
+    expect(campiInVigore(primo.querySelector(".ui-radio")!)).toEqual([
+      { field: "r", value: { type: "text", value: "a" } },
+    ]);
+  });
+
+  it("e dentro un form non si deselezionavano già prima: il form è un gruppo", () => {
+    const primo = monta(dentroUnForm());
+    const secondo = monta(dentroUnForm());
+
+    sceltaDi(primo, "a").click();
+    sceltaDi(secondo, "b").click();
+
+    expect(sceltaDi(primo, "a").checked).toBe(true);
+  });
+});
+
+// Le linguette di un gruppo di schede sono un pezzo d'albero che non passa da
+// `figli`: le disegna la shell, perché cambiare scheda è una piega e non serve
+// un giro dal provider. Passavano da `barra.replaceChildren()`, cioè si
+// ricostruivano tutte a ogni riconciliazione — che è precisamente ciò che il
+// §2.8 esiste per non fare.
+describe("le linguette di una barra di schede si riusano (§2.8)", () => {
+  const schede = (azione: string, etichetta = "Prima"): UiNode =>
+    ({
+      node: "tabs",
+      active: 0,
+      tabs: [
+        {
+          node: "tab",
+          label: etichetta,
+          action: { action: azione, payload: null },
+          children: [{ node: "text", content: "uno" }],
+        },
+        { node: "tab", label: "Seconda", action: null, children: [{ node: "text", content: "due" }] },
+      ],
+    }) as UiNode;
+
+  const conCampo = (): UiNode =>
+    ({
+      node: "tabs",
+      active: 0,
+      tabs: [
+        {
+          node: "tab",
+          label: "Prima",
+          action: { action: "apri", payload: null },
+          children: [
+            {
+              node: "text_input",
+              field: "q",
+              label: "Cerca",
+              value: "gatto",
+              placeholder: null,
+              action: null,
+            },
+          ],
+        },
+      ],
+    }) as UiNode;
+
+  function montato(prima: UiNode, dopo: UiNode) {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const mandate: string[] = [];
+    const onAction = async (a: ActionRef) => {
+      mandate.push(a.action);
+    };
+    mountTree(host, prima, onAction);
+    const linguetta = host.querySelector<HTMLButtonElement>(".ui-tab-button")!;
+    linguetta.focus();
+    mountTree(host, dopo, onAction);
+    return { host, linguetta, mandate };
+  }
+
+  it("chi ci sta sopra col tab non perde il fuoco", () => {
+    const { host, linguetta } = montato(schede("apri"), schede("apri"));
+    expect(host.querySelector(".ui-tab-button")).toBe(linguetta);
+    expect(document.activeElement).toBe(linguetta);
+  });
+
+  it("l'etichetta è quella del nodo nuovo", () => {
+    const { host } = montato(schede("apri", "Prima"), schede("apri", "Terza"));
+    expect(host.querySelector(".ui-tab-button")!.textContent).toBe("Terza");
+  });
+
+  it("una linguetta riusata manda l'azione del nodo nuovo", () => {
+    // Il presidio della forma, non del difetto: finché le linguette si
+    // ricostruivano, la chiusura che catturava `tab` era per forza fresca. Chi
+    // le riusa senza passare da `ascolta` la fa invecchiare, ed è lo stesso
+    // difetto della 0118 in un ramo che quella voce aveva lasciato scoperto.
+    const { host, linguetta, mandate } = montato(schede("prima"), schede("dopo"));
+    expect(host.querySelector(".ui-tab-button")).toBe(linguetta);
+    linguetta.click();
+    expect(mandate).toEqual(["dopo"]);
+  });
+
+  it("e la manda coi campi in vigore, che una linguetta non è un nodo", () => {
+    // Una linguetta è scocca, non un nodo disegnato: chi cerca la radice
+    // dell'albero partendo da lei non la trova al primo passo, e prima di
+    // guardare più su l'azione partiva **senza campi**.
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const campi: FieldValue[][] = [];
+    mountTree(host, conCampo(), async (_a: ActionRef, f: FieldValue[]) => {
+      campi.push(f);
+    });
+    host.querySelector<HTMLElement>(".ui-tab-button")!.click();
+    expect(campi).toEqual([[{ field: "q", value: { type: "text", value: "gatto" } }]]);
   });
 });
