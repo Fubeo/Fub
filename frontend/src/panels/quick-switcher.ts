@@ -41,6 +41,7 @@
 // propone non è la query così com'è: passa da `rules/nome-cercato.ts`, perché
 // `note.create` prende un **path** e una query può contenere uno slash.
 import { noteDalNome } from "../host/query";
+import { Corsa } from "../ui/corsa";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
 import { notify } from "../ui/notify";
@@ -140,8 +141,9 @@ export function apriQuickSwitcher(): void {
   let visibili: Voce[] = [];
   let scelto = 0;
   // Come nella ricerca dentro la nota: una risposta lenta di una query vecchia
-  // non deve sovrascrivere i risultati di una più recente.
-  let seq = 0;
+  // non deve sovrascrivere i risultati di una più recente. La corsa è di questo
+  // esemplare della palette, non del modulo (decisione 0134).
+  const corsa = new Corsa();
   let timer: number | undefined;
 
   const disegna = () => {
@@ -234,19 +236,38 @@ export function apriQuickSwitcher(): void {
 
   const cerca = async () => {
     const testo = input.value.trim();
-    const mio = ++seq;
-    try {
+    await corsa.ultimo(async (atteso) => {
       // A mani vuote le note aperte di recente e le ricerche fatte di recente:
       // dove stanno scritte, e a quali condizioni, sta in `state/recenti.ts`.
       // Le note passano dal vault perché una rinominata non si può proporre;
       // una ricerca non è un oggetto del vault e non ha niente da verificare.
-      const trovate = testo
-        ? (await noteDalNome(testo)).map((doc): Voce => ({ k: "doc", doc }))
-        : [
-            ...(await noteRecentiEsistenti()).map((doc): Voce => ({ k: "doc", doc })),
-            ...ricercheRecenti().map((q): Voce => ({ k: "query", q })),
-          ];
-      if (mio !== seq) return;
+      //
+      // L'errore diventa un valore prima del cancello: sotto non c'è nessun
+      // `catch`, quindi non c'è dove perdere il segnale di scadenza.
+      const esito = await atteso(
+        (testo
+          ? noteDalNome(testo).then((d) => d.map((doc): Voce => ({ k: "doc", doc })))
+          : noteRecentiEsistenti().then((d) => [
+              ...d.map((doc): Voce => ({ k: "doc", doc })),
+              ...ricercheRecenti().map((q): Voce => ({ k: "query", q })),
+            ])
+        )
+          .then((trovate) => ({ trovate }))
+          .catch((e: unknown) => ({ errore: errorText(e) })),
+      );
+      if ("errore" in esito) {
+        visibili = [];
+        disegna();
+        // Il motivo in chiaro, come nella ricerca: «non disponibile» dice che
+        // non si può cercare, non perché.
+        const vuoto = lista.querySelector(".palette-empty");
+        if (vuoto) {
+          vuoto.textContent = t("search.unavailable");
+          (vuoto as HTMLElement).title = esito.errore;
+        }
+        return;
+      }
+      const trovate = esito.trovate;
       visibili = trovate;
       // Il gesto che chiude il giro: non l'ho trovata, creala. Compare **solo**
       // a risultati vuoti — con dei risultati sotto gli occhi, «crea» è la voce
@@ -259,18 +280,7 @@ export function apriQuickSwitcher(): void {
       }
       scelto = 0;
       disegna();
-    } catch (e) {
-      if (mio !== seq) return;
-      visibili = [];
-      disegna();
-      // Il motivo in chiaro, come nella ricerca: «non disponibile» dice che non
-      // si può cercare, non perché.
-      const vuoto = lista.querySelector(".palette-empty");
-      if (vuoto) {
-        vuoto.textContent = t("search.unavailable");
-        (vuoto as HTMLElement).title = errorText(e);
-      }
-    }
+    });
   };
 
   input.addEventListener("input", () => {

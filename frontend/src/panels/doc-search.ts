@@ -39,6 +39,7 @@ import { t } from "../i18n/strings";
 import { righeDaMostrare } from "../rules/risultati";
 import { attivabile, intrappolaFuoco } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
+import { Corsa } from "../ui/corsa";
 import { state } from "../state/store";
 import { evidenziato } from "../ui/highlight";
 import { revealByteOffset } from "./document";
@@ -101,42 +102,47 @@ export function apriRicercaNellaNota(): void {
   // mentre si digita, e una query per tasto sarebbe una raffica di giri IPC di
   // cui interessa solo l'ultimo.
   let timer: number | undefined;
-  // Ogni ricerca porta il proprio numero d'ordine: una risposta lenta di una
-  // query vecchia non deve sovrascrivere i risultati di una più recente.
-  let seq = 0;
+  // Una risposta lenta di una query vecchia non deve sovrascrivere i risultati
+  // di una più recente. La corsa è **di questa casella** e non del modulo:
+  // questo pannello si apre su una nota, e due note aperte sono due caselle che
+  // non devono annullarsi a vicenda (decisione 0134).
+  const corsa = new Corsa();
 
   const cerca = async () => {
     const testo = input.value.trim();
-    const mio = ++seq;
     if (!testo) {
+      // Svuotare a mano non è un giro: ciò che era in volo va fatto scadere, o
+      // ripopolerebbe una casella che l'utente ha appena svuotato.
+      corsa.annulla();
       riassunto.textContent = "";
       lista.innerHTML = "";
       return;
     }
-    let hits: DocumentMatch[];
-    try {
-      hits = (
-        await documentiCheCombaciano(testoNelDocumento([doc], testo, true), {
+    await corsa.ultimo(async (atteso) => {
+      // L'errore diventa un valore prima del cancello: il ramo che dice «non si
+      // può cercare» è una scrittura come le altre e passa di qui.
+      const esito = await atteso(
+        documentiCheCombaciano(testoNelDocumento([doc], testo, true), {
           offset: 0,
           limit: QUANTE,
         })
-      ).items;
-    } catch (e) {
-      if (mio === seq) {
+          .then((p) => ({ hits: p.items }))
+          .catch((e: unknown) => ({ errore: errorText(e) })),
+      );
+      if ("errore" in esito) {
         riassunto.textContent = t("search.unavailable");
         lista.innerHTML = "";
         // Il motivo in chiaro: «ricerca non disponibile» dice che non si può
         // cercare, non perché — e il perché qui è quasi sempre un vault senza
         // indice full-text.
-        riassunto.title = errorText(e);
+        riassunto.title = esito.errore;
+        return;
       }
-      return;
-    }
-    if (mio !== seq) return;
-    // Nessuno stato «sto ancora indicizzando» come nel pannello del vault: chi
-    // ha una nota aperta l'ha aperta da un indice che risponde, e la domanda in
-    // più a ogni ricerca vuota costerebbe più di ciò che chiarisce.
-    disegna(hits);
+      // Nessuno stato «sto ancora indicizzando» come nel pannello del vault: chi
+      // ha una nota aperta l'ha aperta da un indice che risponde, e la domanda in
+      // più a ogni ricerca vuota costerebbe più di ciò che chiarisce.
+      disegna(esito.hits);
+    });
   };
 
   const disegna = (hits: DocumentMatch[]) => {

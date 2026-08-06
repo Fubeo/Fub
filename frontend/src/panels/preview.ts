@@ -21,6 +21,7 @@ import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
+import { Corsa, type Atteso } from "../ui/corsa";
 
 /// Profondità massima di transclusion: oltre, l'embed resta un link.
 const MAX_EMBED_DEPTH = 5;
@@ -41,8 +42,31 @@ export function configurePreview(deps: PreviewDeps): void {
   apriPagina = deps.openPage;
 }
 
+/// La corsa è **della superficie**, non del modulo.
+///
+/// Due riquadri in Lettura su due note sono due anteprime che si riempiono
+/// insieme, e un contatore unico di modulo — che è com'erano scritte due delle
+/// quattro implementazioni a mano — le farebbe annullare a vicenda. La mappa è
+/// **debole** perché il padrone è l'elemento: quando il riquadro se ne va la sua
+/// corsa se ne va con lui, e non c'è nessuna cancellazione da ricordarsi. È la
+/// stessa regola della `Vita` (0133), col contenitore al posto della chiusura.
+const corse = new WeakMap<HTMLElement, Corsa>();
+
+function corsaDi(previewEl: HTMLElement): Corsa {
+  const gia = corse.get(previewEl);
+  if (gia) return gia;
+  const nuova = new Corsa();
+  corse.set(previewEl, nuova);
+  return nuova;
+}
+
 /// Svuota una superficie di lettura.
 export function clearPreview(previewEl: HTMLElement): void {
+  // **Questa riga è il difetto 0031.** Svuotare non basta: la resa chiesta un
+  // istante fa è ancora in volo, e senza far scadere il giro arriverebbe a
+  // riempire un'anteprima che nessuno guarda più — quella del documento di
+  // prima, dentro un riquadro che intanto mostra altro.
+  corse.get(previewEl)?.annulla();
   previewEl.innerHTML = "";
 }
 
@@ -56,9 +80,16 @@ export function clearPreview(previewEl: HTMLElement): void {
 /// è il riquadro (§1.2), e questo modulo torna a sapere solo *come* si rende un
 /// documento.
 export async function updatePreview(previewEl: HTMLElement, id: string): Promise<void> {
-  const reso = await api.renderPreview(id);
-  innesta(previewEl, reso);
-  await hydrateEmbeds(previewEl, new Set([id]), new Map());
+  await corsaDi(previewEl).ultimo(async (atteso) => {
+    const reso = await atteso(api.renderPreview(id));
+    innesta(previewEl, reso);
+    // L'`atteso` scende nell'idratazione, e non è una comodità: gli embed sono
+    // il **grosso** delle attese di un'anteprima — una nota che ne trascluda
+    // dieci sono dieci viaggi dopo che il primo è già tornato — quindi è lì che
+    // la finestra è larga. Passarlo giù è ciò che rende il controllo una cosa
+    // che si eredita invece di una cosa che si riscrive.
+    await hydrateEmbeds(previewEl, new Set([id]), new Map(), atteso);
+  });
 }
 
 /// Innesta un documento reso: l'HTML **sanitizzato**, e poi le parti
@@ -144,6 +175,7 @@ async function hydrateEmbeds(
   container: HTMLElement,
   chain: Set<string>,
   memo: Map<string, Promise<EmbedContent>>,
+  atteso: Atteso,
 ): Promise<void> {
   const slots = Array.from(
     container.querySelectorAll<HTMLElement>(".embed[data-embed-page]"),
@@ -156,28 +188,31 @@ async function hydrateEmbeds(
         slot.classList.add("embed-too-deep");
         return;
       }
-      try {
-        const heading = slot.dataset.embedHeading ?? null;
-        const chiave = `${page} ${heading ?? ""}`;
-        let atteso = memo.get(chiave);
-        if (!atteso) {
-          atteso = api.renderEmbed(page, heading);
-          memo.set(chiave, atteso);
-        }
-        const content = await atteso;
-        if (chain.has(content.doc_id)) {
-          slot.classList.add("embed-cycle");
-          return;
-        }
-        // Un embed passa dagli stessi renderer dell'anteprima: un diagramma
-        // dentro una nota trasclusa resta un diagramma. `innesta` fa le tre cose
-        // che servono — sanitizza, ricuce i link, monta le parti.
-        innesta(slot, content);
-        slot.classList.add("embed-loaded");
-        await hydrateEmbeds(slot, new Set([...chain, content.doc_id]), memo);
-      } catch {
-        slot.classList.add("unresolved");
+      const heading = slot.dataset.embedHeading ?? null;
+      const chiave = `${page} ${heading ?? ""}`;
+      let chiesto = memo.get(chiave);
+      if (!chiesto) {
+        chiesto = api.renderEmbed(page, heading);
+        memo.set(chiave, chiesto);
       }
+      // L'errore diventa un valore prima del cancello — un embed che non si
+      // risolve si segna e basta — così qui sotto non c'è nessun `catch` in cui
+      // il segnale di scadenza possa perdersi.
+      const content = await atteso(chiesto.then((c) => c).catch(() => null));
+      if (!content) {
+        slot.classList.add("unresolved");
+        return;
+      }
+      if (chain.has(content.doc_id)) {
+        slot.classList.add("embed-cycle");
+        return;
+      }
+      // Un embed passa dagli stessi renderer dell'anteprima: un diagramma
+      // dentro una nota trasclusa resta un diagramma. `innesta` fa le tre cose
+      // che servono — sanitizza, ricuce i link, monta le parti.
+      innesta(slot, content);
+      slot.classList.add("embed-loaded");
+      await hydrateEmbeds(slot, new Set([...chain, content.doc_id]), memo, atteso);
     }),
   );
 }

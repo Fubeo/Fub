@@ -6,6 +6,7 @@
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
 import { cartelleDelVault, contenutoDiCartella, documentiEsistenti } from "../host/query";
+import { Corsa } from "../ui/corsa";
 import type { VaultFolder } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import {
@@ -138,20 +139,32 @@ export function mountExplorer(): void {
 /// arrivano a ogni salvataggio con una risposta quasi sempre identica: qui si
 /// ricostruisce solo se è cambiata davvero, o se a chiederlo è un gesto
 /// dell'utente (`forza`), che una risposta identica ce l'ha per costruzione.
+/// I giri di questo pannello, di cui conta solo l'ultimo.
+///
+/// La firma qui sotto **sembra** questa cosa e non lo è: `ultimaFirma` toglie i
+/// ridisegni identici, cioè risponde a «è cambiato qualcosa?». Non risponde a
+/// «sono ancora io?», ed è la domanda che mancava — due giri partiti insieme
+/// hanno quasi sempre firme *diverse* (una sottocartella aperta nel frattempo,
+/// una nota salvata), quindi il vecchio passava il controllo e vinceva perché
+/// arrivava dopo. Un dedup non è mai un ordinamento (decisione 0134).
+const corsa = new Corsa();
+
 async function refreshFromKernel(forza = false): Promise<void> {
-  const cartelle = await caricaVisibili();
-  const attesi = [
-    ...[...cartelle.values()].flatMap((c) =>
-      c.folders.flatMap((f) => folderNoteCandidates(f.path, state.handledExtensions)),
-    ),
-    ...state.meta.pinned,
-  ];
-  const nuova: Vista = { cartelle, esistenti: await documentiEsistenti(attesi) };
-  const firma = impronta(nuova);
-  if (!forza && firma === ultimaFirma) return;
-  ultimaFirma = firma;
-  vista = nuova;
-  renderFileList();
+  await corsa.ultimo(async (atteso) => {
+    const cartelle = await atteso(caricaVisibili());
+    const attesi = [
+      ...[...cartelle.values()].flatMap((c) =>
+        c.folders.flatMap((f) => folderNoteCandidates(f.path, state.handledExtensions)),
+      ),
+      ...state.meta.pinned,
+    ];
+    const nuova: Vista = { cartelle, esistenti: await atteso(documentiEsistenti(attesi)) };
+    const firma = impronta(nuova);
+    if (!forza && firma === ultimaFirma) return;
+    ultimaFirma = firma;
+    vista = nuova;
+    renderFileList();
+  });
 }
 
 /// Il contenuto delle sole cartelle **visibili**: la radice dello spazio
