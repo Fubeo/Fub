@@ -502,13 +502,6 @@ verifica, non in un elenco di lavoro.
   sugli `id` che vengono dal contenuto, con la risoluzione delle ancore che lo
   applica dalla stessa parte — e va scritto tenendo insieme le due metà, o
   l'ancora di blocco si rompe.
-- [ ] **Una potatura riuscita a metà lascia l'indice che nomina blob che non ci
-  sono** (`crates/fub-features/src/versioning.rs`). `prune` cancella i blob e
-  aggiorna la mappa in memoria, e solo dopo `write_meta`/`write_index` col `?`:
-  se la scrittura dell'indice fallisce, sul disco resta un indice che elenca
-  versioni ormai cancellate, e `read` fallirà su ognuna. È il caso meno grave
-  dell'elenco — si perde un derivato, non un dato dell'utente — ma la
-  riparazione non c'è.
 
 ## Gli allegati
 
