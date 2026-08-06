@@ -58,6 +58,12 @@ pub fn corpus() -> Vec<Caso> {
         caso("heading atx", "# Titolo\n"),
         caso("heading setext", "Titolo\n===\n"),
         caso("heading di ogni livello", "# a\n\n## b\n\n### c\n\n#### d\n\n##### e\n\n###### f\n"),
+        // Due titoli omonimi: lo stesso testo, e due `id` che devono restare
+        // diversi. È il caso che rende il corpus un cliente della disambiguazione
+        // — la conformità di un provider si misura sull'outline intero, e senza
+        // un documento che ne abbia due uguali passerebbe senza aver provato
+        // niente.
+        caso("due heading omonimi", "## Note\n\nprima\n\n## Note\n\nseconda\n"),
         caso("paragrafo", "Un paragrafo qualunque.\n"),
         caso("lista non ordinata", "- a\n- b\n"),
         caso("lista ordinata", "1. a\n2. b\n"),

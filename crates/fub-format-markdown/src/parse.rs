@@ -4,8 +4,8 @@ use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::{Arena, Options};
 use fub_abi::format::ParseContext;
 use fub_abi::model::{
-    canonical_anchor, custom_kind, heading_slug, valid_anchor, Anchor, Block, ColumnAlign, DocId,
-    DocumentModel, Frontmatter, Heading, Inline, Link, LinkTarget, ListItem, Span, TableCell,
+    canonical_anchor, custom_kind, valid_anchor, Anchor, Block, ColumnAlign, DocId, DocumentModel,
+    Frontmatter, Heading, HeadingSlugs, Inline, Link, LinkTarget, ListItem, Span, TableCell,
     TableRow, Tag, TaskMarker,
 };
 use fub_abi::options::syntax;
@@ -49,6 +49,9 @@ struct Acc {
     outline: Vec<Heading>,
     anchors: Vec<Anchor>,
     text: String,
+    /// Chi assegna gli slug dei titoli, per la durata di **questo** documento:
+    /// due `## Note` non possono ricevere lo stesso `id` (vedi `HeadingSlugs`).
+    slugs: HeadingSlugs,
 }
 
 pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {
@@ -270,10 +273,16 @@ fn convert_block<'a>(
             }
             acc.text.push_str(&text);
             acc.text.push('\n');
+            // **Una** chiamata, due usi. Chiamare l'assegnatario due volte
+            // sullo stesso titolo darebbe `note` all'outline e `note-1` al
+            // blocco: uno stato letto due volte è due stati, ed è la forma in
+            // cui una disambiguazione si trasforma nel difetto che voleva
+            // chiudere.
+            let slug = acc.slugs.next_slug(text.trim());
             acc.outline.push(Heading {
                 level: h.level,
                 text: text.trim().to_string(),
-                slug: heading_slug(text.trim()),
+                slug: slug.clone(),
                 span,
             });
             Some(Block::Heading {
@@ -281,7 +290,7 @@ fn convert_block<'a>(
                 inlines,
                 // L'ancora di un heading è il suo slug: è ciò che risolve
                 // `[[Nota#Titolo]]`, ed è generato, non scritto dall'utente.
-                anchor: Some(heading_slug(text.trim())),
+                anchor: Some(slug),
                 span,
             })
         }

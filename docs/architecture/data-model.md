@@ -425,7 +425,14 @@ Un blocco è indirizzabile in due sintassi, che sono due spazi di nomi distinti:
 
 - `[[Nota#Titolo]]` → l'ancora di un heading è il suo **slug generato**
   (`heading_slug`, nel contratto: prima era una funzione privata del provider
-  markdown, quindi due provider potevano dare due id allo stesso titolo);
+  markdown, quindi due provider potevano dare due id allo stesso titolo), e
+  **disambiguato dentro il documento** (`HeadingSlugs`, decisione 0123): il
+  primo di due titoli omonimi tiene la forma pura — così un documento senza
+  omonimi ha gli id di sempre e nessun link già scritto cambia destinazione —
+  e dal secondo in poi si numera in coda alla prima forma libera (`note`,
+  `note-1`, `note-2`), che si raggiunge scrivendola perché `[[Nota#Note 1]]`
+  passa dalla stessa regola. Chi cerca usa `heading_matches`, che è la stessa
+  cosa nell'altro verso: lo slug, oppure il testo del titolo com'è scritto;
 - `[[Nota#^abc]]` → l'**id esplicito** che l'utente scrive in coda al blocco,
   normalizzato da `canonical_anchor` (trim + minuscolo, come `canonical_tag`) e
   validato da `valid_anchor` (lettere, cifre, `-`, `_`). Il `^` deve essere

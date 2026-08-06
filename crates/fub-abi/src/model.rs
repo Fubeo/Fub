@@ -720,6 +720,104 @@ pub fn heading_slug(text: &str) -> String {
     slug
 }
 
+/// L'assegnatario degli slug di **un** documento: [`heading_slug`] dice come si
+/// scrive un titolo, questo dice chi se lo prende quando i titoli omonimi sono
+/// due.
+///
+/// # Perché non basta la funzione
+///
+/// Uno slug è un `id` nell'HTML e la chiave di `[[Nota#Titolo]]`, e una nota
+/// con due `## Note` ne produceva **due uguali**: `getElementById` e
+/// `outline.iter().find(…)` restituiscono il primo, quindi il link alla seconda
+/// sezione atterrava sulla prima senza che niente lo dicesse — non un errore,
+/// una destinazione sbagliata. La regola pura non può ripararlo perché la
+/// domanda «è già preso?» non è una domanda sul testo di un titolo: è una
+/// domanda sul documento, e la risposta è **stato**. Qui c'è l'unico posto in
+/// cui quello stato esiste, così non può essercene una seconda copia che
+/// diverge: chi parsa lo tiene per la durata di un documento, chi verifica lo
+/// ricostruisce dai testi con [`heading_slugs`], e i due ottengono la stessa
+/// lista o il presidio è rosso.
+///
+/// # La regola
+///
+/// Il **primo** che chiede una forma la ottiene esattamente com'era
+/// (`heading_slug`), e questo non è un dettaglio: un documento senza titoli
+/// omonimi ha gli stessi slug di prima, quindi nessun link già scritto
+/// dall'utente cambia destinazione. Dal secondo in poi si numera in coda —
+/// `note`, `note-1`, `note-2` — che è la consuetudine di GitHub, quella che chi
+/// scrive markdown ha già in mano, ed è **raggiungibile scrivendola**:
+/// `[[Nota#Note 1]]` passa da `heading_slug` e dà `note-1`.
+///
+/// Il numero non è un contatore per testo ma la prima forma **libera**: se il
+/// documento contiene davvero un `## Note 1` fra i due `## Note`, il terzo
+/// diventa `note-2` invece di rubargli l'id. Un contatore per testo avrebbe
+/// prodotto due `note-1`, cioè il difetto di partenza spostato di una riga.
+#[derive(Debug, Default, Clone)]
+pub struct HeadingSlugs {
+    taken: std::collections::BTreeSet<String>,
+}
+
+impl HeadingSlugs {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Lo slug del prossimo heading, in ordine di lettura del documento.
+    pub fn next_slug(&mut self, text: &str) -> String {
+        let base = heading_slug(text);
+        if self.taken.insert(base.clone()) {
+            return base;
+        }
+        for n in 1u32.. {
+            // Un titolo di sola punteggiatura dà base vuota (il contratto la
+            // conosce: `valid_anchor` la rifiuterebbe). Attaccarci un trattino
+            // darebbe `-1`; il numero da solo resta una forma che `heading_slug`
+            // sa produrre, quindi resta scrivibile in un link.
+            let candidate = if base.is_empty() {
+                n.to_string()
+            } else {
+                format!("{base}-{n}")
+            };
+            if self.taken.insert(candidate.clone()) {
+                return candidate;
+            }
+        }
+        unreachable!("un documento non ha 4 miliardi di titoli omonimi")
+    }
+}
+
+/// Il `#Sezione` di un `[[Nota#Sezione]]` (o di un `![[Nota#Sezione]]`) nomina
+/// **questo** heading?
+///
+/// È la metà che legge di [`HeadingSlugs`], e sta qui accanto per la ragione
+/// per cui la 0121 aveva messo le due metà di un prefisso in una funzione sola:
+/// chi genera un id e chi lo cerca non possono essere due regole, o la
+/// disambiguazione diventa il difetto nuovo — id diversi che nessuna query sa
+/// più distinguere. Erano già due, e diverse: il canale dati confrontava
+/// `heading_slug` con lo slug, l'embed confrontava la chiave di risoluzione con
+/// lo slug **o** col testo. Entrambe trovavano il titolo giusto finché era uno;
+/// nessuna delle due sapeva nominare il secondo.
+///
+/// Le due strade restano, perché rispondono a due modi di scrivere: chi scrive
+/// `#Note 1` nomina lo slug (ed è così che si raggiunge un omonimo), chi scrive
+/// `#Ciao, Mondo!` nomina il titolo com'è, punteggiatura compresa. La prima
+/// vince sulla seconda perché è quella che sa distinguere gli omonimi.
+pub fn heading_matches(query: &str, heading: &Heading) -> bool {
+    heading_slug(query) == heading.slug
+        || crate::rules::path::resolution_key(query)
+            == crate::rules::path::resolution_key(&heading.text)
+}
+
+/// Gli slug di un outline, dai suoi testi in ordine di lettura.
+///
+/// È [`HeadingSlugs`] in una riga, per chi ha già tutti i titoli in mano —
+/// tipicamente chi **verifica** che un provider abbia applicato la regola
+/// invece di riscriverla.
+pub fn heading_slugs<'a>(texts: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut slugs = HeadingSlugs::new();
+    texts.into_iter().map(|t| slugs.next_slug(t)).collect()
+}
+
 /// Il registro dei `custom_kind` noti — la metà "decisa" della decisione 0003 sulle
 /// varianti mancanti.
 ///
@@ -1230,6 +1328,71 @@ mod tests {
         assert_eq!(heading_slug("Ciao Mondo!"), "ciao-mondo");
         assert_eq!(heading_slug("Sezione   con  spazi"), "sezione-con-spazi");
         assert_eq!(heading_slug("A/B & C"), "ab-c");
+    }
+
+    /// Due titoli omonimi non possono portare lo stesso id, e un documento che
+    /// omonimi non ne ha non deve cambiare **nemmeno un** id: un link già
+    /// scritto dall'utente punta a uno slug, e riscriverlo sarebbe una
+    /// regressione silenziosa su ogni nota del vault.
+    #[test]
+    fn two_headings_with_the_same_text_cannot_share_an_id() {
+        assert_eq!(
+            heading_slugs(["Note", "Altro", "Note", "Note"]),
+            ["note", "altro", "note-1", "note-2"],
+            "il primo tiene la forma pura, i successivi si numerano"
+        );
+        // Il verso che protegge chi non ha duplicati: identità con la regola
+        // pura, titolo per titolo.
+        let soli = ["Titolo Uno", "Sotto Sezione", "A/B & C", ""];
+        assert_eq!(
+            heading_slugs(soli),
+            soli.iter().map(|t| heading_slug(t)).collect::<Vec<_>>()
+        );
+        // Il numero è la prima forma LIBERA, non un contatore per testo: se
+        // `note-1` esiste già come titolo suo, il secondo `Note` lo salta
+        // invece di rubarglielo.
+        assert_eq!(
+            heading_slugs(["Note", "Note 1", "Note"]),
+            ["note", "note-1", "note-2"]
+        );
+        // Chi arriva dopo non scaccia chi c'era: se `note-1` se l'è già preso
+        // il secondo omonimo, il titolo che si chiama davvero «Note 1» prende
+        // la prima forma libera invece del suo id.
+        assert_eq!(
+            heading_slugs(["Note", "Note", "Note 1"]),
+            ["note", "note-1", "note-1-1"]
+        );
+        // Anche la base vuota (titolo di sola punteggiatura) si disambigua, e
+        // resta una forma che `heading_slug` sa produrre — cioè scrivibile in
+        // un link.
+        assert_eq!(heading_slugs(["...", "???"]), ["", "1"]);
+        assert_eq!(heading_slug("1"), "1");
+    }
+
+    /// La gemella che legge: chi cerca un frammento trova esattamente il
+    /// titolo che quella lista ha nominato, secondo per secondo.
+    #[test]
+    fn a_fragment_finds_the_heading_the_allocator_named() {
+        let outline: Vec<Heading> = ["Note", "Ciao, Mondo!", "Note"]
+            .iter()
+            .zip(heading_slugs(["Note", "Ciao, Mondo!", "Note"]))
+            .map(|(text, slug)| Heading {
+                level: 2,
+                text: (*text).to_string(),
+                slug,
+                span: Span::EMPTY,
+            })
+            .collect();
+        let trova = |q: &str| outline.iter().position(|h| heading_matches(q, h));
+        assert_eq!(trova("Note"), Some(0));
+        // La seconda sezione omonima è raggiungibile, e prima non lo era da
+        // nessuna sintassi.
+        assert_eq!(trova("Note 1"), Some(2));
+        assert_eq!(trova("note-1"), Some(2));
+        // Il titolo com'è scritto, punteggiatura compresa, resta una strada.
+        assert_eq!(trova("Ciao, Mondo!"), Some(1));
+        assert_eq!(trova("ciao-mondo"), Some(1));
+        assert_eq!(trova("Sezione che non c'è"), None);
     }
 
     #[test]

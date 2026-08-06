@@ -41,7 +41,7 @@ use std::collections::BTreeSet;
 
 use fub_abi::format::{DocumentSource, ParseContext, SourceKind};
 use fub_abi::model::{
-    heading_slug, Block, DocId, DocumentModel, Inline, Link, LinkTarget, Span, Tag,
+    heading_slugs, Block, DocId, DocumentModel, Inline, Link, LinkTarget, Span, Tag,
 };
 use fub_abi::traits::{IndexProvider, IndexQuery, ReadApi, ViewProvider};
 use fub_abi::FormatProvider;
@@ -612,25 +612,31 @@ pub fn le_tabelle_piatte_sono_la_proiezione_dell_albero(model: &DocumentModel) {
     );
 }
 
-/// *«L'ancora di un heading, **generata** dal suo testo.»*
+/// *«L'ancora di un heading, **generata** dal suo testo — e da chi c'era prima
+/// di lui.»*
 ///
-/// La regola sta nel contratto ([`heading_slug`]) e non nel provider, e la
+/// La regola sta nel contratto ([`heading_slugs`]) e non nel provider, e la
 /// ragione è scritta là: due provider che la scrivessero ognuno per sé darebbero
 /// due id diversi allo stesso titolo, e un `[[Nota#Titolo]]` risolverebbe
 /// sull'uno e non sull'altro. Questa funzione verifica che chi riempie `slug` la
 /// **applichi** invece di riscriverla.
+///
+/// Si confronta l'outline **intero** e non un titolo alla volta, perché lo slug
+/// non è una funzione del solo testo: due `## Note` non possono portare lo
+/// stesso `id`, e finché il confronto era `slug == heading_slug(text)` la
+/// disambiguazione era letteralmente **vietata** a chiunque volesse scriverla.
 pub fn lo_slug_di_un_heading_e_quello_del_contratto(model: &DocumentModel) {
-    for h in &model.outline {
+    let attesi = heading_slugs(model.outline.iter().map(|h| h.text.as_str()));
+    for (h, atteso) in model.outline.iter().zip(&attesi) {
         assert_eq!(
-            h.slug,
-            heading_slug(&h.text),
+            &h.slug, atteso,
             "l'heading `{}` porta lo slug `{}`, ma la regola del contratto\n\
-             (`heading_slug`) su quel testo dà `{}`. Lo slug è la chiave con cui\n\
-             si risolve un `[[Nota#Titolo]]`: una seconda idea di come si genera\n\
-             è un link che funziona da un lato e non dall'altro.",
-            h.text,
-            h.slug,
-            heading_slug(&h.text)
+             (`heading_slugs` sull'outline in ordine di lettura) dà `{}`. Lo slug\n\
+             è la chiave con cui si risolve un `[[Nota#Titolo]]`: una seconda\n\
+             idea di come si genera è un link che funziona da un lato e non\n\
+             dall'altro, e due titoli omonimi con lo stesso slug sono un link\n\
+             che atterra sempre sul primo.",
+            h.text, h.slug, atteso
         );
     }
 }
