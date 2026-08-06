@@ -602,7 +602,10 @@ che per disciplina non si riscrive più — e nessuno lo somma con gli altri. Le
 voci di quella seduta erano tutte scritte, ognuna nel suo verbale, da mesi.
 
 **§23.4 (una selezione sola) sale sopra tutte, e per il criterio in testa a
-questa pagina.** Non è la voce più importante di questa seduta — la §23.5 tocca
+questa pagina** — *chiusa dalla
+[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md), in tempo:
+`selections: option<selection-set>`, e la scadenza che questo paragrafo descrive
+non è mai arrivata*. Non era la voce più importante di quella seduta — la §23.5 tocca
 la privacy e la §23.1 tocca ciò che l'utente perde — ma è l'unica che rende una
 capacità **inesprimibile per sempre invece che oggi**. La differenza è tutta nel
 verso in cui scade: ogni altra voce di questa pagina descrive qualcosa che non si
@@ -612,8 +615,10 @@ una voce di roadmap, è una **major** — cioè la stessa cosa che il presidio d
 [0002](../decisions/0002-additivita-del-contratto.md) esiste per impedire, ed è
 significativo che a scriverla sia stato lo stesso verbale che ne enuncia il
 criterio meglio di chiunque. È il caso più puro della quarta specie di leva —
-*ciò che è già pubblicato* — e l'unico in cui costa un'ora oggi e una versione
-dopo.
+*ciò che è già pubblicato* — e l'unico in cui costava un'ora allora e una
+versione dopo. Che sia stata pagata l'ora e non la versione è la sola prova che
+questa pagina abbia mai prodotto di essere servita a qualcosa: il criterio l'ha
+portata in cima, ed è arrivata prima del freeze.
 
 **§23.5 (il testo selezionato senza permesso) è di una quinta specie, che questa
 pagina non aveva.** Non rende inesprimibile e non moltiplica: **compone**. Presa
@@ -661,12 +666,14 @@ nuova: è una **famiglia**, e va cercata apposta invece che incontrata.
   dichiarato nessuno. Adesso la dichiara chi la richiede: un tasto che questa
   macchina non ha mai visto arriva **sospeso**, e la risposta si dà una chiave
   alla volta.
-- **§23.11 (la base facoltativa)** compone con la
+- **§23.11 (la base facoltativa)** — *chiusa dalla
+  [0092](../decisions/0092-una-base-si-dichiara.md)* — componeva con la
   [0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md): la guardia contro
-  la sovrascrittura è opt-in **proprio dove** il rilevamento delle modifiche
-  esterne non c'è. È anche l'unica delle tre che sta contemporaneamente nella
-  quarta specie, *ciò che è già pubblicato*, e per questo è P0 mentre le altre due
-  no.
+  la sovrascrittura era opt-in **proprio dove** il rilevamento delle modifiche
+  esterne non c'è. Era anche l'unica delle tre a stare contemporaneamente nella
+  quarta specie, *ciò che è già pubblicato*, ed è per questo che era P0 mentre le
+  altre due no. Adesso `base` è un `WriteBase` a due casi nominati: scrivere
+  ciechi resta possibile e smette di essere ciò che succede omettendo.
 
 **Cosa cambia per chi usa questa pagina.** Le prime quattro specie si trovano
 guardando una voce e chiedendosi cosa impedisce. La quinta non si trova

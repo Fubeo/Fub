@@ -364,6 +364,29 @@ export const CONTEGGI = [
       " END{print fuori?0:n+0}' frontend/src/shell.e2e.test.ts",
   },
   {
+    nome: "buchi-dichiarati",
+    ragione:
+      "I verbali che dichiarano un buco proprio: un fatto sulla forma del " +
+      "contratto che da qui non si può chiudere, scritto invece di lasciato " +
+      "aperto (regola della 0064). Non è una casella e non entra in nessun " +
+      "totale — ma **è** un numero, e la riga del glossario che lo scrive è " +
+      "rimasta indietro tre volte di fila perché non aveva nessun attore che " +
+      "la guardasse: diceva «due» mentre erano tre, poi «quattro» mentre erano " +
+      "sei. L'ancora è la **enfasi**: un verbale che ne dichiara uno lo scrive " +
+      "in grassetto o in un titolo, mentre chi cita quello di un altro lo " +
+      "nomina di corsa in mezzo a una frase — e la sola forma di citazione " +
+      "enfatica che esiste, «il buco dichiarato **della** 0064», si toglie per " +
+      "nome. Si contano i **file**, non le righe, perché un verbale che ne " +
+      "dichiara uno lo nomina anche tre volte. Zona cieca dichiarata: un " +
+      "verbale che dichiarasse un buco senza enfatizzarlo non entra nel conto, " +
+      "e uno che citasse quello di un altro in grassetto senza dire «della» ci " +
+      "entrerebbe di troppo.",
+    comando:
+      "grep -EiH '(\\*\\*[^*]*buco dichiarat|^#+[^#]*buco dichiarat)'" +
+      " docs/decisions/0*.md | grep -vi 'buco dichiarato della'" +
+      " | cut -d: -f1 | sort -u | wc -l",
+  },
+  {
     nome: "verbali",
     ragione:
       "I verbali delle decisioni chiuse. È il conteggio che `todo.md` scriveva " +

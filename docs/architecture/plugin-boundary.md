@@ -572,9 +572,9 @@ arriva in fondo.
 |---|---|---|
 | la coda | [dispatcher.rs:560](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
 | il campanello | [dispatcher.rs:589](../../crates/fub-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
-| i thread | [runner.rs:307](../../crates/fub-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
-| l'host per chiamata | [jobs.rs:9](../../crates/fub-host/src/jobs.rs) | tiene l'`Arc<RwLock<Workspace>>` e prende un prestito **per capacità** |
-| la bandiera | [runner.rs:42](../../crates/fub-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
+| i thread | [runner.rs:72](../../crates/fub-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
+| l'host per chiamata | [jobs.rs:92](../../crates/fub-host/src/jobs.rs) | tiene l'`Arc<RwLock<Workspace>>` e prende un prestito **per capacità** |
+| la bandiera | [runner.rs:88](../../crates/fub-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
 | la riga viva | [core.rs:372](../../crates/fub-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
 
 **`JobStatus` è una struct, non un enum**
@@ -1098,8 +1098,8 @@ stateDiagram-v2
 
 Anche qui **nessuno di questi stati ha un enum**. Sono l'appartenenza a una mappa
 e un booleano: un vault è aperto se sta in `Sessions.open`
-([session.rs:184](../../crates/fub-host/src/session.rs)), un workspace è chiuso
-se `Workspace.closed` è vero ([workspace.rs:368](../../crates/fub-kernel/src/workspace.rs)),
+([session.rs:209](../../crates/fub-host/src/session.rs)), un workspace è chiuso
+se `Workspace.closed` è vero ([workspace.rs:444](../../crates/fub-kernel/src/workspace.rs)),
 un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
 ([registry.rs:218](../../crates/fub-host/src/registry.rs)). Le uniche
 transizioni che il **contratto** nomina sono eventi, non stati: `VaultOpened`,
@@ -1111,8 +1111,8 @@ L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 |---|---|---|
 | il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fub-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
 | il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:542](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
-| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:469](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
-| i bundle si spengono in ordine **inverso** | [workspace.rs:1158](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
+| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:397](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
+| i bundle si spengono in ordine **inverso** | [workspace.rs:1201](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
 
 E un caso che il codice tratta e che vale la pena sapere: se un job in volo tiene
 ancora una copia dell'`Arc<dyn Plugin>`, `deactivate` **non viene chiamato
