@@ -77,9 +77,13 @@ impl DocumentStore {
         root: impl AsRef<Utf8Path>,
         registry: Arc<FormatRegistry>,
         storage: Arc<dyn crate::storage::VaultStorage>,
+        settings: crate::settings::SharedSettings,
     ) -> Self {
         Self {
-            vault: Vault::on(root, storage),
+            // Le impostazioni arrivano fin qui per una riga sola, ed è la
+            // §15.6: **quali file sono del vault** è una dichiarazione di
+            // questo vault, non una costante di chi ha compilato.
+            vault: Vault::on(root, storage).watching(settings),
             registry,
             syntax: SyntaxRegistry::new(),
             renderers: RendererRegistry::new(),

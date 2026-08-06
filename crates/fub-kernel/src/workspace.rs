@@ -565,7 +565,12 @@ impl Workspace {
         // con l'indice del kernel, che è chi risponde a chi le chiede (0019).
         let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
         Workspace {
-            docs: DocumentStore::new(root, Arc::clone(&registry), Arc::clone(&storage)),
+            docs: DocumentStore::new(
+                root,
+                Arc::clone(&registry),
+                Arc::clone(&storage),
+                Arc::clone(&settings),
+            ),
             indexes: Indexes::new(
                 registry,
                 Arc::clone(&settings),

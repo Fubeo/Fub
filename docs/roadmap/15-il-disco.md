@@ -6,8 +6,9 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md): il supporto, e le p
 
 ---
 
-Cinque voci sul supporto e due sulle politiche di cosa ci finisce sopra; delle
-politiche resta **una**, perché la 15.5 è chiusa con la
+Cinque voci sul supporto e due sulle politiche di cosa ci finisce sopra; **la
+seduta è chiusa**, e le politiche sono cadute a coppia perché erano una domanda
+sola guardata da due lati. La 15.5 è chiusa con la
 [0058](../decisions/0058-un-nome-che-nasce.md) — un nome che nasce e un nome che
 c'è non si giudicano con la stessa regola, la sorgente di uno `Span` sono i byte
 del file, e `text_policy` rileva senza convertire perché il catalogo (§2.4) chiede
@@ -102,6 +103,17 @@ erano scambiabili: la prima è il prerequisito della seconda. Di questa voce res
 fuori solo ciò che è di qualcun altro — se 512 documenti siano la fetta giusta lo
 dirà il banco delle prestazioni del §17.1, che aspetta una macchina e non una
 decisione.
+
+E la 15.6 — l'ultima — è chiusa dalla
+[0110](../decisions/0110-la-struttura-non-e-una-preferenza.md), che è la 0058
+guardata dall'altro lato: quella diceva *quali nomi*, questa *quali file*. La
+riga che vale oltre la voce è che le esclusioni sono **due specie** e non una
+lista: `.fub/` e `.trash/` sono struttura — mostrarli è indicizzare l'indice e
+riesumare il cestino — mentre `node_modules/` e i dotfile sono una preferenza di
+chi possiede il vault. Tenerle insieme costava il peggio delle due, e a farlo
+vedere è stato un presidio che questa voce rendeva falso senza toccarlo: il
+temporaneo di una scrittura si nascondeva dietro il punto, cioè dietro il ramo
+che un vault può adesso spegnere.
 
 E la seduta si chiude su un fatto di cui vale la pena tenere il conto: **è la
 quinta voce di fila che si chiude per pezzi**, e il criterio non è cambiato
@@ -322,35 +334,46 @@ repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
 
 ### 15.6 La politica di esclusione è una costante di compilazione
 
-*ex §2.16 · kernel · **P2** — il gemello della [0058](../decisions/0058-un-nome-che-nasce.md) sul lato *quali file* invece che *quali nomi**
+*ex §2.16 · kernel · **P2** — **chiusa dalla [0110](../decisions/0110-la-struttura-non-e-una-preferenza.md)**: ci sono due politiche di esclusione, non una — quella che l'utente dichiara (`files.excluded-folders`, `files.show-hidden`, per-vault) e quella che nessuno può dichiarare (`.fub/`, `.trash/`, il temporaneo di una scrittura), e finché erano una lista sola «escluso» voleva dire insieme *ciò che nessuno può cambiare* e *ciò che nessuno può scegliere*. Resta una casella: leggere il `.gitignore`*
 
-- [ ] **`IGNORED_DIRS` (`vault.rs`) è un `&[&str]` nel sorgente**, e la
-      regola sta bene in un punto solo (`is_ignored_name`, usata da scansione e
-      watcher). Il problema non è dove sta: è che è **una** politica quando ne
-      servono cinque, e come **codice** quando serve come dato per-vault — che
-      adesso ha dove stare: una chiave dichiarata, per-vault
-      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)).
-- [ ] **Le cinque, tutte su uno stesso albero**: ignore configurabile e
+- [x] **`IGNORED_DIRS` (`vault.rs`) era un `&[&str]` nel sorgente**, e la voce
+      aveva ragione sul dove e torto sul cosa: la costante era il sintomo. Quella
+      lista metteva nella **stessa specie** due esclusioni che non si somigliano
+      — la cartella di Fub e `node_modules` — e adesso sono due: `e_struttura`,
+      che nessuna impostazione ribalta, e due chiavi dichiarate per-vault
+      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)). Un vault che
+      non dichiara niente si comporta **esattamente** come prima.
+- [x] **Le cinque, tutte su uno stesso albero**: ignore configurabile e
       `.gitignore` (3.1), file nascosti visibili su richiesta (3.2), esclusione
       cartelle dalla ricerca (9.1), esclusione dal sync (18.1), esclusione dal
-      contesto AI (23.2). Sono componibili e hanno scopi diversi: o nascono
-      come un `IgnorePolicy` valutabile e parametrizzato per scopo, o ognuna
-      verrà cablata dove capita, e "questa cartella è esclusa" significherà
-      cinque cose diverse.
-- [ ] **I symlink**, che arrivano da qui. Erano nell'elenco del §15.5 e non sono
-      una domanda sul *nome*: «seguire un symlink» è «questa voce di directory
-      partecipa», cioè esattamente la domanda di questa voce. La
-      [0058](../decisions/0058-un-nome-che-nasce.md) li ha consegnati qui invece
-      di lasciarli come casella residua di una voce chiusa, perché un elenco che
-      perde una riga senza darla a nessuno è il difetto del
-      [§16.7](16-crate-sdk-banchi-di-prova.md). Da decidere insieme alle altre
-      cinque: seguirli o no è una politica come le altre, e un `IgnorePolicy` che
-      non li nomina lascerà il comportamento a `std::fs`, che li segue senza
-      chiedere — con un ciclo di symlink la scansione non torna.
-- [ ] **L'altra metà dei file nascosti.** Che una nota nuova non possa chiamarsi
-      `.nota.md` è deciso ([`NameFault::Hidden`](../decisions/0058-un-nome-che-nasce.md));
-      **mostrare** i dotfile che ci sono, su richiesta (3.2), è di qui. È la
-      stessa stringa (`is_ignored_name`) letta per due domande diverse.
-- [ ] È il gemello del §15.5, chiuso dalla
+      contesto AI (23.2). `IgnorePolicy` è il valutatore parametrico che tutte
+      useranno — la lista e la risposta sui nascosti arrivano da chi chiede — e
+      la riga che impedisce a «questa cartella è esclusa» di significare cinque
+      cose diverse è scritta adesso che c'è la prima: **si compongono per
+      sottrazione**, e nessuna può ridefinire cos'è la struttura. Il
+      `.gitignore` resta **casella residua**: un file come sorgente di politica
+      ha una sintassi propria, una precedenza propria e un proprietario che non
+      è Fub.
+- [x] **I symlink**, che arrivavano da qui, e la premessa era falsa: `std::fs`
+      **non** li segue, perché dalla
+      [0058](../decisions/0058-un-nome-che-nasce.md) la specie si chiede con
+      `file_type()`. Ciò che mancava era che fosse **deciso** invece che
+      *successo*. Decisione: non si seguono, e il verso opposto è scartato
+      avendolo detto — seguirli vuole l'identità di un nodo (`dev`+`ino`), che
+      il `VaultStorage` non ha di proposito (§15.1), e senza quella un anello di
+      collegamenti è una camminata che non torna. Il presidio costruisce
+      l'anello sul filesystem vero, perché quel difetto non fallisce: si pianta.
+- [x] **L'altra metà dei file nascosti.** `files.show-hidden` mostra i dotfile
+      che ci sono; [`NameFault::Hidden`](../decisions/0058-un-nome-che-nasce.md)
+      continua a vietare di **crearne** uno, e l'asimmetria è voluta e adesso
+      scritta in `path_policy`: la preferenza si ribalta in un clic, e le note
+      create mentre era accesa resterebbero invisibili senza che nessuno le
+      nomini. Il campo su una query di listing che la voce temeva prima del
+      freeze **non serve**: la politica sta sul vault, quindi un plugin vede lo
+      stesso vault che vede l'utente.
+- [x] È il gemello del §15.5, chiuso dalla
       [0058](../decisions/0058-un-nome-che-nasce.md), sul lato **quali file** e
-      non **quali nomi**.
+      non **quali nomi** — e il difetto peggiore stava **fuori**, in un presidio
+      che questa voce stessa rendeva falso: il temporaneo di una scrittura era
+      invisibile perché comincia per punto, cioè per il ramo che un vault può
+      ora spegnere.

@@ -226,6 +226,12 @@ pub fn core_settings() -> Vec<SettingSpec> {
     // del sistema sarebbe sbagliata per costruzione — lo stesso vault, aperto
     // su due macchine, porterebbe due date diverse per lo stesso byte.
     settings.extend(fub_kernel::properties::properties_settings());
+    // E per lo stesso criterio: quali file sono di questo vault lo legge la
+    // scansione, che sta nel kernel (§15.6). È la prima famiglia del kernel che
+    // dichiara **cosa il vault contiene** invece di come lo si legge, e per
+    // questo il suo default è scritto due volte in un posto solo — lo schema e
+    // il valutatore ne condividono l'elenco.
+    settings.extend(fub_kernel::ignore::ignore_settings());
     settings
 }
 

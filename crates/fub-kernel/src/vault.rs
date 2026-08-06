@@ -11,6 +11,8 @@ use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{KernelError, Result};
+use crate::ignore::IgnorePolicy;
+use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FsStorage, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
 
@@ -33,9 +35,6 @@ pub const FUB_DIR: &str = ".fub";
 /// Privato di proposito: chi la vuole passa da [`data_root`], così il nome sta
 /// scritto **una volta sola** e non c'è un secondo modo di comporlo.
 const DATA_SUBDIR: &str = "data";
-
-/// Directory ignorate durante la scansione del vault.
-const IGNORED_DIRS: &[&str] = &[".obsidian", ".git", FUB_DIR, ".trash", "node_modules"];
 
 /// La radice dei dati **derivati** del vault: `<root>/.fub/data/`. Ci vivono
 /// l'indice di ricerca, l'anagrafe, i sidecar del cestino e lo spazio dati dei
@@ -86,16 +85,6 @@ struct TrashSidecar {
     original: String,
 }
 
-/// Un componente di path che il vault non deve mai guardare.
-///
-/// Unico punto di verità della regola: la usano sia la scansione
-/// ([`Vault::scan`]) sia il percorso del watcher
-/// ([`Vault::is_ignored`]). Finché viveva solo dentro la scansione, ogni file
-/// spostato nel cestino tornava dentro dalla porta di servizio del watcher.
-pub(crate) fn is_ignored_name(name: &str) -> bool {
-    name.starts_with('.') || IGNORED_DIRS.contains(&name)
-}
-
 /// Un file trovato dalla scansione: il path, e le due cose che il filesystem
 /// dice **senza aprirlo** (§14.2).
 ///
@@ -135,6 +124,11 @@ pub struct Vault {
     /// diversi per la stessa cartella sarebbero due idee di cosa c'è dentro —
     /// il giorno in cui uno dei due cifra, un dato su due resta in chiaro.
     storage: Arc<dyn VaultStorage>,
+    /// Le impostazioni di **questo** vault, da cui si legge la politica di
+    /// esclusione (§15.6). `None` è un vault che non ne ha — un banco, un
+    /// kernel montato senza il bundle del core — e vale il default della
+    /// politica, cioè il comportamento di prima che fosse dichiarabile.
+    settings: Option<SharedSettings>,
 }
 
 impl Vault {
@@ -148,7 +142,26 @@ impl Vault {
         Vault {
             root: root.as_ref().to_owned(),
             storage,
+            settings: None,
         }
+    }
+
+    /// Aggancia le impostazioni da cui leggere la politica di esclusione.
+    ///
+    /// Builder e non parametro di [`on`](Vault::on) per la ragione di
+    /// [`Workspace::with_view_states`](crate::Workspace::with_view_states): il
+    /// default è quello che serve a un banco, e chi monta un vault vero lo
+    /// sostituisce in una riga. Le impostazioni sono **condivise** e non
+    /// copiate — è la stessa `Arc` del workspace — perché la politica si legge
+    /// a ogni domanda e non al montaggio.
+    pub(crate) fn watching(mut self, settings: SharedSettings) -> Self {
+        self.settings = Some(settings);
+        self
+    }
+
+    /// La politica di esclusione che vale **adesso** per questo vault (§15.6).
+    pub(crate) fn ignore_policy(&self) -> IgnorePolicy {
+        crate::ignore::resolve(self.settings.as_ref())
     }
 
     pub fn root(&self) -> &Utf8Path {
@@ -180,11 +193,16 @@ impl Vault {
     /// `.trash/` è invisibile quanto la cartella che lo contiene. Un path fuori
     /// dal vault non è ignorato — semplicemente non è roba nostra, e a dirlo è
     /// [`Vault::doc_id_for_path`].
+    ///
+    /// È la **stessa politica** che usa la scansione, ed è il punto: finché la
+    /// regola viveva solo dentro la scansione, ogni file spostato nel cestino
+    /// tornava dentro dalla porta di servizio del watcher.
     pub fn is_ignored(&self, abs: &Utf8Path) -> bool {
         let Ok(rel) = abs.strip_prefix(&self.root) else {
             return false;
         };
-        rel.components().any(|c| is_ignored_name(c.as_str()))
+        let policy = self.ignore_policy();
+        rel.components().any(|c| policy.esclude(c.as_str()))
     }
 
     /// **Tutto** ciò che il vault contiene, in ordine: i file con dimensione e
@@ -206,38 +224,45 @@ impl Vault {
             files: Vec::new(),
             folders: Vec::new(),
         };
-        self.walk(&self.root, &mut out)?;
+        // La politica si risolve **una volta per scansione** e non per voce di
+        // directory: leggerla è prendere un lock e costruire un elenco, e una
+        // camminata su diecimila file lo farebbe diecimila volte per una
+        // risposta che non cambia in mezzo. Che valga per tutta la camminata è
+        // anche più giusto che comodo: una scansione mezza con una politica e
+        // mezza con un'altra non è un elenco di niente.
+        let policy = self.ignore_policy();
+        self.walk(&self.root, &policy, &mut out)?;
         out.files.sort_by(|a, b| a.id.cmp(&b.id));
         out.folders.sort();
         Ok(out)
     }
 
-    fn walk(&self, dir: &Utf8Path, out: &mut Scan) -> Result<()> {
+    fn walk(&self, dir: &Utf8Path, policy: &IgnorePolicy, out: &mut Scan) -> Result<()> {
         let entries = self.storage.list(dir).map_err(|e| KernelError::Io {
             path: dir.to_owned(),
             source: e,
         })?;
         for entry in entries {
             let name = entry.path.file_name().unwrap_or_default();
-            if is_ignored_name(name) {
+            if policy.esclude(name) {
                 continue;
             }
             match entry.stat.kind {
                 EntryKind::Dir => {
                     out.folders.push(self.doc_id_for_path(&entry.path)?.0);
-                    self.walk(&entry.path, out)?;
+                    self.walk(&entry.path, policy, out)?;
                 }
                 EntryKind::File => out.files.push(ScannedFile {
                     id: self.doc_id_for_path(&entry.path)?,
                     size: entry.stat.size,
                     mtime: entry.stat.mtime,
                 }),
-                // Un symlink non partecipa, ed è ciò che la scansione faceva
-                // già: `read_dir` dava una specie che non è né file né
-                // cartella, e i due rami la saltavano. Adesso ha un nome
-                // (`EntryKind::Other`) invece di essere il terzo caso di un
-                // `if`, e col nome ha un posto dove il §15.6 potrà decidere
-                // altrimenti.
+                // Un collegamento non partecipa, e dalla §15.6 è una
+                // **politica** invece che un effetto: il modulo `ignore` scrive
+                // perché non è un interruttore, e il presidio che lo tiene è
+                // `un_anello_di_collegamenti_non_ferma_la_scansione` — seguirli
+                // senza saper riconoscere un nodo già visto è una camminata che
+                // non torna.
                 EntryKind::Other => {}
             }
         }
@@ -642,5 +667,117 @@ mod tests {
         // Fuori dal vault non è "ignorato": è di qualcun altro, e a dirlo è
         // `doc_id_for_path`.
         assert!(!v.is_ignored("/altrove/.trash/Idea.md".into()));
+    }
+
+    /// Un vault con le impostazioni di un vero montaggio, con la politica di
+    /// esclusione già dichiarata.
+    fn vault_che_dichiara(valori: &[(&str, fub_abi::settings::SettingValue)]) -> Vault {
+        let storage: Arc<dyn VaultStorage> = Arc::new(crate::storage::MemStorage::new());
+        let mut store = crate::settings::SettingsStore::open(
+            "/vault".into(),
+            Arc::clone(&storage),
+            crate::settings::MachineSettings::in_memory(),
+        );
+        store
+            .declare("fub", &crate::ignore::ignore_settings())
+            .expect("le due chiavi dell'esclusione");
+        for (key, value) in valori {
+            store.set(key, value.clone()).expect("chiave dichiarata");
+        }
+        Vault::on("/vault", storage).watching(Arc::new(std::sync::RwLock::new(store)))
+    }
+
+    /// **La casella dei nascosti** (§3.2 del catalogo): mostrarli è una
+    /// preferenza, e vale davvero — ma non è un grimaldello sulla struttura.
+    /// Con l'interruttore acceso la bozza è un documento, e la cartella di Fub,
+    /// il cestino e il temporaneo di una scrittura restano fuori.
+    #[test]
+    fn mostrare_i_nascosti_non_apre_la_struttura() {
+        use fub_abi::settings::SettingValue;
+        let v = vault_che_dichiara(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
+        assert!(!v.is_ignored("/vault/note/.bozza.md".into()));
+        assert!(v.is_ignored("/vault/.fub/data/anagrafe.json".into()));
+        assert!(v.is_ignored("/vault/.trash/Idea.2026-07-24T15-30-00.md".into()));
+        assert!(v.is_ignored("/vault/note/.Idea.md.tmp1234-5".into()));
+        // E l'elenco delle cartelle escluse è l'altra metà, che questa non tocca.
+        assert!(v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
+    }
+
+    /// **La casella della costante** (§15.6): l'elenco è dato, e dichiararne uno
+    /// diverso cambia cosa il vault contiene senza ricompilare niente.
+    #[test]
+    fn le_cartelle_escluse_le_dichiara_il_vault() {
+        use fub_abi::settings::SettingValue;
+        let v = vault_che_dichiara(&[(
+            crate::ignore::EXCLUDED_FOLDERS,
+            SettingValue::List(vec!["build".into()]),
+        )]);
+        assert!(v.is_ignored("/vault/build/out.md".into()));
+        assert!(!v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
+        // La struttura non è nell'elenco e non ci entra: toglierla dalla lista
+        // non la rivela.
+        assert!(v.is_ignored("/vault/.fub/settings.json".into()));
+    }
+
+    /// **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
+    /// `is_ignored`, la scansione cammina: se le due politiche non fossero la
+    /// stessa, un file che la scansione non elenca rientrerebbe al primo
+    /// salvataggio — che è il difetto per cui `is_ignored` esiste.
+    #[test]
+    fn il_watcher_e_la_scansione_hanno_la_stessa_politica() {
+        use fub_abi::settings::SettingValue;
+        let v = vault_che_dichiara(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
+        for (rel, contenuto) in [
+            ("note/Idea.md", "una nota"),
+            ("note/.bozza.md", "una bozza"),
+            (".fub/data/anagrafe.json", "{}"),
+            (".trash/Vecchia.md", "cestinata"),
+            ("node_modules/pacchetto/readme.md", "roba di npm"),
+        ] {
+            let path = Utf8Path::new("/vault").join(rel);
+            v.storage()
+                .write(&path, contenuto.as_bytes())
+                .expect("scrittura");
+        }
+        let visti: Vec<String> = v
+            .scan()
+            .expect("scansione")
+            .files
+            .into_iter()
+            .map(|f| f.id.0)
+            .collect();
+        assert_eq!(visti, vec!["note/.bozza.md", "note/Idea.md"]);
+        for rel in [
+            "note/Idea.md",
+            "note/.bozza.md",
+            ".fub/data/anagrafe.json",
+            ".trash/Vecchia.md",
+            "node_modules/pacchetto/readme.md",
+        ] {
+            let path = Utf8Path::new("/vault").join(rel);
+            assert_eq!(
+                v.is_ignored(&path),
+                !visti.contains(&rel.to_string()),
+                "{rel}: le due porte non dicono la stessa cosa"
+            );
+        }
+    }
+
+    /// **La casella dei collegamenti** (§15.6, consegnata dalla 0058): non si
+    /// seguono, e il caso che lo rende una decisione invece che una preferenza è
+    /// questo — una cartella che contiene un collegamento a se stessa. Se la
+    /// camminata li seguisse senza saper riconoscere un nodo già visitato,
+    /// questo banco non fallirebbe: non tornerebbe affatto.
+    #[cfg(unix)]
+    #[test]
+    fn un_anello_di_collegamenti_non_ferma_la_scansione() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+        std::fs::create_dir(root.join("note")).expect("cartella");
+        std::fs::write(root.join("note/Idea.md"), "una nota").expect("nota");
+        std::os::unix::fs::symlink(root.join("note"), root.join("note/anello")).expect("anello");
+        let scan = Vault::open(&root).scan().expect("scansione");
+        assert_eq!(scan.files.len(), 1, "{:?}", scan.files[0].id);
+        assert_eq!(scan.folders, vec!["note".to_string()]);
     }
 }

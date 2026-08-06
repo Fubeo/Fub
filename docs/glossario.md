@@ -160,7 +160,7 @@ Elenca ciò che **esiste**, che non è ciò che è **indicizzato**: dalla
 che non si è potuto leggere resta in anagrafe e non arriva a nessun indice.
 
 ### autorevole
-`FUB_DIR` · [`kernel/vault.rs:29`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
+`FUB_DIR` · [`kernel/vault.rs:31`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 
 Un dato che, perso, **non si ricostruisce da niente**: l'organizzazione della
 sidebar, le impostazioni del vault, gli snapshot del versioning. Chi lo tiene, se
@@ -177,7 +177,7 @@ sicurezza dell'utente, ed è per questo che [SECURITY.md](SECURITY.md) tratta un
 percorso che la aggira come un problema di sicurezza e non come un bug.
 
 ### derivato
-`data_root` · [`kernel/vault.rs:49`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
+`data_root` · [`kernel/vault.rs:48`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 
 Un dato che si può **buttare e rifare** dal vault: l'indice di ricerca,
 l'anagrafe, le cache. Chi lo tiene, se non riesce a leggerlo, non avvisa nessuno:
@@ -194,6 +194,17 @@ difetto che il §15.4 esiste per togliere. Il suo opposto è
 entry. La distinzione fra loro è la *specie*, e la specie non si persiste —
 dipende da chi è registrato adesso, e un file diventa una nota il giorno in cui
 qualcuno sa parsarlo.
+
+### esclusione
+`IgnorePolicy` · [`kernel/ignore.rs:111`](../crates/fub-kernel/src/ignore.rs) · [0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
+
+Cosa di una cartella **non** fa parte del vault, e sono **due** cose che non si
+somigliano. La *preferenza* è dato di questo vault e si dichiara — le cartelle
+escluse (`files.excluded-folders`) e se i file nascosti siano documenti
+(`files.show-hidden`). La *struttura* — `.fub/`, `.trash/`, il temporaneo di una
+scrittura — non la dichiara nessuno e nessuna impostazione la rivela: mostrarla
+vorrebbe dire indicizzare l'indice e riesumare il cestino. Le due porte che la
+chiedono sono la scansione e il watcher, e chiedono alla stessa politica.
 
 ### finestra di conservazione
 `journal.retention.days` · [`kernel/journal.rs:172`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
@@ -253,7 +264,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5782`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:5787`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa

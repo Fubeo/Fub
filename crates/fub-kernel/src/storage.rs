@@ -308,11 +308,15 @@ static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 /// Accanto perché una rename attraverso due filesystem non è una rename, e una
 /// cartella di temporanei altrove sarebbe un secondo posto da tenere pulito.
 /// Nascosto perché quel file esiste per una frazione di secondo **dentro il
-/// vault**, e chi guarda il vault in quella frazione non deve vederlo: la
-/// scansione e il rilevatore saltano già ogni nome che comincia per punto
-/// (`is_ignored_name`), quindi la regola c'è e basta usarla. Un `Nota.tmp1234-5`
-/// accanto a `Nota.md` sarebbe invece un documento nuovo per chiunque stia
-/// guardando — il nostro watcher, o Obsidian aperto sulla stessa cartella.
+/// vault**, e chi guarda il vault in quella frazione non deve vederlo: un
+/// `Nota.tmp1234-5` accanto a `Nota.md` sarebbe un documento nuovo per chiunque
+/// stia guardando — il nostro watcher, o Obsidian aperto sulla stessa cartella.
+///
+/// Che cominci per punto **non basta più a nasconderlo**, ed è la §15.6: da
+/// quando un vault può dichiarare che i nascosti sono documenti, l'esclusione
+/// del temporaneo non può essere un effetto collaterale di quella preferenza.
+/// La forma del nome è perciò una regola, e la dice
+/// [`e_temporaneo_di_scrittura`] qui accanto.
 fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
     let name = path.file_name().unwrap_or("senza-nome");
@@ -321,6 +325,28 @@ fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
         std::process::id(),
         TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ))
+}
+
+/// Questo nome è il temporaneo di una scrittura in corso?
+///
+/// Sta qui e non nella politica di esclusione perché il nome lo compone
+/// [`tmp_path`], e chi conosce una forma è chi la scrive: la §15.6 chiede alla
+/// politica *se* il temporaneo partecipa, e la politica chiede a questo modulo
+/// *qual è*. Riconosce la forma intera — punto davanti, `.tmp`, il pid e il
+/// numero di sequenza — e non solo il punto, perché il punto da solo è la
+/// preferenza sui nascosti, che un vault può ribaltare.
+pub(crate) fn e_temporaneo_di_scrittura(name: &str) -> bool {
+    let Some(resto) = name.strip_prefix('.') else {
+        return false;
+    };
+    let Some((base, coda)) = resto.rsplit_once(".tmp") else {
+        return false;
+    };
+    let Some((pid, seq)) = coda.split_once('-') else {
+        return false;
+    };
+    let cifre = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    !base.is_empty() && cifre(pid) && cifre(seq)
 }
 
 /// Quanti nomi ha il file a un path — **e il quarto valore, che è il punto**.
@@ -1019,11 +1045,20 @@ mod tests {
     ///
     /// Il presidio è sull'incastro fra due moduli, non su una stringa: il nome
     /// del temporaneo lo compone `storage.rs`, la regola che lo rende invisibile
-    /// è `vault::is_ignored_name`, e sono lontani abbastanza perché un giorno
+    /// è la politica di esclusione, e sono lontani abbastanza perché un giorno
     /// qualcuno cambi il nome del temporaneo senza sapere che c'era una regola
     /// da rispettare. Se succede, questo diventa rosso.
+    ///
+    /// **E si interroga la politica più permissiva che un vault possa
+    /// dichiarare**, non la funzione pura: prima della §15.6 questo banco
+    /// chiedeva a `is_ignored_name`, e il `true` che riceveva arrivava dal ramo
+    /// «comincia per punto». Il giorno in cui un vault dichiara che i nascosti
+    /// sono documenti — cioè la voce stessa che lo ha riscritto — quel ramo si
+    /// spegne, il temporaneo diventa un documento per la scansione, e il banco
+    /// che avrebbe dovuto accorgersene resta verde.
     #[test]
     fn il_temporaneo_di_una_scrittura_non_e_un_documento() {
+        let tutto = crate::ignore::IgnorePolicy::declaring(Vec::new(), true);
         for path in [
             "/vault/Nota.md",
             "/vault/note/Idea.md",
@@ -1032,9 +1067,29 @@ mod tests {
             let tmp = tmp_path(Utf8Path::new(path));
             let nome = tmp.file_name().expect("il temporaneo ha un nome");
             assert!(
-                crate::vault::is_ignored_name(nome),
+                tutto.esclude(nome),
                 "{nome}: la scansione lo vedrebbe come un documento nuovo"
             );
+        }
+    }
+
+    /// L'altro verso della stessa regola: la forma si riconosce **intera**, e un
+    /// file dell'utente che comincia per punto non è un temporaneo di nessuno —
+    /// se lo fosse, un vault che mostra i nascosti continuerebbe a non mostrare
+    /// proprio i suoi.
+    #[test]
+    fn un_nascosto_qualunque_non_e_un_temporaneo() {
+        for nome in [
+            ".gitignore",
+            ".bozza.md",
+            ".Nota.md.tmp",
+            ".Nota.md.tmp12",
+            ".Nota.md.tmp-3",
+            ".Nota.md.tmpaaa-3",
+            ".tmp12-3",
+            "Nota.md.tmp12-3",
+        ] {
+            assert!(!e_temporaneo_di_scrittura(nome), "{nome}");
         }
     }
 

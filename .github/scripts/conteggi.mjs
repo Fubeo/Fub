@@ -130,6 +130,31 @@ export const CONTEGGI = [
       "grep -rlE '#\\[(tauri::)?command\\]|generate_handler!' crates/fub-app/src | wc -l",
   },
   {
+    nome: "cataloghi-del-kernel",
+    ragione:
+      "Quante famiglie di `fub-kernel` dichiarano un catalogo di stringhe, cioè " +
+      "quanti `pub fn catalog()` ci sono in `crates/fub-kernel/src`. Il bundle " +
+      "del core li monta uno per uno e i due banchi dei cataloghi li elencano a " +
+      "mano: un elenco a mano si accorge di una **chiave** che manca, mai di un " +
+      "**catalogo** che manca — `maintenance` è stato fuori a lungo senza che " +
+      "niente diventasse rosso. È la forma che la 0105 nomina per questa specie " +
+      "di buco, e nessun `assert` dentro Rust la può prendere: la prende un " +
+      "conto che guarda il sorgente da fuori.",
+    comando: "grep -rcE '^pub fn catalog\\(\\)' crates/fub-kernel/src | grep -vc ':0'",
+  },
+  {
+    nome: "impostazioni-del-kernel",
+    ragione:
+      "Quante famiglie di `fub-kernel` dichiarano delle impostazioni, cioè " +
+      "quanti `pub fn *_settings()` ci sono in `crates/fub-kernel/src`. Vive " +
+      "accanto a `cataloghi-del-kernel` e presidia l'altra metà: una famiglia " +
+      "che il bundle del core non monta non è rossa da nessuna parte — le sue " +
+      "chiavi spariscono dal pannello e chi le legge prende il default in " +
+      "silenzio, che è precisamente il comportamento giusto per un vault che " +
+      "non ha dichiarato niente. Misurato togliendo la riga (§15.6).",
+    comando: "grep -rlE '^pub fn [a-z_]*settings\\(\\)' crates/fub-kernel/src | wc -l",
+  },
+  {
     nome: "durabilita-su-ogni-piattaforma",
     ragione:
       "Quanti test di `crates/fub-kernel/tests/la_durabilita.rs` non hanno " +
