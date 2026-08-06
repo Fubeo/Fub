@@ -91,25 +91,29 @@ fn voci(tree: &UiNode) -> Vec<(String, Option<String>)> {
     out
 }
 
-/// L'azione del primo bottone «Ripristina», o `None`.
+/// L'azione dell'**ultimo** bottone «Ripristina», cioè quello della versione
+/// più vecchia disegnata — la sola che ripristinata cambi qualcosa.
+///
+/// Era il *primo*, ed era un mezzo banco: il primo bottone è quello della
+/// versione più recente, che porta scritto «adesso» e ripristinarla è riscrivere
+/// il file con ciò che c'è già. Finché il payload se lo scriveva il test — il
+/// primo bottone con l'istante dell'ultima versione — non si vedeva; prendendo
+/// il payload che il pannello disegna, le due metà tornano a essere della stessa
+/// riga e il banco misura un ripristino vero.
 fn ripristina(tree: &UiNode) -> Option<ActionRef> {
-    fn walk(node: &UiNode, out: &mut Option<ActionRef>) {
-        if out.is_some() {
-            return;
-        }
+    fn walk(node: &UiNode, out: &mut Vec<ActionRef>) {
         if let UiKind::Button { label, action, .. } = &node.kind {
             if label == "Ripristina" {
-                *out = Some(action.clone());
-                return;
+                out.push(action.clone());
             }
         }
         for figlio in node.children() {
             walk(figlio, out);
         }
     }
-    let mut out = None;
+    let mut out = Vec::new();
     walk(tree, &mut out);
-    out
+    out.pop()
 }
 
 /// Ogni testo dell'albero, per chiedere *cosa dice* senza legarsi alla forma.
@@ -172,12 +176,15 @@ fn lanteprima_si_ricorda_fra_due_ridisegni() {
         .expect("riscritta");
 
     let tree = ws.render_view(&istanza()).unwrap();
-    // La più vecchia: è quella che vale la pena guardare.
-    let ts = ultimo_ts(&tree);
+    // La più vecchia: è quella che vale la pena guardare. Il payload è **quello
+    // disegnato**, non uno ricostruito qui: un banco che se lo scrive da sé
+    // passerebbe verde anche se il pannello smettesse di metterci dentro ciò che
+    // ci mette, e proverebbe metà di ciò che dichiara.
+    let azione = ultima_azione(&tree);
     let update = ws
         .view_action(
             &istanza(),
-            UiAction::new("preview").with_payload(serde_json::json!({ "ts": ts })),
+            UiAction::new(azione.action.0).with_payload(azione.payload),
         )
         .expect("anteprima");
     let ViewUpdate::Replace { root } = update else {
@@ -197,16 +204,15 @@ fn lanteprima_si_ricorda_fra_due_ridisegni() {
     assert!(!detto(&tree).contains("com'era"));
 }
 
-/// L'istante della versione più vecchia disegnata.
-fn ultimo_ts(tree: &UiNode) -> u64 {
-    fn walk(node: &UiNode, out: &mut Vec<u64>) {
+/// L'azione della versione più vecchia disegnata, **col payload che il pannello
+/// le ha messo addosso**.
+fn ultima_azione(tree: &UiNode) -> ActionRef {
+    fn walk(node: &UiNode, out: &mut Vec<ActionRef>) {
         if let UiKind::ListItem {
             action: Some(a), ..
         } = &node.kind
         {
-            if let Some(ts) = a.payload.get("ts").and_then(|v| v.as_u64()) {
-                out.push(ts);
-            }
+            out.push(a.clone());
         }
         for figlio in node.children() {
             walk(figlio, out);
@@ -214,7 +220,16 @@ fn ultimo_ts(tree: &UiNode) -> u64 {
     }
     let mut out = Vec::new();
     walk(tree, &mut out);
-    *out.last().expect("almeno una versione")
+    out.pop().expect("almeno una versione")
+}
+
+/// L'istante della versione più vecchia disegnata.
+fn ultimo_ts(tree: &UiNode) -> u64 {
+    ultima_azione(tree)
+        .payload
+        .get("ts")
+        .and_then(|v| v.as_u64())
+        .expect("l'azione porta il suo istante")
 }
 
 #[test]
@@ -235,16 +250,66 @@ fn ripristinare_passa_dal_registro_e_si_annulla() {
     );
 
     let tree = ws.render_view(&istanza()).unwrap();
-    let ts = ultimo_ts(&tree);
     let azione = ripristina(&tree).expect("il bottone c'è");
     ws.view_action(
         &istanza(),
-        UiAction::new(azione.action.0).with_payload(serde_json::json!({ "ts": ts })),
+        UiAction::new(azione.action.0).with_payload(azione.payload),
     )
     .expect("ripristino");
     assert_eq!(
         std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
         "com'era\n"
+    );
+}
+
+/// **Un ripristino disegnato su un'altra nota non scrive su questa.**
+///
+/// È il difetto 0047 nel suo secondo sito, e la corsa si **costruisce** invece
+/// di aspettarla: tre chiamate in fila con il cambio di nota in mezzo, che è la
+/// finestra vera — il pannello di `Uno.md` è ancora sotto il dito di chi clicca
+/// perché il ridisegno che segue un cambio di nota arriva dopo.
+///
+/// Le due metà venivano da due istanti diversi: l'istante dalla storia di
+/// `Uno.md`, la nota dal contesto attivo *adesso*. Qui l'istante di `Uno.md`
+/// **esiste anche** nella storia di `Due.md`, perché le due note sono state
+/// scritte insieme — che non è una coincidenza da laboratorio, è ciò che
+/// succede in un lotto —, quindi il vecchio codice non si fermava a un errore:
+/// riportava indietro `Due.md` in silenzio.
+#[test]
+fn un_ripristino_disegnato_su_unaltra_nota_non_scrive_su_questa() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("Uno.md"), "uno com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    ws.write_document(&DocId::new("Due.md"), "due com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    guarda(&mut ws, "Uno.md");
+    ws.write_document(&DocId::new("Uno.md"), "uno com'è\n", WriteBase::Dictated)
+        .expect("riscritta");
+    ws.write_document(&DocId::new("Due.md"), "due com'è\n", WriteBase::Dictated)
+        .expect("riscritta");
+
+    // 1. Il pannello si disegna su `Uno.md`, e il bottone si porta dietro la
+    //    nota su cui è stato disegnato.
+    let azione = ripristina(&ws.render_view(&istanza()).unwrap()).expect("il bottone c'è");
+    // 2. La nota attiva cambia. Il ridisegno arriverà, ma non è ancora arrivato.
+    guarda(&mut ws, "Due.md");
+    // 3. Il click parte dal pannello vecchio.
+    ws.view_action(
+        &istanza(),
+        UiAction::new(azione.action.0).with_payload(azione.payload),
+    )
+    .expect("un click scaduto non è un errore: è un click che non significa");
+
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Due.md")).unwrap(),
+        "due com'è\n",
+        "la nota che si sta leggendo non torna indietro per un click su un'altra"
+    );
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "uno com'è\n",
+        "e nemmeno quella disegnata: un salto scaduto si butta, non si consegna"
     );
 }
 

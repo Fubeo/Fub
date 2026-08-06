@@ -1291,7 +1291,10 @@ impl ViewProvider for HistoryView {
             // ridisegna a ogni scrittura, e un'anteprima che vivesse nel solo
             // albero sparirebbe al primo salvataggio di chi la sta leggendo.
             A_PREVIEW => {
-                let Some(ts) = action.payload.get(TS).and_then(|v| v.as_u64()) else {
+                let (Some(_), Some(ts)) = (
+                    stessa_nota(&action, host),
+                    action.payload.get(TS).and_then(|v| v.as_u64()),
+                ) else {
                     return Ok(ViewUpdate::None);
                 };
                 host.set_view_state(PREVIEW_STATE, Some(serde_json::Value::from(ts)))?;
@@ -1308,7 +1311,7 @@ impl ViewProvider for HistoryView {
             // dall'annullamento, fuori dalla simulazione e fuori dalla palette.
             A_RESTORE => {
                 let (Some(doc), Some(ts)) = (
-                    host.active_context().and_then(|c| c.doc),
+                    stessa_nota(&action, host),
                     action.payload.get(TS).and_then(|v| v.as_u64()),
                 ) else {
                     return Ok(ViewUpdate::None);
@@ -1323,6 +1326,33 @@ impl ViewProvider for HistoryView {
             _ => Ok(ViewUpdate::None),
         }
     }
+}
+
+/// La nota su cui questa riga è stata **disegnata**, e solo se è ancora
+/// l'attiva.
+///
+/// È il difetto 0047 nel suo secondo sito, e qui è peggio che nell'outline:
+/// là un salto scaduto portava il cursore nel punto sbagliato, qui una riga
+/// scaduta **scrive**. Le due metà di un ripristino venivano da due istanti
+/// diversi — il `ts` dalla storia della nota *disegnata*, la nota da quella
+/// *attiva adesso* — e fra i due ci sta la finestra in cui il pannello vecchio è
+/// ancora sotto il dito di chi clicca, perché il ridisegno che segue un cambio
+/// di nota arriva dopo. Ne usciva un `version.restore` con la nota B e un
+/// istante della storia di A: se B quell'istante non ce l'ha è un errore in
+/// faccia a chi non ha sbagliato niente, e se ce l'ha — due scritture nello
+/// stesso millisecondo sono un lotto, non una coincidenza — è B riportata
+/// indietro senza che nessuno l'abbia chiesto.
+///
+/// Si **butta**, e non si ripristina la nota ricordata: `interests()` di questo
+/// pannello dichiara `follows: document`, cioè promette di seguire l'attiva, e
+/// scrivere d'autorità su quella di prima sarebbe insieme una contraddizione
+/// della propria registrazione e la più invasiva delle due risposte sbagliate.
+/// Un click scaduto non fa niente, e quello dopo — sul pannello giusto, che nel
+/// frattempo è arrivato — lo fa.
+fn stessa_nota(action: &UiAction, host: &dyn ReadApi) -> Option<DocId> {
+    let disegnata = action.payload.get(DOC).and_then(|v| v.as_str())?;
+    let attiva = host.active_context().and_then(|c| c.doc)?;
+    (attiva.as_str() == disegnata).then_some(attiva)
 }
 
 fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
@@ -1342,7 +1372,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         versions
             .iter()
             .enumerate()
-            .map(|(i, v)| riga(v, i == 0))
+            .map(|(i, v)| riga(v, i == 0, doc.as_str()))
             .collect(),
     ));
 
@@ -1377,7 +1407,11 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
 /// La più recente porta scritto *«adesso»* invece della dimensione, ed è ciò che
 /// il pannello nativo già faceva: ripristinare la versione più recente è
 /// riscrivere il file con quello che c'è già dentro.
-fn riga(v: &VersionRef, corrente: bool) -> UiNode {
+/// La nota viaggia nel payload accanto all'istante, e non perché serva a chi
+/// agisce — `version.restore` la vuole, ma la si potrebbe rileggere —: serve a
+/// dire **su quale nota questa riga è stata disegnata**, che è l'unico modo di
+/// accorgersi che nel frattempo è cambiata. Vedi [`stessa_nota`].
+fn riga(v: &VersionRef, corrente: bool, doc: &str) -> UiNode {
     let quando = Text::message(WHEN, vec![Arg::timestamp(WHEN, v.ts)]);
     let quanto = if corrente {
         Text::key(CURRENT)
@@ -1393,12 +1427,15 @@ fn riga(v: &VersionRef, corrente: bool) -> UiNode {
                 UiNode::list_item(
                     quando,
                     Some(quanto),
-                    Some(ActionRef::with(A_PREVIEW, serde_json::json!({ TS: v.ts }))),
+                    Some(ActionRef::with(
+                        A_PREVIEW,
+                        serde_json::json!({ DOC: doc, TS: v.ts }),
+                    )),
                 ),
                 UiNode::button(
                     Text::key(RESTORE_LABEL),
                     Intent::Primary,
-                    ActionRef::with(A_RESTORE, serde_json::json!({ TS: v.ts })),
+                    ActionRef::with(A_RESTORE, serde_json::json!({ DOC: doc, TS: v.ts })),
                 ),
             ],
         },
