@@ -86,6 +86,23 @@ export interface Editor {
   /// Accende o spegne la resa inline: è la differenza fra la modalità Live
   /// Preview e la modalità Sorgente (FEATURES 4.1).
   setLivePreview(on: boolean): void;
+  /// Smonta l'editor: la vista di CodeMirror, i suoi ascoltatori, i suoi
+  /// osservatori del DOM.
+  ///
+  /// Serve perché un riquadro **si chiude** (§1.2): `costruisciStruttura` in
+  /// `panels/document.ts` toglie dalla mappa i riquadri che il layout non
+  /// nomina più e ne stacca la radice dal documento. Togliere il nodo non è
+  /// distruggere la vista: un `EditorView` tiene un `MutationObserver` sul
+  /// proprio DOM, un `ResizeObserver`, e degli ascoltatori sulla finestra per
+  /// sapere quando rimisurarsi — nessuno dei tre se ne va perché un antenato è
+  /// stato staccato. Ogni divisione chiusa ne lasciava dietro uno, e il modo
+  /// per accorgersene era usare l'app per un pomeriggio.
+  ///
+  /// Non è la stessa cosa di una `Vita` (`ui/vita.ts`), ed è la ragione per cui
+  /// è un metodo qui: ciò che si perde non è un ascoltatore che questo file ha
+  /// registrato, è un oggetto di una libreria che sa smontarsi da sé. Chi ha
+  /// una `Vita` lo affida a lei con `vita.aggiungi(editor.destroy)`.
+  destroy(): void;
   /// Passa all'altra luce (§12.4).
   ///
   /// I **colori** non passano di qui — sono `var(--…)` e li cambia il CSS da
@@ -241,6 +258,9 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
         primary: tutte[mainIndex],
         secondary: tutte.filter((_, i) => i !== mainIndex),
       };
+    },
+    destroy() {
+      view.destroy();
     },
     setLivePreview(on: boolean) {
       previewOn = on;
