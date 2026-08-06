@@ -37,7 +37,7 @@ use camino::Utf8PathBuf;
 use fub_abi::model::DocId;
 use fub_abi::traits::JobId;
 use fub_abi::{Event, Notice};
-use fub_host::{EventSink, Host, NoWatcher};
+use fub_host::{Consegna, EventSink, Host, NoWatcher};
 
 /// Il topic del **sigillo**: l'evento che chiude l'apertura e apre il conto.
 ///
@@ -97,7 +97,7 @@ struct Stato {
 }
 
 impl EventSink for SinkConFreno {
-    fn emit(&self, notice: &Notice) {
+    fn emit(&self, notice: &Notice) -> Consegna {
         let mut stato = self.stato.lock().unwrap();
         if stato.fase == Fase::Apertura {
             if matches!(&notice.event, Event::Custom { topic, .. } if topic == SIGILLO) {
@@ -106,7 +106,7 @@ impl EventSink for SinkConFreno {
             } else {
                 stato.apertura.push(format!("{:?}", notice.kind()));
             }
-            return;
+            return Consegna::Fatta;
         }
         stato.visti.push(notice.clone());
         // Si prende la barriera **sotto lo stesso lucchetto** con cui si è
@@ -118,6 +118,7 @@ impl EventSink for SinkConFreno {
         if let Some(via) = via {
             let _ = via.recv();
         }
+        Consegna::Fatta
     }
 }
 

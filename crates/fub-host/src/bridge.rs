@@ -45,12 +45,13 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use fub_abi::event::{Actor, Origin};
 use fub_abi::model::DocId;
 use fub_abi::rules::events::degrade;
 use fub_abi::{Event, Notice};
 use fub_kernel::Subscription;
 
-use crate::session::EventSink;
+use crate::session::{Consegna, EventSink};
 
 /// Oltre quanti eventi in una raffica il ponte smette di raccontarli uno per
 /// uno e dice «riconcilia».
@@ -71,6 +72,11 @@ const BURST_CEILING: usize = 128;
 /// chiamante si prende da sé.
 pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
     std::thread::spawn(move || {
+        // Quanti notice l'uscita non ha preso, e nessuno ha ancora saputo. Il
+        // conto sta **qui** e non dentro i sink: le uscite sono più d'una — il
+        // webview, un giorno le SSE di un'API locale — e questo è il punto da
+        // cui passano tutte.
+        let mut debito = 0u64;
         // `recv` blocca finché non c'è **almeno** un evento: è l'unico punto in
         // cui questo thread dorme, e non consuma niente mentre il vault è fermo.
         while let Ok(first) = rx.recv() {
@@ -80,10 +86,62 @@ pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
             // una finestra scelta da noi.
             burst.extend(rx.try_iter());
             for notice in reduce(burst) {
-                sink.emit(&notice);
+                debito = consegna(&*sink, &notice, debito);
             }
         }
+        // **E qui il ponte finisce**, che prima non lo diceva nessuno.
+        //
+        // L'unica uscita da quel ciclo è un `RecvError`, cioè il bus caduto,
+        // cioè il vault chiuso: da questo istante niente arriverà più al
+        // webview, e per chi legge un log senza questa riga la differenza fra
+        // «il vault è stato chiuso» e «il ponte è morto e l'app è ferma» non
+        // esiste. Il debito residuo esce con lui perché è l'unico momento in cui
+        // si sa che non sarà pagato: quegli eventi non li riconcilierà nessuno.
+        if debito > 0 {
+            tracing::error!(
+                target: "fub.host",
+                debito,
+                "il ponte degli eventi ha chiuso con un debito: l'uscita non ha \
+                 mai ripreso a consegnare, e chi riceve è rimasto indietro senza \
+                 saperlo"
+            );
+        } else {
+            tracing::debug!(
+                target: "fub.host",
+                "il ponte degli eventi ha chiuso: il bus non c'è più, il vault è chiuso"
+            );
+        }
     });
+}
+
+/// Consegna un notice **pagando prima il debito**, e rende il debito che resta.
+///
+/// È `Subscriber::deliver` del bus visto dall'altro capo del ponte, e la forma è
+/// la stessa per la stessa ragione: l'`Overflow` viene **prima** di ciò che lo
+/// ha sbloccato, perché è l'ordine in cui le due cose sono successe — «hai perso
+/// N» e poi il fatto nuovo. Non c'è un tipo condiviso col bus e non lo si è
+/// costruito: là il conto è di un canale e la porta è `mod intake`, qui è di un
+/// thread e la porta è questa funzione. Ciò che si eredita è la regola — *una
+/// consegna persa ha già la sua parola* — non il tipo.
+///
+/// Se nemmeno l'`Overflow` esce, il fatto nuovo **non si prova nemmeno**: il
+/// debito cresce di uno e si riproverà al prossimo. Consegnarlo scavalcando un
+/// «riconcilia» non consegnato vorrebbe dire raccontare un vault che non è
+/// quello che chi riceve ha in mano.
+fn consegna(sink: &dyn EventSink, notice: &Notice, debito: u64) -> u64 {
+    if debito > 0 {
+        let arretrato = Notice::new(
+            Event::Overflow { dropped: debito },
+            Origin::by(Actor::Kernel),
+        );
+        if sink.emit(&arretrato) == Consegna::Persa {
+            return debito + 1;
+        }
+    }
+    match sink.emit(notice) {
+        Consegna::Fatta => 0,
+        Consegna::Persa => 1,
+    }
 }
 
 /// Le due riduzioni, in ordine: prima si raggruppa, poi — se ancora non basta —
@@ -249,6 +307,95 @@ mod tests {
                 ..DocChanges::default()
             }),
         })
+    }
+
+    /// Un'uscita che ha un interruttore: dice di sì o di no a comando, e
+    /// registra ciò che le è passato. È l'`AppHandle` che non c'è ancora, e
+    /// l'`emit` che torna con un errore, senza Tauri in mezzo.
+    ///
+    /// Registra con degli atomici e non con un `Vec` sotto lucchetto perché un
+    /// lucchetto nudo qui dentro è la seconda risposta alla domanda della
+    /// [decisione 0120] — `tests/un_lucchetto_solo.rs` lo dice, e conta anche i
+    /// banchi. Ciò che serve provare sono due numeri e una posizione, e quelli
+    /// si contano senza chiedere niente a nessuno.
+    ///
+    /// [decisione 0120]: ../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md
+    struct Uscita {
+        aperta: std::sync::atomic::AtomicBool,
+        /// Quanti notice sono usciti davvero.
+        visti: std::sync::atomic::AtomicUsize,
+        /// In che posizione è uscito l'`Overflow`, e quanto valeva: [`SENZA`]
+        /// finché non ne esce uno.
+        overflow_a: std::sync::atomic::AtomicU64,
+        overflow_di: std::sync::atomic::AtomicU64,
+    }
+
+    /// «Non è ancora successo», per i due conti dell'[`Uscita`].
+    const SENZA: u64 = u64::MAX;
+
+    impl Default for Uscita {
+        fn default() -> Self {
+            use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+            Uscita {
+                aperta: AtomicBool::new(false),
+                visti: AtomicUsize::new(0),
+                overflow_a: AtomicU64::new(SENZA),
+                overflow_di: AtomicU64::new(SENZA),
+            }
+        }
+    }
+
+    impl crate::session::EventSink for Uscita {
+        fn emit(&self, notice: &Notice) -> Consegna {
+            use std::sync::atomic::Ordering::Relaxed;
+            if !self.aperta.load(Relaxed) {
+                return Consegna::Persa;
+            }
+            let posizione = self.visti.fetch_add(1, Relaxed);
+            if let Event::Overflow { dropped } = notice.event {
+                self.overflow_a.store(posizione as u64, Relaxed);
+                self.overflow_di.store(dropped, Relaxed);
+            }
+            Consegna::Fatta
+        }
+    }
+
+    /// **Ciò che non è uscito si dice appena l'uscita si apre.**
+    ///
+    /// Le due strade per cui il webview non prende un evento — non c'è ancora,
+    /// e la consegna torna con un errore — erano scritte tutte e due come
+    /// niente: un `if let` senza `else` e un `let _ =`. Ciò che l'utente vedeva
+    /// era una shell ferma su uno stato vecchio, e nessuno diceva perché.
+    #[test]
+    fn cio_che_l_uscita_non_ha_preso_diventa_un_overflow_appena_riapre() {
+        use std::sync::atomic::Ordering::Relaxed;
+        let uscita = Uscita::default();
+
+        // Chiusa: tre fatti non escono, e il debito li conta.
+        let mut debito = 0;
+        for id in ["a.md", "b.md", "c.md"] {
+            debito = consegna(&uscita, &cambiato(id), debito);
+        }
+        assert_eq!(debito, 3, "il debito conta ciò che non è uscito");
+        assert_eq!(uscita.visti.load(Relaxed), 0, "e niente è uscito");
+
+        // Si apre: il primo fatto nuovo arriva **preceduto** dal conto.
+        uscita.aperta.store(true, Relaxed);
+        debito = consegna(&uscita, &cambiato("d.md"), debito);
+        assert_eq!(debito, 0, "pagato");
+        assert_eq!(
+            uscita.overflow_di.load(Relaxed),
+            3,
+            "chi riceve non sa di essere indietro di tre fatti: resta su uno stato \
+             vecchio e nessuno gli dice di riconciliare"
+        );
+        assert_eq!(
+            uscita.overflow_a.load(Relaxed),
+            0,
+            "e il conto arriva **prima** del fatto nuovo, che è l'ordine in cui le \
+             due cose sono successe"
+        );
+        assert_eq!(uscita.visti.load(Relaxed), 2, "il conto, e poi il fatto");
     }
 
     /// **Un guasto non si raggruppa, e non si perde in una raffica** (§20.2).

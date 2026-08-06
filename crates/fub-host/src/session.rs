@@ -70,7 +70,35 @@ use crate::watcher::{VaultWatcher, WatcherFactory};
 /// si dice non passando nessun sink, non passandone uno che butta via, così il
 /// thread del ponte non nasce nemmeno.
 pub trait EventSink: Send + Sync + 'static {
-    fn emit(&self, notice: &Notice);
+    /// Manda fuori un notice, e **dice se è uscito**.
+    ///
+    /// La risposta esiste perché senza di essa non c'era nessuno a cui dirlo: le
+    /// due strade per cui un'uscita fallisce — il webview non c'è ancora, e la
+    /// consegna torna con un errore — erano scritte tutte e due come un ramo
+    /// vuoto e un `let _ =`, cioè come niente. Un evento che non esce non è un
+    /// evento in meno: è una shell che resta ferma su uno stato vecchio, ed è
+    /// esattamente il fatto per cui [`Event::Overflow`](fub_abi::Event::Overflow)
+    /// esiste. Chi tiene il conto è il ponte, che è uno solo
+    /// (`bridge::consegna`); chi implementa questo trait deve solo **non
+    /// mentire**.
+    #[must_use = "un'uscita che non dice se ha consegnato è una perdita silenziosa: \
+                  chi riceve resta indietro e nessuno gli dice di riconciliare"]
+    fn emit(&self, notice: &Notice) -> Consegna;
+}
+
+/// Cosa è successo a un notice arrivato a un'[uscita](EventSink).
+///
+/// Non è un `Result`: non c'è niente da fare con l'errore — chi emette è il
+/// kernel, che non ha nessuno a cui rispondere ([decisione 0126]) — e ciò che
+/// serve sapere è una cosa sola, se chi sta dall'altra parte l'ha visto.
+///
+/// [decisione 0126]: ../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Consegna {
+    /// È uscito.
+    Fatta,
+    /// Non è uscito, e non uscirà: chi sta dall'altra parte ne resta in debito.
+    Persa,
 }
 
 /// Sessione di un vault aperto: il workspace condiviso, la metà leggibile del
@@ -956,15 +984,37 @@ impl Host {
     /// [`Actor::User`], perché di qui passa la persona davanti allo schermo: è
     /// la stessa distinzione per cui `set_setting` è un comando IPC e non
     /// `settings.set` del registro.
+    /// # È la **seconda uscita**, e non passa dal ponte
+    ///
+    /// Zona cieca dichiarata: qui non c'è nessun vault, quindi non c'è nessun
+    /// bus e nessun thread del ponte, quindi il conto del debito di
+    /// `bridge::consegna` non copre questa riga. Di consegne fuori dal ponte ce
+    /// n'è **una** [conta: uscite-fuori-dal-ponte], ed è questa; la si è
+    /// scoperta perché il `#[must_use]` di [`EventSink::emit`] l'ha resa
+    /// rumorosa, mentre prima era una chiamata il cui esito nessuno guardava.
+    ///
+    /// Ciò che non si fa è rispondere `Err`: la scrittura è **fatta**, e dire di
+    /// no a chi ha scritto sarebbe mentire su un file che è già cambiato. Ciò
+    /// che si fa è dirlo, perché l'unico modo in cui questo caso finiva era in
+    /// silenzio.
     fn dillo_a_chi_guarda(&self, key: &str) -> Result<(), PluginError> {
         if let Some(sink) = &self.sink {
-            sink.emit(&fub_abi::Notice::new(
+            let consegna = sink.emit(&fub_abi::Notice::new(
                 fub_abi::Event::SettingChanged {
                     key: key.to_string(),
                     scope: fub_abi::settings::SettingScope::Machine,
                 },
                 fub_abi::event::Origin::by(fub_abi::event::Actor::User),
             ));
+            if consegna == Consegna::Persa {
+                tracing::error!(
+                    target: "fub.host",
+                    chiave = key,
+                    "l'impostazione è scritta ma non l'ha saputo nessuno: chi ascolta \
+                     — la tastiera, il pannello — continua a rispondere al valore \
+                     vecchio finché non si riapre"
+                );
+            }
         }
         Ok(())
     }

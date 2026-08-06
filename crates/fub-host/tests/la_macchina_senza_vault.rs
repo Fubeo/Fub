@@ -219,8 +219,9 @@ fn una_scrittura_senza_vault_si_dice_lo_stesso() {
     #[derive(Default)]
     struct Registratore(Mutex<Vec<Notice>>);
     impl fub_host::EventSink for Registratore {
-        fn emit(&self, notice: &Notice) {
+        fn emit(&self, notice: &Notice) -> fub_host::Consegna {
             self.0.lock().unwrap().push(notice.clone());
+            fub_host::Consegna::Fatta
         }
     }
 
