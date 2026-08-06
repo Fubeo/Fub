@@ -115,6 +115,31 @@ pub struct SyntaxRuleSpec {
     pub produces: Vec<String>,
 }
 
+/// **Come si riconosce una sintassi, per chi non ha il parser** (§4.4).
+///
+/// È la dichiarazione vista da fuori: il nome nel vocabolario di
+/// [`syntax`](crate::options::syntax), e la **forma** quando la forma è un
+/// dato invece che una grammatica. Chi disegna una superficie di scrittura —
+/// la nostra live preview, o quella di un terzo dalla
+/// [0104](../../../docs/decisions/0104-la-superficie-di-scrittura-si-presta.md)
+/// — non ha il provider e non può parsare il buffer sporco che ha in mano
+/// ([0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)):
+/// tutto ciò che può fare è **interpretare** questa dichiarazione, e ciò che
+/// qui non è dichiarato lo riscriverà a mano.
+///
+/// `trigger` assente non vuol dire «nessuna forma»: vuol dire che la forma è
+/// nella grammatica del provider, ed è il confine esatto oltre il quale chi
+/// decora si arrangia. Distinguerlo da un elenco di nomi nudi è tutto il
+/// valore di questo tipo: dice **dove finisce** ciò che si può generare.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SyntaxForm {
+    /// Il nome della sintassi: `fub:highlight`, `fub:wikilinks`, `terzi:spoiler`.
+    pub name: String,
+    /// Il trigger dichiarato da una [`SyntaxRuleSpec`], se la sintassi arriva
+    /// da una regola innestata; `None` se la conosce il provider.
+    pub trigger: Option<SyntaxTrigger>,
+}
+
 /// Ciò che una regola ha agganciato.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyntaxMatch {

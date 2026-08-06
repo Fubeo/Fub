@@ -5,7 +5,6 @@ import {
   dedentListItem,
   duplicateLines,
   indentListItem,
-  parseListItem,
   smartListEnter,
   toggleBold,
   toggleBulletList,
@@ -261,21 +260,9 @@ describe("trasforma in lista (Mod-Shift-8/7)", () => {
   });
 });
 
-describe("parseListItem", () => {
-  it("riconosce i tipi e dove finisce il marcatore", () => {
-    expect(parseListItem("  - [x] fatto")).toMatchObject({
-      indent: "  ",
-      kind: "bullet",
-      checked: true,
-      markerEnd: 8,
-      content: "fatto",
-    });
-    expect(parseListItem("3) voce")).toMatchObject({ kind: "ordered", number: 3, bullet: ")" });
-    expect(parseListItem("> citazione")).toMatchObject({ kind: "quote", content: "citazione" });
-    expect(parseListItem("testo - non lista")).toBeNull();
-    expect(parseListItem("-niente spazio")).toBeNull();
-  });
-});
+// I test della lettura di una voce di lista sono in `rules/sintassi.test.ts`,
+// col codice: da qui è uscita, e tenerne una copia avrebbe rimesso in piedi la
+// coppia di letture che la §4.4 ha tolto.
 
 describe("autoPairDecision", () => {
   const decide = (spec: string, typed: string) => {

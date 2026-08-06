@@ -158,10 +158,13 @@ describe("wikilink", () => {
     });
   });
 
-  it("senza alias mostra la pagina; `#heading` non entra nel bersaglio", () => {
+  // Il payload porta il bersaglio **intero**, `#heading` compreso: portava la
+  // sola pagina, quindi `Mod-click` su `[[Nota#Sezione]]` apriva la nota in
+  // cima mentre lo stesso link in Lettura arrivava alla sezione (§4.4).
+  it("senza alias il bersaglio porta anche il punto che il link nomina", () => {
     const ds = decora("vedi [[Nota#Sezione]] qui");
     expect(di(ds, "wikilink")).toEqual([
-      { from: 7, to: 19, kind: "wikilink", data: "Nota" },
+      { from: 7, to: 19, kind: "wikilink", data: "Nota#Sezione" },
     ]);
   });
 

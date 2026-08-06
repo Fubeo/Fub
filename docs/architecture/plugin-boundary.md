@@ -978,7 +978,10 @@ alternativo di terzi deve poter esistere, ed è la
 default** è nativo. E il **`FormatProvider` di casa**, per il punto 2 e **non**
 per il punto 1: la live preview non chiama il provider a ogni battuta, perché la
 [0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha deciso che il modello
-verso il webview non ci va e il buffer lo decora Lezer nella shell (§4.4). Ma
+verso il webview non ci va e il buffer lo decora Lezer nella shell — e ciò che
+Lezer non conosce lo decora interpretando la **dichiarazione** del contratto,
+che è la risposta della [0115](../decisions/0115-la-verita-e-la-dichiarazione.md)
+alla §4.4 e vale anche per una superficie di scrittura di terzi. Ma
 ogni salvataggio e ogni `reindex` passano di lì, e un vault da 100k note sono
 100k parse oltre il confine. Un formato di terzi paga quel pedaggio perché lo
 sceglie; quello che apre le note di tutti no.

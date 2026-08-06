@@ -470,6 +470,53 @@ fn offset_cases(forward: bool) -> Vec<Value> {
     out
 }
 
+/// I testi su cui la grammatica di un `#tag` si decide, e su cui la live
+/// preview della shell rispondeva **un'altra cosa** prima della §4.4.
+///
+/// Non è un campione di tag: è un campione dei tre confini che
+/// [`fub_abi::rules::tag::scan_tags`] dichiara, più le forme che una seconda
+/// implementazione scrive per prime e sbagliate — il `#` dopo un segno di
+/// punteggiatura, l'accento decomposto, le cifre non ASCII.
+const TAG_TEXTS: &[&str] = &[
+    "ciao #progetto e #area/lavoro",
+    "issue #123 e colore #fff ok",
+    "a#b non e' un tag",
+    "vedi.#tag e (#altro) e \"#terzo\"",
+    "_#dopo-un-underscore",
+    "##doppio",
+    "#Caf\u{e9} contro #Cafe\u{301}",
+    "#\u{661}\u{662}\u{663} non e' #123",
+    "coda #",
+    "emoji 🌍 poi #dopo-emoji",
+    "",
+];
+
+/// I tag di un testo, con gli span in **code unit UTF-16**.
+///
+/// La regola risponde in byte, che è la valuta del modello; la gemella
+/// TypeScript vive dove la valuta è la code unit, e non esiste un `String` JS
+/// indicizzabile a byte. La conversione è quella già rispecchiata qui sopra
+/// (`byte_to_utf16`), quindi la fixture non introduce una terza regola: compone
+/// due che ci sono già.
+fn scan_tags_cases() -> Vec<Value> {
+    TAG_TEXTS
+        .iter()
+        .map(|text| {
+            let tags: Vec<Value> = fub_abi::rules::tag::scan_tags(text)
+                .into_iter()
+                .map(|t| {
+                    json!({
+                        "name": t.name,
+                        "from": byte_to_utf16(text, t.span.start),
+                        "to": byte_to_utf16(text, t.span.end),
+                    })
+                })
+                .collect();
+            json!({"text": text, "out": tags})
+        })
+        .collect()
+}
+
 /// La fixture attesa, costruita dalle regole Rust.
 ///
 /// Una chiave qui è una regola che **esiste in due lingue**: aggiungerne una
@@ -484,6 +531,7 @@ fn expected() -> Value {
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),
         "mask_wants": mask_wants_cases(),
+        "scan_tags": scan_tags_cases(),
         "byte_to_utf16": offset_cases(true),
         "utf16_to_byte": offset_cases(false),
     })

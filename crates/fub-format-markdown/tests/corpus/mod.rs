@@ -66,6 +66,18 @@ pub fn corpus() -> Vec<Caso> {
         caso("code block con linguaggio", "```rust\nfn main() {}\n```\n"),
         caso("code block indentato", "    quattro spazi\n"),
         caso("code block non chiuso", "```rs\nsenza chiusura\n"),
+        // Un recinto che CONTIENE ciò che fuori sarebbe sintassi. Nato dalla
+        // §4.4 costruendo la zona cieca del corpus: senza questo caso, una
+        // passata che smettesse di escludere il codice restava verde su tutte
+        // e sessantatré le sorgenti.
+        caso(
+            "code block con dentro ciò che fuori sarebbe sintassi",
+            "```md\n[[Nota]] e #tag e - [ ] task e ==evidenziato==\n```\n",
+        ),
+        caso(
+            "codice inline con dentro ciò che fuori sarebbe sintassi",
+            "prima `[[Nota]] #tag` dopo\n",
+        ),
         caso("citazione", "> citata\n"),
         caso("citazione annidata", "> > due volte\n"),
         caso("riga orizzontale", "***\n"),
@@ -93,6 +105,15 @@ pub fn corpus() -> Vec<Caso> {
         caso("embed di immagine", "![alt](figura.png)\n"),
         caso("tag", "#tag\n"),
         caso("tag annidato", "#genitore/figlio\n"),
+        // I tre confini di `scan_tags`, sulla stessa riga: il `#` dopo un segno
+        // di punteggiatura, l'accento decomposto, le cifre non ASCII. Sono i
+        // punti su cui una seconda implementazione sbaglia per prima, ed è la
+        // §4.4 che li ha portati qui: dentro un recinto o un codice inline non
+        // devono diventare tag né di qua né di là.
+        caso(
+            "tag ai confini della regola",
+            "vedi.#dopo-punto, (#in-parentesi), #Cafe\u{301}, #\u{661}\u{662}, `#in-codice` e a#b\n",
+        ),
         caso("softbreak", "una riga\nun'altra\n"),
         caso("linebreak", "una riga  \nun'altra\n"),
         caso("link di riferimento", "[a][rif]\n\n[rif]: nota.md\n"),

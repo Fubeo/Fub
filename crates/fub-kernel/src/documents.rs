@@ -27,6 +27,7 @@
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::custom::SyntaxForm;
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, ParseContext, SourceKind,
 };
@@ -219,6 +220,47 @@ impl DocumentStore {
             descriptor,
             capabilities,
         })
+    }
+
+    /// Le sintassi che questo documento capirebbe, e **come si riconoscono**
+    /// quando la forma è dichiarata (§4.4).
+    ///
+    /// È `format_of` per chi deve **disegnare** invece di parsare. Le due
+    /// domande hanno la stessa risposta sui nomi e non sulla forma: le capacità
+    /// dicono *cosa so fare*, questa dice *a cosa somiglia*, e la seconda esiste
+    /// perché una superficie di scrittura non ha il provider — ha un buffer
+    /// sporco che nessuno al di qua del confine conosce
+    /// ([0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)).
+    ///
+    /// L'ordine è quello della **dichiarazione**: prima ciò che il provider sa
+    /// fare per conto suo (in ordine di `OptionMap`, cioè di dichiarazione del
+    /// provider), poi ciò che le regole innestano, in ordine di applicazione.
+    /// Un elenco che cambiasse ordine a ogni chiamata renderebbe il file
+    /// generato di `frontend/` rumoroso senza che niente sia cambiato.
+    ///
+    /// Chi arriva due volte compare **una**, e vince chi porta il trigger: una
+    /// regola che innesta un nome che il provider dichiara già è la stessa
+    /// sintassi vista da chi ne conosce la forma, ed è la stessa regola di
+    /// precedenza di `format_of` letta al contrario — là il provider vince
+    /// perché il suo *dettaglio* è più informativo, qui la regola vince perché
+    /// il suo *trigger* lo è.
+    pub fn syntax_forms(&self, id: &DocId) -> Vec<SyntaxForm> {
+        let Ok(provider) = self.provider_for(id) else {
+            return Vec::new();
+        };
+        let grafted = self.syntax.forms(&provider.descriptor().id);
+        let mut out: Vec<SyntaxForm> = provider
+            .capabilities()
+            .syntax
+            .iter()
+            .filter(|(name, _)| !grafted.iter().any(|g| g.name == *name))
+            .map(|(name, _)| SyntaxForm {
+                name: name.to_string(),
+                trigger: None,
+            })
+            .collect();
+        out.extend(grafted);
+        out
     }
 
     // --- storage persistente dei plugin ------------------------------------

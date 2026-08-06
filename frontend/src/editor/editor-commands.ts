@@ -17,6 +17,8 @@ import {
 import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { moveLineDown, moveLineUp } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
+import { taskChecked } from "../rules/mirrored";
+import { marcatoreSuccessivo, voceDiLista } from "../rules/sintassi";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
 
@@ -125,83 +127,13 @@ export const toggleWikilink = toggleWrap("[[", "]]");
 
 // ── Liste ────────────────────────────────────────────────────────────────────
 
-/// Una riga letta come voce di lista (o citazione). `markerEnd` è dove inizia
-/// il contenuto, in code unit dall'inizio riga: è l'unica coordinata che i
-/// comandi usano per tagliare o sostituire il marcatore.
-export interface ListItem {
-  indent: string;
-  kind: "bullet" | "ordered" | "quote";
-  /// Il pallino (`-`/`*`/`+`), il delimitatore (`.`/`)`) per le numerate,
-  /// oppure `>` per le citazioni.
-  bullet: string;
-  /// Solo per le numerate.
-  number: number | null;
-  /// `null` = niente checkbox; le todo sono bullet/numerate con la checkbox.
-  checked: boolean | null;
-  markerEnd: number;
-  content: string;
-}
-
-// Le todo si provano prima delle liste nude: `- [ ] x` è anche un bullet
-// valido, e vincerebbe la lettura sbagliata.
-const TODO_BULLET = /^(\s*)([-*+]) \[([ xX])\] /;
-const TODO_ORDERED = /^(\s*)(\d+)([.)]) \[([ xX])\] /;
-const BULLET = /^(\s*)([-*+]) /;
-const ORDERED = /^(\s*)(\d+)([.)]) /;
-const QUOTE = /^(\s*)> ?/;
-
-/// La riga è una voce di lista/todo/citazione? È il cancello di ogni comando
-/// di lista: dove risponde `null`, il comando restituisce `false` e la
-/// battuta cade sul binding di default.
-export function parseListItem(line: string): ListItem | null {
-  let m = TODO_BULLET.exec(line);
-  if (m) {
-    return {
-      indent: m[1], kind: "bullet", bullet: m[2], number: null,
-      checked: m[3] !== " ", markerEnd: m[0].length, content: line.slice(m[0].length),
-    };
-  }
-  m = TODO_ORDERED.exec(line);
-  if (m) {
-    return {
-      indent: m[1], kind: "ordered", bullet: m[3], number: Number(m[2]),
-      checked: m[4] !== " ", markerEnd: m[0].length, content: line.slice(m[0].length),
-    };
-  }
-  m = BULLET.exec(line);
-  if (m) {
-    return {
-      indent: m[1], kind: "bullet", bullet: m[2], number: null,
-      checked: null, markerEnd: m[0].length, content: line.slice(m[0].length),
-    };
-  }
-  m = ORDERED.exec(line);
-  if (m) {
-    return {
-      indent: m[1], kind: "ordered", bullet: m[3], number: Number(m[2]),
-      checked: null, markerEnd: m[0].length, content: line.slice(m[0].length),
-    };
-  }
-  m = QUOTE.exec(line);
-  if (m) {
-    return {
-      indent: m[1], kind: "quote", bullet: ">", number: null,
-      checked: null, markerEnd: m[0].length, content: line.slice(m[0].length),
-    };
-  }
-  return null;
-}
-
-/// Il marcatore della voce *successiva* a `item` (per l'Enter): stesso tipo e
-/// indent, le numerate prendono il numero dopo, e le todo nascono non spuntate
-/// anche se la voce corrente era `[x]` — spuntata è la cosa fatta, non quella
-/// che si sta per scrivere.
-function nextMarker(item: ListItem): string {
-  if (item.kind === "quote") return `${item.indent}> `;
-  const box = item.checked !== null ? "[ ] " : "";
-  if (item.kind === "ordered") return `${item.indent}${item.number! + 1}${item.bullet} ${box}`;
-  return `${item.indent}${item.bullet} ${box}`;
-}
+// La lettura di una voce di lista **non sta più qui**: sta in
+// `rules/sintassi.ts`, che è il posto unico in cui la shell riconosce sintassi
+// (§4.4, decisione 0115). Stava scritta due volte — qui per i gesti, in
+// `livepreview.ts` per la casella — e le due non erano d'accordo: su
+// `> - [ ] x` la live preview disegnava una checkbox e questo file leggeva una
+// citazione, quindi `Mod-Enter` non la spuntava; su `-  [ ] x` (due spazi) la
+// live preview vedeva una todo e questo file un bullet.
 
 /// `Enter` dentro una lista: continua la voce (il testo dopo il cursore scende
 /// sulla riga nuova), rinumera le numerate a valle, e su una voce vuota toglie
@@ -212,7 +144,7 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
   const range = state.selection.main;
   if (state.selection.ranges.length !== 1 || !range.empty) return false;
   const line = state.doc.lineAt(range.head);
-  const item = parseListItem(line.text);
+  const item = voceDiLista(line.text);
   if (!item) return false;
   if (range.head < line.from + item.markerEnd) return false;
 
@@ -228,7 +160,7 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
     return true;
   }
 
-  const insert = `\n${nextMarker(item)}`;
+  const insert = `\n${marcatoreSuccessivo(item)}`;
   const changes: ChangeSpec[] = [{ from: range.head, insert }];
   if (item.kind === "ordered") {
     // Le voci a valle dello stesso livello scalano di uno. Le sottoliste (più
@@ -237,14 +169,15 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
     let expected = item.number! + 2;
     for (let n = line.number + 1; n <= state.doc.lines; n++) {
       const l = state.doc.line(n);
-      const it = parseListItem(l.text);
+      const it = voceDiLista(l.text);
       if (!it) break;
       if (it.indent.length > item.indent.length) continue;
       if (it.indent.length < item.indent.length || it.kind !== "ordered") break;
       if (it.number !== expected) {
+        const numeroDa = l.from + it.quote.length + it.indent.length;
         changes.push({
-          from: l.from + it.indent.length,
-          to: l.from + it.indent.length + String(it.number).length,
+          from: numeroDa,
+          to: numeroDa + String(it.number).length,
           insert: String(expected),
         });
       }
@@ -285,7 +218,7 @@ function selectedLines(state: EditorState): Line[] {
 /// una voce. Fuori dalle liste → `false`, e il Tab cade sul binding di default
 /// (l'`indentWithTab` già montato in editor.ts).
 export const indentListItem: StateCommand = ({ state, dispatch }) => {
-  const lines = selectedLines(state).filter((l) => parseListItem(l.text) !== null);
+  const lines = selectedLines(state).filter((l) => voceDiLista(l.text) !== null);
   if (lines.length === 0) return false;
   const unit = state.facet(indentUnit);
   dispatch(
@@ -312,7 +245,7 @@ function dedentWidth(text: string, unit: string): number {
 /// resta com'è ma la battuta conta come gestita: de-indentare una lista non
 /// deve mai degradare nel comando di indentazione generico.
 export const dedentListItem: StateCommand = ({ state, dispatch }) => {
-  const lines = selectedLines(state).filter((l) => parseListItem(l.text) !== null);
+  const lines = selectedLines(state).filter((l) => voceDiLista(l.text) !== null);
   if (lines.length === 0) return false;
   const unit = state.facet(indentUnit);
   const changes: ChangeSpec[] = [];
@@ -330,12 +263,14 @@ export const dedentListItem: StateCommand = ({ state, dispatch }) => {
 export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
   const changes: ChangeSpec[] = [];
   for (const l of selectedLines(state)) {
-    const item = parseListItem(l.text);
+    const item = voceDiLista(l.text);
     if (!item || item.kind === "quote") continue;
-    if (item.checked !== null) {
-      // il marcatore finisce con `] `: il carattere della spunta sta 3 prima
-      const box = l.from + item.markerEnd - 3;
-      changes.push({ from: box, to: box + 1, insert: item.checked ? " " : "x" });
+    if (item.symbol !== null) {
+      // Il simbolo sta fra le parentesi, e `boxFrom` dice dove sono: leggerlo
+      // contando all'indietro dal marcatore presupponeva che la casella fosse
+      // sempre `[x] ` di quattro caratteri, che a fine riga è falso.
+      const box = l.from + item.boxFrom;
+      changes.push({ from: box + 1, to: box + 2, insert: taskChecked(item.symbol) ? " " : "x" });
     } else {
       changes.push({ from: l.from + item.markerEnd, insert: "[ ] " });
     }
@@ -374,7 +309,7 @@ function setListKind(kind: "bullet" | "ordered"): StateCommand {
   return ({ state, dispatch }) => {
     const lines = selectedLines(state).filter((l) => l.text.trim() !== "");
     if (lines.length === 0) return false;
-    const items = lines.map((l) => parseListItem(l.text));
+    const items = lines.map((l) => voceDiLista(l.text));
     const allSame = items.every((it) => it !== null && it.kind === kind);
     const changes: ChangeSpec[] = [];
     let n = 1;
@@ -382,15 +317,17 @@ function setListKind(kind: "bullet" | "ordered"): StateCommand {
       const l = lines[i];
       const it = items[i];
       if (allSame) {
-        changes.push({ from: l.from + it!.indent.length, to: l.from + it!.markerEnd });
+        changes.push({ from: l.from + it!.quote.length + it!.indent.length, to: l.from + it!.markerEnd });
         continue;
       }
       const marker = kind === "bullet" ? "- " : `${n}. `;
       n += 1;
       if (it) {
-        // la checkbox (`[x] `, 4 code unit in coda al marcatore) sopravvive
-        const end = l.from + it.markerEnd - (it.checked !== null ? 4 : 0);
-        changes.push({ from: l.from + it.indent.length, to: end, insert: marker });
+        // La checkbox sopravvive: si sostituisce fino a **dove comincia la
+        // casella**, che è un fatto letto, non i quattro caratteri che si
+        // presumeva avesse sempre.
+        const end = it.symbol !== null ? l.from + it.boxFrom : l.from + it.markerEnd;
+        changes.push({ from: l.from + it.quote.length + it.indent.length, to: end, insert: marker });
       } else {
         const indentLen = /^\s*/.exec(l.text)![0].length;
         changes.push({ from: l.from + indentLen, insert: marker });

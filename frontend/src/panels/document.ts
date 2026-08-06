@@ -593,7 +593,8 @@ function riquadro(id: string): Riquadro {
       // — è la ragione per cui il kernel non tiene una mappa di riquadri.
       if (layout.focus === id) scheduleContext();
     },
-    onOpenWikilink: (page) => void openWikilink(page),
+    onOpenWikilink: (page, heading, block) =>
+      void openWikilink(page, heading ?? undefined, block ?? undefined),
     onSearchTag: (tag) => deps.searchTag(tag),
     // Le sorgenti dei completamenti sono l'IPC, ammorbidite: prima che un
     // vault sia aperto rispondono vuoto, non con un errore in console.

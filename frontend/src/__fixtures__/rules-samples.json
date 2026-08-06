@@ -1850,6 +1850,120 @@
       "out": false
     }
   ],
+  "scan_tags": [
+    {
+      "text": "ciao #progetto e #area/lavoro",
+      "out": [
+        {
+          "name": "progetto",
+          "from": 5,
+          "to": 14
+        },
+        {
+          "name": "area/lavoro",
+          "from": 17,
+          "to": 29
+        }
+      ]
+    },
+    {
+      "text": "issue #123 e colore #fff ok",
+      "out": [
+        {
+          "name": "fff",
+          "from": 20,
+          "to": 24
+        }
+      ]
+    },
+    {
+      "text": "a#b non e' un tag",
+      "out": []
+    },
+    {
+      "text": "vedi.#tag e (#altro) e \"#terzo\"",
+      "out": [
+        {
+          "name": "tag",
+          "from": 5,
+          "to": 9
+        },
+        {
+          "name": "altro",
+          "from": 13,
+          "to": 19
+        },
+        {
+          "name": "terzo",
+          "from": 24,
+          "to": 30
+        }
+      ]
+    },
+    {
+      "text": "_#dopo-un-underscore",
+      "out": [
+        {
+          "name": "dopo-un-underscore",
+          "from": 1,
+          "to": 20
+        }
+      ]
+    },
+    {
+      "text": "##doppio",
+      "out": [
+        {
+          "name": "doppio",
+          "from": 1,
+          "to": 8
+        }
+      ]
+    },
+    {
+      "text": "#Café contro #Café",
+      "out": [
+        {
+          "name": "Café",
+          "from": 0,
+          "to": 5
+        },
+        {
+          "name": "Cafe",
+          "from": 13,
+          "to": 18
+        }
+      ]
+    },
+    {
+      "text": "#١٢٣ non e' #123",
+      "out": [
+        {
+          "name": "١٢٣",
+          "from": 0,
+          "to": 4
+        }
+      ]
+    },
+    {
+      "text": "coda #",
+      "out": []
+    },
+    {
+      "text": "emoji 🌍 poi #dopo-emoji",
+      "out": [
+        {
+          "name": "dopo-emoji",
+          "from": 13,
+          "to": 24
+        }
+      ]
+    },
+    {
+      "text": "",
+      "out": []
+    }
+  ],
   "byte_to_utf16": [
     {
       "text": "ascii puro",

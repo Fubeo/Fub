@@ -9,9 +9,14 @@
 //   CodeMirror), si aggiorna a ogni battuta senza IPC, e il problema
 //   byte↔UTF-16 non esiste proprio. Gli `Span` restano per le decorazioni
 //   semantiche di M3.
-// - La sintassi che il parser non conosce (wikilink, `==evidenziato==`, tag,
-//   checkbox) si riconosce **per riga con regex**: gli indici dei match JS
-//   sono già code unit, quindi accenti ed emoji non spostano nulla.
+// - La sintassi che il parser non conosce (wikilink, i tratti fra
+//   delimitatori, tag, checkbox) si riconosce **per riga**, e non qui: la
+//   riconosce `rules/sintassi.ts`, che è il posto unico in cui la shell
+//   interpreta la dichiarazione del contratto (§4.4, decisione 0115). Gli
+//   indici che ne tornano sono già code unit, quindi accenti ed emoji non
+//   spostano nulla. Prima queste regex stavano scritte qui, e le stesse
+//   sintassi erano riscritte diverse in `editor-commands.ts` e in
+//   `completions.ts`.
 //
 // Il modulo è diviso in due strati, e la divisione è ciò che lo rende
 // testabile: `computeDecorations` è una funzione pura (stato → lista di
@@ -35,13 +40,27 @@ import { syntaxTree } from "@codemirror/language";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../rules/mirrored";
+import {
+  delimitatoriInline,
+  parseWikilinkInner,
+  scanTags,
+  tratti,
+  voceDiLista,
+  wikilink,
+} from "../rules/sintassi";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
 export interface LivePreviewCallbacks {
-  /// `Mod-click` su un wikilink: riceve la pagina nuda, senza alias né
-  /// `#heading` (per `[[#Sezione]]`, link interno alla nota, arriva "").
-  openWikilink(page: string): void;
+  /// `Mod-click` su un wikilink: riceve il **punto**, non solo la pagina.
+  ///
+  /// `page` vuota è `[[#Sezione]]`, cioè un link interno alla nota. `heading` e
+  /// `block` sono il punto che il link nomina, quando lo nomina: arrivavano
+  /// fin qui e venivano buttati, quindi `[[Nota#Sezione]]` cliccato
+  /// nell'editor apriva la nota in cima mentre lo stesso link cliccato in
+  /// Lettura arrivava alla sezione — due risposte per lo stesso link, che è la
+  /// §4.4 nella sua forma più piccola.
+  openWikilink(page: string, heading: string | null, block: string | null): void;
   /// Click semplice su un tag: riceve il nome senza `#` (es. "area/lavoro").
   searchTag(tag: string): void;
 }
@@ -80,8 +99,9 @@ export interface LiveDeco {
   from: number;
   to: number;
   kind: LiveDecoKind;
-  /// Payload per i kind che ne hanno uno: la pagina di un wikilink, il nome
-  /// di un tag, "x"/" " per lo stato di una checkbox.
+  /// Payload per i kind che ne hanno uno: il bersaglio di un wikilink come sta
+  /// scritto (`Nota#Sezione^blocco`), il nome di un tag, "x"/" " per lo stato
+  /// di una checkbox.
   data?: string;
 }
 
@@ -98,17 +118,19 @@ export function activeLinesOf(state: EditorState): Set<number> {
   return attive;
 }
 
-// La sintassi Obsidian fuori dal parser. Gli indici dei match sono code unit
-// JS: nessuna conversione, è già la valuta di CodeMirror.
-const RE_WIKILINK = /(!?)\[\[([^[\]\n]+)\]\]/g;
-const RE_EVIDENZIA = /==([^=\n]+)==/g;
-// Un tag inizia dopo spazio/inizio riga/parentesi aperta (mai in mezzo a una
-// parola) e deve avere almeno un carattere non numerico. `# Titolo` non
-// matcha: dopo il `#` di un heading c'è uno spazio.
-const RE_TAG = /(^|[\s([{])#([\p{L}\p{N}\p{M}_/-]+)/gu;
-// Checkbox a inizio voce di lista (anche dentro citazioni e liste numerate).
-// Il lookahead non consuma: il match finisce esattamente su `]`.
-const RE_CHECKBOX = /^((?:\s*>\s*)*\s*)(?:[-*+]|\d+[.)])\s+\[([ xX])\](?=\s|$)/;
+// I delimitatori inline **dichiarati**, letti una volta sola al caricamento
+// del modulo: `==` non è scritto in questo file, è il trigger di
+// `HighlightRule`. Una sintassi inline registrata in Rust si decora da sé.
+const INLINE_DICHIARATI = delimitatoriInline();
+
+// Il nome dell'attributo con cui il payload viaggia nel DOM, scritto **una**
+// volta: chi lo posa e chi lo rilegge stanno a trecento righe di distanza, e
+// finché erano due letterali (`attributes:` di qua, `dataset.` di là) un refuso
+// non compilava male — semplicemente non trovava niente, e il click non faceva
+// nulla. `dataset` non serve più, e non è un dettaglio: la sua forma camelCase
+// è una **terza** grafia dello stesso nome.
+const ATTR_WIKILINK = "data-fub-target";
+const ATTR_TAG = "data-fub-tag";
 
 /// La funzione pura al centro del modulo: dallo stato (albero Lezer + testo)
 /// e dalle righe attive produce la lista ordinata degli intervalli da
@@ -289,62 +311,65 @@ export function computeDecorations(
 
     // Wikilink ed embed. Il match diventa a sua volta un'esclusione: un
     // `#heading` o un `|` dentro `[[…]]` non sono un tag né altro.
-    RE_WIKILINK.lastIndex = 0;
-    for (let m; (m = RE_WIKILINK.exec(testo)); ) {
-      const inizio = riga.from + m.index;
-      const fine = inizio + m[0].length;
+    for (const w of wikilink(testo)) {
+      const inizio = riga.from + w.from;
+      const fine = riga.from + w.to;
       if (!libero(inizio, fine)) continue;
       esclusioni.push({ from: inizio, to: fine });
-      const interno = m[2];
-      const internoDa = inizio + m[1].length + 2;
-      const internoA = fine - 2;
-      const pipe = interno.indexOf("|");
-      const bersaglio = pipe === -1 ? interno : interno.slice(0, pipe);
-      const pagina = bersaglio.split("#")[0].trim();
+      const internoDa = riga.from + w.internoDa;
+      const internoA = riga.from + w.internoA;
+      // Il payload porta il riferimento **intero**: pagina, heading e blocco.
+      // Portava la sola pagina, quindi `Mod-click` su `[[Nota#Sezione]]`
+      // apriva la nota in cima mentre lo stesso link in Lettura arrivava alla
+      // sezione — due risposte per lo stesso link (§4.4).
+      const data = w.bersaglio;
       if (rigaAttiva) {
         // Sorgente visibile ma link comunque cliccabile e stilato.
-        out.push({ from: internoDa, to: internoA, kind: "wikilink", data: pagina });
+        out.push({ from: internoDa, to: internoA, kind: "wikilink", data });
       } else {
         // Un solo hide copre `![[` (o `[[`) e, se c'è l'alias, anche `Pagina|`.
-        const mostraDa = pipe === -1 ? internoDa : internoDa + pipe + 1;
+        const mostraDa =
+          w.alias === null ? internoDa : internoDa + w.bersaglio.length + 1;
         out.push({ from: inizio, to: mostraDa, kind: "hide" });
-        out.push({ from: mostraDa, to: internoA, kind: "wikilink", data: pagina });
+        out.push({ from: mostraDa, to: internoA, kind: "wikilink", data });
         out.push({ from: internoA, to: fine, kind: "hide" });
       }
     }
 
-    // Evidenziazione `==testo==`: il mark resta anche sulla riga attiva,
-    // spariscono solo i marcatori.
-    RE_EVIDENZIA.lastIndex = 0;
-    for (let m; (m = RE_EVIDENZIA.exec(testo)); ) {
-      const inizio = riga.from + m.index;
-      const fine = inizio + m[0].length;
+    // I tratti fra delimitatori **dichiarati** (`==evidenziato==` e chi verrà):
+    // il mark resta anche sulla riga attiva, spariscono solo i marcatori.
+    for (const t of tratti(testo, INLINE_DICHIARATI)) {
+      const inizio = riga.from + t.from;
+      const fine = riga.from + t.to;
       if (!libero(inizio, fine)) continue;
       if (!rigaAttiva) {
-        out.push({ from: inizio, to: inizio + 2, kind: "hide" });
-        out.push({ from: fine - 2, to: fine, kind: "hide" });
+        out.push({ from: inizio, to: riga.from + t.contenutoDa, kind: "hide" });
+        out.push({ from: riga.from + t.contenutoA, to: fine, kind: "hide" });
       }
-      out.push({ from: inizio + 2, to: fine - 2, kind: "highlight" });
+      out.push({
+        from: riga.from + t.contenutoDa,
+        to: riga.from + t.contenutoA,
+        kind: "highlight",
+      });
     }
 
     // Tag: mai nascosti, sempre marcati (e cliccabili) — anche sulla riga
-    // attiva. Un tag di sole cifre non è un tag (regola Obsidian).
-    RE_TAG.lastIndex = 0;
-    for (let m; (m = RE_TAG.exec(testo)); ) {
-      const nome = m[2];
-      if (!/[^\p{N}]/u.test(nome)) continue;
-      const tagDa = riga.from + m.index + m[1].length;
-      const tagA = tagDa + 1 + nome.length;
+    // attiva. La regola è quella del contratto (`scan_tags`), non una regex di
+    // qua: era più stretta, e `vedi.#tag` restava senza decorazione mentre il
+    // modello lo indicizzava.
+    for (const t of scanTags(testo)) {
+      const tagDa = riga.from + t.from;
+      const tagA = riga.from + t.to;
       if (!libero(tagDa, tagA)) continue;
-      out.push({ from: tagDa, to: tagA, kind: "tag", data: nome });
+      out.push({ from: tagDa, to: tagA, kind: "tag", data: t.name });
     }
 
     // Checkbox a inizio voce: fuori dalla riga attiva il `[ ]`/`[x]` diventa
     // un widget; il barrato leggero sulla voce fatta resta sempre.
-    const mc = RE_CHECKBOX.exec(testo);
-    if (mc) {
-      const parA = riga.from + mc[0].length; // subito dopo `]`
-      const spuntata = taskChecked(mc[2]);
+    const voce = voceDiLista(testo);
+    if (voce && voce.symbol !== null) {
+      const parA = riga.from + voce.boxTo; // subito dopo `]`
+      const spuntata = taskChecked(voce.symbol);
       if (!rigaAttiva) {
         out.push({ from: parA - 3, to: parA, kind: "checkbox", data: spuntata ? "x" : " " });
       }
@@ -428,12 +453,12 @@ function inDecorazione(d: LiveDeco): Decoration {
     case "wikilink":
       return Decoration.mark({
         class: "cm-fub-wikilink",
-        attributes: { "data-fub-page": d.data ?? "" },
+        attributes: { [ATTR_WIKILINK]: d.data ?? "" },
       });
     case "tag":
       return Decoration.mark({
         class: "cm-fub-tag",
-        attributes: { "data-fub-tag": d.data ?? "" },
+        attributes: { [ATTR_TAG]: d.data ?? "" },
       });
     default:
       return marchi[d.kind]!;
@@ -462,14 +487,17 @@ function gestisciClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks
 
   const wikilink = bersaglio.closest<HTMLElement>(".cm-fub-wikilink");
   if (wikilink && (e.ctrlKey || e.metaKey)) {
-    cb.openWikilink(wikilink.dataset.fubPage ?? "");
+    // L'attributo porta il bersaglio come sta scritto nella sorgente: qui lo
+    // si ripassa dalla stessa grammatica di prima, invece di ri-serializzarlo.
+    const rif = parseWikilinkInner(wikilink.getAttribute(ATTR_WIKILINK) ?? "");
+    cb.openWikilink(rif.page, rif.heading, rif.block);
     e.preventDefault();
     return true;
   }
 
   const tag = bersaglio.closest<HTMLElement>(".cm-fub-tag");
   if (tag && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-    cb.searchTag(tag.dataset.fubTag ?? "");
+    cb.searchTag(tag.getAttribute(ATTR_TAG) ?? "");
     e.preventDefault();
     return true;
   }

@@ -110,6 +110,15 @@ function tabellaDeiNumeri() {
     }
   });
 
+  // Il **femminile** di uno. Non è una grafia alternativa di comodo: in
+  // italiano il numero concorda col nome che conta, e le cose che questo repo
+  // conta sono per metà femminili — «una voce aperta», «una casella residua».
+  // Senza questa riga l'unico modo di scrivere il vero era «uno voce», cioè
+  // scriverlo sbagliato, o metterci una cifra in mezzo a una frase: il difetto
+  // per cui questo file esiste, riprodotto da lui. Vale solo per uno, e la
+  // ragione è che l'italiano flette solo lui — «due voci», «ventidue voci».
+  tabella.set("una", 1);
+
   tabella.set("cento", 100);
   // Le centinaia, e non per completezza: il registro dei verbali ha superato
   // cento, quindi da qui in avanti il numero **giusto** non era scrivibile in
@@ -288,6 +297,10 @@ function autoprova() {
     ["le quattordici famiglie ", 14],
     ["ne conta **ventitré** ", 23],
     ["ventuno, ventotto e trentuno: l'ultimo vince ", 31],
+    // Il femminile di uno: «una voce aperta» dev'essere leggibile, o il vero
+    // non è scrivibile in italiano corretto.
+    ["**una** voce aperta ", 1],
+    ["ventuna non è una parola, quindi qui vale l'ultimo che c'è: una ", 1],
     ["**trentaquattro** oggi ", 34],
     ["il contratto è **18 058** righe ", 18058],
     ["3400 righe di cui 1697 di commento ", 1697],

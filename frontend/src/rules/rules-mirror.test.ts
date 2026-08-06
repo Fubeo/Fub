@@ -6,6 +6,7 @@ import {
   normalizedName,
   pageName,
   resolutionKey,
+  scanTags,
   taskChecked,
   topicMatches,
 } from "./mirrored";
@@ -46,6 +47,9 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   name_fault: (c) => nameFault(c.path, c.naming),
   normalized_name: (c) => normalizedName(c.path),
   task_checked: (c) => taskChecked(c.symbol ?? null),
+  // Il riconoscimento di un `#tag` (§4.4): la regola sale nel contratto
+  // perché una superficie di scrittura la deve sapere senza avere il parser.
+  scan_tags: (c) => scanTags(c.text),
   byte_to_utf16: (c) => byteToCharIndex(c.text, c.byte),
   utf16_to_byte: (c) => charToByteIndex(c.text, c.unit),
   // La maschera di un abbonamento (§10.1). `mask_name` è solo l'etichetta che

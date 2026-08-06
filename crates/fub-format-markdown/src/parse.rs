@@ -782,7 +782,7 @@ fn push_plain_or_tags(
     out: &mut Vec<Inline>,
 ) {
     let tags: Vec<Tag> = if ctx.enabled(syntax::TAGS) {
-        scan::extract_tags(slice)
+        scan::scan_tags(slice)
             .into_iter()
             // Sul sorgente gli pseudo-tag si riconoscono: `\#` è sotto escape,
             // `&#x27;` è un'entità — nessuno dei due è un tag per Obsidian.
