@@ -12,26 +12,39 @@
 use fub_abi::model::{
     custom_kind, Block, ColumnAlign, DocumentModel, Inline, LinkTarget, TableRow,
 };
+use fub_abi::FormatError;
 
-pub fn serialize(model: &DocumentModel) -> String {
+/// # Ciò che non si sa scrivere **risale**, non sparisce
+///
+/// Questa funzione ha un solo modo di sbagliare in modo interessante: avere in
+/// mano qualcosa che il markdown non sa esprimere. Fino alla riparazione di
+/// questo difetto quel caso era un ramo muto — `if let Ok(yaml)` sul
+/// frontmatter — e il risultato era una sorgente **valida e incompleta**, cioè
+/// la peggiore delle due: chi la scriveva sul disco non aveva niente da
+/// guardare, e il frontmatter era già perso. Da qui in poi il fallimento è un
+/// `Err` che arriva a chi ha chiesto la scrittura.
+pub fn serialize(model: &DocumentModel) -> Result<String, FormatError> {
     let mut out = String::new();
     if !model.frontmatter.is_empty() {
-        if let Ok(yaml) = serde_yaml_ng::to_string(&model.frontmatter.0) {
-            out.push_str("---\n");
-            out.push_str(&yaml);
-            out.push_str("---\n\n");
-        }
+        let yaml = serde_yaml_ng::to_string(&model.frontmatter.0).map_err(|e| {
+            FormatError::Serialize(format!(
+                "il frontmatter non si è potuto scrivere in YAML: {e}"
+            ))
+        })?;
+        out.push_str("---\n");
+        out.push_str(&yaml);
+        out.push_str("---\n\n");
     }
     for (i, block) in model.body.iter().enumerate() {
         if i > 0 {
             out.push('\n');
         }
-        write_block(block, &mut out);
+        write_block(block, &mut out)?;
     }
-    out
+    Ok(out)
 }
 
-fn write_block(block: &Block, out: &mut String) {
+fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
     match block {
         Block::Heading { level, inlines, .. } => {
             out.push_str(&"#".repeat((*level).clamp(1, 6) as usize));
@@ -60,7 +73,7 @@ fn write_block(block: &Block, out: &mut String) {
                 }
                 let mut inner = String::new();
                 for b in &item.blocks {
-                    write_block(b, &mut inner);
+                    write_block(b, &mut inner)?;
                 }
                 out.push_str(inner.trim_end());
                 out.push('\n');
@@ -122,7 +135,7 @@ fn write_block(block: &Block, out: &mut String) {
         Block::Quote { blocks, .. } => {
             let mut inner = String::new();
             for b in blocks {
-                write_block(b, &mut inner);
+                write_block(b, &mut inner)?;
             }
             for line in inner.trim_end().lines() {
                 out.push_str("> ");
@@ -137,11 +150,24 @@ fn write_block(block: &Block, out: &mut String) {
             blocks,
             ..
         } => {
-            if custom_kind == custom_kind::FOOTNOTE_DEFINITION {
+            if custom_kind == custom_kind::FRONTMATTER_UNPARSED {
+                // Il frontmatter che il parser non ha capito torna **verbatim**,
+                // delimitatori compresi. Se il testo non c'è non si può
+                // ricostruire da nient'altro — gli `attrs` sono tutto ciò che
+                // questo blocco è — e allora il giro completo si ferma qui
+                // invece di produrre una sorgente amputata che sembra intera.
+                let text = attrs.get("text").and_then(|v| v.as_str()).ok_or_else(|| {
+                    FormatError::Serialize(format!(
+                        "un blocco `{}` senza `attrs.text` non ha una sorgente da riscrivere",
+                        custom_kind::FRONTMATTER_UNPARSED
+                    ))
+                })?;
+                out.push_str(text);
+            } else if custom_kind == custom_kind::FOOTNOTE_DEFINITION {
                 let label = attrs.get("label").and_then(|v| v.as_str()).unwrap_or("1");
                 let mut inner = String::new();
                 for b in blocks {
-                    write_block(b, &mut inner);
+                    write_block(b, &mut inner)?;
                 }
                 out.push_str(&format!("[^{label}]: {}\n", inner.trim()));
             } else if custom_kind == custom_kind::CALLOUT {
@@ -149,7 +175,7 @@ fn write_block(block: &Block, out: &mut String) {
                 out.push_str(&format!("> [!{ty}]\n"));
                 let mut inner = String::new();
                 for b in blocks {
-                    write_block(b, &mut inner);
+                    write_block(b, &mut inner)?;
                 }
                 for line in inner.trim_end().lines() {
                     out.push_str("> ");
@@ -158,11 +184,12 @@ fn write_block(block: &Block, out: &mut String) {
                 }
             } else {
                 for b in blocks {
-                    write_block(b, out);
+                    write_block(b, out)?;
                 }
             }
         }
     }
+    Ok(())
 }
 
 fn write_inlines(inlines: &[Inline], out: &mut String) {

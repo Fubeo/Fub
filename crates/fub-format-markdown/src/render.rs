@@ -123,6 +123,20 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 }
                 render_blocks(blocks, opts, out);
                 out.push_str("</div>");
+            } else if custom_kind == custom_kind::FRONTMATTER_UNPARSED {
+                // Il degrado generico qui non basterebbe: questo blocco non ha
+                // figli, e un `<div>` vuoto è di nuovo la sparizione muta —
+                // l'utente ha sbagliato una virgola nelle proprietà e vedrebbe
+                // le proprietà svanire senza un avviso. Il testo resta **dato**
+                // (escapato), e il motivo si legge accanto.
+                let motivo = attrs.get("error").and_then(|v| v.as_str()).unwrap_or("");
+                let text = attrs.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                out.push_str(&format!(
+                    "<div{id} class=\"block-frontmatter-unparsed\">\
+                     <div class=\"frontmatter-error\">{}</div><pre>{}</pre></div>",
+                    escape_html(motivo),
+                    escape_html(text)
+                ));
             } else {
                 // Ogni altro kind — registrato o no — degrada a resa generica,
                 // col suo `custom_kind` come classe. L'HTML grezzo di

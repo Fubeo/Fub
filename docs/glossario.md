@@ -91,7 +91,7 @@ markdown è solo il primo provider che sa produrlo. Dettaglio in
 [architecture/data-model.md](architecture/data-model.md).
 
 ### proprietà
-`PropertyValue` · [`abi/model.rs:789`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`PropertyValue` · [`abi/model.rs:800`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Un valore del frontmatter letto con un tipo invece che come JSON nudo: scalare,
 data, ora, lista. Serve a chi interroga (ordinare per data, filtrare per stato)

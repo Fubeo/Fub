@@ -68,7 +68,16 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     for child in root.children() {
         let value = &child.data.borrow().value;
         if let NodeValue::FrontMatter(raw) = value {
-            frontmatter = parse_frontmatter(raw);
+            // Un frontmatter che non si proietta su JSON **non si butta**: resta
+            // nel modello come blocco verbatim, e da lì torna sulla sorgente
+            // identico a com'era. È contenuto dell'utente, e chi non l'ha capito
+            // non è autorizzato a cancellarlo.
+            match parse_frontmatter(raw) {
+                Ok(fm) => frontmatter = fm,
+                Err(motivo) => {
+                    body.push(frontmatter_non_letto(raw, motivo, span_of(child, &offsets)));
+                }
+            }
             continue;
         }
         let Some(block) = convert_block(child, source, &offsets, ctx, &mut acc) else {
@@ -818,7 +827,15 @@ fn push_plain_or_tags(
     }
 }
 
-fn parse_frontmatter(raw: &str) -> Frontmatter {
+/// Il frontmatter proiettato su JSON, oppure **perché non si è potuto**.
+///
+/// L'errore è una frase, non un tipo: qui non c'è nessuno che debba
+/// distinguere fra «virgola sbagliata» e «non è una mappa» *facendo* qualcosa
+/// di diverso — c'è qualcuno che deve leggerla. Ciò che conta è che il
+/// fallimento **esista**: prima cadeva in un `_ => Frontmatter::default()`, e
+/// da lì in poi un frontmatter rotto e un frontmatter assente erano
+/// indistinguibili per chiunque, riscrittura compresa.
+fn parse_frontmatter(raw: &str) -> Result<Frontmatter, String> {
     // `raw` include i delimitatori `---`; li togliamo prima di parsare lo YAML.
     let inner = raw
         .trim()
@@ -826,10 +843,47 @@ fn parse_frontmatter(raw: &str) -> Frontmatter {
         .trim_end_matches("---")
         .trim();
     if inner.is_empty() {
-        return Frontmatter::default();
+        return Ok(Frontmatter::default());
     }
     match serde_yaml_ng::from_str::<serde_json::Value>(inner) {
-        Ok(serde_json::Value::Object(map)) => Frontmatter(map),
-        _ => Frontmatter::default(),
+        Ok(serde_json::Value::Object(map)) => Ok(Frontmatter(map)),
+        // Uno YAML valido che non è una mappa (`- a`, `solo testo`) non è un
+        // frontmatter: non ha proprietà da offrire, e non è un errore di
+        // sintassi che si possa citare con una riga.
+        Ok(altro) => Err(format!(
+            "il frontmatter non è una mappa di proprietà ma {}",
+            specie_yaml(&altro)
+        )),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn specie_yaml(v: &serde_json::Value) -> &'static str {
+    match v {
+        serde_json::Value::Null => "un valore vuoto",
+        serde_json::Value::Bool(_) => "un booleano",
+        serde_json::Value::Number(_) => "un numero",
+        serde_json::Value::String(_) => "una stringa",
+        serde_json::Value::Array(_) => "un elenco",
+        serde_json::Value::Object(_) => "una mappa",
+    }
+}
+
+/// Il blocco che conserva un frontmatter illeggibile **verbatim**.
+///
+/// `text` è normalizzato a finire con un solo `\n` dopo il delimitatore di
+/// chiusura: `raw` di comrak si porta dietro anche la riga vuota che separa il
+/// frontmatter dal corpo, e quella riga la rimette il serializer come
+/// separatore fra blocchi. Senza la normalizzazione il giro completo
+/// guadagnerebbe una riga vuota a ogni passaggio.
+fn frontmatter_non_letto(raw: &str, motivo: String, span: Span) -> Block {
+    let mut text = raw.trim_end().to_string();
+    text.push('\n');
+    Block::Custom {
+        custom_kind: custom_kind::FRONTMATTER_UNPARSED.to_string(),
+        attrs: serde_json::json!({ "text": text, "error": motivo }),
+        blocks: Vec::new(),
+        anchor: None,
+        span,
     }
 }

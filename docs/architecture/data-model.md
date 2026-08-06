@@ -480,6 +480,7 @@ tutti e due i posti prima di usarlo:
 | `diagram` | `{ "engine": string, "source": string }` | mermaid, PlantUML, Graphviz, D2. Il motore sta negli `attrs` perché il kind è la **famiglia**: chi li disegna vuole un innesto solo |
 | `highlight` | `{ "text": string }` | **inline**, `==…==` |
 | `block` | — | ciò che il provider non sa nominare |
+| `frontmatter-unparsed` | `{ "text": string, "error": string }` | un frontmatter che non si proietta su JSON (YAML rotto, o un documento che non è una mappa). `text` è il blocco **verbatim**, delimitatori compresi: chi non l'ha capito non lo cancella |
 
 **Chi emette un kind, e chi lo disegna.** Dalla
 [decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) i
