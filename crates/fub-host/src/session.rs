@@ -755,12 +755,14 @@ impl Host {
         self.vaults.set_favorite(&canonical(root)?, favorite)
     }
 
-    /// L'icona e il nome con cui un vault compare nell'elenco.
+    /// L'icona e il nome con cui un vault compare nell'elenco: **l'aspetto
+    /// intero**, nelle stesse forme in cui `known_vaults` lo restituisce —
+    /// l'icona assente è `None`, il nome non scelto è il vuoto.
     pub fn set_vault_look(
         &self,
         root: &Utf8Path,
         icon: Option<String>,
-        name: Option<String>,
+        name: String,
     ) -> Result<(), PluginError> {
         self.vaults.set_look(&canonical(root)?, icon, name)
     }

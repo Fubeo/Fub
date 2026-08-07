@@ -724,12 +724,17 @@ fn set_vault_favorite(host: State<Host>, path: String, favorite: bool) -> Result
     host.set_vault_favorite(&Utf8PathBuf::from(path), favorite)
 }
 
+/// L'aspetto con cui un vault compare nell'elenco: **tutto quanto**, nelle
+/// stesse forme in cui `known_vaults` lo restituisce. L'icona che non c'è è
+/// `null`, il nome che nessuno ha scelto è la stringa vuota — e questa è
+/// l'unica lettura possibile della firma, che è ciò che un `null` sul nome non
+/// sarebbe stato.
 #[tauri::command]
 fn set_vault_look(
     host: State<Host>,
     path: String,
     icon: Option<String>,
-    name: Option<String>,
+    name: String,
 ) -> Result<(), PluginError> {
     host.set_vault_look(&Utf8PathBuf::from(path), icon, name)
 }

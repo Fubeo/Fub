@@ -201,18 +201,32 @@ impl VaultRegistry {
         self.update(root, |entry| entry.keys_seen = keys.clone())
     }
 
-    /// L'icona (`None` la toglie) e il nome (vuoto = quello della cartella).
+    /// **L'aspetto intero**: l'icona (`None` = nessuna) e il nome (vuoto =
+    /// quello della cartella).
+    ///
+    /// I due parametri sono i due campi di [`VaultEntry`] **nelle loro stesse
+    /// forme**, e non è un'economia di tipi: è ciò che impedisce alla firma di
+    /// dire due cose. Il nome è stato un `Option<String>`, e un `Option` a un
+    /// confine ha due letture — «lascialo com'era» e «azzeralo» — che nessuna
+    /// firma distingue; quella accanto sceglieva già la seconda, questa
+    /// sceglieva la prima, e chi leggeva `set_look(root, icona, None)` non
+    /// aveva modo di sapere che gliene stava applicando due opposte. Un `String`
+    /// la variante ambigua non ce l'ha: chi non vuole più un nome scrive il
+    /// vuoto, che è la stessa cosa che legge da `known_vaults`.
+    ///
+    /// **È un `set` e non una modifica parziale**: chi cambia solo il nome
+    /// rimanda l'icona che ha letto. Il verso opposto — due parametri che
+    /// dicono «lascia com'era» — vorrebbe un `Option<Option<String>>` per
+    /// l'icona, cioè tre stati per rispondere a una domanda che ne ha due.
     pub fn set_look(
         &self,
         root: &Utf8Path,
         icon: Option<String>,
-        name: Option<String>,
+        name: String,
     ) -> Result<(), PluginError> {
         self.update(root, |entry| {
             entry.icon = icon.clone();
-            if let Some(name) = name.clone() {
-                entry.name = name;
-            }
+            entry.name = name.clone();
         })
     }
 
@@ -427,12 +441,8 @@ mod tests {
         let (reg, warning) = VaultRegistry::open(&path);
         assert!(warning.is_none(), "un file che non c'è non è un errore");
         reg.note_opened(Utf8Path::new("/a"), 42).unwrap();
-        reg.set_look(
-            Utf8Path::new("/a"),
-            Some("📓".into()),
-            Some("Diario".into()),
-        )
-        .unwrap();
+        reg.set_look(Utf8Path::new("/a"), Some("📓".into()), "Diario".into())
+            .unwrap();
 
         let (riletto, warning) = VaultRegistry::open(&path);
         assert!(warning.is_none());
@@ -472,6 +482,33 @@ mod tests {
             terza.list()[0].favorite,
             "e il preferito della prima è ancora un preferito"
         );
+    }
+
+    /// Togliere il nome scelto **torna al nome della cartella**, che è ciò che
+    /// il vuoto vuol dire in [`VaultEntry::name`]. E togliere l'icona la toglie.
+    ///
+    /// **Questo banco è verde per costruzione** e va detto: prova la forma
+    /// nuova, in cui il nome è un `String` e il vuoto è l'unico modo di dire
+    /// «non ne ho scelto uno». Con la firma di prima la stessa riga passava
+    /// scrivendo `Some(String::new())` — la via c'era, ed è la ragione per cui
+    /// questo non è mai stato un difetto di comportamento. Quello che non c'era
+    /// è una firma che lo dicesse: `None` sembrava l'azzeramento perché il
+    /// parametro accanto lo era, e chi lo scriveva si azzerava l'icona senza
+    /// toccare il nome. Il banco sta qui perché nessuno rimetta un `Option` per
+    /// «lasciarlo com'era».
+    #[test]
+    fn togliere_il_nome_scelto_torna_al_nome_della_cartella() {
+        let reg = VaultRegistry::in_memory();
+        reg.note_opened(Utf8Path::new("/a"), 1).unwrap();
+        reg.set_look(Utf8Path::new("/a"), Some("📓".into()), "Diario".into())
+            .unwrap();
+        assert_eq!(reg.list()[0].name, "Diario");
+
+        reg.set_look(Utf8Path::new("/a"), None, String::new())
+            .unwrap();
+        let entry = reg.list().remove(0);
+        assert_eq!(entry.name, "", "vuoto = il nome della cartella");
+        assert_eq!(entry.icon, None, "e l'icona si toglie con `None`");
     }
 
     #[test]
