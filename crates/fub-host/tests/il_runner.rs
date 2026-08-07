@@ -113,7 +113,12 @@ impl Plugin for Lavoratore {
         Ok(())
     }
 
+    /// Il commiato si **annuncia** come un passo del job, sullo stesso canale:
+    /// «è stato chiamato» e «non è stato chiamato» sono la stessa domanda fatta
+    /// a due tempi diversi, e un banco che le legga da due posti diversi non
+    /// può dire quale è venuto prima.
     fn deactivate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.passi.segna("congedato");
         Ok(())
     }
 
@@ -160,6 +165,26 @@ impl Plugin for Lavoratore {
                     self.passi.aspetta_il_via();
                 }
                 Ok(serde_json::json!("raccontato"))
+            }
+            // **Esce solo se qualcuno gli dice di no.** Non aspetta un via dal
+            // banco: chiede all'host, e richiede, finché l'host non lo rifiuta.
+            // È la forma con cui si costruisce (invece di aspettarla) la corsa
+            // fra un job in volo e lo spegnimento del suo componente — il job è
+            // dentro `run_job` finché lo spegnimento non è deciso, e non per un
+            // tempo che il banco spera sia abbastanza.
+            //
+            // La scadenza non è un'attesa: è la rete che fa **fallire** un banco
+            // rotto invece di lasciarlo appeso.
+            "insiste" => {
+                self.passi.segna("è dentro");
+                let scadenza = std::time::Instant::now() + Duration::from_secs(5);
+                loop {
+                    host.random_bytes(1)?;
+                    assert!(
+                        std::time::Instant::now() < scadenza,
+                        "nessuno ha mai detto di no a questo job"
+                    );
+                }
             }
             "esplodi" => panic!("il job è esploso"),
             altro => Err(PluginError::UnknownJob(altro.into())),
@@ -331,6 +356,49 @@ fn un_job_puro_che_non_chiama_mai_lhost_arriva_in_fondo_comunque() {
         serde_json::json!(42),
         "la cancellazione è cooperativa perché non può essere altro"
     );
+    host.close();
+}
+
+/// **Spegnere un componente aspetta i suoi job, e poi lo congeda.**
+///
+/// È il difetto scritto al contrario. Chi esegue un job tiene una copia del
+/// bundle finché il job dura (`BundleRegistry::body` rende un `Arc`), e
+/// `Plugin::deactivate` vuole essere solo: spegnere un componente dalle
+/// impostazioni mentre un suo job è in volo non chiamava il commiato affatto —
+/// lo diceva in un errore, e il bundle veniva smontato lo stesso. Il plugin
+/// perdeva l'unico momento in cui può lasciar andare ciò che tiene (un file
+/// aperto, una connessione, un thread suo) *mentre è ancora intero*.
+///
+/// La corsa è **costruita, non aspettata**: il job in volo è «insiste», che da
+/// `run_job` esce soltanto quando l'host lo rifiuta. Nessun via del banco lo
+/// libera, nessun `sleep` spera che lo spegnimento arrivi prima — l'unica cosa
+/// che può farlo uscire è lo spegnimento stesso, quindi quando lo spegnimento
+/// arriva a `Arc::get_mut` il job è dentro per costruzione.
+///
+/// E ciò che si aspetta alla fine non è un tempo ma un fatto: il commiato arriva
+/// sullo stesso canale dei passi del job, e con la forma vecchia non arriverebbe
+/// mai.
+#[test]
+fn spegnere_un_componente_aspetta_il_suo_job_e_poi_lo_congeda() {
+    let v = Vault::nuovo();
+    let (passi, regia) = passi();
+    let (host, _eventi) = banco(&v, &passi);
+
+    chiedi(&host, "insiste", serde_json::json!(null));
+    regia.aspetta("è dentro");
+
+    // Lo spegnimento lo chiede questo thread e basta: non c'è più niente da
+    // fare in parallelo, perché il job non aspetta il banco.
+    let errori = host.set_plugin_enabled(None, SPIA, false);
+
+    assert!(
+        errori.expect("il componente si spegne").is_empty(),
+        "spegnere un componente con un suo job in volo non è un guasto: è \
+         un'attesa"
+    );
+    // Il commiato è stato chiamato, ed è la riga per cui questo banco esiste:
+    // senza l'attesa, qui non arriverebbe niente e questa riga scadrebbe.
+    regia.aspetta("congedato");
     host.close();
 }
 

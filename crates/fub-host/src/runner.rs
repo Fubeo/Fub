@@ -39,7 +39,7 @@
 //! chiudono, che è esattamente il caso a due thread contro cui il watcher viene
 //! lasciato andare per primo.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -157,6 +157,89 @@ impl Flags {
         for flag in self.live.values() {
             flag.store(true, Ordering::Relaxed);
         }
+    }
+}
+
+/// La frase che si dice se il conto dei job in volo è avvelenato.
+///
+/// Sotto questo lock non gira mai codice di nessuno — ci si scrive un id e si
+/// esce — quindi avvelenarlo vuol dire che è panicato il runner stesso, e
+/// continuare vorrebbe dire spegnere un componente mentre un suo job è dentro.
+const VELENO: &str = "il conto dei job in volo è avvelenato";
+
+/// **Chi è dentro il codice di un bundle adesso, e chi non ci deve più
+/// entrare.**
+///
+/// Risponde a una domanda sola, e nient'altro qui dentro la sa rispondere:
+/// *questo componente si può spegnere adesso?* Chi esegue un job tiene una
+/// copia del bundle per tutta la durata — [`BundleRegistry::body`] rende un
+/// `Arc` apposta, perché un prestito legherebbe il registry per minuti — e
+/// finché quella copia esiste `Plugin::deactivate` non si può nemmeno chiamare:
+/// vuole `&mut`, e `Arc::get_mut` non lo dà a chi non è solo. Le bandiere non
+/// bastano a saperlo: sono per job, non dicono di **chi** è il job, e non
+/// distinguono «accodato» da «dentro».
+#[derive(Default)]
+struct InVolo {
+    /// Le bandiere dei job che sono **dentro** `run_job` adesso, per bundle.
+    ///
+    /// La bandiera e non il solo conto: chi aspetta la alza, ed è tutto ciò che
+    /// vuol dire chiedere a un job di smettere.
+    dentro: HashMap<String, HashMap<JobId, Arc<AtomicBool>>>,
+    /// I bundle che si stanno spegnendo: un loro job non parte più.
+    ///
+    /// Senza, il pool riempirebbe da dietro ciò che chi spegne sta svuotando —
+    /// un drenaggio prende **tutta** la coda, e aspettare che esca uno mentre
+    /// parte il successivo è un'attesa che non finisce.
+    fermi: HashSet<String>,
+}
+
+/// Un job **dentro** il codice del suo bundle: finché questo vive, chi vuole
+/// spegnere quel bundle aspetta.
+///
+/// È la forma del `Lotto` del kernel: uscire non si può dimenticare, perché non
+/// lo fa nessuno — lo fa il `Drop`. Un job che panicasse a metà, o che tornasse
+/// da un ramo d'errore scritto domani, esce lo stesso; e chi spegne resterebbe
+/// ad aspettare per sempre se uscire fosse una riga da ricordarsi.
+struct Dentro {
+    volo: Arc<(Mutex<InVolo>, Condvar)>,
+    plugin: String,
+    id: JobId,
+}
+
+impl Drop for Dentro {
+    fn drop(&mut self) {
+        let (posto, campana) = &*self.volo;
+        // Un `Drop` non pania: durante uno srotolamento costerebbe il processo
+        // invece del job. Il veleno qui lo si prende com'è — ciò che resta da
+        // fare è togliersi dal conto, e va fatto comunque.
+        let mut volo = posto.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(dentro) = volo.dentro.get_mut(&self.plugin) {
+            dentro.remove(&self.id);
+            if dentro.is_empty() {
+                volo.dentro.remove(&self.plugin);
+            }
+        }
+        campana.notify_all();
+    }
+}
+
+/// **Il diritto di spegnere un bundle**: finché vive, nessun job di quel bundle
+/// parte e nessuno è dentro il suo codice.
+///
+/// Lo si tiene per il tempo dello spegnimento e lo si lascia cadere dopo: è un
+/// permesso, non uno stato. Lasciarlo alzato per sempre vorrebbe dire che
+/// riaccendere un componente non gli restituisce i job.
+pub struct Fermo {
+    volo: Arc<(Mutex<InVolo>, Condvar)>,
+    plugin: String,
+}
+
+impl Drop for Fermo {
+    fn drop(&mut self) {
+        let (posto, campana) = &*self.volo;
+        let mut volo = posto.lock().unwrap_or_else(|e| e.into_inner());
+        volo.fermi.remove(&self.plugin);
+        campana.notify_all();
     }
 }
 
@@ -354,6 +437,12 @@ struct Shared {
     /// Le sveglie sono **una** per pool e non una per thread: due thread con due
     /// quadranti farebbero suonare ogni sveglia due volte.
     sveglie: Custodia<Sveglie>,
+    /// Chi è dentro il codice di un bundle, e chi si sta spegnendo.
+    ///
+    /// Un `Mutex` con una `Condvar` e non una [`Custodia`]: qui non si prende
+    /// un prestito, si **aspetta un fatto**, e la 0120 presta e basta. È la
+    /// stessa coppia di [`InCorso::fine`], per la stessa ragione.
+    volo: Arc<(Mutex<InVolo>, Condvar)>,
 }
 
 /// L'indicizzazione dell'apertura mentre gira: il lavoro, la sua identità di
@@ -523,12 +612,77 @@ impl Shared {
         Ok(())
     }
 
+    /// **Entra nel codice di un bundle**, se quel bundle non si sta spegnendo.
+    ///
+    /// `None` vuol dire «non entrare»: il job non parte, e riceve il proprio
+    /// esito come ogni altro che non parte.
+    fn entra(&self, plugin: &str, id: JobId, flag: &Arc<AtomicBool>) -> Option<Dentro> {
+        let (posto, _) = &*self.volo;
+        let mut volo = posto.lock().expect(VELENO);
+        if volo.fermi.contains(plugin) {
+            return None;
+        }
+        volo.dentro
+            .entry(plugin.to_string())
+            .or_default()
+            .insert(id, Arc::clone(flag));
+        Some(Dentro {
+            volo: Arc::clone(&self.volo),
+            plugin: plugin.to_string(),
+            id,
+        })
+    }
+
+    /// **Ferma i job di un bundle e aspetta che non ne resti nessuno dentro.**
+    ///
+    /// Le due metà sono una cosa sola e non due: chiudere la porta senza
+    /// aspettare chi è già dentro lascerebbe esattamente il caso per cui questo
+    /// esiste, e aspettare senza chiudere la porta non finirebbe mai.
+    ///
+    /// Chiedere a chi è dentro di smettere è **alzare la sua bandiera**, e non
+    /// è più di così: un job che non chiama mai l'host arriva in fondo
+    /// comunque, ed è il limite che la
+    /// [0032](../../../docs/decisions/0032-il-runner-dei-job.md) dichiara —
+    /// chi spegne aspetta chi lavora, come chi chiude.
+    ///
+    /// **Chi la chiama non deve tenere in mano né il workspace né il registry**:
+    /// un job dentro `run_job` li chiede per finire, e aspettarlo tenendoli
+    /// sarebbe aspettare sé stessi.
+    fn ferma(&self, plugin: &str) -> Fermo {
+        let (posto, campana) = &*self.volo;
+        let mut volo = posto.lock().expect(VELENO);
+        volo.fermi.insert(plugin.to_string());
+        if let Some(dentro) = volo.dentro.get(plugin) {
+            for flag in dentro.values() {
+                flag.store(true, Ordering::Relaxed);
+            }
+        }
+        while volo.dentro.contains_key(plugin) {
+            volo = campana.wait(volo).expect(VELENO);
+        }
+        Fermo {
+            volo: Arc::clone(&self.volo),
+            plugin: plugin.to_string(),
+        }
+    }
+
     /// Esegue un job e ne riconsegna l'esito. **Sempre** un esito: un job che
     /// sparisce senza dire niente è un chiamante che aspetta per sempre, ed è la
     /// regola che la [0028](../../../docs/decisions/0028-come-un-componente-smette.md)
     /// ha già scritto per i job di chi si disattiva.
     fn run(&self, job: PendingJob) -> Result<(), PluginError> {
         let flag = self.flag(job.id)?;
+        // **Ci si annuncia prima di prendere il corpo**, e il guard si dichiara
+        // per primo perché cada per **ultimo**: fra queste due righe ci sta chi
+        // spegne il componente, e se la copia del bundle si prendesse prima di
+        // annunciarsi quell'attesa non la vedrebbe. Per la stessa ragione
+        // `_dentro` deve sopravvivere all'`Arc` del plugin — un `Drop` in
+        // ordine inverso sveglierebbe chi spegne con una copia ancora in giro,
+        // che è il difetto scritto al contrario.
+        let Some(_dentro) = self.entra(&job.plugin, job.id, &flag) else {
+            self.refuse(job, "non parte: il suo componente si sta spegnendo")?;
+            return Ok(());
+        };
         // Il corpo lo tiene il registry, e lo si prende **senza tenere il suo
         // lock** per la durata del job: chi chiude deve poterci passare.
         let plugin = self.bundles.read()?.body(&job.plugin);
@@ -767,6 +921,7 @@ impl JobRunner {
             apertura: Custodia::new("l'apertura in corso", apertura),
             flags: Custodia::vuota("le bandiere dei job"),
             sveglie: Custodia::vuota("le sveglie del vault"),
+            volo: Arc::new((Mutex::new(InVolo::default()), Condvar::new())),
         });
         let workers = (0..threads.max(1))
             .map(|n| {
@@ -800,6 +955,25 @@ impl JobRunner {
         // Su un vault avvelenato non c'è niente da annullare: il pool si è già
         // fermato da sé, e la riga che spiega perché è già stata scritta.
         let _ = self.shared.cancel(id);
+    }
+
+    /// **Ferma i job di un componente**, e torna quando nessuno è più dentro il
+    /// suo codice: da lì in poi si può spegnere.
+    ///
+    /// È la seconda porta da cui si arriva a [`BundleRegistry::stop`]. La prima
+    /// — chiudere il vault — ferma il pool **intero** e raccoglie i thread, e
+    /// per quella non serviva niente: dopo `stop` non c'è nessuno dentro
+    /// niente. Spegnere un componente dalle impostazioni (§11.1) non ferma il
+    /// pool, e non deve: gli altri componenti non c'entrano.
+    ///
+    /// Il permesso che torna vale finché lo si tiene, e per quello che dura
+    /// nessun job di quel bundle parte. **Va preso prima del prestito del
+    /// workspace**, non dopo: chi è dentro `run_job` chiede il workspace per
+    /// riconsegnare l'esito, e aspettarlo tenendolo sarebbe aspettare sé
+    /// stessi. Vedi `Host::set_plugin_enabled`, che è l'unico chiamante.
+    #[must_use = "il componente resta fermo solo finché si tiene questo permesso"]
+    pub fn ferma_bundle(&self, id: &str) -> Fermo {
+        self.shared.ferma(id)
     }
 
     /// **Ferma il pool**: annulla tutti, sveglia chi dorme, aspetta chi lavora,
@@ -1219,6 +1393,7 @@ mod tests {
             ),
             flags: Custodia::vuota("le bandiere di prova"),
             sveglie: Custodia::vuota("le sveglie di prova"),
+            volo: Arc::new((Mutex::new(InVolo::default()), Condvar::new())),
         };
         (dir, Arc::new(shared), id, root)
     }

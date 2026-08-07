@@ -1071,7 +1071,7 @@ sequenceDiagram
 | `BundleRegistry::mount` | [registry.rs:262](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
 | `reindex` | [workspace.rs:157](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
 | `bridge::spawn` | [bridge.rs:73](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
-| `JobRunner::start` | [runner.rs:735](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
+| `JobRunner::start` | [runner.rs:889](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
 La riga che è facile perdere è la prima: **`fub.core` è un bundle come gli
 altri** e si monta per primo, e non registra nulla — esiste per avere un'identità
@@ -1113,17 +1113,28 @@ L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 | Regola | Dove | Cosa costerebbe non averla |
 |---|---|---|
 | il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fub-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
-| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:580](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
-| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:397](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
+| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:734](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
+| `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:472](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
 | i bundle si spengono in ordine **inverso** | [workspace.rs:1201](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
 
-E un caso che il codice tratta e che vale la pena sapere: se un job in volo tiene
-ancora una copia dell'`Arc<dyn Plugin>`, `deactivate` **non viene chiamato
-affatto**, e al suo posto si produce un errore che lo dice
-([registry.rs:377](../../crates/fub-host/src/registry.rs)). Non è un fallimento
-che ferma la chiusura: gli errori dello spegnimento si accumulano e tornano come
-lista, perché fermarsi al primo lascerebbe metà dei componenti accesi dentro un
-vault che l'utente considera chiuso.
+La seconda regola è quella che tiene in piedi la terza. `deactivate` prende
+`&mut self`, quindi vuole il plugin di **uno solo**, e l'unico altro che può
+tenerne una copia è un job in volo: `body` gli rende un `Arc` clonato apposta,
+perché un job dura minuti. Perciò **chi spegne aspetta prima di bussare**, e le
+porte da cui si arriva sono due — chi chiude il vault ferma il pool intero
+(`JobRunner::stop`), chi spegne un solo componente ferma i job *suoi*
+(`JobRunner::ferma_bundle`, [runner.rs:975](../../crates/fub-host/src/runner.rs)).
+La seconda alza la bandiera dell'annullamento dei job di quel bundle e poi
+aspetta che escano: un job cooperativo se ne accorge alla prima capacità che
+chiede, e nel frattempo nessun job nuovo di quel bundle parte più.
+
+Se malgrado tutto una copia resta in giro, `deactivate` non viene chiamato e al
+suo posto si produce un errore che lo **dice**
+([registry.rs:398](../../crates/fub-host/src/registry.rs)): è la diagnostica per
+una terza porta aperta domani senza l'attesa, non un caso normale. Non ferma la
+chiusura — gli errori dello spegnimento si accumulano e tornano come lista,
+perché fermarsi al primo lascerebbe metà dei componenti accesi dentro un vault
+che l'utente considera chiuso.
 
 ## Rischi
 

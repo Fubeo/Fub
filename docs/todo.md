@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Trentanove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Trentasette** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -507,7 +507,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0002 | `restore_from_trash` ripristina i documenti e non gli asset | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
 | 0004 | i sidecar orfani in `.fub/data/trash/` non li pota nessuno fino a `empty_trash` | `fub-kernel` · `vault.rs` `remove_trashed` | cestino |
 | 0007 | `close_vault` e `with_session` fanno `canonical()` per primo: un vault sparito dal disco non si chiude più | `fub-host` · `session.rs:1015` | vault che sparisce |
-| 0008 | `set_plugin_enabled(false)` non ferma i job in volo, e salta `Plugin::deactivate` | `fub-host` · `session.rs` `set_plugin_enabled` | spegnimento |
 | 0018 | risoluzione dei link rotti: scansione lineare con `resolution_key` per voce, per ogni riferimento | `fub-kernel` · `index/core.rs` `resolve_entry_in` | prestazioni |
 | 0019 | `Vault::open` non rende assoluta la radice: un `set_current_dir` sposta `.fub` e `.trash` | `fub-kernel` · `vault.rs:137` | vault che sparisce |
 | 0038 | i comandi Tauri sono sincroni e prendono lock + I/O sul thread pool dell'IPC | `fub-app` · `lib.rs` | lock e I/O |
@@ -525,7 +524,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0058 | `restore_from_trash` scrive prima di cancellare: un crash in mezzo lascia due copie | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
 | 0059 | `link_rewrite_plan` cerca l'omonimia in `metas` e non in `entries`: gli allegati omonimi sfuggono | `fub-kernel` · `workspace.rs:3352` | anagrafe |
 | 0062 | `backlinks()` torna duplicati quando un documento linka due volte lo stesso target, e il contratto non lo dice | `fub-kernel` · `graph.rs:231` | grafo |
-| 0067 | `Arc::get_mut` fallisce con un job in volo e `deactivate` non viene chiamato: nessun assert lo presidia | `fub-host` · `registry.rs:396` | spegnimento |
 | 0068 | `check(_, Naming::New)` accetta gli spazi in testa che `normalized` trasforma in file nascosti | `fub-abi` · `rules/path_policy.rs:286` | regole |
 | 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
 | 0071 | `UndoStack::push` usa `Vec::remove(0)` oltre il tetto | `fub-kernel` · `undo.rs:99` | prestazioni |
