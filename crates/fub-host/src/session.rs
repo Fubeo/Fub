@@ -1222,9 +1222,27 @@ impl Host {
         Ok(self.versions(vault)?.list(id))
     }
 
-    /// Rileggere una versione passa dall'`HostApi` come tutto il resto: l'host
-    /// presta al versioning le sue stesse capacità (`Workspace::with_host`), non
-    /// una scorciatoia sul filesystem.
+    /// Rileggere una versione passa dall'host come tutto il resto: l'host presta
+    /// al versioning le sue stesse capacità, non una scorciatoia sul filesystem.
+    ///
+    /// **`with_read_host` e non `with_host`**, cioè il prestito **condiviso**.
+    /// Rileggere una versione è una lettura, e prendere qui l'esclusivo ferma
+    /// chi scrive per il tempo di una lettura da disco — il difetto che la
+    /// [0024] ha misurato e per cui il workspace sta dietro un `RwLock`. Ci si
+    /// arrivava per una premessa che oggi è falsa: che un host lo desse solo un
+    /// `&mut Workspace`. Ne esiste uno di sola lettura dalla [0021], e da lì una
+    /// lettura si serve leggendo.
+    ///
+    /// **A dirlo è un banco e non il compilatore**, e va scritto perché la cosa
+    /// ovvia è sbagliata: `VersionStore::read` chiede un `&dyn ReadApi`, ma un
+    /// `&mut dyn HostApi` ci si converte da sé — `HostApi: ReadApi`, e Rust sa
+    /// risalire una supertrait. Rimettere qui `write()` compila senza una parola.
+    /// Chi se ne accorge è
+    /// `rileggere_una_versione_non_ferma_chi_scrive` (`tests/concorrenza.rs`),
+    /// accanto ai tre presidi che la 0024 aveva già lasciato.
+    ///
+    /// [0024]: ../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md
+    /// [0021]: ../../../docs/decisions/0021-il-confine.md
     #[cfg(feature = "versioning")]
     pub fn read_version(
         &self,
@@ -1234,8 +1252,8 @@ impl Host {
     ) -> Result<String, PluginError> {
         let store = self.versions(vault)?;
         let ws = self.workspace(vault)?;
-        let mut ws = ws.write()?;
-        ws.with_host(VERSIONING_ID, |host| store.read(id, ts, host))
+        let ws = ws.read()?;
+        ws.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))
     }
 
     /// Ripristina una versione riscrivendo il documento (D8): passa da parse,

@@ -239,6 +239,72 @@ fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
     );
 }
 
+/// **La quarta, e non era nei tre punti della voce: rileggere una versione è
+/// una lettura.**
+///
+/// `Host::read_version` prendeva il prestito **esclusivo** — non perché servisse
+/// a qualcosa, ma perché l'unica strada per arrivare a un host era
+/// `Workspace::with_host`, che vuole `&mut`. Una cronologia aperta su una nota
+/// grande fermava chi salva per il tempo di una lettura da disco, cioè
+/// esattamente il difetto che la 0024 ha misurato e comprato via.
+///
+/// **Niente cronometro, e niente attesa nel caso buono**: il prestito condiviso
+/// lo tiene questo thread, e il lettore ne chiede un altro. Se sono due letture
+/// entrano insieme e la risposta arriva subito; se `read_version` chiede
+/// l'esclusivo si mette in coda dietro a una guardia che nessuno molla, e il
+/// timeout è la sola forma in cui quel blocco può diventare rosso invece che
+/// appeso. Il prestito si molla **prima** della `join`, in tutti e due i casi,
+/// o un rosso diventerebbe un test che non finisce.
+#[test]
+fn rileggere_una_versione_non_ferma_chi_scrive() {
+    // Il turno di banco vale anche per chi non cronometra: questo test apre un
+    // vault e ne indicizza il contenuto, cioè *è* la macchina occupata degli
+    // altri due — che di macchina occupata muoiono.
+    let _turno = turno_di_banco();
+    let v = vault(3);
+    let host = Arc::new(aperto(&v));
+    // **Prima l'indicizzazione, poi la prova.** Chi apre non la aspetta (§15.7),
+    // e finché gira il runner chiede il prestito esclusivo a ogni fetta: sotto un
+    // `RwLock` un lettore nuovo si ferma dietro a chi aspetta di scrivere — è la
+    // proprietà che la 0024 ha comprato, e qui sarebbe rumore addosso a un'altra.
+    host.wait_indexed(None).expect("l'indicizzazione finisce");
+    let ws = host.workspace(None).expect("il vault è aperto");
+    let id = DocId::new("Nota 0.md");
+    // La fotografia dell'apertura: la storia esiste prima che qualcuno scriva.
+    let ts = host
+        .list_versions(None, &id)
+        .expect("versioning acceso")
+        .first()
+        .expect("la fotografia dell'apertura")
+        .ts;
+
+    // Il prestito condiviso, tenuto: da qui in poi chi legge è dentro.
+    let dentro = ws.read().expect("il vault non è avvelenato");
+
+    let (esiti, risposte) = std::sync::mpsc::channel();
+    let lettore = {
+        let (host, id) = (Arc::clone(&host), id.clone());
+        std::thread::spawn(move || {
+            let _ = esiti.send(host.read_version(None, &id, ts));
+        })
+    };
+    let risposta = risposte.recv_timeout(Duration::from_secs(10));
+    drop(dentro);
+    lettore.join().expect("il lettore finisce");
+
+    let sorgente = risposta
+        .expect(
+            "rileggere una versione non è entrata nel workspace mentre un'altra \
+             lettura lo teneva: `read_version` chiede il prestito esclusivo, e \
+             una lettura che ferma chi scrive è il difetto che la 0024 ha tolto",
+        )
+        .expect("la versione si rilegge");
+    assert!(
+        sorgente.starts_with("# Nota 0"),
+        "e non è una lettura vuota: {sorgente:?}"
+    );
+}
+
 /// Una view che pania mentre disegna.
 struct Esplode;
 

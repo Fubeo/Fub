@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Cinquantatré** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Cinquantuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -519,7 +519,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0043 | senza finestra il tetto della ricerca è `total`: `TopDocs::with_limit(total)` su un vault grande | `fub-features` · `search.rs:1146` | prestazioni |
 | 0044 | `read_meta` converte un `meta.json` corrotto in `None` con `.ok()`, e la cartella risulta libera | `fub-features` · `versioning.rs:895` | versioning |
 | 0045 | `rebuild_from_store` carica ogni snapshot in memoria solo per calcolarne l'impronta | `fub-features` · `versioning.rs:938` | prestazioni |
-| 0046 | `VersionStore` tiene il proprio `Mutex` attraverso `data_read`/`data_write` | `fub-features` · `versioning.rs` | lock e I/O |
 | 0048 | `escape_attr` non copre l'apice singolo | `fub-features` · `blocks.rs:299` | rendering |
 | 0049 | `StatsView` dichiara `ContextMask::all()` e rilegge il documento intero a ogni movimento del cursore | `fub-features` · `stats.rs:82` | prestazioni |
 | 0050 | `count` attraversa il testo due volte, su un percorso caldo | `fub-features` · `stats.rs:57` | prestazioni |
@@ -549,7 +548,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
 | 0094 | un `Block::Custom` senza figli e senza renderer registrato si rende `<div>` vuoto: math, diagrammi e HTML grezzo spariscono dall'anteprima | `fub-format-markdown` · `render.rs` `render_block` | rendering |
 | 0095 | non c'è modo di chiedere a un `custom_kind` «sei esprimibile in questo formato?»: l'elenco è una catena di `if`, e un secondo `FormatProvider` la riscrive da zero | `fub-format-markdown` · `serialize.rs` `write_custom_block` | confini |
-| 0096 | `read_version` prende il prestito **esclusivo** del workspace per una lettura, e ferma chi scrive | `fub-host` · `session.rs` `read_version` | lock e I/O |
 | 0097 | `finish_index` cammina il disco con `collect_doc_data` sotto il prestito esclusivo, una volta per apertura | `fub-kernel` · `workspace.rs` `finish_index` | lock e I/O |
 | 0098 | `JobBell` ha sei `.expect("campanello avvelenato")`: la ragione è legittima ma è **una frase**, non una decisione presa | `fub-kernel` · `dispatcher.rs` `JobBell` | errori |
 | 0099 | `FileSink` pania sul proprio `Mutex`: se muore chi scrive, muore per primo il canale con cui il guasto si denuncia | `fub-kernel` · `log.rs` `FileSink` | errori |

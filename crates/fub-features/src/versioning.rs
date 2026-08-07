@@ -323,6 +323,20 @@ struct Inner {
 /// (`Workspace::with_host`), lo stesso che riceve l'handler.
 #[derive(Clone)]
 pub struct VersionStore {
+    /// **Il prestito attraversa il disco nelle scritture, e non nelle letture**,
+    /// e la riga fra le due non è dove sta l'I/O: è cosa succede se qualcuno
+    /// entra in mezzo.
+    ///
+    /// [`Inner::applica`] costruisce il piano da ciò che `docs` dice *adesso* e
+    /// lo installa solo se il disco l'ha accettato: mollare il prestito in
+    /// mezzo darebbe a due salvataggi la stessa base, e il secondo cancellerebbe
+    /// il primo senza che nessuno dei due se ne accorga. Là il prestito che
+    /// attraversa il `data_write` **è** l'atomicità, non un difetto, e togliere
+    /// l'I/O da sotto sposterebbe una riga di questo `todo.md` da una famiglia a
+    /// un'altra.
+    ///
+    /// In lettura no: quello che serve è il path, e [`Inner::percorso`] lo
+    /// consegna con la guardia già finita. Vedi [`VersionStore::read`].
     inner: Arc<Mutex<Inner>>,
 }
 
@@ -502,24 +516,24 @@ impl VersionStore {
     }
 
     /// Il contenuto di una versione.
-    pub fn read(&self, id: &DocId, ts: u64, host: &dyn HostApi) -> Result<String, PluginError> {
-        let inner = self.inner.lock().expect("mutex");
-        let doc = inner.docs.get(id.as_str()).ok_or_else(|| {
-            PluginError::BadArgs(Text::message(
-                NO_VERSIONS,
-                vec![Arg::text(DOC, id.as_str())],
-            ))
-        })?;
-        if !doc.versions.iter().any(|v| v.ts == ts) {
-            return Err(PluginError::BadArgs(Text::message(
-                NO_SUCH_VERSION,
-                // Un istante, non una data già scritta: il fuso e il calendario
-                // di chi legge li conosce chi risolve, non chi solleva
-                // l'errore. È la ragione per cui `ArgValue::Timestamp` esiste.
-                vec![Arg::timestamp(WHEN, ts), Arg::text(DOC, id.as_str())],
-            )));
-        }
-        let path = blob(&doc.dir, &snapshot_name(ts, id.as_str()));
+    ///
+    /// **Prende un [`ReadApi`] e non un `HostApi`**, ed è la riga per cui questa
+    /// firma è più stretta del necessario apposta: leggere una versione è una
+    /// lettura, e chi la serve deve poterlo fare dal prestito **condiviso** del
+    /// workspace (`Workspace::with_read_host`, decisione 0024). **Non è un
+    /// presidio**, e va detto perché la cosa ovvia è sbagliata: un
+    /// `&mut dyn HostApi` si converte da sé in un `&dyn ReadApi`, che ne è la
+    /// supertrait, quindi questa firma non chiude nessuna porta. È la
+    /// dichiarazione di cosa questa funzione fa, e serve a chi la chiama per
+    /// sapere quale dei due prestiti le basta.
+    ///
+    /// **E il lucchetto dello store non attraversa il disco.** Il prestito serve
+    /// a sapere *dove* sta il blob — cioè a leggere l'anagrafe in memoria — e
+    /// quello finisce con [`Inner::percorso`], che è l'unica a vederlo. Da qui
+    /// in giù non c'è nessuna guardia da tenere: la lettura del blob è di chi ha
+    /// il path.
+    pub fn read(&self, id: &DocId, ts: u64, host: &dyn ReadApi) -> Result<String, PluginError> {
+        let path = self.inner.lock().expect("mutex").percorso(id, ts)?;
         let bytes = host.data_read(&path)?.ok_or_else(|| {
             PluginError::Internal(Text::message(
                 CONTENT_GONE,
@@ -556,6 +570,40 @@ impl VersionStore {
 }
 
 impl Inner {
+    /// Dove sta il blob di **questa** versione, secondo l'anagrafe in memoria.
+    ///
+    /// Esiste per una ragione sola, ed è la stessa per cui [`Inner::applica`] è
+    /// il posto unico in cui `docs` cambia: qui il prestito dello store finisce
+    /// **prima** dell'I/O, e finisce per costruzione — chi legge il blob riceve
+    /// un `String` e non ha modo di tenere una guardia che non ha mai visto. La
+    /// forma opposta — un `lock()` in testa a [`VersionStore::read`] e un
+    /// `data_read` sotto — è quella che due lettori di cronologia si passavano
+    /// uno alla volta, ognuno aspettando l'I/O dell'altro.
+    ///
+    /// Il verso opposto vale nelle **scritture**, e non è una svista: là il
+    /// prestito attraversa il disco apposta, perché il piano si costruisce da ciò
+    /// che c'è adesso e si installa solo se il disco l'ha accettato. Toglierlo di
+    /// lì non toglierebbe un'attesa: aprirebbe una finestra in cui due
+    /// salvataggi pianificano dalla stessa base e il secondo cancella il primo.
+    fn percorso(&self, id: &DocId, ts: u64) -> Result<String, PluginError> {
+        let doc = self.docs.get(id.as_str()).ok_or_else(|| {
+            PluginError::BadArgs(Text::message(
+                NO_VERSIONS,
+                vec![Arg::text(DOC, id.as_str())],
+            ))
+        })?;
+        if !doc.versions.iter().any(|v| v.ts == ts) {
+            return Err(PluginError::BadArgs(Text::message(
+                NO_SUCH_VERSION,
+                // Un istante, non una data già scritta: il fuso e il calendario
+                // di chi legge li conosce chi risolve, non chi solleva
+                // l'errore. È la ragione per cui `ArgValue::Timestamp` esiste.
+                vec![Arg::timestamp(WHEN, ts), Arg::text(DOC, id.as_str())],
+            )));
+        }
+        Ok(blob(&doc.dir, &snapshot_name(ts, id.as_str())))
+    }
+
     /// La cartella del documento nello spazio dati del plugin.
     ///
     /// Il nome nasce dall'impronta del `doc_id`; se quella cartella è già di
