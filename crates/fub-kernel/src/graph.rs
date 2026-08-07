@@ -228,6 +228,18 @@ impl LinkGraph {
     }
 
     /// Backlink verso un documento (riferimenti entranti), ordinati per sorgente.
+    ///
+    /// **Un elemento per link, non per documento**, ed è il contratto e non un
+    /// effetto: una nota che ne cita un'altra in tre punti produce tre
+    /// [`BacklinkRef`], perché ognuno porta il proprio `context` — il frammento
+    /// in cui il link compare — ed è quello che un pannello backlink mostra.
+    /// Raggrupparli è una **vista** (FEATURES §7.2, «Backlink raggruppati»), non
+    /// una proprietà di questa risposta.
+    ///
+    /// Chi invece vuole **le note che linkano qui, una volta ciascuna**, chiami
+    /// [`linked`](Self::linked): la sua firma è un `BTreeSet`, cioè dice da sé
+    /// di essere un insieme. È lì che sta scritta quella domanda, e non in un
+    /// `.map(|b| b.source).collect()` ripetuto a ogni sito.
     pub fn backlinks(&self, target: &DocId) -> Vec<BacklinkRef> {
         let mut refs = self.backlinks.get(target).cloned().unwrap_or_default();
         // Ordinamento *stabile*: fra riferimenti dallo stesso sorgente resta
@@ -236,9 +248,43 @@ impl LinkGraph {
         refs
     }
 
-    /// Link uscenti risolti da un documento.
+    /// Link uscenti risolti da un documento, **nell'ordine dei link nel
+    /// sorgente** — e quindi con lo stesso bersaglio ripetuto se il documento
+    /// lo cita due volte, per la stessa ragione di [`backlinks`](Self::backlinks).
+    /// Chi vuole l'insieme chiami [`linked`](Self::linked).
     pub fn outgoing(&self, source: &DocId) -> Vec<DocId> {
         self.outgoing.get(source).cloned().unwrap_or_default()
+    }
+
+    /// **I documenti in relazione di link con `doc`, una volta ciascuno.**
+    ///
+    /// È la domanda che [`backlinks`](Self::backlinks) e
+    /// [`outgoing`](Self::outgoing) non rispondono: quelle due elencano *link*,
+    /// questa elenca *documenti*. La distinzione non è accademica — chi cammina
+    /// il grafo, chi valuta un predicato di link e chi pianifica una riscrittura
+    /// al rename vogliono tutti e tre l'insieme, e prima di questa firma se lo
+    /// ricavavano da soli in tre modi diversi: un `BTreeSet` costruito a mano,
+    /// un `.collect()` che si affidava al `BTreeMap` di `Matches` per assorbire
+    /// i doppioni, e un `if !docs.contains(…)`. Tre spelling della stessa
+    /// proprietà sono tre occasioni di dimenticarla.
+    ///
+    /// Il tipo di ritorno è la proprietà: un `BTreeSet` non ha doppioni per
+    /// costruzione, quindi il prossimo chiamante non ha niente da ricordarsi.
+    pub fn linked(&self, doc: &DocId, direction: LinkDirection) -> BTreeSet<DocId> {
+        let mut out = BTreeSet::new();
+        if matches!(direction, LinkDirection::Outbound | LinkDirection::Both) {
+            out.extend(self.outgoing.get(doc).into_iter().flatten().cloned());
+        }
+        if matches!(direction, LinkDirection::Inbound | LinkDirection::Both) {
+            out.extend(
+                self.backlinks
+                    .get(doc)
+                    .into_iter()
+                    .flatten()
+                    .map(|r| r.source.clone()),
+            );
+        }
+        out
     }
 
     /// I documenti raggiungibili da `doc` in al più `depth` passi, nel verso
@@ -260,16 +306,7 @@ impl LinkGraph {
         if depth == 0 {
             return Vec::new();
         }
-        let step = |id: &DocId| -> Vec<DocId> {
-            let mut next: BTreeSet<DocId> = BTreeSet::new();
-            if matches!(direction, LinkDirection::Outbound | LinkDirection::Both) {
-                next.extend(self.outgoing(id));
-            }
-            if matches!(direction, LinkDirection::Inbound | LinkDirection::Both) {
-                next.extend(self.backlinks(id).into_iter().map(|b| b.source));
-            }
-            next.into_iter().collect()
-        };
+        let step = |id: &DocId| -> BTreeSet<DocId> { self.linked(id, direction) };
 
         let mut seen: HashSet<DocId> = HashSet::from([doc.clone()]);
         let mut out = Vec::new();
@@ -865,6 +902,22 @@ mod tests {
         assert_eq!(sources(&graph, "sub/Nota.md"), ["a.md"]);
     }
 
+    /// **Le due metà della stessa domanda**, e stanno nello stesso banco perché
+    /// una sembra il difetto dell'altra.
+    ///
+    /// `backlinks()` e `outgoing()` elencano **link**: due citazioni della
+    /// stessa nota sono due riferimenti, con due contesti, ed è ciò che un
+    /// pannello backlink mostra. Questa metà è la più vecchia del banco e va
+    /// letta come una difesa — presa da sola somiglia a un doppione, e il
+    /// rimedio ovvio (deduplicare qui) cancellerebbe il contesto della seconda
+    /// menzione senza che nessun altro presidio se ne accorgesse.
+    ///
+    /// `linked()` elenca **documenti**, una volta ciascuno: è l'altra domanda, e
+    /// prima che avesse una firma i tre chiamanti interni se la ricavavano da
+    /// soli in tre modi diversi. Questa metà è **verde per costruzione** — il
+    /// ritorno è un `BTreeSet`, non potrebbe fallire — ed è scritta lo stesso,
+    /// perché ciò che il banco ha da dire è che le due domande sono diverse e
+    /// hanno due risposte diverse.
     #[test]
     fn duplicate_links_keep_multiplicity() {
         let a = doc_with_links("a.md", &["Nota", "Nota"]);
@@ -877,6 +930,22 @@ mod tests {
         graph.upsert(&a);
         assert_eq!(sources(&graph, "Nota.md"), ["a.md", "a.md"]);
         assert_eq!(graph.outgoing(&DocId::new("a.md")).len(), 2);
+
+        let target = DocId::new("Nota.md");
+        assert_eq!(
+            graph.linked(&target, LinkDirection::Inbound),
+            BTreeSet::from([DocId::new("a.md")]),
+            "due riferimenti, ma la nota che linka qui è una"
+        );
+        assert_eq!(
+            graph.linked(&DocId::new("a.md"), LinkDirection::Outbound),
+            BTreeSet::from([target.clone()])
+        );
+        assert_eq!(
+            graph.linked(&target, LinkDirection::Both),
+            BTreeSet::from([DocId::new("a.md")]),
+            "e nei due versi insieme non si conta due volte chi sta in tutti e due"
+        );
     }
 
     // --- la camminata: `IndexQuery::Neighbors` (decisione 0005) ----------------------

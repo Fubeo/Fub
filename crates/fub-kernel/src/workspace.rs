@@ -69,8 +69,8 @@ use fub_abi::text::{Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, HostApi,
     IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobSpec,
-    Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider, TimerSpec, VaultEntry,
-    ViewInstance, ViewInterests, ViewProvider, ViewSpec,
+    LinkDirection, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider, TimerSpec,
+    VaultEntry, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{
     ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider,
@@ -3498,14 +3498,12 @@ impl Workspace {
             to.as_str().to_string()
         };
 
-        let mut sources: BTreeSet<DocId> = self
-            .indexes
-            .core
-            .graph
-            .backlinks(from)
-            .into_iter()
-            .map(|r| r.source)
-            .collect();
+        // Le note che linkano `from`, **una volta ciascuna**: chi lo cita tre
+        // volte va riscritto una volta sola, e il filtro per-link qui sotto
+        // cammina già tutti i suoi link. Prima questo era un `.map().collect()`
+        // in un `BTreeSet` costruito qui: adesso l'insieme lo dice la firma.
+        let mut sources: BTreeSet<DocId> =
+            self.indexes.core.graph.linked(from, LinkDirection::Inbound);
         // Il self-link è escluso dai backlink per scelta, ma al rename va
         // riscritto come gli altri: `[[Nota]]` dentro la nota stessa resterebbe
         // dangling — e verrebbe dirottato da chi ricreasse il vecchio nome. Ai
