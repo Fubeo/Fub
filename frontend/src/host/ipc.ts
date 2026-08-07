@@ -19,6 +19,7 @@ import type {
   InvokeMode,
   KernelNotice,
   Locale,
+  PluginError,
   RenderedDocument,
   SettingValue,
   KnownVault,
@@ -172,8 +173,11 @@ export const api = {
   // Chi questo host sa montare, e chi è acceso: non è `VaultInfo.plugins`, che
   // elenca chi è dichiarato nel kernel — un componente spento non lo è.
   listBundles: () => invoke<BundleInfo[]>("list_bundles"),
+  // Ciò che torna sono gli errori dello **spegnimento**, interi: la specie e
+  // non solo la frase (decisione 0041), che è l'unica cosa su cui questa shell
+  // può ramificare.
   setPluginEnabled: (id: string, enabled: boolean) =>
-    invoke<string[]>("set_plugin_enabled", { id, enabled }),
+    invoke<PluginError[]>("set_plugin_enabled", { id, enabled }),
   // I vault che questa macchina conosce, fra un avvio e l'altro: un elenco di
   // vault non sta in nessun vault, quindi vive nel livello macchina.
   knownVaults: () => invoke<KnownVault[]>("known_vaults"),

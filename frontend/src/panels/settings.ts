@@ -583,9 +583,12 @@ function disegnaComponente(bundle: BundleInfo, perChiave: Mappa): HTMLElement[] 
     void (async () => {
       try {
         // Ciò che torna sono gli errori **dello spegnimento**, che non sono un
-        // motivo per non spegnere: si dicono e basta.
+        // motivo per non spegnere: si dicono e basta. Arrivano interi — specie
+        // e frase (decisione 0041) — e qui si stampa la frase con la stessa
+        // funzione di ogni altro guasto: `${p}` su un oggetto direbbe
+        // «[object Object]», ed è il tipo a non lasciarlo scrivere.
         const problemi = await api.setPluginEnabled(bundle.id, input.checked);
-        for (const p of problemi) notify(p, "guasto");
+        for (const p of problemi) notify(errorText(p), "guasto");
         // Il montaggio è già avvenuto lato host; qui si riallinea **il resto
         // della finestra**, o le view di un componente spento resterebbero
         // appese nella sidebar e i suoi comandi nella palette.

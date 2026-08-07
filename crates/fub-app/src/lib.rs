@@ -147,14 +147,13 @@ fn set_current_vault(host: State<Host>, path: String) -> Result<(), PluginError>
 /// Chiude un vault: flush, `close` degli indici, disattivazione dei plugin
 /// (§9.5). Restituisce **ciò che è andato storto chiudendo**, che non è un
 /// motivo per non chiudere: la lista è quasi sempre vuota, e quando non lo è
-/// dice cosa non è diventato durevole.
+/// dice cosa non è diventato durevole — **con la specie di ciascuno**, come
+/// ogni altro errore che esce di qui (decisione 0041): una lista di frasi
+/// avrebbe fatto la stessa figura a schermo e tolto alla shell l'unica cosa su
+/// cui può ramificare.
 #[tauri::command]
-fn close_vault(host: State<Host>, path: String) -> Result<Vec<String>, PluginError> {
-    Ok(host
-        .close_vault(&Utf8PathBuf::from(path))?
-        .into_iter()
-        .map(|e| e.to_string())
-        .collect())
+fn close_vault(host: State<Host>, path: String) -> Result<Vec<PluginError>, PluginError> {
+    host.close_vault(&Utf8PathBuf::from(path))
 }
 
 /// Path del vault da aprire all'avvio (comodo per sviluppo/screenshot):
@@ -702,14 +701,15 @@ fn list_bundles(host: State<Host>, vault: Option<String>) -> Result<Vec<BundleIn
 }
 
 /// Accende o spegne un componente, adesso e per i prossimi avvii. Restituisce
-/// ciò che è andato storto **spegnendo**, che non è un motivo per non spegnere.
+/// ciò che è andato storto **spegnendo**, che non è un motivo per non spegnere:
+/// gli errori interi, come `close_vault`, e per la stessa ragione.
 #[tauri::command]
 fn set_plugin_enabled(
     host: State<Host>,
     id: String,
     enabled: bool,
     vault: Option<String>,
-) -> Result<Vec<String>, PluginError> {
+) -> Result<Vec<PluginError>, PluginError> {
     host.set_plugin_enabled(vault.as_deref(), &id, enabled)
 }
 

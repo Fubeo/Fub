@@ -729,12 +729,20 @@ impl Host {
     /// accende e spegne un componente è **l'utente**, non un programma, e questa
     /// è la porta da cui passa l'utente (`plugins.disabled` non si è dichiarata
     /// scrivibile da un programma, apposta).
+    ///
+    /// **Ciò che torna sono gli errori dello spegnimento interi**, non le frasi
+    /// che li descrivono: spegnere non si annulla perché un `deactivate` è
+    /// andato storto, e chi riceve l'elenco deve poterci ramificare sopra. Una
+    /// `String` qui avrebbe fatto la stessa figura sullo schermo e tolto il
+    /// `kind` ([decisione 0041](../../../docs/decisions/0041-un-errore-che-attraversa-il-confine.md))
+    /// a un passo dal confine che quel tipo lo sa attraversare da sé — che è
+    /// come lo restituisce già [`Host::close_vault`], ed è la stessa lista.
     pub fn set_plugin_enabled(
         &self,
         vault: Option<&str>,
         id: &str,
         enabled: bool,
-    ) -> Result<Vec<String>, PluginError> {
+    ) -> Result<Vec<PluginError>, PluginError> {
         if id == crate::settings::CORE_ID {
             return Err(PluginError::BadArgs(
                 format!("`{id}` non si spegne: è chi tiene l'elenco di ciò che è spento").into(),
@@ -750,7 +758,7 @@ impl Host {
             if enabled {
                 registry.enable(&mut ws, id).map_err(PluginError::from)?;
             } else {
-                errors.extend(registry.unmount(&mut ws, id).iter().map(|e| e.to_string()));
+                errors.extend(registry.unmount(&mut ws, id));
             }
 
             let mut disabled = crate::settings::disabled_plugins(&ws);
