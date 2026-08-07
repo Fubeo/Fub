@@ -250,18 +250,24 @@ giusto — e sono il modo più corto di dire cosa è cambiato:
 - **Portare `KernelError` dentro il contratto.** È la lingua dell'host, e un
   host diverso ne avrà un'altra. Il posto giusto per la scelta è la conversione,
   non il tipo.
-- **Convertire `Vec<String>` di `close_vault` e `set_plugin_enabled` in
-  `Vec<PluginError>`.** Quelli sono **dati** — un rapporto di cosa non è
-  diventato durevole, mostrato come un elenco di righe — non il canale d'errore.
-  Chi disegna non ci rama sopra. Resta scritto qui sotto perché è comunque un
-  posto in cui la prosa fa da tipo.
+- ~~**Convertire `Vec<String>` di `close_vault` e `set_plugin_enabled` in
+  `Vec<PluginError>`.**~~ Quelli sono **dati** — un rapporto di cosa non è
+  diventato durevole, mostrato come un elenco di righe — non il canale d'errore,
+  e chi disegna non ci rama sopra. **Ripensato dopo**: erano dati, sì, ma dati
+  *già tipizzati a monte* e appiattiti con un `.to_string()` un passo prima del
+  confine — non `String` che nascevano `String`. La condizione scritta qui sotto
+  («il giorno che la shell dovesse ramare») chiedeva alla shell di meritarsi il
+  tipo, ma il costo di tenerlo era zero: la variante c'era già dall'altra parte
+  del muro, e a passarla non si è aggiunto niente, si è tolta una conversione.
 - **Un `instanceof` sulla shell.** Non c'è nessuna classe che attraversi un IPC.
 
 ## Cosa resta scoperto (e dove è scritto)
 
-- **`close_vault` e `set_plugin_enabled` restituiscono ancora `Vec<String>`.**
-  Sono dati e non il canale d'errore (vedi sopra), ma il giorno che la shell
-  dovesse ramare su uno di quegli esiti, quella lista va tipizzata.
+- ~~**`close_vault` e `set_plugin_enabled` restituiscono ancora `Vec<String>`.**~~
+  **Chiuso**: rendono `Vec<PluginError>`, e il `.to_string()` che stava un passo
+  prima del confine non c'è più. La shell non ci rama ancora — mostra
+  `errorText(p)` e basta — ma la specie adesso le arriva, invece di doverla
+  chiedere indietro a chi l'aveva già.
 - **`FormatError` resta a `String`.** Deliberato, motivato nel doc del modulo, e
   vero finché nessuno lo mostra sotto un pulsante.
 - **I messaggi del kernel e dell'host sono `Text::Literal` in italiano.** Il
