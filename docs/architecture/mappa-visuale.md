@@ -196,7 +196,6 @@ flowchart TD
     abi["fub-abi"]:::contract
 
     app --> abi
-    app --> features
     app --> host
     app --> kernel
     host --> abi

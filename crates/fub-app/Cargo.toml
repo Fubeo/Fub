@@ -18,17 +18,28 @@ path = "src/main.rs"
 fub-abi = { workspace = true }
 fub-kernel = { workspace = true }
 # Chi monta: registro, feature, sessione, watcher, ponte eventi (§8.2).
-fub-host = { workspace = true }
-# Solo per `VersionRef`, che è un tipo che attraversa l'IPC — e la feature che
-# lo possiede va chiesta per nome (§16.3). Che `fub-host` la accenda già di suo
-# non basta a renderla nostra: sarebbe una dipendenza che regge finché nessuno
-# tocca il `Cargo.toml` di qualcun altro.
 #
-# L'app è la build **piena**: qui non c'è una cargo feature per bundle perché
-# l'applicazione che spediamo le ha tutte, e chi vuole compilarne meno lo fa
-# sotto — su `fub-features` o su `fub-host`, che è dove il guadagno di
+# L'app è la build **piena**, e le feature ufficiali le chiede **per nome**
+# invece di ereditarle dal `default` di qualcun altro: una dipendenza che regge
+# finché nessuno tocca il `Cargo.toml` di un altro crate non è una dipendenza,
+# è una coincidenza. Qui non c'è una cargo feature per bundle perché
+# l'applicazione che spediamo le ha tutte; chi vuole compilarne meno lo fa
+# sotto — su `fub-host` o su `fub-features`, che è dove il guadagno di
 # compilazione sta.
-fub-features = { workspace = true, features = ["versioning"] }
+#
+# **`fub-features` non è qui, ed è il punto.** C'era, «solo per `VersionRef`,
+# che è un tipo che attraversa l'IPC», e quella riga diceva due cose non più
+# vere. La prima: `VersionRef` per di qui non passa più. `list_versions`,
+# `read_version` e `restore_version` sono spariti quando la cronologia è
+# diventata un `ViewProvider` della feature versioning (§1.2), e `src/` non
+# nomina `fub_features` da nessuna parte. La seconda, che era falsa anche
+# prima: chiedere `fub-features/versioning` da qui **non accendeva** ciò che si
+# credeva di accendere. I `#[cfg(feature = "versioning")]` che gatano
+# `Session::versions` stanno su **`fub-host`**, e le cargo feature non
+# risalgono: accendere quella del crate sotto lasciava quel `#[cfg]` spento.
+# Una feature si chiede al crate da cui si dipende — è l'unico che sappia
+# tradurla — ed è ciò che `features = [...]` qui sopra fa adesso.
+fub-host = { workspace = true, features = ["feature-ufficiali"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }

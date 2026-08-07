@@ -495,6 +495,59 @@ fn whoever_mounts_does_not_depend_on_whoever_draws() {
     );
 }
 
+/// Il verso opposto del confine host↔app: **la colla non scavalca chi monta**.
+///
+/// `whoever_mounts_does_not_depend_on_whoever_draws` guarda `fub-host` e gli
+/// vieta il webview. Questo guarda `fub-app` e gli vieta di saltare l'host per
+/// arrivare alle feature ufficiali. Sono due metà della stessa frase — «`fub-app`
+/// è ridotto a colla Tauri» — e finora ne era presidiata una sola.
+///
+/// La riga che questo test toglie di mezzo diceva di esserci «solo per
+/// `VersionRef`, che è un tipo che attraversa l'IPC», e sbagliava in due modi.
+/// `VersionRef` di lì non passa più — le tre porte IPC del versioning sono
+/// sparite quando la cronologia è diventata un `ViewProvider` — e `src/` non
+/// nominava `fub_features` da nessuna parte: era una dipendenza **dichiarata e
+/// non usata**, che è il caso che nessun compilatore vede. L'altra metà è che
+/// non faceva nemmeno ciò che diceva: i `#[cfg(feature = "versioning")]` che
+/// gatano `Session::versions` sono su `fub-host`, e accendere
+/// `fub-features/versioning` da `fub-app` non li accende, perché le cargo
+/// feature non risalgono il grafo.
+///
+/// Perché un test e non «l'assenza della riga»: togliere una dipendenza inusata
+/// non lascia dietro nessun guardiano. Il compilatore dice di no solo a chi
+/// scrive `fub_features::` in `fub-app/src/`, e non dice niente a chi rimette
+/// la riga nel `Cargo.toml` «per un attimo». Questo lo dice.
+///
+/// **Chi monta è il solo che possa tradurre**: se all'app serve una feature
+/// ufficiale, la chiede a `fub-host` per nome (`features = ["feature-ufficiali"]`),
+/// e `fub-host` la inoltra a `fub-features`. Un secondo cliente del montaggio —
+/// la CLI (27.1), l'API locale (27.2) — eredita la stessa regola gratis, perché
+/// la rete guarda **chiunque** dipenda da `fub-host`.
+#[test]
+fn chi_incolla_non_scavalca_chi_monta() {
+    let meta = metadata();
+    let graph = Graph::new(&meta);
+
+    let colpevoli: Vec<&str> = graph
+        .members()
+        .into_iter()
+        .filter(|m| *m != "fub-host" && *m != "fub-features")
+        .filter(|m| graph.direct(m).contains("fub-host"))
+        .filter(|m| graph.direct(m).contains("fub-features"))
+        .collect();
+
+    assert!(
+        colpevoli.is_empty(),
+        "{colpevoli:?} dichiarano **sia** `fub-host` **sia** `fub-features` fra le\n\
+         dipendenze normali. Chi ha già il montaggio non ha ragione di raggiungere\n\
+         le feature ufficiali da sé: quale bundle esista e quale sia acceso lo\n\
+         decide `fub-host` in un posto solo (§16.3), e una cargo feature chiesta\n\
+         al crate sbagliato non accende il `#[cfg]` che si crede.\n\
+         Se serve una feature ufficiale, chiedila a `fub-host` per nome:\n\
+         `fub-host = {{ workspace = true, features = [\"…\"] }}`."
+    );
+}
+
 // ---------------------------------------------------------------------------
 // La quarta rete: il diagramma dei componenti.
 // ---------------------------------------------------------------------------

@@ -1188,7 +1188,6 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "fub-abi",
- "fub-features",
  "fub-host",
  "fub-kernel",
  "serde",
