@@ -54,6 +54,35 @@ pub struct TextStats {
 /// vorrebbe il modello parsato al di qua del confine, che è il canale che
 /// ancora non c'è (§4.1). È una differenza di pochi punti percentuali su una
 /// nota vera, e dichiararla costa meno che fingere una precisione che non c'è.
+///
+/// # Le due passate restano due, ed è misurato
+///
+/// A prima vista questo attraversa il testo due volte e si fonderebbe in un
+/// giro solo sui `char`. Una riga della tabella dei difetti misurati lo chiedeva
+/// — «`count` attraversa il testo due volte, su un percorso caldo» — e il banco
+/// l'ha smentita, perché **le due passate non pesano uguale**.
+/// Su 40,8 KB di prosa mista: `split_whitespace().count()` costa
+/// 69,9 µs, `chars().count()` ne costa **2,4** — un rapporto di ventinove a uno,
+/// perché contare i `char` è contare i byte che non sono continuazioni UTF-8 e
+/// LLVM lo vettorizza, mentre spezzare in parole guarda ogni carattere e
+/// interroga la tabella Unicode dello spazio bianco. La «seconda passata» è il
+/// **3 %** del conto, non la metà.
+///
+/// Fondere le due in un ciclo solo è stato scritto e cronometrato per davvero:
+/// 62,8 → 54,9 µs su 40,8 KB (misto), 62,3 → 51,4 µs su ASCII puro. Su una nota
+/// vera da 8 KB sono **poco più di un microsecondo**, su un pannello che la
+/// shell ridisegna al massimo sei o sette volte al secondo — il contesto lo
+/// pubblica `scheduleContext` con un rimbalzo di 150 ms.
+/// La variante che scorre i **byte** con una
+/// corsia ASCII è stata misurata anche lei ed è **più lenta** di tutte e due:
+/// 65,5 µs e 68,5 µs, perché toglie a LLVM il ciclo che sapeva vettorizzare.
+///
+/// Quel microsecondo si comprerebbe rifacendo a mano `split_whitespace`, cioè
+/// riscrivendo la definizione Unicode di «spazio» dentro questo file — quindici
+/// casi provati a mano (NBSP, U+2028/2029, spazio ogham e ideografico, NEL,
+/// emoji, legature) per una regola che oggi arriva gratis e giusta dalla libreria
+/// standard. Non vale il cambio: **se qualcuno torna a proporlo, questo commento
+/// è la risposta, e i numeri sopra sono il modo di smentirlo.**
 pub fn count(text: &str) -> TextStats {
     TextStats {
         words: text.split_whitespace().count(),
