@@ -772,8 +772,10 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   // IPC, un `PluginError` da leggere e — soprattutto — il campo di testo già
   // chiuso, cioè il nome da ridigitare.
   //
-  // `normalizedName` prima di giudicare, perché è la forma che verrebbe scritta
-  // sul disco: NFC, e senza spazi ai bordi dei segmenti.
+  // `normalizedName` qui sopra non serve più a *giudicare* — dalla 0068 se la
+  // calcola `nameFault` — ma a **mandare**: è la forma che verrebbe scritta sul
+  // disco (NFC, senza spazi ai bordi dei segmenti), ed è quella che il kernel
+  // deve ricevere perché il nome che l'utente rivede sia quello che c'è.
   const guasto = nameFault(to, "new");
   if (guasto !== null) {
     notify(t("explorer.bad_name", { nome: newPageName, motivo: t(MOTIVO[guasto]) }), "info");

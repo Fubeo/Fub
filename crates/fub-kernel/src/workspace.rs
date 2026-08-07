@@ -6373,14 +6373,19 @@ pub fn valid_doc_id(name: &str) -> Result<DocId> {
 /// di una forma sola per ciò che si scrive, e serve perché due nomi che
 /// differiscono solo per la composizione Unicode sono due file per il filesystem
 /// e **uno** per il grafo.
+///
+/// Qui non si normalizza *prima* di chiedere il giudizio, e prima della 0068 lo
+/// si faceva: `check(_, Naming::New)` giudica ormai da sé la forma che si
+/// scrive, quindi comporre le due funzioni in questa riga sarebbe normalizzare
+/// due volte e, soprattutto, rimettere in giro l'idea che l'ordine sia una cosa
+/// che il chiamante deve sapere.
 pub fn new_doc_id(name: &str) -> Result<DocId> {
     let id = valid_doc_id(name)?;
-    let normalizzato = path_policy::normalized(id.as_str());
-    path_policy::check(&normalizzato, Naming::New).map_err(|why| KernelError::BadName {
+    path_policy::check(id.as_str(), Naming::New).map_err(|why| KernelError::BadName {
         name: name.to_string(),
         why: why.to_string(),
     })?;
-    Ok(DocId::new(normalizzato))
+    Ok(DocId::new(path_policy::normalized(id.as_str())))
 }
 
 /// Il [`DocId`] con cui un **plugin** può nominare un documento, o

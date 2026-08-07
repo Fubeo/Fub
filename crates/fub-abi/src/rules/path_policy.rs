@@ -144,10 +144,15 @@ pub enum NameFault {
     Reserved { segment: String, ch: char },
     /// Uno dei [`DOS_DEVICES`].
     Device { segment: String },
-    /// Finisce con un punto o uno spazio. Windows li **tronca in silenzio**: il
-    /// file si crea con un nome diverso da quello chiesto, e chi lo cerca col
-    /// nome chiesto non lo trova. Gli spazi in coda li toglie [`normalized`];
-    /// un punto no, perché togliere un punto cambia il nome e non lo pulisce.
+    /// Finisce con un punto. Windows lo **tronca in silenzio**: il file si crea
+    /// con un nome diverso da quello chiesto, e chi lo cerca col nome chiesto
+    /// non lo trova.
+    ///
+    /// Windows tronca anche lo spazio in coda, e qui non compare: quello lo
+    /// toglie [`normalized`], che è la forma su cui [`check`] giudica un nome
+    /// nuovo. Un punto no, perché togliere un punto cambia il nome e non lo
+    /// pulisce — chi lo ha scritto va avvisato, non corretto di nascosto. È la
+    /// ragione per cui questo guasto si chiama così e non «punto o spazio».
     TrailingDot { segment: String },
     /// Comincia con un punto. È l'unica regola del modulo che non è di un
     /// filesystem ma di Fub: la scansione salta ogni nome che comincia col
@@ -243,6 +248,33 @@ impl std::error::Error for NameFault {}
 /// di chiamare — non lo fa questa funzione, perché convertire un separatore è una
 /// tolleranza di un varco specifico e non una regola del contratto.
 ///
+/// # Un nome che nasce si giudica nella forma in cui verrà scritto
+///
+/// Per [`Naming::New`] la domanda non è «va bene ciò che è stato digitato», è
+/// «va bene ciò che finirà sul disco» — e ciò che finisce sul disco è
+/// [`normalized`], non `path`. Quindi il giudizio si dà **su quello**, e le due
+/// funzioni non sono più due posti che si copiano: sono la stessa espressione.
+///
+/// Finché non lo erano divergevano nei due versi, ed è il difetto 0068. In un
+/// verso `check` **accettava** ciò che poi non si poteva scrivere: `" .nota.md"`
+/// passava — non comincia con un punto, comincia con uno spazio — e `normalized`
+/// ne faceva `".nota.md"`, un file che la scansione salta, cioè una nota creata
+/// e invisibile a chi l'ha creata. Non era il caso di un carattere ma di una
+/// classe: `" CON.md"` passava allo stesso modo e diventava la console
+/// (`is_dos_device` guarda il pezzo fino al primo punto, e quel pezzo era `" CON"`),
+/// e un nome al limite dei byte può superarlo dopo la composizione NFC. Nell'altro
+/// verso `check` **rifiutava** ciò che si poteva benissimo scrivere: `"nota.md "`
+/// dava `TrailingDot` per un nome che sarebbe nato `"nota.md"`.
+///
+/// La difesa di prima era che ogni chiamante normalizzasse *prima* di chiedere —
+/// cosa che i due chiamanti facevano entrambi, ed è la ragione per cui nessuno
+/// se n'era accorto. Ma è una disciplina da ripetere a ogni sito nuovo, e questo
+/// è un modulo del **contratto**: chi scrive un plugin chiama `check` e scrive
+/// `normalized`, e nessuna firma glielo diceva.
+///
+/// Per [`Naming::Existing`] non si normalizza, e non è un'asimmetria: quel nome
+/// non lo stiamo scrivendo noi: c'è già, e com'è scritto lo dice il disco.
+///
 /// # L'ordine dei controlli è dichiarato
 ///
 /// Un nome può essere sbagliato in più modi insieme, e questa funzione risponde
@@ -253,6 +285,15 @@ impl std::error::Error for NameFault {}
 /// fixture del §6.2 confronta con quella della gemella TypeScript, e due ordini
 /// diversi darebbero due guasti diversi sullo stesso nome.
 pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
+    // Dichiarato fuori dall'`if` perché il `&str` che segue ci vive dentro: è la
+    // forma che dura quanto la funzione, senza chiedere una `Cow` a chi legge.
+    let scritto;
+    let path = if naming == Naming::New {
+        scritto = normalized(path);
+        scritto.as_str()
+    } else {
+        path
+    };
     if path.trim().is_empty() {
         return Err(NameFault::Empty);
     }
@@ -283,7 +324,11 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
                 segment: segment.to_string(),
             });
         }
-        if segment.ends_with('.') || segment.ends_with(' ') {
+        // Solo il punto: uno spazio in coda qui non arriva più — `normalized`
+        // l'ha già tolto, ed è la stessa `normalized` da cui `segment` viene.
+        // Tenere l'`ends_with(' ')` sarebbe un ramo che non si può percorrere,
+        // cioè una regola che sembra viva e non lo è.
+        if segment.ends_with('.') {
             return Err(NameFault::TrailingDot {
                 segment: segment.to_string(),
             });
@@ -325,6 +370,11 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
 /// ha voluto nessuno — è un dito sulla barra — mentre un punto è un carattere
 /// scritto, e chi lo ha scritto va avvisato ([`NameFault::TrailingDot`]) invece
 /// che corretto.
+///
+/// **È anche la forma su cui [`check`] giudica un nome nuovo**, e non per
+/// comodità: le due funzioni rispondono alla stessa domanda su due stringhe
+/// diverse solo se qualcuno si ricorda di comporle nell'ordine giusto. Composte
+/// qui, non c'è più un ordine da ricordare.
 pub fn normalized(path: &str) -> String {
     path.split('/')
         .map(|segment| segment.trim().nfc().collect::<String>())
@@ -478,15 +528,57 @@ mod tests {
         // Per segmento, non solo ai due estremi del path: `cartella ` sarebbe un
         // nome di cartella che Windows tronca.
         assert_eq!(normalized("cartella / nota.md"), "cartella/nota.md");
-        // Il punto in coda resta, e `check` lo segnala.
+        // Il punto in coda resta, e `check` lo segnala — senza che chi chiede
+        // debba comporre le due funzioni a mano: fino alla 0068 questi due
+        // `assert` dicevano `faults(&normalized(…))`, e quella composizione era
+        // precisamente la disciplina che nessuna firma imponeva.
         assert_eq!(normalized("nota. "), "nota.");
-        assert_eq!(
-            faults(&normalized("nota. "), Naming::New),
-            Some("trailing-dot")
-        );
-        // Uno spazio in coda invece sparisce prima di arrivare a `check`, che è
-        // il motivo per cui `TrailingDot` si chiama così e non «punto o spazio».
-        assert_eq!(faults(&normalized("nota.md "), Naming::New), None);
+        assert_eq!(faults("nota. ", Naming::New), Some("trailing-dot"));
+        // Uno spazio in coda invece sparisce prima di arrivare al controllo, che
+        // è il motivo per cui `TrailingDot` si chiama così e non «punto o
+        // spazio».
+        assert_eq!(faults("nota.md ", Naming::New), None);
+    }
+
+    /// **`check` e `normalized` non possono contraddirsi** (difetto 0068).
+    ///
+    /// La proprietà non è «gli spazi in testa si rifiutano»: è che il giudizio
+    /// su un nome nuovo valga per il nome che verrebbe **scritto**. Un banco su
+    /// un carattere solo l'avrebbe mancata — lo spazio in testa è un caso della
+    /// classe, e i suoi fratelli sono almeno tre (il device che riemerge, il
+    /// punto che riemerge, il nome che accorcia e diventa lecito).
+    ///
+    /// Rosso prima della riparazione su cinque di questi casi; verde dopo, e
+    /// **per costruzione** — `check` normalizza da sé, quindi l'uguaglianza è
+    /// vera per ogni stringa e non solo per la tabella. La tabella resta perché
+    /// nomina i casi che si sono rotti davvero: se un giorno qualcuno rimettesse
+    /// il giudizio sulla forma digitata, qui si vedrebbe *quali* nomi cambiano.
+    #[test]
+    fn il_giudizio_su_un_nome_nuovo_e_quello_sulla_forma_che_si_scrive() {
+        let casi = [
+            (" .nota.md", Some("hidden")),       // il caso che la 0068 nominava
+            (" .gitignore", Some("hidden")),     //
+            (" CON.md", Some("device")),         // `is_dos_device` vedeva `" CON"`
+            ("Progetti/ .x.md", Some("hidden")), // per segmento, non solo il primo
+            ("nota.md ", None),                  // e il verso opposto: rifiutava il lecito
+            (" nota.md ", None),                 //
+            (" / ", Some("traversal")),          // ciò che si scriverebbe è `/`
+            ("   ", Some("empty")),              //
+            ("nota. ", Some("trailing-dot")),    // il punto resta, e resta un guasto
+        ];
+        for (path, atteso) in casi {
+            assert_eq!(
+                faults(path, Naming::New),
+                atteso,
+                "`{path}` va giudicato come `{}`",
+                normalized(path)
+            );
+            assert_eq!(
+                faults(path, Naming::New),
+                faults(&normalized(path), Naming::New),
+                "`{path}`: le due funzioni si sono di nuovo separate"
+            );
+        }
     }
 
     #[test]

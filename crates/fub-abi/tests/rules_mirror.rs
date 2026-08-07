@@ -165,6 +165,21 @@ fn name_fault_cases() -> Vec<Value> {
         &"🌍".repeat(64),
         &"a".repeat(255),
         &"a".repeat(256),
+        // Gli spazi ai bordi di un segmento (difetto 0068): per un nome **nuovo**
+        // il giudizio è su ciò che si scriverebbe, cioè sulla forma
+        // normalizzata. Ci sono per la ragione per cui la NFC ci è entrata alla
+        // 0020 — è la coppia di regole che una gemella può implementare
+        // separatamente senza che nulla lo dica, e qui il costo non sarebbe un
+        // nome che non si risolve ma un file scritto sul disco con un nome che
+        // chi lo ha chiesto non ha chiesto.
+        " .nota.md",
+        " .gitignore",
+        " CON.md",
+        "Progetti/ .nascosta.md",
+        "nota.md ",
+        " nota.md ",
+        "nota. ",
+        " / ",
     ];
     let mut out = Vec::new();
     for path in nomi {
