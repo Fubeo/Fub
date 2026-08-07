@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Quindici** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Quattordici** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -515,7 +515,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
 | 0071 | `UndoStack::push` usa `Vec::remove(0)` oltre il tetto | `fub-kernel` · `undo.rs:99` | prestazioni |
 | 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
-| 0077 | `portable_dir` non verifica di essere scrivibile e non ripiega su `~/.config/fub` | `fub-host` · `config.rs:133` | configurazione |
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
 | 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |
 
