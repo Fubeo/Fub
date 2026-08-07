@@ -163,6 +163,21 @@ impl VaultRegistry {
         entries
     }
 
+    /// Questa radice è in elenco **esattamente sotto questo nome**?
+    ///
+    /// È la domanda che permette di non richiedere al disco una chiave che si
+    /// conosce già ([`Host::chiave`](crate::Host)): una voce del registro è
+    /// canonica per contratto — l'apertura l'ha scritta così — quindi un nome
+    /// che combacia con una voce *è* la chiave, e non c'è niente da risolvere.
+    /// La domanda è deliberatamente letterale e non «sono la stessa cartella»:
+    /// per rispondere a quella servirebbe il disco, cioè la cosa che qui non
+    /// c'è.
+    pub fn conosce(&self, root: &Utf8Path) -> bool {
+        self.entries
+            .read()
+            .is_ok_and(|entries| entries.iter().any(|e| e.root == root.as_str()))
+    }
+
     /// Un vault è stato aperto: entra nell'elenco, o risale in cima.
     pub fn note_opened(&self, root: &Utf8Path, now: u64) -> Result<(), PluginError> {
         self.update(root, |entry| entry.last_opened = now)
