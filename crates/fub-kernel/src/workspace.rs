@@ -615,17 +615,35 @@ impl Workspace {
         registry: FormatRegistry,
         machine: Arc<MachineSettings>,
     ) -> Self {
-        // Il registry è condiviso con l'indice del kernel invece che copiato:
-        // "quali estensioni sono documenti" è una domanda sola (vedi
-        // `CoreIndex::registry`).
-        let registry = Arc::new(registry);
-        let root = root.as_ref();
         // **Un** supporto per workspace, non uno per proprietario: il vault, il
         // sidecar dell'organizzazione, la configurazione del vault e l'anagrafe
         // scrivono tutti nella stessa cartella, e due supporti per la stessa
         // cartella sarebbero due idee di cosa c'è dentro — il giorno in cui uno
         // dei due cifra, un dato su due resta in chiaro (§15.1, 0065).
-        let storage: Arc<dyn crate::storage::VaultStorage> = Arc::new(crate::storage::FsStorage);
+        Workspace::on(root, registry, Arc::new(crate::storage::FsStorage), machine)
+    }
+
+    /// Come [`with_machine_settings`](Workspace::with_machine_settings), col
+    /// **supporto passato** invece del disco (§15.1).
+    ///
+    /// Esiste per la stessa ragione per cui esiste [`Vault::on`](crate::Vault::on),
+    /// e ne è il gemello un piano più su: finché il `FsStorage` è l'unico
+    /// supporto che un workspace sa montare, ciò che il workspace fa al disco si
+    /// può solo *osservare a valle*, mai **interrompere a metà** — e le proprietà
+    /// che parlano di cosa sopravvive a un guasto non hanno un banco. Con questa
+    /// riga un supporto che fallisce la mossa che si vuole studiare è tre righe
+    /// di test, e non c'è nessuna attesa da costruire.
+    pub fn on(
+        root: impl AsRef<Utf8Path>,
+        registry: FormatRegistry,
+        storage: Arc<dyn crate::storage::VaultStorage>,
+        machine: Arc<MachineSettings>,
+    ) -> Self {
+        // Il registry è condiviso con l'indice del kernel invece che copiato:
+        // "quali estensioni sono documenti" è una domanda sola (vedi
+        // `CoreIndex::registry`).
+        let registry = Arc::new(registry);
+        let root = root.as_ref();
         let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(
             root,
             Arc::clone(&storage),
@@ -2828,13 +2846,22 @@ impl Workspace {
     /// chiamante ne ha scelto un altro (è il caso in cui il path è di nuovo
     /// occupato e l'app ha chiesto all'utente).
     ///
-    /// Il ripristino è una **scrittura normale** (D8): passa da
-    /// [`write_document`], quindi da parse, grafo, indici ed eventi come
-    /// qualunque altra modifica. Nessun percorso speciale da tenere coerente —
-    /// ed è anche il motivo per cui il ripristino genera a sua volta uno
-    /// snapshot di versione, cioè è annullabile.
+    /// Il ripristino è l'**inverso esatto** della cancellazione: una mossa sola
+    /// sul disco ([`Vault::restore_trashed`]), e poi la stessa coda che segue
+    /// ogni scrittura — parse, grafo, indici, eventi. Non è un `write` seguito
+    /// da un `remove`: quella forma ha un istante in cui la nota sta in due
+    /// posti, e un guasto lì dentro ce la lascia.
     ///
-    /// [`write_document`]: Workspace::write_document
+    /// Ciò che torna può **non essere un documento**: nel cestino ci finiscono
+    /// anche gli allegati — è condiviso con Obsidian (D1) e
+    /// [`list_trash`](Vault::list_trash) li elenca apposta — e per restituire un
+    /// `.png` non serve né un provider né che i byte siano UTF-8. Pretenderli
+    /// sarebbe il difetto, com'è per
+    /// [`rename_entry_in_batch`](Workspace::rename_entry_in_batch): la coda di
+    /// un allegato è quella di un documento per sottrazione, non un secondo
+    /// percorso.
+    ///
+    /// [`Vault::restore_trashed`]: crate::Vault::restore_trashed
     pub fn restore_from_trash(&mut self, trash_id: &DocId, to: Option<DocId>) -> Result<DocId> {
         let entry = self
             .docs
@@ -2860,16 +2887,43 @@ impl Workspace {
         if self.indexes.core.metas.contains_key(&target) || self.docs.vault.exists(&target) {
             return Err(KernelError::AlreadyExists(target.to_string()));
         }
+        // Il modello si costruisce **prima** di muovere il file, per la ragione
+        // di `write_source`: il parse è puro, e farlo dopo lascerebbe il disco
+        // avanti rispetto a modelli, grafo e indici davanti a un chiamante che
+        // riceve `Err`.
+        //
+        // Nessun provider per questa estensione non è un errore: è un allegato,
+        // e la sua coda è questa per sottrazione — niente lettura, niente parse,
+        // niente modello da mettere in cache.
         let ext = extension_of(&target).unwrap_or_default();
-        if self.docs.registry.provider_for_ext(&ext).is_none() {
-            return Err(KernelError::NoProvider(ext));
-        }
+        let model = match self.docs.registry.provider_for_ext(&ext) {
+            Some(_) => {
+                let source = self.docs.vault.read(trash_id)?;
+                let revision = Revision::of(&source);
+                Some((self.docs.parse(&target, &source)?, revision))
+            }
+            None => None,
+        };
 
-        let source = self.docs.vault.read(trash_id)?;
-        // `write_source` e non `write_document`: al registro questa non è una
-        // nota che nasce, è una che torna — e l'inverso di un ritorno è un
-        // ritorno nel cestino, non la cancellazione di qualcosa che non c'era.
-        self.write_source(&target, &source)?;
+        // **Una** mossa sul disco, e il cestino lascia andare la voce con tutto
+        // ciò che teneva per lei.
+        self.docs.vault.restore_trashed(trash_id, &target)?;
+        match model {
+            Some((model, revision)) => self.ingest_model(&target, model, revision),
+            None => {
+                // L'impronta di un allegato non c'è, come per ogni voce che
+                // nessuno parsa: l'anagrafe la ricava dal disco.
+                let kind = self
+                    .touch_entry(&target, None)
+                    .unwrap_or(EntryKind::Unknown);
+                self.emit_event(Event::EntryChanged {
+                    id: target.clone(),
+                    kind,
+                });
+                self.emit_event(Event::IndexUpdated);
+            }
+        }
+        self.dispatch_pending();
         self.record(JournalOp::Restored {
             trash: trash_id.clone(),
             doc: target.clone(),
@@ -2892,10 +2946,6 @@ impl Workspace {
             });
             self.dispatch_pending();
         }
-        // La copia nel cestino se ne va per ultima: se la cancellazione
-        // fallisce restano due copie della nota, il che è un fastidio. Fare il
-        // contrario significherebbe rischiare di non averne nessuna.
-        self.docs.vault.remove_trashed(trash_id)?;
         Ok(target)
     }
 

@@ -15,14 +15,57 @@
 
 use std::sync::{Arc, Mutex};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::Event;
 use fub_abi::model::{DocId, DocumentModel};
-use fub_abi::traits::{HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult};
-use fub_kernel::{data_root, FormatRegistry, KernelError, Workspace};
+use fub_abi::traits::{
+    EntryKind, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, VaultEntry,
+};
+use fub_kernel::storage::{DirEntry, FsStorage, Stat, VaultStorage};
+use fub_kernel::{data_root, FormatRegistry, KernelError, MachineSettings, Workspace};
 use fub_testkit::TestoDiProva;
+
+/// Un supporto che fa tutto come il disco tranne **una** mossa, che rifiuta.
+///
+/// È il punto d'iniezione che un crash a metà non ha: non si aspetta che il
+/// processo muoia fra due scritture, si prende la seconda e la si fa fallire.
+struct SupportoCheRifiuta {
+    inner: FsStorage,
+    /// Le `remove` di un path che contiene questo pezzo falliscono.
+    rifiuta_remove_in: &'static str,
+}
+
+impl VaultStorage for SupportoCheRifiuta {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.inner.read(path)
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.write(path, bytes)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        if path.as_str().contains(self.rifiuta_remove_in) {
+            return Err(std::io::Error::other("il supporto ha detto di no"));
+        }
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.inner.stat(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Call {
@@ -99,8 +142,21 @@ impl Fixture {
         std::fs::write(path, body).unwrap();
     }
 
+    /// Come [`put`](Fixture::put), per un file che **non è testo**.
+    fn put_bytes(&self, rel: &str, body: &[u8]) {
+        let path = self.root.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, body).unwrap();
+    }
+
     fn exists(&self, rel: &str) -> bool {
         self.root.join(rel).exists()
+    }
+
+    fn read_bytes(&self, rel: &str) -> Vec<u8> {
+        std::fs::read(self.root.join(rel)).expect("lettura")
     }
 
     fn read(&self, rel: &str) -> String {
@@ -108,11 +164,17 @@ impl Fixture {
     }
 
     fn workspace(&self) -> Workspace {
+        self.workspace_su(Arc::new(FsStorage))
+    }
+
+    /// Lo stesso workspace, sul **supporto passato**: è così che si interrompe
+    /// una mutazione a metà senza aspettare niente.
+    fn workspace_su(&self, storage: Arc<dyn VaultStorage>) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
             .register(TestoDiProva::per_estensione("txt").boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::on(&self.root, registry, storage, MachineSettings::in_memory());
         // I plugin di prova si dichiarano prima di registrare (§7.3): il
         // kernel non presta capacità a una stringa.
         ws.register_core_feature("test.spia", "test.spia")
@@ -457,6 +519,87 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
         .restore_from_trash(&trashed, Some(DocId::new("Idea (ripristinata).txt")))
         .unwrap();
     assert_eq!(fx.read(tornata.as_str()), "la vecchia");
+}
+
+/// 0058 — il ripristino è **una mossa sola**, e non c'è un istante in cui la
+/// nota sta in due posti.
+///
+/// Il guasto non si aspetta, si inietta: il supporto rifiuta le cancellazioni
+/// dentro `.trash/`, cioè esattamente la seconda metà di uno «scrivi e poi
+/// cancella». Con quella forma il banco è rosso — la nota è tornata **e** è
+/// ancora nel cestino, e l'utente che ne modifica una ritrova l'altra. Con un
+/// `rename` la seconda metà non esiste.
+#[test]
+fn a_restore_the_disk_interrupts_leaves_one_copy_not_two() {
+    let fx = Fixture::new();
+    fx.put("Idea.txt", "un'idea");
+    let mut ws = fx.workspace_su(Arc::new(SupportoCheRifiuta {
+        inner: FsStorage,
+        rifiuta_remove_in: "/.trash/",
+    }));
+
+    let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
+    let esito = ws.restore_from_trash(&trashed, None);
+
+    let tornata = fx.exists("Idea.txt");
+    let nel_cestino = fx.exists(".trash/Idea.txt");
+    assert!(
+        tornata != nel_cestino,
+        "esito {esito:?}: tornata={tornata}, ancora nel cestino={nel_cestino} — \
+         due copie della stessa nota sono la peggiore delle due risposte"
+    );
+}
+
+/// 0002 — dal cestino torna anche ciò che nessuno parsa.
+///
+/// `list_trash` elenca **tutti** i file apposta, allegati compresi (il cestino è
+/// condiviso con Obsidian, D1). Pretendere un provider — o che i byte siano
+/// UTF-8 — per restituirne uno sarebbe il difetto, ed è la stessa ragione per
+/// cui `rename_entry_in_batch` non lo pretende.
+#[test]
+fn an_attachment_comes_back_from_the_trash_like_a_note() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    let png = [0x89u8, b'P', b'N', b'G', 0x0D, 0x00, 0xFF];
+    fx.put_bytes(".trash/foto.png", &png);
+
+    let voci = ws.list_trash().unwrap();
+    assert_eq!(voci.len(), 1, "il cestino la elenca: {voci:?}");
+    let tornata = ws
+        .restore_from_trash(&voci[0].id, None)
+        .expect("un allegato torna dal cestino come una nota");
+
+    assert_eq!(tornata, DocId::new("foto.png"));
+    assert_eq!(fx.read_bytes("foto.png"), png, "byte per byte");
+    assert!(
+        !fx.exists(".trash/foto.png"),
+        "il cestino l'ha lasciata andare"
+    );
+    // E il vault la **vede**: un allegato ripristinato che l'anagrafe non
+    // conosce ricompare solo alla prossima apertura.
+    let anagrafe = entries_di_specie(&ws, EntryKind::Asset);
+    assert_eq!(
+        anagrafe
+            .iter()
+            .map(|e| e.id.to_string())
+            .collect::<Vec<_>>(),
+        vec!["foto.png".to_string()]
+    );
+}
+
+/// Le voci dell'anagrafe di una specie, come le chiede la shell.
+fn entries_di_specie(ws: &Workspace, of_kind: EntryKind) -> Vec<VaultEntry> {
+    let IndexResult::Entries(page) = ws
+        .query_index(IndexQuery::Entries {
+            of_kind: Some(of_kind),
+            within: None,
+            page: None,
+        })
+        .expect("il kernel serve l'anagrafe")
+    else {
+        panic!("attesa l'anagrafe");
+    };
+    page.items
 }
 
 #[test]
