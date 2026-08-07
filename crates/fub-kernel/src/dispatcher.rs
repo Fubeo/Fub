@@ -48,7 +48,7 @@
 //! che è esattamente ciò che questo componente non deve avere.
 
 use std::collections::VecDeque;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
 
 use fub_abi::model::DocId;
 use fub_abi::rules::events::degrade;
@@ -56,6 +56,7 @@ use fub_abi::traits::{JobId, JobSpec};
 use fub_abi::{Actor, BatchId, Event, Notice, Origin};
 
 use crate::bus::EventBus;
+use crate::veleno::Condizione;
 
 /// Tetto di eventi drenati in un singolo drenaggio: tronca i cicli di handler
 /// che si rimbalzano eventi a vicenda senza convergere. Il troncamento NON è
@@ -585,27 +586,48 @@ pub struct PendingJob {
 /// conto è già diverso, e l'attesa torna subito. Con un booleano quella
 /// finestra sarebbe un job fermo fino al successivo, che è il genere di bug che
 /// si vede una volta al mese e non si riproduce mai.
+///
+/// # E se il campanello si avvelena
+///
+/// Il conto sta in una [`Condizione`], non in un `Mutex` nudo, e la ragione è la
+/// riga che la [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md)
+/// aveva lasciato scoperta: qui c'erano **sei** `.expect("campanello
+/// avvelenato")`, e una frase ripetuta sei volte sembra una decisione presa
+/// senza esserlo. La decisione c'era, ed è quella della 0126 — *cosa il
+/// lucchetto protegge* è un `u64` monotòno, cioè niente che un panico a metà
+/// renda incredibile, e `ring` non risponde a nessuno — ma stava in un
+/// `expect`, dove non tiene: il settimo `expect` non l'avrebbe ereditata.
+/// Adesso sta in un tipo, e il settimo non si può scrivere.
+///
+/// Un campanello ripreso costa **al più una suonata**, e non un job: chi
+/// aspetta riguarda `queued`, che è monotòno e non torna indietro, quindi un
+/// risveglio perso è un risveglio, non un lavoro. Il fatto resta osservabile da
+/// [`Condizione::denunce`].
 #[derive(Default)]
 pub struct JobBell {
-    queued: Mutex<u64>,
-    ring: Condvar,
+    queued: Condizione<u64>,
 }
 
 impl JobBell {
     /// Suona: un job è entrato in coda (o qualcuno vuole svegliare chi aspetta).
+    ///
+    /// Sveglia **tutti** e non uno: un drenaggio prende tutti i job in coda, e
+    /// chi si sveglia potrebbe non trovarne più (un altro thread lo ha
+    /// preceduto). La regola sta in [`Condizione::cambia`], che è il posto in
+    /// cui vale per chiunque.
     pub fn ring(&self) {
-        let mut queued = self.queued.lock().expect("campanello avvelenato");
-        *queued += 1;
-        // `notify_all` e non `notify_one`: un drenaggio prende **tutti** i job
-        // in coda, e chi si sveglia potrebbe non trovarne più (un altro thread
-        // lo ha preceduto). Svegliarne uno solo lascerebbe gli altri fermi
-        // davanti a lavoro che c'è.
-        self.ring.notify_all();
+        self.queued.cambia(|queued| *queued += 1);
     }
 
     /// Quante volte ha suonato finora. Si legge **prima** di drenare.
     pub fn ticket(&self) -> u64 {
-        *self.queued.lock().expect("campanello avvelenato")
+        *self.queued.prendi()
+    }
+
+    /// Quante volte il campanello si è ripreso da un avvelenamento. È l'unica
+    /// traccia che ne resta, ed è dichiarata: vedi la testa del tipo.
+    pub fn denunce(&self) -> u32 {
+        self.queued.denunce()
     }
 
     /// Aspetta che suoni oltre `seen`, **o che scada `entro`**, e restituisce
@@ -617,21 +639,85 @@ impl JobBell {
     /// mio». La differenza è che l'intervallo non lo sceglie chi aspetta — lo
     /// dice la sveglia più vicina.
     pub fn wait_beyond_or(&self, seen: u64, entro: std::time::Duration) -> u64 {
-        let queued = self.queued.lock().expect("campanello avvelenato");
-        let (queued, _) = self
-            .ring
-            .wait_timeout_while(queued, entro, |q| *q == seen)
-            .expect("campanello avvelenato");
-        *queued
+        let queued = self.queued.prendi();
+        *self.queued.aspetta_o(queued, entro, |q| *q == seen)
     }
 
     /// Aspetta che suoni oltre `seen`, e restituisce il conto nuovo.
     pub fn wait_beyond(&self, seen: u64) -> u64 {
-        let queued = self.queued.lock().expect("campanello avvelenato");
-        let queued = self
-            .ring
-            .wait_while(queued, |q| *q == seen)
-            .expect("campanello avvelenato");
-        *queued
+        let queued = self.queued.prendi();
+        *self.queued.aspetta(queued, |q| *q == seen)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Avvelena un lucchetto facendo paniare **dentro** un `catch_unwind` col
+    /// prestito in mano: è come lo produce la vita, e non serve un thread —
+    /// quindi non c'è niente che possa andare in blocco invece che in rosso.
+    ///
+    /// L'hook dei panici si mette a tacere per la durata del misfatto, o un
+    /// panico voluto stamperebbe la sua traccia e farebbe sembrare rotto un
+    /// banco verde.
+    fn avvelena(f: impl FnOnce()) {
+        let vecchio = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+        std::panic::set_hook(vecchio);
+    }
+
+    /// **Un campanello avvelenato suona lo stesso, e chi aspetta si sveglia.**
+    ///
+    /// Coi sei `.expect("campanello avvelenato")` di prima questo caso non
+    /// falliva un `assert`: paniava — nel thread del banco alla prima riga, e
+    /// nell'app dentro il runner dei job, cioè nel thread che poi non accoda
+    /// più niente.
+    #[test]
+    fn un_campanello_avvelenato_suona_lo_stesso_e_sveglia_chi_aspetta() {
+        let bell = Arc::new(JobBell::default());
+        avvelena(|| {
+            let _guardia = bell.queued.prendi();
+            panic!("qualcuno muore col campanello in mano");
+        });
+
+        // Il conto è monotòno e non è tornato indietro: ciò che il veleno può
+        // costare è un risveglio, non un job.
+        let biglietto = bell.ticket();
+        let chi_aspetta = {
+            let bell = Arc::clone(&bell);
+            std::thread::spawn(move || bell.wait_beyond(biglietto))
+        };
+        bell.ring();
+        assert_eq!(
+            chi_aspetta
+                .join()
+                .expect("chi aspettava è arrivato in fondo"),
+            biglietto + 1
+        );
+        assert_eq!(
+            bell.denunce(),
+            1,
+            "un incidente vale uno, non uno per chiamata"
+        );
+    }
+
+    /// L'attesa a scadenza è la seconda porta, e si rompe per conto suo: il
+    /// veleno di `wait_timeout_while` porta dentro una coppia e non una guardia.
+    #[test]
+    fn un_campanello_avvelenato_scade_lo_stesso() {
+        let bell = JobBell::default();
+        avvelena(|| {
+            let _guardia = bell.queued.prendi();
+            panic!("boom");
+        });
+        let biglietto = bell.ticket();
+        assert_eq!(
+            bell.wait_beyond_or(biglietto, std::time::Duration::from_millis(1)),
+            biglietto,
+            "scaduto il tempo si torna col conto che c'era"
+        );
+        assert_eq!(bell.denunce(), 1);
     }
 }

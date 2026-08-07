@@ -177,14 +177,19 @@ stessa cosa.
   l'elenco che dovrebbe restringere (misurati: `Mutex`/`RwLock` in dieci file
   del kernel, ognuno con una ragione sua). Ciò che questo commit copre è
   `bus.rs`, e i suoi conti sono lì dentro.
-- **`JobBell` in `dispatcher.rs` scrive `.expect("campanello avvelenato")` in
-  quattro punti** e resta com'è. Non è una svista: là il `Mutex` serve una
-  `Condvar` — che è definita su `MutexGuard` e su niente altro — e ciò che
-  protegge è un `u64` monotòno, cioè niente da rendere incredibile. È la ragione
-  `Condizione` dell'allowlist della 0120, e vale identica qui. Ma la frase non
-  ha una porta che la tenga: è un `expect` con una frase, cioè esattamente la
-  forma che la 0120 ha chiamato «sembra una decisione presa, ed è solo una
-  frase».
+- **`JobBell` in `dispatcher.rs` scriveva `.expect("campanello avvelenato")`** e
+  restava com'era. Non era una svista: là il `Mutex` serve una `Condvar` — che è
+  definita su `MutexGuard` e su niente altro — e ciò che protegge è un `u64`
+  monotòno, cioè niente da rendere incredibile. È la ragione `Condizione`
+  dell'allowlist della 0120, e vale identica qui. Ma la frase non aveva una porta
+  che la tenesse: era un `expect` con una frase, cioè esattamente la forma che la
+  0120 ha chiamato «sembra una decisione presa, ed è solo una frase».
+  *(I punti erano **sei** e non quattro — questa riga li aveva contati sui soli
+  `.lock()`, e due stanno sull'esito della `Condvar`. Chiuso da
+  `crates/fub-kernel/src/veleno.rs`, che porta la politica di questa decisione
+  fuori da `bus.rs`: `Ricovero`, `RicoveroCondiviso` e `Condizione`, con il conto
+  di `crates/fub-kernel/tests/il_veleno_del_kernel.rs` a tenere che una terza
+  risposta non si improvvisi.)*
 - **La riga di diagnosi va nel log e non nel canale del §20.2**, come nella
   0120: emettere un `Event::Trouble` da qui vorrebbe dire rientrare nel bus da
   dentro il bus.

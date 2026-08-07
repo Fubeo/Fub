@@ -50,7 +50,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{
@@ -108,6 +108,7 @@ use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
 use crate::undo::UndoStack;
 use crate::vault::TrashEntry;
+use crate::veleno::Ricovero;
 use crate::viewstate::ViewStates;
 
 /// Il pannello di una shell che ne ha uno solo.
@@ -486,12 +487,31 @@ pub struct Workspace {
     /// **Le sorgenti di import che l'host tiene aperte** (decisione 0102).
     ///
     /// Non è un sesto proprietario: è una tabella di prestiti in corso, che vive
-    /// quanto il dialogo di sistema che l'ha riempita. Sta dietro un `Mutex` per
+    /// quanto il dialogo di sistema che l'ha riempita. Sta dietro un lucchetto per
     /// una ragione sola e dichiarata: `TransferRead::read_source` prende `&self`
     /// — perché quel trait sta anche su chi legge — mentre leggere un file
     /// avanza un cursore. Fra i due era meglio l'interiore che una firma che
     /// mente su cosa tocca.
-    sources: Mutex<OpenSources>,
+    ///
+    /// Un [`Ricovero`] e non un `Mutex` nudo, e qui la ragione non è di forma:
+    /// `OpenSources::read` chiama `SourceBacking::read_at` — **codice di
+    /// qualcun altro** — col prestito in mano. Un provider che pania là dentro
+    /// avvelena questo lucchetto, e da lì ogni `open_source`, `close_source`,
+    /// `read_open_source` e `source_len` sarebbe stato un panico: sotto il
+    /// prestito esclusivo del workspace, cioè un vault irraggiungibile fino al
+    /// riavvio. Sarebbe la [0032](../../../docs/decisions/0032-il-runner-dei-job.md)
+    /// disfatta da sotto — *un provider che pania costa la chiamata, non il
+    /// vault* — e la rete che la 0032 mette attorno alla chiamata non lo vede,
+    /// perché il veleno **resta** dopo che il panico è stato preso.
+    ///
+    /// Ci si riprende, per la regola della
+    /// [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md):
+    /// ciò che il lucchetto protegge è una tabella di prestiti **indipendenti**
+    /// e un contatore monotòno. `read` non muta niente (cerca e chiama), e le
+    /// altre tre sono un `insert`, un `remove` e una lettura: nessuna lascia
+    /// dietro di sé mezza mutazione, e le sorgenti che non c'entrano non hanno
+    /// nessuna ragione di morire con quella che è andata storta.
+    sources: Ricovero<OpenSources>,
     /// Il vault è già stato chiuso ([`close`](Workspace::close))?
     ///
     /// **Non è un sesto proprietario** (§8.1): è lo stato del *tutto*, ed è
@@ -639,7 +659,7 @@ impl Workspace {
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
             network: None,
-            sources: Mutex::new(OpenSources::default()),
+            sources: Ricovero::new(OpenSources::default()),
             closed: false,
             settings,
             view_states: ViewStates::in_memory(),
@@ -4831,11 +4851,7 @@ impl Workspace {
     ) -> std::result::Result<ImportSource, PluginError> {
         let len = backing.len();
         let prologue = backing.read_at(0, PROLOGUE as u32)?;
-        let handle = self
-            .sources
-            .lock()
-            .expect("le sorgenti aperte non sono avvelenate")
-            .open(backing);
+        let handle = self.sources.prendi().open(backing);
         Ok(ImportSource {
             name: name.into(),
             media_type,
@@ -4849,10 +4865,7 @@ impl Workspace {
 
     /// Chiude una sorgente aperta. Chiudere ciò che non c'è riesce.
     pub fn close_source(&mut self, handle: SourceHandle) {
-        self.sources
-            .lock()
-            .expect("le sorgenti aperte non sono avvelenate")
-            .close(handle);
+        self.sources.prendi().close(handle);
     }
 
     /// Legge da una sorgente aperta: il lato host di
@@ -4863,18 +4876,12 @@ impl Workspace {
         offset: u64,
         len: u32,
     ) -> std::result::Result<Vec<u8>, PluginError> {
-        self.sources
-            .lock()
-            .expect("le sorgenti aperte non sono avvelenate")
-            .read(handle, offset, len)
+        self.sources.prendi().read(handle, offset, len)
     }
 
     /// Quanti byte ha una sorgente aperta, se lo è.
     pub fn source_len(&self, handle: SourceHandle) -> Option<u64> {
-        self.sources
-            .lock()
-            .expect("le sorgenti aperte non sono avvelenate")
-            .len(handle)
+        self.sources.prendi().len(handle)
     }
 
     /// Fa entrare una sorgente esterna nel vault, col **primo** provider

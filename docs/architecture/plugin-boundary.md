@@ -570,7 +570,7 @@ arriva in fondo.
 
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
-| la coda | [dispatcher.rs:560](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
+| la coda | [dispatcher.rs:561](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
 | il campanello | [dispatcher.rs:589](../../crates/fub-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
 | i thread | [runner.rs:72](../../crates/fub-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
 | l'host per chiamata | [jobs.rs:94](../../crates/fub-host/src/jobs.rs) | tiene la `Custodia<Workspace>` e prende un prestito **per capacità** |
@@ -1069,7 +1069,7 @@ sequenceDiagram
 | `Host::open` | [session.rs:251](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
 | `mount` | [mount.rs:188](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
 | `BundleRegistry::mount` | [registry.rs:262](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
-| `reindex` | [workspace.rs:156](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
+| `reindex` | [workspace.rs:157](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
 | `bridge::spawn` | [bridge.rs:73](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
 | `JobRunner::start` | [runner.rs:714](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
@@ -1102,7 +1102,7 @@ stateDiagram-v2
 Anche qui **nessuno di questi stati ha un enum**. Sono l'appartenenza a una mappa
 e un booleano: un vault è aperto se sta in `Sessions.open`
 ([session.rs:209](../../crates/fub-host/src/session.rs)), un workspace è chiuso
-se `Workspace.closed` è vero ([workspace.rs:502](../../crates/fub-kernel/src/workspace.rs)),
+se `Workspace.closed` è vero ([workspace.rs:522](../../crates/fub-kernel/src/workspace.rs)),
 un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
 ([registry.rs:218](../../crates/fub-host/src/registry.rs)). Le uniche
 transizioni che il **contratto** nomina sono eventi, non stati: `VaultOpened`,
