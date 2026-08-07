@@ -209,10 +209,9 @@ impl RenderedDocument {
 /// formato esatto diventerebbe contratto e ogni provider dovrebbe conoscerlo.
 fn slot_html(slot: u32, kind: &str) -> String {
     format!(
-        "<div class=\"ui-slot\" data-ui-slot=\"{slot}\" data-custom-kind=\"{}\"></div>",
-        kind.replace('&', "&amp;")
-            .replace('"', "&quot;")
-            .replace('<', "&lt;")
+        "<div class=\"ui-slot\"{}{}></div>",
+        fub_abi::html::attr("data-ui-slot", &slot.to_string()),
+        fub_abi::html::attr("data-custom-kind", kind)
     )
 }
 

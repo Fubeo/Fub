@@ -8,7 +8,7 @@ use fub_abi::model::{
 };
 use fub_abi::options::render_option;
 
-use crate::util::{escape_attr, escape_html};
+use fub_abi::html::{attr, escape};
 
 pub fn render_html(model: &DocumentModel, opts: &RenderOptions) -> String {
     let mut out = String::new();
@@ -27,7 +27,7 @@ fn render_blocks(blocks: &[Block], opts: &RenderOptions, out: &mut String) {
 /// al documento giusto senza avere dove atterrare.
 fn anchor_attr(block: &Block) -> String {
     match block.anchor() {
-        Some(id) => format!(" id=\"{}\"", escape_attr(id)),
+        Some(id) => attr("id", id),
         None => String::new(),
     }
 }
@@ -58,8 +58,8 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                         let checked = if t.checked() { " checked" } else { "" };
                         let symbol = t.symbol.map(String::from).unwrap_or_default();
                         out.push_str(&format!(
-                            "<li class=\"task\" data-task=\"{}\"><input type=\"checkbox\" disabled{checked}>",
-                            escape_attr(&symbol)
+                            "<li class=\"task\"{}><input type=\"checkbox\" disabled{checked}>",
+                            attr("data-task", &symbol)
                         ));
                     }
                     None => out.push_str("<li>"),
@@ -87,12 +87,12 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         Block::CodeBlock { lang, code, .. } => {
             match lang {
                 Some(l) => out.push_str(&format!(
-                    "<pre{id}><code class=\"language-{}\">",
-                    escape_attr(l)
+                    "<pre{id}><code{}>",
+                    attr("class", &format!("language-{l}"))
                 )),
                 None => out.push_str(&format!("<pre{id}><code>")),
             }
-            out.push_str(&escape_html(code));
+            out.push_str(&escape(code));
             out.push_str("</code></pre>");
         }
         Block::Quote { blocks, .. } => {
@@ -110,14 +110,14 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             if custom_kind == custom_kind::CALLOUT {
                 let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
                 out.push_str(&format!(
-                    "<div{id} class=\"callout\" data-callout=\"{}\">",
-                    escape_attr(ty)
+                    "<div{id} class=\"callout\"{}>",
+                    attr("data-callout", ty)
                 ));
                 if let Some(title) = attrs.get("title").and_then(|v| v.as_str()) {
                     if !title.is_empty() {
                         out.push_str(&format!(
                             "<div class=\"callout-title\">{}</div>",
-                            escape_html(title)
+                            escape(title)
                         ));
                     }
                 }
@@ -134,8 +134,8 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 out.push_str(&format!(
                     "<div{id} class=\"block-frontmatter-unparsed\">\
                      <div class=\"frontmatter-error\">{}</div><pre>{}</pre></div>",
-                    escape_html(motivo),
-                    escape_html(text)
+                    escape(motivo),
+                    escape(text)
                 ));
             } else {
                 // Ogni altro kind — registrato o no — degrada a resa generica,
@@ -146,11 +146,11 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 let label = attrs
                     .get("label")
                     .and_then(|v| v.as_str())
-                    .map(|l| format!(" data-label=\"{}\"", escape_attr(l)))
+                    .map(|l| attr("data-label", l))
                     .unwrap_or_default();
                 out.push_str(&format!(
-                    "<div{id} class=\"block-{}\"{label}>",
-                    escape_attr(custom_kind)
+                    "<div{id}{}{label}>",
+                    attr("class", &format!("block-{custom_kind}"))
                 ));
                 render_blocks(blocks, opts, out);
                 out.push_str("</div>");
@@ -190,7 +190,7 @@ fn render_inlines(inlines: &[Inline], opts: &RenderOptions, out: &mut String) {
 
 fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
     match inline {
-        Inline::Text(s) => out.push_str(&escape_html(s)),
+        Inline::Text(s) => out.push_str(&escape(s)),
         Inline::Emph(children) => {
             out.push_str("<em>");
             render_inlines(children, opts, out);
@@ -203,14 +203,14 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
         }
         Inline::Code(s) => {
             out.push_str("<code>");
-            out.push_str(&escape_html(s));
+            out.push_str(&escape(s));
             out.push_str("</code>");
         }
         Inline::TagRef { name, .. } => {
             out.push_str(&format!(
-                "<span class=\"tag\" data-tag=\"{}\">#{}</span>",
-                escape_attr(name),
-                escape_html(name)
+                "<span class=\"tag\"{}>#{}</span>",
+                attr("data-tag", name),
+                escape(name)
             ));
         }
         Inline::Link {
@@ -224,9 +224,9 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
         } if custom_kind == custom_kind::FOOTNOTE_REFERENCE => {
             let label = attrs.get("label").and_then(|v| v.as_str()).unwrap_or("");
             out.push_str(&format!(
-                "<sup class=\"footnote-ref\" data-label=\"{}\">{}</sup>",
-                escape_attr(label),
-                escape_html(label)
+                "<sup class=\"footnote-ref\"{}>{}</sup>",
+                attr("data-label", label),
+                escape(label)
             ));
         }
         // Il degrado generico degli inline. **Prima non c'era**: un
@@ -241,9 +241,9 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
         } => {
             let text = attrs.get("text").and_then(|v| v.as_str()).unwrap_or("");
             out.push_str(&format!(
-                "<span class=\"inline-{}\">{}</span>",
-                escape_attr(&class_of(custom_kind)),
-                escape_html(text)
+                "<span{}>{}</span>",
+                attr("class", &format!("inline-{}", class_of(custom_kind))),
+                escape(text)
             ));
         }
     }
@@ -282,12 +282,12 @@ fn wiki_attrs(
     heading: &Option<String>,
     block: &Option<String>,
 ) -> String {
-    let mut out = format!(" data-{prefisso}-page=\"{}\"", escape_attr(page));
+    let mut out = attr(&format!("data-{prefisso}-page"), page);
     if let Some(h) = heading {
-        out.push_str(&format!(" data-{prefisso}-heading=\"{}\"", escape_attr(h)));
+        out.push_str(&attr(&format!("data-{prefisso}-heading"), h));
     }
     if let Some(b) = block {
-        out.push_str(&format!(" data-{prefisso}-block=\"{}\"", escape_attr(b)));
+        out.push_str(&attr(&format!("data-{prefisso}-block"), b));
     }
     out
 }
@@ -344,29 +344,29 @@ fn render_link(
         // file. Chi disegna sa dove sta il vault; questo codice no.
         LinkTarget::Url(url) if embed => {
             out.push_str(&format!(
-                "<div class=\"embed\" data-embed-url=\"{}\">",
-                escape_attr(url)
+                "<div class=\"embed\"{}>",
+                attr("data-embed-url", url)
             ));
             render_link_label(label, url, out);
             out.push_str("</div>");
         }
         LinkTarget::Path(p) if embed => {
             out.push_str(&format!(
-                "<div class=\"embed\" data-embed-path=\"{}\">",
-                escape_attr(p)
+                "<div class=\"embed\"{}>",
+                attr("data-embed-path", p)
             ));
             render_link_label(label, p, out);
             out.push_str("</div>");
         }
         LinkTarget::Url(url) => {
-            out.push_str(&format!("<a href=\"{}\">", escape_attr(url)));
+            out.push_str(&format!("<a{}>", attr("href", url)));
             render_link_label(label, url, out);
             out.push_str("</a>");
         }
         LinkTarget::Path(p) => {
             out.push_str(&format!(
-                "<a class=\"internal-path\" data-path=\"{}\" href=\"#\">",
-                escape_attr(p)
+                "<a class=\"internal-path\"{} href=\"#\">",
+                attr("data-path", p)
             ));
             render_link_label(label, p, out);
             out.push_str("</a>");
@@ -379,6 +379,6 @@ fn render_link_label(label: Option<&[Inline]>, fallback: &str, out: &mut String)
         Some(inlines) if !inlines.is_empty() => {
             render_inlines(inlines, &RenderOptions::default(), out)
         }
-        _ => out.push_str(&escape_html(fallback)),
+        _ => out.push_str(&escape(fallback)),
     }
 }

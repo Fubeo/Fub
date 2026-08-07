@@ -50,6 +50,7 @@ pub mod edit;
 pub mod error;
 pub mod event;
 pub mod format;
+pub mod html;
 pub mod ipc;
 pub mod locale;
 pub mod model;

@@ -317,6 +317,46 @@ mod tests {
         );
     }
 
+    /// **L'apice esce escapato da ogni attributo**, e non perché qui si scrivano
+    /// gli attributi fra apici singoli — oggi sono tutti fra virgolette doppie.
+    ///
+    /// Il valore di un attributo è testo dell'utente: il nome di una nota, il
+    /// simbolo di un task, l'`info string` di un recinto. L'escape incompleto
+    /// che c'era prima (`&`, `<`, `>`, `"` e basta, in `fub-features` e nel
+    /// kernel) era innocuo per una ragione che nessuno aveva scritto da nessuna
+    /// parte — *tutti i chiamanti di oggi usano le virgolette doppie* — cioè per
+    /// una proprietà di chi chiama, non di chi escapa. Il giorno che un
+    /// emettitore scrive `class='…'`, che è HTML valido, quella proprietà cade
+    /// in silenzio e il difetto smette di essere estetico.
+    ///
+    /// Adesso l'attributo lo scrive `fub_abi::html::attr`, che mette lui le
+    /// virgolette e l'escape: la domanda «quali caratteri servono per *questo*
+    /// delimitatore» non si pone più a chi chiama. Questo banco fissa il
+    /// risultato sull'**HTML prodotto**, che è l'artefatto vero — un banco sul
+    /// modello non vedrebbe niente, perché il modello l'apice ce l'ha e basta.
+    ///
+    /// **Verde per costruzione, e va detto**: delle tre tabelle divergenti
+    /// questa era la completa, quindi su *questo* provider il banco non sarebbe
+    /// mai stato rosso. Sta qui perché fissa il risultato dopo la migrazione a
+    /// `fub_abi::html`; il banco che era davvero rosso sull'apice è quello di
+    /// `fub-features` · `blocks.rs`, dove la tabella incompleta stava.
+    #[test]
+    fn un_apice_in_un_attributo_esce_come_entita() {
+        let html = MarkdownProvider::new()
+            .render_html(&parse("[[L'ora del tè]]"), &RenderOptions::preview())
+            .unwrap();
+        assert!(
+            html.contains("data-wikilink-page=\"L&#39;ora del tè\""),
+            "html: {html}"
+        );
+        assert!(
+            !html.contains("L'ora"),
+            "l'apice grezzo è rimasto nell'attributo: {html}"
+        );
+        // E nel testo del link, che è contenuto e non attributo: stessa tabella.
+        assert!(html.contains(">L&#39;ora del tè<"), "html: {html}");
+    }
+
     #[test]
     fn renders_basic_formatting() {
         let doc = parse("Testo **grassetto** e *corsivo* e `codice`.");

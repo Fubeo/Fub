@@ -29,6 +29,7 @@ use fub_abi::custom::{
 };
 use fub_abi::error::FormatError;
 use fub_abi::format::{ParseContext, RenderOptions};
+use fub_abi::html::{attr, escape};
 use fub_abi::model::custom_kind;
 use fub_abi::options::syntax;
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -241,13 +242,13 @@ impl CustomRenderer for MathRenderer {
             return Ok(CustomRendering::Fallback);
         };
         let anchor = match &block.anchor {
-            Some(a) => format!(" id=\"{}\"", escape_attr(a)),
+            Some(a) => attr("id", a),
             None => String::new(),
         };
         Ok(CustomRendering::Html(format!(
-            "<div{anchor} class=\"math-block\" data-tex=\"{}\">{}</div>",
-            escape_attr(source),
-            escape_text(source)
+            "<div{anchor} class=\"math-block\"{}>{}</div>",
+            attr("data-tex", source),
+            escape(source)
         )))
     }
 }
@@ -294,19 +295,6 @@ impl SyntaxRule for HighlightRule {
             attrs: json!({ "text": m.text }),
         }))
     }
-}
-
-fn escape_attr(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('"', "&quot;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
 }
 
 #[cfg(test)]
@@ -392,11 +380,19 @@ mod tests {
         assert!(matches!(out, CustomRendering::Fallback));
     }
 
+    /// **Il sorgente di una formula è testo dell'utente, e nell'attributo esce
+    /// per intero.**
+    ///
+    /// L'apice è la metà che era rossa: l'escape privato di questo file copriva
+    /// `&`, `<`, `>` e `"`, e l'apice lo lasciava passare. Era innocuo *oggi*
+    /// solo perché `data-tex` si scrive fra virgolette doppie — una proprietà
+    /// del chiamante, non dell'escape — e questo file è quello che il repo
+    /// indica come l'esempio da copiare per scrivere un renderer di terzi.
     #[test]
     fn la_formula_esce_come_html_col_sorgente_escapato() {
         let block = CustomBlock {
             custom_kind: custom_kind::MATH.into(),
-            attrs: json!({ "source": "a < b & \"c\"", "display": true }),
+            attrs: json!({ "source": "a < b & \"c\" e l'apice", "display": true }),
             blocks: vec![],
             anchor: Some("^f1".into()),
             span: Span::new(0, 0),
@@ -410,7 +406,24 @@ mod tests {
         assert!(html.contains("id=\"^f1\""), "{html}");
         assert!(html.contains("class=\"math-block\""));
         assert!(!html.contains("a < b"), "il sorgente va escapato: {html}");
-        assert!(html.contains("a &lt; b &amp; \"c\""), "{html}");
+        // Le virgolette escapate anche nel testo: `fub_abi::html` ha **una**
+        // tabella per il contenuto e per l'attributo, e la ragione sta nel suo
+        // doc — due tabelle vogliono un chiamante che ne scelga una, ed è la
+        // scelta da cui nascevano le tre copie divergenti.
+        assert!(
+            html.contains("a &lt; b &amp; &quot;c&quot; e l&#39;apice"),
+            "{html}"
+        );
+        // E l'attributo dice la stessa cosa: è il `data-tex` che un motore TeX
+        // rileggerà il giorno che c'è, quindi deve portare il sorgente intero.
+        assert!(
+            html.contains("data-tex=\"a &lt; b &amp; &quot;c&quot; e l&#39;apice\""),
+            "{html}"
+        );
+        assert!(
+            !html.contains("l'apice"),
+            "l'apice grezzo è rimasto: {html}"
+        );
     }
 
     #[test]
