@@ -788,21 +788,15 @@ impl CoreIndex {
     }
 
     /// I documenti in relazione di link con `doc`, secondo il verso chiesto.
-    fn linked(&self, doc: &DocId, direction: LinkDirection) -> Vec<DocId> {
-        match direction {
-            LinkDirection::Outbound => self.graph.outgoing(doc),
-            LinkDirection::Inbound => self
-                .graph
-                .backlinks(doc)
-                .into_iter()
-                .map(|b| b.source)
-                .collect(),
-            LinkDirection::Both => {
-                let mut all = self.graph.outgoing(doc);
-                all.extend(self.graph.backlinks(doc).into_iter().map(|b| b.source));
-                all
-            }
-        }
+    ///
+    /// Una volta ciascuno: [`LinkGraph::linked`] risponde con un insieme, e
+    /// prima che quella firma esistesse questa funzione elencava *link* e non
+    /// *documenti* — una nota che ne citava un'altra due volte compariva due
+    /// volte. Non si vedeva perché a valle c'è il `BTreeMap` di [`Matches`], che
+    /// li assorbiva: il difetto era coperto da un dettaglio d'implementazione di
+    /// qualcun altro, ed è il modo in cui un difetto sopravvive a un refactor.
+    fn linked(&self, doc: &DocId, direction: LinkDirection) -> BTreeSet<DocId> {
+        self.graph.linked(doc, direction)
     }
 }
 

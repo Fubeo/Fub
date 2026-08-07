@@ -11,8 +11,11 @@
 //! il provider risponde [`ViewUpdate::Navigate`], che la shell esegue. Nessun
 //! pezzo del percorso è cablato nell'app.
 
+use std::collections::HashMap;
+
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
+use fub_abi::model::DocId;
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -153,14 +156,35 @@ const A_COUNT: &str = "count";
 /// Costruisce l'albero `UiNode` del pannello backlink per un insieme di
 /// riferimenti entranti. Separato da [`BacklinksView`] perché è pura
 /// trasformazione dati→UI: si prova senza un host.
+///
+/// **Una riga per riferimento, non per nota**: chi cita la nota aperta in tre
+/// punti compare tre volte, con tre contesti diversi, ed è ciò che
+/// [`IndexQuery::Backlinks`] promette — la risposta porta il frammento in cui il
+/// link compare, e tre frammenti sono tre righe. Raggrupparli è la voce
+/// «Backlink raggruppati» del §7.2, cioè un'altra vista.
 pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
     if refs.is_empty() {
         return placeholder(EMPTY);
     }
 
+    // Quante righe ha già prodotto ogni sorgente: serve alla chiave, sotto.
+    let mut nth: HashMap<&DocId, usize> = HashMap::new();
     let items = refs
         .iter()
         .map(|r| {
+            let n = nth.entry(&r.source).or_insert(0);
+            // La chiave è l'identità della riga fra due ridisegni, e il
+            // contratto di [`UiNode`] la vuole **unica fra i fratelli**. Il solo
+            // `DocId` sorgente non lo era: due menzioni della stessa nota
+            // davano due fratelli con la stessa chiave, e il riconciliatore
+            // della shell — che accoppia per chiave e poi per posizione — non
+            // riusciva più a riusare la seconda riga, ricostruendola a ogni
+            // salvataggio (focus, scroll e selezione con lei). L'identità di una
+            // riga qui è la coppia *sorgente + quale sua menzione*, e questa è
+            // la sua scrittura; non è la posizione nell'elenco, che cambia
+            // quando un'altra nota entra o esce.
+            let key = format!("{}#{n}", r.source.as_str());
+            *n += 1;
             UiNode::list_item(
                 r.source.page_name(),
                 r.context.clone().map(Text::from),
@@ -171,9 +195,7 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
                     serde_json::json!({ DOC: r.source.as_str() }),
                 )),
             )
-            // La chiave è l'identità della riga fra due ridisegni: il documento
-            // sorgente, non la sua posizione nell'elenco.
-            .with_key(r.source.as_str())
+            .with_key(key)
         })
         .collect();
 
@@ -223,8 +245,50 @@ mod tests {
             "il documento sta nel payload, non concatenato nell'id"
         );
         assert!(
-            json.contains(r#""key":"a/Nota.md""#),
+            json.contains(r#""key":"a/Nota.md#0""#),
             "ogni riga porta la propria identità fra due ridisegni"
+        );
+    }
+
+    /// Il contratto di [`UiNode`] vuole la chiave **unica fra i fratelli**, e
+    /// una nota che ne cita un'altra due volte produce due fratelli: prima che
+    /// l'ordinale entrasse nella chiave erano due righe con la stessa, e il
+    /// riconciliatore della shell ne riusava una sola — l'altra la ricostruiva
+    /// a ogni ridisegno, cioè a ogni salvataggio.
+    ///
+    /// Il banco guarda **le chiavi dei fratelli**, non la loro forma: se un
+    /// giorno l'identità di una riga si scrivesse in un altro modo, questo
+    /// resterebbe la domanda giusta.
+    #[test]
+    fn due_menzioni_dalla_stessa_nota_sono_due_righe_con_due_chiavi() {
+        let refs = vec![
+            BacklinkRef {
+                source: DocId::new("a/Nota.md"),
+                context: Some("il primo punto in cui la cita".into()),
+            },
+            BacklinkRef {
+                source: DocId::new("a/Nota.md"),
+                context: Some("il secondo, più sotto".into()),
+            },
+            BacklinkRef {
+                source: DocId::new("b/Altra.md"),
+                context: None,
+            },
+        ];
+        let UiKind::Stack { children, .. } = build_backlinks_view(&refs).kind else {
+            panic!("il pannello è una colonna");
+        };
+        let UiKind::List { items } = &children[1].kind else {
+            panic!("la seconda riga della colonna è l'elenco");
+        };
+        assert_eq!(items.len(), 3, "una riga per riferimento, non per nota");
+        let chiavi: std::collections::BTreeSet<&str> =
+            items.iter().filter_map(|n| n.key.as_deref()).collect();
+        assert_eq!(
+            chiavi.len(),
+            items.len(),
+            "chiavi dei fratelli: {:?} — devono essere tante quante le righe",
+            items.iter().map(|n| n.key.as_deref()).collect::<Vec<_>>()
         );
     }
 
