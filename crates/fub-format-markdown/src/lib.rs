@@ -357,6 +357,64 @@ mod tests {
         assert!(html.contains(">L&#39;ora del tè<"), "html: {html}");
     }
 
+    /// **Un blocco senza figli non si rende come un `<div>` vuoto**: il suo
+    /// contenuto sta negli `attrs`, e di lì esce.
+    ///
+    /// Il caso che si vede sempre, con tutto montato come lo monta l'app, è
+    /// l'HTML grezzo: `custom_kind::HTML` non ha un renderer registrato da
+    /// nessuno — e non deve averlo, perché cosa sia lecito eseguire lo decide la
+    /// sanitizzazione (5.3) — quindi cade nel degrado generico, che è questo. Il
+    /// `parse.rs` mette i byte in `attrs.html` e `blocks` resta vuoto; il
+    /// degrado rendeva i figli, cioè niente. Un `<div>` e un commento HTML
+    /// **sparivano dall'anteprima**, mentre nel file restavano — `serialize.rs`
+    /// la sua metà della stessa perdita l'aveva già chiusa, e questa era
+    /// rimasta indietro.
+    ///
+    /// Che il testo esca **escapato** è la metà che non cambia: resta dato, non
+    /// torna markup.
+    #[test]
+    fn un_blocco_senza_figli_non_perde_il_proprio_testo() {
+        let html = MarkdownProvider::new()
+            .render_html(
+                &parse("<div class=\"x\">ciao</div>\n"),
+                &RenderOptions::preview(),
+            )
+            .unwrap();
+        assert!(html.contains("class=\"block-html\""), "html: {html}");
+        assert!(
+            html.contains("&lt;div class=&quot;x&quot;&gt;ciao&lt;/div&gt;"),
+            "l'HTML grezzo è sparito dall'anteprima: {html}"
+        );
+        assert!(
+            !html.contains("<div class=\"x\">"),
+            "e non deve tornare markup: {html}"
+        );
+
+        // Il commento HTML, che è l'altro modo di scriverne uno.
+        let html = MarkdownProvider::new()
+            .render_html(&parse("<!-- nota per me -->\n"), &RenderOptions::preview())
+            .unwrap();
+        assert!(html.contains("nota per me"), "html: {html}");
+
+        // E un kind qualunque senza figli che porta il proprio sorgente: è la
+        // forma di una formula o di un diagramma quando il renderer che li
+        // disegna non c'è (spento, revocato, o fallito).
+        let doc = DocumentModel {
+            body: vec![Block::Custom {
+                custom_kind: custom_kind::MATH.into(),
+                attrs: serde_json::json!({ "source": "E = mc^2", "display": true }),
+                blocks: vec![],
+                anchor: None,
+                span: fub_abi::model::Span::new(0, 0),
+            }],
+            ..DocumentModel::empty(fub_abi::model::DocId::new("nota.md"))
+        };
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &RenderOptions::preview())
+            .unwrap();
+        assert!(html.contains("E = mc^2"), "html: {html}");
+    }
+
     #[test]
     fn renders_basic_formatting() {
         let doc = parse("Testo **grassetto** e *corsivo* e `codice`.");
