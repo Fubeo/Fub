@@ -643,7 +643,16 @@ impl Workspace {
         // "quali estensioni sono documenti" è una domanda sola (vedi
         // `CoreIndex::registry`).
         let registry = Arc::new(registry);
-        let root = root.as_ref();
+        // **La radice si fissa qui, una volta sola.** Tutto ciò che segue ci
+        // appende il proprio nome — le impostazioni, l'organizzazione, le
+        // bozze, i documenti, l'anagrafe, il registro: sei store, e cinque il
+        // path se lo calcolano adesso mentre il vault se lo ricalcola a ogni
+        // domanda. Con una radice relativa sarebbero sei file scritti in un
+        // posto e riletti da un altro, appena la cartella di lavoro del
+        // processo si sposta. Che questa riga **copra** il parametro non è
+        // stile: chi aggiungerà il settimo store non ha in mano nessun'altra
+        // `root` da passargli.
+        let root = &crate::vault::radice_assoluta(root.as_ref());
         let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(
             root,
             Arc::clone(&storage),
