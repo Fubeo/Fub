@@ -136,6 +136,50 @@ fn una_formula_esce_come_html_dentro_il_flusso() {
     assert!(!out.html.contains("language-math"), "html: {}", out.html);
 }
 
+/// **Un kind che nessuno disegna si legge crudo, non sparisce.**
+///
+/// È la seconda metà di `un_kind_prodotto_e_mai_disegnato_si_puo_contare`, che
+/// chiama `undrawn_kinds()` «il conto dei blocchi che l'utente leggerà crudo» —
+/// e per averlo scritto nessuno era andato a guardare *cosa* leggesse davvero.
+/// Leggeva un `<div>` vuoto: la regola aveva delimitato il recinto, il sorgente
+/// era uscito dal blocco di codice per entrare negli `attrs`, e il degrado
+/// generico del provider rendeva i **figli** — che un blocco così non ha.
+///
+/// La strada è quella vera: `render_preview`, cioè `compose`. Un kind senza
+/// renderer non entra nemmeno nel `match` dei rendering — `for_kind` non lo
+/// trova e il blocco finisce nella corsa che il provider rende. È lo stesso
+/// punto in cui atterra un renderer che **fallisce o pania**
+/// (`CustomRendering::Fallback`), e quel ramo il §9.3 lo chiama *degrado
+/// onesto*: prima cancellava la formula dell'utente.
+#[test]
+fn un_kind_senza_renderer_arriva_all_anteprima_col_suo_sorgente() {
+    let v = Vault::new();
+    v.put("f.md", "```math\nE = mc^2\n```\n");
+
+    let mut registry = FormatRegistry::new();
+    registry.register(MarkdownProvider::boxed()).unwrap();
+    let mut ws = Workspace::new(&v.root, registry);
+    ws.register_core_feature(BLOCKS_ID, "Blocchi")
+        .expect("dichiarato");
+    ws.register_syntax_rule(BLOCKS_ID, Box::new(MathRule))
+        .unwrap();
+    // Il renderer dei diagrammi c'è, quello delle formule no: il registro non è
+    // vuoto, quindi `compose` percorre il ramo lungo e non la scorciatoia di
+    // `renderers.is_empty()`.
+    ws.register_custom_renderer(BLOCKS_ID, Box::new(DiagramRenderer))
+        .unwrap();
+    ws.reindex().expect("reindex");
+
+    assert_eq!(ws.undrawn_kinds(), vec![custom_kind::MATH.to_string()]);
+    let out = preview(&ws, "f.md");
+    assert!(
+        out.html.contains("E = mc^2"),
+        "il sorgente della formula è sparito dall'anteprima: {}",
+        out.html
+    );
+    assert!(out.parts.is_empty(), "nessun renderer, nessuna parte");
+}
+
 #[test]
 fn levidenziato_arriva_dal_modello_e_non_sparisce_piu() {
     let v = Vault::new();
