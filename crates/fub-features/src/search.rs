@@ -460,7 +460,10 @@ pub struct SearchIndex {
     /// e da un modello la revisione del sorgente non si ricalcola. L'unico
     /// posto in cui questo indice la vede è la domanda del kernel, e questa
     /// mappa è il tempo che passa fra la domanda e la consegna: si riempie in
-    /// [`IndexProvider::up_to_date`] e si **consuma** documento per documento.
+    /// [`IndexProvider::up_to_date`] e si **consuma** documento per documento —
+    /// e per documento si **invalida**: una domanda nuova su un id sostituisce
+    /// la dichiarazione di prima e non tocca quelle degli altri, perché la
+    /// domanda arriva per fetta e due fette non si annullano a vicenda.
     /// Consumare e non consultare è il punto: un documento che arriva senza
     /// dichiarazione — perché qualcuno l'ha salvato a sessione aperta — non
     /// deve raccogliere la revisione che la domanda dell'avvio aveva lasciato
@@ -1582,9 +1585,25 @@ impl IndexProvider for SearchIndex {
     ///   stretto di com'è scritto.
     fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
         let mut announced = self.announced.lock().expect("mutex");
-        announced.clear();
         let mut current = Vec::new();
         for entry in entries {
+            // **La dichiarazione è per documento, e per documento si rifà.**
+            // Qui c'era un `clear()` in testa, ed era giusto finché la domanda
+            // arrivava una volta sola con il vault intero. Da quando il kernel
+            // la fa **per fetta** (`Workspace::plan_batch`) quel `clear()`
+            // trattava una mappa per-documento come il buffer di un giro: la
+            // domanda su una fetta si portava via le dichiarazioni della fetta
+            // prima, che stavano ancora aspettando la loro consegna, e quei
+            // documenti finivano indicizzati **senza** la revisione del
+            // sorgente — cioè da rileggere a ogni apertura, per sempre.
+            //
+            // Che oggi non si veda dipende da come le due fasi sono
+            // programmate: il chiamante di adesso consegna una fetta prima di
+            // chiedere della successiva. Ma è una proprietà del suo orario, non
+            // del contratto, e dalla 0119 pianificare e applicare sono due
+            // chiamate pubbliche apposta perché si possano sovrapporre.
+            // Togliere di mezzo l'assunzione costa questa riga.
+            announced.remove(&entry.id);
             let (EntryKind::Document, Some(revision)) = (entry.kind, entry.fingerprint.as_ref())
             else {
                 continue;
@@ -2505,6 +2524,61 @@ mod tests {
             "e alla riapertura si risponde SENZA che nessuno abbia aperto un file"
         );
         assert_eq!(search(&idx, "gatto").len(), 1, "e l'indice è ancora quello");
+    }
+
+    #[test]
+    fn una_fetta_non_annulla_le_dichiarazioni_di_quella_prima() {
+        // **Il giro dell'apertura come lo fa il kernel su un vault grande**: la
+        // domanda arriva per fetta (`Workspace::plan_batch`), e fra la domanda e
+        // la consegna il prestito passa di mano — dalla 0119 pianificare e
+        // applicare sono due chiamate pubbliche distinte, che un chiamante può
+        // sovrapporre. Qui le due domande stanno prima delle due consegne, che è
+        // l'ordine peggiore fra quelli che il contratto permette.
+        //
+        // Prima che questa riga esistesse `up_to_date` faceva `clear()` in
+        // testa: la seconda domanda si portava via la dichiarazione della prima,
+        // `a.md` finiva nell'indice senza la revisione del suo sorgente, e alla
+        // riapertura lo si rileggeva pur non essendo cambiato — a ogni apertura,
+        // per sempre, in silenzio.
+        let (_g, path) = tmp();
+        let mut host = MemoryHost::new();
+        let vault = [("a.md", "il gatto"), ("b.md", "il cane")];
+        {
+            let mut idx = open(&path, &mut host);
+            for (id, source) in vault {
+                assert!(
+                    idx.up_to_date(&[voce(id, Some(source))]).is_empty(),
+                    "il primo giro non sa niente"
+                );
+            }
+            for (id, source) in vault {
+                let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(id, source)));
+            }
+            idx.flush(&mut host).unwrap();
+        }
+
+        assert_eq!(
+            manifest_of(&host).sources.len(),
+            2,
+            "le revisioni dei sorgenti sono due quante le fette: quella della \
+             prima non è stata annullata dalla domanda della seconda"
+        );
+
+        let idx = open(&path, &mut host);
+        let mut gia: Vec<String> = idx
+            .up_to_date(&[
+                voce("a.md", Some("il gatto")),
+                voce("b.md", Some("il cane")),
+            ])
+            .iter()
+            .map(|d| d.to_string())
+            .collect();
+        gia.sort();
+        assert_eq!(
+            gia,
+            ["a.md", "b.md"],
+            "e alla riapertura nessuno dei due va riletto"
+        );
     }
 
     #[test]
