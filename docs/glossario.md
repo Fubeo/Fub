@@ -269,7 +269,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6081`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6088`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa

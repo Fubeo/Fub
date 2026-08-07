@@ -53,11 +53,12 @@
 //!
 //! [`enabled`]: Levels::enabled
 
+use crate::veleno::{Ricovero, RicoveroCondiviso};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 
 /// I gradini del log, dal silenzio al racconto di tutto.
 ///
@@ -164,14 +165,20 @@ pub struct Levels {
     /// cioè un formato dentro un formato — la cosa che `vaults.json` esiste per
     /// non fare. La domanda vera che qualcuno si pone è *voglio vedere tutto di
     /// questo componente*, e ha una risposta booleana.
-    verbose: RwLock<Vec<String>>,
+    ///
+    /// Sta in un [`RicoveroCondiviso`] e non in un `RwLock` nudo perché **questo è il
+    /// filtro di ogni callsite di `tracing`**: un `expect` qui trasformerebbe un
+    /// panico avvenuto altrove in un panico su *ogni riga di log successiva*,
+    /// cioè nel canale con cui ogni altro guasto si racconta. Vedi
+    /// [`crate::veleno`], e [`FileSink`] per l'altra metà della stessa strada.
+    verbose: RicoveroCondiviso<Vec<String>>,
 }
 
 impl Default for Levels {
     fn default() -> Levels {
         Levels {
             global: AtomicU8::new(Level::default() as u8),
-            verbose: RwLock::new(Vec::new()),
+            verbose: RicoveroCondiviso::new(Vec::new()),
         }
     }
 }
@@ -196,12 +203,12 @@ impl Levels {
 
     /// Sostituisce l'elenco dei target verbosi.
     pub fn set_verbose(&self, targets: Vec<String>) {
-        *self.verbose.write().expect("target verbosi") = targets;
+        *self.verbose.scrivi() = targets;
     }
 
     /// L'elenco dei target verbosi adesso.
     pub fn verbose(&self) -> Vec<String> {
-        self.verbose.read().expect("target verbosi").clone()
+        self.verbose.leggi().clone()
     }
 
     /// **Si scrive questa riga?**
@@ -218,11 +225,7 @@ impl Levels {
         if level > Level::Debug {
             return false;
         }
-        self.verbose
-            .read()
-            .expect("target verbosi")
-            .iter()
-            .any(|t| t == target)
+        self.verbose.leggi().iter().any(|t| t == target)
     }
 }
 
@@ -263,10 +266,32 @@ impl Sink for StderrSink {
 /// segnalazione — e ciò che serve a una segnalazione è *poco fa*, non *il mese
 /// scorso*. Cinque generazioni sarebbero state cinque volte il disco per una
 /// domanda che nessuno ha posto.
+///
+/// # E se il lucchetto del file si avvelena
+///
+/// È il caso peggiore di tutto il repo, e non per il file: **questo è il canale
+/// con cui ogni altro guasto si denuncia.** Un `.expect` qui vorrebbe dire che
+/// un panico avvenuto una volta sola dentro `write_line` trasforma ogni riga di
+/// log successiva in un panico — e la 0126 denuncia un bus avvelenato *con una
+/// riga di log*, la 0120 fa lo stesso per una custodia. Il meccanismo con cui i
+/// guasti si raccontano si toglierebbe di mezzo per primo, e ciò che resta è un
+/// guasto muto.
+///
+/// Quindi il lucchetto è un [`Ricovero`]: ci si riprende. Ciò che protegge è un
+/// file aperto e un contatore di byte — al peggio manca l'ultimo incremento, e
+/// una rotazione arriva una riga tardi.
+///
+/// **Dove si denuncia che è morto il canale con cui si denuncia?** Non con
+/// `tracing::error!`, che da qui rientrerebbe in questo stesso `write_line` sullo
+/// stesso thread: un cerchio, e con un prestito esclusivo già preso, un blocco.
+/// Si denuncia **nel file, direttamente**, con la guardia già in mano e saltando
+/// il collettore — è la sola strada che esce dal cerchio. Se il file non è
+/// aperto la riga si perde, e resta il conto di [`Ricovero::denunce`]: è meno,
+/// ma è osservabile da qualcuno.
 #[derive(Debug)]
 pub struct FileSink {
     path: Utf8PathBuf,
-    state: Mutex<Option<Open>>,
+    state: Ricovero<Option<Open>>,
 }
 
 /// Oltre questi byte il file ruota. Dieci mega: abbastanza per settimane al
@@ -288,11 +313,11 @@ impl FileSink {
     pub fn open(path: &Utf8Path) -> (FileSink, Option<String>) {
         let sink = FileSink {
             path: path.to_owned(),
-            state: Mutex::new(None),
+            state: Ricovero::new(None),
         };
         let warning = match sink.reopen() {
             Ok(open) => {
-                *sink.state.lock().expect("file di log") = Some(open);
+                *sink.state.prendi() = Some(open);
                 None
             }
             Err(e) => Some(format!("log: `{path}` non si apre: {e}")),
@@ -331,7 +356,26 @@ impl FileSink {
 
 impl Sink for FileSink {
     fn write_line(&self, line: &str) {
-        let mut state = self.state.lock().expect("file di log");
+        let mut state = self.state.prendi();
+        // Il canale si denuncia **dentro sé stesso**, prima della riga che
+        // qualcuno voleva scrivere: vedi la testa del tipo. `da_raccontare` è
+        // ciò che rende «una volta per incidente» vero senza che la porta debba
+        // sapere dove si racconta — e se il file non è aperto la denuncia si
+        // perde esattamente come la riga, che è la stessa perdita e non una in
+        // più.
+        let veleni = self.state.da_raccontare();
+        if veleni > 0 {
+            let avviso = compose(
+                crate::time::now_unix_millis(),
+                Level::Error,
+                "fub.kernel",
+                "il lucchetto del file di log si è avvelenato: qualcuno è morto \
+                 mentre scriveva. Il file è intatto e si continua a scrivere; \
+                 qualche riga può mancare.",
+                &format!(" volte={veleni}"),
+            );
+            scrivi_riga(state.as_mut(), &avviso);
+        }
         let Some(open) = state.as_mut() else { return };
         if open.written >= ROTATE_AT {
             match self.rotate() {
@@ -344,32 +388,36 @@ impl Sink for FileSink {
                 }
             }
         }
-        let Some(open) = state.as_mut() else { return };
-        if writeln!(open.file, "{line}").is_ok() {
-            open.written += line.len() as u64 + 1;
-        }
+        scrivi_riga(state.as_mut(), line);
+    }
+}
+
+/// L'**unico** posto da cui una riga entra nel file, e da cui il conto dei byte
+/// si muove. Anche la denuncia di un avvelenamento passa di qui: è ciò che le
+/// permette di essere scritta senza rientrare nel collettore.
+fn scrivi_riga(open: Option<&mut Open>, line: &str) {
+    let Some(open) = open else { return };
+    if writeln!(open.file, "{line}").is_ok() {
+        open.written += line.len() as u64 + 1;
     }
 }
 
 /// Il sink dei test: tiene le righe in memoria e le sa rileggere.
 #[derive(Debug, Default)]
 pub struct CapturingSink {
-    lines: Mutex<Vec<String>>,
+    lines: Ricovero<Vec<String>>,
 }
 
 impl CapturingSink {
     /// Le righe scritte finora, in ordine.
     pub fn lines(&self) -> Vec<String> {
-        self.lines.lock().expect("righe catturate").clone()
+        self.lines.prendi().clone()
     }
 }
 
 impl Sink for CapturingSink {
     fn write_line(&self, line: &str) {
-        self.lines
-            .lock()
-            .expect("righe catturate")
-            .push(line.into());
+        self.lines.prendi().push(line.into());
     }
 }
 
@@ -631,5 +679,83 @@ mod tests {
             "il file nuovo è nuovo: {}",
             corrente.len()
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Il veleno del canale che denuncia (0126 estesa, `crate::veleno`)
+    // -----------------------------------------------------------------------
+
+    /// Avvelena un lucchetto facendo paniare **dentro** un `catch_unwind` col
+    /// prestito in mano: è come lo produce la vita, e non serve un thread —
+    /// quindi non c'è niente che possa andare in blocco invece che in rosso.
+    ///
+    /// L'hook dei panici si mette a tacere per la durata del misfatto, o un
+    /// panico voluto stamperebbe la sua traccia e farebbe sembrare rotto un
+    /// banco verde.
+    fn avvelena(f: impl FnOnce()) {
+        let vecchio = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+        std::panic::set_hook(vecchio);
+    }
+
+    /// **Il canale con cui i guasti si denunciano sopravvive al proprio.**
+    ///
+    /// Col `.lock().expect("file di log")` di prima questo caso non falliva
+    /// «male»: paniava alla prima riga scritta dopo il misfatto, cioè faceva
+    /// esattamente ciò che l'app avrebbe fatto a ogni `tracing::error!`
+    /// successivo — e il primo `tracing::error!` a farne le spese sarebbe stato
+    /// quello con cui la 0126 denuncia un bus avvelenato.
+    #[test]
+    fn un_file_di_log_avvelenato_scrive_lo_stesso_e_lo_dice_nel_file() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("fub.log");
+        let (sink, warning) = FileSink::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        sink.write_line("prima del misfatto");
+
+        avvelena(|| {
+            let _guardia = sink.state.prendi();
+            panic!("qualcuno muore col file in mano");
+        });
+
+        sink.write_line("dopo il misfatto");
+        let scritto = std::fs::read_to_string(&path).expect("il file di log");
+        assert!(scritto.contains("dopo il misfatto"), "{scritto}");
+        // La denuncia sta **nel file**, non in un `tracing::error!` che da qui
+        // rientrerebbe: è la sola strada che esce dal cerchio.
+        assert!(
+            scritto.contains("il lucchetto del file di log si è avvelenato"),
+            "il canale non ha detto di essersi avvelenato: {scritto}"
+        );
+        assert_eq!(sink.state.denunce(), 1, "un incidente vale uno");
+
+        // E lo dice **una volta per incidente**: la riga dopo non la ripete.
+        sink.write_line("terza riga");
+        let scritto = std::fs::read_to_string(&path).expect("il file di log");
+        assert_eq!(
+            scritto.matches("si è avvelenato").count(),
+            1,
+            "la denuncia si ripete a ogni riga: {scritto}"
+        );
+    }
+
+    /// **Il filtro di ogni callsite sopravvive al proprio veleno.**
+    ///
+    /// È il gemello del caso qui sopra un piano più su: `Levels::enabled` gira
+    /// prima di *ogni* riga di `tracing`, e col `.expect("target verbosi")` di
+    /// prima un solo panico avvenuto tenendo l'elenco avrebbe reso paniante ogni
+    /// macro di log del processo, comprese quelle di tauri.
+    #[test]
+    fn un_filtro_avvelenato_risponde_lo_stesso() {
+        let levels = Levels::default();
+        levels.set_verbose(vec!["fub.versioning".into()]);
+        avvelena(|| {
+            let _guardia = levels.verbose.scrivi();
+            panic!("qualcuno muore tenendo l'elenco dei verbosi");
+        });
+        assert!(levels.enabled("fub.versioning", Level::Debug));
+        assert_eq!(levels.verbose(), vec!["fub.versioning".to_string()]);
+        assert_eq!(levels.verbose.denunce(), 1);
     }
 }

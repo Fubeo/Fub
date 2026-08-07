@@ -1,0 +1,402 @@
+//! **Un lucchetto del kernel sta dietro una porta, e questa porta si riprende.**
+//!
+//! È la [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md)
+//! applicata fuori da `bus.rs`, con la regola che la
+//! [0120](../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md)
+//! ha scritto per renderla decidibile: *la politica del veleno segue **cosa il
+//! lucchetto protegge**, non che specie di lucchetto è.*
+//!
+//! `Custodia` (in `fub-host`) risponde `Internal` a ogni chiamata, perché
+//! protegge un `Workspace` — uno stato che un panico a metà mutazione rende
+//! incredibile — e perché c'è qualcuno a cui rispondere. Qui non vale né l'una
+//! né l'altra:
+//!
+//! - ciò che questi lucchetti proteggono è un conto monotòno, un elenco di
+//!   stringhe, un file aperto col suo contatore di byte. Nessuno dei tre è
+//!   *mezzo mutato* da un panico: al peggio manca l'ultimo incremento;
+//! - **non c'è nessuno a cui rispondere.** `Sink::write_line` non rende niente,
+//!   `Levels::enabled` rende un `bool` che è una domanda e non un esito,
+//!   `JobBell::ring` rende `()`. «Rispondi di no» qui è «taci», e la 0126 ha già
+//!   misurato che tacere non è una politica.
+//!
+//! Quindi: **ci si riprende, si pulisce il veleno, e si conta.**
+//!
+//! # Perché la porta conta e non parla
+//!
+//! `Roster` (in `bus.rs`) scrive la sua riga di `tracing::error!` da sé. Questa
+//! porta **non può**, e non è una semplificazione: fra i suoi clienti c'è il
+//! collettore del log ([`crate::log`]). Un `tracing::error!` scritto dentro
+//! [`Ricovero::prendi`] mentre chi chiama è `FileSink::write_line` rientrerebbe
+//! nel collettore, che richiederebbe lo stesso lucchetto dallo stesso thread:
+//! non un difetto, un **blocco**. E dentro `Levels::enabled` sarebbe la stessa
+//! cosa un piano più su.
+//!
+//! Una porta che non sa chi la chiama non sa se parlare sia sicuro. Quindi la
+//! porta garantisce le due cose che valgono per tutti — *non pania mai*, *tiene
+//! il conto* — e **dove** raccontarlo lo sceglie il sito, che sa in che canale
+//! si trova. [`Ricovero::da_raccontare`] è il modo di dirlo una volta per
+//! incidente senza che la porta debba saperlo: `FileSink` lo usa per scrivere la
+//! riga **nel proprio file**, direttamente, saltando il collettore — che è
+//! l'unica risposta non circolare a *«dove si denuncia che è morto il canale con
+//! cui si denuncia?»*.
+//!
+//! # Perché tre tipi e non uno
+//!
+//! Perché i lucchetti che ci stanno sotto sono davvero diversi, ed è la premessa
+//! che la 0120 ha visto cadere a metà lavoro: **un `RwLock` non è «un `Mutex`
+//! con un permesso in più»**. `Mutex<T>` è `Sync` per ogni `T: Send`;
+//! `RwLock<T>` lo è solo per `T: Send + Sync`, perché presta `&T` a più thread
+//! insieme. `Workspace::sources` tiene dei `Box<dyn SourceBacking>` — `Sync` non
+//! è, e non deve diventarlo per una tabella che un thread solo tocca — quindi il
+//! tipo su `RwLock` là non ci entra, e il tipo su `Mutex` nel filtro del log
+//! metterebbe in fila ogni callsite di `tracing`. Da qui [`Ricovero`] e
+//! [`RicoveroCondiviso`], che non si sostituiscono.
+//!
+//! Il terzo è [`Condizione`], e non ha un lucchetto suo: **è un [`Ricovero`] con
+//! una campana sopra**, e la sua politica è quella, non una seconda copia.
+//! Esiste come tipo perché [`std::sync::Condvar`] è definita su `MutexGuard` e
+//! su niente altro — `wait` restituisce la stessa guardia che ha ricevuto. È la
+//! ragione `Condizione` dell'allowlist di `un_lucchetto_solo.rs`, che fin qui
+//! era **un commento** e qui diventa un tipo.
+
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{
+    Condvar, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
+};
+
+/// **Un lucchetto che si riprende**, per un dato che un panico a metà non rende
+/// incredibile.
+///
+/// `.lock()` su un `Ricovero` non esiste, quindi non compila: si passa da
+/// [`prendi`](Ricovero::prendi), e la domanda «cosa si fa se è avvelenato?» ha
+/// una risposta sola, scritta una volta.
+#[derive(Debug, Default)]
+pub struct Ricovero<T> {
+    inner: Mutex<T>,
+    /// Quante volte questo lucchetto si è ripreso. È **del lucchetto** e non
+    /// del processo: due sink aperti sono due stati, e sapere che uno si è
+    /// avvelenato non dice niente dell'altro.
+    denunce: AtomicU32,
+    /// Quante ne sono già state raccontate. Vedi [`Ricovero::da_raccontare`].
+    raccontate: AtomicU32,
+}
+
+impl<T> Ricovero<T> {
+    /// Il lucchetto attorno a `dato`.
+    pub const fn new(dato: T) -> Ricovero<T> {
+        Ricovero {
+            inner: Mutex::new(dato),
+            denunce: AtomicU32::new(0),
+            raccontate: AtomicU32::new(0),
+        }
+    }
+
+    /// Il prestito. Non pania: se è avvelenato si riprende.
+    pub fn prendi(&self) -> MutexGuard<'_, T> {
+        match self.inner.lock() {
+            Ok(guardia) => guardia,
+            Err(veleno) => self.riprendi(veleno),
+        }
+    }
+
+    /// Quante volte si è ripreso, da sempre.
+    pub fn denunce(&self) -> u32 {
+        self.denunce.load(Ordering::Relaxed)
+    }
+
+    /// Gli avvelenamenti che **nessuno ha ancora raccontato** — e che da adesso
+    /// risultano raccontati.
+    ///
+    /// È ciò che rende «una volta per incidente» vero senza che la porta debba
+    /// sapere *dove* si racconta: lo sa il sito, che sa in che canale si trova.
+    /// Zero è il caso normale, e un sito che non chiama mai questo metodo
+    /// degrada in silenzio col conto di [`denunce`](Ricovero::denunce) come sola
+    /// traccia — il che va bene finché è **scritto** che è così.
+    pub fn da_raccontare(&self) -> u32 {
+        let denunce = self.denunce.load(Ordering::Relaxed);
+        denunce.saturating_sub(self.raccontate.swap(denunce, Ordering::Relaxed))
+    }
+
+    /// La politica, in un posto solo: **riprenditi, pulisci, conta.**
+    ///
+    /// `clear_poison` fa sì che il conto sia *per avvelenamento* e non per
+    /// sempre: un secondo panico è un secondo incidente e vale due.
+    /// È **generica su cosa il veleno porta dentro** perché i tre modi di
+    /// prendere questo lucchetto ne portano due: `lock` e `Condvar::wait_while`
+    /// una guardia, `Condvar::wait_timeout_while` una guardia e l'esito del
+    /// tempo. [`Condizione`] ci passa dentro, ed è ciò che le fa ereditare
+    /// questa politica invece di riscriverla.
+    #[cold]
+    fn riprendi<V>(&self, veleno: PoisonError<V>) -> V {
+        self.inner.clear_poison();
+        self.denunce.fetch_add(1, Ordering::Relaxed);
+        veleno.into_inner()
+    }
+}
+
+/// **Lo stesso, per un dato che si legge molto più di quanto si scriva.**
+///
+/// Un `RwLock` e non un `Mutex` **non** è «un `Ricovero` con un permesso in
+/// più»: è la premessa che la 0120 ha visto cadere a metà lavoro, perché
+/// `Mutex<T>` è `Sync` per ogni `T: Send` mentre `RwLock<T>` lo è solo per
+/// `T: Send + Sync` — presta `&T` a più thread insieme. Quindi i due tipi non si
+/// sostituiscono, e ce ne vogliono due: `Workspace::sources` tiene dei
+/// `Box<dyn SourceBacking>`, che `Sync` non è e non deve diventarlo per una
+/// tabella che un thread solo tocca.
+///
+/// Qui il cliente è uno e la ragione è misurata: [`crate::log::Levels`] è il
+/// filtro di **ogni** callsite di `tracing`, e metterli in fila costerebbe a chi
+/// non chiede niente.
+#[derive(Debug, Default)]
+pub struct RicoveroCondiviso<T> {
+    inner: RwLock<T>,
+    denunce: AtomicU32,
+}
+
+impl<T> RicoveroCondiviso<T> {
+    /// Il lucchetto attorno a `dato`.
+    pub const fn new(dato: T) -> RicoveroCondiviso<T> {
+        RicoveroCondiviso {
+            inner: RwLock::new(dato),
+            denunce: AtomicU32::new(0),
+        }
+    }
+
+    /// Il prestito condiviso. Non pania: se è avvelenato si riprende.
+    pub fn leggi(&self) -> RwLockReadGuard<'_, T> {
+        match self.inner.read() {
+            Ok(guardia) => guardia,
+            Err(veleno) => self.riprendi(veleno),
+        }
+    }
+
+    /// Il prestito esclusivo. Non pania: se è avvelenato si riprende.
+    pub fn scrivi(&self) -> RwLockWriteGuard<'_, T> {
+        match self.inner.write() {
+            Ok(guardia) => guardia,
+            Err(veleno) => self.riprendi(veleno),
+        }
+    }
+
+    /// Quante volte si è ripreso, da sempre.
+    pub fn denunce(&self) -> u32 {
+        self.denunce.load(Ordering::Relaxed)
+    }
+
+    #[cold]
+    fn riprendi<V>(&self, veleno: PoisonError<V>) -> V {
+        self.inner.clear_poison();
+        self.denunce.fetch_add(1, Ordering::Relaxed);
+        veleno.into_inner()
+    }
+}
+
+/// **Un lucchetto che si riprende, e una condizione da aspettarci sopra.**
+///
+/// Stessa politica del [`Ricovero`], e un `Mutex` al posto del `RwLock` per la
+/// ragione scritta in testa al modulo: la `Condvar` restituisce la guardia che
+/// ha ricevuto, e la guardia di un `RwLock` non si mette in attesa.
+#[derive(Debug, Default)]
+pub struct Condizione<T> {
+    stato: Ricovero<T>,
+    campana: Condvar,
+}
+
+impl<T> Condizione<T> {
+    /// Il lucchetto attorno a `dato`, con la sua campana.
+    pub const fn new(dato: T) -> Condizione<T> {
+        Condizione {
+            stato: Ricovero::new(dato),
+            campana: Condvar::new(),
+        }
+    }
+
+    /// Prende lo stato. Non pania: se è avvelenato si riprende.
+    pub fn prendi(&self) -> MutexGuard<'_, T> {
+        self.stato.prendi()
+    }
+
+    /// Cambia lo stato e **sveglia tutti**.
+    ///
+    /// `notify_all` e non `notify_one`: chi aspetta una condizione può essere
+    /// più d'uno, e un fatto già avvenuto non si ripete. Svegliarne uno solo
+    /// lascerebbe gli altri fermi davanti a qualcosa che è già successo — che è
+    /// il genere di attesa che non scade mai.
+    pub fn cambia(&self, f: impl FnOnce(&mut T)) {
+        f(&mut self.prendi());
+        self.campana.notify_all();
+    }
+
+    /// Aspetta finché `ancora` resta vero. Non pania: se il lucchetto si
+    /// avvelena mentre si aspetta, si riprende e continua.
+    pub fn aspetta<'a>(
+        &'a self,
+        stato: MutexGuard<'a, T>,
+        ancora: impl FnMut(&mut T) -> bool,
+    ) -> MutexGuard<'a, T> {
+        match self.campana.wait_while(stato, ancora) {
+            Ok(guardia) => guardia,
+            Err(veleno) => self.stato.riprendi(veleno),
+        }
+    }
+
+    /// Come [`aspetta`](Condizione::aspetta), ma non oltre `entro`. La guardia
+    /// torna comunque: chi chiama guarda lo stato e decide se era il tempo o il
+    /// fatto.
+    pub fn aspetta_o<'a>(
+        &'a self,
+        stato: MutexGuard<'a, T>,
+        entro: std::time::Duration,
+        ancora: impl FnMut(&mut T) -> bool,
+    ) -> MutexGuard<'a, T> {
+        match self.campana.wait_timeout_while(stato, entro, ancora) {
+            Ok((guardia, _scaduto)) => guardia,
+            Err(veleno) => self.stato.riprendi(veleno).0,
+        }
+    }
+
+    /// Quante volte si è ripreso, da sempre. È il conto del [`Ricovero`] che sta
+    /// sotto: la politica è **una sola**, e questa è la prova che non è stata
+    /// riscritta.
+    pub fn denunce(&self) -> u32 {
+        self.denunce_di_sotto()
+    }
+
+    fn denunce_di_sotto(&self) -> u32 {
+        self.stato.denunce()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::sync::Arc;
+
+    /// Avvelena `f` facendo paniare **dentro** un `catch_unwind`, col prestito
+    /// in mano: è come lo produce la vita, e non serve un thread.
+    ///
+    /// L'hook dei panici si mette a tacere per la durata del misfatto, o un
+    /// panico voluto stamperebbe la sua traccia e farebbe sembrare rotto un
+    /// banco verde (la stessa cautela di `un_lucchetto_solo.rs`).
+    fn avvelena(f: impl FnOnce()) {
+        let vecchio = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let _ = catch_unwind(AssertUnwindSafe(f));
+        std::panic::set_hook(vecchio);
+    }
+
+    #[test]
+    fn un_ricovero_avvelenato_presta_lo_stesso_e_conta() {
+        let r = Ricovero::new(vec!["a".to_string()]);
+        avvelena(|| {
+            let _g = r.prendi();
+            panic!("qualcuno muore col prestito in mano");
+        });
+        // Le due prove insieme: **non pania** (se paniasse il test fallirebbe
+        // qui) e ciò che c'era è ancora là.
+        assert_eq!(r.prendi().len(), 1);
+        r.prendi().push("b".into());
+        assert_eq!(r.prendi().len(), 2);
+        assert_eq!(
+            r.denunce(),
+            1,
+            "un incidente vale uno, non uno per chiamata"
+        );
+    }
+
+    /// Il gemello su `RwLock`, e serve perché è **un altro tipo**: la 0120 ha
+    /// visto cadere la premessa che un `RwLock` fosse «un `Mutex` con un
+    /// permesso in più», e due tipi si rompono separatamente. Qui si prova anche
+    /// il verso che il `Mutex` non ha: **un lettore non avvelena**, quindi il
+    /// misfatto va fatto col prestito esclusivo.
+    #[test]
+    fn un_ricovero_condiviso_avvelenato_presta_lo_stesso_e_conta() {
+        let r = RicoveroCondiviso::new(vec!["a".to_string()]);
+        avvelena(|| {
+            let _g = r.scrivi();
+            panic!("qualcuno muore col prestito esclusivo in mano");
+        });
+        assert_eq!(r.leggi().len(), 1);
+        r.scrivi().push("b".into());
+        assert_eq!(r.leggi().len(), 2);
+        assert_eq!(r.denunce(), 1);
+    }
+
+    #[test]
+    fn un_secondo_incidente_vale_due() {
+        let r = Ricovero::new(0u32);
+        for _ in 0..2 {
+            avvelena(|| {
+                let _g = r.prendi();
+                panic!("boom");
+            });
+            // Prendere il prestito è ciò che pulisce il veleno: senza questa
+            // riga il secondo panico troverebbe il lucchetto già sporco e
+            // `clear_poison` non avrebbe niente da dire.
+            drop(r.prendi());
+        }
+        assert_eq!(r.denunce(), 2);
+    }
+
+    #[test]
+    fn si_racconta_una_volta_per_incidente() {
+        let r = Ricovero::new(0u32);
+        assert_eq!(
+            r.da_raccontare(),
+            0,
+            "senza incidenti non c'è niente da dire"
+        );
+        avvelena(|| {
+            let _g = r.prendi();
+            panic!("boom");
+        });
+        drop(r.prendi());
+        assert_eq!(r.da_raccontare(), 1);
+        assert_eq!(
+            r.da_raccontare(),
+            0,
+            "raccontarlo due volte è raccontarne due"
+        );
+        assert_eq!(r.denunce(), 1, "il conto totale non si consuma");
+    }
+
+    #[test]
+    fn una_condizione_avvelenata_sveglia_lo_stesso() {
+        let c = Arc::new(Condizione::new(0u64));
+        avvelena(|| {
+            let _g = c.prendi();
+            panic!("qualcuno muore tenendo la condizione");
+        });
+        // Chi aspetta parte **prima** che il fatto avvenga, e il fatto lo
+        // produce questo thread: la corsa si costruisce, non si aspetta.
+        let sveglia = {
+            let c = Arc::clone(&c);
+            std::thread::spawn(move || {
+                let stato = c.prendi();
+                *c.aspetta(stato, |q| *q == 0)
+            })
+        };
+        c.cambia(|q| *q += 1);
+        assert_eq!(
+            sveglia.join().expect("chi aspettava è arrivato in fondo"),
+            1
+        );
+        assert_eq!(c.denunce(), 1);
+    }
+
+    #[test]
+    fn una_condizione_avvelenata_scade_lo_stesso() {
+        let c = Condizione::new(7u64);
+        avvelena(|| {
+            let _g = c.prendi();
+            panic!("boom");
+        });
+        let stato = c.prendi();
+        // Nessuno cambierà lo stato: si prova che l'attesa **torna** invece di
+        // paniare sul veleno, e che torna col valore che c'era.
+        let fuori = c.aspetta_o(stato, std::time::Duration::from_millis(1), |q| *q == 7);
+        assert_eq!(*fuori, 7);
+        assert_eq!(c.denunce(), 1);
+    }
+}

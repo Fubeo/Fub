@@ -80,6 +80,7 @@ pub mod time;
 pub mod transfer;
 mod undo;
 pub mod vault;
+pub mod veleno;
 pub mod viewstate;
 pub mod workspace;
 
@@ -103,6 +104,7 @@ pub use storage::{update_atomic, write_atomic};
 pub use storage::{DirEntry, EntryKind, FsStorage, MemStorage, Stat, VaultStorage};
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
+pub use veleno::{Condizione, Ricovero, RicoveroCondiviso};
 pub use viewstate::ViewStates;
 pub use workspace::{
     new_doc_id, valid_doc_id, Apertura, GraphUpdate, Indicizzazione, ParsedBatch, ParsedChange,

@@ -810,3 +810,125 @@ fn l_elenco_delle_porte_e_quello_dell_enum() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// La rete che il veleno disfaceva da sotto
+// ---------------------------------------------------------------------------
+
+/// Una sorgente di import che **muore leggendo**, e non subito: il prologo lo
+/// consegna, perché `open_source` lo legge *fuori* dal lucchetto e un panico là
+/// non avvelenerebbe niente. Il misfatto va dove conta — dentro
+/// `OpenSources::read`, col prestito della tabella in mano.
+struct SorgenteCheMuoreLeggendo;
+
+impl fub_kernel::transfer::SourceBacking for SorgenteCheMuoreLeggendo {
+    fn read_at(&mut self, offset: u64, _len: u32) -> Result<Vec<u8>, PluginError> {
+        // Il prologo lo legge `open_source` **fuori** dal lucchetto: morire là
+        // non avvelenerebbe niente, e questo banco proverebbe qualcos'altro.
+        if offset == 0 {
+            return Ok(b"FUB1 questo e' il prologo".to_vec());
+        }
+        panic!("la sorgente muore mentre il kernel tiene la tabella dei prestiti")
+    }
+
+    fn len(&self) -> u64 {
+        512
+    }
+}
+
+/// Un importer che legge la sorgente a pezzi: è il modo in cui il panico della
+/// sorgente arriva sotto il lucchetto, perché `HostApi::read_source` passa da
+/// `Workspace::read_open_source`.
+struct ImporterCheLegge;
+
+impl fub_abi::transfer::ImportProvider for ImporterCheLegge {
+    fn can_handle(&self, source: &fub_abi::transfer::ImportSource) -> bool {
+        source.prologue().starts_with(b"FUB1")
+    }
+
+    fn import(
+        &mut self,
+        source: &fub_abi::transfer::ImportSource,
+        _request: &fub_abi::transfer::ImportRequest,
+        host: &mut dyn HostApi,
+    ) -> Result<fub_abi::transfer::ImportReport, PluginError> {
+        let handle = match &source.content {
+            fub_abi::transfer::SourceContent::Streamed(s) => s.handle,
+            fub_abi::transfer::SourceContent::Bytes(_) => unreachable!("è a handle"),
+        };
+        host.read_source(handle, 16, 16)?;
+        unreachable!("la sorgente muore prima di rispondere")
+    }
+}
+
+/// **Una sorgente che muore non porta con sé la tabella delle sorgenti.**
+///
+/// È il caso che questo file esisteva già per presidiare — *un provider che
+/// pania costa la chiamata, non il vault* (0032) — visto dal lato che la rete
+/// non poteva vedere: il `catch_unwind` prende il panico, ma il **veleno resta**
+/// sul lucchetto che il panico ha attraversato. Coi quattro
+/// `.expect("le sorgenti aperte non sono avvelenate")` di prima, da quel momento
+/// ogni `open_source`, `close_source`, `read_source` e `source_len` era un
+/// panico — sotto il prestito esclusivo del workspace, cioè la 0120 a valle e un
+/// vault irraggiungibile fino al riavvio. La rete c'era e veniva disfatta da
+/// sotto, una chiamata dopo.
+#[test]
+fn una_sorgente_che_muore_leggendo_non_porta_con_se_la_tabella() {
+    let (_dir, mut ws) = banco();
+    ws.register_import_provider("test.mina", Box::new(ImporterCheLegge))
+        .expect("registrato");
+
+    let sorgente = ws
+        .open_source("mina.fub", None, Box::new(SorgenteCheMuoreLeggendo))
+        .expect("aperta");
+
+    // L'hook dei panici si tace per la durata del misfatto, o un panico voluto
+    // stamperebbe la sua traccia e farebbe sembrare rotto un banco verde.
+    // **Il `catch_unwind` è qui e non nel kernel, ed è una zona cieca misurata.**
+    // Le tredici porte di `safety::Gate` coprono comandi, view, handler, indici,
+    // formati, regole di sintassi, renderer, servizi e job — e **non** l'import
+    // né l'export: `Workspace::import` chiama il provider nudo. Il panico di
+    // questo banco srotolerebbe quindi fino a chi ha chiesto l'import, che è una
+    // metà mancante della 0032 e non di questa riga; qui si prende come lo
+    // prenderebbe la rete, perché ciò che si sta provando è **cosa resta dopo**:
+    // il veleno sopravvive al panico comunque, e la rete non lo vede.
+    //
+    // L'hook si tace per la durata del misfatto, o un panico voluto stamperebbe
+    // la sua traccia e farebbe sembrare rotto un banco verde.
+    let vecchio = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let esito = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ws.import(&sorgente, &fub_abi::transfer::ImportRequest::apply())
+    }));
+    std::panic::set_hook(vecchio);
+    assert!(esito.is_err(), "la sorgente doveva morire leggendo");
+
+    // Da qui in poi ogni riga era un panico. Le quattro porte della tabella,
+    // tutte e quattro, perché è il conto che il difetto misurava.
+    let handle = match &sorgente.content {
+        fub_abi::transfer::SourceContent::Streamed(s) => s.handle,
+        fub_abi::transfer::SourceContent::Bytes(_) => unreachable!("è a handle"),
+    };
+    assert_eq!(
+        ws.source_len(handle),
+        Some(512),
+        "la tabella risponde ancora"
+    );
+    let seconda = ws
+        .open_source(
+            "sana.fub",
+            None,
+            Box::new(fub_kernel::transfer::MemorySource(b"FUB1 sana".to_vec())),
+        )
+        .expect("una sorgente sana si apre dopo che un'altra è morta");
+    ws.close_source(handle);
+    assert_eq!(
+        ws.source_len(handle),
+        None,
+        "e si chiude: la tabella è viva, non solo leggibile"
+    );
+    drop(seconda);
+
+    // E il vault, che è la proprietà di questo file.
+    il_vault_risponde_ancora(&mut ws);
+}
