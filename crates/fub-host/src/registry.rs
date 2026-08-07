@@ -353,6 +353,19 @@ impl BundleRegistry {
         self.mount(bundle.as_ref(), ws)
     }
 
+    /// **Sa montare questo id?** — cioè: è fra i conosciuti, o è già montato.
+    ///
+    /// È la sola metà di [`enable`](BundleRegistry::enable) che risponde senza
+    /// il workspace, e ha un nome suo perché qualcuno la chiede **prima** di
+    /// scrivere: chi accende un componente (`Host::set_plugin_enabled`) mette
+    /// la riga in `plugins.disabled` per prima, e un id inventato non deve
+    /// arrivare a quella scrittura — non è un montaggio andato storto, è una
+    /// domanda mal posta, e le domande mal poste si respingono prima di
+    /// cambiare qualcosa e non dopo.
+    pub fn knows(&self, id: &str) -> bool {
+        self.mounted.iter().any(|m| m.id == id) || self.known.iter().any(|b| b.manifest().id == id)
+    }
+
     /// **Il corpo di un job.** Chi drena `take_pending_jobs` sa a quale plugin
     /// chiederlo (è il campo che la
     /// [0028](../../../docs/decisions/0028-come-un-componente-smette.md) ha

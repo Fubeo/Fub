@@ -359,6 +359,141 @@ fn accendere_un_componente_che_non_esiste_e_un_errore_e_non_un_silenzio() {
     );
 }
 
+/// Gli id che il file del vault dichiara spenti, **come li vede chi legge**.
+fn spenti(host: &Host) -> Vec<String> {
+    host.with_session(None, |s| {
+        fub_host::settings::disabled_plugins(&s.workspace().read().unwrap())
+    })
+    .expect("aperto")
+}
+
+/// **Se la riga non si scrive, il componente non si spegne.**
+///
+/// Il difetto è scritto al contrario: si smontava per primo e si scriveva
+/// `plugins.disabled` per ultimo, quindi una scrittura che non riusciva
+/// lasciava il componente smontato *adesso* e acceso *nel file* — cioè uno
+/// stato che alla prima riapertura si disfa da sé, senza dire niente a
+/// nessuno. Adesso la mossa che può fallire sta davanti: `unmount` non
+/// fallisce — raccoglie i guasti del commiato e li rende, ma smonta comunque —
+/// quindi delle due metà solo una ha un modo di andare storta, e sta prima.
+///
+/// Il guasto è **iniettato, non aspettato**: al posto di `.fub/settings.json`
+/// c'è una cartella, e uno store che non ha potuto leggere il file del vault
+/// non lo sovrascrive (è il cancello `vault_readable`, §20.2). Ogni scrittura
+/// d'impostazione fallisce, sempre, senza corse e senza attese.
+#[test]
+fn cio_che_il_file_non_ha_accettato_non_resta_spento_in_memoria() {
+    let v = Vault::new();
+    std::fs::create_dir_all(v.root.join(".fub").join("settings.json")).expect("la cartella");
+
+    let host = headless();
+    host.open(&v.root)
+        .expect("un file di impostazioni illeggibile non impedisce di aprire");
+    assert!(dichiarati(&host).contains(&"fub.stats".to_string()));
+
+    let errore = host
+        .set_plugin_enabled(None, "fub.stats", false)
+        .expect_err("la riga non si scrive, e lo spegnimento non si finge");
+
+    assert!(
+        dichiarati(&host).contains(&"fub.stats".to_string()),
+        "spento in memoria e acceso nel file è lo stato che non deve esistere: \
+         se la riga non si è scritta, il componente è ancora montato ({errore})"
+    );
+    let inventario = host.bundles(None).expect("aperto");
+    assert!(
+        inventario
+            .iter()
+            .find(|b| b.id == "fub.stats")
+            .expect("resta fra i conosciuti")
+            .mounted,
+        "e l'inventario dice la stessa cosa del kernel"
+    );
+}
+
+const ROTTO: &str = "test.non-si-monta";
+
+/// Un bundle che **non si monta**, e che lo dichiara nel manifest: una major
+/// del contratto che questo host non parla è il primo dei quattro passi di
+/// `mount`, e cade sempre. Il guasto è costruito, non atteso.
+struct BundleCheNonSiMonta;
+
+impl fub_host::registry::Bundle for BundleCheNonSiMonta {
+    fn manifest(&self) -> fub_abi::traits::PluginManifest {
+        let mut manifest = fub_abi::traits::PluginManifest::core(ROTTO, "Non si monta");
+        manifest.abi_version = "99.0.0".to_string();
+        manifest
+    }
+
+    fn plugin(&self) -> Box<dyn fub_abi::traits::Plugin> {
+        unreachable!("il montaggio si ferma alla versione del contratto")
+    }
+
+    fn register(&self, _ws: &mut fub_kernel::Workspace) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// **Accendere scrive ciò che l'utente vuole, anche se il montaggio non
+/// riesce.**
+///
+/// È l'altra metà della voce, e l'unica in cui l'ordine è una scelta: qui le
+/// mosse che possono fallire sono due, la scrittura e il montaggio. La riga va
+/// per prima perché `plugins.disabled` è ciò che l'utente **vuole** — non a
+/// caso non è scrivibile da un programma — e non lo specchio di ciò che è
+/// montato adesso; e perché «scritto come acceso, non montato» è lo stato che
+/// ogni avvio produce quando un bundle non si monta (`mount.rs` scrive
+/// l'errore nel log e tira avanti), quindi il prossimo avvio ci riprova. Con
+/// l'ordine vecchio, invece, il gesto dell'utente veniva dimenticato: il
+/// montaggio falliva, la riga restava fra gli spenti, e alla riapertura del
+/// vault non ci provava più nessuno.
+#[test]
+fn accendere_scrive_l_intenzione_anche_quando_il_montaggio_non_riesce() {
+    let v = Vault::new();
+    let host = headless();
+    host.open(&v.root).expect("si apre");
+    host.with_session(None, |s| {
+        s.bundles()
+            .write()
+            .unwrap()
+            .remember(std::sync::Arc::new(BundleCheNonSiMonta));
+    })
+    .expect("aperto");
+
+    // Prima si spegne — ed è un no-op sul montaggio, perché montato non lo è
+    // mai stato: quello che conta è la riga che entra nel file.
+    host.set_plugin_enabled(None, ROTTO, false)
+        .expect("si spegne");
+    assert!(spenti(&host).contains(&ROTTO.to_string()));
+
+    // E poi si riaccende, e il montaggio non riesce. L'errore si dice — non si
+    // finge che sia acceso — ma la riga se n'è andata lo stesso.
+    let errore = host
+        .set_plugin_enabled(None, ROTTO, true)
+        .expect_err("un contratto che questo host non parla non si monta");
+    assert!(
+        matches!(errore, PluginError::Unserved(_)),
+        "non è un difetto di nessuno: questo host non parla quel contratto ({errore})"
+    );
+    assert!(
+        !spenti(&host).contains(&ROTTO.to_string()),
+        "il montaggio è fallito, ma «accendilo» era la richiesta: {:?}",
+        spenti(&host)
+    );
+
+    // E sta **sul disco**, che è il punto della voce: riaperto il vault, la
+    // riga non è tornata indietro.
+    host.close_vault(&v.root).expect("chiuso");
+    let host = headless();
+    host.open(&v.root).expect("si riapre");
+    assert!(
+        !spenti(&host).contains(&ROTTO.to_string()),
+        "il disco non deve restare indietro rispetto a ciò che l'utente ha \
+         chiesto: {:?}",
+        spenti(&host)
+    );
+}
+
 /// Il livello **macchina** è uno solo, e vive fuori dai vault: è la metà che
 /// prima non esisteva affatto, e la ragione per cui il registro dei vault non
 /// poteva nascere prima di questa voce.
