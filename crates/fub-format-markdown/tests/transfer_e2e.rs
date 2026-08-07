@@ -432,6 +432,95 @@ fn a_single_document_target_produces_exactly_one_artifact() {
     assert!(out.contains("# Beta\n"));
 }
 
+/// **In una concatenazione un frontmatter non è un frontmatter**, e ciò che ne
+/// resta non deve cambiare significato per il posto in cui è finito.
+///
+/// Un `---` in testa a un file apre i metadati; in mezzo a un documento è un
+/// divisore orizzontale, e la riga dopo — `titolo: X` — diventa il testo di
+/// un'intestazione setext chiusa dal `---` di chiusura. Copiare la testa dov'era
+/// non perdeva byte: ne cambiava il senso, che è peggio, perché il file uscito
+/// *sembra* giusto.
+///
+/// # Una premessa del difetto era falsa, e sembrava vera
+///
+/// Diceva «dal secondo documento in poi». Sono **tutti**, primo compreso: prima
+/// di ogni corpo va un `# Nome`, quindi il frontmatter non è mai in testa
+/// nemmeno per il primo. La premessa sembrava vera perché la si legge dal *modo
+/// in cui si concatena* — il primo arriva per primo — invece che da *cosa rende
+/// un frontmatter un frontmatter*, che è stare al byte zero.
+#[test]
+fn in_un_documento_unico_il_frontmatter_resta_metadato_e_non_diventa_un_divisore() {
+    let (_g, ws) = vault();
+    let report = ws
+        .export(&ExportRequest::new(
+            TARGET_SINGLE,
+            ExportSelection::Folder("Progetti".to_string()),
+        ))
+        .expect("export");
+    let out = text(
+        artifact(&report, "export.md")
+            .as_bytes()
+            .expect("in memoria"),
+    );
+
+    // I byte dei metadati ci sono tutti, per tutt'e due le note.
+    assert_eq!(
+        out.matches("tipo: progetto").count(),
+        2,
+        "il documento unico ha perso dei metadati:\n{out}"
+    );
+
+    // E non sono diventati sintassi: ciò che li porta è un recinto, quindi il
+    // modello del documento uscito li vede come **codice**, non come un divisore
+    // seguito da un'intestazione.
+    let m = modello(out, "export.md");
+    let recinti: Vec<&String> = m
+        .body
+        .iter()
+        .filter_map(|b| match b {
+            Block::CodeBlock { lang, code, .. } if lang.as_deref() == Some("yaml") => Some(code),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        recinti.len(),
+        2,
+        "i due frontmatter non sono due blocchi yaml:\n{out}"
+    );
+    for r in recinti {
+        assert!(r.contains("tipo: progetto"), "recinto: {r:?}");
+    }
+    assert_eq!(
+        m.body
+            .iter()
+            .filter(|b| matches!(b, Block::ThematicBreak { .. }))
+            .count(),
+        1,
+        "l'unico divisore ammesso è quello che separa i due documenti:\n{out}"
+    );
+
+    // L'altra metà dell'opzione: senza metadati non ne esce nessuno, ed è ciò
+    // che rende la bandiera una scelta invece di una parola.
+    let senza = ws
+        .export(
+            &ExportRequest::new(
+                TARGET_SINGLE,
+                ExportSelection::Folder("Progetti".to_string()),
+            )
+            .with_options(serde_json::json!({ "frontmatter": false })),
+        )
+        .expect("export");
+    let out = text(
+        artifact(&senza, "export.md")
+            .as_bytes()
+            .expect("in memoria"),
+    );
+    assert!(
+        !out.contains("tipo: progetto"),
+        "«senza metadati» ne ha lasciati:\n{out}"
+    );
+}
+
 #[test]
 fn an_unknown_target_is_refused_by_the_kernel() {
     let (_g, ws) = vault();
