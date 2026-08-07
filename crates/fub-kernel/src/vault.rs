@@ -50,6 +50,39 @@ pub fn data_root(root: &Utf8Path) -> Utf8PathBuf {
     root.join(FUB_DIR).join(DATA_SUBDIR)
 }
 
+/// La radice di un vault resa **assoluta**: quella data, se già lo è, e
+/// altrimenti quella data appesa alla cartella di lavoro di adesso.
+///
+/// Una radice relativa non è una cartella: è una cartella **più** la cartella
+/// di lavoro del processo, e la cartella di lavoro nessuno l'ha promessa ferma.
+/// Chi tiene una radice relativa e ci appende `.fub` o `.trash` a ogni domanda
+/// — [`Vault`] lo fa a ogni `read`, `walk`, `trash` — non tiene una cartella:
+/// tiene una *ricetta* per trovarne una, e dopo un `set_current_dir` la ricetta
+/// dà una cartella diversa. Sarebbero due vault sotto lo stesso nome, con
+/// l'indice del secondo scritto accanto ai file del primo.
+///
+/// **Assoluta e non canonica**, e non è la stessa operazione: canonicalizzare
+/// risolve anche i link simbolici, cioè cambia la risposta a «dove sono i miei
+/// file» per chi il vault ce l'ha dietro un link, e per giunta è una domanda al
+/// disco — su una cartella che non c'è non ha risposta, e questa firma non può
+/// fallire. Qui non serve riconoscere due nomi della stessa cartella: serve che
+/// la radice non si sposti. Chi ha bisogno di una *chiave*, perché due nomi
+/// devono cadere sulla stessa sessione, canonicalizza un piano più su
+/// (`fub_host::Host`), dove è ancora in tempo a dire di no.
+///
+/// Se la cartella di lavoro non è leggibile — o non è UTF-8 — non c'è niente di
+/// meglio del path dato: si tiene quello, che è ciò che si faceva sempre.
+pub(crate) fn radice_assoluta(root: &Utf8Path) -> Utf8PathBuf {
+    if root.is_absolute() {
+        return root.to_owned();
+    }
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| Utf8PathBuf::from_path_buf(cwd).ok())
+        .map(|cwd| cwd.join(root))
+        .unwrap_or_else(|| root.to_owned())
+}
+
 /// Nome della cartella cestino dentro il vault.
 ///
 /// È la stessa che usa Obsidian per "Move to Obsidian trash": un vault
@@ -172,9 +205,14 @@ impl Vault {
     }
 
     /// Un vault su un supporto qualunque (§15.1).
+    ///
+    /// **La radice si fissa qui**, e da qui in poi non è più quella che il
+    /// chiamante ha scritto: è la sua forma assoluta ([`radice_assoluta`]).
+    /// Questa è la sola riga che la costruisce, quindi non esiste un `Vault` la
+    /// cui radice si sposti sotto ai piedi.
     pub fn on(root: impl AsRef<Utf8Path>, storage: Arc<dyn VaultStorage>) -> Self {
         Vault {
-            root: root.as_ref().to_owned(),
+            root: radice_assoluta(root.as_ref()),
             storage,
             settings: None,
         }
