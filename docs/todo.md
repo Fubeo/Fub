@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Tredici** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Dodici** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -511,7 +511,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0045 | `rebuild_from_store` carica ogni snapshot in memoria solo per calcolarne l'impronta | `fub-features` · `versioning.rs:938` | prestazioni |
 | 0049 | `StatsView` dichiara `ContextMask::all()` e rilegge il documento intero a ogni movimento del cursore | `fub-features` · `stats.rs:82` | prestazioni |
 | 0050 | `count` attraversa il testo due volte, su un percorso caldo | `fub-features` · `stats.rs:57` | prestazioni |
-| 0051 | il filtro dei tag alloca un `to_lowercase()` per tag a ogni battuta | `fub-features` · `tags.rs:232` | prestazioni |
 | 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
 | 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |

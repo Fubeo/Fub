@@ -222,6 +222,43 @@ fn filter_of(host: &dyn ReadApi) -> Result<String, PluginError> {
         .unwrap_or_default())
 }
 
+/// `nome` contiene `cerca` — che arriva **già minuscolo** — a meno del caso.
+///
+/// Vuol dire *esattamente* `nome.to_lowercase().contains(cerca)`, che è la riga
+/// che c'era: qui non si è cambiata la regola, si è tolta la copia. Quella riga
+/// allocava una `String` **per tag e per battuta** — su un vault da cinquecento
+/// tag sono cinquecento allocazioni ogni volta che si preme un tasto nel campo
+/// filtro, cioè un decimo di tutte quelle del ridisegno.
+///
+/// **Perché due corsie e non una che confronta i caratteri minuscoli uno a uno.**
+/// Perché quella è sbagliata, e in questo repo ha già un numero suo: la 0070 la
+/// registra su `prefix_len_ci`. `str::to_lowercase` non è
+/// `chars().flat_map(char::to_lowercase)` — è **sensibile al contesto**
+/// (`ΟΔΟΣ` finisce in `οδος`, non in `οδοσ`) e sa allungare (`İ` diventa due
+/// caratteri). Un filtro riscritto carattere per carattere smetterebbe di
+/// trovare un tag greco cercandolo per intero, ed è un difetto di correttezza
+/// vestito da ottimizzazione.
+///
+/// Quindi: **la corsia veloce vale solo dove è dimostrabilmente la stessa
+/// risposta**, cioè quando il nome del tag è tutto ASCII — lì
+/// `to_lowercase` *è* `to_ascii_lowercase`, non c'è contesto da guardare e non
+/// c'è niente che si allunghi. Fuori da lì si passa dalla riga di prima, che è
+/// l'unica che sa il sigma finale. Un filtro non ASCII contro un nome ASCII non
+/// combacia in nessuna delle due corsie, e non ha bisogno di un caso suo: un
+/// byte sopra `0x7F` non è mai uguale a un byte ASCII.
+fn contiene_a_meno_del_caso(nome: &str, cerca: &str) -> bool {
+    if !nome.is_ascii() {
+        return nome.to_lowercase().contains(cerca);
+    }
+    let (paglia, ago) = (nome.as_bytes(), cerca.as_bytes());
+    // `windows(0)` va in panico, e non è un caso da non avere: il chiamante di
+    // oggi filtra il vuoto un rigo sopra, il prossimo può non farlo.
+    ago.is_empty()
+        || paglia
+            .windows(ago.len())
+            .any(|w| w.eq_ignore_ascii_case(ago))
+}
+
 /// Costruisce l'albero `UiNode` del pannello tag. Separato dal provider perché è
 /// pura trasformazione dati→UI: si prova senza un host. I tag arrivano già
 /// ordinati per nome dal kernel.
@@ -229,7 +266,7 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
     let cerca = filter.trim().to_lowercase();
     let visibili: Vec<&TagCount> = tags
         .iter()
-        .filter(|t| cerca.is_empty() || t.name.to_lowercase().contains(&cerca))
+        .filter(|t| cerca.is_empty() || contiene_a_meno_del_caso(&t.name, &cerca))
         .collect();
 
     // Il campo c'è sempre, anche quando l'elenco è vuoto: se sparisse appena il
@@ -466,6 +503,69 @@ mod tests {
             .render_view(&ViewInstance::only(TAGS_VIEW), &host)
             .unwrap();
         assert_eq!(voci(&tree), ["#rust", "#note"]);
+    }
+
+    /// **Il presidio della corsia ASCII.** Il filtro ignora il caso: `#Rust` si
+    /// trova scrivendo `RUS`, e `#Città` scrivendo `città` — con l'accento, che
+    /// è la lettera che l'utente ha davvero digitato.
+    ///
+    /// *Era verde anche prima della corsia ASCII*, ed è il punto: presidia la
+    /// risposta, che il taglio delle allocazioni non doveva toccare. Quello che
+    /// **non** era verde prima è il conteggio, e sta in
+    /// `tests/il_filtro_non_alloca.rs`.
+    #[test]
+    fn il_filtro_ignora_il_caso() {
+        let tags = [
+            tag("Rust", 1),
+            tag("progetto/Città", 2),
+            tag("NOTE", 3),
+            tag("altro", 4),
+        ];
+        for (filtro, atteso) in [
+            ("RUS", vec!["#Rust"]),
+            ("rust", vec!["#Rust"]),
+            ("città", vec!["#progetto/Città"]),
+            ("CITTÀ", vec!["#progetto/Città"]),
+            ("note", vec!["#NOTE"]),
+            ("O", vec!["#progetto/Città", "#NOTE", "#altro"]),
+        ] {
+            assert_eq!(voci(&build_tags_view(&tags, filtro)), atteso, "{filtro:?}");
+        }
+    }
+
+    /// **Il presidio che la corsia ASCII non diventi un confronto carattere per
+    /// carattere.** `"ΟΔΟΣ".to_lowercase()` è `"οδος"` — con il sigma finale —
+    /// mentre `chars().flat_map(char::to_lowercase)` dà `"οδοσ"`: il caso è
+    /// sensibile al contesto, ed è la stessa forma del difetto 0070 su
+    /// `prefix_len_ci`. Chi un giorno «finisse il lavoro» estendendo la corsia
+    /// veloce fuori dall'ASCII fa cadere questo test.
+    ///
+    /// *Provato in rosso* sostituendo il corpo di `contiene_a_meno_del_caso` con
+    /// la versione carattere per carattere: la prima riga fallisce.
+    #[test]
+    fn fuori_dallascii_il_caso_resta_quello_di_to_lowercase() {
+        let tags = [tag("ΟΔΟΣ", 1)];
+        assert_eq!(
+            voci(&build_tags_view(&tags, "οδος")),
+            ["#ΟΔΟΣ"],
+            "il sigma finale minuscolo è ς, e cercando la parola intera il tag si trova"
+        );
+        assert!(
+            voci(&build_tags_view(&tags, "οδοσ")).is_empty(),
+            "il sigma non finale non è quello che `to_lowercase` produce in coda"
+        );
+        assert_eq!(
+            voci(&build_tags_view(&tags, "οδο")),
+            ["#ΟΔΟΣ"],
+            "e il prefisso, che di sigma non ne ha, si trova comunque"
+        );
+    }
+
+    /// Un ago fuori dall'ASCII non combacia dentro un nome ASCII, e non gli
+    /// serve un caso a parte: nessun byte sopra `0x7F` è un byte ASCII.
+    #[test]
+    fn un_filtro_accentato_non_trova_un_tag_ascii() {
+        assert!(voci(&build_tags_view(&[tag("citta", 1)], "città")).is_empty());
     }
 
     /// Un filtro che non trova niente non fa sparire il campo: senza, cancellare
