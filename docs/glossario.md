@@ -148,7 +148,7 @@ disambigua — non si sceglie affatto: lo dice `HealthCheck::CollidingPaths`
 ## Il vault
 
 ### anagrafe
-`VaultEntry` (il tipo del contratto) reso durevole da `EntryStore` · [`kernel/entries.rs:171`](../crates/fub-kernel/src/entries.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
+`VaultEntry` (il tipo del contratto) reso durevole da `EntryStore` · [`kernel/entries.rs:177`](../crates/fub-kernel/src/entries.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
 
 Ciò che il kernel si ricorda di ogni file per **non doverlo rileggere**:
 frontmatter, outline, e quanto basta a decidere se il file su disco è ancora
