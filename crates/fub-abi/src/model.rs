@@ -955,7 +955,99 @@ pub mod custom_kind {
     /// *contenuto dell'utente*, e chi non l'ha capito non è autorizzato a
     /// cancellarlo: lo conserva così com'è, e dice perché in `error`.
     pub const FRONTMATTER_UNPARSED: &str = "frontmatter-unparsed";
+
+    /// **Dove un `Custom` tiene il proprio contenuto**, cioè i byte che
+    /// l'utente ha scritto.
+    ///
+    /// È la domanda che chi rende e chi serializza si facevano ognuno per
+    /// conto proprio, e in due modi diversi: `render.rs` provava tre chiavi a
+    /// campione (`html`, `source`, `text`) e chiamava vuoto ciò che non
+    /// trovava; `serialize.rs` teneva una catena di `if` sui kind, che è lo
+    /// stesso elenco scritto come flusso di controllo — non interrogabile da
+    /// nessuno, e da riscrivere per intero al secondo `FormatProvider`.
+    ///
+    /// Le prose degli `attrs` qui sopra dicevano già tutto: sono state fatte
+    /// dato. Ciò che si eredita è la parte **indipendente dal formato** —
+    /// *questi byte sono già sorgente*, *questo contenuto sta nei figli*,
+    /// *questo è il corpo di una sintassi che il formato deve saper
+    /// riscrivere*. Ciò che resta di ogni formato è la sua grammatica: `>
+    /// [!nota]` è di markdown, e in markdown resta.
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    pub enum Carico {
+        /// Nei **figli**. `blocks` è tutto il contenuto; gli `attrs`, se ci
+        /// sono, sono parametri — il tipo di un callout, l'etichetta di una
+        /// nota — e non testo dell'utente.
+        Figli,
+        /// **Sorgente**, sotto questa chiave degli `attrs`: i byte sono già il
+        /// testo che stava nel file, delimitatori compresi. Riscriverli è
+        /// copiarli, e ogni formato che sappia ospitare del testo grezzo li sa
+        /// esprimere.
+        Sorgente(&'static str),
+        /// Il **corpo** di una sintassi, sotto questa chiave: byte dell'utente
+        /// senza il delimitatore che li racchiudeva. Chi rende li mostra —
+        /// meglio del nulla che si vedeva prima —, ma chi serializza li può
+        /// riscrivere **solo se conosce quella sintassi**: il recinto
+        /// ```` ```math ```` che li ha prodotti è un'informazione della regola,
+        /// e la regola può averlo trasformato. Ricostruirlo a indovinare
+        /// sarebbe inventare la sorgente dell'utente.
+        Corpo(&'static str),
+    }
+
+    /// I kind del core con ciò che ognuno porta, **tutti e soli**.
+    ///
+    /// Che sia una tabella e non un `match` è deliberato: un `match` sulle
+    /// stringhe non si può contare, e il presidio
+    /// `ogni_kind_dichiara_cosa_porta` conta proprio le due metà — un `const`
+    /// nuovo senza una riga qui è rosso, e una riga qui che non nomina nessun
+    /// `const` pure.
+    pub const CARICHI: &[(&str, Carico)] = &[
+        (CALLOUT, Carico::Figli),
+        (MATH, Carico::Corpo("source")),
+        (HTML, Carico::Sorgente("html")),
+        (FOOTNOTE_DEFINITION, Carico::Figli),
+        (FOOTNOTE_REFERENCE, Carico::Corpo("label")),
+        (DIAGRAM, Carico::Corpo("source")),
+        (HIGHLIGHT, Carico::Corpo("text")),
+        (DEFINITION_LIST, Carico::Figli),
+        (DEFINITION_TERM, Carico::Figli),
+        (DEFINITION_DESCRIPTION, Carico::Figli),
+        (BLOCK, Carico::Figli),
+        (FRONTMATTER_UNPARSED, Carico::Sorgente("text")),
+    ];
+
+    /// Cosa porta un `custom_kind`, o `None` se il contratto non lo dichiara.
+    ///
+    /// **`None` non vuol dire «niente»: vuol dire «nessuno l'ha detto».** Un
+    /// kind di terzi non è in [`CARICHI`] per costruzione — l'elenco è del
+    /// core, e questo modulo dichiara i significati *condivisi*, non tutti
+    /// quelli possibili. Chi rende un kind non dichiarato degrada come sa; chi
+    /// serializza si rifiuta, che è l'unica risposta che non inventa byte.
+    ///
+    /// **Il limite, dichiarato**: oggi un terzo *non ha modo* di dire dove
+    /// tiene i propri byte — `SyntaxRuleSpec::produces` elenca i nomi dei kind
+    /// e nient'altro. Aggiungerglielo cambia il contratto, che è additivo e
+    /// vicino al freeze, e le forme possibili sono più d'una: è una scelta, e
+    /// finché non è presa questa funzione risponde `None` e lo dice.
+    pub fn carico(kind: &str) -> Option<Carico> {
+        CARICHI.iter().find(|(k, _)| *k == kind).map(|(_, c)| *c)
+    }
+
+    impl Carico {
+        /// La chiave degli `attrs` sotto cui stanno i byte, se ci stanno.
+        pub fn chiave(self) -> Option<&'static str> {
+            match self {
+                Carico::Figli => None,
+                Carico::Sorgente(k) | Carico::Corpo(k) => Some(k),
+            }
+        }
+    }
 }
+
+/// I *nomi* dei kind si usano qualificati — `custom_kind::MATH` dice di chi è
+/// quella stringa —, ma [`custom_kind::Carico`] è un **tipo**, e compare nella
+/// firma di [`custom_kind::carico`]: chi la legge deve poterlo nominare senza
+/// sapere in che modulo è stato scritto (`superficie_della_radice.rs`).
+pub use custom_kind::Carico;
 
 /// Il valore di una proprietà del frontmatter, **normalizzato**.
 ///
@@ -1341,6 +1433,122 @@ fn digits(s: &str, max: usize) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// I `const` dichiarati dentro `pub mod custom_kind`, letti dal sorgente.
+    ///
+    /// Il salto della prosa è la metà che conta: questo modulo *racconta* i
+    /// kind nei doc comment, e un estrattore che contasse anche quelli
+    /// presidierebbe se stesso. Si prendono le sole righe che **sono** una
+    /// dichiarazione — `pub const NOME: &str = "…";` — e solo dentro il
+    /// modulo, che comincia alla riga che lo apre.
+    fn kind_dichiarati() -> Vec<(String, String)> {
+        let src = include_str!("model.rs");
+        let dentro = src
+            .split_once("pub mod custom_kind {")
+            .expect("il modulo `custom_kind` non si trova nel sorgente")
+            .1;
+        let mut out = Vec::new();
+        for riga in dentro.lines() {
+            let riga = riga.trim();
+            let Some(resto) = riga.strip_prefix("pub const ") else {
+                continue;
+            };
+            // Un `pub const` di **un altro tipo** non è un kind: `CARICHI` è la
+            // tabella che risponde su di loro, e sta nello stesso modulo. Il
+            // salto guarda il tipo scritto, non il nome, così un kind non può
+            // sfuggire al conto chiamandosi in un modo invece che in un altro;
+            // e se un giorno l'estrattore smettesse di riconoscere la forma,
+            // il conto `>= 12` qui sotto è il rosso che se ne accorge.
+            let Some((nome, valore)) = resto.split_once(": &str = ") else {
+                continue;
+            };
+            let valore = valore
+                .trim_end_matches(';')
+                .trim_matches('"')
+                .trim_matches('\\');
+            out.push((nome.to_string(), valore.to_string()));
+        }
+        out
+    }
+
+    /// **Ogni `custom_kind` del core dichiara cosa porta, e viceversa.**
+    ///
+    /// È il presidio del difetto 0095: *dove* stiano i byte di un `Custom` era
+    /// scritto in tre posti che nessuno teneva allineati — la prosa qui sopra,
+    /// tre stringhe a campione in `render.rs`, una catena di `if` in
+    /// `serialize.rs`. Adesso il posto è [`custom_kind::CARICHI`], e questo
+    /// conto è ciò che impedisce al quarto kind di nascere senza una risposta:
+    /// il compilatore un `const` in più non lo vede, e chi lo aggiunge non ha
+    /// nessuna ragione di aprire `render.rs`.
+    ///
+    /// Il conto è nei **due versi** apposta, come l'allowlist di
+    /// `dependency_invariant.rs`: una riga di `CARICHI` che non nomina nessun
+    /// `const` è un kind rinominato di cui è rimasta l'ombra, e sarebbe una
+    /// tabella che risponde a un nome che non esiste più.
+    #[test]
+    fn ogni_kind_dichiara_cosa_porta() {
+        let dichiarati = kind_dichiarati();
+        assert!(
+            dichiarati.len() >= 12,
+            "l'estrattore ha letto {} dichiarazioni: ne legge troppo poche per\n\
+             essere il lettore che questo conto crede di avere",
+            dichiarati.len()
+        );
+
+        let senza_carico: Vec<&str> = dichiarati
+            .iter()
+            .filter(|(_, v)| custom_kind::carico(v).is_none())
+            .map(|(n, _)| n.as_str())
+            .collect();
+        assert!(
+            senza_carico.is_empty(),
+            "{senza_carico:?} sono `custom_kind` del core e non dicono dove tengono i\n\
+             loro byte. Aggiungili a `custom_kind::CARICHI`: `Figli` se il contenuto\n\
+             sta nei figli, `Sorgente(chiave)` se gli `attrs` portano già la sorgente,\n\
+             `Corpo(chiave)` se portano il corpo di una sintassi senza il suo\n\
+             delimitatore. Senza quella riga il kind si rende vuoto e non si\n\
+             serializza, e non c'è niente di rosso da nessuna parte."
+        );
+
+        let valori: Vec<&str> = dichiarati.iter().map(|(_, v)| v.as_str()).collect();
+        let fantasmi: Vec<&str> = custom_kind::CARICHI
+            .iter()
+            .map(|(k, _)| *k)
+            .filter(|k| !valori.contains(k))
+            .collect();
+        assert!(
+            fantasmi.is_empty(),
+            "{fantasmi:?} stanno in `CARICHI` e non sono `const` di `custom_kind`:\n\
+             è l'ombra di un kind rinominato o tolto. Togli la riga, o la tabella\n\
+             risponde a un nome che non esiste più."
+        );
+    }
+
+    /// L'estrattore deve leggere ciò che dice di leggere: le dichiarazioni sì,
+    /// la prosa che le nomina no.
+    #[test]
+    fn l_estrattore_dei_kind_salta_la_prosa() {
+        let letti = kind_dichiarati();
+        assert!(letti.iter().any(|(n, v)| n == "HTML" && v == "html"));
+        assert!(letti
+            .iter()
+            .any(|(n, v)| n == "FRONTMATTER_UNPARSED" && v == "frontmatter-unparsed"));
+        // `CARICHI` è un `pub const` dello stesso modulo, ed è la tabella, non
+        // un kind: l'estrattore lo salta perché il suo tipo non è `&str`.
+        assert!(
+            !letti.iter().any(|(n, _)| n == "CARICHI"),
+            "l'estrattore ha preso la tabella per un kind"
+        );
+        // Il doc di `CARICHI` nomina `Sorgente`, `Corpo` e `Figli`, e il doc di
+        // `carico` nomina `SyntaxRuleSpec::produces`: nessuno dei quattro è un
+        // kind, e nessuno dei quattro deve comparire.
+        for nome in ["Sorgente", "Corpo", "Figli", "produces"] {
+            assert!(
+                !letti.iter().any(|(n, v)| n == nome || v == nome),
+                "l'estrattore ha preso `{nome}` dalla prosa"
+            );
+        }
+    }
 
     #[test]
     fn docid_page_name_strips_dir_and_ext() {

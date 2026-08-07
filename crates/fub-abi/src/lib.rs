@@ -96,9 +96,9 @@ pub use format::{
 };
 pub use locale::{HourCycle, Locale, Weekday};
 pub use model::{
-    Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter, Heading,
-    HeadingSlugs, Inline, Link, LinkTarget, ListItem, ParsedWikilink, PropertyDate, PropertyScalar,
-    PropertyTime, PropertyValue, Span, TableCell, TableRow, Tag, TaskMarker,
+    Anchor, Block, Carico, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter,
+    Heading, HeadingSlugs, Inline, Link, LinkTarget, ListItem, ParsedWikilink, PropertyDate,
+    PropertyScalar, PropertyTime, PropertyValue, Span, TableCell, TableRow, Tag, TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::{OptionMap, OptionStatus};
