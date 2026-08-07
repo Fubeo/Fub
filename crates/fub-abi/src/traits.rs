@@ -3653,6 +3653,18 @@ pub trait IndexProvider: Send + Sync {
     /// che ha in memoria: chi ha appena buttato il proprio stato perché la
     /// versione dello schema non combaciava non ha niente, e dirlo è l'unica
     /// cosa che gli impedisce di restare vuoto per sempre.
+    ///
+    /// # La domanda arriva a fette, e una fetta non parla delle altre
+    ///
+    /// Il kernel chiede **per fetta**, come alimenta: su un vault grande questo
+    /// metodo viene chiamato dieci volte con dieci elenchi diversi, e non è
+    /// promesso in che ordine le domande si alternino alle consegne. Chi
+    /// risponde soltanto *guardando* ciò che ha non se ne accorge. Chi invece si
+    /// **prende nota** di qualcosa mentre risponde deve tenerne conto: quella
+    /// nota è per documento, e una domanda su una fetta non dice niente sui
+    /// documenti che quella fetta non nomina. Azzerarla a ogni chiamata è la
+    /// scorciatoia che sembra pulizia e butta via ciò che un'altra fetta stava
+    /// ancora aspettando.
     fn up_to_date(&self, _entries: &[VaultEntry]) -> Vec<DocId> {
         Vec::new()
     }
