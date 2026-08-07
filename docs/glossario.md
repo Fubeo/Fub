@@ -269,7 +269,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6177`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6175`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
@@ -442,7 +442,7 @@ rottura deliberata prima del freeze si fa *ritagliandola*, con un commit che la
 tocca e dice perché — così si vede in review.
 
 ### manifest
-`PluginManifest` · [`abi/traits.rs:3779`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`PluginManifest` · [`abi/traits.rs:3791`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e i
 permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria: se

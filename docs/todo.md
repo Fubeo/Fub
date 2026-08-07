@@ -507,7 +507,7 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0038 | i comandi Tauri sono sincroni e prendono lock + I/O sul thread pool dell'IPC | `fub-app` · `lib.rs` | lock e I/O |
 | 0040 | `vault_replace` senza `docs` legge **ogni** documento del vault invece di chiedere all'indice | `fub-features` · `commands.rs:1287` | prestazioni |
 | 0041 | il doppio controllo di `dirty` in `SearchIndex::commit` ferma le letture per tutta la durata del commit | `fub-features` · `search.rs` `commit` | prestazioni |
-| 0043 | senza finestra il tetto della ricerca è `total`: `TopDocs::with_limit(total)` su un vault grande | `fub-features` · `search.rs:1146` | prestazioni |
+| 0043 | senza finestra il tetto della ricerca è `total`: `TopDocs::with_limit(total)` su un vault grande | `fub-features` · `search.rs:1149` | prestazioni |
 | 0045 | `rebuild_from_store` carica ogni snapshot in memoria solo per calcolarne l'impronta | `fub-features` · `versioning.rs:938` | prestazioni |
 | 0049 | `StatsView` dichiara `ContextMask::all()` e rilegge il documento intero a ogni movimento del cursore | `fub-features` · `stats.rs:82` | prestazioni |
 | 0050 | `count` attraversa il testo due volte, su un percorso caldo | `fub-features` · `stats.rs:57` | prestazioni |
