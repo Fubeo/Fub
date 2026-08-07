@@ -310,6 +310,24 @@ struct Meta {
     deleted_at: Option<u64>,
 }
 
+/// Che cosa una cartella dello store **rivendica**, e i due modi diversi in cui
+/// può non dirlo.
+///
+/// I due modi sono un tipo e non un `Option` perché non vogliono dire la stessa
+/// cosa e nessun chiamante li tratta allo stesso modo: una cartella senza
+/// `meta.json` non è di nessuno, una col `meta.json` illeggibile è di qualcuno
+/// che non sappiamo nominare. Schiacciarli su `None` — un `.ok()` — faceva dire
+/// a [`Inner::dir_per`] «libera» di una cartella piena, e a quel punto la prima
+/// [`scrivi_meta`] ci scriveva sopra il nome di un altro documento.
+enum Rivendicazione {
+    /// Nessun `meta.json`: la cartella non è di nessuno.
+    Nessuna,
+    /// Un `meta.json` c'è e non si legge. **Non** è una cartella libera.
+    Illeggibile,
+    /// La cartella dice di chi è.
+    Di(Meta),
+}
+
 struct Inner {
     docs: BTreeMap<String, DocVersions>,
 }
@@ -630,9 +648,23 @@ impl Inner {
             } else {
                 format!("{base}-{n}")
             };
-            let libera = match read_meta(&nome, host)? {
-                None => true,
-                Some(meta) => meta.doc_id == id.as_str(),
+            let libera = match rivendicazione_di(&nome, host)? {
+                Rivendicazione::Nessuna => true,
+                Rivendicazione::Di(meta) => meta.doc_id == id.as_str(),
+                // Un `meta.json` che non si legge **non** è una cartella
+                // libera: è una cartella di cui non sappiamo il proprietario.
+                // Darla via vorrebbe dire scriverci sopra il nome di questo
+                // documento, e attribuirgli gli snapshot dell'altro alla prima
+                // ricostruzione — cioè proprio le due storie mescolate che
+                // questa funzione esiste per non fare. Il caso si raggiunge
+                // senza bisogno di una collisione di impronte: dopo un rename
+                // la chiave migra e la cartella resta col nome dell'impronta
+                // vecchia, quindi il primo documento che rinasce con quel path
+                // se la ritrova davanti. La direzione innocua è il nome brutto;
+                // e la cartella non resta perduta per sempre, perché il
+                // prossimo salvataggio del suo vero proprietario riscrive il
+                // `meta.json` e la rende di nuovo leggibile.
+                Rivendicazione::Illeggibile => false,
             };
             if libera {
                 return Ok(nome);
@@ -936,11 +968,14 @@ fn load_index(host: &dyn ReadApi) -> Option<BTreeMap<String, DocVersions>> {
     (index.schema_version == SCHEMA_VERSION).then_some(index.docs)
 }
 
-fn read_meta(dir: &str, host: &dyn HostApi) -> Result<Option<Meta>, PluginError> {
+fn rivendicazione_di(dir: &str, host: &dyn HostApi) -> Result<Rivendicazione, PluginError> {
     let Some(raw) = host.data_read(&blob(dir, META_FILE))? else {
-        return Ok(None);
+        return Ok(Rivendicazione::Nessuna);
     };
-    Ok(serde_json::from_slice(&raw).ok())
+    Ok(match serde_json::from_slice(&raw) {
+        Ok(meta) => Rivendicazione::Di(meta),
+        Err(_) => Rivendicazione::Illeggibile,
+    })
 }
 
 /// Ricostruisce l'indice leggendo lo store: ogni cartella dice di chi è
@@ -965,9 +1000,25 @@ fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions
 
     let mut docs = BTreeMap::new();
     for (dir, names) in per_dir {
-        let Some(meta) = read_meta(dir, host)? else {
-            tracing::warn!(target: "fub.versioning", "{dir} non dice di chi è, la salto");
-            continue;
+        let meta = match rivendicazione_di(dir, host)? {
+            Rivendicazione::Di(meta) => meta,
+            Rivendicazione::Nessuna => {
+                tracing::warn!(target: "fub.versioning", "{dir} non dice di chi è, la salto");
+                continue;
+            }
+            // Diverso dal caso sopra, e vale la pena dirlo: qui una storia c'è
+            // e resta sul disco, fuori dall'indice finché quel `meta.json` non
+            // torna leggibile. Nessun altro se la prende — [`Inner::dir_per`]
+            // non dà via una cartella che non sa leggere — e il primo
+            // salvataggio del suo proprietario la riscrive.
+            Rivendicazione::Illeggibile => {
+                tracing::warn!(
+                    target: "fub.versioning",
+                    "il meta.json di {dir} non si legge: la sua storia resta sul \
+                     disco ma fuori dall'indice"
+                );
+                continue;
+            }
         };
         let mut versions = Vec::new();
         for name in names {
@@ -2105,6 +2156,56 @@ mod tests {
         // Anche il tombstone sopravvive: vive nella cartella, non nell'indice.
         let inner = store.inner.lock().unwrap();
         assert!(inner.docs["nota/Idea.md"].deleted_at.is_some());
+    }
+
+    /// Una cartella il cui `meta.json` non si legge **non** è una cartella
+    /// libera.
+    ///
+    /// Il caso non ha bisogno di una collisione di impronte: dopo un rename la
+    /// chiave migra e la cartella resta col nome dell'impronta vecchia, quindi
+    /// basta che una nota rinasca con quel path per trovarsela davanti. Se
+    /// l'anagrafe della cartella è illeggibile e la si dà via, la prima
+    /// `scrivi_meta` ci scrive sopra un altro `doc_id`, e alla prima
+    /// ricostruzione gli snapshot di `b.md` diventano versioni di `a.md`.
+    #[test]
+    fn a_folder_whose_meta_cannot_be_read_is_not_given_to_another_document() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), "la storia di a\n", &mut host)
+            .unwrap();
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+        store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
+        assert_eq!(
+            store.inner.lock().unwrap().docs["b.md"].dir,
+            dir,
+            "il banco non prova niente se la cartella si è mossa col rename"
+        );
+        let ts_di_b = store.list(&id("b.md"))[0].ts;
+
+        // L'anagrafe della cartella si corrompe: un troncamento, un disco
+        // pieno a metà scrittura.
+        host.data_write(&blob(&dir, META_FILE), b"non sono json")
+            .unwrap();
+
+        // E una nota nuova nasce col path che quella cartella porta impresso
+        // nel nome.
+        host.avanza(1_000);
+        store
+            .snapshot(&id("a.md"), "una nota tutta nuova\n", &mut host)
+            .unwrap();
+
+        assert_ne!(
+            store.inner.lock().unwrap().docs["a.md"].dir,
+            dir,
+            "la cartella di b.md è stata data ad a.md, e il suo meta.json \
+             sovrascritto: la storia di b.md è diventata storia di a.md"
+        );
+        assert_eq!(
+            store.read(&id("b.md"), ts_di_b, &host).unwrap(),
+            "la storia di a\n",
+            "la storia di b.md è ancora dov'era"
+        );
     }
 
     #[test]
