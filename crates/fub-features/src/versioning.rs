@@ -700,11 +700,24 @@ impl Inner {
     /// non c'è nessun ramo d'errore da ricordarsi di scrivere: chi aggiunge un
     /// campo a [`DocVersions`] eredita l'ordine giusto senza saperlo.
     ///
-    /// Il `meta.json` va **prima** dell'indice perché l'autorità è l'indice
-    /// (vedi [`VersionStore::open`]: si ricostruisce dai meta solo quando
-    /// l'indice manca o è illeggibile). Se il meta passa e l'indice no, il
-    /// disco resta com'era per chi lo legge, e la memoria pure: concordano.
-    /// L'ordine inverso lascerebbe un'autorità avanti e una memoria indietro.
+    /// Il `meta.json` va **prima** dell'indice perché l'autorità è il **disco**
+    /// e l'indice ne è il derivato (vedi il preambolo del modulo, e
+    /// [`VersionStore::open`], che dai meta ricostruisce). Vale per il
+    /// `meta.json` quello che vale già per il blob di una versione, scritto
+    /// anche lui prima di arrivare qui: se poi l'indice non passa, ciò che è
+    /// finito sul disco è la verità, e resta lì ad aspettare la ricostruzione
+    /// che la ritroverà.
+    ///
+    /// Quindi non è vero, e non deve esserlo, che «se il meta passa e l'indice
+    /// no il disco resta com'era»: il disco è **avanti**, verso il vero, e
+    /// l'indice e la memoria restano indietro insieme — indietro concordi, che
+    /// è la proprietà che serve. L'ordine inverso invece lascerebbe l'indice
+    /// avanti e il disco indietro, cioè un derivato che afferma una versione o
+    /// un tombstone di cui la verità non sa niente.
+    ///
+    /// Ciò che questa forma **non** basta a garantire è che le rivendicazioni
+    /// sul disco restino una per documento: quella la tiene [`trasloca`],
+    /// togliendo la rivendicazione vecchia prima che qui se ne scriva una nuova.
     fn applica(
         &mut self,
         piano: BTreeMap<String, DocVersions>,
@@ -918,12 +931,28 @@ fn trasloca(
         versions.push(v);
     }
 
-    // La cartella abbandonata non deve restare a dire di chi è: un `meta.json`
-    // sopravvissuto lì farebbe rinascere una seconda storia sullo stesso
-    // `doc_id` la prima volta che l'indice va ricostruito.
+    // La cartella abbandonata smette di dire di chi è **qui**, prima che
+    // `applica` scriva la rivendicazione nuova — e non dopo, con gli altri
+    // avanzi.
+    //
+    // La regola «prima l'indice, poi si cancella» vale per i **contenuti**, che
+    // l'indice nomina: toglierne uno che l'indice nomina ancora è il modo di
+    // rompere ogni `read`. Un `meta.json` l'indice non lo nomina, e rimandarlo
+    // apriva la sola finestra in cui **due** cartelle rivendicano lo stesso
+    // `doc_id`: se `scrivi_index` falliva lì in mezzo, il disco restava con la
+    // cartella unita e quella vecchia che dicevano tutte e due `to`, e
+    // `rebuild_from_store` — che le tiene in un `BTreeMap` per `doc_id` — ne
+    // buttava una in silenzio, senza nessuna regola su quale.
+    //
+    // Qui invece si arriva a copie **tutte** fatte, ed è la precondizione che
+    // rende questa cancellazione innocua: ciò che stava di là sta già di qua.
+    // La finestra peggiore che resta è la cartella unita che dice ancora `from`,
+    // cioè la storia intera sotto la chiave di prima — un nome vecchio, non una
+    // storia persa. E se è la cancellazione stessa a non riuscire, il `?` ferma
+    // il rename prima che la seconda rivendicazione esista.
     if let Some(esistente) = esistente {
         if esistente.dir != dir {
-            da_ripulire.push(blob(&esistente.dir, META_FILE));
+            host.data_remove(&blob(&esistente.dir, META_FILE))?;
         }
     }
     // Un contenuto che serve ancora non si cancella, per quanto il suo vecchio
@@ -2205,6 +2234,111 @@ mod tests {
             store.read(&id("b.md"), ts_di_b, &host).unwrap(),
             "la storia di a\n",
             "la storia di b.md è ancora dov'era"
+        );
+    }
+
+    /// Il rename che unisce due storie, con l'indice che dice di no proprio in
+    /// mezzo: sul disco deve restare **una** rivendicazione per documento.
+    ///
+    /// La rivendicazione vecchia se ne andava dopo l'indice, con gli avanzi, e
+    /// quella era la finestra: due cartelle che dicono `Nota.md`, e
+    /// `rebuild_from_store` — un `BTreeMap` per `doc_id` — ne teneva quella che
+    /// capitava per ultima. Qui capitava la cartella *senza* l'unione, quindi
+    /// si perdevano due versioni su due.
+    #[test]
+    fn a_rename_the_index_refuses_leaves_one_claim_per_document() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("vecchia.md"), "storia che arriva\n", &mut host)
+            .unwrap();
+        host.avanza(1_000);
+        store
+            .snapshot(&id("Nota.md"), "storia che c'era\n", &mut host)
+            .unwrap();
+
+        host.avanza(1_000);
+        host.nega_scrittura(INDEX_FILE);
+        assert!(
+            store
+                .rename(&id("vecchia.md"), &id("Nota.md"), &mut host)
+                .is_err(),
+            "una scrittura negata non è un successo"
+        );
+
+        let rivendicano: Vec<String> = host
+            .data_list("")
+            .unwrap()
+            .into_iter()
+            .filter(|p| p.ends_with(META_FILE))
+            .filter(|p| {
+                let raw = host.data_read(p).unwrap().unwrap();
+                serde_json::from_slice::<Meta>(&raw).is_ok_and(|m| m.doc_id == "Nota.md")
+            })
+            .collect();
+        assert_eq!(
+            rivendicano.len(),
+            1,
+            "due cartelle dicono di essere Nota.md: {rivendicano:?}"
+        );
+
+        // E l'indice si perde davvero: è la sola strada per cui una
+        // rivendicazione doppia si vede, ed è quella per cui esiste.
+        host.data_remove(INDEX_FILE).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+        let versioni = store.list(&id("Nota.md"));
+        assert_eq!(
+            versioni.len(),
+            2,
+            "la ricostruzione ha perso una storia: {versioni:?}"
+        );
+        for v in &versioni {
+            assert!(
+                store.read(&id("Nota.md"), v.ts, &host).is_ok(),
+                "l'indice ricostruito nomina la versione {} e il contenuto non c'è",
+                v.ts
+            );
+        }
+    }
+
+    /// Il verso che l'audit aveva letto al contrario, e che va tenuto fermo.
+    ///
+    /// Fra `scrivi_meta` riuscita e `scrivi_index` fallita il `meta.json` resta
+    /// **avanti** all'indice, e sembra una bugia sul disco. Non lo è: il disco
+    /// è l'autorità e l'indice il derivato, e il meta è avanti *verso il vero* —
+    /// la nota che risorge è viva davvero, quella che prende il tombstone è
+    /// morta davvero. La ricostruzione che «risuscita la nota» non sta
+    /// sbagliando: sta recuperando. Chi «riparasse» questo verso — riscrivendo
+    /// il meta all'indietro dopo un indice fallito, o invertendo l'ordine —
+    /// metterebbe il derivato davanti alla verità.
+    ///
+    /// Questo banco **non è mai stato rosso**, ed è il punto: tiene ferma la
+    /// metà che l'audit aveva dichiarato guasta e che guasta non era.
+    #[test]
+    fn a_meta_the_index_did_not_follow_is_ahead_of_the_index_never_behind() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
+        store.tombstone(&id("a.md"), &mut host).unwrap();
+
+        host.nega_scrittura(INDEX_FILE);
+        host.avanza(1_000);
+        assert!(
+            store.snapshot(&id("a.md"), "identico", &mut host).is_err(),
+            "una scrittura negata non è un successo"
+        );
+        // Indice e memoria restano indietro **insieme**: è la proprietà che
+        // `applica` garantisce, e che gli altri banchi già misurano.
+        assert!(store.is_deleted(&id("a.md")));
+
+        // Ma il disco no. Persa l'anagrafe derivata, resta quella vera.
+        host.data_remove(INDEX_FILE).unwrap();
+        assert!(
+            !VersionStore::open(&mut host)
+                .unwrap()
+                .is_deleted(&id("a.md")),
+            "il meta è tornato indietro insieme all'indice: la verità sul disco \
+             adesso segue il suo derivato"
         );
     }
 
