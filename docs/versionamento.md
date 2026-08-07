@@ -167,6 +167,16 @@ torna comunque. La regola che ne esce, e vale per il formato che nascerà domani
 quando il degrado è già la risposta prevista del formato**
 ([0106](decisions/0106-un-formato-si-presenta.md)).
 
+**Lo stesso silenzio vale per un sidecar che parla di un altro file.** La chiave
+è il nome della voce cestinata, e due voci omonime cestinate in momenti diversi
+se la dividono: perciò il sidecar porta il **timbro** del file di cui parla —
+dimensione e `mtime`, che un `rename` non tocca — e quando il timbro non torna
+vale come un sidecar che non c'è, con il degrado di sempre. Il campo è
+facoltativo e lo schema **non** è salito di numero apposta: un sidecar scritto
+prima che il timbro esistesse non ha niente da smentire e resta creduto, mentre
+un numero nuovo avrebbe buttato via il cestino di chi aggiorna, che è il
+contrario di ciò che il rifiuto in avanti protegge.
+
 Il dettaglio conta anche nel verso opposto: l'anagrafe non legge un file **senza**
 campo `version` come «versione 0», perché quel formato è nato con il campo — un
 file che non ce l'ha non è vecchio, è di qualcun altro
