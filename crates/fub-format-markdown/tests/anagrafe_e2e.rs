@@ -143,3 +143,73 @@ fn un_wikilink_a_un_allegato_omonimo_prende_il_path_intero() {
          stessa regola delle note"
     );
 }
+
+/// **Il verso opposto, e non è simmetrico** (difetto 0059).
+///
+/// Rinominando una *nota*, `link_rewrite_plan` cerca gli omonimi del nome
+/// d'arrivo in `metas` — i documenti — e **non** nell'anagrafe. Letto di fianco
+/// al banco qui sopra, che invece cammina `entries`, sembra una svista: un
+/// allegato omonimo «sfugge» al controllo. La 0059 diceva esattamente questo, e
+/// **è falsa**; questo banco tiene ferma la metà falsa, perché la simmetria è
+/// una lettura troppo facile e qualcuno la «riparerà» di nuovo.
+///
+/// Il motivo è che **ogni piano cerca l'omonimia nel registro che il proprio
+/// risolutore legge**, e i due risolutori sono due:
+///
+/// - un wikilink verso un allegato passa da `named_entry_in`, che confronta il
+///   nome del file **con la sua estensione** — `![[foto.png]]`, mai `[[foto]]`.
+///   Quindi un allegato non contende mai un *nome pagina*, che l'estensione non
+///   ce l'ha: `foto.png` e `foto` non si somigliano nemmeno;
+/// - e dove i due nomi coincidono davvero — un file **senza** estensione, come
+///   il `LICENSE` qui sotto — decide l'ordine: chi risolve prova il grafo, cioè
+///   i documenti, e solo se lì non trova niente ripiega sull'anagrafe
+///   (`rules::health::broken_target`). Un allegato non può togliere un nome a
+///   una nota perché non arriva mai al proprio turno.
+///
+/// Allargare la ricerca a `entries` non riparerebbe niente e costerebbe: la nota
+/// finirebbe nominata `[[Legale/LICENSE]]` dentro i documenti di terzi, cioè il
+/// path intero al posto del nome, per un'ambiguità che non c'è.
+///
+/// **La destinazione sta in una sottocartella apposta.** Sostituendo `metas` con
+/// `entries` in `link_rewrite_plan` questo banco diventa rosso — `Vedi
+/// [[Legale/LICENSE]]` invece di `Vedi [[LICENSE]]` — ed è la prova che serve:
+/// non presidia il codice com'è, presidia il codice contro la riparazione che la
+/// riga proponeva. Rinominando invece nella **radice** sarebbe verde anche con
+/// quella riparazione applicata (misurato), perché lì `strip_ext(path)` e il nome
+/// pagina sono la stessa stringa e la seconda forma non si distingue dalla
+/// prima: un presidio non rosso *per come è montato*, non perché la proprietà
+/// tenga.
+#[test]
+fn un_allegato_non_contende_il_nome_pagina_di_una_nota() {
+    let (_g, mut ws) = vault();
+    let root = ws.root().to_owned();
+    // Un file senza estensione: è il solo caso in cui il nome di un allegato e
+    // il nome pagina di una nota possono essere la stessa stringa.
+    std::fs::write(root.join("LICENSE"), "MIT").unwrap();
+    std::fs::write(root.join("bozza.md"), "# Bozza\n").unwrap();
+    std::fs::write(root.join("Indice.md"), "Vedi [[bozza]]\n").unwrap();
+    std::fs::create_dir_all(root.join("Legale")).unwrap();
+    ws.reindex().expect("reindex");
+
+    ws.rename_document(&DocId::new("bozza.md"), &DocId::new("Legale/LICENSE.md"))
+        .expect("la nota si rinomina");
+
+    assert_eq!(
+        ws.read_source(&DocId::new("Indice.md")).unwrap(),
+        "Vedi [[LICENSE]]\n",
+        "il nome basta: l'omonimo è un allegato, e un allegato non si nomina \
+         senza estensione. Cercando l'omonimia in `entries` qui ci sarebbe \
+         `[[Legale/LICENSE]]`"
+    );
+    assert_eq!(
+        ws.resolve_link("LICENSE"),
+        Some(DocId::new("Legale/LICENSE.md")),
+        "ed è il nome che riporta alla nota, non al file omonimo: fra i due \
+         risolutori il grafo va per primo"
+    );
+    assert_eq!(
+        broken(&ws),
+        [("Assente.md".to_string(), Some("manca.png".to_string()))],
+        "nessun link nuovo è rotto — il solo rotto è quello che lo era già"
+    );
+}

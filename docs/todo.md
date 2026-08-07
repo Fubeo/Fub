@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Diciannove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Diciotto** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -514,7 +514,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0050 | `count` attraversa il testo due volte, su un percorso caldo | `fub-features` · `stats.rs:57` | prestazioni |
 | 0051 | il filtro dei tag alloca un `to_lowercase()` per tag a ogni battuta | `fub-features` · `tags.rs:232` | prestazioni |
 | 0052 | la chiave di stato del filtro tag è cablata e si fida dell'isolamento implicito dell'host | `fub-features` · `tags.rs:74` | stato di vista |
-| 0059 | `link_rewrite_plan` cerca l'omonimia in `metas` e non in `entries`: gli allegati omonimi sfuggono | `fub-kernel` · `workspace.rs:3352` | anagrafe |
 | 0062 | `backlinks()` torna duplicati quando un documento linka due volte lo stesso target, e il contratto non lo dice | `fub-kernel` · `graph.rs:231` | grafo |
 | 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
 | 0071 | `UndoStack::push` usa `Vec::remove(0)` oltre il tetto | `fub-kernel` · `undo.rs:99` | prestazioni |

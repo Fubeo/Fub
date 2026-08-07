@@ -3460,6 +3460,18 @@ impl Workspace {
         // riscrittura scriverebbe sempre la forma più lunga. Quindi resta una
         // regola; ciò che cambia è che adesso la seconda condizione la si
         // **verifica** invece di affermarla.
+        // **`metas` e non `entries`, ed è la scelta giusta** (difetto 0059, che
+        // affermava il contrario). La gemella qui accanto — `entry_rewrite_plan`,
+        // che sposta un allegato — cerca gli omonimi nell'anagrafe, e la
+        // differenza fra le due non è una svista: **ogni piano cerca l'omonimia
+        // nel registro che il proprio risolutore legge**. Un wikilink verso un
+        // allegato lo risolve `named_entry_in`, che confronta il nome del file
+        // **con l'estensione** (`![[foto.png]]`, mai `[[foto]]`), quindi un
+        // allegato non contende mai un *nome pagina*; e dove le due stringhe
+        // coincidono davvero — un file senza estensione — chi risolve prova il
+        // grafo per primo e ripiega sull'anagrafe solo se lì non ha trovato
+        // niente. Allargare la ricerca a `entries` scriverebbe il path intero
+        // dentro i documenti di terzi per un'ambiguità che non esiste.
         let to_name = to.page_name();
         let ambiguous = self
             .indexes
