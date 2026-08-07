@@ -738,6 +738,51 @@ impl Host {
         Ok(())
     }
 
+    /// **La chiave di una radice**: quella con cui è già conosciuta, se lo è, e
+    /// solo altrimenti la sua forma canonica.
+    ///
+    /// Canonicalizzare è una domanda al filesystem, e una radice si
+    /// canonicalizza **una volta, all'apertura** — è lì che `/vault`, `/vault/`
+    /// e un link simbolico diventano la stessa chiave, ed è lì che si può
+    /// ancora dire di no a chi nomina una cartella che non c'è. Rifarla a ogni
+    /// uso non aggiunge niente e toglie tutto nel caso che conta: una chiavetta
+    /// staccata, una cartella di rete caduta, un `rm -rf` di chi fa pulizia.
+    /// Da quel momento il disco non risponde più, e le funzioni che
+    /// ricanonicalizzavano rispondevano «non riesco a risolvere» a chi voleva
+    /// **chiudere** quel vault, o smettere di preferirlo, o rinominarlo — cioè
+    /// esattamente alle tre cose che si fanno su un vault che non c'è più.
+    ///
+    /// La risposta l'apertura l'ha già data: è la chiave della sessione e il
+    /// `root` della voce in registro, ed è la sola forma che
+    /// [`vaults`](Host::vaults) e [`known_vaults`](Host::known_vaults)
+    /// restituiscono, cioè la sola che la shell abbia in mano. Quindi si guarda
+    /// prima lì. Al disco si chiede solo per un nome che né le sessioni né il
+    /// registro conoscono — un alias, un path con lo slash finale — e lì la
+    /// canonicalizzazione serve ancora, per intero.
+    ///
+    /// Non è [`forme_della_radice`], che risponde a un'altra domanda: chi
+    /// **dimentica** cancella per ogni nome possibile e non può fallire, chi
+    /// usa deve arrivare a *una* chiave o dire perché no.
+    fn chiave(&self, root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
+        if self.conosce(root) {
+            return Ok(root.to_owned());
+        }
+        canonical(root)
+    }
+
+    /// Questo host conosce questa radice **sotto questo nome**: c'è una
+    /// sessione aperta con questa chiave, o una voce in registro.
+    ///
+    /// I due elenchi insieme e non uno solo, perché le due metà si aprono e si
+    /// chiudono in momenti diversi: un vault chiuso esce dalle sessioni e resta
+    /// in registro — ed è proprio allora che lo si preferisce o lo si rinomina.
+    fn conosce(&self, root: &Utf8Path) -> bool {
+        self.sessions
+            .read()
+            .is_ok_and(|sessions| sessions.open.contains_key(root))
+            || self.vaults.conosce(root)
+    }
+
     // --- il registro dei vault (§11.1) -------------------------------------
     //
     // Ciò che questa macchina **conosce**, che è un'altra cosa da ciò che è
@@ -752,7 +797,7 @@ impl Host {
     /// Appunta (o spunta) un vault. Il path **non** deve essere aperto: si
     /// preferisce un vault anche quando è chiuso, ed è quasi sempre allora.
     pub fn set_vault_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
-        self.vaults.set_favorite(&canonical(root)?, favorite)
+        self.vaults.set_favorite(&self.chiave(root)?, favorite)
     }
 
     /// L'icona e il nome con cui un vault compare nell'elenco: **l'aspetto
@@ -764,7 +809,7 @@ impl Host {
         icon: Option<String>,
         name: String,
     ) -> Result<(), PluginError> {
-        self.vaults.set_look(&canonical(root)?, icon, name)
+        self.vaults.set_look(&self.chiave(root)?, icon, name)
     }
 
     /// Toglie un vault dall'elenco. **Non lo cancella dal disco**: dimenticare
@@ -1219,7 +1264,10 @@ impl Host {
     /// Se era il corrente, corrente diventa un altro dei vault aperti — o
     /// nessuno, se non ne restano.
     pub fn close_vault(&self, root: &Utf8Path) -> Result<Vec<PluginError>, PluginError> {
-        let root = canonical(root)?;
+        // **Fuori dal prestito esclusivo**, perché nel ramo che non conosce il
+        // nome dato questa riga chiede al disco: e il lock che ferma ogni
+        // comando dell'host non attraversa una domanda al filesystem.
+        let root = self.chiave(root)?;
         let session = {
             let mut sessions = self.sessions.write()?;
             let Some(session) = sessions.open.remove(&root) else {
@@ -1295,7 +1343,7 @@ impl Host {
     /// dell'ultimo lavoro — e sarebbe di nuovo un ordine che dice una cosa e un
     /// corrente che ne dice un'altra.
     pub fn set_current(&self, root: &Utf8Path) -> Result<(), PluginError> {
-        self.diventa_corrente(&canonical(root)?)
+        self.diventa_corrente(&self.chiave(root)?)
     }
 
     /// Fa qualcosa con una sessione: quella nominata, o la corrente se `vault` è
@@ -1309,9 +1357,15 @@ impl Host {
         vault: Option<&str>,
         f: impl FnOnce(&VaultSession) -> R,
     ) -> Result<R, PluginError> {
+        // La chiave si risolve **prima** del prestito, per la ragione di
+        // [`chiave`](Host::chiave): nel ramo che non conosce il nome dato c'è
+        // una domanda al disco, e il prestito delle sessioni non la attraversa.
+        let nominata = vault
+            .map(|path| self.chiave(Utf8Path::new(path)))
+            .transpose()?;
         let sessions = self.sessions.read()?;
-        let key = match vault {
-            Some(path) => canonical(Utf8Path::new(path))?,
+        let key = match nominata {
+            Some(key) => key,
             None => sessions
                 .corrente()
                 .cloned()
@@ -1525,13 +1579,19 @@ fn info_of(session: &VaultSession) -> Result<VaultInfo, PluginError> {
     })
 }
 
-/// La forma **canonica** di una radice: è la chiave delle sessioni.
+/// La forma **canonica** di una radice: è la chiave delle sessioni, e si conia
+/// **all'apertura**.
 ///
 /// Senza, `/vault` e `/vault/` — o un link simbolico e la sua destinazione —
 /// sarebbero due sessioni sullo stesso vault, e la seconda si fermerebbe sul
 /// lock che l'indice della prima tiene sulla propria cartella. Un path che non
 /// si canonicalizza (non esiste, o non è leggibile) è un errore qui, dove si può
 /// ancora dire quale.
+///
+/// **Chi la chiama diretta è chi conia**: [`Host::open`], che una cartella l'ha
+/// già pretesa una riga sopra. Chi *usa* una radice coniata passa da
+/// [`Host::chiave`] e chi la dimentica da [`forme_della_radice`], e in nessuno
+/// dei due casi si torna a chiedere al disco una risposta che si ha già.
 fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
     let canonical = root
         .canonicalize()
@@ -1548,6 +1608,10 @@ fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
 /// una domanda al filesystem, e su una cartella sparita non ha risposta. Chi
 /// apre può quindi pretendere la canonica; chi dimentica no, e deve accettare
 /// che la stessa radice sia nominabile in due modi.
+///
+/// Non è [`Host::chiave`], che risponde alla terza domanda: chi **usa** un
+/// vault deve arrivare a *una* chiave o dire perché no, e ci arriva guardando
+/// quelle che già conosce invece di cancellare per ogni nome possibile.
 fn forme_della_radice(root: &Utf8Path) -> Vec<Utf8PathBuf> {
     let mut forme = vec![root.to_owned()];
     if let Ok(canonica) = canonical(root) {
