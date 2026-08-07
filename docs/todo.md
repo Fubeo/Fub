@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Quarantadue** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Quaranta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -505,7 +505,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 |---|---|---|---|
 | 0001 | `VersionRef` attraversa l'IPC, e per lui `fub-app` dipende da `fub-features` | `fub-app/Cargo.toml` | confini |
 | 0002 | `restore_from_trash` ripristina i documenti e non gli asset | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
-| 0003 | il contesto di `Session` sopravvive alla disattivazione del plugin che l'ha pubblicato | `fub-kernel` · `workspace.rs` `deactivate_plugin` | spegnimento |
 | 0004 | i sidecar orfani in `.fub/data/trash/` non li pota nessuno fino a `empty_trash` | `fub-kernel` · `vault.rs` `remove_trashed` | cestino |
 | 0007 | `close_vault` e `with_session` fanno `canonical()` per primo: un vault sparito dal disco non si chiude più | `fub-host` · `session.rs:1015` | vault che sparisce |
 | 0008 | `set_plugin_enabled(false)` non ferma i job in volo, e salta `Plugin::deactivate` | `fub-host` · `session.rs` `set_plugin_enabled` | spegnimento |

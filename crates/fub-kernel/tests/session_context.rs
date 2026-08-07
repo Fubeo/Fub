@@ -218,6 +218,47 @@ fn only_the_views_that_follow_what_changed_are_redrawn() {
     assert!(ws.active_context().is_none());
 }
 
+/// **Il contesto non è del plugin che lo stava leggendo**: spegnerne uno non lo
+/// azzera, e non deve. Ciò che `ViewContext` porta — riquadro, documento,
+/// selezioni, modalità — è della shell, che è anche l'unica a scriverlo
+/// ([`Workspace::set_active_context`]); non c'è un campo che nomini chi l'ha
+/// pubblicato, perché a pubblicarlo non è mai un componente. Azzerarlo qui
+/// vorrebbe dire che l'utente smette di guardare la nota che ha davanti perché
+/// un pannello laterale si è spento.
+///
+/// L'altra metà — che dopo lo spegnimento nessuno dica alla shell di
+/// ridisegnare una view che non c'è più — è **verde per costruzione**:
+/// `set_active_context` ricalcola l'elenco da `views()` a ogni chiamata, e
+/// quella view `deactivate_plugin` l'ha già tolta. Il banco tiene ferma la
+/// costruzione invece di ripararla: se un domani l'elenco venisse memorizzato
+/// al posto di ricalcolato, è qui che si romperebbe.
+#[test]
+fn deactivating_a_plugin_leaves_the_session_context_alone() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+
+    let pubblicato = contesto("Nota.md").with_selections(Some(SelectionSet::caret(3)));
+    assert_eq!(
+        ws.set_active_context(Some(pubblicato.clone())),
+        vec!["solo-doc", "doc-e-selezione"]
+    );
+
+    ws.deactivate_plugin("test.sel").expect("disattivato");
+
+    assert_eq!(
+        ws.active_context(),
+        Some(&pubblicato),
+        "il contesto è della shell: non se ne va con chi lo leggeva"
+    );
+
+    assert_eq!(
+        ws.set_active_context(Some(contesto("Altra.md"))),
+        vec!["solo-doc"],
+        "la view di chi si è spento non è più fra quelle da ridisegnare: la \
+         shell non riceve mai un id a cui non corrisponde più un provider"
+    );
+}
+
 #[test]
 fn the_shortcut_for_a_single_pane_shell_clears_the_selection() {
     let fx = Fixture::new();
