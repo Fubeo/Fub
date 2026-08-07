@@ -183,7 +183,12 @@ export const api = {
   knownVaults: () => invoke<KnownVault[]>("known_vaults"),
   setVaultFavorite: (path: string, favorite: boolean) =>
     invoke<void>("set_vault_favorite", { path, favorite }),
-  setVaultLook: (path: string, icon: string | null, name: string | null) =>
+  // L'aspetto **intero**, nelle stesse forme che `knownVaults` restituisce:
+  // icona assente = `null`, nome non scelto = `""` (che chi disegna sostituisce
+  // col nome della cartella). Il nome non è un `string | null` apposta: un
+  // `null` accanto a quello dell'icona si leggerebbe «lascialo com'era», e
+  // sarebbe la stessa firma con due significati opposti.
+  setVaultLook: (path: string, icon: string | null, name: string) =>
     invoke<void>("set_vault_look", { path, icon, name }),
   // Toglie dall'elenco. **Non cancella niente dal disco.** Dimentica anche come
   // lo si stava guardando (§11.2): riaprire fra un anno un vault dimenticato non
