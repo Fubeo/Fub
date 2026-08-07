@@ -421,6 +421,8 @@ const IT = {
   "organization.not_saved": "Organizzazione non salvata: {reason}",
   "views.surface_missing":
     "La view «{view}» chiede la superficie «{surface}», che questa shell non ospita: {motivo}.",
+  "views.action_failed":
+    "L'azione «{action}» non è andata a buon fine ({reason}): quello che vedi è di prima.",
   "commands.list_failed":
     "L'elenco dei comandi non è arrivato ({reason}): la palette è vuota e le scorciatoie dichiarate non rispondono.",
   "vault.partial":
@@ -736,6 +738,8 @@ const EN: Record<Chiave, string> = {
   "organization.not_saved": "Organization not saved: {reason}",
   "views.surface_missing":
     "The view «{view}» asks for the «{surface}» surface, which this shell does not host: {motivo}.",
+  "views.action_failed":
+    "The «{action}» action did not go through ({reason}): what you see is from before.",
   "commands.list_failed":
     "The command list did not arrive ({reason}): the palette is empty and the declared shortcuts do not respond.",
   "vault.partial":
