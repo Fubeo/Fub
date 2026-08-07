@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Ventuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Venti** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -522,7 +522,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
 | 0077 | `portable_dir` non verifica di essere scrivibile e non ripiega su `~/.config/fub` | `fub-host` · `config.rs:133` | configurazione |
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
-| 0095 | non c'è modo di chiedere a un `custom_kind` «sei esprimibile in questo formato?»: l'elenco è una catena di `if`, e un secondo `FormatProvider` la riscrive da zero | `fub-format-markdown` · `serialize.rs` `write_custom_block` | confini |
 | 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |
 
 ## Gli allegati

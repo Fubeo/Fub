@@ -159,7 +159,9 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // forma che `parse.rs` dà a un `NodeValue::HtmlBlock`, ed è
                 // quella che una `SyntaxRule` produce — quindi va letto di lì.
                 if blocks.is_empty() {
-                    out.push_str(&escape(contenuto_testuale(attrs).unwrap_or_default()));
+                    out.push_str(&escape(
+                        contenuto_testuale(custom_kind, attrs).unwrap_or_default(),
+                    ));
                 } else {
                     render_blocks(blocks, opts, out);
                 }
@@ -253,7 +255,7 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             // espressione: qui si guardava solo `text`, e un inline che portasse
             // il proprio contenuto sotto un altro nome del registro spariva
             // esattamente come sparivano i blocchi.
-            let text = contenuto_testuale(attrs).unwrap_or_default();
+            let text = contenuto_testuale(custom_kind, attrs).unwrap_or_default();
             out.push_str(&format!(
                 "<span{}>{}</span>",
                 attr("class", &format!("inline-{}", class_of(custom_kind))),
@@ -267,29 +269,33 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
 /// contenuto che il blocco ha.
 ///
 /// I `custom_kind` che non hanno figli portano i byte dell'utente in un attrs,
-/// e il nome di quell'attrs lo decide chi produce il blocco. Il registro di
-/// [`custom_kind`] ne dichiara tre, e sono questi tre in quest'ordine:
-///
-/// - `html` — l'HTML grezzo, il solo di cui `parse.rs` sia l'autore;
-/// - `source` — il sorgente di una formula o di un diagramma, cioè la forma che
-///   una `SyntaxRule` **a recinto** produce;
-/// - `text` — la forma che una `SyntaxRule` **inline** produce.
+/// e **la chiave la dichiara il contratto**, non questo file:
+/// [`custom_kind::carico`] la dice per ogni kind del core. Prima erano tre
+/// stringhe a campione (`html`, `source`, `text`) scritte qui dentro, cioè lo
+/// stesso elenco di `model.rs` copiato in un renderer: un kind del core che
+/// chiamasse il proprio contenuto in un quarto modo si rendeva vuoto, e la
+/// copia non aveva nessuno che la tenesse allineata all'originale.
 ///
 /// Sta in una funzione sola perché il degrado dei blocchi e quello degli inline
 /// facevano la stessa domanda in due punti, e la facevano diversa: l'inline
 /// guardava `text` e il blocco non guardava niente. Chiedere due volte la stessa
 /// cosa in due modi è il difetto, non la ripetizione.
 ///
-/// **Il limite, dichiarato**: un kind di terzi che chiami il proprio contenuto
-/// in un quarto modo qui non si vede, e resta un `<div>` col bordo tratteggiato
-/// e vuoto. La risposta a quel caso non è una quarta stringa in questo elenco —
-/// è poter **chiedere** a un `custom_kind` cosa porta, che è il difetto 0095 e
-/// non si chiude di striscio da qui.
-fn contenuto_testuale(attrs: &serde_json::Value) -> Option<&str> {
-    ["html", "source", "text"]
-        .into_iter()
-        .filter_map(|chiave| attrs.get(chiave).and_then(|v| v.as_str()))
-        .find(|s| !s.is_empty())
+/// **Il limite, dichiarato**: un kind che il contratto **non** dichiara — cioè
+/// quello di un terzo — nessuno sa dove tenga i byte, perché oggi non c'è modo
+/// di dirlo (vedi [`custom_kind::carico`]). Per quelli resta il campione delle
+/// tre chiavi del core: è un tentativo, e si vede che lo è. Sostituirlo con
+/// «niente» toglierebbe la resa a `terzi:spoiler` che oggi funziona; farne una
+/// quarta stringa non renderebbe il quinto caso.
+fn contenuto_testuale<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str> {
+    let testo = |chiave: &str| attrs.get(chiave).and_then(|v| v.as_str());
+    match custom_kind::carico(kind) {
+        Some(carico) => carico.chiave().and_then(testo).filter(|s| !s.is_empty()),
+        None => ["html", "source", "text"]
+            .into_iter()
+            .filter_map(testo)
+            .find(|s| !s.is_empty()),
+    }
 }
 
 /// La classe CSS di un `custom_kind`: il nome senza il namespace, perché il

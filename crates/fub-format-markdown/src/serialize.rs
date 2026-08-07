@@ -41,7 +41,8 @@
 //! buttarli: si ferma e lo dice.
 
 use fub_abi::model::{
-    custom_kind, Block, ColumnAlign, DocumentModel, Inline, LinkTarget, TableRow,
+    custom_kind, custom_kind::Carico, Block, ColumnAlign, DocumentModel, Inline, LinkTarget,
+    TableRow,
 };
 use fub_abi::FormatError;
 
@@ -323,44 +324,47 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
 /// I `custom_kind` che **questo** formato sa scrivere, e l'errore per tutti gli
 /// altri.
 ///
-/// L'elenco non è arbitrario: sono i kind che il parser markdown *produce da
-/// solo* (`parse.rs`), cioè quelli di cui il provider conosce la sintassi
-/// perché è lui ad averla letta. Un kind che arriva da una `SyntaxRule` —
-/// `math`, `diagram`, `terzi:qualunque` — non è in questo elenco per
-/// costruzione, e per una ragione che non è pigrizia: il recinto ```` ```math ````
-/// che lo ha prodotto è un'informazione della regola, e la regola può averlo
-/// trasformato. Riscriverlo a indovinare sarebbe inventare la sorgente
-/// dell'utente.
+/// **Due metà, e solo la prima è di markdown.**
+///
+/// La prima sono i kind che hanno una sintassi *di questa grammatica*: `> [!x]`,
+/// `[^etichetta]: …`, la riga che comincia per `: `. Sono tre `if`, e tre `if`
+/// devono restare: nessun altro formato le scriverebbe così, e un provider
+/// org-mode o textile qui ci mette le sue.
+///
+/// La seconda era una catena di `if` sui kind — cioè lo stesso elenco che il
+/// contratto tiene in [`custom_kind::CARICHI`], riscritto come flusso di
+/// controllo e non interrogabile da nessuno. Adesso è il contratto a
+/// rispondere, e la risposta è **indipendente dal formato**:
+///
+/// - [`Carico::Sorgente`] — i byte *sono già* la sorgente, delimitatori
+///   compresi. Si copiano. Ci cadono l'HTML grezzo — che usciva di qui come
+///   niente, perché `blocks` è vuoto per costruzione e il ramo generico
+///   «scrivi i figli» scriveva zero byte, ed è la perdita che il corpus misura
+///   — e il frontmatter che il parser non ha capito.
+/// - [`Carico::Figli`] — il contenuto sta nei figli, e scriverli non perde
+///   niente perché non c'è nient'altro.
+/// - [`Carico::Corpo`] — byte dell'utente **senza il loro delimitatore**:
+///   `math`, `diagram`, e ogni kind che arrivi da una `SyntaxRule`. Non è
+///   pigrizia che non si scrivano: il recinto che li ha prodotti è
+///   un'informazione della regola, e la regola può averlo trasformato.
+/// - non dichiarato — un kind di terzi. Stessa risposta, per la stessa ragione.
 fn write_custom_block(
     kind: &str,
     attrs: &serde_json::Value,
     blocks: &[Block],
     out: &mut String,
 ) -> Result<(), FormatError> {
-    if kind == custom_kind::FRONTMATTER_UNPARSED {
-        // Il frontmatter che il parser non ha capito torna **verbatim**,
-        // delimitatori compresi. Se il testo non c'è non si può ricostruire da
-        // nient'altro — gli `attrs` sono tutto ciò che questo blocco è.
-        out.push_str(attr_richiesto(attrs, "text", kind)?);
-    } else if kind == custom_kind::HTML {
-        // L'HTML grezzo è **testo dell'utente**, e usciva di qui come niente:
-        // `blocks` è vuoto per costruzione (`parse.rs` lo mette tutto negli
-        // `attrs`), quindi il ramo generico «scrivi i figli» scriveva zero
-        // byte. Un `<div>` e un `<!-- commento -->` sparivano dal file al primo
-        // giro, ed è la perdita che il corpus misura.
-        let html = attr_richiesto(attrs, "html", kind)?;
-        out.push_str(html);
-        if !html.ends_with('\n') {
-            out.push('\n');
-        }
-    } else if kind == custom_kind::FOOTNOTE_DEFINITION {
+    // --- la metà che è di markdown ------------------------------------------
+    if kind == custom_kind::FOOTNOTE_DEFINITION {
         let label = attr_richiesto(attrs, "label", kind)?;
         let mut inner = String::new();
         for b in blocks {
             write_block(b, &mut inner)?;
         }
         out.push_str(&format!("[^{label}]: {}\n", inner.trim()));
-    } else if kind == custom_kind::CALLOUT {
+        return Ok(());
+    }
+    if kind == custom_kind::CALLOUT {
         let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
         out.push_str(&format!("> [!{ty}]\n"));
         let mut inner = String::new();
@@ -372,12 +376,9 @@ fn write_custom_block(
             out.push_str(line);
             out.push('\n');
         }
-    } else if kind == custom_kind::DEFINITION_LIST || kind == custom_kind::DEFINITION_TERM {
-        // Il termine è la sua riga; la lista è la sequenza dei suoi figli.
-        for b in blocks {
-            write_block(b, out)?;
-        }
-    } else if kind == custom_kind::DEFINITION_DESCRIPTION {
+        return Ok(());
+    }
+    if kind == custom_kind::DEFINITION_DESCRIPTION {
         // `: ` è la sintassi che la rende una descrizione. Senza, la riga
         // tornava un paragrafo qualunque e la definition list si scioglieva.
         let mut inner = String::new();
@@ -389,16 +390,26 @@ fn write_custom_block(
             out.push_str(line);
             out.push('\n');
         }
-    } else if kind == custom_kind::BLOCK {
-        // L'ultima spiaggia del parser: un blocco che non sa nominare ma di cui
-        // ha ricostruito i **figli**, e allora i figli sono tutto ciò che c'è.
-        // È l'unico caso in cui scrivere i soli figli non perde niente, perché
-        // non c'è nient'altro: `attrs` è `Null` per costruzione.
-        for b in blocks {
-            write_block(b, out)?;
+        return Ok(());
+    }
+
+    // --- la metà che è del contratto ----------------------------------------
+    match custom_kind::carico(kind) {
+        Some(Carico::Sorgente(chiave)) => {
+            // Se il testo non c'è non si può ricostruire da nient'altro: gli
+            // `attrs` sono tutto ciò che questo blocco è.
+            let sorgente = attr_richiesto(attrs, chiave, kind)?;
+            out.push_str(sorgente);
+            if !sorgente.ends_with('\n') {
+                out.push('\n');
+            }
         }
-    } else {
-        return Err(non_esprimibile("il blocco", kind));
+        Some(Carico::Figli) => {
+            for b in blocks {
+                write_block(b, out)?;
+            }
+        }
+        Some(Carico::Corpo(_)) | None => return Err(non_esprimibile("il blocco", kind)),
     }
     Ok(())
 }
@@ -473,11 +484,20 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
             let label = attr_richiesto(attrs, "label", custom_kind)?;
             out.push_str(&format!("[^{label}]"));
         }
+        // Il resto lo dice il contratto, come per i blocchi: un inline che
+        // porta **sorgente** si copia, e tutto ciò che porta il corpo di una
+        // sintassi — o che il contratto non dichiara affatto — non si scrive,
+        // perché il delimitatore che lo racchiudeva è di chi l'ha agganciato.
         Inline::Custom {
             custom_kind,
-            attrs: _,
+            attrs,
             span: _,
-        } => return Err(non_esprimibile("l'inline", custom_kind)),
+        } => match custom_kind::carico(custom_kind) {
+            Some(Carico::Sorgente(chiave)) => {
+                out.push_str(attr_richiesto(attrs, chiave, custom_kind)?)
+            }
+            _ => return Err(non_esprimibile("l'inline", custom_kind)),
+        },
     }
     Ok(())
 }
