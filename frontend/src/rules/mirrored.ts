@@ -116,9 +116,18 @@ function isDosDevice(segment: string): boolean {
 /// contratto**, non un dettaglio: un nome sbagliato in più modi risponde col
 /// primo dell'elenco, e la fixture confronta *quella* risposta — due ordini
 /// diversi darebbero due guasti diversi sullo stesso nome.
+///
+/// Un nome **nuovo** si giudica nella forma in cui verrebbe scritto, cioè su
+/// `normalizedName` e non su ciò che è stato digitato: senza, le due funzioni si
+/// contraddicono nei due versi — `" .nota.md"` passava e nasceva `".nota.md"`,
+/// un file che la scansione salta; `"nota.md "` veniva rifiutato per un nome che
+/// sarebbe nato `"nota.md"`. Comporle qui invece che a ogni chiamata è tutto il
+/// punto: la disciplina che si ripete a ogni sito è quella che il sito nuovo non
+/// eredita.
 export function nameFault(path: string, naming: Naming): NameFault | null {
-  if (path.trim() === "") return "empty";
-  for (const segment of path.split("/")) {
+  const giudicato = naming === "new" ? normalizedName(path) : path;
+  if (giudicato.trim() === "") return "empty";
+  for (const segment of giudicato.split("/")) {
     if (segment === "" || segment === "." || segment === "..") return "traversal";
     if (naming === "existing") continue;
     for (const ch of segment) {
@@ -130,7 +139,9 @@ export function nameFault(path: string, naming: Naming): NameFault | null {
       if (RESERVED_CHARS.has(ch)) return "reserved";
     }
     if (isDosDevice(segment)) return "device";
-    if (segment.endsWith(".") || segment.endsWith(" ")) return "trailing-dot";
+    // Solo il punto: uno spazio in coda qui non arriva più — `normalizedName`
+    // l'ha già tolto, ed è la stessa da cui `segment` viene.
+    if (segment.endsWith(".")) return "trailing-dot";
     if (segment.startsWith(".")) return "hidden";
     if (utf8Bytes(segment) > MAX_SEGMENT_BYTES) return "too-long";
   }

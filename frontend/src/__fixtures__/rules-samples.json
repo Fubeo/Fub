@@ -421,6 +421,86 @@
       "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "naming": "new",
       "out": "too-long"
+    },
+    {
+      "path": " .nota.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": " .nota.md",
+      "naming": "new",
+      "out": "hidden"
+    },
+    {
+      "path": " .gitignore",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": " .gitignore",
+      "naming": "new",
+      "out": "hidden"
+    },
+    {
+      "path": " CON.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": " CON.md",
+      "naming": "new",
+      "out": "device"
+    },
+    {
+      "path": "Progetti/ .nascosta.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "Progetti/ .nascosta.md",
+      "naming": "new",
+      "out": "hidden"
+    },
+    {
+      "path": "nota.md ",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "nota.md ",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": " nota.md ",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": " nota.md ",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "nota. ",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "nota. ",
+      "naming": "new",
+      "out": "trailing-dot"
+    },
+    {
+      "path": " / ",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": " / ",
+      "naming": "new",
+      "out": "traversal"
     }
   ],
   "normalized_name": [
