@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Cinquantuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Cinquanta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -548,7 +548,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
 | 0094 | un `Block::Custom` senza figli e senza renderer registrato si rende `<div>` vuoto: math, diagrammi e HTML grezzo spariscono dall'anteprima | `fub-format-markdown` · `render.rs` `render_block` | rendering |
 | 0095 | non c'è modo di chiedere a un `custom_kind` «sei esprimibile in questo formato?»: l'elenco è una catena di `if`, e un secondo `FormatProvider` la riscrive da zero | `fub-format-markdown` · `serialize.rs` `write_custom_block` | confini |
-| 0097 | `finish_index` cammina il disco con `collect_doc_data` sotto il prestito esclusivo, una volta per apertura | `fub-kernel` · `workspace.rs` `finish_index` | lock e I/O |
 | 0098 | `JobBell` ha sei `.expect("campanello avvelenato")`: la ragione è legittima ma è **una frase**, non una decisione presa | `fub-kernel` · `dispatcher.rs` `JobBell` | errori |
 | 0099 | `FileSink` pania sul proprio `Mutex`: se muore chi scrive, muore per primo il canale con cui il guasto si denuncia | `fub-kernel` · `log.rs` `FileSink` | errori |
 | 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |

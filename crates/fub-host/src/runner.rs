@@ -428,6 +428,14 @@ impl Shared {
             let mut ws = self.workspace.write()?;
             ws.finish_index(in_corso.work)
         };
+        // **La raccolta dello spazio per-documento, sotto prestito condiviso.**
+        // Cammina il disco degli spazi dati e il cestino, e non tocca il
+        // workspace: stava dentro `finish_index`, cioè dentro l'esclusivo, e in
+        // fondo a un'apertura è l'ultima cosa che chi guarda il vault aspetta
+        // senza motivo. Che il condiviso basti è la sua proprietà, non un
+        // rilassamento: chi potrebbe far tornare una nota fra il giudizio e la
+        // cancellazione vuole l'esclusivo, e da qui non lo ottiene.
+        self.workspace.read()?.collect_doc_data();
         *in_corso.unread.write()? = apertura
             .scartati
             .iter()
