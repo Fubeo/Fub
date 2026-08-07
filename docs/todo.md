@@ -5,7 +5,7 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 136 voci: novantanove da sette giri sulla stessa domanda, due da una
+Sono uscite 143 voci: novantanove da sette giri sulla stessa domanda, due da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md); e la §20.5, nata
 misurando la [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) contro il
@@ -32,10 +32,14 @@ perché vuole un fuso e una regola sull'ora legale
 ([0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)) — e tre da un
 **consuntivo**: la seduta 24, nata rileggendo contro i sorgenti le novantadue
 osservazioni che `docs/issues.md` teneva da un audit e che nessuno aveva mai
-lavorato. Centotrentasei sono
-chiuse — **tutte**, di nuovo — e i loro verbali stanno in
+lavorato — e **sette** da una **rilettura**: la
+[seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md), che
+non ha cercato pezzi mancanti del piano ma ha rimisurato contro i sorgenti del
+2026-08-07 le osservazioni che questo repo si portava avanti di giro in giro, e
+le ha **smentite più spesso di quanto le abbia confermate**. Centotrentasei sono
+chiuse, e i loro verbali stanno in
 [decisions/](decisions/README.md); le voci ancora aperte sono
-**zero** [conta: voci-aperte], e questo file resta il loro **indice** e il
+**sette** [conta: voci-aperte], e questo file resta il loro **indice** e il
 consuntivo di come sono finite.
 
 Da quello stesso consuntivo viene la **terza specie** che questo file conta: i
@@ -103,8 +107,8 @@ nuove, e vanno fatte in quest'ordine:
 E una settima strada, che non è una domanda: **una decisione di prodotto presa a
 verbale**. La [0025](decisions/0025-la-ricerca-predefinita.md) non ha trovato
 voci cercandole, le ha **create**: deciso cosa l'app deve fare, quello che manca
-al contratto per permetterlo si calcola. Le altre ventidue sedute descrivono un
-debito, la [21](roadmap/21-la-ricerca-predefinita.md) descrive una promessa.
+al contratto per permetterlo si calcola. Le altre ventiquattro sedute descrivono
+un debito, la [21](roadmap/21-la-ricerca-predefinita.md) descrive una promessa.
 
 E un'ottava, che non è nemmeno una strada: **una verifica**. La §21.10 è uscita
 dal controllo, riga per riga contro il codice, di un'affermazione arrivata da
@@ -236,15 +240,29 @@ che questo piano passa il tempo a togliere dal codice.
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
 | **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | **chiusa** — tre voci aperte perché toccavano una firma, e su due delle tre quel criterio non reggeva | — | — |
+| **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta è già scritta altrove nel repo | 7 | — |
 
 ## Le voci
 
-**Zero** [conta: voci-aperte]: la tabella è vuota, ed è così che si sa che la
-roadmap infrastrutturale di M4 è finita. C'era già arrivata una volta, e la
-[seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) l'ha
-riaperta per tre voci con un criterio solo — **toccano una firma**, e una firma
-scade col freeze. **Su due delle tre quel criterio non reggeva**, e a scoprirlo
-è stato ogni volta il giro che le ha chiuse, mai chi le aveva scritte: la §24.1
+**Sette** [conta: voci-aperte], e sono tutte della
+[seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md).
+**Non riaprono la roadmap infrastrutturale di M4, che resta finita**: nessuna
+delle sette è un pezzo che manca al piano, e la prova è da dove vengono. Non
+sono uscite cercando cosa serva per costruire FEATURES.md — quella domanda ha
+finito di produrre voci — ma da una **rilettura** che ha rimisurato ciò che il
+repo si portava avanti, e sono tutte e sette dello stesso tipo: una **scelta di
+prodotto o di contratto** che il codice ha già preso scrivendosi, e che nessuno
+ha mai posto come domanda. Cinque delle sette hanno il codice che dice una cosa e
+un verbale che, sullo stesso problema, ne dice un'altra; sei su sette hanno la
+risposta già scritta da qualche parte in questo repo. Per taglia: una P0, quattro
+P1, due P2 — e **la P0 non è una firma**, è una perdita di dati, quindi non
+scade col freeze e non è per questo che sta in cima.
+
+Il criterio della scadenza ha già mostrato una volta di non bastare. La
+[seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) aveva aperto
+tre voci con quel criterio solo — **toccano una firma**, e una firma scade col
+freeze — e **su due delle tre non reggeva**: a scoprirlo è stato ogni volta il
+giro che le ha chiuse, mai chi le aveva scritte. La §24.1
 ([0130](decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md)) perché
 un `pub use` è additivo — a scadere era il frattempo — e la §24.2
 ([0131](decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md)) perché
@@ -269,7 +287,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-**zero** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+**sette** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -286,11 +304,17 @@ decidere. La forma di questo file era già pronta a riceverlo, e la prova è che
 non è servito inventare un criterio nuovo: è bastato rileggere quello con cui
 *Caselle* si era staccata da *Voci*.
 
-La colonna *Voci* somma **zero** [conta: voci-aperte]: **ogni** seduta è a
-zero, e l'ultima ad arrivarci è la 24, con la
-[0132](decisions/0132-un-rifiuto-non-e-una-frase.md) — prima di lei c'era la 16,
-con la
-[0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md).
+La colonna *Voci* somma **sette** [conta: voci-aperte], e stanno **tutte in una
+riga**: le prime ventiquattro sedute sono a zero, la venticinquesima è a sette.
+È una distribuzione che vale la pena leggere, perché è la seconda volta che
+capita e la prima è finita: le ventiquattro ci sono arrivate una per volta —
+l'ultima è stata la 24, con la
+[0132](decisions/0132-un-rifiuto-non-e-una-frase.md), prima di lei la 16, con la
+[0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
+— e ogni volta lo zero è stato il segnale che una domanda aveva finito di
+produrre voci. Vale ancora: lo zero delle ventiquattro dice che la roadmap
+infrastrutturale è finita, e la riga della 25 non lo contraddice, perché non
+viene da quella domanda.
 Della 20 non resta nemmeno una casella: si è chiusa con la
 [0111](decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), l'ultima delle cinque
 voci nate dalla domanda «cosa fallisce senza produrre nessun segnale». La 23 era
@@ -458,10 +482,17 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
+| **§25.1** | [Una rinomina che atterra su una nota viva](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#251-una-rinomina-che-atterra-su-una-nota-viva) | 25. Sette scelte che il codice ha preso senza dirlo | kernel | **P0** |
+| **§25.2** | [Quante regole di identità di un nome vuole Fub](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#252-quante-regole-di-identità-di-un-nome-vuole-fub) | 25. Sette scelte che il codice ha preso senza dirlo | contratto | **P1** |
+| **§25.3** | [Dove sta la prima fotografia di un vault](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#253-dove-sta-la-prima-fotografia-di-un-vault) | 25. Sette scelte che il codice ha preso senza dirlo | kernel | **P1** |
+| **§25.4** | [Quanto contesto porta un backlink](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#254-quanto-contesto-porta-un-backlink) | 25. Sette scelte che il codice ha preso senza dirlo | contratto | **P1** |
+| **§25.5** | [Quando la cartella di configurazione non si può scrivere](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#255-quando-la-cartella-di-configurazione-non-si-può-scrivere) | 25. Sette scelte che il codice ha preso senza dirlo | kernel | **P1** |
+| **§25.6** | [Chi paga la latenza di una scrittura fatta dentro un comando IPC](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#256-chi-paga-la-latenza-di-una-scrittura-fatta-dentro-un-comando-ipc) | 25. Sette scelte che il codice ha preso senza dirlo | shell | **P2** |
+| **§25.7** | [Dove stanno i byte di un `kind` di terzi](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#257-dove-stanno-i-byte-di-un-kind-di-terzi) | 25. Sette scelte che il codice ha preso senza dirlo | contratto | **P2** |
 
 ## I difetti misurati
 
-**Undici** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Quarantasette** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -490,6 +521,26 @@ l'unica ragione per cui sono qui. Rimisurate una per una contro i sorgenti del
 fuori perché non è un difetto ma una firma ([§24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md)
 è il posto di quelle).
 
+**Il terzo blocco, `0110`–`0145`**, è il giro del 2026-08-07, e non viene da un
+file: viene dalla stessa **rilettura** che ha aperto la
+[seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md).
+Trentasei righe, e il modo in cui sono nate è la parte che conta. Venticinque
+sono uscite rimisurando contro i sorgenti di oggi le osservazioni che i giri
+precedenti si portavano avanti: **tre erano false** e **dieci dicevano una cosa
+diversa** da quella che si osserva — non più piccola, diversa, con un altro
+soggetto o un altro meccanismo — e **due difetti veri sono stati trovati accanto
+a una riga falsa**, cercando la prova che la smentiva. Le altre undici sono il
+residuo delle sette voci: ciò che, dentro ognuna, non ha niente da decidere. Una
+ventiseiesima riga era pronta e **non è stata scritta**, perché *dove* debba
+stare la prima fotografia di un vault è precisamente la
+[§25.3](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#253-dove-sta-la-prima-fotografia-di-un-vault),
+e un difetto la cui riparazione dipende da una decisione non è un difetto; il suo
+numero, `0115`, è andato a un'altra misura. E c'è una cosa da sapere prima di
+leggerli: **i numeri di questo elenco e quelli dei
+[verbali](decisions/README.md) hanno finito lo spazio libero e si sovrappongono**
+— `0115` è **sia** una decisione **sia** un difetto, e non sono la stessa cosa.
+Chi ne cita uno dice quale delle due.
+
 **Il numero è quello di `issues.md` e non scala**, per la stessa regola dei `§`:
 è citato dai verbali e dai messaggi di commit, e rinumerarlo trasformerebbe ogni
 citazione in un rimando cieco. I buchi nella sequenza sono le ventidue righe che
@@ -514,6 +565,42 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
 | 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |
+| 0110 | lo stesso testo di contesto è copiato per intero tre volte lungo la catena — una `String` per ogni link in `inlines_del_blocco`, poi di nuovo in `register_links`, poi in `backlinks()` — dove basterebbe una fetta condivisa del sorgente | `fub-format-markdown` · `parse.rs` `inlines_del_blocco` | prestazioni |
+| 0111 | una riga vuota in mezzo a una tabella GFM la chiude e lascia le righe successive come un paragrafo unico, e succede in due file — `docs/decisions/README.md` riga 90 (58 righe, 214.447 byte in un solo paragrafo) e `docs/architecture/wit-congelato.md` riga 98 (8 righe, 11.174 byte) — senza che nessun conto della CI guardi l'integrità di una tabella | `docs` · `decisions/README.md` riga 90 (con `architecture/wit-congelato.md` riga 98) | regole |
+| 0112 | l'anagrafe non ha forma incrementale: `EntryStore::open` deserializza l'intera `BTreeMap<DocId, StoredEntry>` e `EntryStore::store` la riserializza e la sostituisce tutta con una `VaultStorage::write`, così ogni apertura paga il vault intero anche quando non è cambiato un file | `fub-kernel` · `entries.rs` `EntryStore::store` | prestazioni |
+| 0113 | il prestito esclusivo di `finish_index` copre in fila cinque fasi, tre delle quali toccano il disco — ricostruzione integrale del grafo, riconciliazione degli indici, flush degli indici, ricongiungimento delle rinomine che cammina l'anagrafe persistita, riscrittura integrale di `entries.json` — così un lettore concorrente aspetta la somma di tutte e cinque e non la sola indicizzazione | `fub-kernel` · `workspace.rs` `Workspace::finish_index` | lock e I/O |
+| 0114 | ogni snapshot riserializza e riscrive l'intero `versions.json` — `scrivi_index` fa `docs.clone()` di tutta la `BTreeMap` e un `data_write` su `INDEX_FILE` — quindi la prima passata su N note scrive N indici di taglia crescente: O(N²) byte | `fub-features` · `versioning.rs` `scrivi_index` | prestazioni |
+| 0115 | risolvere un wikilink scandisce tutta l'anagrafe: `named_entry_in` calcola fino a due `resolution_key` per voce e chiude con un `min_by_key` che non cortocircuita, quindi trovare costa quanto non trovare — 27,8 ms a chiamata su 20.000 voci — e `entry_rewrite_plan` la chiama una volta per ogni link di ogni documento, cioè quarantasei minuti per rinominare un allegato | `fub-kernel` · `index/core.rs` `named_entry_in` | prestazioni |
+| 0116 | il grafo dei link è l'unico derivato che non si scrive su disco — `LinkGraph` non ha `Serialize`/`Deserialize` — mentre i suoi ingressi sì, dentro `entries.json`, quindi `finish_index` chiama `rebuild_graph` senza guardare il modo e ricostruisce l'intero grafo anche su un'apertura in cui nessun documento è stato riletto | `fub-kernel` · `index/core.rs` `IndexCore::rebuild_graph` | prestazioni |
+| 0117 | aprire un vault paga la latenza dell'IPC una volta per domanda invece che una volta per gruppo: `openVaultPath` mette in fila sette `await` che nessun dato lega — quattro caricatori di stato e tre elenchi del kernel — collassabili in due `Promise.all` senza toccare l'ordine che i commenti dichiarano; quattro siti in tutto, questo è il peggiore | `frontend` · `main.ts` `openVaultPath` | prestazioni |
+| 0118 | `DEFAULT_EXCLUDED` è `.obsidian`, `.git`, `node_modules` e non contiene `target`: su un vault che è anche un repo Rust ogni file di `target/` prende un `DocId` ed entra in anagrafe, perché il filtro a valle assegna una specie e non scarta nulla | `fub-kernel` · `ignore.rs` `DEFAULT_EXCLUDED` | regole |
+| 0119 | `Journal::open` legge `.fub/journal.jsonl` due volte di fila — una per `ripara_la_coda` e una per `pota(0)` — e una terza la fa `Workspace::pota_il_registro` appena il bundle dichiara `journal.retention.days`, perché `pota` rilegge il file invece di ricevere i byte che il chiamante ha appena letto | `fub-kernel` · `journal.rs` `Journal::open` | lock e I/O |
+| 0120 | il quarto banco di `concorrenza.rs` è l'unico che non prende `turno_di_banco()`: libtest lo fa girare insieme agli altri tre e i suoi thread occupano i core proprio mentre `due_letture_stanno_nel_workspace_insieme` cronometra la sovrapposizione, che su una macchina a due core può non avvenire mai | `fub-host` · `tests/concorrenza.rs` `una_view_che_pania_disegnando_non_avvelena_il_vault` | presidi |
+| 0121 | `verificaAncora` conta come «senza nome» e abbandona ogni `:N` la cui riga non offre un simbolo cercabile — 36 su 154 — e nell'abbandonarlo salta anche il controllo di limite sul numero di righe del bersaglio, che non avrebbe avuto bisogno di nessun nome | `.github/scripts` · `check-doc-links.mjs` `verificaAncora` | presidi |
+| 0122 | un tratto `` `file.rs:N` `` che nessun link della stessa riga risolve per nome di file non viene né verificato né contato: 33 ancoraggi di prosa, soprattutto in `docs/decisions/`, restano fuori dal totale di 154 e il riassunto finale non li nomina | `.github/scripts` · `check-doc-links.mjs` `main` | presidi |
+| 0123 | gli avvisi non fatali del montaggio viaggiano nell'`Ok(Vec<String>)` di `BundleRegistry::enable`, e i due chiamanti che accendono un bundle scartano quel payload con un `?` che non lega: l'utente accende un componente e i provider non entrati non compaiono né nel valore di ritorno né nel log | `fub-host` · `session.rs` `Host::set_plugin_enabled` | regole |
+| 0124 | tre comandi IPC restano registrati in `generate_handler!` senza che nessuna riga di `frontend/` li invochi, e l'allowlist della dieta li assolve per nome senza mai chiedere chi li chiami: superficie da mantenere e sandboxare che solo i banchi esercitano | `fub-app` · `lib.rs` `close_vault` (con `list_vaults`, `set_current_vault`) | presidi |
+| 0125 | l'unica asserzione sul contesto di `computes_backlinks_with_context` è un `any(\|r\| r.context.is_some())`: le tre sorgenti sono verificate una per una, ma il contesto — la cosa che dà il nome al banco — passa con un backlink su quattro che ce l'ha, e senza messaggio di fallimento | `fub-format-markdown` · `tests/vault_e2e.rs` `computes_backlinks_with_context` | presidi |
+| 0126 | gli estratti di un provider si raccolgono con `.collect()` in una `BTreeMap<DocId, DocumentMatch>`: due righe per lo stesso documento si sovrascrivono in silenzio, dove `Matches::insert` — a poche righe di distanza — avrebbe chiamato `absorb` e fuso score, proprietà e occorrenze | `fub-kernel` · `index/plan.rs` `told` | regole |
+| 0127 | un verbale è immutabile ma il codice che descrive no, e non c'è nessun registro che tenga i due allineati: due verbali — la decisione 0121 sul `<div>` vuoto e su `heading_slug`, la 0062 sull'unico caso di `StderrSink` — affermano di `crates/` cose che a HEAD sono false, i commit che le hanno rese false hanno toccato solo `todo.md`, e chi legge non ha nessun segnale di stare leggendo un fatto scaduto | `docs` · `CONTRIBUTING.md` `Chiudere una decisione` | regole |
+| 0128 | i blocchi compongono la classe CSS col `custom_kind` intero mentre gli inline la fanno passare per `class_of`, che taglia il namespace fidandosi di un `data-kind` che nessun ramo emette: `terzi:spoiler` e `altri:spoiler` collidono su `.inline-spoiler` senza nulla che li distingua | `fub-format-markdown` · `render.rs` `class_of` | regole |
+| 0129 | `convert_inlines` non ha un ramo per l'HTML inline e lo lascia cadere nel catch-all che ricorre sui figli, ma quel nodo porta il markup in `literal` e non ha figli, quindi sparisce senza lasciare nemmeno i byte grezzi — mentre `convert_block` salva il `literal` dell'HTML di blocco | `fub-format-markdown` · `parse.rs` `convert_inlines` | regole |
+| 0130 | due letture che rispondono con dei dati hanno un comando IPC proprio invece di una variante di `IndexQuery`, e siccome `IndexQuery` non ha una variante di resa e l'`HostApi` non ha una capacità di render, un `ViewProvider` non ha nessuna porta per mostrare un documento reso mentre la shell ne ha due | `fub-app` · `lib.rs` `render_preview` / `render_embed` | regole |
+| 0131 | `deleted_at` non è un dato salvato ma l'mtime del file nel cestino diviso 1000, ricavato in `walk_trash`, quindi qualsiasi tocco al file — un rename, un backup, una sync — riscrive la data di cancellazione, e per giunta invalida il sidecar, che usa lo stesso mtime come controllo d'identità | `fub-kernel` · `vault.rs` `walk_trash` | regole |
+| 0132 | il presidio delle stringhe del kernel elenca a mano tre famiglie — `locale`, `properties`, `ignore` — mentre il kernel ne dichiara cinque: `journal` e `maintenance` non entrano né fra i cataloghi né fra le spec, e le loro chiavi e la loro prosa cablata restano fuori dal giudizio restando verde, benché `Famiglia::cataloghi()` e `Famiglia::impostazioni()` esistano già a due passi | `fub-features` · `tests/i_cataloghi.rs` `le_impostazioni_del_core_parlano_anche_loro` | presidi |
+| 0133 | il conto `crate-del-workspace` ricava l'elenco dei crate dal glob `crates/*/Cargo.toml` invece che da `[workspace] members`, ignorando `crateDelWorkspace` che gli altri due presidi già usano: una cartella su disco non dichiarata membro entra nel conto senza che cargo la compili, e un membro fuori da `crates/` non ci entra mai | `.github/scripts` · `conteggi.mjs` `crate-del-workspace` | presidi |
+| 0134 | l'anagrafe si scrive una volta sola per sessione — `store_entries` ha per unico chiamante `finish_index`, che gira solo nel job d'apertura — mentre le sei chiamate a `touch_entry` di metà sessione aggiornano solo la memoria e `Workspace::close` non la scrive: tutto ciò che si salva, rinomina o cestina dopo l'apertura viene riletto e riparsato alla riapertura, cioè esattamente il lavoro che l'anagrafe esiste per evitare | `fub-kernel` · `workspace.rs` `Workspace::store_entries` | prestazioni |
+| 0135 | `Workspace::organization_warnings` non ha nessun chiamante fuori dai banchi: gli avvisi che calcola non arrivano a nessuna porta | `fub-kernel` · `workspace.rs` `organization_warnings` | presidi |
+| 0136 | l'etichetta di un wikilink senza alias la sintetizza comrak dal bersaglio, e `convert_inlines` la scandisce per i tag come fosse prosa: `[[#Sezione]]` fa nascere un tag `Sezione` che nessuno ha scritto, con lo span dentro quello del link | `fub-format-markdown` · `parse.rs` ramo `NodeValue::WikiLink` | regole |
+| 0137 | il dry-run della rinomina chiede `IndexQuery::Backlinks` con `page: None` e poi destruttura `BacklinkRef { source, .. }`: si fa consegnare i contesti — 203 KB mediani, fino a 1,5 MB — per costruire un elenco di percorsi, mentre la foglia `QueryPredicate::Linked` che il docstring di `backlinks()` gli indica esiste già | `fub-features` · `commands.rs` (dry-run della rinomina) | prestazioni |
+| 0138 | `set_setting_for_user` e `reset_setting_for_user` prendono il prestito **esclusivo** del workspace e ci attraversano una scrittura su disco, mentre i quattro fratelli che fanno la stessa cosa prendono quello condiviso e `set_view_state` ha la ragione scritta accanto a sé: «prendere qui quello esclusivo bloccherebbe chi legge per il tempo di una scrittura su disco» | `fub-host` · `session.rs` `Host::set_setting_for_user` | lock e I/O |
+| 0139 | `togliDappertutto` chiama `chiudiTab` in ciclo e ogni giro fa un `cambiato()`, cioè una scrittura su disco con `fsync`: cancellare un documento aperto in cinque riquadri costa cinque scritture dove ne basterebbe una alla fine | `frontend` · `layout.ts` `togliDappertutto` | prestazioni |
+| 0140 | quattro regole di identità di un nome non fanno la normalizzazione NFC che `resolution_key` fa — `canonical_tag`, `canonical_anchor`, `heading_slug`, `prefix_len_ci` — così paglia in NFD e ago in NFC non si incontrano in nessuno dei due versi, e `heading_slug` su NFD non diverge soltanto: **cancella** l'accento, perché una `Mn` non è alfanumerica | `fub-abi` · `model.rs` `canonical_tag` (con `canonical_anchor`, `heading_slug`, `occurrences.rs` `prefix_len_ci`) | regole |
+| 0141 | «sta dentro questa cartella?» ha tre risposte incompatibili in produzione — `query::within_folder` taglia gli slash finali e ha il ramo su sé stessa, `rules::events::folder_contains` li taglia e non ce l'ha, `transfer::in_folder` taglia entrambi i capi — e il banco di `transfer.rs` asserisce vero ciò che `within_folder` dà falso, mentre la prosa di `traits.rs` scrive che la regola «è una, e due copie divergerebbero sul caso che nessuno prova» | `fub-abi` · `transfer.rs` `in_folder` | regole |
+| 0142 | il test della rinomina a solo caso è scritto a mano due volte, identico, con un `to_lowercase()` nudo senza NFC e senza trim: è una quattordicesima regola di piegatura del caso, e può contraddire `resolution_key` proprio sul rename che deve proteggere | `fub-kernel` · `workspace.rs` `case_only` (due siti) | regole |
+| 0143 | la testa di `il_veleno_del_kernel.rs` dichiara nove file col lucchetto e tre di quelli — `journal.rs`, `drafts.rs`, `ignore.rs` — non ne hanno nessuno, mentre `vault.rs`, che ne ha uno di banco, non è nell'elenco: i file di produzione col lucchetto nudo fuori dalle due porte sono sei, e nessun conto guarda quella frase | `fub-kernel` · `tests/il_veleno_del_kernel.rs` (prosa di modulo) | presidi |
+| 0144 | il commento di `FUORI_FEATURE` assolve due file dicendo che stanno «dietro una cargo feature spenta di default», e non è vero per nessuno dei due: `pub mod custodia;` è incondizionato — `custodia.rs` va escluso perché **è la porta** — e `http-client` è acceso di default, così il conto vede tre chiavi dove `fub-host` ne ha quattro | `fub-host` · `tests/un_lucchetto_solo.rs` `FUORI_FEATURE` | presidi |
+| 0145 | `ogni_file_e_guardato` cammina il solo `fub-host/src` mentre `SORGENTI` nomina anche `app/src/lib.rs`: oggi è vacuo perché `fub-app` non ha lucchetti, ma il presidio esiste apposta perché un file **nuovo** entri in rumore e non in silenzio | `fub-host` · `tests/un_lucchetto_solo.rs` `ogni_file_e_guardato` | presidi |
 
 ## Gli allegati
 
