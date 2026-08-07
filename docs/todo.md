@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Trentuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Trenta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -532,7 +532,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0094 | un `Block::Custom` senza figli e senza renderer registrato si rende `<div>` vuoto: math, diagrammi e HTML grezzo spariscono dall'anteprima | `fub-format-markdown` · `render.rs` `render_block` | rendering |
 | 0095 | non c'è modo di chiedere a un `custom_kind` «sei esprimibile in questo formato?»: l'elenco è una catena di `if`, e un secondo `FormatProvider` la riscrive da zero | `fub-format-markdown` · `serialize.rs` `write_custom_block` | confini |
 | 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |
-| 0101 | `EntryStore::store` mette la cache a posto **prima** di scrivere: se la scrittura fallisce, memoria e disco divergono fino alla riapertura | `fub-kernel` · `entries.rs` `EntryStore::store` | stato divergente |
 | 0102 | fra `scrivi_meta` riuscita e `scrivi_index` fallita un `meta.json` resta «viva» sotto un indice «cestinata»: una ricostruzione dai meta risuscita la nota — gemello del 0044 | `fub-features` · `versioning.rs` `applica` | versioning |
 
 ## Gli allegati
