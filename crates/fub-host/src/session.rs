@@ -161,6 +161,16 @@ pub struct VaultSession {
     /// Va tenuto in vita, e **lasciato andare per primo**: quando smette di
     /// guardare, il vault non cambia più da sotto a chi lo sta chiudendo.
     watcher: Box<dyn VaultWatcher>,
+    /// **Quando questa sessione è stata usata l'ultima volta**, nel contatore
+    /// di [`Sessions::usi`]. Da qui si legge il corrente, e per questo sta
+    /// sulla sessione e non accanto alla mappa: una sessione porta con sé il
+    /// proprio posto nell'ordine, e toglierla dalla mappa toglie anche quello.
+    ///
+    /// Zero è «aperta ma non ancora diventata corrente», che dura il tempo fra
+    /// l'inserimento e [`Host::diventa_corrente`] e perde contro chiunque:
+    /// aprire un vault lo rende corrente **quando l'apertura è finita**, non a
+    /// metà.
+    usato: u64,
 }
 
 impl VaultSession {
@@ -237,14 +247,51 @@ impl VaultSession {
     }
 }
 
-/// I vault aperti, e quale è quello corrente.
+/// I vault aperti, **in ordine d'uso**.
+///
+/// Il vault "corrente" è **della shell**: serve a chi non ne nomina uno, e non
+/// è un'assunzione del backend. Chi chiude il corrente ne lascia un altro
+/// corrente se ce n'è, e nessuno se non ce n'è.
 #[derive(Default)]
 struct Sessions {
     open: BTreeMap<Utf8PathBuf, VaultSession>,
-    /// Il vault "corrente" è **della shell**: serve a chi non ne nomina uno, e
-    /// non è un'assunzione del backend. Chi chiude il corrente ne lascia un
-    /// altro corrente se ce n'è, e nessuno se non ce n'è.
-    current: Option<Utf8PathBuf>,
+    /// Quanti «diventa corrente» sono passati di qui. È un **contatore** e non
+    /// un orologio: la domanda è *chi è stato usato dopo chi*, e a un ordine
+    /// non serve sapere che ore erano — un orologio di sistema, che può
+    /// tornare indietro, saprebbe rispondere peggio alla stessa domanda.
+    usi: u64,
+}
+
+impl Sessions {
+    /// **Il vault corrente**: il più recente fra gli aperti.
+    ///
+    /// È un'espressione e non un campo, ed è la differenza che conta: un campo
+    /// va tenuto allineato alla mappa, e chi lo aggiornava lo faceva con un
+    /// criterio suo — chiudendo il corrente toccava al primo path in ordine,
+    /// che è l'ordine della [`BTreeMap`] e non una politica che qualcuno abbia
+    /// scelto. Qui chi non è aperto non può essere corrente, e chi chiude il
+    /// corrente lascia il posto al più recente di chi resta senza che nessuno
+    /// scelga niente.
+    fn corrente(&self) -> Option<&Utf8PathBuf> {
+        self.open
+            .iter()
+            .max_by_key(|(_, session)| session.usato)
+            .map(|(root, _)| root)
+    }
+
+    /// Questo vault è il più recente. `false` se non è aperto — ed è la
+    /// risposta di chi lo chiede per un path che nessuno ha aperto.
+    fn rendi_corrente(&mut self, root: &Utf8Path) -> bool {
+        self.usi += 1;
+        let usi = self.usi;
+        match self.open.get_mut(root) {
+            Some(session) => {
+                session.usato = usi;
+                true
+            }
+            None => false,
+        }
+    }
 }
 
 /// Chi monta Fub e tiene aperti i vault.
@@ -454,6 +501,11 @@ impl Host {
     /// ripagare e il lock dell'indice da riprendere — e se la seconda apertura
     /// falliva non si tornava alla prima. Succedeva riaprendo lo stesso vault
     /// dal dialogo, e in sviluppo a ogni ricarica della pagina.
+    ///
+    /// **Le due vie escono dallo stesso posto**, e non è un vezzo: finché la
+    /// via corta usciva per conto suo, riaprire un vault già aperto ne
+    /// spostava il corrente e lasciava i recenti nell'ordine vecchio — cioè
+    /// l'unica delle due cose che l'utente rivede al prossimo avvio.
     pub fn open(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
         if !root.is_dir() {
             // `NotFound` e non `BadArgs`: chi arriva qui ha scelto una cartella
@@ -465,15 +517,25 @@ impl Host {
         }
         let root = canonical(root)?;
 
-        {
-            let mut sessions = self.sessions.write()?;
-            if let Some(session) = sessions.open.get(&root) {
-                let info = info_of(session)?;
-                sessions.current = Some(root);
-                return Ok(info);
-            }
-        }
+        let gia_aperta = {
+            let sessions = self.sessions.read()?;
+            sessions.open.get(&root).map(info_of).transpose()?
+        };
+        let info = match gia_aperta {
+            Some(info) => info,
+            None => self.monta(&root)?,
+        };
+        self.diventa_corrente(&root)?;
+        Ok(info)
+    }
 
+    /// Il montaggio vero e proprio, che è la via lunga di [`open`](Host::open):
+    /// monta, scansiona, accende il ponte, avvia il rilevatore e il pool, e
+    /// mette la sessione nella mappa. **Non decide chi è corrente**: quello lo
+    /// fa chi l'ha chiamata, con la stessa riga che lo fa per un vault che era
+    /// già aperto.
+    fn monta(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
+        let root = root.to_owned();
         let crate::mount::Mounted {
             workspace: mut ws,
             registry,
@@ -587,6 +649,9 @@ impl Host {
             #[cfg(feature = "versioning")]
             versions,
             watcher,
+            // Aperta, non ancora corrente: lo diventa quando l'apertura è
+            // finita, e a dirlo è una riga sola per tutte e due le vie.
+            usato: 0,
         };
 
         // **Chi arriva secondo lascia cadere ciò che ha montato.** Il controllo
@@ -621,7 +686,6 @@ impl Host {
             };
             let vinta = sessions.open.get(&root).expect("appena inserita, o già lì");
             let info = info_of(vinta)?;
-            sessions.current = Some(root.clone());
             (info, perdente)
         };
         // Chiudere sta **fuori** dal lock delle sessioni, per la stessa ragione
@@ -629,21 +693,49 @@ impl Host {
         if let Some(perdente) = perdente {
             perdente.close();
         }
-        // Il vault entra fra i conosciuti (§11.1). Va **dopo** l'apertura
-        // riuscita, e non prima: un path che non si apre non è un vault
-        // recente, è un errore — e un elenco di recenti pieno di cartelle che
-        // non aprono è peggio di un elenco vuoto. Un registro che non riesce a
-        // scriversi non fa fallire l'apertura: è una comodità, non il vault.
+        Ok(info)
+    }
+
+    /// **Un vault diventa il corrente**, e questa è l'unica riga che lo dice.
+    ///
+    /// Due cose insieme, ed è la ragione per cui è una funzione sola:
+    ///
+    /// - l'**ordine d'uso** dei vault aperti, da cui il corrente si legge
+    ///   ([`Sessions::corrente`]) e da cui si rilegge da sé quando il corrente
+    ///   si chiude;
+    /// - il **timbro nel registro** (§11.1), che è l'ordine in cui l'utente
+    ///   rivede i recenti al prossimo avvio.
+    ///
+    /// Erano due cose in due posti, e ogni chiamante ne aggiornava un
+    /// sottoinsieme diverso: aprire un vault già aperto spostava il corrente e
+    /// non i recenti, `set_current` non toccava nessuno dei due, e chi chiudeva
+    /// il corrente sceglieva il successore con un terzo criterio ancora. Un
+    /// posto solo, e il criterio è lo stesso per tutti perché è **la stessa
+    /// espressione**.
+    ///
+    /// Il vault entra fra i conosciuti **dopo** un'apertura riuscita e non
+    /// prima: un path che non si apre non è un vault recente, è un errore — e
+    /// un elenco di recenti pieno di cartelle che non aprono è peggio di un
+    /// elenco vuoto.
+    fn diventa_corrente(&self, root: &Utf8Path) -> Result<(), PluginError> {
+        if !self.sessions.write()?.rendi_corrente(root) {
+            return Err(PluginError::NotFound(
+                format!("Nessun vault aperto su {root}.").into(),
+            ));
+        }
+        // Il registro sta **fuori** dal lock delle sessioni: scrive sul disco,
+        // e tenerlo dentro fermerebbe ogni comando dell'host per il tempo di
+        // una scrittura di comodità.
         if let Err(e) = self
             .vaults
-            .note_opened(&root, fub_kernel::time::now_unix_millis())
+            .note_opened(root, fub_kernel::time::now_unix_millis())
         {
             // Solo log: il registro dei recenti è una comodità, non il vault,
             // e non scriversi non perde un dato dell'utente — perde al più un
             // path nell'elenco di chi è stato aperto. Pavimento e basta (0062).
             tracing::warn!(target: "fub.host", "registro dei vault: {e}");
         }
-        Ok(info)
+        Ok(())
     }
 
     // --- il registro dei vault (§11.1) -------------------------------------
@@ -1047,7 +1139,7 @@ impl Host {
     /// su un archivio» da «la finestra è aperta e basta», e la pone chi deve
     /// decidere se una domanda si può servire senza vault.
     pub fn has_current_vault(&self) -> bool {
-        self.sessions.read().is_ok_and(|s| s.current.is_some())
+        self.sessions.read().is_ok_and(|s| s.corrente().is_some())
     }
 
     /// Il promemoria costa una riscrittura del registro, quindi si paga solo
@@ -1094,9 +1186,11 @@ impl Host {
                     format!("Nessun vault aperto su {root}.").into(),
                 ));
             };
-            if sessions.current.as_ref() == Some(&root) {
-                sessions.current = sessions.open.keys().next().cloned();
-            }
+            // Chi è corrente adesso non si decide qui, e non c'era modo di
+            // deciderlo bene: il corrente è il più recente degli aperti, e
+            // togliere una sessione dalla mappa toglie con lei il suo posto
+            // nell'ordine. Prima toccava al primo path in ordine — l'ordine
+            // della `BTreeMap`, che nessuno aveva scelto come politica.
             session
         };
         // Fuori dal lock delle sessioni: chiudere chiama i provider, e un
@@ -1121,7 +1215,8 @@ impl Host {
                 Ok(sessions) => sessions,
                 Err(e) => return vec![e],
             };
-            sessions.current = None;
+            // Svuotare la mappa è già «non c'è più un corrente»: non c'è un
+            // secondo campo da azzerare, e quindi non c'è modo di scordarselo.
             std::mem::take(&mut sessions.open)
         };
         sessions
@@ -1144,20 +1239,22 @@ impl Host {
 
     /// Il vault corrente, se ce n'è uno.
     pub fn current(&self) -> Option<Utf8PathBuf> {
-        self.sessions.read().ok().and_then(|s| s.current.clone())
+        self.sessions
+            .read()
+            .ok()
+            .and_then(|s| s.corrente().cloned())
     }
 
     /// Rende corrente un vault già aperto.
+    ///
+    /// Passa da [`diventa_corrente`](Host::diventa_corrente) come `open`, e per
+    /// la ragione che rende quella funzione una sola: **sceglierlo è usarlo**.
+    /// Chi torna su un vault e poi spegne l'app deve ritrovarselo in cima ai
+    /// recenti, o l'elenco racconterebbe l'ultimo *montaggio* invece
+    /// dell'ultimo lavoro — e sarebbe di nuovo un ordine che dice una cosa e un
+    /// corrente che ne dice un'altra.
     pub fn set_current(&self, root: &Utf8Path) -> Result<(), PluginError> {
-        let root = canonical(root)?;
-        let mut sessions = self.sessions.write()?;
-        if !sessions.open.contains_key(&root) {
-            return Err(PluginError::NotFound(
-                format!("Nessun vault aperto su {root}.").into(),
-            ));
-        }
-        sessions.current = Some(root);
-        Ok(())
+        self.diventa_corrente(&canonical(root)?)
     }
 
     /// Fa qualcosa con una sessione: quella nominata, o la corrente se `vault` è
@@ -1175,8 +1272,8 @@ impl Host {
         let key = match vault {
             Some(path) => canonical(Utf8Path::new(path))?,
             None => sessions
-                .current
-                .clone()
+                .corrente()
+                .cloned()
                 .ok_or_else(|| PluginError::NotFound("Nessun vault aperto.".into()))?,
         };
         let session = sessions.open.get(&key).ok_or_else(|| {
