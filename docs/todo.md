@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Cinquantaquattro** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Cinquantatré** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -530,7 +530,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0058 | `restore_from_trash` scrive prima di cancellare: un crash in mezzo lascia due copie | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
 | 0059 | `link_rewrite_plan` cerca l'omonimia in `metas` e non in `entries`: gli allegati omonimi sfuggono | `fub-kernel` · `workspace.rs:3352` | anagrafe |
 | 0062 | `backlinks()` torna duplicati quando un documento linka due volte lo stesso target, e il contratto non lo dice | `fub-kernel` · `graph.rs:231` | grafo |
-| 0065 | il debouncer del watcher tiene il prestito esclusivo per tutta la raffica **e** per `flush_indexes` | `fub-host` · `watcher.rs:225` | lock e I/O |
 | 0067 | `Arc::get_mut` fallisce con un job in volo e `deactivate` non viene chiamato: nessun assert lo presidia | `fub-host` · `registry.rs:396` | spegnimento |
 | 0068 | `check(_, Naming::New)` accetta gli spazi in testa che `normalized` trasforma in file nascosti | `fub-abi` · `rules/path_policy.rs:286` | regole |
 | 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
