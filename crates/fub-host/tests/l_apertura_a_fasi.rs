@@ -193,3 +193,44 @@ fn chiudere_a_meta_indicizzazione_non_lascia_un_lavoro_appeso() {
         "chiudere ha aspettato chi lavorava, e il vault non c'è più"
     );
 }
+
+/// **L'apertura a fasi raccoglie lo spazio per-documento delle note che non ci
+/// sono più**, e la raccolta non è più dentro `finish_index`.
+///
+/// La raccolta (§13.2) cammina il disco degli spazi dati e il cestino: girava
+/// sotto il prestito **esclusivo** perché stava dentro `Workspace::finish_index`,
+/// e in fondo a un'apertura è l'ultima cosa che chi disegna il vault aspetta
+/// senza motivo. Adesso `collect_doc_data` prende `&self` e la chiama il runner,
+/// sotto il prestito condiviso.
+///
+/// **Il presidio è qui e non nel kernel**, ed è la ragione per cui esiste: nel
+/// kernel la raccolta si prova attraverso `reindex`, che è il giro sincrono e se
+/// la chiama da sé. La strada che poteva perderla è questa — quella dei thread —
+/// e a spostare una riga fuori da una funzione si perde chi la chiamava, non chi
+/// la scriveva. Togliendo la riga da `Shared::avanza_apertura` questo test è
+/// rosso e nessun altro se ne accorge.
+#[test]
+fn l_apertura_a_fasi_raccoglie_lo_spazio_di_chi_non_c_e_piu() {
+    let v = Vault::con(3);
+    // Lo spazio per-documento di una nota che nel vault non c'è: è ciò che resta
+    // di una cancellazione definitiva fatta ad app chiusa, che nessun evento
+    // racconta.
+    let orfano = fub_kernel::data_root(&v.root)
+        .join("plugins")
+        .join("plugin.spento")
+        .join(fub_abi::rules::doc_data::DOC_SPACE)
+        .join(fub_abi::rules::doc_data::encode("Sparita.md"));
+    std::fs::create_dir_all(&orfano).expect("cartelle");
+    std::fs::write(orfano.join("annotazioni.json"), br#"{"nota":"x"}"#).expect("scrittura");
+
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&v.root).expect("il vault si apre");
+    host.wait_indexed(None).expect("aspetta");
+
+    assert!(
+        !orfano.exists(),
+        "l'apertura a fasi non ha raccolto lo spazio di una nota che non c'è \
+         più: la raccolta è uscita da `finish_index` e chi apre a fasi non l'ha \
+         raccolta ({orfano})"
+    );
+}

@@ -1618,7 +1618,13 @@ impl Workspace {
         while !indicizzazione.finita() {
             self.index_batch(&mut indicizzazione);
         }
-        Ok(self.finish_index(indicizzazione))
+        let apertura = self.finish_index(indicizzazione);
+        // La raccolta sta fuori da `finish_index` perché vuole `&self` e non
+        // `&mut` (vedi il suo doc); qui la si rifà subito, come prima, perché
+        // `reindex` è il giro sincrono e chi lo chiama ha già il prestito in
+        // mano — non c'è nessuno da non far aspettare.
+        self.collect_doc_data();
+        Ok(apertura)
     }
 
     /// **La prima fase dell'apertura** (§15.7): guarda cosa c'è, e basta.
@@ -1972,12 +1978,13 @@ impl Workspace {
         if !apertura.interrotta {
             self.sospesi_dal_dubbio = self.rejoin_renamed_while_closed();
         }
-        // La raccolta dello stato per-documento (§13.2) passa di qui e non da
-        // un evento: la cancellazione definitiva si può perdere — svuotare il
-        // cestino ad app chiusa non lo annuncia nessuno — mentre un giro sul
-        // disco no. È il momento giusto perché l'anagrafe è appena stata
-        // ricostruita, cioè è al suo massimo di verità.
-        self.collect_doc_data();
+        // **La raccolta dello stato per-documento non è qui**, ed è l'unica riga
+        // di questa funzione che sta altrove apposta: la fa
+        // [`collect_doc_data`](Workspace::collect_doc_data), che prende `&self`,
+        // e chi ha i thread la chiama sotto il prestito **condiviso**. Il perché
+        // sta là sopra; qui resta il quando — subito dopo, e dopo il
+        // ricongiungimento, che è la riga con cui la raccolta non cancella ciò
+        // che è appena stato riconosciuto.
         self.store_entries();
 
         self.as_actor(Actor::Kernel, |ws| {
@@ -5917,7 +5924,35 @@ impl Workspace {
         }
     }
 
-    fn collect_doc_data(&mut self) -> usize {
+    /// **Toglie lo spazio per-documento delle note che non ci sono più** (§13.2),
+    /// e dice quante ne ha tolte.
+    ///
+    /// Passa di qui e non da un evento: la cancellazione definitiva si può
+    /// perdere — svuotare il cestino ad app chiusa non lo annuncia nessuno —
+    /// mentre un giro sul disco no. Il momento giusto è subito dopo
+    /// [`finish_index`](Workspace::finish_index), quando l'anagrafe è appena
+    /// stata ricostruita ed è al suo massimo di verità.
+    ///
+    /// # Perché prende `&self`, e perché non basta che lo prenda
+    ///
+    /// Perché non tocca il workspace: guarda l'anagrafe, cammina il disco degli
+    /// spazi dati e toglie cartelle. Stava dentro `finish_index`, cioè dentro il
+    /// prestito **esclusivo**, e su un vault con una storia per nota quel giro è
+    /// un `readdir` più uno `stat` per documento — più il cestino, che si legge
+    /// per intero. Chi disegna il vault appena aperto lo aspettava tutto.
+    ///
+    /// Il prestito **condiviso** non è solo più corto: è l'unico che tiene in
+    /// piedi ciò che questa funzione decide. «Questo documento non c'è più» si
+    /// legge dall'anagrafe e si esegue cancellando, e fra le due cose nessuno
+    /// deve poter far tornare quel documento — se no si cancella lo spazio di una
+    /// nota viva. Chiunque lo farebbe vuole `&mut`, quindi il prestito condiviso
+    /// lo esclude: la finestra fra il giudizio e la cancellazione non esiste,
+    /// senza che serva un piano da invalidare (0119).
+    ///
+    /// **Chi la chiama**: [`reindex`](Workspace::reindex) per il giro sincrono,
+    /// il runner di `fub-host` per l'apertura a fasi, e `vault.repair`. Che il
+    /// secondo non se la dimentichi lo guarda un banco, non questa riga.
+    pub fn collect_doc_data(&self) -> usize {
         // **Una raccolta si fa su un'anagrafe che si dichiara completa, o non si
         // fa** (§23.1). È la stessa riga con cui `finish_index` non riconcilia
         // un'indicizzazione interrotta, applicata al suo vicino di tre righe
