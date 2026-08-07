@@ -249,10 +249,11 @@ impl ExportProvider for MarkdownExport {
                     continue;
                 }
             };
-            let body = if frontmatter {
-                source
-            } else {
-                strip_frontmatter(&source, doc.as_str())
+            // Il documento diviso nelle due parti che le due destinazioni usano
+            // in modi diversi: una le concatena, l'altra le copia.
+            let (testa, corpo) = match fine_del_frontmatter(&source, doc.as_str()) {
+                Some(i) => (&source[..i], &source[i..]),
+                None => ("", source.as_str()),
             };
 
             match request.target.as_str() {
@@ -266,6 +267,9 @@ impl ExportProvider for MarkdownExport {
                 // due volte in RAM. Una strada sola, e a scegliere è chi ha
                 // aperto il dialogo — che è l'unico a sapere dove va a finire.
                 TARGET_FILES => {
+                    // Un file per nota: il frontmatter resta dov'era, cioè in
+                    // testa al file, che è l'unico posto in cui è un frontmatter.
+                    let body = if frontmatter { source.as_str() } else { corpo };
                     let h = out.open_artifact(doc.as_str(), MEDIA_TYPES[0])?;
                     out.write_artifact(h, body.as_bytes())?;
                     report.artifacts.push(out.close_artifact(h)?);
@@ -275,7 +279,30 @@ impl ExportProvider for MarkdownExport {
                         single.push_str("\n\n---\n\n");
                     }
                     single.push_str(&format!("# {}\n\n", doc.page_name()));
-                    single.push_str(body.trim_end());
+                    // **In una concatenazione un frontmatter non è un
+                    // frontmatter**, ed è tutto il difetto: lo è solo in testa al
+                    // file, e in testa al file ce ne sta uno. Copiato dov'era, il
+                    // primo `---` diventava un divisore orizzontale e il secondo
+                    // faceva del `titolo: X` un'intestazione — di ogni documento,
+                    // primo compreso, perché il `# Nome` qui sopra lo precede
+                    // comunque.
+                    //
+                    // Recintarlo è la sola forma che tiene le tre cose insieme:
+                    // i byte ci sono tutti, si vede che sono metadati, e nessun
+                    // pezzo cambia significato per il posto in cui è finito.
+                    // Toglierli renderebbe `frontmatter = true` e
+                    // `frontmatter = false` la stessa cosa per questa
+                    // destinazione, cioè un'opzione che mente.
+                    if frontmatter && !testa.trim().is_empty() {
+                        let recinto = "`".repeat(3.max(crate::util::fila_massima(testa, '`') + 1));
+                        single.push_str(&recinto);
+                        single.push_str("yaml\n");
+                        single.push_str(testa.trim_end());
+                        single.push('\n');
+                        single.push_str(&recinto);
+                        single.push_str("\n\n");
+                    }
+                    single.push_str(corpo.trim_end());
                     single.push('\n');
                 }
             }
@@ -297,14 +324,20 @@ impl ExportProvider for MarkdownExport {
     }
 }
 
-/// La sorgente senza il frontmatter, tagliata sullo **span del primo blocco**,
-/// esteso all'indentazione che quello span lascia fuori.
+/// L'indice a cui il **frontmatter finisce e il corpo comincia**, tagliato sullo
+/// **span del primo blocco** ed esteso all'indentazione che quello span lascia
+/// fuori. `None` se non c'è niente da tagliare.
 ///
 /// È il modo dichiarato di modificare un documento in questo progetto — una
 /// patch guidata dagli span del modello — e non una seconda lettura dei
 /// delimitatori `---`, che sarebbe un secondo parser YAML in miniatura. Un
-/// documento che non parsa o che è solo frontmatter esce vuoto: qui il
-/// frontmatter *è* tutto il documento.
+/// documento che è solo frontmatter ha il corpo vuoto: lì il frontmatter *è*
+/// tutto il documento.
+///
+/// Risponde con un **indice** e non con la coda perché le due destinazioni ne
+/// vogliono due metà diverse: un file per nota tiene o butta la testa dov'era, un
+/// documento unico la deve spostare — e spostarla è ciò che la smette di essere
+/// un frontmatter.
 ///
 /// # Perché lo span del primo blocco non basta
 ///
@@ -317,12 +350,12 @@ impl ExportProvider for MarkdownExport {
 /// primo carattere che non è indentazione è ciò che tiene il gesto una patch e
 /// non una seconda lettura del file. Trovato dal round-trip sul corpus della
 /// [0061](../../../docs/decisions/0061-un-giro-che-non-passa-dal-modello.md).
-fn strip_frontmatter(source: &str, doc_id: &str) -> String {
+fn fine_del_frontmatter(source: &str, doc_id: &str) -> Option<usize> {
     let Ok(model) = crate::parse::parse_markdown(source, &ParseContext::obsidian(doc_id)) else {
-        return source.to_string();
+        return None;
     };
     if model.frontmatter.is_empty() {
-        return source.to_string();
+        return None;
     }
     match model.body.first() {
         Some(first) => {
@@ -331,17 +364,20 @@ fn strip_frontmatter(source: &str, doc_id: &str) -> String {
                 .rfind(['\n', '\r'])
                 .map(|i| i + 1)
                 .unwrap_or(0);
-            let taglio = if source[riga..contenuto]
-                .chars()
-                .all(|c| c == ' ' || c == '\t')
-            {
-                riga
-            } else {
-                contenuto
-            };
-            source[taglio..].to_string()
+            Some(
+                if source[riga..contenuto]
+                    .chars()
+                    .all(|c| c == ' ' || c == '\t')
+                {
+                    riga
+                } else {
+                    contenuto
+                },
+            )
         }
-        None => String::new(),
+        // Il frontmatter *è* tutto il documento: la testa è tutto, il corpo è
+        // niente.
+        None => Some(source.len()),
     }
 }
 
@@ -383,21 +419,38 @@ mod tests {
         }));
     }
 
+    /// Le due metà del taglio, guardate insieme: **la testa e il corpo, e la
+    /// loro somma è il sorgente.**
+    ///
+    /// La seconda riga di ogni coppia è quella che conta da quando il taglio è
+    /// un indice: un `strip` che tornasse una coda giusta ma partendo dal punto
+    /// sbagliato avrebbe una testa sbagliata, e nessuno la guardava.
     #[test]
     fn the_frontmatter_leaves_by_span_and_takes_nothing_of_the_body_with_it() {
+        fn diviso(src: &str) -> (&str, &str) {
+            match fine_del_frontmatter(src, "n.md") {
+                Some(i) => (&src[..i], &src[i..]),
+                None => ("", src),
+            }
+        }
+
         let src = "---\ntitle: Ciao\n---\n\n# Titolo\n\nCorpo.\n";
-        assert_eq!(strip_frontmatter(src, "n.md"), "# Titolo\n\nCorpo.\n");
+        assert_eq!(
+            diviso(src),
+            ("---\ntitle: Ciao\n---\n\n", "# Titolo\n\nCorpo.\n")
+        );
 
         let senza = "# Titolo\n\nCorpo.\n";
         assert_eq!(
-            strip_frontmatter(senza, "n.md"),
-            senza,
+            diviso(senza),
+            ("", senza),
             "senza frontmatter non si taglia niente"
         );
 
+        let solo = "---\ntitle: Solo\n---\n";
         assert_eq!(
-            strip_frontmatter("---\ntitle: Solo\n---\n", "n.md"),
-            "",
+            diviso(solo),
+            (solo, ""),
             "un documento che è solo frontmatter, senza, non è niente"
         );
     }
