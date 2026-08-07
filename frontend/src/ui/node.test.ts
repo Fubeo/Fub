@@ -1,5 +1,16 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Il centro notifiche si finge: qui interessa **che** la porta lo chiami e con
+// che frase, non come disegna. Fingerlo tiene anche `ui/node` fuori dalla
+// catena `state/kernel` → `host/ipc`, che in un banco del riconciliatore non
+// c'entra niente.
+const notify = vi.fn();
+vi.mock("./notify", () => ({
+  get notify() {
+    return notify;
+  },
+}));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
 import { accoppia, campiInVigore, mountTree, patchTree } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
@@ -595,5 +606,72 @@ describe("le linguette di una barra di schede si riusano (§2.8)", () => {
     });
     host.querySelector<HTMLElement>(".ui-tab-button")!.click();
     expect(campi).toEqual([[{ field: "q", value: { type: "text", value: "gatto" } }]]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Un'azione che va storta lo dice (§20.4, decisione 0080)
+// ---------------------------------------------------------------------------
+
+describe("un'azione che va storta lo dice, e lo dice alla porta (§20.4)", () => {
+  const campo = (azione: string): UiNode =>
+    ({
+      node: "text_input",
+      field: "q",
+      label: "Cerca",
+      value: "",
+      placeholder: null,
+      key: "campo",
+      action: { action: azione, payload: null },
+    }) as UiNode;
+
+  /// Monta un albero il cui handler va storto nel modo chiesto, fa scattare
+  /// l'azione, e lascia svuotare la coda dei microtask: una promessa rifiutata
+  /// non si vede nello stesso giro in cui nasce.
+  async function scatta(handler: () => void | Promise<void>): Promise<void> {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, campo("mostra.tutto"), handler);
+    host.querySelector("input")!.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  beforeEach(() => {
+    notify.mockClear();
+  });
+
+  /// I due modi in cui un handler va storto sono due e nessuno prende l'altro.
+  /// Un `throw` sincrono — che nel giro vero è una `TypeError` di qua dal
+  /// confine — non arriva mai a una `.catch`.
+  it("un handler che pania lo dice, con il nome dell'azione", async () => {
+    await scatta(() => {
+      throw new Error("qualcosa di qua dal confine");
+    });
+    expect(notify).toHaveBeenCalledTimes(1);
+    const [frase, tono] = notify.mock.calls[0]!;
+    expect(tono).toBe("guasto");
+    expect(frase).toContain("mostra.tutto");
+    expect(frase).toContain("qualcosa di qua dal confine");
+  });
+
+  /// E il verso opposto: un `view_action` che torna con un errore del backend è
+  /// una **promessa rifiutata**, che non passa da un `try` già uscito. È il caso
+  /// che il difetto misurato nominava, e la frase la compone `errorText` — cioè
+  /// il `message` del `PluginError`, non `[object Object]`.
+  it("una promessa rifiutata lo dice, con il messaggio del contratto", async () => {
+    await scatta(() => Promise.reject({ kind: "Internal", message: "il provider è caduto" }));
+    expect(notify).toHaveBeenCalledTimes(1);
+    const [frase] = notify.mock.calls[0]!;
+    expect(frase).toContain("mostra.tutto");
+    expect(frase).toContain("il provider è caduto");
+  });
+
+  /// La metà che tiene ferma la prova: un'azione che riesce **non** dice niente.
+  /// Senza questo caso, un `notify` messo su ogni azione passerebbe i due casi
+  /// qui sopra e riempirebbe il centro notifiche di successi.
+  it("un'azione che riesce non dice niente", async () => {
+    await scatta(async () => {});
+    expect(notify).not.toHaveBeenCalled();
   });
 });

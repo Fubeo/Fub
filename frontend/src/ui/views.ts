@@ -435,6 +435,11 @@ function disegna(id: string, montata: Montata, albero: UiNode): void {
     // `write_document` (§18.1), che toglie la corsa invece di ordinarla. Questa
     // toglie l'unico caso in cui la corsa la perdeva sempre lo stesso.
     await flushPendingSave();
+    // **Qui non c'è un `try`, ed è deliberato.** Un'azione che va storta la dice
+    // la `Porta` di `ui/node.ts` — l'unica strada che un'azione ha per uscire da
+    // un albero montato — e scriverne uno anche qui vorrebbe dire due frasi per
+    // lo stesso guasto, o una qui e nessuna per il prossimo `mountTree`. Il
+    // difetto misurato nominava questa riga: era il testimone, non l'autore.
     const update = await api.viewAction(
       // La view, non il pannello: vedi la nota su `renderDeclaredView`.
       montata.view,

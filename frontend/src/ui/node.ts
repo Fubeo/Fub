@@ -44,6 +44,8 @@ import { customRenderer } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
 import { attivabile, identificatore, nonAttivabile } from "./a11y";
 import { t } from "../i18n/strings";
+import { errorText } from "../host/errors";
+import { notify } from "./notify";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -106,10 +108,49 @@ function instrada(container: HTMLElement, onAction: ActionHandler): Montaggio {
   const montaggio: Montaggio = {
     radice: null,
     corrente: onAction,
-    porta: ((action, fields) => montaggio.corrente(action, fields)) as Porta,
+    porta: ((action, fields) => guasto(action, () => montaggio.corrente(action, fields))) as Porta,
   };
   montati.set(container, montaggio);
   return montaggio;
+}
+
+/// **Un'azione che va storta lo dice**, e lo dice qui.
+///
+/// Il difetto misurato nominava `viewAction` in `ui/views.ts`, cioè il posto in
+/// cui si *vede*: un `throw` da lì lasciava la vista com'era, uguale a un click
+/// che non aveva fatto niente, e la promessa finiva rifiutata senza che nessuno
+/// la guardasse. Ma quello è il **testimone**, non l'autore: il ripiego di
+/// `patch`, l'`applyIntent` di un `ViewUpdate` che naviga, la `flushPendingSave`
+/// che esce prima e il prossimo `mountTree` che qualcuno scriverà passano tutti
+/// **da qui**, perché la `Porta` è l'unica strada che un'azione ha per uscire da
+/// un albero montato. Una regola che vale per tutti i chiamanti si scrive nel
+/// posto che tutti attraversano: il secondo chiamante non deve ricordarsi di
+/// niente, e non può dimenticarsene.
+///
+/// La porta **non è una seconda superficie d'errore**: il canale è il centro
+/// notifiche di `ui/notify.ts` (§20.4, decisione 0080), lo stesso da cui passano
+/// `refreshPanel` e la palette, e la frase la compone `errorText` come ovunque.
+/// Ciò che si aggiunge è quale azione, perché «qualcosa non è andato» senza il
+/// nome dell'azione è la metà che non aiuta.
+///
+/// **La vista resta com'era, ed è giusto così**: il provider non ha risposto,
+/// quindi non c'è niente di nuovo da disegnare. Ciò che mancava non era il
+/// ridisegno — era dirlo.
+function guasto(action: ActionRef, esegui: () => void | Promise<void>): void | Promise<void> {
+  const dillo = (e: unknown): void => {
+    notify(t("views.action_failed", { action: action.action, reason: errorText(e) }), "guasto");
+  };
+  // I due modi in cui un handler va storto sono due, e nessuno dei due prende
+  // l'altro: un `throw` sincrono non arriva mai a una `.catch`, e una promessa
+  // rifiutata non passa da un `try` che è già uscito.
+  let esito: void | Promise<void>;
+  try {
+    esito = esegui();
+  } catch (e) {
+    dillo(e);
+    return;
+  }
+  return Promise.resolve(esito).catch(dillo);
 }
 
 // ---------------------------------------------------------------------------
