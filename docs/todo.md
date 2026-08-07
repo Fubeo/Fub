@@ -504,7 +504,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | # | Difetto | Dove | Famiglia |
 |---|---|---|---|
 | 0001 | `VersionRef` attraversa l'IPC, e per lui `fub-app` dipende da `fub-features` | `fub-app/Cargo.toml` | confini |
-| 0002 | `restore_from_trash` ripristina i documenti e non gli asset | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
 | 0004 | i sidecar orfani in `.fub/data/trash/` non li pota nessuno fino a `empty_trash` | `fub-kernel` · `vault.rs` `remove_trashed` | cestino |
 | 0007 | `close_vault` e `with_session` fanno `canonical()` per primo: un vault sparito dal disco non si chiude più | `fub-host` · `session.rs:1015` | vault che sparisce |
 | 0018 | risoluzione dei link rotti: scansione lineare con `resolution_key` per voce, per ogni riferimento | `fub-kernel` · `index/core.rs` `resolve_entry_in` | prestazioni |
@@ -521,7 +520,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0050 | `count` attraversa il testo due volte, su un percorso caldo | `fub-features` · `stats.rs:57` | prestazioni |
 | 0051 | il filtro dei tag alloca un `to_lowercase()` per tag a ogni battuta | `fub-features` · `tags.rs:232` | prestazioni |
 | 0052 | la chiave di stato del filtro tag è cablata e si fida dell'isolamento implicito dell'host | `fub-features` · `tags.rs:74` | stato di vista |
-| 0058 | `restore_from_trash` scrive prima di cancellare: un crash in mezzo lascia due copie | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
 | 0059 | `link_rewrite_plan` cerca l'omonimia in `metas` e non in `entries`: gli allegati omonimi sfuggono | `fub-kernel` · `workspace.rs:3352` | anagrafe |
 | 0062 | `backlinks()` torna duplicati quando un documento linka due volte lo stesso target, e il contratto non lo dice | `fub-kernel` · `graph.rs:231` | grafo |
 | 0068 | `check(_, Naming::New)` accetta gli spazi in testa che `normalized` trasforma in file nascosti | `fub-abi` · `rules/path_policy.rs:286` | regole |

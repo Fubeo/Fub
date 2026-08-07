@@ -509,15 +509,47 @@ impl Vault {
     /// Qui il file è già stato cestinato una volta, e svuotare il cestino è
     /// l'atto con cui l'utente conferma.
     pub fn remove_trashed(&self, id: &DocId) -> Result<()> {
+        self.leave_trash(id, TrashExit::Destroy)
+    }
+
+    /// Ritira una voce dal cestino e la rimette nel vault a `to`: è l'**inverso
+    /// esatto** di [`trash`](Vault::trash), e come quello è una mossa sola.
+    ///
+    /// Una mossa sola non è un dettaglio di implementazione, è la proprietà: un
+    /// ripristino che scrivesse la copia nuova e poi cancellasse quella vecchia
+    /// avrebbe un istante in cui la nota sta in due posti, e un guasto in quel
+    /// punto ce la lascia — l'utente ne modifica una e ritrova l'altra. Un
+    /// `rename` o è avvenuto o no.
+    pub fn restore_trashed(&self, id: &DocId, to: &DocId) -> Result<()> {
+        self.leave_trash(id, TrashExit::To(to))
+    }
+
+    /// Le due uscite dal cestino, con **ciò che il cestino tiene** scritto una
+    /// volta sola.
+    ///
+    /// Per una voce cestinata il cestino tiene due cose — il file e il suo
+    /// sidecar — e le uscite sono due: distruggerla o restituirla. Scritte
+    /// separatamente sarebbero due elenchi da tenere allineati, cioè due modi di
+    /// dimenticare metà voce; il giorno che il cestino terrà una terza cosa (una
+    /// miniatura, una derivata) la si aggiunge qui e **tutte** le uscite se la
+    /// portano dietro senza che nessuno se ne ricordi.
+    ///
+    /// Il recinto vale per entrambe: da qui non si tocca niente che non stia
+    /// dentro `.trash/`.
+    fn leave_trash(&self, id: &DocId, exit: TrashExit<'_>) -> Result<()> {
         let path = self.path_for(id);
         if !path.starts_with(self.root.join(TRASH_DIR)) {
             return Err(KernelError::OutsideVault(path));
         }
-        self.storage
-            .remove(&path)
-            .map_err(|e| KernelError::Io { path, source: e })?;
-        // Il sidecar segue la voce; se resta orfano nessuno lo leggerà più
-        // (la chiave è il nome della voce), quindi l'esito non cambia.
+        match exit {
+            TrashExit::Destroy => self.storage.remove(&path),
+            TrashExit::To(to) => self.storage.rename(&path, &self.path_for(to)),
+        }
+        .map_err(|e| KernelError::Io { path, source: e })?;
+        // Il sidecar segue la voce, e il suo esito non risale: il file **è**
+        // uscito dal cestino, e dirlo fallito perché un dato derivato è rimasto
+        // indietro sarebbe raccontare al chiamante il contrario di quel che è
+        // successo. Quel che resta indietro se ne va con `empty_trash`.
         let _ = self.storage.remove(&self.trash_sidecar_path(id));
         Ok(())
     }
@@ -543,6 +575,12 @@ impl Vault {
         let _ = self.storage.remove_dir_all(&self.trash_meta_dir());
         Ok(entries.len())
     }
+}
+
+/// Come una voce lascia il cestino: distrutta, o restituita al vault.
+enum TrashExit<'a> {
+    Destroy,
+    To(&'a DocId),
 }
 
 /// Una voce del cestino. Vive nel **contratto** dalla decisione 0013, da quando
