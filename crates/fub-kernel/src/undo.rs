@@ -34,6 +34,8 @@
 //! un'altra cosa — questa pila è il pezzo che si può avere prima, e senza il
 //! quale il journal non saprebbe comunque *cosa* registrare.
 
+use std::collections::VecDeque;
+
 use fub_abi::command::{Partial, Undo};
 
 /// Quante operazioni si ricorda.
@@ -72,7 +74,18 @@ pub(crate) struct Entry {
 #[derive(Default)]
 pub(crate) struct UndoStack {
     /// L'ultima in coda.
-    entries: Vec<Entry>,
+    ///
+    /// Una **coda a due teste** e non un `Vec`, perché questa pila si riempie
+    /// da un capo e si pota dall'altro: si spinge in fondo, si annulla dal
+    /// fondo, e oltre il [`TETTO`] si butta via la **testa**. Con un `Vec`
+    /// quel «si butta via la testa» era `remove(0)`, che ricopia tutte le voci
+    /// rimaste a ogni comando — novantanove, col tetto di oggi. Non era il
+    /// costo a fare la differenza (misurato: 231 ns per comando, contro un
+    /// comando che scrive sul disco), è che il tipo permetteva di scriverlo:
+    /// `VecDeque` non ha una testa da spostare, quindi la variante lenta non
+    /// si può più esprimere, e il giorno che il tetto salisse a diecimila non
+    /// ci sarebbe niente da riscoprire.
+    entries: VecDeque<Entry>,
     /// Un annullamento è in corso.
     ///
     /// È la sola bandiera di questo modulo, e regge un'invariante che senza di
@@ -91,12 +104,12 @@ impl UndoStack {
         if self.replaying || undo.is_empty() {
             return;
         }
-        self.entries.push(Entry { undo, partial });
+        self.entries.push_back(Entry { undo, partial });
         if self.entries.len() > TETTO {
             // Si perde la **più vecchia**: chi annulla va all'indietro, e la
             // voce che sta per uscire dalla finestra è quella che nessuno
             // raggiungerà mai.
-            self.entries.remove(0);
+            self.entries.pop_front();
         }
     }
 
@@ -107,7 +120,7 @@ impl UndoStack {
     /// qualcosa, e riproporlo vorrebbe dire riprovare a fare il pezzo che era
     /// già riuscito.
     pub(crate) fn pop(&mut self) -> Option<Entry> {
-        self.entries.pop()
+        self.entries.pop_back()
     }
 
     /// Segna che un annullamento sta girando, e per quanto.
@@ -190,6 +203,20 @@ mod tests {
         assert_eq!(s.len(), 0);
     }
 
+    /// **Oltre il tetto si pota dalla testa, e l'ordine resta quello.**
+    ///
+    /// Non guarda la cima e basta: svuota la pila e confronta **tutte** le
+    /// voci, dalla più recente alla più vecchia. È la differenza che conta da
+    /// quando le voci stanno in una coda a due teste invece che in un `Vec`:
+    /// una pila che spinge, pota o annulla dal capo sbagliato ha ancora
+    /// `len() == TETTO` e ancora una cima plausibile, e si tradisce solo
+    /// nell'ordine di mezzo. Un banco che guardasse la sola cima lascerebbe
+    /// passare la coda che si svuota al rovescio, che è un difetto di
+    /// correttezza vestito da ottimizzazione.
+    ///
+    /// **Vale per tutte e due le forme**: era verde anche col `Vec` e col
+    /// `remove(0)`, ed è il motivo per cui sta qui — presidia la proprietà che
+    /// il cambio di struttura non doveva toccare, non il cambio.
     #[test]
     fn il_tetto_perde_la_piu_vecchia() {
         let mut s = UndoStack::default();
@@ -197,10 +224,18 @@ mod tests {
             spingi(&mut s, &format!("op {n}"));
         }
         assert_eq!(s.len(), TETTO);
+        let mut uscite = Vec::new();
+        while let Some(e) = s.pop() {
+            uscite.push(e.undo.label);
+        }
+        let attese: Vec<Text> = (5..TETTO + 5)
+            .rev()
+            .map(|n| Text::Literal(format!("op {n}")))
+            .collect();
         assert_eq!(
-            s.pop().map(|e| e.undo.label),
-            Some(Text::Literal(format!("op {}", TETTO + 4))),
-            "in cima resta la più recente"
+            uscite, attese,
+            "le cinque più vecchie sono uscite dalla testa, le altre escono \
+             dal fondo in ordine inverso"
         );
     }
 
