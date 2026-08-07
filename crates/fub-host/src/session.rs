@@ -863,16 +863,46 @@ impl Host {
             let _fermo = (!enabled).then(|| session.runner.ferma_bundle(id));
             let mut ws = session.workspace.write()?;
             let mut registry = session.registry.write()?;
-            let mut errors = Vec::new();
 
-            // Prima il fatto, poi la memoria del fatto: se il montaggio fallisce
-            // non resta scritto che il componente è acceso.
-            if enabled {
-                registry.enable(&mut ws, id).map_err(PluginError::from)?;
-            } else {
-                errors.extend(registry.unmount(&mut ws, id));
+            // **La domanda mal posta si respinge prima di toccare qualunque
+            // cosa.** Accendere un id che nessuno conosce non è un guasto a
+            // metà strada: è un id scritto male, e la risposta è la stessa che
+            // dà [`BundleRegistry::enable`] — solo, arriva *prima* della
+            // scrittura invece che dopo. È l'unico pezzo di `enable` che non
+            // ha bisogno del workspace per rispondere, ed è quello che va
+            // portato davanti al punto di non ritorno: ciò che resta dietro è
+            // il montaggio, che il workspace lo tocca per forza.
+            if enabled && !registry.knows(id) {
+                return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
             }
 
+            // **Il disco prima, la memoria dopo** — la riga di famiglia, qui a
+            // mano perché le due memorie non sono la copia di un file (quelle
+            // le tiene `Durevole`): sono la riga in `plugins.disabled` e il
+            // *montaggio*, che è il registry più il kernel.
+            //
+            // Nel verso dello spegnimento l'ordine è gratis e non c'è niente da
+            // scambiare: `unmount` **non fallisce** — raccoglie i guasti del
+            // commiato e li rende, ma smonta comunque — quindi la mossa che può
+            // andare storta è una sola ed è la scrittura, e sta davanti. Se non
+            // riesce non è stato smontato niente: il vuoto fra le due metà non
+            // è più esprimibile.
+            //
+            // Nel verso dell'accensione, invece, di mosse che possono fallire
+            // ne restano due (la scrittura e il montaggio) e l'ordine è una
+            // scelta. Va così, e non al contrario, per due ragioni. La prima:
+            // `plugins.disabled` è ciò che l'utente **vuole**, non lo specchio
+            // di ciò che è montato — non a caso non è `program_writable`. La
+            // seconda: «scritto come acceso, non montato» non è uno stato
+            // inventato qui, è quello che ogni avvio produce quando un bundle
+            // non si monta (`mount.rs`: l'errore si scrive nel log e si tira
+            // avanti), quindi è uno stato che il resto del programma sa già
+            // abitare, e il prossimo avvio ci riprova. Lo stato opposto —
+            // montato adesso, spento nel file — nessun avvio lo sa produrre, e
+            // si disfa da sé alla prima riapertura senza dire niente. Il
+            // commento che stava qui prometteva che «se il montaggio fallisce
+            // non resta scritto che il componente è acceso»: non era vero
+            // nemmeno allora, perché all'avvio resta scritto eccome.
             let mut disabled = crate::settings::disabled_plugins(&ws);
             disabled.retain(|d| d != id);
             if !enabled {
@@ -883,6 +913,13 @@ impl Host {
                 crate::settings::PLUGINS_DISABLED,
                 fub_abi::settings::SettingValue::List(disabled),
             )?;
+
+            let mut errors = Vec::new();
+            if enabled {
+                registry.enable(&mut ws, id).map_err(PluginError::from)?;
+            } else {
+                errors.extend(registry.unmount(&mut ws, id));
+            }
             Ok(errors)
         })?
     }
