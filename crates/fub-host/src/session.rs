@@ -749,6 +749,22 @@ impl Host {
             ));
         }
         self.with_session(vault, |session| {
+            // **Prima i job, poi i prestiti**, e in quest'ordine soltanto.
+            //
+            // Chi esegue un job tiene una copia del bundle finché il job dura
+            // ([`BundleRegistry::body`]), e `Plugin::deactivate` vuole essere
+            // solo: spegnere un componente con un suo job in volo saltava il
+            // commiato e lo diceva in un errore. Aspettarlo qui è la stessa
+            // regola con cui si chiude un vault — chi spegne aspetta chi
+            // lavora ([0032](../../../docs/decisions/0032-il-runner-dei-job.md))
+            // — applicata a un componente invece che a tutti.
+            //
+            // E **prima** dei due prestiti, non dopo: un job dentro `run_job`
+            // chiede il workspace per riconsegnare il proprio esito, e
+            // aspettarlo tenendoglielo sarebbe aspettare sé stessi. Il permesso
+            // si dichiara per primo anche perché cada per ultimo: finché vive,
+            // nessun job di quel bundle riparte da dietro.
+            let _fermo = (!enabled).then(|| session.runner.ferma_bundle(id));
             let mut ws = session.workspace.write()?;
             let mut registry = session.registry.write()?;
             let mut errors = Vec::new();

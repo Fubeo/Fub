@@ -388,11 +388,14 @@ impl BundleRegistry {
         };
         let mut bundle = self.mounted.remove(at);
         // `deactivate` prende `&mut self`, quindi vuole che il plugin sia di
-        // **uno solo**: lo è, perché chi chiude ferma il pool prima di arrivare
-        // qui (`JobRunner::stop`, decisione 0032) e un job in volo è l'unico
-        // altro che potrebbe tenerne una copia. Se un giorno qualcuno invertisse
-        // i due passi, il commiato non verrebbe chiamato e questo lo **dice**,
-        // invece di aspettare in silenzio la fine di un export.
+        // **uno solo**: un job in volo è l'unico altro che potrebbe tenerne una
+        // copia, e tutte e due le porte da cui si arriva qui lo aspettano prima
+        // di bussare — chi chiude il vault ferma il pool intero
+        // (`JobRunner::stop`), chi spegne un componente ferma i job **suoi**
+        // (`JobRunner::ferma_bundle`), decisione 0032 per entrambe. Se un
+        // giorno qualcuno invertisse i due passi, o ne aprisse una terza, il
+        // commiato non verrebbe chiamato e questo lo **dice**, invece di
+        // aspettare in silenzio la fine di un export.
         let out = match Arc::get_mut(&mut bundle.plugin) {
             Some(plugin) => ws.with_host(id, |host| plugin.deactivate(host)).err(),
             None => Some(PluginError::Internal(
