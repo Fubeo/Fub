@@ -305,24 +305,40 @@ struct Open {
 }
 
 impl FileSink {
-    /// Apre (o crea) il file. L'avviso non è un errore: un log che non si apre
-    /// non deve impedire di aprire un vault — è la stessa regola con cui
-    /// [`crate::settings::MachineSettings::open`] tratta un file illeggibile, e
-    /// vale a maggior ragione qui, dove ciò che si perde è il racconto e non il
-    /// contenuto.
-    pub fn open(path: &Utf8Path) -> (FileSink, Option<String>) {
+    /// Apre (o crea) il file, oppure dice perché non ci è riuscito.
+    ///
+    /// Un log che non si apre non deve impedire di aprire un vault — è la
+    /// stessa regola con cui [`crate::settings::MachineSettings::open`] tratta
+    /// un file illeggibile, e vale a maggior ragione qui, dove si perde il
+    /// racconto e non il contenuto. Ma *non impedire* vuol dire **ripiegare su
+    /// un altro canale**, non tenersi un `FileSink` che non ha un file.
+    ///
+    /// # Perché è un `Result` e non un `(FileSink, Option<String>)`
+    ///
+    /// Perché un sink che non ha aperto niente **scrive ogni riga nel vuoto,
+    /// per sempre**: [`FileSink::write_line`] esce subito quando lo stato è
+    /// `None`, e nessuno riprova mai ad aprire. Con la coppia, ripiegare era
+    /// una cosa che il chiamante si doveva *ricordare* — `let (sink, _warning)
+    /// = …` compilava benissimo, ed è esattamente la riga che stava in
+    /// `fub_host::install_logging`: un'installazione portable su un supporto
+    /// non scrivibile spegneva **tutto** il log del processo, senza ripiego e
+    /// senza una parola, e l'avviso che diceva perché era la cosa buttata via.
+    ///
+    /// Col `Result` quello stato non è più rappresentabile all'apertura, e chi
+    /// apre un log deve scrivere cosa fa quando non si apre. È il compilatore a
+    /// tenerlo fermo, non un commento.
+    pub fn open(path: &Utf8Path) -> Result<FileSink, String> {
         let sink = FileSink {
             path: path.to_owned(),
             state: Ricovero::new(None),
         };
-        let warning = match sink.reopen() {
+        match sink.reopen() {
             Ok(open) => {
                 *sink.state.prendi() = Some(open);
-                None
+                Ok(sink)
             }
-            Err(e) => Some(format!("log: `{path}` non si apre: {e}")),
-        };
-        (sink, warning)
+            Err(e) => Err(format!("log: `{path}` non si apre: {e}")),
+        }
     }
 
     fn reopen(&self) -> std::io::Result<Open> {
@@ -650,13 +666,37 @@ mod tests {
         (dir, path)
     }
 
+    /// **Un file che non si apre non diventa un sink.**
+    ///
+    /// Prima era un `FileSink` con lo stato a `None`, cioè un pozzo: ogni riga
+    /// del processo ci finiva dentro e nessuno riapriva mai. Adesso non esiste —
+    /// e a tenerlo fermo è il **tipo di ritorno**, non questo banco, che sulla
+    /// forma nuova è verde per costruzione. Qui si prova che il `Err` porta con
+    /// sé il path, perché è ciò che il chiamante deve poter dire a chi guarda.
+    ///
+    /// La cartella impossibile si costruisce senza permessi — una cartella
+    /// *dentro un file* non si crea da nessuna parte, nemmeno da root e nemmeno
+    /// su Windows.
+    #[test]
+    fn un_file_di_log_che_non_si_apre_non_diventa_un_sink() {
+        let (_tmp, dir) = tempdir();
+        let occupato = dir.join("non-una-cartella");
+        std::fs::write(&occupato, b"un file, non una cartella").expect("scrive");
+
+        let path = occupato.join("fub.log");
+        let e = FileSink::open(&path).expect_err("sotto un file non si crea niente");
+        assert!(
+            e.contains(path.as_str()),
+            "l'errore non dice quale file: {e}"
+        );
+    }
+
     /// Il file ruota, e ciò che c'era prima si ritrova in `.1`.
     #[test]
     fn il_file_ruota_e_non_perde_la_generazione_di_prima() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("fub.log");
-        let (sink, warning) = FileSink::open(&path);
-        assert!(warning.is_none(), "{warning:?}");
+        let sink = FileSink::open(&path).expect("il file si apre");
 
         let lunga = "x".repeat(1024);
         let mut scritte = 0u64;
@@ -710,8 +750,7 @@ mod tests {
     fn un_file_di_log_avvelenato_scrive_lo_stesso_e_lo_dice_nel_file() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("fub.log");
-        let (sink, warning) = FileSink::open(&path);
-        assert!(warning.is_none(), "{warning:?}");
+        let sink = FileSink::open(&path).expect("il file si apre");
         sink.write_line("prima del misfatto");
 
         avvelena(|| {

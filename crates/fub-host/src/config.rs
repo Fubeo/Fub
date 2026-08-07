@@ -101,23 +101,65 @@ pub fn log_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
 /// (`Host::new`, ambienti senza `HOME`) il sink è `stderr`, ed è l'unico
 /// `stderr` che resta in Fub: là non c'è nessun altro canale.
 ///
-/// Il file non apre? `FileSink::open` torna un avviso, e in quel caso il sink
-/// degrada a `stderr`: un log che non si apre non deve impedire all'app di
-/// partire — la stessa regola di `MachineSettings::open`.
+/// Il file non apre? Il sink ripiega su `stderr` **e la ragione si dice**, con
+/// la prima riga che passa dal collettore appena montato: un log che non si apre
+/// non deve impedire all'app di partire — la stessa regola di
+/// `MachineSettings::open` — ma non deve nemmeno sparire senza una parola.
 pub fn install_logging() -> std::sync::Arc<fub_kernel::log::Levels> {
     use std::sync::Arc;
     let levels = Arc::new(fub_kernel::log::Levels::default());
-    let sink: Arc<dyn fub_kernel::log::Sink> = match config_dir() {
-        Some(dir) => {
-            let (sink, _warning) = fub_kernel::log::FileSink::open(&log_path(&dir));
-            Arc::new(sink)
-        }
-        None => Arc::new(fub_kernel::log::StderrSink),
-    };
+    let (sink, avviso) = pavimento(config_dir());
     // In `run` siamo i primi; il `Err` si vede solo se qualcuno ha già
     // installato, e in un test non si passa di qui.
     let _ = fub_kernel::log::install(Arc::clone(&levels), sink);
+    // **Dopo** l'installazione e non prima: questa riga esiste per essere letta,
+    // e prima del collettore non avrebbe avuto dove andare. Il canale che la
+    // riceve è proprio quello su cui si è appena ripiegato.
+    if let Some(avviso) = avviso {
+        tracing::warn!(target: "fub.host", "{avviso}");
+    }
     levels
+}
+
+/// **Dove va il log, e — se non è il file — perché.**
+///
+/// Sta fuori da [`install_logging`] perché quella monta un collettore *globale
+/// al processo*, cioè si esegue una volta sola e nessun banco la può rifare. La
+/// scelta invece è il pezzo che si sbaglia, ed è il pezzo che si prova.
+///
+/// Il caso che questa funzione esiste per non ripetere: `config_dir()` è un
+/// path, non una promessa che ci si possa scrivere. Un'installazione portable
+/// (il marcatore [`PORTABLE_MARKER`] accanto all'eseguibile) su un supporto in
+/// sola lettura torna `Some(dir)` come qualunque altra, e prima di questa
+/// riparazione ciò che ne usciva era un `FileSink` senza file: ogni riga di
+/// `tracing` del processo — comprese quelle con cui le impostazioni, il registro
+/// dei vault e lo stato di vista denunciano di non essersi salvati — finiva nel
+/// vuoto. Il canale con cui ogni altro guasto si racconta era il primo a
+/// tacere, e taceva proprio nel caso in cui c'era di più da dire.
+fn pavimento(
+    dir: Option<Utf8PathBuf>,
+) -> (std::sync::Arc<dyn fub_kernel::log::Sink>, Option<String>) {
+    use std::sync::Arc;
+    let Some(dir) = dir else {
+        // Nessuna cartella di configurazione — un ambiente senza `HOME` — e
+        // `stderr` è il canale **normale**, non un ripiego: non c'è niente da
+        // spiegare a nessuno (0062).
+        return (Arc::new(fub_kernel::log::StderrSink), None);
+    };
+    match fub_kernel::log::FileSink::open(&log_path(&dir)) {
+        Ok(file) => (Arc::new(file), None),
+        Err(e) => (
+            Arc::new(fub_kernel::log::StderrSink),
+            Some(format!(
+                "{e}. Il log di questa sessione va su stderr. Se `{dir}` non è \
+                 scrivibile non si salveranno nemmeno le impostazioni della \
+                 macchina, il registro dei vault e lo stato di vista: una \
+                 installazione portable prende la cartella accanto \
+                 all'eseguibile perché c'è il marcatore `{PORTABLE_MARKER}`, e \
+                 non perché ci si possa scrivere."
+            )),
+        ),
+    }
 }
 
 fn env_path(key: &str) -> Option<Utf8PathBuf> {
@@ -130,6 +172,16 @@ fn env_path(key: &str) -> Option<Utf8PathBuf> {
 /// L'installazione è portable? Lo dice un file accanto all'eseguibile, e non una
 /// variabile d'ambiente: una chiavetta la si sposta da un computer all'altro, e
 /// ciò che la rende portable deve viaggiare **con lei**.
+///
+/// **Il marcatore dice dove, non dice che ci si possa scrivere**, e le due cose
+/// non coincidono: una chiavetta in sola lettura, o un `fub.portable` finito
+/// accanto a un eseguibile di sistema. Cosa fare in quel caso — ripiegare sul
+/// profilo dell'utente, lavorare in memoria, o rifiutarsi di partire — è una
+/// scelta di prodotto e non è stata presa: ripiegare in silenzio sulla home
+/// sparpaglierebbe i dati di chi ha scelto la chiavetta proprio per non
+/// lasciarne in giro. Ciò che è deciso è che **non si tace**: il guasto si
+/// scopre all'avvio e lo dice [`pavimento`], perché il primo a provare a
+/// scrivere in quella cartella è il log.
 fn portable_dir() -> Option<Utf8PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = Utf8PathBuf::from_path_buf(exe.parent()?.to_path_buf()).ok()?;
@@ -183,6 +235,48 @@ mod tests {
         unsafe { std::env::set_var("FUB_CONFIG_DIR", "   ") };
         assert_ne!(config_dir(), Some(Utf8PathBuf::from("   ")));
         unsafe { std::env::remove_var("FUB_CONFIG_DIR") };
+    }
+
+    /// **Un log che non si apre ripiega su `stderr`, e la ragione esiste.**
+    ///
+    /// La cartella non scrivibile si produce **senza permessi**: `create_dir_all`
+    /// non può creare una cartella *dentro un file*, e questo vale da root — dove
+    /// un `chmod` non toglie niente a nessuno — e vale su Windows, dove un
+    /// `chmod` non c'è. Iniettare la forma del guasto batte aspettarsi che
+    /// l'ambiente lo produca.
+    ///
+    /// **Verde per costruzione**, e va detto: prima della riparazione la scelta
+    /// non era una funzione — stava dentro `install_logging`, che monta un
+    /// collettore globale al processo e che nessun banco poteva chiamare due
+    /// volte. Ciò che tiene fermo il pozzo è il **compilatore**: `FileSink::open`
+    /// torna un `Result`, quindi un sink senza file non si costruisce più
+    /// distrattamente. Questo presidia l'altra metà, quella che nessun tipo può
+    /// esprimere: che il ripiego dica *perché* e nomini la cartella.
+    #[test]
+    fn un_log_che_non_si_apre_ripiega_e_dice_perche() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let base = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).expect("path UTF-8");
+        let occupato = base.join("non-una-cartella");
+        std::fs::write(&occupato, b"un file, non una cartella").expect("scrive");
+
+        let (_, avviso) = pavimento(Some(occupato.clone()));
+        let avviso = avviso.expect("una cartella dentro un file non si crea");
+        assert!(
+            avviso.contains(occupato.as_str()),
+            "l'avviso non nomina la cartella: {avviso}"
+        );
+        assert!(
+            avviso.contains("stderr"),
+            "l'avviso non dice dove è finito il log: {avviso}"
+        );
+    }
+
+    /// Senza cartella di configurazione `stderr` è il canale **normale** e non un
+    /// ripiego: là non c'è nessun altro canale, e non c'è niente da spiegare.
+    #[test]
+    fn senza_cartella_di_configurazione_stderr_non_e_un_guasto() {
+        let (_, avviso) = pavimento(None);
+        assert_eq!(avviso, None);
     }
 
     #[test]
