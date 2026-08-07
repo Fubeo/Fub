@@ -531,7 +531,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0068 | `check(_, Naming::New)` accetta gli spazi in testa che `normalized` trasforma in file nascosti | `fub-abi` · `rules/path_policy.rs:286` | regole |
 | 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
 | 0071 | `UndoStack::push` usa `Vec::remove(0)` oltre il tetto | `fub-kernel` · `undo.rs:99` | prestazioni |
-| 0072 | `cancel_job` con un `JobId` mai accodato lascia una bandiera orfana in `Flags::live` per sempre | `fub-host` · `runner.rs:135` | spegnimento |
 | 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
 | 0074 | riaprire un vault già aperto non aggiorna `last_opened`: i recenti restano nell'ordine vecchio | `fub-host` · `session.rs` `open` | registro vault |
 | 0075 | `set_look` con `name: None` non azzera: non c'è modo di tornare al nome della cartella | `fub-host` · `vaults.rs:205` | registro vault |

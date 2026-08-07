@@ -531,6 +531,11 @@ impl Dispatcher {
         std::mem::take(&mut self.pending_jobs)
     }
 
+    /// Il primo id che non è ancora di nessuno: sotto è emesso, da qui in su no.
+    pub(crate) fn jobs_issued(&self) -> u64 {
+        self.next_job_id
+    }
+
     /// Toglie dalla coda i job di un plugin che sta smettendo (§9.4) e li
     /// restituisce, perché chi li toglie deve poterli **chiudere**: un job che
     /// sparisce senza un esito è un chiamante che aspetta per sempre.
