@@ -61,7 +61,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::organization::Organization;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::VaultStorage;
+use crate::storage::{Durevole, VaultStorage};
 use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3).
@@ -109,7 +109,10 @@ pub struct OrganizationStore {
     /// cliccando gli stessi interruttori, l'organizzazione di un vault di mille
     /// note no.
     readable: bool,
-    data: RwLock<Organization>,
+    /// L'organizzazione, che è **anche** ciò che sta nel sidecar: un
+    /// [`Durevole`] perché «su disco prima, in memoria dopo» non dipendesse dal
+    /// fatto che chi scrive la prossima mutazione legga il commento sotto.
+    data: RwLock<Durevole<Organization>>,
     /// Cosa è andato storto **dopo** l'apertura: una migrazione che non si è
     /// potuta scrivere. Chi monta le mostra e se ne fa carico svuotandole, come
     /// per gli avvisi della configurazione.
@@ -132,7 +135,7 @@ impl OrganizationStore {
                 path: Some(path),
                 storage: Some(storage),
                 readable: warning.is_none(),
-                data: RwLock::new(data),
+                data: RwLock::new(Durevole::letto(data)),
                 warnings: RwLock::new(Vec::new()),
             }),
             warning,
@@ -145,7 +148,7 @@ impl OrganizationStore {
             path: None,
             storage: None,
             readable: true,
-            data: RwLock::new(Organization::default()),
+            data: RwLock::new(Durevole::letto(Organization::default())),
             warnings: RwLock::new(Vec::new()),
         })
     }
@@ -153,7 +156,7 @@ impl OrganizationStore {
     /// L'organizzazione intera: è ciò che il canale dati restituisce a
     /// [`IndexQuery::Organization`](fub_abi::traits::IndexQuery::Organization).
     pub fn snapshot(&self) -> Organization {
-        self.data.read().expect("organizzazione").clone()
+        (*self.data.read().expect("organizzazione")).clone()
     }
 
     /// L'emoji di un path (`None` la toglie).
@@ -222,7 +225,7 @@ impl OrganizationStore {
     /// è, per quella cartella.
     pub fn migrate(&self, from: &str, to: &str) -> Result<bool, String> {
         let mut data = self.data.write().expect("organizzazione");
-        let mut next = data.clone();
+        let mut next = (**data).clone();
         let mut cambiata = false;
 
         if let Some(icon) = next.icons.remove(from) {
@@ -248,8 +251,7 @@ impl OrganizationStore {
         if !cambiata {
             return Ok(false);
         }
-        self.store(&next)?;
-        *data = next;
+        data.scrivi(next, |next| self.store(next))?;
         Ok(true)
     }
 
@@ -272,21 +274,19 @@ impl OrganizationStore {
 
     fn update(&self, f: impl FnOnce(&mut Organization)) -> Result<(), String> {
         let mut data = self.data.write().expect("organizzazione");
-        let mut next = data.clone();
+        let mut next = (**data).clone();
         f(&mut next);
-        if next == *data {
+        if next == **data {
             // Niente è cambiato: non si tocca il disco. Cliccare due volte lo
             // stesso interruttore non è una scrittura.
             return Ok(());
         }
-        self.store(&next)?;
-        *data = next;
-        Ok(())
+        data.scrivi(next, |next| self.store(next))
     }
 
-    /// **Su disco prima, in memoria dopo**: al contrario, una scrittura fallita
-    /// lascerebbe in memoria un'organizzazione che il file non ha, e il
-    /// chiamante che ha ricevuto l'errore non avrebbe modo di saperlo.
+    /// La sola metà «su disco» di [`Durevole::scrivi`]: che la memoria si
+    /// muova solo dopo di lei non è più una riga da ricordarsi di scrivere qui
+    /// sotto, è ciò che il tipo del campo `data` sa esprimere.
     fn store(&self, org: &Organization) -> Result<(), String> {
         let Some(path) = &self.path else {
             return Ok(());

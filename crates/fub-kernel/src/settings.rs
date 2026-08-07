@@ -74,7 +74,7 @@ use fub_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingSpec, 
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{update_atomic, VaultStorage};
+use crate::storage::{update_atomic, Durevole, VaultStorage};
 use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
@@ -442,7 +442,10 @@ pub struct SettingsStore {
     /// in chiaro accanto ai documenti cifrati
     /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
     storage: Arc<dyn VaultStorage>,
-    vault: BTreeMap<String, SettingValue>,
+    /// Il livello del vault, che è **anche** ciò che sta nel file: un
+    /// [`Durevole`] perché «su disco prima, in memoria dopo» smettesse di
+    /// essere una frase in un commento e diventasse l'unico ordine scrivibile.
+    vault: Durevole<BTreeMap<String, SettingValue>>,
     /// Il file del vault si è letto? Se no **non lo si riscrive**: vedi
     /// [`non_lo_sovrascrivo`].
     vault_readable: bool,
@@ -480,7 +483,7 @@ impl SettingsStore {
             specs: BTreeMap::new(),
             vault_path,
             storage,
-            vault,
+            vault: Durevole::letto(vault),
             vault_readable: warnings.is_empty(),
             machine,
             sospese: BTreeSet::new(),
@@ -738,9 +741,10 @@ impl SettingsStore {
                         non_lo_sovrascrivo(&self.vault_path).into(),
                     ));
                 }
-                // Su disco prima, in memoria dopo: la ragione è la stessa
-                // scritta su `MachineSettings::write`.
-                let mut next = self.vault.clone();
+                // Su disco prima, in memoria dopo: non più perché lo dica
+                // questo commento, ma perché `Durevole` non sa esprimere
+                // l'altro ordine — la ragione sta là sopra.
+                let mut next = (*self.vault).clone();
                 match value {
                     Some(v) => {
                         next.insert(spec.key.clone(), v);
@@ -749,11 +753,13 @@ impl SettingsStore {
                         next.remove(&spec.key);
                     }
                 }
-                let bytes = encode(&next).map_err(|e| PluginError::Internal(e.into()))?;
-                self.storage.write(&self.vault_path, &bytes).map_err(|e| {
-                    PluginError::Internal(format!("{}: {e}", self.vault_path).into())
+                let (path, storage) = (&self.vault_path, self.storage.as_ref());
+                self.vault.scrivi(next, |next| {
+                    let bytes = encode(next).map_err(|e| PluginError::Internal(e.into()))?;
+                    storage
+                        .write(path, &bytes)
+                        .map_err(|e| PluginError::Internal(format!("{path}: {e}").into()))
                 })?;
-                self.vault = next;
                 // **Scrivere risveglia**, e sta qui perché qui passano tutti e
                 // due i modi di scrivere — il valore e l'azzeramento. A scrivere
                 // un'impostazione è una persona davanti al pannello (la via dei

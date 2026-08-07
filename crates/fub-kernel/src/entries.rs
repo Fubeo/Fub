@@ -70,7 +70,7 @@ use fub_abi::edit::Revision;
 use fub_abi::model::{Anchor, DocId, Frontmatter, Heading, Link};
 use serde::{Deserialize, Serialize};
 
-use crate::storage::VaultStorage;
+use crate::storage::{Durevole, VaultStorage};
 use crate::vault::data_root;
 use fub_abi::schema::SchemaVersion;
 
@@ -156,15 +156,21 @@ impl StoredEntry {
 }
 
 /// Il file com'è su disco.
+///
+/// Generico sul solo campo che pesa, perché **scriverlo non costi una copia**:
+/// si legge come [`EntriesFile`] (che possiede la tabella) e si scrive come
+/// `EntriesFile<&BTreeMap<…>>`, che la presta. È una struttura sola, quindi non
+/// c'è modo che le due idee del formato divergano — che è ciò che due tipi
+/// gemelli, uno per leggere e uno per scrivere, non avrebbero garantito.
 #[derive(Default, Serialize, Deserialize)]
-struct EntriesFile {
+struct EntriesFile<E = BTreeMap<DocId, StoredEntry>> {
     version: SchemaVersion,
     /// Quando questa tabella è stata scritta, in millisecondi UNIX: è la soglia
     /// della regola *racily clean* (vedi il § in testa al modulo).
     #[serde(default)]
     written_at: u64,
     #[serde(default)]
-    entries: BTreeMap<DocId, StoredEntry>,
+    entries: E,
 }
 
 /// Ciò che il kernel sapeva del vault l'ultima volta.
@@ -179,7 +185,11 @@ pub(crate) struct EntryStore {
     /// dentro il vault, e ci passa sopra come i documenti
     /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
     storage: Arc<dyn VaultStorage>,
-    known: BTreeMap<DocId, StoredEntry>,
+    /// Ciò che si sa, e che è **anche** ciò che c'è nel file: un [`Durevole`]
+    /// perché fossero la stessa cosa per costruzione e non per disciplina —
+    /// questo campo si assegnava prima della scrittura, e una scrittura fallita
+    /// lasciava in memoria una tabella che il disco non aveva.
+    known: Durevole<BTreeMap<DocId, StoredEntry>>,
 }
 
 impl EntryStore {
@@ -189,7 +199,7 @@ impl EntryStore {
     pub(crate) fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> Self {
         let path = data_root(root).join(FILE);
         EntryStore {
-            known: load(&path, storage.as_ref()).unwrap_or_default(),
+            known: Durevole::letto(load(&path, storage.as_ref()).unwrap_or_default()),
             path,
             storage,
         }
@@ -217,22 +227,30 @@ impl EntryStore {
     /// ha comunque aperto il vault, e far fallire un'apertura riuscita perché
     /// un file derivato non si è scritto sarebbe il verso sbagliato. Chi chiama
     /// lo annota dove si annotano gli altri esiti che nessuno leggerebbe.
+    ///
+    /// **Si scrive prima e si adotta dopo** ([`Durevole`]), e non è una
+    /// preferenza sull'ordine: al contrario, una scrittura fallita lasciava
+    /// `known` a raccontare una tabella che sul disco non c'è: dentro la
+    /// sessione «ciò che si sa» e «ciò che si sa*rà* riaprendo» diventavano due
+    /// cose diverse, e nessuno le teneva d'occhio perché l'esito non risale.
+    /// Con l'ordine giusto un guasto costa ciò che un dato derivato deve
+    /// costare — una riapertura lenta — e niente altro.
     pub(crate) fn store(&mut self, entries: BTreeMap<DocId, StoredEntry>) -> Result<(), String> {
         let written_at = crate::time::now_unix_millis();
-        self.known = entries;
-        let file = EntriesFile {
-            version: SCHEMA_VERSION,
-            written_at,
-            // La copia c'è perché ciò che si scrive è ciò che si tiene: due
-            // strutture diverse sarebbero due idee di cosa si sa.
-            entries: self.known.clone(),
-        };
-        let json = serde_json::to_vec(&file).map_err(|e| e.to_string())?;
-        // Le cartelle mancanti le crea il supporto, che è dove quella riga sta
-        // scritta una volta sola (§15.1).
-        self.storage
-            .write(&self.path, &json)
-            .map_err(|e| format!("non riesco a scrivere {}: {e}", self.path))
+        let (path, storage) = (&self.path, self.storage.as_ref());
+        self.known.scrivi(entries, |entries| {
+            let json = serde_json::to_vec(&EntriesFile {
+                version: SCHEMA_VERSION,
+                written_at,
+                entries,
+            })
+            .map_err(|e| e.to_string())?;
+            // Le cartelle mancanti le crea il supporto, che è dove quella riga
+            // sta scritta una volta sola (§15.1).
+            storage
+                .write(path, &json)
+                .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
+        })
     }
 }
 
@@ -307,6 +325,44 @@ mod tests {
         assert!(EntryStore::open(&root, Arc::new(crate::storage::FsStorage))
             .known(&DocId::new("a.md"))
             .is_some());
+    }
+
+    /// **Una scrittura che non è avvenuta non si ricorda.**
+    ///
+    /// Il guasto non si aspetta, si inietta, e qui non serve nemmeno un
+    /// supporto finto: `.fub/data` è un **file** invece che una cartella, cioè
+    /// la stessa `ENOTDIR` che un disco pieno o un permesso tolto darebbero a
+    /// chi prova a scrivere là sotto. È la forma di `SupportoCheRifiuta`
+    /// (`tests/trash.rs`) senza il supporto, perché questo modulo si guarda da
+    /// dentro e là il tipo è locale a un banco di integrazione.
+    ///
+    /// Con l'ordine di prima — `self.known = entries` e *poi* la scrittura — il
+    /// banco è rosso: la tabella resta in memoria, `known` risponde di sì, e
+    /// «ciò che si sa» e «ciò che si saprà riaprendo» diventano due cose
+    /// diverse per tutta la sessione. L'esito di `store` non risale a nessuno
+    /// (è un derivato, apposta), quindi non c'era nemmeno chi potesse
+    /// accorgersene.
+    #[test]
+    fn cio_che_il_disco_ha_rifiutato_non_resta_in_memoria() {
+        let (_tmp, root) = tempdir();
+        std::fs::create_dir_all(root.join(crate::vault::FUB_DIR)).unwrap();
+        std::fs::write(data_root(&root), "non sono una cartella").unwrap();
+
+        let mut store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
+        let e = store
+            .store(BTreeMap::from([(DocId::new("a.md"), voce(3, 1_000))]))
+            .expect_err("la cartella non si può creare");
+
+        assert!(
+            store.known(&DocId::new("a.md")).is_none(),
+            "«{e}»: la memoria non deve raccontare una tabella che il disco non ha"
+        );
+        assert!(
+            EntryStore::open(&root, Arc::new(crate::storage::FsStorage))
+                .known(&DocId::new("a.md"))
+                .is_none(),
+            "e chi riapre la vede uguale a chi era rimasto aperto"
+        );
     }
 
     /// L'anagrafe passa dal supporto, e ci passa **davvero**: su un supporto in

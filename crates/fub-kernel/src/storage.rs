@@ -794,6 +794,87 @@ fn lock_esclusivo(path: &Utf8Path) -> Option<std::fs::File> {
     Some(file)
 }
 
+// --- la copia in memoria di un file ----------------------------------------
+
+/// **Ciò che si tiene in memoria di un file, e che si cambia solo scrivendo.**
+///
+/// # Il difetto che questo tipo toglie
+///
+/// «Su disco prima, in memoria dopo» era scritto in **cinque** posti — le
+/// impostazioni di vault, quelle di macchina, l'organizzazione, il registro dei
+/// vault, lo stato di vista — ognuno con la sua frase, e in nessuno dei cinque
+/// c'era qualcosa che lo tenesse fermo. Il sesto posto
+/// ([`EntryStore`](crate::entries)) ha scritto le due righe nell'ordine opposto
+/// e nessuno se n'è accorto per un anno: la regola era una **convenzione**, e
+/// una convenzione non si eredita — si ricopia, finché qualcuno non la ricopia
+/// male.
+///
+/// Qui l'ordine non è più una scelta di chi scrive la funzione: è l'unico
+/// ordine che il tipo sa esprimere. Il valore sta dentro, non se ne consegna
+/// mai un `&mut`, e l'unico modo di sostituirlo è [`Durevole::scrivi`], che
+/// sostituisce **dopo** che la scrittura è tornata `Ok`. Un guasto a metà
+/// lascia memoria e disco d'accordo su ciò che c'era prima, che è l'unico stato
+/// che chi ha ricevuto l'errore può presumere.
+///
+/// # Perché il verso è questo e non l'altro
+///
+/// Perché delle due mosse **solo una può fallire**. Assegnare un campo non
+/// fallisce; scrivere un file sì. Mettere per ultima quella che non fallisce
+/// vuol dire che non esiste un istante in cui una è avvenuta e l'altra no, ed è
+/// la stessa ragione per cui un ripristino dal cestino è un `rename` e non un
+/// «scrivi e poi cancella».
+///
+/// # L'altra forma della stessa regola
+///
+/// [`update_atomic`] è questo tipo per i file che si **fondono** invece di
+/// ricomporsi: là il valore nuovo non ce l'ha il chiamante — lo produce la
+/// fusione con ciò che sul disco c'è adesso — quindi la scrittura *restituisce*
+/// la memoria da adottare invece di riceverla. Le due sono la stessa promessa
+/// («la memoria è ciò che il disco ha accettato») per i due modi di comporre un
+/// file, e chi ne apre un settimo sceglie fra queste due e non fra due ordini.
+pub struct Durevole<T>(T);
+
+impl<T> Durevole<T> {
+    /// Ciò che si è appena letto dal file — o il vuoto, per un file che non
+    /// c'era.
+    pub fn letto(iniziale: T) -> Self {
+        Durevole(iniziale)
+    }
+
+    /// Scrive `nuovo` e **solo se il disco lo ha accettato** lo adotta.
+    ///
+    /// `su_disco` riceve un prestito di ciò che sta per diventare la memoria, e
+    /// non una copia: è il valore stesso che va a finire nel file, quindi le due
+    /// idee di «cosa si sa» non possono divergere nemmeno per il tempo di una
+    /// serializzazione.
+    pub fn scrivi<E>(
+        &mut self,
+        nuovo: T,
+        su_disco: impl FnOnce(&T) -> Result<(), E>,
+    ) -> Result<(), E> {
+        su_disco(&nuovo)?;
+        self.0 = nuovo;
+        Ok(())
+    }
+}
+
+impl<T> std::ops::Deref for Durevole<T> {
+    type Target = T;
+
+    /// Si legge come il valore che porta. **Non** c'è il `DerefMut`, ed è tutto
+    /// il punto: un `&mut` consegnato qui rimetterebbe in circolazione
+    /// esattamente la mossa che questo tipo esiste per non far più scrivere.
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Durevole<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 // --- la memoria ------------------------------------------------------------
 
 /// Un vault in memoria: la **seconda implementazione** che tiene onesto il
