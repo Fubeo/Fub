@@ -81,10 +81,18 @@ fn i_byte_dichiarati_si_vedono_nella_resa() {
 
     for (kind, carico) in custom_kind::CARICHI {
         let body = match carico.chiave() {
-            Some(chiave) => vec![blocco(kind, serde_json::json!({ chiave: MARCA }), Vec::new())],
+            Some(chiave) => vec![blocco(
+                kind,
+                serde_json::json!({ chiave: MARCA }),
+                Vec::new(),
+            )],
             // Chi tiene il contenuto nei figli non ha una chiave da sbagliare:
             // la domanda che gli si fa è la stessa, e la risposta sono i figli.
-            None => vec![blocco(kind, serde_json::Value::Null, vec![paragrafo(MARCA)])],
+            None => vec![blocco(
+                kind,
+                serde_json::Value::Null,
+                vec![paragrafo(MARCA)],
+            )],
         };
         let html = reso(body);
         assert!(
