@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{KernelError, Result};
 use crate::ignore::IgnorePolicy;
 use crate::settings::SharedSettings;
-use crate::storage::{EntryKind, FsStorage, VaultStorage};
+use crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
 use fub_abi::schema::SchemaVersion;
 
@@ -84,6 +84,39 @@ struct TrashSidecar {
     v: SchemaVersion,
     /// Il path (relativo al vault) da cui la voce è stata cestinata.
     original: String,
+    /// **Di quale file** questo sidecar parla.
+    ///
+    /// La chiave di un sidecar è il nome della voce cestinata, e quel nome non
+    /// è unico nel tempo: il cestino è condiviso con Obsidian (D1), che può
+    /// togliere una voce senza sapere niente di `.fub/data/` e cestinarne poi
+    /// un'altra che si chiama uguale. Senza questo campo il sidecar rimasto
+    /// indietro viene creduto per la nuova, e la manda in una cartella che non
+    /// ha mai visto — o peggio, se là c'è già una nota, il ripristino sotto un
+    /// altro nome le porta via lo stato per-documento.
+    ///
+    /// È un `Option` e lo schema **non** è cambiato di numero: un sidecar
+    /// scritto prima di questo campo non è illeggibile, è solo non verificabile,
+    /// e vale quel che valeva. Bumpare la versione renderebbe carta straccia il
+    /// cestino di chi aggiorna — ogni nota lì dentro tornerebbe in radice invece
+    /// che nella sua cartella — per un caso che non si dà quasi mai. I sidecar
+    /// senza timbro si esauriscono da soli, alla prima `empty_trash`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    file: Option<TrashStamp>,
+}
+
+/// Il timbro di un file: ciò che il supporto sa dirne **senza aprirlo**, e che
+/// basta a non confonderlo con un omonimo.
+///
+/// Dimensione e data insieme: la data da sola non basta (`0` vuol dire «il
+/// supporto non lo sa», §14.2) e la dimensione da sola nemmeno. Sono le stesse
+/// due cose che [`Vault::list_trash`] ha già in mano camminando, quindi
+/// verificare costa zero letture in più.
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+struct TrashStamp {
+    size: u64,
+    /// Millisecondi UNIX, come [`crate::storage::Stat::mtime`]. Un `rename` non
+    /// la tocca, quindi è la stessa da prima che la nota finisse nel cestino.
+    mtime: u64,
 }
 
 /// Un file trovato dalla scansione: il path, e le due cose che il filesystem
@@ -416,6 +449,18 @@ impl Vault {
         let json = serde_json::to_string(&TrashSidecar {
             v: SCHEMA_VERSION,
             original: original.to_string(),
+            // Il timbro del file **appena** spostato: è l'unica cosa che lega
+            // questo sidecar a quella voce e non al prossimo omonimo. Se il
+            // supporto non sa dirlo, il sidecar resta senza — vale quel che
+            // valeva prima che il timbro esistesse, che è più di niente.
+            file: self
+                .storage
+                .stat(&self.path_for(trashed))
+                .ok()
+                .map(|s| TrashStamp {
+                    size: s.size,
+                    mtime: s.mtime,
+                }),
         })
         .expect("un path è sempre serializzabile");
         self.storage
@@ -438,10 +483,24 @@ impl Vault {
     /// si dà solo aprendo il vault con una copia di Fub più vecchia di quella
     /// che l'ha cestinata; se un giorno il sidecar porterà qualcosa che il
     /// degrado non sa rifare, quel campo sarà da scrivere.
-    fn trash_sidecar_original(&self, trashed: &DocId) -> Option<DocId> {
+    fn trash_sidecar_original(&self, trashed: &DocId, stat: &Stat) -> Option<DocId> {
         let raw = self.storage.read(&self.trash_sidecar_path(trashed)).ok()?;
         let sidecar: TrashSidecar = serde_json::from_slice(&raw).ok()?;
-        (sidecar.v == SCHEMA_VERSION).then(|| DocId::new(sidecar.original))
+        if sidecar.v != SCHEMA_VERSION {
+            return None;
+        }
+        // **Un sidecar che parla di un altro file vale come un sidecar che non
+        // c'è**: stessa regola della versione che non si conosce, e stesso
+        // degrado. Chi non porta il timbro non lo può smentire e resta creduto
+        // (vedi [`TrashSidecar::file`]).
+        let stamp = TrashStamp {
+            size: stat.size,
+            mtime: stat.mtime,
+        };
+        if sidecar.file.is_some_and(|f| f != stamp) {
+            return None;
+        }
+        Some(DocId::new(sidecar.original))
     }
 
     /// Il contenuto del cestino, dal più recente al più vecchio.
@@ -486,7 +545,7 @@ impl Vault {
                 // Obsidian, o di un'altra epoca) si degrada al nome
                 // de-timbrato nella radice.
                 original: self
-                    .trash_sidecar_original(&id)
+                    .trash_sidecar_original(&id, &entry.stat)
                     .unwrap_or_else(|| DocId::new(strip_stamp(name))),
                 // L'mtime è l'istante dello spostamento nel cestino. Se il
                 // supporto non lo sa dire, meglio "epoca zero" che rifiutare di

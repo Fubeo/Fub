@@ -284,6 +284,79 @@ fn the_trash_sidecar_carries_its_schema_version() {
     let json: serde_json::Value = serde_json::from_str(&sidecar).expect("è JSON");
     assert_eq!(json["v"], 1, "il sidecar dichiara il suo schema");
     assert_eq!(json["original"], "progetti/Nota.txt");
+    // E **di quale file** parla: senza, la chiave (il nome della voce) lo
+    // renderebbe valido anche per il prossimo omonimo.
+    assert_eq!(
+        json["file"]["size"], 11,
+        "il timbro del file cestinato: {json}"
+    );
+    assert!(json["file"]["mtime"].is_number(), "{json}");
+}
+
+/// Un sidecar scritto prima che il timbro esistesse resta buono.
+///
+/// **Verde per costruzione**: era il comportamento di prima e lo è ancora, ed è
+/// scritto qui perché è una scelta, non un residuo — lo schema non è cambiato di
+/// numero apposta (vedi `TrashSidecar::file`), e il giorno che qualcuno rendesse
+/// il timbro obbligatorio farebbe tornare in radice ogni nota già nel cestino di
+/// chi aggiorna, senza che nessun altro banco se ne accorga.
+#[test]
+fn a_sidecar_written_before_the_stamp_existed_is_still_believed() {
+    let fx = Fixture::new();
+    let ws = fx.workspace();
+    fx.put(".trash/Idea.txt", "cestinata da una Fub di prima");
+    fx.put(
+        ".fub/data/trash/Idea.txt.json",
+        r#"{"v":1,"original":"progetti/Idea.txt"}"#,
+    );
+
+    let voci = ws.list_trash().unwrap();
+    assert_eq!(voci.len(), 1);
+    assert_eq!(voci[0].original, DocId::new("progetti/Idea.txt"));
+}
+
+/// 0004 — un sidecar rimasto indietro **non parla per l'omonima**.
+///
+/// La chiave di un sidecar è il *nome* della voce cestinata, e quel nome non è
+/// unico nel tempo: il cestino è condiviso con Obsidian (D1), che può togliere
+/// una voce senza sapere niente di `.fub/data/trash/` e cestinarne poi un'altra
+/// che si chiama uguale. Il sidecar rimasto indietro allora descrive un file che
+/// non esiste più, e viene creduto per quello nuovo.
+///
+/// Non è spazio occupato: è una nota mandata in una cartella che non ha mai
+/// visto. E se là c'è già una nota — è il caso normale, la cartella d'origine di
+/// una nota cancellata è la cartella dove si lavora — il ripristino sotto un
+/// altro nome le porta via lo stato per-documento, storia del versioning
+/// compresa, perché `restore_from_trash` lo migra dall'`original` che il sidecar
+/// dichiara.
+#[test]
+fn an_orphan_sidecar_does_not_speak_for_a_namesake() {
+    let fx = Fixture::new();
+    fx.put("progetti/Idea.txt", "la prima");
+    let mut ws = fx.workspace();
+
+    // 1. Fub cestina la prima: il sidecar ricorda `progetti/`.
+    let cestinata = ws
+        .delete_document(&DocId::new("progetti/Idea.txt"))
+        .unwrap();
+    // 2. Un'altra app distrugge quella voce dal cestino. Il sidecar è roba di
+    //    Fub, in `.fub/data/`: lei non lo conosce e lo lascia dov'è.
+    std::fs::remove_file(fx.root.join(cestinata.as_str())).unwrap();
+    assert!(
+        fx.exists(".fub/data/trash/Idea.txt.json"),
+        "il sidecar è rimasto indietro"
+    );
+    // 3. La stessa app cestina un'ALTRA nota che si chiama uguale.
+    fx.put(".trash/Idea.txt", "la seconda, che non c'entra niente");
+
+    let voci = ws.list_trash().unwrap();
+    assert_eq!(voci.len(), 1, "{voci:?}");
+    assert_eq!(
+        voci[0].original,
+        DocId::new("Idea.txt"),
+        "la seconda non è mai stata in progetti/: senza un sidecar **suo** \
+         degrada alla radice, come ogni voce cestinata da un'altra app"
+    );
 }
 
 #[test]
