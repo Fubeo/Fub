@@ -122,7 +122,24 @@ impl Flags {
     /// segno è un job che il pool non ha ancora visto — la bandiera nasce qui,
     /// alzata, e il drenaggio la troverà — mentre sotto il segno è un job già
     /// concluso, e annullarlo non vuol dire niente.
-    fn cancel(&mut self, id: JobId) {
+    ///
+    /// # Il terzo modo: un id che non è mai stato un job
+    ///
+    /// «Oltre il segno» da solo non dice «deve ancora partire»: dice «non è
+    /// ancora passato di qui», e i numeri che non ci passeranno mai sono
+    /// infiniti. L'id di un annullamento **arriva da fuori** — dal pulsante del
+    /// centro attività, e sull'IPC come stringa che chiunque può comporre —
+    /// quindi un id di un altro vault, o di un elenco vecchio, o inventato,
+    /// entrava qui e lasciava una bandiera che nessuno avrebbe mai tolto: solo
+    /// `Shared::run` e `avanza_apertura` chiamano `forget`, e un job che non
+    /// esiste non passa né dall'uno né dall'altro.
+    ///
+    /// Chi sa distinguere i due casi è il kernel, che gli id li **emette**
+    /// ([`Workspace::jobs_issued`]): sotto quel segno l'id è stato dato a
+    /// qualcuno e la coda lo consegnerà, da lì in su non è mai stato un job e
+    /// non c'è niente da aspettare. Non è un tetto prudenziale — è la stessa
+    /// domanda del campo `seen`, posta all'unico che ne ha la risposta esatta.
+    fn cancel(&mut self, id: JobId, emessi: u64) {
         if let Some(flag) = self.live.get(&id) {
             flag.store(true, Ordering::Relaxed);
             return;
@@ -131,7 +148,7 @@ impl Flags {
             Some(seen) => id.0 > seen,
             None => true,
         };
-        if da_venire {
+        if da_venire && id.0 < emessi {
             self.live.insert(id, Arc::new(AtomicBool::new(true)));
         }
     }
@@ -487,8 +504,12 @@ impl Shared {
         Ok(Arc::clone(&flags.live[&id]))
     }
 
+    /// Il segno degli id emessi si prende **prima** del lock delle bandiere e
+    /// non dentro: è una lettura del workspace, e annidarla sotto le bandiere
+    /// sarebbe il secondo ordine fra due lock che altrove è già l'opposto.
     fn cancel(&self, id: JobId) -> Result<(), PluginError> {
-        self.flags.write()?.cancel(id);
+        let emessi = self.workspace.read()?.jobs_issued();
+        self.flags.write()?.cancel(id, emessi);
         Ok(())
     }
 
@@ -771,6 +792,10 @@ impl JobRunner {
     /// preso in carico. Senza quella distinzione ogni annullamento arrivato
     /// tardi — che è il caso normale di un pulsante premuto mentre il lavoro
     /// finisce — lascerebbe dietro di sé una bandiera che nessuno toglie.
+    ///
+    /// E annullare un id che **non è mai stato un job** non lascia niente
+    /// nemmeno lui: l'id arriva da fuori, e il segno che lo giudica è quello
+    /// degli id che il kernel ha emesso ([`Flags::cancel`]).
     pub fn cancel(&self, id: JobId) {
         // Su un vault avvelenato non c'è niente da annullare: il pool si è già
         // fermato da sé, e la riga che spiega perché è già stata scritta.
@@ -875,7 +900,7 @@ mod tests {
     fn annullare_un_job_vivo_alza_la_sua_bandiera() {
         let mut flags = Flags::default();
         flags.claim(JobId(7));
-        flags.cancel(JobId(7));
+        flags.cancel(JobId(7), 8);
         assert_eq!(bandiera(&flags, 7), Some(true));
     }
 
@@ -886,10 +911,38 @@ mod tests {
     fn annullare_un_job_ancora_in_coda_lo_aspetta() {
         let mut flags = Flags::default();
         flags.claim(JobId(3));
-        flags.cancel(JobId(9));
+        // Il kernel ha già emesso fino al 9 compreso: quel job esiste, è in
+        // coda, e il pool non l'ha ancora drenato.
+        flags.cancel(JobId(9), 10);
         assert_eq!(bandiera(&flags, 9), Some(true));
         flags.claim(JobId(9));
         assert_eq!(bandiera(&flags, 9), Some(true));
+    }
+
+    /// Annullare un id che il kernel **non ha mai emesso** non lascia niente.
+    ///
+    /// È il caso che entra da fuori: l'id di un annullamento arriva sull'IPC
+    /// come stringa, e nessuno garantisce che sia di questo vault — un elenco
+    /// del centro attività rimasto indietro, o un altro vault diventato
+    /// corrente, e il numero è di un job che qui non è mai esistito. Sopra il
+    /// segno di `seen` sembrava «uno che deve ancora partire», e ogni pressione
+    /// lasciava una bandiera per la vita della sessione.
+    #[test]
+    fn annullare_un_id_mai_emesso_non_lascia_niente() {
+        let mut flags = Flags::default();
+        flags.claim(JobId(1));
+        // Il kernel ha emesso 0 e 1: il 42 non è mai stato un job.
+        flags.cancel(JobId(42), 2);
+        assert_eq!(bandiera(&flags, 42), None);
+        assert_eq!(
+            flags.live.len(),
+            1,
+            "un id mai emesso ha lasciato una bandiera che nessuno toglierà"
+        );
+        // E il confine è **esatto**, non prudenziale: l'ultimo emesso resta
+        // annullabile prima che il pool lo veda.
+        flags.cancel(JobId(1), 2);
+        assert_eq!(bandiera(&flags, 1), Some(true));
     }
 
     /// Annullare un job **già concluso** non lascia niente dietro.
@@ -908,7 +961,7 @@ mod tests {
             flags.live.remove(&JobId(id));
         }
         for id in [1, 2, 3] {
-            flags.cancel(JobId(id));
+            flags.cancel(JobId(id), 4);
         }
         assert!(
             flags.live.is_empty(),
@@ -937,7 +990,7 @@ mod tests {
     fn con_la_bandiera_alzata_nessuna_fetta_parte() {
         let (_dir, shared, id) = un_vault_da_indicizzare();
         shared.flags.write().unwrap().claim(id);
-        shared.flags.write().unwrap().cancel(id);
+        shared.flags.write().unwrap().cancel(id, id.0 + 1);
 
         assert!(
             shared.avanza_apertura().unwrap(),
@@ -1178,7 +1231,7 @@ mod tests {
         flags.claim(JobId(6)); // il lotto di un altro, già più avanti
         flags.claim(JobId(7));
         flags.live.remove(&JobId(4)); // il 4 è finito
-        flags.cancel(JobId(5)); // il 5 aspetta ancora il proprio turno
+        flags.cancel(JobId(5), 8); // il 5 aspetta ancora il proprio turno
         assert_eq!(bandiera(&flags, 5), Some(true));
         assert_eq!(bandiera(&flags, 4), None);
     }

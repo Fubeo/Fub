@@ -5379,6 +5379,24 @@ impl Workspace {
         self.dispatch.take_pending_jobs()
     }
 
+    /// **Quante identità di job il kernel ha emesso finora**: il primo numero
+    /// che non è ancora di nessuno.
+    ///
+    /// È un confine, non una statistica, e serve a una domanda sola: *questo id
+    /// è mai stato dato a qualcuno?* Chi annulla riceve l'id da fuori — dal
+    /// pulsante del centro attività, e sull'IPC come stringa — e senza questo
+    /// numero non c'è modo di distinguere «un job che deve ancora partire» da
+    /// «un numero che non è mai stato un job». Le due cose vogliono risposte
+    /// opposte: la prima vuole che l'annullamento **aspetti** il job, la seconda
+    /// che non lasci niente dietro di sé.
+    ///
+    /// Il contatore è **uno** per workspace e non cala mai: un id sotto questo
+    /// segno è stato emesso, uno pari o sopra no, e nessun riuso lo rimette in
+    /// discussione.
+    pub fn jobs_issued(&self) -> u64 {
+        self.dispatch.jobs_issued()
+    }
+
     /// Le **sveglie dichiarate** da chi è registrato adesso (§22.1, decisione
     /// 0069): l'id del componente e la sua `TimerSpec`.
     ///
