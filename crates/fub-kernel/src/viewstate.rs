@@ -175,17 +175,41 @@ impl ViewStates {
     /// È la potatura di cui questo file ha bisogno per non crescere e basta, ed
     /// è anche la cosa giusta da fare: chi dimentica un vault non si aspetta che
     /// riaprendolo fra un anno le cartelle siano ancora aperte com'erano.
-    pub fn forget_vault(&self, vault: &str) -> Result<(), String> {
-        if !self
-            .vaults
-            .read()
-            .expect("stato di vista")
-            .contains_key(vault)
-        {
-            return Ok(());
-        }
+    ///
+    /// # Perché prende **tutte** le forme e non una
+    ///
+    /// Perché una radice sola è nominabile in più modi — quello che l'utente ha
+    /// scritto e la sua forma canonica — e la chiave qui è la stringa, quindi
+    /// dimenticare *un* vault vuol dire togliere *N* chiavi. Chiamare N volte
+    /// una funzione che ne toglie una era N scritture dello stesso file: se la
+    /// seconda non riusciva — il disco pieno, un'altra finestra che ha appena
+    /// riscritto il file — la prima era già andata, e restava un vault
+    /// **mezzo** dimenticato, con lo scroll ancora lì sotto l'altro nome.
+    ///
+    /// Con la firma che prende l'insieme quel mezzo non esiste: è
+    /// [`ViewStates::muta`] una volta sola, cioè una sola scrittura atomica,
+    /// che o toglie tutte le forme o non ne toglie nessuna. È la stessa riga di
+    /// `Registry::forget`, che dallo stesso chiamante riceve lo stesso elenco —
+    /// e chi le chiama entrambe non ha più modo di scrivere il ciclo che stava
+    /// fra le due.
+    ///
+    /// # E perché non chiede prima se c'è
+    ///
+    /// C'era una scorciatoia — *se in memoria non c'è, non costa una scrittura*
+    /// — e chiedeva alla copia sbagliata. La copia in memoria è vecchia per
+    /// definizione ([`ViewStates::muta`]: è **il disco** che si rilegge sotto
+    /// lock, apposta), quindi lo scroll depositato da un'altra finestra di Fub
+    /// dopo la nostra apertura sta nel file e non qui: la scorciatoia lo
+    /// dichiarava assente, tornava `Ok`, e quel vault restava là dentro per
+    /// sempre — dimenticato dal registro, dove l'utente lo vede, e ricordato in
+    /// un file che non cala mai, che è precisamente ciò che questa funzione
+    /// esiste per evitare. Costava una scrittura risparmiata su un gesto che si
+    /// fa una volta ogni tanto.
+    pub fn forget_vault(&self, forme: &[Utf8PathBuf]) -> Result<(), String> {
         self.muta(|next| {
-            next.remove(vault);
+            for forma in forme {
+                next.remove(forma.as_str());
+            }
         })
     }
 
@@ -343,9 +367,75 @@ mod tests {
         states
             .set("/b", "p", "i", "k", Some(serde_json::json!(2)))
             .unwrap();
-        states.forget_vault("/a").unwrap();
+        states.forget_vault(&[Utf8PathBuf::from("/a")]).unwrap();
         assert_eq!(states.get("/a", "p", "i", "k"), None);
         assert_eq!(states.get("/b", "p", "i", "k"), Some(serde_json::json!(2)));
+    }
+
+    /// 0089 — **le forme di una radice se ne vanno insieme**, e in una mossa
+    /// sola.
+    ///
+    /// Un vault è nominabile in due modi (quello dato e la forma canonica) e
+    /// qui la chiave è la stringa, quindi dimenticarlo tocca due chiavi. Il
+    /// ciclo che stava dal lato dell'host ne faceva due scritture dello stesso
+    /// file, e la seconda che non riesce lasciava il vault mezzo dimenticato.
+    ///
+    /// Questa metà del banco è **verde per costruzione**, e va detto: il tipo
+    /// della firma prende l'insieme, quindi il ciclo non è più scrivibile e non
+    /// c'è una versione di questo codice in cui il banco potrebbe fallire. È il
+    /// compilatore a presidiare, non l'asserzione; l'asserzione dice cosa il
+    /// compilatore sta proteggendo.
+    #[test]
+    fn le_forme_di_una_radice_se_ne_vanno_in_una_mossa_sola() {
+        let states = ViewStates::in_memory();
+        for forma in ["/var/vault", "/private/var/vault"] {
+            states
+                .set(forma, "p", "i", "k", Some(serde_json::json!(1)))
+                .unwrap();
+        }
+        states
+            .forget_vault(&[
+                Utf8PathBuf::from("/var/vault"),
+                Utf8PathBuf::from("/private/var/vault"),
+            ])
+            .unwrap();
+        assert!(
+            states.vaults.read().unwrap().is_empty(),
+            "nessuna delle due forme resta indietro"
+        );
+    }
+
+    /// 0089, la metà che **è** rossa — e non era quella scritta nella riga.
+    ///
+    /// La scorciatoia «se in memoria non c'è, non costa una scrittura»
+    /// interrogava la copia vecchia per decidere di non guardare quella fresca.
+    /// Qui il file cresce dopo l'apertura — che è ciò che fa una seconda
+    /// finestra di Fub aperta sullo stesso vault, e la ragione per cui `muta`
+    /// rilegge il disco sotto lock — e con la scorciatoia `forget_vault`
+    /// rispondeva `Ok` senza togliere niente: il vault spariva dal registro, e
+    /// il suo scroll restava in un file che non cala mai.
+    #[test]
+    fn dimentica_anche_cio_che_e_arrivato_nel_file_dopo_l_apertura() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("view-state.json");
+        let (states, _) = ViewStates::open(&path);
+
+        // Un'altra finestra deposita lo scroll di un vault che questa copia in
+        // memoria non ha mai visto.
+        let (altra, _) = ViewStates::open(&path);
+        altra
+            .set("/a", "p", "i", "k", Some(serde_json::json!(1)))
+            .unwrap();
+
+        states.forget_vault(&[Utf8PathBuf::from("/a")]).unwrap();
+
+        let (riletto, warning) = ViewStates::open(&path);
+        assert!(warning.is_none());
+        assert_eq!(
+            riletto.get("/a", "p", "i", "k"),
+            None,
+            "dimenticare guarda il file, non il ricordo che se ne aveva"
+        );
     }
 
     #[test]

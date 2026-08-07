@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Trenta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Ventinove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -526,7 +526,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0071 | `UndoStack::push` usa `Vec::remove(0)` oltre il tetto | `fub-kernel` · `undo.rs:99` | prestazioni |
 | 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
 | 0077 | `portable_dir` non verifica di essere scrivibile e non ripiega su `~/.config/fub` | `fub-host` · `config.rs:133` | configurazione |
-| 0089 | `forget_vault` esce al primo errore I/O e lascia le forme successive dentro `view_states` | `fub-host` · `session.rs:668` | stato divergente |
 | 0090 | `set_plugin_enabled` muta memoria e registro, poi propaga l'errore di `set_setting`: il disco resta indietro | `fub-host` · `session.rs` `set_plugin_enabled` | stato divergente |
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
 | 0094 | un `Block::Custom` senza figli e senza renderer registrato si rende `<div>` vuoto: math, diagrammi e HTML grezzo spariscono dall'anteprima | `fub-format-markdown` · `render.rs` `render_block` | rendering |

@@ -790,14 +790,16 @@ impl Host {
     pub fn forget_vault(&self, root: &Utf8Path) -> Result<(), PluginError> {
         let forme = forme_della_radice(root);
         self.vaults.forget(&forme)?;
-        // Il sidecar dello stato di vista ha un fallimento solo — scriverlo —
-        // e chi lo riceve non ha altro da fare che riprovare. Una forma che non
-        // è là dentro non costa una scrittura: `forget_vault` esce prima.
-        for forma in &forme {
-            self.view_states
-                .forget_vault(forma.as_str())
-                .map_err(|e| PluginError::Io(e.into()))?;
-        }
+        // **Le forme insieme, non una per volta**: sono due file diversi, quindi
+        // due scritture ci vogliono per forza, ma dentro ciascuno la potatura è
+        // *una* mossa. Il ciclo che stava qui ne faceva N sullo stesso file, e
+        // bastava che la seconda non riuscisse per lasciare il vault mezzo
+        // dimenticato — dimenticato sotto il nome dato, ancora lì sotto quello
+        // canonico. Adesso quella metà non è più esprimibile: la firma prende
+        // l'insieme, come `Registry::forget` qui sopra.
+        self.view_states
+            .forget_vault(&forme)
+            .map_err(|e| PluginError::Io(e.into()))?;
         Ok(())
     }
 
