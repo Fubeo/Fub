@@ -461,7 +461,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Cinquanta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Quarantasei** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -525,7 +525,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0051 | il filtro dei tag alloca un `to_lowercase()` per tag a ogni battuta | `fub-features` · `tags.rs:232` | prestazioni |
 | 0052 | la chiave di stato del filtro tag è cablata e si fida dell'isolamento implicito dell'host | `fub-features` · `tags.rs:74` | stato di vista |
 | 0056 | export verso `markdown.single` con `frontmatter = true`: i frontmatter dal secondo in poi finiscono nel corpo | `fub-format-markdown` · `transfer.rs:225` | markdown |
-| 0057 | `link.context` si valorizza solo nel ramo `Paragraph`: i link in intestazioni e tabelle restano senza | `fub-format-markdown` · `parse.rs:570` | markdown |
 | 0058 | `restore_from_trash` scrive prima di cancellare: un crash in mezzo lascia due copie | `fub-kernel` · `workspace.rs` `restore_from_trash` | cestino |
 | 0059 | `link_rewrite_plan` cerca l'omonimia in `metas` e non in `entries`: gli allegati omonimi sfuggono | `fub-kernel` · `workspace.rs:3352` | anagrafe |
 | 0062 | `backlinks()` torna duplicati quando un documento linka due volte lo stesso target, e il contratto non lo dice | `fub-kernel` · `graph.rs:231` | grafo |
@@ -538,9 +537,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0074 | riaprire un vault già aperto non aggiorna `last_opened`: i recenti restano nell'ordine vecchio | `fub-host` · `session.rs` `open` | registro vault |
 | 0075 | `set_look` con `name: None` non azzera: non c'è modo di tornare al nome della cartella | `fub-host` · `vaults.rs:205` | registro vault |
 | 0077 | `portable_dir` non verifica di essere scrivibile e non ripiega su `~/.config/fub` | `fub-host` · `config.rs:133` | configurazione |
-| 0079 | `render_link` scrive `data-embed-heading` e ignora `block`: `![[Nota#^b]]` perde l'ancora | `fub-format-markdown` · `render.rs:285` | markdown |
-| 0080 | `write_link` serializza `[[page^b]]` invece di `[[page#^b]]` quando `heading` è `None` | `fub-format-markdown` · `serialize.rs:519` | markdown |
-| 0081 | lo span di un embed include il `!` nel ripiego testuale e non nel ramo comrak | `fub-format-markdown` · `parse.rs:642` | markdown |
 | 0086 | `viewAction` non è avvolta in un `try/catch`: un errore lascia la vista com'era, senza dirlo | `frontend` · `ui/views.ts:391` | errori |
 | 0089 | `forget_vault` esce al primo errore I/O e lascia le forme successive dentro `view_states` | `fub-host` · `session.rs:668` | stato divergente |
 | 0090 | `set_plugin_enabled` muta memoria e registro, poi propaga l'errore di `set_setting`: il disco resta indietro | `fub-host` · `session.rs` `set_plugin_enabled` | stato divergente |

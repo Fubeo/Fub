@@ -276,6 +276,47 @@ mod tests {
         assert!(!html.contains("class=\"wikilink\""));
     }
 
+    /// **Un segnaposto di embed porta le stesse tre coordinate di un
+    /// riferimento**, perché sono la stessa cosa vista da due prefissi.
+    ///
+    /// Il link portava pagina, heading *e* blocco; l'embed solo pagina e
+    /// heading, e i due elenchi stavano scritti a mano in due rami. Un
+    /// `![[Nota#^blocco]]` arrivava quindi alla shell come un embed della nota
+    /// intera — l'unica cosa che diceva *quale* blocco era il pezzo che non
+    /// veniva scritto, e un campo che manca non lo vede nessuno.
+    ///
+    /// La seconda metà è il contrario e vale uguale: un campo **assente** non si
+    /// scrive. Un `data-embed-heading=""` non dice «non c'è heading», dice
+    /// «l'heading si chiama nulla», e chi legge l'attributo con un `?? null`
+    /// riceve la stringa vuota e va a cercare una sezione che non esiste.
+    #[test]
+    fn il_segnaposto_di_un_embed_porta_anche_l_ancora_di_blocco() {
+        let html = MarkdownProvider::new()
+            .render_html(&parse("![[Altra Nota#^blocco]]"), &RenderOptions::preview())
+            .unwrap();
+        assert!(
+            html.contains("data-embed-page=\"Altra Nota\""),
+            "html: {html}"
+        );
+        assert!(html.contains("data-embed-block=\"blocco\""), "html: {html}");
+        assert!(
+            !html.contains("data-embed-heading"),
+            "un heading che non c'è non si scrive: {html}"
+        );
+        // E l'altro prefisso, sulla stessa sorgente senza il `!`.
+        let html = MarkdownProvider::new()
+            .render_html(&parse("[[Altra Nota#^blocco]]"), &RenderOptions::preview())
+            .unwrap();
+        assert!(
+            html.contains("data-wikilink-block=\"blocco\""),
+            "html: {html}"
+        );
+        assert!(
+            !html.contains("data-wikilink-heading"),
+            "un heading che non c'è non si scrive: {html}"
+        );
+    }
+
     #[test]
     fn renders_basic_formatting() {
         let doc = parse("Testo **grassetto** e *corsivo* e `codice`.");

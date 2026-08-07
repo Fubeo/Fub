@@ -261,6 +261,37 @@ fn class_of(custom_kind: &str) -> String {
         .to_string()
 }
 
+/// Le coordinate di un wikilink come data-attribute, col prefisso di chi le
+/// riceve: `data-wikilink-*` per un riferimento, `data-embed-*` per il
+/// segnaposto di una transclusion.
+///
+/// **Sta in una funzione sola perché i due rami scrivevano due elenchi diversi
+/// della stessa cosa.** Il link portava pagina, heading *e* blocco — glielo ha
+/// dato la 0049 — l'embed solo pagina e heading: `![[Nota#^b]]` arrivava alla
+/// shell senza l'ancora, cioè come un embed della nota intera, e a dirlo non
+/// c'era niente perché il campo che mancava non è un campo che manchi al
+/// compilatore. Un quinto campo di [`LinkTarget::Wiki`] adesso si scrive qui e
+/// lo ereditano tutti e due.
+///
+/// Un campo assente **non si scrive**: un `data-embed-heading=""` non dice «non
+/// c'è heading», dice «l'heading è quello che si chiama nulla», e chi legge
+/// l'attributo con un `?? null` riceve la stringa vuota.
+fn wiki_attrs(
+    prefisso: &str,
+    page: &str,
+    heading: &Option<String>,
+    block: &Option<String>,
+) -> String {
+    let mut out = format!(" data-{prefisso}-page=\"{}\"", escape_attr(page));
+    if let Some(h) = heading {
+        out.push_str(&format!(" data-{prefisso}-heading=\"{}\"", escape_attr(h)));
+    }
+    if let Some(b) = block {
+        out.push_str(&format!(" data-{prefisso}-block=\"{}\"", escape_attr(b)));
+    }
+    out
+}
+
 fn render_link(
     target: &LinkTarget,
     label: Option<&[Inline]>,
@@ -280,38 +311,23 @@ fn render_link(
                 // emette un placeholder; il frontend chiama `render_embed` del
                 // kernel e innesta il contenuto (profondità e cicli a suo
                 // carico). Vedi docs/architecture/ui-protocol.md.
-                let heading_attr = heading
-                    .as_ref()
-                    .map(|h| format!(" data-embed-heading=\"{}\"", escape_attr(h)))
-                    .unwrap_or_default();
                 out.push_str(&format!(
-                    "<div class=\"embed\" data-embed-page=\"{}\"{}>",
-                    escape_attr(page),
-                    heading_attr
+                    "<div class=\"embed\"{}>",
+                    wiki_attrs("embed", page, heading, block)
                 ));
                 render_link_label(label, page, out);
                 out.push_str("</div>");
                 return;
             }
-            let heading_attr = heading
-                .as_ref()
-                .map(|h| format!(" data-wikilink-heading=\"{}\"", escape_attr(h)))
-                .unwrap_or_default();
-            // E il **blocco**: il parser lo legge dalla 0003, e fino alla 0049
-            // si fermava qui — il renderer non lo scriveva, quindi
+            // Le stesse tre coordinate, con l'altro prefisso: il **blocco** il
+            // parser lo legge dalla 0003, e fino alla 0049 si fermava qui —
             // `[[Nota#^blocco]]` arrivava alla shell come un link alla nota e
             // basta. Adesso c'è una risposta in cui metterlo
             // (`resolved-ref.at`), e questo è il primo centimetro del giro.
-            let block_attr = block
-                .as_ref()
-                .map(|b| format!(" data-wikilink-block=\"{}\"", escape_attr(b)))
-                .unwrap_or_default();
             // Wikilink come data-attribute: il frontend risolve la navigazione.
             out.push_str(&format!(
-                "<a class=\"wikilink\" data-wikilink-page=\"{}\"{}{}",
-                escape_attr(page),
-                heading_attr,
-                block_attr
+                "<a class=\"wikilink\"{}",
+                wiki_attrs("wikilink", page, heading, block)
             ));
             if opts.enabled(render_option::WIKILINKS_AS_DATA_ATTRS) {
                 out.push_str(" href=\"#\"");

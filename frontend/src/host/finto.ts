@@ -425,8 +425,12 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
       discardDraft: (id) => porta("discardDraft", [id], Promise.resolve()),
       renderPreview: (id) =>
         porta("renderPreview", [id], Promise.resolve({ html: docs.get(id)?.testo ?? "", parts: [] })),
-      renderEmbed: (page, heading) =>
-        porta("renderEmbed", [page, heading], Promise.resolve({ doc_id: page, html: "", parts: [] })),
+      renderEmbed: (page, heading, block) =>
+        porta(
+          "renderEmbed",
+          [page, heading, block],
+          Promise.resolve({ doc_id: page, html: "", parts: [] }),
+        ),
       setActiveContext: (context) => porta("setActiveContext", [context], Promise.resolve([])),
       setSystemLocale: (locale) => porta("setSystemLocale", [locale], Promise.resolve(false)),
       listViews: () => porta("listViews", [], Promise.resolve(view)),

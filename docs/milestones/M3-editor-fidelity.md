@@ -66,10 +66,11 @@ Oggi il provider markdown emette callout/tabelle/embed/math come
   non sul bersaglio, così che ci ricada anche `![](immagine.png)`): il protocollo di
   transclusion è **già cablato** (deciso in revisione concettuale, vedi
   [../architecture/ui-protocol.md](../architecture/ui-protocol.md)): il provider
-  emette il placeholder `.embed`, il kernel serve `render_embed(page, heading?)`
-  (anche per sezione, via `Span` dell'outline), il frontend idrata con guardia
-  su cicli e profondità. M3 estende la resa (immagini, blocchi `^id`, stile) —
-  non il meccanismo.
+  emette il placeholder `.embed`, il kernel serve
+  `render_embed(page, heading?, block?)` (anche per sezione, via `Span`
+  dell'outline, e per blocco `^id`, via `Span` di `anchors`), il frontend idrata
+  con guardia su cicli e profondità. M3 estende la resa (immagini, stile) — non
+  il meccanismo.
 
 ### Command palette (`CommandProvider`) — **anticipata a M2** ([decisione 0009](../decisions/0009-registro-dei-comandi.md) + [decisione 0010](../decisions/0010-comando-descritto-a-una-macchina.md))
 

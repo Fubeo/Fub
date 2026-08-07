@@ -280,18 +280,20 @@ fn discard_draft(host: State<Host>, id: String, vault: Option<String>) -> Result
 // mantiene: il modo giusto di reggerla è toglierla, e rimetterla il giorno che
 // qualcuno di qua abbia di nuovo quella domanda.
 
-/// Contenuto di un embed `![[page#heading]]`: il frontend lo innesta nel
-/// placeholder emesso dal provider (profondità massima e cicli a suo carico).
+/// Contenuto di un embed `![[page#heading]]` o `![[page#^blocco]]`: il frontend
+/// lo innesta nel placeholder emesso dal provider (profondità massima e cicli a
+/// suo carico).
 #[tauri::command]
 fn render_embed(
     host: State<Host>,
     page: String,
     heading: Option<String>,
+    block: Option<String>,
     vault: Option<String>,
 ) -> Result<EmbedContent, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read()?;
-    let (doc_id, content) = ws.render_embed(&page, heading.as_deref())?;
+    let (doc_id, content) = ws.render_embed(&page, heading.as_deref(), block.as_deref())?;
     Ok(EmbedContent {
         doc_id: doc_id.0,
         content,

@@ -73,8 +73,8 @@ export const api = {
   // Il primo nome libero della famiglia «Nota», «Nota 1», … (D3). La
   // convenzione vive nel kernel: chiederla evita di averne due versioni.
   renderPreview: (id: string) => invoke<RenderedDocument>("render_preview", { id }),
-  renderEmbed: (page: string, heading: string | null) =>
-    invoke<EmbedContent>("render_embed", { page, heading }),
+  renderEmbed: (page: string, heading: string | null, block: string | null) =>
+    invoke<EmbedContent>("render_embed", { page, heading, block }),
   // View dichiarative (protocollo generico). La shell pubblica il contesto del
   // pannello, chiede l'albero di una view e rimanda le azioni al provider,
   // senza sapere cosa la view faccia — è il percorso di un plugin.

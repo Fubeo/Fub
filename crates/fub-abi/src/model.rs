@@ -607,6 +607,11 @@ pub struct ParsedWikilink {
 /// del riferimento, non del bersaglio (vedi [`Link::embed`]).
 ///
 /// Esempi: `Nota`, `Nota#Sezione`, `Nota^blocco`, `Nota#Sez|testo`, `#SoloHeading`.
+///
+/// È **indulgente di proposito** su una forma che Obsidian non scrive:
+/// `Nota^blocco` senza `#` dà lo stesso un riferimento a blocco. Chi *scrive*
+/// non lo è ([`LinkTarget::wiki_inner`] mette sempre il `#`), che è la sola
+/// composizione in cui leggere e scrivere non producono un dialetto privato.
 pub fn parse_wikilink_inner(inner: &str) -> ParsedWikilink {
     // Alias dopo la prima '|'.
     let (link_part, alias) = match inner.split_once('|') {
@@ -629,10 +634,63 @@ pub fn parse_wikilink_inner(inner: &str) -> ParsedWikilink {
     ParsedWikilink {
         target: LinkTarget::Wiki {
             page,
-            heading,
+            // **Un heading vuoto non è un heading.** In `Nota#^blocco` il `#`
+            // introduce il `^` e non nomina niente, e in `Nota#` non c'è niente
+            // da nominare: il campo valeva `Some("")`, cioè un titolo che
+            // nessun outline contiene. Da lì uscivano un `data-…-heading=""`
+            // scritto sul segnaposto della transclusion e — peggio — un
+            // bersaglio che [`LinkTarget::wiki_inner`] non sa riscrivere
+            // uguale, perché la forma canonica di quel campo assente è
+            // l'assenza.
+            heading: heading.filter(|h| !h.is_empty()),
             block,
         },
         alias: alias.filter(|a| !a.is_empty()),
+    }
+}
+
+impl LinkTarget {
+    /// L'interno di questo wikilink, cioè ciò che va fra `[[` e `]]`.
+    ///
+    /// È il verso opposto di [`parse_wikilink_inner`], e sta **qui accanto** per
+    /// la ragione per cui [`HeadingSlugs`] sta accanto a [`heading_matches`]:
+    /// chi scrive la forma testuale di un bersaglio e chi la rilegge sono la
+    /// stessa regola in due versi, e finché erano due divergevano. Divergevano
+    /// davvero: il serializer markdown scriveva `[[page^b]]` per un riferimento
+    /// a blocco senza heading, e in Obsidian quello non è un riferimento a
+    /// blocco — è una pagina che si chiama `page^b`. Il `#` non è opzionale
+    /// perché l'heading manca; è ciò che rende `^` un `^` di ancora.
+    ///
+    /// Il giro `wiki_inner` → `parse_wikilink_inner` è **l'identità**, ed è la
+    /// forma in cui la coppia resta onesta: un lettore indulgente e uno
+    /// scrittore che si accontenta della propria indulgenza sono d'accordo fra
+    /// loro e in disaccordo con tutti gli altri.
+    ///
+    /// `None` per gli altri due bersagli: un URL e un path si scrivono con
+    /// un'altra sintassi, e quale non lo decide il contratto.
+    pub fn wiki_inner(&self) -> Option<String> {
+        let LinkTarget::Wiki {
+            page,
+            heading,
+            block,
+        } = self
+        else {
+            return None;
+        };
+        let mut out = String::with_capacity(page.len() + 16);
+        out.push_str(page);
+        if let Some(h) = heading {
+            out.push('#');
+            out.push_str(h);
+        }
+        if let Some(b) = block {
+            if heading.is_none() {
+                out.push('#');
+            }
+            out.push('^');
+            out.push_str(b);
+        }
+        Some(out)
     }
 }
 
@@ -1345,6 +1403,97 @@ mod tests {
             parse_wikilink_inner("Nota").target,
             LinkTarget::wiki("Nota")
         );
+        // Un heading vuoto non è un heading: `Nota#^blk` ha un `#` che serve al
+        // `^`, e `Nota#` non nomina niente.
+        assert_eq!(
+            parse_wikilink_inner("Nota#^blk").target,
+            LinkTarget::Wiki {
+                page: "Nota".into(),
+                heading: None,
+                block: Some("blk".into()),
+            }
+        );
+        assert_eq!(
+            parse_wikilink_inner("Nota#").target,
+            LinkTarget::wiki("Nota")
+        );
+    }
+
+    /// **Il giro fra i due versi della stessa regola.**
+    ///
+    /// `wiki_inner` scrive ciò che `parse_wikilink_inner` legge, e la prova che
+    /// conta è che il giro sia l'identità: una coppia scrittore/lettore può
+    /// restare d'accordo con sé stessa scrivendo un dialetto che nessun altro
+    /// legge, ed è esattamente com'era — il serializer markdown scriveva
+    /// `page^b`, il lettore lo riaccettava perché è indulgente, e Obsidian ci
+    /// leggeva una pagina di nome `page^b`.
+    #[test]
+    fn what_a_wikilink_writes_is_what_a_wikilink_reads() {
+        let bersagli = [
+            LinkTarget::wiki("Nota"),
+            LinkTarget::Wiki {
+                page: "Nota".into(),
+                heading: Some("Sezione".into()),
+                block: None,
+            },
+            // Il caso che divergeva: blocco **senza** heading.
+            LinkTarget::Wiki {
+                page: "Nota".into(),
+                heading: None,
+                block: Some("blk".into()),
+            },
+            LinkTarget::Wiki {
+                page: "Nota".into(),
+                heading: Some("Sezione".into()),
+                block: Some("blk".into()),
+            },
+            // I due che nominano il documento che li ospita (`names_host`).
+            LinkTarget::Wiki {
+                page: String::new(),
+                heading: Some("Sezione".into()),
+                block: None,
+            },
+            LinkTarget::Wiki {
+                page: String::new(),
+                heading: None,
+                block: Some("blk".into()),
+            },
+        ];
+        for t in &bersagli {
+            let inner = t.wiki_inner().expect("un Wiki ha un interno");
+            assert_eq!(
+                &parse_wikilink_inner(&inner).target,
+                t,
+                "`{inner}` non si rilegge come il bersaglio che l'ha scritto"
+            );
+        }
+        assert_eq!(
+            LinkTarget::Wiki {
+                page: "Nota".into(),
+                heading: None,
+                block: Some("blk".into()),
+            }
+            .wiki_inner()
+            .as_deref(),
+            Some("Nota#^blk"),
+            "il `#` non è opzionale perché l'heading manca: è ciò che rende \
+             quel `^` un `^` di ancora"
+        );
+        // L'altro verso: ciò che il lettore accetta per indulgenza torna
+        // **canonico** quando lo si riscrive, invece di restare un dialetto.
+        assert_eq!(
+            parse_wikilink_inner("Nota^blk")
+                .target
+                .wiki_inner()
+                .as_deref(),
+            Some("Nota#^blk")
+        );
+        // E i bersagli che non sono wikilink non hanno un interno da scrivere.
+        assert_eq!(
+            LinkTarget::Url("https://x.invalid/".into()).wiki_inner(),
+            None
+        );
+        assert_eq!(LinkTarget::Path("a/b.md".into()).wiki_inner(), None);
     }
 
     #[test]

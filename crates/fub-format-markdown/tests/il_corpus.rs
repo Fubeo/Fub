@@ -139,8 +139,8 @@ fn ogni_voce_del_corpus_produce_un_modello_che_dice_il_vero() {
         verificati += 1;
     }
     assert!(
-        verificati >= 62,
-        "il corpus ha verificato {verificati} casi su sessantadue: un corpus che si\n\
+        verificati >= 66,
+        "il corpus ha verificato {verificati} casi su sessantasei: un corpus che si\n\
          svuota passa sempre, quindi la soglia è il conteggio di oggi — cresce con\n\
          lui, e scende solo in un commit che dice perché."
     );
@@ -822,6 +822,218 @@ fn nessuna_divergenza_e_vera_su_un_documento_qualunque() {
             );
         }
     }
+}
+
+/// **Ogni link scoperto in una qualunque sorgente del corpus porta il suo
+/// contesto**, cioè la riga che il pannello dei backlink mostra sotto il nome.
+///
+/// È un **conto**, non un test per ramo, e la differenza è tutta qui: un test
+/// per ramo prova i rami che c'erano il giorno in cui è stato scritto, e il
+/// difetto era esattamente che il ramo `Paragraph` assegnava il contesto e gli
+/// altri no. Questo conto guarda il corpus, e il corpus è già presidiato per
+/// contenere **ogni variante di `Block`** ([`il_corpus_produce_ogni_variante_del_modello`]):
+/// il giorno in cui `convert_block` cresce di un ramo che porta dei link, il
+/// caso che lo esercita entra di là e questo diventa rosso di qua, senza che
+/// nessuno debba ricordarsi di aggiungere un assert.
+///
+/// Un contesto **vuoto** non conta come contesto: `Some("")` occuperebbe il
+/// campo dicendo niente, ed è il modo in cui questa riga resterebbe verde
+/// riparando male.
+///
+/// # La pretesa è «se il blocco ha dell'altro», e va detto perché
+///
+/// Non «ogni link ha un contesto»: esiste un blocco che di testo non ne ha —
+/// `![alt](f.png)` da solo in un paragrafo, dove l'alt non entra nel testo
+/// indicizzato (è una divergenza dichiarata qui accanto) — e lì il contesto non
+/// c'è, perché non c'è. La condizione si legge dalla **sorgente**, non dal
+/// modello: il blocco, tolti i byte dei suoi link, deve avere ancora qualcosa
+/// da dire. Ricostruire il testo del blocco dal modello sarebbe stata una
+/// seconda implementazione di `convert_inlines`, cioè un presidio che si rompe
+/// quando il parser cambia idea invece di quando sbaglia.
+#[test]
+fn ogni_link_del_corpus_porta_il_contesto_del_suo_blocco() {
+    let mut senza: Vec<String> = Vec::new();
+    let mut con_contesto = 0usize;
+    let mut pretesi = 0usize;
+    for caso in corpus() {
+        let doc = parse(caso.source);
+        let contesti: BTreeMap<(usize, usize), Option<String>> = doc
+            .links
+            .iter()
+            .map(|l| ((l.span.start, l.span.end), l.context.clone()))
+            .collect();
+        for (blocco, link) in blocchi_di_inline(&doc.body) {
+            let contesto = contesti.get(&(link.start, link.end)).cloned().flatten();
+            if let Some(c) = &contesto {
+                con_contesto += 1;
+                assert!(
+                    !c.trim().is_empty(),
+                    "«{}»: il link a {}..{} porta un contesto vuoto, che occupa il \
+                     campo dicendo niente",
+                    caso.nome,
+                    link.start,
+                    link.end
+                );
+            }
+            // Il blocco, tolti i byte del link: se resta qualcosa, quel qualcosa
+            // è il contesto che al link tocca.
+            let dentro = &caso.source
+                [blocco.start.min(caso.source.len())..blocco.end.min(caso.source.len())];
+            let resto: String = dentro
+                .char_indices()
+                .filter(|(i, _)| {
+                    let assoluto = blocco.start + i;
+                    !(link.start..link.end).contains(&assoluto)
+                })
+                .map(|(_, c)| c)
+                .collect();
+            if resto
+                .trim_matches(|c: char| c.is_whitespace() || "#|>-*".contains(c))
+                .is_empty()
+            {
+                continue;
+            }
+            pretesi += 1;
+            if contesto.is_none() {
+                senza.push(format!(
+                    "  «{}»: link a {}..{}, nel blocco {}..{} che dice anche {:?}",
+                    caso.nome, link.start, link.end, blocco.start, blocco.end, resto
+                ));
+            }
+        }
+    }
+    assert!(
+        senza.is_empty(),
+        "{} link nascono senza contesto pur stando in un blocco che ne ha uno da \
+         dare:\n{}\n\n\
+         Il contesto di un link è il testo del **blocco** che lo contiene, e si\n\
+         assegna in `inlines_del_blocco` — l'unico ingresso agli inline di un\n\
+         blocco. Un ramo di `convert_block` che chiami `convert_inlines`\n\
+         direttamente salta quella regola, ed è il difetto che questo conto\n\
+         presidia: la risposta non è aggiungere l'assegnazione nel ramo nuovo, è\n\
+         farlo passare dall'ingresso che ce l'ha già.",
+        senza.len(),
+        senza.join("\n")
+    );
+    // I due test del test. Un corpus in cui nessun link stia in un blocco
+    // parlante renderebbe la riga qui sopra vera per vacuità; e uno in cui
+    // nessun link abbia contesto la renderebbe vera con un `context` sempre
+    // `None`, che è precisamente ciò che si sta presidiando.
+    assert!(
+        pretesi >= 6 && con_contesto >= 8,
+        "il corpus pretende un contesto per {pretesi} link e ne vede {con_contesto} \
+         con contesto: troppo pochi perché questo conto provi qualcosa"
+    );
+}
+
+/// Ogni link del modello, con lo span del **blocco** che lo contiene: è la
+/// grana a cui il contesto si assegna.
+///
+/// Un blocco che porta blocchi (una citazione, una voce d'elenco, un callout)
+/// non compare come contenitore: i suoi figli sì, uno per uno, ed è giusto — il
+/// contesto di un link è il testo del blocco più vicino che ne porti, non
+/// quello dell'involucro.
+fn blocchi_di_inline(blocks: &[Block]) -> Vec<(Span, Span)> {
+    fn inline(nodes: &[Inline], out: &mut Vec<Span>) {
+        for n in nodes {
+            match n {
+                Inline::Emph(dentro) | Inline::Strong(dentro) => inline(dentro, out),
+                Inline::Link { label, span, .. } => {
+                    out.push(*span);
+                    inline(label.as_deref().unwrap_or(&[]), out);
+                }
+                Inline::Text(_)
+                | Inline::Code(_)
+                | Inline::TagRef { .. }
+                | Inline::Custom { .. } => {}
+            }
+        }
+    }
+    fn da(nodes: &[Inline], blocco: Span, out: &mut Vec<(Span, Span)>) {
+        let mut link = Vec::new();
+        inline(nodes, &mut link);
+        out.extend(link.into_iter().map(|l| (blocco, l)));
+    }
+    fn giro(blocks: &[Block], out: &mut Vec<(Span, Span)>) {
+        for b in blocks {
+            match b {
+                Block::Heading { inlines, span, .. } | Block::Paragraph { inlines, span, .. } => {
+                    da(inlines, *span, out)
+                }
+                Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => giro(blocks, out),
+                Block::List { items, .. } => {
+                    for i in items {
+                        giro(&i.blocks, out);
+                    }
+                }
+                Block::Table { head, rows, .. } => {
+                    for r in head.iter().chain(rows) {
+                        for cella in &r.cells {
+                            da(&cella.inlines, cella.span, out);
+                        }
+                    }
+                }
+                Block::CodeBlock { .. } | Block::ThematicBreak { .. } => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    giro(blocks, &mut out);
+    out
+}
+
+/// **Un embed comincia dal suo punto esclamativo**, e finisce dove finiscono le
+/// parentesi.
+///
+/// Il `!` è parte del riferimento, non del testo che lo precede: chi cancella o
+/// riscrive un embed guidato dal suo span deve portarsi via anche quello.
+///
+/// # Questo presidio è **verde per costruzione**, e va detto
+///
+/// Le strade che leggono un `[[…]]` sono due — il nodo `WikiLink` di comrak e il
+/// ripiego testuale di `find_embeds` — e davano due risposte diverse sullo
+/// stesso `!`: il ripiego lo teneva dentro lo span, comrak lo guardava per
+/// decidere `embed` e poi lo lasciava fuori. Nessuno dei due era rosso, perché
+/// **le due strade non si incontrano su nessun ingresso**: comrak un `![[` non
+/// lo riconosce affatto (lo lascia come testo, e lì entra il ripiego), e quando
+/// il `!` è sotto escape non c'è nessun embed di cui parlare. Il caso in cui la
+/// divergenza si vedrebbe è quello in cui comrak cambia idea su `![[`, cioè un
+/// aggiornamento di dipendenza — ed è precisamente per quello che le due
+/// risposte adesso sono **una funzione sola** (`embed_before`) invece di due
+/// righe che si somigliano.
+///
+/// Ciò che questo test aggiunge davvero è quindi il **contorno**: le due
+/// proprietà osservabili oggi, scritte, così che l'unificazione non possa averle
+/// cambiate di nascosto e il giorno del cambio di comrak ci sia qualcosa da
+/// rompere.
+#[test]
+fn un_embed_comincia_dal_suo_punto_esclamativo() {
+    // Il ripiego testuale: `![[…]]` è un embed, e lo span parte dal `!`.
+    for (source, atteso) in [
+        ("![[Nota]]\n", "![[Nota]]"),
+        ("testo ![[Nota]] dopo\n", "![[Nota]]"),
+        ("![[Nota#^blocco]]\n", "![[Nota#^blocco]]"),
+    ] {
+        let doc = parse(source);
+        let link = doc.links.first().expect("un embed è un link");
+        assert!(link.embed, "{source:?}: non è stato letto come embed");
+        assert_eq!(
+            &source[link.span.start..link.span.end],
+            atteso,
+            "{source:?}: lo span dell'embed non comincia dal `!`"
+        );
+    }
+    // Il ramo comrak, che è raggiungibile solo con il `!` sotto escape: allora
+    // non è un embed, e lo span è quello delle sole parentesi — il `!`
+    // letterale resta del testo, perché è testo.
+    let source = "\\![[Nota]]\n";
+    let doc = parse(source);
+    let link = doc.links.first().expect("un wikilink è un link");
+    assert!(
+        !link.embed,
+        "un `!` sotto escape è un punto esclamativo, non un embed"
+    );
+    assert_eq!(&source[link.span.start..link.span.end], "[[Nota]]");
 }
 
 /// Il testo di tutti gli inline, concatenato: è la lettura più cruda del

@@ -193,10 +193,15 @@ async function hydrateEmbeds(
         return;
       }
       const heading = slot.dataset.embedHeading ?? null;
-      const chiave = `${page} ${heading ?? ""}`;
+      // L'ancora di blocco: `![[Nota#^b]]` trasclude **quel blocco**, non la
+      // nota intera. Il segnaposto la porta dalla 0079; la chiave del memo la
+      // deve portare anche lei, o due embed della stessa pagina con due ancore
+      // diverse si scambierebbero la risposta.
+      const block = slot.dataset.embedBlock ?? null;
+      const chiave = `${page} ${heading ?? ""} ${block ?? ""}`;
       let chiesto = memo.get(chiave);
       if (!chiesto) {
-        chiesto = api.renderEmbed(page, heading);
+        chiesto = api.renderEmbed(page, heading, block);
         memo.set(chiave, chiesto);
       }
       // L'errore diventa un valore prima del cancello — un embed che non si

@@ -217,6 +217,68 @@ fn il_giro_completo_non_perde_le_ancore_di_blocco() {
     }
 }
 
+/// **Il conto, quarta proprietà.** Un riferimento si riscrive **com'era**, byte
+/// per byte.
+///
+/// # Perché le tre proprietà qui sopra non lo vedono, e nemmeno il round-trip
+///
+/// Un wikilink riscritto male non perde né testo né struttura né ancore: perde
+/// il **bersaglio**, e il bersaglio è una stringa dentro `[[…]]` che il giro
+/// `sorgente → modello → sorgente → modello` non confronta mai con la sorgente.
+/// Peggio: il nostro lettore è **indulgente di proposito** — `[[page^b]]` lo
+/// riaccetta come riferimento a blocco — quindi il giro torna al punto fisso su
+/// una scrittura che *fuori di qui* vuol dire un'altra cosa. In Obsidian
+/// `[[page^b]]` è una pagina che si chiama `page^b`. Una coppia
+/// scrittore/lettore che si accontenta della propria indulgenza è d'accordo con
+/// sé stessa e in disaccordo con tutti gli altri, e nessun round-trip può
+/// accorgersene: il confronto che serve è **col testo**, ed è questo.
+///
+/// Il difetto misurato era doppio, e il secondo l'ha scoperto il primo:
+///
+/// 1. il `#` che manca — `[[Nota#^blocco]]` usciva `[[Nota^blocco]]`, perché il
+///    `#` si scriveva solo quando c'era un heading da scrivere. Il `#` non è
+///    del heading: è ciò che rende quel `^` un `^` di ancora;
+/// 2. l'alias che nessuno aveva scritto — l'etichetta si confrontava con la
+///    sola `page`, quindi `[[Nota#Sezione]]` usciva `[[Nota#Sezione|Nota#Sezione]]`,
+///    e il giro dopo lo allungava ancora. Un file che si allunga da solo a ogni
+///    riscrittura.
+#[test]
+fn un_riferimento_si_riscrive_com_era() {
+    for source in [
+        "[[Nota]]\n",
+        "[[Nota#Sezione]]\n",
+        "[[Nota#^blocco]]\n",
+        "[[Nota#Sezione^blocco]]\n",
+        "[[Nota|Alias]]\n",
+        "[[Nota#Sezione|Alias]]\n",
+        "[[Nota#^blocco|Alias]]\n",
+        "[[#Sezione]]\n",
+        "![[Nota]]\n",
+        "![[Nota#^blocco]]\n",
+        "vedi [[Nota#^blocco]] e [[Altra#Sezione]] qui\n",
+    ] {
+        let riscritto = serialize(&parse(source));
+        assert_eq!(
+            riscritto, source,
+            "un riferimento è rientrato diverso da com'era uscito.\n  \
+             sorgente:  {source:?}\n  riscritto: {riscritto:?}"
+        );
+    }
+    // L'altro verso, che è il motivo per cui il lettore può restare indulgente:
+    // ciò che accetta per indulgenza torna **canonico nel bersaglio** quando lo
+    // si riscrive, invece di restare un dialetto privato.
+    //
+    // Il testo mostrato, invece, resta quello che l'utente vedeva — `[[Nota^blocco]]`
+    // a schermo diceva «Nota^blocco» — e diventa un alias esplicito: riparare
+    // dove un riferimento *punta* non è titolo per cambiare ciò che si *legge*.
+    let riscritto = serialize(&parse("[[Nota^blocco]]\n"));
+    assert_eq!(riscritto, "[[Nota#^blocco|Nota^blocco]]\n");
+    // E il giro dopo è fermo. Senza questa riga la riparazione dell'alias
+    // sarebbe indistinguibile da un file che si allunga di un `|…` a ogni
+    // riscrittura, che è com'era.
+    assert_eq!(serialize(&parse(&riscritto)), riscritto);
+}
+
 /// **Il comportamento.** Un inline di una sintassi che il provider non conosce
 /// **risale**: non si scrive a metà e non si salta.
 ///

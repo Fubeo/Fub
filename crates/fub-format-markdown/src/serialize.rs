@@ -45,6 +45,8 @@ use fub_abi::model::{
 };
 use fub_abi::FormatError;
 
+use crate::util::fila_massima;
+
 /// # Ciò che non si sa scrivere **risale**, non sparisce
 ///
 /// Questa funzione ha un solo modo di sbagliare in modo interessante: avere in
@@ -403,20 +405,6 @@ fn write_custom_block(
 
 /// La fila più lunga di `c` dentro `s`. Serve ai recinti e al codice inline:
 /// il delimitatore deve essere più lungo di ciò che delimita.
-fn fila_massima(s: &str, c: char) -> usize {
-    let mut max = 0;
-    let mut corrente = 0;
-    for ch in s.chars() {
-        if ch == c {
-            corrente += 1;
-            max = max.max(corrente);
-        } else {
-            corrente = 0;
-        }
-    }
-    max
-}
-
 fn write_inlines(inlines: &[Inline], out: &mut String) -> Result<(), FormatError> {
     for inline in inlines {
         write_inline(inline, out)?;
@@ -504,25 +492,35 @@ fn write_link(
         out.push('!');
     }
     match target {
+        // I tre campi si nominano lo stesso, e non è cerimonia: è la regola in
+        // testa a `write_block`: un quarto campo di `LinkTarget::Wiki` deve dare
+        // `E0027` qui, o nascerebbe perso in silenzio come nacque `anchor`.
+        // **Ma a scriverli non è questo file**: la forma testuale di un
+        // bersaglio è del contratto ([`LinkTarget::wiki_inner`]), che è il verso
+        // opposto di `parse_wikilink_inner` e sta accanto a lui. Finché la
+        // scriveva il provider, un riferimento a blocco senza heading usciva
+        // `[[page^b]]` — che Obsidian legge come una pagina di nome `page^b` —
+        // e nessuno se ne accorgeva perché il nostro lettore riaccettava la
+        // propria invenzione.
         LinkTarget::Wiki {
-            page,
-            heading,
-            block,
+            page: _,
+            heading: _,
+            block: _,
         } => {
+            let inner = target
+                .wiki_inner()
+                .expect("un bersaglio Wiki ha sempre un interno");
             out.push_str("[[");
-            out.push_str(page);
-            if let Some(h) = heading {
-                out.push('#');
-                out.push_str(h);
-            }
-            if let Some(b) = block {
-                out.push('^');
-                out.push_str(b);
-            }
+            out.push_str(&inner);
             if let Some(inlines) = label {
                 let mut lbl = String::new();
                 write_inlines(inlines, &mut lbl)?;
-                if lbl != *page {
+                // L'alias si scrive solo se **dice qualcosa di diverso** dal
+                // bersaglio, e il confronto è con l'interno intero. Era col solo
+                // `page`, quindi ogni link con un punto rientrava dal giro con
+                // un alias che nel file non c'era: `[[Nota#Sez]]` usciva
+                // `[[Nota#Sez|Nota#Sez]]`, e un altro giro lo allungava ancora.
+                if lbl != inner {
                     out.push('|');
                     out.push_str(&lbl);
                 }

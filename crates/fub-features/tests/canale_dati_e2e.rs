@@ -1020,7 +1020,7 @@ fn chi_genera_un_id_e_chi_risolve_un_frammento_nominano_lo_stesso_punto() {
     // Anche l'embed guarda la stessa sezione del link: `![[Nota#Note 1]]` e
     // `[[Nota#Note 1]]` non possono mostrare due cose.
     let (_id, embed) = ws
-        .render_embed("Omonime", Some("Note 1"))
+        .render_embed("Omonime", Some("Note 1"), None)
         .expect("l'embed della seconda");
     assert!(
         embed.html.contains("radici") && !embed.html.contains("alberi"),

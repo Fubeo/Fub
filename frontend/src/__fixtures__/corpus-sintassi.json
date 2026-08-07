@@ -276,6 +276,34 @@
     "task": []
   },
   {
+    "nome": "wikilink al solo blocco",
+    "source": "[[Nota#^blocco]]\n",
+    "tag": [],
+    "wikilink": [
+      {
+        "page": "Nota",
+        "embed": false,
+        "from": 0,
+        "to": 16
+      }
+    ],
+    "task": []
+  },
+  {
+    "nome": "wikilink a un heading e basta",
+    "source": "[[Nota#Sezione]]\n",
+    "tag": [],
+    "wikilink": [
+      {
+        "page": "Nota",
+        "embed": false,
+        "from": 0,
+        "to": 16
+      }
+    ],
+    "task": []
+  },
+  {
     "nome": "embed di wikilink",
     "source": "![[Nota]]\n",
     "tag": [],
@@ -285,6 +313,40 @@
         "embed": true,
         "from": 0,
         "to": 9
+      }
+    ],
+    "task": []
+  },
+  {
+    "nome": "embed di un blocco",
+    "source": "![[Nota#^blocco]]\n",
+    "tag": [],
+    "wikilink": [
+      {
+        "page": "Nota",
+        "embed": true,
+        "from": 0,
+        "to": 17
+      }
+    ],
+    "task": []
+  },
+  {
+    "nome": "link con del testo attorno fuori da un paragrafo",
+    "source": "# Titolo con [[Nota]]\n\n| dove | cosa |\n| - | - |\n| vedi [[Altra]] qui | x |\n",
+    "tag": [],
+    "wikilink": [
+      {
+        "page": "Nota",
+        "embed": false,
+        "from": 13,
+        "to": 21
+      },
+      {
+        "page": "Altra",
+        "embed": false,
+        "from": 56,
+        "to": 65
       }
     ],
     "task": []
