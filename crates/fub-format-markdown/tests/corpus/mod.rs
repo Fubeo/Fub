@@ -107,7 +107,25 @@ pub fn corpus() -> Vec<Caso> {
         caso("wikilink", "[[Nota]]\n"),
         caso("wikilink completo", "[[Nota#Sezione^blocco|Alias]]\n"),
         caso("wikilink al solo heading", "[[#Sezione]]\n"),
+        // Le due forme in cui il `#` c'è e **non** introduce un heading. Non
+        // c'erano, e il corpus era cieco per quello: l'unica forma con un
+        // `block` era `[[Nota#Sezione^blocco|Alias]]`, che ha anche l'heading e
+        // anche l'alias, cioè proprio il caso in cui chi scriveva il
+        // riferimento non sbagliava. Senza heading il serializer scriveva
+        // `[[Nota^blocco]]`, che in Obsidian è una pagina di nome `Nota^blocco`.
+        caso("wikilink al solo blocco", "[[Nota#^blocco]]\n"),
+        caso("wikilink a un heading e basta", "[[Nota#Sezione]]\n"),
         caso("embed di wikilink", "![[Nota]]\n"),
+        caso("embed di un blocco", "![[Nota#^blocco]]\n"),
+        // Un link **con dell'altro testo attorno**, fuori da un paragrafo. Sono
+        // i due blocchi in cui il contesto dei backlink non arrivava, e senza
+        // dell'altro testo nel blocco il conto che lo presidia non avrebbe
+        // niente da pretendere: un link che sta da solo in una cella non ha un
+        // contesto da perdere.
+        caso(
+            "link con del testo attorno fuori da un paragrafo",
+            "# Titolo con [[Nota]]\n\n| dove | cosa |\n| - | - |\n| vedi [[Altra]] qui | x |\n",
+        ),
         caso("embed di immagine", "![alt](figura.png)\n"),
         caso("tag", "#tag\n"),
         caso("tag annidato", "#genitore/figlio\n"),

@@ -293,13 +293,17 @@ non viene risolto dal provider: esce come placeholder
 
 ```html
 <div class="embed" data-embed-page="Page" data-embed-heading="Heading">…</div>
+<div class="embed" data-embed-page="Page" data-embed-block="abc123">…</div>
 ```
 
 e la composizione avviene fuori:
 
-1. il **kernel** espone `Workspace::render_embed(page, heading?)` → risolve la
-   pagina via grafo e rende l'intero documento o la sola sezione del heading
-   (sottomodello ritagliato sugli `Span` dell'outline);
+1. il **kernel** espone `Workspace::render_embed(page, heading?, block?)` →
+   risolve la pagina via grafo e rende l'intero documento, o la sola sezione del
+   heading (sottomodello ritagliato sugli `Span` dell'outline), o il solo blocco
+   che porta quell'ancora (ritagliato sullo `Span` di `DocumentModel::anchors`).
+   Se il riferimento porta tutt'e due **vince il blocco**: un'ancora di blocco è
+   unica nel documento, un heading nomina l'intervallo che la contiene;
 2. il **frontend** idrata i placeholder (comando IPC `render_embed`) e innesta
    l'HTML, ricorsivamente; tiene la catena dei documenti aperti per spezzare i
    **cicli** (`![[A]]` dentro A) e applica la **profondità massima** (5).

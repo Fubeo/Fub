@@ -60,7 +60,7 @@ use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
 use fub_abi::locale::Locale;
-use fub_abi::model::{heading_matches, DocId, DocumentModel, LinkTarget, Span};
+use fub_abi::model::{canonical_anchor, heading_matches, DocId, DocumentModel, LinkTarget, Span};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
@@ -3691,8 +3691,9 @@ impl Workspace {
         )?)
     }
 
-    /// Rende il contenuto di un embed `![[page#heading]]`: risolve la pagina
-    /// e rende l'intero documento, o la sola sezione del heading richiesto.
+    /// Rende il contenuto di un embed `![[page#heading]]` o `![[page#^blocco]]`:
+    /// risolve la pagina e rende l'intero documento, o la sola sezione del
+    /// heading richiesto, o il solo blocco che porta quell'ancora.
     ///
     /// È il pezzo kernel della **transclusion**: `render_html` dei provider
     /// resta una funzione pura per-documento (emette solo un placeholder per
@@ -3700,10 +3701,20 @@ impl Workspace {
     /// innesta l'HTML nel placeholder. Ricorsione, profondità massima e cicli
     /// sono gestiti dal chiamante, che conosce la catena di embed corrente
     /// (vedi `docs/architecture/ui-protocol.md`).
+    ///
+    /// # Chi vince fra i due, e perché non è una scelta di comodo
+    ///
+    /// Un `LinkTarget::Wiki` può portarli tutti e due, e allora **vince il
+    /// blocco**: un'ancora di blocco è unica nel documento — è la chiave con cui
+    /// [`canonical_anchor`] la risolve — mentre un heading nomina un intervallo
+    /// che la contiene. Chiedere «la sezione X, e dentro il blocco b» e
+    /// chiedere «il blocco b» sono la stessa domanda, e la seconda si risponde
+    /// senza guardare la prima.
     pub fn render_embed(
         &self,
         page: &str,
         heading: Option<&str>,
+        block: Option<&str>,
     ) -> Result<(DocId, RenderedDocument)> {
         let id = self
             .resolve_link(page)
@@ -3715,12 +3726,14 @@ impl Workspace {
         let model = self.docs.parse_from_disk(&id)?;
         let provider = self.docs.provider_for(&id)?;
         let opts = RenderOptions::preview();
-        let model = match heading {
-            None => model,
-            Some(h) => {
-                section_of(&model, h).ok_or_else(|| KernelError::NotFound(format!("{id}#{h}")))?
-            }
-        };
+        let model =
+            match (block, heading) {
+                (Some(b), _) => block_of(&model, b)
+                    .ok_or_else(|| KernelError::NotFound(format!("{id}#^{b}")))?,
+                (None, Some(h)) => section_of(&model, h)
+                    .ok_or_else(|| KernelError::NotFound(format!("{id}#{h}")))?,
+                (None, None) => model,
+            };
         // Anche un embed passa dai renderer: un diagramma dentro una nota
         // trascluso resta un diagramma. Gli slot delle parti sono numerati
         // dentro QUESTA composizione, e il frontend li monta dentro il
@@ -6377,6 +6390,37 @@ fn section_of(model: &DocumentModel, heading: &str) -> Option<DocumentModel> {
         .cloned()
         .collect();
     Some(section)
+}
+
+/// Sottomodello con il solo blocco che porta l'ancora `^id`.
+///
+/// Il ritaglio si legge dalla tabella piatta `anchors` e non dal campo `anchor`
+/// dei blocchi, e la ragione sta scritta nel contratto accanto ad
+/// [`fub_abi::model::Anchor`]: quel campo porta lo **slug generato** per un
+/// heading, non l'id che l'utente ha scritto, mentre `anchors.span` è *«il
+/// blocco intero, cioè ciò che un embed di blocco ritaglia»*. Cioè: la risposta
+/// era già scritta nel modello, e mancava solo chi la chiedesse.
+///
+/// Chi matcha è [`canonical_anchor`], la stessa regola con cui il grafo risolve
+/// un `[[Nota#^blocco]]`: un embed che trovasse un blocco diverso da quello che
+/// il link apre sarebbe la stessa scritta che mostra due cose.
+fn block_of(model: &DocumentModel, block: &str) -> Option<DocumentModel> {
+    let voluto = canonical_anchor(block);
+    let ancora = model.anchors.iter().find(|a| a.id == voluto)?;
+    let mut ritaglio = DocumentModel::empty(model.id.clone());
+    ritaglio.body = model
+        .body
+        .iter()
+        .filter(|b| {
+            let s = b.span().start;
+            s >= ancora.span.start && s < ancora.span.end.max(ancora.span.start + 1)
+        })
+        .cloned()
+        .collect();
+    // Un'ancora che non ritaglia niente è un'ancora che non c'è: rispondere con
+    // un documento vuoto vorrebbe dire mostrare il nulla invece di dire che il
+    // bersaglio non si è trovato.
+    (!ritaglio.body.is_empty()).then_some(ritaglio)
 }
 
 /// **Un lotto aperto è un prestito, e si chiude cadendo.**

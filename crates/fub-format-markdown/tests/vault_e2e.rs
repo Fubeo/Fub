@@ -136,6 +136,74 @@ fn edit_updates_graph_and_backlinks() {
         .any(|r| r.source == daily));
 }
 
+/// **`![[Nota#^blocco]]` trascluda quel blocco**, non la nota intera.
+///
+/// Il segnaposto portava pagina e heading e il kernel sapeva ritagliare solo una
+/// sezione, quindi l'ancora si perdeva due volte lungo la stessa strada — e il
+/// modo di fallimento era il peggiore: **niente andava storto**. Si vedeva la
+/// nota intera, che è una risposta plausibile, e nessuno diceva che ne era stata
+/// chiesta una riga.
+///
+/// Il ritaglio non è un secondo parser di ancore: `DocumentModel::anchors` porta
+/// già lo span del blocco, e il contratto lo dice accanto al campo — *«è ciò che
+/// un embed di blocco ritaglia»*. Mancava chi lo chiedesse.
+///
+/// **Questa metà non poteva essere rossa**, e va detto: `render_embed` il blocco
+/// non lo prendeva proprio, quindi il banco non compilava invece di fallire. La
+/// metà che era rossa sta di là ed è il sito che il difetto nominava,
+/// `il_segnaposto_di_un_embed_porta_anche_l_ancora_di_blocco` in
+/// `fub-format-markdown/src/lib.rs`: il segnaposto non scriveva l'ancora. Questo
+/// banco presidia il resto della strada, che quell'ancora prima non aveva.
+#[test]
+fn un_embed_a_un_blocco_ritaglia_quel_blocco() {
+    let (_scratch, mut ws) = open_scratch();
+    let nota = DocId::new("Nota B.md");
+    ws.write_document(
+        &nota,
+        "# Nota B\n\nprimo paragrafo\n\nil secondo, indirizzabile ^bersaglio\n\nterzo\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+
+    let (_id, tutta) = ws
+        .render_embed("Nota B", None, None)
+        .expect("la nota intera");
+    assert!(
+        tutta.html.contains("primo") && tutta.html.contains("terzo"),
+        "senza coordinate si trascluda tutto: {}",
+        tutta.html
+    );
+
+    let (_id, blocco) = ws
+        .render_embed("Nota B", None, Some("bersaglio"))
+        .expect("il blocco indirizzato");
+    assert!(
+        blocco.html.contains("il secondo"),
+        "l'embed non porta il blocco chiesto: {}",
+        blocco.html
+    );
+    assert!(
+        !blocco.html.contains("primo") && !blocco.html.contains("terzo"),
+        "l'embed di un blocco porta anche il resto della nota: {}",
+        blocco.html
+    );
+
+    // Case-insensitive come tutta la risoluzione delle ancore
+    // (`canonical_anchor`): un embed che trovasse un blocco diverso da quello
+    // che il link apre sarebbe la stessa scritta che mostra due cose.
+    assert!(ws
+        .render_embed("Nota B", None, Some("Bersaglio"))
+        .is_ok_and(|(_, r)| r.html.contains("il secondo")));
+
+    // E un'ancora che non c'è **si dice**: rispondere con la nota intera sarebbe
+    // la risposta plausibile che nasconde l'errore, ed è com'era.
+    assert!(
+        ws.render_embed("Nota B", None, Some("inesistente"))
+            .is_err(),
+        "un'ancora che non esiste deve risalire, non degradare alla nota intera"
+    );
+}
+
 #[test]
 fn a_new_note_takes_the_first_free_untitled_name() {
     let (_scratch, mut ws) = open_scratch();

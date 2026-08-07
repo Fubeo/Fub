@@ -53,7 +53,7 @@ alfabetico.
 ## Il documento
 
 ### ancora
-`Anchor` · [`abi/model.rs:681`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Anchor` · [`abi/model.rs:739`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'identificatore che un blocco si porta dentro il testo — la forma `^id` in coda
 a un paragrafo — perché un link possa puntare a *quel* punto e non alla nota
@@ -91,7 +91,7 @@ markdown è solo il primo provider che sa produrlo. Dettaglio in
 [architecture/data-model.md](architecture/data-model.md).
 
 ### proprietà
-`PropertyValue` · [`abi/model.rs:927`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`PropertyValue` · [`abi/model.rs:985`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Un valore del frontmatter letto con un tipo invece che come JSON nudo: scalare,
 data, ora, lista. Serve a chi interroga (ordinare per data, filtrare per stato)
@@ -269,7 +269,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6068`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6081`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa

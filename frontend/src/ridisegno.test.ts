@@ -254,4 +254,24 @@ describe("il prezzo di un'anteprima (§2.9)", () => {
     await updatePreview(el, "nota.md");
     expect(host.aPorta("renderEmbed").map((c) => c.args[1])).toEqual(["A", "B"]);
   });
+
+  it("l'ancora di blocco di un embed arriva al kernel, e distingue due domande", async () => {
+    // La terza coordinata. `![[Nota#^b]]` trasclude **quel blocco**: se la
+    // chiave del memo non la porta, due embed della stessa pagina con due
+    // ancore diverse si scambiano la risposta — che è lo stesso guasto del
+    // test qui sopra, un campo più in là. E se non la porta la chiamata, il
+    // blocco non arriva affatto e si vede la nota intera, che è la risposta
+    // plausibile che nasconde l'errore.
+    const embed = (page: string, b: string) =>
+      `<div class="embed" data-embed-page="${page}" data-embed-block="${b}"></div>`;
+    const host = soloHost({
+      "nota.md": embed("Glossario", "b1") + embed("Glossario", "b2") + embed("Glossario", "b1"),
+    });
+    const { updatePreview } = await import("./panels/preview");
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    await updatePreview(el, "nota.md");
+    expect(host.aPorta("renderEmbed").map((c) => c.args[2])).toEqual(["b1", "b2"]);
+    expect(el.querySelectorAll(".embed-loaded")).toHaveLength(3);
+  });
 });

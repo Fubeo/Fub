@@ -267,10 +267,8 @@ fn convert_block<'a>(
             // poi da testo e inline: `^abc` è indirizzo, non contenuto.
             let anchor = trailing_anchor(source, span, acc);
             let mut text = String::new();
-            let mut inlines = convert_inlines(node, source, offsets, ctx, acc, &mut text);
-            if let Some(a) = &anchor {
-                strip_marker(&mut inlines, &mut text, &a.written);
-            }
+            let inlines =
+                inlines_del_blocco(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
             acc.text.push_str(&text);
             acc.text.push('\n');
             // **Una** chiamata, due usi. Chiamare l'assegnatario due volte
@@ -296,19 +294,10 @@ fn convert_block<'a>(
         }
         NodeValue::Paragraph => {
             let anchor = trailing_anchor(source, span, acc);
-            let link_base = acc.links.len();
             let mut text = String::new();
-            let mut inlines = convert_inlines(node, source, offsets, ctx, acc, &mut text);
-            if let Some(a) = &anchor {
-                strip_marker(&mut inlines, &mut text, &a.written);
-            }
+            let inlines =
+                inlines_del_blocco(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
             let ptext = text.trim().to_string();
-            // I link scoperti in questo paragrafo ereditano il testo come contesto.
-            for link in &mut acc.links[link_base..] {
-                if link.context.is_none() {
-                    link.context = Some(ptext.clone());
-                }
-            }
             acc.text.push_str(&ptext);
             acc.text.push('\n');
             Some(Block::Paragraph {
@@ -514,7 +503,7 @@ fn convert_table<'a>(
         let mut cells = Vec::new();
         for c in r.children() {
             let mut text = String::new();
-            let inlines = convert_inlines(c, source, offsets, ctx, acc, &mut text);
+            let inlines = inlines_del_blocco(c, source, offsets, ctx, acc, None, &mut text);
             acc.text.push_str(text.trim());
             acc.text.push(' ');
             let cella = ritagliato_dopo(span_of(c, offsets), span, fine);
@@ -577,6 +566,51 @@ fn push_link(
     });
 }
 
+/// Gli inline di un **blocco**: il marcatore d'ancora tolto, e il **contesto**
+/// assegnato ai link che ci stanno dentro.
+///
+/// È l'ingresso che ogni ramo di [`convert_block`] usa; [`convert_inlines`] —
+/// quella che ricorre dentro un `Emph`, uno `Strong`, l'etichetta di un link —
+/// non assegna niente, perché il contesto di un link è il testo del **blocco**
+/// che lo contiene, e dentro un `Emph` non si sa quale sia.
+///
+/// La regola stava scritta dentro il ramo `Paragraph`, e valeva solo lì: un
+/// link in un'intestazione o in una cella di tabella nasceva con `context:
+/// None`, e il pannello dei backlink lo mostrava senza la riga che lo spiega.
+/// Copiarla nei due rami mancanti sarebbe stata la risposta sbagliata due
+/// volte: chi *vede* il sintomo non è chi lo produce, e una regola che vale per
+/// tutti i chiamanti si scrive nel posto che tutti attraversano.
+///
+/// I link già scoperti da un blocco **più interno** non si sovrascrivono: il
+/// contesto è quello del blocco più vicino che porti del testo, che è ciò che
+/// faceva già un paragrafo dentro una citazione.
+fn inlines_del_blocco<'a>(
+    node: &'a AstNode<'a>,
+    source: &str,
+    offsets: &Offsets<'_>,
+    ctx: &ParseContext,
+    acc: &mut Acc,
+    anchor: Option<&FoundAnchor>,
+    text: &mut String,
+) -> Vec<Inline> {
+    let link_base = acc.links.len();
+    let mut inlines = convert_inlines(node, source, offsets, ctx, acc, text);
+    if let Some(a) = anchor {
+        strip_marker(&mut inlines, text, &a.written);
+    }
+    let contesto = text.trim();
+    // Un contesto vuoto non è un contesto: `Some("")` occuperebbe il campo e
+    // impedirebbe a chiunque altro di riempirlo, dicendo niente.
+    if !contesto.is_empty() {
+        for link in &mut acc.links[link_base..] {
+            if link.context.is_none() {
+                link.context = Some(contesto.to_string());
+            }
+        }
+    }
+    inlines
+}
+
 fn convert_inlines<'a>(
     node: &'a AstNode<'a>,
     source: &str,
@@ -602,7 +636,7 @@ fn convert_inlines<'a>(
                 // gli escape sono ancora visibili: `\#nontag` non diventa un
                 // tag (Obsidian lo neutralizza).
                 let slice = source.get(span.start..span.end).unwrap_or(&s);
-                push_text_features(slice, &s, span.start, ctx, acc, &mut out);
+                push_text_features(source, slice, &s, span.start, ctx, acc, &mut out);
             }
             NodeValue::SoftBreak | NodeValue::LineBreak => {
                 text_out.push(' ');
@@ -636,11 +670,7 @@ fn convert_inlines<'a>(
                 );
             }
             NodeValue::WikiLink(wl) => {
-                // Il `!` che precede fa embed solo se è un `!` vero: sotto
-                // escape (`\![[...]]`) è un punto esclamativo letterale.
-                let embed = span.start > 0
-                    && source.as_bytes()[span.start - 1] == b'!'
-                    && !is_escaped(source, span.start - 1);
+                let (embed, span) = embed_before(source, span);
                 let parsed = scan::parse_wikilink_inner(&wl.url);
                 let mut label_text = String::new();
                 let label = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
@@ -693,6 +723,7 @@ fn convert_inlines<'a>(
 /// testo fra le feature resta quello del sorgente: più fedele alla
 /// serializzazione, marginalmente più grezzo a schermo.)
 fn push_text_features(
+    source: &str,
     slice: &str,
     decoded: &str,
     base: usize,
@@ -710,15 +741,22 @@ fn push_text_features(
         return;
     }
     let mut cursor = 0;
-    for (span, inner) in embeds {
-        if span.start > cursor {
-            let seg = &slice[cursor..span.start];
+    for (parentesi, inner) in embeds {
+        // Il `!` lo aggiunge allo span [`embed_before`], che è la stessa
+        // funzione da cui passa il ramo comrak: qui `find_embeds` consegna le
+        // sole parentesi, e chi decide dove comincia un embed è uno solo.
+        let (embed, abs) = embed_before(
+            source,
+            Span::new(base + parentesi.start, base + parentesi.end),
+        );
+        let inizio = abs.start - base;
+        if inizio > cursor {
+            let seg = &slice[cursor..inizio];
             push_plain_or_tags(seg, seg, base + cursor, ctx, acc, out);
         }
         let parsed = scan::parse_wikilink_inner(&inner);
-        let abs = Span::new(base + span.start, base + span.end);
-        push_link(acc, out, parsed.target, None, true, abs);
-        cursor = span.end;
+        push_link(acc, out, parsed.target, None, embed, abs);
+        cursor = abs.end - base;
     }
     if cursor < slice.len() {
         let seg = &slice[cursor..];
@@ -726,9 +764,44 @@ fn push_text_features(
     }
 }
 
-/// Trova gli embed `![[...]]`, restituendo (span nel frammento, contenuto
-/// interno). Il frammento è sorgente: un `!` sotto escape (`\![[...]]`) non
-/// apre un embed.
+/// Il `!` che precede un `[[…]]` lo rende un **embed**, e allora lo span
+/// comincia da lì.
+///
+/// Il `!` è parte del riferimento, non del testo che lo precede: chi cancella o
+/// riscrive un embed guidato dal suo span deve portarsi via anche quello, o
+/// resta un punto esclamativo orfano. Sotto escape (`\![[…]]`) è un punto
+/// esclamativo letterale: niente embed, e lo span resta quello delle parentesi.
+///
+/// **Sta in una funzione sola perché le strade che leggono un `[[…]]` sono
+/// due**: il nodo `WikiLink` di comrak e il ripiego testuale di [`find_embeds`]
+/// — che esiste perché comrak un `![[` non lo riconosce affatto. Le due
+/// rispondevano in modi diversi sullo stesso `!`: la seconda lo teneva dentro
+/// lo span, la prima lo guardava per decidere `embed` e poi lo lasciava fuori.
+/// Oggi la prima un `!` non escapato non lo vede mai — è per questo che il
+/// disaccordo non si vede da nessuna parte — ed è esattamente la forma in cui
+/// una divergenza aspetta l'aggiornamento di una dipendenza per diventare vera.
+/// A confrontare le due strade adesso c'è
+/// `tests/il_corpus.rs::un_embed_comincia_dal_suo_punto_esclamativo`, e il
+/// contorno che ne dipende è dichiarato nel corpus della shell
+/// (`frontend/src/editor/corpus.test.ts`: «lo span del modello comprende il `!`
+/// dell'embed»).
+fn embed_before(source: &str, parentesi: Span) -> (bool, Span) {
+    if parentesi.start > 0
+        && source.as_bytes()[parentesi.start - 1] == b'!'
+        && !is_escaped(source, parentesi.start - 1)
+    {
+        (true, Span::new(parentesi.start - 1, parentesi.end))
+    } else {
+        (false, parentesi)
+    }
+}
+
+/// Trova gli embed `![[...]]`, restituendo (span **delle sole parentesi** nel
+/// frammento, contenuto interno). Il `!` lo aggiunge [`embed_before`], che è
+/// dove quella decisione sta per tutt'e due le strade.
+///
+/// Il frammento è sorgente: un `!` sotto escape (`\![[...]]`) non apre un
+/// embed.
 fn find_embeds(text: &str) -> Vec<(Span, String)> {
     let mut res = Vec::new();
     let mut i = 0;
@@ -741,7 +814,7 @@ fn find_embeds(text: &str) -> Vec<(Span, String)> {
             if let Some(rel) = text[i + 3..].find("]]") {
                 let inner = text[i + 3..i + 3 + rel].to_string();
                 let end = i + 3 + rel + 2;
-                res.push((Span::new(i, end), inner));
+                res.push((Span::new(i + 1, end), inner));
                 i = end;
                 continue;
             }
