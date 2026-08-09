@@ -693,6 +693,40 @@ fn convert_inlines<'a>(
                     span,
                 );
             }
+            NodeValue::HtmlInline(literal) => {
+                // **Il gemello inline di `NodeValue::HtmlBlock`**, e prima non
+                // c'era: senza un ramo suo un `<b>`, un `<br>` o un `<kbd>`
+                // finiva nel catch-all, che ricorre sui figli — e un
+                // `HtmlInline` di figli non ne ha, perché il markup lo porta
+                // tutto nel proprio `literal`. Non degradava: **spariva**, e
+                // spariva prima di ogni altro lato, cioè dal modello. La resa
+                // era la metà che si vedeva meno; quella che costava era la
+                // **riscrittura**, perché `serialize` scrive ciò che il modello
+                // ha: `un <b>grassetto</b> inline` tornava sul disco come `un
+                // grassetto inline`, e i tag dell'utente erano cancellati dal
+                // suo file.
+                //
+                // Che i byte restino **dato** e non tornino markup è la stessa
+                // scelta del blocco, presa nello stesso posto: `custom_kind::
+                // HTML` è `Carico::Sorgente("html")`, quindi `serialize` li
+                // ricopia identici e `render` li mostra escapati. Cosa sia
+                // lecito eseguire lo decide la sanitizzazione (5.3), non il
+                // provider che ha letto il file.
+                //
+                // In `text_out` **non ci vanno**, e qui il blocco non fa da
+                // esempio: un `HtmlBlock` è tutto il contenuto del proprio
+                // blocco, e se non entrasse nel testo indicizzato quel blocco
+                // non sarebbe cercabile affatto; un `<b>` sta in mezzo a una
+                // frase che il suo testo ce l'ha già nei nodi accanto, e
+                // metterci dentro il markup significherebbe scrivere `un <b>
+                // grassetto </b> inline` nel contesto di un backlink e nel
+                // testo su cui si cerca.
+                out.push(Inline::Custom {
+                    custom_kind: custom_kind::HTML.to_string(),
+                    attrs: serde_json::json!({ "html": literal }),
+                    span,
+                });
+            }
             NodeValue::FootnoteReference(f) => {
                 out.push(Inline::Custom {
                     custom_kind: custom_kind::FOOTNOTE_REFERENCE.to_string(),

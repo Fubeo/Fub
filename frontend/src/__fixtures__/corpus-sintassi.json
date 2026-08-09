@@ -476,6 +476,13 @@
     "task": []
   },
   {
+    "nome": "html inline",
+    "source": "un <b>grassetto</b> inline\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
     "nome": "commento html",
     "source": "<!-- un commento -->\n",
     "tag": [],

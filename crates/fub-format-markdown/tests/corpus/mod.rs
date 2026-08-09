@@ -148,6 +148,7 @@ pub fn corpus() -> Vec<Caso> {
         caso("footnote", "una nota[^n]\n\n[^n]: il corpo\n"),
         caso("definition list", "Termine\n\n: la definizione\n"),
         caso("html a blocco", "<div>blocco</div>\n"),
+        caso("html inline", "un <b>grassetto</b> inline\n"),
         caso("commento html", "<!-- un commento -->\n"),
         // --- frontmatter ---
         caso("frontmatter", "---\ntitolo: X\n---\n\n# Corpo\n"),
@@ -237,10 +238,6 @@ pub fn divergenti() -> Vec<Caso> {
         ),
         caso("il barrato non arriva nel modello", "~~barrato~~\n"),
         caso("l'apice non arriva nel modello", "testo ^apice^ qui\n"),
-        caso(
-            "l'html inline sparisce, mentre quello a blocco resta",
-            "un <b>grassetto</b> inline\n",
-        ),
         caso(
             "l'ancora esplicita di un heading non è raggiungibile dall'albero",
             "## Titolo ^xyz\n",
