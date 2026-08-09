@@ -158,8 +158,10 @@ async function init(): Promise<void> {
   mountSettings({
     apriVault: openVaultPath,
     ricaricaProvider: async () => {
-      await mountDeclaredViews();
-      await loadCommandSpecs();
+      // Le stesse due domande dell'apertura, e per la stessa ragione insieme:
+      // non si leggono a vicenda, e chi accende un componente le aspetta
+      // entrambe.
+      await Promise.all([mountDeclaredViews(), loadCommandSpecs()]);
     },
   });
 
@@ -248,7 +250,6 @@ async function openVaultPath(dir: string): Promise<void> {
   state.vaultRoot = info.root;
   state.handledExtensions =
     info.extensions.length > 0 ? info.extensions : state.handledExtensions;
-  await loadOrganization();
   // Lo stato di vista di **questo** vault (§11.2): come lo si stava guardando.
   // Dopo l'apertura, perché è il backend a tenerlo e la chiave è il vault
   // aperto; e prima del segnale, perché chi si iscrive disegna con questi.
@@ -257,9 +258,17 @@ async function openVaultPath(dir: string): Promise<void> {
   // dentro, in che modalità ciascuno. Non c'è più un `closeDocument()` qui —
   // chiudeva il documento del vault precedente perché non c'era niente da
   // ripristinare al posto suo, e adesso c'è: la finestra riparte com'era.
-  await caricaLayout();
-  await loadExpanded();
-  await loadActiveSpace();
+  //
+  // **Insieme, e non in fila**: sono quattro domande che non si leggono a
+  // vicenda — l'organizzazione, il layout, le cartelle aperte, lo spazio
+  // attivo — e ciascuna è un giro sull'IPC. In fila costavano cinque andate e
+  // ritorno (`caricaLayout` ne fa due di suo), e chi apre un vault le paga
+  // tutte una dopo l'altra prima di vedere qualcosa. L'ordine che i commenti
+  // qui sopra dichiarano è **rispetto a `openVault` e al segnale**, non fra
+  // loro: `Promise.all` lo tiene fermo. Nessuna delle quattro può rifiutare —
+  // tutte e quattro hanno il proprio `catch` dentro — quindi qui non c'è la
+  // domanda «cosa resta a metà se una va storta».
+  await Promise.all([loadOrganization(), caricaLayout(), loadExpanded(), loadActiveSpace()]);
   await sincronizza();
   // **Ciò che era rimasto non salvato** (§15.2), e sta qui accanto a
   // `vault.partial` perché è la stessa specie di riga: due cose che l'apertura
@@ -281,12 +290,18 @@ async function openVaultPath(dir: string): Promise<void> {
   // view, i comandi: l'elenco serve alle scorciatoie dichiarate — la palette lo
   // richiede da sé a ogni apertura, perché è il momento in cui costa nulla ed è
   // l'unico in cui deve essere fresco.
-  await mountDeclaredViews();
-  await loadCommandSpecs();
+  //
   // Gli accordi riconfigurati vivono nelle impostazioni di **questo** vault
   // (0076), quindi si rileggono quando il vault cambia — insieme ai comandi che
-  // ne sono i proprietari.
-  await loadKeyOverrides();
+  // ne sono i proprietari. «Insieme» qui è letterale: i tre elenchi non si
+  // leggono a vicenda, e chi li aspetta è la riga dopo, che li vuole tutti e
+  // tre. In fila erano tre andate e ritorno, adesso una.
+  //
+  // L'unica differenza che resta: se `list_views` rifiuta, i due elenchi che
+  // prima non venivano nemmeno chiesti adesso arrivano lo stesso. È il verso
+  // buono — un vault che si apre male tiene comunque i comandi e gli accordi —
+  // e `Promise.all` rifiuta come rifiutava `mountDeclaredViews` da solo.
+  await Promise.all([mountDeclaredViews(), loadCommandSpecs(), loadKeyOverrides()]);
   await avvisaSeDueComandiSiContendonoUnTasto();
   // **Dopo** i conflitti, e non è indifferente: una scorciatoia sospesa non è in
   // vigore, quindi non partecipa a nessun conflitto — e dire prima «questo vault
