@@ -12,15 +12,17 @@ il verbale dice perché sembrava vero).
 ---
 
 **La regola che questo verbale fissa.** Una scrittura su disco dentro un comando
-IPC **si accoda nella shell** — coalescendo per chiave, così due scritture della
-stessa chiave accavallate diventano una scrittura sola con l'ultimo valore — e
-**non** si rende `async` nel thread dell'IPC. Non è una scelta libera: la
+IPC **si accoda nella shell** — coalescendo per chiave: per ogni chiave la coda
+tiene **al più un lavoro in volo e al più uno che aspetta**, quello che aspetta
+porta sempre l'ultimo valore e quello che è partito arriva sempre — e **non** si
+rende `async` nel thread dell'IPC. Non è una scelta libera: la
 [0133](0133-chi-ascolta-nomina-fino-a-quando.md) e `frontend/src/ui/corsa.ts`
 hanno già deciso che quando il lavoro *deve arrivare* — «una scrittura su
 disco, una mutazione del layout» — la risposta è **accodare**, e questa voce
 applica quella decisione alla porta che tutte le scritture di stato
-attraversano. Coalescere non è scartare: il lavoro che parte c'è e arriva, e
-chi ha accodato sa quando è finito.
+attraversano. Coalescere non è scartare: ciò che parte c'è e arriva, e chi ha
+accodato sa quando è finito — chi arriva mentre un lavoro corre aspetta il
+proprio esito, chi lo sostituisce in attesa aspetta l'esito del lavoro fuso.
 
 **Il numero.** **37** comandi registrati nel `generate_handler!` di
 `crates/fub-app/src/lib.rs`, **0** `async`. Chi rifà il conto non usi un `grep`
@@ -74,7 +76,7 @@ vault.
    censimento era stato fatto leggendo la prosa, e la prosa nominava i gesti
    «discreti» senza contare la riga di `apriTabIn`.
 5. **«`scriviStato` ha due chiamanti» è falso: sono cinque, in tre moduli, con
-   quattro chiavi** — `store.ts:175` (`expanded`), `store.ts:184`
+   quattro chiavi** — `store.ts:176` (`expanded`), `store.ts:185`
    (`activeSpace`), `layout.ts:449` (`layout`), `recenti.ts:187` e `:198`
    (`history`). Sembrava vero perché i due di `store.ts` sono gli unici
    «nudi»: gli altri passano da `cambiato()` e da `metti_via()`. **È il fatto
