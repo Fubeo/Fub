@@ -415,6 +415,90 @@ mod tests {
         assert!(html.contains("E = mc^2"), "html: {html}");
     }
 
+    /// **Due estensioni omonime di due autori diversi non finiscono sulla
+    /// stessa classe CSS**, e questo vale sul lato blocco *e* sul lato inline.
+    ///
+    /// È il caso per cui il namespace di un `custom_kind` esiste: `terzi` e
+    /// `altri` possono chiamare `spoiler` la propria estensione senza mettersi
+    /// d'accordo, e il modello li tiene distinti. Il render li perdeva a metà
+    /// strada — il blocco scriveva il kind intero, l'inline lo tagliava al `:`
+    /// — quindi un tema scritto per lo `spoiler` di uno vestiva anche quello
+    /// dell'altro, in silenzio.
+    ///
+    /// **Il banco è stato rosso**, e sull'inline soltanto: rimettendo il taglio
+    /// del namespace i due span uscivano tutti e due su `inline-spoiler`.
+    ///
+    /// L'ultima metà è quella che tiene ferma la parte che **non** deve
+    /// cambiare: un kind del core non ha namespace, quindi la sua classe è
+    /// quella di prima. `.inline-highlight` è un selettore vero della shell
+    /// (`frontend/src/style.css`), e allargare la classe con un prefisso
+    /// avrebbe scollegato il tema senza che niente diventasse rosso.
+    #[test]
+    fn due_kind_omonimi_di_namespace_diversi_non_collidono_sulla_classe() {
+        let custom_inline = |kind: &str, text: &str| Inline::Custom {
+            custom_kind: kind.into(),
+            attrs: serde_json::json!({ "text": text }),
+            span: fub_abi::model::Span::EMPTY,
+        };
+        let custom_block = |kind: &str, source: &str| Block::Custom {
+            custom_kind: kind.into(),
+            attrs: serde_json::json!({ "source": source }),
+            blocks: vec![],
+            anchor: None,
+            span: fub_abi::model::Span::EMPTY,
+        };
+        let doc = DocumentModel {
+            body: vec![
+                Block::Paragraph {
+                    inlines: vec![
+                        custom_inline("terzi:spoiler", "di terzi"),
+                        custom_inline("altri:spoiler", "di altri"),
+                    ],
+                    anchor: None,
+                    span: fub_abi::model::Span::EMPTY,
+                },
+                custom_block("terzi:spoiler", "blocco di terzi"),
+                custom_block("altri:spoiler", "blocco di altri"),
+            ],
+            ..DocumentModel::empty(fub_abi::model::DocId::new("nota.md"))
+        };
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &RenderOptions::preview())
+            .unwrap();
+
+        for lato in ["inline", "block"] {
+            for ns in ["terzi", "altri"] {
+                assert!(
+                    html.contains(&format!("class=\"{lato}-{ns}:spoiler\"")),
+                    "manca la classe `{lato}-{ns}:spoiler`: {html}"
+                );
+            }
+            // E la classe senza namespace non esce affatto: se uscisse, i due
+            // autori sarebbero di nuovo lo stesso selettore.
+            assert!(
+                !html.contains(&format!("class=\"{lato}-spoiler\"")),
+                "il namespace è stato tagliato sul lato {lato}: {html}"
+            );
+        }
+
+        // La metà che non cambia: un kind del core resta dov'era.
+        let core = DocumentModel {
+            body: vec![Block::Paragraph {
+                inlines: vec![custom_inline(custom_kind::HIGHLIGHT, "importante")],
+                anchor: None,
+                span: fub_abi::model::Span::EMPTY,
+            }],
+            ..DocumentModel::empty(fub_abi::model::DocId::new("nota.md"))
+        };
+        let html = MarkdownProvider::new()
+            .render_html(&core, &RenderOptions::preview())
+            .unwrap();
+        assert!(
+            html.contains("<span class=\"inline-highlight\">importante</span>"),
+            "html: {html}"
+        );
+    }
+
     #[test]
     fn renders_basic_formatting() {
         let doc = parse("Testo **grassetto** e *corsivo* e `codice`.");

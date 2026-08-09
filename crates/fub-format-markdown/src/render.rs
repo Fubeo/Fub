@@ -150,7 +150,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                     .unwrap_or_default();
                 out.push_str(&format!(
                     "<div{id}{}{label}>",
-                    attr("class", &format!("block-{custom_kind}"))
+                    attr("class", &classe("block", custom_kind))
                 ));
                 // Un blocco **senza figli** non ha niente da rendere per questa
                 // strada, e finiva in un `<div>` vuoto: la frase qui sopra
@@ -258,7 +258,7 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             let text = contenuto_testuale(custom_kind, attrs).unwrap_or_default();
             out.push_str(&format!(
                 "<span{}>{}</span>",
-                attr("class", &format!("inline-{}", class_of(custom_kind))),
+                attr("class", &classe("inline", custom_kind)),
                 escape(text)
             ));
         }
@@ -298,16 +298,30 @@ fn contenuto_testuale<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'
     }
 }
 
-/// La classe CSS di un `custom_kind`: il nome senza il namespace, perché il
-/// namespace serve a evitare le collisioni fra estensioni, non a finire in un
-/// selettore. Due estensioni omonime restano distinguibili dal `data-kind` che
-/// il blocco porta; una classe è per il tema.
-fn class_of(custom_kind: &str) -> String {
-    custom_kind
-        .rsplit_once(':')
-        .map(|(_, name)| name)
-        .unwrap_or(custom_kind)
-        .to_string()
+/// La classe CSS di un `Custom`: il prefisso del lato che lo rende — `block` o
+/// `inline` — e poi il `custom_kind` **intero**, namespace compreso.
+///
+/// **Sta in una funzione sola perché i due lati la componevano diversa**, e la
+/// differenza non era estetica: il blocco scriveva il kind intero, l'inline lo
+/// faceva passare per un `class_of` che tagliava tutto ciò che stava prima del
+/// `:`. Così `terzi:spoiler` e `altri:spoiler` — due estensioni omonime di due
+/// autori diversi, che è il caso per cui il namespace esiste — uscivano
+/// **entrambe** su `.inline-spoiler`, e un tema che ne vestisse una vestiva
+/// anche l'altra. Il namespace nel modello li teneva distinti fin qui, e qui si
+/// perdeva.
+///
+/// Il commento che difendeva il taglio diceva che le due restavano
+/// distinguibili «dal `data-kind` che il blocco porta»: **quell'attributo non
+/// lo emette nessun ramo**, né qui né altrove nel workspace. Era una premessa
+/// che sembrava vera perché argomentava.
+///
+/// I kind del core non hanno namespace, quindi per loro non cambia niente:
+/// `highlight` resta `.inline-highlight`, che è il selettore su cui il tema
+/// della shell è scritto (`frontend/src/style.css`). Il `:` in un nome di
+/// classe è lecito in HTML; in un selettore CSS si scrive `\:`, ed è la stessa
+/// forma che i blocchi emettono già da prima di questa riga.
+fn classe(lato: &str, custom_kind: &str) -> String {
+    format!("{lato}-{custom_kind}")
 }
 
 /// Le coordinate di un wikilink come data-attribute, col prefisso di chi le
