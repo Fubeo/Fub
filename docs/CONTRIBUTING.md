@@ -61,16 +61,53 @@ npx tsc --noEmit      # `vite build` traspila senza controllare i tipi
 npm test
 npm run build
 
+# shell (dalla radice, come la CI)
+node .github/scripts/check-ascoltatori.mjs
+node .github/scripts/check-corse.mjs
+node .github/scripts/check-npm-copie.mjs
+
 # documenti
 node .github/scripts/check-doc-links.mjs
+node .github/scripts/check-prosa.mjs
+node .github/scripts/check-tabelle.mjs
+
+# invarianti
+node .github/scripts/check-cargo-versioni.mjs
+node .github/scripts/check-cargo-feature-default.mjs
+
+# le feature ufficiali si spengono davvero (§16.3): l'unica cosa che il cargo test non copre
+cargo build -p fub-features --no-default-features
+cargo build -p fub-features --no-default-features --features outline
+cargo build -p fub-host --no-default-features --features outline,notify-watcher
+
+# il presidio del ciclo stesso
+node .github/scripts/check-ciclo-locale.mjs
 
 # supply chain (serve `cargo install cargo-deny`)
 cargo deny check
 ```
 
-La CI non fa niente di più di questo elenco: se passa in locale, passa lì —
-salvo il fatto che i test girano anche su Windows e macOS, dove a rompersi sono
-quasi sempre i path e i lock file di `.fub/data/`.
+### Le eccezioni al ciclo
+
+Comandi che la CI lancia e che il ciclo locale non elenca, con la ragione per
+cui non ci stanno. L'elenco è chiuso: una voce che non corrisponde più a
+nessun comando della CI è scaduta, e `check-ciclo-locale.mjs` la fa diventare
+rossa.
+
+- `cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc` — il
+  ramo Windows del kernel compilato da Linux: serve il target
+  `x86_64-pc-windows-msvc`, che quasi nessuno ha installato, e ciò che verifica
+  si rompe solo sotto quel compilatore — la stessa specie della corsa Windows
+  che la promessa qui sotto dichiara fuori dal ciclo.
+
+La CI non fa niente di più di questo elenco e delle eccezioni qui sopra: se
+passa in locale, passa lì — salvo il fatto che i test girano anche su Windows
+e macOS, dove a rompersi sono quasi sempre i path e i lock file di
+`.fub/data/`. L'elenco delle eccezioni è chiuso: un comando della CI che non
+sta nel ciclo e non ha una voce lì sopra è un errore di questo documento, e
+`check-ciclo-locale.mjs` lo fa diventare rosso — e una voce che non
+corrisponde più a nessun comando della CI è un'eccezione scaduta, rossa allo
+stesso modo.
 
 I fuzzer del §17.1 girano **dentro** `cargo test --workspace`, con un seme e un
 conteggio fissi: la stessa corsa a ogni push, su tre sistemi operativi, senza un
@@ -103,7 +140,7 @@ Sei job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):
 | `supply chain` | licenze, advisory e provenienza secondo [`deny.toml`](../deny.toml), più l'SBOM SPDX 2.3 come artefatto | push, PR **e** la corsa settimanale |
 | `fmt + clippy` | formattazione e lint, con i warning come errori | push e PR |
 | `build + test` | l'intero workspace su Linux, Windows e macOS, con la toolchain pinnata all'MSRV | push, PR **e** la corsa settimanale |
-| `docs` | i link interni fra i documenti | push e PR |
+| `docs` | i link interni fra i documenti e la promessa del ciclo locale | push e PR |
 | `frontend` | type-check, test di unità e build della shell | push, PR **e** la corsa settimanale |
 
 C'è una corsa **schedulata** il lunedì mattina, e la ragione è il job della

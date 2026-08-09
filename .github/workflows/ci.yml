@@ -226,6 +226,19 @@ jobs:
         run: node .github/scripts/check-tabelle.mjs --autoprova
       - name: Ogni tabella dei documenti è ancora una tabella, e con tutte le sue colonne
         run: node .github/scripts/check-tabelle.mjs
+      # E la promessa che il CONTRIBUTING fa alla CI, resa meccanica: ogni
+      # comando che un job lancia dev'essere nel ciclo locale di
+      # docs/CONTRIBUTING.md o fra le sue eccezioni dichiarate, e viceversa —
+      # è la riga «La CI non fa niente di più di questo elenco», che senza un
+      # presidio decade come è già successo (sette script e tre build erano
+      # arrivati in CI senza una riga nel documento). Prima l'autoprova, perché
+      # qui la parte fragile è il lettore dei due formati — il `run:` a blocco
+      # del workflow, il recinto e l'elenco delle eccezioni del documento: se
+      # si spegnesse lui, il controllo direbbe verde senza aver guardato.
+      - name: Il ciclo locale di CONTRIBUTING.md sa leggere i comandi della CI
+        run: node .github/scripts/check-ciclo-locale.mjs --autoprova
+      - name: Ogni comando della CI sta nel ciclo locale di CONTRIBUTING.md, o fra le sue eccezioni
+        run: node .github/scripts/check-ciclo-locale.mjs
 
   frontend:
     name: frontend (type-check + test + build)
