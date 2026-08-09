@@ -297,10 +297,26 @@ struct DocVersions {
     versions: Vec<VersionRef>,
 }
 
-#[derive(Serialize, Deserialize)]
+/// L'indice **come si legge**: possiede i suoi documenti, perché chi lo legge
+/// se li tiene.
+#[derive(Deserialize)]
 struct Index {
     schema_version: SchemaVersion,
     docs: BTreeMap<String, DocVersions>,
+}
+
+/// L'indice **come si scrive**: presta i documenti a chi li ha già.
+///
+/// Sono due tipi e non uno perché le due direzioni non hanno lo stesso
+/// bisogno. Serializzando dall'[`Index`] posseduto, ogni scrittura cominciava
+/// con un `docs.clone()` — una `BTreeMap` intera copiata, tutte le `String` e
+/// tutti i `Vec`, per poi buttarla subito dopo. Il formato su disco è lo stesso
+/// campo per campo: `#[serde(rename)]` non serve, perché i nomi dei campi
+/// coincidono già.
+#[derive(Serialize)]
+struct IndexDaScrivere<'a> {
+    schema_version: SchemaVersion,
+    docs: &'a BTreeMap<String, DocVersions>,
 }
 
 /// Ciò che una cartella dello store dice di sé. Basta a ricostruire l'indice.
@@ -330,6 +346,16 @@ enum Rivendicazione {
 
 struct Inner {
     docs: BTreeMap<String, DocVersions>,
+    /// C'è un lotto aperto ([`VersionStore::in_lotto`])?
+    ///
+    /// Dentro un lotto [`Inner::applica`] scrive il `meta.json` — che è
+    /// l'autorità — e **non** l'indice, che è il derivato e si compone in fondo
+    /// una volta sola. Il flag sta qui e non nel chiamante perché la regola
+    /// deve valere per **ogni** strada che passa da `applica`: chi domani
+    /// aggiungesse un `VersionStore::qualcosa` chiamato dentro una passata la
+    /// eredita senza saperlo, e un lotto che valesse solo per `snapshot`
+    /// riscriverebbe di nuovo l'indice a ogni tombstone della riconciliazione.
+    lotto: bool,
 }
 
 /// Lo store delle versioni.
@@ -378,8 +404,81 @@ impl VersionStore {
             }
         };
         Ok(VersionStore {
-            inner: Arc::new(Mutex::new(Inner { docs })),
+            inner: Arc::new(Mutex::new(Inner { docs, lotto: false })),
         })
+    }
+
+    /// Una passata su **molti** documenti, con l'indice scritto una volta sola.
+    ///
+    /// # Perché esiste
+    ///
+    /// `versions.json` è un file solo che nomina tutti i documenti, quindi
+    /// scriverlo costa O(N) byte *sempre*, anche per una versione sola. Fuori da
+    /// una passata quel costo è il prezzo onesto di un indice; dentro una
+    /// passata su N note diventa N indici di taglia crescente — **O(N²) byte**,
+    /// e su 2 000 note misurate erano 267 MB scritti per un indice finale da
+    /// 267 KB. Non è una costante da limare: è la classe sbagliata.
+    ///
+    /// # Perché non è un baratto fra velocità e durabilità
+    ///
+    /// L'indice si **toglie** prima di cominciare, invece di lasciarlo lì
+    /// vecchio. È la differenza fra le due forme, ed è tutta la differenza:
+    ///
+    /// - un indice **vecchio** dopo un crash è un derivato che si crede la
+    ///   verità, e le fotografie della passata interrotta — blob e `meta.json`
+    ///   già sul disco — resterebbero senza nessuno che le nomina, per sempre;
+    /// - un indice **assente** è esattamente la condizione che
+    ///   [`VersionStore::open`] sa gestire da sempre: ricostruisce dallo store,
+    ///   dove ogni cartella dice di chi è e ogni file dice quando. Non si perde
+    ///   niente.
+    ///
+    /// Il verso della durabilità quindi non peggiora, **migliora**: con l'indice
+    /// scritto a ogni fotografia, un processo ucciso fra il blob e l'indice
+    /// lasciava quel blob orfano e invisibile. Qui no.
+    ///
+    /// Il prezzo vero, e sta scritto per non riscoprirlo: dopo un'interruzione
+    /// la riapertura paga una ricostruzione, che legge tutti gli snapshot. Si
+    /// paga una volta, dopo un crash, e la direzione dell'errore è il tempo —
+    /// mai una versione persa.
+    ///
+    /// # Cosa non cambia
+    ///
+    /// Quali fotografie esistono, in che ordine, e il contenuto dell'indice che
+    /// ne esce: identico byte per byte a quello che sarebbe uscito riscrivendolo
+    /// ogni volta, perché è la stessa funzione sullo stesso `docs` finale.
+    ///
+    /// # La zona d'ombra, dichiarata
+    ///
+    /// Per la durata del lotto `versions.json` non c'è, e chi legge le versioni
+    /// **dal disco** — [`HistoryView`], che rilegge a ogni disegno — vede una
+    /// cronologia vuota invece di una parziale. All'apertura non lo vede
+    /// nessuno, perché la passata gira prima che ci sia una finestra; nella
+    /// riconciliazione dopo un `Overflow` è un lampo, e il pannello si ridisegna
+    /// alla prima scrittura che segue. È il prezzo dichiarato di non lasciare in
+    /// giro un indice che si crede la verità.
+    fn in_lotto<T>(
+        &self,
+        host: &mut dyn HostApi,
+        passata: impl FnOnce(&mut dyn HostApi) -> T,
+    ) -> Result<T, PluginError> {
+        // Se togliere l'indice non riesce, la passata **non comincia**: andare
+        // avanti vorrebbe dire lasciare sul disco esattamente l'indice vecchio
+        // che questa forma esiste per non lasciare. E un `data_remove` che
+        // fallisce su uno spazio dati è lo stesso guasto per cui fallirebbe
+        // ogni `data_write` che segue.
+        host.data_remove(INDEX_FILE)?;
+        self.inner.lock().expect("mutex").lotto = true;
+        let chiuso_comunque = Lotto { inner: &self.inner };
+        let esito = passata(&mut *host);
+        drop(chiuso_comunque);
+        // Il prestito attraversa il `data_write` come lo attraversa in
+        // [`Inner::applica`], e per la stessa ragione: l'indice che va sul disco
+        // dev'essere quello che `docs` dice *adesso*. Mollandolo in mezzo, un
+        // salvataggio che entrasse qui scriverebbe il suo indice e poi questo ci
+        // scriverebbe sopra il proprio, più vecchio di una versione.
+        let inner = self.inner.lock().expect("mutex");
+        scrivi_index(&inner.docs, host)?;
+        Ok(esito)
     }
 
     /// Salva una versione, se il contenuto è diverso dall'ultima salvata.
@@ -727,9 +826,38 @@ impl Inner {
         if let Some(doc) = piano.get(meta_di.as_str()) {
             scrivi_meta(meta_di, doc, host)?;
         }
-        scrivi_index(&piano, host)?;
+        // Dentro un lotto l'indice non si scrive: lo scrive
+        // [`VersionStore::in_lotto`] una volta sola, in fondo. Il piano si
+        // installa lo stesso, e non è un'eccezione alla regola di sopra — è la
+        // stessa regola letta sull'autorità giusta. Ciò che il disco ha
+        // accettato qui è il `meta.json`, e il `meta.json` è la verità;
+        // l'indice ne è il derivato, e un derivato che manca non è una bugia,
+        // è la condizione da cui [`VersionStore::open`] ricostruisce.
+        if !self.lotto {
+            scrivi_index(&piano, host)?;
+        }
         self.docs = piano;
         Ok(())
+    }
+}
+
+/// Il lotto aperto: finché vive, l'indice non si riscrive a ogni fotografia.
+///
+/// È un `Drop` e non due righe in fila perché il flag deve tornare giù anche se
+/// la passata srotola: un lotto rimasto aperto sarebbe uno store che non scrive
+/// più l'indice, mai più, e il difetto successivo sarebbe molto peggio di
+/// quello riparato. Il `Drop` **non scrive** — chiudere il conto sul disco può
+/// fallire, e un errore che scappasse da un `Drop` non avrebbe dove andare
+/// (peggio: un panico da un `Drop` è un `abort`).
+struct Lotto<'a> {
+    inner: &'a Mutex<Inner>,
+}
+
+impl Drop for Lotto<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.lotto = false;
+        }
     }
 }
 
@@ -751,9 +879,9 @@ fn scrivi_index(
     docs: &BTreeMap<String, DocVersions>,
     host: &mut dyn HostApi,
 ) -> Result<(), PluginError> {
-    let index = Index {
+    let index = IndexDaScrivere {
         schema_version: SCHEMA_VERSION,
-        docs: docs.clone(),
+        docs,
     };
     let raw = serde_json::to_vec(&index).map_err(|e| {
         PluginError::Internal(Text::message(
@@ -1108,20 +1236,36 @@ impl VersioningHandler {
 
     /// Una passata sull'intero vault, e chi fotografare.
     fn sweep(&self, host: &mut dyn HostApi, chi: Passata) -> Result<(), PluginError> {
-        for id in self.esistenti(host)? {
-            if matches!(chi, Passata::SoloNuovi) && self.store.has_versions(&id) {
-                continue;
-            }
-            // Una nota illeggibile o non salvabile non deve impedire
-            // l'apertura del vault: il vault è la verità, le versioni no.
-            match host.read_document(&id) {
-                Ok(source) => {
-                    if let Err(e) = self.store.snapshot(&id, &source, host) {
-                        tracing::warn!(target: "fub.versioning", "versione di {id} non salvata: {e}");
-                        // Una versione attesa non salvata è una perdita
-                        // autorevole (0052: `Failure`): l'errore è già un
-                        // `PluginError` catalogato, e lo si porta nel canale tale
-                        // e quale invece di ricomporlo (0062).
+        let da_guardare = self.esistenti(host)?;
+        // Una passata è un **lotto**: le fotografie vanno sul disco una per una
+        // — blob e `meta.json`, che sono l'autorità — e l'indice, che è il
+        // derivato, si scrive una volta sola in fondo. Fuori di qui l'indice
+        // resta scritto a ogni salvataggio: è il costo onesto di un indice, e
+        // diventa un difetto solo quando lo si paga N volte di fila.
+        let esito = self.store.in_lotto(host, |host| {
+            for id in da_guardare {
+                if matches!(chi, Passata::SoloNuovi) && self.store.has_versions(&id) {
+                    continue;
+                }
+                // Una nota illeggibile o non salvabile non deve impedire
+                // l'apertura del vault: il vault è la verità, le versioni no.
+                match host.read_document(&id) {
+                    Ok(source) => {
+                        if let Err(e) = self.store.snapshot(&id, &source, host) {
+                            tracing::warn!(target: "fub.versioning", "versione di {id} non salvata: {e}");
+                            // Una versione attesa non salvata è una perdita
+                            // autorevole (0052: `Failure`): l'errore è già un
+                            // `PluginError` catalogato, e lo si porta nel canale tale
+                            // e quale invece di ricomporlo (0062).
+                            host.emit(Event::Trouble {
+                                severity: Severity::Failure,
+                                subject: Some(id.clone()),
+                                error: e,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(target: "fub.versioning", "{id} non si legge: {e}");
                         host.emit(Event::Trouble {
                             severity: Severity::Failure,
                             subject: Some(id.clone()),
@@ -1129,15 +1273,25 @@ impl VersioningHandler {
                         });
                     }
                 }
-                Err(e) => {
-                    tracing::warn!(target: "fub.versioning", "{id} non si legge: {e}");
-                    host.emit(Event::Trouble {
-                        severity: Severity::Failure,
-                        subject: Some(id.clone()),
-                        error: e,
-                    });
-                }
             }
+        });
+        // L'indice finale non si è scritto. Non è una versione persa — sul
+        // disco le fotografie ci sono tutte e la prossima apertura le
+        // ricostruisce — ma non è nemmeno una notizia da tenersi: è lo stesso
+        // guasto che prima si presentava una volta per nota, e qui si presenta
+        // una volta sola. **Senza soggetto**, perché non è di un documento: è
+        // dello store.
+        if let Err(e) = esito {
+            tracing::warn!(
+                target: "fub.versioning",
+                "l'indice non si è scritto dopo la passata: resta da \
+                 ricostruire alla prossima apertura ({e})"
+            );
+            host.emit(Event::Trouble {
+                severity: Severity::Failure,
+                subject: None,
+                error: e,
+            });
         }
         Ok(())
     }
@@ -2365,6 +2519,7 @@ mod tests {
         let handler = VersioningHandler::new(VersionStore {
             inner: Arc::new(Mutex::new(Inner {
                 docs: BTreeMap::new(),
+                lotto: false,
             })),
         });
         assert!(handler.subscribed().contains(EventKind::Overflow));
