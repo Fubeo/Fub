@@ -187,13 +187,16 @@ interface VoceDiChiave {
 /// l'ultimo valore — e nessun valore si perde.
 ///
 /// È ciò che la [0133](../../../docs/decisions/0133-chi-ascolta-nomina-fino-a-quando.md)
-/// lasciava da decidere: una scrittura su disco si **accoda**, non si **scarta**,
-/// ma tre scritture della stessa chiave accavallate non sono tre lavori — sono
-/// un lavoro solo, con l'ultimo valore. Coalescere non è scartare: il lavoro
-/// che parte c'è e arriva, e chi ha accodato sa quando è finito, perché aspetta
-/// quel lavoro — anche chi è stato fuso, che aspetta il lavoro partito al posto
-/// del proprio. Ciò che si perde è solo il valore intermedio, che nessuno ha
-/// chiesto di vedere.
+/// lasciava da decidere: una scrittura su disco si **accoda**, non si **scarta**.
+/// Per ogni chiave la coda tiene **al più un lavoro in volo e al più uno che
+/// aspetta**: quello che aspetta porta sempre il valore più recente, perché
+/// ogni arrivo in attesa sostituisce il lavoro che c'era, e quello che è
+/// partito arriva sempre. Un arrivo mentre un lavoro corre non si fonde — apre
+/// un giro nuovo — e non è un limite ma la condizione per cui chi arriva in
+/// volo aspetta **il proprio** esito; chi arriva mentre un lavoro aspetta, e lo
+/// sostituisce, aspetta invece l'esito del lavoro fuso, come se fosse il suo.
+/// Coalescere non è scartare: ciò che parte c'è e arriva, e ciò che si perde è
+/// solo il valore intermedio, che nessuno ha chiesto di vedere.
 ///
 /// È un tipo accanto a `Coda` e non un modo di `Coda`, per la stessa ragione
 /// per cui `Corsa` e `Coda` sono due tipi: chiavi diverse non si bloccano fra
@@ -207,9 +210,12 @@ export class CodaCoalescente {
   ///
   /// Se per quella chiave c'è già un lavoro in coda che non è partito, il
   /// valore nuovo prende il suo posto: chi aveva accodato prima aspetta il
-  /// lavoro fuso, non il proprio, che non partirà mai. Un errore arriva a chi
-  /// ha accodato e non ferma la coda, come in `Coda` — chi è stato fuso lo
-  /// riceve insieme al primo, perché aspetta lo stesso lavoro.
+  /// lavoro fuso, non il proprio, che non partirà mai. Se invece un lavoro
+  /// sta già correndo, il nuovo si accoda e chi lo ha chiesto aspetta il
+  /// proprio esito — la chiave non ha mai più di un lavoro in attesa. Un
+  /// errore arriva a chi ha accodato e non ferma la coda, come in `Coda` —
+  /// chi è stato fuso lo riceve insieme al primo, perché aspetta lo stesso
+  /// lavoro.
   accodaPerChiave(chiave: string, lavoro: () => Promise<void>): Promise<void> {
     let voce = this.#perChiave.get(chiave);
     if (!voce) {
