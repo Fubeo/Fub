@@ -380,99 +380,46 @@ la tabella senza toccare la voce che la nominava.
 
 ### 25.7 Dove stanno i byte di un `kind` di terzi
 
-*aperta · strato **contratto** · **P2***
+*chiusa dalla [0140](../decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md) · strato **contratto** · **P2***
 
-**1. La domanda.** Un `kind` di terzi può dichiarare **dove stanno i suoi byte**,
-o deve indovinare la chiave che il provider di ripiego campiona?
+**Com'è finita, e cosa lascia.** La risposta è la **forma (b)** che la voce
+stessa raccomandava: la chiave del carico di un `kind` di terzi è `source`, e
+la regola sta in `fub_abi::rules::carichi` (`CHIAVE_DEL_CARICO` +
+`carico_testuale`) perché la erediti gratis il secondo chiamante — il provider
+WASM di M5 (0020). `CARICHI` **non cresce e non può crescere**: il conto a due
+versi di `ogni_kind_dichiara_cosa_porta` rifiuta la riga che non nomina una
+`const` del core — la domanda che la voce poneva come scelta era già decisa, e
+a deciderla è un presidio. Il campione a tre chiavi esce da `render.rs`, che
+adesso chiede la risposta al contratto; `html` e `text` si tolgono, e le due
+fixture che li usavano su kind di terzi si migrano a `source` nello stesso
+commit — altrimenti sarebbero diventate mute in silenzio (provato: il banco
+resta verde con la fixture che rende vuoto).
 
-**2. Che cosa si osserva oggi, misurato.** `CARICHI` (`fub-abi/src/model.rs:1003`)
-è una tabella `pub const` di **12 righe**, tutte di core. `carico()` ha **tre**
-lettori in tutto il workspace (`render.rs:292`, `serialize.rs:397`, `:495`). Il
-ramo `None` della degradazione generica campiona **tre** chiavi cablate,
-`fub-format-markdown/src/render.rs:290`:
+Il silenzio a runtime resta e si dichiara nella forma della 0052: chi vede il
+guasto — la resa, in `fub-format-markdown` — non ha il bus fra le mani, e una
+porta dal render sarebbe la seconda convenzione accanto a quella dell'avvio
+della §25.5. Il pavimento (`tracing` nel provider) si rimanda a un verbale
+suo: costa una dipendenza nuova a un crate che deliberatamente non ce l'ha
+(0062).
 
-```rust
-None => ["html", "source", "text"].into_iter().filter_map(testo).find(|s| !s.is_empty()),
-```
+Il presidio è un banco nei due versi,
+`un_kind_di_terzi_degradato_mostra_i_byte_della_chiave_convenzionale`
+(`custom_blocks_e2e.rs`), provato rosso in entrambi: la chiave rinominata in
+produzione fa cadere l'asserzione con un `<div>` vuoto nel messaggio, il
+campione riallargato fa vincere `TESTO-SBAGLIATO` su `source`. È il banco che
+il §7 dichiarava mancante — ed esisteva già a metà: il passaggio c'era,
+mancava l'asserzione sul contenuto.
 
-L'esempio preciso: un plugin registra `SyntaxTrigger::Fence { info: ["spoiler"] }`,
-`produces: ["terzi:spoiler"]`, e la sua `apply` rende
-`SyntaxProduct::Block { custom_kind: "terzi:spoiler", attrs: {"corpo": "…"} }` —
-chiave `corpo`, scelta sua, perché **niente nel contratto gli dice quale usare**.
-Se non registra un `CustomRenderer`, o se il suo renderer torna `Fallback` o va in
-panico (`fub-kernel/src/renderer.rs:288`), `carico("terzi:spoiler")` è `None`, il
-campione di tre chiavi non contiene `corpo`, e il blocco esce come **un `<div>`
-vuoto**: il testo dell'utente non è a schermo. L'unico log è `mount.rs:413` («non
-ha un renderer»), che non nomina la causa vera. Rinominare la chiave in `source`
-lo fa funzionare.
+Resta aperta la sola forma **(a)**, e resta perché non è urgente, non perché
+sia stata scartata:
 
-Conseguenza viva: **una**, un `<div>` vuoto in un percorso di ripiego.
-Conseguenze immaginate e cadute: **tre**. Esercizio del caso nel repo: **zero** —
-`fub-sdk/src` non nomina mai `SyntaxRule`, e i due `examples/` nemmeno.
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Un campo in fondo a `syntax-rule-spec`** (`carichi: list<carico>` più
-      un `variant carico`), consultato da `render.rs:290` prima del campione.
-      **Paga chi scrive il contratto**: un tipo nuovo, additivo, per sempre.
-      Compra: chi scrive un plugin dichiara la propria chiave invece di
-      indovinarla.
-- [ ] **(b) Dichiarare la convenzione invece del campo**: scrivere in
-      `docs/architecture/plugin-boundary.md` e nel doc del WIT che la chiave del
-      carico **è `source`**, e togliere `html` e `text` dal campione. **Paga chi
-      ha già scritto un plugin** con un'altra chiave, cioè oggi nessuno. Costo
-      zero nel contratto.
-- [ ] **(c) Niente**, e il limite resta prosa in tre file. **Paga il primo terzo
-      che ci sbatte**, con un sintomo muto.
-
-**4. Che cosa il repo ha già deciso qui vicino.** La **decisione
-[0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)** ha reso
-`produces` un contratto e non una nota. La **decisione
-[0021](../decisions/0021-il-confine.md)** (§7.1-7.6) elencava a `:222` proprio
-`produces` fra i nomi «non guardati da niente». La **decisione
-[0122](../decisions/0122-una-sorgente-non-degrada-si-rifiuta.md)** governa il ramo
-`None` — «*una proiezione degrada, una sorgente si rifiuta*» — e ha **già
-scartato** la soluzione ovvia, cioè gli `attrs` verbatim timbrati dal kernel. La
-**decisione [0115](../decisions/0115-la-verita-e-la-dichiarazione.md)** (§4.4) è
-il precedente della forma identica: `SyntaxForm` ha aggiunto una *forma
-dichiarata* accanto ai *nomi dichiarati*. E la **decisione
-[0002](../decisions/0002-additivita-del-contratto.md)** è quella che rende un
-tipo nuovo caro per sempre. Nessun verbale copre `CARICHI`: è nato col commit
-`159b7ca`, che ha chiuso un difetto senza verbale.
-
-**5. Reversibile?** Non come si temeva. `CARICHI` **non è nel WIT**, e aggiungere
-un campo **in fondo** a `syntax-rule-spec` è additivo per la regola scritta del
-repo — `fub-abi/tests/wit_additivity.rs:31`: «record | un campo **in fondo** |
-rinominare, ritipare, riordinare, togliere» — quindi la (a) **non ritaglia** il
-congelato. Irreversibile è solo il **nome e la forma del `variant carico`**. La
-(b) è interamente reversibile.
-
-**6. La raccomandazione: (b) adesso, (a) quando il primo terzo lo chiede.**
-L'asimmetria è reale ma il suo raggio è **un** `<div>` vuoto in un percorso di
-ripiego, e nessun `kind` di terzi porta oggi carichi: spendere un tipo nel
-contratto per un caso che nessuno esercita è esattamente ciò che la decisione
-0002 rende caro per sempre. Ciò che costa zero e toglie il 100% della sorpresa è
-**dichiarare la chiave**: il campione a tre chiavi è una regola non scritta, e la
-regola di questo repo è che una regola non scritta è un difetto.
-
-**7. Che cosa resta rotto se non si decide.** Un plugin che nomina il proprio
-carico `corpo`, `body` o `content` rende un blocco vuoto senza nessun messaggio
-che spieghi perché, e l'unico modo di scoprirlo è leggere `render.rs`. Il
-presidio che manca è un banco `terzi:*` che passa dalla degradazione generica
-invece che dal proprio renderer.
-
-*Quello che si diceva e che non regge.* «C'è un'asimmetria fra `CARICHI` e
-`SyntaxRuleSpec::produces`»: **mal detta** — `produces` (`fub-abi/src/custom.rs:115`)
-è **simmetrico**, i terzi lo riempiono come il core
-(`fub-features/tests/custom_blocks_e2e.rs:263` = `["terzi:gantt"]`); ciò che è
-core-only è `CARICHI`, e le due cose dichiarano cose diverse: `produces` dichiara
-**nomi**, `CARICHI` dichiara **posizione del carico**. «Qualcosa a valle — indice,
-ricerca, backlink — lo indovina o lo ignora»: **falso, provato** —
-`SyntaxRegistry::apply` (`fub-kernel/src/syntax.rs:281`) muta **solo `body`**, la
-ricerca indicizza `DocumentModel::text` prodotto dal provider prima che una regola
-giri, i backlink leggono la tabella piatta `links`, e nessuno cammina
-`Block::Custom`. «Se la forma tocca il WIT la scelta non è reversibile»: **falso
-per questo caso**, come sopra. E il rifiuto del serializzatore
-(`serialize.rs:412`) **non** è la lacuna: `Some(Carico::Corpo(_))` e `None` stanno
-nello **stesso braccio del match**, quindi ogni `kind` di core prodotto da una
-regola sintattica è rifiutato identicamente a uno ignoto.
+- [ ] **(a) Un campo in fondo a `syntax-rule-spec`** (`carichi: list<carico>`
+      più un `variant carico`), consultato prima della convenzione. L'innesco
+      è osservabile: **il primo `custom_kind` di terzi che ha bisogno di
+      dichiarare il proprio carico invece di seguire la convenzione** — un
+      plugin che deve dire *dove* tiene i byte (più di una chiave, una chiave
+      che non è `source`, carichi in più punti), e per cui `source` è una
+      limitazione, non una risposta. Additivo per la regola scritta del repo
+      (un campo in fondo, `wit_additivity.rs`), ma il nome e la forma del
+      `variant` si pagano per sempre (0002): è la casella che questo verbale
+      lascia aperta, col suo trigger.
