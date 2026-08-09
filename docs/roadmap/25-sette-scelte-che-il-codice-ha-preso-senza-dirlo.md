@@ -313,116 +313,44 @@ dimensione.
 
 ### 25.5 Quando la cartella di configurazione non si può scrivere
 
-*aperta · strato **kernel** · **P1***
+*chiusa dalla [0139](../decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md) · strato **kernel** · **P1***
 
-**1. La domanda.** Quando la cartella di configurazione esiste ma non si può
-scrivere, Fub parte in sola lettura dichiarandolo, si rifiuta di partire, o parte
-e perde lo stato senza dirlo?
+**Com'è finita, e cosa lascia.** La risposta è la **forma (a)** che la voce
+stessa raccomandava — si parte, e si dice una volta per sessione — con il
+**quando** che la voce non diceva e che decideva tutto: la porta non può
+essere una spinta all'avvio, perché a quell'ora non ascolta nessuno. Il ponte
+degli eventi nasce dentro `Host::open`, al primo vault aperto, e la shell si
+iscrive agli eventi ancora dopo; un `Trouble` emesso all'avvio si perderebbe
+in ogni caso — prima del `setup` di Tauri come `Consegna::Persa`, dopo come
+un `app.emit` che torna `Ok` senza nessun ascoltatore, perché Tauri non
+accoda. Quindi la diagnosi che `pavimento` componeva per `stderr` — il primo
+a provare a scrivere in quella cartella è il log — esce da `install_logging`,
+entra nell'host con `with_avviso_di_sessione`, e si consegna a un
+**tiraggio**: il comando `avviso_di_sessione`, che la shell chiede in `init()`
+appena il router è in piedi, prima di `initial_vault`. Il `take` rende la
+«una volta per sessione» strutturale: la seconda chiamata — da un secondo
+frontend, da un test, dalla CI — riceve `None`, e nessun latch serve. Anche
+il ramo in cui `config_dir()` è `None` parla, con un messaggio suo: prima
+taceva, e il banco che presidiava quel silenzio
+(`senza_cartella_di_configurazione_stderr_non_e_un_guasto`) è stato riscritto
+nel verso nuovo. I banchi tengono ferma la forma nei due versi: il `take`
+rimosso diventa rosso, il tiraggio tolto da `init()` diventa rosso, e il gesto
+nuovo della finestra senza vault — il dodicesimo di
+[17-presidi-che-restano](../roadmap/17-presidi-che-restano.md) — vede la
+chiamata arrivare alla porta e il toast comparire.
 
-**2. Che cosa si osserva oggi, misurato.** La risposta è già scritta — e dice che
-non è stata presa. `crates/fub-host/src/config.rs:172-184`, testualmente:
-
-> *«Il marcatore dice dove, non dice che ci si possa scrivere … Cosa fare in quel
-> caso — ripiegare sul profilo dell'utente, lavorare in memoria, o rifiutarsi di
-> partire — è una **scelta di prodotto e non è stata presa** … Ciò che è deciso è
-> che **non si tace**.»*
-
-Binario di HEAD, `FUB_CONFIG_DIR=/usr/lib/fub-config-prova` (non scrivibile):
-**parte, in memoria, senza panico**, ed emette **un solo** avviso, su `stderr`,
-dal bootstrap del log:
-
-```
-WARN fub.host log: '…/logs/fub.log' non si apre: Permission denied (os error 13).
-Il log di questa sessione va su stderr. Se '…' non è scrivibile non si salveranno
-nemmeno le impostazioni della macchina, il registro dei vault e lo stato di vista …
-```
-
-`ls` conferma che non è stato creato niente. **Nessun test esiste** per una
-cartella presente-ma-non-scrivibile: i due banchi vicini (`config.rs:256`,
-`log.rs:681`) iniettano il guasto come *un file al posto di una cartella*, e
-`config.rs:242-246` dice esplicitamente che il `chmod` non si usa.
-
-**Il numero che decide: quattro file, undici specie di stato.** Impostazioni
-macchina (`log.level`, `log.verbose`, `fub-host/src/settings.rs:416`); vault
-conosciuti e recenti (tetto 20, `vaults.rs:48`, `session.rs:731`); preferiti
-(`session.rs:799`); nome e icona per vault (`session.rs:809`); `keys_seen`
-(`session.rs:1257`); layout finestra e pannelli
-(`frontend/src/state/layout.ts:413,428`); cartelle espanse
-(`frontend/src/state/store.ts:163`); spazio attivo (`store.ts:164`); cronologia
-note e ricerche (`frontend/src/state/recenti.ts:66,187,198`); stato di vista dei
-provider (`fub-features/src/tags.rs:170`); il log della sessione. **Undici
-derivati, zero originali**: bozze, tema, scorciatoie, versioni, indice, journal,
-cestino e sidecar dell'organizzazione stanno tutti **dentro il vault**. Ed è
-questo che decide la forma. E c'è un secondo ramo che tace del tutto: se la
-cartella è **assente**, `config.rs:147` non emette nemmeno quella riga, e si
-perdono le stesse undici cose. Zero banchi.
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Sola lettura dichiarata.** Si parte, si scrive una volta sola nel
-      canale visibile (`Event::Trouble`, `Severity::Warning`), e da lì in poi
-      ogni scrittura fallisce in silenzio *perché è già stato detto*. **Paga
-      l'utente**, con un avviso all'avvio e uno stato non ricordato. È l'unica
-      forma che rende il difetto scopribile.
-- [ ] **(b) Rifiutare di partire.** **Paga l'utente in ogni scenario**: un
-      chiosco, una home di rete montata a metà, un disco pieno passeggero
-      diventano tutti «Fub non si apre», per perdere il layout dei pannelli.
-      Contraddice la riga scritta a `config.rs:40-45`: «*Perdere il tema è meglio
-      di un'app che non parte*».
-- [ ] **(c) Ripiegare** su `~/.config/fub` quando il marcatore portable punta a
-      una cartella non scrivibile. **Paga chi ha voluto l'installazione
-      portable**: lo stato finisce su una macchina invece che sulla chiavetta,
-      che è il contrario di ciò che «portable» promette. È la forma nominata e
-      non scelta a `config.rs:178-181`.
-
-**4. Che cosa il repo ha già deciso qui vicino.** La **decisione
-[0062](../decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)** dà il
-criterio esatto — *il log è il pavimento, l'evento è la porta* — e dice che
-`StderrSink` vale quando manca il `config_dir`: oggi il **pavimento** c'è e la
-**porta** manca. La **decisione
-[0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)** dice quale severità:
-un derivato perso è `Warning`. Le **decisioni
-[0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)** e
-[0037](../decisions/0037-lo-stato-di-vista.md) hanno già scritto la regola
-gemella per il file *illeggibile* — «non lo si sovrascrive» — che è un altro
-caso. La **decisione
-[0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)** è il motivo per
-cui tema e scorciatoie sono nel vault e quindi salvi, ed è ciò che fa «undici
-derivati, zero originali». La **decisione
-[0001](../decisions/0001-supply-chain-e-sbom.md)** è perché non c'è nessun crate
-`dirs`/`directories` e il calcolo sta tutto in `config.rs:46`. In `docs/` non c'è
-niente: i `read-only` di `FEATURES.md:197,291,2515` sono caselle future sul
-*vault*, e `glossario.md:405` è la sandbox dei plugin.
-
-**5. Reversibile?** Sì, tranne un pezzo: la scelta fra (a) e (c) cambia **dove
-finiscono i byte** di un'installazione portable, e un utente che ha già dello
-stato nella cartella accanto all'eseguibile lo vedrebbe smettere di essere letto.
-Il resto — quale severità, quale canale — si cambia domani.
-
-**6. La raccomandazione: (a), e non (c).** Il conto è undici derivati contro zero
-originali: il danno è «Fub non si ricorda com'era», e nessun danno di quella
-taglia giustifica né un'app che non parte né un ripiego che tradisce la promessa
-di «portable». Ciò che manca non è un meccanismo, è **una porta**: la riga di
-`stderr` esiste già e va duplicata in un `Event::Trouble` alla prima scrittura
-fallita, una volta per sessione. E il ramo in cui `config_dir()` è `None` deve
-dire la stessa cosa: perde le stesse undici, e oggi tace.
-
-**7. Che cosa resta rotto se non si decide.** Tre incoerenze che nessuno può
-risolvere senza la scelta: lo stesso guasto risale come `PluginError::Io` per il
-registro vault, `PluginError::Internal` per le impostazioni macchina e `String`
-nudo per lo stato di vista; arriva alla shell come `"guasto"` per le impostazioni
-(`frontend/src/panels/settings.ts:433`) e come `"info"` per il layout
-(`frontend/src/state/store.ts:210`); e chi lavora su un chiosco non ha modo di
-sapere perché Fub dimentica tutto a ogni avvio.
-
-*Quello che si diceva e che non regge.* Che il caso fosse coperto dalle decisioni
-0036/0037: quelle riguardano il file **illeggibile**, non quello non scrivibile.
-E il precedente storico va letto al contrario di come sembra: il commit `9a58184`
-ha tolto da `docs/todo.md` la riga «`0077 | portable_dir` non verifica di essere
-scrivibile» — il difetto è stato chiuso, e la domanda di prodotto è rimasta
-aperta dentro un commento.
-
----
+**Le premesse cadute, e il residuo.** La citazione «undici derivati, zero
+originali» attribuita alla [0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)
+è falsa — la frase vive solo in questa voce, e la sostanza del verbale regge
+lo stesso. E «alla prima scrittura fallita» si è rivelato essere il momento
+in cui la diagnosi nasce: la prima scrittura fallita è l'apertura del log, ed
+è quella riga che il tiraggio consegna. Resta fuori, dichiarato nel verbale e
+**non** come casella (non ha un innesco, e una casella senza innesco è una
+riga scritta a vuoto): la normalizzazione dei tre percorsi di errore del punto
+7 — `PluginError::Io` per il registro vault, `Internal` per le impostazioni
+macchina, `String` nudo per lo stato di vista — che la forma (a) informa ma
+non uniforma; e la tensione fra il toast `guasto` di `set_setting` e il tono
+`info` della porta, due frasi che dicono due momenti diversi.
 
 ### 25.6 Chi paga la latenza di una scrittura fatta dentro un comando IPC
 
