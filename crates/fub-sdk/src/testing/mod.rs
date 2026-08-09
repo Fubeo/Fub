@@ -156,6 +156,21 @@ pub struct MemoryHost {
     /// operazioni e non un tempo apposta: su una macchina condivisa un tempo
     /// non è un segnale.
     scritture: Mutex<BTreeMap<String, (usize, usize)>>,
+    /// Il **conto** delle letture, per path: quante volte e quanti byte.
+    ///
+    /// L'altra metà di [`MemoryHost::scritture_su`], e serve per la stessa
+    /// ragione rovesciata: i blob e i documenti dicono cosa c'è, non **quante
+    /// volte è stato aperto**. Un comando che rilegge il vault intero e uno che
+    /// chiede solo le note che gli servono lasciano dietro di sé esattamente lo
+    /// stesso stato, e senza questo conto un presidio sulla quantità di lettura
+    /// sarebbe verde in tutti e due i casi.
+    ///
+    /// Ci finiscono le letture del **vault** (per `DocId`) e quelle dello
+    /// **spazio dati** (per path): sono i due canali da cui si legge, e la
+    /// chiave è quella con cui il chiamante ha chiesto. Anche qui è un conto di
+    /// operazioni e non un tempo: su una macchina condivisa un tempo non è un
+    /// segnale.
+    letture: Mutex<BTreeMap<String, (usize, usize)>>,
 }
 
 impl MemoryHost {
@@ -267,6 +282,38 @@ impl MemoryHost {
             .get(path)
             .copied()
             .unwrap_or((0, 0))
+    }
+
+    /// Quante volte quel path (o quel `DocId`) è stato **letto**, e quanti byte
+    /// in tutto. `(0, 0)` per ciò che nessuno ha mai aperto.
+    pub fn letture_su(&self, path: &str) -> (usize, usize) {
+        self.letture
+            .lock()
+            .unwrap()
+            .get(path)
+            .copied()
+            .unwrap_or((0, 0))
+    }
+
+    /// Il totale delle letture: quante e quanti byte, su tutto.
+    ///
+    /// È la forma che serve quando la domanda non è *quel* documento ma
+    /// **quanti**: «questo comando ha aperto il vault intero?» non si risponde
+    /// path per path.
+    pub fn letture_totali(&self) -> (usize, usize) {
+        self.letture
+            .lock()
+            .unwrap()
+            .values()
+            .fold((0, 0), |(n, b), (dn, db)| (n + dn, b + db))
+    }
+
+    /// Segna una lettura riuscita. Privato: il conto si legge, non si scrive.
+    fn annota_lettura(&self, chiave: &str, byte: usize) {
+        let mut letture = self.letture.lock().unwrap();
+        let conto = letture.entry(chiave.to_string()).or_insert((0, 0));
+        conto.0 += 1;
+        conto.1 += byte;
     }
 
     /// Le richieste di rete che questo doppio ha visto, in ordine.
@@ -523,12 +570,17 @@ impl VaultRead for MemoryHost {
     }
 
     fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
-        self.docs
+        let bytes = self
+            .docs
             .lock()
             .unwrap()
             .get(id.as_str())
             .cloned()
-            .ok_or_else(|| PluginError::BadArgs(format!("{id} non esiste").into()))
+            .ok_or_else(|| PluginError::BadArgs(format!("{id} non esiste").into()))?;
+        // Solo le letture **riuscite**, come per le scritture: chiedere un
+        // documento che non c'è non è lavoro fatto sul disco.
+        self.annota_lettura(id.as_str(), bytes.len());
+        Ok(bytes)
     }
 
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
@@ -725,7 +777,11 @@ impl VaultStructure for MemoryHost {
 
 impl DataRead for MemoryHost {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        Ok(self.blobs.lock().unwrap().get(path).cloned())
+        let blob = self.blobs.lock().unwrap().get(path).cloned();
+        if let Some(bytes) = &blob {
+            self.annota_lettura(path, bytes.len());
+        }
+        Ok(blob)
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {

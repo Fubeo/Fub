@@ -1300,6 +1300,14 @@ fn vault_replace(
         return Err(PluginError::BadArgs(Text::key(E_EMPTY_FIND)));
     }
 
+    // Senza `docs` si scandisce il vault intero, una lettura per nota. Sembra il
+    // posto dove chiedere all'indice quali note contengono l'ago, e non lo è:
+    // l'indice tiene la **proiezione a testo piano** del documento (niente
+    // frontmatter, niente marcatori, i wikilink ridotti all'etichetta — vedi
+    // `fub-kernel/src/occurrences.rs`), mentre `occurrences` cerca byte in un
+    // file. Un prefiltro non renderebbe questo comando più rapido: lo
+    // renderebbe incompleto, in silenzio. Il conto e la prova stanno in
+    // `tests/chi_risponde_apre_i_byte.rs`.
     let targets = match args.documents("docs") {
         Some(docs) => docs,
         None => host.list_documents(None)?.items,
