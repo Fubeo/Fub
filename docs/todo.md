@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Trentuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Trenta** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -571,7 +571,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0115 | risolvere un wikilink scandisce tutta l'anagrafe: `named_entry_in` calcola fino a due `resolution_key` per voce e chiude con un `min_by_key` che non cortocircuita, quindi trovare costa quanto non trovare — 27,8 ms a chiamata su 20.000 voci — e `entry_rewrite_plan` la chiama una volta per ogni link di ogni documento, cioè quarantasei minuti per rinominare un allegato | `fub-kernel` · `index/core.rs` `named_entry_in` | prestazioni |
 | 0117 | aprire un vault paga la latenza dell'IPC una volta per domanda invece che una volta per gruppo: `openVaultPath` mette in fila sette `await` che nessun dato lega — quattro caricatori di stato e tre elenchi del kernel — collassabili in due `Promise.all` senza toccare l'ordine che i commenti dichiarano; quattro siti in tutto, questo è il peggiore | `frontend` · `main.ts` `openVaultPath` | prestazioni |
 | 0118 | `DEFAULT_EXCLUDED` è `.obsidian`, `.git`, `node_modules` e non contiene `target`: su un vault che è anche un repo Rust ogni file di `target/` prende un `DocId` ed entra in anagrafe, perché il filtro a valle assegna una specie e non scarta nulla | `fub-kernel` · `ignore.rs` `DEFAULT_EXCLUDED` | regole |
-| 0119 | `Journal::open` legge `.fub/journal.jsonl` due volte di fila — una per `ripara_la_coda` e una per `pota(0)` — e una terza la fa `Workspace::pota_il_registro` appena il bundle dichiara `journal.retention.days`, perché `pota` rilegge il file invece di ricevere i byte che il chiamante ha appena letto | `fub-kernel` · `journal.rs` `Journal::open` | lock e I/O |
 | 0123 | gli avvisi non fatali del montaggio viaggiano nell'`Ok(Vec<String>)` di `BundleRegistry::enable`, e i due chiamanti che accendono un bundle scartano quel payload con un `?` che non lega: l'utente accende un componente e i provider non entrati non compaiono né nel valore di ritorno né nel log | `fub-host` · `session.rs` `Host::set_plugin_enabled` | regole |
 | 0126 | gli estratti di un provider si raccolgono con `.collect()` in una `BTreeMap<DocId, DocumentMatch>`: due righe per lo stesso documento si sovrascrivono in silenzio, dove `Matches::insert` — a poche righe di distanza — avrebbe chiamato `absorb` e fuso score, proprietà e occorrenze | `fub-kernel` · `index/plan.rs` `told` | regole |
 | 0127 | un verbale è immutabile ma il codice che descrive no, e non c'è nessun registro che tenga i due allineati: due verbali — la decisione 0121 sul `<div>` vuoto e su `heading_slug`, la 0062 sull'unico caso di `StderrSink` — affermano di `crates/` cose che a HEAD sono false, i commit che le hanno rese false hanno toccato solo `todo.md`, e chi legge non ha nessun segnale di stare leggendo un fatto scaduto | `docs` · `CONTRIBUTING.md` `Chiudere una decisione` | regole |

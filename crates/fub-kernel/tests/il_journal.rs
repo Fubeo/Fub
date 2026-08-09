@@ -372,3 +372,120 @@ fn il_registro_non_porta_dentro_il_documento() {
         "ciò che finisce è l'impronta, che dice *se* è ancora quello e non cosa era"
     );
 }
+
+/// Un supporto che **conta le letture del registro** e per il resto è quello in
+/// memoria. È la cucitura di `la_radice_non_si_muove.rs` ristretta a una domanda
+/// sola: quante volte `journal.jsonl` passa davanti al disco.
+struct SupportoCheConta {
+    inner: fub_kernel::MemStorage,
+    letture: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl fub_kernel::VaultStorage for SupportoCheConta {
+    fn read(&self, path: &camino::Utf8Path) -> std::io::Result<Vec<u8>> {
+        if path.file_name() == Some("journal.jsonl") {
+            self.letture
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        self.inner.read(path)
+    }
+    fn write(&self, path: &camino::Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.write(path, bytes)
+    }
+    fn append(&self, path: &camino::Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &camino::Utf8Path, to: &camino::Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn remove(&self, path: &camino::Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &camino::Utf8Path) -> std::io::Result<Vec<fub_kernel::DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &camino::Utf8Path) -> std::io::Result<fub_kernel::Stat> {
+        self.inner.stat(path)
+    }
+    fn remove_empty_dir(&self, dir: &camino::Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
+
+/// **Aprire un workspace non legge il registro più di due volte.**
+///
+/// # Perché un tetto e non un'uguaglianza
+///
+/// Perché le due letture di adesso — `ripara_la_coda`, che guarda l'ultimo byte,
+/// e `pota(0)`, che deve rileggere perché la prima può averci appeso un
+/// terminatore — non sono un numero da difendere: sono il numero che c'è. Ciò
+/// che va difeso è che non diventino quattro. Un'uguaglianza andrebbe rossa
+/// anche a chi le fonde, cioè proprio a chi migliora la cosa che questo banco
+/// presidia; un tetto va rosso solo a chi la peggiora.
+///
+/// # Il numero, e perché è piccolo
+///
+/// Sul registro di questo repo — 4,2 KB, ventuno righe — una lettura di troppo
+/// costa qualche microsecondo. Al tetto del registro (`TETTO` = diecimila
+/// record, 1,96 MB) ne costa 208, misurati caldi. Sono le cifre per cui la riga
+/// che chiedeva di fondere le letture è stata chiusa come vera e trascurabile:
+/// contro un'apertura a freddo di duemila note (896 ms) le due letture di
+/// troppo dell'apertura valgono lo 0,05%. Questo banco non le toglie — tiene
+/// ferma la taglia, che è l'unica cosa che potrebbe crescere in silenzio.
+///
+/// # Quello che questo banco non vede
+///
+/// La **terza** lettura, che il kernel da solo non fa: la fa
+/// `Workspace::pota_il_registro` quando qualcuno dichiara
+/// `journal.retention.days`, cioè a ogni apertura vera passata da `fub-host`.
+/// Sta fuori da questo tetto perché ha un'altra causa — una chiave dichiarata,
+/// non l'apertura — e metterla dentro renderebbe il numero dipendente da chi è
+/// montato.
+///
+/// # Chi è stato rosso
+///
+/// Questo banco, con una terza `self.storage.read(&self.path)` messa a mano in
+/// `Journal::open`: `3` contro un tetto di `2`.
+#[test]
+fn aprire_un_vault_non_rilegge_il_registro_piu_di_due_volte() {
+    let letture = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let inner = fub_kernel::MemStorage::new();
+    let root = Utf8PathBuf::from("/vault");
+    // Un registro che **c'è già** e finisce per intero: il caso in cui le
+    // letture si contano davvero. Su un file che non c'è ognuna torna subito e
+    // il banco sarebbe verde per la ragione sbagliata.
+    fub_kernel::VaultStorage::write(
+        &inner,
+        &root.join(".fub/journal.jsonl"),
+        b"{\"v\":1,\"at\":1,\"origin\":{\"actor\":{\"kind\":\"user\"}},\"writer\":\"aa\",\"op\":{\"op\":\"created\",\"doc\":\"una.md\",\"to\":\"r1\"}}\n",
+    )
+    .expect("il registro di partenza");
+    let storage = std::sync::Arc::new(SupportoCheConta {
+        inner,
+        letture: std::sync::Arc::clone(&letture),
+    });
+    let ws = Workspace::on(
+        &root,
+        fub_kernel::FormatRegistry::new(),
+        storage as std::sync::Arc<dyn fub_kernel::VaultStorage>,
+        fub_kernel::MachineSettings::in_memory(),
+    );
+    let quante = letture.load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        quante >= 1,
+        "zero letture vuol dire che il registro non è stato aperto affatto, \
+         e allora il tetto qui sotto non dimostra niente"
+    );
+    assert!(
+        quante <= 2,
+        "aprire un vault ha letto {quante} volte `journal.jsonl`: al tetto del \
+         registro ogni lettura di troppo è ~208 µs, e crescono in silenzio"
+    );
+    // E il registro si legge ancora: un'apertura che avesse smesso di leggerlo
+    // passerebbe il tetto a mani basse.
+    assert_eq!(
+        ws.journal().records.len(),
+        1,
+        "la riga di partenza c'è ancora"
+    );
+}
