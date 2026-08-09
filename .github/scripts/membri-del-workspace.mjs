@@ -38,6 +38,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** Il nome della tabella di una riga `[…]`, o `null` se la riga non lo è. */
 function nomeSezione(riga) {
@@ -156,4 +157,28 @@ export function crateDelWorkspace(radice) {
   }
 
   return { file: file.sort(), violazioni };
+}
+
+// **Da riga di comando**: i manifest dei membri, uno per riga, su stdout.
+//
+// Il terzo chiamante non è un presidio ma un **conto**: `crate-del-workspace` in
+// `conteggi.mjs`, che è una stringa di shell e quindi non può importare una
+// funzione. Senza questa porta si sarebbe riscritta lì la lettura di
+// `[workspace] members` — cioè la terza copia della cosa che questo file esiste
+// per non avere in due.
+//
+// Le violazioni vanno su **stderr** e non spengono l'uscita: chi le fa diventare
+// rosse sono i due presidi che chiamano `crateDelWorkspace`, e un terzo attore
+// che dice la stessa cosa non aggiungerebbe un verso — toglierebbe solo il
+// numero dal registro proprio nel giro in cui serve leggerlo. Se l'elenco non si
+// legge affatto, `file` è vuoto e il conto stampa **zero**: è il verso giusto in
+// cui sbagliare, perché zero crate che ereditano la versione non passa
+// inosservato in nessuna prosa che citi quel numero.
+if (
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  const { file, violazioni } = crateDelWorkspace(process.cwd());
+  for (const violazione of violazioni) console.error(violazione);
+  for (const manifest of file) console.log(manifest);
 }

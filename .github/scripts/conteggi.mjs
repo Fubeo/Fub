@@ -277,8 +277,27 @@ export const CONTEGGI = [
       "I crate che ereditano la versione dal `Cargo.toml` della radice. " +
       "Dichiarava questo e contava le **cartelle** di `crates/`: un crate che " +
       "si scrivesse la versione a mano — cioè precisamente quello che la frase " +
-      "esclude — sarebbe stato contato lo stesso.",
-    comando: "grep -lE '^version\\.workspace *= *true' crates/*/Cargo.toml | wc -l",
+      "esclude — sarebbe stato contato lo stesso. " +
+      "E anche dopo quella correzione l'**elenco** restava il glob `crates/*`, " +
+      "cioè il disco, mentre chi compila legge `[workspace] members`: una " +
+      "cartella con un manifest che nessun membro dichiara entrava nel conto " +
+      "senza che cargo la compilasse — codice che non esiste e `#[test]` che non " +
+      "sono rossi perché non girano — e un membro fuori da `crates/` non ci " +
+      "entrava mai. Oggi le due liste coincidono e nessuno dei due casi c'è: il " +
+      "conto non cambia numero, cambia da dove lo prende. L'elenco lo dà " +
+      "`membri-del-workspace.mjs`, lo stesso che aprono `check-cargo-versioni` e " +
+      "`check-cargo-feature-default`, e la porta da riga di comando esiste " +
+      "perché un `comando` è una stringa di shell: la terza copia della lettura " +
+      "di `members` sarebbe stata scritta qui. " +
+      "Zone cieche dichiarate: le divergenze fra elenco e disco questo conto " +
+      "non le stampa — le fanno rosse i due presidi che chiamano la stessa " +
+      "funzione — quindi un membro dichiarato senza `Cargo.toml` esce dal conto " +
+      "in silenzio *qui* e grida *là*; e l'ancora resta la riga " +
+      "`version.workspace = true`, quindi un crate che ereditasse la versione " +
+      "per un'altra strada non si vedrebbe.",
+    comando:
+      "node .github/scripts/membri-del-workspace.mjs | while read -r m; do" +
+      " grep -qE '^version\\.workspace *= *true' \"$m\" && echo \"$m\"; done | wc -l",
   },
   {
     nome: "wit-righe",
