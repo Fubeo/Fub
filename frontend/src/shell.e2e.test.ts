@@ -23,7 +23,7 @@
 //
 // # Dieci gesti, contati da fuori
 //
-// I gesti sono **undici** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **dodici** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -44,7 +44,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorView } from "@codemirror/view";
 import type { HostFinto } from "./host/finto";
-import type { SettingEntry } from "./host/contract";
+import type { KernelNotice, SettingEntry } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
 
 // L'host finto vive in una scatola che `vi.mock` possa vedere: i factory dei
@@ -109,6 +109,7 @@ async function monta(
   impostazioni: SettingEntry[] = [],
   radice: string | null | undefined = undefined,
   freni: string[] = [],
+  avviso: KernelNotice | null = null,
 ): Promise<{ host: HostFinto; avvio: Promise<void>; sblocca: Map<string, () => void> }> {
   vi.resetModules();
   scatola.conferma = true;
@@ -117,6 +118,7 @@ async function monta(
     view: [specDiProva(CESTINO_VIEW, "left_sidebar")],
     impostazioni,
     radice,
+    avvisoDiSessione: avviso,
   });
   scatola.host = host;
   const sblocca = new Map(freni.map((p) => [p, host.frena(p)]));
@@ -130,8 +132,9 @@ async function avvia(
   file: Record<string, string>,
   impostazioni: SettingEntry[] = [],
   radice: string | null | undefined = undefined,
+  avviso: KernelNotice | null = null,
 ): Promise<HostFinto> {
-  const { host, avvio } = await monta(file, impostazioni, radice);
+  const { host, avvio } = await monta(file, impostazioni, radice, [], avviso);
   await avvio;
   await riposa();
   return host;
@@ -551,6 +554,39 @@ describe("la finestra senza vault", () => {
     const palette = registro.allCommands().find((e) => e.id === "shell.palette");
     expect(palette?.binding).toBe("Mod-Alt-p");
     expect(palette?.declared).toBe(SHELL_KEYS["shell.palette"]);
+  });
+
+  it("chiede l'avviso di sessione all'avvio, e lo mostra se c'è", async () => {
+    // §25.5: la diagnosi «la cartella di configurazione non si può scrivere»
+    // nasce all'avvio del backend, quando nessun ascoltatore esiste — una
+    // spinta sarebbe persa, e la porta è un tiraggio. Questo gesto tiene ferma
+    // la catena intera: la shell lo chiede (il registro del finto lo vede),
+    // e lo consegna al router come un evento qualunque (lo storico dei toast
+    // lo mostra). Si fa rosso in due versi: senza la chiamata in `init()`
+    // il registro non vede nulla, senza l'inoltro il toast non appare.
+    const avviso: KernelNotice = {
+      event: {
+        type: "trouble",
+        severity: "warning",
+        subject: null,
+        error: { kind: "io", message: "`/config` non si può scrivere" },
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const host = await avvia({}, [], null, avviso);
+
+    expect(host.aPorta("avvisoDiSessione").length).toBe(1);
+    const { avvisiRecenti } = await import("./ui/notify");
+    expect(avvisiRecenti().some((a) => a.testo.includes("non si può scrivere"))).toBe(true);
+
+    // E una sessione sana non dice niente: il tiraggio c'è, la risposta è
+    // vuota, e lo storico resta pulito. `avvisiRecenti` si ri-importa dopo
+    // ogni `avvia`: `vi.resetModules` ricarica i moduli, e l'istanza di prima
+    // è quella della sessione con l'avviso.
+    const sana = await avvia({}, [], null);
+    const { avvisiRecenti: recentiSani } = await import("./ui/notify");
+    expect(sana.aPorta("avvisoDiSessione").length).toBe(1);
+    expect(recentiSani().some((a) => a.testo.includes("non si può scrivere"))).toBe(false);
   });
 });
 

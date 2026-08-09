@@ -163,6 +163,22 @@ fn initial_vault() -> Option<String> {
     fub_host::initial_vault()
 }
 
+/// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di configurazione
+/// non si può scrivere» (o non c'è), come `Event::Trouble` di severità
+/// `Warning`, una volta per sessione.
+///
+/// È un **tiraggio** e non una spinta all'avvio: quando la diagnosi nasce
+/// (`install_logging`) non esiste ancora né l'handle del webview né il ponte —
+/// che parte al primo vault aperto — né l'ascoltatore della shell. Una spinta
+/// a quell'ora sarebbe emessa nel vuoto e persa in silenzio; un comando chiesto
+/// dalla shell dopo che il router è attaccato è l'unico istante in cui la
+/// consegna è garantita dall'ordine dell'IPC. Il secondo chiamante (un test, un
+/// altro frontend) trova la risposta già consumata: `None`.
+#[tauri::command]
+fn avviso_di_sessione(host: State<Host>) -> Option<fub_abi::Notice> {
+    host.avviso_di_sessione()
+}
+
 // `list_documents` **non è più un comando** (§14.4). Era l'ultimo dato che la
 // shell chiedeva fuori da `IndexQuery`, e la finestra che il contratto ha dal
 // §5.5 questo confine non l'ha mai usata: restituiva l'intero vault in un
@@ -773,7 +789,7 @@ pub fn run() {
     // posto dove andare (§17.3, decisione 0062). L'`Arc` torna qui e passa
     // all'host, perché è lo stesso su cui il montaggio cambierà il livello
     // leggendo le impostazioni.
-    let levels = fub_host::install_logging();
+    let (levels, avviso) = fub_host::install_logging();
     // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
     // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
     // `WebviewEvents`).
@@ -786,7 +802,15 @@ pub fn run() {
         // con una cartella di configurazione, un livello macchina e un registro
         // dei vault. Un test o un e2e headless costruiscono `Host::new()`, che
         // lavora in memoria e non tocca la configurazione di chi lo esegue.
-        .manage(Host::installed().with_levels(levels).with_sink(sink))
+        // L'avviso di `install_logging` entra da qui: è nato prima dell'host,
+        // e questo è il punto più basso che lo può tenere fino al tiraggio
+        // della shell (§25.5).
+        .manage(
+            Host::installed()
+                .with_avviso_di_sessione(avviso)
+                .with_levels(levels)
+                .with_sink(sink),
+        )
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
             Ok(())
@@ -797,6 +821,7 @@ pub fn run() {
             list_vaults,
             set_current_vault,
             initial_vault,
+            avviso_di_sessione,
             read_document,
             write_document,
             save_draft,

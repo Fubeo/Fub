@@ -93,7 +93,11 @@ pub fn log_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
 }
 
 /// **Installa il collettore del log per tutto il processo** (§17.3) e torna i
-/// livelli condivisi.
+/// livelli condivisi **e l'avviso** che il pavimento ha composto — la diagnosi
+/// «il log non ha potuto aprire il suo file», o «non c'è nessuna cartella di
+/// configurazione». Chi chiama (solo `fub_app::run`) lo passa all'host, che è
+/// il livello in cui la diagnosi diventa un `Event::Trouble` (§25.5): qui non
+/// può — non esiste ancora nessun canale verso chi guarda.
 ///
 /// È la prima cosa che fa `fub_app::run`, prima di qualunque vault: ogni riga
 /// di `tracing` da lì in poi — comprese quelle di `Host::installed`, che apre i
@@ -105,7 +109,7 @@ pub fn log_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
 /// la prima riga che passa dal collettore appena montato: un log che non si apre
 /// non deve impedire all'app di partire — la stessa regola di
 /// `MachineSettings::open` — ma non deve nemmeno sparire senza una parola.
-pub fn install_logging() -> std::sync::Arc<fub_kernel::log::Levels> {
+pub fn install_logging() -> (std::sync::Arc<fub_kernel::log::Levels>, Option<String>) {
     use std::sync::Arc;
     let levels = Arc::new(fub_kernel::log::Levels::default());
     let (sink, avviso) = pavimento(config_dir());
@@ -115,10 +119,10 @@ pub fn install_logging() -> std::sync::Arc<fub_kernel::log::Levels> {
     // **Dopo** l'installazione e non prima: questa riga esiste per essere letta,
     // e prima del collettore non avrebbe avuto dove andare. Il canale che la
     // riceve è proprio quello su cui si è appena ripiegato.
-    if let Some(avviso) = avviso {
+    if let Some(ref avviso) = avviso {
         tracing::warn!(target: "fub.host", "{avviso}");
     }
-    levels
+    (levels, avviso)
 }
 
 /// **Dove va il log, e — se non è il file — perché.**
@@ -142,9 +146,22 @@ fn pavimento(
     use std::sync::Arc;
     let Some(dir) = dir else {
         // Nessuna cartella di configurazione — un ambiente senza `HOME` — e
-        // `stderr` è il canale **normale**, non un ripiego: non c'è niente da
-        // spiegare a nessuno (0062).
-        return (Arc::new(fub_kernel::log::StderrSink), None);
+        // `stderr` è il canale **normale**, non un ripiego: il log non ha un
+        // posto dove andare. Ma perde le stesse undici specie di stato del ramo
+        // non scrivibile (impostazioni della macchina, registro dei vault,
+        // stato di vista), e la voce 25.5 ha deciso che anche questo si dice:
+        // una volta per sessione, come l'altro ramo. Prima (0062) non c'era
+        // niente da spiegare — non scrivere non era un guasto; da questa voce
+        // tacere è la diagnosi che manca, non la riga.
+        return (
+            Arc::new(fub_kernel::log::StderrSink),
+            Some(
+                "Nessuna cartella di configurazione (un ambiente senza `HOME`): Fub \
+                 lavora in memoria, e le impostazioni della macchina, il registro dei \
+                 vault e lo stato di vista non si salveranno da nessuna parte."
+                    .into(),
+            ),
+        );
     };
     match fub_kernel::log::FileSink::open(&log_path(&dir)) {
         Ok(file) => (Arc::new(file), None),
@@ -271,12 +288,25 @@ mod tests {
         );
     }
 
-    /// Senza cartella di configurazione `stderr` è il canale **normale** e non un
-    /// ripiego: là non c'è nessun altro canale, e non c'è niente da spiegare.
+    /// Senza cartella di configurazione `stderr` resta il canale **normale**, e
+    /// la voce 25.5 ha deciso che anche questo si dice: le undici specie di
+    /// stato della macchina si perdono come nel ramo non scrivibile, e tacere
+    /// sarebbe la diagnosi che manca. Prima (0062) «non c'era niente da
+    /// spiegare» — la scelta di prodotto era un'altra, e questo banco la
+    /// presidiava nel verso vecchio; da questa voce la riga esiste ed è
+    /// questa.
     #[test]
-    fn senza_cartella_di_configurazione_stderr_non_e_un_guasto() {
+    fn senza_cartella_lo_stesso_si_dice() {
         let (_, avviso) = pavimento(None);
-        assert_eq!(avviso, None);
+        let avviso = avviso.expect("anche senza cartella la diagnosi si dice");
+        assert!(
+            avviso.contains("Nessuna cartella di configurazione"),
+            "l'avviso non dice che manca la cartella: {avviso}"
+        );
+        assert!(
+            avviso.contains("non si salveranno da nessuna parte"),
+            "l'avviso non dice la perdita: {avviso}"
+        );
     }
 
     #[test]

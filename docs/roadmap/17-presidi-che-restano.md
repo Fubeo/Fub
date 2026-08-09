@@ -191,11 +191,14 @@ solo ha lo stesso difetto in un altro travestimento.
       rispondere). I gesti erano **sette** e non cinque, perché «rinomina» ne è
       due — quella che chiede questa finestra e quella che arriva da fuori — ed
       è la seconda quella in cui il difetto c'era; adesso sono
-      **undici** [conta: gesti-della-shell]: la
+      **dodici** [conta: gesti-della-shell]: la
       [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
-      ne ha aggiunti due sulle scorciatoie, e l'undicesimo è il link **dentro**
+      ne ha aggiunti due sulle scorciatoie, l'undicesimo è il link **dentro**
       la nota — un gesto che si vede solo di qua dal confine, perché ciò che
-      mancava non era una risposta ma una domanda.
+      mancava non era una risposta ma una domanda — e il dodicesimo è l'avviso
+      di sessione della 25.5, che la finestra vuota chiede all'avvio e mostra
+      se c'è: il gesto che tiene ferma la porta del tiraggio da questo lato
+      del confine.
       Due difetti veri, tutti e due nel cablaggio, che è la classe che la
       [0015](../decisions/0015-la-forma-della-shell.md) dichiarava di non poter
       vedere: l'Invio che conferma una rinomina in posto risaliva
