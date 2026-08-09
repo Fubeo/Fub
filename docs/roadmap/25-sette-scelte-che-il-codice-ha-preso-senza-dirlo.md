@@ -58,115 +58,37 @@ regola non è scritta **da nessuna parte**, e quello è precisamente il difetto.
 
 ### 25.1 Una rinomina che atterra su una nota viva
 
-*aperta · strato **kernel** · **P0***
+*chiusa dalla [0135](../decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md) · strato **kernel** · **P0***
 
-**1. La domanda.** Quando una rinomina fatta da fuori atterra su un documento
-che nel vault esiste già, chi vince — l'identità che si muove o quella su cui
-atterra — e che cosa si fa di ciò che apparteneva alla seconda?
+**Com'è finita, e cosa lascia.** La voce chiedeva chi vince quando una rinomina
+fatta da fuori atterra su un'identità che nel vault esiste già, e la risposta è
+la **forma (a)**: se `to_id` è già in anagrafe non è un rename, è
+`remove(from)` + `sync_path(to)`. La misura che l'ha decisa era che dei quattro
+canali di stato attaccati a un'identità **tre la distruggevano e uno la
+fondeva**, e che il canale distrutto più grave — la bozza — è per dichiarazione
+del modulo che la tiene «l'unica copia di ciò che l'utente ha scritto»: `mv A.md
+B.md` da un terminale, con Fub aperto e il buffer di `B` sporco, cancellava per
+sempre quel testo senza dirlo. La guardia sta in una riga sola, nel punto che
+tutte e tre le porte attraversano, e la degradazione esisteva già lì accanto.
 
-**2. Che cosa si osserva oggi, misurato.** Sonda eseguita a `bc1d27d`: vault con
-`A.md` e `B.md` vivi e indicizzati, dati per-documento e bozza non salvata per
-entrambi, poi `std::fs::rename(A.md → B.md)` da fuori e
-`ws.sync_renamed_path(A.md, B.md)`.
+Delle quattro premesse con cui la voce era stata scritta **nessuna reggeva**, e
+il danno c'era lo stesso in un'altra funzione: è il caso di scuola di una voce
+sbagliata sul meccanismo e giusta sul posto dove guardare. Il dettaglio sta nel
+verbale.
 
-```
-sync_renamed_path -> Ok(true)
-doc-data di A dopo : None
-doc-data di B dopo : Some("dati-di-A")        <-- i dati di B cancellati
-bozza di B.md      = "testo non salvato di A" <-- la bozza di B sovrascritta
-B è ancora in anagrafe? true                  <-- B è VIVA
-warnings: []                                  <-- nessuno lo dice
-```
+Resta aperta la sola **forma (b)**, e resta perché non è urgente, non perché sia
+stata scartata:
 
-`Ok(true)`, nessun avviso, nessun `Trouble`, nessuna riga di log. I canali di
-stato attaccati all'identità di `B` sono **quattro**: `migrate_side_data`
-(`workspace.rs:3307`) ne muove tre e il quarto passa dall'evento. **Tre lo
-distruggono, uno lo fonde.** `organization.migrate` (`workspace.rs:3318`)
-sostituisce icona e pin di `B`; `migrate_doc_data` fa `remove_dir_all` sullo
-spazio di `B` (`docdata.rs:85-86`); `drafts.migrate` (`workspace.rs:3340` →
-`drafts.rs:281`) scrive `storage.write(&self.path(to), …)` e **sovrascrive** la
-bozza, che è — per dichiarazione del modulo che la tiene, `workspace.rs:3337` —
-«l'**unica** copia di ciò che l'utente ha scritto». `B` resta in anagrafe: è una
-nota viva, non un residuo.
-
-Il buco è **uno solo**. `sync_renamed_path_here` (`workspace.rs:3375`) è il
-quarto dei quattro chiamanti di `migrate_doc_data` e l'unico che non controlla
-mai che `to_id` sia già in `metas`; gli altri tre hanno davanti un
-`AlreadyExists` che garantisce la destinazione libera (`workspace.rs:2727`,
-`:2897`, `:3013`, `:3090`). Banchi che coprano il caso: **zero** — cercando
-`sovrascriv|overwrit` nei test del kernel si trovano solo cestino, ripristino e
-sidecar, mai un rename esterno su un'identità occupata.
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Rifiutare la migrazione d'identità.** Se `to_id` è già in `metas` e
-      non è `from_id`, non è un rename: è `remove(from)` + `sync_path(to)`. Paga
-      **chi ha rinominato**: la storia delle versioni di `A` si spezza e i suoi
-      dati restano orfani fino alla prima raccolta. Non paga niente di ciò che
-      era di `B`. È una riga, e la degradazione esiste già a
-      `workspace.rs:3396-3401`.
 - [ ] **(b) Migrare senza mai schiacciare**, cioè la regola del versioning estesa
       agli altri tre canali: dove fondere ha senso si fonde, dove non ce l'ha
       vince la destinazione e ciò che resta indietro si **nomina**
-      (`doc_data_warnings` c'è già, `organization.warn` pure). Paga **chi
-      manterrà il codice**: tre politiche di collisione da scrivere e da
-      presidiare. È l'unica forma in cui nessuno perde niente in silenzio.
-- [ ] **(c) Com'è oggi.** Paga **l'utente**, e paga esattamente la cosa che il
-      repo dichiara non perdibile.
-
-**4. Che cosa il repo ha già deciso qui vicino.** La **decisione
-[0044](../decisions/0044-lo-stato-per-documento.md)** ha spostato la migrazione
-dello stato per-documento dentro il kernel proprio perché *il rename è un rito
-che ognuno celebra per conto proprio, e ognuno lo celebra col proprio buco*: e
-questo è il buco del rito unificato. La **decisione
-[0048](../decisions/0048-una-radice-sola.md)** tiene la bozza **fuori** da
-`data/` — «metterla sotto `data/` avrebbe voluto dire dichiarare buttabile ciò
-che è precisamente l'unica copia» — ed è per questo che `docdata::collect` non la
-vede mai (`drafts.rs:79-91` dichiara «**Non raccoglie**»). La **decisione
-[0099](../decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)** copre la
-rinomina ad app chiusa, che è un altro caso. La **decisione
-[0034](../decisions/0034-il-freno-e-il-raggruppamento.md)** è la ragione per cui
-la migrazione sta nell'operazione e non sull'evento.
-
-**E la risposta alla domanda è già scritta, in un verso solo.** Il quarto canale
-— `VersionStore::rename`, `versioning.rs:465` — fa la cosa giusta, e ne scrive il
-perché a `versioning.rs:475-479`: «*Se il nuovo nome aveva già una storia … le
-due si uniscono in ordine di tempo: buttarne una sarebbe perdere versioni senza
-dirlo*». Quattro canali, la stessa collisione, una politica scritta: e i tre del
-kernel non la applicano.
-
-**5. Reversibile?** **Interamente.** Nessun tipo pubblico, nessun WIT, nessun
-formato su disco: la scelta sta dentro `sync_renamed_path_here` e tre funzioni
-private del kernel, e si cambia domani.
-
-**6. La raccomandazione: (a) subito, (b) dopo.** La guardia della (a) è di due
-righe, elimina il 100% della perdita misurata e non obbliga a decidere niente
-sulla fusione; «rinomina su un'identità occupata» è un caso raro, e degradarlo a
-rimozione più aggiunta è la cosa che l'utente capisce — `B` ha il testo di `A`,
-ed è vero. La (b) è la forma giusta, ma vuole tre politiche di collisione, e
-nessuna è urgente finché la (a) impedisce la perdita. Il presidio che decide
-manca del tutto, ed è la parte da scrivere insieme alla (a): un banco che fa la
-rinomina sovrascrivente e verifica che la bozza della vittima sia ancora lì.
-
-**7. Che cosa resta rotto se non si decide.** `mv A.md B.md` in un terminale, con
-Fub aperto e il buffer di `B` sporco, cancella per sempre il testo non salvato di
-`B` senza dirlo. È la perdita che `drafts.rs` esiste per impedire, fatta dal
-kernel.
-
-*Quello che si diceva e che non regge.* Quattro premesse, tutte e quattro false,
-e la voce regge lo stesso per un'altra strada. «`docdata.rs:81-87` cancella lo
-spazio di un documento che non esiste più»: **falso sul soggetto** — quelle righe
-stanno in `migrate`, non in `collect`, e cancellano il path di **destinazione**.
-«`sync_renamed_path_here` esiste apposta perché una nota rinominata fuori non è
-sparita»: **vero ma rovesciato** — non è il presidio, è il chiamante senza
-guardia, ed è da lì che si entra nel danno. «Dentro lo spazio per-documento c'è
-la bozza»: **falso**, sta un livello sopra `data/`, per la decisione 0048. «La
-raccolta cancella i dati di una nota rinominata ad app chiusa»: **falso, e
-presidiato tre volte** — `finish_index` fa il ricongiungimento prima
-(`workspace.rs:2026`, col commento «Invertire le due righe vorrebbe dire
-cancellare i dati un istante prima di sapere di chi sono»), `collect_doc_data` si
-rifiuta su un'anagrafe non `Ready` (`:6076`) e i `sospesi_dal_dubbio` sono
-esclusi (`:6088-6092`).
+      (`doc_data_warnings` c'è già, `organization.warn` pure). Il modello è già
+      scritto — `VersionStore::rename` unisce le due storie in ordine di tempo,
+      «buttarne una sarebbe perdere versioni senza dirlo» — ma le politiche da
+      scrivere sono **tre**, una per canale, e non sono la stessa: due bozze non
+      salvate non si fondono senza inventare un testo che nessuno ha scritto.
+      Paga **chi manterrà il codice**, ed è l'unica forma in cui nessuno perde
+      niente in silenzio.
 
 ---
 
