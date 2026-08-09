@@ -275,131 +275,39 @@ difetto la cui riparazione dipende da una decisione non è un difetto.
 
 ### 25.4 Quanto contesto porta un backlink
 
-*aperta · strato **contratto** · **P1***
+*chiusa dalla [0138](../decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md) · strato **contratto** · **P1***
 
-**1. La domanda.** Quanto testo porta un backlink, e chi lo produce: chi parsa o
-chi disegna?
-
-**2. Che cosa si osserva oggi, misurato.** Misure rifatte a `bc1d27d` su `docs/`,
-cartelle nascoste escluse:
-
-- 200 note, **3.258.845 byte** di sorgente, **4.367 link**, tutti col contesto.
-- Somma dei contesti, una copia per link: **53.994.565 byte** — **16,6×** il
-  vault.
-- Distribuzione: min 4, **p50 341**, p90 1.367, p99 195.738, **max 195.738**.
-- `decisions/README.md` da solo: **51.931.587 byte**, il **96,2%** del totale, da
-  **462** link.
-- `entries.json`: **54.934.932 B**. Leggerlo e parsarlo costa 53,5 + 47,8 ms,
-  riserializzarlo 66,6 ms.
-- Copie dello stesso testo in RAM: **tre** — `DocMeta.links` (`Link.context`,
-  `model.rs:713`), `LinkRef.context` (`graph.rs:95`, clonata in `register_links`,
-  `graph.rs:495`), `BacklinkRef.context` (`graph.rs:589`).
-
-**La misura che decide, e che mancava fino a questo giro: il contesto viene
-mostrato, ma su una riga sola troncata dal CSS.** A mostrarlo è
-`fub-features/src/backlinks.rs:190` (`r.context.clone().map(Text::from)`), che lo
-mette nel **sottotitolo** di un `list_item`; la shell lo disegna a
-`frontend/src/ui/node.ts:543` e lo veste a `frontend/src/style.css:713`:
-
-```css
-.ui-list-item-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-```
-
-Tutto il resto attraversa l'IPC per essere buttato dal browser, e non è gratis:
-`backlinks.rs:81` chiede `page: None`, cioè nessuna finestra. Byte consegnati al
-pannello per apertura di nota, sul `LinkGraph` reale di `docs/`: **mediana
-203.655 byte**, massimo **1.575.186** per 29 righe (`decisions/0077-…`), e 1.406.151
-per le 200 righe di `todo.md`. Cioè **199 KB mediani per disegnare qualche riga
-da ~80 caratteri visibili**.
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Tetto in byte con ellissi.** Costa una costante e un taglio a confine
-      di carattere; a 220 byte il pannello disegna lo stesso identico pixel.
-      **Non paga nessuno**, e il banco `il_corpus.rs:854`
-      (`ogni_link_del_corpus_porta_il_contesto_del_suo_blocco`) resta verde:
-      verifica che il contesto ci sia e non sia vuoto, non che sia il blocco
-      intero.
-- [ ] **(b) Finestra intorno al link.** Costa un `char_indices` e due numeri
-      invece di uno, e rende di più: su un blocco lungo la (a) taglia in testa e
-      **il link finisce fuori dall'ellissi**, cioè il frammento mostrato non
-      contiene il riferimento di cui parla. **Paga chi manterrà il codice**, e chi
-      scrive un provider di terzi, che deve implementarla uguale. È ciò che il
-      repo già fa per la ricerca.
-- [ ] **(c) Nessun contesto memorizzato, si rilegge quando serve.**
-      `Link.context` resta `none` e il pannello ricava il frammento dallo `span`
-      del link contro il documento. Rompe davvero: il banco `il_corpus.rs:854`
-      cade e va riscritto contro il nuovo produttore, e `Link.context` è nel
-      **WIT congelato** (`wit/frozen/0.1.0.wit:130`, `:1738`) — resta lecito
-      riempirlo, quindi non è un ritaglio, ma diventa un campo che il provider
-      nativo non riempie e uno di terzi sì. Guadagna: `entries.json` torna a
-      ~3 MB su 3,2 MB di note, e la RAM perde tre copie su tre.
-- [ ] **(d) Blocco intero condiviso (`Arc<str>`).** **Non ripara il disco.**
-      `entries.json` è JSON: un `Arc` condiviso si serializza N volte lo stesso, e
-      i 54,9 MB restano 54,9 MB. Ripara la RAM del grafo e basta.
-
-**4. Che cosa il repo ha già deciso qui vicino — ed è la parte che cambia la
-raccomandazione.** La stessa domanda, «quanto testo porta una riga di
-risultato?», è già stata posta e risposta per la **ricerca**:
-
-- `fub-features/src/search.rs:122` — `const SNIPPET_CHARS: usize = 220;`,
-  «Lunghezza massima di uno snippet, in caratteri», applicata a `search.rs:1182`
-  (`gen.set_max_num_chars`) e `:1205`. **L'estratto della ricerca è una finestra,
-  ed è tappato a 220 caratteri.**
-- `fub-abi/src/traits.rs:2199` — l'enum `Excerpts` esiste **per una misura**,
-  scritta nel suo docstring: «*una ricerca testuale su duemila note ne costava
-  ventitré millisecondi, e ventuno erano duemila estratti generati per mostrarne
-  venti*». La conseguenza è che l'estratto **si chiede** (`excerpts: Excerpts`,
-  `traits.rs:2586`) e non si presume.
-
-Il contesto di un backlink fa **l'opposto su tutt'e due i punti**: senza tetto, e
-prodotto sempre — a tempo di parsing, per ogni link, e scritto su disco. Vicino
-c'è anche il criterio dei tetti, la **decisione
-[0094](../decisions/0094-un-tetto-che-si-fa-sentire.md)**: il tetto resta una
-costante Rust e non entra nel contratto, ma chi lo supera deve saperlo — e un
-contesto tagliato con l'ellissi lo dice da sé. E dove la regola vada scritta lo
-dice la **decisione [0020](../decisions/0020-le-regole-in-un-posto-solo.md)**:
-`fub-abi::rules`, così il provider WASM di M5 la eredita invece di reinventarla.
-
-**5. Reversibile?** **Il campo no, la politica sì.**
-`Link.context: option<string>` è nel WIT congelato: non si toglie. Ma *quanto* ci
-si mette non è nel contratto — nessuna riga del WIT lo dice — quindi la scelta
-sta dentro `fub-abi::rules` più il provider, e si cambia domani. **Con
-un'eccezione**: se la regola resta implicita, a M5 ogni provider di terzi ne
-inventa una sua, e allora la politica diventa di fatto irreversibile perché sono
-N. Scriverla nelle `rules` è ciò che la tiene reversibile.
-
-**6. La raccomandazione: (b), col numero della ricerca, e la regola in
-`fub-abi::rules`.** Una finestra di **220 caratteri** intorno al link — lo stesso
-numero di `SNIPPET_CHARS`, e in un posto solo, non due. Tre argomenti. Primo, *il
-secondo chiamante la eredita gratis*: la regola sta nelle `rules`, il provider
-WASM di M5 la chiama come la chiama il markdown nativo, e la ricerca e i backlink
-smettono di avere due idee di quanto sia un estratto. Secondo, **la (a) mostra la
-cosa sbagliata**: su un blocco da 195 KB il tetto in testa taglia prima del link,
-e la riga che l'utente legge non contiene il riferimento — è l'unica differenza
-fra le due che l'utente vede. Terzo, **la (c) è più pulita e si scarta per una
-ragione sola**: sposta il costo dall'indice alla lettura, e il pannello backlink
-si ridisegna a ogni cambio di documento, cioè in un punto in cui oggi non c'è
-I/O. La (b) lascia il costo dov'è e lo rende proporzionato: 4.367 link × ~220
-byte ≈ **960 KB** invece di 54 MB, l'1,8% di oggi.
-
-**7. Che cosa resta rotto se non si decide.** Un `entries.json` di 16,6× il
-vault, riletto e riscritto per intero a ogni apertura; 203 KB mediani, fino a
-1,5 MB, attraverso l'IPC a ogni cambio di nota per disegnare righe da 80
-caratteri; e — la parte che non si vede — **a M5 la politica si moltiplica per il
-numero dei provider**, perché non è scritta da nessuna parte.
-
-*Quello che si diceva e che non regge.* Il contesto mediano non è 297 byte ma
-**341**; il massimo non è 192.140 ma **195.738**; «il 93% dell'indice da un
-documento» è **94,5%** di `entries.json` e **96,2%** dei byte di contesto. «Il
-contesto potrebbe non essere mai usato» è falso: è mostrato, ma su una riga sola
-troncata dal CSS. «Un `Arc<str>` condiviso ripara `entries.json`» è falso: è
-JSON, si serializza N volte lo stesso. E il copia-per-link **non è il difetto
-nuovo**: esisteva già prima di `53b7817` come `link.context = Some(ptext.clone())`
-dentro il solo ramo `Paragraph`, e quel commit l'ha sollevato a tutti i blocchi.
-Ciò che resta come difetto è la **tripla copia in RAM** lungo la catena
-`DocMeta.links` → `LinkRef` → `BacklinkRef`, cioè il difetto `0110`; **quanto**
-testo sia è questa voce.
+**Com'è finita, e cosa lascia.** La risposta è la forma **(b)** che la voce
+stessa raccomandava: il contesto di un backlink è una **finestra di 220
+caratteri attorno al link**, ritagliata sul testo renderizzato del blocco che
+lo contiene, con l'ellissi ai bordi dove taglia — e il link non si taglia mai,
+perché è il riferimento di cui la riga parla. La regola sta in
+`fub-abi::rules::snippet` (`window(testo, intervallo) -> String`), così il
+provider WASM di M5 la eredita invece di reinventarla (0020), e il tetto resta
+una costante Rust fuori dal contratto, visibile quando morde e mai
+interrogabile (0094): il WIT continua a dire `context: option<string>`, e la
+(b) ci mette meno byte dentro. Il numero è lo stesso dello snippet di ricerca:
+`SNIPPET_CHARS` è migrata da `fub-features/src/search.rs` (oggi
+`search.rs:1195` per tantivy, `:1218` per `head_of`) in un posto solo, e la
+ricerca e i backlink smettono di avere due idee di quanto sia un estratto. Il
+parser registra la posizione di ogni link nel testo renderizzato del blocco —
+che non esisteva da nessuna parte, ed è il costo che la voce non contava — in
+un contenitore unico che non può disallinearsi, e il trim passa dopo il
+ritaglio. Con la voce si chiude il difetto `0110`, come «vera e trascurabile,
+detta coi numeri» e non come «riparata con la fetta condivisa»: le copie della
+catena restano strutturalmente — sono **due copie e una move**, non tre, e la
+riga non contava né il clone del render né il disco — ma ognuna scende da una
+mediana di 341 byte (massimo 195.738) a ≤222 caratteri: 4.367 link × ≤222 ≈
+**969 KB** invece di **53.994.565 byte**, l'1,8%. Le forme scartate: la (a)
+taglia in testa e il link finisce fuori dall'ellissi; la (c) sposta il costo
+dall'indice alla lettura e il pannello si ridisegna a ogni cambio di documento;
+la (d) non ripara `entries.json`, che è JSON e si serializza N volte lo stesso.
+Restano i fatti, non i difetti: `entries.json` è ancora riletto e riscritto per
+intero a ogni apertura (0112 è un'altra riga), e il pannello attraversa ancora
+l'IPC con `page: None` — ma con ≤222 caratteri per riga. Le premesse cadute
+sono nel [verbale](../decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md),
+con la più grossa che vale ripetere: il difetto non era la duplicazione, era la
+dimensione.
 
 ---
 
