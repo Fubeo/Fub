@@ -315,6 +315,114 @@ fn a_sidecar_written_before_the_stamp_existed_is_still_believed() {
     assert_eq!(voci[0].original, DocId::new("progetti/Idea.txt"));
 }
 
+/// L'mtime di una nota, in secondi UNIX, imposto a mano: è l'unico modo di
+/// avere una nota **vecchia** senza aspettare.
+fn invecchia(fx: &Fixture, rel: &str, secs: u64) {
+    let file = std::fs::File::options()
+        .write(true)
+        .open(fx.root.join(rel))
+        .expect("apertura");
+    let quando = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
+    file.set_times(std::fs::FileTimes::new().set_modified(quando))
+        .expect("mtime");
+}
+
+fn adesso_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+/// 0131 — **la data di cancellazione non è l'ultima scrittura della nota**.
+///
+/// Cestinare è un `rename`, e un `rename` non tocca l'mtime del file: è la
+/// proprietà su cui poggia `TrashStamp`, che usa quell'mtime come identità.
+/// Finché `deleted_at` era `stat.mtime / 1000`, la data mostrata nel cestino era
+/// l'ultima volta che la nota era stata **scritta** — una nota toccata l'ultima
+/// volta nel 2020 e buttata oggi si presentava come cancellata nel 2020 — e
+/// `list_trash`, che ordina «dal più recente», metteva in cima la più fresca di
+/// scrittura invece dell'ultima buttata.
+///
+/// Il banco è stato rosso prima della riparazione, con `deleted_at` a
+/// `1577869200`, cioè il 1° gennaio 2020.
+#[test]
+fn la_data_di_cancellazione_non_e_l_ultima_scrittura_della_nota() {
+    const CAPODANNO_2020: u64 = 1_577_869_200;
+
+    let fx = Fixture::new();
+    fx.put("progetti/Idea.txt", "scritta molto tempo fa");
+    invecchia(&fx, "progetti/Idea.txt", CAPODANNO_2020);
+    let mut ws = fx.workspace();
+
+    let prima = adesso_secs();
+    ws.delete_document(&DocId::new("progetti/Idea.txt"))
+        .expect("cestinata");
+
+    let voci = ws.list_trash().unwrap();
+    assert_eq!(voci.len(), 1);
+    assert!(
+        voci[0].deleted_at >= prima,
+        "cancellata adesso, non nel {}: deleted_at = {}",
+        CAPODANNO_2020,
+        voci[0].deleted_at
+    );
+    // E l'ordine, che è la conseguenza che si vede: la nota vecchia appena
+    // buttata sta **sopra** una cestinata prima di lei ma scritta di recente.
+    // Con la data presa dall'mtime le due si invertivano, perché «di recente»
+    // voleva dire *scritta* di recente.
+    fx.put(".trash/Altra.txt", "cestinata da Obsidian un'ora fa");
+    invecchia(&fx, ".trash/Altra.txt", prima - 3600);
+    let voci = ws.list_trash().unwrap();
+    assert_eq!(voci.len(), 2);
+    assert_eq!(
+        voci[0].id,
+        DocId::new(".trash/Idea.txt"),
+        "dal più recente, e la più recente è quella cancellata per ultima"
+    );
+}
+
+/// L'altra metà, che è la migrazione: **una voce che il campo non ce l'ha
+/// degrada a ciò che si vedeva prima**.
+///
+/// Sono due popolazioni e valgono entrambe per sempre: i sidecar scritti da una
+/// Fub di prima, che si esauriscono al primo svuotamento, e le voci cestinate da
+/// Obsidian, che sidecar non ne scrive e che continueranno ad arrivare. Per
+/// tutte e due l'mtime resta l'unica cosa che si sa, e una riga senza data
+/// sarebbe peggio di una riga con la data della sua ultima scrittura.
+///
+/// **È verde per costruzione**, e va detto: prima della riparazione era il
+/// comportamento di *tutte* le voci, quindi non ha mai potuto essere rosso.
+/// Diventa rosso il giorno in cui qualcuno decide che una voce senza il campo
+/// vale «data sconosciuta» — che è la sola alternativa, e cambierebbe cosa si
+/// vede nel cestino di chi aggiorna.
+#[test]
+fn una_voce_senza_la_data_nel_sidecar_resta_datata_dal_disco() {
+    const CAPODANNO_2020: u64 = 1_577_869_200;
+
+    let fx = Fixture::new();
+    // Il sidecar di una Fub che il campo non lo scriveva ancora.
+    fx.put(".trash/Idea.txt", "cestinata da una Fub di prima");
+    invecchia(&fx, ".trash/Idea.txt", CAPODANNO_2020);
+    fx.put(
+        ".fub/data/trash/Idea.txt.json",
+        r#"{"v":1,"original":"progetti/Idea.txt"}"#,
+    );
+    // E una voce di Obsidian, che sidecar non ne ha affatto.
+    fx.put(".trash/Altra.txt", "cestinata da Obsidian");
+    invecchia(&fx, ".trash/Altra.txt", CAPODANNO_2020);
+
+    let ws = fx.workspace();
+    let voci = ws.list_trash().unwrap();
+    assert_eq!(voci.len(), 2);
+    for voce in &voci {
+        assert_eq!(voce.deleted_at, CAPODANNO_2020, "{}", voce.id);
+    }
+    // E il path d'origine continua a valere quel che valeva.
+    let idea = voci.iter().find(|v| v.id.as_str().ends_with("Idea.txt"));
+    assert_eq!(idea.expect("c'è").original, DocId::new("progetti/Idea.txt"));
+}
+
 /// 0004 — un sidecar rimasto indietro **non parla per l'omonima**.
 ///
 /// La chiave di un sidecar è il *nome* della voce cestinata, e quel nome non è

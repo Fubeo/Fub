@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Ventisei** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Venticinque** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -574,7 +574,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0126 | gli estratti di un provider si raccolgono con `.collect()` in una `BTreeMap<DocId, DocumentMatch>`: due righe per lo stesso documento si sovrascrivono in silenzio, dove `Matches::insert` — a poche righe di distanza — avrebbe chiamato `absorb` e fuso score, proprietà e occorrenze | `fub-kernel` · `index/plan.rs` `told` | regole |
 | 0127 | un verbale è immutabile ma il codice che descrive no, e non c'è nessun registro che tenga i due allineati: due verbali — la decisione 0121 sul `<div>` vuoto e su `heading_slug`, la 0062 sull'unico caso di `StderrSink` — affermano di `crates/` cose che a HEAD sono false, i commit che le hanno rese false hanno toccato solo `todo.md`, e chi legge non ha nessun segnale di stare leggendo un fatto scaduto | `docs` · `CONTRIBUTING.md` `Chiudere una decisione` | regole |
 | 0130 | due letture che rispondono con dei dati hanno un comando IPC proprio invece di una variante di `IndexQuery`, e siccome `IndexQuery` non ha una variante di resa e l'`HostApi` non ha una capacità di render, un `ViewProvider` non ha nessuna porta per mostrare un documento reso mentre la shell ne ha due | `fub-app` · `lib.rs` `render_preview` / `render_embed` | regole |
-| 0131 | `deleted_at` non è un dato salvato ma l'mtime del file nel cestino diviso 1000, ricavato in `walk_trash`, quindi qualsiasi tocco al file — un rename, un backup, una sync — riscrive la data di cancellazione, e per giunta invalida il sidecar, che usa lo stesso mtime come controllo d'identità | `fub-kernel` · `vault.rs` `walk_trash` | regole |
 | 0137 | il dry-run della rinomina chiede `IndexQuery::Backlinks` con `page: None` e poi destruttura `BacklinkRef { source, .. }`: si fa consegnare i contesti — 203 KB mediani, fino a 1,5 MB — per costruire un elenco di percorsi, mentre la foglia `QueryPredicate::Linked` che il docstring di `backlinks()` gli indica esiste già | `fub-features` · `commands.rs` (dry-run della rinomina) | prestazioni |
 | 0139 | `togliDappertutto` chiama `chiudiTab` in ciclo e ogni giro fa un `cambiato()`, cioè una scrittura su disco con `fsync`: cancellare un documento aperto in cinque riquadri costa cinque scritture dove ne basterebbe una alla fine | `frontend` · `layout.ts` `togliDappertutto` | prestazioni |
 | 0140 | quattro regole di identità di un nome non fanno la normalizzazione NFC che `resolution_key` fa — `canonical_tag`, `canonical_anchor`, `heading_slug`, `prefix_len_ci` — così paglia in NFD e ago in NFC non si incontrano in nessuno dei due versi, e `heading_slug` su NFD non diverge soltanto: **cancella** l'accento, perché una `Mn` non è alfanumerica | `fub-abi` · `model.rs` `canonical_tag` (con `canonical_anchor`, `heading_slug`, `occurrences.rs` `prefix_len_ci`) | regole |

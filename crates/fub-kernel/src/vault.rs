@@ -135,6 +135,27 @@ struct TrashSidecar {
     /// senza timbro si esauriscono da soli, alla prima `empty_trash`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     file: Option<TrashStamp>,
+    /// **Quando** la voce è stata cestinata, in millisecondi UNIX.
+    ///
+    /// Sta qui perché il filesystem non lo sa. Cestinare è un `rename`, e un
+    /// `rename` non tocca l'mtime del file — lo dice
+    /// [`TrashStamp::mtime`] due campi più su, ed è la ragione per cui quel
+    /// timbro funziona come identità. Finché la data mostrata nel cestino era
+    /// `stat.mtime`, non era l'istante della cancellazione: era l'ultima volta
+    /// che la nota era stata **scritta**. Una nota modificata l'ultima volta nel
+    /// 2020 e cestinata oggi si presentava come cancellata nel 2020, e
+    /// [`Vault::list_trash`] — che ordina «dal più recente» su quel campo —
+    /// metteva in cima la nota scritta più di recente invece di quella buttata
+    /// per ultima.
+    ///
+    /// È un `Option` e lo schema **non** cambia di numero, per la stessa
+    /// ragione di [`TrashSidecar::file`]: un sidecar scritto prima di questo
+    /// campo non è illeggibile, e la voce che non ce l'ha degrada esattamente a
+    /// ciò che si vedeva prima. Non ce l'hanno neanche le voci cestinate da
+    /// Obsidian, che sidecar non ne scrive, e per quelle l'mtime resta l'unica
+    /// cosa che si sa.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<u64>,
 }
 
 /// Il timbro di un file: ciò che il supporto sa dirne **senza aprirlo**, e che
@@ -499,6 +520,11 @@ impl Vault {
                     size: s.size,
                     mtime: s.mtime,
                 }),
+            // L'orologio si legge **qui**, dove la cancellazione avviene, e non
+            // si deduce dal disco più tardi: il `rename` che ha appena spostato
+            // il file non ha lasciato nessuna traccia dell'istante in cui è
+            // successo (vedi [`TrashSidecar::deleted_at`]).
+            deleted_at: Some(crate::time::now_unix_millis()),
         })
         .expect("un path è sempre serializzabile");
         self.storage
@@ -506,9 +532,15 @@ impl Vault {
             .map_err(|e| KernelError::Io { path, source: e })
     }
 
-    /// Il path d'origine registrato dal sidecar, se è stata Fub a cestinare
-    /// questa voce. Un sidecar assente o illeggibile non è un errore: è una
+    /// Ciò che questo vault sa di una voce cestinata, se è stata Fub a
+    /// cestinarla. Un sidecar assente o illeggibile non è un errore: è una
     /// voce cestinata da qualcun altro (Obsidian), o di un'altra epoca.
+    ///
+    /// Torna il sidecar **intero** e non un campo solo perché le domande che
+    /// gli si fanno sono due — da dove veniva la voce, e quando è stata
+    /// cestinata — e la lettura, la versione e il timbro sono gli stessi per
+    /// tutte e due: chi chiede la seconda eredita le tre verifiche invece di
+    /// ripeterle, e non c'è modo di crederne una e non l'altra.
     ///
     /// **Una versione che non si conosce vale come un sidecar che non c'è**, e
     /// qui il rifiuto in avanti è muto invece che rumoroso come nelle
@@ -521,7 +553,7 @@ impl Vault {
     /// si dà solo aprendo il vault con una copia di Fub più vecchia di quella
     /// che l'ha cestinata; se un giorno il sidecar porterà qualcosa che il
     /// degrado non sa rifare, quel campo sarà da scrivere.
-    fn trash_sidecar_original(&self, trashed: &DocId, stat: &Stat) -> Option<DocId> {
+    fn trash_sidecar(&self, trashed: &DocId, stat: &Stat) -> Option<TrashSidecar> {
         let raw = self.storage.read(&self.trash_sidecar_path(trashed)).ok()?;
         let sidecar: TrashSidecar = serde_json::from_slice(&raw).ok()?;
         if sidecar.v != SCHEMA_VERSION {
@@ -538,7 +570,7 @@ impl Vault {
         if sidecar.file.is_some_and(|f| f != stamp) {
             return None;
         }
-        Some(DocId::new(sidecar.original))
+        Some(sidecar)
     }
 
     /// Il contenuto del cestino, dal più recente al più vecchio.
@@ -578,20 +610,32 @@ impl Vault {
             }
             let id = self.doc_id_for_path(&path)?;
             let name = file_name_of(id.as_str());
+            let sidecar = self.trash_sidecar(&id, &entry.stat);
             out.push(TrashEntry {
                 // Il sidecar sa da quale cartella veniva; senza (voce di
                 // Obsidian, o di un'altra epoca) si degrada al nome
                 // de-timbrato nella radice.
-                original: self
-                    .trash_sidecar_original(&id, &entry.stat)
+                original: sidecar
+                    .as_ref()
+                    .map(|s| DocId::new(s.original.clone()))
                     .unwrap_or_else(|| DocId::new(strip_stamp(name))),
-                // L'mtime è l'istante dello spostamento nel cestino. Se il
-                // supporto non lo sa dire, meglio "epoca zero" che rifiutare di
-                // mostrare la riga: la data è un dettaglio, la nota no. Il
-                // contratto porta i secondi e il supporto i millisecondi
-                // (§14.2): la divisione sta qui, dove le due unità si
-                // incontrano.
-                deleted_at: entry.stat.mtime / 1000,
+                // La data la dichiara **chi ha cestinato**, e sta nel sidecar:
+                // il `rename` con cui una nota entra nel cestino non tocca il
+                // suo mtime, quindi il disco di quell'istante non sa niente.
+                // Senza sidecar — una voce di Obsidian, o di prima che il campo
+                // esistesse — resta l'mtime, che è l'ultima scrittura della
+                // nota: non è la cancellazione, ma è tutto ciò che si sa, e una
+                // riga senza data sarebbe peggio di una riga con una data
+                // vecchia. Se nemmeno l'mtime il supporto lo sa dire, meglio
+                // "epoca zero" che rifiutare di mostrare la riga: la data è un
+                // dettaglio, la nota no. Il contratto porta i secondi e le due
+                // sorgenti i millisecondi (§14.2): la divisione sta qui, dove le
+                // unità si incontrano.
+                deleted_at: sidecar
+                    .as_ref()
+                    .and_then(|s| s.deleted_at)
+                    .unwrap_or(entry.stat.mtime)
+                    / 1000,
                 size: entry.stat.size,
                 id,
             });
