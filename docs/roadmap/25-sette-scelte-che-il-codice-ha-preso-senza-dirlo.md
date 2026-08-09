@@ -128,148 +128,61 @@ nominano per numero invece di travestirli da ragione: una divergenza dichiarata
 
 ### 25.3 Dove sta la prima fotografia di un vault
 
-*aperta · strato **kernel** · **P1***
+*chiusa dalla [0141](../decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) · strato **kernel** · **P1***
 
-**1. La domanda.** La prima fotografia di un vault mai visto deve stare dentro
-l'apertura sincrona — garantendo che nessuna nota possa essere modificata prima
-di avere il suo primo snapshot — o può essere differita, accettando una finestra
-in cui una modifica cancella per sempre lo stato in cui l'utente ha trovato
-quella nota?
+**Com'è finita, e cosa lascia.** La voce chiedeva se la prima fotografia di un
+vault mai visto debba stare dentro l'apertura sincrona o possa essere differita,
+e la risposta è la **forma (a)** che la voce stessa raccomandava: la finestra
+scoperta resta **zero**, e la sola cosa che si sposta è *dove* sta la chiamata,
+non *quando*. La passata esce dalla fase 1 e la chiama il **runner**, una volta
+per apertura, **prima della prima fetta**. Il *quando* non cambia di un'unità
+osservabile — la fotografia precede ancora qualunque scrittura dell'utente —, ma
+il *chi* sì: non più un ramo `Event::VaultOpened` dentro `VersioningHandler`, che
+ci finiva per caso perché l'evento usciva di lì, ma una chiusura che il montaggio
+consegna alla sessione. Il ramo e la sua maschera si tolgono, e `InCorso` porta
+una chiusura consumata col `take`: la garanzia una-sola-volta è **il tipo, non un
+flag**.
 
-**2. Che cosa si osserva oggi, misurato.** `scan_vault` (`workspace.rs:1692`)
-emette `VaultOpened` e chiama `dispatch_pending()` a `workspace.rs:1760-1763`,
-cioè **dentro la fase 1** — quella che `Host::open` aspetta
-(`session.rs:581`) — **prima** di `begin_index_job`, **prima** del ponte eventi,
-**prima** che il runner esista. Da lì: `versioning.rs:1276` →
-`first_snapshot_of_the_vault` (`:1191`) → `sweep(Passata::SoloNuovi)` (`:1110`).
-Non è «fuori dalla fase a fette»: è **prima che la fase a fette esista**. Non è
-annullabile — la bandiera si guarda solo in `avanza_apertura`, `runner.rs:486` —
-e non compare in nessuna barra, perché il `JobStarted` nasce dopo
-(`session.rs:601`).
+L'argomento è il numero della voce — riparato l'O(N²) restano ~167 ms su 5000
+note, il prezzo di una finestra di lunghezza zero su un dato che, perso, non si
+ricostruisce da niente — e il posto lo detta la
+[0070](../decisions/0070-un-vault-si-apre-in-due-tempi.md): la fase 1 dice
+**quali** documenti esistono, la passata legge il **contenuto**, quindi stava
+dalla parte sbagliata della riga.
 
-Vault sintetici, ~5,6 KB per nota, `.fub/` rimosso prima di ogni corsa, `mount()`
-reale, cache di pagina calda:
+**La forma approvata è morta sul banco, ed è la premessa caduta che vale il
+verbale.** Era un `JobHost` per-capacità, per far girare la passata senza il
+prestito esclusivo del workspace — la stessa mossa che nella
+[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+aveva pagato. Qui **chiude un ciclo di lock**: la passata tiene il mutex interno
+dello store attraverso le proprie scritture, le scritture normali tengono il
+workspace attraverso le chiamate alla feature, e `concorrenza.rs` è rimasto
+appeso oltre sessanta secondi — non rosso, **in deadlock**. La passata gira sotto
+l'esclusivo, come girava in fase 1: della forma originale resta il taglio e cade
+l'ambizione sul lock, che nessuna riga della voce chiedeva. La seconda premessa
+caduta è di fatto: `first_snapshot_of_the_vault` sta in **`fub-features`**, non in
+`fub-kernel`.
 
-| note | `scan_vault` versioning **spento** | **acceso** | **la passata** | fase a fette |
-|---|---|---|---|---|
-| 100 | 0,5 ms | 13,0 ms | **12,5 ms** | 28 ms |
-| 1000 | 2,5 ms | 386,8 ms | **384 ms** | 240 ms |
-| 5000 | 15,9 ms | 9253,9 ms | **9238 ms** | 1703 ms |
+Le altre tre forme non si fanno. La **(b)** e la **(c)** aprono una finestra
+lunga quanto l'indicizzazione, in cui chi comincia subito a scrivere perde per
+sempre lo stato in cui ha trovato la nota — il baratto che la 0124 ha già
+rifiutato — e la (c) ci aggiunge una superficie da disegnare in cambio di niente
+che la (b) non dia. La **(d)** vuole un evento che porti il sorgente, cioè un
+campo nel WIT e un byte-per-byte dei documenti nella coda degli eventi, ed è
+l'unica non reversibile: non chiude comunque la finestra, la accorcia.
 
-Quadratico netto: ×10 note → ×31 tempo. L'O(N²) è **triplo** — due
-`inner.docs.clone()` (`versioning.rs:428`, `:507`), un `docs.clone()` dentro
-`scrivi_index` (`:756`), più la serializzazione e la scrittura atomica
-dell'intero `versions.json`. A 5000 note il `versions.json` finale è 714.514 B,
-quindi il riscritto totale è ≈ 5000²/2 × 143 B ≈ **1,79 GB**.
-
-Il **residuo lineare**, misurato direttamente (leggi il file, impronta FNV-1a
-come `versioning.rs:1085`, scrittura atomica del blob, senza mai toccare
-l'indice):
-
-| note | residuo lineare | per nota |
-|---|---|---|
-| 100 | 3,3 ms | 0,033 ms |
-| 1000 | 31,9 ms | 0,032 ms |
-| 5000 | **167,0 ms** | 0,033 ms |
-
-Cioè: **riparato l'O(N²), su 5000 note la passata passa da 9238 ms a ~167 ms** —
-un decimo della fase a fette e dieci volte la scansione. Due fatti che accorciano
-la decisione: una passata interrotta è **già gratis da riprendere**
-(`Passata::SoloNuovi` salta chi ha già versioni, `versioning.rs:1112`), e **la
-finestra scoperta di oggi è zero**.
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Com'è oggi, con l'O(N²) riparato.** Chi chiude a metà non vede niente
-      e alla riapertura la passata riprende gratis; chi modifica nella finestra
-      non esiste, perché finestra non ce n'è. Costo: 167 ms aggiunti
-      all'apertura sincrona su 5000 note, invisibili nella barra e non
-      annullabili. **Paga chi apre un vault grande**, e paga poco.
-- [ ] **(b) La passata diventa una fase a fette.** Annullabile, visibile, dentro
-      il `JobId` che esiste già. Ma chi modifica nella finestra **perde per
-      sempre** lo stato di quella nota, e la finestra è lunga quanto
-      l'indicizzazione — 1,7 s su 5000 note, e su disco freddo secondi. **Paga
-      l'utente che comincia a scrivere subito**, che la decisione
-      [0124](../decisions/0124-una-fetta-dell-apertura-e-un-piano-anche-lei.md)
-      chiama «non una patologia ma il comportamento normale».
-- [ ] **(c) In sottofondo dopo l'apertura, con «non ancora» nella cronologia.**
-      Come la (b), più una superficie nuova da disegnare e tradurre e uno stato
-      in più che ogni lettore della cronologia deve gestire. **Paga chi manterrà
-      il codice**, in cambio di niente che la (b) non dia già.
-- [ ] **(d) Lo snapshot viaggia con la fetta.** `plan_batch` legge già il
-      sorgente di ogni nota: una lettura invece di due, e la passata eredita
-      gratis annullamento e progresso. **Paga il contratto**: `ParsedBatch`
-      (`workspace.rs:307-321`) porta `models`, non sorgenti, e il versioning è un
-      `EventHandler` — servirebbe un evento per documento che porti il sorgente.
-      E non chiude comunque la finestra: la accorcia.
-
-**4. Che cosa il repo ha già deciso qui vicino.** La **decisione
-[0070](../decisions/0070-un-vault-si-apre-in-due-tempi.md)** scrive il criterio,
-e lo scrive **contro** il costo: «*La linea del taglio non è "quanto costa", è
-"cosa il vault sa dire". La divisione ovvia sarebbe stata per costo … Sarebbe
-stata una divisione che cambia col disco. … il confine è se il vault sappia
-ancora dire **quali** documenti esistono. Da un lato la scansione …; dopo, tutto
-ciò che serve a sapere **cosa dicono** i documenti, che è derivato e si
-ricostruisce.*» La passata legge il **contenuto** di ogni nota: sta per
-definizione dalla parte del *cosa dicono*, ed è oggi dalla parte sbagliata della
-riga. Il criterio esiste, la passata lo viola, e nessuno l'ha notato perché è
-arrivata da un evento invece che da una chiamata.
-
-La **decisione [0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)**
-è la riga da cui quel criterio deriva. La **decisione 0124** ha già affrontato lo
-stesso pericolo un piano più in basso — «*senza il confronto delle impronte
-questo commit avrebbe scambiato una lentezza con una **perdita silenziosa di
-testo***» — e la sua risposta (impronta per documento, confrontata
-all'applicazione) è il materiale già pronto se si sceglie di differire. La
-**decisione
-[0119](../decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)**
-dà la forma piano/applicazione, e la **decisione 0034** è la ragione per cui la
-passata è uno sweep e non un evento. Infine, la finestra scoperta è **già
-nominata nel sorgente**, `versioning.rs:1186-1190`: «*senza questo passaggio, la
-prima modifica a una nota mai versionata cancellerebbe per sempre lo stato in cui
-l'utente l'ha trovata — l'handler gira dopo la scrittura e vede solo il testo
-nuovo*».
-
-**5. Reversibile?** Sì per (a), (b) e (c): nessun tipo pubblico, nessun formato
-su disco — `versions.json` non cambia, e la (b) sposta soltanto *chi* chiama
-`sweep`. **No per la (d)**: vuole un evento che porti il sorgente, cioè un campo
-nel WIT — additivo, quindi non ritaglia il congelato, ma il nome e il tipo si
-pagano per sempre, e porta un byte-per-byte dei documenti dentro la coda degli
-eventi, che la decisione 0034 ha già dichiarato a budget.
-
-**6. La raccomandazione: (a), e la sola cosa da spostare è *dove* sta la
-chiamata, non *quando*.** L'argomento è il numero: 167 ms su 5000 note è il
-prezzo di una finestra di lunghezza **zero** su un dato che, perso, non si
-ricostruisce da niente. Differire per risparmiare 167 ms significa scambiare una
-lentezza che l'utente non vede con la perdita che la funzione esiste per
-impedire, cioè letteralmente il baratto che la decisione 0124 ha rifiutato tre
-commit fa.
-
-Ma la (a) **non è lo stato di oggi**: oggi quei 167 ms stanno dentro
-`scan_vault`, cioè dentro la fase che la decisione 0070 riserva a *quali
-documenti esistono*, e ci stanno **per caso**, perché `VaultOpened` esce di lì.
-La forma giusta è chiamare la passata **subito dopo la fase 1 e prima delle
-fette**, dallo stesso posto da cui il runner chiama `collect_doc_data`
-(`runner.rs:544`): sincrona rispetto alla prima fetta, quindi finestra ancora
-zero, ma **fuori dal `Result` che `Host::open` aspetta** e dentro il racconto del
-job. Costa una riga di `runner.rs` e nessuna decisione di contratto. **E prima di
-tutto questo va riparato l'O(N²)** — il difetto `0114`: finché c'è, ogni misura
-di questa voce è una misura di quello.
-
-**7. Che cosa resta rotto se non si decide.** Oggi, su un vault di 5000 note,
-l'apertura si ferma **9,2 secondi** in una fase che non si può annullare e che
-nessuna barra racconta: l'utente vede l'app appesa e non ha modo di sapere perché
-né di fermarla. Riparato l'O(N²) restano 167 ms nello stesso punto cieco — e
-nessuna riga scritta dice se quel punto sia il posto giusto, mentre la decisione
-0070 dice che non lo è.
+Ciò che la voce lascia scoperto non è una casella e non è una riga di difetto:
+**il residuo O(N²)** del versioning — `let mut piano = inner.docs.clone()`, due
+volte in `VersionStore::snapshot` e i gemelli in `rename` e `tombstone`. La copia
+*è* la forma `Durevole`, e riscriverla come un delta con rollback significa
+abbandonarla; la sua riparazione dipende dalla decisione che il difetto `0113`
+tiene aperta, e un difetto la cui riparazione dipende da una decisione non è un
+difetto. Sta nel verbale come fatto misurato in attesa di decisione.
 
 *Quello che si diceva e che non regge.* Si diceva che la passata girasse «fuori
-dal ciclo a fette del `JobRunner`»: è più grave, gira **prima che il ciclo
-esista**. E il numero che circolava — «1542 ms su 2358» — **non ha riscontro nel
-repo**: era una stima, non una misura, e le misure vere sono quelle della tabella
-qui sopra. La riga di difetto che diceva la stessa cosa è stata **tolta** invece
-che scritta: *dove* debba stare quella chiamata è precisamente questa voce, e un
-difetto la cui riparazione dipende da una decisione non è un difetto.
+dal ciclo a fette del `JobRunner`»: era più grave, girava **prima che il ciclo
+esistesse**. E il numero che circolava — «1542 ms su 2358» — non aveva riscontro
+nel repo: era una stima, non una misura.
 
 ---
 
