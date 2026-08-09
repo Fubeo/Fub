@@ -54,6 +54,7 @@ use fub_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery, TextTolerance,
 };
+use fub_abi::rules::snippet::SNIPPET_CHARS;
 use fub_abi::schema::SchemaVersion;
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -117,9 +118,6 @@ const INDEX_DIR: &str = "index";
 
 /// Memoria del writer tantivy. Sotto i 15 MB tantivy rifiuta.
 const WRITER_HEAP: usize = 50_000_000;
-
-/// Lunghezza massima di uno snippet, in caratteri.
-const SNIPPET_CHARS: usize = 220;
 
 /// Il `page_name` conta più del corpo: chi cerca "Rust" vuole prima la nota
 /// *intitolata* Rust, poi le mille che la nominano.

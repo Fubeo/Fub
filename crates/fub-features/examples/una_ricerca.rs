@@ -42,6 +42,7 @@ use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::query::{QueryExpr, QueryPredicate, TextField, TextQuery};
+use fub_abi::rules::snippet::SNIPPET_CHARS;
 use fub_abi::traits::{EntryKind, Excerpts, IndexQuery, IndexResult, Page, PropertySelect};
 use fub_features::search::{HEADING_BOOST, PAGE_NAME_BOOST};
 use fub_features::{SearchIndex, SEARCH_ID};
@@ -58,8 +59,6 @@ const NOTES: usize = 2000;
 /// Quante volte si ripete ogni misura. Poche, perché una query da millisecondi
 /// non ha bisogno di migliaia di giri per uscire dal rumore.
 const GIRI: usize = 30;
-/// Lo stesso tetto che il provider dà agli estratti (`SNIPPET_CHARS`).
-const SNIPPET_CHARS: usize = 220;
 // Gli stessi pesi del provider — e adesso **non possono** divergere: sono le sue
 // costanti, importate. Erano due copie con un commento che chiedeva a chi legge
 // di tenerle allineate («se qui divergessero, la fase 3 misurerebbe una query

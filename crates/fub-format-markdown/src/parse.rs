@@ -1,5 +1,7 @@
 //! Parsing: AST comrak → `DocumentModel` comune.
 
+use std::ops::Range;
+
 use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::{Arena, Options};
 use fub_abi::format::ParseContext;
@@ -9,6 +11,7 @@ use fub_abi::model::{
     TableRow, Tag, TaskMarker,
 };
 use fub_abi::options::syntax;
+use fub_abi::rules::snippet;
 use fub_abi::rules::text_policy;
 use fub_abi::FormatError;
 use fub_sdk::scan;
@@ -44,7 +47,12 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
 /// Accumulatore delle tabelle piatte estratte durante la visita.
 #[derive(Default)]
 struct Acc {
-    links: Vec<Link>,
+    /// Ogni link con la sua posizione nel testo del blocco che lo contiene:
+    /// `[inizio, fine)` in **byte**, sul testo non ancora trimmato. Nascono
+    /// insieme e muoiono insieme: la posizione serve solo a ritagliare il
+    /// contesto (la finestra di `rules::snippet`), e tenerle nello stesso
+    /// contenitore è ciò che impedisce a un inserimento di disallinearle.
+    links: Vec<(Link, Range<usize>)>,
     tags: Vec<Tag>,
     outline: Vec<Heading>,
     anchors: Vec<Anchor>,
@@ -107,7 +115,7 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
         frontmatter,
         body,
         outline: acc.outline,
-        links: acc.links,
+        links: acc.links.into_iter().map(|(link, _)| link).collect(),
         tags: acc.tags,
         anchors: acc.anchors,
         text: acc.text.trim().to_string(),
@@ -544,6 +552,12 @@ fn convert_block_children<'a>(
 
 /// Emette un link **e** lo registra nella tabella piatta: sono due gesti che
 /// non devono poter divergere (l'immagine divergeva).
+///
+/// `nel_testo` è la posizione del link nel testo del blocco che lo contiene
+/// (`[inizio, fine)` in byte, sul testo non ancora trimmato): è ciò che la
+/// regola del contesto (`rules::snippet::window`) usa per ritagliare la
+/// finestra attorno al link. Nasce qui perché è l'unico punto in cui la
+/// lunghezza dell'etichetta è nota.
 fn push_link(
     acc: &mut Acc,
     out: &mut Vec<Inline>,
@@ -551,13 +565,17 @@ fn push_link(
     label: Option<Vec<Inline>>,
     embed: bool,
     span: Span,
+    nel_testo: Range<usize>,
 ) {
-    acc.links.push(Link {
-        target: target.clone(),
-        embed,
-        span,
-        context: None,
-    });
+    acc.links.push((
+        Link {
+            target: target.clone(),
+            embed,
+            span,
+            context: None,
+        },
+        nel_testo,
+    ));
     out.push(Inline::Link {
         target,
         label,
@@ -571,8 +589,9 @@ fn push_link(
 ///
 /// È l'ingresso che ogni ramo di [`convert_block`] usa; [`convert_inlines`] —
 /// quella che ricorre dentro un `Emph`, uno `Strong`, l'etichetta di un link —
-/// non assegna niente, perché il contesto di un link è il testo del **blocco**
-/// che lo contiene, e dentro un `Emph` non si sa quale sia.
+/// non assegna niente, perché il contesto di un link è una **finestra** del
+/// testo del blocco che lo contiene (la regola sta in `rules::snippet`), e
+/// dentro un `Emph` non si sa quale sia.
 ///
 /// La regola stava scritta dentro il ramo `Paragraph`, e valeva solo lì: un
 /// link in un'intestazione o in una cella di tabella nasceva con `context:
@@ -598,13 +617,20 @@ fn inlines_del_blocco<'a>(
     if let Some(a) = anchor {
         strip_marker(&mut inlines, text, &a.written);
     }
-    let contesto = text.trim();
+    // Il contesto di un link è una **finestra** del testo del blocco che lo
+    // contiene: la regola sta in `rules::snippet`, che ritaglia attorno al
+    // link e aggiunge l'ellissi dove taglia. La finestra si calcola sul testo
+    // **non trimmato** — le posizioni dei link sono state registrate durante
+    // la costruzione, e un trim in testa le sposterebbe — e il trim lo fa la
+    // regola, sulla finestra.
+    //
     // Un contesto vuoto non è un contesto: `Some("")` occuperebbe il campo e
     // impedirebbe a chiunque altro di riempirlo, dicendo niente.
-    if !contesto.is_empty() {
-        for link in &mut acc.links[link_base..] {
-            if link.context.is_none() {
-                link.context = Some(contesto.to_string());
+    for (link, nel_testo) in &mut acc.links[link_base..] {
+        if link.context.is_none() {
+            let c = snippet::window(text, nel_testo.clone());
+            if !c.is_empty() {
+                link.context = Some(c);
             }
         }
     }
@@ -689,6 +715,7 @@ fn convert_inlines<'a>(
             NodeValue::Link(link) => {
                 let mut label_text = String::new();
                 let label = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
+                let inizio = text_out.len();
                 text_out.push_str(&label_text);
                 push_link(
                     acc,
@@ -697,6 +724,7 @@ fn convert_inlines<'a>(
                     Some(label),
                     false,
                     span,
+                    inizio..text_out.len(),
                 );
             }
             NodeValue::WikiLink(wl) => {
@@ -721,19 +749,29 @@ fn convert_inlines<'a>(
                 // che l'autore ha scritto, e il suo `#tag` è un tag suo. È la
                 // metà da non rovesciare, ed è la ragione per cui la
                 // distinzione sta qui e non in `push_text_features`.
-                let label = match etichetta_sintetica(child, &wl.url) {
+                let (label, nel_testo) = match etichetta_sintetica(child, &wl.url) {
                     Some(testo) => {
+                        let inizio = text_out.len();
                         text_out.push_str(&testo);
-                        vec![Inline::Text(testo)]
+                        (vec![Inline::Text(testo)], inizio..text_out.len())
                     }
                     None => {
                         let mut label_text = String::new();
                         let l = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
+                        let inizio = text_out.len();
                         text_out.push_str(&label_text);
-                        l
+                        (l, inizio..text_out.len())
                     }
                 };
-                push_link(acc, &mut out, parsed.target, Some(label), embed, span);
+                push_link(
+                    acc,
+                    &mut out,
+                    parsed.target,
+                    Some(label),
+                    embed,
+                    span,
+                    nel_testo,
+                );
             }
             NodeValue::Image(img) => {
                 let mut label_text = String::new();
@@ -742,6 +780,11 @@ fn convert_inlines<'a>(
                 // in `links` nessun riferimento ad allegato veniva aggiornato al
                 // rename, né risultava fra gli orfani (13.1): non perché il path
                 // non fosse un arco, ma perché quell'arco non veniva raccolto.
+                // L'`alt` non entra nel testo del blocco — è una divergenza
+                // dichiarata del corpus — quindi la posizione del link nel
+                // testo è vuota, e la finestra si centra sul punto in cui
+                // l'immagine sta.
+                let inizio = text_out.len();
                 push_link(
                     acc,
                     &mut out,
@@ -749,6 +792,7 @@ fn convert_inlines<'a>(
                     Some(label),
                     true,
                     span,
+                    inizio..text_out.len(),
                 );
             }
             NodeValue::HtmlInline(literal) => {
@@ -847,7 +891,20 @@ fn push_text_features(
             push_plain_or_tags(seg, seg, base + cursor, ctx, acc, out);
         }
         let parsed = scan::parse_wikilink_inner(&inner);
-        push_link(acc, out, parsed.target, None, embed, abs);
+        // L'embed testuale sta DENTRO il testo pushato (comrak non l'ha
+        // riconosciuto, quindi i suoi byte sono testo): la posizione è quella
+        // della fetta di sorgente, che coincide col testo fintanto che non ci
+        // sono entità da decodificare davanti — e se ce ne sono, la finestra
+        // si centra male ma la regola normalizza i confini senza mai panicare.
+        push_link(
+            acc,
+            out,
+            parsed.target,
+            None,
+            embed,
+            abs,
+            (abs.start - base)..(abs.end - base),
+        );
         cursor = abs.end - base;
     }
     if cursor < slice.len() {
