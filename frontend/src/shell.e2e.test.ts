@@ -98,25 +98,43 @@ function montaLaScocca(): void {
   document.body.innerHTML = corpo[1].replace(/<script[\s\S]*?<\/script>/g, "");
 }
 
+/// Monta la shell su un vault finto **senza aspettare l'avvio**, con le porte
+/// nominate tenute in volo.
+///
+/// I freni vanno messi prima di importare `main.ts`, perché l'avvio parte
+/// all'import: è l'unico modo di guardare *dentro* l'apertura di un vault
+/// invece che a cose fatte. Chi non ne ha bisogno usa `avvia`.
+async function monta(
+  file: Record<string, string>,
+  impostazioni: SettingEntry[] = [],
+  radice: string | null | undefined = undefined,
+  freni: string[] = [],
+): Promise<{ host: HostFinto; avvio: Promise<void>; sblocca: Map<string, () => void> }> {
+  vi.resetModules();
+  scatola.conferma = true;
+  const host = creaHostFinto({
+    file,
+    view: [specDiProva(CESTINO_VIEW, "left_sidebar")],
+    impostazioni,
+    radice,
+  });
+  scatola.host = host;
+  const sblocca = new Map(freni.map((p) => [p, host.frena(p)]));
+  montaLaScocca();
+  const main = await import("./main");
+  return { host, avvio: main.avvio, sblocca };
+}
+
 /// Monta la shell su un vault finto e **aspetta che l'avvio sia finito**.
 async function avvia(
   file: Record<string, string>,
   impostazioni: SettingEntry[] = [],
   radice: string | null | undefined = undefined,
 ): Promise<HostFinto> {
-  vi.resetModules();
-  scatola.conferma = true;
-  scatola.host = creaHostFinto({
-    file,
-    view: [specDiProva(CESTINO_VIEW, "left_sidebar")],
-    impostazioni,
-    radice,
-  });
-  montaLaScocca();
-  const main = await import("./main");
-  await main.avvio;
+  const { host, avvio } = await monta(file, impostazioni, radice);
+  await avvio;
   await riposa();
-  return scatola.host;
+  return host;
 }
 
 /// Lascia girare ciò che è stato messo in coda: la shell fa quasi tutto con
@@ -222,7 +240,36 @@ beforeEach(() => {
 
 describe("apri un vault", () => {
   it("la finestra parte sul vault iniziale, con l'albero e la prima nota aperta", async () => {
-    const host = await avvia(VAULT);
+    // **Le domande che nessun dato lega partono insieme.** Aprire un vault
+    // costava otto andate e ritorno sull'IPC in fila — quattro caricatori di
+    // stato (`caricaLayout` ne fa due di suo) e tre elenchi del kernel — per
+    // otto risposte che non si leggono a vicenda. Adesso sono due attese.
+    //
+    // Il conto delle chiamate non lo vedrebbe: sono le stesse otto in tutti e
+    // due i casi. Il predicato è l'**attesa**, e si costruisce coi freni
+    // dell'host finto invece di sperarla: si tiene in volo la risposta di una
+    // porta e si guarda chi è già partito. Rosso con la forma di prima:
+    // `viewState` era chiesta una volta sola, e `listCommands` mai.
+    const { host, avvio, sblocca } = await monta(VAULT, [], undefined, [
+      "viewState",
+      "listViews",
+    ]);
+    await riposa();
+    expect(host.aPorta("viewState").map((c) => c.args[0])).toEqual([
+      "layout",
+      "mode",
+      "expanded",
+      "activeSpace",
+    ]);
+
+    sblocca.get("viewState")!();
+    await riposa();
+    expect(host.aPorta("listViews")).toHaveLength(1);
+    expect(host.aPorta("listCommands")).toHaveLength(1);
+
+    sblocca.get("listViews")!();
+    await avvio;
+    await riposa();
 
     // Il vault che l'host propone all'avvio, non uno scelto da qui.
     expect(document.querySelector("#vault-path")?.textContent).toBe("/vault");

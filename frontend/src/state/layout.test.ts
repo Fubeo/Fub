@@ -390,4 +390,18 @@ describe("rileggere la finestra com'era", () => {
     expect(panes()).toEqual(["main"]);
     expect(layout.panes.main.mode).toBe("live_preview");
   });
+
+  // Le due chiavi si chiedono **insieme**. Il conto delle chiamate non lo
+  // vedrebbe — sono due in tutti e due i casi — quindi il predicato è
+  // l'*attesa*: si tiene in volo la risposta della prima e si guarda se la
+  // seconda è già partita. È la stessa forma del freno dell'host finto.
+  // Rosso con la forma di prima: `mode` non veniva chiesta.
+  it("le due chiavi partono insieme, non una dietro l'altra", async () => {
+    viewState.mockImplementation((key: string) =>
+      key === "layout" ? new Promise(() => {}) : Promise.resolve(null),
+    );
+    void caricaLayout();
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    expect(viewState.mock.calls.map((c) => c[0])).toEqual(["layout", "mode"]);
+  });
 });

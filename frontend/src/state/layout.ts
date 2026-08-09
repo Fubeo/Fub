@@ -465,9 +465,16 @@ function cambiato(): void {
 /// cancelliamo**, perché una versione precedente della shell riaperta sullo
 /// stesso vault lo ritroverebbe, e una migrazione che rompe il ritorno indietro
 /// costa più di una chiave morta in un file di cache.
+/// Le due chiavi si chiedono **insieme**: la vecchia non dipende dalla nuova, e
+/// in fila costavano due andate e ritorno sull'IPC a ogni apertura di vault per
+/// leggere due valori che nessuno lega. Le domande restano due — la vecchia
+/// chiave si chiedeva già sempre, anche quando il layout c'era — ma l'attesa
+/// diventa una.
 export async function caricaLayout(): Promise<void> {
-  const salvato = await leggiStato<unknown>(LAYOUT_KEY);
-  const eredita = await leggiStato<string>(MODE_KEY_LEGACY);
+  const [salvato, eredita] = await Promise.all([
+    leggiStato<unknown>(LAYOUT_KEY),
+    leggiStato<string>(MODE_KEY_LEGACY),
+  ]);
   layout = parseLayout(salvato) ?? layoutDiDefault(modalitaValida(eredita));
 }
 
