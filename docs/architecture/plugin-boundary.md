@@ -1085,7 +1085,7 @@ sequenceDiagram
 | `BundleRegistry::mount` | [registry.rs:269](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
 | `reindex` | [workspace.rs:157](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
 | `bridge::spawn` | [bridge.rs:73](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
-| `JobRunner::start` | [runner.rs:889](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
+| `JobRunner::start` | [runner.rs:914](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
 La riga che è facile perdere è la prima: **`fub.core` è un bundle come gli
 altri** e si monta per primo, e non registra nulla — esiste per avere un'identità
@@ -1127,7 +1127,7 @@ L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 | Regola | Dove | Cosa costerebbe non averla |
 |---|---|---|
 | il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fub-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
-| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:734](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
+| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:759](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
 | `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:405](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
 | i bundle si spengono in ordine **inverso** | [workspace.rs:1201](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
 
@@ -1137,7 +1137,7 @@ tenerne una copia è un job in volo: `body` gli rende un `Arc` clonato apposta,
 perché un job dura minuti. Perciò **chi spegne aspetta prima di bussare**, e le
 porte da cui si arriva sono due — chi chiude il vault ferma il pool intero
 (`JobRunner::stop`), chi spegne un solo componente ferma i job *suoi*
-(`JobRunner::ferma_bundle`, [runner.rs:975](../../crates/fub-host/src/runner.rs)).
+(`JobRunner::ferma_bundle`, [runner.rs:1000](../../crates/fub-host/src/runner.rs)).
 La seconda alza la bandiera dell'annullamento dei job di quel bundle e poi
 aspetta che escano: un job cooperativo se ne accorge alla prima capacità che
 chiede, e nel frattempo nessun job nuovo di quel bundle parte più.
