@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Ventinove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Ventotto** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -574,7 +574,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0123 | gli avvisi non fatali del montaggio viaggiano nell'`Ok(Vec<String>)` di `BundleRegistry::enable`, e i due chiamanti che accendono un bundle scartano quel payload con un `?` che non lega: l'utente accende un componente e i provider non entrati non compaiono né nel valore di ritorno né nel log | `fub-host` · `session.rs` `Host::set_plugin_enabled` | regole |
 | 0126 | gli estratti di un provider si raccolgono con `.collect()` in una `BTreeMap<DocId, DocumentMatch>`: due righe per lo stesso documento si sovrascrivono in silenzio, dove `Matches::insert` — a poche righe di distanza — avrebbe chiamato `absorb` e fuso score, proprietà e occorrenze | `fub-kernel` · `index/plan.rs` `told` | regole |
 | 0127 | un verbale è immutabile ma il codice che descrive no, e non c'è nessun registro che tenga i due allineati: due verbali — la decisione 0121 sul `<div>` vuoto e su `heading_slug`, la 0062 sull'unico caso di `StderrSink` — affermano di `crates/` cose che a HEAD sono false, i commit che le hanno rese false hanno toccato solo `todo.md`, e chi legge non ha nessun segnale di stare leggendo un fatto scaduto | `docs` · `CONTRIBUTING.md` `Chiudere una decisione` | regole |
-| 0129 | `convert_inlines` non ha un ramo per l'HTML inline e lo lascia cadere nel catch-all che ricorre sui figli, ma quel nodo porta il markup in `literal` e non ha figli, quindi sparisce senza lasciare nemmeno i byte grezzi — mentre `convert_block` salva il `literal` dell'HTML di blocco | `fub-format-markdown` · `parse.rs` `convert_inlines` | regole |
 | 0130 | due letture che rispondono con dei dati hanno un comando IPC proprio invece di una variante di `IndexQuery`, e siccome `IndexQuery` non ha una variante di resa e l'`HostApi` non ha una capacità di render, un `ViewProvider` non ha nessuna porta per mostrare un documento reso mentre la shell ne ha due | `fub-app` · `lib.rs` `render_preview` / `render_embed` | regole |
 | 0131 | `deleted_at` non è un dato salvato ma l'mtime del file nel cestino diviso 1000, ricavato in `walk_trash`, quindi qualsiasi tocco al file — un rename, un backup, una sync — riscrive la data di cancellazione, e per giunta invalida il sidecar, che usa lo stesso mtime come controllo d'identità | `fub-kernel` · `vault.rs` `walk_trash` | regole |
 | 0136 | l'etichetta di un wikilink senza alias la sintetizza comrak dal bersaglio, e `convert_inlines` la scandisce per i tag come fosse prosa: `[[#Sezione]]` fa nascere un tag `Sezione` che nessuno ha scritto, con lo span dentro quello del link | `fub-format-markdown` · `parse.rs` ramo `NodeValue::WikiLink` | regole |

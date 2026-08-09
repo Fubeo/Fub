@@ -282,6 +282,48 @@ fn un_riferimento_si_riscrive_com_era() {
 /// **Il comportamento.** Un inline di una sintassi che il provider non conosce
 /// **risale**: non si scrive a metà e non si salta.
 ///
+/// **L'HTML dell'utente torna sul disco com'era, dai due lati.**
+///
+/// Il decimo sito, trovato dopo i nove dell'elenco in testa, e quello che
+/// nessuno dei nove conti vedeva: la perdita non era in `serialize.rs`, era nel
+/// **parser**. `convert_inlines` non aveva un ramo per `NodeValue::HtmlInline`,
+/// quindi il nodo cadeva nel catch-all che ricorre sui figli — e un
+/// `HtmlInline` figli non ne ha, perché porta tutto il markup nel proprio
+/// `literal`. `un <b>grassetto</b> inline` arrivava al modello come `un
+/// grassetto inline`, e da lì tornava sul file dell'utente senza i suoi tag.
+///
+/// **Perché `il_giro_completo_non_perde_il_testo` non lo vedeva**, pur avendo
+/// adesso il caso nel corpus: quel conto confronta `parse(src)` con
+/// `parse(serialize(parse(src)))`, e se i byte si perdono **prima**, alla prima
+/// parsata, le due passate sono d'accordo fra loro e in disaccordo col file. È
+/// la classe cieca di ogni round-trip — il lettore riaccetta ciò che lo
+/// scrittore ha inventato — e l'unico modo di uscirne è **asserire contro la
+/// sorgente**, che è ciò che questo banco fa.
+///
+/// I due lati stanno nello stesso banco perché sono la stessa regola —
+/// `custom_kind::HTML` è `Carico::Sorgente("html")`, cioè byte che si copiano —
+/// e finché era scritta in un ramo solo su due nessuno vedeva che ne mancava
+/// uno.
+#[test]
+fn l_html_dell_utente_torna_sul_disco_com_era() {
+    for (nome, src) in [
+        ("inline", "un <b>grassetto</b> inline\n"),
+        (
+            "inline con attributi",
+            "prima <span class=\"x\">c</span> poi\n",
+        ),
+        ("a blocco", "<div class=\"y\">blocco</div>\n"),
+        ("commento", "<!-- un commento -->\n"),
+    ] {
+        let riscritto = serialize(&parse(src));
+        assert_eq!(
+            riscritto, src,
+            "«{nome}»: la riscrittura ha cambiato i byte dell'utente.\n  \
+             sorgente:  {src:?}\n  riscritto: {riscritto:?}",
+        );
+    }
+}
+
 /// I delimitatori (`==`, `$`, quelli di un plugin di terzi) appartengono alla
 /// `SyntaxRule` che li ha agganciati, e il provider markdown non li ha mai
 /// visti. Scriverne il solo `attrs.text` toglierebbe una sintassi dal file

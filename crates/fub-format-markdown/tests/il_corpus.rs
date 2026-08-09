@@ -598,11 +598,6 @@ fn divergenze_dichiarate() -> Vec<(&'static str, Perche, fn(&DocumentModel, &str
             |d, _| testo_piatto(d) == "testo apice qui" && nomi_dei_kind(d).is_empty(),
         ),
         (
-            "l'html inline sparisce, mentre quello a blocco resta",
-            Perche::AccesaEnonMappata,
-            |d, _| testo_piatto(d) == "un grassetto inline" && nomi_dei_kind(d).is_empty(),
-        ),
-        (
             "l'ancora esplicita di un heading non è raggiungibile dall'albero",
             Perche::RappresentataEnonRaggiungibile,
             |d, _| {
@@ -712,16 +707,16 @@ fn le_divergenze_sono_quelle_dichiarate() {
     let dichiarate = divergenze_dichiarate();
     let sorgenti = divergenti();
     assert!(
-        dichiarate.len() >= 12,
-        "l'elenco delle divergenze si è svuotato: {} righe su dodici. Se sono\n\
+        dichiarate.len() >= 11,
+        "l'elenco delle divergenze si è svuotato: {} righe su undici. Se sono\n\
          state riparate è una bella notizia e va scritta dove la riparazione sta\n\
          — e allora si abbassa questo numero **nello stesso commit**, che è ciò\n\
          che lo tiene una soglia e non un desiderio; se è l'elenco che si è\n\
          rotto, questo file ha smesso di presidiare la cosa per cui esiste.\n\
-         L'ultima scesa: «un frontmatter che non si parsa non lascia traccia» —\n\
-         adesso la traccia c'è, e il caso è passato nel corpus curato col nome\n\
-         «frontmatter illeggibile» (vedi\n\
-         `tests/il_frontmatter_non_si_perde.rs`).",
+         L'ultima scesa: «l'html inline sparisce, mentre quello a blocco resta»\n\
+         — adesso `convert_inlines` ha il suo ramo `HtmlInline` e i byte\n\
+         restano, quindi il caso è passato nel corpus curato col nome «html\n\
+         inline» e il giro completo lo riscrive identico.",
         dichiarate.len()
     );
 
