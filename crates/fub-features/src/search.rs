@@ -965,7 +965,13 @@ impl SearchIndex {
     ///
     /// Il doppio controllo di `dirty` non è prudenza: due query concorrenti
     /// possono trovarlo alzato insieme, e la seconda non deve committare a
-    /// vuoto. Le due `Ordering` non decorative sono queste: chi spegne `dirty`
+    /// vuoto. Non è nemmeno un residuo: è ciò che la
+    /// [decisione 0026](../../../docs/decisions/0026-due-query-insieme.md) ha
+    /// **installato** quando ha tolto il `Mutex<Inner>` che metteva in fila le
+    /// ricerche — 43 op/s prima, 320 dopo a otto thread — e leggerlo come un
+    /// lock che ferma i lettori per la durata del commit è leggere al contrario
+    /// la riparazione che quei numeri hanno pagato. Le due `Ordering` non
+    /// decorative sono queste: chi spegne `dirty`
     /// lo fa in `Release` **dopo** il `reload`, chi lo legge spento lo fa in
     /// `Acquire` **prima** di chiedere un `searcher` — cioè chi vede «pulito»
     /// vede anche l'indice ricaricato che ha reso vera quella parola.
@@ -1133,7 +1139,14 @@ impl SearchIndex {
             .map_err(|e| PluginError::Internal(motivo(COUNT, e)))?;
         let (offset, limit) = match page {
             // Senza finestra si restituisce tutto ciò che combacia: il tetto è
-            // il conteggio, non un numero inventato qui.
+            // il conteggio, non un numero inventato qui. E non è una svista da
+            // vault grande: è **come il pianificatore interroga sempre**
+            // (`fub-kernel/src/index/plan.rs`), perché ordine e finestra di una
+            // risposta a `Documents` sono del contratto e non di tantivy
+            // ([decisione 0020](../../../docs/decisions/0020-le-regole-in-un-posto-solo.md)).
+            // Quanto costi l'argomento di `with_limit` è misurato in
+            // `tests/una_ricerca_senza_finestra.rs`, e la risposta è: niente. Il
+            // costo sta in `searcher.doc`, cioè nelle righe restituite.
             None => (0usize, total),
             Some(p) => (p.offset as usize, p.limit as usize),
         };
