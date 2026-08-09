@@ -64,6 +64,15 @@ pub struct MemoryHost {
     /// Il contesto servito da [`HostEnv::active_context`], come lo
     /// pubblicherebbe la shell.
     context: Mutex<Option<ViewContext>>,
+    /// Quante volte [`HostEnv::active_context`] è stato chiamato.
+    ///
+    /// È lo stesso conto delle letture del vault, per il canale che non passa
+    /// da un path: `active_context` **clona** il contesto — quindi anche il
+    /// testo di ogni selezione — e chiederlo due volte nello stesso render è
+    /// una copia buttata che nessun'altra traccia lascerebbe vedere, perché lo
+    /// stato dopo è identico allo stato prima. Anche qui è un conto di
+    /// operazioni e non un tempo.
+    letture_del_contesto: AtomicU64,
     /// Backlink finti per [`HostQuery::query_index`], seminati per target. Il
     /// doppio non ha un grafo: risponde solo a ciò che gli è stato messo dentro,
     /// ed è quanto basta a provare una view contro il contratto.
@@ -306,6 +315,14 @@ impl MemoryHost {
             .unwrap()
             .values()
             .fold((0, 0), |(n, b), (dn, db)| (n + dn, b + db))
+    }
+
+    /// Quante volte qualcuno ha chiesto il contesto attivo.
+    ///
+    /// La forma con cui si prova che un render è una **fotografia**: una sola
+    /// lettura, e ciò che ne esce viene da quell'unica.
+    pub fn letture_del_contesto(&self) -> u64 {
+        self.letture_del_contesto.load(Ordering::Relaxed)
     }
 
     /// Segna una lettura riuscita. Privato: il conto si legge, non si scrive.
@@ -955,6 +972,7 @@ impl HostEnv for MemoryHost {
     }
 
     fn active_context(&self) -> Option<ViewContext> {
+        self.letture_del_contesto.fetch_add(1, Ordering::Relaxed);
         self.context.lock().unwrap().clone()
     }
 }
