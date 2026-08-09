@@ -213,24 +213,32 @@ fn le_impostazioni_del_core_parlano_anche_loro() {
     // stessa strada vuole lo stesso presidio. Qui si guarda quelle del kernel,
     // che è l'unico dei due che questo crate vede; le altre le guarda il banco
     // di `fub-host`.
-    let cataloghi = [
-        fub_kernel::locale::catalog(),
-        fub_kernel::properties::catalog(),
-        fub_kernel::ignore::catalog(),
-    ]
-    .concat();
+    //
+    // **Le famiglie non si elencano più a mano.** Erano tre righe — `locale`,
+    // `properties`, `ignore` — mentre il kernel ne dichiara cinque, e un elenco
+    // scritto a mano si accorge di una chiave che manca, mai di una famiglia che
+    // manca. Adesso sono `Famiglia::cataloghi()` e `Famiglia::impostazioni()`,
+    // cioè le stesse due espressioni da cui `fub_host::settings` monta: una
+    // famiglia nuova entra qui il giorno in cui entra in `Famiglia::TUTTE`, e
+    // in `TUTTE` la fa entrare il compilatore.
+    let cataloghi = fub_kernel::famiglie::Famiglia::cataloghi();
     let (mut chiavi, mut cablate) = (Vec::new(), Vec::new());
-    // Le due famiglie insieme e non solo il locale: questo elenco è scritto a
-    // mano, quindi una famiglia nuova dichiarata dal kernel resta scoperta
-    // restando verde — è la stessa forma per cui `cataloghi_del_core()` in
-    // `fub-host` aveva perso `maintenance`.
-    let specs = [
-        fub_kernel::locale::locale_settings(),
-        fub_kernel::properties::properties_settings(),
-        fub_kernel::ignore::ignore_settings(),
-    ]
-    .concat();
-    for spec in specs {
+    // Le chiavi che il kernel **prende in prestito** invece di possederle.
+    //
+    // Misurato aprendo l'elenco alle cinque: `journal.retention` si mette nel
+    // gruppo `core.group.privacy`, che è del bundle di core, e lo fa apposta —
+    // due gruppi «Privacy» scritti da due componenti sarebbero due sezioni
+    // identiche nel pannello, e la ragione sta scritta accanto alla riga in
+    // `journal.rs`. La frase la localizza chi l'ha scritta
+    // ([0040](../../../docs/decisions/0040-chi-localizza.md)), quindi in nessun
+    // catalogo del kernel quella voce c'è né deve esserci: a giudicarla è il
+    // banco di `fub-host`, che somma i due cataloghi.
+    //
+    // L'esenzione si **calcola dal namespace** e non è un elenco a mano: `core.`
+    // è di chi monta. Una chiave che il kernel possiede — `journal.*`,
+    // `locale.*`, `files.*`, `properties.*` — senza una voce nei cataloghi del
+    // kernel resta rossa qui, ed è il verso che conta.
+    for spec in fub_kernel::famiglie::Famiglia::impostazioni() {
         let dove = format!("kernel: `{}`", spec.key);
         chiave(&spec.label, &dove, &mut chiavi, &mut cablate);
         chiave(&spec.description, &dove, &mut chiavi, &mut cablate);
@@ -241,7 +249,15 @@ fn le_impostazioni_del_core_parlano_anche_loro() {
             }
         }
     }
+    let (prestate, chiavi): (Vec<String>, Vec<String>) =
+        chiavi.into_iter().partition(|k| k.starts_with("core."));
     assert!(cablate.is_empty(), "{cablate:?}");
+    assert!(
+        !prestate.is_empty(),
+        "nessuna chiave del kernel sta più nel namespace `core.`: l'esenzione qui \
+         sopra non esenta più niente, e se è così va tolta invece di restare a \
+         perdonare un caso che non c'è"
+    );
     // Le lingue si guardano una per una e non catalogo per catalogo: una chiave
     // può stare in uno qualsiasi dei cataloghi di quella lingua, ed è
     // precisamente la somma che il montaggio fa (`Strings::template`).
