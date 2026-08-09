@@ -57,15 +57,10 @@ fn vault_grande() -> MemoryHost {
 fn la_prima_fotografia_scrive_l_indice_una_volta_sola() {
     let mut host = vault_grande();
     let store = VersionStore::open(&mut host).expect("apertura");
-    let mut handler = VersioningHandler::new(store.clone());
+    let handler = VersioningHandler::new(store.clone());
 
     handler
-        .handle(
-            &Notice::of(Event::VaultOpened {
-                root: "/vault".into(),
-            }),
-            &mut host,
-        )
+        .first_snapshot_of_the_vault(&mut host)
         .expect("la prima fotografia");
 
     // La passata ha fatto il suo lavoro: senza questo, un indice scritto zero
@@ -104,14 +99,9 @@ fn la_prima_fotografia_scrive_l_indice_una_volta_sola() {
 fn l_indice_scritto_una_volta_sola_dice_tutto_quello_che_diceva_prima() {
     let mut host = vault_grande();
     let store = VersionStore::open(&mut host).expect("apertura");
-    let mut handler = VersioningHandler::new(store.clone());
+    let handler = VersioningHandler::new(store.clone());
     handler
-        .handle(
-            &Notice::of(Event::VaultOpened {
-                root: "/vault".into(),
-            }),
-            &mut host,
-        )
+        .first_snapshot_of_the_vault(&mut host)
         .expect("la prima fotografia");
     drop(handler);
     drop(store);
@@ -150,18 +140,13 @@ fn l_indice_scritto_una_volta_sola_dice_tutto_quello_che_diceva_prima() {
 fn una_passata_interrotta_non_perde_niente_perche_l_indice_si_ricostruisce() {
     let mut host = vault_grande();
     let store = VersionStore::open(&mut host).expect("apertura");
-    let mut handler = VersioningHandler::new(store.clone());
+    let handler = VersioningHandler::new(store.clone());
     host.nega_scrittura(INDEX_FILE);
 
     // La passata non solleva: una nota non salvata è un `Trouble`, non un
     // fallimento dell'apertura. Ma l'indice non è stato scritto.
     handler
-        .handle(
-            &Notice::of(Event::VaultOpened {
-                root: "/vault".into(),
-            }),
-            &mut host,
-        )
+        .first_snapshot_of_the_vault(&mut host)
         .expect("la prima fotografia non fa cadere l'apertura");
     drop(handler);
     drop(store);
@@ -185,4 +170,29 @@ fn una_passata_interrotta_non_perde_niente_perche_l_indice_si_ricostruisce() {
         assert_eq!(versioni.len(), 1);
         assert!(riaperto.read(&id, versioni[0].ts, &host).is_ok());
     }
+}
+
+/// **`VaultOpened` non fotografa più** (§25.3): la passata la chiama il
+/// runner, e l'evento da solo non produce niente. È la metà che tiene fermo
+/// il taglio «fuori dalla fase 1»: se qualcuno rimette il ramo nell'handler,
+/// questo banco è rosso.
+#[test]
+fn l_evento_vaultopened_non_fotografa_piu() {
+    let mut host = MemoryHost::new().con_documento("a.md", "com'era");
+    let store = VersionStore::open(&mut host).expect("apertura");
+    let mut handler = VersioningHandler::new(store.clone());
+
+    handler
+        .handle(
+            &Notice::of(Event::VaultOpened {
+                root: "/vault".into(),
+            }),
+            &mut host,
+        )
+        .expect("l'handler risponde");
+
+    assert!(
+        store.documents().is_empty(),
+        "VaultOpened ha fotografato: la passata non sta più nell'handler"
+    );
 }

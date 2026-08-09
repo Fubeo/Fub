@@ -47,9 +47,8 @@
 //! cartella più uno snapshot: nessun blob si apre due volte.
 
 use fub_abi::command::InvokeMode;
-use fub_abi::event::{Event, Notice};
 use fub_abi::model::DocId;
-use fub_abi::traits::{CommandProvider, DataWrite, EventHandler, VaultRead};
+use fub_abi::traits::{CommandProvider, DataWrite, VaultRead};
 use fub_features::{CoreCommands, VersionStore, VersioningHandler, VAULT_REPLACE};
 use fub_sdk::testing::MemoryHost;
 
@@ -236,12 +235,7 @@ fn la_ricostruzione_ritrova_le_impronte_dal_contenuto() {
     let mut host = vault(DOCUMENTI, 0);
     let store = VersionStore::open(&mut host).expect("apertura");
     VersioningHandler::new(store.clone())
-        .handle(
-            &Notice::of(Event::VaultOpened {
-                root: "/vault".into(),
-            }),
-            &mut host,
-        )
+        .first_snapshot_of_the_vault(&mut host)
         .expect("la prima fotografia");
     let prima: Vec<_> = store
         .documents()

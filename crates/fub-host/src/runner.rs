@@ -445,6 +445,12 @@ struct Shared {
     volo: Arc<(Mutex<InVolo>, Condvar)>,
 }
 
+/// La prima fotografia del vault: una chiusura che riceve il workspace — già
+/// sotto l'esclusivo — e scatta la passata, prima della prima fetta (§25.3).
+#[cfg(feature = "versioning")]
+pub(crate) type PrimaFotografia =
+    Box<dyn FnOnce(&mut Workspace) -> Result<(), PluginError> + Send + Sync>;
+
 /// L'indicizzazione dell'apertura mentre gira: il lavoro, la sua identità di
 /// job, e dove va a finire il suo esito.
 pub struct InCorso {
@@ -467,6 +473,12 @@ pub struct InCorso {
     /// intervallo è una politica da scegliere — ogni quanto? a che costo? —
     /// dove basta un fatto.
     pub(crate) fine: Arc<(Mutex<bool>, Condvar)>,
+    /// La prima fotografia del vault, da scattare una volta per apertura,
+    /// prima della prima fetta (§25.3). La chiusura esiste solo col versioning
+    /// acceso; `take()` la consuma, quindi la garanzia una-sola-volta è il
+    /// tipo, non un flag.
+    #[cfg(feature = "versioning")]
+    pub(crate) fotografia: Option<PrimaFotografia>,
 }
 
 impl Shared {
@@ -487,6 +499,19 @@ impl Shared {
         let Some(mut in_corso) = self.apertura.write()?.take() else {
             return Ok(false);
         };
+        // La prima fotografia: fuori dalla fase 1, prima della prima fetta.
+        // Gira sotto l'esclusivo, come in fase 1: la passata tiene il lock
+        // interno dello store attraverso le proprie scritture, e le scritture
+        // normali tengono il workspace attraverso le chiamate alla feature —
+        // un host per-capacità chiuderebbe il ciclo. Un errore qui non deve
+        // fermare il pool: la passata interrotta si riprende alla riapertura.
+        #[cfg(feature = "versioning")]
+        if let Some(foto) = in_corso.fotografia.take() {
+            let mut ws = self.workspace.write()?;
+            if let Err(e) = foto(&mut ws) {
+                tracing::warn!(target: "fub.host", "la prima fotografia non è riuscita: {e}");
+            }
+        }
         // La bandiera è **quella di tutti**: annullare l'indicizzazione è
         // premere lo stesso pulsante che annulla un export, e passa dalla
         // stessa `Flags`. Senza questo, «annulla» avrebbe avuto due
@@ -1389,6 +1414,8 @@ mod tests {
                     work,
                     unread: Custodia::vuota("gli scarti di prova"),
                     fine: Arc::new((Mutex::new(false), Condvar::new())),
+                    #[cfg(feature = "versioning")]
+                    fotografia: None,
                 }),
             ),
             flags: Custodia::vuota("le bandiere di prova"),

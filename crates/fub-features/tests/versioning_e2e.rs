@@ -34,8 +34,8 @@ impl Vault {
     /// esattamente la coppia che tiene l'app — una copia dentro l'handler, una
     /// in mano a chi deve elencare e rileggere le versioni.
     ///
-    /// Non c'è nessun passaggio di "prima fotografia" da fare qui: è policy
-    /// della feature, e scatta sull'evento `VaultOpened` che emette `reindex`.
+    /// La prima fotografia la chiama il runner (§25.3); qui, a livello
+    /// kernel, la si chiama a mano dopo `reindex` per avere lo stesso stato.
     fn open(&self) -> (Workspace, VersionStore) {
         let mut registry = FormatRegistry::new();
         registry
@@ -51,12 +51,20 @@ impl Vault {
         let store = ws
             .with_host(VERSIONING_ID, VersionStore::open)
             .expect("store versioni");
+        let handler = VersioningHandler::new(store.clone());
         ws.register_event_handler(
             VERSIONING_ID,
             Box::new(VersioningHandler::new(store.clone())),
         )
         .expect("registrato");
         ws.reindex().expect("reindex");
+        // La prima fotografia la chiama il runner, prima della prima fetta
+        // (§25.3): qui, a livello kernel, la si chiama a mano dopo reindex per
+        // avere lo stesso stato.
+        ws.with_host(VERSIONING_ID, |host| {
+            handler.first_snapshot_of_the_vault(host)
+        })
+        .expect("la prima fotografia");
         (ws, store)
     }
 
