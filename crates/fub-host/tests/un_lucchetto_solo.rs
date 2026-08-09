@@ -86,6 +86,12 @@ fn concessi() -> BTreeMap<&'static str, Perche> {
 /// I sorgenti che il conto giudica. `include_str!` e non `std::fs`: così il
 /// legame è una dipendenza di compilazione e non un path da tenere aggiornato a
 /// mano — se un file si sposta, questo banco non compila.
+///
+/// `src/net.rs` è qui e si legge **sempre**, anche in un montaggio che spegne
+/// `http-client`: `include_str!` non ha `#[cfg]`, e il verso in cui questo
+/// sbaglia è quello giusto — il conto guarda di più, non di meno. Un `#[cfg]`
+/// sull'elenco avrebbe fatto l'opposto, cioè un file che sparisce dal presidio
+/// esattamente nella build in cui nessuno lo compila.
 const SORGENTI: &[(&str, &str)] = &[
     ("src/lib.rs", include_str!("../src/lib.rs")),
     ("src/session.rs", include_str!("../src/session.rs")),
@@ -101,14 +107,29 @@ const SORGENTI: &[(&str, &str)] = &[
     ("src/records.rs", include_str!("../src/records.rs")),
     ("src/shell.rs", include_str!("../src/shell.rs")),
     ("src/parete.rs", include_str!("../src/parete.rs")),
+    ("src/net.rs", include_str!("../src/net.rs")),
     ("app/src/lib.rs", include_str!("../../fub-app/src/lib.rs")),
+    ("app/src/main.rs", include_str!("../../fub-app/src/main.rs")),
 ];
 
-/// I file di `crates/fub-host/src` che il conto **non** legge, e non è una
-/// dimenticanza: sono dietro una cargo feature spenta di default. Se
-/// `SORGENTI` più questi non copre la cartella, il banco lo dice da sé
-/// ([`ogni_file_e_guardato`]).
-const FUORI_FEATURE: &[&str] = &["net.rs", "custodia.rs"];
+/// **La porta**, e l'unico file che il conto non legge.
+///
+/// La ragione è che il lucchetto della [`Custodia`] è *il* lucchetto con la
+/// politica: leggerlo qui vorrebbe dire pretendere una riga di `concessi()` per
+/// la risposta stessa, cioè chiedere alla porta di giustificarsi davanti al
+/// conto che esiste per mandarci la gente.
+///
+/// Fin qui questa costante si chiamava `FUORI_FEATURE` e assolveva **due** file
+/// dicendo che stavano «dietro una cargo feature spenta di default», e non era
+/// vero per nessuno dei due. `pub mod custodia;` in `lib.rs` è incondizionato:
+/// nessuna feature lo ha mai spento, e la ragione per cui sta fuori è
+/// **strutturale**, non di packaging. `net.rs` sta dietro `http-client`, che è
+/// nel `default` del `Cargo.toml` — cioè acceso in ogni build che nessuno abbia
+/// spento a mano —, quindi è codice di produzione compilato di norma, ed è
+/// passato in fondo a `SORGENTI`. Era la forma peggiore delle due: non un
+/// numero invecchiato ma una **ragione che non è mai stata vera**, e che
+/// leggendola faceva sembrare guardato un file che nessuno guardava.
+const LA_PORTA: &[&str] = &["custodia.rs"];
 
 /// Le righe di **codice** di un sorgente: la prosa si salta sempre, i banchi
 /// solo quando la domanda li riguarda.
@@ -196,24 +217,45 @@ fn nessuno_srotola_la_risposta_della_porta() {
     }
 }
 
-/// **Il conto guarda tutta la cartella**, o dice quale file gli è sfuggito.
+/// Le cartelle che `SORGENTI` dice di coprire, come prefisso e come path.
+///
+/// Sono **due** perché `SORGENTI` nomina due crate, e questa costante esiste
+/// perché il conto le derivi invece di ricordarsene una sola: prima la
+/// passeggiata guardava `crates/fub-host/src` e basta, mentre l'elenco
+/// dichiarava anche `app/src/lib.rs`. La metà taciuta era vacua per il difetto
+/// che il primo conto cerca — `fub-app` non ha lucchetti nudi — e **non** per il
+/// difetto che questa passeggiata cerca: `crates/fub-app/src/main.rs` c'era già,
+/// non era in `SORGENTI`, e nessuno lo diceva. Sei righe di `main`, quindi
+/// niente di rotto; ma la cosa che qui si presidia non è il contenuto di quel
+/// file, è che il **prossimo** entri in rumore e non in silenzio.
+const CARTELLE: &[(&str, &str)] = &[("src", "src"), ("app/src", "../fub-app/src")];
+
+/// **Il conto guarda tutte le cartelle che dice di guardare**, o dice quale file
+/// gli è sfuggito.
 ///
 /// È la lezione di `dieta_ipc.rs`: un presidio che legge un elenco di file sa
 /// quell'elenco, e un file nuovo entra in silenzio. Qui l'elenco lo si
-/// confronta con la cartella vera.
+/// confronta con le cartelle vere.
+///
+/// Che sia rosso davvero si prova **togliendo** una riga da `SORGENTI`, non
+/// aggiungendo un file: un elenco che dice «questi sono tutti» sbaglia per
+/// difetto, e un caso in più non tocca il verso in cui sbaglia.
 #[test]
 fn ogni_file_e_guardato() {
-    let dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let radice = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut mancanti = Vec::new();
-    for voce in std::fs::read_dir(&dir).expect("la cartella dei sorgenti") {
-        let voce = voce.expect("una voce");
-        let nome = voce.file_name().to_string_lossy().to_string();
-        if !nome.ends_with(".rs") || FUORI_FEATURE.contains(&nome.as_str()) {
-            continue;
-        }
-        let atteso = format!("src/{nome}");
-        if !SORGENTI.iter().any(|(f, _)| *f == atteso) {
-            mancanti.push(atteso);
+    for (prefisso, cartella) in CARTELLE {
+        let dir = radice.join(cartella);
+        for voce in std::fs::read_dir(&dir).expect("la cartella dei sorgenti") {
+            let voce = voce.expect("una voce");
+            let nome = voce.file_name().to_string_lossy().to_string();
+            if !nome.ends_with(".rs") || LA_PORTA.contains(&nome.as_str()) {
+                continue;
+            }
+            let atteso = format!("{prefisso}/{nome}");
+            if !SORGENTI.iter().any(|(f, _)| *f == atteso) {
+                mancanti.push(atteso);
+            }
         }
     }
     assert!(

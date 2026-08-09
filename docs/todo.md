@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Quarantasei** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Quarantaquattro** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -598,8 +598,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0141 | «sta dentro questa cartella?» ha tre risposte incompatibili in produzione — `query::within_folder` taglia gli slash finali e ha il ramo su sé stessa, `rules::events::folder_contains` li taglia e non ce l'ha, `transfer::in_folder` taglia entrambi i capi — e il banco di `transfer.rs` asserisce vero ciò che `within_folder` dà falso, mentre la prosa di `traits.rs` scrive che la regola «è una, e due copie divergerebbero sul caso che nessuno prova» | `fub-abi` · `transfer.rs` `in_folder` | regole |
 | 0142 | il test della rinomina a solo caso è scritto a mano due volte, identico, con un `to_lowercase()` nudo senza NFC e senza trim: è una quattordicesima regola di piegatura del caso, e può contraddire `resolution_key` proprio sul rename che deve proteggere | `fub-kernel` · `workspace.rs` `case_only` (due siti) | regole |
 | 0143 | la testa di `il_veleno_del_kernel.rs` dichiara nove file col lucchetto e tre di quelli — `journal.rs`, `drafts.rs`, `ignore.rs` — non ne hanno nessuno, mentre `vault.rs`, che ne ha uno di banco, non è nell'elenco: i file di produzione col lucchetto nudo fuori dalle due porte sono sei, e nessun conto guarda quella frase | `fub-kernel` · `tests/il_veleno_del_kernel.rs` (prosa di modulo) | presidi |
-| 0144 | il commento di `FUORI_FEATURE` assolve due file dicendo che stanno «dietro una cargo feature spenta di default», e non è vero per nessuno dei due: `pub mod custodia;` è incondizionato — `custodia.rs` va escluso perché **è la porta** — e `http-client` è acceso di default, così il conto vede tre chiavi dove `fub-host` ne ha quattro | `fub-host` · `tests/un_lucchetto_solo.rs` `FUORI_FEATURE` | presidi |
-| 0145 | `ogni_file_e_guardato` cammina il solo `fub-host/src` mentre `SORGENTI` nomina anche `app/src/lib.rs`: oggi è vacuo perché `fub-app` non ha lucchetti, ma il presidio esiste apposta perché un file **nuovo** entri in rumore e non in silenzio | `fub-host` · `tests/un_lucchetto_solo.rs` `ogni_file_e_guardato` | presidi |
 
 ## Gli allegati
 
