@@ -431,6 +431,19 @@ impl Matches {
         self.0.get_mut(doc)
     }
 
+    /// Sfila ciò che si sa di un documento, togliendolo dall'insieme.
+    ///
+    /// È la lettura di chi ha già le proprie righe e vuole arricchirle una per
+    /// una — il secondo tempo della §21.9, in `fub-kernel` — senza passare per
+    /// la mappa nuda: raccogliere le risposte di un provider in una
+    /// `BTreeMap<DocId, DocumentMatch>` con un `.collect()` fa vincere
+    /// l'ultima riga letta, mentre una raccolta passata da
+    /// [`insert`](Matches::insert) ha già fuso le due righe con
+    /// [`DocumentMatch::absorb`](crate::traits::DocumentMatch::absorb).
+    pub fn take(&mut self, doc: &DocId) -> Option<DocumentMatch> {
+        self.0.remove(doc)
+    }
+
     /// In ordine di `DocId`. Chi vuole un altro ordine (rilevanza, una
     /// proprietà) lo impone dopo: qui l'ordine è quello che rende stabile la
     /// paginazione.

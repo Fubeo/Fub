@@ -9,14 +9,15 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::Revision;
 use fub_abi::edit::WriteBase;
 use fub_abi::error::PluginError;
 use fub_abi::event::Notice;
-use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::model::{DocId, DocumentModel, PropertyValue, Span};
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
-    DocumentMatch, Excerpts, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page,
-    Paged, PredicateKind, PropertySelect, QueryRoute,
+    DocPosition, DocumentMatch, Excerpts, HostApi, IndexLoss, IndexProvider, IndexQuery,
+    IndexResult, Page, Paged, PredicateKind, PropertyEntry, PropertySelect, QueryRoute,
 };
 use fub_kernel::{data_root, FormatRegistry, Workspace};
 use fub_testkit::TestoDiProva;
@@ -581,4 +582,116 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
         .register_index_provider("test.altra", Box::new(spy))
         .unwrap();
     assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
+}
+
+/// Un provider che, nel secondo tempo della §21.9, riporta **due righe per lo
+/// stesso documento**: prima la seconda cancellava la prima.
+///
+/// Non è un caso di laboratorio: un indice a segmenti che risponde con
+/// `Excerpts::Attach` emette naturalmente una riga per segmento, e le
+/// occorrenze di una nota lunga si spartiscono fra due segmenti. La decisione
+/// 0049 dice che le occorrenze **si sommano** — la ricerca ne mostra N e
+/// permette di saltare dall'una all'altra — ma la fusione la fa
+/// `DocumentMatch::absorb`, e chi raccoglieva gli estratti in una `BTreeMap`
+/// con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
+/// la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
+struct IndiceASegmenti;
+
+impl IndexProvider for IndiceASegmenti {
+    fn routes(&self) -> Vec<QueryRoute> {
+        vec![QueryRoute::Predicate(PredicateKind::Text)]
+    }
+    fn activate(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+    fn on_documents_indexed(&mut self, _d: &[DocumentModel]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+    fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+    fn flush(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+    fn close(&mut self, _h: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+        let doc = DocId::new("lunga.txt");
+        let rev = Revision::new("r1");
+        let excerpts = match query {
+            IndexQuery::Documents { excerpts, .. } => excerpts,
+            _ => Excerpts::Omit,
+        };
+        if !excerpts.wanted() {
+            // Primo tempo: si seleziona e basta, una riga per documento.
+            return Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(
+                doc,
+            )
+            .with_score(1.0)])));
+        }
+        // Secondo tempo: due segmenti, due righe, lo stesso documento.
+        let mut primo = DocumentMatch::of(doc.clone()).with_score(1.0);
+        primo.snippet = Some("…alfa…".into());
+        primo.occurrences = vec![DocPosition::at(Span::new(3, 7), rev.clone())];
+        primo.properties = vec![PropertyEntry {
+            key: "titolo".into(),
+            value: PropertyValue::Text("Lunga".into()),
+        }];
+        let mut secondo = DocumentMatch::of(doc).with_score(0.5);
+        secondo.occurrences = vec![DocPosition::at(Span::new(90, 94), rev)];
+        secondo.properties = vec![PropertyEntry {
+            key: "autore".into(),
+            value: PropertyValue::Text("qualcuno".into()),
+        }];
+        Ok(IndexResult::Documents(Paged::all(vec![primo, secondo])))
+    }
+}
+
+#[test]
+fn two_excerpt_rows_for_one_document_merge_instead_of_overwriting() {
+    let fx = Fixture::new();
+    let mut ws = fx.workspace();
+    ws.register_index_provider("test.altra", Box::new(IndiceASegmenti))
+        .expect("registrato");
+    ws.reindex().unwrap();
+
+    let r = ws.query_index(IndexQuery::Documents {
+        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("alfa"))),
+        sort: None,
+        select: PropertySelect::None,
+        page: Some(Page::first(5)),
+        excerpts: Excerpts::Attach,
+    });
+
+    let hits = match r {
+        Ok(IndexResult::Documents(hits)) => hits,
+        other => panic!("attesi dei documenti, trovato {other:?}"),
+    };
+    assert_eq!(hits.items.len(), 1, "un documento resta un documento");
+    let row = &hits.items[0];
+
+    // Le occorrenze si sommano (decisione 0049): prima ne arrivava **una**,
+    // quella del segmento letto per ultimo.
+    assert_eq!(
+        row.occurrences.len(),
+        2,
+        "le occorrenze dei due segmenti si sommano: {:?}",
+        row.occurrences
+    );
+    assert_eq!(row.occurrences[0].span, Span::new(3, 7));
+    assert_eq!(row.occurrences[1].span, Span::new(90, 94));
+
+    // Le proprietà si uniscono, in ordine di chiave.
+    let chiavi: Vec<&str> = row.properties.iter().map(|p| p.key.as_str()).collect();
+    assert_eq!(chiavi, vec!["autore", "titolo"]);
+
+    // La rilevanza che resta è la maggiore, e l'estratto è il primo che c'è —
+    // non quello della riga arrivata per ultima, che non ne aveva nessuno.
+    assert_eq!(row.score, Some(1.0));
+    assert_eq!(row.snippet.as_deref(), Some("…alfa…"));
 }
