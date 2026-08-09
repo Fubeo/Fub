@@ -292,13 +292,24 @@ export function stessaTab(a: Tab, b: Tab): boolean {
 /// riquadro vuoto è uno stato legittimo, ed è dove si finisce anche dividendone
 /// uno.
 export function chiudiTab(id: string, indice: number, l: Layout = layout): void {
+  if (togli(id, indice, l)) cambiato();
+}
+
+/// Toglie la tab e basta: **niente annuncio, niente scrittura**. Torna `false`
+/// se non c'era niente da togliere.
+///
+/// Sta separata da `chiudiTab` per la stessa ragione per cui `rinomina` chiama
+/// `cambiato()` una volta sola in fondo: chi ne chiude N di fila non deve
+/// pagare N scritture su disco. La mutazione è di qui, l'annuncio è di chi ha
+/// finito.
+function togli(id: string, indice: number, l: Layout): boolean {
   const p = l.panes[id];
-  if (!p || indice < 0 || indice >= p.tabs.length) return;
+  if (!p || indice < 0 || indice >= p.tabs.length) return false;
   p.tabs.splice(indice, 1);
   if (p.tabs.length === 0) p.active = -1;
   else if (p.active > indice) p.active -= 1;
   else if (p.active === indice) p.active = Math.max(0, indice - 1);
-  cambiato();
+  return true;
 }
 
 /// Rende attiva una tab per indice.
@@ -327,14 +338,24 @@ export function rinomina(da: string, a: string, l: Layout = layout): void {
 }
 
 /// Il documento non c'è più: via da ogni riquadro che lo teneva.
+///
+/// **Un annuncio solo, e quindi una scrittura sola.** Ogni `cambiato()` è un
+/// `set_view_state`, cioè un `fsync` dall'altra parte dell'IPC: chiudere una
+/// nota aperta in cinque riquadri ne costava cinque, per cinque stati
+/// intermedi che nessuno ha chiesto di vedere e che nessuno può leggere —
+/// `scriviStato` non si aspetta, quindi non è nemmeno vero che le cinque
+/// scritture lascino cinque stati coerenti sul disco: partono tutte insieme e
+/// vince l'ultima. È la stessa forma di `rinomina`, qui sopra.
 export function togliDappertutto(doc: string, l: Layout = layout): void {
+  let toccato = false;
   for (const id of paneConDoc(doc, l)) {
     const tabs = l.panes[id].tabs;
     for (let i = tabs.length - 1; i >= 0; i--) {
       const t = tabs[i];
-      if (t.k === "doc" && t.doc === doc) chiudiTab(id, i, l);
+      if (t.k === "doc" && t.doc === doc) toccato = togli(id, i, l) || toccato;
     }
   }
+  if (toccato) cambiato();
 }
 
 /// Cambia la modalità di un riquadro.

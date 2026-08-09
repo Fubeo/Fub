@@ -168,6 +168,33 @@ describe("le tab di un riquadro", () => {
     expect(paneConDoc("a.md", l)).toEqual([]);
   });
 
+  // Il conto è il presidio, e guarda la porta: ogni `cambiato()` è un
+  // `set_view_state`, cioè un `fsync` dall'altra parte dell'IPC (§25.6 misura
+  // 2,5–5 ms l'uno). Chiudere N tab è **un** gesto e deve costare **una**
+  // scrittura, non una per riquadro. Rosso con la forma di prima: cinque.
+  it("una nota aperta in cinque riquadri se ne va con una scrittura sola", () => {
+    const l = nuovo();
+    apriIn("main", "a.md", l);
+    for (let i = 0; i < 4; i++) apriIn(dividi("main", "row", l)!, "a.md", l);
+    expect(paneConDoc("a.md", l)).toHaveLength(5);
+    setViewState.mockClear();
+
+    togliDappertutto("a.md", l);
+
+    expect(paneConDoc("a.md", l)).toEqual([]);
+    expect(setViewState.mock.calls.map((c) => c[0])).toEqual(["layout"]);
+  });
+
+  // Il verso opposto, perché un conto che va a uno è indistinguibile da un
+  // conto che va a zero: se non c'era niente da togliere non si scrive niente.
+  it("togliere una nota che nessun riquadro teneva non scrive", () => {
+    const l = nuovo();
+    apriIn("main", "a.md", l);
+    setViewState.mockClear();
+    togliDappertutto("b.md", l);
+    expect(setViewState).not.toHaveBeenCalled();
+  });
+
   it("attivare una tab che non c'è non fa niente", () => {
     const l = nuovo();
     apriIn("main", "a.md", l);
