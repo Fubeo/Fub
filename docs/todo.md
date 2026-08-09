@@ -39,7 +39,7 @@ non ha cercato pezzi mancanti del piano ma ha rimisurato contro i sorgenti del
 le ha **smentite più spesso di quanto le abbia confermate**. Centotrentanove
 sono chiuse, e i loro verbali stanno in
 [decisions/](decisions/README.md); le voci ancora aperte sono
-**tre** [conta: voci-aperte], e questo file resta il loro **indice** e il
+**due** [conta: voci-aperte], e questo file resta il loro **indice** e il
 consuntivo di come sono finite.
 
 Da quello stesso consuntivo viene la **terza specie** che questo file conta: i
@@ -240,24 +240,23 @@ che questo piano passa il tempo a togliere dal codice.
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
 | **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | **chiusa** — tre voci aperte perché toccavano una firma, e su due delle tre quel criterio non reggeva | — | — |
-| **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta è già scritta altrove nel repo — la prima chiusa dalla [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), la seconda dalla [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), la terza dalla [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), la quarta dalla [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md) | 3 | 1 |
+| **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta è già scritta altrove nel repo — la prima chiusa dalla [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), la seconda dalla [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), la terza dalla [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), la quarta dalla [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md), la quinta dalla [0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md) | 2 | 1 |
 
 ## Le voci
 
-**Tre** [conta: voci-aperte], e sono tutte della
+**Due** [conta: voci-aperte], e sono tutte della
 [seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md), che
-ne aveva aperte sette.
-**Non riaprono la roadmap infrastrutturale di M4, che resta finita**: nessuna
-delle quattro è un pezzo che manca al piano, e la prova è da dove vengono. Non
-sono uscite cercando cosa serva per costruire FEATURES.md — quella domanda ha
-finito di produrre voci — ma da una **rilettura** che ha rimisurato ciò che il
-repo si portava avanti, e sono tutte e quattro dello stesso tipo: una **scelta di
-prodotto o di contratto** che il codice ha già preso scrivendosi, e che nessuno
-ha mai posto come domanda. Tre delle quattro hanno il codice che dice una cosa e
-un verbale che, sullo stesso problema, ne dice un'altra; tre su quattro hanno
-la risposta già scritta da qualche parte in questo repo. Per taglia: tre P1 e
-una P2 — l'unica P0 era la §25.1, e **non era una firma**: era una perdita di
-dati, quindi non scadeva col freeze e non è per questo che stava in cima. L'ha
+ne aveva aperte sette: cinque si sono chiuse, e le due che restano — la §25.3
+e la §25.7 — sono una P1 e una P2.
+**Non riaprono la roadmap infrastrutturale di M4, che resta finita**: come le
+cinque chiuse, nessuna delle due è un pezzo che manca al piano, e la prova è
+da dove vengono. Non sono uscite cercando cosa serva per costruire FEATURES.md
+— quella domanda ha finito di produrre voci — ma da una **rilettura** che ha
+rimisurato ciò che il repo si portava avanti, e sono dello stesso tipo: una
+**scelta di prodotto o di contratto** che il codice ha già preso scrivendosi,
+e che nessuno ha mai posto come domanda. L'unica P0 era la §25.1, e **non era
+una firma**: era una perdita di dati, quindi non scadeva col freeze e non è
+per questo che stava in cima. L'ha
 chiusa la [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md),
 che di quella voce prende la forma (a) e lascia la (b) scritta e aperta. La
 seconda a cadere è stata la §25.2, con la
@@ -276,7 +275,14 @@ contesto di un backlink è una finestra di 220 caratteri attorno al link, la
 regola sta in `fub-abi::rules::snippet` con la costante della ricerca migrata
 in un posto solo, e con lei si chiude il difetto `0110` — che non diceva tre
 copie ma due copie e una move, e la chiusura è «vera e trascurabile, detta coi
-numeri»: 969 KB invece di 54 MB.
+numeri»: 969 KB invece di 54 MB. La
+quinta è stata la §25.5, con la
+[0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md): la
+cartella di configurazione che non si può scrivere — o non c'è — si dice una
+volta per sessione su un `Event::Trouble` di severità `Warning`, e la porta è
+un **tiraggio** che la shell chiede appena il router è in piedi, perché una
+spinta all'avvio sarebbe emessa nel vuoto: il ponte nasce solo al primo vault
+aperto.
 
 Il criterio della scadenza ha già mostrato una volta di non bastare. La
 [seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) aveva aperto
@@ -307,7 +313,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-**tre** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+**due** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -324,8 +330,8 @@ decidere. La forma di questo file era già pronta a riceverlo, e la prova è che
 non è servito inventare un criterio nuovo: è bastato rileggere quello con cui
 *Caselle* si era staccata da *Voci*.
 
-La colonna *Voci* somma **tre** [conta: voci-aperte], e stanno **tutte in una
-riga**: le prime ventiquattro sedute sono a zero, la venticinquesima è a tre.
+La colonna *Voci* somma **due** [conta: voci-aperte], e stanno **tutte in una
+riga**: le prime ventiquattro sedute sono a zero, la venticinquesima è a due.
 È una distribuzione che vale la pena leggere, perché è la seconda volta che
 capita e la prima è finita: le ventiquattro ci sono arrivate una per volta —
 l'ultima è stata la 24, con la
@@ -513,7 +519,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
 | **§25.3** | [Dove sta la prima fotografia di un vault](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#253-dove-sta-la-prima-fotografia-di-un-vault) | 25. Sette scelte che il codice ha preso senza dirlo | kernel | **P1** |
-| **§25.5** | [Quando la cartella di configurazione non si può scrivere](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#255-quando-la-cartella-di-configurazione-non-si-può-scrivere) | 25. Sette scelte che il codice ha preso senza dirlo | kernel | **P1** |
 | **§25.7** | [Dove stanno i byte di un `kind` di terzi](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#257-dove-stanno-i-byte-di-un-kind-di-terzi) | 25. Sette scelte che il codice ha preso senza dirlo | contratto | **P2** |
 
 ## I difetti misurati
@@ -599,7 +604,7 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentotto** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentanove** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue
