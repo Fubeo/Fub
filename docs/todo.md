@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Ventisette** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Ventisei** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -565,7 +565,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
 | 0110 | lo stesso testo di contesto è copiato per intero tre volte lungo la catena — una `String` per ogni link in `inlines_del_blocco`, poi di nuovo in `register_links`, poi in `backlinks()` — dove basterebbe una fetta condivisa del sorgente | `fub-format-markdown` · `parse.rs` `inlines_del_blocco` | prestazioni |
-| 0111 | una riga vuota in mezzo a una tabella GFM la chiude e lascia le righe successive come un paragrafo unico, e succede in due file — `docs/decisions/README.md` riga 90 (58 righe, 214.447 byte in un solo paragrafo) e `docs/architecture/wit-congelato.md` riga 98 (8 righe, 11.174 byte) — senza che nessun conto della CI guardi l'integrità di una tabella | `docs` · `decisions/README.md` riga 90 (con `architecture/wit-congelato.md` riga 98) | regole |
 | 0112 | l'anagrafe non ha forma incrementale: `EntryStore::open` deserializza l'intera `BTreeMap<DocId, StoredEntry>` e `EntryStore::store` la riserializza e la sostituisce tutta con una `VaultStorage::write`, così ogni apertura paga il vault intero anche quando non è cambiato un file | `fub-kernel` · `entries.rs` `EntryStore::store` | prestazioni |
 | 0113 | il prestito esclusivo di `finish_index` copre in fila cinque fasi, tre delle quali toccano il disco — ricostruzione integrale del grafo, riconciliazione degli indici, flush degli indici, ricongiungimento delle rinomine che cammina l'anagrafe persistita, riscrittura integrale di `entries.json` — così un lettore concorrente aspetta la somma di tutte e cinque e non la sola indicizzazione | `fub-kernel` · `workspace.rs` `Workspace::finish_index` | lock e I/O |
 | 0115 | risolvere un wikilink scandisce tutta l'anagrafe: `named_entry_in` calcola fino a due `resolution_key` per voce e chiude con un `min_by_key` che non cortocircuita, quindi trovare costa quanto non trovare — 27,8 ms a chiamata su 20.000 voci — e `entry_rewrite_plan` la chiama una volta per ogni link di ogni documento, cioè quarantasei minuti per rinominare un allegato | `fub-kernel` · `index/core.rs` `named_entry_in` | prestazioni |

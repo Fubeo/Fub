@@ -209,6 +209,18 @@ jobs:
         run: node .github/scripts/check-prosa.mjs --autoprova
       - name: I numeri e le garanzie che la prosa afferma sui sorgenti
         run: node .github/scripts/check-prosa.mjs
+      # E la terza specie, che non è né un link né un numero: una tabella che al
+      # sorgente si legge intatta e alla pagina non è più una tabella. Una riga
+      # vuota in mezzo la chiude, e le righe sotto diventano un paragrafo con i
+      # `|` stampati come testo — era successo in due file, cinquantotto righe
+      # nel registro dei verbali e otto in `wit-congelato.md`, senza rompere un
+      # link né un numero. Prima l'autoprova, perché la parte fragile qui è la
+      # distinzione fra la riga vuota che spezza una tabella e quella che ne
+      # separa due: se si spegnesse lei, il conto direbbe verde su tutto.
+      - name: La riga vuota che spezza una tabella non è quella che ne separa due
+        run: node .github/scripts/check-tabelle.mjs --autoprova
+      - name: Ogni tabella dei documenti è ancora una tabella
+        run: node .github/scripts/check-tabelle.mjs
 
   frontend:
     name: frontend (type-check + test + build)
