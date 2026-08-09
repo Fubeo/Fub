@@ -499,8 +499,9 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
 /// Lo store si apre con le stesse capacità che avrà l'handler — un `HostApi`
 /// intestato a `VERSIONING_ID` — e non con `std::fs`: chi monta non ha un canale
 /// privilegiato che un plugin non avrebbe. La prima fotografia del vault non è
-/// qui: è policy della feature, e scatta sull'evento `VaultOpened` che `reindex`
-/// emette dopo il montaggio.
+/// qui: è policy della feature, e la chiama il runner, una volta per apertura,
+/// prima della prima fetta (§25.3), da una chiusura che il montaggio consegna
+/// nella sessione.
 #[cfg(feature = "versioning")]
 fn register_versioning(
     ws: &mut Workspace,

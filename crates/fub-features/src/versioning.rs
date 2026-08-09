@@ -452,7 +452,8 @@ impl VersionStore {
     /// Per la durata del lotto `versions.json` non c'è, e chi legge le versioni
     /// **dal disco** — [`HistoryView`], che rilegge a ogni disegno — vede una
     /// cronologia vuota invece di una parziale. All'apertura non lo vede
-    /// nessuno, perché la passata gira prima che ci sia una finestra; nella
+    /// nessuno, perché la passata gira nel runner, prima della prima fetta;
+    /// nella
     /// riconciliazione dopo un `Overflow` è un lampo, e il pannello si ridisegna
     /// alla prima scrittura che segue. È il prezzo dichiarato di non lasciare in
     /// giro un indice che si crede la verità.
@@ -1308,8 +1309,8 @@ impl VersioningHandler {
     /// La domanda è all'anagrafe ([`IndexQuery::Entries`], §14.1) e non a
     /// [`HostApi::list_documents`], e la differenza è diventata visibile con
     /// l'apertura a fasi (§15.7): `list_documents` risponde dai documenti
-    /// **parsati**, e all'arrivo di [`Event::VaultOpened`] non ne è stato
-    /// parsato ancora nessuno — il vault a quel punto sa *cosa c'è*, non
+    /// **parsati**, e quando la passata parte non ne è stato parsato ancora
+    /// nessuno — il vault a quel punto sa *cosa c'è*, non
     /// *cosa dicono*. Chiedendo la lista sbagliata, la prima fotografia
     /// sarebbe stata di zero note, e la prima modifica a una nota mai
     /// versionata avrebbe cancellato per sempre lo stato in cui l'utente
@@ -1346,10 +1347,14 @@ impl VersioningHandler {
     /// versionata cancellerebbe per sempre lo stato in cui l'utente l'ha
     /// trovata — l'handler gira *dopo* la scrittura e vede solo il testo nuovo.
     ///
-    /// È **policy della feature**, non del wiring di chi monta: viveva in
-    /// `fub-app::open_vault`, cioè in un posto dove un plugin non potrebbe
-    /// metterla. Qui è esattamente ciò che farebbe `Plugin::activate`.
-    fn first_snapshot_of_the_vault(&self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    /// La chiama il runner, una volta per apertura, prima della prima fetta
+    /// (§25.3): il *quando* e il *cosa* sono policy della feature — viveva in
+    /// `fub-app::open_vault`, poi sull'evento `VaultOpened`, oggi qui, con la
+    /// stessa firma di un `Plugin::activate` — e il *chi* è il wiring.
+    pub fn first_snapshot_of_the_vault<'h>(
+        &self,
+        host: &'h mut (dyn HostApi + 'h),
+    ) -> Result<(), PluginError> {
         self.sweep(host, Passata::SoloNuovi)
     }
 
@@ -1422,7 +1427,6 @@ enum Passata {
 impl EventHandler for VersioningHandler {
     fn subscribed(&self) -> EventMask {
         EventMask::of([
-            EventKind::VaultOpened,
             EventKind::DocumentChanged,
             EventKind::DocumentRenamed,
             EventKind::DocumentRemoved,
@@ -1434,7 +1438,6 @@ impl EventHandler for VersioningHandler {
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
         match &notice.event {
-            Event::VaultOpened { .. } => self.first_snapshot_of_the_vault(host)?,
             Event::DocumentChanged { id, .. } => {
                 let source = host.read_document(id)?;
                 self.store.snapshot(id, &source, host)?;
@@ -2663,15 +2666,8 @@ mod tests {
             .snapshot(&id("b.md"), "anche questa", &mut host)
             .unwrap();
 
-        let mut handler = VersioningHandler::new(store.clone());
-        handler
-            .handle(
-                &Notice::of(Event::VaultOpened {
-                    root: "/vault".into(),
-                }),
-                &mut host,
-            )
-            .unwrap();
+        let handler = VersioningHandler::new(store.clone());
+        handler.first_snapshot_of_the_vault(&mut host).unwrap();
 
         assert_eq!(store.list(&id("a.md")).len(), 1, "mai vista → fotografata");
         assert_eq!(

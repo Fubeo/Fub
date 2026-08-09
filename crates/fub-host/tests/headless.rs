@@ -198,8 +198,11 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     host.open(&v.root).expect("il vault si apre");
     let id = DocId::new("Nota.md");
 
-    // La prima fotografia scatta su `VaultOpened`, che `reindex` emette dentro
-    // `Host::open`: la storia esiste prima ancora che qualcuno scriva.
+    // La prima fotografia non sta più dentro `Host::open` (§25.3): la chiama
+    // il runner, prima della prima fetta — l'ordine lo presidia
+    // `la_prima_fotografia_precede_la_prima_fetta`. Qui si aspetta il job, e
+    // la storia esiste già prima che qualcuno scriva.
+    host.wait_indexed(None).expect("aspetta l'indicizzazione");
     let before = host.list_versions(None, &id).expect("versioning acceso");
     assert_eq!(before.len(), 1, "la fotografia dell'apertura");
 
@@ -225,6 +228,63 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     let ws = host.workspace(None).unwrap();
     let ws = ws.read().unwrap();
     assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
+}
+
+/// **La prima fotografia sta nel runner, prima della prima fetta** (§25.3).
+///
+/// La passata è uscita dalla fase 1: `Host::open` non fotografa più, e la
+/// prima cosa dell'indicizzazione è la passata. Il testimone è il primo
+/// `JobProgress`: la fetta che lo emette sta nella stessa chiamata di
+/// `avanza_apertura` che ha appena consumato la fotografia, quindi quando la
+/// barra si annuncia ogni nota ha già la sua prima versione.
+///
+/// Rosso se la chiamata manca, o tarda: finisse dopo le fette (per esempio
+/// accanto a `collect_doc_data`), al primo `JobProgress` le versioni
+/// sarebbero ancora zero.
+#[test]
+fn la_prima_fotografia_precede_la_prima_fetta() {
+    let v = Vault::new();
+    for n in 0..50 {
+        v.put(&format!("Nota{n:02}.md"), &format!("# Nota {n}\n"));
+    }
+
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let host = Host::new()
+        .with_watcher(Box::new(NoWatcher))
+        .with_sink(Arc::new(Collected(seen.clone())));
+    host.open(&v.root).expect("il vault si apre");
+
+    // Il ponte ha un freno (§10.2): la consegna si aspetta, e se non arriva il
+    // test fallisce sul tempo massimo invece che sul primo giro.
+    let scaduto = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < scaduto {
+        let arrivato = seen
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|n: &Notice| n.event.kind() == EventKind::JobProgress);
+        if arrivato {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        seen.lock()
+            .unwrap()
+            .iter()
+            .any(|n| n.event.kind() == EventKind::JobProgress),
+        "la prima fetta non si è mai annunciata"
+    );
+
+    for n in 0..50 {
+        let id = DocId::new(format!("Nota{n:02}.md"));
+        let versioni = host.list_versions(None, &id).expect("versioning acceso");
+        assert_eq!(
+            versioni.len(),
+            1,
+            "{id}: alla prima fetta la fotografia non c'era ancora"
+        );
+    }
 }
 
 /// Un sink che accumula: il posto dell'`AppHandle` di Tauri, senza Tauri.
