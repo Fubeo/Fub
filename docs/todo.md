@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Trentanove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Trentotto** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -583,7 +583,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0129 | `convert_inlines` non ha un ramo per l'HTML inline e lo lascia cadere nel catch-all che ricorre sui figli, ma quel nodo porta il markup in `literal` e non ha figli, quindi sparisce senza lasciare nemmeno i byte grezzi — mentre `convert_block` salva il `literal` dell'HTML di blocco | `fub-format-markdown` · `parse.rs` `convert_inlines` | regole |
 | 0130 | due letture che rispondono con dei dati hanno un comando IPC proprio invece di una variante di `IndexQuery`, e siccome `IndexQuery` non ha una variante di resa e l'`HostApi` non ha una capacità di render, un `ViewProvider` non ha nessuna porta per mostrare un documento reso mentre la shell ne ha due | `fub-app` · `lib.rs` `render_preview` / `render_embed` | regole |
 | 0131 | `deleted_at` non è un dato salvato ma l'mtime del file nel cestino diviso 1000, ricavato in `walk_trash`, quindi qualsiasi tocco al file — un rename, un backup, una sync — riscrive la data di cancellazione, e per giunta invalida il sidecar, che usa lo stesso mtime come controllo d'identità | `fub-kernel` · `vault.rs` `walk_trash` | regole |
-| 0133 | il conto `crate-del-workspace` ricava l'elenco dei crate dal glob `crates/*/Cargo.toml` invece che da `[workspace] members`, ignorando `crateDelWorkspace` che gli altri due presidi già usano: una cartella su disco non dichiarata membro entra nel conto senza che cargo la compili, e un membro fuori da `crates/` non ci entra mai | `.github/scripts` · `conteggi.mjs` `crate-del-workspace` | presidi |
 | 0134 | l'anagrafe si scrive una volta sola per sessione — `store_entries` ha per unico chiamante `finish_index`, che gira solo nel job d'apertura — mentre le sei chiamate a `touch_entry` di metà sessione aggiornano solo la memoria e `Workspace::close` non la scrive: tutto ciò che si salva, rinomina o cestina dopo l'apertura viene riletto e riparsato alla riapertura, cioè esattamente il lavoro che l'anagrafe esiste per evitare | `fub-kernel` · `workspace.rs` `Workspace::store_entries` | prestazioni |
 | 0135 | `Workspace::organization_warnings` non ha nessun chiamante fuori dai banchi: gli avvisi che calcola non arrivano a nessuna porta | `fub-kernel` · `workspace.rs` `organization_warnings` | presidi |
 | 0136 | l'etichetta di un wikilink senza alias la sintetizza comrak dal bersaglio, e `convert_inlines` la scandisce per i tag come fosse prosa: `[[#Sezione]]` fa nascere un tag `Sezione` che nessuno ha scritto, con lo span dentro quello del link | `fub-format-markdown` · `parse.rs` ramo `NodeValue::WikiLink` | regole |
