@@ -281,6 +281,18 @@ function estraiLink(testo) {
 // link è stantio; e siccome il nome c'è, il controllo sa anche **dove è
 // finito** e lo dice, così ripararlo è copiare un numero invece di cercarlo.
 
+/**
+ * Le estensioni che fanno di un tratto `qualcosa:N` l'**ancoraggio a un file**
+ * invece di una citazione qualunque con due punti dentro.
+ *
+ * Sta in una costante sola perché la leggono due parti che devono restare
+ * d'accordo: `nomiPromessi`, che rifiuta di cercare un percorso dentro un
+ * sorgente, e il conto degli ancoraggi di prosa in fondo. Se le due divergono,
+ * un ancoraggio esce da un conto senza entrare nell'altro, e sparisce da tutti
+ * e due i totali.
+ */
+const ESTENSIONI_DI_FILE = /\.(json|md|mjs|js|rs|ts|tsx|toml|wit)$/;
+
 /** Le parole che in un tratto di codice non sono un nome da cercare. */
 const PAROLE_NON_NOMI = new Set([
   "pub", "fn", "let", "mut", "self", "crate", "super", "use", "mod", "impl",
@@ -301,7 +313,7 @@ function nomiPromessi(testoRiga, etichetta) {
     // Un percorso non è un simbolo: `.fub/workspace.json` non si cerca dentro
     // `organization.rs`, e cercarlo lo stesso troverebbe un `workspace`
     // qualsiasi a riga 1 e chiamerebbe verde un link stantio.
-    if (tratto.includes("/") || /\.(json|md|rs|ts|tsx|toml|wit)$/.test(tratto)) continue;
+    if (tratto.includes("/") || ESTENSIONI_DI_FILE.test(tratto)) continue;
     for (const pezzo of tratto.split(/[^A-Za-z0-9_]+/)) {
       if (pezzo.length >= 3 && !PAROLE_NON_NOMI.has(pezzo.toLowerCase())) nomi.add(pezzo);
     }
@@ -420,9 +432,15 @@ function main() {
   let totaleLink = 0;
   let totaleRighe = 0;
   let righeSenzaNome = 0;
-  // Le ancore che stanno accanto a un link e non dentro la sua etichetta, già
-  // viste: una riga con due link allo stesso file le farebbe contare due volte.
-  const ancoreAccanto = new Set();
+  // Gli ancoraggi di **prosa**: un tratto `file.rs:N` che nessun link della sua
+  // riga risolve per nome di file. Non si verificano — la ragione sta accanto
+  // al conto, in fondo — ma si contano, perché una zona cieca senza un numero
+  // è indistinguibile da una che cresce.
+  let ancoraggiDiProsa = 0;
+  // Le ancore già viste, per etichetta o accanto a un link: una riga con due
+  // link allo stesso file le farebbe contare due volte, e un'ancora che è stata
+  // verificata non è prosa.
+  const ancoreViste = new Set();
   const problemi = [];
 
   for (const percorso of file) {
@@ -526,7 +544,13 @@ function main() {
       // Il `:N` dell'etichetta, se c'è.
       const etichettaNuda = etichetta.replace(/`/g, "").trim();
       const conRiga = etichettaNuda.match(/^(\S+):(\d+)$/);
-      if (conRiga && bersaglioNumerabile) verificaAncora(etichetta, Number(conRiga[2]));
+      if (conRiga && bersaglioNumerabile) {
+        // Anche l'etichetta entra fra le viste: quando è scritta fra backtick
+        // (`` [`Cargo.toml:15`](../Cargo.toml) ``) il conto della prosa qui
+        // sotto la incontrerebbe di nuovo e la chiamerebbe non verificata.
+        ancoreViste.add(`${percorso}|${riga}|${etichettaNuda}`);
+        verificaAncora(etichetta, Number(conRiga[2]));
+      }
 
       // **E il `:N` che viaggia ACCANTO al link invece che dentro l'etichetta.**
       //
@@ -558,8 +582,8 @@ function main() {
           const accanto = tratto.match(/^(\S+):(\d+)$/);
           if (accanto === null || path.basename(accanto[1]) !== nomeFile) continue;
           const chiave = `${percorso}|${riga}|${tratto}`;
-          if (ancoreAccanto.has(chiave)) continue; // due link uguali sulla stessa riga
-          ancoreAccanto.add(chiave);
+          if (ancoreViste.has(chiave)) continue; // già verificata su questa riga
+          ancoreViste.add(chiave);
           verificaAncora(`\`${tratto}\``, Number(accanto[2]));
         }
       }
@@ -572,6 +596,44 @@ function main() {
         segnala(`il file c'è, ma non ha l'ancora #${frammento}`);
       }
     }
+
+    // **Quanti ancoraggi questo presidio non ha nemmeno aperto.**
+    //
+    // Il ciclo qui sopra passa dai link: un `file.rs:N` che nessun link della
+    // sua riga risolve per nome di file non ci entra mai, e fino a qui non
+    // entrava neanche nel totale. Il riassunto diceva «153 con un numero di
+    // riga» e taceva sui 112 che non aveva guardato — **la stessa specie di
+    // difetto che questo script presidia**, fatta al riassunto di questo
+    // script: un conto cieco a ciò che nessuno gli ha detto di guardare, verde
+    // mentre la cosa cresce.
+    //
+    // Contarli non vuol dire verificarli, e la distinzione non è timidezza. Un
+    // tratto senza link accanto **non dice a quale file si riferisca**:
+    // `traits.rs:2912` sono tre file diversi in questo repo, e sceglierne uno
+    // è indovinare. E la maggior parte di questi sta in due posti che devono
+    // poter invecchiare — la tabella dei difetti di `docs/todo.md` e le sedute
+    // della roadmap — perché sono misure **datate**: renderle rosse quando quel
+    // file si accorcia vorrebbe dire chiedere a un verbale di restare vero, che
+    // è precisamente ciò che un verbale non promette. Da cui: il numero sì, il
+    // giudizio no.
+    //
+    // Zona cieca dichiarata, misurata: l'ancora è il **tratto di codice**,
+    // quindi un `dispatcher.rs:589` scritto senza backtick non entra in questo
+    // conto — provato, il numero non si muove. È il verso giusto in cui
+    // sbagliare: la convenzione di questi documenti è che un riferimento a un
+    // sorgente stia fra backtick, e chi la rompe si toglie dal conto **e**
+    // dalla verifica insieme, cioè non guadagna un verde, perde una lettura.
+    mascheraBlocchiDiCodice(testo, { inLinea: false })
+      .split("\n")
+      .forEach((rigaTesto, i) => {
+        for (const m of rigaTesto.matchAll(/`([^`]+)`/g)) {
+          const tratto = m[1].trim();
+          const ancoraggio = tratto.match(/^(\S+):\d+$/);
+          if (ancoraggio === null || !ESTENSIONI_DI_FILE.test(ancoraggio[1])) continue;
+          if (ancoreViste.has(`${percorso}|${i + 1}|${tratto}`)) continue;
+          ancoraggiDiProsa += 1;
+        }
+      });
   }
 
   for (const p of problemi) {
@@ -583,6 +645,17 @@ function main() {
       ` — di cui ${totaleRighe} con un numero di riga` +
       (righeSenzaNome > 0 ? `, ${righeSenzaNome} senza un nome accanto da cercare` : ""),
   );
+  // La zona cieca la dice il riassunto, non il solo commento nel codice: chi
+  // legge l'uscita deve poter vedere quanto è grande ciò che non è stato
+  // guardato senza aprire questo file.
+  if (ancoraggiDiProsa > 0) {
+    console.log(
+      `${ancoraggiDiProsa} ancoraggi di prosa, non verificati: un \`file.rs:N\` che nessun link` +
+        ` della sua riga\nrisolve non dice a quale file si riferisca, ed è per lo più una misura` +
+        ` datata — la tabella\ndei difetti, le sedute della roadmap — che non deve diventare rossa` +
+        ` quando quel file cambia.`,
+    );
+  }
 
   // Un presidio che non ha guardato niente non è verde: è spento. È il modo in
   // cui questo si era già spento una volta, e «0 rotti» lo diceva verde.
