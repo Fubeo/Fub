@@ -722,6 +722,20 @@ stanno in `options::permission`; un permesso con un namespace di terzi attravers
 il confine intatto, e un host che non lo conosce può **rifiutarlo** — che è
 esattamente ciò che un enum chiuso non gli avrebbe permesso di fare.
 
+## La chiave del carico di un `custom_kind` di terzi
+
+Quando una `SyntaxRule` produce un `Custom` (blocco o inline), i byte
+dell'utente che la resa generica deve mostrare stanno negli `attrs`. Per i kind
+del core la chiave la dichiara la tabella `custom_kind::CARICHI`; un kind di
+terzi in quella tabella **non può entrare** — l'elenco è del core, e il conto a
+due versi lo presidia — quindi la sua chiave è la convenzione: **`source`**
+(§25.7, forma (b)). La regola sta in `fub_abi::rules::carichi`, ed è la stessa
+che il provider WASM di M5 erediterà: chi dichiara i propri byte sotto `source`
+si vede rendere dalla resa generica di qualunque provider, chi li porta sotto
+un'altra chiave si rende vuoto — e il silenzio è dichiarato, perché la resa
+generica è il degrado della [0122](../decisions/0122-una-sorgente-non-degrada-si-rifiuta.md),
+non un errore.
+
 ## Modello capability: **ibrido**
 
 **Grana grossa (un permesso per capacità) + allowlist come parametro del

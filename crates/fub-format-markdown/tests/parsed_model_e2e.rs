@@ -50,7 +50,7 @@ impl SyntaxRule for RegolaDiTerzi {
     ) -> Result<Option<SyntaxProduct>, FormatError> {
         Ok(Some(SyntaxProduct::Inline {
             custom_kind: "terzi:sottolineato".into(),
-            attrs: serde_json::json!({ "text": m.text }),
+            attrs: serde_json::json!({ "source": m.text }),
         }))
     }
 }

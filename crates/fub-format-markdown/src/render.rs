@@ -7,6 +7,7 @@ use fub_abi::model::{
     custom_kind, Block, ColumnAlign, DocumentModel, Inline, LinkTarget, TableRow,
 };
 use fub_abi::options::render_option;
+use fub_abi::rules::carichi;
 
 use fub_abi::html::{attr, escape};
 
@@ -245,16 +246,18 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
         // `Inline::Custom` che il provider non riconosceva spariva dalla
         // resa, in silenzio — ed era il gemello inline del difetto che il
         // §3.2 nomina sui blocchi, con l'aggravante che qui non restava
-        // nemmeno il testo. Un kind che porta il proprio `text` (è la forma
-        // che una `SyntaxRule` inline produce) lo mostra dentro uno span con
-        // la sua classe: chi ha un tema lo veste, chi non ce l'ha lo legge.
+        // nemmeno il testo. Un kind che porta i propri byte sotto la chiave
+        // che il contratto dichiara (la tabella per il core, `source` per i
+        // terzi — §25.7) li mostra dentro uno span con la sua classe: chi ha
+        // un tema lo veste, chi non ce l'ha lo legge.
         Inline::Custom {
             custom_kind, attrs, ..
         } => {
             // La stessa domanda del degrado dei blocchi, e la stessa
             // espressione: qui si guardava solo `text`, e un inline che portasse
             // il proprio contenuto sotto un altro nome del registro spariva
-            // esattamente come sparivano i blocchi.
+            // esattamente come sparivano i blocchi. Adesso la domanda la fa
+            // `carichi::carico_testuale`, come per i blocchi.
             let text = contenuto_testuale(custom_kind, attrs).unwrap_or_default();
             out.push_str(&format!(
                 "<span{}>{}</span>",
@@ -269,33 +272,27 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
 /// contenuto che il blocco ha.
 ///
 /// I `custom_kind` che non hanno figli portano i byte dell'utente in un attrs,
-/// e **la chiave la dichiara il contratto**, non questo file:
-/// [`custom_kind::carico`] la dice per ogni kind del core. Prima erano tre
-/// stringhe a campione (`html`, `source`, `text`) scritte qui dentro, cioè lo
-/// stesso elenco di `model.rs` copiato in un renderer: un kind del core che
-/// chiamasse il proprio contenuto in un quarto modo si rendeva vuoto, e la
-/// copia non aveva nessuno che la tenesse allineata all'originale.
+/// e **la chiave la dichiara il contratto**, non questo file: la domanda sta
+/// in [`carichi::carico_testuale`] — la tabella [`custom_kind::CARICHI`] per i
+/// kind del core, la chiave convenzionale `source` per quelli di terzi
+/// (§25.7). Prima erano tre stringhe a campione (`html`, `source`, `text`)
+/// scritte qui dentro, cioè lo stesso elenco di `model.rs` copiato in un
+/// renderer: un kind del core che chiamasse il proprio contenuto in un quarto
+/// modo si rendeva vuoto, e la copia non aveva nessuno che la tenesse
+/// allineata all'originale.
 ///
 /// Sta in una funzione sola perché il degrado dei blocchi e quello degli inline
 /// facevano la stessa domanda in due punti, e la facevano diversa: l'inline
 /// guardava `text` e il blocco non guardava niente. Chiedere due volte la stessa
 /// cosa in due modi è il difetto, non la ripetizione.
 ///
-/// **Il limite, dichiarato**: un kind che il contratto **non** dichiara — cioè
-/// quello di un terzo — nessuno sa dove tenga i byte, perché oggi non c'è modo
-/// di dirlo (vedi [`custom_kind::carico`]). Per quelli resta il campione delle
-/// tre chiavi del core: è un tentativo, e si vede che lo è. Sostituirlo con
-/// «niente» toglierebbe la resa a `terzi:spoiler` che oggi funziona; farne una
-/// quarta stringa non renderebbe il quinto caso.
+/// **Il limite, dichiarato**: un kind di terzi che non porta i byte sotto la
+/// chiave convenzionale si rende vuoto — è il prezzo della forma (b) della
+/// §25.7, e oggi nessun plugin lo paga. «Sostituire il campione con niente»
+/// è ciò che la riga vecchia rifiutava: non è niente, è la **chiave
+/// dichiarata** in `rules::carichi`, e chi la segue rende come prima.
 fn contenuto_testuale<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str> {
-    let testo = |chiave: &str| attrs.get(chiave).and_then(|v| v.as_str());
-    match custom_kind::carico(kind) {
-        Some(carico) => carico.chiave().and_then(testo).filter(|s| !s.is_empty()),
-        None => ["html", "source", "text"]
-            .into_iter()
-            .filter_map(testo)
-            .find(|s| !s.is_empty()),
-    }
+    carichi::carico_testuale(kind, attrs)
 }
 
 /// La classe CSS di un `Custom`: il prefisso del lato che lo rende — `block` o

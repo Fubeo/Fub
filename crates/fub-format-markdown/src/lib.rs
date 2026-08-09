@@ -485,9 +485,9 @@ mod tests {
     /// avrebbe scollegato il tema senza che niente diventasse rosso.
     #[test]
     fn due_kind_omonimi_di_namespace_diversi_non_collidono_sulla_classe() {
-        let custom_inline = |kind: &str, text: &str| Inline::Custom {
+        let custom_inline = |kind: &str, chiave: &str, text: &str| Inline::Custom {
             custom_kind: kind.into(),
-            attrs: serde_json::json!({ "text": text }),
+            attrs: serde_json::json!({ chiave: text }),
             span: fub_abi::model::Span::EMPTY,
         };
         let custom_block = |kind: &str, source: &str| Block::Custom {
@@ -501,8 +501,8 @@ mod tests {
             body: vec![
                 Block::Paragraph {
                     inlines: vec![
-                        custom_inline("terzi:spoiler", "di terzi"),
-                        custom_inline("altri:spoiler", "di altri"),
+                        custom_inline("terzi:spoiler", "source", "di terzi"),
+                        custom_inline("altri:spoiler", "source", "di altri"),
                     ],
                     anchor: None,
                     span: fub_abi::model::Span::EMPTY,
@@ -534,7 +534,7 @@ mod tests {
         // La metà che non cambia: un kind del core resta dov'era.
         let core = DocumentModel {
             body: vec![Block::Paragraph {
-                inlines: vec![custom_inline(custom_kind::HIGHLIGHT, "importante")],
+                inlines: vec![custom_inline(custom_kind::HIGHLIGHT, "text", "importante")],
                 anchor: None,
                 span: fub_abi::model::Span::EMPTY,
             }],

@@ -367,6 +367,83 @@ fn da_un_renderer_non_fidato_il_contenuto_attivo_non_passa() {
     );
 }
 
+/// Una sintassi di terzi che porta i propri byte sotto la chiave
+/// **convenzionale** (`source`) *e* sotto una chiave che la convenzione non
+/// nomina (`text`): la resa generica deve prendere la prima e ignorare la
+/// seconda, ed è nei due versi che il banco la tiene ferma.
+struct ConvenzioneRule;
+
+impl SyntaxRule for ConvenzioneRule {
+    fn spec(&self) -> SyntaxRuleSpec {
+        SyntaxRuleSpec {
+            id: "terzi:convenzione".into(),
+            format: "markdown".into(),
+            trigger: SyntaxTrigger::Fence {
+                info: vec!["convenzione".into()],
+            },
+            order: 0,
+            option: None,
+            produces: vec!["terzi:convenzione".into()],
+        }
+    }
+    fn apply(
+        &self,
+        _m: &SyntaxMatch,
+        _ctx: &ParseContext,
+    ) -> Result<Option<SyntaxProduct>, FormatError> {
+        Ok(Some(SyntaxProduct::Block {
+            custom_kind: "terzi:convenzione".into(),
+            attrs: json!({ "source": "GIRO-DEI-BYTE", "text": "TESTO-SBAGLIATO" }),
+            blocks: vec![],
+        }))
+    }
+}
+
+/// **Un `kind` di terzi degradato mostra i byte sotto la chiave che la
+/// convenzione dichiara — `source` — e sotto nessun'altra.**
+///
+/// È il banco che la §25.7 dichiarava mancante: un `terzi:*` che passa dalla
+/// degradazione generica invece che dal proprio renderer. Un plugin che non
+/// registra un `CustomRenderer` (o il cui renderer torna `Fallback` o pania —
+/// `fub-kernel/src/renderer.rs` li tratta tutti e tre allo stesso modo) vede
+/// il proprio blocco reso dal provider, e la resa chiede i byte al contratto:
+/// `rules::carichi::carico_testuale` — la tabella del core per i kind
+/// dichiarati, la chiave convenzionale `source` per i kind di terzi.
+///
+/// I due versi: la chiave dichiarata si vede, e una chiave che la convenzione
+/// non nomina **non** si vede. Se il campione a più chiavi tornasse, `text`
+/// vincerebbe su `source` e la seconda asserzione cadrebbe insieme alla prima.
+#[test]
+fn un_kind_di_terzi_degradato_mostra_i_byte_della_chiave_convenzionale() {
+    let v = Vault::new();
+    v.put("c.md", "```convenzione\ngiro\n```\n");
+    let mut registry = FormatRegistry::new();
+    registry.register(MarkdownProvider::boxed()).unwrap();
+    let mut ws = Workspace::new(&v.root, registry);
+    // Un plugin di terzi, dichiarato come tale: il grado di fiducia sta nella
+    // dichiarazione, non su ogni cosa che registra (§7.3).
+    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+        .expect("dichiarato");
+    ws.register_syntax_rule("terzi", Box::new(ConvenzioneRule))
+        .expect("innesto");
+    ws.reindex().expect("reindex");
+
+    // Il renderer non c'è: `compose` non trova nessuno per `terzi:convenzione`
+    // e il blocco finisce nella corsa che il provider rende genericamente.
+    let out = preview(&ws, "c.md");
+    assert!(out.parts.is_empty(), "parts: {:?}", out.parts);
+    assert!(
+        out.html.contains("GIRO-DEI-BYTE"),
+        "i byte sotto la chiave convenzionale `source` non compaiono: {}",
+        out.html
+    );
+    assert!(
+        !out.html.contains("TESTO-SBAGLIATO"),
+        "la chiave `text` non è la convenzione, e non deve rendere: {}",
+        out.html
+    );
+}
+
 #[test]
 fn due_regole_sulla_stessa_sintassi_non_si_registrano_in_silenzio() {
     let v = Vault::new();
