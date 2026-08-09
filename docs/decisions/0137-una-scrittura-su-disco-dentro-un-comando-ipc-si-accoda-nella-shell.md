@@ -82,10 +82,28 @@ vault.
    corsa.ts`, accanto a `Coda` — il posto che tutti i chiamanti attraversano —
    e non dentro `store.ts`, dove la risposta andrebbe ripetuta al prossimo
    sito.
+6. **La voce citava come proprio «caso peggiore» un difetto ritrattato.** Il
+   corpo della §25.6 nominava `set_setting_for_user` e `reset_setting_for_user`
+   col prestito esclusivo come «il caso peggiore» e come difetto aperto, e la
+   ritrattazione (`53972d4`) l'aveva già tolto come falso poche ore prima: quel
+   prestito non è lì per la scrittura su disco, ma perché scrivere
+   un'impostazione rifà i recinti, pota il registro ed emette. Sembrava vera
+   perché era scritta nel corpo della voce, e questo verbale l'ha creduta e
+   propagata in un documento nuovo. Il guasto a monte è il secondo strato, e
+   vale più del primo: **la ritrattazione aveva ripulito la tabella senza
+   toccare la voce che la citava** — una ritrattazione che non si propaga
+   lascia in piedi la sua stessa smentita, ed è il motivo per cui l'errore è
+   arrivato fino a qui. La lezione per chi scriverà il presidio dei numeri
+   penzolanti: un difetto ritirato citato dentro un verbale si fa passare per
+   chiuso, e un conto costruito sulla citazione nascerebbe cieco sul caso che
+   deve prendere.
 
-**Cosa resta scoperto.** Il difetto **0138**: `set_setting_for_user` e
-`reset_setting_for_user` (`crates/fub-host/src/session.rs:1082` e `:1100`)
-prendono il prestito **esclusivo** — `session.workspace.write()` — e ci
-attraversano una scrittura su disco, mentre i quattro fratelli prendono
-`read()`. È il «caso peggiore» che la voce nomina, e **resta aperto**: non è
-questa voce.
+**Cosa resta scoperto.** Il «caso peggiore» che la voce nominava non lascia un
+difetto aperto: la ritrattazione (`53972d4`) l'aveva già tolto come falso prima
+che questa voce si chiudesse — il prestito esclusivo di `set_setting_for_user`
+(`crates/fub-host/src/session.rs:1082` e `:1100`) non è lì per la scrittura su
+disco, ma perché scrivere un'impostazione rifà i recinti, pota il registro ed
+emette, e i quattro fratelli che prendono il condiviso non fanno niente di tutto
+questo. Resta il fatto, non il difetto: chi legge quella porta vede un prestito
+esclusivo che attraversa una scrittura su disco, e deve sapere che è stato
+guardato e ritrattato, non dimenticato.

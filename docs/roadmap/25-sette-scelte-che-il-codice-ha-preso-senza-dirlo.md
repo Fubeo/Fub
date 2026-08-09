@@ -532,10 +532,15 @@ seconda convenzione di chiamata rompe l'elenco chiuso — e la (c) resta chiusa
 **fino alla soglia**: si accetta il lucchetto di macchina finché il file di
 stato resta sotto la taglia misurata — 5,036 ms su 137 KB con 20 vault contro
 2,561 ms su 2,4 KB, dominato dall'`fsync` e non dalla fusione — e quel giorno
-si riapre la (c), che è l'unica forma irreversibile. Resta aperto il difetto
-`0138`: `set_setting_for_user` e `reset_setting_for_user` prendono il prestito
-esclusivo del workspace e ci attraversano una scrittura su disco — il «caso
-peggiore» che questa voce nominava, e non è questa voce.
+si riapre la (c), che è l'unica forma irreversibile. Il «caso peggiore» che la
+voce nominava — `set_setting_for_user` e `reset_setting_for_user` con il
+prestito esclusivo del workspace — **non è un difetto aperto**: la ritrattazione
+(`53972d4`) l'aveva già tolto come falso prima che questa voce si chiudesse,
+perché il prestito esclusivo di `set_setting_for_user` non è lì per la scrittura
+su disco ma perché scrivere un'impostazione rifà i recinti, pota il registro ed
+emette, e i quattro fratelli che prendono il condiviso non fanno niente di tutto
+questo. La voce originale lo citava ancora perché la ritrattazione aveva ripulito
+la tabella senza toccare la voce che la nominava.
 
 ### 25.7 Dove stanno i byte di un `kind` di terzi
 
