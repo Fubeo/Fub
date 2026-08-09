@@ -90,9 +90,10 @@ function featureDi(file) {
     let aperte = (testo.match(/\[/g) ?? []).length - (testo.match(/\]/g) ?? []).length;
     while (aperte > 0 && i + 1 < righe.length) {
       i++;
-      // I commenti dentro l'elenco sono prosa, non voci: `trash` ne ha sei
-      // righe. Si tolgono qui, altrimenti una parola di italiano diventerebbe
-      // il nome di una feature che non esiste.
+      // I commenti dentro l'elenco sono prosa, non voci: `trash` ne porta, e
+      // il conto cambia a ogni riga di commento che si aggiunge. Si tolgono
+      // qui, altrimenti una parola di italiano diventerebbe il nome di una
+      // feature che non esiste.
       const seguito = righe[i].trim().replace(/^#.*$/, "");
       testo += ` ${seguito}`;
       aperte += (seguito.match(/\[/g) ?? []).length - (seguito.match(/\]/g) ?? []).length;

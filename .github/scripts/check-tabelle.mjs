@@ -25,9 +25,10 @@
 //   2. **il delimitatore che non ha le colonne dell'intestazione.** Se
 //      `|---|---|` non ha lo stesso numero di celle della riga sopra, GFM non
 //      apre nessuna tabella: l'intero blocco è un paragrafo dalla prima riga.
-//      Oggi le tabelle di questo repo sono duecentotredici — il conto le stampa
-//      in coda, così il numero qui si ricontrolla senza fidarsi — e nessuna è
-//      così; il conto non costa niente e diventa rosso il giorno che succede.
+//      Quante tabelle ci sono lo stampa questo script in coda, a ogni corsa:
+//      è lì che un numero del genere si ricontrolla, non in un commento che
+//      nessuno ricalcola — e nessuna è così; il conto non costa niente e
+//      diventa rosso il giorno che succede.
 //   3. **una riga di corpo che non ha le celle dell'intestazione.** Qui la
 //      tabella resta una tabella, e proprio per questo la pagina resa non
 //      denuncia niente: GFM **pareggia in silenzio**, e nei due versi (spec
