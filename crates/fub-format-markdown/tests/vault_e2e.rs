@@ -4,6 +4,7 @@
 use camino::Utf8PathBuf;
 use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
+use fub_abi::traits::BacklinkRef;
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, KernelError, Workspace};
 
@@ -92,7 +93,56 @@ fn computes_backlinks_with_context() {
         sources.contains(&"Daily/2026-07-24.md"),
         "backlink: {sources:?}"
     );
-    assert!(bl.iter().any(|r| r.context.is_some()));
+    ogni_backlink_porta_il_contesto(&bl, "Nota B");
+}
+
+/// **Ogni** backlink porta il contesto, e il contesto è la riga in cui il
+/// riferimento sta davvero.
+///
+/// Qui c'era `any(|r| r.context.is_some())`, che è il modo in cui un elenco si
+/// presidia col suo elemento più fortunato: bastava che *uno* dei quattro
+/// backlink avesse il contesto perché il banco che porta `with_context` nel
+/// nome passasse, e i quattro sono quattro proprio perché `index.md` ne
+/// contribuisce due. Un `any` non è una pretesa più debole di poco: è una
+/// pretesa su un altro insieme.
+///
+/// Le due metà che quell'asserzione non guardava, e che questa guarda:
+///
+/// - **quale** manca, perché un `any` che va rosso non ha niente da dire e un
+///   `all` senza messaggio nemmeno;
+/// - **che il contesto sia quello giusto**, ed è la metà che compra qualcosa.
+///   Che il contesto *esista* lo presidia già, e su ogni variante di `Block`
+///   invece che su quattro backlink, `ogni_link_del_corpus_porta_il_contesto_
+///   del_suo_blocco` in `il_corpus.rs`. Quello che né quel conto né `is_some()`
+///   vedono è un campo **pieno e sbagliato**: un `context` che porti un pezzo
+///   qualunque del documento sorgente — la prima riga, il titolo — passa da
+///   tutti e due, e il pannello dei backlink lo mostra sotto il nome della nota
+///   facendo credere di aver citato la riga del riferimento. Il contesto è il
+///   testo del blocco che contiene il link, quindi il nome del bersaglio ci sta
+///   dentro per costruzione, e chiederlo è l'unico modo di distinguere la riga
+///   giusta da una riga.
+///
+/// Sta in una funzione e non nel banco perché i backlink li chiedono altri sei
+/// test di questo file: il secondo che vorrà guardare il contesto non ha da
+/// riscrivere né la pretesa né il messaggio.
+fn ogni_backlink_porta_il_contesto(refs: &[BacklinkRef], bersaglio: &str) {
+    assert!(!refs.is_empty(), "nessun backlink da controllare");
+    for r in refs {
+        let ctx = r.context.as_deref().unwrap_or_else(|| {
+            panic!(
+                "il backlink da {} non porta nessun contesto: il pannello dei \
+                 backlink mostrerà il nome della nota e basta",
+                r.source.as_str()
+            )
+        });
+        assert!(
+            ctx.contains(bersaglio),
+            "il contesto del backlink da {} non nomina `{bersaglio}`: {ctx:?} — \
+             il campo porta un pezzo del documento che non è la riga del \
+             riferimento",
+            r.source.as_str()
+        );
+    }
 }
 
 #[test]
