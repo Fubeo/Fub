@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Trentotto** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Trentasette** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -573,7 +573,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0117 | aprire un vault paga la latenza dell'IPC una volta per domanda invece che una volta per gruppo: `openVaultPath` mette in fila sette `await` che nessun dato lega — quattro caricatori di stato e tre elenchi del kernel — collassabili in due `Promise.all` senza toccare l'ordine che i commenti dichiarano; quattro siti in tutto, questo è il peggiore | `frontend` · `main.ts` `openVaultPath` | prestazioni |
 | 0118 | `DEFAULT_EXCLUDED` è `.obsidian`, `.git`, `node_modules` e non contiene `target`: su un vault che è anche un repo Rust ogni file di `target/` prende un `DocId` ed entra in anagrafe, perché il filtro a valle assegna una specie e non scarta nulla | `fub-kernel` · `ignore.rs` `DEFAULT_EXCLUDED` | regole |
 | 0119 | `Journal::open` legge `.fub/journal.jsonl` due volte di fila — una per `ripara_la_coda` e una per `pota(0)` — e una terza la fa `Workspace::pota_il_registro` appena il bundle dichiara `journal.retention.days`, perché `pota` rilegge il file invece di ricevere i byte che il chiamante ha appena letto | `fub-kernel` · `journal.rs` `Journal::open` | lock e I/O |
-| 0120 | il quarto banco di `concorrenza.rs` è l'unico che non prende `turno_di_banco()`: libtest lo fa girare insieme agli altri tre e i suoi thread occupano i core proprio mentre `due_letture_stanno_nel_workspace_insieme` cronometra la sovrapposizione, che su una macchina a due core può non avvenire mai | `fub-host` · `tests/concorrenza.rs` `una_view_che_pania_disegnando_non_avvelena_il_vault` | presidi |
 | 0123 | gli avvisi non fatali del montaggio viaggiano nell'`Ok(Vec<String>)` di `BundleRegistry::enable`, e i due chiamanti che accendono un bundle scartano quel payload con un `?` che non lega: l'utente accende un componente e i provider non entrati non compaiono né nel valore di ritorno né nel log | `fub-host` · `session.rs` `Host::set_plugin_enabled` | regole |
 | 0124 | tre comandi IPC restano registrati in `generate_handler!` senza che nessuna riga di `frontend/` li invochi, e l'allowlist della dieta li assolve per nome senza mai chiedere chi li chiami: superficie da mantenere e sandboxare che solo i banchi esercitano | `fub-app` · `lib.rs` `close_vault` (con `list_vaults`, `set_current_vault`) | presidi |
 | 0125 | l'unica asserzione sul contesto di `computes_backlinks_with_context` è un `any(\|r\| r.context.is_some())`: le tre sorgenti sono verificate una per una, ma il contesto — la cosa che dà il nome al banco — passa con un backlink su quattro che ce l'ha, e senza messaggio di fallimento | `fub-format-markdown` · `tests/vault_e2e.rs` `computes_backlinks_with_context` | presidi |
