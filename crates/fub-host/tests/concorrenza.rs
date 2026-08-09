@@ -14,8 +14,8 @@
 //! `dependency_invariant.rs` — l'invariante che nessuno rompe apposta e che
 //! tutti romperebbero per comodità.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
@@ -32,14 +32,22 @@ fn lettori() -> usize {
     std::thread::available_parallelism().map_or(2, |n| n.get().clamp(2, 8))
 }
 
-/// Il banco di misura è uno solo, e i due test di contesa devono farci il turno.
+/// Il banco di misura è uno solo, e **tutti** i test di questo file ci fanno il
+/// turno.
 ///
-/// libtest esegue in parallelo i test dello stesso binario: senza questo turno
-/// i due girerebbero insieme, e ognuno dei due *è* la macchina occupata
-/// dell'altro. Quello che conta le letture sovrapposte tiene il prestito
-/// condiviso in ciclo stretto proprio mentre l'altro cronometra quanto ci mette
-/// a passare in scrittura — misurerebbero la contesa che si fanno da soli,
-/// invece di quella che il §8.3 ha comprato.
+/// libtest esegue in parallelo i test dello stesso binario, e uno solo di questi
+/// quattro cronometra: `chi_scrive_non_aspetta_i_lettori_piu_di_un_battito`
+/// misura in millisecondi quanto ci mette un salvataggio a passare davanti ai
+/// lettori. Ogni altro test di questo file apre un vault, lo indicizza e ci
+/// lancia dentro dei thread — cioè **è** la macchina occupata di quella misura,
+/// che di macchina occupata muore.
+///
+/// La regola è «tutti», e non «chi cronometra più i suoi vicini rumorosi»,
+/// perché la seconda è un elenco che si dimentica: il turno mancava proprio
+/// all'ultimo test aggiunto al file, che è il modo in cui questo elenco si
+/// sbaglia sempre. Per chi non misura il turno costa il tempo degli altri tre e
+/// non toglie niente, perché nessuno dei tre prova qualcosa che abbia bisogno di
+/// un vicino.
 static BANCO: Mutex<()> = Mutex::new(());
 
 /// Prende il turno di banco, avvelenamento compreso.
@@ -83,51 +91,66 @@ fn aperto(v: &Vault) -> Host {
 /// **La proprietà che dà il nome alla voce**: due letture del kernel possono
 /// essere dentro il workspace *nello stesso momento*.
 ///
-/// Il contatore si alza e si abbassa **dentro** il prestito, quindi il massimo
-/// che registra è il numero di thread che hanno tenuto il workspace insieme. Con
-/// `write()` al posto di `read()` quel massimo è 1, per costruzione — ed è
-/// l'unico modo in cui questo test può fallire.
+/// **Si costruisce, non si aspetta.** La forma di prima lanciava `lettori()`
+/// thread in duecento giri ciascuno e chiedeva che il massimo delle letture
+/// contemporanee registrate arrivasse a due. Quel massimo è una **statistica**:
+/// su una macchina occupata — e questo file la macchina se la occupa da solo,
+/// perché gli altri test ci girano insieme — i thread possono entrare e uscire
+/// uno per volta senza che il codice abbia niente di sbagliato, e il banco è
+/// rosso per il tempo che ha trovato. Peggio del rosso è il verde: quando
+/// passava aveva dimostrato che *stavolta* due letture si erano incrociate, non
+/// che potessero.
+///
+/// [`Custodia::try_read`] è la domanda giusta e non ha una macchina dentro:
+/// «lo posso avere **adesso**?». Il prestito condiviso lo tiene questo thread,
+/// un secondo lettore ne chiede un altro senza mettersi in fila. Se il prestito
+/// è condiviso la risposta è `Some` per costruzione, sempre e su qualunque
+/// macchina; se il workspace tornasse a un prestito esclusivo — un `Mutex` con
+/// un altro nome — sarebbe `None`, altrettanto sempre. Niente soglia, niente
+/// cronometro, niente `sleep`.
+///
+/// **L'indicizzazione si aspetta prima**, ed è la sola precauzione che resta:
+/// finché il runner gira chiede il prestito esclusivo a ogni fetta, e sotto un
+/// `RwLock` un lettore nuovo si ferma dietro a chi aspetta di scrivere. Un
+/// `None` di lì sarebbe un rosso per la ragione sbagliata — è la stessa nota di
+/// `rileggere_una_versione_non_ferma_chi_scrive`, qui sotto.
 #[test]
 fn due_letture_stanno_nel_workspace_insieme() {
     let _turno = turno_di_banco();
-    let v = vault(60);
+    let v = vault(4);
     let host = aperto(&v);
+    host.wait_indexed(None).expect("l'indicizzazione finisce");
     let ws = host.workspace(None).unwrap();
+    let id = DocId::new("Nota 0.md");
 
-    let n = lettori();
-    let dentro = Arc::new(AtomicUsize::new(0));
-    let massimo = Arc::new(AtomicUsize::new(0));
-    let via = Arc::new(Barrier::new(n));
+    // Il primo prestito, tenuto da qui fino in fondo.
+    let primo = ws.read().expect("il vault non è avvelenato");
+    primo.render_preview(&id).expect("la prima lettura legge");
 
-    let handles: Vec<_> = (0..n)
-        .map(|t| {
-            let (ws, dentro, massimo, via) =
-                (ws.clone(), dentro.clone(), massimo.clone(), via.clone());
-            std::thread::spawn(move || {
-                via.wait();
-                // Un solo giro non basta: la sovrapposizione è un incrocio, e un
-                // incrocio va aspettato. Duecento letture con un parse vero
-                // dentro sono un miliardo di occasioni più del necessario.
-                for i in 0..200u64 {
-                    let w = ws.read().unwrap();
-                    let ora = dentro.fetch_add(1, Ordering::SeqCst) + 1;
-                    massimo.fetch_max(ora, Ordering::SeqCst);
-                    let _ =
-                        w.render_preview(&DocId::new(format!("Nota {}.md", (i + t as u64) % 60)));
-                    dentro.fetch_sub(1, Ordering::SeqCst);
-                }
-            })
-        })
-        .collect();
-    for h in handles {
-        h.join().unwrap();
-    }
+    // Il secondo, chiesto **da un altro thread** mentre il primo è dentro. Il
+    // thread non è un ornamento: un `try_read` chiesto dallo stesso thread che
+    // tiene già il prestito non distingue un lucchetto condiviso da uno
+    // rientrante, e risponderebbe di sì a tutti e due.
+    let entrato = {
+        let (ws, id) = (ws.clone(), id.clone());
+        std::thread::spawn(move || ws.try_read().map(|w| w.render_preview(&id).is_ok()))
+            .join()
+            .expect("il secondo lettore finisce")
+    };
+    drop(primo);
 
     assert!(
-        massimo.load(Ordering::SeqCst) >= 2,
-        "nessuna lettura si è mai sovrapposta a un'altra: il prestito non è \
-         condiviso. Se qui c'è un `write()` dove il §8.3 chiede un `read()`, \
-         il workspace è tornato a essere un `Mutex` con un altro nome."
+        entrato.is_some(),
+        "una seconda lettura non è potuta entrare nel workspace mentre la prima \
+         lo teneva: il prestito non è condiviso. Se qui c'è un `write()` dove il \
+         §8.3 chiede un `read()`, il workspace è tornato a essere un `Mutex` con \
+         un altro nome."
+    );
+    assert_eq!(
+        entrato,
+        Some(true),
+        "la seconda lettura è entrata ma non ha letto: entrare nel workspace \
+         insieme serve a leggerci dentro insieme."
     );
 }
 
@@ -258,8 +281,8 @@ fn chi_scrive_non_aspetta_i_lettori_piu_di_un_battito() {
 #[test]
 fn rileggere_una_versione_non_ferma_chi_scrive() {
     // Il turno di banco vale anche per chi non cronometra: questo test apre un
-    // vault e ne indicizza il contenuto, cioè *è* la macchina occupata degli
-    // altri due — che di macchina occupata muoiono.
+    // vault e ne indicizza il contenuto, cioè *è* la macchina occupata di
+    // quello che cronometra — che di macchina occupata muore.
     let _turno = turno_di_banco();
     let v = vault(3);
     let host = Arc::new(aperto(&v));
@@ -377,6 +400,11 @@ impl ViewProvider for Esplode {
 /// thread suo — e sotto un `Mutex` un buco solo costerebbe ancora il vault.
 #[test]
 fn una_view_che_pania_disegnando_non_avvelena_il_vault() {
+    // Il turno di banco vale anche per chi non misura, e questo test è quello
+    // che se lo era dimenticato: apre un vault, lo indicizza e ci lancia dentro
+    // un thread che pania, tutto mentre l'unico test che cronometra di questo
+    // file misura dei millisecondi.
+    let _turno = turno_di_banco();
     let v = vault(4);
     let host = aperto(&v);
     let ws = host.workspace(None).unwrap();
