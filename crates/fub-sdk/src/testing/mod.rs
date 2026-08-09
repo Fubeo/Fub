@@ -146,6 +146,16 @@ pub struct MemoryHost {
     /// I path dello spazio dati su cui `data_write` rifiuta. Vuoto è il
     /// default. Si accende con [`MemoryHost::nega_scrittura`].
     scritture_negate: Mutex<std::collections::BTreeSet<String>>,
+    /// Il **conto** delle `data_write`, per path: quante volte e quanti byte.
+    ///
+    /// I blob dicono com'è finito lo spazio dati; questo dice **quanto è
+    /// costato arrivarci**, ed è l'unica delle due cose che vede un difetto di
+    /// prestazioni. Un file riscritto mille volte e uno scritto una sola
+    /// lasciano lo stesso `blobs`, e senza questo contatore un presidio sulla
+    /// quantità di lavoro sarebbe verde in tutti e due i casi. È un conto di
+    /// operazioni e non un tempo apposta: su una macchina condivisa un tempo
+    /// non è un segnale.
+    scritture: Mutex<BTreeMap<String, (usize, usize)>>,
 }
 
 impl MemoryHost {
@@ -244,6 +254,19 @@ impl MemoryHost {
             .lock()
             .unwrap()
             .insert(path.to_string());
+    }
+
+    /// Quante volte quel path è stato scritto, e quanti byte in tutto.
+    ///
+    /// `(0, 0)` per un path mai scritto: non essere mai passati di lì è un
+    /// conto, non un'assenza di risposta.
+    pub fn scritture_su(&self, path: &str) -> (usize, usize) {
+        self.scritture
+            .lock()
+            .unwrap()
+            .get(path)
+            .copied()
+            .unwrap_or((0, 0))
     }
 
     /// Le richieste di rete che questo doppio ha visto, in ordine.
@@ -731,6 +754,13 @@ impl DataWrite for MemoryHost {
             .lock()
             .unwrap()
             .insert(path.to_string(), bytes.to_vec());
+        // Il conto sale **solo** sulle scritture riuscite: una scrittura
+        // negata non è lavoro fatto sul disco, e contarla renderebbe il
+        // contatore inservibile proprio nei banchi che provano i rifiuti.
+        let mut scritture = self.scritture.lock().unwrap();
+        let conto = scritture.entry(path.to_string()).or_insert((0, 0));
+        conto.0 += 1;
+        conto.1 += bytes.len();
         Ok(())
     }
 
