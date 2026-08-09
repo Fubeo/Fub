@@ -17,6 +17,7 @@
 import type { CommandSpec, Organization } from "../host/contract";
 import { api } from "../host/ipc";
 import { errorText } from "../host/errors";
+import { CodaCoalescente } from "../ui/corsa";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
 
@@ -197,8 +198,20 @@ export async function leggiStato<T>(key: string): Promise<T | null> {
   }
 }
 
+/// Le scritture di stato passano da una coda che **coalesce per chiave**: due
+/// scritture della stessa chiave accavallate sono una scrittura sola, con
+/// l'ultimo valore, e due chiavi diverse non si mettono in coda a vicenda. La
+/// forma sta in `ui/corsa.ts`, accanto a `Coda` — non qui, perché chi domani
+/// avrà bisogno di «deve arrivare, ma conta solo l'ultimo valore per quella
+/// chiave» la eredita dal posto che tutti attraversano.
+const codaDegliStati = new CodaCoalescente();
+
 /// Ricordare, **senza aspettare**: chi apre una cartella nell'albero non deve
 /// fermarsi per una scrittura su disco.
+///
+/// La scrittura passa dalla coda qui sopra: parte appena il turno della sua
+/// chiave arriva, e chi l'ha chiesta può sapere quando è finita — ma non si
+/// ferma ad aspettarla, e un errore resta un avviso, non un'eccezione.
 ///
 /// L'obiezione che teneva questo punto in console era giusta e riguardava il
 /// *testo*, non il canale: nominare la chiave voleva dire un avviso diverso a
@@ -208,7 +221,9 @@ export async function leggiStato<T>(key: string): Promise<T | null> {
 /// Il tono è `info`: non si è perso lavoro dell'utente, si è persa la memoria di
 /// come aveva lasciato i pannelli.
 export function scriviStato(key: string, value: unknown): void {
-  void api.setViewState(key, value).catch(() => {
-    notify(t("state.not_remembered"), "info");
-  });
+  void codaDegliStati.accodaPerChiave(key, () =>
+    api.setViewState(key, value).catch(() => {
+      notify(t("state.not_remembered"), "info");
+    })
+  );
 }

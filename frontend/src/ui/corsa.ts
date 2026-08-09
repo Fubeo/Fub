@@ -167,3 +167,75 @@ export class Coda {
     return mio;
   }
 }
+
+/// Il lavoro di una chiave che aspetta il proprio turno. Sostituirne il
+/// `lavoro` è coalescere: la promessa resta quella, e chi la tiene non sa di
+/// essere stato fuso.
+interface Pendente {
+  lavoro: () => Promise<void>;
+  promessa: Promise<void>;
+}
+
+/// Lo stato di una chiave: la coda dei suoi lavori già partiti, e l'ultimo
+/// lavoro che aspetta di partire.
+interface VoceDiChiave {
+  coda: Coda;
+  pendente: Pendente | null;
+}
+
+/// Il padrone dei lavori per **chiave** in cui, per ogni chiave, conta solo
+/// l'ultimo valore — e nessun valore si perde.
+///
+/// È ciò che la [0133](../../../docs/decisions/0133-chi-ascolta-nomina-fino-a-quando.md)
+/// lasciava da decidere: una scrittura su disco si **accoda**, non si **scarta**,
+/// ma tre scritture della stessa chiave accavallate non sono tre lavori — sono
+/// un lavoro solo, con l'ultimo valore. Coalescere non è scartare: il lavoro
+/// che parte c'è e arriva, e chi ha accodato sa quando è finito, perché aspetta
+/// quel lavoro — anche chi è stato fuso, che aspetta il lavoro partito al posto
+/// del proprio. Ciò che si perde è solo il valore intermedio, che nessuno ha
+/// chiesto di vedere.
+///
+/// È un tipo accanto a `Coda` e non un modo di `Coda`, per la stessa ragione
+/// per cui `Corsa` e `Coda` sono due tipi: chiavi diverse non si bloccano fra
+/// loro, e una coda sola le metterebbe in fila comunque. Ogni chiave ha la sua
+/// `Coda`, e una scrittura lenta su una non ritarda l'altra.
+export class CodaCoalescente {
+  #perChiave = new Map<string, VoceDiChiave>();
+
+  /// Mette `lavoro` in coda per `chiave`, e torna l'attesa del lavoro che
+  /// partirà — il proprio, o il lavoro fuso che lo ha sostituito.
+  ///
+  /// Se per quella chiave c'è già un lavoro in coda che non è partito, il
+  /// valore nuovo prende il suo posto: chi aveva accodato prima aspetta il
+  /// lavoro fuso, non il proprio, che non partirà mai. Un errore arriva a chi
+  /// ha accodato e non ferma la coda, come in `Coda` — chi è stato fuso lo
+  /// riceve insieme al primo, perché aspetta lo stesso lavoro.
+  accodaPerChiave(chiave: string, lavoro: () => Promise<void>): Promise<void> {
+    let voce = this.#perChiave.get(chiave);
+    if (!voce) {
+      voce = { coda: new Coda(), pendente: null };
+      this.#perChiave.set(chiave, voce);
+    }
+    const v = voce;
+    if (v.pendente) {
+      // Un lavoro per questa chiave aspetta già il proprio turno: il valore
+      // nuovo sostituisce il vecchio, e chi aspettava riceverà l'esito del
+      // lavoro fuso — la promessa è la stessa, e non cambia.
+      v.pendente.lavoro = lavoro;
+      return v.pendente.promessa;
+    }
+    const pendente: Pendente = {
+      lavoro,
+      // Le sostituzioni di qui sopra mutano `pendente.lavoro` nello stesso
+      // oggetto, quindi chi parte legge il valore più recente. Svuotare la
+      // voce prima di partire fa sì che un arrivo di mezzo apra un giro nuovo
+      // invece di fondersi in questo.
+      promessa: v.coda.accoda(async () => {
+        v.pendente = null;
+        await pendente.lavoro();
+      }),
+    };
+    v.pendente = pendente;
+    return pendente.promessa;
+  }
+}

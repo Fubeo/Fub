@@ -172,7 +172,7 @@ describe("le tab di un riquadro", () => {
   // `set_view_state`, cioè un `fsync` dall'altra parte dell'IPC (§25.6 misura
   // 2,5–5 ms l'uno). Chiudere N tab è **un** gesto e deve costare **una**
   // scrittura, non una per riquadro. Rosso con la forma di prima: cinque.
-  it("una nota aperta in cinque riquadri se ne va con una scrittura sola", () => {
+  it("una nota aperta in cinque riquadri se ne va con una scrittura sola", async () => {
     const l = nuovo();
     apriIn("main", "a.md", l);
     for (let i = 0; i < 4; i++) apriIn(dividi("main", "row", l)!, "a.md", l);
@@ -181,6 +181,13 @@ describe("le tab di un riquadro", () => {
 
     togliDappertutto("a.md", l);
 
+    // Le scritture passano dalla coda di `scriviStato` (che le coalesce per
+    // chiave), e il conto si guarda a lavoro partito, non nel momento in cui è
+    // stato chiesto. Le cinque aperture di sopra e la chiusura di qui sono
+    // comunque **una** scrittura sola: la coda fonde ciò che è ancora in
+    // attesa. Quattro giri di microtask, perché la catena della coda si riarma
+    // solo a lavoro risolto.
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
     expect(paneConDoc("a.md", l)).toEqual([]);
     expect(setViewState.mock.calls.map((c) => c[0])).toEqual(["layout"]);
   });

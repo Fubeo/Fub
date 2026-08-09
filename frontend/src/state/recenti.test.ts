@@ -90,6 +90,10 @@ describe("le ricerche recenti", () => {
     setViewState.mockClear();
     ricordaRicerca("riunione");
     expect(ricercheRecenti()).toEqual(["riunione"]);
+    // La scrittura passa dalla coda di `scriviStato`, e il canale si guarda a
+    // lavoro partito, non nel momento in cui è stato chiesto. Quattro giri di
+    // microtask: la catena della coda si riarma solo a lavoro risolto.
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
     expect(setViewState).toHaveBeenCalledWith("history", { note: [], ricerche: ["riunione"] });
   });
 
@@ -189,6 +193,9 @@ describe("cancellare", () => {
     dimenticaTutto();
 
     expect(ricercheRecenti()).toEqual([]);
+    // La scrittura passa dalla coda di `scriviStato`: quattro giri di
+    // microtask, come sopra.
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
     // `null` e non due liste vuote: per un dato di privacy la differenza fra
     // «assente» e «vuoto» è quella che si vede aprendo il file.
     expect(setViewState).toHaveBeenCalledWith("history", null);

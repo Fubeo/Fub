@@ -58,12 +58,18 @@ describe("rileggere dove si era rimasti", () => {
 });
 
 describe("ricordare", () => {
-  it("nessuna cartella aperta si dimentica, invece di scrivere una lista vuota", () => {
+  it("nessuna cartella aperta si dimentica, invece di scrivere una lista vuota", async () => {
     saveExpanded();
+    // La scrittura passa dalla coda di `scriviStato`, e il canale si guarda a
+    // lavoro partito, non nel momento in cui è stato chiesto. Quattro giri di
+    // microtask: la catena della coda si riarma solo quando il lavoro di prima
+    // è risolto, e il giro unico non basta.
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
     expect(setViewState).toHaveBeenCalledWith("expanded", null);
 
     state.expanded = new Set(["note"]);
     saveExpanded();
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
     expect(setViewState).toHaveBeenLastCalledWith("expanded", ["note"]);
   });
 

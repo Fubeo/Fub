@@ -5,7 +5,7 @@
 // scritto qui dentro invece che sperato. È la forma già usata in
 // `state/salvataggio.test.ts`.
 import { describe, expect, it, vi } from "vitest";
-import { Coda, Corsa } from "./corsa";
+import { Coda, CodaCoalescente, Corsa } from "./corsa";
 
 /// Una promessa che si risolve (o si rigetta) su comando del banco.
 function rinviata<T>(): {
@@ -184,5 +184,121 @@ describe("Coda", () => {
     // e una che si fermasse lo trasformerebbe nella morte di tutti quelli dopo.
     await expect(a).rejects.toBe(guasto);
     await expect(b).resolves.toBe("dopo");
+  });
+});
+
+describe("CodaCoalescente", () => {
+  it("tre scritture accavallate della stessa chiave sono una scrittura sola, con l'ultimo valore", async () => {
+    const coda = new CodaCoalescente();
+    // Il conto delle scritture partite, e il banco lo nomina: senza
+    // coalescenza qui ce ne sarebbero tre — «primo», «secondo» e «terzo» — e
+    // il `toEqual(["terzo"])` in fondo sarebbe rosso. È il verso che la forma
+    // esiste per chiudere: coalescere non è scartare, è partire una volta sola
+    // con ciò che conta.
+    const scritte: string[] = [];
+    const primo = rinviata<void>();
+
+    const a = coda.accodaPerChiave("k", async () => {
+      scritte.push("primo");
+      await primo.promessa;
+    });
+    const b = coda.accodaPerChiave("k", async () => {
+      scritte.push("secondo");
+    });
+    const c = coda.accodaPerChiave("k", async () => {
+      scritte.push("terzo");
+    });
+
+    primo.risolvi();
+    await Promise.all([a, b, c]);
+
+    // Le prime due non partono perché il loro valore è già invecchiato, ma la
+    // terza arriva — ed è arrivata per tutti e tre, chi ha accodato compreso.
+    expect(scritte).toEqual(["terzo"]);
+  });
+
+  it("chi ha accodato prima aspetta il lavoro fuso, che porta l'ultimo valore", async () => {
+    const coda = new CodaCoalescente();
+    const passi: string[] = [];
+    const freno = rinviata<void>();
+
+    const a = coda.accodaPerChiave("k", async () => {
+      passi.push("vecchio");
+    });
+    const b = coda.accodaPerChiave("k", async () => {
+      passi.push("nuovo: dentro");
+      await freno.promessa;
+      passi.push("nuovo: fuori");
+    });
+
+    let aFinita = false;
+    void a.then(() => {
+      aFinita = true;
+    });
+
+    // Il lavoro di `a` è stato fuso in quello di `b`: se `a` si risolvesse da
+    // sé sarebbe già finita qui — invece aspetta il lavoro partito, e quello
+    // porta il valore nuovo, non il suo. È la metà che una coalescenza che
+    // scarta l'ultima sbaglierebbe: lì partirebbe «vecchio».
+    await Promise.resolve();
+    expect(aFinita).toBe(false);
+    expect(passi).toEqual(["nuovo: dentro"]);
+
+    freno.risolvi();
+    await Promise.all([a, b]);
+    expect(aFinita).toBe(true);
+    expect(passi).toEqual(["nuovo: dentro", "nuovo: fuori"]);
+  });
+
+  it("chiavi diverse non si mettono in coda a vicenda", async () => {
+    const coda = new CodaCoalescente();
+    const passi: string[] = [];
+    const freno = rinviata<void>();
+
+    const lenta = coda.accodaPerChiave("lenta", async () => {
+      passi.push("lenta: dentro");
+      await freno.promessa;
+      passi.push("lenta: fuori");
+    });
+    const veloce = coda.accodaPerChiave("veloce", async () => {
+      passi.push("veloce");
+    });
+
+    await Promise.resolve();
+    // La lenta è sospesa e la veloce è partita lo stesso: se le chiavi
+    // condividessero una coda sola, qui ci sarebbe solo «lenta: dentro».
+    expect(passi).toEqual(["lenta: dentro", "veloce"]);
+
+    freno.risolvi();
+    await Promise.all([lenta, veloce]);
+    expect(passi).toEqual(["lenta: dentro", "veloce", "lenta: fuori"]);
+  });
+
+  it("uno sbaglio arriva a chi ha accodato e non ferma la coda", async () => {
+    const coda = new CodaCoalescente();
+    const passi: string[] = [];
+    const guasto = new Error("disco pieno");
+
+    const a = coda.accodaPerChiave("k", async () => {
+      throw guasto;
+    });
+    // Un giro di microtask: il lavoro di `a` è partito, quindi `b` non lo
+    // fonde — si accoda dopo, come in `Coda`.
+    await Promise.resolve();
+    const b = coda.accodaPerChiave("k", async () => {
+      passi.push("dopo");
+    });
+    const c = coda.accodaPerChiave("altra", async () => {
+      passi.push("altra chiave");
+    });
+
+    await expect(a).rejects.toBe(guasto);
+    await Promise.all([b, c]);
+    // L'ordine fra le due non è la regola — `b` non può partire prima che la
+    // catena di `a` si riarmi, e `c` parte su una coda nuova, quindi l'ordine
+    // è stabile ma non dice niente. La regola è che ci sono **tutte e due**:
+    // la chiave di `a` non è morta con lui, e le altre chiavi non l'hanno
+    // nemmeno visto.
+    expect(passi.sort()).toEqual(["altra chiave", "dopo"]);
   });
 });
