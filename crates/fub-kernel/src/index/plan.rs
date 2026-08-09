@@ -38,7 +38,6 @@
 //! venisse.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 
 use fub_abi::model::DocId;
 use fub_abi::query::{
@@ -170,14 +169,16 @@ fn rehydrate(
             page: None,
             excerpts: Excerpts::Attach,
         })?;
-        let mut told: BTreeMap<DocId, DocumentMatch> = answer
-            .documents()?
-            .items
-            .into_iter()
-            .map(|m| (m.doc.clone(), m))
-            .collect();
+        // In `Matches`, non in una `BTreeMap` nuda: un provider può rispondere
+        // con **due righe per lo stesso documento** — un indice a segmenti ne
+        // emette una per segmento — e con un `.collect()` sulla mappa la
+        // seconda cancellava la prima in silenzio, portandosi via le occorrenze
+        // dell'altro segmento. `Matches::insert` passa da
+        // `DocumentMatch::absorb`, che è dove sta scritto come si fondono
+        // rilevanza, estratto, proprietà e occorrenze (decisione 0049).
+        let mut told: Matches = answer.documents()?.items.into_iter().collect();
         for row in rows.iter_mut() {
-            if let Some(m) = told.remove(&row.doc) {
+            if let Some(m) = told.take(&row.doc) {
                 row.absorb(m);
             }
         }
