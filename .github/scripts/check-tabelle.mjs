@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// **Una tabella scritta resta una tabella.**
+// **Una tabella scritta resta una tabella, e con tutte le sue colonne.**
 //
 // Il difetto che ha fatto scrivere questo conto stava in due file e si leggeva
 // solo guardando la pagina resa, mai il sorgente: in `docs/decisions/README.md`
@@ -17,21 +17,52 @@
 // colonne, e a vederla bisogna aprire la pagina. È la specie di rottura muta che
 // questa cartella esiste per prendere.
 //
-// Le due forme in cui una tabella smette di essere una tabella, e sono qui
-// tutte e due perché il sintomo è lo stesso — un paragrafo di `|`:
+// Le tre forme in cui una tabella smette di dire ciò che il sorgente sembra
+// dire. Le prime due stanno qui insieme perché il sintomo è lo stesso — un
+// paragrafo di `|`; la terza tiene in piedi la tabella e falsifica una riga:
 //
 //   1. **una riga vuota in mezzo al corpo.** La tabella finisce lì.
 //   2. **il delimitatore che non ha le colonne dell'intestazione.** Se
 //      `|---|---|` non ha lo stesso numero di celle della riga sopra, GFM non
 //      apre nessuna tabella: l'intero blocco è un paragrafo dalla prima riga.
-//      Oggi le tabelle di questo repo sono duecentododici e nessuna è così; il
-//      conto non costa niente e diventa rosso il giorno che succede.
+//      Oggi le tabelle di questo repo sono duecentotredici — il conto le stampa
+//      in coda, così il numero qui si ricontrolla senza fidarsi — e nessuna è
+//      così; il conto non costa niente e diventa rosso il giorno che succede.
+//   3. **una riga di corpo che non ha le celle dell'intestazione.** Qui la
+//      tabella resta una tabella, e proprio per questo la pagina resa non
+//      denuncia niente: GFM **pareggia in silenzio**, e nei due versi (spec
+//      GFM 0.29, esempio 204). Se le celle sono **meno**, «empty cells are
+//      inserted»: le righe dei verbali 0135 e 0100 sono vissute così, con tre
+//      celle su quattro, e in pagina la loro *Data* era una cella vuota — che è
+//      indistinguibile da una data che non c'è ancora. Se sono **di più**,
+//      «the excess is ignored»: il testo oltre l'ultima colonna **sparisce**
+//      dalla pagina, e nessuno lo va a cercare perché al sorgente c'è.
 //
 // **Due tabelle attaccate sono legittime**, e la riga vuota che le separa non è
 // un difetto: si riconoscono perché dopo la riga vuota viene un'intestazione col
 // suo delimitatore. Il conto le lascia passare, e l'autoprova tiene fermo che le
 // lasci passare — senza quel caso questa sarebbe la regola che «ripara» una cosa
 // voluta.
+//
+// **Una cella vuota ma presente (`| |`) è a posto**, e il conto la conta come
+// una cella: il guasto della terza forma non è la cella senza testo, è la cella
+// **mancante**, cioè un numero di pipe diverso.
+//
+// **Perché il conto guarda le pipe scappate, e perché un code span non salva.**
+// Una pipe che fa parte del testo di una cella si scrive `\|` — e la spec lo
+// chiede a lettere **anche dentro gli altri span inline** (GFM 0.29, esempio
+// 200: *«include a pipe in a cell's content by escaping it, including inside
+// other inline spans»*, con `` b `\|` az `` come esempio). I backtick **non**
+// proteggono: per GFM il taglio in celle viene prima, e un `` `a | b` `` dentro
+// una cella sono due celle. Questo conto è nato trovandone due scritte così,
+// vive da mesi e invisibili: `` `string | null` `` nel registro delle decisioni
+// e `` `map_err(|e| e.to_string())` `` in `docs/roadmap/strozzature.md`, dove le
+// due pipe della chiusura Rust facevano cinque celle su tre e mangiavano in
+// pagina metà dell'ultima colonna. **Chi vedrà questo conto rosso su una riga
+// del genere non stia a cercare un bug qui**: la riga è davvero rotta, e la
+// riparazione è scrivere `\|`. Per la stessa ragione esentare i code span dal
+// taglio sarebbe la cosa sbagliata — verrebbe un conto che resta verde su una
+// riga che in pagina è rotta, cioè un presidio che mente.
 //
 // # Le zone cieche, dichiarate
 //
@@ -46,7 +77,8 @@
 // Uso:
 //   node .github/scripts/check-tabelle.mjs [cartella]
 //   node .github/scripts/check-tabelle.mjs --autoprova
-// Exit code 1 se una tabella è interrotta, o se non c'è niente da controllare.
+// Exit code 1 se una tabella è interrotta o se una riga non ha le sue colonne,
+// o se non c'è niente da controllare.
 //
 // Niente dipendenze npm, come gli altri presidi di questa cartella.
 
@@ -72,6 +104,11 @@ function celle(riga) {
   if (s.startsWith("|")) s = s.slice(1);
   if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
   return s.split(/(?<!\\)\|/).length;
+}
+
+/** `1 cella` / `2 celle`: un messaggio che dice «le 1 celle» si legge scritto da una macchina. */
+function quante(n) {
+  return n === 1 ? "1 cella" : `${n} celle`;
 }
 
 /** Vero se a `i` comincia una tabella: una riga con le pipe e il delimitatore sotto. */
@@ -123,9 +160,31 @@ export function guastiDi(testo) {
 
     if (!apreUnaTabella(righe, i)) continue;
 
-    // Il corpo, che si segue finché le righe cominciano per `|`.
+    // Il corpo, che si segue finché le righe cominciano per `|`. Ogni riga di
+    // corpo deve avere le celle dell'intestazione: GFM pareggia da sé, e in
+    // silenzio, quindi la pagina resa non lo dice a nessuno.
+    const attese = celle(righe[i]);
     let j = i + 2;
-    while (j < righe.length && RE_RIGA.test(righe[j])) j++;
+    while (j < righe.length && RE_RIGA.test(righe[j])) {
+      const trovate = celle(righe[j]);
+      if (trovate !== attese) {
+        guasti.push({
+          riga: j + 1,
+          cosa:
+            `la riga di corpo ha ${trovate} celle e l'intestazione (riga ${i + 1}) ne ` +
+            `dichiara ${attese}: ` +
+            (trovate < attese
+              ? `${attese - trovate === 1 ? "manca" : "mancano"} ${quante(attese - trovate)}` +
+                `, e GFM pareggia inserendo il vuoto — una colonna vuota si legge come un ` +
+                `dato che non c'è ancora`
+              : `${trovate - attese === 1 ? "c'è" : "ci sono"} ${quante(trovate - attese)} ` +
+                `di troppo, e GFM pareggia ignorando l'eccesso — quel testo sparisce dalla ` +
+                `pagina; una pipe che fa parte del testo si scrive \`\\|\`, anche dentro i ` +
+                `backtick`),
+        });
+      }
+      j++;
+    }
 
     if (j < righe.length && righe[j].trim() === "") {
       // Due tabelle attaccate: dopo la vuota viene un'intestazione con il suo
@@ -159,10 +218,11 @@ export function guastiDi(testo) {
 // ---------------------------------------------------------------------------
 //
 // Serve per la ragione della trappola numero tre: **un conto che non è mai stato
-// rosso non ha dimostrato niente**. I due casi che contano sono il primo (la
-// riga vuota in mezzo, che deve essere rossa) e il terzo (le due tabelle
-// attaccate, che deve restare verde): senza il terzo questo sarebbe un conto che
-// chiama difetto una cosa voluta.
+// rosso non ha dimostrato niente**. I casi che contano sono quelli che devono
+// essere rossi (la riga vuota in mezzo, e la riga di corpo scompagnata **nei due
+// versi**: una cella in meno e una in più) e quelli che devono restare verdi (le
+// due tabelle attaccate, la cella vuota ma presente, il `\|` scappato): senza i
+// secondi questo sarebbe un conto che chiama difetto una cosa voluta.
 
 function autoprova() {
   const casi = [
@@ -181,6 +241,24 @@ function autoprova() {
       0,
     ],
     ["il `\\|` dentro una cella non divide", "| a\\|b | c |\n|---|---|\n| 1 | 2 |\n", 0],
+    ["la riga di corpo con una cella in meno", "| a | b | c |\n|---|---|---|\n| 1 | 2 |\n", 1],
+    ["la riga di corpo con una cella in più", "| a | b |\n|---|---|\n| 1 | 2 | 3 |\n", 1],
+    ["la cella vuota ma presente è a posto", "| a | b |\n|---|---|\n| 1 | |\n|  |  |\n", 0],
+    [
+      "la pipe scappata dentro un code span non divide",
+      "| a | b |\n|---|---|\n| `map_err(\\|e\\| e.into())` | 2 |\n",
+      0,
+    ],
+    [
+      "la pipe NON scappata dentro un code span divide, e la cella di coda sparisce",
+      "| a | b |\n|---|---|\n| `string | null` | 2026-08-04 |\n",
+      1,
+    ],
+    [
+      "il corpo scompagnato dopo la vuota è del paragrafo, non della tabella",
+      "| a | b |\n|---|---|\n| 1 | 2 |\n\n| 3 |\n",
+      1,
+    ],
   ];
 
   let rossi = 0;
@@ -230,7 +308,11 @@ function main() {
 
   for (const p of problemi) console.log(p);
   if (problemi.length > 0) console.log("");
-  console.log(`${tabelle} tabelle in ${guardati} file di prosa, ${problemi.length} interrotte`);
+  const guasti = problemi.length;
+  console.log(
+    `${tabelle} tabelle in ${guardati} file di prosa, ${guasti} guast${guasti === 1 ? "o" : "i"} ` +
+      `(tabella interrotta, o riga senza le sue colonne)`,
+  );
 
   // Come per i link e per la prosa: un presidio che non ha guardato niente non è
   // verde, è spento.
