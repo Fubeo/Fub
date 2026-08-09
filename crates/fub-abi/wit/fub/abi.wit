@@ -299,7 +299,9 @@ interface model {
     }
     /// Escape hatch: callout, math, footnote, definition list. I `custom-kind`
     /// condivisi stanno in `fub_abi::model::custom_kind` e nella tabella di
-    /// docs/architecture/data-model.md.
+    /// docs/architecture/data-model.md; un kind di terzi porta i propri byte
+    /// negli `attrs` sotto la chiave `source` (convenzione §25.7,
+    /// `fub_abi::rules::carichi`).
     record block-custom {
         custom-kind: string,
         attrs: json,

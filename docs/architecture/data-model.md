@@ -498,10 +498,14 @@ terzi portano `ns:`. `Workspace::undrawn_kinds()` dice quali sono prodotti e mai
 disegnati.
 
 I kind **sconosciuti** degradano sempre a resa generica
-(`<div class="block-{kind}">` per un blocco, `<span class="inline-{kind}">` col
-`text` degli `attrs` per un inline), mai a errore. Il degrado inline **non
-esisteva** prima della 0017: un `Inline::Custom` sconosciuto non veniva reso
-affatto, quindi il testo spariva in silenzio.
+(`<div class="block-{kind}">` per un blocco, `<span class="inline-{kind}">` per
+un inline), mai a errore. I byte che la resa generica mostra stanno negli
+`attrs` sotto la chiave che il contratto dichiara: la tabella qui sopra per i
+kind del core, la chiave convenzionale **`source`** per quelli di terzi
+(§25.7, `fub_abi::rules::carichi`) — un terzo che porta i propri byte sotto
+un'altra chiave si rende vuoto, ed è il degrado dichiarato. Il degrado inline
+**non esisteva** prima della 0017: un `Inline::Custom` sconosciuto non veniva
+reso affatto, quindi il testo spariva in silenzio.
 
 ## `LinkTarget` — intento non risolto
 

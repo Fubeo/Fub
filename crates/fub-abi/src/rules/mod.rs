@@ -42,6 +42,9 @@
 //! - [`snippet`] — **quanto testo porta una riga di risultato**: la finestra
 //!   di contesto attorno a un link e il tetto dello snippet di ricerca
 //!   (§25.4);
+//! - [`carichi`] — **dove stanno i byte di un `custom_kind`**: la chiave
+//!   convenzionale per i kind di terzi, accanto alla tabella del core
+//!   (§25.7);
 //! - [`properties`] — filtro, ordinamento e faccette sul frontmatter;
 //! - [`tag`] — la gerarchia dei tag, accanto alla forma canonica del nome;
 //! - [`health`] — cosa conta come link rotto, e cosa no.
@@ -68,6 +71,7 @@
 //!
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
 
+pub mod carichi;
 pub mod doc_data;
 pub mod events;
 pub mod health;
