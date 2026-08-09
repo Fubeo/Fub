@@ -361,7 +361,7 @@ una voce per volta senza mai aspettare le altre. Il taglio che a un certo punto
 sembrava servire — spezzarla per **lente**, le §23.9–§23.17 rispondono a una
 domanda più stretta delle prime otto — non è mai servito.
 
-Le caselle residue oggi sono **ventiquattro**, e stanno in diciannove posti:
+Le caselle residue oggi sono **venticinque**, e stanno in venti posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
@@ -495,7 +495,16 @@ guardare — la politica di collisione che sta in `versioning.rs` accanto a
 `VersionStore::rename`, che le due storie le unisce in ordine di tempo. Ma le
 politiche da scrivere sono **tre**, una per canale, e non sono la stessa: due
 bozze non salvate non si fondono senza inventare un testo che nessuno ha
-scritto. Nessuna è urgente finché la guardia impedisce la perdita).
+scritto. Nessuna è urgente finché la guardia impedisce la perdita) e la
+[§25.7](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#257-dove-stanno-i-byte-di-un-kind-di-terzi)
+(una: la **forma (a)** — un campo `carichi` in fondo a `syntax-rule-spec`, che
+la [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md) ha lasciato
+aperta prendendo la (b), cioè dichiarando che la chiave è `source` invece di
+spendere un tipo nel contratto. La casella ha un innesco scritto, e non una
+data: **il primo `kind` di terzi che deve dichiarare il proprio carico**. Finché
+non esiste, la (a) costerebbe un tipo additivo per sempre — il prezzo che la
+[0002](decisions/0002-additivita-del-contratto.md) rende caro — per un caso che
+nessuno esercita).
 Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte.
