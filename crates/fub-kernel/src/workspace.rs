@@ -3028,7 +3028,7 @@ impl Workspace {
         // file, non una collisione — il check sul disco va saltato. Un vero
         // omonimo-per-case su filesystem case-sensitive è comunque intercettato
         // da `models` (il vault è l'unica fonte dei DocId, quindi lo conosce).
-        let case_only = from.as_str().to_lowercase() == to.as_str().to_lowercase();
+        let case_only = solo_il_caso(from, to);
         if self.indexes.core.metas.contains_key(to) || (!case_only && self.docs.vault.exists(to)) {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
@@ -3102,7 +3102,7 @@ impl Workspace {
     /// allegato in una cartella «allegati» — cioè la prima cosa che si fa
     /// mettendo ordine — romperebbe ogni nota che lo incorpora.
     fn rename_entry_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
-        let case_only = from.as_str().to_lowercase() == to.as_str().to_lowercase();
+        let case_only = solo_il_caso(from, to);
         if self.indexes.core.entries.contains_key(to)
             || self.indexes.core.metas.contains_key(to)
             || (!case_only && self.docs.vault.exists(to))
@@ -6402,6 +6402,21 @@ impl Workspace {
         }
         Ok(path)
     }
+}
+
+/// Le due identità differiscono **solo** per come sono scritte, non per chi
+/// nominano: è la domanda di [`resolution_key`], e la si fa da qui invece che a
+/// mano.
+///
+/// La risposta serve a sapere se `vault.exists(to)` sta vedendo un file diverso
+/// o **lo stesso** file — su un filesystem case-insensitive (macOS, Windows)
+/// `nota.md` e `Nota.md` sono un file solo, e su APFS lo sono anche `Café.md` in
+/// NFC e in NFD. Un `to_lowercase()` scritto qui accanto avrebbe risposto di sì
+/// alla prima coppia e di no alla seconda, cioè avrebbe contraddetto la regola
+/// di risoluzione proprio sul rename che quella regola deve proteggere
+/// (difetto 0142).
+fn solo_il_caso(from: &DocId, to: &DocId) -> bool {
+    resolution_key(from.as_str()) == resolution_key(to.as_str())
 }
 
 /// Valida un nome/path che **nomina un documento che esiste** (o che potrebbe

@@ -1781,6 +1781,58 @@ mod tests {
         assert_eq!(trova("Sezione che non c'è"), None);
     }
 
+    /// **Il difetto 0093 era falso sulla conseguenza, e questo lo tiene fermo.**
+    ///
+    /// Diceva: «`heading_slug` non normalizza in NFC, quindi `# Café` scritto da
+    /// macOS e lo stesso link digitato altrove danno due slug diversi **e i link
+    /// si rompono**». La prima metà è vera — ed è il difetto 0140, che riguarda
+    /// quattro regole e non una. La seconda no: [`heading_matches`] è una
+    /// **disgiunzione**, e il secondo ramo passa da `resolution_key`, che la NFC
+    /// la fa. La risoluzione tiene **nei due versi**; ciò che si rompe è
+    /// l'`id=` HTML, che di rami ne ha uno solo.
+    ///
+    /// Senza questo banco qualcuno «riparerebbe» di nuovo la metà che non è
+    /// rotta, e la strada che salva la risoluzione oggi non è provata da
+    /// nessuna parte.
+    #[test]
+    fn nfd_e_nfc_si_incontrano_sul_testo_e_non_sullo_slug() {
+        let nfc = "Café";
+        let nfd = "Cafe\u{301}";
+        assert_ne!(
+            nfc, nfd,
+            "le due forme sono byte diversi, o non si prova niente"
+        );
+
+        // Lo slug diverge, e non diverge soltanto: su NFD **cancella**
+        // l'accento, perché `U+0301` è una `Mn` e non è alfanumerica.
+        assert_eq!(heading_slug(nfc), "café");
+        assert_eq!(heading_slug(nfd), "cafe");
+
+        let heading = Heading {
+            level: 2,
+            text: nfd.to_string(),
+            slug: heading_slug(nfd),
+            span: Span::EMPTY,
+        };
+        // Il primo ramo non aggancia — è la metà vera del difetto —, il secondo
+        // sì, e basta lui.
+        assert_ne!(heading_slug(nfc), heading.slug);
+        assert!(
+            heading_matches(nfc, &heading),
+            "NFC non trova il titolo NFD"
+        );
+
+        let heading = Heading {
+            slug: heading_slug(nfc),
+            text: nfc.to_string(),
+            ..heading
+        };
+        assert!(
+            heading_matches(nfd, &heading),
+            "NFD non trova il titolo NFC"
+        );
+    }
+
     #[test]
     fn a_task_marker_carries_the_symbol_not_just_a_flag() {
         let m = |symbol| TaskMarker {
