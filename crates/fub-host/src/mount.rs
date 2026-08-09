@@ -398,6 +398,23 @@ pub fn mount(
         tracing::warn!(target: "fub.host", "impostazioni: {warning}");
     }
 
+    // Cosa è andato storto con l'**organizzazione** — icone, appuntate, spazi,
+    // ordinamenti: il sidecar illeggibile all'apertura, o una migrazione che non
+    // si è potuta scrivere dietro a una rinomina. La 0038 aveva già scritto
+    // questa riga in prosa — «la rinomina vale, l'icona resta indietro, e
+    // qualcuno lo dice (`organization_warnings`)» — e il metodo la ripete sul
+    // proprio doc: *chi monta le mostra, e svuotandole se ne fa carico*. Chi
+    // monta era l'unico a poterlo fare e non lo faceva, quindi non se ne faceva
+    // carico nessuno: gli avvisi restavano nel workspace finché qualcuno non li
+    // chiedeva, e a chiederli era solo un banco del kernel.
+    //
+    // Sta qui e non altrove per la ragione dei due vicini: sono l'unico punto in
+    // cui c'è un workspace intero e nessuno lo sta ancora guardando, e questi
+    // avvisi **si svuotano leggendoli** — chi non li legge qui non li legge più.
+    for warning in ws.organization_warnings() {
+        tracing::warn!(target: "fub.host", "organizzazione: {warning}");
+    }
+
     // Cosa non ha potuto seguire una rinomina (§13.2). Vale la pena leggerlo
     // insieme al montaggio e non altrove: se qui c'è una riga, un plugin ha una
     // chiave morta e non lo sa — è il difetto che questa voce esiste per non

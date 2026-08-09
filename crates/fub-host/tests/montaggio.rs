@@ -345,3 +345,69 @@ fn chiudere_ferma_i_bundle_a_rovescio_e_mentre_sono_ancora_interi() {
     );
     assert!(registry.ids().is_empty(), "il registry è vuoto");
 }
+
+/// **Gli avvisi dell'organizzazione arrivano a chi monta**, e chi monta se ne fa
+/// carico svuotandoli.
+///
+/// `Workspace::organization_warnings` è ciò che il kernel ha da dire quando il
+/// sidecar dell'organizzazione — icone, appuntate, spazi, ordinamenti — non si è
+/// potuto leggere all'apertura, o quando una migrazione non ha potuto seguire
+/// una rinomina. Il suo doc lo scrive («chi monta le mostra, e svuotandole se ne
+/// fa carico») e la [0038](../../../docs/decisions/0038-il-kernel-possiede-il-sidecar.md)
+/// pure («la rinomina vale, l'icona resta indietro, e qualcuno lo dice»), ma
+/// nessuno fuori dai banchi le chiedeva: erano l'unica delle quattro famiglie di
+/// avvisi del workspace a non passare dal blocco di `mount` che legge le altre
+/// tre — impostazioni, stato per-documento, `kind` senza renderer.
+///
+/// Le due asserzioni si tengono per mano e da sole non provano niente. Che gli
+/// avvisi siano **vuoti** dopo l'apertura è anche lo stato di un vault in cui
+/// non è andato storto niente; che il sidecar sia rotto lo dice il rifiuto di
+/// `set_icon`, che è la prova che quel file è stato letto e giudicato
+/// illeggibile — cioè che un avviso c'è stato. Insieme dicono l'unica cosa che
+/// si voleva dire: c'era, e se l'è preso il montaggio.
+///
+/// L'ordine conta e non è una comodità: `set_icon` va **dopo**, perché un
+/// rifiuto può a sua volta annotare, e chiedere gli avvisi dopo di lui li
+/// leggerebbe pieni per la ragione sbagliata.
+#[test]
+fn chi_monta_si_prende_gli_avvisi_dell_organizzazione() {
+    let casa = tempfile::tempdir().expect("tempdir");
+    let config = camino::Utf8PathBuf::from_path_buf(casa.path().to_path_buf()).expect("utf8");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("Nota.md"), "# Nota\n").expect("una nota");
+    std::fs::create_dir_all(root.join(".fub")).expect("la cartella del vault");
+    std::fs::write(
+        root.join(".fub").join("workspace.json"),
+        "{ \"icons\": {,} }",
+    )
+    .expect("un sidecar che non si legge");
+
+    let host = fub_host::Host::new()
+        .with_watcher(Box::new(fub_host::NoWatcher))
+        .with_config_dir(&config);
+    host.open(&root)
+        .expect("un sidecar rotto non impedisce di aprire");
+    let ws = host.workspace(None).expect("il vault è aperto");
+
+    assert!(
+        ws.read()
+            .expect("il vault non è avvelenato")
+            .organization_warnings()
+            .is_empty(),
+        "gli avvisi dell'organizzazione sono ancora nel workspace dopo il \
+         montaggio: chi monta non li ha letti, e allora non li legge nessuno — \
+         il sidecar è illeggibile e l'utente non lo saprà mai"
+    );
+
+    let rifiuto = ws
+        .read()
+        .expect("il vault non è avvelenato")
+        .set_icon("Nota.md", Some("📌".into()))
+        .expect_err("non si scrive su ciò che non si è letto");
+    assert!(
+        rifiuto.contains("non lo sovrascrive"),
+        "il sidecar doveva essere illeggibile, e questa prova non prova più \
+         niente se non lo è: {rifiuto}"
+    );
+}
