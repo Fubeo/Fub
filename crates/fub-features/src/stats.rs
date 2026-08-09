@@ -129,16 +129,27 @@ impl ViewProvider for StatsView {
         _instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
-        let Some(doc) = host.active_context().and_then(|c| c.doc) else {
+        // **Una lettura sola.** Il contesto si prendeva due volte — una per
+        // ricavarne il documento, una per le selezioni e la modalità — sotto un
+        // commento che dichiarava il contrario, e la seconda non era gratis:
+        // `active_context()` **clona** il `ViewContext`, cioè anche il testo di
+        // ogni selezione, che è il campo che questo pannello ha voluto (vedi il
+        // § in testa). Con otto cursori da 2400 caratteri il secondo giro
+        // costava 11 allocazioni e 19 491 byte su 38 e 82 250 — un quarto del
+        // render, buttato — e il pannello si ridisegna a ogni movimento del
+        // cursore, cioè fino a sei o sette volte al secondo mentre si scrive.
+        //
+        // È anche ciò che il commento prometteva: prendere il contesto una
+        // volta sola è ciò che rende il render una **fotografia coerente**. Con
+        // due letture il documento veniva dalla prima e la selezione dalla
+        // seconda, e nulla nel tipo diceva che fossero lo stesso contesto.
+        let Some(context) = host.active_context() else {
             return Ok(riga(Text::key(NO_ACTIVE_DOC)));
         };
-        // Il contesto è stato appena letto: rileggerlo qui darebbe la stessa
-        // risposta, ma prenderlo una volta sola è ciò che rende il render una
-        // fotografia coerente.
-        let context = host
-            .active_context()
-            .expect("il contesto c'era un attimo fa");
-        let source = host.read_document(&doc)?;
+        let Some(doc) = context.doc.as_ref() else {
+            return Ok(riga(Text::key(NO_ACTIVE_DOC)));
+        };
+        let source = host.read_document(doc)?;
         Ok(build_stats_view(
             count(&source),
             selezione(&context.selections),
