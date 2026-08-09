@@ -3318,6 +3318,18 @@ impl Workspace {
     /// Il modo in cui si vedrebbe è preciso — un quarto posto per-documento
     /// aggiunto qui e non là, e la rinomina ad app chiusa che ne perde uno solo.
     ///
+    /// **La destinazione è libera, e non è un'ipotesi**: i tre canali qui
+    /// sotto scrivono ciascuno *sopra* ciò che sta a `to`, quindi chiamare
+    /// questa funzione con un `to` vivo in anagrafe vuol dire perdere il dato
+    /// di qualcun altro senza dirlo. Chi entra da
+    /// [`rename_document`](Workspace::rename_document) ha un `AlreadyExists`
+    /// davanti; chi entra da
+    /// [`rejoin_renamed_while_closed`](Workspace::rejoin_renamed_while_closed)
+    /// accoppia solo id che ieri non erano in anagrafe; chi entra dal watcher
+    /// ha la guardia di [`sync_renamed_path_here`] (decisione 0135).
+    ///
+    /// [`sync_renamed_path_here`]: Workspace::sync_renamed_path_here
+    ///
     /// **Nessuno di questi tre errori risale**, ed è la regola dell'§11.3: chi
     /// chiama ha già il file al posto nuovo, e far fallire una rinomina riuscita
     /// perché un'icona non l'ha seguita sarebbe il verso sbagliato. La rinomina
@@ -3423,6 +3435,34 @@ impl Workspace {
         };
         if from_id == to_id {
             return self.sync_path_here(to);
+        }
+        // **Una rinomina che atterra su un'identità viva non è una rinomina**
+        // (§25.1, decisione 0135). Dei tre modi di entrare in
+        // `migrate_side_data` questo è l'unico che possa avere davanti una
+        // destinazione *occupata*: `rename_document` ha un `AlreadyExists`
+        // prima, `rejoin_renamed_while_closed` accoppia per impronta un id che
+        // ieri non era in anagrafe. Senza questa riga il rito si
+        // celebrava lo stesso, e i tre canali attaccati a `to` — icona e pin,
+        // spazio per-documento, bozza — scrivevano il dato di `from` sopra
+        // quello di `to`, che è vivo. La bozza è l'**unica** copia di ciò che
+        // l'utente ha scritto: `mv A.md B.md` in un terminale cancellava per
+        // sempre il buffer sporco di `B`, in silenzio.
+        //
+        // La guardia sta **qui e non dentro i tre canali** perché è la stessa
+        // domanda per tutti e tre, e a valle nessuno dei tre saprebbe più
+        // rispondere «allora non era un rename»: la si eredita passando di
+        // qua, non ricordandosela.
+        //
+        // Il prezzo lo paga chi ha rinominato, ed è dichiarato: la storia di
+        // `from` si spezza e i suoi dati restano orfani fino alla prima
+        // raccolta. Non paga niente di ciò che era di `to`. La degradazione è
+        // la stessa di sopra — è sparito qualcosa da `from`, è comparso
+        // qualcosa in `to` — e le due mezze verità vanno dette entrambe
+        // (§14.1). Fondere invece di degradare è la forma (b) della voce, che
+        // vuole tre politiche di collisione e resta aperta.
+        if self.indexes.core.metas.contains_key(&to_id) {
+            let partito = self.sync_path_here(from)?;
+            return Ok(self.sync_path_here(to)? || partito);
         }
         if !to.exists() {
             self.remove_document(&from_id);

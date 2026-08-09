@@ -36,10 +36,10 @@ lavorato — e **sette** da una **rilettura**: la
 [seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md), che
 non ha cercato pezzi mancanti del piano ma ha rimisurato contro i sorgenti del
 2026-08-07 le osservazioni che questo repo si portava avanti di giro in giro, e
-le ha **smentite più spesso di quanto le abbia confermate**. Centotrentasei sono
-chiuse, e i loro verbali stanno in
+le ha **smentite più spesso di quanto le abbia confermate**. Centotrentasette
+sono chiuse, e i loro verbali stanno in
 [decisions/](decisions/README.md); le voci ancora aperte sono
-**sette** [conta: voci-aperte], e questo file resta il loro **indice** e il
+**sei** [conta: voci-aperte], e questo file resta il loro **indice** e il
 consuntivo di come sono finite.
 
 Da quello stesso consuntivo viene la **terza specie** che questo file conta: i
@@ -240,23 +240,26 @@ che questo piano passa il tempo a togliere dal codice.
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 2 |
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
 | **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | **chiusa** — tre voci aperte perché toccavano una firma, e su due delle tre quel criterio non reggeva | — | — |
-| **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta è già scritta altrove nel repo | 7 | — |
+| **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta è già scritta altrove nel repo — la prima chiusa dalla [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md) | 6 | 1 |
 
 ## Le voci
 
-**Sette** [conta: voci-aperte], e sono tutte della
-[seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md).
+**Sei** [conta: voci-aperte], e sono tutte della
+[seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md), che
+ne aveva aperte sette.
 **Non riaprono la roadmap infrastrutturale di M4, che resta finita**: nessuna
-delle sette è un pezzo che manca al piano, e la prova è da dove vengono. Non
+delle sei è un pezzo che manca al piano, e la prova è da dove vengono. Non
 sono uscite cercando cosa serva per costruire FEATURES.md — quella domanda ha
 finito di produrre voci — ma da una **rilettura** che ha rimisurato ciò che il
-repo si portava avanti, e sono tutte e sette dello stesso tipo: una **scelta di
+repo si portava avanti, e sono tutte e sei dello stesso tipo: una **scelta di
 prodotto o di contratto** che il codice ha già preso scrivendosi, e che nessuno
-ha mai posto come domanda. Cinque delle sette hanno il codice che dice una cosa e
-un verbale che, sullo stesso problema, ne dice un'altra; sei su sette hanno la
-risposta già scritta da qualche parte in questo repo. Per taglia: una P0, quattro
-P1, due P2 — e **la P0 non è una firma**, è una perdita di dati, quindi non
-scade col freeze e non è per questo che sta in cima.
+ha mai posto come domanda. Quattro delle sei hanno il codice che dice una cosa e
+un verbale che, sullo stesso problema, ne dice un'altra; cinque su sei hanno la
+risposta già scritta da qualche parte in questo repo. Per taglia: quattro P1 e
+due P2 — l'unica P0 era la §25.1, e **non era una firma**: era una perdita di
+dati, quindi non scadeva col freeze e non è per questo che stava in cima. L'ha
+chiusa la [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md),
+che di quella voce prende la forma (a) e lascia la (b) scritta e aperta.
 
 Il criterio della scadenza ha già mostrato una volta di non bastare. La
 [seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) aveva aperto
@@ -287,7 +290,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-**sette** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+**sei** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -304,8 +307,8 @@ decidere. La forma di questo file era già pronta a riceverlo, e la prova è che
 non è servito inventare un criterio nuovo: è bastato rileggere quello con cui
 *Caselle* si era staccata da *Voci*.
 
-La colonna *Voci* somma **sette** [conta: voci-aperte], e stanno **tutte in una
-riga**: le prime ventiquattro sedute sono a zero, la venticinquesima è a sette.
+La colonna *Voci* somma **sei** [conta: voci-aperte], e stanno **tutte in una
+riga**: le prime ventiquattro sedute sono a zero, la venticinquesima è a sei.
 È una distribuzione che vale la pena leggere, perché è la seconda volta che
 capita e la prima è finita: le ventiquattro ci sono arrivate una per volta —
 l'ultima è stata la 24, con la
@@ -326,7 +329,7 @@ una voce per volta senza mai aspettare le altre. Il taglio che a un certo punto
 sembrava servire — spezzarla per **lente**, le §23.9–§23.17 rispondono a una
 domanda più stretta delle prime otto — non è mai servito.
 
-Le caselle residue oggi sono **ventitré**, e stanno in diciotto posti:
+Le caselle residue oggi sono **ventiquattro**, e stanno in diciannove posti:
 la [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) (una: i workspace salvati
 con un nome — la casa è decisa, il formato aspetta di vedere assetti veri),
 [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
@@ -450,7 +453,17 @@ dati possa arrivarci, e oggi il `SyntaxRegistry` vive sotto il prestito
 esclusivo di chi scrive e viene attraversato a ogni parse, quindi condividerlo è
 una decisione sulla concorrenza del kernel
 ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e non un pezzo di
-quella voce).
+quella voce) e la
+[§25.1](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#251-una-rinomina-che-atterra-su-una-nota-viva)
+(una: la **forma (b)** — migrare senza mai schiacciare, invece di degradare a
+rimozione più aggiunta. La [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md)
+ha preso la (a), che toglie il 100% della perdita misurata e non obbliga a
+decidere niente sulla fusione; la (b) resta, e ha un modello già scritto a cui
+guardare — la politica di collisione che sta in `versioning.rs` accanto a
+`VersionStore::rename`, che le due storie le unisce in ordine di tempo. Ma le
+politiche da scrivere sono **tre**, una per canale, e non sono la stessa: due
+bozze non salvate non si fondono senza inventare un testo che nessuno ha
+scritto. Nessuna è urgente finché la guardia impedisce la perdita).
 Non diventano voci
 — non reggerebbero il criterio in testa a questo file — ma non devono nemmeno
 sparire senza essere state fatte.
@@ -482,7 +495,6 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
-| **§25.1** | [Una rinomina che atterra su una nota viva](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#251-una-rinomina-che-atterra-su-una-nota-viva) | 25. Sette scelte che il codice ha preso senza dirlo | kernel | **P0** |
 | **§25.2** | [Quante regole di identità di un nome vuole Fub](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#252-quante-regole-di-identità-di-un-nome-vuole-fub) | 25. Sette scelte che il codice ha preso senza dirlo | contratto | **P1** |
 | **§25.3** | [Dove sta la prima fotografia di un vault](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#253-dove-sta-la-prima-fotografia-di-un-vault) | 25. Sette scelte che il codice ha preso senza dirlo | kernel | **P1** |
 | **§25.4** | [Quanto contesto porta un backlink](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#254-quanto-contesto-porta-un-backlink) | 25. Sette scelte che il codice ha preso senza dirlo | contratto | **P1** |
@@ -580,7 +592,7 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md) —
   i commit e i commenti nel codice nominano i numeri di prima della
   riorganizzazione; lì si traducono.
-- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentaquattro** [conta: verbali],
+- [I verbali delle decisioni chiuse](decisions/README.md) — **centotrentacinque** [conta: verbali],
   uno per file. Diceva «cinquantasette» quando erano cinquantanove, e il comando
   che lo ricava era già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo esegue
