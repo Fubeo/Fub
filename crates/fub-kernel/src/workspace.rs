@@ -1296,6 +1296,23 @@ impl Workspace {
             ws.dispatch_pending();
         });
 
+        // **L'anagrafe si scrive qui**, accanto al flush degli indici e per la
+        // sua stessa ragione: è l'ultimo momento in cui qualcuno sa che sta
+        // chiudendo (§9.5). Fra l'apertura e questa riga `touch_entry` ha
+        // aggiornato la sola memoria — cinque siti: un salvataggio, una
+        // scrittura vista dal rilevatore, il cestino, il ripristino, la rinomina
+        // — e senza questa riga tutto ciò che si è toccato dopo l'apertura
+        // veniva riletto e riparsato alla riapertura, cioè il lavoro che
+        // l'anagrafe esiste per evitare.
+        //
+        // **Non copre il processo ucciso**, e non deve: chi muore senza passare
+        // di qui ricade su ciò che c'era prima di questa riga — l'anagrafe di
+        // fine apertura, che rilegge i soli documenti toccati dopo. È il degrado
+        // di un derivato, non una perdita, quindi qui non si baratta niente:
+        // questa riga toglie del lavoro nel caso normale e non ne aggiunge in
+        // nessuno.
+        self.store_entries();
+
         let mut errors = self.flush_indexes();
 
         let plugins: Vec<String> = self
@@ -2088,11 +2105,14 @@ impl Workspace {
     /// Scrive l'anagrafe, perché la prossima apertura non debba rifare ciò che
     /// questa ha appena fatto (§14.2).
     ///
-    /// Si scrive **qui e alla chiusura**, non a ogni salvataggio: è un file che
-    /// contiene una riga per file del vault, e riscriverlo a ogni battuta
-    /// sarebbe pagare l'intero vault per un documento. Fra un giro e l'altro
-    /// l'anagrafe vive in memoria; se il processo muore prima di scriverla, la
-    /// riapertura rilegge tutto — cioè si comporta come prima che questa voce
+    /// Si scrive **qui e alla chiusura** — i due chiamanti sono
+    /// [`finish_index`](Workspace::finish_index) e
+    /// [`close_with`](Workspace::close_with) — e non a ogni salvataggio: è un
+    /// file che contiene una riga per file del vault, e riscriverlo a ogni
+    /// battuta sarebbe pagare l'intero vault per un documento. Fra un giro e
+    /// l'altro l'anagrafe vive in memoria; se il processo muore prima di
+    /// scriverla, la riapertura rilegge ciò che si è toccato da quando è stata
+    /// scritta l'ultima volta — cioè si comporta come prima che questa voce
     /// esistesse, che è il degrado giusto per un dato derivato.
     ///
     /// L'esito non risale, e non perché non interessi: un'apertura riuscita non
