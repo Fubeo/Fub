@@ -518,105 +518,24 @@ aperta dentro un commento.
 
 ### 25.6 Chi paga la latenza di una scrittura fatta dentro un comando IPC
 
-*aperta · strato **shell** · **P2***
+*chiusa dalla [0137](../decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md) · strato **shell** · **P2***
 
-**1. La domanda.** Un comando IPC che scrive su disco può tenere un lucchetto
-condiviso da tutti i vault per il tempo di un `fsync`, o quella scrittura va
-spostata — e se sì, accodata nella shell o tolta dal thread dell'IPC?
-
-**2. Che cosa si osserva oggi, misurato.** `ViewStates::muta` prende
-`self.vaults.write()` e lo tiene per tutto `update_atomic`: `flock`, rilettura,
-fusione, riscrittura atomica con `sync_all()` sul file **e** sulla directory.
-Costo di una `set`, su filesystem vero (`ext`, non tmpfs):
-
-| vault / cartelle | taglia del file | tempo |
-|---|---|---|
-| 1 / — | 2,4 KB | **2,561 ms** |
-| 5 / 30 | 20 KB | **2,792 ms** |
-| 20 / 80 | 137 KB | **5,036 ms** |
-
-Dominato dall'`fsync`, non dalla fusione: il file cresce di 57× e il tempo di 2×.
-*Chi ripete la misura in `/tmp` sottostima di ~50×: è tmpfs, e `sync_all()` lì è
-quasi gratis.*
-
-Frequenza: `cambiato()` (`frontend/src/state/layout.ts:426`) ha **8 siti di
-chiamata**, tutti gesti **discreti** — nessun gesto continuo. Due amplificazioni
-vere: `fuocoSu` scrive **a ogni click su un riquadro**, e `togliDappertutto`
-chiama `chiudiTab` in ciclo, cioè **una scrittura per tab**. E il caso peggiore
-non è `set_view_state`: è `Host::set_setting_for_user` /
-`reset_setting_for_user` (`session.rs:1082`, `:1100`), che prendono il prestito
-**esclusivo** e ci attraversano una scrittura su disco, mentre i quattro fratelli
-(`session.rs:1507`–`1565`) prendono `read()`.
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Accodare nella shell** — una `Coda` davanti a `scriviStato`, che
-      coalesce per chiave. Una riga in `store.ts`, non rompe niente. **Paga chi
-      mantiene la shell.** Ma non è una scelta libera:
-      `frontend/src/ui/corsa.ts` scrive già che quando il lavoro *deve arrivare*
-      — «**una scrittura su disco**, una mutazione del layout» — la risposta è
-      **accodare**. Non riduce il tempo in cui il lucchetto è preso: riduce
-      quante volte lo si prende.
-- [ ] **(b) Togliere la scrittura dal thread IPC** — `spawn_blocking`, o comandi
-      `async`. Costa una **seconda convenzione di chiamata** su una superficie
-      tenuta deliberatamente a elenco chiuso e omogeneo; da quel giorno «il
-      comando è sincrono o no?» è una domanda che ogni comando nuovo deve porsi,
-      e `dieta_ipc.rs` non la vede. **Paga chi scriverà il 38° comando.**
-- [ ] **(c) Restringere ciò che il lucchetto copre** — un file per vault. Costa
-      un **cambio di formato su disco** con migrazione, e la proprietà che `muta`
-      dichiara nella propria prosa («due finestre di Fub aperte insieme
-      depositano scroll di esemplari diversi») resterebbe vera solo per vault.
-      **Paga l'utente**, una volta, alla migrazione.
-
-**4. Che cosa il repo ha già deciso qui vicino.** La **decisione
-[0133](../decisions/0133-chi-ascolta-nomina-fino-a-quando.md)** e `corsa.ts`:
-una scrittura su disco si **accoda**, non si scarta — e il presidio
-`check-corse.mjs` esiste già. Vincola la (a). La **decisione
-[0057](../decisions/0057-la-dieta-dell-ipc.md)** («La dieta dell'IPC»): elenco
-chiuso, e ogni comando nuovo porta la ragione per cui non poteva essere altro. È
-l'argomento contro la (b).
-
-**E il codice ha già deciso metà della domanda**: `set_view_state`
-(`crates/fub-app/src/lib.rs:680`) prende il prestito condiviso *di proposito*,
-con la ragione scritta accanto — «*prendere qui quello esclusivo del workspace
-bloccherebbe chi legge per il tempo di una scrittura su disco — per salvare uno
-scroll*». Quella frase è la regola; `set_setting_for_user` non la applica, ed è
-il difetto `0138`.
-
-**5. Reversibile?** (a) e (b) sì, stanno dentro un modulo. **(c) no**: è un
-formato su disco, e vuole una migrazione e un `SchemaVersion`.
-
-**6. La raccomandazione: (a); non (b); non (c) adesso.** La (b) compra 2,5–5 ms
-su una chiamata che nessuno aspetta e che l'utente non vede, e paga con una
-seconda convenzione su una superficie che il repo tiene omogenea per decisione.
-La prova che decide — *il secondo chiamante la eredita gratis?* — dà **no**: il
-38° comando non eredita niente, deve scegliere. La (a) è già decisa dalla
-decisione 0133 e costa una riga; il suo valore vero è su `togliDappertutto`. La
-(c) risolve la cosa giusta al prezzo sbagliato, finché la misura è 5 ms su 137 KB
-con 20 vault, che è già il caso limite. Ciò che il verbale deve fissare è **il
-numero e la soglia**: si accetta il lucchetto di macchina finché il file resta
-sotto una certa taglia, e quel giorno si riapre la (c).
-
-**7. Che cosa resta rotto se non si decide.** Chi clicca fra riquadri paga 2,5–5
-ms di lucchetto condiviso per click e non lo vede; `fuocoSu` fa un `fsync` per
-ogni click; e chi scriverà il 38° comando non trova scritto da nessuna parte se
-possa scrivere su disco dentro l'IPC.
-
-*Quello che si diceva e che non regge.* Il **difetto 0073** è sbagliato due volte:
-«a ogni scroll» è falso — `grep -rn "scrollTop" frontend/src` non trova niente,
-la shell non persiste nessuno scroll — e «`set_view_state` prende il lock
-esclusivo» è falso, prende `ws.read()`, con tre righe di commento sopra che
-dicono perché; e il suo ancoraggio `lib.rs:645` è scaduto, la funzione sta a
-`crates/fub-app/src/lib.rs:680`. «Il lucchetto è a livello di macchina invece che
-per vault» è vera come fatto e falsa come diagnosi: il **file** è uno per config
-dir (`session.rs:426`), quindi lucchetto e file hanno la stessa ampiezza, e
-restringerlo è un cambio di formato e non una correzione di granularità.
-«Qualcuno aspetta quel `Result`» è falso: `store.ts::scriviStato` è
-`void … .catch()`. Regge invece il **difetto 0038**: 37 comandi registrati, 0
-`async` — e il `grep` grezzo che ne dà 39 cade nella trappola già misurata dalla
-decisione 0057, perché due sono prosa.
-
----
+**Com'è finita, e cosa lascia.** La risposta è la **forma (a)** che la voce
+stessa raccomandava: una scrittura su disco dentro un comando IPC **si accoda
+nella shell** — coalescendo per chiave, così due scritture della stessa chiave
+accavallate diventano una scrittura sola con l'ultimo valore — e non si rende
+`async` nel thread dell'IPC. La coda sta in `frontend/src/ui/corsa.ts`, accanto
+a `Coda`, perché la erediti gratis chiunque: i chiamanti di `scriviStato` sono
+**cinque** in tre moduli, e la premessa della voce che ne contava due era falsa.
+La (b) si scarta per la [0057](../decisions/0057-la-dieta-dell-ipc.md) — una
+seconda convenzione di chiamata rompe l'elenco chiuso — e la (c) resta chiusa
+**fino alla soglia**: si accetta il lucchetto di macchina finché il file di
+stato resta sotto la taglia misurata — 5,036 ms su 137 KB con 20 vault contro
+2,561 ms su 2,4 KB, dominato dall'`fsync` e non dalla fusione — e quel giorno
+si riapre la (c), che è l'unica forma irreversibile. Resta aperto il difetto
+`0138`: `set_setting_for_user` e `reset_setting_for_user` prendono il prestito
+esclusivo del workspace e ci attraversano una scrittura su disco — il «caso
+peggiore» che questa voce nominava, e non è questa voce.
 
 ### 25.7 Dove stanno i byte di un `kind` di terzi
 
