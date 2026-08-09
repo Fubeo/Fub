@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Trentadue** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Trentuno** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -581,7 +581,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0131 | `deleted_at` non è un dato salvato ma l'mtime del file nel cestino diviso 1000, ricavato in `walk_trash`, quindi qualsiasi tocco al file — un rename, un backup, una sync — riscrive la data di cancellazione, e per giunta invalida il sidecar, che usa lo stesso mtime come controllo d'identità | `fub-kernel` · `vault.rs` `walk_trash` | regole |
 | 0136 | l'etichetta di un wikilink senza alias la sintetizza comrak dal bersaglio, e `convert_inlines` la scandisce per i tag come fosse prosa: `[[#Sezione]]` fa nascere un tag `Sezione` che nessuno ha scritto, con lo span dentro quello del link | `fub-format-markdown` · `parse.rs` ramo `NodeValue::WikiLink` | regole |
 | 0137 | il dry-run della rinomina chiede `IndexQuery::Backlinks` con `page: None` e poi destruttura `BacklinkRef { source, .. }`: si fa consegnare i contesti — 203 KB mediani, fino a 1,5 MB — per costruire un elenco di percorsi, mentre la foglia `QueryPredicate::Linked` che il docstring di `backlinks()` gli indica esiste già | `fub-features` · `commands.rs` (dry-run della rinomina) | prestazioni |
-| 0138 | `set_setting_for_user` e `reset_setting_for_user` prendono il prestito **esclusivo** del workspace e ci attraversano una scrittura su disco, mentre i quattro fratelli che fanno la stessa cosa prendono quello condiviso e `set_view_state` ha la ragione scritta accanto a sé: «prendere qui quello esclusivo bloccherebbe chi legge per il tempo di una scrittura su disco» | `fub-host` · `session.rs` `Host::set_setting_for_user` | lock e I/O |
 | 0139 | `togliDappertutto` chiama `chiudiTab` in ciclo e ogni giro fa un `cambiato()`, cioè una scrittura su disco con `fsync`: cancellare un documento aperto in cinque riquadri costa cinque scritture dove ne basterebbe una alla fine | `frontend` · `layout.ts` `togliDappertutto` | prestazioni |
 | 0140 | quattro regole di identità di un nome non fanno la normalizzazione NFC che `resolution_key` fa — `canonical_tag`, `canonical_anchor`, `heading_slug`, `prefix_len_ci` — così paglia in NFD e ago in NFC non si incontrano in nessuno dei due versi, e `heading_slug` su NFD non diverge soltanto: **cancella** l'accento, perché una `Mn` non è alfanumerica | `fub-abi` · `model.rs` `canonical_tag` (con `canonical_anchor`, `heading_slug`, `occurrences.rs` `prefix_len_ci`) | regole |
 | 0141 | «sta dentro questa cartella?» ha tre risposte incompatibili in produzione — `query::within_folder` taglia gli slash finali e ha il ramo su sé stessa, `rules::events::folder_contains` li taglia e non ce l'ha, `transfer::in_folder` taglia entrambi i capi — e il banco di `transfer.rs` asserisce vero ciò che `within_folder` dà falso, mentre la prosa di `traits.rs` scrive che la regola «è una, e due copie divergerebbero sul caso che nessuno prova» | `fub-abi` · `transfer.rs` `in_folder` | regole |
