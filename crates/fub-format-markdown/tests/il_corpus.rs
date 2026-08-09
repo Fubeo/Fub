@@ -526,11 +526,6 @@ enum Perche {
     /// Nasce dalla forma dei byte, e la conseguenza è che due file identici a
     /// schermo danno due modelli diversi.
     DipendeDaiByte,
-    /// La specie peggiore: il modello dichiara qualcosa che **nel documento non
-    /// c'è**. Una perdita si nota — chi ha scritto `~~barrato~~` vede che non è
-    /// barrato; un'invenzione no, perché il posto in cui compare è un pannello
-    /// che l'utente non sta guardando mentre scrive.
-    InventataDalParser,
 }
 
 /// Dove il modello e il file **non sono d'accordo**, una riga per divergenza.
@@ -568,25 +563,6 @@ enum Perche {
 #[allow(clippy::type_complexity)]
 fn divergenze_dichiarate() -> Vec<(&'static str, Perche, fn(&DocumentModel, &str) -> bool)> {
     vec![
-        (
-            "un link a un heading di questa nota inventa un tag",
-            Perche::InventataDalParser,
-            |d, _| {
-                d.tags.iter().any(|t| t.name == "Sezione")
-                    && d.links.first().is_some_and(|l| {
-                        matches!(&l.target, LinkTarget::Wiki { heading, .. }
-                            if heading.as_deref() == Some("Sezione"))
-                    })
-                    // E i due span si sovrappongono: il tag sta **dentro** il
-                    // link, quindi rinominare la nota e rinominare il tag
-                    // riscrivono gli stessi byte.
-                    && d.links.first().is_some_and(|l| {
-                        d.tags
-                            .iter()
-                            .any(|t| l.span.start <= t.span.start && t.span.end <= l.span.end)
-                    })
-            },
-        ),
         (
             "il barrato non arriva nel modello",
             Perche::AccesaEnonMappata,
@@ -707,16 +683,16 @@ fn le_divergenze_sono_quelle_dichiarate() {
     let dichiarate = divergenze_dichiarate();
     let sorgenti = divergenti();
     assert!(
-        dichiarate.len() >= 11,
-        "l'elenco delle divergenze si è svuotato: {} righe su undici. Se sono\n\
+        dichiarate.len() >= 10,
+        "l'elenco delle divergenze si è svuotato: {} righe su dieci. Se sono\n\
          state riparate è una bella notizia e va scritta dove la riparazione sta\n\
          — e allora si abbassa questo numero **nello stesso commit**, che è ciò\n\
          che lo tiene una soglia e non un desiderio; se è l'elenco che si è\n\
          rotto, questo file ha smesso di presidiare la cosa per cui esiste.\n\
-         L'ultima scesa: «l'html inline sparisce, mentre quello a blocco resta»\n\
-         — adesso `convert_inlines` ha il suo ramo `HtmlInline` e i byte\n\
-         restano, quindi il caso è passato nel corpus curato col nome «html\n\
-         inline» e il giro completo lo riscrive identico.",
+         L'ultima scesa: «un link a un heading di questa nota inventa un tag»\n\
+         — l'etichetta che comrak sintetizza dal bersaglio non si scandisce\n\
+         più come prosa, e la sorgente `[[#Sezione]]` stava già nel corpus\n\
+         curato col nome «wikilink al solo heading».",
         dichiarate.len()
     );
 

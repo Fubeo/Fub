@@ -611,6 +611,36 @@ fn inlines_del_blocco<'a>(
     inlines
 }
 
+/// L'etichetta che comrak ha **sintetizzato dal bersaglio**, se è quella.
+///
+/// Un wikilink senza alias in comrak non è un nodo senza figli: è un nodo con
+/// **un** figlio testo che ripete il bersaglio parola per parola. Non c'è un
+/// campo che dica «questa l'ho messa io», e quindi la si riconosce dalla forma:
+/// un figlio solo, di testo, uguale all'url del nodo. `None` per tutto il
+/// resto, cioè per ogni etichetta che l'autore abbia scritto.
+///
+/// **La zona cieca, dichiarata**: `[[Nota|Nota]]` — un alias battuto identico
+/// al bersaglio — risponde `Some`, perché dal nodo i due casi sono
+/// indistinguibili. Il testo che si vede è lo stesso, quindi l'unica differenza
+/// osservabile sarebbe un `#` dentro un alias uguale al proprio bersaglio
+/// (`[[#x|#x]]`), che è una nota che punta a un proprio heading scrivendo due
+/// volte la stessa cosa. Distinguerli vorrebbe dire riparsare l'interno del
+/// wikilink dalla sorgente, cioè tenere una seconda grammatica del `|` accanto
+/// a quella di comrak, e il costo di quella seconda grammatica è più alto del
+/// caso che risolve.
+fn etichetta_sintetica<'a>(node: &'a AstNode<'a>, url: &str) -> Option<String> {
+    let mut figli = node.children();
+    let solo = figli.next()?;
+    if figli.next().is_some() {
+        return None;
+    }
+    let value = &solo.data.borrow().value;
+    let NodeValue::Text(testo) = value else {
+        return None;
+    };
+    (testo == url).then(|| testo.to_string())
+}
+
 fn convert_inlines<'a>(
     node: &'a AstNode<'a>,
     source: &str,
@@ -672,9 +702,37 @@ fn convert_inlines<'a>(
             NodeValue::WikiLink(wl) => {
                 let (embed, span) = embed_before(source, span);
                 let parsed = scan::parse_wikilink_inner(&wl.url);
-                let mut label_text = String::new();
-                let label = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
-                text_out.push_str(&label_text);
+                // **L'etichetta che nessuno ha scritto non è prosa.** Senza
+                // alias comrak sintetizza l'etichetta dal bersaglio, e
+                // scandirla come si scandisce una frase faceva nascere dei tag
+                // dal nome della nota: `[[#Sezione]]` — un link a un heading di
+                // questa stessa nota — dichiarava un tag `Sezione` che
+                // nell'indice stava accanto a quelli veri, con lo span
+                // **dentro** quello del link, cioè sugli stessi byte che una
+                // rinomina della nota riscrive.
+                //
+                // Il `#` di un bersaglio non è il `#` di un tag: introduce un
+                // heading, e a dirlo è già `parse_wikilink_inner`, che di
+                // quello stesso `#` fa il campo `heading`. Il difetto era che
+                // gli stessi byte venivano letti due volte da due regole
+                // diverse.
+                //
+                // **Un alias resta prosa**: `[[Nota|alias con #tag]]` è testo
+                // che l'autore ha scritto, e il suo `#tag` è un tag suo. È la
+                // metà da non rovesciare, ed è la ragione per cui la
+                // distinzione sta qui e non in `push_text_features`.
+                let label = match etichetta_sintetica(child, &wl.url) {
+                    Some(testo) => {
+                        text_out.push_str(&testo);
+                        vec![Inline::Text(testo)]
+                    }
+                    None => {
+                        let mut label_text = String::new();
+                        let l = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
+                        text_out.push_str(&label_text);
+                        l
+                    }
+                };
                 push_link(acc, &mut out, parsed.target, Some(label), embed, span);
             }
             NodeValue::Image(img) => {

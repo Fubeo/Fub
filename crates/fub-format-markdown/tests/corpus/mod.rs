@@ -232,10 +232,6 @@ pub fn corpus() -> Vec<Caso> {
 /// nome qui senza predicato là, o un predicato là senza nome qui, è rosso.
 pub fn divergenti() -> Vec<Caso> {
     vec![
-        caso(
-            "un link a un heading di questa nota inventa un tag",
-            "[[#Sezione]]\n",
-        ),
         caso("il barrato non arriva nel modello", "~~barrato~~\n"),
         caso("l'apice non arriva nel modello", "testo ^apice^ qui\n"),
         caso(

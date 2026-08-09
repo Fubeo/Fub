@@ -167,6 +167,56 @@ mod tests {
         assert!(doc.tags.is_empty(), "tags: {:?}", doc.tags);
     }
 
+    /// **Il bersaglio di un wikilink non è prosa, l'alias sì.**
+    ///
+    /// Senza alias l'etichetta la sintetizza comrak copiando il bersaglio, e
+    /// finché veniva scandita come una frase qualunque `[[#Sezione]]` — il modo
+    /// in cui si punta a un heading di questa stessa nota — faceva nascere un
+    /// tag `Sezione` che nessuno aveva scritto, con lo span **dentro** quello
+    /// del link: gli stessi byte rivendicati da due tabelle, e una rinomina
+    /// della nota e una del tag che si contendono la stessa patch.
+    ///
+    /// **Le due metà stanno nello stesso banco apposta**, perché la
+    /// riparazione sbagliata è quella che le confonde: togliere i tag da dentro
+    /// i wikilink e basta cancellerebbe anche `#tag` in un alias, che l'autore
+    /// ha battuto lettera per lettera. Il criterio non è «dentro un link», è
+    /// «l'ha scritto qualcuno».
+    ///
+    /// Il banco è stato **rosso** sulla prima metà: `[[#Sezione]]` dichiarava
+    /// un tag `Sezione`. Era una divergenza dichiarata del corpus — «un link a
+    /// un heading di questa nota inventa un tag» — e adesso quella sorgente sta
+    /// nel corpus curato.
+    #[test]
+    fn un_tag_nasce_solo_dove_qualcuno_lo_ha_scritto() {
+        for src in [
+            "[[#Sezione]]",
+            "[[Nota#Sezione]]",
+            "[[#Sezione|alias]]",
+            "[[Nota]]",
+            "![[#Sezione]]",
+        ] {
+            let doc = parse(src);
+            assert!(
+                doc.tags.is_empty(),
+                "«{src}»: il bersaglio del link è diventato un tag: {:?}",
+                doc.tags
+            );
+            assert!(
+                !format!("{:?}", doc.body).contains("TagRef"),
+                "«{src}»: un `TagRef` dentro l'etichetta del link: {:?}",
+                doc.body
+            );
+        }
+
+        // E l'altra metà: dentro un alias il `#` è dell'autore, e resta un tag.
+        let doc = parse("[[Nota|alias con #tag]]");
+        let nomi: Vec<_> = doc.tags.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(nomi, vec!["tag"], "body: {:?}", doc.body);
+        // Lo span punta al `#tag` della sorgente, non a un'invenzione.
+        let s = doc.tags[0].span;
+        assert_eq!(&"[[Nota|alias con #tag]]"[s.start..s.end], "#tag");
+    }
+
     #[test]
     fn embed_spans_point_at_the_source_even_after_escapes() {
         let src = "pre \\# poi ![[Nota#Sez]] fine";
