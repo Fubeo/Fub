@@ -98,7 +98,7 @@ const FILE: &str = "entries.json";
 /// Il **corpo** non c'è, come non c'è nella cache in memoria (`DocMeta`) e per
 /// la stessa ragione: il render lo riparsa dal disco su richiesta, e tenerlo qui
 /// vorrebbe dire scrivere l'intero vault una seconda volta accanto a sé stesso.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StoredMeta {
     #[serde(default)]
     pub(crate) frontmatter: Frontmatter,
@@ -132,7 +132,7 @@ pub(crate) struct StoredMeta {
 }
 
 /// Una voce come sta sul file.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StoredEntry {
     pub(crate) size: u64,
     pub(crate) mtime: u64,
@@ -236,6 +236,20 @@ impl EntryStore {
     /// Con l'ordine giusto un guasto costa ciò che un dato derivato deve
     /// costare — una riapertura lenta — e niente altro.
     pub(crate) fn store(&mut self, entries: BTreeMap<DocId, StoredEntry>) -> Result<(), String> {
+        // **Una tabella che il disco ha già non si riscrive.** Da quando
+        // l'anagrafe si scrive anche alla chiusura del vault, chi apre e chiude
+        // senza toccare niente passa di qui due volte con lo stesso contenuto:
+        // senza questa riga la seconda volta serializzerebbe e riscriverebbe una
+        // riga per file del vault per non dire niente di nuovo.
+        //
+        // Il confronto è lecito **perché** `known` è un [`Durevole`]: dice ciò
+        // che il disco ha accettato, non ciò che qualcuno si è annotato. Con un
+        // campo normale questa riga sarebbe una scommessa — una scrittura
+        // fallita avrebbe lasciato in memoria una tabella mai scritta, e il
+        // confronto avrebbe saltato la scrittura che la ripara.
+        if entries == *self.known {
+            return Ok(());
+        }
         let written_at = crate::time::now_unix_millis();
         let (path, storage) = (&self.path, self.storage.as_ref());
         self.known.scrivi(entries, |entries| {
