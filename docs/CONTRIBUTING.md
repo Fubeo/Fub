@@ -90,9 +90,8 @@ cargo deny check
 ### Le eccezioni al ciclo
 
 Comandi che la CI lancia e che il ciclo locale non elenca, con la ragione per
-cui non ci stanno. L'elenco è chiuso: una voce che non corrisponde più a
-nessun comando della CI è scaduta, e `check-ciclo-locale.mjs` la fa diventare
-rossa.
+cui non ci stanno: una voce è il comando, fra backtick, e la ragione dopo il
+`—`.
 
 - `cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc` — il
   ramo Windows del kernel compilato da Linux: serve il target
