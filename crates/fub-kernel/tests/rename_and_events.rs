@@ -772,6 +772,96 @@ fn an_external_rename_into_an_ignored_folder_is_a_removal() {
         if id.as_str() == "Nota.lnk")));
 }
 
+/// **Una rinomina esterna che atterra su una nota viva non è una rinomina**
+/// (§25.1, decisione 0135).
+///
+/// `mv A.lnk B.lnk` da un terminale, con `B` indicizzata e il suo buffer
+/// sporco. Prima della guardia il kernel celebrava il rito della migrazione
+/// d'identità sopra un'identità occupata: i tre canali di
+/// `migrate_side_data` — organizzazione, spazio per-documento, bozza —
+/// scrivevano ciascuno il dato di `A` sopra quello di `B`, e la bozza è
+/// l'**unica** copia di ciò che l'utente ha scritto.
+///
+/// Le tre asserzioni sul dato di `B` erano rosse tutte e tre prima della
+/// guardia: la bozza tornava `"il testo non salvato di B"` → `"quello di A"`,
+/// l'icona `"🅱️"` → `"🅰️"`, e lo spazio per-documento di `B` veniva
+/// `remove_dir_all`-ato prima di ricevere quello di `A`.
+#[test]
+fn una_rinomina_esterna_su_una_nota_viva_non_le_schiaccia_i_dati() {
+    let dir = TempDir::new("extrename-viva");
+    let mut ws = workspace(&dir.0);
+    let a = DocId::new("A.lnk");
+    let b = DocId::new("B.lnk");
+    ws.write_document(&a, "", WriteBase::Dictated).unwrap();
+    ws.write_document(&b, "", WriteBase::Dictated).unwrap();
+
+    // Ciò che sta attaccato alle due identità, uno per canale.
+    ws.save_draft(&a, "il testo non salvato di A", None)
+        .unwrap();
+    ws.save_draft(&b, "il testo non salvato di B", None)
+        .unwrap();
+    ws.set_icon("A.lnk", Some("🅰️".into())).unwrap();
+    ws.set_icon("B.lnk", Some("🅱️".into())).unwrap();
+    attacca_dati(&dir.0, "A.lnk");
+    attacca_dati(&dir.0, "B.lnk");
+
+    // `mv A.lnk B.lnk` da fuori: il file di `B` non c'è più, al suo posto c'è
+    // quello di `A`.
+    std::fs::rename(dir.0.join("A.lnk"), dir.0.join("B.lnk")).unwrap();
+    assert!(ws
+        .sync_renamed_path(&dir.0.join("A.lnk"), &dir.0.join("B.lnk"))
+        .unwrap());
+
+    // Ciò che era di `B` è ancora di `B`, tutto e tre i canali.
+    assert_eq!(
+        bozza_di(&ws, "B.lnk").as_deref(),
+        Some("il testo non salvato di B"),
+        "la bozza della vittima è l'unica copia di ciò che l'utente ha scritto"
+    );
+    assert_eq!(
+        ws.organization().icons.get("B.lnk").map(String::as_str),
+        Some("🅱️"),
+        "l'organizzazione della vittima non segue un'identità che non è la sua"
+    );
+    assert_eq!(
+        dati_di(&dir.0, "B.lnk").as_deref(),
+        Some("i dati di B.lnk"),
+        "e nemmeno il suo spazio per-documento"
+    );
+
+    // La degradazione, che è ciò che la forma (a) paga: non è una migrazione
+    // d'identità ma una rimozione più un'aggiunta, `A` non c'è più e `B` resta
+    // viva col testo che le è atterrato addosso.
+    assert!(!ws.documents().contains(&a), "A non c'è più");
+    assert!(ws.documents().contains(&b), "B è ancora viva");
+}
+
+/// Lo spazio per-documento di un plugin, come lo scriverebbe lui. Cammina il
+/// disco e non i plugin montati, come `docdata::migrate`.
+fn spazio_dati(root: &Utf8PathBuf, doc: &str) -> Utf8PathBuf {
+    root.join(".fub/data/plugins/test.appiccicoso")
+        .join(fub_abi::rules::doc_data::DOC_SPACE)
+        .join(fub_abi::rules::doc_data::encode(doc))
+}
+
+fn attacca_dati(root: &Utf8PathBuf, doc: &str) {
+    let dir = spazio_dati(root, doc);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("annotazione"), format!("i dati di {doc}")).unwrap();
+}
+
+fn dati_di(root: &Utf8PathBuf, doc: &str) -> Option<String> {
+    std::fs::read_to_string(spazio_dati(root, doc).join("annotazione")).ok()
+}
+
+fn bozza_di(ws: &Workspace, doc: &str) -> Option<String> {
+    ws.drafts()
+        .drafts
+        .into_iter()
+        .find(|b| b.doc.as_str() == doc)
+        .map(|b| b.text)
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch a coda (anti-rientranza)
 // ---------------------------------------------------------------------------

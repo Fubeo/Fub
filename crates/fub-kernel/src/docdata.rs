@@ -79,9 +79,11 @@ pub(crate) fn migrate(
         }
         let destinazione = space_dir(root, to);
         // Il path di destinazione era **libero** — il kernel rifiuta un rename
-        // verso un documento che esiste — quindi una cartella già lì è di una
-        // nota che non c'è più: la raccolta l'avrebbe tolta al prossimo giro, e
-        // qui va tolta subito o la `rename` non ha dove atterrare.
+        // verso un documento che esiste, e da fuori lo rifiuta la guardia di
+        // `sync_renamed_path_here` (decisione 0135) — quindi una cartella già
+        // lì è di una nota che non c'è più: la raccolta l'avrebbe tolta al
+        // prossimo giro, e qui va tolta subito o la `rename` non ha dove
+        // atterrare.
         if storage.exists(&destinazione) {
             let _ = storage.remove_dir_all(&destinazione);
         }
