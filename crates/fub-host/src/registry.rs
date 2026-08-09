@@ -36,7 +36,9 @@
 //! dichiarazione. Il quarto no, e la differenza è deliberata: un bundle a cui
 //! una view si contende il nome è un bundle che funziona meno una view, e
 //! smontarlo per intero vorrebbe dire che un id doppio in un plugin di terzi
-//! spegne l'indice di ricerca. Ciò che non entra torna come **avviso**.
+//! spegne l'indice di ricerca. Ciò che non entra è un **avviso**, e chi monta
+//! lo scrive nel log: non torna al chiamante, perché un payload che torna è un
+//! payload che si può scartare — ed è ciò che due chiamanti su tre facevano.
 
 use std::sync::Arc;
 
@@ -84,6 +86,11 @@ pub trait Bundle: Send + Sync {
     /// ogni `register_*` qui dentro trova il proprio proprietario. Ciò che torna
     /// sono **avvisi** già composti: un pezzo che non entra non smonta il
     /// bundle, e chi monta ha un canale per dirlo (oggi `stderr`, §20.2).
+    ///
+    /// Il canale lo usa [`BundleRegistry::mount`], che è il punto che ogni
+    /// accensione attraversa — non il chiamante di turno: la frase qui sopra
+    /// era vera del contratto e falsa dei fatti finché scriverla toccava a chi
+    /// chiamava.
     fn register(&self, ws: &mut Workspace) -> Vec<String>;
 }
 
@@ -259,11 +266,7 @@ impl BundleRegistry {
     /// Torna gli **avvisi** dei provider che non sono entrati (il bundle è
     /// montato lo stesso), o l'errore di uno dei tre passi che non ammettono un
     /// mezzo montaggio.
-    pub fn mount(
-        &mut self,
-        bundle: &dyn Bundle,
-        ws: &mut Workspace,
-    ) -> Result<Vec<String>, BundleError> {
+    pub fn mount(&mut self, bundle: &dyn Bundle, ws: &mut Workspace) -> Result<(), BundleError> {
         let manifest = bundle.manifest();
         let id = manifest.id.clone();
 
@@ -289,8 +292,25 @@ impl BundleRegistry {
             return Err(BundleError::Activation { id, error });
         }
 
-        // 4. I provider. Da qui in poi ciò che va storto è un avviso.
-        let warnings = bundle.register(ws);
+        // 4. I provider. Da qui in poi ciò che va storto è un avviso, e **il
+        //    canale è questo**: il doc di [`Bundle::register`] lo scrive da
+        //    sempre («chi monta ha un canale per dirlo, oggi `stderr`, §20.2»),
+        //    ma finché gli avvisi tornavano al chiamante il canale era una
+        //    promessa che due chiamanti su tre non mantenevano — il bundle di
+        //    core li buttava in un `if let Err`, e `Host::set_plugin_enabled` in
+        //    un `?` che non lega. Scriverli qui è la regola nel posto che tutti
+        //    attraversano, e togliere il payload rende il gesto di scartarli
+        //    inesprimibile invece che solo sconsigliato: chi accende un
+        //    componente non ha più un modo di far sparire i provider che non
+        //    sono entrati.
+        //
+        //    L'id davanti alla frase non è decorazione: gli avvisi che i
+        //    `register_*` compongono dicono *cosa* non è entrato («sintassi non
+        //    innestata: …»), mai *di chi*, e una riga di log senza il
+        //    componente non si può nemmeno rileggere.
+        for warning in bundle.register(ws) {
+            tracing::warn!(target: "fub.host", "{id}: {warning}");
+        }
         self.mounted.push(MountedBundle {
             id,
             // Dopo l'attivazione, e non prima: `activate` vuole `&mut self`, e
@@ -298,7 +318,7 @@ impl BundleRegistry {
             // proprio questo.
             plugin: Arc::from(plugin),
         });
-        Ok(warnings)
+        Ok(())
     }
 
     /// Gli id dei bundle montati, in ordine di montaggio.
@@ -343,9 +363,9 @@ impl BundleRegistry {
     /// distinguere «l'ho riacceso» da «ho scritto male l'id». Un bundle già
     /// acceso invece è un no-op senza avvisi: accendere ciò che è acceso è già
     /// il risultato voluto.
-    pub fn enable(&mut self, ws: &mut Workspace, id: &str) -> Result<Vec<String>, BundleError> {
+    pub fn enable(&mut self, ws: &mut Workspace, id: &str) -> Result<(), BundleError> {
         if self.mounted.iter().any(|m| m.id == id) {
-            return Ok(Vec::new());
+            return Ok(());
         }
         let Some(bundle) = self.known.iter().find(|b| b.manifest().id == id).cloned() else {
             return Err(BundleError::Unknown(id.to_string()));

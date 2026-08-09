@@ -131,6 +131,7 @@ struct BundleSpia {
     diario: Diario,
     abi: String,
     non_si_attiva: bool,
+    perde_un_pezzo: bool,
 }
 
 impl BundleSpia {
@@ -140,6 +141,7 @@ impl BundleSpia {
             diario: diario.clone(),
             abi: fub_abi::traits::ABI_VERSION.to_string(),
             non_si_attiva: false,
+            perde_un_pezzo: false,
         }
     }
 
@@ -151,6 +153,18 @@ impl BundleSpia {
 
     fn che_non_si_attiva(mut self) -> Self {
         self.non_si_attiva = true;
+        self
+    }
+
+    /// Un bundle a cui il quarto passo lascia indietro un pezzo: registra il
+    /// proprio comando **due volte**, e la seconda il kernel la rifiuta.
+    ///
+    /// È il caso vero in miniatura — un id doppio, un nome di view conteso —
+    /// che il modulo dichiara di non voler far diventare uno smontaggio: il
+    /// bundle resta montato meno un pezzo, e l'unica cosa che deve succedere è
+    /// che qualcuno lo dica.
+    fn che_lascia_indietro_un_pezzo(mut self) -> Self {
+        self.perde_un_pezzo = true;
         self
     }
 }
@@ -187,6 +201,11 @@ impl Bundle for BundleSpia {
             }),
         ) {
             avvisi.push(format!("handler: {e}"));
+        }
+        if self.perde_un_pezzo {
+            if let Err(e) = ws.register_command_provider(self.id, Box::new(Saluto(self.id))) {
+                avvisi.push(format!("comando: {e}"));
+            }
         }
         avvisi
     }
@@ -272,8 +291,7 @@ fn chi_smette_ha_ancora_lhost_e_i_propri_provider() {
     let mut registry = BundleRegistry::new();
 
     let bundle = BundleSpia::nuovo("test.uno", &diario);
-    let avvisi = registry.mount(&bundle, &mut ws).expect("si monta");
-    assert!(avvisi.is_empty(), "niente è rimasto fuori: {avvisi:?}");
+    registry.mount(&bundle, &mut ws).expect("si monta");
     assert_eq!(registry.ids(), vec!["test.uno"]);
     assert!(
         registry
@@ -409,5 +427,85 @@ fn chi_monta_si_prende_gli_avvisi_dell_organizzazione() {
         rifiuto.contains("non lo sovrascrive"),
         "il sidecar doveva essere illeggibile, e questa prova non prova più \
          niente se non lo è: {rifiuto}"
+    );
+}
+
+/// **Chi accende un componente vede i pezzi che non sono entrati**, e li vede
+/// nel log con davanti il nome del componente.
+///
+/// Il quarto passo del montaggio non è tutto-o-niente apposta: un provider che
+/// non entra lascia il bundle in piedi meno quel provider, e il doc di
+/// [`Bundle::register`] scrive da sempre che «chi monta ha un canale per dirlo».
+/// Il canale c'era e la promessa no: gli avvisi tornavano al chiamante in un
+/// `Ok(Vec<String>)`, e dei tre chiamanti che accendono un bundle solo uno li
+/// leggeva — il bundle di core finiva in un `if let Err` che il ramo `Ok` non
+/// lo guarda nemmeno, e `Host::set_plugin_enabled` in un `?` che non lega il
+/// valore. Chi accendeva un componente dalle preferenze si ritrovava un
+/// componente a metà e nessuna riga da nessuna parte.
+///
+/// Adesso la riga la scrive `BundleRegistry::mount`, che è il punto che tutti e
+/// tre attraversano, e il payload non c'è più: scartarlo non è più esprimibile.
+///
+/// La cattura è **thread-local** (`fub_kernel::log::captured_default`), quindi
+/// questo banco non vede le righe degli altri test che girano insieme a lui e
+/// loro non vedono le sue.
+#[test]
+fn accendere_un_bundle_scrive_nel_log_i_pezzi_che_non_sono_entrati() {
+    let mut ws = vault();
+    let diario: Diario = Arc::default();
+    let mut registry = BundleRegistry::new();
+
+    let bundle = BundleSpia::nuovo("test.perdente", &diario).che_lascia_indietro_un_pezzo();
+    registry.remember(Arc::new(bundle));
+
+    let (esito, righe) =
+        fub_kernel::log::captured_default(|| registry.enable(&mut ws, "test.perdente"));
+    esito.expect("un provider che non entra non impedisce il montaggio");
+
+    assert!(
+        registry.ids().contains(&"test.perdente"),
+        "il bundle è montato: il quarto passo non è tutto-o-niente"
+    );
+
+    let avvisi: Vec<&String> = righe
+        .iter()
+        .filter(|r| r.contains("test.perdente"))
+        .collect();
+    assert_eq!(
+        avvisi.len(),
+        1,
+        "una riga sola, e con dentro il componente: {righe:?}"
+    );
+    assert!(
+        avvisi[0].contains("WARN") && avvisi[0].contains("fub.host"),
+        "è un avviso di chi monta: {}",
+        avvisi[0]
+    );
+    assert!(
+        avvisi[0].contains("comando:"),
+        "e dice quale pezzo non è entrato: {}",
+        avvisi[0]
+    );
+}
+
+/// Il verso opposto: un bundle a cui **non** manca niente non lascia righe.
+///
+/// Senza questa metà il banco di sopra passerebbe anche se `mount` scrivesse
+/// una riga a ogni montaggio, e «qualcosa non è entrato» smetterebbe di essere
+/// un'informazione.
+#[test]
+fn un_bundle_intero_non_lascia_righe_nel_log() {
+    let mut ws = vault();
+    let diario: Diario = Arc::default();
+    let mut registry = BundleRegistry::new();
+
+    registry.remember(Arc::new(BundleSpia::nuovo("test.intero", &diario)));
+    let (esito, righe) =
+        fub_kernel::log::captured_default(|| registry.enable(&mut ws, "test.intero"));
+    esito.expect("si monta");
+
+    assert!(
+        !righe.iter().any(|r| r.contains("test.intero")),
+        "niente è rimasto fuori, e chi monta non ha niente da dire: {righe:?}"
     );
 }

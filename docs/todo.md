@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Ventiquattro** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Ventitré** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -570,7 +570,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0115 | risolvere un wikilink scandisce tutta l'anagrafe: `named_entry_in` calcola fino a due `resolution_key` per voce e chiude con un `min_by_key` che non cortocircuita, quindi trovare costa quanto non trovare — 27,8 ms a chiamata su 20.000 voci — e `entry_rewrite_plan` la chiama una volta per ogni link di ogni documento, cioè quarantasei minuti per rinominare un allegato | `fub-kernel` · `index/core.rs` `named_entry_in` | prestazioni |
 | 0117 | aprire un vault paga la latenza dell'IPC una volta per domanda invece che una volta per gruppo: `openVaultPath` mette in fila sette `await` che nessun dato lega — quattro caricatori di stato e tre elenchi del kernel — collassabili in due `Promise.all` senza toccare l'ordine che i commenti dichiarano; quattro siti in tutto, questo è il peggiore | `frontend` · `main.ts` `openVaultPath` | prestazioni |
 | 0118 | `DEFAULT_EXCLUDED` è `.obsidian`, `.git`, `node_modules` e non contiene `target`: su un vault che è anche un repo Rust ogni file di `target/` prende un `DocId` ed entra in anagrafe, perché il filtro a valle assegna una specie e non scarta nulla | `fub-kernel` · `ignore.rs` `DEFAULT_EXCLUDED` | regole |
-| 0123 | gli avvisi non fatali del montaggio viaggiano nell'`Ok(Vec<String>)` di `BundleRegistry::enable`, e i due chiamanti che accendono un bundle scartano quel payload con un `?` che non lega: l'utente accende un componente e i provider non entrati non compaiono né nel valore di ritorno né nel log | `fub-host` · `session.rs` `Host::set_plugin_enabled` | regole |
 | 0127 | un verbale è immutabile ma il codice che descrive no, e non c'è nessun registro che tenga i due allineati: due verbali — la decisione 0121 sul `<div>` vuoto e su `heading_slug`, la 0062 sull'unico caso di `StderrSink` — affermano di `crates/` cose che a HEAD sono false, i commit che le hanno rese false hanno toccato solo `todo.md`, e chi legge non ha nessun segnale di stare leggendo un fatto scaduto | `docs` · `CONTRIBUTING.md` `Chiudere una decisione` | regole |
 | 0130 | due letture che rispondono con dei dati hanno un comando IPC proprio invece di una variante di `IndexQuery`, e siccome `IndexQuery` non ha una variante di resa e l'`HostApi` non ha una capacità di render, un `ViewProvider` non ha nessuna porta per mostrare un documento reso mentre la shell ne ha due | `fub-app` · `lib.rs` `render_preview` / `render_embed` | regole |
 | 0137 | il dry-run della rinomina chiede `IndexQuery::Backlinks` con `page: None` e poi destruttura `BacklinkRef { source, .. }`: si fa consegnare i contesti — 203 KB mediani, fino a 1,5 MB — per costruire un elenco di percorsi, mentre la foglia `QueryPredicate::Linked` che il docstring di `backlinks()` gli indica esiste già | `fub-features` · `commands.rs` (dry-run della rinomina) | prestazioni |

@@ -382,11 +382,12 @@ pub fn mount(
             // dall'inventario dei bundle (`BundleRegistry::inventory`).
             continue;
         }
-        match registry.enable(&mut ws, &id) {
-            Ok(warnings) => warnings
-                .iter()
-                .for_each(|w| tracing::warn!(target: "fub.host", "{w}")),
-            Err(e) => tracing::error!(target: "fub.host", "bundle non montato: {e}"),
+        // Gli avvisi dei provider che non sono entrati li scrive `mount`, che
+        // è il punto che anche il core e `Host::set_plugin_enabled`
+        // attraversano; qui resta il solo caso che quel punto non raggiunge —
+        // il bundle che non si monta affatto.
+        if let Err(e) = registry.enable(&mut ws, &id) {
+            tracing::error!(target: "fub.host", "bundle non montato: {e}");
         }
     }
 
