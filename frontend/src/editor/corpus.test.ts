@@ -40,13 +40,6 @@ const casi = corpus as CasoCorpus[];
 /// la parte che conta — una riga senza ragione è un caso spento, non una
 /// divergenza dichiarata.
 const DIVERGENZE: Record<string, string> = {
-  // **Il modello inventa un tag dentro `[[#Sezione]]`.** È la divergenza che
-  // `corpus/mod.rs` dichiara già dal lato Rust (`divergenti()`, prima riga): il
-  // `#Sezione` di un link a una sezione di questa nota finisce nei tag. Qui la
-  // shell ha ragione — esclude l'intervallo del wikilink prima di cercare i tag
-  // — e il giorno in cui il modello smetterà, questa riga diventa rossa
-  // insieme a quella di là.
-  "wikilink al solo heading/tag": "il modello estrae un tag dentro `[[#Sezione]]`",
   // **CodeMirror normalizza i terminatori di riga, il modello no** — ma solo il
   // CRLF costa un carattere. `EditorState.create` spezza il documento su
   // `\r\n`, `\r` e `\n` e lo ricompone col proprio separatore: un `\r` nudo
