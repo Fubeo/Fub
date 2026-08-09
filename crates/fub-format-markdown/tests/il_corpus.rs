@@ -877,8 +877,9 @@ fn ogni_link_del_corpus_porta_il_contesto_del_suo_blocco() {
         senza.is_empty(),
         "{} link nascono senza contesto pur stando in un blocco che ne ha uno da \
          dare:\n{}\n\n\
-         Il contesto di un link è il testo del **blocco** che lo contiene, e si\n\
-         assegna in `inlines_del_blocco` — l'unico ingresso agli inline di un\n\
+         Il contesto di un link è una **finestra** del testo del blocco che lo\n\
+         contiene (la regola sta in `fub_abi::rules::snippet`), e si assegna in\n\
+         `inlines_del_blocco` — l'unico ingresso agli inline di un\n\
          blocco. Un ramo di `convert_block` che chiami `convert_inlines`\n\
          direttamente salta quella regola, ed è il difetto che questo conto\n\
          presidia: la risposta non è aggiungere l'assegnazione nel ramo nuovo, è\n\

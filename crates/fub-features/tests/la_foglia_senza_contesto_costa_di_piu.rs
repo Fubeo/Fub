@@ -6,38 +6,42 @@
 //!
 //! Il dry-run di `note.rename` chiede `IndexQuery::Backlinks` per sapere quali
 //! note nominano il documento, e di ogni riferimento riceve anche il `context`
-//! — il paragrafo in cui il link compare — che poi butta via, perché ciò che
-//! costruisce è un elenco di path. Da fuori è una riga di prestazioni ovvia:
-//! `QueryPredicate::Linked` è la stessa domanda **senza** il contesto, e il
-//! docstring di [`IndexQuery::Backlinks`] la indica per nome («la forma senza
-//! contesto è la foglia»). Contata, la riga si rovescia.
+//! — la finestra di testo attorno al link (§25.4, `fub_abi::rules::snippet`)
+//! — che poi butta via, perché ciò che costruisce è un elenco di path. Da
+//! fuori è una riga di prestazioni ovvia: `QueryPredicate::Linked` è la stessa
+//! domanda **senza** il contesto, e il docstring di [`IndexQuery::Backlinks`]
+//! la indica per nome («la forma senza contesto è la foglia»). Contata, la
+//! riga si rovescia.
 //!
 //! # I numeri, su note che nominano il bersaglio dentro paragrafi da 260 caratteri
 //!
 //! Duecentosessanta non è un numero tondo: è la **mediana** della lunghezza di
 //! un blocco di prosa nei documenti di questo repo (7409 blocchi, mediana 257,
-//! media 374, p90 763). Il contesto di un link è il testo del blocco che lo
-//! contiene, quindi è quella la scala vera.
+//! media 374, p90 763). Il contesto di un link era il testo del blocco che lo
+//! contiene, quindi quella era la scala vera; dalla §25.4 è una **finestra di
+//! 220 caratteri** attorno al link (`fub_abi::rules::snippet`), e la scala è
+//! il tetto — i numeri qui sotto sono misurati con la finestra.
 //!
 //! | domanda | allocazioni | byte |
 //! |---|---|---|
-//! | `Backlinks` su 500 backlink, contesti compresi | 1 003 | 187 512 |
-//! | **il dry-run intero** sugli stessi 500 | 1 058 | **237 953** |
+//! | `Backlinks` su 500 backlink, contesti compresi | 1 003 | 167 012 |
+//! | **il dry-run intero** sugli stessi 500 | 1 058 | **217 453** |
 //! | `Documents` con la foglia `Linked`, stessi 500 | 1 728 | **686 078** |
-//! | `Backlinks` su 2000 backlink | 4 003 | 750 012 |
-//! | il dry-run intero sugli stessi 2000 | 4 062 | 947 909 |
+//! | `Backlinks` su 2000 backlink | 4 003 | 668 012 |
+//! | il dry-run intero sugli stessi 2000 | 4 062 | 865 909 |
 //! | `Documents` con `Linked`, stessi 2000 | 6 871 | 2 750 970 |
 //!
-//! **La foglia costa quasi tre volte l'intero dry-run che avrebbe dovuto
-//! alleggerire**, e quasi quattro volte la domanda che sostituirebbe. La ragione
+//! **La foglia costa più di tre volte l'intero dry-run che avrebbe dovuto
+//! alleggerire**, e quattro volte la domanda che sostituirebbe. La ragione
 //! è che `Backlinks` clona un `BacklinkRef` per riferimento — un centinaio di
-//! byte più il contesto, qui 375 in tutto — mentre la strada di `Documents`
+//! byte più il contesto, qui 334 in tutto — mentre la strada di `Documents`
 //! materializza un `DocumentMatch` per riga: il `BTreeSet<DocId>` di
 //! `LinkGraph::linked`, poi il `BTreeMap<DocId, DocumentMatch>` di `Matches`,
 //! poi il `Vec` di `into_vec`, cioè tre copie del `DocId` e circa 1,37 KB per
 //! documento — 1 372 a 500 backlink, 1 375 a 2000, **qualunque cosa contengano i
 //! contesti**. Il punto di pareggio sta attorno agli 1,2 KB di contesto per
-//! riferimento: sopra la mediana della prosa vera, sopra anche il p90.
+//! riferimento: sopra la mediana della prosa vera, sopra anche il p90 — e, da
+//! quando il contesto è una finestra di 220 caratteri, **fuori dal dominio**.
 //!
 //! Non è un argomento contro la foglia — è la foglia giusta, e il giorno che
 //! quelle tre copie diventassero una la scelta si rovescia. È un argomento
@@ -56,7 +60,7 @@
 //!
 //! `il_dry_run_spende_sulla_domanda_non_intorno` dice che il piano non costa
 //! molto più della domanda che pone: sta entro una volta e mezza, e oggi ci sta
-//! con 237 953 byte contro 187 512, cioè 1,27. *Provato in rosso* applicando lo
+//! con 217 453 byte contro 167 012, cioè 1,30. *Provato in rosso* applicando lo
 //! scambio per davvero dentro `note_rename`: il dry-run è passato a **672 535**
 //! byte, cioè 3,59 volte la domanda che aveva sostituito, e il banco si è
 //! acceso. (Il primo confronto scritto — «il piano intero costa meno della sola
@@ -223,7 +227,7 @@ fn per_i_backlink(ws: &Workspace) -> usize {
 }
 
 /// **La premessa della riga, scritta al rovescio.** `QueryPredicate::Linked` è
-/// `Backlinks` *senza* i contesti — 266 KB di paragrafi in meno da consegnare —
+/// `Backlinks` *senza* i contesti — 519 KB in meno da consegnare, misurati —
 /// e costa di più.
 ///
 /// Non c'è un numero magico: è un confronto fra due domande misurate nello

@@ -39,6 +39,9 @@
 //!   domanda diversa da quali ne contiene (§15.5);
 //! - [`text_policy`] — **che forma hanno i byte** di un file: BOM, terminatori
 //!   di riga, UTF-8. Rileva e dichiara, non converte (§15.5);
+//! - [`snippet`] — **quanto testo porta una riga di risultato**: la finestra
+//!   di contesto attorno a un link e il tetto dello snippet di ricerca
+//!   (§25.4);
 //! - [`properties`] — filtro, ordinamento e faccette sul frontmatter;
 //! - [`tag`] — la gerarchia dei tag, accanto alla forma canonica del nome;
 //! - [`health`] — cosa conta come link rotto, e cosa no.
@@ -73,6 +76,7 @@ pub mod media;
 pub mod path;
 pub mod path_policy;
 pub mod properties;
+pub mod snippet;
 pub mod tag;
 pub mod text_policy;
 
