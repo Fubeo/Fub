@@ -33,6 +33,12 @@ import type {
 
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
+  // L'avviso di sessione (§25.5): la diagnosi «la cartella di configurazione
+  // non si può scrivere» (o non c'è), una volta per sessione. È un tiraggio:
+  // la diagnosi nasce all'avvio del backend, prima che questo ascoltatore
+  // esista — una spinta a quell'ora sarebbe persa — e la shell la chiede
+  // appena il router è in piedi.
+  avvisoDiSessione: () => invoke<KernelNotice | null>("avviso_di_sessione"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
   // `listDocuments` **non c'è più** (§14.4): restituiva l'intero vault in un
   // `string[]`, senza finestra e senza saper dire *quale cartella*. Chi vuole

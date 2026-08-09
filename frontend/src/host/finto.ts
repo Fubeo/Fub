@@ -88,6 +88,9 @@ export interface Opzioni {
   file?: Record<string, string>;
   /// Il vault da aprire all'avvio, o `null` per una finestra vuota.
   radice?: string | null;
+  /// L'avviso di sessione (§25.5) che il tiraggio risponde, o `null` (default)
+  /// per una sessione sana.
+  avvisoDiSessione?: KernelNotice | null;
   /// Le view che i provider dichiarano. Vuoto = nessun provider registrato,
   /// che è uno stato legittimo e non un vault a metà.
   view?: ViewSpec[];
@@ -397,6 +400,8 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
   const modulo: typeof import("./ipc") = {
     api: {
       initialVault: () => porta("initialVault", [], Promise.resolve(radice)),
+      avvisoDiSessione: () =>
+        porta("avvisoDiSessione", [], Promise.resolve(opzioni.avvisoDiSessione ?? null)),
       openVault: (path) => {
         const info: VaultInfo = { root: path, extensions: ["md"], plugins: [], unread: [] };
         return porta("openVault", [path], Promise.resolve(info));

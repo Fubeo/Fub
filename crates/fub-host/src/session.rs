@@ -299,6 +299,16 @@ pub struct Host {
     sessions: Custodia<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
+    /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di
+    /// configurazione non si può scrivere — o non c'è» composta da
+    /// `install_logging` prima che l'host esistesse. Si tiene qui perché
+    /// `config.rs` non ha stato e `run()` è una chiamata: questo è il punto più
+    /// basso che vive attraverso il buco dell'avvio. Un `Mutex<Option>` e non
+    /// un atomico perché la «una volta per sessione» è **strutturale** — la
+    /// diagnosi nasce una volta e si consuma una volta con un `take` — e la
+    /// forma di `Custodia::denuncia` serve a chi deve rispondere a ogni
+    /// chiamata, non a chi risponde alla prima.
+    avviso_di_sessione: Mutex<Option<String>>,
     /// Il **livello macchina** della configurazione (§11.1), condiviso da tutti
     /// i vault che questo host apre: la configurazione della macchina è una, e N
     /// copie sarebbero N idee del tema.
@@ -369,6 +379,7 @@ impl Host {
             sessions: Custodia::vuota("le sessioni aperte"),
             watcher,
             sink: None,
+            avviso_di_sessione: Mutex::new(None),
             // **In memoria di default**, come `Workspace::new`, e per la stessa
             // ragione: chi non ha un'installazione — un test, un e2e headless —
             // non deve scrivere nella cartella di configurazione di chi lo
@@ -451,6 +462,18 @@ impl Host {
     /// Accende il ponte eventi verso `sink`.
     pub fn with_sink(mut self, sink: Arc<dyn EventSink>) -> Self {
         self.sink = Some(sink);
+        self
+    }
+
+    /// Porta nell'host la diagnosi che il pavimento ha composto prima che
+    /// l'host esistesse (`install_logging`). La chiama `fub_app::run`, l'unico
+    /// che la riceve da lì; chi costruisce un host per un test non la passa e
+    /// non ha nessun avviso da consegnare.
+    pub fn with_avviso_di_sessione(self, avviso: Option<String>) -> Self {
+        *self
+            .avviso_di_sessione
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = avviso;
         self
     }
 
@@ -1186,6 +1209,43 @@ impl Host {
     /// [`Actor::User`], perché di qui passa la persona davanti allo schermo: è
     /// la stessa distinzione per cui `set_setting` è un comando IPC e non
     /// `settings.set` del registro.
+    /// **La porta dell'avviso di sessione** (§25.5): la diagnosi «la cartella
+    /// di configurazione non si può scrivere» — o non c'è — come
+    /// `Event::Trouble` di severità `Warning`, consegnata **una volta** per
+    /// sessione.
+    ///
+    /// Perché è un tiraggio e non una spinta: la diagnosi nasce in
+    /// `install_logging`, prima che questo host esista e che qualunque
+    /// ascoltatore sia in piedi — il ponte verso la webview nasce solo al primo
+    /// vault aperto ([`Host::open`]), e la shell si iscrive agli eventi ancora
+    /// dopo. Una spinta a quell'ora sarebbe un evento emesso nel vuoto: verde e
+    /// muta. L'unico istante garantito è un comando chiesto dalla shell
+    /// **dopo** che il router è attaccato, e questo metodo è il suo lato host.
+    ///
+    /// Il `take` rende la «una volta per sessione» strutturale: la seconda
+    /// chiamata — da un secondo comando, da un secondo thread — trova `None` e
+    /// non consegna niente. Niente `AtomicU32`: la forma di
+    /// [`Custodia::denuncia`](crate::custodia::Custodia) serve a chi deve
+    /// rispondere a **ogni** chiamata, e qui la diagnosi nasce una volta e si
+    /// consuma una volta. L'origine è `Kernel` (0012): la diagnosi non è di
+    /// nessun altro — non l'ha chiesta la persona e non l'ha prodotta un
+    /// plugin.
+    pub fn avviso_di_sessione(&self) -> Option<Notice> {
+        let avviso = self
+            .avviso_di_sessione
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()?;
+        Some(Notice::new(
+            fub_abi::Event::Trouble {
+                severity: fub_abi::event::Severity::Warning,
+                subject: None,
+                error: PluginError::Io(avviso.into()),
+            },
+            fub_abi::event::Origin::by(fub_abi::event::Actor::Kernel),
+        ))
+    }
+
     /// # È la **seconda uscita**, e non passa dal ponte
     ///
     /// Zona cieca dichiarata: qui non c'è nessun vault, quindi non c'è nessun

@@ -80,3 +80,16 @@ function chiama(fn: () => void): void {
 export function startKernelRouter(): Promise<() => void> {
   return onKernelEvent(consegna);
 }
+
+/// Consegna al router un notice arrivato **per tiraggio** (l'avviso di
+/// sessione, §25.5) invece che dal canale.
+///
+/// La diagnosi «la cartella di configurazione non si può scrivere» nasce
+/// all'avvio del backend, quando nessun ascoltatore esiste ancora: una spinta
+/// sarebbe persa, e la shell la tira appena il router è in piedi. Un notice
+/// tirato è un notice come gli altri — passa da `consegna` perché ogni
+/// ascoltatore lo veda, e l'unica alternativa sarebbe un secondo canale per i
+/// guasti, che è esattamente ciò che questo router esiste per non avere.
+export function inoltraNotifica(n: KernelNotice): void {
+  consegna(n);
+}

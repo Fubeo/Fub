@@ -253,6 +253,13 @@ const ALLOWLIST: &[(&str, Perche)] = &[
     ("list_vaults", Perche::SuperficieDellApp),
     ("set_current_vault", Perche::SuperficieDellApp),
     ("initial_vault", Perche::SuperficieDellApp),
+    // L'avviso di sessione (§25.5): la porta della diagnosi «la cartella di
+    // configurazione non si può scrivere». Risponde con un **dato**, e la riga
+    // che divide (0013) direbbe `query_index` — la stessa obiezione di
+    // `pending_keybindings` qui sotto, e la stessa risposta: la risposta non
+    // si ricava dal vault, nasce dal bootstrap dell'installazione prima di
+    // ogni vault, ed è il caso della finestra vuota quello che conta.
+    ("avviso_di_sessione", Perche::SuperficieDellApp),
     // L'anagrafe della macchina (§11.1): esiste prima di ogni vault, e sopravvive
     // a tutti. Un vault dimenticato non ha un indice che se ne ricordi.
     ("known_vaults", Perche::SuperficieDellApp),

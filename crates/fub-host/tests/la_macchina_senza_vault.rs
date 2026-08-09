@@ -268,3 +268,69 @@ fn ogni_comando_di_shell_ha_una_chiave_di_macchina() {
         );
     }
 }
+
+/// **La porta dell'avviso di sessione (§25.5): si consegna una volta, e con
+/// la forma che la shell sa mostrare.**
+///
+/// La diagnosi «la cartella di configurazione non si può scrivere» nasce in
+/// `install_logging`, quando nessun canale verso chi guarda esiste ancora —
+/// il ponte parte al primo vault aperto, la shell si iscrive dopo: una spinta
+/// a quell'ora sarebbe emessa nel vuoto. Questo banco tiene fermo ciò che
+/// l'host promette al tiraggio: il `Notice` giusto, **una volta sola** — il
+/// `take` rende la seconda chiamata `None` per costruzione, e toglierlo è il
+/// modo in cui questo banco va rosso.
+///
+/// La zona cieca va detta: il cablaggio `install_logging → run →
+/// `with_avviso_di_sessione`` non è provabile qui (il collettore è globale al
+/// processo, nessun banco può rifare `install_logging`); lo presidiano la
+/// firma di `install_logging` e i banchi di `pavimento` in `config.rs`, che
+/// tengono fermo che la diagnosi esiste nei due rami.
+#[test]
+fn un_avviso_di_sessione_si_dice_una_volta_sola() {
+    use fub_abi::event::{Actor, Severity};
+    use fub_abi::{Event, Notice};
+
+    let senza = Host::new();
+    assert_eq!(
+        senza.avviso_di_sessione(),
+        None,
+        "senza diagnosi non si dice niente"
+    );
+
+    let host = Host::new().with_avviso_di_sessione(Some("`/config` non si può scrivere".into()));
+    let Notice { event, origin } = host
+        .avviso_di_sessione()
+        .expect("la diagnosi c'è e si consegna");
+    let Event::Trouble {
+        severity,
+        subject,
+        error,
+    } = event
+    else {
+        panic!("l'avviso non è un Trouble: {event:?}");
+    };
+    assert_eq!(
+        severity,
+        Severity::Warning,
+        "un derivato perduto informa (0052)"
+    );
+    assert_eq!(
+        subject, None,
+        "il guasto è della macchina, non di un documento"
+    );
+    assert!(
+        error.to_string().contains("/config"),
+        "la diagnosi arriva intera: {error}"
+    );
+    assert_eq!(
+        origin.actor,
+        Actor::Kernel,
+        "la diagnosi non è di nessun altro (0012)"
+    );
+
+    assert_eq!(
+        host.avviso_di_sessione(),
+        None,
+        "una volta per sessione: la seconda chiamata non consegna"
+    );
+}

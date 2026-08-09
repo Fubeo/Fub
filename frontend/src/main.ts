@@ -11,7 +11,7 @@ import "./style.css";
 import { pickFolder } from "./host/dialog";
 import { api } from "./host/ipc";
 import { statoDelVault, vociDelVault } from "./host/query";
-import { startKernelRouter } from "./state/kernel";
+import { inoltraNotifica, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
 import { loadOrganization } from "./state/organization";
 import { emit, loadActiveSpace, loadExpanded, state } from "./state/store";
@@ -204,6 +204,15 @@ async function init(): Promise<void> {
   ascoltaIGuasti();
 
   await startKernelRouter();
+
+  // L'avviso di sessione (§25.5): la diagnosi «la cartella di configurazione
+  // non si può scrivere» nasce all'avvio del backend, quando nessun ascoltatore
+  // esiste ancora — una spinta sarebbe emessa nel vuoto. Si tira adesso, col
+  // router in piedi, e si consegna come un evento qualunque: l'ordine dell'IPC
+  // garantisce che `ascoltaIGuasti` — iscritta prima del router — sia già
+  // lì a riceverlo.
+  const avviso = await api.avvisoDiSessione();
+  if (avviso) inoltraNotifica(avviso);
 
   // Il locale del sistema (§12.3), **prima** di aprire il vault: da qui in poi
   // ogni `render_view` lo trova già pubblicato, invece di disegnare il primo
