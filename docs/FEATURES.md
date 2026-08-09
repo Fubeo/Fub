@@ -1,6 +1,6 @@
 # Fub — Master Feature Document
 
-**Versione:** 1.0 consolidata  
+**Versione:** 1.1 consolidata (+ microfeature collegate)  
 **Scope:** unire in un unico documento ordinato tutte le feature fondamentali di **Fub** e della futura **FubSuite**, includendo sia la lista iniziale sia le feature aggiuntive emerse dopo.
 
 ---
@@ -258,6 +258,8 @@ vale più.
 
 # 3. Vault, workspace, file explorer e organizzazione base
 
+*Microfeature essenziali: [vault-ed-esploratore.md](microfeatures/vault-ed-esploratore.md) e [editor-di-testo.md](microfeatures/editor-di-testo.md).*
+
 ## 3.1 Vault
 
 **Cosa fa parte di un vault lo dichiara il vault, con due eccezioni che nessuno
@@ -375,6 +377,8 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 ---
 
 # 4. Editor, scrittura e assistenza
+
+*Microfeature essenziali: [editor-di-testo.md](microfeatures/editor-di-testo.md) e [block-editor-parita.md](microfeatures/block-editor-parita.md).*
 
 ## 4.1 Modalità editor
 
@@ -520,6 +524,8 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 
 # 5. Markdown: standard, estensioni e sicurezza
 
+*Microfeature essenziali: [markdown-e-preview.md](microfeatures/markdown-e-preview.md) e [block-editor-parita.md](microfeatures/block-editor-parita.md).*
+
 ## 5.1 Standard Markdown
 
 - [ ] CommonMark completo
@@ -633,6 +639,8 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 
 # 6. Rendering, preview, temi e stampa
 
+*Microfeature essenziali: [markdown-e-preview.md](microfeatures/markdown-e-preview.md).*
+
 ## 6.1 Rendering
 
 - [ ] Rendering Markdown fedele
@@ -738,6 +746,8 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 ---
 
 # 7. Link, backlink, transclusione e grafo
+
+*Microfeature essenziali: [vault-ed-esploratore.md](microfeatures/vault-ed-esploratore.md).*
 
 ## 7.1 Link
 
@@ -882,6 +892,8 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 ---
 
 # 8. Organizzazione, metadata, tassonomia e collezioni
+
+*Microfeature essenziali: [vault-ed-esploratore.md](microfeatures/vault-ed-esploratore.md).*
 
 ## 8.1 Organizzazione base
 
@@ -1057,6 +1069,8 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 ---
 
 # 9. Ricerca, query, discovery e knowledge lifecycle
+
+*Microfeature essenziali: [ricerca-e-task.md](microfeatures/ricerca-e-task.md).*
 
 ## 9.1 Ricerca base e avanzata
 
@@ -1274,6 +1288,8 @@ ricerca peggiore.
 
 # 10. Task, calendario, produttività e notifiche
 
+*Microfeature essenziali: [ricerca-e-task.md](microfeatures/ricerca-e-task.md).*
+
 ## 10.1 Task base
 
 - [ ] Checkbox Markdown
@@ -1401,6 +1417,8 @@ ricerca peggiore.
 ---
 
 # 11. Database, data editor, ETL e dashboard
+
+*Microfeature essenziali: [canvas-e-database.md](microfeatures/canvas-e-database.md) e [block-editor-parita.md](microfeatures/block-editor-parita.md).*
 
 ## 11.1 Database engine
 
@@ -1551,6 +1569,8 @@ ricerca peggiore.
 ---
 
 # 12. Canvas, whiteboard, diagrammi e presentazioni
+
+*Microfeature essenziali: [canvas-e-database.md](microfeatures/canvas-e-database.md).*
 
 ## 12.1 Canvas base
 
@@ -1816,6 +1836,8 @@ ricerca peggiore.
 ---
 
 # 13. Allegati, media, annotazioni e audio/video
+
+*Microfeature essenziali: [media-e-allegati.md](microfeatures/media-e-allegati.md).*
 
 ## 13.1 Gestione allegati
 
@@ -3333,7 +3355,6 @@ ricerca peggiore.
 - [ ] Background priority
 - [ ] Network throttling
 - [ ] Sync bandwidth limits
-- [ ] Lazy loading
 - [ ] Incremental parsing
 - [ ] Incremental saving
 - [ ] Streaming large files
@@ -3448,10 +3469,7 @@ ricerca peggiore.
 - [ ] Captions
 - [ ] Transcripts
 - [ ] Audio descriptions opzionali
-- [ ] Accessible canvas alternative
-- [ ] Accessible graph alternative
 - [ ] Accessible charts
-- [ ] Accessible tables
 - [ ] Accessible forms
 - [ ] Accessible notifications
 - [ ] Accessible drag & drop
@@ -3480,7 +3498,6 @@ ricerca peggiore.
 - [ ] Currency formatting
 - [ ] Measurement units
 - [ ] Number formatting
-- [ ] Calendar localization
 - [ ] Translation memory
 - [ ] Community translations
 - [ ] Pseudo-locale testing
@@ -3504,6 +3521,8 @@ ricerca peggiore.
 ---
 
 # 26. Piattaforme, mobile, web, OS integration
+
+*Microfeature essenziali: [app-e-piattaforma.md](microfeatures/app-e-piattaforma.md).*
 
 ## 26.1 Desktop
 
@@ -3563,8 +3582,6 @@ ricerca peggiore.
 - [ ] Audio transcription offline
 - [ ] Offline vault completo
 - [ ] Selective vault download
-- [ ] Background sync
-- [ ] Biometric lock
 - [ ] Face unlock
 - [ ] Fingerprint unlock
 - [ ] Stylus support
@@ -3936,4 +3953,17 @@ ricerca peggiore.
 - [ ] Legal/compliance/governance
 
 ---
+
+# 32. Microfeature essenziali — indice
+
+Le feature banali ed essenziali di uso quotidiano (movimento cursore, selezione, appunti, interazioni con preview, canvas, database, ecc.) vivono in file dedicati, collegati alle sezioni corrispondenti:
+
+- [editor-di-testo.md](microfeatures/editor-di-testo.md) — sezioni 3.3 e 4: movimento cursore, selezione, tasti di modifica, operazioni su riga, appunti, trova nella nota, scorrimento e zoom, visualizzazione, file e schede, inserimento, formattazione rapida, workspace
+- [block-editor-parita.md](microfeatures/block-editor-parita.md) — sezioni 4-5: parità completa con l'editor a blocchi di riferimento (blocchi, slash menu, manipolazione, scorciatoie, pagina, menzioni, embed, equazioni, tabella, database, AI opzionale, interfaccia)
+- [markdown-e-preview.md](microfeatures/markdown-e-preview.md) — sezioni 5-6: inserimento guidato, tabella, interazione con la preview
+- [vault-ed-esploratore.md](microfeatures/vault-ed-esploratore.md) — sezioni 3.1-3.2, 7-8: esploratore file, vault, link, organizzazione rapida
+- [ricerca-e-task.md](microfeatures/ricerca-e-task.md) — sezioni 9-10: navigazione risultati ricerca, task, calendario
+- [canvas-e-database.md](microfeatures/canvas-e-database.md) — sezioni 11-12: interazioni canvas e database
+- [media-e-allegati.md](microfeatures/media-e-allegati.md) — sezione 13: viewer immagini, audio/video, PDF, allegati
+- [app-e-piattaforma.md](microfeatures/app-e-piattaforma.md) — sezioni 14-31: finestra, menu di sistema, dialoghi e focus, impostazioni e avvio
 
