@@ -28,14 +28,27 @@
 //! # Cosa questo banco **non** vede, dichiarato
 //!
 //! **Gli altri file del kernel tengono ancora i loro lucchetti nudi.** Sono
-//! nove — `workspace.rs`, `settings.rs`, `organization.rs`, `viewstate.rs`,
-//! `storage.rs`, `locale.rs`, `journal.rs`, `drafts.rs`, `ignore.rs` — e restano
-//! fuori dal primo conto **apposta**: è lo stesso buco che la 0120 aveva
-//! dichiarato («il conto vede `fub-host` e `fub-app`, non gli altri crate») e
-//! che la 0126 aveva rifiutato di chiudere, perché estenderlo vorrebbe dire
-//! un'allowlist lunga come l'elenco che dovrebbe restringere. Ciò che è cambiato
-//! è che adesso la porta **c'è**: convertirne uno costa una riga, e la domanda
-//! «con quale delle due politiche?» ha già le sue due risposte scritte.
+//! **sei** [conta: lucchetti-nudi-del-kernel], e restano fuori dal primo conto
+//! **apposta**: è lo stesso buco che la 0120 aveva dichiarato («il conto vede
+//! `fub-host` e `fub-app`, non gli altri crate») e che la 0126 aveva rifiutato
+//! di chiudere, perché estenderlo vorrebbe dire un'allowlist lunga come
+//! l'elenco che dovrebbe restringere. Ciò che è cambiato è che adesso la porta
+//! **c'è**: convertirne uno costa una riga, e la domanda «con quale delle due
+//! politiche?» ha già le sue due risposte scritte.
+//!
+//! Il numero sta fra parentesi quadre e non fra i trattini perché **prima era
+//! una frase, e la frase era falsa**. Diceva «sono nove» e li nominava:
+//! `journal.rs`, `drafts.rs` e `ignore.rs` erano nell'elenco e non hanno mai
+//! avuto un lucchetto, mentre `vault.rs` ne ha uno — di banco, quindi fuori dal
+//! taglio di [`codice`] e giustamente fuori dal conto — e nell'elenco non
+//! c'era. Nessuno se n'era accorto per la ragione che rende questa specie
+//! peggiore delle altre: **il motivo per cui si scrive un elenco è smettere di
+//! doverlo rifare**. Un elenco a mano dentro una zona dichiarata cieca non ha
+//! nessun attore che lo guardi — non il compilatore, che non legge i commenti,
+//! e non un banco, perché il banco è qui sotto e guarda altre due cose.
+//! Adesso l'attore c'è, è `check-prosa`, e la stessa zona vista sui tre crate
+//! che il conto della 0120 non attraversa
+//! vale **otto** file [conta: lucchetti-fuori-dal-conto].
 //!
 //! Il secondo conto invece li attraversa tutti, perché la domanda è diversa: non
 //! «hai un lucchetto?» ma «ne hai improvvisato la politica?».

@@ -492,7 +492,7 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 ## I difetti misurati
 
-**Quarantaquattro** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Quarantadue** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -564,7 +564,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0070 | `prefix_len_ci` confronta i minuscoli code point per code point e sbaglia sulle espansioni (`İ`) | `fub-kernel` · `occurrences.rs:215` | regole |
 | 0073 | `set_view_state` scrive `view-state.json` in modo sincrono sul thread IPC, a ogni scroll | `fub-app` · `lib.rs:645` | lock e I/O |
 | 0093 | `heading_slug` non normalizza in NFC: `# Café` scritto da macOS e lo stesso link digitato altrove danno due slug diversi | `fub-abi` · `model.rs` `heading_slug` | regole |
-| 0100 | il conto dei lucchetti della 0120 vede solo `fub-host` e `fub-app`: `fub-kernel` ne ha quattordici file, e nessuno li guarda | `fub-kernel`, `fub-features`, `fub-sdk` · `src/` | presidi |
 | 0110 | lo stesso testo di contesto è copiato per intero tre volte lungo la catena — una `String` per ogni link in `inlines_del_blocco`, poi di nuovo in `register_links`, poi in `backlinks()` — dove basterebbe una fetta condivisa del sorgente | `fub-format-markdown` · `parse.rs` `inlines_del_blocco` | prestazioni |
 | 0111 | una riga vuota in mezzo a una tabella GFM la chiude e lascia le righe successive come un paragrafo unico, e succede in due file — `docs/decisions/README.md` riga 90 (58 righe, 214.447 byte in un solo paragrafo) e `docs/architecture/wit-congelato.md` riga 98 (8 righe, 11.174 byte) — senza che nessun conto della CI guardi l'integrità di una tabella | `docs` · `decisions/README.md` riga 90 (con `architecture/wit-congelato.md` riga 98) | regole |
 | 0112 | l'anagrafe non ha forma incrementale: `EntryStore::open` deserializza l'intera `BTreeMap<DocId, StoredEntry>` e `EntryStore::store` la riserializza e la sostituisce tutta con una `VaultStorage::write`, così ogni apertura paga il vault intero anche quando non è cambiato un file | `fub-kernel` · `entries.rs` `EntryStore::store` | prestazioni |
@@ -597,7 +596,6 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0140 | quattro regole di identità di un nome non fanno la normalizzazione NFC che `resolution_key` fa — `canonical_tag`, `canonical_anchor`, `heading_slug`, `prefix_len_ci` — così paglia in NFD e ago in NFC non si incontrano in nessuno dei due versi, e `heading_slug` su NFD non diverge soltanto: **cancella** l'accento, perché una `Mn` non è alfanumerica | `fub-abi` · `model.rs` `canonical_tag` (con `canonical_anchor`, `heading_slug`, `occurrences.rs` `prefix_len_ci`) | regole |
 | 0141 | «sta dentro questa cartella?» ha tre risposte incompatibili in produzione — `query::within_folder` taglia gli slash finali e ha il ramo su sé stessa, `rules::events::folder_contains` li taglia e non ce l'ha, `transfer::in_folder` taglia entrambi i capi — e il banco di `transfer.rs` asserisce vero ciò che `within_folder` dà falso, mentre la prosa di `traits.rs` scrive che la regola «è una, e due copie divergerebbero sul caso che nessuno prova» | `fub-abi` · `transfer.rs` `in_folder` | regole |
 | 0142 | il test della rinomina a solo caso è scritto a mano due volte, identico, con un `to_lowercase()` nudo senza NFC e senza trim: è una quattordicesima regola di piegatura del caso, e può contraddire `resolution_key` proprio sul rename che deve proteggere | `fub-kernel` · `workspace.rs` `case_only` (due siti) | regole |
-| 0143 | la testa di `il_veleno_del_kernel.rs` dichiara nove file col lucchetto e tre di quelli — `journal.rs`, `drafts.rs`, `ignore.rs` — non ne hanno nessuno, mentre `vault.rs`, che ne ha uno di banco, non è nell'elenco: i file di produzione col lucchetto nudo fuori dalle due porte sono sei, e nessun conto guarda quella frase | `fub-kernel` · `tests/il_veleno_del_kernel.rs` (prosa di modulo) | presidi |
 
 ## Gli allegati
 
