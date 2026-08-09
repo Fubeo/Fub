@@ -1141,6 +1141,13 @@ fn rivendicazione_di(dir: &str, host: &dyn HostApi) -> Result<Rivendicazione, Pl
 /// È la direzione lecita del dubbio. Costa una lettura di tutti gli snapshot,
 /// ma succede solo quando l'indice è perso — e un indice perso, senza questo,
 /// renderebbe le versioni irraggiungibili per sempre.
+///
+/// Quella lettura non si può togliere: [`VersionRef::hash`] è l'impronta FNV-1a
+/// **del contenuto** e `size` è la sua lunghezza, e l'unico posto in cui erano
+/// già scritti è `versions.json`, cioè proprio l'indice che qui manca. Caricare
+/// gli snapshot non è il prezzo per calcolare l'impronta: è il calcolo. Il conto
+/// — 400 letture per 200 documenti, un `meta.json` e uno snapshot ciascuno,
+/// niente riletto — sta in `fub-features/tests/chi_risponde_apre_i_byte.rs`.
 fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
     // I blob sono ordinati, quindi quelli di una stessa cartella sono contigui.
     let mut per_dir: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
