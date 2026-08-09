@@ -865,3 +865,162 @@ fn i_ponti_restano_sei() {
         ponti.len()
     );
 }
+
+// ---------------------------------------------------------------------------
+// Chi li chiama
+// ---------------------------------------------------------------------------
+
+/// **I comandi registrati che nella shell non invoca nessuno**, e la ragione per
+/// cui restano.
+///
+/// L'allowlist qui sopra chiede *perché quel comando non poteva essere una view,
+/// una query o un comando del registro*, e a quella domanda risponde una volta
+/// sola, alla nascita. Non chiede la seconda, che invecchia da sé: **chi lo
+/// chiama**. Un `Perche::SuperficieDellApp` sta bene addosso a `open_vault`, che
+/// la shell invoca a ogni avvio, e sta uguale addosso a un comando che nessuno
+/// invoca più da quando il pannello che lo usava è diventato una view — o che
+/// nessuno ha mai invocato. Superficie che nessuno attraversa resta superficie:
+/// va mantenuta, documentata e sandboxata come le altre, e a M5 sarà
+/// raggiungibile dal webview come tutte.
+///
+/// Questi tre non sono una dimenticanza, e per questo stanno in un elenco invece
+/// che in un `assert!(vuoto)`. La
+/// [0029](../../../docs/decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)
+/// li ha scritti così apposta e lo dice: *«i tre comandi ci sono (`list_vaults`,
+/// `set_current_vault`, `close_vault`) e `main.ts` non ne chiama nessuno: la
+/// finestra resta una, e apre un vault alla volta. È voluto — questa voce è la
+/// metà backend, ed è quella che scadeva, perché è quella che ogni cliente
+/// futuro avrebbe dovuto riscrivere. La metà shell è il §1.2 col modello di
+/// layout e il `PaneId`»*. Sono la metà backend di una voce la cui metà shell è
+/// in roadmap, non codice morto: toglierli sarebbe disfare una decisione presa.
+///
+/// Ciò che questa riga compra è che quella frase resti **vera**: il giorno che il
+/// §1.2 arriva e la shell li chiama, questo test è rosso e l'elenco si accorcia;
+/// il giorno che un quarto comando perde il suo chiamante, questo test è rosso e
+/// chi lo ha perso deve scrivere qui perché resta — o toglierlo.
+const SENZA_CHIAMANTE: &[&str] = &["close_vault", "list_vaults", "set_current_vault"];
+
+/// I nomi di comando che la shell invoca, letti da `frontend/src`.
+///
+/// **Zona cieca dichiarata**: si riconosce `invoke("nome")` col nome
+/// *letterale*, che è la sola forma che questa shell usa — chi costruisse il
+/// nome (`invoke(`get_${x}`)`) non verrebbe visto, e il verso in cui il conto
+/// sbaglia è quello che richiede di volerlo aggirare. Il presidio contro la
+/// forma costruita esiste già e sta di là: l'allowlist è un elenco chiuso, e un
+/// comando che la shell raggiunge senza nominarlo è comunque dichiarato lì.
+///
+/// Non distingue il codice dai test della shell, ed è voluto: `finto.ts` e
+/// `shell.e2e.test.ts` sono la shell che si prova da sola, e un comando invocato
+/// solo dal proprio doppio è comunque un comando che qualcuno in `frontend/`
+/// nomina. La domanda a cui questo elenco risponde è più grossolana e più
+/// robusta di «lo usa la UI»: è «esiste una riga di shell che lo conosce».
+fn invocati_dalla_shell() -> BTreeSet<String> {
+    fn raccogli(dir: &std::path::Path, out: &mut Vec<String>) {
+        for voce in std::fs::read_dir(dir)
+            .unwrap_or_else(|e| panic!("non si legge `{}`: {e}", dir.display()))
+        {
+            let voce = voce.expect("una voce della cartella della shell");
+            let path = voce.path();
+            if path.is_dir() {
+                raccogli(&path, out);
+            } else if path.extension().is_some_and(|e| e == "ts") {
+                out.push(
+                    std::fs::read_to_string(&path)
+                        .unwrap_or_else(|e| panic!("non si legge `{}`: {e}", path.display())),
+                );
+            }
+        }
+    }
+
+    let radice = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src");
+    let mut sorgenti = Vec::new();
+    raccogli(&radice, &mut sorgenti);
+
+    let mut nomi = BTreeSet::new();
+    for testo in &sorgenti {
+        // `invoke` seguito da un eventuale parametro di tipo, dalla parentesi e
+        // dal nome fra virgolette. Il parametro di tipo può contenere di tutto
+        // (`invoke<string | null>`), quindi si salta fino alla prima `(`.
+        for (i, _) in testo.match_indices("invoke") {
+            let resto = &testo[i + "invoke".len()..];
+            let Some(apre) = resto.find('(') else {
+                continue;
+            };
+            // Fra `invoke` e la `(` ci può stare solo un parametro di tipo o
+            // dello spazio: qualunque altra cosa e non è questa chiamata.
+            let mezzo = &resto[..apre];
+            if !mezzo.trim().is_empty() && !(mezzo.trim().starts_with('<')) {
+                continue;
+            }
+            let dopo = resto[apre + 1..].trim_start();
+            let Some(dopo) = dopo.strip_prefix('"') else {
+                continue;
+            };
+            let Some(fine) = dopo.find('"') else { continue };
+            nomi.insert(dopo[..fine].to_string());
+        }
+    }
+    nomi
+}
+
+/// **Ogni comando IPC ha un chiamante nella shell, o è in un elenco che dice
+/// perché no.**
+///
+/// È la metà che all'allowlist mancava, e la specie è quella di ogni presidio
+/// che «assolve per nome»: una riga che dà il permesso senza mai richiedere la
+/// ragione che quel permesso presupponeva. `Perche::SuperficieDellApp` dice
+/// perché il comando non è una view; non dice, e non può dire, che qualcuno lo
+/// usi ancora.
+///
+/// Va rosso nei **due versi**, e il secondo conta quanto il primo: un elenco di
+/// eccezioni che resta lungo mentre la shell cresce smette di essere una
+/// fotografia e diventa un ricordo — la stessa disciplina di
+/// [`la_superficie_ipc_e_un_elenco_chiuso`].
+#[test]
+fn ogni_comando_registrato_ha_un_chiamante_o_dice_perche_no() {
+    let registrati = comandi_registrati(SORGENTE);
+    let invocati = invocati_dalla_shell();
+
+    // Il test del test: una camminata che non trova niente renderebbe la prima
+    // asserzione vera per vacuità e la seconda rossa per la ragione sbagliata.
+    // La shell invoca decine di comandi, e `open_vault` è quello che non può non
+    // esserci — è la riga con cui un vault comincia a esistere.
+    assert!(
+        invocati.len() >= 20 && invocati.contains("open_vault"),
+        "camminando `frontend/src` si trovano {} comandi invocati: questa \
+         camminata non sta guardando la shell, e ciò che dice sotto non vuol \
+         dire niente",
+        invocati.len()
+    );
+
+    let atteso: BTreeSet<&str> = SENZA_CHIAMANTE.iter().copied().collect();
+    let orfani: BTreeSet<&str> = registrati
+        .iter()
+        .copied()
+        .filter(|c| !invocati.contains(*c))
+        .collect();
+
+    let nuovi: BTreeSet<&str> = orfani.difference(&atteso).copied().collect();
+    assert!(
+        nuovi.is_empty(),
+        "nessuna riga di `frontend/src` invoca più: {}\n\
+         \n\
+         Un comando IPC senza chiamante non smette di costare: resta superficie da\n\
+         mantenere, documentare e sandboxare, e a M5 resta raggiungibile dal webview.\n\
+         Le due risposte sono togliere il comando da `generate_handler!` — e allora\n\
+         va tolto anche da `ALLOWLIST`, che è una fotografia — oppure scriverlo in\n\
+         `SENZA_CHIAMANTE` con la decisione che dice perché aspetta un chiamante che\n\
+         non è ancora arrivato. La seconda vuole una decisione da citare: se non c'è,\n\
+         è la prima.",
+        elenca(&nuovi)
+    );
+
+    let arrivati: BTreeSet<&str> = atteso.difference(&orfani).copied().collect();
+    assert!(
+        arrivati.is_empty(),
+        "{} sta in `SENZA_CHIAMANTE`, ma la shell adesso lo invoca.\n\
+         Toglilo da quell'elenco: è una fotografia, non un ricordo — e se era lì per\n\
+         la 0029, il §1.2 è arrivato ed è una buona notizia da scrivere.",
+        elenca(&arrivati)
+    );
+}
