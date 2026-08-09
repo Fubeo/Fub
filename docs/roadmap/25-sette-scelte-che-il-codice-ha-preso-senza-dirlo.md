@@ -94,155 +94,35 @@ stata scartata:
 
 ### 25.2 Quante regole di identità di un nome vuole Fub
 
-*aperta · strato **contratto** · **P1***
+*chiusa dalla [0136](../decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md) · strato **contratto** · **P1***
 
-**1. La domanda.** Una regola nuova di «quando due nomi sono lo stesso nome» si
-**dichiara**, o nasce in silenzio? E se si dichiara, dove — nel contratto, in un
-conto, o in una porta?
+**Com'è finita, e cosa lascia.** La voce chiedeva se una regola nuova di «quando
+due nomi sono lo stesso nome» si dichiara o nasce in silenzio, e la risposta è la
+**forma (a)** che la voce stessa raccomandava: un **conto sulle sorgenti** —
+`crates/fub-abi/tests/una_regola_di_nome_si_dichiara.rs` — che pretende
+**famiglia e ragione** per ognuna delle regole in produzione, e diventa rosso
+sotto `cargo test` a chi ne aggiunge una senza dichiararla. La **(b)**, una porta
+`fub_abi::rules` esclusiva, **non si fa**: risponde a una domanda che quattro
+verbali hanno già chiuso con un no, ed è irreversibile perché WIT-adiacente.
 
-**2. Che cosa si osserva oggi, misurato.** Censimento a `bc1d27d`, contato per
-nome di simbolo e non per numero di riga:
+Il numero misurato dal censimento — 44 regole per la stessa domanda — *sembrava*
+una duplicazione da unificare e **non lo era**: la duplicazione vera stava nella
+**dichiarazione mancante**, non nelle regole. Il presidio è nato verde su
+**quaranta** righe, ed è stato acceso rosso nei due versi (una regola non
+dichiarata, una famiglia mentita). Il difetto `0142` — la piegatura scritta a
+mano due volte nel rename — è stato riparato qui: adesso è `solo_il_caso`, che
+chiama `resolution_key`. E tre righe di difetto che questa voce nominava sono
+risultate **false**: `0070` (`İ` e `ẞ` sono le risposte giuste e deliberate),
+`0093` sulla conseguenza (`heading_matches` è una disgiunzione: si rompe l'`id=`
+HTML, non la risoluzione), `0018` sul posto (la scansione che si paga sempre è
+nel ramo `Wiki`, ed è il difetto `0115`). Il dettaglio sta nel verbale.
 
-- **44 funzioni-regola di produzione**, con **~95 siti di chiamata**.
-- **13 regole distinte di piegatura del caso**, su **tre meccanismi
-  incompatibili**: `str::to_lowercase` (full-Unicode, sensibile al contesto),
-  `char::to_lowercase` (senza contesto), `eq_ignore_ascii_case` /
-  `to_ascii_lowercase` (solo ASCII). **Una sola delle tredici fa anche la
-  normalizzazione NFC**: `resolution_key`.
-- **Tre risposte incompatibili** alla domanda «sta dentro questa cartella?», più
-  una quarta nell'SDK: `query::within_folder` taglia gli slash finali e **ha** il
-  ramo su sé stessa; `rules::events::folder_contains` li taglia e **non** ce
-  l'ha; `transfer::in_folder` (`fub-abi/src/transfer.rs:675`) taglia **entrambi**
-  i capi e non ha il ramo; `MemoryHost::data_list` usa
-  `starts_with(prefix + "/")`.
-- **Due duplicati verbatim in produzione**: `query::tag_matches` (seconda metà) ≡
-  `rules::tag::is_sub_tag`; e `let case_only = from.as_str().to_lowercase() == …`
-  copiato identico a `workspace.rs:3011` **e** `:3085`.
-- **La famiglia a cui manca la NFC è di quattro siti, non di uno**:
-  `canonical_tag` (`model.rs:757`), `canonical_anchor` (`:768`, che nessuna riga
-  aveva mai nominato), `heading_slug` (`:791`), `prefix_len_ci`
-  (`occurrences.rs:215`).
-- **L'identità di un'estensione ha due risposte contraddittorie**: ASCII in
-  `rules/media.rs:48,76` e `rules/health.rs:129`, full-Unicode in `registry.rs`,
-  `documents.rs:314`, `transfer.rs:362`.
-
-E un dato che sta accanto e non dentro il censimento: il banco di
-`transfer.rs:968` asserisce che `in_folder("x/a.md", "/x/")` è **vero**, dove
-`within_folder` sullo stesso ingresso dà **falso** — mentre la prosa di
-`crates/fub-abi/src/traits.rs:287` scrive che la regola «*è una, e due copie
-divergerebbero sul caso che nessuno prova*».
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Un conto delle regole**, come `un_lucchetto_solo.rs` fa per i
-      lucchetti: un banco che legge i sorgenti e pretende che ogni funzione che
-      piega il caso o normalizza stia in un elenco con la sua **famiglia** e la
-      sua **ragione**. Costa un'allowlist di ~44 righe e non rompe niente. **Paga
-      chi aggiunge la 45ª regola**, che è esattamente lo scopo.
-- [ ] **(b) Una porta**: ogni regola di identità di nome vive in
-      `fub_abi::rules` e non è raggiungibile altrove. Il precedente esiste —
-      `fub-abi/tests/superficie_della_radice.rs:46` asserisce che
-      `resolution_key` si raggiunge solo da `rules::path`. Costa il trasloco di
-      `canonical_tag`, `canonical_anchor` e `heading_slug`, più il divieto al
-      kernel di scrivere `to_lowercase()` a mano; e rompe le regole
-      *volutamente* diverse — `prefix_len_ci`, la corsia ASCII di `tags.rs` — che
-      dovrebbero salire con la loro ragione. **Paga chi mantiene il kernel.**
-- [ ] **(c) Niente censimento**: si riparano le divergenze misurate una per una.
-      **Paga chi troverà la prossima fra sei mesi**, rifacendo il lavoro di
-      questo giro.
-
-**4. Che cosa il repo ha già deciso qui vicino — ed è la parte che riscrive la
-domanda.** **Quattro volte** il repo ha stabilito che le regole sono
-legittimamente più d'una, quindi «una porta sola» risponde a una domanda già
-chiusa con un no:
-
-- la **decisione [0020](../decisions/0020-le-regole-in-un-posto-solo.md)**:
-  «*Non sono due copie della stessa regola: sono due requisiti che **devono**
-  divergere, e una fixture che li legasse nascerebbe rossa e resterebbe rossa.*»
-- la **decisione [0107](../decisions/0107-il-caso-di-una-lettera.md)**: «*la
-  domanda non era una: erano tre, e adesso hanno tre risposte diverse.*» E la
-  riga che quel verbale ha **ripudiato** da `path_policy.rs` è precisamente la
-  tesi «unifichiamo»: «*È il tipo di riga peggiore che un modulo possa contenere:
-  dichiara **coperto** ciò che non lo è.*»
-- la **decisione [0058](../decisions/0058-un-nome-che-nasce.md)**: «*Un nome che
-  c'è e un nome che nasce non si giudicano con la stessa regola*», e fra le cose
-  scartate «*una politica sola per leggere e per creare. È la voce letta a
-  metà.*»
-- la **decisione [0115](../decisions/0115-la-verita-e-la-dichiarazione.md)**:
-  «*le tre specie di regola che ci convivono sono dichiarate: generata,
-  rispecchiata, scritta una volta. L'ultima categoria non è un residuo da
-  rimpicciolire a tutti i costi.*»
-
-**E la zona cieca è già dichiarata, sempre dalla decisione 0115** — è la frase che
-questa voce esiste per citare: «*Nessun attore vede una quattordicesima regex
-scritta domani in un modulo nuovo della shell … il generato, la fixture e il
-corpus prendono chi **cambia** una regola, non chi ne **aggiunge** una accanto.*»
-
-**Il precedente esatto esiste, e ha già vinto una volta.** La **decisione
-[0110](../decisions/0110-la-struttura-non-e-una-preferenza.md)**, nella sezione
-aggiunta il 2026-08-06, è l'ammissione post-hoc che una regola era stata
-riscritta e aveva divergito: «*`IgnorePolicy` confrontava i nomi per uguaglianza
-di byte … mentre la 0107, decisa nello stesso giro e **tre commit prima**, aveva
-appena stabilito quando due path sono lo stesso path … questa decisione ha
-perfino modificato la prosa di `path_policy` senza usarne la funzione.*»
-
-Chi possiede le regole è già deciso dalla decisione 0020 («*se una risposta del
-contratto ha una parte che non dipende da chi la dà, quella parte è del
-contratto*»), qualificata dalle decisioni
-[0043](../decisions/0043-il-path-e-la-chiave.md) e
-[0123](../decisions/0123-lo-slug-di-un-titolo-e-un-posto-non-una-parola.md). E
-sono già decise, da non riaprire: la **decisione
-[0047](../decisions/0047-la-cartella-esiste-nel-kernel.md)** (folder note per
-path esatto, divergenza deliberata), la **decisione
-[0086](../decisions/0086-una-cronologia-e-la-sua-porta.md)**
-(`nome-cercato.ts` non normalizza, ed è prodotto: «*ripulirla in
-`riunione-con-anna` è il momento in cui l'app decide di sapere meglio
-dell'utente come si chiamano le sue cose*»), la **decisione
-[0117](../decisions/0117-un-termine-non-si-sovrappone-a-se-stesso.md)** (la
-deduplica sensibile al caso in `wanted` è dichiarata scoperta) e la **decisione
-[0061](../decisions/0061-un-giro-che-non-passa-dal-modello.md)** (il round-trip
-NFC/NFD dei nomi non è provato e servirebbe una macchina Apple in CI).
-
-**5. Reversibile?** La (a) sì: un banco si cancella. La **(b) no** per la parte
-che sale nel contratto — `fub_abi::rules` è WIT-adiacente, e ciò che ci entra ci
-resta. La (c) è reversibile per definizione, e per definizione non decide niente.
-
-**6. La raccomandazione: (a), e non (b) adesso.** La prova che decide è *il
-secondo chiamante la eredita gratis?*. Il repo ha già stabilito quattro volte che
-le regole **devono** essere più d'una: ciò che nessuno eredita non è la porta, è
-**la dichiarazione**. Chi scrive oggi la 45ª regola non trova niente che gli
-chieda a quale famiglia appartenga, e la decisione 0110 dimostra col proprio caso
-che questo costa una divergenza **tre commit dopo** che una decisione l'aveva già
-risolta. Un conto — la forma che questo repo usa già per i lucchetti, per l'IPC,
-per le corse — dà quell'eredità al prezzo di un'allowlist. E l'allowlist ha già
-il suo asse: le tre famiglie sono misurate, e il criterio per stare nell'una o
-nell'altra è già scritto in `occurrences.rs:212-214` e `tags.rs:227-248`. Il conto
-non deve inventare la tassonomia: deve **pretenderla**.
-
-**7. Che cosa resta rotto se non si decide.** La 45ª regola nasce senza che
-nessuno lo sappia, esattamente come è nata la 14ª — misurata **tre commit** dopo
-la decisione che l'aveva già risolta. I difetti `0115`, `0140`, `0141` e `0142`
-si riparano comunque; ciò che non si ripara è che il quinto arriva.
-
-*Quello che si diceva e che non regge.* La domanda posta era «unifichiamo le
-regole?», e il repo l'aveva già chiusa quattro volte. Il **difetto 0070**
-(«`prefix_len_ci` sbaglia sulle espansioni, `İ`») è **falso come difetto**: `İ`/`i`
-e `ẞ`/`ß` sono entrambe le risposte *giuste* sotto la conversione di caso di
-default, è deliberato, `occurrences.rs:69,88-90,212-214` lo spiega, e
-`fub-features/src/tags.rs:227-248` cita quel difetto come ragione per **non**
-riusare quella regola; il difetto vero di `prefix_len_ci` è un altro, ed è la NFC
-mancante. Il **difetto 0093** («due slug diversi ⇒ i link si rompono») è **falso**
-sulla conseguenza: `heading_matches` (`model.rs:892`) è una **disgiunzione** —
-`heading_slug(query) == heading.slug` **oppure**
-`resolution_key(query) == resolution_key(heading.text)` — e il secondo ramo salva
-la risoluzione nei due versi; ciò che si rompe è l'`id=` HTML. E su NFD
-`heading_slug` non diverge soltanto: **cancella** l'accento (`Café` in NFD →
-`cafe`), perché `U+0301` è una `Mn` e non è alfanumerica. Il **difetto 0018**
-punta al posto sbagliato e morde più forte di come è scritto: nel ramo `Path` la
-scansione è un ripiego su un link già dichiarato rotto, col commento accanto che
-lo dice; nel ramo `Wiki` invece `resolve_entry_in` ritorna `named_entry_in`
-**incondizionatamente** — ed è il difetto `0115`, misurato a **1,335 ms** su 1 000
-voci, **7,285 ms** su 5 500 e **27,761 ms** su 20 000.
+Ciò che la (a) **non** fa è riparare una divergenza: restano aperti, come
+difetti misurati e non come caselle, il `0115` (risolvere un wikilink scandisce
+l'anagrafe), il `0140` (quattro regole senza NFC) e il `0141` (tre risposte
+incompatibili a «sta dentro questa cartella?»). Le loro righe di allowlist li
+nominano per numero invece di travestirli da ragione: una divergenza dichiarata
+è più visibile di una taciuta, e resta una divergenza.
 
 ---
 
