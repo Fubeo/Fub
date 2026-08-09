@@ -364,7 +364,7 @@ Cosa conta esattamente come aggiunta sta in
 ogni push contro la linea di base congelata.
 
 ### bundle
-`Bundle` · [`host/registry.rs:53`](../crates/fub-host/src/registry.rs) · [0031](decisions/0031-chi-possiede-i-bundle.md)
+`Bundle` · [`host/registry.rs:55`](../crates/fub-host/src/registry.rs) · [0031](decisions/0031-chi-possiede-i-bundle.md)
 
 Un pacchetto di provider che si monta e si smonta insieme: la feature nativa dei
 backlink è un bundle, e a M5 lo sarà un plugin WASM. Esiste perché montare
@@ -607,7 +607,7 @@ registrazione, non si scopre per tentativi: la tabella delle rotte
 sceglierne uno a caso.
 
 ### pianificatore
-`QueryPlan` · [`kernel/index/plan.rs:436`](../crates/fub-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
+`QueryPlan` · [`kernel/index/plan.rs:437`](../crates/fub-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
 
 Chi decide come eseguire una query che tocca più di un indice. Dalla 0026 può
 mandarne due **insieme**: non è una dichiarazione nel contratto, è una misura —
