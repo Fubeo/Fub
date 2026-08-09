@@ -482,12 +482,33 @@ function main() {
         const nomi = nomiPromessi(testoRiga, ancora);
         const righeBersaglio = fs.readFileSync(bersaglio, "utf8").split("\n");
 
+        // **Il limite si controlla per primo, e non ha bisogno di nessun nome.**
+        //
+        // Sono due domande diverse e fino a qui stavano in una catena sola: *a
+        // quella riga c'è la cosa che il documento nomina* vuole un nome da
+        // cercare, ma *quella riga esiste* vuole solo il file. Chiedendole
+        // insieme, i `:N` la cui riga non offre un simbolo cercabile uscivano
+        // dal ramo prima di arrivare qui, e con loro se ne andava anche la metà
+        // che si poteva rispondere: un `dispatcher.rs:589` su un file che ne ha
+        // 400 è rotto e basta, e per dirlo non serve sapere altro.
+        //
+        // È il verso in cui questo presidio invecchia: un file si **accorcia** —
+        // una funzione tolta, un modulo spostato — e ogni ancora oltre la nuova
+        // fine punta al vuoto. Misurato al 2026-08-09: dei 36 ancoraggi senza
+        // nome nessuno sfora oggi, quindi questo ramo nasce vuoto. Sta qui
+        // perché il caso nuovo entri in rumore invece che in silenzio, che è la
+        // sola ragione per cui un presidio si scrive prima del difetto.
+        if (numero > righeBersaglio.length) {
+          segnala(`il file ha ${righeBersaglio.length} righe, il link ne cita ${numero}`);
+          return;
+        }
+
         if (nomi.length === 0) {
           // Non si inventa un nome: la riga non promette niente di cercabile, e
           // il conto in fondo lo dice invece di far finta di aver controllato.
+          // Ciò che resta scoperto qui è **solo** «a quella riga c'è la cosa
+          // giusta»; che la riga esista l'ha già chiesto il ramo qui sopra.
           righeSenzaNome += 1;
-        } else if (numero > righeBersaglio.length) {
-          segnala(`il file ha ${righeBersaglio.length} righe, il link ne cita ${numero}`);
         } else if (!nomi.some((n) => new RegExp(`\\b${n}\\b`).test(righeBersaglio[numero - 1]))) {
           const dove = dovEFinito(righeBersaglio, nomi);
           segnala(
