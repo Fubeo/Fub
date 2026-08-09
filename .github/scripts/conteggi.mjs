@@ -501,6 +501,61 @@ export const CONTEGGI = [
       " {n+=gsub(/sink\\.emit\\(/,\"\")} END{print n+0}'",
   },
   {
+    nome: "lucchetti-nudi-del-kernel",
+    ragione:
+      "I file di `crates/fub-kernel/src` che tengono un `Mutex`/`RwLock` in " +
+      "**produzione** fuori dalle due porte del veleno (`bus.rs` della 0126 e " +
+      "`veleno.rs`). È la zona che la 0120 ha dichiarato di non guardare e che " +
+      "la 0126 ha rifiutato di chiudere, per una ragione che resta buona: " +
+      "un'allowlist su questi file sarebbe lunga come l'elenco che dovrebbe " +
+      "restringere, e la politica del kernel non è quella dell'host. Ma " +
+      "«dichiarata» non vuol dire «misurata»: la testa di " +
+      "`crates/fub-kernel/tests/il_veleno_del_kernel.rs` ne elencava **nove** a " +
+      "mano, e tre di quelli — `journal.rs`, `drafts.rs`, `ignore.rs` — non ne " +
+      "avevano nessuno, mentre `vault.rs` ne aveva uno e non era nell'elenco. " +
+      "Nessun attore guardava quella frase; adesso il numero è questo. " +
+      "Il taglio al `#[cfg(test)]` è quello dei due banchi del veleno: un " +
+      "lucchetto costruito in un banco è roba del banco, ed è la ragione per " +
+      "cui `vault.rs` **non** entra qui. " +
+      "Zone cieche dichiarate, tutte nel verso di chi vorrebbe aggirarle: si " +
+      "contano i **file** e non i siti, quindi un secondo lucchetto in un file " +
+      "che ne ha già uno non muove il numero; l'ancora è il nome del tipo, " +
+      "quindi un `use std::sync::Mutex as Serratura` o un lucchetto di terzi " +
+      "non si vede; e il taglio presuppone che il modulo di test stia in fondo, " +
+      "come sono scritti i file di questo crate. Le righe di commento si " +
+      "saltano, o la prosa che racconta questo difetto conterebbe sé stessa. " +
+      "Una **terza** porta scritta domani farebbe salire il numero invece di " +
+      "sparire dal conto: è il verso giusto in cui sbagliare, perché costringe " +
+      "a dichiararla.",
+    comando:
+      "find crates/fub-kernel/src -name '*.rs' ! -name 'bus.rs' ! -name" +
+      " 'veleno.rs' -exec awk 'FNR==1{c=0;t=0} /^#\\[cfg\\(test\\)\\]$/{t=1}" +
+      " t{next} /^[[:space:]]*\\/\\//{next}" +
+      " !c&&/(Mutex|RwLock)(<|::)/{print FILENAME; c=1}' {} + | wc -l",
+  },
+  {
+    nome: "lucchetti-fuori-dal-conto",
+    ragione:
+      "Gli stessi file, allargati ai tre crate che il conto della 0120 non " +
+      "attraversa: `fub-kernel`, `fub-features` e `fub-sdk`. Vive nella stessa " +
+      "frase di `lucchetti-nudi-del-kernel` e la chiude dall'altro capo — quello " +
+      "dice quanto è grande la zona cieca del kernel, questo quanto è grande " +
+      "tutta. Serve perché `crates/fub-host/tests/un_lucchetto_solo.rs` dichiara " +
+      "la zona cieca e non ne dava **nessun** numero: una zona cieca senza " +
+      "numero è indistinguibile da una che cresce, ed è così che il file numero " +
+      "nove è entrato in silenzio. Il conto non restringe niente e non chiede " +
+      "una riga di giustificazione a nessuno: la decisione della 0126 — che una " +
+      "politica del veleno si riderivi da cosa il lucchetto protegge, invece di " +
+      "trapiantarsi — resta intatta. Cambia solo che la zona cieca adesso è " +
+      "misurata. Stesse zone cieche del conto qui sopra.",
+    comando:
+      "find crates/fub-kernel/src crates/fub-features/src crates/fub-sdk/src" +
+      " -name '*.rs' ! -name 'bus.rs' ! -name 'veleno.rs' -exec awk" +
+      " 'FNR==1{c=0;t=0} /^#\\[cfg\\(test\\)\\]$/{t=1} t{next}" +
+      " /^[[:space:]]*\\/\\//{next} !c&&/(Mutex|RwLock)(<|::)/{print FILENAME;" +
+      " c=1}' {} + | wc -l",
+  },
+  {
     nome: "buchi-dichiarati",
     ragione:
       "I verbali che dichiarano un buco proprio: un fatto sulla forma del " +

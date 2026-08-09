@@ -30,10 +30,24 @@
 //! che il compilatore non può vedere, ed è esattamente il caso che è sfuggito.
 //!
 //! Ciò che questo banco **non** vede, dichiarato: i lucchetti degli altri
-//! crate. `fub-kernel`, `fub-features` e `fub-sdk` ne hanno di propri, e la
-//! politica di questa decisione non li ha attraversati — il difetto misurato
-//! era il confine host↔app, e allargare un conto oltre ciò che si è deciso
-//! vorrebbe dire un'allowlist lunga come l'elenco che dovrebbe restringere.
+//! crate. `fub-kernel`, `fub-features` e `fub-sdk` ne hanno di propri — sono
+//! **otto** file [conta: lucchetti-fuori-dal-conto] —, e la politica di questa
+//! decisione non li ha attraversati: il difetto misurato era il confine
+//! host↔app, e allargare un conto oltre ciò che si è deciso vorrebbe dire
+//! un'allowlist lunga come l'elenco che dovrebbe restringere. La
+//! [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md)
+//! ha riguardato la domanda e ha risposto di nuovo di no, con la ragione più
+//! forte: una politica del veleno si **riderivano** da cosa il lucchetto
+//! protegge, quindi trapiantare qui la `Custodia` importerebbe la risposta
+//! dell'host in un posto dove nessuna delle sue giustificazioni vale.
+//!
+//! Il numero però c'è, ed è la sola cosa che è cambiata: prima questa frase
+//! nominava tre crate e nessuna quantità. Una zona cieca senza numero è
+//! indistinguibile da una che cresce — il file che ci entra domani non fa
+//! rumore da nessuna parte, e non c'è niente da cui accorgersene. Contarla non
+//! la restringe e non chiede una riga di giustificazione a nessuno: la
+//! **misura**, che è il minimo che si deve a un buco che si è deciso di
+//! tenere.
 
 use std::collections::{BTreeMap, BTreeSet};
 
