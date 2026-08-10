@@ -132,7 +132,11 @@ Non c'è un `CODEOWNERS`. C'è **un solo** manutentore.
 
 ## Chiudere una decisione
 
-Un verbale nuovo prende il numero successivo libero. I verbali non si riscrivono e non si rinumerano. I dettagli sono in [decisions/README.md](decisions/README.md).
+Un verbale nuovo prende il numero successivo libero. Il **contenuto** di un verbale (le decisioni prese, le alternative scartate) è immutabile. La **forma** non lo è: un verbale si può riscrivere per renderlo più chiaro, a patto di non falsificarne il senso. Il numero e il nome del file non cambiano mai. Una decisione che ne supera un'altra è un verbale nuovo che la cita.
+
+Se un verbale cita nomi o file che a `HEAD` non esistono più, **non** si corregge al presente: si aggiunge un avviso in cima per dire che è invecchiato. (Questo chiude il difetto 0127).
+
+I dettagli sono in [decisions/README.md](decisions/README.md).
 
 ## Il resto
 
