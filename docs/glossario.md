@@ -1,3 +1,4 @@
+
 # Glossario
 
 Il lessico di Fub è preciso e **non è standard**: lotto, porta, ponte, anagrafe,
@@ -98,7 +99,7 @@ data, ora, lista. Serve a chi interroga (ordinare per data, filtrare per stato)
 senza costringere ogni consumatore a indovinare che forma abbia una chiave.
 
 ### revisione
-`Revision` · [`abi/edit.rs:104`](../crates/fub-abi/src/edit.rs) · [0008](decisions/0008-modifica-chirurgica.md)
+`Revision` · [`abi/edit.rs:168`](../crates/fub-abi/src/edit.rs) · [0008](decisions/0008-modifica-chirurgica.md)
 
 L'identità del testo su cui si sta per calcolare una modifica. È **opaca**: solo
 l'uguaglianza è contratto, come l'host la derivi non è promesso a nessuno.
@@ -269,7 +270,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6235`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6250`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
@@ -878,6 +879,11 @@ kernel — ed è la prova che il canale dati basta.
 
 ## Il metodo
 
+### banco
+`Banco` · [PIANO.md](PIANO.md) · [0054](decisions/0054-il-banco-del-lato-provider.md)
+
+Un test del codice. Il costruttore principale usato nel repository per variare gli assi in modo sistematico, separando chi prova il kernel da chi prova chi lo estende.
+
 ### buco dichiarato
 — · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md), [0106](decisions/0106-un-formato-si-presenta.md), [0109](decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md), [0112](decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md), [0113](decisions/0113-il-banco-conta-le-operazioni.md), [0128](decisions/0128-una-versione-di-schema-e-un-tipo.md)
 
@@ -906,6 +912,31 @@ buchi numerati, non dell'inventario: la 0069 ne aveva dichiarato uno prima che
 la numerazione esistesse, e nessun consuntivo l'aveva raccolto. Un verbale non
 si riscrive, quindi il posto dove il conto torna è questo.
 
+### casa
+— · [todo.md](todo.md) · [0065](decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+
+Il modulo che possiede il diritto di imporre una regola. È il luogo esatto in cui quella regola va scritta una volta sola, per evitare duplicazioni o contraddizioni.
+
+### casella
+— · [todo.md](todo.md) · [0061](decisions/0061-un-giro-che-non-passa-dal-modello.md)
+
+Il lavoro già deciso che qualcuno deve fare, rimasto in attesa dopo aver preso una decisione. Si spunta senza più dover compiere scelte.
+
+### difetto
+— · [todo.md](todo.md) · —
+
+Un problema misurato nel codice che si ripara per via diretta, senza prendere nuove decisioni. Se la sua risoluzione richiede una scelta, diventa lavoro da decidere.
+
+### gemella
+— · [architecture/shell.md](architecture/shell.md) · [0020](decisions/0020-le-regole-in-un-posto-solo.md)
+
+Una funzione scritta due volte in due linguaggi diversi che devono comportarsi in modo identico. Le due implementazioni vengono verificate passandogli gli stessi input per assicurare che restino d'accordo.
+
+### gesto
+— · [FEATURES.md](FEATURES.md) · [0081](decisions/0081-un-accordo-ha-un-proprietario.md)
+
+Una singola interazione dell'utente, come la pressione di un tasto, un clic o un trascinamento, presa al suo livello più elementare.
+
 ### giro
 — · [todo.md](todo.md) · —
 
@@ -913,6 +944,21 @@ Una passata completa sulla stessa domanda — «cosa manca perché quella voce d
 FEATURES sia un provider?» — fatta sull'intero catalogo. Le voci della roadmap
 vengono da sette giri, più una da una misura, nove da una decisione di prodotto e
 una da una verifica.
+
+### grana
+— · [todo.md](todo.md) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
+
+Il livello di dettaglio con cui si misura o si filtra qualcosa. Sceglierlo significa decidere se un'osservazione guarda a un'intera categoria o a un dettaglio specifico.
+
+### innesco
+— · [todo.md](todo.md) · [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md)
+
+Il fatto osservabile che fa scattare l'esecuzione di un lavoro rimandato. Si scrive al posto di una data esatta per vincolare un'azione a un momento preciso che ancora non si conosce.
+
+### lente
+— · [roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) · —
+
+La domanda precisa e ristretta con cui si esplora il codice durante un'analisi. Viene dichiarata in anticipo per guidare la ricerca e far emergere problemi che sfuggirebbero a uno sguardo generico.
 
 ### leva
 — · [roadmap/leva.md](roadmap/leva.md) · —
@@ -935,6 +981,11 @@ Ciò che fa diventare **rossa** un'affermazione quando smette di essere vera: un
 test, un check in CI, un'invariante. La regola del repo è che una promessa senza
 presidio decade in silenzio — e il check dei link esiste perché era già successo.
 
+### residuo
+— · [todo.md](todo.md) · [0061](decisions/0061-un-giro-che-non-passa-dal-modello.md)
+
+La parte di una proposta che non richiede alcuna scelta. Viene separata e trattata come un problema diretto da riparare oppure come un compito puramente esecutivo da svolgere in seguito.
+
 ### seduta
 — · [roadmap/README.md](roadmap/README.md) · —
 
@@ -942,6 +993,11 @@ Un insieme di voci che conviene decidere **in una volta sola**, perché sono la
 stessa domanda vista da lati diversi: deciderle separate significa deciderle
 male. Una seduta per file in `roadmap/`, con in testa la ragione per cui quelle
 voci stanno insieme.
+
+### specie
+— · [todo.md](todo.md) · —
+
+Una delle categorie in cui viene classificato il lavoro da compiere. Le differenze servono a contare separatamente i problemi da risolvere subito, i lavori assegnati e le scelte ancora aperte.
 
 ### strato
 — · [todo.md](todo.md) · —
