@@ -1158,3 +1158,31 @@ che l'utente considera chiuso.
   terzi; le feature ufficiali restano native.
 - **Glob del `vault_scope`** — semantica (case, symlink, path traversal `..`) da
   fissare con test dedicati a M4.
+
+
+## Buchi dichiarati
+
+Un fatto sulla forma del contratto che chi legge dedurrebbe **al contrario**,
+scritto nel posto in cui ci si inciampa mentre ci si chiede se una cosa si può —
+non in fondo a un verbale e non come casella da spuntare. Non entra in nessun
+totale e non è lavoro rimandato: è ciò che si sarebbe scoperto dopo.
+
+Sono **otto** [conta: buchi-dichiarati]: `plugin_data_dir`, che consegna a un
+provider nativo una cartella vera (0064); «su task completato» che non ha un
+campo nel modello, quindi in `DocChange` non si può nominare (0069); la
+superficie di scrittura di un terzo, che non è vietata ma non è attrezzata
+(0104); il formato su disco che nasce senza costante nominata e senza riga in
+tabella (0106); ciò che di Windows da qui non si può provare (0109); che il
+ponte Tauri serializzi davvero questi record e che la webview li disegni (0112);
+il rapporto fra due tempi, che nessun conto di operazioni sa sostituire (0113);
+e la versione di schema scritta al volo dentro il record — `SchemaVersion::new(1)`
+senza una costante che la nomini: è del tipo giusto, quindi il compilatore è
+contento, e non la conta nessuno (0128).
+
+Il numero ha una storia sua, ed è la ragione per cui adesso porta un conto
+accanto: questa riga ha detto «due» mentre erano tre e poi «quattro» mentre
+erano sei, cioè è rimasta indietro **tre volte** — e la serie che i verbali si
+timbrano a vicenda (*n. 5* nella 0112, *n. 6* nella 0113) è l'ordinale dei soli
+buchi numerati, non dell'inventario: la 0069 ne aveva dichiarato uno prima che
+la numerazione esistesse, e nessun consuntivo l'aveva raccolto. Un verbale non
+si riscrive, quindi il posto dove il conto torna è questo.

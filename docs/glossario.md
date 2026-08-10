@@ -1,8 +1,7 @@
-
 # Glossario
 
 Il lessico di Fub è preciso e **non è standard**: lotto, porta, ponte, anagrafe,
-sidecar, superficie, seduta, strozzatura, derivato, autorevole. Ogni parola è stata scelta per dire una
+sidecar, superficie, revisione, ricongiungimento, derivato, autorevole. Ogni parola è stata scelta per dire una
 cosa sola, quasi sempre in un verbale, e da lì è finita nei nomi dei tipi, nei
 commenti e nei messaggi di commit. Chi arriva la incontra prima di incontrare la
 sua definizione, e finora la definizione stava sparsa nel documento che l'aveva
@@ -35,7 +34,7 @@ nome del tipo, quello, è esatto.
 
 **Non c'è un indice alfabetico.** Sarebbe un secondo elenco degli stessi termini,
 e una voce dimenticata lì dentro non romperebbe niente: si cerca con `Ctrl-F`,
-che è quello che si fa comunque in un glossario. Le famiglie sono sette, in
+che è quello che si fa comunque in un glossario. Le famiglie sono sei, in
 ordine di quanto presto le si incontra, e dentro ognuna i termini sono in ordine
 alfabetico.
 
@@ -47,7 +46,6 @@ alfabetico.
 | [Il canale dati](#il-canale-dati) | come si fa una domanda al kernel e chi risponde |
 | [Gli eventi e il lavoro lungo](#gli-eventi-e-il-lavoro-lungo) | come si racconta che qualcosa è cambiato, o sta ancora succedendo |
 | [L'interfaccia](#linterfaccia) | come il core descrive una vista e la shell la disegna |
-| [Il metodo](#il-metodo) | le parole con cui questo repo organizza il proprio lavoro |
 
 ---
 
@@ -875,155 +873,3 @@ Un pannello dichiarato dal core: cosa mostra, dove sta, cosa si può fare
 dentro. Backlink, outline, tag e statistiche sono view vere — non rami del
 kernel — ed è la prova che il canale dati basta.
 
----
-
-## Il metodo
-
-### banco
-`Banco` · [PIANO.md](PIANO.md) · [0054](decisions/0054-il-banco-del-lato-provider.md)
-
-Un test del codice. Il costruttore principale usato nel repository per variare gli assi in modo sistematico, separando chi prova il kernel da chi prova chi lo estende.
-
-### buco dichiarato
-— · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0064](decisions/0064-il-supporto-sta-sotto.md), [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md), [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md), [0106](decisions/0106-un-formato-si-presenta.md), [0109](decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md), [0112](decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md), [0113](decisions/0113-il-banco-conta-le-operazioni.md), [0128](decisions/0128-una-versione-di-schema-e-un-tipo.md)
-
-Un fatto sulla forma del contratto che chi legge dedurrebbe **al contrario**,
-scritto nel posto in cui ci si inciampa mentre ci si chiede se una cosa si può —
-non in fondo a un verbale e non come casella da spuntare. Non entra in nessun
-totale e non è lavoro rimandato: è ciò che si sarebbe scoperto dopo.
-
-Sono **otto** [conta: buchi-dichiarati]: `plugin_data_dir`, che consegna a un
-provider nativo una cartella vera (0064); «su task completato» che non ha un
-campo nel modello, quindi in `DocChange` non si può nominare (0069); la
-superficie di scrittura di un terzo, che non è vietata ma non è attrezzata
-(0104); il formato su disco che nasce senza costante nominata e senza riga in
-tabella (0106); ciò che di Windows da qui non si può provare (0109); che il
-ponte Tauri serializzi davvero questi record e che la webview li disegni (0112);
-il rapporto fra due tempi, che nessun conto di operazioni sa sostituire (0113);
-e la versione di schema scritta al volo dentro il record — `SchemaVersion::new(1)`
-senza una costante che la nomini: è del tipo giusto, quindi il compilatore è
-contento, e non la conta nessuno (0128).
-
-Il numero ha una storia sua, ed è la ragione per cui adesso porta un conto
-accanto: questa riga ha detto «due» mentre erano tre e poi «quattro» mentre
-erano sei, cioè è rimasta indietro **tre volte** — e la serie che i verbali si
-timbrano a vicenda (*n. 5* nella 0112, *n. 6* nella 0113) è l'ordinale dei soli
-buchi numerati, non dell'inventario: la 0069 ne aveva dichiarato uno prima che
-la numerazione esistesse, e nessun consuntivo l'aveva raccolto. Un verbale non
-si riscrive, quindi il posto dove il conto torna è questo.
-
-### casa
-— · [todo.md](todo.md) · [0065](decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
-
-Il modulo che possiede il diritto di imporre una regola. È il luogo esatto in cui quella regola va scritta una volta sola, per evitare duplicazioni o contraddizioni.
-
-### casella
-— · [todo.md](todo.md) · [0061](decisions/0061-un-giro-che-non-passa-dal-modello.md)
-
-Il lavoro già deciso che qualcuno deve fare, rimasto in attesa dopo aver preso una decisione. Si spunta senza più dover compiere scelte.
-
-### difetto
-— · [todo.md](todo.md) · —
-
-Un problema misurato nel codice che si ripara per via diretta, senza prendere nuove decisioni. Se la sua risoluzione richiede una scelta, diventa lavoro da decidere.
-
-### gemella
-— · [architecture/shell.md](architecture/shell.md) · [0020](decisions/0020-le-regole-in-un-posto-solo.md)
-
-Una funzione scritta due volte in due linguaggi diversi che devono comportarsi in modo identico. Le due implementazioni vengono verificate passandogli gli stessi input per assicurare che restino d'accordo.
-
-### gesto
-— · [FEATURES.md](FEATURES.md) · [0081](decisions/0081-un-accordo-ha-un-proprietario.md)
-
-Una singola interazione dell'utente, come la pressione di un tasto, un clic o un trascinamento, presa al suo livello più elementare.
-
-### giro
-— · [todo.md](todo.md) · —
-
-Una passata completa sulla stessa domanda — «cosa manca perché quella voce di
-FEATURES sia un provider?» — fatta sull'intero catalogo. Le voci della roadmap
-vengono da sette giri, più una da una misura, nove da una decisione di prodotto e
-una da una verifica.
-
-### grana
-— · [todo.md](todo.md) · [0033](decisions/0033-la-grana-di-un-abbonamento.md)
-
-Il livello di dettaglio con cui si misura o si filtra qualcosa. Sceglierlo significa decidere se un'osservazione guarda a un'intera categoria o a un dettaglio specifico.
-
-### innesco
-— · [todo.md](todo.md) · [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md)
-
-Il fatto osservabile che fa scattare l'esecuzione di un lavoro rimandato. Si scrive al posto di una data esatta per vincolare un'azione a un momento preciso che ancora non si conosce.
-
-### lente
-— · [roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) · —
-
-La domanda precisa e ristretta con cui si esplora il codice durante un'analisi. Viene dichiarata in anticipo per guidare la ricerca e far emergere problemi che sfuggirebbero a uno sguardo generico.
-
-### leva
-— · [roadmap/leva.md](roadmap/leva.md) · —
-
-Quanto una voce conta, che **non è** la sua scadenza: una voce può essere P2 e
-restare la più importante da capire. Il resto della roadmap dice quando prendere
-una voce, quel documento dice quali contano di più.
-
-### P0 / P1 / P2
-— · [todo.md](todo.md) · —
-
-La priorità di una voce, e il criterio non è l'importanza ma la **scadenza**:
-P0 prima del freeze di M4, P1 insieme a M3, P2 quando la scala lo chiede. Una
-voce di strato *kernel* o *shell* è P0 solo se ha una metà che è firma.
-
-### presidio
-— · [CONTRIBUTING.md](CONTRIBUTING.md) · [0014](decisions/0014-i-verbali-fuori-da-todo.md)
-
-Ciò che fa diventare **rossa** un'affermazione quando smette di essere vera: un
-test, un check in CI, un'invariante. La regola del repo è che una promessa senza
-presidio decade in silenzio — e il check dei link esiste perché era già successo.
-
-### residuo
-— · [todo.md](todo.md) · [0061](decisions/0061-un-giro-che-non-passa-dal-modello.md)
-
-La parte di una proposta che non richiede alcuna scelta. Viene separata e trattata come un problema diretto da riparare oppure come un compito puramente esecutivo da svolgere in seguito.
-
-### seduta
-— · [roadmap/README.md](roadmap/README.md) · —
-
-Un insieme di voci che conviene decidere **in una volta sola**, perché sono la
-stessa domanda vista da lati diversi: deciderle separate significa deciderle
-male. Una seduta per file in `roadmap/`, con in testa la ragione per cui quelle
-voci stanno insieme.
-
-### specie
-— · [todo.md](todo.md) · —
-
-Una delle categorie in cui viene classificato il lavoro da compiere. Le differenze servono a contare separatamente i problemi da risolvere subito, i lavori assegnati e le scelte ancora aperte.
-
-### strato
-— · [todo.md](todo.md) · —
-
-L'etichetta di una voce — *contratto*, *kernel*, *shell*, *presidi* — che serve a
-fissare la scadenza e non a raggruppare il lavoro. Le voci sono raggruppate per
-*seduta*, non per strato.
-
-### strozzatura
-— · [roadmap/strozzature.md](roadmap/strozzature.md) · —
-
-Dove il contratto impedisce a un'intera famiglia di FEATURES di essere fatta di
-provider. È l'indice inverso della roadmap: si entra dal capitolo di FEATURES
-invece che dalla seduta.
-
-### verbale
-— · [decisions/README.md](decisions/README.md) · [0014](decisions/0014-i-verbali-fuori-da-todo.md)
-
-Il documento di una decisione chiusa: il ragionamento, cosa si è scartato,
-cosa resta scoperto. Numerato, **immutabile**, e un numero ritirato non si
-riusa. È la parte del repo che fra sei mesi non si ricostruisce dal diff — il
-perché, non il cosa.
-
-### voce
-— · [todo.md](todo.md) · —
-
-L'unità di lavoro della roadmap, numerata `§N.M`. Una voce si chiude con un
-verbale; un verbale può chiuderne due, o mezza, quando quel pezzo è comunque una
-decisione intera.

@@ -20,9 +20,10 @@ cosa è un secondo posto che invecchia**, in silenzio, perché niente lo compila
 disegno in un colpo d'occhio.
 
 **Non capisco una parola.** [glossario.md](glossario.md) — lotto, porta, ponte,
-anagrafe, sidecar, superficie, seduta, strozzatura, banco, difetto: il lessico di questo repo è
+anagrafe, sidecar, superficie, revisione, ricongiungimento: il lessico di questo repo è
 preciso e non è standard. Una voce per termine, con il tipo Rust da cercare, il
-file in cui vive e il verbale che l'ha deciso.
+file in cui vive e il verbale che l'ha deciso. Per il vocabolario del metodo,
+invece, la tabella è in [leggimi-prima.md](leggimi-prima.md).
 
 **Devo scrivere codice.** [architecture/](architecture/) — il contratto, il
 modello dei dati, il protocollo di UI, il confine dei plugin, la forma della
