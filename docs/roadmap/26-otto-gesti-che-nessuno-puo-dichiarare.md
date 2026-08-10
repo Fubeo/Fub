@@ -42,6 +42,30 @@ implementazioni. E il corpus resta ciò che è: un elenco di intenzioni, senza u
 solo `[conta:]` e senza una sola riga di accessibilità, che nessun presidio
 legge e nessuna scadenza governa.
 
+**Una nona lente è stata passata e ha risposto «niente», e va scritto perché
+nessuno la ripassi.** La domanda era: fra i 424 gesti, quali chiedono una
+**superficie** — un posto dove qualcosa si ancora e si disegna — che il
+contratto non nomina? Sembrava la più promettente delle nove, perché il corpus è
+pieno di gesti che vogliono un posto: un tooltip col percorso del file
+(`../microfeatures/vault-ed-esploratore.md:24`), la tendina per cambiare vault
+(`:31`), il menu barra-obliqua ancorato al cursore
+(`../microfeatures/block-editor-parita.md:9`), la maniglia del blocco al
+passaggio del mouse (`:47`). Nessuno di questi apre una voce, e la ragione è una
+sola e vale per tutti: **`ViewSurface` non è il vocabolario della UI dell'app, è
+il vocabolario di ciò che un terzo può dichiarare.** Il tooltip, la tendina, la
+barra di ricerca nel documento (`ui`, `panels/doc-search.ts`) e il menu
+contestuale nativo (`ui/menu.ts`, chiamato da `panels/explorer.ts` in cinque
+punti) sono componenti cablati nella shell, con un host loro, e non passano dal
+protocollo: non c'è nessuna superficie che chiedono e non ottengono, perché non
+la chiedono. L'unico punto in cui un gesto del corpus tocca davvero il
+protocollo delle superfici è il menu contestuale — e lì la superficie **c'è**,
+`context-menu` è nell'enum, e ciò che manca è un'altra cosa: il bersaglio del
+clic. Ha già una voce, la [§26.5](#265-il-menu-contestuale-la-superficie-cè-il-bersaglio-del-clic-no).
+Le dieci superfici sono state rimisurate passando: dieci nell'enum
+(`../../crates/fub-abi/src/traits.rs` `ViewSurface::ALL`), **otto ospitate** e
+**due no** (`menu`, `context_menu`), che è il numero che questa seduta usa e non
+quello che `ui-protocol.md` scrive.
+
 **La lente dichiarata.** Ogni voce è stata guardata con la domanda che la
 [§23](23-cosa-costano-le-decisioni-chiuse.md) ha reso un metodo di
 questo repo, e che [todo.md:168-173](../todo.md) tiene scritta: *questa
