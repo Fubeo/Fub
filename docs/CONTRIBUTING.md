@@ -1,52 +1,38 @@
 # Contribuire a Fub
 
-Il progetto ha **un manutentore**, e questo documento dice cosa cambia per chi
-arriva da fuori: dove si guarda prima di scrivere, quali regole non sono
-opinioni, e come si fa a sapere di aver rotto qualcosa **prima** che lo dica la
-CI.
+Il progetto ha **un** manutentore. Questo documento dice cosa cambia per chi arriva da fuori. Spiega dove guardare prima di scrivere, quali regole sono inviolabili e come scoprire di aver rotto qualcosa **prima** che lo dica la CI.
 
-Il registro è quello del resto di [`docs/`](README.md): niente si scrive due
-volte. Se una frase qui dentro ripetesse un documento di architettura, la frase
-è di troppo — al suo posto va il link.
+Il registro è quello del resto di [`docs/`](README.md): non si ripete la prosa. Usa il link invece di copiare.
 
 ## Prima di scrivere una riga
 
 | Voglio… | Leggo |
 |---|---|
-| capire l'idea architetturale e le decisioni col perché | [PIANO.md](PIANO.md) |
+| capire l'idea architetturale e le decisioni | [PIANO.md](PIANO.md) |
 | capire una parola che non conosco | [glossario.md](glossario.md) |
 | vedere tutto in un colpo d'occhio | [architecture/mappa-visuale.md](architecture/mappa-visuale.md) |
 | toccare un trait del contratto | [architecture/traits.md](architecture/traits.md) e [architecture/wit.md](architecture/wit.md) |
 | aggiungere un pannello o una vista | [architecture/ui-protocol.md](architecture/ui-protocol.md) e [architecture/shell.md](architecture/shell.md) |
-| sapere perché una cosa è così e non altrimenti | [decisions/](decisions/README.md) |
-| sapere cosa manca, e con che priorità | [todo.md](todo.md) |
+| sapere perché una cosa è così | [decisions/](decisions/README.md) |
+| sapere cosa manca, e le priorità | [todo.md](todo.md) |
 
-La domanda «perché è fatto così» ha quasi sempre già una risposta scritta: sono
-i verbali. Aprire una discussione su una scelta già chiusa senza aver letto il
-suo verbale costa a entrambi il tempo di riscoprirla.
+Le decisioni storiche hanno un verbale. Leggilo prima di riaprire una discussione.
 
 ## Le cinque invarianti che non si negoziano
 
-Non sono raccomandazioni: ognuna ha qualcosa che diventa **rosso** se la si
-viola, ed è per questo che sono ancora vere.
+Non sono raccomandazioni. Un presidio (un test automatico) le difende e diventa **rosso** se violato.
 
 | Invariante | Perché | Chi la fa fallire |
 |---|---|---|
-| `fub-abi` e `fub-kernel` non conoscono `comrak`, `tauri`, `wasmtime`; `fub-host` non conosce `tauri` | il core è agnostico rispetto al formato e chi monta dev'essere avviabile da una CLI o da un e2e headless, senza webview | [`crates/fub-abi/tests/dependency_invariant.rs`](../crates/fub-abi/tests/dependency_invariant.rs) |
-| `fub-abi` e `crates/fub-abi/wit/fub/abi.wit` si rispecchiano | il contratto WIT è la stessa superficie detta nella lingua dei componenti: se le due divergono, a M5 diverge il confine | [`crates/fub-abi/tests/wit_conformance.rs`](../crates/fub-abi/tests/wit_conformance.rs) |
-| il contratto cresce **solo per aggiunta** rispetto a `wit/frozen/` | è la promessa su cui poggia il freeze di M4, e senza presidio decade in silenzio — vedi [architecture/wit-congelato.md](architecture/wit-congelato.md) | [`crates/fub-abi/tests/wit_additivity.rs`](../crates/fub-abi/tests/wit_additivity.rs) |
-| i link fra documenti non marciscono — e nemmeno quelli che puntano a un file di codice | un secondo posto in cui si racconta la stessa cosa invecchia perché niente lo compila; un documento che cita `traits.rs` deve diventare rosso quando `traits.rs` si sposta | [`.github/scripts/check-doc-links.mjs`](../.github/scripts/check-doc-links.mjs) |
-| il diagramma dei componenti dice le dipendenze che dicono i `Cargo.toml` | un disegno non lo compila nessuno: un arco inventato e — soprattutto — un crate nuovo mai disegnato passerebbero inosservati, e un diagramma incompleto mente più di uno sbagliato | [`il_diagramma_dice_le_dipendenze_vere`](../crates/fub-abi/tests/dependency_invariant.rs) |
+| `fub-abi` e `fub-kernel` non conoscono `comrak`, `tauri`, `wasmtime`; `fub-host` non conosce `tauri` | Il core è agnostico al formato. Chi assembla deve potersi avviare senza interfaccia webview. | [`crates/fub-abi/tests/dependency_invariant.rs`](../crates/fub-abi/tests/dependency_invariant.rs) |
+| `fub-abi` e `crates/fub-abi/wit/fub/abi.wit` si rispecchiano | Il contratto WIT è il confine per `M5`. Se divergono, il confine si spezza. | [`crates/fub-abi/tests/wit_conformance.rs`](../crates/fub-abi/tests/wit_conformance.rs) |
+| il contratto cresce **solo per aggiunta** rispetto a `wit/frozen/` | Garantisce il freeze di `M4`. Senza presidio, la promessa decade in silenzio (vedi [architecture/wit-congelato.md](architecture/wit-congelato.md)). | [`crates/fub-abi/tests/wit_additivity.rs`](../crates/fub-abi/tests/wit_additivity.rs) |
+| i link fra documenti e codice non marciscono | Un documento che cita `traits.rs` deve fallire se si sposta. | [`.github/scripts/check-doc-links.mjs`](../.github/scripts/check-doc-links.mjs) |
+| il diagramma dei componenti dice le dipendenze che dicono i `Cargo.toml` | Un disegno non compilato mente. Un crate nuovo deve apparire nel diagramma. | [`il_diagramma_dice_le_dipendenze_vere`](../crates/fub-abi/tests/dependency_invariant.rs) |
 
-Rompere deliberatamente la terza è previsto e ha una procedura: si ritaglia la
-linea di base con un commit che tocca `0.1.0.wit` e dice perché. Il test non lo
-impedisce, lo rende **visibile in review**.
+Puoi rompere intenzionalmente la **terza** regola toccando `0.1.0.wit` in un commit esplicito. Il test lo evidenzierà in review.
 
-La sesta regola — **tutta la prosa sta in `docs/`** — è nella tabella dei
-presidi solo a metà, e va detto: nessuno script sa distinguere un documento
-nuovo fuori posto da un `README.md` legittimo. È l'unica delle cinque che si
-regge sulla review, ed è per questo che [README.md](README.md) spiega per esteso
-dove va ogni genere di documento invece di limitarsi a elencare le cartelle.
+La **sesta** regola ("tutta la prosa sta in `docs/`") si basa sulla review manuale. Non c'è uno script che distingua file legittimi da fuoriposto. Un file `README.md` legittimo non fallisce in CI.
 
 ## Il ciclo locale
 
@@ -75,12 +61,12 @@ node .github/scripts/check-tabelle.mjs
 node .github/scripts/check-cargo-versioni.mjs
 node .github/scripts/check-cargo-feature-default.mjs
 
-# le feature ufficiali si spengono davvero (§16.3): l'unica cosa che il cargo test non copre
+# le feature ufficiali si spengono davvero (§16.3)
 cargo build -p fub-features --no-default-features
 cargo build -p fub-features --no-default-features --features outline
 cargo build -p fub-host --no-default-features --features outline,notify-watcher
 
-# il presidio del ciclo stesso
+# presidio del ciclo stesso
 node .github/scripts/check-ciclo-locale.mjs
 
 # supply chain (serve `cargo install cargo-deny`)
@@ -89,32 +75,15 @@ cargo deny check
 
 ### Le eccezioni al ciclo
 
-Comandi che la CI lancia e che il ciclo locale non elenca, con la ragione per
-cui non ci stanno: una voce è il comando, fra backtick, e la ragione dopo il
-`—`.
+I comandi della CI elencati di seguito, con la ragione indicata dopo il `—`, non stanno nel ciclo locale:
 
-- `cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc` — il
-  ramo Windows del kernel compilato da Linux: serve il target
-  `x86_64-pc-windows-msvc`, che quasi nessuno ha installato, e ciò che verifica
-  si rompe solo sotto quel compilatore — la stessa specie della corsa Windows
-  che la promessa qui sotto dichiara fuori dal ciclo.
+- `cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc` — Serve il target `x86_64-pc-windows-msvc`.
 
-La CI non fa niente di più di questo elenco e delle eccezioni qui sopra: se
-passa in locale, passa lì — salvo il fatto che i test girano anche su Windows
-e macOS, dove a rompersi sono quasi sempre i path e i lock file di
-`.fub/data/`. L'elenco delle eccezioni è chiuso: un comando della CI che non
-sta nel ciclo e non ha una voce lì sopra è un errore di questo documento, e
-`check-ciclo-locale.mjs` lo fa diventare rosso — e una voce che non
-corrisponde più a nessun comando della CI è un'eccezione scaduta, rossa allo
-stesso modo.
+La CI esegue questi comandi. Se passano in locale, passeranno in CI. I test girano su Linux, macOS e Windows. Qui falliscono di solito i path e lock file di `.fub/data/`. `check-ciclo-locale.mjs` fallisce se c'è un disallineamento fra CI e locale.
 
-I fuzzer del §17.1 girano **dentro** `cargo test --workspace`, con un seme e un
-conteggio fissi: la stessa corsa a ogni push, su tre sistemi operativi, senza un
-rosso che dipende da quando lo si è lanciato. Alzare il conteggio è **cercare** e
-non presidiare, e si fa a mano:
+I fuzzer del §17.1 girano **dentro** `cargo test --workspace` con seme fisso. Alzare il conteggio serve a cercare bug a mano, non a presidiare:
 
 ```bash
-# FUB_FUZZ_SEME sceglie il seme; ogni porta ha il suo conteggio.
 FUB_FUZZ_CASI=5000000 cargo test --release -p fub-format-markdown \
   --test il_corpus -- nessuna_mutazione
 FUB_FUZZ_TRASFERIMENTO=1000000 cargo test --release -p fub-format-markdown \
@@ -123,93 +92,51 @@ FUB_FUZZ_NOMI=100000 cargo test --release -p fub-format-markdown \
   --test transfer_e2e -- no_mutated_name
 ```
 
-Non stanno in nessun elenco di variabili d'ambiente, e non è una dimenticanza: non
-configurano Fub. Vivono solo dentro `#[test]`, e l'unico posto dove serve
-conoscerle è questo — cioè dove si lancia il comando. Delle variabili che
-l'applicazione legge parla la
-[decisione 0036](decisions/0036-le-impostazioni-e-i-tre-stati.md).
+Queste non configurano Fub e vivono solo dentro `#[test]`. Delle variabili lette dall'app parla la [decisione 0036](decisions/0036-le-impostazioni-e-i-tre-stati.md).
 
 ## Cosa presidia la CI
 
-Sei job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):
+**Sei** job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):
 
 | Job | Cosa presidia | Quando gira |
 |---|---|---|
-| `invarianti` | le prime tre invarianti della tabella sopra | push e PR |
-| `supply chain` | licenze, advisory e provenienza secondo [`deny.toml`](../deny.toml), più l'SBOM SPDX 2.3 come artefatto | push, PR **e** la corsa settimanale |
-| `fmt + clippy` | formattazione e lint, con i warning come errori | push e PR |
-| `build + test` | l'intero workspace su Linux, Windows e macOS, con la toolchain pinnata all'MSRV | push, PR **e** la corsa settimanale |
-| `docs` | i link interni fra i documenti e la promessa del ciclo locale | push e PR |
-| `frontend` | type-check, test di unità e build della shell | push, PR **e** la corsa settimanale |
+| `invarianti` | le prime **tre** invarianti | push e PR |
+| `supply chain` | licenze e advisory secondo [`deny.toml`](../deny.toml), SBOM SPDX 2.3 | push, PR **e** settimanale |
+| `fmt + clippy` | formattazione e lint (warning = errori) | push e PR |
+| `build + test` | il workspace su Linux, Windows e macOS | push, PR **e** settimanale |
+| `docs` | link interni e promessa del ciclo locale | push e PR |
+| `frontend` | type-check, test e build della shell | push, PR **e** settimanale |
 
-C'è una corsa **schedulata** il lunedì mattina, e la ragione è il job della
-supply chain: un advisory nuovo non aspetta il prossimo push, e il costo di
-scoprire tardi una dipendenza compromessa è asimmetrico rispetto a tutto il
-resto. I tre job veloci (`invarianti`, `fmt + clippy`, `docs`) si tirano fuori
-da quella corsa con una condizione esplicita, perché senza un commit di mezzo
-non possono aver cambiato esito; `build + test` e `frontend` la condizione non
-ce l'hanno, quindi girano anche lì — dove valgono come canarino sull'ambiente,
-visto che dipendenze di sistema e immagini dei runner cambiano sotto ai piedi.
+I job pesanti girano anche di lunedì per controllare le dipendenze e l'ambiente.
 
 ## I commit
 
-Il manutentore lavora **direttamente su `main`**, senza branch. Un contributo da
-fuori arriva come pull request da un fork; il resto delle regole vale per
-entrambi.
+Il manutentore lavora su `main`. I contributi esterni arrivano via pull request.
 
-Forma del messaggio: `tipo(scope,scope): frase`.
+Formato: `tipo(scope,scope): frase`.
 
-- **tipo** — `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `style`.
-- **scope** — il crate senza il prefisso `fub-` (`abi`, `kernel`, `host`,
-  `features`, `sdk`, `app`), più `wit`, `frontend`, `docs`, `ci`. Si elencano
-  tutti quelli toccati.
-- **frase** — in italiano, minuscola, senza punto finale, e dice **cosa cambia
-  per chi legge il codice dopo**, non quali file sono cambiati. Il diff l'elenco
-  dei file ce l'ha già.
+- **tipo**: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `style`.
+- **scope**: il crate senza `fub-` (`abi`, `kernel`, `host`, `features`, `sdk`, `app`), più `wit`, `frontend`, `docs`, `ci`.
+- **frase**: minuscola, in italiano, senza punto finale. Spiega **cosa cambia** e non quali file tocca.
 
-I messaggi non portano trailer: nessun `Signed-off-by`, nessun
-`Co-Authored-By`. Chi ha scritto il commit sta nel campo autore.
+Niente trailer `Signed-off-by` e `Co-Authored-By`. L'autore è chi firma il commit. Un commit lascia l'albero verde e funzionante. Se richiede **due** passaggi, è **un solo** commit.
 
-Un commit lascia l'albero verde. Se una modifica ha bisogno di due passaggi per
-compilare, è un commit solo.
-
-**Non c'è un `CODEOWNERS`, e non è una dimenticanza.** Quel file serve a
-instradare le review verso il proprietario di un'area quando i proprietari sono
-più di uno. Qui è uno: qualunque riga si scrivesse assegnerebbe ogni percorso
-allo stesso nome, cioè aggiungerebbe un file da tenere aggiornato per produrre
-una richiesta di review che sarebbe arrivata comunque. Il giorno in cui i
-manutentori saranno due, il file avrà un senso e si scriverà allora.
+Non c'è un `CODEOWNERS`. C'è **un solo** manutentore.
 
 ## Aggiungere un documento
 
-Dove va, lo dice [README.md](README.md) nella sezione delle convenzioni, e non
-si ripete qui. Le due cose da ricordare:
+[README.md](README.md) spiega dove metterlo.
 
-- **il nome del file** è minuscolo, con le parole separate da trattini, in
-  italiano — salvo le eccezioni elencate lì, che sono storiche o imposte da
-  GitHub;
-- **i numeri che cambiano** (voci aperte, verbali, stato di una milestone)
-  stanno solo in [todo.md](todo.md) e in [decisions/README.md](decisions/README.md).
-  Un documento che li ripete è un documento che prima o poi mente.
+- I nomi sono minuscoli e in italiano.
+- I numeri (verbali, voci aperte) vivono in `todo.md` e [decisions/README.md](decisions/README.md).
 
 ## Chiudere una decisione
 
-Un verbale si scrive quando una voce di `todo.md` si chiude, prende il **numero
-successivo** — mai uno già usato, nemmeno se il verbale che lo portava è stato
-superato — e ci si sposta dentro **intero**. I verbali sono immutabili: non si
-riscrivono e non si rinumerano; una decisione che ne supera un'altra è un
-verbale nuovo che la cita.
-
-Un verbale può chiudere anche mezza voce, quando quel pezzo è una decisione
-intera; il criterio, con gli esempi, sta in [decisions/README.md](decisions/README.md).
+Un verbale nuovo prende il numero successivo libero. I verbali non si riscrivono e non si rinumerano. I dettagli sono in [decisions/README.md](decisions/README.md).
 
 ## Il resto
 
-- Come segnalare una vulnerabilità: [SECURITY.md](SECURITY.md). **Non** si apre
-  una issue pubblica.
-- Cosa ci si aspetta nelle interazioni: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-- Cosa promettono i numeri di versione: [versionamento.md](versionamento.md).
-- Con che licenza entra un contributo: `MIT OR Apache-2.0`, come il resto del
-  repo ([LICENSE-MIT](../LICENSE-MIT), [LICENSE-APACHE](../LICENSE-APACHE)).
-  Aprendo una pull request si accetta che il contributo sia rilasciato con
-  quella doppia licenza.
+- Vulnerabilità: [SECURITY.md](SECURITY.md).
+- Condotta: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- Versioni: [versionamento.md](versionamento.md).
+- Licenza: `MIT OR Apache-2.0` ([LICENSE-MIT](../LICENSE-MIT), [LICENSE-APACHE](../LICENSE-APACHE)).
