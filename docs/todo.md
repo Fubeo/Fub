@@ -619,7 +619,7 @@ stato, nessuna spunta e nessuna percentuale, e l'unico modo di chiuderne una è
 
 ## I difetti misurati
 
-**Dodici** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Ottantacinque** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -680,15 +680,114 @@ CodeMirror, ma *chi dei due debba tenerlo* è precisamente la
 e vale la stessa regola con cui la §25.3 aveva tenuto fuori il suo residuo: **un
 difetto la cui riparazione dipende da una decisione non è un difetto**.
 
+**Il quinto blocco, `0151`–`0222`**, è del 2026-08-10 e non viene da una
+rilettura dei documenti ma da una **battuta di caccia sui sorgenti**: sedici
+letture in parallelo, una per fetta — il supporto, il ciclo di vita del vault, il
+registro, bozze e docdata, le impostazioni, l'organizzazione, le scritture e le
+mutazioni del workspace, gli indici persistiti, i log del kernel, il recinto
+dell'host, il watcher, il runner di sessione, la shell, il serializzatore
+Markdown, il contratto — con una domanda sola: *dove si possono perdere byte
+dell'utente, o dove il disco può divergere dalla memoria senza che nessuno lo
+dica?* Sono uscite centodiciannove osservazioni, e qui ce n'è meno di due terzi.
+Il resto è caduto, e per ragioni che vale la pena separare.
+
+**Otto erano già riparate** nell'albero di lavoro dello stesso giorno — la
+rinomina di solo caso del docdata, il `workspace.json` mancante che ripartiva
+dal `default`, il parse dopo la rename in `rename_document_in_batch`, il recinto
+di `.fub/`/`.trash/` sui `DocId` (che era la stessa osservazione ripetuta da tre
+fette), la conferma del cestino che chiudeva il documento sbagliato, gli escape
+persi in serializzazione, il titolo di un callout. **Una era falsa**: l'àncora
+duplicata quando un blocco finisce con un inline non testuale non si riproduce.
+**Diciotto erano doppioni** fra fette confinanti, e qui sono una riga sola —
+chi conta le righe non conta le osservazioni.
+
+**E venti non sono state scritte**, per la regola con cui la §25.3 e la §26.1
+avevano già tenuto fuori i loro residui: *un difetto la cui riparazione dipende
+da una decisione non è un difetto*. Sono tre grappoli, e si nominano qui perché
+non vadano persi. Il primo: `Journal::append` passa da `O_APPEND` senza lock
+mentre `pota` e `clear` passano da `update`, quindi una riga appesa da un altro
+processo cade nella riscrittura — e la [0067](decisions/0067-il-registro-di-cio-che-e-successo.md)
+**rifiuta a verbale** un lock per riga, quindi chi la ripara emenda un verbale.
+Il secondo, il più largo: `std::fs::rename` **sostituisce la destinazione in
+silenzio**, e sotto ci stanno tutte le guardie del repo che controllano e poi
+muovono — il cestino che sceglie un candidato libero, la rinomina di documento e
+di entry, il restore, `Drafts::migrate`, `create_document`, `free_name`, il
+commento di `create_note` che dice «a quel punto è la scrittura a dirlo» e non è
+vero. La riparazione è **un'ottava operazione di `VaultStorage`** (una mossa che
+non rimpiazza, `renameat2(RENAME_NOREPLACE)` dove c'è e un `create_new` di sonda
+dove non c'è), cioè un allargamento del supporto unico: è una voce, non una
+riga. Il terzo: il ramo `SulPosto` di `write_con` tronca senza temp+rename per
+symlink, hardlink e `NomiDelFile::Ignoto`, e con esso `pota`/`clear` su un
+registro collegato — è un **tradeoff già documentato** in `storage.rs`, e
+disfarlo significa scegliere fra atomicità e conservazione dell'inode. La stessa
+cosa vale per il compare-and-swap di `DescendsFrom`, che fra il confronto della
+revisione e la scrittura non ha niente di atomico fra processi.
+
+**Il sesto blocco, `0223`–`0224`**, è dello stesso 2026-08-10 ma di una misura
+diversa: non «dove si perdono byte», ma **quante volte la stessa cosa è
+scritta**. Sono uscite una sessantina di copie, e quasi tutte non sono difetti —
+sono ripetizioni che il compilatore prende, o impalcatura di banchi che costa
+noia e non rischio. Due sole hanno la proprietà che rende un difetto un difetto:
+**se le copie divergono, nessuno se ne accorge**, e quello che si rompe non è la
+comodità di chi legge ma un dato o una promessa. Il resto della misura non è
+andato perso: è diventato la regola qui sotto,
+[dove va una regola scritta due volte](#dove-va-una-regola-scritta-due-volte),
+che serve a impedire che quelle sessanta copie diventino sessanta voci.
+
+La `0223` **è stata riparata lo stesso giorno** e per questo non è più nella
+tabella: le due costanti di FNV-1a stanno adesso in un posto solo — il tipo
+`Fnv1a` di `fub-abi`, che si mangia a pezzi perché chi impronta un documento non
+ha un blocco unico di byte ma una sequenza di campi da separare — e
+`Revision::of_bytes`, l'indice di ricerca e lo store delle versioni passano
+tutti e tre di lì. L'estrazione da sola però non chiude niente, perché il
+difetto non era che le tre copie fossero diverse: erano identiche, ed era il
+*gesto che ricomincia* a costare — un quarto posto che vuole un `u64` stabile e
+si riscrive le sue due `const`, che in quel momento sono due righe. Quello lo
+prende un conto, `una_sola_impronta.rs`, sul modello di
+`una_sola_tabella_di_escape.rs`: cammina ogni `.rs` sotto un `src/`, normalizza
+via gli `_` e non ammette le due costanti fuori da `edit.rs`. Accanto stanno i
+due vettori canonici di FNV-1a scritti a mano (`l_impronta_non_si_muove`), che
+sono l'unica cosa che tiene fermo il *valore*: da quando i due archivi passano
+dalla stessa funzione, cambiarla non fa più fallire niente per conto suo — ogni
+archivio resta coerente con sé stesso — ma rende illeggibile ciò che è già su
+disco.
+
+**Il settimo blocco, `0225`–`0226`**, è dello stesso 2026-08-10 e viene
+da una domanda fatta a voce: se uno studente al secondo anno di informatica —
+non svogliato, appassionato — aprisse `docs/`, capirebbe cosa legge? La misura
+dice che il problema non è dove stanno i file: sono 217 tracciati in sette
+cartelle, `docs/README.md` è già una mappa con sette porte, e i link sono
+presidiati. È che **il glossario definisce le parole del prodotto e non quelle
+del metodo**, e sono queste ultime a stare nella prima pagina che uno apre. Non
+apre una voce perché non c'è niente da decidere: il glossario esiste, la sua
+forma è quella di novantuno voci già scritte, e i termini sono già in uso. La
+`0226` è la stessa misura vista dall'altro capo: non le parole che mancano al
+lettore, ma la pagina che manca al repo. Come si riparano tutte e due sta scritto
+per esteso in [come si semplifica la documentazione](#come-si-semplifica-la-documentazione),
+e sta lì e non qui perché sono istruzioni da eseguire, non misure da leggere.
+
+I difetti `0225` e `0226` **sono stati riparati lo stesso giorno** (2026-08-10) e per questo non sono più nella tabella: le undici voci sono state aggiunte al glossario e il file `leggimi-prima.md` è stato creato e inserito negli indici.
+
+Quello che invece **non** è entrato è la domanda grossa — se il dialetto vada
+tenuto e basta glossarlo, o se `banco` debba diventare `test` in duemila e
+settecento posti. Quella è una decisione: cambia chi è il lettore che il repo si
+sceglie, tocca i nomi di due file di roadmap e di alcuni banchi, e i verbali non
+si riscrivono. Finché non è presa, questa riparazione è la parte che vale
+comunque in tutti e due i casi — anche chi decidesse di tradurre tutto avrebbe
+prima bisogno dell'elenco dei termini e del loro significato, che è esattamente
+ciò che manca.
+
 **Il numero è quello di `issues.md` e non scala**, per la stessa regola dei `§`:
 è citato dai verbali e dai messaggi di commit, e rinumerarlo trasformerebbe ogni
 citazione in un rimando cieco. I buchi nella sequenza sono le ventidue righe che
-non sono sopravvissute alla rilettura. Il conto perciò **conta le righe**, e da
+non sono sopravvissute alla rilettura, più quelle riparate dopo essere state
+scritte — la `0223` è la prima. Il conto perciò **conta le righe**, e da
 `0100` ha voluto un pattern più largo: quello vecchio si fermava a `0099` e
 avrebbe dichiarato meno difetti di quanti ce ne sono.
 
-**L'ancora è al simbolo, non alla riga.** Ogni riga porta il posto misurato al
-2026-08-06: i numeri di riga si saranno mossi, il simbolo no. Chi ne prende una
+**L'ancora è al simbolo, non alla riga.** Ogni riga porta il posto misurato il
+giorno del suo blocco — 2026-08-06 fino alla `0145`, 2026-08-10 da lì in avanti:
+i numeri di riga si saranno mossi, il simbolo no. Chi ne prende una
 **riconta**, non deduce.
 
 | # | Difetto | Dove | Famiglia |
@@ -705,6 +804,347 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0148 | la forma canonica di un accordo è scritta tre volte e le due copie Rust non sono quella che dicono di essere: entrambe si annunciano «come lo normalizza la shell», ma spezzano solo su `-` e ricuciono con `-`, mentre in TypeScript una scorciatoia è una **sequenza** di accordi separati da spazio e la funzione risponde `null` per ciò che questa shell non sa premere — un primo tasto senza modificatori, un modificatore che non esiste. Oggi nessun comando dichiara una sequenza, quindi la divergenza non si vede: il giorno che la dichiara, l'oscuramento per prefisso lo vede solo la shell — `prefissiOscurati` non ha copia di là — e un accordo impremibile passa verde di qua perché la copia Rust normalizza qualunque stringa invece di rifiutarla | `fub-features` · `tests/command_keys.rs` `normalizza` (con la copia gemella in `fub-host` · `tests/shell_keys_mirror.rs`, e il presidio che le usa è `no_two_official_commands_want_the_same_chord`) | regole |
 | 0149 | due superfici catturano il fuoco con la stessa `intrappolaFuoco` — la palette (`ui/palette.ts:312`) e la superficie modale delle view (`ui/views.ts:301`) — ma stanno su due piani lontani e nessuno dei due è dichiarato rispetto all'altro: la palette si chiama `.modale` nel suo stesso commento e dipinge a `--z-popover` (70), sotto `#settings-panel` a `--z-dialog` (80) e sotto `#views-modal` a `--z-modal` (90), che si chiama modale anche lui. Chi prende il fuoco non è chi sta sopra, e la regola che dice quale delle due vince non esiste da nessuna parte; nello stesso elenco `--z-overlay` (50) porta un commento che ne spiega il ruolo ed è citato da **zero** regole | `frontend` · `style.css` `.modale` (con `theme/tokens.css` `--z-overlay`) | regole |
 | 0150 | la pagina che descrive le superfici dice due numeri scaduti dalla [0079](decisions/0079-il-grafo-esce-dall-overlay.md): «questa shell ne ospita **sette**» e «le tre che restano — area principale, menu, menu contestuale», mentre da quel verbale l'area principale **è** ospitata e le non ospitate «passano da tre a **due**». Chi legge il protocollo per sapere dove può ancorare una view legge il repo di prima della 0079, e nessun conto lo guarda: il numero sta in prosa e non ha un `[conta:]` possibile, perché contare le superfici ospitate non ha criterio meccanico | `docs` · `architecture/ui-protocol.md` «Le superfici: dove una view si ancora» | regole |
+| 0151 | il file di lock non viene mai rimosso: `lock_esclusivo` crea `.{nome}.lock` accanto al bersaglio e non lo toglie all'uscita, così un vault accumula un `.lock` per ogni file che ha protetto — impostazioni, organizzazione, anagrafe, `vaults.json` fuori dal vault — e chi guarda la cartella con `show-hidden` vede dei file che nessuno spiega e che nessuna riparazione spazza | `fub-kernel` · `storage.rs` `lock_esclusivo` | lock e I/O |
+| 0152 | `lock_esclusivo` blocca senza scadenza: un processo morto male, un lock di rete che non si rilascia o un'altra installazione ferma dentro l'`update` fanno aspettare per sempre chi salva un'impostazione, e non c'è nessun timeout, nessun errore e nessun modo per l'utente di sapere che cosa sta aspettando | `fub-kernel` · `storage.rs` `lock_esclusivo` | lock e I/O |
+| 0153 | la 0065 promette «questi byte o niente» e la mantiene con temp+fsync+rename+fsync della directory, ma `rename`, `remove`, `remove_dir_all` — le operazioni che muovono o tolgono l'**unica copia** della nota, cioè cestinazione, ripristino, spostamento, rimozione della bozza e del docdata — non sincronizzano niente: su un filesystem senza journaling la mossa può sparire dopo un Ok, lasciando una voce di cestino che punta al nulla o una nota che risorge dov'era, con il registro che dice il contrario | `fub-kernel` · `storage.rs` `FsStorage::rename` (con `remove` e `remove_dir_all`) | lock e I/O |
+| 0154 | il doppio in memoria non si comporta come il supporto che imita in tre punti, e un doppio che diverge fa passare verdi dei banchi che sul disco sarebbero rossi: scrivere su un path che è già una directory riesce invece di fallire, il mtime di una directory è sempre zero, e `fondi` può avvelenare il `Mutex` lasciando ogni accesso successivo in panico | `fub-kernel` · `storage.rs` `MemStorage` | regole |
+| 0155 | i temporanei di scrittura `.{nome}.tmp{pid}-{n}` si puliscono solo sui rami di errore: un crash fra `File::create` e la rename li lascia sul posto per sempre, la policy di ignore li rende invisibili e nessuna routine di apertura li spazza, così ogni crash lascia un sedimento che cresce e che il riuso di un pid può far confondere con un temporaneo vivo | `fub-kernel` · `storage.rs` `tmp_path` | lock e I/O |
+| 0156 | `symlink_metadata(path).ok()` tratta ogni errore come «non è un symlink»: permessi, I/O, path troppo lungo finiscono tutti nello stesso ramo, e siccome da quella risposta dipende la **scelta di come scrivere**, un errore ingoiato può mandare una scrittura sul ramo sbagliato senza che nessuno lo veda | `fub-kernel` · `storage.rs` `come_scrivere` | lock e I/O |
+| 0157 | `empty_trash` toglie le voci una per una e poi cammina `.trash/` con `remove_dir_all`: ciò che un altro processo cestina dentro la finestra o viene cancellato in silenzio o fa fallire la camminata a metà, senza rollback, senza conteggio parziale e senza una riga di registro per ciò che è stato distrutto — è la stessa forma del bug noto `il_vault_che_sparisce`; la mossa giusta è rinominare `.trash/` con un nome temporaneo e camminare **quello**. In coda, l'errore sui sidecar è ingoiato da un `let _`, quindi i metadati orfani non li segnala nessuno | `fub-kernel` · `vault.rs` `Vault::empty_trash` | lock e I/O |
+| 0158 | il recinto di `leave_trash` è lessicale e non risolve `..`: controlla che il path di destinazione cominci per la radice del vault confrontando i segmenti così come sono scritti, quindi un `to` che risale e ridiscende passa la guardia e il ripristino atterra fuori dal vault | `fub-kernel` · `vault.rs` `leave_trash` | regole |
+| 0159 | il `drop` del watcher non aspetta il debouncer: la chiusura del vault lascia il thread di debounce a consegnare eventi su un workspace che sta sparendo, e il rilascio della radice non ha nessuna barriera che garantisca che nessuno stia più scrivendo dentro `.fub/` | `fub-kernel` · `vault.rs` `Vault::drop` | lock e I/O |
+| 0160 | aprire un vault non verifica niente: `Vault::open` e `Vault::on` accettano una radice che non esiste, che è un file invece di una directory o su cui non si ha permesso di scrittura, e l'errore arriva solo alla prima operazione che tocca il disco — cioè a giro avanzato, con eventi già emessi e un'interfaccia che ha già mostrato un vault aperto | `fub-kernel` · `vault.rs` `Vault::open` | regole |
+| 0161 | il commento di `pota` dichiara chiusa una finestra che è ancora aperta: dice che l'`update` protegge dalla riga che cade fra la lettura e la riscrittura, ma l'`update` protegge solo chi passa dal lock e `append` non ci passa, quindi la prosa promette più di quanto il lock faccia. Il lock su `append` è una decisione (la 0067 lo rifiuta a verbale) ma la promessa falsa è un difetto: o la si corregge, o chi legge crede di avere una garanzia che non ha | `fub-kernel` · `journal.rs` `Journal::pota` | regole |
+| 0162 | `ripara_la_coda` legge il registro fuori dal lock e poi ci appende: fra la lettura che decide che la coda è mezza scritta e la scrittura che la ripara ci sta comodamente un'altra riga, e la riparazione la mangia | `fub-kernel` · `journal.rs` `ripara_la_coda` | lock e I/O |
+| 0163 | una riga appesa a metà non fa perdere sé stessa ma **quella dopo**: la coda troncata si ricuce col primo pezzo del record successivo, che diventa illeggibile e viene scartato dalla lettura, quindi il costo di un'interruzione è una riga in più di quella interrotta | `fub-kernel` · `journal.rs` `Journal::append` | lock e I/O |
+| 0164 | `Journal::read` ingoia gli errori di lettura e risponde «registro vuoto»: un file illeggibile per permessi o per I/O diventa indistinguibile da un vault senza storia, e da lì l'undo non ha niente da disfare senza che nessuno dica perché | `fub-kernel` · `journal.rs` `Journal::read` | lock e I/O |
+| 0165 | la guardia che rifiuta una destinazione occupata fa fallire **ogni** rinomina di solo caso su un filesystem case-insensitive: `nota.md` → `Nota.md` trova sé stessa, `Drafts::migrate` risponde `AlreadyExists` e la bozza resta orfana sotto la chiave vecchia mentre il documento si è mosso — la guardia serve, ma deve confrontare l'identità del file e non il suo nome | `fub-kernel` · `drafts.rs` `Drafts::migrate` | regole |
+| 0166 | `Drafts::read` tratta un `list` fallito come «non ci sono bozze»: una directory illeggibile fa sparire in silenzio il lavoro non salvato dell'utente dalla vista, e il salvataggio successivo lo sovrascrive convinto che non ci fosse niente | `fub-kernel` · `drafts.rs` `Drafts::read` | lock e I/O |
+| 0167 | `docdata::migrate` rimuove la destinazione senza guardarne la forma e con l'errore ingoiato: se sotto la chiave nuova c'è già uno spazio-documento di un altro documento, quello viene tolto — annotazioni, pin, miniature — e se la rimozione fallisce nessuno lo segnala, così la migrazione prosegue su un posto che non è vuoto | `fub-kernel` · `docdata.rs` `migrate` | lock e I/O |
+| 0168 | fra la rinomina del documento e la migrazione del suo docdata c'è una finestra di crash non coperta da niente: il file è al nome nuovo e i suoi dati per-documento sono ancora sotto la chiave vecchia, dove la prima `collect` successiva li spazza perché non corrispondono a nessun documento vivo | `fub-kernel` · `workspace.rs` `rename_document_in_batch` (con `docdata.rs` `migrate`) | lock e I/O |
+| 0169 | i rami di fallimento di `Drafts::migrate` lasciano lo stato a metà: a seconda di dove si ferma restano due bozze per un documento solo, oppure una bozza il cui campo `doc` nomina un documento che non esiste più, e nessuna delle due configurazioni viene riconciliata da qualcosa | `fub-kernel` · `drafts.rs` `Drafts::migrate` | regole |
+| 0170 | il cancello che decide se si può scrivere nel vault viene da una bandiera letta **una volta** all'apertura: se il vault diventa illeggibile o di sola lettura dopo, le scritture continuano a partire e falliscono una per una invece di essere fermate, e se lo era e non lo è più restano rifiutate finché non si riapre | `fub-kernel` · `settings.rs` `vault_readable` | regole |
+| 0171 | la prima scrittura in un vault avviene senza lock: quando `.fub/` non esiste ancora, `lock_esclusivo` non ha dove creare il proprio file e il ramo di creazione procede senza protezione, cioè proprio nel momento in cui due installazioni che aprono lo stesso vault nuovo si pestano | `fub-kernel` · `settings.rs` `store_vault` | lock e I/O |
+| 0172 | `MachineSettings::write` tiene il `values.write()` per tutta la durata dell'I/O: ogni lettore di un'impostazione aspetta il disco invece della sola sostituzione in memoria, e su un supporto lento questo blocca la shell su un'operazione che con la 0066 dovrebbe costare solo la fusione | `fub-kernel` · `settings.rs` `MachineSettings::write` | lock e I/O |
+| 0173 | `store_vault` fa `expect` sul downcast del supporto: chi passa un `VaultStorage` che non è `FsStorage` — un doppio, un supporto di terzi il giorno che esisterà — non riceve un errore ma un panico, e la 0032 dice che un panico uccide il processo | `fub-kernel` · `settings.rs` `store_vault` | regole |
+| 0174 | le chiavi JSON duplicate si perdono in silenzio: la fusione sotto lock rilegge il file e riscrive la mappa, quindi un file scritto a mano (o da un'altra versione) con due volte la stessa chiave ne conserva una sola e l'utente non sa quale delle due ha perso | `fub-kernel` · `settings.rs` `Durevole::aggiorna` | regole |
+| 0175 | `migra` produce doppioni in `order` e in `pinned`: la migrazione riscrive le liste senza deduplicare, quindi un id che era già presente compare due volte e da lì l'ordine dell'esploratore mostra la stessa voce in due posti | `fub-kernel` · `organization.rs` `migra` | regole |
+| 0176 | l'esclusione guarda il nome e non la specie: una cartella dichiarata esclusa esclude anche i **file** che si chiamano allo stesso modo, e una dichiarazione scritta con lo slash finale — `build/`, la forma che chiunque venga da `.gitignore` scrive per prima — non combacia mai con niente, quindi non esclude un bel niente e nessuno lo dice | `fub-kernel` · `ignore.rs` `is_ignored` | regole |
+| 0177 | le chiavi di `Organization` non passano dallo stesso recinto dei `DocId` nuovi: una chiave con `..` o con una barra rovescia arriva dal file su disco e viene usata per comporre un path, quindi un `workspace.json` scritto a mano può nominare posizioni fuori dal vault | `fub-kernel` · `organization.rs` (chiavi di `order` / `pinned`) | regole |
+| 0178 | il confronto della revisione ingoia con `.ok()` ogni errore di lettura e lo racconta come «la base non combacia»: chi non riesce più a leggere la propria nota per permessi o per un disco che sta fallendo riceve «il documento è cambiato sotto di te», e un conflitto vero non si distingue da un supporto rotto | `fub-kernel` · `workspace.rs` `write_document` (ramo `DescendsFrom`) | regole |
+| 0179 | `touch_entry` ristata il file appena scritto per prenderne mtime e dimensione, e se in quella finestra qualcuno lo elimina risponde togliendo la voce: la scrittura ha risposto Ok, l'evento `DocumentChanged` è uscito, e l'anagrafe dice che il documento non c'è — i byte scritti bastavano a rispondere senza tornare sul disco | `fub-kernel` · `workspace.rs` `touch_entry` | lock e I/O |
+| 0180 | se il documento esisteva o no lo decide l'anagrafe in memoria e non il disco: un file creato da un'altra applicazione e non ancora indicizzato fa registrare `Created` dove il fatto è `Written`, e il registro — che la 0067 dichiara autorevole — racconta un evento che non è successo | `fub-kernel` · `workspace.rs` `write_document` | regole |
+| 0181 | `sync_renamed_path_here` sposta prima di rileggere, cioè la forma che il codice stesso documenta come difetto in `restore_from_trash` e lì evita: se la rilettura o il parse della destinazione fallisce, la funzione risponde `Err` con il disco già spostato e memoria, grafo, indici, registro ed eventi fermi al nome vecchio | `fub-kernel` · `workspace.rs` `sync_renamed_path_here` | lock e I/O |
+| 0182 | la rinomina di solo caso salta il controllo su disco **anche** dove il filesystem distingue le maiuscole: il commento motiva lo skip con macOS e Windows, dove `exists(to)` vedrebbe lo stesso file, ma su Linux un omonimo-per-caso davvero diverso e non ancora indicizzato viene rimpiazzato senza un errore | `fub-kernel` · `workspace.rs` `rename_document_in_batch` (`solo_il_caso`) | regole |
+| 0183 | l'esportazione scrive direttamente sul destinatario: `File::create` tronca il file precedente all'apertura, i byte vanno sul path finale senza temp né rename, e la ricevuta `Delivered` esce dopo un semplice `flush()` che non garantisce niente sul disco — un export interrotto ha già distrutto quello di prima e ne certifica come consegnato uno a metà | `fub-kernel` · `transfer.rs` `DirectorySink::open_artifact` (con `close_artifact`) | lock e I/O |
+| 0184 | la rinomina **esterna** di un allegato ne perde i dati per-documento mentre quella interna li migra: il riconoscimento dell'identità filtra sui soli documenti, quindi un'immagine rinominata dal Finder degrada a «sparita e ricomparsa» e annotazioni, pin e miniatura vengono spazzate dalla prima `collect` successiva | `fub-kernel` · `workspace.rs` `sync_renamed_path_here` | regole |
+| 0185 | la bandiera `replaying` si alza e si abbassa a mano attorno al batch invece che con un guardiano che la rimette a posto uscendo: un panico dentro il replay la lascia alzata, e da lì ogni `undo.push` viene scartato in silenzio | `fub-kernel` · `workspace.rs` `undo_last` | regole |
+| 0186 | il ripristino dal cestino può atterrare dentro `.fub/` o `.trash/`: la destinazione passa da `Naming::Existing`, che non blocca i segmenti nascosti come fa `Naming::New` per creazione, rinomina e importazione, quindi il restore è la porta rimasta aperta e ci si crea pure la voce fantasma in anagrafe | `fub-kernel` · `workspace.rs` `restore_from_trash` | regole |
+| 0187 | la finestra «pulito per caso» si calcola sul momento del **salvataggio** e non su quello della scansione: l'indice confronta con `written_at`, quindi un file cambiato fra la scansione e la scrittura dell'indice risulta già coperto e resta indicizzato con il contenuto vecchio fino a un evento che lo tocchi di nuovo | `fub-kernel` · `index` (uso di `written_at`) | regole |
+| 0188 | l'indice di ricerca scrive i propri segmenti direttamente sul filesystem invece che attraverso `VaultStorage`, che il repo dichiara **il supporto unico** dei byte: quei file non passano da temp+rename, non passano da lock, non li vede un doppio in memoria, e ogni banco che monta un supporto finto ha un pezzo di vault che gli sfugge | `fub-kernel` · `index` (segmenti tantivy) | regole |
+| 0189 | `EntryStore::store` riscrive l'anagrafe senza prendere il lock che le altre riscritture integrali prendono: due processi che chiudono insieme si sovrascrivono l'anagrafe a vicenda, e vince l'ultimo che finisce | `fub-kernel` · `entries.rs` `EntryStore::store` | lock e I/O |
+| 0190 | l'ordine fra anagrafe e indici è asimmetrico fra i due punti che li scrivono — `finish_index` li salva in un ordine e `close_with` nell'altro — quindi un'interruzione a metà lascia due stati incoerenti diversi a seconda di quale dei due percorsi stava correndo, e nessuno dei due è quello che la riapertura si aspetta | `fub-kernel` · `workspace.rs` `finish_index` / `close_with` | lock e I/O |
+| 0191 | il log del kernel non regge né due processi né il mondo esterno: la rotazione non è protetta fra installazioni e può far perdere il file vecchio, le scritture non sincronizzano mai, e se qualcuno elimina o ruota il file da fuori il `FileSink` non se ne accorge e continua a scrivere in un descrittore morto **per sempre**, cioè proprio quando il log servirebbe per capire cos'è successo | `fub-kernel` · `log.rs` `FileSink` | lock e I/O |
+| 0192 | `Condizione::cambia` salta il `notify_all` se il closure che modifica lo stato va in panico: chi aspetta la condizione resta appeso senza che nessuno lo svegli, e il panico che l'ha causato è già stato inghiottito dal `Mutex` avvelenato | `fub-kernel` · `sync.rs` `Condizione::cambia` | lock e I/O |
+| 0193 | due percorsi che cancellano alberi lo fanno con `remove_dir_all` e con l'errore ingoiato — la riparazione del vault e la raccolta degli spazi-documento — quindi una cancellazione parziale non si distingue da una riuscita e ciò che resta non lo segnala nessuno | `fub-kernel` · `vault.rs` `repair` (con `docdata.rs` `collect`) | lock e I/O |
+| 0194 | `controlla_path` è solo lessicale: confronta i segmenti come sono scritti e non risolve i link, quindi un symlink piazzato dentro il vault porta una scrittura fuori dal vault passando una guardia che crede di aver controllato | `fub-kernel` · `path` `controlla_path` | regole |
+| 0195 | il secondo cancello di `Guard::undo_last` è più largo del primo: chi ha ottenuto il permesso per una famiglia di scrittura può far disfare un'operazione che non avrebbe potuto compiere, perché il controllo sul disfacimento non ricontrolla la specie dell'operazione da disfare | `fub-host` · `guard.rs` `Guard::undo_last` | regole |
+| 0196 | ogni salvataggio del kernel torna dentro dal watcher: la scrittura produce un evento che il montaggio non riconosce come proprio, quindi il documento appena scritto viene riletto, riparsato e reingerito a ogni battuta — il costo si paga su ogni salvataggio di ogni nota | `fub-host` · `watcher` (eco della rename) | prestazioni |
+| 0197 | il watcher legge un file mentre qualcuno lo sta ancora scrivendo: non c'è nessuna prova di stabilità — né un secondo `stat` che confermi la stessa dimensione, né un'attesa — quindi un file grande scritto da un'applicazione esterna entra in anagrafe a metà e ci resta finché non arriva un altro evento | `fub-host` · `watcher` (ingestione dell'evento) | lock e I/O |
+| 0198 | una rinomina esterna lenta viene spezzata in due dal debounce: se l'evento di partenza e quello di arrivo cadono in due finestre diverse, il montaggio non li riconosce come la stessa mossa, l'identità del documento si perde e con essa la bozza non salvata che ci stava attaccata | `fub-host` · `watcher` (debounce delle rinomine) | regole |
+| 0199 | la parte «da» di una rinomina orfana non esce mai: quando l'evento di arrivo manca, quello di partenza resta appeso in attesa del gemello e nessuno lo emette come rimozione, quindi il documento sparito dal disco resta vivo in anagrafe finché non si riapre il vault | `fub-host` · `watcher` (accoppiamento delle rinomine) | regole |
+| 0200 | gli errori di sincronizzazione per-file vengono ingoiati dentro la battuta: un documento che non si riesce a sincronizzare non fa fallire il lotto e non produce nessun segnale, quindi resta indietro rispetto al disco senza che l'utente o il log lo sappiano | `fub-host` · `watcher` (battuta di sync) | lock e I/O |
+| 0201 | i temporanei di scrittura delle **altre** applicazioni entrano in anagrafe: la policy che riconosce i temporanei conosce solo la forma di quelli del kernel, quindi un `.goutputstream-xxxx` o un `~$nota.md` diventa una voce che compare nell'esploratore e sparisce da sola poco dopo | `fub-host` · `watcher` (filtro dei temporanei) | regole |
+| 0202 | una voce nata da `set_look` o da `set_favorite` nasce con `last_opened` a zero, cioè col valore che la politica di sfratto legge come «la più vecchia di tutte»: l'aspetto o il preferito che l'utente ha appena scelto è il primo candidato a essere buttato via | `fub-host` · `mount` `set_look` / `set_favorite` | regole |
+| 0203 | un workspace avvelenato lascia un job senza esito: la richiesta viene rifiutata prima di entrare, ma il canale di risposta non riceve né un risultato né un errore, quindi chi ha chiesto aspetta per sempre — e siccome è il ramo che si imbocca quando qualcosa è già andato storto, è proprio lì che l'interfaccia si pianta | `fub-host` · `session` (runner dei job) | regole |
+| 0204 | `ricorda_i_tasti_visti` legge l'insieme dei tasti già visti, lo modifica e lo riscrive senza tenerlo fermo in mezzo: due sessioni che imparano un tasto nello stesso momento se ne perdono uno | `fub-host` · `session.rs` `ricorda_i_tasti_visti` | lock e I/O |
+| 0205 | la chiusura dell'applicazione non forza il salvataggio pendente: il salvataggio è ritardato di circa un secondo e mezzo, e chiudere la finestra mentre il ritardo corre butta via l'ultima battitura senza chiedere niente e senza lasciarne traccia nella bozza | `frontend` · chiusura dell'app (salvataggio ritardato) | regole |
+| 0206 | `flushPendingSave` ignora l'esito del salvataggio che forza: se la scrittura fallisce, la funzione risponde comunque e il chiamante prosegue come se i byte fossero sul disco — e `convertToFolder`, che sposta il documento, non forza affatto il salvataggio prima di muoverlo | `frontend` · `flushPendingSave` (con `convertToFolder`) | regole |
+| 0207 | un file con fine riga CRLF viene riscritto tutto LF al primo salvataggio: l'editor normalizza in ingresso e nessuno ricorda la forma originale, quindi aprire una nota e battere un carattere produce un diff che tocca ogni riga del file | `frontend` · editor (fine riga) | regole |
+| 0208 | cestinare una nota ne lascia la bozza: il documento se ne va nel cestino e il lavoro non salvato resta sotto la chiave vecchia, dove non è più raggiungibile da nessuna vista e dove la prima raccolta lo spazza | `frontend` · cestino (con `fub-kernel` · `drafts.rs`) | regole |
+| 0209 | le bozze di crash possono smettere di essere scritte senza dirlo: se la scrittura periodica fallisce una volta il ciclo non riparte e non c'è nessun segnale, quindi la rete di sicurezza che esiste per il caso peggiore è spenta proprio mentre l'utente crede di averla | `frontend` · bozze di crash | regole |
+| 0210 | un tasto premuto dentro la finestra di migrazione di una rinomina ricrea il nome vecchio: il salvataggio parte con l'identità di prima mentre il file si è già mosso, e il risultato è la stessa nota in due posti con due contenuti diversi | `frontend` · rinomina (finestra di migrazione) | regole |
+| 0211 | `suspendSave` e `resumeSave` hanno un posto solo: due sospensioni annidate — una rinomina dentro una conversione, un'importazione mentre una modale è aperta — si pestano, e la seconda ripresa riaccende il salvataggio che la prima voleva ancora fermo; dalla stessa parte nasce la bozza transitoria marcata «superata» che compare e sparisce senza che nessuno l'abbia chiesta | `frontend` · `suspendSave` / `resumeSave` | regole |
+| 0212 | `scriviStato` non porta l'identità del vault: lo stato dell'interfaccia si salva con una chiave sola, quindi aprire un secondo vault ci scrive sopra e riaprire il primo ne restituisce la vista dell'altro | `frontend` · `scriviStato` | regole |
+| 0213 | un frontmatter vuoto — le due sole righe di trattini — sparisce alla riscrittura: chi lo aveva messo per marcare che la nota ha dei metadati ancora da compilare se lo ritrova tolto senza averlo chiesto | `fub-format-markdown` · `serialize.rs` (frontmatter) | regole |
+| 0214 | un alias esplicito uguale al bersaglio si perde: `[[Nota\|Nota]]` viene riscritto `[[Nota]]` perché la scrittura confronta il testo con il bersaglio e omette l'alias quando coincidono, ma quell'alias era scritto a mano e la riscrittura lo toglie | `fub-format-markdown` · `serialize.rs` (wikilink) | regole |
+| 0215 | il numero di partenza di una lista ordinata si perde: una lista che comincia da 3 torna a cominciare da 1, e il documento riscritto dice una cosa diversa da quello letto | `fub-format-markdown` · `serialize.rs` (liste ordinate) | regole |
+| 0216 | una nota a piè di pagina su più blocchi viene appiattita in uno solo: i paragrafi, gli elenchi e i blocchi di codice dentro la definizione si fondono, e ciò che rientra non è ciò che era uscito | `fub-format-markdown` · `serialize.rs` (note a piè di pagina) | regole |
+| 0217 | `render_link_label` ignora le `RenderOptions` che riceve: l'etichetta di un link esce sempre nella stessa forma qualunque cosa il chiamante abbia chiesto, quindi una via di configurazione del contratto è dichiarata e non ha effetto | `fub-format-markdown` · `render_link_label` | regole |
+| 0218 | le destinazioni di link con spazi o parentesi non vengono escapate né racchiuse fra parentesi angolari: un link a un file il cui nome contiene uno spazio esce come Markdown rotto, e alla rilettura non è più un link | `fub-format-markdown` · `serialize.rs` (destinazioni dei link) | regole |
+| 0219 | il doppio del contratto risponde con un codice diverso dal kernel sugli stessi fatti — `BadArgs` dove il kernel dice `already-exists` o `not-found`, la forma dell'id di `trash_document` diversa, e la manopola `scritture_negate` che insegna `io` dove il kernel risponde `internal` — quindi chi sviluppa contro il doppio scrive gestione di errore che sul kernel non combacia | `fub-abi` · `MemoryHost` | regole |
+| 0220 | il doppio del contratto non applica **nessun** recinto sui path: accetta `..`, path assoluti e segmenti nascosti che il kernel rifiuta, quindi una view di terzi che passa la conformità può essere rifiutata dal vero host — e, peggio, chi scrive i banchi non ha modo di accorgersi che il proprio recinto non esiste | `fub-abi` · `MemoryHost` | regole |
+| 0221 | il kernel contraddice il proprio `not-found` in lettura: chiedere un documento che non c'è risponde `io` invece di `not-found`, cioè il codice che il contratto dichiara per quel caso, e chi distingue i due rami non può | `fub-kernel` · lettura di un documento assente | regole |
+| 0222 | la suite di conformità non copre le famiglie di **scrittura**: prova le letture e le query, mentre creazione, scrittura, rinomina, cestinazione e ripristino — cioè tutto ciò che tocca i byte dell'utente — non hanno nessun banco che verifichi che due host rispondano allo stesso modo, ed è esattamente lì che i due divergono | `fub-abi` · suite di conformità | regole |
+| 0224 | `expand` in Rust ed `espandi` in TypeScript sono lo stesso motore di sostituzione `{nome}` scritto due volte, e sono **l'unica coppia dichiarata gemella che nessuna fixture presidia**: `rules-samples.json` lega `mirrored.ts` alle regole di `fub-abi` e non nomina né l'una né l'altra, mentre `strings.test.ts` prova `espandi` solo contro attese scritte lì accanto. Le due divergono **già**: in Rust il nome è tutto ciò che precede la prima `}` (quindi `foo-bar` è un nome), in TypeScript solo `\w+`; ogni regola nuova — un escape, una graffa letterale — va portata identica in due motori senza niente che li confronti | `fub-abi` · `text.rs` `expand` (con `frontend` · `i18n/strings.ts` `espandi`) | regole |
+
+
+## Dove va una regola scritta due volte
+
+Questa sezione non elenca niente: dice **dove si mette una cosa che è scritta
+più volte**, e serve perché la domanda torna a ogni giro e la risposta facile è
+sbagliata.
+
+La risposta facile è «una libreria condivisa»: si raccolgono le copie e si
+mettono in un posto nuovo fatto apposta. Questo repo ha già scelto diversamente,
+e l'ha scritto in testa a
+[`util.rs`](../crates/fub-format-markdown/src/util.rs) il giorno in cui ha tolto
+di lì due funzioni. La ragione registrata non è che erano doppie:
+
+> «la regola che genera un indirizzo (`[[Nota#Titolo]]`) deve valere per
+> chiunque lo risolva — due provider con due slugify diversi danno due id allo
+> stesso titolo» … «chi produce markup non è solo il provider — `CustomRendering::Html`
+> è una via del contratto — quindi la tabella è del contratto».
+
+Cioè: **la regola sale dove appartiene, e chi la possiede lo dice chi ha diritto
+di farla valere**, non quante volte è scritta. Una libreria di utilità raccoglie
+per *forma del codice*; questo repo colloca per *proprietà della regola*. Sono
+due criteri diversi, e il secondo è quello che ha già prodotto
+`fub_abi::model::heading_slug` e `fub_abi::html`.
+
+**Le case sono cinque, e quattro esistono già.** Nessuna va creata:
+
+| Dove | Cosa ci va | Il precedente |
+|---|---|---|
+| `fub-abi` | ciò che vale per chiunque risolva la stessa domanda: l'ultimo segmento di un path, nome ed estensione, «sta dentro questa cartella», il primo nome libero, l'impronta, gli accessor di `IndexResult` | `heading_slug`, `fub_abi::html` |
+| `fub-testkit` | l'impalcatura dei banchi: la cartella usa-e-getta, i provider giocattolo, il montaggio di un vault di prova, la camminata del modello | `TestoDiProva`, `Banco` |
+| un modulo privato del crate | ciò che non esce di lì: il controllo di versione dei file di macchina, la fusione sotto lock, il prologo dei comandi | `update_atomic` in `storage.rs` |
+| i moduli che il frontend ha già (`ui/`, `rules/`) | la modale, il freno, l'avviso di guasto, il predicato di scopo | `ui/highlight.ts`, `ui/corsa.ts` |
+| **nessuna casa — si presidia** | tutto ciò che è scritto una volta in Rust e una in TypeScript | `rules_mirror.rs` → `rules-samples.json` |
+
+L'ultima riga è la più importante e la più facile da sbagliare: una regola
+gemella fra i due linguaggi **non si estrae a mano**. Finché `fub-abi` non
+compila a wasm32 le due copie servono entrambe, e ciò che le tiene uguali è un
+banco che le confronta su casi generati. Toglierne una a mano toglie la
+sorveglianza senza dare l'unificazione — ed è esattamente il difetto `0224`, che
+è quella coppia lasciata scoperta.
+
+**Un crate nuovo non è una casa.** Aggiungerne uno costa tre presidi
+(`check-cargo-versioni`, `check-cargo-feature-default`, i membri del workspace) e
+una riga di architettura, e per ora non compra niente che `fub-abi` e
+`fub-testkit` non diano già.
+
+**E l'ordine non è quello del numero di copie.** La domanda che ordina è: *se le
+due copie diventano diverse, chi se ne accorge?*
+
+1. **Nessuno, e si rompe un dato o una promessa.** Sono difetti e stanno nella
+   tabella qui sopra — `0224` è quello che resta di questa famiglia (la `0223`,
+   l'impronta scritta tre volte, è già riparata), insieme ai quattro che i giri
+   precedenti avevano già trovato per altra strada (`0140` la
+   normalizzazione di quattro regole di identità, `0141` le tre risposte a «sta
+   dentro questa cartella», `0148` le due copie Rust di `normalizza`, `0149` le
+   due superfici che catturano il fuoco).
+2. **Il compilatore.** Costa una modifica coordinata e non un rischio: si fa
+   quando si passa di lì per altri motivi, non prima.
+3. **Nessuno, ma non si rompe niente.** Un bottone, una riga vuota, un builder.
+   Si lascia stare: il diff costa più di quanto tolga.
+
+## Come si semplifica la documentazione
+
+Tre mosse, e **non sono la stessa specie**. Le prime due sono difetti — la
+`0225` e la `0226` — perché non c'è niente da decidere: sono additive, non
+tolgono una frase a nessun documento esistente, e se domani non convincono si
+cancellano. La terza è una decisione, e sta scritta qui sotto senza una riga in
+tabella apposta.
+
+L'ordine non è un'opinione: **la terza non si prende prima di aver fatto le
+prime due**, perché è la sola irreversibile e perché è probabile che dopo le
+prime due sia molto più piccola. Se il testo diventa leggibile quando le undici
+parole hanno una definizione, il dialetto non era il problema.
+
+Le istruzioni qui sotto sono scritte per essere **eseguite senza dedurre
+niente**: chi le prende — persona o modello — non deve andare a cercare cosa
+intendeva chi le ha scritte.
+
+### 1. Chiudere il glossario (difetto `0225`)
+
+**Cosa si fa.** Si aggiungono **undici voci** a [glossario.md](glossario.md),
+tutte dentro la sezione `## Il metodo`, in ordine alfabetico fra le dieci che ci
+sono già (`buco dichiarato`, `giro`, `leva`, `P0 / P1 / P2`, `presidio`,
+`seduta`, `strato`, `strozzatura`, `verbale`, `voce`).
+
+| termine | volte in `docs/` | cosa vuol dire, in una riga | dove è già usato per esteso |
+|---|---|---|---|
+| `banco` | 423 | un test — il tipo `Banco` di `fub-testkit` è il costruttore che quasi tutti usano | [PIANO.md](PIANO.md), `crates/fub-testkit/src/lib.rs` |
+| `casa` | 59 | il modulo che ha **il diritto** di imporre una regola, che è dove la regola va scritta una volta sola | la sezione qui sopra, `crates/fub-format-markdown/src/util.rs` |
+| `casella` | 367 | ciò che resta da fare dopo che una decisione è chiusa: nessuna scelta, solo lavoro | l'apertura di questo file |
+| `difetto` | 530 | qualcosa di misurato nel codice che si ripara senza decidere niente — se la riparazione dipende da una decisione, non è un difetto | l'apertura di questo file |
+| `gemella` | 45 | una funzione scritta due volte in due linguaggi che devono restare d'accordo | la riga `0224`, `crates/fub-abi/tests/rules_mirror.rs` |
+| `gesto` | 171 | una singola interazione dell'utente — un tasto, un clic, un trascinamento — presa alla grana più fine | [FEATURES.md](FEATURES.md) §32, [microfeatures/](microfeatures/) |
+| `grana` | 92 | quanto è fine la misura che si sta facendo: «alla grana del gesto» vuol dire un'osservazione per interazione | questo file, [roadmap/](roadmap/) |
+| `innesco` | 13 | l'evento che fa scattare una casella, scritto al posto di una data quando la data non si sa | questo file |
+| `lente` | 12 | la domanda stretta con cui si guarda il codice in una seduta, dichiarata **prima** di guardare | questo file, §23.9 |
+| `residuo` | 45 | ciò che di una voce non aveva niente da decidere e diventa un difetto o una casella | questo file |
+| `specie` | 267 | una delle tre categorie che questo file conta separatamente: voci, caselle, difetti | l'apertura di questo file |
+
+**La forma di una voce** è fissata dal glossario stesso e non si inventa:
+
+```
+### il termine
+`TipoRust` · [`file`](percorso/relativo/vero) · [verbale](decisions/NNNN-....md)
+
+Cos'è, in due o tre righe.
+```
+
+Le tre coordinate si riempiono così: il **tipo** solo se esiste davvero un
+identificatore con quel nome nei sorgenti — per queste undici parole succede una
+volta sola, `Banco` — altrimenti `—`; il **file** è la colonna «dove è già usato
+per esteso» qui sopra, scritta come link relativo vero, perché
+[check-doc-links](../.github/scripts/check-doc-links.mjs) lo verifica; il
+**verbale** solo se ce n'è uno che decide quel termine, altrimenti `—`.
+
+**Le quattro regole che vincolano il testo**, e sono quelle che rendono la mossa
+sicura:
+
+1. **Due o tre righe, mai di più.** Il glossario dice di sé stesso «qui c'è la
+   frase minima che permette di leggere gli altri documenti senza fermarsi».
+   Una voce che spiega il metodo diventa il secondo posto in cui il metodo è
+   spiegato, e il secondo posto invecchia.
+2. **Si rimanda, non si ripete.** Ogni voce punta al documento che tratta la
+   cosa per esteso. Se scrivendola viene voglia di aggiungere una precisazione,
+   quella precisazione appartiene al documento puntato.
+3. **Non si tocca nient'altro.** Undici blocchi nuovi dentro `## Il metodo` e
+   zero righe modificate altrove. Il diff deve essere fatto di sole aggiunte.
+4. **Ogni voce si regge da sola, in italiano normale.** È la regola che vale più
+   delle altre tre, perché queste undici parole *sono* il dialetto: una voce
+   scritta nel dialetto è circolare, e un glossario circolare è peggio di uno
+   assente — sembra una risposta. La prova è meccanica: **si legge la voce
+   avendo letto solo quella**, e se per capirla serve un'altra delle undici, la
+   voce è da riscrivere. Dove l'altra parola serve davvero, o si glossa in tre
+   parole dentro la frase stessa (*«una casella — il lavoro che resta dopo una
+   decisione —»*) o si scrive la cosa in italiano e basta.
+
+   La colonna «cosa vuol dire, in una riga» della tabella qui sopra **non è il
+   testo finale** ed è scritta apposta per chi il repo lo conosce già: `residuo`
+   ci sta come «ciò che di una **voce** non aveva niente da decidere e diventa
+   un **difetto** o una **casella**», che sono tre parole del dialetto dentro la
+   definizione del dialetto. Lo stesso vale per `innesco` e `specie`. È il
+   significato, non la frase: la frase si scrive per il lettore dichiarato più
+   sotto, che è lo stesso della mossa 2.
+
+   Valgono qui, identiche, **le quattro regole di registro della mossa 2** — la
+   parola inventata si definisce nella stessa frase, prima la cosa e poi il
+   perché, mai una definizione per sola negazione, frasi corte. Sono scritte una
+   volta sola, là, e questa riga è il rimando.
+
+**Cosa cambia intorno.** L'apertura di `glossario.md` elenca dieci termini come
+esempio del lessico non standard (`lotto, porta, ponte, anagrafe, sidecar,
+superficie, seduta, strozzatura, derivato, autorevole`) e sono tutti del
+prodotto: aggiungerne due del metodo — `banco`, `difetto` — è l'unica modifica a
+una frase esistente che vale la pena fare, ed è una parola in più in un elenco.
+Stessa cosa in [README.md](README.md) alla riga «Non capisco una parola», che
+ripete lo stesso elenco.
+
+**Come si verifica.** `node .github/scripts/check-doc-links.mjs` (i link nuovi
+sono veri) e `node .github/scripts/check-prosa.mjs`. Il numero di voci del
+glossario **non** è sotto conto automatico: se una frase dice «novantuno voci»,
+va riletta a mano — è esattamente la famiglia di errori del commit `441d376`.
+
+### 2. Il file d'ingresso (difetto `0226`)
+
+**Cosa si fa.** Si scrive **un file nuovo**, `docs/leggimi-prima.md`, di due
+pagine. Non si modifica nessun documento esistente tranne i due indici, e come.
+
+**Perché in `docs/` e non in radice**: lo decide [README.md](README.md) e non
+chi scrive — tutta la prosa sta in `docs/`, e un documento che riguarda il repo
+come progetto pubblico sta al primo livello, accanto a `CONTRIBUTING.md`.
+
+**Per chi è scritto**, e va tenuto in mente frase per frase: qualcuno al secondo
+anno di informatica, che sa cos'è un test e cos'è un `trait` ma non ha mai visto
+questo repo, e che ha dieci minuti. Se una frase richiede di aver già letto un
+altro documento di `docs/`, quella frase è sbagliata per questo file.
+
+**Cosa ci va, in quest'ordine e niente altro:**
+
+1. **Cos'è Fub** — in cinque righe, senza architettura: un'applicazione per
+   prendere note su una cartella di file `.md`, compatibile con i vault di
+   Obsidian, con un nucleo che non sa cos'è il markdown e dei provider che
+   glielo insegnano.
+2. **Com'è diviso** — i crate in ordine di dipendenza e cosa fa ciascuno in una
+   riga, più il frontend. Chi vuole il disegno vero lo trova in
+   [architecture/mappa-visuale.md](architecture/mappa-visuale.md), e il rimando
+   basta.
+3. **I quattro documenti che contano e a cosa servono** — `decisions/` (perché
+   una cosa è così, un file per decisione, non si riscrivono), `todo.md` (cosa
+   manca, in tre specie che si contano separatamente), `architecture/` (com'è
+   fatto adesso), `FEATURES.md` (dove si vuole arrivare, non dove si è).
+4. **Il dizionario del dialetto** — le undici parole della mossa 1 più
+   `presidio`, `verbale`, `seduta`, `voce`, in una tabella di due colonne:
+   parola, e cosa vuol dire in italiano normale. Qui si **ripete** ciò che sta
+   nel glossario, ed è l'unica ripetizione consentita in tutto il repo: si
+   dichiara nel file stesso che il glossario è la sede vera e che questa tabella
+   è una scorciatoia per la prima lettura.
+5. **Da dove si comincia a toccare il codice** — il ciclo locale, che sta già in
+   [CONTRIBUTING.md](CONTRIBUTING.md): si rimanda, non si copia.
+
+**Il registro**, che è tutto il punto del file:
+
+- Nessuna parola inventata senza la sua definizione **nella stessa frase**.
+- Prima la cosa, poi il perché. Non «ciò che fa diventare rossa
+  un'affermazione quando smette di essere vera è un presidio», ma «un presidio è
+  un test che fallisce se una promessa del repo smette di valere».
+- Niente definizioni per negazione come **unica** definizione: «non è un errore
+  ma un caso previsto» dice cosa una cosa non è. Prima si dice cos'è.
+- Frasi corte. Se una frase ha tre subordinate, sono tre frasi.
+
+**Cosa cambia intorno, e va fatto nello stesso diff** — è la parte che si rompe
+in silenzio se qualcuno la salta:
+
+- [README.md](README.md), sezione «Da dove si comincia»: la porta «Non conosco
+  il progetto» oggi manda a `PIANO.md`. Deve mandare **prima** a
+  `leggimi-prima.md` e poi a `PIANO.md`.
+- [README.md](README.md), sezione «Le aree»: la tabella dei documenti di primo
+  livello prende una riga nuova, con la colonna «chi la mantiene aggiornata»
+  compilata come le altre.
+- [README.md](README.md), stessa sezione: la frase dice «**Quattro** raccontano
+  il progetto» e «**Cinque** riguardano il repo come progetto pubblico». Uno dei
+  due numeri cambia, e **nessun presidio se ne accorge** — è un numero scritto
+  in lettere dentro una frase.
+- [PIANO.md](PIANO.md) contiene la mappa dettagliata di tutti i documenti: va
+  cercato se elenca i file di primo livello, e in quel caso aggiornato.
+
+**Come si verifica.** `node .github/scripts/check-doc-links.mjs`,
+`node .github/scripts/check-prosa.mjs`, e una rilettura umana dei due numeri in
+lettere qui sopra.
+
+### 3. La sostituzione dei termini — che è una decisione, non un difetto
+
+Tradurre il dialetto — `banco` → `test` in 423 posti, `presidio` → qualcos'altro
+in 814 — **non ha una riga in tabella**, e la ragione è la regola di questo file:
+un lavoro la cui esecuzione dipende da una scelta non è un difetto. Le scelte
+aperte sono due e nessuna delle due è tecnica: *chi è il lettore che il repo si
+sceglie*, e *quali parole si traducono e con cosa*. Finché non hanno una
+risposta scritta, chiunque cominci sta decidendo per tutti mentre modifica file.
+
+Se la decisione si prende, apre una **seduta** in [roadmap/](roadmap/) — sarebbe
+la 27 — e queste sono le tre cose che quella seduta deve già sapere, misurate:
+
+1. **I verbali non si riscrivono.** `docs/decisions/` sono 142 file immutabili
+   per convenzione ([CONTRIBUTING.md](CONTRIBUTING.md), *Chiudere una
+   decisione*): un verbale reso più chiaro è un verbale che dice una cosa che
+   nessuno ha deciso. Se un verbale è illeggibile, gli si affianca una nota; non
+   lo si tocca. Questo mette fuori dal perimetro **il 65% dei file di `docs/`**.
+2. **Alcuni termini stanno nei nomi.** `roadmap/16-crate-sdk-banchi-di-prova.md`,
+   `roadmap/17-presidi-che-restano.md`,
+   `crates/fub-abi/tests/una_sola_tabella_di_escape.rs` e i nomi di parecchi
+   banchi contengono la parola. Rinominare un file rompe i link — e quello
+   almeno lo prende `check-doc-links`, che ne verifica 4.572. Rinominare un test
+   non rompe niente e fa sparire una citazione in un messaggio di commit.
+3. **`presidio` non è sinonimo di `test`.** Un presidio è un test che difende
+   una *classe* di regressione, spesso strutturale: `una_sola_impronta.rs` non
+   prova che un'impronta è giusta, impedisce che ne nasca una quarta copia.
+   Tradurlo con `test` perde esattamente la distinzione per cui la parola
+   esiste. O si tiene e si glossa — che è la mossa 1 — o si traduce con due
+   parole.
+
+**E una cosa va costruita prima di lasciar riscrivere qualunque testo a
+chiunque**, modello o persona: un conto che, dati un file prima e dopo,
+verifichi che non siano cambiati **i numeri, i percorsi, gli identificatori fra
+backtick e i link**. Non dice che il senso è salvo — quello non lo dice
+nessuno — ma prende tutta la famiglia di errori del commit `441d376`, dove la
+prosa diceva ventiquattro e la colonna sommava venticinque in diciannove posti
+senza che nessun presidio potesse vederlo. Sono una trentina di righe accanto
+agli altri undici script.
 
 ## Gli allegati
 
