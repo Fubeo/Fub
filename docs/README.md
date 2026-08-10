@@ -14,13 +14,13 @@ cosa è un secondo posto che invecchia**, in silenzio, perché niente lo compila
 
 ## Da dove si comincia
 
-**Non conosco il progetto.** [PIANO.md](PIANO.md) — l'idea architetturale, le
-decisioni col perché, la struttura dei crate. Poi
-[architecture/mappa-visuale.md](architecture/mappa-visuale.md), lo stesso
+**Non conosco il progetto.** [leggimi-prima.md](leggimi-prima.md) — due pagine per capire cos'è Fub, com'è diviso e le parole fondamentali. Poi
+[PIANO.md](PIANO.md) per l'idea architetturale, le decisioni col perché e la struttura dei crate. Infine
+[architecture/mappa-visuale.md](architecture/mappa-visuale.md) per lo stesso
 disegno in un colpo d'occhio.
 
 **Non capisco una parola.** [glossario.md](glossario.md) — lotto, porta, ponte,
-anagrafe, sidecar, superficie, seduta, strozzatura: il lessico di questo repo è
+anagrafe, sidecar, superficie, seduta, strozzatura, banco, difetto: il lessico di questo repo è
 preciso e non è standard. Una voce per termine, con il tipo Rust da cercare, il
 file in cui vive e il verbale che l'ha deciso.
 
@@ -60,11 +60,12 @@ Più i documenti di primo livello. Quattro raccontano il progetto:
 [PIANO.md](PIANO.md) (il piano, con la mappa dettagliata di tutti i documenti),
 [FEATURES.md](FEATURES.md) (il catalogo), [todo.md](todo.md) (l'indice del
 lavoro aperto) e [glossario.md](glossario.md) (il lessico: una voce per termine,
-col tipo, il file e il verbale). Cinque riguardano il repo come progetto
+col tipo, il file e il verbale). Sei riguardano il repo come progetto
 pubblico, e stanno qui e non in radice per la stessa regola di tutto il resto:
 
 | Documento | Cosa dice | Chi lo mantiene aggiornato |
 |---|---|---|
+| [leggimi-prima.md](leggimi-prima.md) | cos'è Fub in cinque righe, i crate in ordine di dipendenza, e il dizionario del dialetto | chi cambia la divisione in crate o il nucleo del metodo |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | le invarianti presidiate, il ciclo locale, la forma dei commit, come si chiude una decisione | chi cambia un presidio o la CI |
 | [SECURITY.md](SECURITY.md) | dove si segnala una vulnerabilità, cos'è dentro il perimetro, cosa è già presidiato | chi sposta il perimetro — a M5 lo sposta il sandbox WASM |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1, traduzione ufficiale, ripreso e non riscritto | nessuno: è testo importato |

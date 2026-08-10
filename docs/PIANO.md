@@ -197,6 +197,7 @@ di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
 **Il repo come progetto pubblico** (primo livello di `docs/`, perché la prosa sta
 in un posto solo; i nomi sono in inglese perché GitHub li cerca **per nome** — la
 ragione per esteso è in [README.md](README.md)):
+- [leggimi-prima.md](leggimi-prima.md) — cos'è Fub in cinque righe, i crate in ordine di dipendenza, e il dizionario del dialetto.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — le quattro invarianti presidiate, il ciclo locale, i sei job della CI, la forma dei commit, come si chiude una decisione.
 - [SECURITY.md](SECURITY.md) — il canale privato per una vulnerabilità, il perimetro (dentro: il contenuto dei file come input non fidato; fuori: il sandbox WASM, che a M5 non esiste ancora), e i presidi già in piedi.
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1, traduzione ufficiale italiana, ripreso parola per parola.
