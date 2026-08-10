@@ -5,7 +5,14 @@ Torna a [PIANO.md](PIANO.md). Questo documento chiede una cosa sola:
 mancano perché quelle voci si possano costruire senza riscrivere il kernel, il
 contratto e la shell ogni volta?**
 
-Sono uscite 143 voci: novantanove da sette giri sulla stessa domanda, due da una
+Dal 2026-08-10 quella domanda ha un secondo piano di lettura: otto file di
+[microfeature](microfeatures/) scompongono dodici sezioni di FEATURES.md in
+**424 gesti** atomici — un tasto, un clic, un trascinamento per riga. La
+domanda non cambia; cambia la **grana** a cui la si può misurare, ed è da
+quella misura che è nata la
+[seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md).
+
+Sono uscite 151 voci: novantanove da sette giri sulla stessa domanda, due da una
 **misura** (la §8.4, nata dalla [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)
 e chiusa dalla [0026](decisions/0026-due-query-insieme.md); e la §20.5, nata
 misurando la [0052](decisions/0052-cio-che-va-storto-e-un-evento.md) contro il
@@ -36,10 +43,16 @@ lavorato — e **sette** da una **rilettura**: la
 [seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md), che
 non ha cercato pezzi mancanti del piano ma ha rimisurato contro i sorgenti del
 2026-08-07 le osservazioni che questo repo si portava avanti di giro in giro, e
-le ha **smentite più spesso di quanto le abbia confermate**. Centoquarantuno
+le ha **smentite più spesso di quanto le abbia confermate** — e **otto** da una
+**misura fra due elenchi**: la
+[seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md), che ha messo
+i 424 gesti di [microfeatures/](microfeatures/) contro i sorgenti di oggi e non
+ha cercato ciò che manca all'app — quello lo elenca FEATURES.md — ma i punti in
+cui **un gesto che l'app compie non ha nessun dato che lo dichiari**.
+Centoquarantuno
 sono chiuse, e i loro verbali stanno in
 [decisions/](decisions/README.md); le voci ancora aperte sono
-**zero** [conta: voci-aperte], e questo file resta il loro **indice** e il
+**otto** [conta: voci-aperte], e questo file resta il loro **indice** e il
 consuntivo di come sono finite.
 
 Da quello stesso consuntivo viene la **terza specie** che questo file conta: i
@@ -107,7 +120,7 @@ nuove, e vanno fatte in quest'ordine:
 E una settima strada, che non è una domanda: **una decisione di prodotto presa a
 verbale**. La [0025](decisions/0025-la-ricerca-predefinita.md) non ha trovato
 voci cercandole, le ha **create**: deciso cosa l'app deve fare, quello che manca
-al contratto per permetterlo si calcola. Le altre ventiquattro sedute descrivono
+al contratto per permetterlo si calcola. Le altre venticinque sedute descrivono
 un debito, la [21](roadmap/21-la-ricerca-predefinita.md) descrive una promessa.
 
 E un'ottava, che non è nemmeno una strada: **una verifica**. La §21.10 è uscita
@@ -205,6 +218,22 @@ trova?* — applicata al posto in cui questo repo scrive i propri debiti. La reg
 che se ne ricava è un numero: **alla terza volta che un «resta fuori» si ripete
 identico, non è una dichiarazione, è una voce**.
 
+E una **dodicesima**, che non guarda un elenco solo ma **due elenchi alla stessa
+grana**. Le prime undici strade partono tutte da un testo — una domanda, un
+verbale, un audit, un «resta fuori» — e lo mettono contro il codice. Questa mette
+contro il codice un **elenco di gesti**: le otto sezioni di
+[microfeatures/](microfeatures/) scompongono FEATURES.md in 424 righe che dicono
+ciascuna una cosa sola e verificabile — *questo tasto fa questo*, *questo
+trascinamento sposta quello* — e a quella grana la domanda cambia forma. Non è
+più «che pezzo di infrastruttura manca», che è la domanda del piano ed è finita;
+è «**questo gesto, chi lo dichiara?**». La differenza è che un gesto che l'app
+già compie non compare in nessun elenco di cose mancanti, e quindi nessuna delle
+undici strade lo può trovare: funziona, e proprio per questo è invisibile. Le
+otto voci della [seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md)
+sono tutte di questa forma, e la regola che se ne ricava è che **un elenco più
+fine non produce più voci dello stesso tipo: ne produce di un tipo che prima non
+si vedeva**.
+
 ## Le sedute
 
 Cosa c'è in questa tabella, e cosa no: la colonna *Perché insieme* dice la
@@ -241,10 +270,31 @@ che questo piano passa il tempo a togliere dal codice.
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
 | **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | **chiusa** — tre voci aperte perché toccavano una firma, e su due delle tre quel criterio non reggeva | — | — |
 | **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | **chiusa** — sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta era già scritta altrove nel repo: [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md), [0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md), [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md), [0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) | — | 2 |
+| **26** | [Otto gesti che l'app fa e nessuno può dichiarare](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) | otto gesti che l'app compie e che **nessun dato dichiara**: in tutti e otto la mossa che li renderebbe dichiarabili il repo l'ha già fatta accanto, su un problema confinante | 8 | — |
 
 ## Le voci
 
-**Zero** [conta: voci-aperte]. Le ultime erano della
+**Otto** [conta: voci-aperte], tutte della
+[seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md), aperte il
+2026-08-10. La cosa da dire subito è che **la prima domanda di questo file non è
+cambiata, ed è tornata a produrre voci**: a cambiare è stata la grana a cui la si
+misura. Finché l'elenco a destra era FEATURES.md, la domanda trovava pezzi di
+infrastruttura mancanti, e ha smesso di trovarne. Con gli otto file di
+[microfeatures/](microfeatures/) l'elenco a destra è fatto di **424 gesti**
+singoli, e alla grana del gesto salta fuori una specie che prima non si poteva
+vedere: non ciò che manca, ma ciò che **c'è e nessun dato dichiara** — un tasto
+premuto che nessun comando nomina, una superficie che si disegna e non si sa a
+che livello sta, un rilascio che sposta un file senza che nessuno abbia
+dichiarato il bersaglio. Sette delle otto sono di **contratto** e una di
+**shell**; una sola è **P0**, la §26.6, e come la §25.1 **non è una firma** — ma
+per una ragione diversa: non è un dato che si perde, è un permesso la cui
+finestra si chiude col primo manifest di terzi, quindi **prima** del freeze e non
+con lui. Le otto si tengono anche per una seconda proprietà, ed è quella che le
+rende decidibili in una volta sola: in tutte e otto **la mossa che le
+dichiarerebbe questo repo l'ha già fatta accanto**, su un problema confinante e a
+verbale — così nessuna delle otto discute *se* si dichiara, ma solo *dove*.
+
+Le ultime prima di queste erano della
 [seduta 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md), che
 ne aveva aperte sette e le ha chiuse tutte e sette.
 **Non hanno riaperto la roadmap infrastrutturale di M4, che resta finita**:
@@ -321,7 +371,7 @@ seduta le caselle ci sono, e dicono a che punto è la singola voce.
 
 **Ma una voce chiusa può lasciare una casella, e quella casella è di un'altra
 specie.** La colonna *Voci* conta le voci **aperte**, e la sua somma fa
-**zero** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
+**otto** [conta: voci-aperte] come deve. Il residuo di una voce **chiusa** non
 ci rientra, e per molto tempo non ha avuto dove essere contato: è il modo in cui
 la riga della seduta 14 ha detto «due caselle» mentre il suo file ne aveva tre,
 e la 19 non ha detto niente avendone tre. Adesso ha una colonna sua —
@@ -338,18 +388,24 @@ decidere. La forma di questo file era già pronta a riceverlo, e la prova è che
 non è servito inventare un criterio nuovo: è bastato rileggere quello con cui
 *Caselle* si era staccata da *Voci*.
 
-La colonna *Voci* somma **zero** [conta: voci-aperte], e adesso la tabella è
-**vuota**: tutte e venticinque le sedute sono a zero. È una distribuzione che
-vale la pena leggere, perché è la seconda volta che capita e la prima volta era
-finita allo stesso modo: le sedute ci sono arrivate una per volta — l'ultima
-delle ventiquattro è stata la 24, con la
+La colonna *Voci* somma **otto** [conta: voci-aperte], e stanno tutte in **una
+riga sola**: le prime venticinque sedute sono a zero, la ventiseiesima porta le
+otto. Questa distribuzione va letta insieme a quella del giorno prima, perché lo
+zero di allora diceva qualcosa che adesso si vede meglio. Il 2026-08-09 la
+tabella è stata **vuota**, per la prima e finora unica volta: tutte e
+venticinque le sedute a zero. Ci erano arrivate una per volta — l'ultima delle
+ventiquattro è stata la 24, con la
 [0132](decisions/0132-un-rifiuto-non-e-una-frase.md), prima di lei la 16, con la
-[0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
-— e ogni volta lo zero è stato il segnale che una domanda aveva finito di
-produrre voci. Vale ancora, e vale due volte: lo zero delle ventiquattro dice
-che la roadmap infrastrutturale è finita, quello della 25 dice che ha finito
-anche la **rilettura**, che era una domanda diversa. Restano le caselle, che non
-sono voci: lavoro già deciso da fare.
+[0116](decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md),
+e la venticinquesima il giorno dello zero — e ogni volta lo zero è stato il
+segnale che **una domanda** aveva finito di produrre voci: quello delle
+ventiquattro diceva che la roadmap infrastrutturale è finita, quello della 25 che
+aveva finito anche la **rilettura**, che era una domanda diversa. Il giorno dopo
+ne sono uscite otto, e non è una smentita di nessuno dei due: le otto non vengono
+da nessuna delle due domande, vengono da un **elenco più fine** che prima non
+c'era. Che è esattamente ciò che lo zero significava e non di più — *quella*
+domanda è finita, non *le* domande. Restano anche le caselle, che non sono voci:
+lavoro già deciso da fare.
 Della 20 non resta nemmeno una casella: si è chiusa con la
 [0111](decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), l'ultima delle cinque
 voci nate dalla domanda «cosa fallisce senza produrre nessun segnale». La 23 era
@@ -536,19 +592,34 @@ chiusura trasforma ogni citazione in un rimando cieco.
 
 | § | Voce | Seduta | Strato | |
 |---|---|---|---|---|
+| **§26.1** | [Un accordo ha un contesto, o non ce l'ha](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#261-un-accordo-ha-un-contesto-o-non-ce-lha) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
+| **§26.2** | [Cinque registri di tastiera, e il presidio ne guarda due](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#262-cinque-registri-di-tastiera-e-il-presidio-ne-guarda-due) | 26. Otto gesti che l'app fa e nessuno può dichiarare | shell | **P1** |
+| **§26.3** | [La grammatica di un accordo non sta nel contratto](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#263-la-grammatica-di-un-accordo-non-sta-nel-contratto) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P2** |
+| **§26.4** | [Il livello di una superficie non è un dato](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#264-il-livello-di-una-superficie-non-è-un-dato) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
+| **§26.5** | [Il menu contestuale: la superficie c'è, il bersaglio del clic no](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#265-il-menu-contestuale-la-superficie-cè-il-bersaglio-del-clic-no) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
+| **§26.6** | [Gli appunti sono una spunta sola, e le domande sono due](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#266-gli-appunti-sono-una-spunta-sola-e-le-domande-sono-due) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P0** |
+| **§26.7** | [Un rilascio si consegna, un bersaglio non si dichiara](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#267-un-rilascio-si-consegna-un-bersaglio-non-si-dichiara) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
+| **§26.8** | [La terza pila: l'annulla dentro una view che non è del core](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#268-la-terza-pila-lannulla-dentro-una-view-che-non-è-del-core) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P2** |
 
-**La tabella è vuota, ed è il segnale.** L'assenza di righe non è un'omissione:
-è ciò che questo file dichiara di sé — «se una voce è in questa tabella, è
-aperta» — letto nell'altro verso. L'ultima a uscirne è stata la §25.3, con la
-[0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md).
-Il conto è nato per poterlo dire: `voci-aperte` porta un `|| true` in coda
-**apposta**, perché `grep -c` esce 1 quando non trova niente e il giorno in cui
-la tabella si svuota il registro direbbe «non ha contato» invece di «zero».
-Quel giorno è oggi.
+**La tabella è stata vuota un giorno solo, ed è servito a qualcosa.** Dal
+2026-08-09 — quando la §25.3 ne è uscita con la
+[0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md), e
+non restava nessuna riga — al 2026-08-10, quando ci sono entrate le otto della
+seduta 26. Il conto era nato per poter reggere proprio quel giorno: `voci-aperte`
+porta un `|| true` in coda **apposta**, perché `grep -c` esce 1 quando non trova
+niente e a tabella vuota il registro direbbe «non ha contato» invece di «zero».
+Ha fatto il suo lavoro, e la riga resta dov'è: la tabella tornerà vuota, e non
+c'è ragione di riscoprire la stessa cosa una seconda volta.
+
+L'altra metà di quella dichiarazione vale adesso, nel verso opposto: **se una
+voce è in questa tabella, è aperta** — le otto qui sopra non hanno nessuno
+stato, nessuna spunta e nessuna percentuale, e l'unico modo di chiuderne una è
+**toglierla di qui** e mettere il suo verbale in
+[decisions/](decisions/README.md).
 
 ## I difetti misurati
 
-**Nove** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
+**Dodici** [conta: difetti-aperti], e non sono voci. Nessuno chiede una
 decisione — è il criterio che li tiene fuori dalla tabella qui sopra — e nessuno
 è il residuo di un verbale, che è ciò che li tiene fuori dalla colonna *Caselle*.
 Sono la **terza specie**, e ha voluto un conto suo per la stessa ragione per cui
@@ -597,6 +668,18 @@ leggerli: **i numeri di questo elenco e quelli dei
 — `0115` è **sia** una decisione **sia** un difetto, e non sono la stessa cosa.
 Chi ne cita uno dice quale delle due.
 
+**Il quarto blocco, `0148`–`0150`**, è del 2026-08-10 e viene dalla stessa
+misura che ha aperto la
+[seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md): i 424 gesti di
+[microfeatures/](microfeatures/) contro i sorgenti di oggi. Sono il residuo di
+quella misura — ciò che ha trovato e che **non ha niente da decidere**, quindi
+non è diventato una voce. Una quarta riga era pronta e **non è stata scritta**:
+`Mod-f` è dichiarato due volte, da `shell.doc.search` e dalla ricerca di
+CodeMirror, ma *chi dei due debba tenerlo* è precisamente la
+[§26.1](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#261-un-accordo-ha-un-contesto-o-non-ce-lha),
+e vale la stessa regola con cui la §25.3 aveva tenuto fuori il suo residuo: **un
+difetto la cui riparazione dipende da una decisione non è un difetto**.
+
 **Il numero è quello di `issues.md` e non scala**, per la stessa regola dei `§`:
 è citato dai verbali e dai messaggi di commit, e rinumerarlo trasformerebbe ogni
 citazione in un rimando cieco. I buchi nella sequenza sono le ventidue righe che
@@ -618,7 +701,10 @@ avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0130 | due letture che rispondono con dei dati hanno un comando IPC proprio invece di una variante di `IndexQuery`, e siccome `IndexQuery` non ha una variante di resa e l'`HostApi` non ha una capacità di render, un `ViewProvider` non ha nessuna porta per mostrare un documento reso mentre la shell ne ha due | `fub-app` · `lib.rs` `render_preview` / `render_embed` | regole |
 | 0140 | quattro regole di identità di un nome non fanno la normalizzazione NFC che `resolution_key` fa — `canonical_tag`, `canonical_anchor`, `heading_slug`, `prefix_len_ci` — così paglia in NFD e ago in NFC non si incontrano in nessuno dei due versi, e `heading_slug` su NFD non diverge soltanto: **cancella** l'accento, perché una `Mn` non è alfanumerica | `fub-abi` · `model.rs` `canonical_tag` (con `canonical_anchor`, `heading_slug`, `occurrences.rs` `prefix_len_ci`) | regole |
 | 0141 | «sta dentro questa cartella?» ha tre risposte incompatibili in produzione — `query::within_folder` taglia gli slash finali e ha il ramo su sé stessa, `rules::events::folder_contains` li taglia e non ce l'ha, `transfer::in_folder` taglia entrambi i capi — e il banco di `transfer.rs` asserisce vero ciò che `within_folder` dà falso, mentre la prosa di `traits.rs` scrive che la regola «è una, e due copie divergerebbero sul caso che nessuno prova» | `fub-abi` · `transfer.rs` `in_folder` | regole |
-| 0147 | il totale delle voci in testa a questo file (143) non quadra con chiuse + aperte dichiarate (141 + 0), e nessuna voce tolta o assorbita lo spiega — le uniche del repo sono chiuse da un verbale o dichiarate non-voci; un `[conta:]` non può esistere, perché le voci chiuse non hanno criterio meccanico (tre formati di stato nei file di seduta, sedute 1–13/18/19/24 in prosa senza sezioni): se la riga regredisce non la vede nessun conto, e la rimisura è a mano | `docs` · `todo.md` «Sono uscite 143 voci» | regole |
+| 0147 | il totale delle voci in testa a questo file (151) non quadra con chiuse + aperte dichiarate (141 + 8), e nessuna voce tolta o assorbita lo spiega — le uniche del repo sono chiuse da un verbale o dichiarate non-voci; un `[conta:]` non può esistere, perché le voci chiuse non hanno criterio meccanico (tre formati di stato nei file di seduta, sedute 1–13/18/19/24 in prosa senza sezioni): se la riga regredisce non la vede nessun conto, e la rimisura è a mano | `docs` · `todo.md` «Sono uscite 151 voci» | regole |
+| 0148 | la forma canonica di un accordo è scritta tre volte e le due copie Rust non sono quella che dicono di essere: entrambe si annunciano «come lo normalizza la shell», ma spezzano solo su `-` e ricuciono con `-`, mentre in TypeScript una scorciatoia è una **sequenza** di accordi separati da spazio e la funzione risponde `null` per ciò che questa shell non sa premere — un primo tasto senza modificatori, un modificatore che non esiste. Oggi nessun comando dichiara una sequenza, quindi la divergenza non si vede: il giorno che la dichiara, l'oscuramento per prefisso lo vede solo la shell — `prefissiOscurati` non ha copia di là — e un accordo impremibile passa verde di qua perché la copia Rust normalizza qualunque stringa invece di rifiutarla | `fub-features` · `tests/command_keys.rs` `normalizza` (con la copia gemella in `fub-host` · `tests/shell_keys_mirror.rs`, e il presidio che le usa è `no_two_official_commands_want_the_same_chord`) | regole |
+| 0149 | due superfici catturano il fuoco con la stessa `intrappolaFuoco` — la palette (`ui/palette.ts:312`) e la superficie modale delle view (`ui/views.ts:301`) — ma stanno su due piani lontani e nessuno dei due è dichiarato rispetto all'altro: la palette si chiama `.modale` nel suo stesso commento e dipinge a `--z-popover` (70), sotto `#settings-panel` a `--z-dialog` (80) e sotto `#views-modal` a `--z-modal` (90), che si chiama modale anche lui. Chi prende il fuoco non è chi sta sopra, e la regola che dice quale delle due vince non esiste da nessuna parte; nello stesso elenco `--z-overlay` (50) porta un commento che ne spiega il ruolo ed è citato da **zero** regole | `frontend` · `style.css` `.modale` (con `theme/tokens.css` `--z-overlay`) | regole |
+| 0150 | la pagina che descrive le superfici dice due numeri scaduti dalla [0079](decisions/0079-il-grafo-esce-dall-overlay.md): «questa shell ne ospita **sette**» e «le tre che restano — area principale, menu, menu contestuale», mentre da quel verbale l'area principale **è** ospitata e le non ospitate «passano da tre a **due**». Chi legge il protocollo per sapere dove può ancorare una view legge il repo di prima della 0079, e nessun conto lo guarda: il numero sta in prosa e non ha un `[conta:]` possibile, perché contare le superfici ospitate non ha criterio meccanico | `docs` · `architecture/ui-protocol.md` «Le superfici: dove una view si ancora» | regole |
 
 ## Gli allegati
 
