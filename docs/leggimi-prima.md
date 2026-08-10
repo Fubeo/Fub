@@ -23,7 +23,7 @@ Il disegno d'insieme è in [architecture/mappa-visuale.md](architecture/mappa-vi
 
 ## 3. I quattro documenti che contano
 
-- [decisions/](decisions/README.md): i verbali. Spiegano perché un sistema è fatto così. Ogni file è uno solo e contiene una decisione immutabile.
+- [decisions/](decisions/README.md): i verbali. Spiegano perché un sistema è fatto così. Ogni file è unico; il contenuto è immutabile, ma la forma si può riscrivere per chiarezza.
 - [todo.md](todo.md): l'indice del lavoro. Mostra cosa manca, in **tre** categorie con conteggi separati.
 - [architecture/](architecture/README.md): il funzionamento attuale. Spiega com'è fatto il progetto adesso.
 - [FEATURES.md](FEATURES.md): il catalogo. Elenca dove vogliamo arrivare.
