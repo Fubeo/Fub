@@ -17,8 +17,8 @@ una firma. Nella forma **(a)** che la voce stessa raccomanda: *«(a) subito,
 — l'identità che si muove o quella su cui atterra — e che cosa si fa di ciò che
 apparteneva alla seconda?
 
-Il codice una risposta ce l'aveva già, e non l'aveva scelta nessuno: vince chi si
-muove, e di ciò che apparteneva alla seconda **non si fa niente**, lo si
+Il codice una risposta ce l'aveva già, e non l'aveva scelta nessuno: vince chi
+si muove, e di ciò che apparteneva alla seconda **non si fa niente**, lo si
 sovrascrive. `sync_renamed_path` tornava `Ok(true)`, senza avvisi, senza
 `Trouble`, senza una riga di log.
 
@@ -36,10 +36,10 @@ la destinazione sia libera:
 - `drafts.migrate` scrive `storage.write(&self.path(to), …)`.
 
 Il terzo è quello che conta. Una bozza è — per dichiarazione del modulo che la
-tiene e per la [0048](0048-una-radice-sola.md), che la tiene apposta **fuori** da
-`data/` — l'**unica** copia di ciò che l'utente ha scritto. Chi aveva il buffer
-di `B` sporco e ha fatto `mv A.md B.md` da un'altra finestra perdeva per sempre
-quel testo, e a farglielo perdere era il pezzo di codice che esiste per
+tiene e per la [0048](0048-una-radice-sola.md), che la tiene apposta **fuori**
+da `data/` — l'**unica** copia di ciò che l'utente ha scritto. Chi aveva il
+buffer di `B` sporco e ha fatto `mv A.md B.md` da un'altra finestra perdeva per
+sempre quel testo, e a farglielo perdere era il pezzo di codice che esiste per
 impedirlo.
 
 Il banco lo misura: prima della guardia stampava
@@ -62,13 +62,13 @@ uno solo — il quarto, `VersionStore::rename` in `fub-features/src/versioning.r
 > buttarne una sarebbe perdere versioni senza dirlo.*
 
 Chi leggeva il codice trovava quella frase, la trovava argomentata, e concludeva
-che il rito fosse uno solo. Non lo era: era **una politica scritta in un canale e
-tre canali che non la applicavano**, e la ragione per cui nessuno se ne accorgeva
-è che i tre non hanno un posto in cui la politica si scriverebbe — la migrazione
-la fanno e basta.
+che il rito fosse uno solo. Non lo era: era **una politica scritta in un canale
+e tre canali che non la applicavano**, e la ragione per cui nessuno se ne
+accorgeva è che i tre non hanno un posto in cui la politica si scriverebbe — la
+migrazione la fanno e basta.
 
-C'è di più, ed è la forma che questo repo chiama *un commento che argomenta è una
-premessa che sembra vera*. In `docdata.rs`, sopra il `remove_dir_all`, stava
+C'è di più, ed è la forma che questo repo chiama *un commento che argomenta è
+una premessa che sembra vera*. In `docdata.rs`, sopra il `remove_dir_all`, stava
 scritto:
 
 > *Il path di destinazione era **libero** — il kernel rifiuta un rename verso un
@@ -106,8 +106,8 @@ due mezze verità si dicono entrambe (§14.1) — da `from` è sparito qualcosa,
 che l'esito resti registrato una volta sola (§9.7).
 
 Il risultato per l'utente è quello che l'utente vede e capisce: `B` ha il testo
-di `A`, ed è vero; `A` non c'è più, ed è vero; la bozza di `B`, la sua icona e il
-suo spazio per-documento sono ancora di `B`.
+di `A`, ed è vero; `A` non c'è più, ed è vero; la bozza di `B`, la sua icona e
+il suo spazio per-documento sono ancora di `B`.
 
 ### Perché (a) adesso e non (b)
 
@@ -119,8 +119,8 @@ non salvate no (fonderle vorrebbe dire inventare un testo che nessuno ha
 scritto), e due icone nemmeno. Ognuna vuole poi un avviso, un presidio e un modo
 di dirlo a chi guarda.
 
-Niente di tutto questo è urgente **una volta che la (a) impedisce la perdita**, e
-decidere tre politiche di collisione sotto la pressione di una perdita di dati
+Niente di tutto questo è urgente **una volta che la (a) impedisce la perdita**,
+e decidere tre politiche di collisione sotto la pressione di una perdita di dati
 aperta è il modo di deciderle male. La (a) elimina il 100% della perdita
 misurata, costa due righe già scritte altrove, e **non pregiudica la (b)**:
 niente tipo pubblico, niente WIT, niente formato su disco.
@@ -134,21 +134,20 @@ niente tipo pubblico, niente WIT, niente formato su disco.
    non fonde le due storie: la storia di `A` prende una **lapide**
    (`VersionStore::tombstone` scrive `deleted_at`) e resta attaccata a un id che
    non è più in anagrafe. Le versioni non si cancellano — `VersionStore`
-   sopravvive alla cancellazione per la
-   [0044](0044-lo-stato-per-documento.md), e un ripristino le rianima — ma da
-   `B` non si vedono.
+   sopravvive alla cancellazione per la [0044](0044-lo-stato-per-documento.md),
+   e un ripristino le rianima — ma da `B` non si vedono.
 2. **I dati di `A` restano orfani** fino alla prima raccolta: spazio
    per-documento, bozza, icona. La raccolta li toglierà alla prossima apertura,
    perché `A` non è né indicizzata né nel cestino.
 
-È il prezzo dichiarato dalla voce, ed è asimmetrico di proposito: chi rinomina ha
-fatto un gesto e ne vede l'effetto, chi subisce la rinomina non ha fatto niente e
-non vedrebbe niente.
+È il prezzo dichiarato dalla voce, ed è asimmetrico di proposito: chi rinomina
+ha fatto un gesto e ne vede l'effetto, chi subisce la rinomina non ha fatto
+niente e non vedrebbe niente.
 
 ## Il secondo chiamante la eredita gratis
 
-È la prova che decide, e qui la risposta è netta: **i tre canali non se la devono
-ricordare, la attraversano**.
+È la prova che decide, e qui la risposta è netta: **i tre canali non se la
+devono ricordare, la attraversano**.
 
 I chiamanti diretti di `migrate_side_data` sono due — `migrate_identity` e
 `rejoin_renamed_while_closed` — e il primo ne ha a sua volta due, quindi contati
@@ -164,23 +163,23 @@ adesso tutti e tre garantiscono la destinazione libera:
 Fuori da questi tre, `migrate_doc_data` — che è **uno** dei tre canali, non i
 tre — ha altri due chiamanti, e ognuno si difende da sé perché ognuno sceglie il
 proprio path di destinazione: `restore_from_trash`, che quando l'origine è di
-nuovo occupata approda su un nome scelto dall'utente, e
-`rename_entry_in_batch`, che ha un `AlreadyExists` suo. Non è una politica di
-collisione ripetuta tre volte: è che a scegliere la destinazione sono loro, e
-`sync_renamed_path` è l'unico a cui la destinazione la detta il filesystem.
+nuovo occupata approda su un nome scelto dall'utente, e `rename_entry_in_batch`,
+che ha un `AlreadyExists` suo. Non è una politica di collisione ripetuta tre
+volte: è che a scegliere la destinazione sono loro, e `sync_renamed_path` è
+l'unico a cui la destinazione la detta il filesystem.
 
 La guardia sta **a monte e non dentro i tre canali**, e la ragione è che a valle
 la domanda non si può più porre: dentro `drafts.migrate` non c'è modo di dire
 «allora non era un rename» — si potrebbe al più rifiutare *quella* scrittura, e
 si otterrebbe una migrazione a metà, con l'icona che ha seguito e la bozza no.
-La domanda «è occupata la destinazione?» è **la stessa per i tre canali**, quindi
-si fa una volta, nel punto che tutti e tre attraversano.
+La domanda «è occupata la destinazione?» è **la stessa per i tre canali**,
+quindi si fa una volta, nel punto che tutti e tre attraversano.
 
 Ciò che la guardia non può fare da sola è **impedire a un quarto canale di
 nascere senza di lei**. Per questo il contratto è anche scritto: la
 documentazione di `migrate_side_data` adesso dichiara la precondizione e nomina
-chi la garantisce per ciascuna delle tre porte, e il commento di `docdata.rs` che
-prometteva un invariante falso adesso nomina la guardia che lo rende vero.
+chi la garantisce per ciascuna delle tre porte, e il commento di `docdata.rs`
+che prometteva un invariante falso adesso nomina la guardia che lo rende vero.
 
 ## Il presidio, e il rosso
 
@@ -193,13 +192,12 @@ cestino, il sidecar illeggibile, la fusione di due righe di estratto, la
 scrittura atomica.
 
 **Un banco solo per tutti e tre i canali**, ed è una scelta e non una pigrizia:
-i tre canali non hanno tre guardie, ne hanno una, quindi tre banchi
-proverebbero tre volte la stessa riga. Il banco attacca a `B` un dato per
-canale — bozza, icona, spazio per-documento — e li verifica tutti e tre dopo
-`mv A.lnk B.lnk`; il giorno che qualcuno togliesse la guardia, ne diventano
-rossi tre insieme, il che dice anche *quanti* canali passavano di lì. Il caso
-che la voce chiama «quello che perde davvero» — la bozza non salvata — è il
-primo `assert`.
+i tre canali non hanno tre guardie, ne hanno una, quindi tre banchi proverebbero
+tre volte la stessa riga. Il banco attacca a `B` un dato per canale — bozza,
+icona, spazio per-documento — e li verifica tutti e tre dopo `mv A.lnk B.lnk`;
+il giorno che qualcuno togliesse la guardia, ne diventano rossi tre insieme, il
+che dice anche *quanti* canali passavano di lì. Il caso che la voce chiama
+«quello che perde davvero» — la bozza non salvata — è il primo `assert`.
 
 Rosso prima, verde dopo: le tre righe stampate sopra sono la corsa in rosso.
 
@@ -209,10 +207,10 @@ Rosso prima, verde dopo: le tre righe stampate sopra sono la corsa in rosso.
   comportamento da presidiare finché non è deciso quale. Ciò che c'è è la
   casella residua in `todo.md`, che è l'unica forma in cui questo repo tiene
   ferma una cosa non ancora fatta.
-- **Il banco non prova il verso degli avvisi.** La (a) non ne emette — degrada in
-  silenzio, come degradava già il ramo accanto — e la voce non lo chiedeva: la
-  perdita è impedita, non annunciata. Se un giorno la (b) arriva, l'avviso è la
-  prima cosa che porta con sé (`doc_data_warnings` e `organization.warn`
+- **Il banco non prova il verso degli avvisi.** La (a) non ne emette — degrada
+  in silenzio, come degradava già il ramo accanto — e la voce non lo chiedeva:
+  la perdita è impedita, non annunciata. Se un giorno la (b) arriva, l'avviso è
+  la prima cosa che porta con sé (`doc_data_warnings` e `organization.warn`
   esistono già).
 - **La collisione fra un allegato e un documento non è coperta.** La guardia
   guarda `metas`, cioè i documenti; un allegato in anagrafe ma senza modello

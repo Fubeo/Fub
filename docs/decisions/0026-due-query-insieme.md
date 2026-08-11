@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §8.4 (seduta 8) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/08-il-kernel-a-pezzi.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/08-il-kernel-a-pezzi.md)
 
 ---
 
@@ -48,11 +49,12 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
 ## Le decisioni prese, da NON ridiscutere senza motivo
 
 - **Una dichiarazione non poteva cambiare ciò che è lecito, e quindi non era una
-  clausola.** `IndexProvider` è `Send + Sync` e `query` prende `&self`: chiamarla
-  da N thread sulla stessa istanza **è già** permesso, per costruzione, e nessun
-  campo aggiunto potrebbe renderlo di più o di meno permesso. Ciò che un
-  `concurrent-queries: bool` direbbe non è *cosa si può fare* ma *quanto si
-  aspetterà*: è un suggerimento sulle prestazioni travestito da firma.
+  clausola.** `IndexProvider` è `Send + Sync` e `query` prende `&self`:
+  chiamarla da N thread sulla stessa istanza **è già** permesso, per
+  costruzione, e nessun campo aggiunto potrebbe renderlo di più o di meno
+  permesso. Ciò che un `concurrent-queries: bool` direbbe non è *cosa si può
+  fare* ma *quanto si aspetterà*: è un suggerimento sulle prestazioni travestito
+  da firma.
 - **E nessun chiamante avrebbe potuto agirci.** Il kernel non parallelizza le
   query per conto proprio — la concorrenza gliela portano i chiamanti, N comandi
   IPC e N view — quindi con un `false` in mano non ha niente da smettere di
@@ -68,19 +70,19 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
   e qui non c'è niente che diventi impossibile.
 - **Quindi la scadenza non c'è, ed era tutta la P0.** La voce era **P0
   condizionale**: scadeva col freeze *solo se* la risposta fosse stata qualcosa
-  che chi implementa deve fornire. Non lo è. Un paragrafo di commento nel WIT non
-  è un cambio di contratto — non ha discriminante, non ha ordine, non compare in
-  nessuna firma — e si può scrivere oggi come fra un anno. La voce si chiude
-  senza aver consumato nulla del budget del freeze, ed è il verso in cui una P0
-  condizionale deve risolversi quando può.
+  che chi implementa deve fornire. Non lo è. Un paragrafo di commento nel WIT
+  non è un cambio di contratto — non ha discriminante, non ha ordine, non
+  compare in nessuna firma — e si può scrivere oggi come fra un anno. La voce si
+  chiude senza aver consumato nulla del budget del freeze, ed è il verso in cui
+  una P0 condizionale deve risolversi quando può.
 - **La prosa si scrive lo stesso, perché è l'unica cosa che sarebbe servita.**
   Il trait ([`IndexProvider::query`](../../crates/fub-abi/src/traits.rs)) e il
-  WIT ([`index.query`](../../crates/fub-abi/wit/fub/abi.wit)) adesso dicono per esteso ciò che
-  era implicito: due `query` possono essere in volo insieme, serializzare è
-  **permesso e sconsigliato**, e chi vuole sapere se il proprio indice scala lo
-  misura. Non è una garanzia e non finge di esserlo: è la differenza fra un
-  comportamento che nessuno aveva scritto e uno che si è deciso di non
-  pretendere.
+  WIT ([`index.query`](../../crates/fub-abi/wit/fub/abi.wit)) adesso dicono per
+  esteso ciò che era implicito: due `query` possono essere in volo insieme,
+  serializzare è **permesso e sconsigliato**, e chi vuole sapere se il proprio
+  indice scala lo misura. Non è una garanzia e non finge di esserlo: è la
+  differenza fra un comportamento che nessuno aveva scritto e uno che si è
+  deciso di non pretendere.
 - **Al posto della dichiarazione c'è una misura, e la porta ogni indice.** Se la
   qualità è del singolo indice, il presidio è del singolo indice: la ricerca ha
   il suo (`due_ricerche_stanno_nell_indice_insieme`, in `features/search.rs`), e
@@ -105,12 +107,13 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
   sotto il lock evita che due query concorrenti committino a vuoto, e le due
   `Ordering` che contano legano lo spegnimento di `dirty` al `reload` che l'ha
   reso vero: chi legge «pulito» vede anche l'indice ricaricato.
-- **E il lock che resta non sta su tutto, sta sul writer.** `IndexWriter::commit`
-  vuole `&mut self`; `add_document` e `delete_term` no, prendono `&self`. Quindi
-  tantivy non aveva mai chiesto un `Mutex` attorno all'indice intero: quel lock
-  era il prezzo di aver messo `commit` dentro `search`. `fingerprints` e
-  `manifest_at` sono adesso campi normali, perché cambiano solo sotto `&mut
-  self` — è il compilatore a tenerli fuori dalla concorrenza, non un lock.
+- **E il lock che resta non sta su tutto, sta sul writer.**
+  `IndexWriter::commit` vuole `&mut self`; `add_document` e `delete_term` no,
+  prendono `&self`. Quindi tantivy non aveva mai chiesto un `Mutex` attorno
+  all'indice intero: quel lock era il prezzo di aver messo `commit` dentro
+  `search`. `fingerprints` e `manifest_at` sono adesso campi normali, perché
+  cambiano solo sotto `&mut self` — è il compilatore a tenerli fuori dalla
+  concorrenza, non un lock.
 
 ## Trovato per strada
 
@@ -128,8 +131,8 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
   che ha già in mano, che è esattamente ciò che il commento del trait chiedeva a
   un indice di fare. Il difetto era di chi doveva committare, cioè di chi ha uno
   stato durevole — che è anche la classe di provider di terzi in cui tornerà.
-- **Il costo di una query non si è mosso, e doveva non muoversi.** 47 op/s con un
-  prestito esclusivo vuol dire ~21 ms per ricerca, che è lo stesso numero di
+- **Il costo di una query non si è mosso, e doveva non muoversi.** 47 op/s con
+  un prestito esclusivo vuol dire ~21 ms per ricerca, che è lo stesso numero di
   prima: questa voce non ha reso una query più veloce, ha fatto passare N query
   insieme. Le due cose sono diverse ed è la §21.9 a dirlo per intero.
 
@@ -144,14 +147,15 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
   così: sta sul percorso di chi scrive, e chi scrive è già serializzato dal
   prestito esclusivo del workspace un livello più su. Spezzarlo comprerebbe
   parallelismo dentro un percorso che non ne ha da spendere.
-- **I 23 ms per query restano, e restano della [§21.9](0074-selezionare-non-e-raccontare.md).**
-  Con la [0025](0025-la-ricerca-predefinita.md) quella domanda ha un proprietario
-  suo, e ha ancora due numeri a due ordini di grandezza di distanza da spiegare
-  (108 µs misurati a M2, ~21–23 ms qui). Questa voce ha tolto la ragione per cui
-  quei millisecondi **non si dividevano per otto**; non ha spiegato perché siano
+- **I 23 ms per query restano, e restano della
+  [§21.9](0074-selezionare-non-e-raccontare.md).** Con la
+  [0025](0025-la-ricerca-predefinita.md) quella domanda ha un proprietario suo,
+  e ha ancora due numeri a due ordini di grandezza di distanza da spiegare (108
+  µs misurati a M2, ~21–23 ms qui). Questa voce ha tolto la ragione per cui quei
+  millisecondi **non si dividevano per otto**; non ha spiegato perché siano
   tanti. *(La spiegazione è arrivata con la
-  [0074](0074-selezionare-non-e-raccontare.md), che ha chiuso la §21.9: non erano
-  della query, erano di duemila estratti generati per mostrarne venti.)*
+  [0074](0074-selezionare-non-e-raccontare.md), che ha chiuso la §21.9: non
+  erano della query, erano di duemila estratti generati per mostrarne venti.)*
 - **Il banco non è stato toccato.** Le sue tre fasi misuravano già la cosa
   giusta, e la prima esisteva proprio perché «un provider può avere un lock
   proprio dentro il prestito condiviso». Cambiarlo mentre si cambia ciò che
@@ -165,8 +169,8 @@ lo vede, e per la ragione che la 0024 aveva già spiegato — una ricerca costav
 - `cargo test --workspace` — **55 suite, 0 fallimenti**. Sono le stesse 55 della
   [0024](0024-chi-legge-non-aspetta-chi-legge.md), e il numero non sale apposta:
   il presidio nuovo (`due_ricerche_stanno_nell_indice_insieme`) sta **dentro**
-  la suite di `fub-features`, che passa da 93 a 94 test, perché è una qualità
-  di quell'indice e non una proprietà del kernel da provare a parte. Nessun test
+  la suite di `fub-features`, che passa da 93 a 94 test, perché è una qualità di
+  quell'indice e non una proprietà del kernel da provare a parte. Nessun test
   preesistente è stato tolto; uno è stato *adattato* di una riga
   (`inner.get_mut().dirty` → `dirty.load(…)`, perché il campo che leggeva ha
   cambiato tipo).

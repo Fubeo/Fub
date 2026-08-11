@@ -6,7 +6,13 @@
 | **Origine** | `todo.md` §21.4 ([seduta 21](../roadmap/21-la-ricerca-predefinita.md)) — **chiude la voce**; e **mezza** §21.5, che resta aperta con le due superfici che mancano. Il criterio della mezza voce è quello della [0031](0031-chi-possiede-i-bundle.md) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/21-la-ricerca-predefinita.md) · [la ricerca predefinita, 0025](0025-la-ricerca-predefinita.md) · [il canale dati, 0019](0019-il-canale-dati.md) · [una posizione dentro un documento, 0049](0049-una-posizione-dentro-un-documento.md) · [cosa si chiede a una ricerca, 0050](0050-cosa-si-chiede-a-una-ricerca.md) · [un accordo ha un proprietario, 0081](0081-un-accordo-ha-un-proprietario.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/21-la-ricerca-predefinita.md) ·
+[la ricerca predefinita, 0025](0025-la-ricerca-predefinita.md) ·
+[il canale dati, 0019](0019-il-canale-dati.md) ·
+[una posizione dentro un documento, 0049](0049-una-posizione-dentro-un-documento.md)
+· [cosa si chiede a una ricerca, 0050](0050-cosa-si-chiede-a-una-ricerca.md) ·
+[un accordo ha un proprietario, 0081](0081-un-accordo-ha-un-proprietario.md)
 
 ---
 
@@ -57,8 +63,8 @@ leggerebbe chi apre il file.
 
 ## La §21.4, e perché è corta
 
-La ricerca dentro la nota è un modale (`panels/doc-search.ts`), su `Mod-f` —
-la coppia che le dita si aspettano, ora che `Mod-Shift-f` è tornato alla ricerca
+La ricerca dentro la nota è un modale (`panels/doc-search.ts`), su `Mod-f` — la
+coppia che le dita si aspettano, ora che `Mod-Shift-f` è tornato alla ricerca
 del vault ([0081](0081-un-accordo-ha-un-proprietario.md)). **Non è il
 trova/sostituisci**, ed è la distinzione che regge tutta la voce: quello è
 editing e cammina sulle occorrenze grezze in ordine di posizione; questa cerca
@@ -69,10 +75,11 @@ Il codice è poco perché le due cose che servivano erano già arrivate:
 
 - il **linguaggio** la sapeva già dire (sopra), quindi zero varianti nuove di
   `IndexQuery` e zero firma toccata — la quarta volta di fila;
-- le **coordinate** ci sono dalla [0049](0049-una-posizione-dentro-un-documento.md),
-  quindi `righeDaMostrare` e `revealByteOffset` sono le stesse identiche del
-  pannello di ricerca. Senza, i risultati sarebbero stati un elenco di conferme
-  che qualcosa esiste dentro un documento che si sta già guardando.
+- le **coordinate** ci sono dalla
+  [0049](0049-una-posizione-dentro-un-documento.md), quindi `righeDaMostrare` e
+  `revealByteOffset` sono le stesse identiche del pannello di ricerca. Senza, i
+  risultati sarebbero stati un elenco di conferme che qualcosa esiste dentro un
+  documento che si sta già guardando.
 
 L'unica decisione rimasta al pannello è **quale** nota: `state.currentDoc`, cioè
 il documento del riquadro col fuoco — e se non ce n'è uno il modale lo dice
@@ -100,10 +107,10 @@ E su questa la regola non basta, perché il suo budget non è per invocazione: �
 pagherebbe a ogni tasto, e su un vault da 50k note l'elenco intero non è una
 risposta — né come costo di trasporto né come cosa da ordinare nella shell.
 
-Le uscite erano due, e si decide per la prima: **la query con prefisso**
-(§21.2, già nel linguaggio dalla [0050](0050-cosa-si-chiede-a-una-ricerca.md)).
-Un giro per battuta, ma piccolo e con la finestra, contro *nessun giro* della
-lista di candidati spinta nella shell e tenuta aggiornata dagli eventi.
+Le uscite erano due, e si decide per la prima: **la query con prefisso** (§21.2,
+già nel linguaggio dalla [0050](0050-cosa-si-chiede-a-una-ricerca.md)). Un giro
+per battuta, ma piccolo e con la finestra, contro *nessun giro* della lista di
+candidati spinta nella shell e tenuta aggiornata dagli eventi.
 
 La seconda uscita perde per una ragione che il progetto ha già scritto, e non
 per una stima: **una lista di candidati mantenuta dagli eventi è un indice
@@ -135,6 +142,6 @@ Due superfici, e sono lavoro, non più decisioni:
 - **l'autocompletamento va migrato** alla query con prefisso decisa qui.
 
 E un residuo minore, dichiarato perché altrimenti si dimentica:
-`panels/search.ts` ha ancora la sua copia privata dell'evidenziazione, gemella di
-quella che è salita in `ui/highlight.ts`. Le due sono identiche oggi; a
+`panels/search.ts` ha ancora la sua copia privata dell'evidenziazione, gemella
+di quella che è salita in `ui/highlight.ts`. Le due sono identiche oggi; a
 riunirle è il prossimo che tocca quel pannello.

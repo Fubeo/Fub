@@ -6,14 +6,17 @@
 | **Origine** | `todo.md` §16.4 + §16.5 (seduta 16) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) · [il presidio dell'additività](../architecture/wit-congelato.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) ·
+[il presidio dell'additività](../architecture/wit-congelato.md)
 
 ---
 
 Due voci in un verbale solo, e lo chiedeva la seduta stessa: *«la 16.5 non è una
-voce autonoma: è la gamba TS della domanda che pone la 16.4. Decidere "da cosa si
-genera il mirror" separatamente da "da cosa si generano WIT e arena" significa
-decidere due volte la stessa cosa, e la seconda volta contro la prima.»*
+voce autonoma: è la gamba TS della domanda che pone la 16.4. Decidere "da cosa
+si genera il mirror" separatamente da "da cosa si generano WIT e arena"
+significa decidere due volte la stessa cosa, e la seconda volta contro la
+prima.»*
 
 La domanda era una: **da quale dei quattro posti — Rust, WIT, arena, mirror TS —
 si generano gli altri tre.** La risposta è che la sorgente è **Rust**, e che
@@ -23,9 +26,8 @@ stessa cosa, e la voce lo dava per scontato. Sotto, misurato.
 ## La premessa del §16.4 è rovesciata, e si vede dal sorgente
 
 Il §16.4 scartava i tipi Rust così: *«la sorgente autorevole del contratto non è
-Rust: è il WIT, ed è già il repo a trattarlo così —
-`wit_conformance.rs` parsa il WIT e ci confronta i tipi Rust, non il
-contrario»*.
+Rust: è il WIT, ed è già il repo a trattarlo così — `wit_conformance.rs` parsa
+il WIT e ci confronta i tipi Rust, non il contrario»*.
 
 Il fatto è vero e la conclusione no, perché **la direzione del parse è opposta
 alla direzione della verità**: si parsa ciò che si controlla, non ciò di cui ci
@@ -39,9 +41,8 @@ titolo *«Da dove vengono i tipi attesi»*:
 E lo fa in tre modi, tutti ancorati a Rust: `WitType` sul campo destrutturato,
 `WitFn` sul **cast del metodo di trait a puntatore a funzione**, e
 `rust_enum_order`, che parsa il sorgente Rust con `syn` e il cui commento dice
-alla lettera *«l'enum è la verità»*. Il WIT è l'**osservato**; l'atteso viene
-da Rust. Il repo tratta come autorevole esattamente il posto che la voce
-escludeva.
+alla lettera *«l'enum è la verità»*. Il WIT è l'**osservato**; l'atteso viene da
+Rust. Il repo tratta come autorevole esattamente il posto che la voce escludeva.
 
 La conseguenza è che il **§16.5 aveva ragione sulla direzione** — generare dai
 tipi Rust — e torto sullo strumento, per un motivo che nessuna delle due voci
@@ -80,13 +81,13 @@ E il mirror è anche **più largo** del contratto: dei 99 tipi esportati da
 `frontend/src/host/contract.ts`, **dodici** non hanno nessuna controparte WIT
 (`VaultInfo`, `OpenVaults`, `Trust`, `Registration`, `RegistrationKind`,
 `PluginInfo`, `VersionRef`, `RenderedDocument`, `RenderedPart`, `EmbedContent`,
-`BundleInfo`, `KnownVault`) perché rispecchiano `fub-kernel` e `fub-app`,
-che nel contratto non ci sono **per scelta**.
+`BundleInfo`, `KnownVault`) perché rispecchiano `fub-kernel` e `fub-app`, che
+nel contratto non ci sono **per scelta**.
 
 ### Il WIT non è generabile come file, e il numero è metà
 
-`crates/fub-abi/wit/fub/abi.wit` è **3386 righe, di cui 1683 di commento**:
-il 49,7%. E non è una copia dei doc-comment Rust — è prosa di un altro registro,
+`crates/fub-abi/wit/fub/abi.wit` è **3386 righe, di cui 1683 di commento**: il
+49,7%. E non è una copia dei doc-comment Rust — è prosa di un altro registro,
 per un altro lettore. Il `record span` del WIT spiega perché al confine gli
 estremi sono `u64` e non `usize` e cosa succede su wasm32; il `Span` di Rust non
 lo dice, e ha invece link intra-doc (`[rules::media::kind_of]`) che nel WIT non
@@ -102,9 +103,10 @@ Il verso opposto è peggio: generare Rust dal WIT (`wit-bindgen`) sostituirebbe
 `EditReport::inverse()`, le conversioni di `arena`, le `rules` — con dei DTO
 piatti più uno strato di conversione. E il WIT ha un sistema di tipi più povero:
 `Paged<T>` è **un** tipo Rust e **nove** record WIT. Si tornerebbe indietro. Il
-repo lo aveva già scritto, in [M4-wit-hardening.md](../milestones/M4-wit-hardening.md):
-il test di conformità dà *«la proprietà che si voleva da `wit-bindgen` +
-`From`/`Into`, senza generare codice»*.
+repo lo aveva già scritto, in
+[M4-wit-hardening.md](../milestones/M4-wit-hardening.md): il test di conformità
+dà *«la proprietà che si voleva da `wit-bindgen` + `From`/`Into`, senza generare
+codice»*.
 
 ### L'arena non è un quarto posto della stessa specie
 
@@ -147,12 +149,12 @@ opinione:
 - **174 delle 203 voci** di `wit_type!` erano esattamente `kebab(NomeRust)`, e
   `fn kebab` stava nello stesso file. Le altre sono sedici scelte vere (un
   primitivo che si scrive diverso, il JSON opaco, le nove istanze di `Paged<T>`,
-  l'unico aliasing deliberato `UiNode => ui-tree`) più tredici che al confine non
-  compaiono affatto.
+  l'unico aliasing deliberato `UiNode => ui-tree`) più tredici che al confine
+  non compaiono affatto.
 - **Tutte e 26** le chiamate a `enumeration_src` scrivevano a mano un elenco di
   casi che la funzione stessa **ricalcolava** con `rust_enum_order` per poi
-  confrontarcelo. L'elenco a mano non era la verità: era una seconda occasione di
-  sbagliare, che il test poi correggeva. Con i loro diciotto helper `*_name`
+  confrontarcelo. L'elenco a mano non era la verità: era una seconda occasione
+  di sbagliare, che il test poi correggeva. Con i loro diciotto helper `*_name`
   (usati **una volta ciascuno**) facevano 376 righe.
 
 ## La decisione
@@ -174,8 +176,8 @@ garantiscono, e che è il discriminante ABI. Sopra ci stanno `kebab` (→ WIT) e
 minima del fatto che regge tutta la decisione.
 
 **2. Il primo posto generato** (`tests/ts_enums.rs` →
-`frontend/src/host/enums.generated.ts`). Le union di stringhe di **tutti e soli**
-gli `enum` senza payload del contratto — ventisei — emesse dai tipi Rust.
+`frontend/src/host/enums.generated.ts`). Le union di stringhe di **tutti e
+soli** gli `enum` senza payload del contratto — ventisei — emesse dai tipi Rust.
 `contract.ts` le ri-esporta tenendo accanto la prosa, che è l'unica cosa di
 quelle union che non si deriva da niente.
 
@@ -193,8 +195,7 @@ annidati e dalla regola degli `u64` come stringa (`fub_abi::ipc`): derivarla
 vuol dire **riscrivere serde**, cioè avere una seconda implementazione della
 serializzazione che può divergere da quella vera. Per quelli la risposta giusta
 è quella che c'era già ed è un derivato anche lei: la fixture generata da serde
-(`fub-features/tests/ts_mirror.rs`), che non descrive il formato — lo
-*esegue*.
+(`fub-features/tests/ts_mirror.rs`), che non descrive il formato — lo *esegue*.
 
 La riga di taglio, quindi, non è «enum sì, record no»: è **ciò che si deriva
 senza reimplementare serde**.
@@ -222,12 +223,12 @@ E il presidio sa ancora fallire — provato, non asserito:
 ### `wit_additivity` non è toccata, ed è il presidio che conta di più
 
 Il taglio è stato scelto anche per questo. `wit_additivity.rs` confronta
-l'`abi.wit` con `wit/frozen/0.1.0.wit` **parsando** entrambi, non facendo diff di
-testo: la formattazione e i commenti gli sono invisibili. Ma la sua sorgente —
-l'`abi.wit` — resta scritta a mano, quindi la promessa pubblicata continua a
+l'`abi.wit` con `wit/frozen/0.1.0.wit` **parsando** entrambi, non facendo diff
+di testo: la formattazione e i commenti gli sono invisibili. Ma la sua sorgente
+— l'`abi.wit` — resta scritta a mano, quindi la promessa pubblicata continua a
 essere presidiata da un confronto fra due cose che nessuno ha derivato l'una
-dall'altra. È l'unico presidio che protegge **plugin di terzi già compilati**, ed
-è quello su cui non conviene risparmiare righe.
+dall'altra. È l'unico presidio che protegge **plugin di terzi già compilati**,
+ed è quello su cui non conviene risparmiare righe.
 
 ### La riga in più che il TypeScript ha guadagnato
 
@@ -236,8 +237,8 @@ stesso insieme, e adesso lo dicono per costruzione: in `mirror.test.ts` c'è
 un'asserzione di **tipo** che verifica `KernelEvent["type"] ≡ EventKind` nelle
 due direzioni. Un `Event` nuovo in Rust fa crescere `EventKind` da solo — perché
 l'elenco degli enum è una **regola** e non una lista — e da quel momento
-`npx tsc --noEmit`, che gira in CI, non compila finché `KernelEvent` non porta il
-caso. È l'esaustività chiesta dal §16.7 — poi deciso con la
+`npx tsc --noEmit`, che gira in CI, non compila finché `KernelEvent` non porta
+il caso. È l'esaustività chiesta dal §16.7 — poi deciso con la
 [decisione 0056](0056-un-elenco-che-e-la-sorgente.md) — ottenuta senza nessun
 elenco scritto a mano.
 
@@ -258,16 +259,16 @@ stessa promessa che il §16.4 rimprovera al §16.5. Il posto generato è il
 **mirror TS** per la sua parte derivabile, e la controprova è stata fatta
 aggiungendo un caso finto a `EventKind` e guardando il rosso spostarsi:
 
-1. la sola dichiarazione Rust rende rosso `cargo test -p fub-abi --test
-   ts_enums`, che **nomina il caso** (`+ "scatola_finta"`) — e nessuno aveva
-   registrato niente da nessuna parte;
+1. la sola dichiarazione Rust rende rosso
+   `cargo test -p fub-abi --test ts_enums`, che **nomina il caso**
+   (`+ "scatola_finta"`) — e nessuno aveva registrato niente da nessuna parte;
 2. rigenerando (`UPDATE_MIRROR=1`) il rosso passa di là: `npx tsc --noEmit`
    fallisce su `_le_specie_di_evento_coincidono`, perché `KernelEvent` non porta
    il caso.
 
-È lo stesso meccanico della fixture — *«nessuno dei due lati può cambiare da solo
-restando verde»* — con una differenza che è il punto di tutta la voce: **il primo
-rosso adesso è automatico.** Prima bisognava ricordarsi di aggiungere un
+È lo stesso meccanico della fixture — *«nessuno dei due lati può cambiare da
+solo restando verde»* — con una differenza che è il punto di tutta la voce: **il
+primo rosso adesso è automatico.** Prima bisognava ricordarsi di aggiungere un
 campione.
 
 ## Il costo, misurato
@@ -289,8 +290,8 @@ E il conto che è **salito**, perché va detto: le righe totali. Il presidio ha
 perso 309 righe (`wit_conformance.rs`: 5498 → 5189) e il repo ne ha guadagnate
 376 fra generatore e lettore condiviso, più 102 di file derivato. È il baratto
 di ogni generatore, ed è giusto solo perché ciò che scende è il costo **per tipo
-nuovo**, che si paga a ogni voce di FEATURES, mentre ciò che sale si è pagato una
-volta.
+nuovo**, che si paga a ogni voce di FEATURES, mentre ciò che sale si è pagato
+una volta.
 
 ## Cosa si è scartato, e perché
 
@@ -321,12 +322,12 @@ volta.
   decisione qui sopra: li presidia la fixture. Non è una casella residua — non
   c'è niente da fare, c'è una riga di taglio da rispettare.
 - **La prosa dell'`abi.wit`** è il vincolo che tiene aperto il verso «genera il
-  WIT». Se un giorno la si vorrà derivare, la domanda da porre prima è *dove vive
-  la documentazione del confine*, non *quale strumento genera*.
-- Il §16.7 — chiuso dopo, con la [decisione 0056](0056-un-elenco-che-e-la-sorgente.md) —
-  riceve da questa decisione due prove: la scoperta per regola
-  (`fieldless_enums`) e l'asserzione di tipo su `EventKind` sono due presidi
-  **esaustivi per costruzione** in un posto che prima era un elenco. Ciò che il
-  §16.7 chiede ancora — l'inventario dei provider ufficiali, le capacità del
-  `TriesEverything` — non è toccato, e continua a passare per il banco del
-  [§16.2](0055-il-banco-del-lato-host.md).
+  WIT». Se un giorno la si vorrà derivare, la domanda da porre prima è *dove
+  vive la documentazione del confine*, non *quale strumento genera*.
+- Il §16.7 — chiuso dopo, con la
+  [decisione 0056](0056-un-elenco-che-e-la-sorgente.md) — riceve da questa
+  decisione due prove: la scoperta per regola (`fieldless_enums`) e l'asserzione
+  di tipo su `EventKind` sono due presidi **esaustivi per costruzione** in un
+  posto che prima era un elenco. Ciò che il §16.7 chiede ancora — l'inventario
+  dei provider ufficiali, le capacità del `TriesEverything` — non è toccato, e
+  continua a passare per il banco del [§16.2](0055-il-banco-del-lato-host.md).

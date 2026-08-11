@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §13.2 (seduta 13) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/13-identita-del-documento.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/13-identita-del-documento.md)
 
 ---
 
@@ -69,15 +70,15 @@ domanda tornerebbe dall'altro lato).
 
 ### La raccolta è un giro, non un evento
 
-Gira all'apertura del vault, quando l'anagrafe è appena stata ricostruita ed è al
-suo massimo di verità. **Non** sulla cancellazione definitiva, che pure sarebbe
-il momento naturale.
+Gira all'apertura del vault, quando l'anagrafe è appena stata ricostruita ed è
+al suo massimo di verità. **Non** sulla cancellazione definitiva, che pure
+sarebbe il momento naturale.
 
 La ragione è la stessa che ha fatto nascere la voce, letta al contrario: un
 evento lo si perde. Il cestino svuotato ad app chiusa non lo annuncia nessuno, e
-una raccolta che dipendesse dall'annuncio non raccoglierebbe mai quel caso — cioè
-quello che succede quando l'utente fa pulizia dal Finder. Un giro sul disco non
-ha questo problema, e costa una `read_dir` per plugin a ogni apertura.
+una raccolta che dipendesse dall'annuncio non raccoglierebbe mai quel caso —
+cioè quello che succede quando l'utente fa pulizia dal Finder. Un giro sul disco
+non ha questo problema, e costa una `read_dir` per plugin a ogni apertura.
 
 ### «Non esiste più» vuol dire né nel vault **né nel cestino**
 
@@ -88,33 +89,34 @@ uscita dal cestino, non quando ci entra.
 
 ### Sotto `doc/` sta ciò che non ha senso senza il documento
 
-È la conseguenza della politica di raccolta, ed è la riga che un autore di plugin
-deve leggere prima di scegliere dove mettere le sue cose. Un'annotazione, una
-riga di database, lo stato di una flashcard: muoiono con la nota, e stanno lì.
+È la conseguenza della politica di raccolta, ed è la riga che un autore di
+plugin deve leggere prima di scegliere dove mettere le sue cose. Un'annotazione,
+una riga di database, lo stato di una flashcard: muoiono con la nota, e stanno
+lì.
 
-E il **controesempio è nel repo**, ed è quello che definisce la regola: la storia
-delle versioni **non** sta lì, e non ci deve stare. Il versioning esiste apposta
-per restare leggibile dopo la cancellazione — tiene un tombstone, e la nota
-cancellata è precisamente ciò che si vuole poter recuperare. Un dato che deve
-sopravvivere al documento tiene il proprio store fuori da `doc/`, ed è il caso in
-cui la regola si vede meglio.
+E il **controesempio è nel repo**, ed è quello che definisce la regola: la
+storia delle versioni **non** sta lì, e non ci deve stare. Il versioning esiste
+apposta per restare leggibile dopo la cancellazione — tiene un tombstone, e la
+nota cancellata è precisamente ciò che si vuole poter recuperare. Un dato che
+deve sopravvivere al documento tiene il proprio store fuori da `doc/`, ed è il
+caso in cui la regola si vede meglio.
 
 ### Il kernel cammina il disco, non il registro dei montati
 
 La migrazione e la raccolta guardano `.fub-data/plugins/*` sul filesystem,
 **anche per i plugin spenti**. Non è generosità: è che un plugin spento oggi non
 deve riaccendersi domani con le chiavi di ieri, ed è esattamente chi non può
-accorgersene da solo. Il presidio di questa voce è scritto su un plugin che non è
-mai stato montato — se funziona per lui, funziona per tutti, e il contrario non è
-vero.
+accorgersene da solo. Il presidio di questa voce è scritto su un plugin che non
+è mai stato montato — se funziona per lui, funziona per tutti, e il contrario
+non è vero.
 
 ### Il ripristino su un altro path è una rinomina, e adesso lo è davvero
 
 Quando il cestino restituisce una nota e il path d'origine è di nuovo occupato,
 l'app ne sceglie un altro: la chiave è cambiata, e il §13.2 lo nominava già come
-«un rename a tutti gli effetti, anche se il documento non era indicizzato». Adesso
-`restore_from_trash` migra anche lo spazio per-documento, accanto all'evento che
-già emetteva — e per la ragione della
+«un rename a tutti gli effetti, anche se il documento non era indicizzato».
+Adesso `restore_from_trash` migra anche lo spazio per-documento, accanto
+all'evento che già emetteva — e per la ragione della
 [0038](0038-il-kernel-possiede-il-sidecar.md): la coda eventi ha un budget e può
 troncare ([0034](0034-il-freno-e-il-raggruppamento.md)), quindi un dato
 autorevole non può dipendere da una consegna dichiaratamente best-effort.
@@ -128,9 +130,10 @@ autorevole non può dipendere da una consegna dichiaratamente best-effort.
   riconoscere il prefisso, non di possedere la porta.
 - **Un'impronta al posto della codifica reversibile.** Vedi sopra: costa
   `doc_of`, cioè costa la raccolta, cioè costa la metà della voce.
-- **Raccogliere su `DocumentRemoved`.** È l'evento sbagliato due volte: lo emette
-  anche il watcher per un file *spostato fuori* — cioè una nota che potrebbe
-  tornare — e non lo emette affatto per il cestino svuotato ad app chiusa.
+- **Raccogliere su `DocumentRemoved`.** È l'evento sbagliato due volte: lo
+  emette anche il watcher per un file *spostato fuori* — cioè una nota che
+  potrebbe tornare — e non lo emette affatto per il cestino svuotato ad app
+  chiusa.
 - **Migrare i dati sull'evento `DocumentRenamed`, dentro il kernel.** Sarebbe
   stato più simmetrico, e sarebbe stato la stessa consegna best-effort che la
   0038 aveva già scartato per l'organizzazione.
@@ -150,12 +153,12 @@ autorevole non può dipendere da una consegna dichiaratamente best-effort.
   clienti. Costa una regola e un giro all'apertura, non una firma congelata.
 - **Un `DocId` molto lungo produce un nome di file molto lungo**, e i filesystem
   si fermano intorno ai 255 byte per componente. Un vault con una nota annidata
-  dieci cartelle sotto può superarlo, e allora la scrittura fallisce con un errore
-  di I/O. È **rumoroso e recuperabile**, mentre accorciare con un'impronta sarebbe
-  silenzioso e irreversibile. Scritto accanto a `encode`.
+  dieci cartelle sotto può superarlo, e allora la scrittura fallisce con un
+  errore di I/O. È **rumoroso e recuperabile**, mentre accorciare con
+  un'impronta sarebbe silenzioso e irreversibile. Scritto accanto a `encode`.
 - **La migrazione non copre la rinomina fatta ad app chiusa** che il watcher non
-  può accoppiare: quella nota risulta sparita e ne nasce una nuova, quindi i dati
-  vecchi li raccoglie il giro successivo. Non è una perdita che questa voce
+  può accoppiare: quella nota risulta sparita e ne nasce una nuova, quindi i
+  dati vecchi li raccoglie il giro successivo. Non è una perdita che questa voce
   introduce — è quella che già c'era — ma adesso almeno smette di *accumularsi*
   in silenzio.
 - **Gli avvisi finiscono su `stderr`**, che in un'app impacchettata non ha un

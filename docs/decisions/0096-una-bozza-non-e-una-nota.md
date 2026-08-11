@@ -76,11 +76,11 @@ retorica: *«il testo che l'utente non ha ancora salvato è il dato più privato
 che un vault contenga»*. Da quella frase la 0088 deduce, e bene, che la
 **scrittura** delle bozze non sarà mai una capacità. Ciò che non ha fatto è
 applicare la stessa frase alla lettura, e l'argomento con cui l'ha concessa —
-*«leggere non è cambiare»*, della
-[0085](0085-leggere-non-e-cambiare.md) — risponde alla domanda sbagliata:
-protegge l'**integrità**, mentre la minaccia che quella frase nomina è la
-**riservatezza**. Contro la riservatezza, leggere è esattamente il verbo che
-conta. Un plugin che legge le bozze e le manda altrove non cambia niente.
+*«leggere non è cambiare»*, della [0085](0085-leggere-non-e-cambiare.md) —
+risponde alla domanda sbagliata: protegge l'**integrità**, mentre la minaccia
+che quella frase nomina è la **riservatezza**. Contro la riservatezza, leggere è
+esattamente il verbo che conta. Un plugin che legge le bozze e le manda altrove
+non cambia niente.
 
 La seconda è una differenza di forma, e si vede solo mettendo le due domande una
 accanto all'altra. **Un documento salvato lo si legge nominandolo**:
@@ -131,8 +131,8 @@ scartata contando le frasi che l'utente può dire:
   di recupero dovrebbe chiedere l'intero vault per leggere il testo che l'utente
   non gli ha consegnato.
 
-E la seconda frase non è ipotetica: **è l'unico cliente che questa domanda
-abbia mai avuto**. Un recupero dopo un crash vuole le bozze e nient'altro —
+E la seconda frase non è ipotetica: **è l'unico cliente che questa domanda abbia
+mai avuto**. Un recupero dopo un crash vuole le bozze e nient'altro —
 `DraftInfo` porta già `exists`, `base` e `current`, cioè tutto ciò che gli serve
 del vault. Farlo dipendere da `read-vault` sarebbe *un permesso troppo grosso
 per la cosa che si fa*, che è la definizione con cui la §23.5 descriveva il modo
@@ -202,10 +202,10 @@ mano di quello di soddisfarlo.
 La seconda è **perché** il cambio è stato meccanico, e non è un dettaglio
 d'implementazione: `CapabilitySet` **non si persiste da nessuna parte**. Si
 ricalcola da `Capability::ALL` a ogni registrazione di plugin, quindi allargare
-il tipo non ha una migrazione dietro. Se un giorno lo si salvasse su disco —
-per un inventario dei permessi già risolti, che è la cosa che verrebbe in mente
-— quella proprietà se ne andrebbe con la prima riga, e questo cambio da
-mezz'ora ne diventerebbe un altro. Sta scritto accanto al tipo.
+il tipo non ha una migrazione dietro. Se un giorno lo si salvasse su disco — per
+un inventario dei permessi già risolti, che è la cosa che verrebbe in mente —
+quella proprietà se ne andrebbe con la prima riga, e questo cambio da mezz'ora
+ne diventerebbe un altro. Sta scritto accanto al tipo.
 
 ## Perché non c'è ritaglio
 
@@ -228,8 +228,9 @@ numero di plugin scritti contro un permesso che non c'era.
 **Non è una difesa contro un plugin ostile**, ed è il registro che la seduta 22
 ha imposto e che la 0095 ha tenuto. A M4 un plugin nativo gira in-process: ha
 già la memoria del processo, e con lei il disco. Il valore di questo cancello è
-la **dichiarazione** — che l'utente possa vederla, e negarla — non l'imposizione.
-Gonfiarlo sarebbe il difetto che questa seduta esiste per non commettere.
+la **dichiarazione** — che l'utente possa vederla, e negarla — non
+l'imposizione. Gonfiarlo sarebbe il difetto che questa seduta esiste per non
+commettere.
 
 **Non è un interruttore sulle bozze.** Che il buffer di crash esista, e cosa
 tenga, resta una decisione della 0088 e della shell. Qui si decide **chi altro**
@@ -251,8 +252,8 @@ Tre test, e due dicono la voce intera in un nome.
   della leva: l'indice si legge, le bozze no. Prima di oggi non era
   **esprimibile**, perché la stessa spunta apriva tutte e due.
 - **`granting_drafts_alone_does_not_open_the_index`** — il secondo verso, quello
-  che la forma cumulativa avrebbe reso impossibile. È il pannello di recupero: le
-  bozze passano, l'indice no.
+  che la forma cumulativa avrebbe reso impossibile. È il pannello di recupero:
+  le bozze passano, l'indice no.
 - **`the_two_permissions_are_not_the_same_key`** — che `read-drafts` non sia un
   nome nuovo davanti al cancello vecchio. Un `Granted` costruito col solo
   `fub:read-vault` concede `Query` e nega `Drafts`, che è la riga esatta che

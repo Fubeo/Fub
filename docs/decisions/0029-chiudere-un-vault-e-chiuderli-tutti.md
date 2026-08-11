@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §9.5 + §9.6 (seduta 9) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)
 
 ---
 
@@ -58,13 +59,13 @@ soltanto chi risponde a chi non ne nomina uno.**
   al **solo** `IndexProvider`, perché è l'unico che il kernel alimenta e l'unico
   che possiede uno stato derivato su disco. Il punto in cui un *bundle* libera
   ciò che possiede resta `Plugin::deactivate` (§9.3). Ma fra i due c'è un caso
-  che nessuno dei due copre — un handler che tiene qualcosa in memoria e non è un
-  indice — e per lui la risposta giusta non è una funzione nuova su ogni trait:
-  è **sapere che sta per succedere**. Che poi è la regola della
+  che nessuno dei due copre — un handler che tiene qualcosa in memoria e non è
+  un indice — e per lui la risposta giusta non è una funzione nuova su ogni
+  trait: è **sapere che sta per succedere**. Che poi è la regola della
   [0013](0013-elenco-delle-capacita.md), applicata al contrario: chi chiude non
   ha bisogno della risposta per proseguire e la chiusura non si annulla, quindi
-  ciò che serve è un evento e non una capacità. Chi non fa in tempo ha perso solo
-  ciò che non aveva reso durevole.
+  ciò che serve è un evento e non una capacità. Chi non fa in tempo ha perso
+  solo ciò che non aveva reso durevole.
 - **Il flush di tutti gli indici viene *prima* delle disattivazioni, e non
   dentro.** `deactivate_plugin` fa già `flush` e poi `close` sugli indici di chi
   spegne — ma li fa **un plugin alla volta**, e ciò che gli handler hanno appena
@@ -75,34 +76,33 @@ soltanto chi risponde a chi non ne nomina uno.**
   frase con cui il §9.5 chiedeva questa voce.
 - **Ordine inverso di dichiarazione.** È l'ordine in cui si smontano le cose che
   si sono montate in ordine: chi è arrivato per ultimo può dipendere da chi
-  c'era già (§7.5), mai il contrario. Fra vault **diversi** invece non c'è nessun
-  ordine che conti, e il codice non finge che ci sia: due vault non si
+  c'era già (§7.5), mai il contrario. Fra vault **diversi** invece non c'è
+  nessun ordine che conti, e il codice non finge che ci sia: due vault non si
   conoscono, non condividono provider e non condividono spazio dati.
 - **Gli errori non fermano niente e tornano tutti insieme.** Una chiusura che si
   interrompesse al primo errore lascerebbe aperto tutto il resto, che è
   esattamente il caso per cui questa funzione esiste. È la stessa regola di
   `flush_indexes`, e chi ha un canale per dirlo li mostra: il comando IPC li
   restituisce come lista, e la chiusura dell'app li scrive (§20.2).
-- **Chiudere due volte non è chiudere due volte.** `Workspace` ha un `closed:
-  bool`, e la seconda chiamata rende una lista vuota senza emettere un secondo
-  `VaultClosed`. **Non è un sesto proprietario** (§8.1): è lo stato del *tutto*,
-  ed è l'unica cosa che nessuno dei cinque può sapere da sé — il disco non sa
-  degli indici, gli indici non sanno dei provider. Serve a una cosa sola, e il
-  presidio la nomina: `chiudere_due_volte_non_chiude_due_volte`.
+- **Chiudere due volte non è chiudere due volte.** `Workspace` ha un
+  `closed: bool`, e la seconda chiamata rende una lista vuota senza emettere un
+  secondo `VaultClosed`. **Non è un sesto proprietario** (§8.1): è lo stato del
+  *tutto*, ed è l'unica cosa che nessuno dei cinque può sapere da sé — il disco
+  non sa degli indici, gli indici non sanno dei provider. Serve a una cosa sola,
+  e il presidio la nomina: `chiudere_due_volte_non_chiude_due_volte`.
 - **L'indice del kernel non riceve `close`, e non è una dimenticanza.** Non
   persiste niente per conto proprio (la sua verità è il vault, e la ricostruisce
-  all'apertura), non ha uno spazio dati, e soprattutto **non potrebbe
-  riceverlo senza uscire da sé stesso**: l'host che gli si presterebbe è
-  costruito sul workspace che lo contiene. La regola resta quella della 0028 —
-  `close` esiste per chi possiede risorse esterne — e il `CoreIndex` non ne
-  possiede.
-- **La chiave delle sessioni è la forma *canonica* della radice.** Non è
-  igiene: senza, `/vault` e `/vault/../vault` sarebbero due sessioni sullo
-  stesso vault, e la seconda si fermerebbe — bloccando, per sempre, senza un
-  errore — sul lock che l'indice della prima tiene sulla propria cartella.
-  Tantivy quel lock lo aspetta *bloccando*, ed è il modo esatto in cui il bug
-  che questa voce ha tolto si manifestava prima. Un path che non si
-  canonicalizza è un errore **qui**, dove si può ancora dire quale.
+  all'apertura), non ha uno spazio dati, e soprattutto **non potrebbe riceverlo
+  senza uscire da sé stesso**: l'host che gli si presterebbe è costruito sul
+  workspace che lo contiene. La regola resta quella della 0028 — `close` esiste
+  per chi possiede risorse esterne — e il `CoreIndex` non ne possiede.
+- **La chiave delle sessioni è la forma *canonica* della radice.** Non è igiene:
+  senza, `/vault` e `/vault/../vault` sarebbero due sessioni sullo stesso vault,
+  e la seconda si fermerebbe — bloccando, per sempre, senza un errore — sul lock
+  che l'indice della prima tiene sulla propria cartella. Tantivy quel lock lo
+  aspetta *bloccando*, ed è il modo esatto in cui il bug che questa voce ha
+  tolto si manifestava prima. Un path che non si canonicalizza è un errore
+  **qui**, dove si può ancora dire quale.
 - **Il watcher si lascia andare per primo.** Entra nel workspace da un thread
   suo: tenerlo vivo durante la chiusura vorrebbe dire poter ricevere una
   sincronizzazione e un `flush_indexes` *dopo* che gli indici sono stati chiusi
@@ -156,13 +156,13 @@ soltanto chi risponde a chi non ne nomina uno.**
 
 ## Cosa NON è stato fatto, e perché
 
-- **Il registro dei vault — recenti, preferiti, icone — si sposta al §11.1.** Era
-  il secondo punto del §9.6, ed è l'unico che questa voce non chiude. Non per
-  mancanza di tempo: perché è **configurazione globale**, e la configurazione
-  globale non ha ancora un posto — oggi le impostazioni sono variabili
-  d'ambiente. Deciderlo qui vorrebbe dire inventare un file di configurazione
-  per un elenco di path, cioè decidere il §11.1 di sfuggita e con un solo
-  cliente davanti. La voce è stata scritta nel
+- **Il registro dei vault — recenti, preferiti, icone — si sposta al §11.1.**
+  Era il secondo punto del §9.6, ed è l'unico che questa voce non chiude. Non
+  per mancanza di tempo: perché è **configurazione globale**, e la
+  configurazione globale non ha ancora un posto — oggi le impostazioni sono
+  variabili d'ambiente. Deciderlo qui vorrebbe dire inventare un file di
+  configurazione per un elenco di path, cioè decidere il §11.1 di sfuggita e con
+  un solo cliente davanti. La voce è stata scritta nel
   [file della seduta 11](../roadmap/11-impostazioni-e-i-tre-stati.md).
 - **Nessuno *aspetta* i job in volo, e la chiusura non li cancella.** In
   produzione non c'è ancora un runner (§9.3): `spawn_job` accoda e basta, e i
@@ -217,14 +217,16 @@ soltanto chi risponde a chi non ne nomina uno.**
     `chiudere_e_lultimo_giro_poi_il_flush_poi_chi_smette` fallisce con il
     proprio messaggio — «chi riceve `VaultClosed` è ancora registrato e può
     ancora scrivere» — perché a quel punto l'handler non è più registrato;
-  - riducendo `canonical` all'identità, `riaprire_lo_stesso_vault_non_lo_rimonta`
-    fallisce con `Nessun vault aperto su /tmp/…/../…`, cioè lo stesso vault
-    diventa due chiavi.
+  - riducendo `canonical` all'identità,
+    `riaprire_lo_stesso_vault_non_lo_rimonta` fallisce con
+    `Nessun vault aperto su /tmp/…/../…`, cioè lo stesso vault diventa due
+    chiavi.
 - **Contratto:** `Event::VaultClosed { root }` e `EventKind::VaultClosed` sono
-  **additivi e in coda** al variant e all'enum (`crates/fub-abi/wit/fub/abi.wit`), presidiati
-  da `wit_conformance`; `EventMask::all()` li include. Il mirror TS è
-  rigenerato (`UPDATE_MIRROR=1` su `fub-features` e `fub-app`), con il
-  record nuovo `OpenVaults` fra i campioni dell'app.
+  **additivi e in coda** al variant e all'enum
+  (`crates/fub-abi/wit/fub/abi.wit`), presidiati da `wit_conformance`;
+  `EventMask::all()` li include. Il mirror TS è rigenerato (`UPDATE_MIRROR=1` su
+  `fub-features` e `fub-app`), con il record nuovo `OpenVaults` fra i campioni
+  dell'app.
 - `cd frontend && npx vitest run` — 11 file, 173 test verdi; `npx tsc --noEmit`
   pulita.
 - `cargo fmt --all` — pulita.

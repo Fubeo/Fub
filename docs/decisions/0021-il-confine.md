@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §7.1–§7.6 (seduta 7, *ex* §1.38, §2.8, §2.10, §1.34, §1.24, §2.25) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/07-il-confine.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/07-il-confine.md)
 
 ---
 
@@ -27,22 +28,25 @@ registro di chi c'è, e una regola per i nomi.**
 - **§7.1** — l'`HostApi` è la **somma** di dieci trait
   ([`fub_abi::traits`](../../crates/fub-abi/src/traits.rs)), e al confine WIT
   dieci `interface` che il `plugin-world` importa una per una. Il rifiuto è un
-  wrapper generico ([`Guard<H, P: Policy>`](../../crates/fub-kernel/src/host/guard.rs)),
-  non una impl gemella.
+  wrapper generico
+  ([`Guard<H, P: Policy>`](../../crates/fub-kernel/src/host/guard.rs)), non una
+  impl gemella.
 - **§7.2** — la disciplina di consegna (`take` → chiamata → ripristino con in
   coda chi si è registrato nel frattempo) è
   [`Workspace::lend`](../../crates/fub-kernel/src/workspace.rs), scritta una
   volta; i registri sono
   [`ProviderTable`](../../crates/fub-kernel/src/providers.rs).
-- **§7.3** — c'è un [registro dei plugin](../../crates/fub-kernel/src/plugins.rs):
-  chi registra si **dichiara** (manifest, permessi, fiducia), e ogni host nasce
-  con davanti la politica del suo plugin.
+- **§7.3** — c'è un
+  [registro dei plugin](../../crates/fub-kernel/src/plugins.rs): chi registra si
+  **dichiara** (manifest, permessi, fiducia), e ogni host nasce con davanti la
+  politica del suo plugin.
 - **§7.4** — un id ha un proprietario, e la regola è una sola per tutti e otto
-  gli spazi di nomi: [`fub_abi::rules::ids`](../../crates/fub-abi/src/rules/ids.rs).
+  gli spazi di nomi:
+  [`fub_abi::rules::ids`](../../crates/fub-abi/src/rules/ids.rs).
 - **§7.5** — i plugin si chiamano: `provides`/`requires` nel manifest,
   `HostServices::call_service`, e un `ServiceProvider` che risponde.
-- **§7.6** — c'è un inventario: `Workspace::plugins()`, e `VaultInfo.versioning:
-  bool` non c'è più.
+- **§7.6** — c'è un inventario: `Workspace::plugins()`, e
+  `VaultInfo.versioning: bool` non c'è più.
 
 ## Le decisioni prese, da NON ridiscutere senza motivo
 
@@ -51,11 +55,11 @@ registro di chi c'è, e una regola per i nomi.**
   sotto-trait — e sono state prese entrambe, perché risolvono due problemi
   diversi che si somigliano. Il `Guard` toglie la impl gemella che serve a dire
   di no (`ReadOnlyHost` diceva no a dieci metodi e per dirlo ne riscriveva
-  ventiquattro); la scomposizione toglie i **rifiuti che non sono nemmeno rifiuti** —
-  i dodici `unreachable!()` di `ReadHost`, che dicevano il vero e non erano un
-  tipo. Prendere solo la prima avrebbe lasciato il percorso di lettura a
-  implementare capacità che non può avere; prendere solo la seconda avrebbe
-  lasciato ogni politica del §7.3 a costare una impl.
+  ventiquattro); la scomposizione toglie i **rifiuti che non sono nemmeno
+  rifiuti** — i dodici `unreachable!()` di `ReadHost`, che dicevano il vero e
+  non erano un tipo. Prendere solo la prima avrebbe lasciato il percorso di
+  lettura a implementare capacità che non può avere; prendere solo la seconda
+  avrebbe lasciato ogni politica del §7.3 a costare una impl.
 - **Il criterio delle dieci famiglie è: cosa vuol dire negarne una.** Non
   «quante ne stanno comode insieme». Per questo la lettura del vault è separata
   dalla scrittura di testo *e* dalle operazioni strutturali (chi scrive una nota
@@ -77,17 +81,16 @@ registro di chi c'è, e una regola per i nomi.**
 - **Il costo ergonomico c'è, ed è dichiarato: i metodi di un trait si vedono se
   il trait è in scope.** Un test che chiama `host.read_document(...)` su un
   doppio adesso importa `VaultRead`. È il prezzo della scomposizione, si paga
-  una riga alla volta, e non è nascosto da un prelude — un prelude
-  rimetterebbe insieme proprio ciò che questa voce ha separato.
+  una riga alla volta, e non è nascosto da un prelude — un prelude rimetterebbe
+  insieme proprio ciò che questa voce ha separato.
 - **Cinque capacità non sanno dire di no, e la cosa è ora scritta dove si
-  legge.** `emit`, `free_name`, `format_of`, `now_unix_millis`,
-  `active_context` non restituiscono un `Result`: una politica che le nega può
-  solo dare la **risposta nulla** (nessun evento, il nome che le è stato
-  passato, nessun formato, il tempo a zero, nessun contesto). Non è una
-  scappatoia del `Guard`: è una proprietà di quelle firme, ed è la lezione che
-  questa seduta lascia alla decisione 0013 — **una capacità nuova dovrebbe
-  portare un esito anche quando "non può fallire"**, perché non potendo fallire
-  non può nemmeno essere negata.
+  legge.** `emit`, `free_name`, `format_of`, `now_unix_millis`, `active_context`
+  non restituiscono un `Result`: una politica che le nega può solo dare la
+  **risposta nulla** (nessun evento, il nome che le è stato passato, nessun
+  formato, il tempo a zero, nessun contesto). Non è una scappatoia del `Guard`:
+  è una proprietà di quelle firme, ed è la lezione che questa seduta lascia alla
+  decisione 0013 — **una capacità nuova dovrebbe portare un esito anche quando
+  "non può fallire"**, perché non potendo fallire non può nemmeno essere negata.
 - **Chi registra si dichiara, e un id non dichiarato è un errore.** Era la
   scelta più invasiva della seduta — tocca ogni `register_*` e ogni banco di
   prova — e l'alternativa era creare un plugin al volo dalla stringa, con
@@ -108,17 +111,17 @@ registro di chi c'è, e una regola per i nomi.**
   `IndexProvider` di terzi avrebbe ricevuto *ogni* documento del vault senza che
   nessuno gli avesse dato un grado. Adesso è una proprietà di chi si dichiara, e
   vale per tutto ciò che registra — view, renderer, indici.
-- **Anche il percorso di lettura passa dal punto di applicazione.** `render_view`
-  ed `export` ricevono un `Guard<ReadHost, Granted>`: un provider senza
-  `read_vault` non legge il vault **mentre disegna** più di quanto lo legga da
-  un'azione. Che il guard avvolga un `ReadHost` invece di un `KernelHost` non
-  cambia niente per la politica, che non sa cosa ci sia sotto — ed è
-  precisamente ciò che un wrapper generico compra.
+- **Anche il percorso di lettura passa dal punto di applicazione.**
+  `render_view` ed `export` ricevono un `Guard<ReadHost, Granted>`: un provider
+  senza `read_vault` non legge il vault **mentre disegna** più di quanto lo
+  legga da un'azione. Che il guard avvolga un `ReadHost` invece di un
+  `KernelHost` non cambia niente per la politica, che non sa cosa ci sia sotto —
+  ed è precisamente ciò che un wrapper generico compra.
 - **La regola dei nomi: il core nomina anche nudo, gli altri solo dentro il
   proprio id.** `backlinks` e `note.create` restano quello che sono — sono i
   nomi che l'utente vede nella palette e nelle hotkey — e `fub:diagrams` è del
-  core perché `fub` è il suo namespace. Un terzo scrive `com.acme.tasks:board`
-  e nessun altro ci può entrare: ne segue la proprietà che serviva, **due plugin
+  core perché `fub` è il suo namespace. Un terzo scrive `com.acme.tasks:board` e
+  nessun altro ci può entrare: ne segue la proprietà che serviva, **due plugin
   non possono collidere**, e il solo spazio conteso resta quello del core con sé
   stesso, dove una collisione è un errore di questo repo che un test vede.
 - **Il separatore è `:` perché era già quello di `OptionMap`.** Le chiavi di
@@ -153,12 +156,12 @@ registro di chi c'è, e una regola per i nomi.**
   poterlo leggere *prima* di montarlo: è ciò con cui risolve le dipendenze di
   chi arriva dopo. In un metodo, per saperlo bisognerebbe averlo già montato.
 - **L'inventario ha fatto sparire un booleano prima che diventasse venti.**
-  `VaultInfo.versioning: bool` era un campo **per feature** dentro un record IPC;
-  con i moduli del capitolo 21 sarebbero stati venti campi, ognuno una modifica
-  al record, al mirror TS e alla fixture. La shell adesso non chiede «il
-  versioning è acceso?»: chiede chi c'è (`hasPlugin`), ed è la stessa domanda che
-  faranno il pannello plugin (20.1), il developer mode (20.2) e la diagnostica
-  (24.2) senza aggiungere un campo a testa.
+  `VaultInfo.versioning: bool` era un campo **per feature** dentro un record
+  IPC; con i moduli del capitolo 21 sarebbero stati venti campi, ognuno una
+  modifica al record, al mirror TS e alla fixture. La shell adesso non chiede
+  «il versioning è acceso?»: chiede chi c'è (`hasPlugin`), ed è la stessa
+  domanda che faranno il pannello plugin (20.1), il developer mode (20.2) e la
+  diagnostica (24.2) senza aggiungere un campo a testa.
 
 ## Trovato per strada, e chiuso
 
@@ -175,10 +178,10 @@ chi si è registrato nel frattempo — è scritto in un posto solo.
 sospettava senza averlo provato.** La convenzione (`"<plugin-id>/<nome>"`) stava
 in un commento; un plugin poteva emettere sotto il nome di un altro e far
 reagire i suoi handler. Adesso è la stessa regola degli altri nomi, e la fa
-rispettare l'host **quando l'evento passa** — che è il solo momento in cui esiste,
-non avendo una registrazione. Il rifiuto è una riga su stderr e non un errore,
-perché `emit` non ha esito: è la quinta capacità senza risposta, e il suo posto
-definitivo è il canale del §20.2.
+rispettare l'host **quando l'evento passa** — che è il solo momento in cui
+esiste, non avendo una registrazione. Il rifiuto è una riga su stderr e non un
+errore, perché `emit` non ha esito: è la quinta capacità senza risposta, e il
+suo posto definitivo è il canale del §20.2.
 
 **Le regole sintattiche e i renderer avevano una regola dei nomi *propria*, e
 chiedeva la cosa sbagliata.** `SyntaxConflict::UnnamespacedId` pretendeva un
@@ -229,8 +232,8 @@ passano da `admit` come tutte, con un proprietario.
   `owns_name` c'è già; per i job la domanda arriva col §9.3, che è dove qualcuno
   comincerà a drenare la coda — oggi `Plugin::run_job` è senza chiamanti come
   `activate`.
-- **Nessun `deactivate`, nessun `unregister`.** Togliere un provider è il §9.4, e
-  con la §7.4 chiusa adesso ha ciò che gli mancava: un id che è di qualcuno.
+- **Nessun `deactivate`, nessun `unregister`.** Togliere un provider è il §9.4,
+  e con la §7.4 chiusa adesso ha ciò che gli mancava: un id che è di qualcuno.
 - **`Plugin::activate`/`deactivate` restano senza chiamanti.** Il registro tiene
   i manifest, non guida un ciclo di vita: quello è il §9.3, e la sua metà kernel
   è ciò che questo modulo prepara.
@@ -238,21 +241,22 @@ passano da `admit` come tutte, con un proprietario.
 ## Verifica
 
 `cargo test --workspace`: **543 verdi** (erano 523), di cui 15 nuovi in
-[`tests/il_confine.rs`](../../crates/fub-kernel/tests/il_confine.rs) — il
-plugin senza `write_vault` che legge e non scrive, il revocato che non fa
-niente, l'id non dichiarato che non riceve niente in bianco, le risposte nulle
-delle capacità senza esito, l'id di view conteso, l'id nudo di un terzo (col
-messaggio che porta l'id giusto), la sostituzione chiesta per nome, la chiamata
-fra plugin, il servizio che nessuno offre, il requisito mancante, il servizio
-rivendicato due volte, il giro nominato, e l'inventario.
+[`tests/il_confine.rs`](../../crates/fub-kernel/tests/il_confine.rs) — il plugin
+senza `write_vault` che legge e non scrive, il revocato che non fa niente, l'id
+non dichiarato che non riceve niente in bianco, le risposte nulle delle capacità
+senza esito, l'id di view conteso, l'id nudo di un terzo (col messaggio che
+porta l'id giusto), la sostituzione chiesta per nome, la chiamata fra plugin, il
+servizio che nessuno offre, il requisito mancante, il servizio rivendicato due
+volte, il giro nominato, e l'inventario.
 
 `cargo clippy --workspace --all-targets` pulito, `cargo fmt` pulito. `npx tsc`
 pulito, **172 test vitest**, `vite build` ok.
 
 Linea di base del WIT **ritagliata** (pre-freeze) con la ragione dentro
-`crates/fub-abi/wit/frozen/0.1.0.wit` e la riga in `docs/architecture/wit-congelato.md`: è la rottura più
-larga fatta finora — ventiquattro funzioni cambiano nome qualificato e un record
-si sposta — ed è l'ultima che riguarda l'`host-api`.
+`crates/fub-abi/wit/frozen/0.1.0.wit` e la riga in
+`docs/architecture/wit-congelato.md`: è la rottura più larga fatta finora —
+ventiquattro funzioni cambiano nome qualificato e un record si sposta — ed è
+l'ultima che riguarda l'`host-api`.
 
 **Non verificato visivamente nell'app Tauri.** Due cose meriterebbero un occhio
 quando qualcuno la aprirà: che il pannello cronologia compaia (adesso dipende da

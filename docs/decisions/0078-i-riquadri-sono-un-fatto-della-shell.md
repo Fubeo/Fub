@@ -6,7 +6,12 @@
 | **Origine** | `todo.md` §1.2 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — chiude la voce, che era all'**ultima casella**; chiude anche la metà rimasta del [§11.2](../roadmap/11-impostazioni-e-i-tre-stati.md) e sblocca la §3.3 |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/18-editor-e-tastiera.md) · [il contesto di sessione, 0007](0007-contesto-di-sessione.md) · [i tre stati, 0036](0036-le-impostazioni-e-i-tre-stati.md) · [lo stato di vista, 0037](0037-lo-stato-di-vista.md) · [l'undo ha due pile, 0045](0045-l-undo-ha-due-pile.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/18-editor-e-tastiera.md) ·
+[il contesto di sessione, 0007](0007-contesto-di-sessione.md) ·
+[i tre stati, 0036](0036-le-impostazioni-e-i-tre-stati.md) ·
+[lo stato di vista, 0037](0037-lo-stato-di-vista.md) ·
+[l'undo ha due pile, 0045](0045-l-undo-ha-due-pile.md)
 
 ---
 
@@ -29,13 +34,13 @@ contesto del pannello con il focus, e nient'altro». Lo stato di vista della
 quindi due outline in due riquadri sono due esemplari e non collidono. Non
 mancava una firma: mancava un corpo alla shell.
 
-E il kernel una mappa di riquadri non la vuole. La domanda a cui risponde — *cosa
-sta guardando l'utente adesso* — è **una sola per definizione**, quanti che siano
-i riquadri; un registro di riquadri lato kernel sarebbe una mappa che nessuno
-interroga, mantenuta a ogni divisione e a ogni chiusura per non servire a niente.
-Quindi la pluralità dei riquadri è **un fatto della shell**, e `MAIN_PANE` non
-era un limite del kernel: era il nome che l'unica shell esistente dava al suo
-unico riquadro. Gli altri li conia lei.
+E il kernel una mappa di riquadri non la vuole. La domanda a cui risponde —
+*cosa sta guardando l'utente adesso* — è **una sola per definizione**, quanti
+che siano i riquadri; un registro di riquadri lato kernel sarebbe una mappa che
+nessuno interroga, mantenuta a ogni divisione e a ogni chiusura per non servire
+a niente. Quindi la pluralità dei riquadri è **un fatto della shell**, e
+`MAIN_PANE` non era un limite del kernel: era il nome che l'unica shell
+esistente dava al suo unico riquadro. Gli altri li conia lei.
 
 Il costo di questa voce, a ridosso del freeze di M4, è **zero firma**:
 `wit_conformance` non si è mosso, e `dieta_ipc` nemmeno — nessuna porta IPC
@@ -50,8 +55,8 @@ Resta un punto solo del kernel che presuppone un riquadro solo,
 `Workspace::set_active_document`, e il suo doc lo dichiarava già — *«scorciatoia
 per una shell a un pannello solo»*. **Non si toglie**: la shell non passa più di
 lì (pubblica `ViewContext` interi), ma lo chiamano test ed esempi, dove nominare
-`MAIN_PANE` è ciò che si vuole davvero dire. Si è precisato il doc, che è la sola
-cosa diventata falsa.
+`MAIN_PANE` è ciò che si vuole davvero dire. Si è precisato il doc, che è la
+sola cosa diventata falsa.
 
 ## «Il layout» sono due cose, e ognuna aveva già la sua casa
 
@@ -72,8 +77,8 @@ ha davanti. Il secondo l'ha creato l'utente, quindi viaggia col vault come le
 note e le scorciatoie.
 
 Distinguendoli **non serve nessun terzo meccanismo**: entrambi i contenitori
-esistono già. Confonderli sarebbe stato il «terzo stato senza contenitore» che il
-§11.2 nomina nel titolo — ed è così che quella mezza voce si chiude senza
+esistono già. Confonderli sarebbe stato il «terzo stato senza contenitore» che
+il §11.2 nomina nel titolo — ed è così che quella mezza voce si chiude senza
 costruire niente. Qui si è fatto il primo; il secondo è **fuori e nominato**: la
 casa è decisa, il formato aspetta di vedere assetti veri, perché un formato
 indovinato prima del primo cliente è un formato da migrare.
@@ -83,12 +88,12 @@ indovinato prima del primo cliente è un formato da migrare.
 Un riquadro tiene **N documenti con uno attivo**. Da questa forma sola escono
 insieme le tab e lo split.
 
-La tentazione era fare solo lo split — è ciò che sblocca la §3.3 — e le tab dopo.
-**Scartata**, e la ragione va detta perché è controintuitiva: decidere adesso
-«un riquadro = una nota» vuol dire buttare quel modello il giorno delle tab,
-perché la forma con le tab lo *contiene*. Non è più lavoro di design: è lo stesso
-lavoro fatto una volta invece che una volta e mezza. E la §3.3 si sblocca lo
-stesso.
+La tentazione era fare solo lo split — è ciò che sblocca la §3.3 — e le tab
+dopo. **Scartata**, e la ragione va detta perché è controintuitiva: decidere
+adesso «un riquadro = una nota» vuol dire buttare quel modello il giorno delle
+tab, perché la forma con le tab lo *contiene*. Non è più lavoro di design: è lo
+stesso lavoro fatto una volta invece che una volta e mezza. E la §3.3 si sblocca
+lo stesso.
 
 La disposizione è un albero — una foglia è un riquadro, un nodo è una divisione
 con un verso e N figli — e non una griglia con coordinate. Una griglia sa dire
@@ -97,7 +102,8 @@ succede quando lo si chiude» è metà del lavoro di un modello di layout. Due
 regole cadono da sé e stanno in `appiattisci`: una divisione con un figlio solo
 **non è** una divisione (è quel figlio, con un livello di indirezione che al
 prossimo split deciderebbe il verso sbagliato), e una divisione dentro una dello
-stesso verso è la stessa fila. Tre riquadri affiancati sono tre figli di un nodo.
+stesso verso è la stessa fila. Tre riquadri affiancati sono tre figli di un
+nodo.
 
 Gli id: `main` resta il primo **per sempre**, e non è nostalgia — è già scritto
 dentro gli esemplari delle view nei file di stato di macchina, quindi cambiarlo
@@ -142,8 +148,8 @@ tre cose:
   adesso un rename può riguardare una nota aperta in un riquadro che non ha il
   fuoco, e la riscrittura del kernel finirebbe sotto una copia più vecchia;
 - la sincronizzazione **non entra nella pila di undo** di chi la riceve. È la
-  regola della [0045](0045-l-undo-ha-due-pile.md) vista da un'altra angolazione —
-  le due pile non si fondono: un Ctrl-Z qui deve disfare ciò che si è scritto
+  regola della [0045](0045-l-undo-ha-due-pile.md) vista da un'altra angolazione
+  — le due pile non si fondono: un Ctrl-Z qui deve disfare ciò che si è scritto
   *qui*. Chi ha scritto ha la sua pila e se lo disfa da sé, e la disfatta arriva
   di là per questa stessa via.
 
@@ -169,12 +175,13 @@ questa decisione esiste per non avere.
 
 ## Il precedente
 
-Due delle tre domande di questa voce avevano già una risposta scritta altrove nel
-repo — il campo `pane` della 0007, il criterio «un valore alla volta / uno per
-nome» della 0036 — e il lavoro è stato **andarle a cercare prima di
-progettare**, non dopo. È la stessa mossa della [0077](0077-una-scorciatoia-e-una-chiave.md),
-che davanti a qualcosa che sembrava chiedere firma nuova si è chiesta se il caso
-si servisse con ciò che c'è. Qui la domanda ha dato la risposta più forte
-possibile: la metà contratto di questo verbale è **vuota**, e «non ho toccato la
-firma ed ecco perché non serviva» è un ragionamento intero — abbastanza da essere
-metà di una decisione, e non una nota a piè di pagina di un commit.
+Due delle tre domande di questa voce avevano già una risposta scritta altrove
+nel repo — il campo `pane` della 0007, il criterio «un valore alla volta / uno
+per nome» della 0036 — e il lavoro è stato **andarle a cercare prima di
+progettare**, non dopo. È la stessa mossa della
+[0077](0077-una-scorciatoia-e-una-chiave.md), che davanti a qualcosa che
+sembrava chiedere firma nuova si è chiesta se il caso si servisse con ciò che
+c'è. Qui la domanda ha dato la risposta più forte possibile: la metà contratto
+di questo verbale è **vuota**, e «non ho toccato la firma ed ecco perché non
+serviva» è un ragionamento intero — abbastanza da essere metà di una decisione,
+e non una nota a piè di pagina di un commit.

@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §16.7 (seduta 16) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) · [il gemello, la superficie IPC](0057-la-dieta-dell-ipc.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) ·
+[il gemello, la superficie IPC](0057-la-dieta-dell-ipc.md)
 
 ---
 
@@ -21,20 +23,22 @@ smette di coprire senza diventare rosso»*. Il §16.6 propone come soluzione **u
 elenco scritto a mano**: l'allowlist dei comandi Tauri. O il §16.6 prescrive il
 difetto che il §16.7 condanna, o le due cose non sono la stessa cosa.
 
-Non lo sono, e la differenza è meccanica invece che di gusto. Guardata da come si
-usa, una lista scritta a mano sta in una di due posizioni:
+Non lo sono, e la differenza è meccanica invece che di gusto. Guardata da come
+si usa, una lista scritta a mano sta in una di due posizioni:
 
 - **Sorgente di iterazione.** Il test cammina l'elenco e prova ogni voce.
   L'insieme vero vive altrove — le quattro `impl ViewProvider`, i metodi che il
   cancello nega — e nessuno confronta le due cose. Aggiungere al vero senza
   aggiungere all'elenco è **verde**: il test continua a provare quello che
   provava. La copertura scende in silenzio.
-- **Asserzione di uguaglianza.** Il test estrae l'insieme vero e pretende che sia
-  uguale all'elenco. Aggiungere al vero senza aggiungere all'elenco è **rosso**.
+- **Asserzione di uguaglianza.** Il test estrae l'insieme vero e pretende che
+  sia uguale all'elenco. Aggiungere al vero senza aggiungere all'elenco è
+  **rosso**.
 
 Sono la stessa frase — *quattro view*, *trentasette comandi* — in due posizioni
-logiche opposte. L'allowlist del §16.6 è nella seconda: non prescrive il difetto,
-ne è l'inverso. Il §16.6 è il §16.7 già risolto, per una superficie sola.
+logiche opposte. L'allowlist del §16.6 è nella seconda: non prescrive il
+difetto, ne è l'inverso. Il §16.6 è il §16.7 già risolto, per una superficie
+sola.
 
 ## Tre forme, e un criterio per scegliere
 
@@ -59,8 +63,8 @@ possibile ma rumorosa.
 leggere l'elenco, sui comandi Tauri no (`tauri::generate_handler!` prende
 identificatori a compile time e non itera niente). Stessa domanda, stessa
 tassonomia, due risposte — e il cappello di una seduta che dichiara un confine
-chiede due verbali, per il criterio che la [0055](0055-il-banco-del-lato-host.md)
-ha fissato.
+chiede due verbali, per il criterio che la
+[0055](0055-il-banco-del-lato-host.md) ha fissato.
 
 ## Gli elenchi delle view sono quattro, non uno — e uno è di un'altra specie
 
@@ -73,14 +77,14 @@ Il §16.7 ne nomina uno (`view_refresh_masks.rs`). Contati:
 | `features/tests/i_cataloghi.rs` | `fub-features` | prova | quattro chiamate a `viste(…)` |
 | `features/tests/conformita.rs` | `fub-features` | prova | quattro chiamate, **per due volte** |
 
-Il quarto è arrivato con la [0054](0054-il-banco-del-lato-provider.md), che lo ha
-scritto dichiarando nel proprio doc-comment di star aggiungendo una copia al
+Il quarto è arrivato con la [0054](0054-il-banco-del-lato-provider.md), che lo
+ha scritto dichiarando nel proprio doc-comment di star aggiungendo una copia al
 difetto che il §16.7 accusa. Era onesto e va tolto: una nota che dice «so che è
 sbagliato» non è un presidio, è una nota.
 
-E il primo **non è della stessa specie degli altri tre**. È l'unico che sta in un
-altro crate, l'unico che è codice di libreria, e soprattutto l'unico da cui la
-cosa **esiste**: gli altri tre descrivono le view ufficiali, `mount.rs` le
+E il primo **non è della stessa specie degli altri tre**. È l'unico che sta in
+un altro crate, l'unico che è codice di libreria, e soprattutto l'unico da cui
+la cosa **esiste**: gli altri tre descrivono le view ufficiali, `mount.rs` le
 *costituisce*. Una view che `mount.rs` non registra non è una view ufficiale che
 i test dimenticano — non è una view ufficiale.
 
@@ -109,8 +113,8 @@ costruzione. Sarebbe una **quinta copia**, e la peggiore — quella che fa crede
 che il problema sia risolto.
 
 La 0055 aveva anche guardato la direzione giusta (il banco è già dev-dependency
-di `fub-features`, quindi il ciclo sarebbe legittimo come quello del kernel).
-Il ciclo infatti non era l'ostacolo. L'ostacolo era un invariante che quella
+di `fub-features`, quindi il ciclo sarebbe legittimo come quello del kernel). Il
+ciclo infatti non era l'ostacolo. L'ostacolo era un invariante che quella
 decisione non aveva riletto — e che è ironicamente lo stesso file che la
 [0054](0054-il-banco-del-lato-provider.md) aveva appena finito di scrivere.
 
@@ -118,8 +122,8 @@ decisione non aveva riletto — e che è ironicamente lo stesso file che la
 
 `crates/fub-features/src/inventario.rs`. È il crate che possiede
 `BacklinksView`, `OutlineView`, `TagPanelView`, `StatsView` e i loro cataloghi,
-ed è già dipendenza **normale** di `fub-host` — quindi `mount.rs` lo legge
-senza che nessun confine si sposti di un centimetro. Nessuna dipendenza nuova nel
+ed è già dipendenza **normale** di `fub-host` — quindi `mount.rs` lo legge senza
+che nessun confine si sposti di un centimetro. Nessuna dipendenza nuova nel
 grafo, in nessuna direzione.
 
 E l'inventario **non descrive**: `mount.rs` costruisce i bundle delle view
@@ -135,12 +139,11 @@ quattro view più ricerca, blocchi, versioning e comandi. È lo stesso difetto u
 giro più largo: una quinta view entrerebbe muta, ma anche una **nona feature**
 entrerebbe senza che nessuno presidi il suo catalogo.
 
-Quindi l'inventario è delle **feature ufficiali di `fub-features`** — otto
-righe con id, nome, catalogo, e i puntatori ai provider che si possono costruire
-da soli (la view, il `CommandProvider`) — e le view ne sono un sottoinsieme
+Quindi l'inventario è delle **feature ufficiali di `fub-features`** — otto righe
+con id, nome, catalogo, e i puntatori ai provider che si possono costruire da
+soli (la view, il `CommandProvider`) — e le view ne sono un sottoinsieme
 *derivato* con un `filter`, non un secondo elenco parallelo. `CORE_ID` resta
-fuori ed è giusto: vive in `fub-host` col proprio catalogo, e non è una
-feature.
+fuori ed è giusto: vive in `fub-host` col proprio catalogo, e non è una feature.
 
 Ciò che **non** sale nell'inventario è la registrazione delle **tre** feature
 irregolari: ricerca, versioning e blocchi. Registrano cose diverse fra loro — un
@@ -148,14 +151,14 @@ irregolari: ricerca, versioning e blocchi. Registrano cose diverse fra loro — 
 il versioning ha bisogno di uno stato che vive in `mount.rs`. Forzarle in una
 firma comune avrebbe voluto dire inventare un'astrazione per tre casi che non si
 somigliano, e `mount.rs` esiste apposta per essere il posto dove l'irregolare è
-scritto per esteso. Dall'inventario prendono id, nome e catalogo; resta scritto a
-mano soltanto **cosa** ognuna registra.
+scritto per esteso. Dall'inventario prendono id, nome e catalogo; resta scritto
+a mano soltanto **cosa** ognuna registra.
 
-*(I comandi erano il quarto caso irregolare in un primo giro di questa decisione,
-e non lo sono: `CoreCommands` si costruisce da solo come una view, quindi è un
-puntatore nell'inventario e `mount.rs` non lo nomina più. La differenza fra
-regolare e irregolare non è che tipo di provider si registra: è **se serve
-qualcosa che l'inventario non ha**.)*
+*(I comandi erano il quarto caso irregolare in un primo giro di questa
+decisione, e non lo sono: `CoreCommands` si costruisce da solo come una view,
+quindi è un puntatore nell'inventario e `mount.rs` non lo nomina più. La
+differenza fra regolare e irregolare non è che tipo di provider si registra: è
+**se serve qualcosa che l'inventario non ha**.)*
 
 ### E un presidio che chiude il bypass
 
@@ -170,35 +173,37 @@ uguaglianza lo verifica.
 
 Riscrivendo i tre presidi ne è saltato fuori un altro che nessuna voce nomina:
 `fub-host/tests/headless.rs` asserisce l'uguaglianza con **nove** id di bundle
-battuti a mano. È della specie buona — la terza forma, non la seconda — e infatti
-è diventato rosso da solo durante le prove.
+battuti a mano. È della specie buona — la terza forma, non la seconda — e
+infatti è diventato rosso da solo durante le prove.
 
-Va lasciato scritto a mano, ed è una decisione e non una dimenticanza. Il presidio
-nuovo confronta ciò che è montato con `ogni_feature_ufficiale()`, quindi **non
-direbbe niente se l'inventario stesso fosse sbagliato**: derivare anche questi
-nove nomi dall'inventario renderebbe i due test la stessa asserzione scritta due
-volte. Un elenco battuto a mano una volta, indipendente dalla sorgente, è ciò che
-risponde alla domanda che la sorgente non può porsi — la stessa ragione per cui
-`ALLOWED_TRANSITIVE_ABI` è una fotografia e non un calcolo. La regola non è «mai
-elenchi a mano»: è **mai un elenco a mano da cui si itera**.
+Va lasciato scritto a mano, ed è una decisione e non una dimenticanza. Il
+presidio nuovo confronta ciò che è montato con `ogni_feature_ufficiale()`,
+quindi **non direbbe niente se l'inventario stesso fosse sbagliato**: derivare
+anche questi nove nomi dall'inventario renderebbe i due test la stessa
+asserzione scritta due volte. Un elenco battuto a mano una volta, indipendente
+dalla sorgente, è ciò che risponde alla domanda che la sorgente non può porsi —
+la stessa ragione per cui `ALLOWED_TRANSITIVE_ABI` è una fotografia e non un
+calcolo. La regola non è «mai elenchi a mano»: è **mai un elenco a mano da cui
+si itera**.
 
 ## Le sette del `TriesEverything` sono giuste, e misurano un'altra cosa
 
-Il §16.7 dice che il test elenca sette capacità per nome, «ed erano cinque quando
-questa voce è stata scritta». Ricontato: sette `annota(`, sette nell'asserzione,
-e le due arrivate dopo sono `setting` ([0036](0036-le-impostazioni-e-i-tre-stati.md))
-e `view-state` ([0037](0037-lo-stato-di-vista.md)). **Il numero è esatto**, ed è
-l'unico della seduta che lo era. Il difetto non è quello: è che un'ottava
-entrerebbe restando verde.
+Il §16.7 dice che il test elenca sette capacità per nome, «ed erano cinque
+quando questa voce è stata scritta». Ricontato: sette `annota(`, sette
+nell'asserzione, e le due arrivate dopo sono `setting`
+([0036](0036-le-impostazioni-e-i-tre-stati.md)) e `view-state`
+([0037](0037-lo-stato-di-vista.md)). **Il numero è esatto**, ed è l'unico della
+seduta che lo era. Il difetto non è quello: è che un'ottava entrerebbe restando
+verde.
 
 Ma ricontando è emersa una cosa che la voce non dice, e che cambia il presidio.
 **Quelle sette non sono capacità**: sono sette *metodi*. Le capacità nel repo
 sono già un insieme chiuso e presidiato — `enum Capability` in
 `kernel/src/host/guard.rs` ha **quattordici** famiglie, `Capability::ALL` le
-elenca, e i `match` senza `_` in `Capability::permission` e in `impl Policy for
-ReadOnly` fanno sì che una quindicesima **non compili** finché qualcuno non la
-classifica. La prima forma della tabella qui sopra, applicata due anni-verbale
-prima che questa voce la chiedesse.
+elenca, e i `match` senza `_` in `Capability::permission` e in
+`impl Policy for ReadOnly` fanno sì che una quindicesima **non compili** finché
+qualcuno non la classifica. La prima forma della tabella qui sopra, applicata
+due anni-verbale prima che questa voce la chiedesse.
 
 Il buco vero sta un gradino più in là, ed è più grande di quello che la voce
 descrive. `ReadOnly` nega **sette famiglie**: `VaultWrite`, `VaultStructure`,
@@ -210,8 +215,8 @@ famiglie negate è precisamente questo: una coincidenza.
 
 Quindi il presidio non elenca più: calcola l'atteso iterando `Capability::ALL` e
 chiedendo a una `ReadOnly` quali nega, e pretende l'uguaglianza con quelle
-davvero rifiutate — nelle due direzioni. È la prima forma (l'insieme è chiuso dal
-compilatore) che alimenta la terza (un'asserzione di uguaglianza), e appena
+davvero rifiutate — nelle due direzioni. È la prima forma (l'insieme è chiuso
+dal compilatore) che alimenta la terza (un'asserzione di uguaglianza), e appena
 acceso è **rosso su quattro famiglie** che nessuno stava provando. È il modo
 migliore in cui un presidio nuovo può nascere.
 
@@ -223,9 +228,9 @@ La copertura è garantita alla grana della **famiglia**, che è la grana a cui i
 obbliga a scrivere dentro quell'impl la riga `self.check(Capability::…)`. Un
 metodo strutturale che dimenticasse la guardia passerebbe.
 
-Lo si scrive qui perché è il criterio che il §16.7 chiede di portare avanti, letto
-al contrario: se una copertura ha un limite, il limite va detto **accanto alla
-copertura**, o si crederà che copra. Le due specie che la voce elenca — il
+Lo si scrive qui perché è il criterio che il §16.7 chiede di portare avanti,
+letto al contrario: se una copertura ha un limite, il limite va detto **accanto
+alla copertura**, o si crederà che copra. Le due specie che la voce elenca — il
 conteggio invecchiato che fa sopravvalutare, il limite invecchiato che fa
 sottovalutare — nascono entrambe da una frase scritta lontano da ciò che
 descrive.
@@ -234,8 +239,8 @@ descrive.
 
 **L'inventario nel testkit**, che la 0055 aveva nominato: irraggiungibile da
 `mount.rs` per un invariante presidiato, come sopra. Non è stato scartato per il
-costo (`fub-features` fra le dipendenze del banco), che pure ci sarebbe stato:
-è stato scartato perché non avrebbe fatto la cosa.
+costo (`fub-features` fra le dipendenze del banco), che pure ci sarebbe stato: è
+stato scartato perché non avrebbe fatto la cosa.
 
 **Una macro che generi `mount.rs` dall'inventario.** Toglierebbe anche il ciclo,
 ma comprerebbe pochissimo — quattro righe — e pagherebbe con la cosa che
@@ -265,7 +270,8 @@ presidio nuovo ricava da `ALL` ciò che pretende di aver provato, quindi una
 famiglia fuori da `ALL` sparirebbe da **tutti e due** restando verde.
 
 Il compilatore obbliga a toccare l'elenco — la lunghezza non torna — ma non a
-metterci dentro la variante giusta: si soddisfa duplicando una riga già presente.
+metterci dentro la variante giusta: si soddisfa duplicando una riga già
+presente.
 
 Chiuso, e senza proc-macro, sfruttando ciò su cui `CapabilitySet` fa già
 affidamento (`1 << cap as u16`): i discriminanti sono contigui da zero, quindi
@@ -306,8 +312,8 @@ stessa ragione **separa**: è la
 aperta da questa seduta.
 
 E con una prova che è arrivata mentre si scriveva: il §16.7 dichiara «127 file,
-**2284** link», e il controllo ne conta **2285**. Quel numero era falso nel commit
-che lo ha scritto — la settima volta in quella sola voce, non la sesta.
+**2284** link», e il controllo ne conta **2285**. Quel numero era falso nel
+commit che lo ha scritto — la settima volta in quella sola voce, non la sesta.
 
 **La grana del metodo dentro una famiglia coperta**, come sopra. È l'unico
 residuo di questa decisione, ed è dichiarato accanto al presidio invece che qui,

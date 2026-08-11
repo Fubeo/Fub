@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §16.1 (seduta 16) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) · [il gemello, lato host](0055-il-banco-del-lato-host.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) ·
+[il gemello, lato host](0055-il-banco-del-lato-host.md)
 
 ---
 
@@ -41,17 +43,17 @@ nomina `fub-sdk` da nessuna parte**. Le sue reti sono:
 | confine feature↔kernel | `fub-features` |
 | confine host↔app | `fub-host` |
 
-Un `fub-sdk` che avesse dichiarato `fub-kernel` sarebbe passato per tutte
-tranne la quarta — e la quarta si sarebbe accontentata che qualcuno disegnasse
-la freccia. L'invariante era nelle intenzioni, non nel test.
+Un `fub-sdk` che avesse dichiarato `fub-kernel` sarebbe passato per tutte tranne
+la quarta — e la quarta si sarebbe accontentata che qualcuno disegnasse la
+freccia. L'invariante era nelle intenzioni, non nel test.
 
 È la **sesta specie** della famiglia che il §16.7 tiene — quattro di conteggi
 falsi, la quinta è il *limite dichiarato* che non c'è più, e questa: una
 **garanzia dichiarata che non è mai esistita**. Le prime cinque sono descrizioni
-invecchiate di qualcosa che esiste, e si curano aggiornandole; qui non c'è niente
-da aggiornare, perché non c'è mai stato niente. Fa lo stesso danno del limite
-invecchiato in direzione opposta — un limite falso fa **sotto**valutare una
-copertura, una garanzia falsa la fa **sopra**valutare — e passa più a lungo
+invecchiate di qualcosa che esiste, e si curano aggiornandole; qui non c'è
+niente da aggiornare, perché non c'è mai stato niente. Fa lo stesso danno del
+limite invecchiato in direzione opposta — un limite falso fa **sotto**valutare
+una copertura, una garanzia falsa la fa **sopra**valutare — e passa più a lungo
 inosservata di tutte, perché il motivo per cui si scrive una garanzia è smettere
 di doverci pensare. Aggiunta al §16.7, che è la voce che quell'elenco lo tiene.
 
@@ -63,15 +65,15 @@ seduta è vera perché c'è un test che la tiene, non perché è scritta.
 ## E la ragione vera è più forte di quella che la seduta dava
 
 `fub-sdk` è **dipendenza normale** di `fub-format-markdown`
-(`crates/fub-format-markdown/Cargo.toml`, `fub-sdk = { workspace = true }`).
-Non è una relazione ipotetica di M5: è nel `Cargo.toml` oggi, perché il parser
+(`crates/fub-format-markdown/Cargo.toml`, `fub-sdk = { workspace = true }`). Non
+è una relazione ipotetica di M5: è nel `Cargo.toml` oggi, perché il parser
 markdown usa `fub_sdk::scan`.
 
 Quindi il kernel dentro l'SDK non finirebbe «nel grafo di un futuro guest»:
-finirebbe **nella libreria di un provider di formato che esiste**, subito. E
-non basta metterlo dietro una cargo feature: l'unificazione delle feature nel
-workspace la accende per tutti appena un membro la chiede, che è precisamente
-il modo in cui un confine dietro una feature smette di essere un confine.
+finirebbe **nella libreria di un provider di formato che esiste**, subito. E non
+basta metterlo dietro una cargo feature: l'unificazione delle feature nel
+workspace la accende per tutti appena un membro la chiede, che è precisamente il
+modo in cui un confine dietro una feature smette di essere un confine.
 
 ## Cosa c'era, e dove stava davvero
 
@@ -105,13 +107,12 @@ costato zero è la misura di quanto fosse fuori posto.
 
 **2. La suite di conformità**, `fub_sdk::testing::conformita`, che è la parte
 che scade davvero — è ciò con cui un autore di plugin dirà «il mio provider
-rispetta il contratto». Ogni funzione corrisponde a una frase del doc-comment
-di un trait, e la porta nel messaggio d'errore.
+rispetta il contratto». Ogni funzione corrisponde a una frase del doc-comment di
+un trait, e la porta nel messaggio d'errore.
 
-**3. `fub_sdk::ui`** — e non `testing`, come il §16.1 proponeva. Un
-costruttore di albero di view **non è codice di prova**: sotto `testing` sarebbe
-stato a disposizione di un provider solo nei suoi test, cioè nel posto in cui
-non serve.
+**3. `fub_sdk::ui`** — e non `testing`, come il §16.1 proponeva. Un costruttore
+di albero di view **non è codice di prova**: sotto `testing` sarebbe stato a
+disposizione di un provider solo nei suoi test, cioè nel posto in cui non serve.
 
 ## Le proprietà erano scritte su metodi che non esistono più
 
@@ -175,8 +176,8 @@ presidi finiscono per non essere d'accordo.
 
 ## La suite ha un cliente vero, ed è un requisito
 
-`crates/fub-features/tests/conformita.rs` fa passare la suite alle quattro
-view ufficiali, a host vuoto e a host con un documento aperto. Non è una
+`crates/fub-features/tests/conformita.rs` fa passare la suite alle quattro view
+ufficiali, a host vuoto e a host con un documento aperto. Non è una
 dimostrazione: **una suite di conformità che nessuna implementazione vera passa
 non è una suite, è un'opinione.** Se un'asserzione è troppo stretta lo si scopre
 lì, su codice che il progetto controlla, invece che addosso al primo plugin di
@@ -185,25 +186,25 @@ troppo».
 
 ## Una copia che esisteva solo per via del posto sbagliato
 
-Trovata spostando: `crates/fub-sdk/src/ids.rs` aveva un doppio dell'host
-scritto a mano nei propri unit test, e il commento accanto ne dava la ragione:
+Trovata spostando: `crates/fub-sdk/src/ids.rs` aveva un doppio dell'host scritto
+a mano nei propri unit test, e il commento accanto ne dava la ragione:
 
 > Non è `MemoryHost` perché quello sta in `fub-features`, che dipende da questo
 > crate — e l'SDK non può dipendere da chi lo usa.
 
 Il ragionamento era giusto, e la premessa è quella che questo verbale ha appena
-tolto di mezzo. Il `random_bytes` di quel doppio era **identico riga per riga** a
-quello di `MemoryHost` — stesso contatore little-endian, stesso orologio a
+tolto di mezzo. Il `random_bytes` di quel doppio era **identico riga per riga**
+a quello di `MemoryHost` — stesso contatore little-endian, stesso orologio a
 `1_700_000_000_000` — e l'unica cosa che aveva in più era un asse: un host che
-**nega l'entropia**, per provare che chi costruisce un id se ne accorga invece di
-produrne uno tutto a zeri.
+**nega l'entropia**, per provare che chi costruisce un id se ne accorga invece
+di produrne uno tutto a zeri.
 
 Quell'asse è diventato `MemoryHost::senza_entropia()`, tre righe, e il doppio
 locale è sparito: **cinquantatré righe in meno** in un crate che ne aveva
 trecentocinquanta. Vale più della sua misura, perché è la forma generale del
 danno: un banco di prova nel posto sbagliato non produce l'assenza di un banco,
-produce **copie con una ragione scritta accanto** — e una ragione scritta accanto
-è ciò che impedisce a chiunque di accorgersi che è una copia.
+produce **copie con una ragione scritta accanto** — e una ragione scritta
+accanto è ciò che impedisce a chiunque di accorgersi che è una copia.
 
 ## Il §16.1 misurava una duplicazione che non c'è
 
@@ -215,16 +216,17 @@ volte — una lista di voci con azione, e un segnaposto per il vuoto»*. Contato
 - `tags.rs` → colonna(campo di filtro, lista)
 
 **Non è lo stesso albero.** Ciò che è davvero scritto tre volte è una funzione
-di **due righe** — `fn placeholder(key) { UiNode::empty_state(Text::key(key)) }`,
-verbatim in `backlinks.rs` e `outline.rs`, inline in `tags.rs` — più la
-convenzione con cui una riga porta il proprio dato nel payload dell'azione.
+di **due righe** —
+`fn placeholder(key) { UiNode::empty_state(Text::key(key)) }`, verbatim in
+`backlinks.rs` e `outline.rs`, inline in `tags.rs` — più la convenzione con cui
+una riga porta il proprio dato nel payload dell'azione.
 
-Sono due funzioni in `fub_sdk::ui`, e il modulo è piccolo perché la
-duplicazione lo era: raccogliere le tre copie di un albero che non esiste
-avrebbe voluto dire inventarne uno che nessuno dei tre voleva. È la stessa
-disciplina che la [0053](0053-il-contratto-ha-una-sorgente.md) ha imposto ai
-conteggi, applicata a un conteggio che questa volta era **gonfio** invece che
-magro — ed è il primo di questo verso.
+Sono due funzioni in `fub_sdk::ui`, e il modulo è piccolo perché la duplicazione
+lo era: raccogliere le tre copie di un albero che non esiste avrebbe voluto dire
+inventarne uno che nessuno dei tre voleva. È la stessa disciplina che la
+[0053](0053-il-contratto-ha-una-sorgente.md) ha imposto ai conteggi, applicata a
+un conteggio che questa volta era **gonfio** invece che magro — ed è il primo di
+questo verso.
 
 ## Cosa si è scartato
 
@@ -234,30 +236,29 @@ magro — ed è il primo di questo verso.
   doppio dell'host. Il banco del contratto non può stare dentro un cliente del
   contratto.
 - **Un crate `fub-conformance` a sé.** Un terzo crate per una suite che ha
-  esattamente le stesse dipendenze dell'SDK — la frase qui contava le funzioni, e
-  il numero non le serviva
-  ([0060](0060-il-modello-dice-il-vero-sui-byte.md)). La linea che divide i crate
-  qui è il **grafo delle dipendenze**, non l'argomento: `testing` e `conformita`
-  stanno con `scan` e `ids` perché vedono le stesse cose, e il testkit sta fuori
-  perché vede il kernel.
+  esattamente le stesse dipendenze dell'SDK — la frase qui contava le funzioni,
+  e il numero non le serviva ([0060](0060-il-modello-dice-il-vero-sui-byte.md)).
+  La linea che divide i crate qui è il **grafo delle dipendenze**, non
+  l'argomento: `testing` e `conformita` stanno con `scan` e `ids` perché vedono
+  le stesse cose, e il testkit sta fuori perché vede il kernel.
 - **Generare la suite dal WIT.** Le proprietà stanno nella **prosa** dei
   doc-comment, che la [0053](0053-il-contratto-ha-una-sorgente.md) ha già
   stabilito essere il vincolo che tiene aperto quel verso. Un generatore avrebbe
-  prodotto i controlli di forma, che `wit_conformance.rs` fa già, e nessuna delle
-  proprietà di comportamento, che sono l'unica ragione per cui questa suite
-  esiste.
+  prodotto i controlli di forma, che `wit_conformance.rs` fa già, e nessuna
+  delle proprietà di comportamento, che sono l'unica ragione per cui questa
+  suite esiste.
 
 ## Cosa resta scoperto, dichiarato
 
 - **`cio_che_non_e_perduto_si_ritrova` non ha ancora un cliente**: richiede un
   indice che dichiari rotte, e i due veri sono `CoreIndex` (che è `pub(crate)`
-  nel kernel, quindi irraggiungibile da fuori) e `SearchIndex` (che ha bisogno di
-  uno spazio dati su disco, cioè del banco della
+  nel kernel, quindi irraggiungibile da fuori) e `SearchIndex` (che ha bisogno
+  di uno spazio dati su disco, cioè del banco della
   [0055](0055-il-banco-del-lato-host.md)). La funzione restituisce `false`
   quando non c'era niente da verificare, apposta perché chi la chiama non creda
   di essere stato promosso.
 - **Il `TriesEverything` del §16.7** non è toccato: le sue capacità restano un
-  elenco scritto a mano — fino alla [decisione 0056](0056-un-elenco-che-e-la-sorgente.md),
-  che le ha smesse di elencare calcolandole da `Capability::ALL`. La suite di
-  conformità non è il posto — quelle sono capacità dell'**host**, non proprietà
-  di un provider.
+  elenco scritto a mano — fino alla
+  [decisione 0056](0056-un-elenco-che-e-la-sorgente.md), che le ha smesse di
+  elencare calcolandole da `Capability::ALL`. La suite di conformità non è il
+  posto — quelle sono capacità dell'**host**, non proprietà di un provider.

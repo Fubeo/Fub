@@ -9,11 +9,12 @@
 
 ## La domanda
 
-Quali file di una cartella sono il vault? Fino a qui la risposta era un `&[&str]`
-nel sorgente — `IGNORED_DIRS` — più una riga che ci aggiungeva «e tutto ciò che
-comincia per punto», in una funzione (`is_ignored_name`) che scansione e watcher
-chiamavano tutt'e due. La voce diceva che il difetto era la **costante**, e che
-la 0036 aveva finalmente dato a quel dato un posto dove stare.
+Quali file di una cartella sono il vault? Fino a qui la risposta era un
+`&[&str]` nel sorgente — `IGNORED_DIRS` — più una riga che ci aggiungeva «e
+tutto ciò che comincia per punto», in una funzione (`is_ignored_name`) che
+scansione e watcher chiamavano tutt'e due. La voce diceva che il difetto era la
+**costante**, e che la 0036 aveva finalmente dato a quel dato un posto dove
+stare.
 
 La costante però non è il difetto: è il sintomo. Il difetto è che quella lista
 metteva nella **stessa specie** due esclusioni che non si somigliano affatto.
@@ -42,11 +43,12 @@ Il nuovo modulo è [`fub_kernel::ignore`](../../crates/fub-kernel/src/ignore.rs)
 `IgnorePolicy` è un **valore** — l'elenco delle cartelle *più* la risposta sui
 nascosti — e non un elenco: le due metà insieme sono ciò che una costante scrive
 in una lista sola. La si risolve dalle impostazioni **a ogni domanda** e non al
-montaggio, per la ragione della [0108](0108-una-data-la-dichiara-chi-possiede-il-vault.md):
-chi cambia la dichiarazione cambia cosa il vault contiene, e una politica
-risolta all'apertura direbbe di no anche dopo che l'utente ha riparato la causa.
-Chi non ha impostazioni — un banco, un kernel montato senza il bundle del core —
-prende il default, che è **esattamente** il comportamento di prima.
+montaggio, per la ragione della
+[0108](0108-una-data-la-dichiara-chi-possiede-il-vault.md): chi cambia la
+dichiarazione cambia cosa il vault contiene, e una politica risolta all'apertura
+direbbe di no anche dopo che l'utente ha riparato la causa. Chi non ha
+impostazioni — un banco, un kernel montato senza il bundle del core — prende il
+default, che è **esattamente** il comportamento di prima.
 
 Di livello **vault** e non di macchina, e per la ragione della
 [0076](0076-le-impostazioni-vivono-nel-vault.md) presa alla lettera: la politica
@@ -101,9 +103,9 @@ che lo crea risponde *qual è*.
   [`NameFault::Hidden`](../../crates/fub-abi/src/rules/path_policy.rs) — resta
   **asimmetrica**, di proposito: un vault che mostra i nascosti mostra i file
   che *ci sono già*, e non autorizza Fub a **crearne** uno. La preferenza si
-  ribalta in un clic, e le note create mentre era accesa resterebbero
-  invisibili senza che nessuno le nomini. Il modulo `path_policy` diceva che i
-  due si toccano; adesso dice anche dove **non** si toccano.
+  ribalta in un clic, e le note create mentre era accesa resterebbero invisibili
+  senza che nessuno le nomini. Il modulo `path_policy` diceva che i due si
+  toccano; adesso dice anche dove **non** si toccano.
 
 ## I collegamenti: scartati avendolo detto
 
@@ -204,14 +206,14 @@ directory grezzo che la scansione riceve dal supporto — mentre la
 prima, aveva appena stabilito *quando due path sono lo stesso path*
 (`resolution_key`: trim, NFC, minuscolo). Le due firme non si conoscevano, e il
 buco stava dove si toccano: questa decisione ha perfino **modificato la prosa**
-di `path_policy` — la riga che dice «la normalizzazione Unicode è la stessa
-NFC di `resolution_key`, applicata ai nomi» — senza usarne la funzione.
+di `path_policy` — la riga che dice «la normalizzazione Unicode è la stessa NFC
+di `resolution_key`, applicata ai nomi» — senza usarne la funzione.
 
 Le due riproduzioni, misurate sulla funzione pura: `files.excluded-folders`
 dichiarato `Café` in NFC non escludeva la stessa cartella scritta in NFD, che è
-come macOS la scrive sul disco; e `node_modules` non escludeva `Node_Modules`
-su un filesystem insensibile al caso, dove le due sono **la stessa cartella**.
-È il difetto che la voce si vietava da sola: la riga *«un vault che nasconde una
+come macOS la scrive sul disco; e `node_modules` non escludeva `Node_Modules` su
+un filesystem insensibile al caso, dove le due sono **la stessa cartella**. È il
+difetto che la voce si vietava da sola: la riga *«un vault che nasconde una
 cartella su una macchina sola sarebbe due idee di cosa c'è dentro»* è la ragione
 per cui la chiave è di livello vault, e una dichiarazione che esclude su Linux e
 non su macOS produce esattamente quelle due idee. Il caso non era nemmeno nuovo:

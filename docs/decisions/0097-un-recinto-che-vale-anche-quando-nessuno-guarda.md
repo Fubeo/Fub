@@ -109,30 +109,29 @@ In chiaro l'allowlist promette un host e la rete ne consegna un altro: chiunque
 stia in mezzo può rispondere al posto di `api.acme.com`, e il recinto che
 l'utente ha approvato non vale più niente. Quindi `https` o niente.
 
-L'eccezione è l'anello locale, e **non è una comodità**. `http://localhost:11434`
-è dove gira un **modello locale** — è l'indirizzo di Ollama, e non per caso —
-cioè l'unico modo di usare l'AI senza mandare le proprie note a qualcuno.
-Negarlo avrebbe tolto dal contratto proprio la strada più privata, obbligando
-chi vuole un assistente a passare per un servizio remoto: la regola scritta per
-proteggere l'utente lo avrebbe spinto verso la scelta peggiore per lui. Verso sé
-stessi non c'è rete da attraversare, quindi l'argomento del TLS non si applica e
-l'eccezione non costa niente.
+L'eccezione è l'anello locale, e **non è una comodità**.
+`http://localhost:11434` è dove gira un **modello locale** — è l'indirizzo di
+Ollama, e non per caso — cioè l'unico modo di usare l'AI senza mandare le
+proprie note a qualcuno. Negarlo avrebbe tolto dal contratto proprio la strada
+più privata, obbligando chi vuole un assistente a passare per un servizio
+remoto: la regola scritta per proteggere l'utente lo avrebbe spinto verso la
+scelta peggiore per lui. Verso sé stessi non c'è rete da attraversare, quindi
+l'argomento del TLS non si applica e l'eccezione non costa niente.
 
 ## `fub:network` senza parametro è *qualunque host*, e la tentazione di ribaltarlo
 
 C'è stata, ed è stata scartata **per iscritto**. Ribaltarla — *«senza elenco,
 nessun host»* — sembra la scelta prudente, e sarebbe la sola chiave del
-contratto la cui **assenza di parametro significa il contrario che altrove**.
-La regola di `OptionMap` è uniforme: presente = acceso, il valore è il
-parametro. È la sola proprietà per cui una mappa sola governa quattro sedi —
-*chi ne impara una le sa tutte* — e romperla per una chiave costa più di quanto
-renda.
+contratto la cui **assenza di parametro significa il contrario che altrove**. La
+regola di `OptionMap` è uniforme: presente = acceso, il valore è il parametro. È
+la sola proprietà per cui una mappa sola governa quattro sedi — *chi ne impara
+una le sa tutte* — e romperla per una chiave costa più di quanto renda.
 
 Ciò che cambia **resta dove deve**, cioè nella frase che l'utente legge
-accettando: *«può connettersi a qualunque host»* non è la stessa frase di
-*«può connettersi a api.acme.com»*, e la differenza la deve vedere chi decide,
-non il cancello. Che oggi quella frase non gliela mostri nessuno è il debito che
-questo verbale conta invece di dichiarare (in fondo).
+accettando: *«può connettersi a qualunque host»* non è la stessa frase di *«può
+connettersi a api.acme.com»*, e la differenza la deve vedere chi decide, non il
+cancello. Che oggi quella frase non gliela mostri nessuno è il debito che questo
+verbale conta invece di dichiarare (in fondo).
 
 ## Una `DryRun` che scarica non è una simulazione
 
@@ -143,22 +142,23 @@ gira con le capacità di chi lo offre; qui **l'effetto non è nell'host**. Un
 fatturato e registrato da chi risponde — cioè è la sola specie di effetto che
 questo processo non può ritirare **nemmeno volendo**.
 
-`run_command` invece resta concesso in simulazione, e la differenza è esatta:
-il comando invocato riceve a sua volta un host simulato, quindi è una **catena
-che l'host governa**; una `fetch` è un **mondo che l'host non conosce**.
+`run_command` invece resta concesso in simulazione, e la differenza è esatta: il
+comando invocato riceve a sua volta un host simulato, quindi è una **catena che
+l'host governa**; una `fetch` è un **mondo che l'host non conosce**.
 
 ## I tipi: byte, e un `404` che è un `Ok`
 
-**Byte e non testo**, ed è la [0087](0087-il-testo-che-sta-dentro-gli-allegati.md)
-letta **al contrario** per una differenza vera. La 0087 dice che per i documenti
-il testo è il default perché *«chi legge del testo non deve poter dimenticare di
-decodificare»*. Per una risposta HTTP la stessa regola dà il risultato opposto:
-un file sul disco non dice di che codifica è, **una risposta HTTP sì**. Ma metà
-della rete risponde `image/png` o `application/pdf`, e un corpo `string`
-costringerebbe l'host a decidere per tutti e a sbagliare per chi scarica un
-allegato. Il `content-type` sta **fra gli header**, dove HTTP lo mette, e non
-c'è un campo accanto: sarebbe lo stesso dato in due posti che possono non essere
-d'accordo — la trappola che la [0007](0007-contesto-di-sessione.md) descrive per
+**Byte e non testo**, ed è la
+[0087](0087-il-testo-che-sta-dentro-gli-allegati.md) letta **al contrario** per
+una differenza vera. La 0087 dice che per i documenti il testo è il default
+perché *«chi legge del testo non deve poter dimenticare di decodificare»*. Per
+una risposta HTTP la stessa regola dà il risultato opposto: un file sul disco
+non dice di che codifica è, **una risposta HTTP sì**. Ma metà della rete
+risponde `image/png` o `application/pdf`, e un corpo `string` costringerebbe
+l'host a decidere per tutti e a sbagliare per chi scarica un allegato. Il
+`content-type` sta **fra gli header**, dove HTTP lo mette, e non c'è un campo
+accanto: sarebbe lo stesso dato in due posti che possono non essere d'accordo —
+la trappola che la [0007](0007-contesto-di-sessione.md) descrive per
 `active-document`. `HttpResponse::content_type()` è **codice** e non contratto,
 quindi non può divergere.
 
@@ -174,8 +174,9 @@ permesso che manca, è che di qua non ci passa nessun filo, e chi lo riceve deve
 poterlo dire diversamente. **Il tetto di tempo e quello del corpo non
 attraversano il confine**, per la regola della
 [0094](0094-un-tetto-che-si-fa-sentire.md) — *un limite dell'host dev'essere
-visibile quando morde, non interrogabile* — quindi stanno in `fub-host/src/net.rs`
-e superarli è un `Io` che lo dice, col numero che resta alzabile.
+visibile quando morde, non interrogabile* — quindi stanno in
+`fub-host/src/net.rs` e superarli è un `Io` che lo dice, col numero che resta
+alzabile.
 
 ## I tre ritrovamenti
 
@@ -204,9 +205,9 @@ possibile.
 **Resta una casella, ed è contata**: fermare la richiesta **già partita** è
 un'altra domanda e non ha risposta qui. Chi annulla non aspetta la rete, aspetta
 il tetto di tempo dell'host — fino a sessanta secondi, cioè un tempo che un
-utente che ha premuto «annulla» **vede**. È contata e non solo dichiarata
-perché ha le due proprietà che distinguono una casella da una riga di prosa:
-è lavoro **già deciso** nella sua direzione (il `CancellationToken` della
+utente che ha premuto «annulla» **vede**. È contata e non solo dichiarata perché
+ha le due proprietà che distinguono una casella da una riga di prosa: è lavoro
+**già deciso** nella sua direzione (il `CancellationToken` della
 [0032](0032-il-runner-dei-job.md) esiste, manca il filo che lo porti dentro il
 client) e ha un sintomo che l'utente sente.
 

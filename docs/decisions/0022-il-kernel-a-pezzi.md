@@ -6,15 +6,15 @@
 | **Origine** | `todo.md` §8.1 (seduta 8, *ex* §2.19) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/08-il-kernel-a-pezzi.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/08-il-kernel-a-pezzi.md)
 
 ---
 
-Una voce sola, e una precedenza dura che il quarto giro aveva scritto:
-**l'8.1 va prima dell'8.2 e dell'8.3**, o il crate host nasce attorno
-all'oggetto-dio e il lock non potrà mai essere a grana fine. È anche il posto
-dove tutte le altre voci del piano andranno ad atterrare — una alla volta, come
-campi.
+Una voce sola, e una precedenza dura che il quarto giro aveva scritto: **l'8.1
+va prima dell'8.2 e dell'8.3**, o il crate host nasce attorno all'oggetto-dio e
+il lock non potrà mai essere a grana fine. È anche il posto dove tutte le altre
+voci del piano andranno ad atterrare — una alla volta, come campi.
 
 La voce è chiusa. L'8.2 e l'8.3 restano aperte, e adesso hanno su cosa poggiare.
 
@@ -42,17 +42,17 @@ comportamento: le 51 suite di test passano identiche, prima e dopo.
   `view_action`, `invoke_command`, `import`, `export`, `call_service`,
   `deliver_to_handlers` e `dispatch_pending` **restano orchestratori sul
   `Workspace`**, e nei componenti c'è solo ciò a cui si risponde *senza
-  svegliare nessuno*. Non è un compromesso: è la linea lungo cui il `RwLock`
-  del §8.3 potrà davvero diventare a grana fine, perché è la linea che separa
-  le letture pure dalle chiamate rientranti.
+  svegliare nessuno*. Non è un compromesso: è la linea lungo cui il `RwLock` del
+  §8.3 potrà davvero diventare a grana fine, perché è la linea che separa le
+  letture pure dalle chiamate rientranti.
 - **I componenti sono raggruppamenti di proprietà, non muri.** I campi di
   `DocumentStore` e `ProviderRegistry` sono `pub(crate)`. La ragione è che le
   operazioni composte del `Workspace` (rinomina, cestino, riscrittura dei link)
   usano una dozzina di verbi diversi del vault, e una facciata che li ripetesse
   tutti sarebbe una seconda copia della `Vault` senza esserne una. Ciò che è
-  *dentro* i componenti è la logica che ha una regola da difendere — la
-  pipeline di parse, il budget del drenaggio, la coalescenza del lotto, il
-  confronto dei contesti — non i getter.
+  *dentro* i componenti è la logica che ha una regola da difendere — la pipeline
+  di parse, il budget del drenaggio, la coalescenza del lotto, il confronto dei
+  contesti — non i getter.
 - **Le guardie di stato sono coppie, non funzioni con chiusura.** `as_actor` e
   `with_provider_call` prendevano una `impl FnOnce(&mut Workspace)`. Nel
   `Dispatcher` sono diventate `swap_actor`/`restore_actor` e
@@ -68,14 +68,14 @@ comportamento: le 51 suite di test passano identiche, prima e dopo.
   `ToDeliver::Notice` o un `ToDeliver::Overflow`, e il ciclo del `Workspace`
   scartava il resto dopo il secondo: cioè un pezzo di decisione era rimasto di
   qua. La [0111](0111-il-budget-e-un-tetto-sul-lavoro.md) lo ha riportato dentro
-  il componente, e il tipo di ritorno è tornato uno.)* La semantica di
-  consegna — che è **contratto** dal freeze di M4 — è quindi scritta in un posto
-  solo, e quel posto non è quello che presta l'host.
+  il componente, e il tipo di ritorno è tornato uno.)* La semantica di consegna
+  — che è **contratto** dal freeze di M4 — è quindi scritta in un posto solo, e
+  quel posto non è quello che presta l'host.
 - **`Session::publish` rende la maschera, non gli id delle view.** Pubblicare un
   contesto vuol dire anche dire alla shell quali view ridisegnare, e
   quell'elenco si calcola sulle spec dei provider. Il componente risponde a
-  *cosa è cambiato* (`ContextMask`); il `Workspace` traduce la maschera in id.
-  È deliberato che la sessione non sappia che le view esistono.
+  *cosa è cambiato* (`ContextMask`); il `Workspace` traduce la maschera in id. È
+  deliberato che la sessione non sappia che le view esistono.
 
 ## Trovato per strada, e chiuso
 
@@ -86,20 +86,20 @@ comportamento: le 51 suite di test passano identiche, prima e dopo.
 - **Non esiste una cache dei modelli parsati.** Il §8.1 dava `DocumentStore` =
   «vault + cache + parse», ma la cache non c'è: lo split metadata/body vuole che
   il corpo si rilegga dal disco a ogni richiesta (`parse_from_disk`), e la cache
-  tiene i soli metadati. Ciò che *sembrava* la cache è
-  `indexes.core.metas`, ed è la cache **dei metadati dell'indice** — usata come
-  prova di esistenza da `is_taken`, `read_model`, `render_preview` e
-  `render_embed`. È il motivo per cui quei quattro metodi incrociano due
-  componenti e non uno: la domanda «questo documento esiste?» ha come risposta
-  l'indice, non il vault. Scritto in testa a `documents.rs`, perché è
-  esattamente il presupposto che il piano dava per buono.
+  tiene i soli metadati. Ciò che *sembrava* la cache è `indexes.core.metas`, ed
+  è la cache **dei metadati dell'indice** — usata come prova di esistenza da
+  `is_taken`, `read_model`, `render_preview` e `render_embed`. È il motivo per
+  cui quei quattro metodi incrociano due componenti e non uno: la domanda
+  «questo documento esiste?» ha come risposta l'indice, non il vault. Scritto in
+  testa a `documents.rs`, perché è esattamente il presupposto che il piano dava
+  per buono.
 - **`extension_of` usava `rsplit_once('.')`, non `Utf8Path::extension`.** Le due
   danno risposte diverse per un file che comincia con un punto. Migrata com'era.
 
 ## Cosa NON è stato fatto, e perché
 
-- **`Indexes` non è stato rinominato `MetadataIndex`.** Il §8.1 lo nominava così,
-  ma il componente esiste già, ha già il suo modulo (`index/`) e il nome
+- **`Indexes` non è stato rinominato `MetadataIndex`.** Il §8.1 lo nominava
+  così, ma il componente esiste già, ha già il suo modulo (`index/`) e il nome
   `Indexes` dice una cosa in più che è vera: sono l'indice del kernel **e**
   quelli registrati. Rinominarlo avrebbe cambiato le citazioni senza cambiare la
   forma.

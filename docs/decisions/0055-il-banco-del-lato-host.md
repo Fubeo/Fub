@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §16.2 (seduta 16) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) · [il gemello, lato provider](0054-il-banco-del-lato-provider.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) ·
+[il gemello, lato provider](0054-il-banco-del-lato-provider.md)
 
 ---
 
@@ -16,8 +18,8 @@ Qui si decide **che forma ha** il banco che il kernel ce l'ha.
 
 ## I numeri, ricontati — e uno di loro non regge la lettura
 
-Il §16.2 diceva **35** helper `vault()`/`workspace()`, **25** `impl
-FormatProvider` giocattolo, di cui **nove** `PlainProvider`. Ricontati:
+Il §16.2 diceva **35** helper `vault()`/`workspace()`, **25**
+`impl FormatProvider` giocattolo, di cui **nove** `PlainProvider`. Ricontati:
 
 | | la voce | contato | nota |
 |---|---|---|---|
@@ -55,8 +57,8 @@ Variano su cinque assi indipendenti, e nessun asse è dominante:
 
 - **dove sta la radice** — 27 fanno un `tempdir`, 8 ricevono la cartella da un
   `&self` (sono metodi su una struct di banco già inventata a mano nel file);
-- **quale formato è registrato** — nessuno (5), il testo piatto su `txt` (6) o su
-  `md` (3), un provider specifico che fa qualcosa (`LinkListProvider`,
+- **quale formato è registrato** — nessuno (5), il testo piatto su `txt` (6) o
+  su `md` (3), un provider specifico che fa qualcosa (`LinkListProvider`,
   `TestoNudo`, `MarkdownProvider`…);
 - **quali plugin sono dichiarati** — da zero a ventotto id;
 - **che file ci sono dentro** — niente, o un corpus con frontmatter e wikilink
@@ -100,8 +102,7 @@ che il test guarda. Chi vuole anche quello ha `senza_scansione()`.
 
 ## La misura, che è l'unica prova che la voce sia chiusa
 
-`crates/fub-kernel/tests/il_banco_regge.rs`, scritto dopo il banco e non
-prima:
+`crates/fub-kernel/tests/il_banco_regge.rs`, scritto dopo il banco e non prima:
 
 | | righe di impalcatura prima della prima asserzione |
 |---|---|
@@ -147,9 +148,10 @@ falsa farebbe provare il vuoto a chiunque.
 ## Il `Deref` ha un buco, e va tappato con una via d'uscita generale
 
 Trovato migrando: `Deref`/`DerefMut` prestano `&Workspace` e `&mut Workspace`, e
-non bastano per un builder che **consuma `self`** — `Workspace::with_view_states(mut self) -> Self`
-vuole il `Workspace` per valore, e il banco lo possiede.
-`kernel/tests/stato_di_vista.rs` è rimasto fuori dalla migrazione per questo.
+non bastano per un builder che **consuma `self`** —
+`Workspace::with_view_states(mut self) -> Self` vuole il `Workspace` per valore,
+e il banco lo possiede. `kernel/tests/stato_di_vista.rs` è rimasto fuori dalla
+migrazione per questo.
 
 La tentazione è un metodo sul banco per ognuno di quei builder. È la scelta
 sbagliata due volte: un banco che cresce di un metodo ogni volta che il kernel
@@ -165,8 +167,8 @@ migrato e i suoi cinque test passano.
 ## Il ciclo di dipendenze, verificato invece che supposto
 
 `fub-testkit` dipende da `fub-kernel`, e `fub-kernel` dev-dipende da
-`fub-testkit`. Cargo lo risolve — verificato, il workspace compila — perché
-le dev-dependency non entrano nel grafo della libreria: la `lib` del kernel non
+`fub-testkit`. Cargo lo risolve — verificato, il workspace compila — perché le
+dev-dependency non entrano nel grafo della libreria: la `lib` del kernel non
 vede il testkit, solo i suoi `tests/` lo vedono.
 
 Il presidio che lo tiene innocuo è `il_banco_di_prova_non_entra_in_nessuna_libreria`
@@ -177,10 +179,10 @@ crate. L'altro — `l_sdk_non_vede_il_kernel` — è raccontato nella
 
 ## Cosa il banco **non** assorbe, e va detto
 
-I cinque helper di `fub-features/tests/` e `fub-format-markdown/tests/`
-seminano un corpus con un frontmatter e dei wikilink precisi, e **quel corpus è
-il soggetto del test**. Portarlo nel testkit vorrebbe dire che il crate spedisce
-i dati di prova di quattro test che non si parlano.
+I cinque helper di `fub-features/tests/` e `fub-format-markdown/tests/` seminano
+un corpus con un frontmatter e dei wikilink precisi, e **quel corpus è il
+soggetto del test**. Portarlo nel testkit vorrebbe dire che il crate spedisce i
+dati di prova di quattro test che non si parlano.
 
 Restano dove sono, e prendono dal banco solo l'impalcatura. Il §16.2 prometteva
 che «uno solo li serva tutti»: è vero per l'impalcatura e falso per i dati, e la
@@ -205,18 +207,19 @@ ciò che le rende due, quindi la stessa forma retorica (una frase in testa alla
 seduta che parla di entrambe le voci) ha prodotto qui la conclusione contraria:
 due verbali, perché due ragionamenti interi.
 
-Il criterio resta quello della [0031](0031-chi-possiede-i-bundle.md)/[0032](0032-il-runner-dei-job.md):
-un verbale è un ragionamento intero, non una quota di lavoro. Ciò che si aggiunge
-è che **un cappello va letto per cosa afferma, non per quante voci nomina** —
+Il criterio resta quello della
+[0031](0031-chi-possiede-i-bundle.md)/[0032](0032-il-runner-dei-job.md): un
+verbale è un ragionamento intero, non una quota di lavoro. Ciò che si aggiunge è
+che **un cappello va letto per cosa afferma, non per quante voci nomina** —
 «sono la stessa domanda vista da due lati» chiede un verbale, «fra loro c'è un
 confine» ne chiede due.
 
 ## Cosa si è scartato
 
-- **Una `fn vault()` sola nel testkit.** È la proposta letterale della voce, ed è
-  quella che i trentacinque helper hanno già scartato per conto loro: se un banco
-  comune non copre il caso, se ne scrive uno accanto. Un builder non ha quel
-  punto di rottura.
+- **Una `fn vault()` sola nel testkit.** È la proposta letterale della voce, ed
+  è quella che i trentacinque helper hanno già scartato per conto loro: se un
+  banco comune non copre il caso, se ne scrive uno accanto. Un builder non ha
+  quel punto di rottura.
 - **Un `PlainProvider` unico, non parametrico.** Avrebbe fatto scendere il
   conteggio a uno e la copertura con lui, in silenzio, su sei test.
 - **Il banco dentro `fub-kernel`, sotto una cargo feature.** Toglie un crate ma
@@ -227,26 +230,26 @@ confine» ne chiede due.
   [0053](0053-il-contratto-ha-una-sorgente.md)). Non si toccano: quel modulo
   legge i sorgenti Rust per i presidi del contratto, serve solo `fub-abi`, e
   vive dentro `fub-abi/tests/`. Metterlo nel testkit metterebbe il **kernel**
-  nel grafo di chi vuole solo leggere un file `.rs`. I due non si sovrappongono e
-  la linea fra loro è la stessa di sempre: cosa serve avere fra le mani.
+  nel grafo di chi vuole solo leggere un file `.rs`. I due non si sovrappongono
+  e la linea fra loro è la stessa di sempre: cosa serve avere fra le mani.
 
 ## Cosa resta scoperto, dichiarato
 
 - **La migrazione degli helper che restano.** È lavoro che non decide niente —
-  una casella residua nel senso della [0052](0052-cio-che-va-storto-e-un-evento.md),
-  non una voce. La forma è decisa e provata; applicarla agli helper rimasti si fa
-  senza aprire un verbale.
+  una casella residua nel senso della
+  [0052](0052-cio-che-va-storto-e-un-evento.md), non una voce. La forma è decisa
+  e provata; applicarla agli helper rimasti si fa senza aprire un verbale.
 - **`ogni_view_ufficiale()` ha adesso un posto naturale e non è stato
   costruito.** Sarebbe nel testkit, e costruirlo vorrebbe dire mettere
   `fub-features` fra le dipendenze di questo crate — che è una decisione della
   seduta 16 e non di questo verbale. Il posto è nominato nel sorgente perché chi
-  aprirà quella voce lo trovi già scelto.
-  *(Aggiornamento: la [decisione 0056](0056-un-elenco-che-e-la-sorgente.md) ha aperto quella
-  voce e ha scartato questo posto. Non per il costo, che pure ci sarebbe stato,
-  ma perché `il_banco_di_prova_non_entra_in_nessuna_libreria` — un test scritto
+  aprirà quella voce lo trovi già scelto. *(Aggiornamento: la
+  [decisione 0056](0056-un-elenco-che-e-la-sorgente.md) ha aperto quella voce e
+  ha scartato questo posto. Non per il costo, che pure ci sarebbe stato, ma
+  perché `il_banco_di_prova_non_entra_in_nessuna_libreria` — un test scritto
   dalla [0054](0054-il-banco-del-lato-provider.md) due ore prima — vieta a
-  `fub-host` di dichiarare il testkit fra le dipendenze normali: `mount.rs`,
-  che è l'elenco da cui le view **esistono**, non avrebbe potuto leggerlo mai.
+  `fub-host` di dichiarare il testkit fra le dipendenze normali: `mount.rs`, che
+  è l'elenco da cui le view **esistono**, non avrebbe potuto leggerlo mai.
   L'inventario sta in `fub-features`.)*
 - **Il §16.3** resta la voce che questa sbloccava, e la sua precondizione è
   soddisfatta. Il suo *primo tempo* — la cargo feature per bundle — non è stato

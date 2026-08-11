@@ -1,11 +1,9 @@
 # 0129 — Una feature spenta per difetto non è provata da nessuno
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: niente di dichiarato. Nasce misurando un difetto che diceva
-un'altra cosa — *«`ureq`: la versione più larga del workspace, unica dipendenza
-di rete, dietro una feature opzionale che la CI di default non compila»* — e di
-cui **nessuno dei tre fatti** era il difetto
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: niente di dichiarato. Nasce
+misurando un difetto che diceva un'altra cosa — *«`ureq`: la versione più larga
+del workspace, unica dipendenza di rete, dietro una feature opzionale che la CI
+di default non compila»* — e di cui **nessuno dei tre fatti** era il difetto
 **Commit**: *(questo commit)*
 
 ---
@@ -42,10 +40,11 @@ pacchetti di lockfile e spiega perché `ureq` e non `reqwest`. Un fatto
 documentato non diventa un difetto perché è scomodo.
 
 **«Una feature opzionale che la CI di default non compila».** **Falsa, e
-verificabile in una riga**: `default = ["notify-watcher", "http-client",
-"feature-ufficiali"]`. `http-client` **è** nel default. `cargo build
---workspace` e `cargo test --workspace` del job `test` lo compilano su tre
-sistemi operativi, `cargo clippy --workspace --all-targets` lo guarda, e
+verificabile in una riga**:
+`default = ["notify-watcher", "http-client", "feature-ufficiali"]`.
+`http-client` **è** nel default. `cargo build --workspace` e
+`cargo test --workspace` del job `test` lo compilano su tre sistemi operativi,
+`cargo clippy --workspace --all-targets` lo guarda, e
 `cargo tree -p fub-host -i ureq` lo conferma nel grafo senza nessun flag.
 
 E il recinto, misurato, è **il codice meglio presidiato dei tre**: `Guard::fetch`
@@ -84,9 +83,9 @@ esattamente quelle che tengono in piedi le due decisioni della 0097: che i
 redirect non si seguano (un `302` da un host dichiarato porta fuori
 dall'allowlist senza che nessuno l'abbia deciso) e che ci si fidi del
 verificatore della piattaforma invece delle radici imbarcate. Insieme a loro
-sparisce la riga `ws.set_network(…)` di `mount.rs`, quindi ogni `fetch`
-risponde `unserved` — l'app perde una capacità **in silenzio**, perché
-`unserved` è la risposta legittima di un host che non monta la rete.
+sparisce la riga `ws.set_network(…)` di `mount.rs`, quindi ogni `fetch` risponde
+`unserved` — l'app perde una capacità **in silenzio**, perché `unserved` è la
+risposta legittima di un host che non monta la rete.
 
 Non diventano rossi. Non diventano `ignored`. **Escono dal conto**, e il conto
 che la CI stampa — le righe `test result: ok`, che sono i *binari* e non i test
@@ -107,11 +106,12 @@ agganciato al job `invariants` accanto a `check-cargo-versioni.mjs`.
 La regola non dice che una feature non possa essere spenta: dice che non può
 essere spenta **per difetto**, perché quella è la sola configurazione che
 nessuno confronta con niente. Che si spenga davvero la CI lo verifica già, ed è
-la §16.3 — `cargo build -p fub-host --no-default-features --features
-outline,notify-watcher` sta nello stesso job da prima di questo verbale, e
-copre proprio il caso `http-client` assente. Le due domande sono opposte e
-servono tutte e due: *questa feature si spegne?* e *questa feature, qualcuno la
-compila?* Il repo aveva la prima e non la seconda.
+la §16.3 —
+`cargo build -p fub-host --no-default-features --features outline,notify-watcher`
+sta nello stesso job da prima di questo verbale, e copre proprio il caso
+`http-client` assente. Le due domande sono opposte e servono tutte e due:
+*questa feature si spegne?* e *questa feature, qualcuno la compila?* Il repo
+aveva la prima e non la seconda.
 
 **Perché un elenco di eccezioni con il comando accanto, e non un'eccezione
 nuda.** Una feature fuori dal `default` non è vietata — sarà legittima il giorno
@@ -126,18 +126,18 @@ soggetto alla stessa classe di difetto: sta in un crate che ha feature. Uno
 script che legge i manifest dal di fuori non si può spegnere accendendo o
 spegnendo niente.
 
-**Il costo, misurato: zero.** Nessun crate nuovo, nessuna feature accesa,
-nessun secondo di build — è un lettore di `Cargo.toml` in Node senza dipendenze
-npm, come gli altri presidi di quella cartella. La nota di scala che il difetto
+**Il costo, misurato: zero.** Nessun crate nuovo, nessuna feature accesa, nessun
+secondo di build — è un lettore di `Cargo.toml` in Node senza dipendenze npm,
+come gli altri presidi di quella cartella. La nota di scala che il difetto
 temeva — «accendere quella feature in CI aggiunge dieci crate e mezzo minuto» —
 non si applica, perché la feature **era già accesa**: qui non si accende niente,
 si impedisce a qualcuno di spegnerla senza accorgersene.
 
 **Cosa non è cambiato.** `ureq = "3"` resta com'è, e la scelta è deliberata: la
 domanda del punto di verità ha già il suo giudice e dice verde, e stringere il
-vincolo a `"3.3"` non risolverebbe nessun difetto misurato — sarebbe una riga
-in più da aggiornare a ogni minor. Nessuna firma di contratto toccata, WIT
-intatto, nessuna dipendenza nuova.
+vincolo a `"3.3"` non risolverebbe nessun difetto misurato — sarebbe una riga in
+più da aggiornare a ogni minor. Nessuna firma di contratto toccata, WIT intatto,
+nessuna dipendenza nuova.
 
 ## La prova che il presidio morde
 
@@ -146,9 +146,9 @@ Verificato **rosso tre volte**, su reversioni distinte:
 1. **Il difetto vero**: `"http-client"` tolto dal `default` di `fub-host` →
    `1 violazione`, exit 1, e il messaggio nomina la feature e il numero di riga.
 2. **L'elenco esaustivo provato togliendo un elemento**, non aggiungendone uno:
-   `"search"` tolto dal `default` di `fub-features` → `1 violazione`. È la
-   forma che conta, perché un presidio che si accorge di un elemento *in più*
-   può benissimo essere cieco a uno in meno.
+   `"search"` tolto dal `default` di `fub-features` → `1 violazione`. È la forma
+   che conta, perché un presidio che si accorge di un elemento *in più* può
+   benissimo essere cieco a uno in meno.
 3. **Il presidio spento**: puntato su una cartella senza `crates/`, non dice
    `0 violazioni` e verde — dice *«qui il presidio non sta guardando niente»* ed
    esce 1. Stessa disciplina di `check-cargo-versioni.mjs` e

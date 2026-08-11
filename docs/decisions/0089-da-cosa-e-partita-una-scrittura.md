@@ -6,7 +6,14 @@
 | **Origine** | `todo.md` §18.1 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — **chiude la voce** |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/18-editor-e-tastiera.md) · [la modifica chirurgica, 0008](0008-modifica-chirurgica.md) · [ciò che non è ancora successo, 0088](0088-cio-che-non-e-ancora-successo.md) · [chi vede il modello parsato, 0018](0018-chi-vede-il-modello-parsato.md) · [il rilevamento si può chiedere, 0030](0030-il-rilevamento-si-puo-chiedere.md) · [un errore è testo che qualcuno legge, 0041](0041-un-errore-e-testo-che-qualcuno-legge.md) · [una scorciatoia è una chiave, 0077](0077-una-scorciatoia-e-una-chiave.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/18-editor-e-tastiera.md) ·
+[la modifica chirurgica, 0008](0008-modifica-chirurgica.md) ·
+[ciò che non è ancora successo, 0088](0088-cio-che-non-e-ancora-successo.md) ·
+[chi vede il modello parsato, 0018](0018-chi-vede-il-modello-parsato.md) ·
+[il rilevamento si può chiedere, 0030](0030-il-rilevamento-si-puo-chiedere.md) ·
+[un errore è testo che qualcuno legge, 0041](0041-un-errore-e-testo-che-qualcuno-legge.md)
+· [una scorciatoia è una chiave, 0077](0077-una-scorciatoia-e-una-chiave.md)
 
 ---
 
@@ -78,21 +85,21 @@ ormai vecchia — quella con cui il documento è stato aperto — e fallirebbe c
 sé stesso: l'editor non riuscirebbe a salvare due volte di fila. Con il ritorno,
 ogni scrittura consegna la base della successiva.
 
-La seconda è che chiude un buco che la [0088](0088-cio-che-non-e-ancora-successo.md)
-aveva dovuto dichiarare un verbale fa. `DraftInfo::base` — la revisione da cui
-il buffer di crash si è discostato — era `null` **sempre**, perché la shell non
-aveva modo di calcolarla: ricalcolare FNV-1a in TypeScript sarebbe stata una
-seconda implementazione della stessa funzione, cioè due verità, e la seconda
-mente in silenzio. Adesso la base arriva dal kernel insieme al testo, e la bozza
-la porta con sé. Il caso `incerta` che la 0088 aveva costruito **resta**, ed è
-giusto che resti: una bozza scritta prima di oggi non la sa, e una che non la sa
-non deve fingere.
+La seconda è che chiude un buco che la
+[0088](0088-cio-che-non-e-ancora-successo.md) aveva dovuto dichiarare un verbale
+fa. `DraftInfo::base` — la revisione da cui il buffer di crash si è discostato —
+era `null` **sempre**, perché la shell non aveva modo di calcolarla: ricalcolare
+FNV-1a in TypeScript sarebbe stata una seconda implementazione della stessa
+funzione, cioè due verità, e la seconda mente in silenzio. Adesso la base arriva
+dal kernel insieme al testo, e la bozza la porta con sé. Il caso `incerta` che
+la 0088 aveva costruito **resta**, ed è giusto che resti: una bozza scritta
+prima di oggi non la sa, e una che non la sa non deve fingere.
 
 Ed è questo il criterio di leva con cui la voce è stata scelta: **due caselle
-che si pagano una volta sola**. Dare la base a `write_document` chiude un difetto
-vecchio *e* rende calcolabile la base delle bozze, e il secondo effetto non
-sarebbe stato ottenibile lavorando sulla 0088 — che l'aveva già guardato e aveva
-dovuto scriverne il limite.
+che si pagano una volta sola**. Dare la base a `write_document` chiude un
+difetto vecchio *e* rende calcolabile la base delle bozze, e il secondo effetto
+non sarebbe stato ottenibile lavorando sulla 0088 — che l'aveva già guardato e
+aveva dovuto scriverne il limite.
 
 ## Il ritaglio, e il ripiego scartato
 
@@ -119,32 +126,33 @@ lavoro non sarebbe stato difficile: sarebbe stato impossibile.
 
 La guardia rilegge il file. È la stessa scelta di `document_revision`, e la
 ragione è che la verità di un documento è il file: una guardia che si fidasse
-dell'anagrafe direbbe di sì proprio nel caso in cui l'anagrafe è indietro — che è
-il solo caso che deve prendere. Il test
-`la_guardia_non_si_fida_dell_anagrafe` esiste per questo, e senza il confronto
-col disco resta verde in modo ingannevole.
+dell'anagrafe direbbe di sì proprio nel caso in cui l'anagrafe è indietro — che
+è il solo caso che deve prendere. Il test `la_guardia_non_si_fida_dell_anagrafe`
+esiste per questo, e senza il confronto col disco resta verde in modo
+ingannevole.
 
 La lettura in più però si paga **solo quando qualcuno la chiede**. Senza `base`,
 `write_document` legge dalla memoria come prima, e la riga del registro continua
-a costare zero letture: la 0088 aveva scritto che *«una riga di registro non vale
-una lettura in più a ogni salvataggio»*, e resta vero. Chi chiede la guardia
-paga la guardia.
+a costare zero letture: la 0088 aveva scritto che *«una riga di registro non
+vale una lettura in più a ogni salvataggio»*, e resta vero. Chi chiede la
+guardia paga la guardia.
 
 ## Di là dal confine: un conflitto non è un disco pieno
 
 La shell tiene ora, accanto al testo del buffer, **da cosa si è discostato**.
-Arriva con il documento — `read_document` consegna testo e revisione insieme,
-in una porta sola — e si aggiorna a ogni salvataggio riuscito e a ogni ricarica.
+Arriva con il documento — `read_document` consegna testo e revisione insieme, in
+una porta sola — e si aggiorna a ogni salvataggio riuscito e a ogni ricarica.
 
 Il salvataggio che fallisce aveva un ramo solo, e ne ha due, perché adesso i due
-casi sono **distinguibili**: la [0041](0041-un-errore-e-testo-che-qualcuno-legge.md)
-aveva reso la specie di un errore interrogabile (`kind: "conflict"` accanto a
-`"io"`) proprio perché un giorno qualcuno ci ramificasse sopra. La differenza non
-è di sfumatura: un disco pieno si **riprova**, e la battuta dopo ci riprova da
-sola; un conflitto no, perché riprovare è la sovrascrittura che la guardia ha
-appena impedito. Ciò che manca non è un tentativo ma una **decisione**, e la
-decisione è dell'utente. Tenerli insieme vorrebbe dire che l'autosave, insistendo,
-risolve da sé un caso in cui insistere è il danno.
+casi sono **distinguibili**: la
+[0041](0041-un-errore-e-testo-che-qualcuno-legge.md) aveva reso la specie di un
+errore interrogabile (`kind: "conflict"` accanto a `"io"`) proprio perché un
+giorno qualcuno ci ramificasse sopra. La differenza non è di sfumatura: un disco
+pieno si **riprova**, e la battuta dopo ci riprova da sola; un conflitto no,
+perché riprovare è la sovrascrittura che la guardia ha appena impedito. Ciò che
+manca non è un tentativo ma una **decisione**, e la decisione è dell'utente.
+Tenerli insieme vorrebbe dire che l'autosave, insistendo, risolve da sé un caso
+in cui insistere è il danno.
 
 La decisione sta in una funzione pura (`esitoDelFallimento`) e non in un `if` in
 mezzo a `saveDoc`, per la disciplina che quel file si è già dato: ciò che si può
@@ -163,26 +171,27 @@ Tre cose che quella scelta porta con sé, e che valgono più della scelta:
   palette sta scegliendo fra due testi, e «risolvi il conflitto» non dice quale
   dei due resta.
 - **Nessuno dei due ha una scorciatoia**, per la regola di `shell.history.clear`
-  più una sua: sono i due gesti in cui l'utente sceglie quale testo perdere, e un
-  tasto premuto per sbaglio sceglierebbe al posto suo. Si cercano nella palette,
-  dove per arrivarci bisogna averli scritti.
+  più una sua: sono i due gesti in cui l'utente sceglie quale testo perdere, e
+  un tasto premuto per sbaglio sceglierebbe al posto suo. Si cercano nella
+  palette, dove per arrivarci bisogna averli scritti.
 - **«Tieni il mio» azzera la base, non la rilegge.** Rileggere la revisione di
-  adesso e riprovare sarebbe la sovrascrittura silenziosa di prima con un giro in
-  più, e la guardia non guarderebbe niente. Qui la sovrascrittura c'è, ed è ciò
-  che l'utente ha chiesto — dopo che gli è stato detto cosa stava coprendo.
+  adesso e riprovare sarebbe la sovrascrittura silenziosa di prima con un giro
+  in più, e la guardia non guarderebbe niente. Qui la sovrascrittura c'è, ed è
+  ciò che l'utente ha chiesto — dopo che gli è stato detto cosa stava coprendo.
 
 ## Cosa NON si è toccato, e perché
 
-Il rischio di questa voce era di aggiungere un **terzo** modo di dire «è cambiato
-sotto». Ce n'erano due e mezzo: `cambioSotto` nella shell (quattro casi, fra cui
-l'eco del proprio salvataggio), `VaultStatus.watching` che dice se la copertura
-del watcher è nulla, e `Revision` + `Conflict` nel contratto.
+Il rischio di questa voce era di aggiungere un **terzo** modo di dire «è
+cambiato sotto». Ce n'erano due e mezzo: `cambioSotto` nella shell (quattro
+casi, fra cui l'eco del proprio salvataggio), `VaultStatus.watching` che dice se
+la copertura del watcher è nulla, e `Revision` + `Conflict` nel contratto.
 
-Non ne è nato uno nuovo: il conflitto del salvataggio **è** il terzo di quei tre,
-esteso alla seconda primitiva di scrittura. Ciò che è cambiato è la gerarchia fra
-i primi due e lui. `cambioSotto` resta l'avviso **precoce** — arriva con l'evento,
-quando il salvataggio non è ancora partito — e non è più ciò da cui dipende la
-correttezza: quella adesso è del kernel, che non si può ingannare.
+Non ne è nato uno nuovo: il conflitto del salvataggio **è** il terzo di quei
+tre, esteso alla seconda primitiva di scrittura. Ciò che è cambiato è la
+gerarchia fra i primi due e lui. `cambioSotto` resta l'avviso **precoce** —
+arriva con l'evento, quando il salvataggio non è ancora partito — e non è più
+ciò da cui dipende la correttezza: quella adesso è del kernel, che non si può
+ingannare.
 
 In particolare il contatore `echi` resta com'era. Toglierlo vorrebbe dire far
 portare all'evento `document_changed` la revisione prodotta, cioè un'altra firma

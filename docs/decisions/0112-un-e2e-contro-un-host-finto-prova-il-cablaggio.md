@@ -1,19 +1,18 @@
 # 0112 — Un e2e contro un host finto non prova l'app: prova il cablaggio
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: [§17.2](../roadmap/17-presidi-che-restano.md#172-test-della-shell)
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**:
+[§17.2](../roadmap/17-presidi-che-restano.md#172-test-della-shell) **Commit**:
+*(questo commit)*
 
 ---
 
 ## La domanda
 
-La voce chiedeva gli **e2e dell'app reale** — «tauri-driver/Playwright sui flussi
-critici: apri vault, scrivi, rinomina, cerca, ripristina» — e nella riga in
-corsivo sotto il titolo diceva un'altra cosa: *«gira contro l'host finto della
-1.3»*. Le due metà della stessa voce non descrivono lo stesso presidio, e la
-domanda vera è quale delle due valga il prezzo.
+La voce chiedeva gli **e2e dell'app reale** — «tauri-driver/Playwright sui
+flussi critici: apri vault, scrivi, rinomina, cerca, ripristina» — e nella riga
+in corsivo sotto il titolo diceva un'altra cosa: *«gira contro l'host finto
+della 1.3»*. Le due metà della stessa voce non descrivono lo stesso presidio, e
+la domanda vera è quale delle due valga il prezzo.
 
 ## La decisione, in una riga
 
@@ -26,7 +25,8 @@ domanda vera è quale delle due valga il prezzo.
 ## Perché non Playwright, e perché non tauri-driver
 
 Non è una rinuncia per pigrizia, ed è una decisione di supply chain: si scarta
-**avendolo detto**, che è la forma della [0109](0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md).
+**avendolo detto**, che è la forma della
+[0109](0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md).
 
 Un runner di browser chiede un browser: `@playwright/test` porta con sé un
 binario scaricato a parte, che la politica della
@@ -39,8 +39,8 @@ primo è il banco delle prestazioni del §17.1, e la §17.1 dice già perché.
 
 Ma la ragione che decide non è il costo: è **cosa si sarebbe provato in più**.
 Un e2e dell'app vero prova tre cose che qui restano fuori — che il ponte
-serializzi i record, che la webview li disegni, che il kernel faccia ciò che
-gli si chiede. La terza ce l'ha già, ed è `cargo test`, che la prova meglio di
+serializzi i record, che la webview li disegni, che il kernel faccia ciò che gli
+si chiede. La terza ce l'ha già, ed è `cargo test`, che la prova meglio di
 qualunque click. Le prime due sono reali e restano scoperte, ed è il **buco
 dichiarato n. 5** in fondo a questo verbale. Ciò che invece nessuno provava — e
 che non chiede un browser per essere provato — è tutto il resto.
@@ -61,26 +61,26 @@ che non chiede un browser per essere provato — è tutto il resto.
 - **Falsa, e detta in tre posti**: «questa shell non ha un ambiente DOM nei
   test» (`docs/architecture/ui-protocol.md`, e le due decisioni che le hanno
   dato l'argomento). `happy-dom` è nelle dipendenze di sviluppo, e **cinque**
-  file di prova ci giravano dentro già prima di questo. Ciò che manca al cammino sul DOM del sanitizer non è
-  l'ambiente: è che nessuno l'abbia scritto. La riga architetturale è riparata;
-  le due decisioni no, perché un verbale è datato.
+  file di prova ci giravano dentro già prima di questo. Ciò che manca al cammino
+  sul DOM del sanitizer non è l'ambiente: è che nessuno l'abbia scritto. La riga
+  architetturale è riparata; le due decisioni no, perché un verbale è datato.
 - **Falsa nel numero**: la voce elenca cinque flussi, ma «rinomina» ne è due —
-  quella che chiede questa finestra e quella che arriva da fuori — e la seconda è
-  l'unica in cui il difetto c'era davvero.
+  quella che chiede questa finestra e quella che arriva da fuori — e la seconda
+  è l'unica in cui il difetto c'era davvero.
 
 ## Cosa l'host finto è, e le tre regole che lo tengono onesto
 
 `frontend/src/host/finto.ts` è un vault in memoria: file, revisioni, cestino,
-eventi, i cinque comandi strutturali di `COMANDI`, e il pezzo di linguaggio delle
-query che una shell parla. Tre regole, e ognuna ha un motivo misurato:
+eventi, i cinque comandi strutturali di `COMANDI`, e il pezzo di linguaggio
+delle query che una shell parla. Tre regole, e ognuna ha un motivo misurato:
 
 1. **È un modulo intero, non un pezzo di modulo.** Il tipo di ritorno è
    `typeof import("./ipc")`, quindi una porta nuova nella shell non compila
    finché il finto non la sa rispondere. È l'attore giusto: il compilatore
    prende la variante che non vuol dire niente. Ha già lavorato mentre lo
    scrivevo — tre record erano sbagliati, e uno (`CommandOutcome.partial`) era
-   un campo nato con la [0101](0101-una-voce-non-e-un-passo.md) che nessun
-   mock scritto a mano avrebbe mai avuto.
+   un campo nato con la [0101](0101-una-voce-non-e-un-passo.md) che nessun mock
+   scritto a mano avrebbe mai avuto.
 2. **Non conosce nessuna feature.** Ciò che sa eseguire è del contratto.
 3. **Ciò che non sa fare lancia.** Una query che non riconosce, un comando che
    non ha, una view che non ha dichiarato: eccezione, mai una risposta vuota. Un
@@ -88,9 +88,9 @@ query che una shell parla. Tre regole, e ognuna ha un motivo misurato:
    shell chiede la cosa sbagliata — e «vuoto» è indistinguibile da «non c'era
    niente».
 
-Una riga di produzione è cambiata per lui, e vale la pena dire perché:
-`main.ts` **esporta l'avvio** (`export const avvio`). Non serve in produzione —
-là è l'ultimo file che gira — serve perché senza quella riga il montaggio non è
+Una riga di produzione è cambiata per lui, e vale la pena dire perché: `main.ts`
+**esporta l'avvio** (`export const avvio`). Non serve in produzione — là è
+l'ultimo file che gira — serve perché senza quella riga il montaggio non è
 *osservabile*, e un e2e che non può aspettare la fine del boot deve dormire un
 tempo a caso: cioè diventa un presidio che ogni tanto passa.
 
@@ -100,7 +100,8 @@ Il secondo gesto della voce ne ha trovato uno vero, e grosso.
 
 L'albero dei file ha **un** ascoltatore di tastiera sul contenitore
 (`frecceNellAlbero`), e la rinomina in posto mette un **campo di testo dentro
-una voce dell'albero**. Ogni battuta là dentro risaliva fino a quell'ascoltatore:
+una voce dell'albero**. Ogni battuta là dentro risaliva fino a
+quell'ascoltatore:
 
 - **Invio** confermava la rinomina **e** faceva `click` sulla riga, cioè
   riapriva il path vecchio — che dopo la rinomina non esiste più. Risultato
@@ -139,8 +140,8 @@ Nove rami tolti uno per volta. Tre sono la misura che ha cambiato il lavoro:
 - il primo `refresh: spec.refresh` che ho tolto ha dato verde e mi ha quasi
   fatto scrivere che la maschera non era presidiata: erano **due** i posti che
   la passano, e ne avevo toccato uno. Con l'altro il gesto del cestino è rosso.
-  Vale come nota di metodo: una prova del rosso su un `grep` che trova due
-  righe e ne cambia una dice il falso.
+  Vale come nota di metodo: una prova del rosso su un `grep` che trova due righe
+  e ne cambia una dice il falso.
 
 Gli altri sei rami — l'apertura del vault iniziale, la base che discende dalla
 revisione letta, la tab che segue la rinomina, il filtro dei tasti del campo, la
@@ -152,8 +153,8 @@ riga di risultato che apre, la maschera della view — sono tutti rossi.
 [0109](0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md) applicata a una
 suite che non si svuota per un `cfg` ma per una riga cancellata o per un
 `it.skip` messo «per un attimo» — e il conto li vede tutti e due, perché
-`it.skip(` non è `it(`. **Non vede** un `it` che non asserisce niente: per quello
-l'attore è la verifica del rosso, e si fa a mano.
+`it.skip(` non è `it(`. **Non vede** un `it` che non asserisce niente: per
+quello l'attore è la verifica del rosso, e si fa a mano.
 
 ## Il ritaglio: zero
 
@@ -162,8 +163,8 @@ Non tocca il WIT, né alcun tipo del contratto. Nessuna dipendenza npm nuova:
 
 ## Cosa non è chiuso, e va detto
 
-- **Buco dichiarato n. 5**: che il ponte Tauri serializzi davvero questi record e
-  che la webview li disegni. Il primo lato ha un presidio parziale — il mirror
+- **Buco dichiarato n. 5**: che il ponte Tauri serializzi davvero questi record
+  e che la webview li disegni. Il primo lato ha un presidio parziale — il mirror
   del contratto — il secondo nessuno. Un buco dichiarato non è una casella e non
   entra in nessun totale ([0064](0064-il-supporto-sta-sotto.md)).
 - **Il layout non si prova**: in `happy-dom` non c'è né CSS né misura, quindi

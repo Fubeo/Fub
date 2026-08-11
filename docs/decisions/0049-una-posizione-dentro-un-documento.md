@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §21.3 + §21.10 (seduta 21) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/21-la-ricerca-predefinita.md) · [la gemella, che decide cosa si chiede a una ricerca](0050-cosa-si-chiede-a-una-ricerca.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/21-la-ricerca-predefinita.md) ·
+[la gemella, che decide cosa si chiede a una ricerca](0050-cosa-si-chiede-a-una-ricerca.md)
 
 ---
 
@@ -18,9 +20,8 @@ Due voci facevano la stessa domanda a due firme diverse.
 
 Deciderle separate voleva dire inventare due modi di dire *dove*, e accorgersene
 quando il primo era già congelato. È l'errore che la
-[0012](0012-origine-degli-eventi.md) ha dichiarato di voler evitare
-decidendosi insieme alla [0011](0011-il-lotto.md), e la ragione per cui la
-seduta 21 esiste.
+[0012](0012-origine-degli-eventi.md) ha dichiarato di voler evitare decidendosi
+insieme alla [0011](0011-il-lotto.md), e la ragione per cui la seduta 21 esiste.
 
 ## La decisione
 
@@ -54,8 +55,8 @@ diverso.
 
 È la domanda che le due voci si facevano separatamente — *«una posizione porta
 la propria revisione?»* — e la risposta doveva essere **una**, o sarebbero
-diventate due discipline. Uno span invecchia appena il documento cambia sotto: senza
-il campo, la shell porterebbe il cursore nel punto sbagliato **senza
+diventate due discipline. Uno span invecchia appena il documento cambia sotto:
+senza il campo, la shell porterebbe il cursore nel punto sbagliato **senza
 accorgersene**, che è la categoria di guasto che il §20 esiste per togliere di
 mezzo. Il contratto sapeva già dirlo altrove — `EditRequest` porta la revisione
 su cui è stato calcolato ([0008](0008-modifica-chirurgica.md)) — e qui è la
@@ -106,8 +107,8 @@ presidio ha ragione**: la variante `resolved` è nata con la
 tagliata. Nel `frozen/0.1.0.wit` l'`index-result` finisce a `organization`;
 `resolved`, `entries` e `folders` non ci sono. Ritipare il payload di una
 variante che non è mai stata pubblicata non rompe nessuna promessa, quindi il
-file della linea di base **non si tocca**: scriverci dentro un `resolved` che non
-c'era vorrebbe dire falsificare cosa è stato pubblicato per far apparire un
+file della linea di base **non si tocca**: scriverci dentro un `resolved` che
+non c'era vorrebbe dire falsificare cosa è stato pubblicato per far apparire un
 ritaglio che non c'è stato.
 
 La riga nella tabella dei ritagli resta lo stesso, e dice questo: la rottura è
@@ -130,24 +131,24 @@ fra la proiezione e il sorgente **non esiste nessuna mappa**. Farla esistere
 vorrebbe dire far portare a ogni indice una seconda copia di ogni documento, o
 un dizionario di corrispondenze per nota.
 
-Il sorgente ce l'ha il vault, cioè il kernel. Quindi la coordinata la produce chi
-ha la coordinata: `Workspace::query_index` apre i sorgenti della **pagina** che
-sta per restituire e ci trova dentro i testi cercati
-(`crates/fub-kernel/src/occurrences.rs`). Sta lì e non nel pianificatore per
-una ragione in più: è l'unico punto in cui passa **ogni** risposta, compresa
-quella di un motore di terzi che rivendicasse `QueryKind::Documents`. E chi ha
-già riempito `occurrences` non viene toccato — un indice che sappia dire *dove*
+Il sorgente ce l'ha il vault, cioè il kernel. Quindi la coordinata la produce
+chi ha la coordinata: `Workspace::query_index` apre i sorgenti della **pagina**
+che sta per restituire e ci trova dentro i testi cercati
+(`crates/fub-kernel/src/occurrences.rs`). Sta lì e non nel pianificatore per una
+ragione in più: è l'unico punto in cui passa **ogni** risposta, compresa quella
+di un motore di terzi che rivendicasse `QueryKind::Documents`. E chi ha già
+riempito `occurrences` non viene toccato — un indice che sappia dire *dove*
 resta la fonte, e questo passaggio è il ripiego di chi non lo sa dire.
 
-**Localizzare non è cercare una seconda volta.** *Se* un documento combacia lo ha
-già deciso chi indicizza, con la propria tokenizzazione; qui si risponde a una
-domanda più piccola e puramente testuale: dove compaiono, nei byte di questo
+**Localizzare non è cercare una seconda volta.** *Se* un documento combacia lo
+ha già deciso chi indicizza, con la propria tokenizzazione; qui si risponde a
+una domanda più piccola e puramente testuale: dove compaiono, nei byte di questo
 file, le stringhe che sono state scritte nella query. Le due possono non
 combaciare, e il verso in cui non combaciano è quello innocuo — un documento
 trovato per stemming non contiene la stringa digitata, quindi non produce
 occorrenze, e `occurrences` vuoto significa già «nessuno le ha calcolate».
-L'inverso — un'occorrenza dove non c'è testo — non può succedere: si cercano byte
-in un file.
+L'inverso — un'occorrenza dove non c'è testo — non può succedere: si cercano
+byte in un file.
 
 I due tetti sono dichiarati e non impliciti: **64 occorrenze per documento** e
 **64 documenti aperti per domanda**. Il secondo è quello che conta: non ogni
@@ -174,15 +175,15 @@ versione che non si conosce si rifà, e il costo è una riapertura lenta sola.
 
 ## I clienti, nello stesso giro
 
-Perché una firma senza qualcuno che la usi è la [0013](0013-elenco-delle-capacita.md)
-che si rimprovera da sola:
+Perché una firma senza qualcuno che la usi è la
+[0013](0013-elenco-delle-capacita.md) che si rimprovera da sola:
 
-- **La ricerca salta all'occorrenza.** Il pannello disegna una riga per la nota e
-  una riga per ogni occorrenza successiva (`search.occurrence`), e ognuna porta
-  il cursore al proprio punto con `revealByteOffset` — la stessa conversione
-  byte UTF-8 → posizione editor che usano l'outline e `ViewUpdate::Reveal`. La
-  ricerca era l'unico cliente naturale di quel giro e non aveva le coordinate da
-  passargli.
+- **La ricerca salta all'occorrenza.** Il pannello disegna una riga per la nota
+  e una riga per ogni occorrenza successiva (`search.occurrence`), e ognuna
+  porta il cursore al proprio punto con `revealByteOffset` — la stessa
+  conversione byte UTF-8 → posizione editor che usano l'outline e
+  `ViewUpdate::Reveal`. La ricerca era l'unico cliente naturale di quel giro e
+  non aveva le coordinate da passargli.
 - **Il wikilink a un punto arriva a destinazione.** Il renderer markdown emette
   `data-wikilink-block` accanto a `data-wikilink-heading` (non lo scriveva: il
   campo si perdeva lì, un centimetro prima della shell), l'anteprima li legge, e

@@ -6,7 +6,11 @@
 | **Origine** | `todo.md` §1.2 ([seduta 18](../roadmap/18-editor-e-tastiera.md)) — chiude la casella *migrare cestino e cronologia a `ViewProvider`*; resta il modello di layout. Chiude anche **tre delle cinque** righe residue del [§16.6](../roadmap/16-crate-sdk-banchi-di-prova.md#166-dieta-dellipc) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/18-editor-e-tastiera.md) · [cosa è una view, 0016](0016-cosa-e-una-view.md) · [lo stato di vista, 0037](0037-lo-stato-di-vista.md) · [la dieta dell'IPC, 0057](0057-la-dieta-dell-ipc.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/18-editor-e-tastiera.md) ·
+[cosa è una view, 0016](0016-cosa-e-una-view.md) ·
+[lo stato di vista, 0037](0037-lo-stato-di-vista.md) ·
+[la dieta dell'IPC, 0057](0057-la-dieta-dell-ipc.md)
 
 ---
 
@@ -22,10 +26,10 @@ decisione. Il resto è esecuzione.
 
 ## Una view non chiede con una finestra: chiede con l'albero che sta disegnando
 
-Il cestino aveva due domande da fare, ed erano il motivo per cui sembrava il caso
-difficile: *«svuoto davvero?»* e *«il path d'origine è di nuovo occupato: con che
-nome la ripristino?»*. Il pannello nativo le faceva con la modale della shell,
-che è una capacità che un provider **non ha**.
+Il cestino aveva due domande da fare, ed erano il motivo per cui sembrava il
+caso difficile: *«svuoto davvero?»* e *«il path d'origine è di nuovo occupato:
+con che nome la ripristino?»*. Il pannello nativo le faceva con la modale della
+shell, che è una capacità che un provider **non ha**.
 
 La strada che si offriva da sé era aggiungerla al contratto: un
 `ViewUpdate::Confirm { message, ok, cancel }`, e la shell disegna la finestra. È
@@ -56,10 +60,10 @@ dell'app.
 ## Chi scrive le versioni è chi le disegna
 
 La cronologia sembrava la più dura per la ragione sbagliata: si credeva le
-mancasse un canale. Non le mancava niente. Il pannello nativo leggeva le versioni
-da tre comandi Tauri, che le chiedevano allo store che vive nell'host; la strada
-apparente era portare quelle letture su `IndexQuery` — è quello che la §16.6
-aveva scritto, per iscritto e con la sua classificazione.
+mancasse un canale. Non le mancava niente. Il pannello nativo leggeva le
+versioni da tre comandi Tauri, che le chiedevano allo store che vive nell'host;
+la strada apparente era portare quelle letture su `IndexQuery` — è quello che la
+§16.6 aveva scritto, per iscritto e con la sua classificazione.
 
 **La cronologia è una view della feature `fub.versioning`**, cioè dello stesso
 plugin che le versioni le scrive. Quindi le rilegge dal **proprio spazio dati**
@@ -74,19 +78,19 @@ rilegge `versions.json` a ogni disegno. È la scelta giusta due volte: l'indice 
 un file piccolo che sta nella cache del sistema, e un pannello che rilegge dice
 la verità anche quando a scrivere è stata un'altra finestra.
 
-Ripristinare, invece, **non** è una scrittura della view: è `version.restore`, un
-comando del registro dichiarato dalla stessa feature. Una view che riscrivesse il
-documento da sé avrebbe un'operazione fuori dal registro — quindi fuori
-dall'annullamento, fuori dalla simulazione e invisibile alla palette. Migrandolo
-col pannello, la palette lo eredita gratis.
+Ripristinare, invece, **non** è una scrittura della view: è `version.restore`,
+un comando del registro dichiarato dalla stessa feature. Una view che
+riscrivesse il documento da sé avrebbe un'operazione fuori dal registro — quindi
+fuori dall'annullamento, fuori dalla simulazione e invisibile alla palette.
+Migrandolo col pannello, la palette lo eredita gratis.
 
 ### E lo spegnimento diventa una registrazione che non avviene
 
 La shell teneva il pannello nascosto con un `hidden` guidato da
 `VaultInfo.versioning`: il pannello c'era comunque, e a tenerlo vuoto era una
-riga di TypeScript. Adesso la view la registra la feature, dentro l'interruttore:
-versioning spento significa nessuna `ViewSpec` da montare e nessun
-`version.restore` nella palette. È la spegnibilità totale (D7) ottenuta
+riga di TypeScript. Adesso la view la registra la feature, dentro
+l'interruttore: versioning spento significa nessuna `ViewSpec` da montare e
+nessun `version.restore` nella palette. È la spegnibilità totale (D7) ottenuta
 **togliendo** codice invece di aggiungerne.
 
 ## Ciò che il §16.6 aveva classificato bene e capito a metà
@@ -107,15 +111,15 @@ il numero lo asserisce il test come prima.
 ## Il presidio che ha fermato la prima stesura, e aveva ragione a metà
 
 La prima versione del cestino importava `TRASH_RESTORE` e `TRASH_EMPTY` da
-`crate::commands`. Rosso: `i_moduli_non_si_parlano` ([0073](0073-una-condizione-che-nessuno-valuta.md))
-ha detto che la condizione della §16.3 si era sbloccata — il primo import fra due
-moduli di feature.
+`crate::commands`. Rosso: `i_moduli_non_si_parlano`
+([0073](0073-una-condizione-che-nessuno-valuta.md)) ha detto che la condizione
+della §16.3 si era sbloccata — il primo import fra due moduli di feature.
 
 Aveva ragione a fermarla, e la riparazione non è lo split. Quell'import era **la
 forma sbagliata di dogfooding**: l'id di un comando è un nome del *registro*,
 cioè del contratto, ed è ciò che scriverebbe un plugin di terzi — che i nostri
-`const` non li ha e non li avrà mai. Le due stringhe si scrivono, e che restino i
-comandi che esistono lo presidia un test che le cerca fra le `CommandSpec`
+`const` non li ha e non li avrà mai. Le due stringhe si scrivono, e che restino
+i comandi che esistono lo presidia un test che le cerca fra le `CommandSpec`
 registrate. È lo stesso scambio del §16.6: un accoppiamento che diventa un
 presidio invece di un import.
 
@@ -141,8 +145,8 @@ stesso.
 
 ## Cosa resta aperto
 
-- **Il modello di layout**, che è l'altra casella del §1.2 e non si è mossa: tab,
-  split, pane, workspace salvabili. È ciò che tiene ferma la §3.3 (il grafo
+- **Il modello di layout**, che è l'altra casella del §1.2 e non si è mossa:
+  tab, split, pane, workspace salvabili. È ciò che tiene ferma la §3.3 (il grafo
   nell'area principale).
 - **Le due porte del render** (`render_preview`, `render_embed`): restano il
   debito del §16.6, e la domanda di firma che aprono — portare HTML reso su un

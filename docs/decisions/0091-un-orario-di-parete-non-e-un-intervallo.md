@@ -8,10 +8,10 @@
 ---
 
 `TimerSchedule` sapeva dire `every` e `after` — le due forme che si misurano in
-**tempo trascorso** — e non sapeva dire «ogni giorno alle 9». Adesso lo dice, con
-un terzo caso in coda al `variant`, e la parte che conta di questa decisione non
-è il caso: è **dove è finita la regola di una sveglia che il contratto non può
-calcolare da sé**.
+**tempo trascorso** — e non sapeva dire «ogni giorno alle 9». Adesso lo dice,
+con un terzo caso in coda al `variant`, e la parte che conta di questa decisione
+non è il caso: è **dove è finita la regola di una sveglia che il contratto non
+può calcolare da sé**.
 
 **Additiva davvero, e il freeze non c'entra.** `timer-schedule` non compare in
 `wit/frozen/0.1.0.wit`: è nato con la
@@ -35,24 +35,24 @@ pub fn nth_after(&self, n: u64) -> Option<u64>
 ```
 
 Restituisce **secondi dalla registrazione**. È una firma di forma «tempo
-trascorso», e un orario di parete non la può implementare: quanti secondi manchino
-alle nove non è una funzione di *quante volte ha già suonato*, è una funzione di
-*che ore sono adesso* — un ingrediente che quella firma non riceve e non può
-ricevere senza smettere di essere pura.
+trascorso», e un orario di parete non la può implementare: quanti secondi
+manchino alle nove non è una funzione di *quante volte ha già suonato*, è una
+funzione di *che ore sono adesso* — un ingrediente che quella firma non riceve e
+non può ricevere senza smettere di essere pura.
 
 Le tre risposte possibili avevano tre prezzi diversi, e sono state misurate
 invece che scelte:
 
 1. **Cambiare `nth_after`.** Costo: una firma pubblicata cambia forma, quindi la
    parte additiva della voce smette di esserlo e il freeze di M4 entra in scena.
-   Guadagno: nessuno — la funzione servirebbe due famiglie con un parametro che a
-   una delle due non serve.
+   Guadagno: nessuno — la funzione servirebbe due famiglie con un parametro che
+   a una delle due non serve.
 2. **Mettere la regola nell'host.** Costo: due host con due idee di quando siano
    le nove del prossimo lunedì, cioè esattamente ciò che la
    [0069](0069-cosa-sa-dire-un-abbonamento.md) aveva scritto di voler evitare
    mettendo `nth_after` nel contratto.
-3. **Una seconda regola accanto alla prima**, che l'ora civile la *riceve* invece
-   di leggerla. Costo: una funzione in più. È questa.
+3. **Una seconda regola accanto alla prima**, che l'ora civile la *riceve*
+   invece di leggerla. Costo: una funzione in più. È questa.
 
 ```rust
 impl WallClock {
@@ -62,8 +62,8 @@ impl WallClock {
 ```
 
 Sono pure come la sorella e stanno nel contratto per la stessa ragione. **Il
-calendario finisce lì, il fuso no**: convertire un'ora civile nell'istante in cui
-accade è di chi possiede l'orologio. Il contratto dice *quali* occorrenze
+calendario finisce lì, il fuso no**: convertire un'ora civile nell'istante in
+cui accade è di chi possiede l'orologio. Il contratto dice *quali* occorrenze
 esistono, l'host dice *quando* accadono.
 
 E `nth_after` risponde `None` a un orario di parete. Perché quel `None` non si
@@ -75,23 +75,23 @@ scritto una riga sbagliata — accanto c'è la domanda fatta apposta,
 **È la trappola che la voce nominava, e il criterio è quello della
 [0090](0090-una-sequenza-e-una-modalita-che-scade.md):** un `Daily` dichiarato
 nel `variant` che nessuno scheduler sa calcolare sarebbe la versione con
-l'orologio della stessa bugia che la [0077](0077-una-scorciatoia-e-una-chiave.md)
-rifiuta nel registro dei comandi.
+l'orologio della stessa bugia che la
+[0077](0077-una-scorciatoia-e-una-chiave.md) rifiuta nel registro dei comandi.
 
 ---
 
 ## La quinta volta che una voce ferma non si esegue: si rimisura
 
-Il metodo ha funzionato cinque volte di fila, e ogni volta ciò che era caduto era
-un'altra cosa: la prima e la seconda aspettavano qualcosa che era **caduto**, la
-terza chiedeva qualcosa che era stato **deciso di no** altrove, la quarta aveva
-una premessa **mai stata vera**. Questa è la quarta variante di nuovo, e su un
-punto che decideva metà della voce.
+Il metodo ha funzionato cinque volte di fila, e ogni volta ciò che era caduto
+era un'altra cosa: la prima e la seconda aspettavano qualcosa che era
+**caduto**, la terza chiedeva qualcosa che era stato **deciso di no** altrove,
+la quarta aveva una premessa **mai stata vera**. Questa è la quarta variante di
+nuovo, e su un punto che decideva metà della voce.
 
 La §22.4 elencava tre candidati per il fuso e ne escludeva uno in anticipo: *il
-locale della [0039](0039-il-locale-e-il-caso.md), che dice come si scrive un'ora,
-non in che fuso si vive*. **Il `Locale` di questo repo dice tutte e due**, e lo
-dice per iscritto nel suo modulo:
+locale della [0039](0039-il-locale-e-il-caso.md), che dice come si scrive
+un'ora, non in che fuso si vive*. **Il `Locale` di questo repo dice tutte e
+due**, e lo dice per iscritto nel suo modulo:
 
 > **Non è un database dei fusi orari.** `Locale::utc_offset_minutes` è l'offset
 > di *adesso* […] chi deve fare aritmetica su date passate o future usa
@@ -102,8 +102,8 @@ delle altre — vault → macchina → default, e il default è la stringa vuota
 per la convenzione di `AS_SYSTEM` vuol dire *chiedilo al sistema*. Cioè il primo
 candidato della voce (il sistema) e il secondo (un'impostazione, §11.1) e il
 terzo (il locale) **non erano tre risposte diverse**: erano tre strati della
-stessa risposta, già montati, già ordinati. Aprire il modulo e leggere il campo è
-costato due minuti e ha risparmiato una chiave di impostazione nuova — che
+stessa risposta, già montati, già ordinati. Aprire il modulo e leggere il campo
+è costato due minuti e ha risparmiato una chiave di impostazione nuova — che
 sarebbe stata la seconda con lo stesso significato, e la seconda si sarebbe
 scoperta il giorno di tradurle.
 
@@ -119,26 +119,27 @@ scoperta il giorno di tradurle.
 | `locale.timezone` | chi usa l'app | «vivo in Italia ma il portatile è configurato in inglese» |
 | `wall-clock.zone` | chi **dichiara** la sveglia | «il digest delle 9 dell'ufficio di Roma» |
 
-I primi due c'erano. Il terzo è la risposta alla domanda che la voce chiamava per
-nome — *un vault sincronizzato fra due macchine in due paesi, che è il caso
+I primi due c'erano. Il terzo è la risposta alla domanda che la voce chiamava
+per nome — *un vault sincronizzato fra due macchine in due paesi, che è il caso
 normale, non quello di frontiera* — ed è una scelta di prodotto prima che di
 architettura, quindi va argomentata.
 
 **Il default è della macchina**, e non del vault. Una sveglia di parete esiste
-per allinearsi all'umano che è seduto lì: «alle 9» quasi sempre vuol dire «quando
-comincio a lavorare», e un portatile portato a Tokyo deve suonare alle 9 di
-Tokyo. È anche l'unica risposta coerente con ciò che già succede: ogni macchina
-fa girare il proprio scheduler, quindi un backup dichiarato alle 3 gira già due
-volte, una per macchina — il fuso del vault non avrebbe reso quel conto diverso,
-avrebbe solo spostato l'ora.
+per allinearsi all'umano che è seduto lì: «alle 9» quasi sempre vuol dire
+«quando comincio a lavorare», e un portatile portato a Tokyo deve suonare alle 9
+di Tokyo. È anche l'unica risposta coerente con ciò che già succede: ogni
+macchina fa girare il proprio scheduler, quindi un backup dichiarato alle 3 gira
+già due volte, una per macchina — il fuso del vault non avrebbe reso quel conto
+diverso, avrebbe solo spostato l'ora.
 
 **Ma il default puro tratta tutte le sveglie come se il loro significato fosse
 "quando mi siedo", e alcune non lo sono.** Un digest legato a un ufficio, un
-promemoria condiviso fra due persone in due paesi: quei casi hanno un significato
-*ancorato a un posto*, e senza un campo non avevano come dirlo — potevano solo
-sperare che tutti configurassero la stessa macchina. `zone: option<string>` è
-quel campo, ed è un `option` per lo stesso motivo per cui `DocChanges` lo era
-nella 0069: i due stati sono due significati, non un valore e la sua assenza.
+promemoria condiviso fra due persone in due paesi: quei casi hanno un
+significato *ancorato a un posto*, e senza un campo non avevano come dirlo —
+potevano solo sperare che tutti configurassero la stessa macchina.
+`zone: option<string>` è quel campo, ed è un `option` per lo stesso motivo per
+cui `DocChanges` lo era nella 0069: i due stati sono due significati, non un
+valore e la sua assenza.
 
 **Un nome che il database non conosce non fa suonare la sveglia**, e non ripiega
 su UTC. Un ripiego silenzioso qui è peggio del silenzio: la dichiarazione
@@ -149,13 +150,13 @@ avrebbe modo di accorgersene.
 
 ## L'ora legale, e il campo che serviva a un'altra domanda
 
-La voce chiedeva una regola sull'ora legale e suggeriva che fosse un campo:
-*un promemoria vuole saltare, un backup vuole girare*. Guardata da vicino, la
+La voce chiedeva una regola sull'ora legale e suggeriva che fosse un campo: *un
+promemoria vuole saltare, un backup vuole girare*. Guardata da vicino, la
 domanda si è spezzata in due, e **nessuna delle due metà vuole un campo**.
 
 **Il giorno in cui l'ora legale esce, le 2:30 esistono due volte.** Suona una
-volta, e non perché qualcuno l'abbia scelto: perché **un'occorrenza è la sua data
-civile e non il suo istante**. È l'invariante su cui è costruito tutto lo
+volta, e non perché qualcuno l'abbia scelto: perché **un'occorrenza è la sua
+data civile e non il suo istante**. È l'invariante su cui è costruito tutto lo
 scheduler di parete — al più una suonata per occorrenza, sempre — e le due 2:30
 sono una sola data civile. Un campo qui sarebbe stato un modo di rendere
 configurabile un difetto.
@@ -164,8 +165,8 @@ configurabile un difetto.
 avanti della durata del salto: la sveglia suona alle 3:30. È la disambiguazione
 *compatible* di RFC 5545, cioè ciò che fa ogni calendario, e vuol dire che una
 sveglia di parete **non perde mai un giorno**. Sta in una riga sola
-(`Fuso::istante`), che è il posto giusto per una regola che altrimenti si sarebbe
-sparsa.
+(`Fuso::istante`), che è il posto giusto per una regola che altrimenti si
+sarebbe sparsa.
 
 Fin qui, zero campi. Ma la stessa domanda vista da vicino ne ha scoperta
 un'altra, che la voce non faceva: **cosa fa una sveglia che è passata mentre
@@ -218,23 +219,23 @@ record wall-clock {
 
 Tre scelte che la voce lasciava a chi la prendeva.
 
-**L'orario è in due interi e non in una stringa `"09:00"`.** Una stringa vuole un
-parser al confine, e con lui un modo di fallire che non ha un posto dove stare: un
-manifest si legge quando il componente si registra, e «l'orario non si capisce»
-sarebbe diventato un errore di registrazione per un campo che poteva
-semplicemente non essere sbagliabile. Due interi si controllano dove si leggono —
-e un orario fuori scala **non suona** invece di rifiutare il componente che
+**L'orario è in due interi e non in una stringa `"09:00"`.** Una stringa vuole
+un parser al confine, e con lui un modo di fallire che non ha un posto dove
+stare: un manifest si legge quando il componente si registra, e «l'orario non si
+capisce» sarebbe diventato un errore di registrazione per un campo che poteva
+semplicemente non essere sbagliabile. Due interi si controllano dove si leggono
+— e un orario fuori scala **non suona** invece di rifiutare il componente che
 l'ha scritto: `WallClock::valid()` è la domanda con cui chi implementa uno
 scheduler sa perché.
 
 **Un caso solo per «ogni giorno» e «il lunedì»**, con `days` vuoto a dire *ogni
-giorno*. Un `daily` e un `weekly` separati sarebbero stati due casi del `variant`
-con la stessa aritmetica dentro, distinti da un campo in più — e due casi costano
-due discriminanti per sempre.
+giorno*. Un `daily` e un `weekly` separati sarebbero stati due casi del
+`variant` con la stessa aritmetica dentro, distinti da un campo in più — e due
+casi costano due discriminanti per sempre.
 
-**Il giorno della settimana è quello del locale**, che c'era già. Un secondo enum
-con gli stessi sette casi sarebbe stato due modi di dire lunedì, e il secondo si
-sarebbe scoperto il giorno di tradurli.
+**Il giorno della settimana è quello del locale**, che c'era già. Un secondo
+enum con gli stessi sette casi sarebbe stato due modi di dire lunedì, e il
+secondo si sarebbe scoperto il giorno di tradurli.
 
 ---
 
@@ -248,8 +249,9 @@ macchina»*. Quella proprietà è il **motivo per cui `every` e `after` sono
 giusti**, e sarebbe stata da buttare se un orario di parete si fosse fatto
 passare per un intervallo.
 
-Le due convivono, in [`fub-host/src/parete.rs`](../../crates/fub-host/src/parete.rs),
-e reggono cose diverse:
+Le due convivono, in
+[`fub-host/src/parete.rs`](../../crates/fub-host/src/parete.rs), e reggono cose
+diverse:
 
 - il tempo **trascorso** regge `every`/`after` — e regge **l'attesa di tutti**,
   perché aspettare è sempre «per quanto», mai «fino a quando»;
@@ -285,31 +287,32 @@ in crate aggiunti e scrive *«senza di lui il conto torna: zero»*
 ([0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)), e a monte c'è la
 [0001](0001-supply-chain-e-sbom.md) con il suo `deny.toml`.
 
-**Misurato: `jiff` aggiunge dieci pacchetti al lockfile**, da 541 a 551 — `jiff`,
-`jiff-core`, `jiff-static`, `jiff-tzdb`, `jiff-tzdb-platform`, `portable-atomic`,
-`portable-atomic-util`, `defmt`, `defmt-macros`, `defmt-parser`. Dieci volte il
-conto di `tracing`, e sta scritto in `crates/fub-host/Cargo.toml` invece che
-nascosto. I tre `defmt` sono voci di lock e non compilazione: vengono da un ramo
-`no_std` che qui non si accende. `default-features = false` toglie `serde` — un
-`WallClock` si serializza da sé, nel contratto, e nessun tipo di `jiff`
-attraversa il confine — e `logging`.
+**Misurato: `jiff` aggiunge dieci pacchetti al lockfile**, da 541 a 551 —
+`jiff`, `jiff-core`, `jiff-static`, `jiff-tzdb`, `jiff-tzdb-platform`,
+`portable-atomic`, `portable-atomic-util`, `defmt`, `defmt-macros`,
+`defmt-parser`. Dieci volte il conto di `tracing`, e sta scritto in
+`crates/fub-host/Cargo.toml` invece che nascosto. I tre `defmt` sono voci di
+lock e non compilazione: vengono da un ramo `no_std` che qui non si accende.
+`default-features = false` toglie `serde` — un `WallClock` si serializza da sé,
+nel contratto, e nessun tipo di `jiff` attraversa il confine — e `logging`.
 
-**L'alternativa a zero crate è stata guardata e scartata per iscritto.** Senza un
-tzdb, «alle 9 a Roma» calcolato su una macchina in UTC è sbagliato di un'ora per
-metà anno, e `locale.timezone` — che è un nome IANA, e c'era già — smetterebbe di
-essere onorabile: il repo l'aveva già previsto, scrivendo *«chi ha il database dei
-fusi legge il nome; chi non ce l'ha vede uno zero e sa che sta guardando UTC, che
-è sbagliato in modo dichiarato»*. Quella frase descriveva una resa accettabile per
-**formattare** una data; per **far scattare** una sveglia non lo è, perché una
-data formattata male si vede e una sveglia che suona un'ora dopo no.
+**L'alternativa a zero crate è stata guardata e scartata per iscritto.** Senza
+un tzdb, «alle 9 a Roma» calcolato su una macchina in UTC è sbagliato di un'ora
+per metà anno, e `locale.timezone` — che è un nome IANA, e c'era già —
+smetterebbe di essere onorabile: il repo l'aveva già previsto, scrivendo *«chi
+ha il database dei fusi legge il nome; chi non ce l'ha vede uno zero e sa che
+sta guardando UTC, che è sbagliato in modo dichiarato»*. Quella frase descriveva
+una resa accettabile per **formattare** una data; per **far scattare** una
+sveglia non lo è, perché una data formattata male si vede e una sveglia che
+suona un'ora dopo no.
 
-La dipendenza entra in `fub-host` e **solo lì**. `fub-abi` resta senza dipendenze
-di date, ed è la conseguenza diretta di dove è finita la regola: l'aritmetica su
-ore civili non ha bisogno di sapere cosa sia l'ora legale.
+La dipendenza entra in `fub-host` e **solo lì**. `fub-abi` resta senza
+dipendenze di date, ed è la conseguenza diretta di dove è finita la regola:
+l'aritmetica su ore civili non ha bisogno di sapere cosa sia l'ora legale.
 
 Una nota di misura, perché è costata un giro: le feature del database sono
-**due** e non una. `tzdb-bundle-platform` imbarca il database solo dove non c'è —
-Windows — e su Linux `TimeZone::get("Europe/Rome")` fallisce senza
+**due** e non una. `tzdb-bundle-platform` imbarca il database solo dove non c'è
+— Windows — e su Linux `TimeZone::get("Europe/Rome")` fallisce senza
 `tzdb-zoneinfo`. Lo hanno scoperto le prove di `parete.rs`, che è il motivo per
 cui un modulo che parla col sistema operativo le ha.
 
@@ -317,8 +320,9 @@ cui un modulo che parla col sistema operativo le ha.
 
 ## Cosa presidia cosa
 
-Le prove sono divise come la decisione: **quali** occorrenze esistono è contratto
-e si prova nel kernel, **quando** accadono è host e si prova nell'host.
+Le prove sono divise come la decisione: **quali** occorrenze esistono è
+contratto e si prova nel kernel, **quando** accadono è host e si prova
+nell'host.
 
 - [`crates/fub-kernel/tests/le_sveglie.rs`](../../crates/fub-kernel/tests/le_sveglie.rs) —
   che `nth_after` dica `None` e che ci sia una domanda per distinguerlo dal `None`
@@ -330,9 +334,9 @@ e si prova nel kernel, **quando** accadono è host e si prova nell'host.
   macchina, il fuso inventato che non ripiega su UTC, le 2:30 che non esistono e
   le 2:30 che esistono due volte, la finestra di recupero e la macchina spenta
   due giorni.
-- [`crates/fub-host/src/runner.rs`](../../crates/fub-host/src/runner.rs) — che le
-  due famiglie convivano nello stesso quadrante **senza mescolarsi**, e che una
-  sveglia di parete nasca e muoia col manifest come ogni altra.
+- [`crates/fub-host/src/runner.rs`](../../crates/fub-host/src/runner.rs) — che
+  le due famiglie convivano nello stesso quadrante **senza mescolarsi**, e che
+  una sveglia di parete nasca e muoia col manifest come ogni altra.
 - [`crates/fub-abi/tests/wit_conformance.rs`](../../crates/fub-abi/tests/wit_conformance.rs) —
   che il caso nuovo sia in coda: l'ordine lo legge dall'enum Rust, quindi
   spostarlo diventa rosso da solo.
@@ -344,5 +348,6 @@ e si prova nel kernel, **quando** accadono è host e si prova nell'host.
 Una casella: **il recupero attraverso un riavvio dell'app**, che vuole un posto
 dove persistere l'ultima occorrenza onorata. È scritta nel file della seduta.
 
-E una cosa che non resta: con questa decisione la [seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md)
-non ha più voci aperte.
+E una cosa che non resta: con questa decisione la
+[seduta 22](../roadmap/22-cosa-sa-dire-un-abbonamento.md) non ha più voci
+aperte.

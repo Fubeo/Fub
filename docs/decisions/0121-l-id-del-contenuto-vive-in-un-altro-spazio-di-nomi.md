@@ -1,9 +1,9 @@
 # 0121 — L'id del contenuto vive in un altro spazio di nomi
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: il difetto *«`id` e `class` del contenuto di una nota entrano nel DOM della shell»* di [«I difetti da correggere»](../todo.md) — l'ultimo della sezione, che con questo verbale sparisce
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: il difetto *«`id` e `class`
+del contenuto di una nota entrano nel DOM della shell»* di
+[«I difetti da correggere»](../todo.md) — l'ultimo della sezione, che con questo
+verbale sparisce **Commit**: *(questo commit)*
 
 ---
 
@@ -29,10 +29,10 @@ Ma un vault si scarica.
 quegli `id` glielo prende».** L'HTML grezzo dentro un markdown **non torna
 markup**. Il parser lo mette nel modello come `custom_kind::HTML` con l'HTML nel
 campo `attrs.html`, e il renderer lo degrada a un `<div class="block-…">` vuoto:
-sta scritto in due posti (`parse.rs`, «resta **dato**, non markup: chi lo disegna
-decide, e oggi nessuno lo disegna», e `render.rs`, «l'HTML grezzo di
-`custom_kind::HTML` resta **dato** e non torna markup»). Un `<div
-id="save-state">` scritto in una nota non arriva mai al sanitizzatore.
+sta scritto in due posti (`parse.rs`, «resta **dato**, non markup: chi lo
+disegna decide, e oggi nessuno lo disegna», e `render.rs`, «l'HTML grezzo di
+`custom_kind::HTML` resta **dato** e non torna markup»). Un
+`<div id="save-state">` scritto in una nota non arriva mai al sanitizzatore.
 
 Sembrava vera per una ragione onesta: il sanitizzatore **esiste**, e l'unica
 lettura naturale di un sanitizzatore è che stia lì perché dell'HTML non nostro
@@ -55,12 +55,12 @@ scritto, e la riparazione richiesta era la stessa.
 
 **Vero: il campione non era il censimento.** Il difetto nominava quattro `id`
 («`save-state`, `activity-panel`, `context-menu`, `key-pending`, …»). I nomi
-della shell misurati — `index.html`, i `getElementById`, i `querySelector("#…")`,
-i `.id = "…"` letterali e le famiglie che `identificatore()` genera per
-l'accessibilità — sono **sessantuno**. Fra questi ce ne sono di *generati*
-(`albero-1`, `campo-3`, `linguetta-2`), cioè nomi che nessuno ha scelto e che una
-nota può contenere per caso: `^albero-1` è un'ancora che un utente scriverebbe
-senza pensarci.
+della shell misurati — `index.html`, i `getElementById`, i
+`querySelector("#…")`, i `.id = "…"` letterali e le famiglie che
+`identificatore()` genera per l'accessibilità — sono **sessantuno**. Fra questi
+ce ne sono di *generati* (`albero-1`, `campo-3`, `linguetta-2`), cioè nomi che
+nessuno ha scelto e che una nota può contenere per caso: `^albero-1` è un'ancora
+che un utente scriverebbe senza pensarci.
 
 **Falso: che la risoluzione delle ancore fosse codice nostro da cambiare.** Il
 difetto chiedeva «la risoluzione delle ancore che lo applica dalla stessa
@@ -86,18 +86,18 @@ Il prefisso è `fub-contenuto-` e sta scritto in un posto, `SPAZIO_CONTENUTO` in
 già scelto: c'è un solo punto in cui dell'HTML entra nella webview, e ciò che
 vale per *ogni* HTML si scrive lì. Metterlo nel provider markdown lo avrebbe
 messo per il produttore di oggi e non per il tema, l'embed di terzi, il blocco
-custom di un plugin — cioè avrebbe riaperto la crepa che il varco unico
-era nato per chiudere. Un `id` che entra dal contenuto **non può** essere nudo,
-perché non c'è una strada che non passi di qui.
+custom di un plugin — cioè avrebbe riaperto la crepa che il varco unico era nato
+per chiudere. Un `id` che entra dal contenuto **non può** essere nudo, perché
+non c'è una strada che non passi di qui.
 
 **Perché una funzione e non una costante usata due volte.** Le metà sono due —
-l'`id` che si **scrive** e il `#frammento` che lo **cerca** — e sono la classe di
-difetti in cui *si aggiorna il lato che si stava guardando*. Prefissare solo la
-prima spegne ogni link interno di ogni nota; prefissare solo la seconda non
+l'`id` che si **scrive** e il `#frammento` che lo **cerca** — e sono la classe
+di difetti in cui *si aggiorna il lato che si stava guardando*. Prefissare solo
+la prima spegne ogni link interno di ogni nota; prefissare solo la seconda non
 ripara niente. Quindi il prefisso non è una costante che due rami si copiano:
-sopra ci sta **una** funzione, `valoreDellAttributo(nome, valore)`, che prende il
-nome dell'attributo e decide — identità per tutti tranne i due che nominano un
-identificatore. Il cammino sul DOM la chiama **una volta sola**, per ogni
+sopra ci sta **una** funzione, `valoreDellAttributo(nome, valore)`, che prende
+il nome dell'attributo e decide — identità per tutti tranne i due che nominano
+un identificatore. Il cammino sul DOM la chiama **una volta sola**, per ogni
 attributo, senza sapere quali riguardi:
 
 ```ts
@@ -133,11 +133,11 @@ scrive una funzione che le produce entrambe.**
 Tre presidi, e ognuno è stato reso rosso in un modo diverso, perché si rompono
 in modi diversi.
 
-**Il verso della collisione** —
-`frontend/src/ui/sanitize.dom.test.ts`, `happy-dom`. Il contenuto entra per
-primo nel documento e la barra di stato dopo: l'ordine è quello **cattivo** di
-proposito, perché `getElementById` dà il primo, e con l'ordine inverso il
-presidio passerebbe anche senza riparazione. Tolta la riscrittura:
+**Il verso della collisione** — `frontend/src/ui/sanitize.dom.test.ts`,
+`happy-dom`. Il contenuto entra per primo nel documento e la barra di stato
+dopo: l'ordine è quello **cattivo** di proposito, perché `getElementById` dà il
+primo, e con l'ordine inverso il presidio passerebbe anche senza riparazione.
+Tolta la riscrittura:
 
 ```
 FAIL … una nota che porta il nome di un elemento della shell non se lo prende
@@ -159,20 +159,20 @@ AssertionError: expected 'fub-contenuto-blocco-1' to be 'blocco-1'
 ```
 
 L'ultimo dei tre sta in `sanitize.test.ts` e non tocca il DOM: è l'**identità**
-fra i due lati (`valoreDellAttributo("id", x) === valoreDellAttributo("href",
-"#"+x).slice(1)`), cioè la cosa che si rompe per prima e prima che qualcosa si
-veda a schermo.
+fra i due lati
+(`valoreDellAttributo("id", x) === valoreDellAttributo("href", "#"+x).slice(1)`),
+cioè la cosa che si rompe per prima e prima che qualcosa si veda a schermo.
 
 **Il conto** — perché i due presidi sopra poggiano su una premessa che va tenuta
 vera: che nessun nome della shell viva sotto il prefisso. È un conto e non un
 test di comportamento perché la domanda è su un **elenco**, che è la divisione
-della [0110](0110-la-struttura-non-e-una-preferenza.md). L'elenco
-non è scritto a mano: si leggono `index.html` e ogni modulo con `?raw` e si
-tirano fuori i nomi da tutte le forme in cui la shell ne pronuncia uno — un
-elenco a mano sarebbe invecchiato al primo pannello nuovo, che è esattamente il
-modo in cui questo difetto era nato. Il conto ha una soglia (`> 50`) perché un
-conto che smettesse di trovare i nomi passerebbe a vuoto; misurato: sessantuno.
-Cambiato il prefisso in `save-`:
+della [0110](0110-la-struttura-non-e-una-preferenza.md). L'elenco non è scritto
+a mano: si leggono `index.html` e ogni modulo con `?raw` e si tirano fuori i
+nomi da tutte le forme in cui la shell ne pronuncia uno — un elenco a mano
+sarebbe invecchiato al primo pannello nuovo, che è esattamente il modo in cui
+questo difetto era nato. Il conto ha una soglia (`> 50`) perché un conto che
+smettesse di trovare i nomi passerebbe a vuoto; misurato: sessantuno. Cambiato
+il prefisso in `save-`:
 
 ```
 FAIL … nessun nome della shell vive nello spazio del contenuto
@@ -184,8 +184,8 @@ I presidi del DOM stanno in un **file a sé** e non in un `describe` di
 `sanitize.test.ts`: l'ambiente di vitest è per file, e la politica pura gira
 senza DOM apposta. Il commento che in quel file diceva «il cammino sul DOM non è
 testato perché questa shell non ha un ambiente DOM» era una delle righe che la
-[0112](0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md) ha misurato false, ed è stato
-riscritto.
+[0112](0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md) ha misurato
+false, ed è stato riscritto.
 
 ## Cosa resta scoperto
 

@@ -61,9 +61,9 @@ regole che dovrebbero salirci sono per metà *volutamente* diverse
 (`prefix_len_ci`, la corsia ASCII di `tags.rs`), cioè arriverebbero nel
 contratto portandosi dietro le proprie eccezioni.
 
-La prova che decide è la seconda: *il secondo chiamante la eredita gratis?*
-Ciò che nessuno eredita non è la porta — è **la dichiarazione**. Chi scrive oggi
-la quarantunesima regola non trova niente che gli chieda a quale famiglia
+La prova che decide è la seconda: *il secondo chiamante la eredita gratis?* Ciò
+che nessuno eredita non è la porta — è **la dichiarazione**. Chi scrive oggi la
+quarantunesima regola non trova niente che gli chieda a quale famiglia
 appartenga; con un conto lo trova, e lo trova **senza sapere che questo verbale
 esiste**, perché il conto è già rosso quando lui esegue `cargo test`.
 
@@ -123,46 +123,46 @@ in questo stesso commit riparando il difetto 0142.
 
 ## Il difetto riparato, e il conto che lo tiene fermo
 
-Il **0142** era la duplicazione più letterale del censimento: `let case_only =
-from.as_str().to_lowercase() == to.as_str().to_lowercase()` scritto identico a
-mano in `rename_document_in_batch` e `rename_entry_in_batch`. Chiede se due
-identità differiscono solo per come sono scritte, per sapere se
+Il **0142** era la duplicazione più letterale del censimento:
+`let case_only = from.as_str().to_lowercase() == to.as_str().to_lowercase()`
+scritto identico a mano in `rename_document_in_batch` e `rename_entry_in_batch`.
+Chiede se due identità differiscono solo per come sono scritte, per sapere se
 `vault.exists(to)` sta vedendo un file diverso o **lo stesso** file — e la
 risposta a quella domanda è `resolution_key`, non un `to_lowercase()` nudo. Il
 `to_lowercase()` rispondeva sì a `nota.md`/`Nota.md` e **no** a `Café.md` in NFC
 contro lo stesso nome in NFD, che su APFS sono un file solo: contraddiceva la
 regola di risoluzione proprio sul rename che quella regola deve proteggere.
-Adesso è `solo_il_caso(from, to)`, una funzione sola che chiama `resolution_key`,
-e il presidio non ha più niente da dichiarare lì perché non c'è più niente da
-dichiarare.
+Adesso è `solo_il_caso(from, to)`, una funzione sola che chiama
+`resolution_key`, e il presidio non ha più niente da dichiarare lì perché non
+c'è più niente da dichiarare.
 
 ## I tre difetti falsi, e perché sembravano veri
 
 - **0070** — «`prefix_len_ci` confronta i minuscoli code point per code point e
   sbaglia sulle espansioni (`İ`)». **Falso**: `İ` e `ẞ` sono le risposte
   *giuste* e deliberate. La ragione sta scritta sopra la funzione (gli offset
-  sono il suo prodotto), e `same_needle` la ripete al rovescio:
-  «*`İ` e `i̇` sono uguali per `to_lowercase` e diversi per `prefix_len_ci`, che
-  è chi decide davvero cosa si trova*». Il banco che tiene ferma la metà falsa
-  esisteva già — `occurrences.rs::non_si_fonde_ciò_che_chi_cerca_distingue`
-  asserisce `due("İ", "i\u{307}")` — ed è la ragione per cui
-  `fub-features/src/tags.rs` **cita questo difetto per numero** come motivo di
-  **non** riusare quella regola nel filtro dei tag. Sembrava vero perché la
-  divergenza da `str::to_lowercase` c'è ed è misurabile: quello che non c'era è
-  che fosse un errore.
+  sono il suo prodotto), e `same_needle` la ripete al rovescio: «*`İ` e `i̇`
+  sono uguali per `to_lowercase` e diversi per `prefix_len_ci`, che è chi decide
+  davvero cosa si trova*». Il banco che tiene ferma la metà falsa esisteva già —
+  `occurrences.rs::non_si_fonde_ciò_che_chi_cerca_distingue` asserisce
+  `due("İ", "i\u{307}")` — ed è la ragione per cui `fub-features/src/tags.rs`
+  **cita questo difetto per numero** come motivo di **non** riusare quella
+  regola nel filtro dei tag. Sembrava vero perché la divergenza da
+  `str::to_lowercase` c'è ed è misurabile: quello che non c'era è che fosse un
+  errore.
 - **0093** — «`heading_slug` non normalizza in NFC: `# Café` scritto da macOS e
   lo stesso link digitato altrove danno due slug diversi». La premessa è vera —
   ed è il difetto **0140**, che resta aperto e riguarda quattro regole e non
   una. **La conseguenza è falsa**: `heading_matches` è una **disgiunzione**,
-  `heading_slug(query) == heading.slug` **oppure** `resolution_key(query) ==
-  resolution_key(heading.text)`, e il secondo ramo la NFC la fa. La risoluzione
-  tiene nei due versi; ciò che si rompe è l'`id=` HTML, che di rami ne ha uno
-  solo. Sembrava vero perché la metà misurata era giusta e nessuno aveva letto
-  il ramo accanto. Qui il banco che tiene ferma la metà falsa **non esisteva** ed
-  è stato scritto: `nfd_e_nfc_si_incontrano_sul_testo_e_non_sullo_slug`, che
-  asserisce anche il verso vero — su NFD lo slug non diverge soltanto,
-  **cancella** l'accento (`Café` → `cafe`), perché `U+0301` è una `Mn` e non è
-  alfanumerica.
+  `heading_slug(query) == heading.slug` **oppure**
+  `resolution_key(query) == resolution_key(heading.text)`, e il secondo ramo la
+  NFC la fa. La risoluzione tiene nei due versi; ciò che si rompe è l'`id=`
+  HTML, che di rami ne ha uno solo. Sembrava vero perché la metà misurata era
+  giusta e nessuno aveva letto il ramo accanto. Qui il banco che tiene ferma la
+  metà falsa **non esisteva** ed è stato scritto:
+  `nfd_e_nfc_si_incontrano_sul_testo_e_non_sullo_slug`, che asserisce anche il
+  verso vero — su NFD lo slug non diverge soltanto, **cancella** l'accento
+  (`Café` → `cafe`), perché `U+0301` è una `Mn` e non è alfanumerica.
 - **0018** — «risoluzione dei link rotti: scansione lineare con `resolution_key`
   per voce, per ogni riferimento». **Punta al posto sbagliato**, e il posto
   giusto ha già un numero. Nel ramo `Path` di `resolve_entry_in` la scansione è
@@ -170,8 +170,8 @@ dichiarare.
   cioè su un riferimento che sta per essere dichiarato rotto*», e il commento
   che lo dice sta accanto alla riga. Nel ramo `Wiki`, invece, `resolve_entry_in`
   ritorna `named_entry_in` **incondizionatamente**, cioè paga la scansione
-  sempre — ed è il difetto **0115**, che resta aperto e misurato (27,8 ms su
-  20 000 voci). Sembrava vero perché la scansione c'è davvero: solo che la riga
+  sempre — ed è il difetto **0115**, che resta aperto e misurato (27,8 ms su 20
+  000 voci). Sembrava vero perché la scansione c'è davvero: solo che la riga
   descriveva il ramo che non costa e taceva quello che costa.
 
 ## Che cosa la (a) lascia scoperto — dichiarato, non sperato
@@ -188,10 +188,11 @@ dichiarare.
    nessun attore le lega a queste. È la zona cieca che la 0115 aveva già
    nominata, e questa decisione non l'ha attraversata.
 3. **Una regola scritta senza uno dei gesti che il conto legge passa.**
-   `MemoryHost::data_list` decide il contenimento con `starts_with(prefix + "/")`
-   e non con un trim. La maglia intercetta il gesto **comodo**, che è l'unico che
-   qualcuno farà avendo fretta; chi scrive la variante lunga sta già pensando.
-   Il caso è costruito e scritto nel banco come zona cieca, non scoperto dopo.
+   `MemoryHost::data_list` decide il contenimento con
+   `starts_with(prefix + "/")` e non con un trim. La maglia intercetta il gesto
+   **comodo**, che è l'unico che qualcuno farà avendo fretta; chi scrive la
+   variante lunga sta già pensando. Il caso è costruito e scritto nel banco come
+   zona cieca, non scoperto dopo.
 
 ## La prova rossa
 

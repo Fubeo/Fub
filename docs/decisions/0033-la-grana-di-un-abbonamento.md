@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §10.1 (seduta 10) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/10-gli-eventi.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/10-gli-eventi.md)
 
 ---
 
@@ -17,9 +18,9 @@ interessa**. Ne seguivano due sprechi, e nessuno dei due lo paga chi lo causa:
 - **Chi si abbona ai custom li riceve tutti.** L'abbonamento è a grana
   `EventKind::Custom`, quindi con i moduli di FubSuite che si parlano fra loro
   (21.2) ogni handler si sveglia per **ogni** custom di **ogni** plugin. Il
-  prefisso di topic non c'era, ma la sua forma sì: la
-  [0021](0021-il-confine.md) impone `ns:nome` all'host nel momento in cui
-  l'evento passa, e mancava solo il match dall'altra parte.
+  prefisso di topic non c'era, ma la sua forma sì: la [0021](0021-il-confine.md)
+  impone `ns:nome` all'host nel momento in cui l'evento passa, e mancava solo il
+  match dall'altra parte.
 - **Manca la grana del soggetto**, ed è la metà che andava inventata: nessuno
   può abbonarsi a «i cambiamenti di questa cartella» o «di questo documento»,
   quindi l'evento più caldo del contratto — `document-changed` — sveglia tutti,
@@ -58,10 +59,10 @@ comunque, perché è ciò che non si può perdere.**
   nessuno, e `wit_additivity` lo ha detto con la frase che ha scritto per questo
   caso — *le due uscite oneste sono renderlo additivo, oppure, solo finché il
   freeze di M4 non è avvenuto, ritagliare la linea di base con un commit che
-  tocca `crates/fub-abi/wit/frozen/` e lo dice*. È la seconda, ed è visibile: nello stesso
-  commit c'è la riga in `crates/fub-abi/wit/frozen/0.1.0.wit`, col perché accanto. Dopo M4 la
-  stessa mossa vorrà una versione nuova **accanto** a quella, non una riga
-  cambiata dentro.
+  tocca `crates/fub-abi/wit/frozen/` e lo dice*. È la seconda, ed è visibile:
+  nello stesso commit c'è la riga in `crates/fub-abi/wit/frozen/0.1.0.wit`, col
+  perché accanto. Dopo M4 la stessa mossa vorrà una versione nuova **accanto** a
+  quella, non una riga cambiata dentro.
 
 ### I due prefissi
 
@@ -74,13 +75,13 @@ comunque, perché è ciò che non si può perdere.**
   deve quindi essere un separatore: `:` o `.` per i nomi (sono i due della
   regola dei nomi, §7.4), `/` per i path.
 - **Il prefisso di topic ha tre grane utili e non tre regole**: `com.acme`
-  (tutti i plugin di acme), `com.acme.tasks` (quel plugin), `com.acme.tasks:board`
-  (una famiglia di topic). Sono la stessa regola letta a tre profondità, e non
-  c'è niente da dichiarare per scegliere quale.
+  (tutti i plugin di acme), `com.acme.tasks` (quel plugin),
+  `com.acme.tasks:board` (una famiglia di topic). Sono la stessa regola letta a
+  tre profondità, e non c'è niente da dichiarare per scegliere quale.
 - **Una cartella è un prefisso di path, e lo è per una ragione con una
   scadenza.** Nel kernel una cartella non è un cittadino: lo diventa col §14.3.
-  La forma della maschera però non poteva aspettare quel giorno — è contratto,
-  e il §14.3 non lo è — quindi `Subject::Folder` porta una `string` e il giorno
+  La forma della maschera però non poteva aspettare quel giorno — è contratto, e
+  il §14.3 non lo è — quindi `Subject::Folder` porta una `string` e il giorno
   che il §14.3 arriva **guadagna una variante**, che è additivo. Il contrario —
   aspettare — avrebbe voluto dire una migrazione di versione per un tipo.
 
@@ -109,20 +110,20 @@ comunque, perché è ciò che non si può perdere.**
 
 ### Dove sta la regola
 
-- **In `fub_abi::rules::events`, e non accanto al tipo.** È la regola con
-  **due applicatori veri**: il kernel, che consegna a un `EventHandler`, e la
+- **In `fub_abi::rules::events`, e non accanto al tipo.** È la regola con **due
+  applicatori veri**: il kernel, che consegna a un `EventHandler`, e la
   **shell**, che decide da sé quando ridisegnare una view dichiarata
   (`ViewSpec.refresh` è una `EventMask`, e la shell la legge). Finché la shell
   applicava un `includes` sulle specie, la maschera poteva restringere quanto
   voleva e lei ridisegnava lo stesso: la promessa del contratto sarebbe stata
   vera nel kernel e falsa in finestra. Adesso la regola è una, la gemella
-  TypeScript sta in `frontend/src/rules/mirrored.ts` e a tenerle uguali non è
-  un commento ma la fixture generata di `rules_mirror.rs` (§6.2).
+  TypeScript sta in `frontend/src/rules/mirrored.ts` e a tenerle uguali non è un
+  commento ma la fixture generata di `rules_mirror.rs` (§6.2).
 - **La shell dichiara maschere anche per i propri pannelli nativi.**
   `Panel.refresh` era una lista di specie ed è diventata una `EventMask`:
-  tenerne due forme avrebbe voluto dire due strade per montare un pannello,
-  che è esattamente ciò che la [0015](0015-la-forma-della-shell.md) ha chiuso.
-  I nativi la scrivono con `refreshOn(...)`, che è `EventMask::of` detta di là.
+  tenerne due forme avrebbe voluto dire due strade per montare un pannello, che
+  è esattamente ciò che la [0015](0015-la-forma-della-shell.md) ha chiuso. I
+  nativi la scrivono con `refreshOn(...)`, che è `EventMask::of` detta di là.
 
 ## Trovato per strada
 
@@ -164,8 +165,8 @@ comunque, perché è ciò che non si può perdere.**
   esistono; il `variant` cresce in coda il giorno che ne serve una terza.
 - **Il soggetto non filtra i custom.** Un `Event::Custom` non nomina documenti,
   quindi passa qualunque soggetto sia dichiarato. Farlo filtrare vorrebbe dire
-  leggere dentro il payload, che è di chi lo manda e non ha una forma promessa
-  a nessuno.
+  leggere dentro il payload, che è di chi lo manda e non ha una forma promessa a
+  nessuno.
 - **La shell non ha una prova che il proprio host applichi la regola.** Il
   router degli eventi della shell si attacca a Tauri, e per provarlo servirebbe
   il banco che il §17.2 chiede. La *regola* è presidiata (fixture generata); che
@@ -196,8 +197,8 @@ comunque, perché è ciò che non si può perdere.**
     anche i custom dell'altro plugin e `a_topic_prefix_wakes_up_who_declared_it`
     fallisce;
   - facendo nominare a un rename il solo path d'arrivo (cioè scrivendo `names`
-    come `touched`), `a_note_leaving_the_folder_is_news_for_the_folder`
-    fallisce — è la lettura plausibile, ed è la ragione per cui quel test esiste;
+    come `touched`), `a_note_leaving_the_folder_is_news_for_the_folder` fallisce
+    — è la lettura plausibile, ed è la ragione per cui quel test esiste;
   - togliendo la guardia «chi non nomina passa»,
     `what_nobody_can_rediscover_reaches_everyone` fallisce: l'`overflow` e il
     `vault-closed` sparirebbero per chi si è abbonato a un documento solo.
@@ -205,9 +206,9 @@ comunque, perché è ciò che non si può perdere.**
     `rules-mirror.test.ts` diventa rosso sul caso `com.acmecorp`. Le due
     implementazioni non possono divergere in silenzio.
 - **Contratto:** `event-mask` da alias a record è una **rottura dichiarata**
-  pre-freeze; `crates/fub-abi/wit/frozen/0.1.0.wit` è ritagliato nello stesso commit e dice
-  perché. `wit_conformance` (che verifica anche l'ordine dei casi del `subject`
-  contro la dichiarazione Rust) e `wit_additivity` sono verdi.
+  pre-freeze; `crates/fub-abi/wit/frozen/0.1.0.wit` è ritagliato nello stesso
+  commit e dice perché. `wit_conformance` (che verifica anche l'ordine dei casi
+  del `subject` contro la dichiarazione Rust) e `wit_additivity` sono verdi.
 - **Mirror TS rigenerato** (`UPDATE_MIRROR=1` su `ts_mirror` e `rules_mirror`),
   e il gemello di là aggiornato: `cd frontend && npx vitest run` (11 file, 177
   test) e `npx tsc --noEmit` puliti.

@@ -6,7 +6,13 @@
 | **Origine** | `todo.md` §20.4 ([seduta 20](../roadmap/20-quando-qualcosa-va-storto.md)) — **chiude la voce**, e con lei la [seduta 20](../roadmap/20-quando-qualcosa-va-storto.md) meno la §20.5. È l'ultimo dei quattro punti in cui il percorso di ciò che va storto era interrotto |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/20-quando-qualcosa-va-storto.md) · [ciò che va storto è un evento, 0052](0052-cio-che-va-storto-e-un-evento.md) · [l'alimentazione risponde, 0051](0051-l-alimentazione-risponde.md) · [il lavoro lungo si racconta, 0035](0035-il-lavoro-lungo-si-racconta.md) · [origine degli eventi, 0012](0012-origine-degli-eventi.md) · [elenco delle capacità, 0013](0013-elenco-delle-capacita.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/20-quando-qualcosa-va-storto.md) ·
+[ciò che va storto è un evento, 0052](0052-cio-che-va-storto-e-un-evento.md) ·
+[l'alimentazione risponde, 0051](0051-l-alimentazione-risponde.md) ·
+[il lavoro lungo si racconta, 0035](0035-il-lavoro-lungo-si-racconta.md) ·
+[origine degli eventi, 0012](0012-origine-degli-eventi.md) ·
+[elenco delle capacità, 0013](0013-elenco-delle-capacita.md)
 
 ---
 
@@ -76,8 +82,8 @@ provata da sei casi. Sta lì e non accanto ai buffer per una ragione che si è
 vista provandola: `panels/document.ts` monta editor, tab e riquadri, e
 importarlo in un test vuol dire portarsi dietro mezza shell e un `document`
 globale — mentre la decisione si prova in mezzo secondo e senza un DOM. È la
-stessa disciplina di `raccogli` in `ui/notify.ts`, e la regola che se ne ricava è
-quella: **la parte che si può sbagliare in un modo che, guardando l'app mentre
+stessa disciplina di `raccogli` in `ui/notify.ts`, e la regola che se ne ricava
+è quella: **la parte che si può sbagliare in un modo che, guardando l'app mentre
 tutto funziona, non si vede, va dove la si può interrogare da sola**.
 
 ## I quattordici, e il criterio con cui si è scelto il tono
@@ -99,33 +105,34 @@ perché sono i tre in cui era facile sbagliare in eccesso:
   scritto giusto nel codice, e finiva in console.
 - **La view che chiede una superficie non ospitata**: è una dichiarazione che
   questa shell non soddisfa, non un fallimento.
-- **Lo stato di vista non ricordato** (`state/store.ts`). Qui l'obiezione scritta
-  nel codice era giusta *e riguardava il testo*: nominare la chiave voleva dire
-  un avviso diverso a ogni click, per un file di cache che al prossimo avvio si
-  riscrive da sé. La frase nuova non la nomina, e allora quattordici fallimenti
-  di fila diventano **una riga con «×14»** — che è esattamente ciò per cui il
-  raggruppamento della [0035](0035-il-lavoro-lungo-si-racconta.md) esiste. Il
-  criterio generale: *un avviso ripetitivo non è una ragione per tacere, è una
-  ragione per scrivere una frase che si raggruppa*.
+- **Lo stato di vista non ricordato** (`state/store.ts`). Qui l'obiezione
+  scritta nel codice era giusta *e riguardava il testo*: nominare la chiave
+  voleva dire un avviso diverso a ogni click, per un file di cache che al
+  prossimo avvio si riscrive da sé. La frase nuova non la nomina, e allora
+  quattordici fallimenti di fila diventano **una riga con «×14»** — che è
+  esattamente ciò per cui il raggruppamento della
+  [0035](0035-il-lavoro-lungo-si-racconta.md) esiste. Il criterio generale: *un
+  avviso ripetitivo non è una ragione per tacere, è una ragione per scrivere una
+  frase che si raggruppa*.
 
 E un quindicesimo punto, che era **peggiore di tutti** e non aveva nemmeno la
 console: `state.commandSpecs = await api.listCommands().catch(() => [])`. Se
-l'elenco non arriva all'apertura del vault, la palette è vuota e ogni scorciatoia
-dichiarata è morta — cioè metà dei modi di usare l'app smette di rispondere —
-e non ne restava una riga da nessuna parte. L'elenco vuoto resta la risposta
-giusta ([0068](0068-un-vault-si-apre-per-quel-che-si-legge.md): un vault si apre
-comunque); ciò che mancava era dirlo. Lo si è trovato **contando**, non
-leggendo — che è il precedente della [0052](0052-cio-che-va-storto-e-un-evento.md)
-applicato di nuovo: nessuno dei numeri scritti a mano in giro era giusto, e non
-lo era perché li si era creduti.
+l'elenco non arriva all'apertura del vault, la palette è vuota e ogni
+scorciatoia dichiarata è morta — cioè metà dei modi di usare l'app smette di
+rispondere — e non ne restava una riga da nessuna parte. L'elenco vuoto resta la
+risposta giusta ([0068](0068-un-vault-si-apre-per-quel-che-si-legge.md): un
+vault si apre comunque); ciò che mancava era dirlo. Lo si è trovato
+**contando**, non leggendo — che è il precedente della
+[0052](0052-cio-che-va-storto-e-un-evento.md) applicato di nuovo: nessuno dei
+numeri scritti a mano in giro era giusto, e non lo era perché li si era creduti.
 
-Con lo stesso conto è caduta anche l'ultima riga che diceva «nessuno lo disegna»:
-`VaultInfo.unread` (§15.7) — le note che l'apertura non ha potuto leggere, che la
-ricerca non trova e che il grafo non collega. Ogni voce esce **anche** come
-evento `trouble`, e da lì il centro notifiche la mostra già; la si legge adesso
-anche dall'esito, che è la ragione per cui quel campo esiste — aprire un vault è
-il carico sotto cui la coda tronca (§20.5), e la seconda strada non passa dalla
-coda.
+Con lo stesso conto è caduta anche l'ultima riga che diceva «nessuno lo
+disegna»: `VaultInfo.unread` (§15.7) — le note che l'apertura non ha potuto
+leggere, che la ricerca non trova e che il grafo non collega. Ogni voce esce
+**anche** come evento `trouble`, e da lì il centro notifiche la mostra già; la
+si legge adesso anche dall'esito, che è la ragione per cui quel campo esiste —
+aprire un vault è il carico sotto cui la coda tronca (§20.5), e la seconda
+strada non passa dalla coda.
 
 ## Il terzo caso, trovato usandola
 
@@ -143,12 +150,12 @@ salvataggio.
 Non era un difetto introdotto qui: quella riga si emetteva da sempre, e finché
 finiva in `console` non l'ha vista nessuno. Portarla sullo schermo l'ha resa
 visibile tre volte di fila alla prima nota lunga scritta dopo il commit — che è
-il modo in cui questa voce si è verificata da sé, e vale la pena scriverlo: **una
-diagnosi che nessuno legge non è una diagnosi giusta, è una diagnosi non
+il modo in cui questa voce si è verificata da sé, e vale la pena scriverlo:
+**una diagnosi che nessuno legge non è una diagnosi giusta, è una diagnosi non
 provata**.
 
-La regola aggiunta è una riga (`cambioSotto`, in `state/salvataggio.ts`), e ha un
-invariante che i test presidiano: l'eco si riconosce contando le scritture
+La regola aggiunta è una riga (`cambioSotto`, in `state/salvataggio.ts`), e ha
+un invariante che i test presidiano: l'eco si riconosce contando le scritture
 riuscite di cui non è ancora tornato l'evento, e **`daFuori` risponde prima del
 contatore, sempre**. Se un eco andasse perso — coda troncata — il contatore
 resterebbe alto e si mangerebbe un avviso di origine kernel o plugin; non può
@@ -180,8 +187,8 @@ che non guardava quel file.
 
 Il terzo caso, dopo la riga morta del §20.2 e le tre sorgenti di `Overflow` del
 §20.5, di una regola che questa seduta ha finito per scrivere tre volte: **un
-documento che afferma una proprietà del codice va riletto contro il codice**. Qui
-il documento era un commento, e la proprietà era la promessa su cui l'intera
+documento che afferma una proprietà del codice va riletto contro il codice**.
+Qui il documento era un commento, e la proprietà era la promessa su cui l'intera
 voce si appoggiava.
 
 ## Cosa resta
@@ -193,8 +200,8 @@ arrivare mai a un `EventHandler`. Non riguarda ciò che è stato fatto qui — i
 ponte verso la webview parte dal bus, che `is_recoverable` la guarda — e resta
 il debito degli handler, cioè dei plugin.
 
-Restano fuori, dichiarati e con casa altrove: il **dialogo di conflitto** (§18.1,
-M3), che è la risposta *interattiva* dove qui c'è la segnalazione; e
-l'**indicatore permanente del watcher** (§9.7), che oggi è un avviso all'apertura.
-Tutti e due chiedevano prima di tutto una superficie, e adesso non è più quella a
-mancare.
+Restano fuori, dichiarati e con casa altrove: il **dialogo di conflitto**
+(§18.1, M3), che è la risposta *interattiva* dove qui c'è la segnalazione; e
+l'**indicatore permanente del watcher** (§9.7), che oggi è un avviso
+all'apertura. Tutti e due chiedevano prima di tutto una superficie, e adesso non
+è più quella a mancare.

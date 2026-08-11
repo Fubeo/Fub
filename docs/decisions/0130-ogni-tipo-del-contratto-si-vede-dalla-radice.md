@@ -1,10 +1,9 @@
 # 0130 — Ogni tipo del contratto si vede dalla radice, e a dirlo non è chi si ricorda
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: la [§24.1](../roadmap/24-tre-firme-che-il-freeze-rende-definitive.md)
-— *«sette tipi del contratto non si vedono dalla radice del crate»*. I tipi
-erano **sessantuno**, non sette, e la premessa che li rendeva urgenti era falsa
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: la
+[§24.1](../roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) — *«sette
+tipi del contratto non si vedono dalla radice del crate»*. I tipi erano
+**sessantuno**, non sette, e la premessa che li rendeva urgenti era falsa
 **Commit**: *(questo commit)*
 
 ---
@@ -32,8 +31,8 @@ contratto sono **duecentoquarantasei**, e quelli invisibili dalla radice erano
 `rules/`, e poi `Undo`/`UndoStep`, `DocChange`/`DocChanges`, `DocumentFormat`,
 `TextTolerance`, `Organization`, `SchemaVersion`.
 
-Sembrava sette perché la voce nasceva da un audit che aveva guardato **un file**,
-e `traits.rs` è il file che si guarda quando si pensa «il contratto». Ma
+Sembrava sette perché la voce nasceva da un audit che aveva guardato **un
+file**, e `traits.rs` è il file che si guarda quando si pensa «il contratto». Ma
 `model.rs` è il modello di documento, cioè la parte del contratto che un plugin
 di formato tocca **per prima**: quattordici tipi lì dentro sono un buco più
 grande di ventuno in `traits.rs`, e nessuno li aveva contati perché nessuno
@@ -112,12 +111,11 @@ resta lungo mentre il codice si accorcia smette di essere una fotografia e
 diventa un ricordo. Messo alla prova del rosso, **non è diventato rosso: non ha
 prodotto output affatto**, perché il crate non compilava. Un `pub use` non è una
 stringa che *nomina* un simbolo, è un **riferimento** a quel simbolo — quel
-verso ce l'ha già il compilatore, che è un presidio più forte e più veloce.
-La prova è stata cancellata invece che abbassata: sarebbe stata verde per
-sempre, e un presidio verde per sempre è indistinguibile da uno soddisfatto.
-**La disciplina dei due versi vale per gli elenchi di stringhe**, e in questo
-file ce n'è uno solo — `MODULI_QUALIFICATI` — che infatti i due versi ce li ha
-entrambi.
+verso ce l'ha già il compilatore, che è un presidio più forte e più veloce. La
+prova è stata cancellata invece che abbassata: sarebbe stata verde per sempre, e
+un presidio verde per sempre è indistinguibile da uno soddisfatto. **La
+disciplina dei due versi vale per gli elenchi di stringhe**, e in questo file ce
+n'è uno solo — `MODULI_QUALIFICATI` — che infatti i due versi ce li ha entrambi.
 
 ## Il rosso, cinque volte
 

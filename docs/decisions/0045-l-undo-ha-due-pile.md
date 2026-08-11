@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §13.3 (seduta 13) — **chiude la seduta** |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/13-identita-del-documento.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/13-identita-del-documento.md)
 
 ---
 
@@ -118,9 +119,9 @@ l'operazione.
 **Il kernel**, e dura quanto il vault aperto — la cronologia «per sessione» che
 FEATURES 4.2 chiede. Non è una rinuncia al journal del §15.2: farla sopravvivere
 a una chiusura non è tenerla su disco, è accorgersi di ciò che è cambiato mentre
-l'app era spenta. Quello è un journal, ed è un'altra cosa; questa pila è il pezzo
-che si può avere prima, e senza il quale il journal non saprebbe comunque *cosa*
-registrare.
+l'app era spenta. Quello è un journal, ed è un'altra cosa; questa pila è il
+pezzo che si può avere prima, e senza il quale il journal non saprebbe comunque
+*cosa* registrare.
 
 Tre regole, e ognuna chiude un modo di sbagliare:
 
@@ -135,8 +136,8 @@ Tre regole, e ognuna chiude un modo di sbagliare:
   la scala per uscire dalla simulazione, e ci si uscirebbe **scrivendo**.
 - **Annullare non è annullabile.** I passi di un annullamento sono comandi come
   gli altri e dichiarano il proprio inverso: senza una bandiera che li tiene
-  fuori, la seconda pressione rifarebbe ciò che la prima ha disfatto, per sempre.
-  Il *redo* è un'altra pila e un'altra decisione, e oggi non c'è.
+  fuori, la seconda pressione rifarebbe ciò che la prima ha disfatto, per
+  sempre. Il *redo* è un'altra pila e un'altra decisione, e oggi non c'è.
 
 E non ci entra il **salvataggio dell'editor**. La riga che separa le due pile è
 dove passa il gesto: un comando entra da qui, una battuta di tastiera no.
@@ -144,15 +145,16 @@ dove passa il gesto: un comando entra da qui, una battuta di tastiera no.
 ## `undo_last` è una capacità, e la 0013 letta al contrario
 
 La [0013](0013-elenco-delle-capacita.md) aveva chiuso l'elenco delle capacità, e
-questa voce ne aggiunge una. La ragione non è un'eccezione: è quella regola letta
-al contrario. La pila è **privata del kernel**, e un `CommandProvider` riceve
-solo l'`HostApi` — quindi «togli l'ultima voce e falla» non è scrivibile senza
-una firma. Ogni comando che tocchi stato privato del kernel finisce in una
+questa voce ne aggiunge una. La ragione non è un'eccezione: è quella regola
+letta al contrario. La pila è **privata del kernel**, e un `CommandProvider`
+riceve solo l'`HostApi` — quindi «togli l'ultima voce e falla» non è scrivibile
+senza una firma. Ogni comando che tocchi stato privato del kernel finisce in una
 capacità; è successo per il vault, per le impostazioni, per lo stato di vista.
 
 Il comando c'è lo stesso — `vault.undo` — ed è lui a comparire nella palette con
 una scorciatoia e una descrizione per un umano, che sono le tre cose che la
-[0009](0009-registro-dei-comandi.md) dà gratis a un comando e a nessuna capacità.
+[0009](0009-registro-dei-comandi.md) dà gratis a un comando e a nessuna
+capacità.
 
 Due dettagli del confine che valgono una riga:
 
@@ -161,19 +163,19 @@ Due dettagli del confine che valgono una riga:
   dal recinto del chiamante, perché a eseguirlo è il kernel: senza il secondo
   controllo, un host di sola lettura avrebbe una scala per riscrivere il vault.
 - **La scorciatoia non è `Mod-z`.** Quella è dell'editor. Darla a entrambe le
-  pile vorrebbe dire che Ctrl-Z fa due cose a seconda di chi vince la corsa — che
-  è la stessa ragione per cui `note.task.toggle` non prende `Mod-Enter`.
+  pile vorrebbe dire che Ctrl-Z fa due cose a seconda di chi vince la corsa —
+  che è la stessa ragione per cui `note.task.toggle` non prende `Mod-Enter`.
 
 ## Dove le due pile si incontrano, e il contratto sapeva già cosa dire
 
 In un punto solo: un'operazione che si annulla mentre l'editor tiene un buffer
-sporco dello stesso documento. La `EditRequest::base` dell'inverso è la revisione
-che l'operazione ha **prodotto**, quindi una scrittura arrivata dopo la rende un
-`Conflict` ([0008](0008-modifica-chirurgica.md)) invece di una sovrascrittura
-silenziosa.
+sporco dello stesso documento. La `EditRequest::base` dell'inverso è la
+revisione che l'operazione ha **prodotto**, quindi una scrittura arrivata dopo
+la rende un `Conflict` ([0008](0008-modifica-chirurgica.md)) invece di una
+sovrascrittura silenziosa.
 
-Non è una guardia aggiunta per l'undo: è quella firma che vale anche qui, ed è la
-prova che il §13.3 aveva ragione a dire che senza la 0008 questa decisione
+Non è una guardia aggiunta per l'undo: è quella firma che vale anche qui, ed è
+la prova che il §13.3 aveva ragione a dire che senza la 0008 questa decisione
 sarebbe nata zoppa.
 
 La voce resta **consumata** anche quando il conflitto la fa fallire: riproporla
@@ -195,11 +197,11 @@ vorrebbe dire riproporre di cancellare il lavoro di chi ha scritto dopo.
   rispondono a due scorciatoie con due risposte diverse.
 - **Un piano onesto per il `dry-run` di `vault.undo`.** Dire *quali* documenti
   tornerebbero indietro vuol dire togliere la voce dalla pila, cioè fare metà
-  dell'operazione per raccontarla. Il comando simulato dice la sola cosa vera che
-  può dire senza toccare niente.
+  dell'operazione per raccontarla. Il comando simulato dice la sola cosa vera
+  che può dire senza toccare niente.
 - **Cancellare per sempre come inverso di `note.create`.** L'inverso di un gesto
-  reversibile deve restare reversibile, o annullare sarebbe più distruttivo di ciò
-  che annulla. È il cestino.
+  reversibile deve restare reversibile, o annullare sarebbe più distruttivo di
+  ciò che annulla. È il cestino.
 
 ## Cosa resta scoperto (e dove è scritto)
 

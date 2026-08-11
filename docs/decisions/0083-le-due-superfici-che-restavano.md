@@ -6,7 +6,13 @@
 | **Origine** | `todo.md` §21.5 ([seduta 21](../roadmap/21-la-ricerca-predefinita.md)) — **chiude la voce**, di cui la [0082](0082-una-porta-per-chi-cerca.md) aveva chiuso la metà che era decisione |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/21-la-ricerca-predefinita.md) · [una porta per chi cerca, 0082](0082-una-porta-per-chi-cerca.md) · [cosa si chiede a una ricerca, 0050](0050-cosa-si-chiede-a-una-ricerca.md) · [selezionare non è raccontare, 0074](0074-selezionare-non-e-raccontare.md) · [un accordo ha un proprietario, 0081](0081-un-accordo-ha-un-proprietario.md) · [la ricerca predefinita, 0025](0025-la-ricerca-predefinita.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/21-la-ricerca-predefinita.md) ·
+[una porta per chi cerca, 0082](0082-una-porta-per-chi-cerca.md) ·
+[cosa si chiede a una ricerca, 0050](0050-cosa-si-chiede-a-una-ricerca.md) ·
+[selezionare non è raccontare, 0074](0074-selezionare-non-e-raccontare.md) ·
+[un accordo ha un proprietario, 0081](0081-un-accordo-ha-un-proprietario.md) ·
+[la ricerca predefinita, 0025](0025-la-ricerca-predefinita.md)
 
 ---
 
@@ -20,10 +26,10 @@ non aveva fatto: **misurare** il giro per battuta invece di assumerlo.
 
 `panels/quick-switcher.ts`, su `Mod-o` — l'accordo di Obsidian, libero in tutti
 e tre i registri di scorciatoie che questa shell tiene. Due dei tre li guarda il
-presidio della [0081](0081-un-accordo-ha-un-proprietario.md); il terzo, la keymap
-dell'editor (`editor/editor-commands.ts`), non lo guarda nessuno ancora ed è
-stato controllato a mano — vale la pena scriverlo qui perché è la stessa forma di
-difetto che la 0081 ha appena riparato, un gradino più in basso.
+presidio della [0081](0081-un-accordo-ha-un-proprietario.md); il terzo, la
+keymap dell'editor (`editor/editor-commands.ts`), non lo guarda nessuno ancora
+ed è stato controllato a mano — vale la pena scriverlo qui perché è la stessa
+forma di difetto che la 0081 ha appena riparato, un gradino più in basso.
 
 Ciò che rende questa superficie **non** una seconda ricerca sta in due righe che
 non sono in questo file: la query si compone in `host/contract.ts`
@@ -38,8 +44,8 @@ più): `fields: ["name"]` e il prefisso acceso per default. La differenza fra
 questa e `testoCercato` non è di ranking ma di **dominio**: cercare `rust`
 ovunque trova le trecento note che ne parlano, e chi ha premuto la scorciatoia
 per aprire la nota *Rust* non le voleva. Che le due restino due è un banco
-(`host/contract.test.ts`), perché un giorno qualcuno restringerà l'una
-pensando all'altra.
+(`host/contract.test.ts`), perché un giorno qualcuno restringerà l'una pensando
+all'altra.
 
 ## L'autocompletamento: la riga che è sparita è la voce intera
 
@@ -51,8 +57,8 @@ deve ripartire a ogni battuta — e `validFor` non solo diventa inutile, diventa
 **sbagliata**: terrebbe buona una finestra calcolata su un prefisso più corto.
 
 Al suo posto ne è arrivata un'altra, `filter: false`, ed è la stessa decisione
-vista dall'altro lato. L'ordine di quelle opzioni **è** la rilevanza calcolata da
-chi ha i dati per calcolarla; il fuzzy di CodeMirror, lasciato acceso, la
+vista dall'altro lato. L'ordine di quelle opzioni **è** la rilevanza calcolata
+da chi ha i dati per calcolarla; il fuzzy di CodeMirror, lasciato acceso, la
 riordinerebbe e la scarterebbe secondo un criterio suo. Sarebbero due ricerche
 dentro un elenco solo — e nessuna delle due avrebbe torto abbastanza da farsi
 notare, che è il modo peggiore in cui una cosa può essere rotta.
@@ -61,11 +67,11 @@ notare, che è il modo peggiore in cui una cosa può essere rotta.
 una scelta e non un'omissione: di un match qui servirebbe solo il punteggio, e
 il punteggio **è già** l'ordine dell'array. Portarsi dietro il record intero per
 un dato che l'ordine contiene sarebbe una firma più larga per la stessa
-informazione. La cosa che invece è cambiata sotto, e che sta scritta accanto alla
-funzione: l'ambiguità dei nomi omonimi si guarda ora dentro la finestra e non su
-tutto il vault. Due note omonime combaciano *identicamente* col prefisso che le
-nomina, quindi arrivano vicine nell'ordine e una finestra che ne contenga una
-sola è tagliata esattamente fra due pari merito; resta possibile, e il verso
+informazione. La cosa che invece è cambiata sotto, e che sta scritta accanto
+alla funzione: l'ambiguità dei nomi omonimi si guarda ora dentro la finestra e
+non su tutto il vault. Due note omonime combaciano *identicamente* col prefisso
+che le nomina, quindi arrivano vicine nell'ordine e una finestra che ne contenga
+una sola è tagliata esattamente fra due pari merito; resta possibile, e il verso
 dello sbaglio è quello buono — si inserisce il nome nudo, cioè ciò che l'utente
 avrebbe scritto a mano, e a decidere quale nota sia resta chi risolve i link.
 
@@ -89,17 +95,17 @@ l'elenco intero (com'era, per apertura) 0,13 ms  2001 resi / 2001 combaciano
 Tre cose, e la seconda non è quella che ci si aspetta.
 
 **Il prefisso costa ~3 ms per battuta, non 0,1.** La riga «solo nome "Nota 7"»
-della fase 2 costava 0,09 ms: la differenza non è il prefisso in sé, è
-**quante note combaciano** — un termine esatto ne trova una, `n` ne trova
-duemila e vanno tutte punteggiate. Il caso peggiore è la **prima lettera**, e il
-costo scende appena il prefisso seleziona.
+della fase 2 costava 0,09 ms: la differenza non è il prefisso in sé, è **quante
+note combaciano** — un termine esatto ne trova una, `n` ne trova duemila e vanno
+tutte punteggiate. Il caso peggiore è la **prima lettera**, e il costo scende
+appena il prefisso seleziona.
 
 **L'elenco intero, dal lato del kernel, costa meno.** 0,13 ms contro 3: se il
 confronto fosse solo questo, la lista spinta vincerebbe. Non lo è, e vale la
 pena dirlo per esteso invece di lasciarlo implicito: quella riga misura **metà**
 della cosa — mancano 2001 righe da serializzare, far passare per l'IPC e
-ordinare nella shell, e mancano tutte le volte in cui quella lista è vecchia.
-La misura non ribalta la 0082: la **circoscrive**, dicendo che ciò che si compra
+ordinare nella shell, e mancano tutte le volte in cui quella lista è vecchia. La
+misura non ribalta la 0082: la **circoscrive**, dicendo che ciò che si compra
 con quei 3 ms è la correttezza, non la velocità.
 
 **Gli estratti sono metà del budget, e qui non servono.** 3 ms contro 4,9 sulla
@@ -112,8 +118,8 @@ esisteva. È il secondo cliente di quella decisione, ed è arrivato da solo.
 Su un vault dieci volte più grande quei 3 ms diventano ~30, sempre sul caso
 peggiore di una lettera sola: sopravvivono al freno di 180 ms che tutte queste
 superfici hanno, e non sopravviverebbero senza. Il freno non è quindi una
-comodità — è ciò che tiene la scelta dentro il suo budget, e va tolto solo da chi
-avrà rimisurato.
+comodità — è ciò che tiene la scelta dentro il suo budget, e va tolto solo da
+chi avrà rimisurato.
 
 ## A mani vuote: le recenti, e perché in memoria
 
@@ -152,9 +158,9 @@ sua copia privata dell'evidenziazione, gemella di `ui/highlight.ts`. Non si è
 toccato quel file perché c'è del lavoro in corso sopra; a riunirle è chi lo
 atterrerà.
 
-E una cosa che si nota solo mettendo in fila le quattro superfici: `righeDaMostrare`
-e `evidenziato`, saliti a comune con la 0082, **non li usa nessuna delle due
-superfici nuove**. Non è uno spreco ed è la conferma del taglio: mostrano
-estratti le due superfici che cercano *dentro* le note, e mostrano nomi le due
-che servono a **spostarsi**. Ciò che le quattro hanno in comune non è il disegno
-— è la porta.
+E una cosa che si nota solo mettendo in fila le quattro superfici:
+`righeDaMostrare` e `evidenziato`, saliti a comune con la 0082, **non li usa
+nessuna delle due superfici nuove**. Non è uno spreco ed è la conferma del
+taglio: mostrano estratti le due superfici che cercano *dentro* le note, e
+mostrano nomi le due che servono a **spostarsi**. Ciò che le quattro hanno in
+comune non è il disegno — è la porta.

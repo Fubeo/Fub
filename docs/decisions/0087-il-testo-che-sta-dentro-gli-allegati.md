@@ -24,8 +24,8 @@ c'è, e la regola per chi lo riceve senza volerlo è scritta accanto alla firma 
 un provider testuale che riceve dei byte risponde `Unsupported` invece di
 indovinare l'encoding.
 
-E la terza casella chiedeva di **dichiarare che la ricerca è il cliente** di quel
-lavoro, «così che chi aprirà la §14.1 sappia chi lo aspetta a valle». Ma la
+E la terza casella chiedeva di **dichiarare che la ricerca è il cliente** di
+quel lavoro, «così che chi aprirà la §14.1 sappia chi lo aspetta a valle». Ma la
 §14.1 è chiusa dalla 0046, e le tre caselle che le restano — l'impronta degli
 allegati, la politica della cartella allegati, le derivate — non sono «estrarre
 testo da un PDF». La voce dichiarava un cliente a un lavoro che non aveva più il
@@ -59,8 +59,8 @@ UTF-8» a proposito di un file che nessuno aveva promesso fosse testo.
 La riparazione è di una specie che vale la pena nominare, perché non è
 «aggiungere un ramo»: è **togliere la seconda decisione**. Il descrittore adesso
 si consulta in un posto solo, `DocumentStore::source_from_disk`, e
-`parse_from_disk` è una riga sopra di lui. Chi indicizza chiama quello. Finché la
-scelta stava dentro `parse_from_disk`, era una scelta *di quella funzione*, e
+`parse_from_disk` è una riga sopra di lui. Chi indicizza chiama quello. Finché
+la scelta stava dentro `parse_from_disk`, era una scelta *di quella funzione*, e
 chiunque leggesse per altre ragioni ne aveva un'altra — cioè nessuna.
 
 ### L'impronta si prende sui byte, e resta la stessa
@@ -131,37 +131,38 @@ e tre di loro sono stati visti fallire con il codice di prima: senza la
 riparazione il documento non arriva all'indice affatto (`NotFound`).
 
 E `MemoryHost` tiene ora i documenti **a byte** e non come `String`. Non è un
-dettaglio del doppio: un banco che non sa rappresentare un allegato è un banco su
-cui l'estrattore di cui sopra non si può scrivere, e il lato provider del §16.2
-esiste apposta perché un provider si provi **contro il contratto** e non contro
-un kernel.
+dettaglio del doppio: un banco che non sa rappresentare un allegato è un banco
+su cui l'estrattore di cui sopra non si può scrivere, e il lato provider del
+§16.2 esiste apposta perché un provider si provi **contro il contratto** e non
+contro un kernel.
 
 ## Cosa questa decisione non fa
 
 - **Non estrae niente da niente.** Nessun PDF, nessun OCR, nessuna trascrizione:
   quelle restano nove voci di FEATURES §9.1 e sono lavoro di provider.
 - **Non decide dove vive il testo estratto.** Un testo ricavato da un PDF è
-  **ricalcolabile**, quindi per la [0048](0048-una-radice-sola.md) è cache
-  e non dato autorevole — `.fub/cache/` e non `.fub/data/`. Ma finché nessuno
-  estrae, non c'è niente da mettere via: il modello vive dentro la chiamata che
-  lo produce, come per ogni altro documento. Quando un estrattore vero arriverà,
-  il posto è già dichiarato e la casella residua della §14.1 sulle derivate lo
+  **ricalcolabile**, quindi per la [0048](0048-una-radice-sola.md) è cache e non
+  dato autorevole — `.fub/cache/` e non `.fub/data/`. Ma finché nessuno estrae,
+  non c'è niente da mettere via: il modello vive dentro la chiamata che lo
+  produce, come per ogni altro documento. Quando un estrattore vero arriverà, il
+  posto è già dichiarato e la casella residua della §14.1 sulle derivate lo
   aspetta — questa voce non ne inventa un terzo.
 - **Non inventa un secondo modo di fare lavoro lungo.** Estrarre testo da mille
   PDF è un job, con il pool per vault della [0032](0032-il-runner-dei-job.md) e
   il progresso come evento della [0035](0035-il-lavoro-lungo-si-racconta.md).
 - **Non tocca la porta di chi cerca.** Un allegato indicizzato è un documento in
-  più nell'indice ([0082](0082-una-porta-per-chi-cerca.md)), non una query nuova.
+  più nell'indice ([0082](0082-una-porta-per-chi-cerca.md)), non una query
+  nuova.
 
 ## La riga che questa voce rende falsa
 
-`strozzature.md` diceva in una riga «`parse(source: &str)` e `Vault::read ->
-String`: un formato binario non entra» e in un'altra, nella stessa tabella, che
-`DocumentSource::Bytes` fa entrare anche i non-testo. Erano in contraddizione da
-prima di questa voce, e la prima aveva torto dal giorno della 0017. È corretta
-qui, perché è la riga che la §21.8 esisteva per nominare — ed è il terzo caso, in
-quel file, di una riga che ha detto «manca» per decine di verbali dopo che la
-cosa c'era.
+`strozzature.md` diceva in una riga «`parse(source: &str)` e
+`Vault::read -> String`: un formato binario non entra» e in un'altra, nella
+stessa tabella, che `DocumentSource::Bytes` fa entrare anche i non-testo. Erano
+in contraddizione da prima di questa voce, e la prima aveva torto dal giorno
+della 0017. È corretta qui, perché è la riga che la §21.8 esisteva per nominare
+— ed è il terzo caso, in quel file, di una riga che ha detto «manca» per decine
+di verbali dopo che la cosa c'era.
 
 ## Cosa resta aperto
 
@@ -171,8 +172,8 @@ la 0084, la 0086 e questa.
 
 Di quegli otto, **tre** hanno speso contratto: le due P0 e la 0074, che ha
 insegnato al canale a dire *«per adesso mi bastano gli id»*. Questa è la quarta,
-ed è la sola arrivata **dopo** che le P0 erano state chiuse — cioè la sola
-firma che il freeze di M4 non aveva già visto arrivare. Che sia una sola, e non
-sei, è il verdetto a posteriori su come quelle quattro P0 erano state trovate: la
+ed è la sola arrivata **dopo** che le P0 erano state chiuse — cioè la sola firma
+che il freeze di M4 non aveva già visto arrivare. Che sia una sola, e non sei, è
+il verdetto a posteriori su come quelle quattro P0 erano state trovate: la
 distanza fra «la ricerca è di classe *omnisearch*» e il repo era quasi tutta
 lavoro, e la parte che era contratto era stata vista quasi tutta al primo giro.

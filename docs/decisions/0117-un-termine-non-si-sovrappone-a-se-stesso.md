@@ -1,9 +1,8 @@
 # 0117 — Un termine non si sovrappone a se stesso
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: il difetto *«due occorrenze dello stesso termine possono sovrapporsi»* di [«I difetti da correggere»](../todo.md)
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: il difetto *«due occorrenze
+dello stesso termine possono sovrapporsi»* di
+[«I difetti da correggere»](../todo.md) **Commit**: *(questo commit)*
 
 ---
 
@@ -36,24 +35,24 @@ comprava solo la sovrapposizione di un termine con se stesso.
 
 Sembrava vera perché il banco che la nomina **passa**, e passa anche col
 comportamento vecchio: è la prova che la frase indicava e non era la prova della
-frase. Il che è la regola generale di cui questa è l'ennesima istanza: *un corpus
-di prova può essere cieco a una passata che riconosce di troppo*. Il caso è stato
-misurato nei due versi — rimessa la riga vecchia, il banco nuovo diventa rosso e
-quello di `arch` resta verde; rimessa quella nuova, tutti e due verdi — ed è per
-questo che i due banchi ora stanno **accanto** e si nominano a vicenda nel
-doc-comment.
+frase. Il che è la regola generale di cui questa è l'ennesima istanza: *un
+corpus di prova può essere cieco a una passata che riconosce di troppo*. Il caso
+è stato misurato nei due versi — rimessa la riga vecchia, il banco nuovo diventa
+rosso e quello di `arch` resta verde; rimessa quella nuova, tutti e due verdi —
+ed è per questo che i due banchi ora stanno **accanto** e si nominano a vicenda
+nel doc-comment.
 
 ## La decisione: cambiare il comportamento, non la frase
 
-Le strade erano due — riparare la scansione, o ammettere nell'intestazione che la
-sovrapposizione è voluta. Decide **chi consuma gli span**, e i consumatori sono
-due, tutti e due nella shell:
+Le strade erano due — riparare la scansione, o ammettere nell'intestazione che
+la sovrapposizione è voluta. Decide **chi consuma gli span**, e i consumatori
+sono due, tutti e due nella shell:
 
 - `frontend/src/rules/risultati.ts:44` — ogni occorrenza oltre la prima diventa
   una **riga cliccabile** dell'elenco dei risultati, etichettata «occorrenza 2»,
   «occorrenza 3», …;
-- `frontend/src/panels/doc-search.ts:158` e `frontend/src/panels/search.ts:165` —
-  quel click porta il cursore a `span.start`.
+- `frontend/src/panels/doc-search.ts:158` e `frontend/src/panels/search.ts:165`
+  — quel click porta il cursore a `span.start`.
 
 Nessuno *evidenzia* con questi span (le evidenziazioni della riga sono gli
 `highlights` dello snippet, che vengono da chi indicizza), ma il verso del danno
@@ -73,7 +72,8 @@ in un modo diverso.
 
 ## La regola
 
-**Dentro un termine, le occorrenze non si sovrappongono; fra termini diversi, sì.**
+**Dentro un termine, le occorrenze non si sovrappongono; fra termini diversi,
+sì.**
 
 Il confine è la scansione: ognuna riparte da `span.end` e ognuna comincia da
 zero. La prima metà è ciò che rende l'elenco un elenco di *punti distinti*; la

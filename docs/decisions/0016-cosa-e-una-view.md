@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §2.1–§2.8 (seduta 2, *ex* §1.2, §1.14, §1.15, §1.30–§1.33, §3.9) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/02-cosa-e-una-view.md) · [il protocollo](../architecture/ui-protocol.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/02-cosa-e-una-view.md) ·
+[il protocollo](../architecture/ui-protocol.md)
 
 ---
 
@@ -17,9 +19,9 @@ tre superfici che esistono.* Non era una scelta sbagliata — era una scelta
 asincrono, cioè i capitoli 11, 12, 11.5 e 22 di FEATURES.
 
 Otto voci su nove sono chiuse in questo giro. Resta aperta la
-[§2.9](../roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) (virtualizzazione,
-P2): è la stessa superficie quando le liste diventano lunghe, non ha scadenza
-col freeze, e non è una precondizione di niente.
+[§2.9](../roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui)
+(virtualizzazione, P2): è la stessa superficie quando le liste diventano lunghe,
+non ha scadenza col freeze, e non è una precondizione di niente.
 
 ## Cosa è una view, adesso
 
@@ -34,25 +36,25 @@ Le decisioni prese, da NON ridiscutere senza motivo:
 - **Un nodo è `{ key, kind }`**, e la chiave sta nel contratto (§2.8). Non è
   decorazione: senza, l'identità di un nodo è la sua posizione, e una lista che
   si riordina si porta dietro il focus e la selezione di qualcun altro. Il §2.1
-  chiedeva un `Patch { path, node }`; il path si rompe al primo riordino —
-  cioè esattamente nel caso che lo motivava, il pannello con 500 righe e una
-  spunta — quindi il patch è **per chiave** e una chiave che non si trova non è
-  un errore, è una view cambiata sotto.
+  chiedeva un `Patch { path, node }`; il path si rompe al primo riordino — cioè
+  esattamente nel caso che lo motivava, il pannello con 500 righe e una spunta —
+  quindi il patch è **per chiave** e una chiave che non si trova non è un
+  errore, è una view cambiata sotto.
 - **Trentatré specie di nodo**, e la regola di fiducia invariata: `Html` e
   `WebView` restano riservate, ogni specie nuova è **sicura per costruzione**
   (nessun campo è interpretato come markup) e la validazione ora scende da
   `UiNode::children`, quindi un contenitore nuovo è coperto dal giorno in cui
-  esiste. La versione di prima elencava a mano i due contenitori che c'erano:
-  è la forma di presidio che si dimentica alla terza aggiunta, e c'è un test che
+  esiste. La versione di prima elencava a mano i due contenitori che c'erano: è
+  la forma di presidio che si dimentica alla terza aggiunta, e c'è un test che
   lo prova sui due posti dove sarebbe più facile — la cella di una tabella e il
   `fallback` di un `Custom`.
 - **Le due metà di un'azione hanno due proprietari** (§2.7). `ActionRef.payload`
   è del **provider** — lo scrive rendendo l'albero e gli torna intatto —,
-  `UiAction.fields` è della **shell**, che ci mette lo stato dei campi in vigore.
-  Nessuno dei due fonde l'oggetto dell'altro, quindi non serve una regola di
-  collisione. È ciò che sostituisce la convenzione privata «i dati dentro l'id»
-  (`open:a/Uno.md`, `tag:rust`, `reveal:10:15`) che le tre feature ufficiali
-  stavano promuovendo a contratto de facto: l'id torna **opaco**.
+  `UiAction.fields` è della **shell**, che ci mette lo stato dei campi in
+  vigore. Nessuno dei due fonde l'oggetto dell'altro, quindi non serve una
+  regola di collisione. È ciò che sostituisce la convenzione privata «i dati
+  dentro l'id» (`open:a/Uno.md`, `tag:rust`, `reveal:10:15`) che le tre feature
+  ufficiali stavano promuovendo a contratto de facto: l'id torna **opaco**.
 - **`ViewPlacement` è diventato `ViewSurface`, con dieci casi** (§2.2). Una voce
   di menu o una scheda di impostazioni non è un *posto in un layout*: è una
   superficie a cui ci si attacca. I tre di prima restano in testa e nell'ordine
@@ -95,8 +97,8 @@ Le decisioni prese, da NON ridiscutere senza motivo:
   descrizione per un umano, gratis.
 - **`selected` è uno stato del nodo** (`ListItem`, `TreeItem`). Il commento
   dell'outline nominava già questa mancanza («un evidenziato vero vorrebbe una
-  nozione di elemento corrente in `UiNode` — che è roba del §2.1»), e senza,
-  chi ce l'ha se lo scrive nel titolo: cioè il §2.7 in un'altra forma.
+  nozione di elemento corrente in `UiNode` — che è roba del §2.1»), e senza, chi
+  ce l'ha se lo scrive nel titolo: cioè il §2.7 in un'altra forma.
 
 ## Il dogfooding, che è dove si è scoperto se regge
 
@@ -128,8 +130,8 @@ esercitato una parte diversa:
 
 Il presidio dell'additività ha nominato **sette** rotture, ed è il suo mestiere:
 sono deliberate, sono pre-freeze, e la baseline è stata ritagliata con la
-ragione scritta dentro `crates/fub-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella dei
-ritagli del suo README).
+ragione scritta dentro `crates/fub-abi/wit/frozen/0.1.0.wit` (più la riga nella
+tabella dei ritagli del suo README).
 
 | cosa | perché |
 |---|---|

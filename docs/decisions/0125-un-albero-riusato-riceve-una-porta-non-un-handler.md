@@ -1,11 +1,9 @@
 # 0125 — Un albero riusato riceve una porta, non un handler
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: la prima delle due zone cieche dichiarate dalla
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: la prima delle due zone
+cieche dichiarate dalla
 [0118](0118-una-chiusura-non-cattura-cio-che-il-riconciliatore-aggiorna.md) —
-*«l'`ActionHandler` di un sottoalbero riusato resta quello del primo
-montaggio»*
+*«l'`ActionHandler` di un sottoalbero riusato resta quello del primo montaggio»*
 **Commit**: *(questo commit)*
 
 ---
@@ -45,18 +43,18 @@ costruzione non potevano vedere niente.
 ## Cosa è stato contato
 
 Il sito dichiarato era uno: `handlerDi`. Le catture di un `ActionHandler` fatte
-al primo montaggio e lette dopo, misurate, sono **due**, e la seconda è fuori dal
-file nominato:
+al primo montaggio e lette dopo, misurate, sono **due**, e la seconda è fuori
+dal file nominato:
 
 1. **`handlers` / `handlerDi`** (il dichiarato). Si scriveva solo in
-   `renderUiNode`, cioè solo sul percorso del *disegno*: dal secondo montaggio in
-   poi è vecchio, sempre, per ogni albero. Lo legge `patchTree` — e qui c'è la
-   parte che nessuno aveva guardato: l'handler ripescato non viene solo *usato*
-   per quel giro, viene passato a `riconcilia`, che lo **riscrive nei `legami`**
-   di tutto il sottoalbero patchato. Un patch, cioè, disfa la riparazione della
-   0118 su un pezzo di albero, e da lì in poi quei campi mandano al primo
-   handler anche fuori dal patch. Il difetto peggiore stava dentro la voce, ma un
-   piano sotto la frase che la descriveva.
+   `renderUiNode`, cioè solo sul percorso del *disegno*: dal secondo montaggio
+   in poi è vecchio, sempre, per ogni albero. Lo legge `patchTree` — e qui c'è
+   la parte che nessuno aveva guardato: l'handler ripescato non viene solo
+   *usato* per quel giro, viene passato a `riconcilia`, che lo **riscrive nei
+   `legami`** di tutto il sottoalbero patchato. Un patch, cioè, disfa la
+   riparazione della 0118 su un pezzo di albero, e da lì in poi quei campi
+   mandano al primo handler anche fuori dal patch. Il difetto peggiore stava
+   dentro la voce, ma un piano sotto la frase che la descriveva.
 
 2. **Il renderer custom.** `disegna` · caso `custom` passa `onAction` a
    `customRenderer(ns)`, e il renderer se lo tiene per la vita del widget
@@ -81,9 +79,9 @@ La prima è **riassegnare al riuso**: scrivere `handlers.set` anche in
 di domani — non la eredita: il renderer custom continuerebbe a tenersi un
 handler nudo, perché non risale nessuna mappa, ce l'ha in una variabile.
 
-La seconda è **togliere di mezzo l'oggetto che invecchia**. Un contenitore ha una
-**porta**: una funzione sola, creata al primo `mountTree` e mai più sostituita,
-che a ogni chiamata inoltra all'handler dell'ultimo montaggio
+La seconda è **togliere di mezzo l'oggetto che invecchia**. Un contenitore ha
+una **porta**: una funzione sola, creata al primo `mountTree` e mai più
+sostituita, che a ogni chiamata inoltra all'handler dell'ultimo montaggio
 (`Montaggio.corrente`). Dentro il renderer non circola altro. Chi la cattura —
 un ascoltatore, una linguetta, il canvas di un renderer custom — cattura un
 rinvio e non una destinazione, e la eredita giusta senza saperlo: è la prova del
@@ -92,24 +90,25 @@ secondo chiamante, ed è il motivo per cui il difetto n. 2 si è chiuso senza ch
 
 Si è scelta la seconda, e ha tre conseguenze.
 
-1. **`Porta` è un tipo, non una convenzione.** `type Porta = ActionHandler & {
-   readonly [PORTA]: true }` con `PORTA` un `unique symbol` dichiarato e mai
-   costruito: l'unica fabbrica è `instrada`, e un `ActionHandler` nudo passato a
-   `riconcilia`, `disegna`, `collega`, `ascolta` o `azioniDelCampo` **non
-   compila**. È la stessa forma della [0114](0114-una-finestra-non-si-omette.md)
-   e del `SENZA_FINESTRA`, e la ragione per cui è un simbolo e non un nome per
-   comodità è quella misurata nella 0117: *una costante di stringa non è un
-   tipo*, e ciò che si può riscrivere a mano il compilatore non lo vede.
+1. **`Porta` è un tipo, non una convenzione.**
+   `type Porta = ActionHandler & { readonly [PORTA]: true }` con `PORTA` un
+   `unique symbol` dichiarato e mai costruito: l'unica fabbrica è `instrada`, e
+   un `ActionHandler` nudo passato a `riconcilia`, `disegna`, `collega`,
+   `ascolta` o `azioniDelCampo` **non compila**. È la stessa forma della
+   [0114](0114-una-finestra-non-si-omette.md) e del `SENZA_FINESTRA`, e la
+   ragione per cui è un simbolo e non un nome per comodità è quella misurata
+   nella 0117: *una costante di stringa non è un tipo*, e ciò che si può
+   riscrivere a mano il compilatore non lo vede.
 2. **`renderUiNode` non è più esportata.** Prendeva un `ActionHandler` da
    chiunque: lasciata pubblica sarebbe stata la porta di servizio da cui rientra
    esattamente ciò che si è appena tolto. Nessuno la usava da fuori — è stata
    misurata, non supposta.
-3. **`patchTree` non risale più niente.** La porta la prende dal contenitore, che
-   è dove sta la verità su chi instrada *adesso*. `handlers` e `handlerDi`
-   spariscono: il difetto non si ripara, si cancella insieme al meccanismo che lo
-   ospitava. Effetto laterale dichiarato: `patchTree` non può più tornare `false`
-   per «non ho trovato l'handler», che era un modo di fallire che non voleva dire
-   niente per il chiamante.
+3. **`patchTree` non risale più niente.** La porta la prende dal contenitore,
+   che è dove sta la verità su chi instrada *adesso*. `handlers` e `handlerDi`
+   spariscono: il difetto non si ripara, si cancella insieme al meccanismo che
+   lo ospitava. Effetto laterale dichiarato: `patchTree` non può più tornare
+   `false` per «non ho trovato l'handler», che era un modo di fallire che non
+   voleva dire niente per il chiamante.
 
 ## La regola
 
@@ -162,8 +161,8 @@ usare male la porta.
 
 `intestazioniSchede` ricostruisce **tutte** le linguette a ogni riconciliazione
 (`barra.replaceChildren()`), quindi una barra di schede che si ridisegna mentre
-l'utente ci sta sopra col tab perde il focus. È il difetto che il §2.8 esiste per
-evitare, sopravvissuto in un angolo dove i figli non passano da `figli`.
+l'utente ci sta sopra col tab perde il focus. È il difetto che il §2.8 esiste
+per evitare, sopravvissuto in un angolo dove i figli non passano da `figli`.
 
 `disegna` · casi `select` e `radio` registrano il lettore del valore (`valore`)
 una volta sola, e quella chiusura cattura `node` — mentre `aggiorna` non lo

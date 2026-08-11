@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §20.1 (seduta 20) — l'ultima **P0** del piano |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/20-quando-qualcosa-va-storto.md) · [la gemella, che dice dove va a finire un esito](0052-cio-che-va-storto-e-un-evento.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/20-quando-qualcosa-va-storto.md) ·
+[la gemella, che dice dove va a finire un esito](0052-cio-che-va-storto-e-un-evento.md)
 
 ---
 
@@ -61,19 +63,19 @@ documento perso sarebbe rimasto senza nome.
 
 **Non riduce il volume.** A M5 quei modelli attraversano il confine comunque, e
 per intero: un `reindex` da 100k note serializza 100k modelli con la firma
-vecchia e con la nuova. Ciò che cambia è il **numero di attraversamenti** —
-100k per indice contro 100k/512 — cioè la sola metà del costo su cui una firma
-possa qualcosa. Scrivere che «il lotto rende economico il reindex» sarebbe stato
+vecchia e con la nuova. Ciò che cambia è il **numero di attraversamenti** — 100k
+per indice contro 100k/512 — cioè la sola metà del costo su cui una firma possa
+qualcosa. Scrivere che «il lotto rende economico il reindex» sarebbe stato
 comodo e falso.
 
 ### Un lotto non è una transazione
 
-La stessa frase della [0011](0011-il-lotto.md), e nello stesso senso: **accettato
-a metà è la norma**. Ciò che si elenca è perduto, ciò che non si elenca è preso,
-non c'è niente da annullare e il kernel non ritenta. Una lista vuota vuol dire
-che è andato tutto bene, ed è ciò che restituisce chi non ha niente da dire —
-compreso l'indice del kernel, che tiene i propri metadati in una `BTreeMap` e
-non ha un modo di rifiutare una chiave.
+La stessa frase della [0011](0011-il-lotto.md), e nello stesso senso:
+**accettato a metà è la norma**. Ciò che si elenca è perduto, ciò che non si
+elenca è preso, non c'è niente da annullare e il kernel non ritenta. Una lista
+vuota vuol dire che è andato tutto bene, ed è ciò che restituisce chi non ha
+niente da dire — compreso l'indice del kernel, che tiene i propri metadati in
+una `BTreeMap` e non ha un modo di rifiutare una chiave.
 
 Chi fallisce **in blocco** elenca tutto ciò che gli è stato dato. Costa una riga
 e dice la verità: quei documenti, in quell'indice, adesso non ci sono.
@@ -82,17 +84,17 @@ e dice la verità: quei documenti, in quell'indice, adesso non ci sono.
 
 È l'unico a sapere quanti modelli ha in mano. La fetta è `FEED_BATCH = 512` in
 `kernel/workspace.rs`, **non** nel contratto, per la stessa ragione per cui il
-tetto della coda eventi sta con chi ritira ([0034](0034-il-freno-e-il-raggruppamento.md)):
-è una politica dell'host, e un guest che la leggesse dalla firma comincerebbe a
-dipenderne.
+tetto della coda eventi sta con chi ritira
+([0034](0034-il-freno-e-il-raggruppamento.md)): è una politica dell'host, e un
+guest che la leggesse dalla firma comincerebbe a dipenderne.
 
 Un indice non può quindi dedurre niente dalla **dimensione** di ciò che riceve:
 un lotto di uno non vuol dire «una scrittura singola», un lotto pieno non vuol
 dire «apertura del vault». Ciò che si deduce è una cosa sola e basta: questi
 documenti sono arrivati insieme, quindi si possono scrivere insieme.
 
-Non è un'impostazione, e per adesso è giusto così: lo diventerà quando ci sarà un
-guest da misurare (M5). Chiedere oggi a un utente un numero che nessuno sa
+Non è un'impostazione, e per adesso è giusto così: lo diventerà quando ci sarà
+un guest da misurare (M5). Chiedere oggi a un utente un numero che nessuno sa
 ancora se conta è il modo di ottenere una configurazione che nessuno sa mettere.
 
 ### `IndexLoss` è un dato, non un errore
@@ -129,7 +131,8 @@ prima di paniare non si usa: dopo un panico il suo stato è ignoto, e un elenco
 parziale direbbe «solo questi» proprio nel caso in cui non lo si può sapere.
 
 L'indice del kernel resta **fuori** dalla rete: se pania lui è un difetto del
-kernel, e nasconderlo vorrebbe dire cercarlo poi in un vault che risponde a metà.
+kernel, e nasconderlo vorrebbe dire cercarlo poi in un vault che risponde a
+metà.
 
 ## Il cliente vero, che era già scritto
 
@@ -141,20 +144,21 @@ non erano nella voce:
 3. **`on_document_removed` col writer andato** → il termine non si cancella, e
    il documento resta cercabile pur essendo sparito dal vault. È la bugia
    opposta, ed è la più visibile delle due: chi cerca lo trova e lo apre;
-4. **`reconcile` col writer andato** → i morti restano, e `forget` toglieva anche
-   l'unica traccia con cui riprovare.
+4. **`reconcile` col writer andato** → i morti restano, e `forget` toglieva
+   anche l'unica traccia con cui riprovare.
 
 Tutte e quattro adesso restituiscono un `IndexLoss` che nomina il documento.
 
 ## Cosa resta fuori, dichiarato
 
-- **Dove va a finire un `IndexLoss`** è la [0052](0052-cio-che-va-storto-e-un-evento.md):
-  qui c'è il canale, lì la destinazione. Deciderne uno solo dà un esito che
-  nessuno legge o un posto vuoto dove metterlo.
+- **Dove va a finire un `IndexLoss`** è la
+  [0052](0052-cio-che-va-storto-e-un-evento.md): qui c'è il canale, lì la
+  destinazione. Deciderne uno solo dà un esito che nessuno legge o un posto
+  vuoto dove metterlo.
 - **`up_to_date` non è toccata.** È nata dopo il taglio della linea di base
   ([0046](0046-l-anagrafe-del-vault.md)) e non ha un esito da dare: la sua
-  risposta *è* il dato, e un elenco vuoto significa già «mandami tutto», che è il
-  verso sicuro dello sbaglio.
+  risposta *è* il dato, e un elenco vuoto significa già «mandami tutto», che è
+  il verso sicuro dello sbaglio.
 - **`ingest_model` non fallisce** per una perdita d'indice, e `reindex` nemmeno:
   un indice è un derivato, il vault è la verità. Ciò che cambia è che adesso
   qualcuno lo sa.

@@ -6,21 +6,24 @@
 | **Origine** | `todo.md` §16.6 (seduta 16) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) · [il gemello, gli elenchi che iterano](0056-un-elenco-che-e-la-sorgente.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) ·
+[il gemello, gli elenchi che iterano](0056-un-elenco-che-e-la-sorgente.md)
 
 ---
 
 Si legge dopo la [0056](0056-un-elenco-che-e-la-sorgente.md), che stabilisce la
-tassonomia degli elenchi scritti a mano e il criterio con cui si sceglie la forma.
-Qui si applica alla sola superficie in cui la risposta cambia — e cambia per un
-motivo meccanico: **`tauri::generate_handler!` prende identificatori a compile
-time e non itera niente**, quindi l'elenco non può diventare la sorgente. Resta
-una copia, e va confrontata.
+tassonomia degli elenchi scritti a mano e il criterio con cui si sceglie la
+forma. Qui si applica alla sola superficie in cui la risposta cambia — e cambia
+per un motivo meccanico: **`tauri::generate_handler!` prende identificatori a
+compile time e non itera niente**, quindi l'elenco non può diventare la
+sorgente. Resta una copia, e va confrontata.
 
 ## Il numero della voce è sbagliato per la terza volta
 
 Il §16.6 dice «**38** oggi, in `generate_handler!`», e fa di quel numero il
-proprio argomento: *«è il secondo che ci sta scritto»*, dopo un «25» già sbagliato.
+proprio argomento: *«è il secondo che ci sta scritto»*, dopo un «25» già
+sbagliato.
 
 Ricontato: sono **37**. Terza volta.
 
@@ -35,11 +38,11 @@ quattro e danno quattro numeri diversi:
 | nomi dentro `generate_handler!` | **37** |
 
 Le sei occorrenze di troppo sono **prosa**: due nel doc-comment di modulo di
-`lib.rs` che spiegano cosa il file è, e quattro in `fub-host` e
-`fub-abi/tests/` che raccontano dove una cosa *stava prima*. Un presidio che
-contasse la prosa nascerebbe con un numero che nessuno può far tornare, e
-morirebbe alla prima volta che qualcuno scrive `#[tauri::command]` dentro un
-commento — cioè scrivendo documentazione, che è la cosa che questo repo fa.
+`lib.rs` che spiegano cosa il file è, e quattro in `fub-host` e `fub-abi/tests/`
+che raccontano dove una cosa *stava prima*. Un presidio che contasse la prosa
+nascerebbe con un numero che nessuno può far tornare, e morirebbe alla prima
+volta che qualcuno scrive `#[tauri::command]` dentro un commento — cioè
+scrivendo documentazione, che è la cosa che questo repo fa.
 
 Quindi l'estrattore salta ogni riga che dopo il trim comincia per `//`, e c'è un
 test che gli dà in pasto un sorgente finto **con la trappola dentro**
@@ -49,18 +52,18 @@ di cui ci si può fidare senza guardare.
 
 ## Deciso: tre insiemi, due confronti
 
-Il test legge `crates/fub-app/src/lib.rs` ed estrae **due insiemi
-indipendenti** — i comandi *definiti* (un vero `#[tauri::command]`) e i comandi
-*registrati* (dentro `generate_handler!`) — e li confronta con l'allowlist
-dichiarata nel test. Due asserzioni, entrambe nelle due direzioni:
+Il test legge `crates/fub-app/src/lib.rs` ed estrae **due insiemi indipendenti**
+— i comandi *definiti* (un vero `#[tauri::command]`) e i comandi *registrati*
+(dentro `generate_handler!`) — e li confronta con l'allowlist dichiarata nel
+test. Due asserzioni, entrambe nelle due direzioni:
 
 1. **definiti == registrati.** Un comando definito e mai registrato è codice
    morto vestito da superficie: dal webview non lo raggiunge nessuno. Oggi non
    ce n'è, e questa asserzione è gratis — ma è l'unica cosa nel repo che se ne
    accorgerebbe.
-2. **registrati == allowlist.** È il cuore. Aggiungerne uno è rosso finché non lo
-   si dichiara, e l'allowlist è una **fotografia**: una riga senza comando vero è
-   rossa quanto un comando senza riga, per la stessa disciplina di
+2. **registrati == allowlist.** È il cuore. Aggiungerne uno è rosso finché non
+   lo si dichiara, e l'allowlist è una **fotografia**: una riga senza comando
+   vero è rossa quanto un comando senza riga, per la stessa disciplina di
    `ALLOWED_TRANSITIVE_ABI` in `dependency_invariant.rs`.
 
 E l'estrattore **si ferma** invece di far sparire un comando quando non capisce
@@ -92,24 +95,25 @@ che non erano previste sono la parte che valeva la pena scoprire:
 e simili), e un test verifica che quel metodo esista **dentro quel trait**
 leggendo `fub-abi/src/traits.rs`. È la sesta specie del §16.7 — *la garanzia
 dichiarata che non è mai esistita* — presa dal verso presidiabile: una frase che
-rimanda a qualcosa di meccanico deve nominare un `X` che una macchina sa cercare.
-Spostare `list_trash` da un trait all'altro diventa rosso.
+rimanda a qualcosa di meccanico deve nominare un `X` che una macchina sa
+cercare. Spostare `list_trash` da un trait all'altro diventa rosso.
 
 **`LaPortaEUnaCredenziale`** è la categoria che il §16.6 non prevedeva e che
 salva sei comandi da una migrazione sbagliata. `set_setting` non poteva essere
-`settings.set` del registro, e il codice lo diceva già: *«da qui passa la persona
-davanti allo schermo, che ha cliccato su un interruttore; da `settings.set` passa
-un programma»*. Sono due autorità, non due strade per la stessa cosa — la
-distinzione della [0012](0012-origine-degli-eventi.md) applicata alla
-configurazione. Stessa forma per `view_state`/`set_view_state`, dove proprietario
-ed esemplare li timbra **la porta** e non JS ([0035](0035-il-lavoro-lungo-si-racconta.md),
+`settings.set` del registro, e il codice lo diceva già: *«da qui passa la
+persona davanti allo schermo, che ha cliccato su un interruttore; da
+`settings.set` passa un programma»*. Sono due autorità, non due strade per la
+stessa cosa — la distinzione della [0012](0012-origine-degli-eventi.md)
+applicata alla configurazione. Stessa forma per `view_state`/`set_view_state`,
+dove proprietario ed esemplare li timbra **la porta** e non JS
+([0035](0035-il-lavoro-lungo-si-racconta.md),
 [0037](0037-lo-stato-di-vista.md)): se arrivassero dal webview, una pagina
 qualunque potrebbe rileggere lo stato di vista di un provider.
 
 **`AspettaUnCliente`** sono le quattro scritture dell'organizzazione (§11.3).
-Passano la riga che divide come comandi, ma **il registro non le può servire**: un
-`CommandProvider` ha in mano solo l'`HostApi`, e per quelle scritture una capacità
-non esiste — non per dimenticanza, per la regola della
+Passano la riga che divide come comandi, ma **il registro non le può servire**:
+un `CommandProvider` ha in mano solo l'`HostApi`, e per quelle scritture una
+capacità non esiste — non per dimenticanza, per la regola della
 [0013](0013-elenco-delle-capacita.md) («una capacità concessa a nessuno è
 superficie da mantenere e sandboxare per sempre»). Sono tenute **fuori** dal
 conteggio del debito apposta: il numero presidiato deve dire *quanti si possono
@@ -119,8 +123,8 @@ migrare oggi*, o diventa un numero che non scende mai e smette di essere letto.
 
 Il §16.6 dichiarava il versioning (3 comandi). Sono cinque:
 
-- `list_versions`, `read_version` → sono **letture**: rispondono con dati e vanno
-  su `IndexQuery`.
+- `list_versions`, `read_version` → sono **letture**: rispondono con dati e
+  vanno su `IndexQuery`.
 - `restore_version` → è un comando vero, ma bespoke: va nel registro.
 - **`render_preview`, `render_embed`** → non li nominava nessuno.
 
@@ -131,15 +135,16 @@ formale — **un `ViewProvider` che volesse mostrare un documento reso non ha
 nessuna porta, e la shell ce l'ha.** È la stessa asimmetria che ha portato
 `search`, `list_tags`, `graph_data` e `backlinks` dentro `query_index` con la
 [0019](0019-il-canale-dati.md), e `resolve_link` con la
-[0043](0043-il-path-e-la-chiave.md). Il precedente esatto è `IndexQuery::Outline`,
-che sta lì per essere «il modo con cui una view legge la struttura di un documento
-senza avere un `FormatProvider`»: un documento **reso** è la stessa domanda un
-passo più in là, senza avere un renderer.
+[0043](0043-il-path-e-la-chiave.md). Il precedente esatto è
+`IndexQuery::Outline`, che sta lì per essere «il modo con cui una view legge la
+struttura di un documento senza avere un `FormatProvider`»: un documento
+**reso** è la stessa domanda un passo più in là, senza avere un renderer.
 
-Va detto cosa questo *non* rovescia. La [0018](0018-chi-vede-il-modello-parsato.md)
-ha confermato `render_preview` come «fast-path della lettura», ma rispondeva a
-un'altra domanda — *il modello parsato attraversa l'IPC?*, e la risposta è no —
-non a *da quale porta passa*. Le due conclusioni stanno insieme.
+Va detto cosa questo *non* rovescia. La
+[0018](0018-chi-vede-il-modello-parsato.md) ha confermato `render_preview` come
+«fast-path della lettura», ma rispondeva a un'altra domanda — *il modello
+parsato attraversa l'IPC?*, e la risposta è no — non a *da quale porta passa*.
+Le due conclusioni stanno insieme.
 
 E va detto cosa resta da decidere a chi prenderà la migrazione, perché questa
 decisione **classifica un debito, non lo salda**: rendere passa dal confine di
@@ -149,12 +154,12 @@ plugin di comunità può chiamare è una domanda di firma che va posta lì, non 
 
 ### Il debito diventa un numero, non una riga di prosa
 
-`il_debito_dichiarato_e_un_numero_presidiato` asserisce il conteggio e nomina le righe. È la
-parte che risponde all'accusa che il §16.6 muove a sé stesso: *«un conto scritto a
-mano in un documento non è un presidio: è una cosa che diventa falsa in
-silenzio»*. Migrarne uno costringe a toccare il numero; chiudere l'ultimo
-costringe ad accorgersene. E il residuo della voce non vive più in un documento
-che nessuno rilegge, ma in un test che gira in CI.
+`il_debito_dichiarato_e_un_numero_presidiato` asserisce il conteggio e nomina le
+righe. È la parte che risponde all'accusa che il §16.6 muove a sé stesso: *«un
+conto scritto a mano in un documento non è un presidio: è una cosa che diventa
+falsa in silenzio»*. Migrarne uno costringe a toccare il numero; chiudere
+l'ultimo costringe ad accorgersene. E il residuo della voce non vive più in un
+documento che nessuno rilegge, ma in un test che gira in CI.
 
 ## Il grafo era già migrato, e la voce non lo sapeva
 
@@ -178,9 +183,9 @@ registrato non è superficie.
 
 **Una categoria-discarica.** Sei ragioni sono già al limite; una settima
 categoria «altro» avrebbe reso l'allowlist un elenco di nomi con una parola
-accanto, cioè la cosa che questa decisione esiste per non produrre. C'è invece un
-test che pretende che **i ponti restino sei**: un settimo canale generico non è
-una riga in più, è un verbale.
+accanto, cioè la cosa che questa decisione esiste per non produrre. C'è invece
+un test che pretende che **i ponti restino sei**: un settimo canale generico non
+è una riga in più, è un verbale.
 
 **Migrare i cinque adesso.** Tre chiedono varianti nuove di `IndexQuery` e due
 chiedono di riaprire il confine di fiducia sul rendering. Il criterio con cui
@@ -200,7 +205,7 @@ vero. Il prezzo di oggi è dichiarato: `IndexQuery::Organization` lascia
 **leggere** l'organizzazione a chiunque, e quelle quattro porte lasciano
 **scrivere** solo alla shell.
 
-**La regola vale sul confine Tauri, non su quello del webview.** L'allowlist dice
-quanti comandi la shell può chiamare; non dice niente su quante chiamate la shell
-faccia, né su cosa il webview possa raggiungere di ciò che la porta espone. È un
-presidio sulla superficie, non sul traffico.
+**La regola vale sul confine Tauri, non su quello del webview.** L'allowlist
+dice quanti comandi la shell può chiamare; non dice niente su quante chiamate la
+shell faccia, né su cosa il webview possa raggiungere di ciò che la porta
+espone. È un presidio sulla superficie, non sul traffico.
