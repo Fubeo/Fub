@@ -503,3 +503,101 @@ fn aprire_un_vault_non_rilegge_il_registro_piu_di_due_volte() {
         "la riga di partenza c'è ancora"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Il conto sul sorgente: ciò che la potatura promette, e ciò che il supporto fa
+// ---------------------------------------------------------------------------
+
+/// Il corpo di una funzione preso dal testo del sorgente: dal blocco che la
+/// contiene, alla firma, fino alla prima chiusura alla sua indentazione.
+fn corpo<'a>(sorgente: &'a str, blocco: &str, firma: &str) -> &'a str {
+    let dentro = sorgente
+        .split_once(blocco)
+        .unwrap_or_else(|| panic!("il blocco `{blocco}` non c'è più: il conto non giudica niente"))
+        .1;
+    let corpo = dentro
+        .split_once(firma)
+        .unwrap_or_else(|| panic!("la firma `{firma}` non c'è più: il conto non giudica niente"))
+        .1;
+    corpo
+        .split_once("\n    }")
+        .expect("una funzione si chiude alla sua indentazione")
+        .0
+}
+
+/// Il testo di un commento senza i `//` e senza gli a capo: così una frase si
+/// cerca per quello che dice, e non per come `rustfmt` l'ha spezzata.
+fn disteso(codice: &str) -> String {
+    codice
+        .lines()
+        .map(str::trim)
+        .filter_map(|l| l.strip_prefix("//"))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// **La potatura non promette un lucchetto che `append` non prende** (difetto
+/// 0161).
+///
+/// # Cosa era falso
+///
+/// Il commento dentro `Journal::pota` diceva che l'`update` è «la differenza fra
+/// potare e perdere», cioè che passare dal supporto invece che da un `read` +
+/// `write` fatti fuori chiude la finestra in cui una riga appesa sparisce. Non
+/// la chiude: il lucchetto di `FsStorage::update` tiene fuori chi *aggiorna*, e
+/// `FsStorage::append` è `O_APPEND` senza lucchetto — glielo rifiuta la
+/// [0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md),
+/// perché un lock per riga si pagherebbe a ogni salvataggio. La finestra è
+/// stretta e dichiarata, non chiusa, e chi legge quel commento deve saperlo.
+///
+/// # Perché un conto e non un banco
+///
+/// Perché la cosa da tenere ferma è un **accordo fra due file**, e la corsa che
+/// la rompe non si sa fabbricare: in memoria non esiste — `MemStorage` prende lo
+/// stesso mutex per `append` e per `update`, quindi un banco su quel supporto
+/// sarebbe verde per la ragione sbagliata — e su disco vorrebbe due processi.
+/// Ciò che si può tenere fermo è l'accordo: se un giorno `append` prende il
+/// lucchetto, il commento diventa troppo pessimista e va riscritto; se qualcuno
+/// toglie dal commento la frase che dichiara la finestra, torna la promessa
+/// falsa. Il conto guarda le due direzioni.
+///
+/// # Chi è stato rosso
+///
+/// Tutte e due le metà, verificate: la prima con un `lock_esclusivo` messo a
+/// mano in `FsStorage::append`, la seconda rimettendo il commento di prima.
+#[test]
+fn la_potatura_non_promette_un_lucchetto_che_append_non_prende() {
+    const STORAGE: &str = include_str!("../src/storage.rs");
+    const JOURNAL: &str = include_str!("../src/journal.rs");
+
+    let aggiunta = corpo(
+        STORAGE,
+        "impl VaultStorage for FsStorage {",
+        "fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {",
+    );
+    assert!(
+        !aggiunta.contains("lock_esclusivo"),
+        "`FsStorage::append` ha preso il lucchetto: è una decisione (0067 lo \
+         rifiuta a verbale), e il commento di `Journal::pota`, che dichiara la \
+         finestra aperta proprio perché non lo prende, va riletto contro questo \
+         codice invece che lasciato lì"
+    );
+
+    let potatura = disteso(corpo(
+        JOURNAL,
+        "impl Journal {",
+        "pub(crate) fn pota(&self, giorni: u64) {",
+    ));
+    for frase in ["append", "non passa dal lucchetto", "0067"] {
+        assert!(
+            potatura.contains(frase),
+            "il commento di `Journal::pota` non nomina più «{frase}»: senza, \
+             torna a promettere che l'`update` chiude la finestra fra la \
+             rilettura e la riscrittura — e l'`update` tiene fuori chi aggiorna, \
+             non chi appende: {potatura}"
+        );
+    }
+}
