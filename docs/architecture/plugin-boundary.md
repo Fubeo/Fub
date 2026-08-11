@@ -1315,7 +1315,7 @@ chiede se una cosa si può fare — non in fondo a un verbale, e non come casell
 spuntare. Non entra in nessun totale e non è lavoro rimandato: è ciò che si
 sarebbe scoperto dopo.
 
-Sono **otto** [conta: buchi-dichiarati]:
+Sono **dieci** [conta: buchi-dichiarati]:
 
 | # | Il buco | Verbale |
 |---|---|---|
@@ -1327,6 +1327,8 @@ Sono **otto** [conta: buchi-dichiarati]:
 | 6 | che il ponte Tauri serializzi davvero questi record, e che la webview li disegni | [0112](../decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md) |
 | 7 | il rapporto fra due tempi, che nessun conto di operazioni sa sostituire | [0113](../decisions/0113-il-banco-conta-le-operazioni.md) |
 | 8 | `SchemaVersion::new(1)` scritto al volo dentro il record, senza una costante che lo nomini: è del tipo giusto, quindi il compilatore è contento, e non lo conta nessuno | [0128](../decisions/0128-una-versione-di-schema-e-un-tipo.md) |
+| 9 | `fub:read-clipboard` e `fub:write-clipboard` non governano niente: chi li nega oggi non nega niente, perché non c'è ancora una famiglia da negare | [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md) |
+| 10 | che il passaggio al confine sia **economico**: il varco prova che il contratto è costruibile e compilabile a `wasm32`, non quanto costi serializzare un `Document` — quella metà vuole il motore, che è di M5 | [0146](../decisions/0146-il-contratto-attraversa-il-confine.md) |
 
 Il numero ha una storia sua, ed è la ragione per cui adesso porta un conto
 accanto. Questa riga ha detto «due» mentre erano tre, e poi «quattro» mentre

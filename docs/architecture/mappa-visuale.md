@@ -1395,7 +1395,7 @@ diversi alla stessa domanda.
   quello congelato, e il test rende la differenza **visibile** invece che
   opinabile.
 
-I buchi dichiarati sono **otto** [conta: buchi-dichiarati], e stanno in
+I buchi dichiarati sono **dieci** [conta: buchi-dichiarati], e stanno in
 [docs/todo.md](../todo.md) insieme ai difetti aperti.
 
 ---

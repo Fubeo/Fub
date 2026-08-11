@@ -1,0 +1,39 @@
+# Il varco: `wit/fub/abi.wit` portato di là dal confine e compilato.
+#
+# NON è un membro del workspace, ed è deliberato (verbale 0146):
+#
+#   * vuole un bersaglio che il workspace non ha — `wasm32-unknown-unknown` —
+#     e un `cargo test --workspace` non deve chiederlo a chi non ce l'ha;
+#   * il generatore si porta dietro trentun crate di albero. Metterlo fra i
+#     `[dev-dependencies]` di `fub-abi` — il crate da cui dipendono tutti gli
+#     altri — lo farebbe pagare a ogni giro di prova del repo, cioè al gesto
+#     che la 0145 ha appena reso più leggero.
+#
+# Chi lo compila è la CI, per nome, nel lavoro degli invarianti del contratto.
+# Un crate che nessuno compila è la forma su disco di una suite che si svuota
+# in silenzio (`.github/scripts/membri-del-workspace.mjs` lo dice per i crate
+# del workspace); qui la riga di `ci.yml` nomina questo manifest, quindi se la
+# cartella sparisce la CI diventa rossa.
+[package]
+name = "varco-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# `cdylib` è la forma che un componente WASM prende davvero. `rlib` sta accanto
+# perché senza di lui `cargo build` non type-checka niente che non finisca nel
+# modulo, e il punto di questo crate è proprio il type-check.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Il runtime del guest: `cabi_realloc`, i costruttori, l'allocatore del confine.
+# Il codice generato lo nomina, e senza di lui non compila.
+wit-bindgen = "0.60"
+
+[build-dependencies]
+# Il generatore, che è una libreria e non un programma da installare: il
+# `build.rs` accanto lo chiama in-process. La versione va allineata a quella di
+# `wit-bindgen` qui sopra — sono i due lati dello stesso generato.
+wit-bindgen-core = "0.60"
+wit-bindgen-rust = "0.60"

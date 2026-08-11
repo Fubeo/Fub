@@ -41,6 +41,18 @@ jobs:
         run: cargo test -p fub-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fub-abi --test dependency_invariant
+      # Le tre righe qui sopra guardano il contratto come TESTO: che Rust e WIT
+      # dicano la stessa cosa, che il WIT non abbia perso niente, che nessuno dei
+      # due dipenda da wasmtime. Nessuna delle tre lo attraversa. Questa lo
+      # attraversa: `abi.wit` diventa i binding guest di `plugin-world` — export
+      # implementati compresi — e viene compilato a wasm32. È la §27.1, e il
+      # perché sta nella 0146 e in tools/varco-wasm/Cargo.toml. Se un giorno il
+      # contratto smette di essere costruibile da un plugin, si scopre qui e non
+      # dopo il freeze.
+      - name: aggiungi il bersaglio del confine
+        run: rustup target add wasm32-unknown-unknown
+      - name: il contratto attraversa il confine (§27.1)
+        run: cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
       # Le altre invarianti di dipendenza dicono *chi* può dipendere da cosa;
       # questa dice *dove si scrive la versione*. Il difetto era misurato:
       # `tempfile = "3.27.0"` copiato identico in cinque Cargo.toml, cioè cinque
