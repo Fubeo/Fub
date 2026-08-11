@@ -449,7 +449,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **cinquantasei** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **cinquantacinque** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -565,7 +565,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0199 | la parte «da» di una rinomina orfana non esce mai: quando l'evento di arrivo manca, quello di partenza resta appeso in attesa del gemello e nessuno lo emette come rimozione, quindi il documento sparito dal disco resta vivo in anagrafe finché non si riapre il vault | `fub-host` · `watcher` (accoppiamento delle rinomine) | regole |
 | 0200 | gli errori di sincronizzazione per-file vengono ingoiati dentro la battuta: un documento che non si riesce a sincronizzare non fa fallire il lotto e non produce nessun segnale, quindi resta indietro rispetto al disco senza che l'utente o il log lo sappiano | `fub-host` · `watcher` (battuta di sync) | lock e I/O |
 | 0201 | i temporanei di scrittura delle **altre** applicazioni entrano in anagrafe: la policy che riconosce i temporanei conosce solo la forma di quelli del kernel, quindi un `.goutputstream-xxxx` o un `~$nota.md` diventa una voce che compare nell'esploratore e sparisce da sola poco dopo | `fub-host` · `watcher` (filtro dei temporanei) | regole |
-| 0202 | una voce nata da `set_look` o da `set_favorite` nasce con `last_opened` a zero, cioè col valore che la politica di sfratto legge come «la più vecchia di tutte»: l'aspetto o il preferito che l'utente ha appena scelto è il primo candidato a essere buttato via | `fub-host` · `mount` `set_look` / `set_favorite` | regole |
 | 0203 | un workspace avvelenato lascia un job senza esito: la richiesta viene rifiutata prima di entrare, ma il canale di risposta non riceve né un risultato né un errore, quindi chi ha chiesto aspetta per sempre — e siccome è il ramo che si imbocca quando qualcosa è già andato storto, è proprio lì che l'interfaccia si pianta | `fub-host` · `session` (runner dei job) | regole |
 | 0204 | `ricorda_i_tasti_visti` legge l'insieme dei tasti già visti, lo modifica e lo riscrive senza tenerlo fermo in mezzo: due sessioni che imparano un tasto nello stesso momento se ne perdono uno | `fub-host` · `session.rs` `ricorda_i_tasti_visti` | lock e I/O |
 | 0205 | la chiusura dell'applicazione non forza il salvataggio pendente: il salvataggio è ritardato di circa un secondo e mezzo, e chiudere la finestra mentre il ritardo corre butta via l'ultima battitura senza chiedere niente e senza lasciarne traccia nella bozza | `frontend` · chiusura dell'app (salvataggio ritardato) | regole |
