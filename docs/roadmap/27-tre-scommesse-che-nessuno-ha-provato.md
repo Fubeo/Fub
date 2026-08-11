@@ -125,95 +125,30 @@ senza che nessuno se ne debba ricordare.
 
 ### 27.2 Un plugin può osservare dopo, non decidere prima
 
-*aperta · strato **contratto** · **P0***
+*chiusa dalla [0147](../decisions/0147-il-contratto-osserva-dopo-e-non-si-interpone.md) · strato **contratto** · **P0***
 
-**1. La domanda.** Il contratto ha undici trait di estensione. Tutti e undici
-sono **posteriori** o **paralleli** alla scrittura: nessuno permette di
-interporsi *fra* la decisione di scrivere e i byte che atterrano. Serve un punto
-di interposizione — e se serve, questa è la specie di firma che dopo il freeze
-non si aggiunge senza una major?
+## Com'è finita, e cosa lascia
 
-**2. Che cosa si osserva oggi, misurato.** Censimento a `69e25b0`.
+**La decisione è la forma (c): il punto di interposizione non entra nel
+contratto.** La voce chiedeva se servisse una firma che potesse dire di no
+prima che i byte atterrino, e la P0 era la ragione della 0002: dopo il freeze
+non c'è una seconda occasione più economica. La premessa, rimisurata a
+`8581cb0`, reggeva la diagnosi e non la cura: l'ordine di una scrittura è
+parse, disco, ingestione, dispatch (`workspace.rs:2331`), l'unico trait che
+vede passare una mutazione è `EventHandler` (dopo), e le undici interfacce
+export del `plugin-world` sono tutte posteriori o parallele. Ma i tre clienti
+che la voce elencava hanno già una casa decisa altrove: il sync è un servizio
+del core (plugin-boundary, punto 3), la cifratura sta sotto `VaultStorage`,
+che è già un `Arc<dyn VaultStorage>` sostituibile — la forma (b) è lo stato di
+oggi — e la politica di vault («questa nota non esce da qui») non compare in
+nessun piano del repo. La forma (a) — un trait di veto prima del freeze — paga
+una firma per sempre e un giro in più a ogni scrittura per un primo chiamante
+che non esiste: è la prova del secondo chiamante, ed è la scrittura stessa.
 
-L'unico trait che vede passare una mutazione è `EventHandler`
-(`crates/fub-abi/src/traits.rs:3708`), e ha due metodi: `subscribed` e `handle`.
-Il secondo torna un `Result` — che sembra un veto, e non lo è. Il chiamante è
-`crates/fub-kernel/src/workspace.rs:5355`, e lì l'errore diventa un **guasto
-registrato**:
-
-```rust
-fault = handler.handle(notice, &mut host).err();
-```
-
-Il commento accanto dice esattamente la semantica, e ha ragione a dirla:
-*«l'errore di un handler non deve far fallire l'operazione che ha emesso
-l'evento»*. Quando `handle` viene chiamato, il disco è già stato scritto —
-l'ordine del corpo di una scrittura è dichiarato in
-`crates/fub-kernel/src/workspace.rs:2287`: parse, disco, ingestione, dispatch.
-
-Ne segue che **tre cose del piano non possono essere plugin**, e non per una
-mancanza di capacità ma per una mancanza di *momento*:
-
-| Chi | Cosa gli serve | Cosa il contratto offre |
-|---|---|---|
-| un sync | risolvere il merge **prima** che il file atterri | l'evento di ciò che è già atterrato |
-| una politica di vault (*«questa nota non esce da qui»*) | negare una scrittura | un guasto dopo la scrittura |
-| la cifratura | interporsi sotto il supporto | `VaultStorage`, che è del kernel e non del contratto |
-
-Il terzo caso ha già lasciato una traccia visibile: l'indice tantivi passa **di
-fianco** al supporto, gli si dà una cartella vera del filesystem, e la
-`mappa-visuale` lo scrive come «segna fin dove arriverà il supporto cifrato».
-
-I tre implementatori di `EventHandler` che esistono — il versioning, i pesi
-della ricerca, la spia del banco — funzionano bene **proprio perché** sono
-osservatori: nessuno dei tre ha mai avuto bisogno di dire di no.
-
-**Come si rimisura.**
-
-```sh
-grep -n "pub trait EventHandler" -A 4 crates/fub-abi/src/traits.rs
-grep -rn "handler.handle(" crates/fub-kernel/src
-grep -rn "impl EventHandler for" crates/*/src
-```
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Un trait nuovo, prima del freeze: chi può dire di no.** Una firma
-      sola, sincrona, che riceve l'operazione proposta e risponde «passa» /
-      «passa così» / «no, con questa ragione», e che gira **dentro** il prestito
-      esclusivo prima della scrittura. Paga **il contratto** — una firma per
-      sempre — e paga **chi scrive** — ogni scrittura passa da un giro in più,
-      anche quando nessuno è registrato. In cambio il sync, le politiche e la
-      cifratura diventano cittadini normali invece di casi speciali del kernel.
-- [ ] **(b) Solo un punto di aggancio del supporto.** Non un veto: la
-      possibilità di sostituire `VaultStorage`, che copre la cifratura e non
-      copre il merge. Paga **chi vuole il sync**, che resta fuori. Più piccola,
-      e risolve un terzo del problema.
-- [ ] **(c) Com'è oggi.** Paga **il piano**: FubSync e ogni politica di vault
-      restano codice del kernel o dell'host, cioè cose che un terzo non può
-      scrivere — e la frase *«una feature ufficiale è ciò che scriverà un
-      plugin»* smette di essere vera per una classe intera di feature. E il
-      giorno che si aggiunge, si aggiunge dopo il freeze.
-
-**4. Che cosa il repo ha già deciso qui vicino.**
-
-* La [0127](../decisions/0127-la-mutazione-e-il-prodotto-della-scrittura.md): la
-  mutazione **è** il prodotto della scrittura. È la ragione per cui l'evento non
-  può che venire dopo — e quindi la ragione per cui il punto di interposizione,
-  se ci sarà, non è un evento.
-* La [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) e il §20.3: un
-  errore di handler non fa fallire l'operazione, **ma si dice**. Il
-  ramo «non far fallire» è deciso; il ramo «poter impedire» non è mai stato
-  posto.
-* La [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md): una scrittura o
-  c'è o non c'è. Un veto che arrivasse a metà romperebbe quella promessa —
-  ragione in più perché il momento giusto sia *prima del disco*, non durante.
-* La [0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md): la
-  superficie di scrittura non vieta, semplicemente non dà gli strumenti. Questa
-  voce chiede se fra quegli strumenti ne manchi uno.
-* [plugin-boundary.md](../architecture/plugin-boundary.md): il metro per
-  decidere cosa non può essere solo un guest nomina già *«agisce prima o dopo la
-  scrittura»* come una delle tre misure. La voce è il seguito di quella riga.
+**Zero caselle.** Sync e supporto cifrato sono feature del core dei loro
+milestone, non lavoro già deciso da questa voce. Il fatto — osservare dopo,
+non decidere prima — resta scritto nel punto 3 di plugin-boundary, il posto
+in cui uno inciampa mentre si chiede se può.
 
 ---
 
