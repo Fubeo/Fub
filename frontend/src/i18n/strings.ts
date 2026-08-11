@@ -409,6 +409,11 @@ const IT = {
   // Dice **perché il gesto non è partito**, e nomina il documento appeso: chi
   // legge ha appena chiesto di spostare una nota e deve capire che il rifiuto
   // riguarda un salvataggio, non la rinomina.
+  // L'iscrizione alla chiusura non è andata: da qui in poi la finestra si chiude
+  // senza che nessuno metta in salvo il ritardo. È una frase e non una riga di
+  // log perché chi scrive deve sapere che la rete sotto non c'è.
+  "document.close_unhooked":
+    "Fub non riesce ad ascoltare la chiusura della finestra: salva a mano prima di chiudere, perché l'ultima battuta potrebbe non essere ancora sul disco.",
   "document.unsaved_blocks":
     "{doc} non è sul disco: l'operazione si ferma qui, perché spostare il file lascerebbe indietro il testo non salvato.",
   // Dice **che non è stato scritto niente**, e non è un dettaglio tecnico: è la
@@ -737,6 +742,8 @@ const EN: Record<Chiave, string> = {
   "document.deleted_dirty":
     "{doc} was deleted on disk while the buffer is dirty: the buffer wins, and the next save recreates it.",
   "document.save_failed": "{doc} was not saved: {reason}",
+  "document.close_unhooked":
+    "Fub cannot listen for the window closing: save by hand before you close, because the last keystroke may not be on disk yet.",
   "document.unsaved_blocks":
     "{doc} is not on disk: the operation stops here, because moving the file would leave the unsaved text behind.",
   "document.save_conflict":

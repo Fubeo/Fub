@@ -23,7 +23,7 @@
 //
 // # Dieci gesti, contati da fuori
 //
-// I gesti sono **quattordici** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **sedici** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -80,6 +80,7 @@ vi.mock("./host/ipc", () => {
     ),
     onKernelEvent: (handler: (n: unknown) => void) =>
       adesso().onKernelEvent(handler as never),
+    allaChiusura: (prima: () => Promise<void>) => adesso().allaChiusura(prima),
   };
 });
 
@@ -405,6 +406,69 @@ describe("rinomina", () => {
     // coprendo qualunque cosa ci sia senza guardare. Misurato: togliendo la
     // migrazione, un presidio che guardasse solo il path resterebbe **verde**.
     expect(scritta.args[2]).toEqual({ kind: "descends_from", value: "r1" });
+  });
+});
+
+describe("chiudere la finestra col ritardo che corre", () => {
+  /// I due ritardi della shell — 400 ms il salvataggio, un secondo la bozza —
+  /// non hanno un dopo quando la finestra si chiude, e non lo aveva nessuno:
+  /// `RunEvent::Exit` di `fub-app` chiude gli indici quando la webview sta già
+  /// morendo, e ciò che era in RAM non lo chiedeva più nessuno (difetto 0205).
+  ///
+  /// I banchi non aspettano il ritardo: chiudono **mentre corre**, che è
+  /// esattamente il caso, e guardano cos'è arrivato all'host.
+  it("l'ultima battuta va sul disco invece di sparire", async () => {
+    const host = await avvia(VAULT);
+    battiNellEditor("l'ultima riga prima di chiudere");
+
+    await host.chiudi();
+
+    // Il testo battuto si aggiunge in fondo alla nota, quindi ciò che parte per
+    // il disco è **tutto** il documento: si guarda dentro, non uguale.
+    const scritte = host.aPorta("writeDocument").map((c) => String(c.args[1]));
+    expect(
+      scritte.join("\n--- e poi ---\n"),
+      "la finestra si è chiusa mentre il ritardo del salvataggio correva: " +
+        "l'ultima battuta non è arrivata al disco",
+    ).toContain("l'ultima riga prima di chiudere");
+  });
+
+  /// L'altra metà, e la ragione per cui la chiusura non chiede conferma: se il
+  /// disco rifiuta, il testo deve restare **nella bozza**, che è la rete tesa
+  /// apposta sotto questo caso (§15.2).
+  ///
+  /// La domanda qui non è «la bozza c'è» — il ramo di fallimento di `saveDoc` la
+  /// scrive comunque — ma **se la chiusura l'ha aspettata**: una scrittura
+  /// lanciata e non attesa, in questa riga, corre contro la distruzione della
+  /// finestra, e chi arriva secondo non arriva. Quindi la bozza si tiene in volo
+  /// e si guarda se la chiusura è già finita senza di lei.
+  it("la chiusura aspetta la bozza, invece di lanciarla e andarsene", async () => {
+    const host = await avvia(VAULT);
+    battiNellEditor("la riga che il disco non vuole");
+    const ripara = host.guasta("writeDocument", "disco pieno");
+    const sblocca = host.frena("saveDraft");
+
+    let chiusa = false;
+    const chiusura = host.chiudi().then(() => {
+      chiusa = true;
+    });
+    await riposa();
+
+    const bozze = host.aPorta("saveDraft").map((c) => String(c.args[1]));
+    expect(
+      bozze.join("\n--- e poi ---\n"),
+      "il salvataggio è fallito chiudendo e nessuno ha scritto la bozza: " +
+        "l'ultima battuta non è in nessuno dei due posti",
+    ).toContain("la riga che il disco non vuole");
+    expect(
+      chiusa,
+      "la finestra si è chiusa mentre la bozza era ancora in volo: la battuta " +
+        "che il disco ha rifiutato corre contro la distruzione della webview",
+    ).toBe(false);
+
+    sblocca();
+    await chiusura;
+    ripara();
   });
 });
 

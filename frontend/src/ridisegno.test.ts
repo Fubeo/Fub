@@ -56,6 +56,7 @@ vi.mock("./host/ipc", () => {
       },
     ),
     onKernelEvent: (handler: (n: unknown) => void) => adesso().onKernelEvent(handler as never),
+    allaChiusura: (prima: () => Promise<void>) => adesso().allaChiusura(prima),
   };
 });
 
