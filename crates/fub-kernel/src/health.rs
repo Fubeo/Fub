@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use fub_abi::traits::VaultEntry;
 
 use crate::graph::LinkGraph;
-use crate::index::core::resolve_entry_in;
+use crate::index::core::{resolve_entry_in, NomiDellAnagrafe};
 
 /// Il vault **come lo vede un controllo di salute**: il grafo dei link e
 /// l'anagrafe, insieme.
@@ -37,6 +37,15 @@ use crate::index::core::resolve_entry_in;
 pub(crate) struct VaultView<'a> {
     pub(crate) graph: &'a LinkGraph,
     pub(crate) entries: &'a BTreeMap<DocId, VaultEntry>,
+    /// Le chiavi dell'anagrafe, che rispondono senza scandirla (difetto 0115).
+    ///
+    /// Un controllo di salute chiede una volta per ogni link di ogni documento,
+    /// quindi è il secondo posto — dopo la riscrittura dei riferimenti — dove
+    /// una scansione per domanda diventava il vault moltiplicato per sé stesso.
+    /// Chi ha l'indice presta le sue, ed è la via di ogni chiamante vero; un
+    /// banco che si costruisce un'anagrafe a mano le fa con
+    /// [`NomiDellAnagrafe::di`], che costa una passata sola.
+    pub(crate) nomi: &'a NomiDellAnagrafe,
 }
 
 impl LinkResolver for VaultView<'_> {
@@ -49,7 +58,7 @@ impl LinkResolver for VaultView<'_> {
     }
 
     fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId> {
-        resolve_entry_in(self.entries, source, target)
+        resolve_entry_in(self.entries, self.nomi, source, target)
     }
 }
 
@@ -277,7 +286,11 @@ mod tests {
             check,
             docs.iter()
                 .map(|d| (&d.id, d.links.as_slice(), &d.frontmatter)),
-            &VaultView { graph, entries },
+            &VaultView {
+                graph,
+                entries,
+                nomi: &NomiDellAnagrafe::di(entries),
+            },
             &md(),
             formats,
         )

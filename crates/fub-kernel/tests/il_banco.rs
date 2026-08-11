@@ -52,9 +52,10 @@ use fub_abi::error::{FormatError, PluginError};
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
-use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
 use fub_abi::traits::{
-    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page, QueryRoute, VaultEntry,
+    HealthCheck, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page, QueryRoute,
+    VaultEntry,
 };
 use fub_abi::FormatProvider;
 use fub_kernel::{FormatRegistry, Workspace};
@@ -420,5 +421,143 @@ fn pagina_di_venti(ws: &Workspace) -> usize {
             paged.items.len()
         }
         altro => panic!("attesa l'anagrafe, trovato {altro:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Risolvere un riferimento, contato in allocazioni
+// ---------------------------------------------------------------------------
+
+/// Un formato che mette in ogni documento **un riferimento a un allegato**.
+///
+/// Serve perché la domanda che questo pezzo di banco misura non la fa il testo
+/// ma il link: senza un `![[…]]` in `links`, nessuno chiede niente all'anagrafe
+/// e la misura sarebbe la stessa a vault vuoto.
+#[derive(Clone, Default)]
+struct ParserConRiferimento;
+
+impl FormatProvider for ParserConRiferimento {
+    fn descriptor(&self) -> FormatDescriptor {
+        FormatDescriptor::text("banco.riferimenti", "Il formato del banco (test)", &["md"])
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        FormatCapabilities::default()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
+        model.text = source.text().unwrap_or_default().to_string();
+        model.links = vec![Link {
+            target: LinkTarget::wiki(ALLEGATO),
+            embed: true,
+            span: Span::EMPTY,
+            context: None,
+        }];
+        Ok(model)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        _opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+}
+
+/// Il nome che ogni nota incorpora, e il file che lo porta davvero.
+const ALLEGATO: &str = "esiste.png";
+
+/// Venti note che incorporano lo stesso allegato, e `riempitivi` altri allegati
+/// che nessuno nomina: è il vault che cresce **sotto** una domanda che resta la
+/// stessa.
+fn vault_con_allegati(riempitivi: usize) -> Montato {
+    let mut banco = Banco::nuovo().con_formato(Box::new(ParserConRiferimento));
+    for i in 0..NOTE_CON_RIFERIMENTO {
+        banco = banco.con_file(&format!("Nota {i}.md"), "Un corpo qualunque.\n");
+    }
+    banco = banco.con_file(&format!("allegati/{ALLEGATO}"), "PNG per finta");
+    for i in 0..riempitivi {
+        banco = banco.con_file(&format!("allegati/foto {i}.png"), "PNG per finta");
+    }
+    banco.monta()
+}
+
+const NOTE_CON_RIFERIMENTO: usize = 20;
+
+/// **Risolvere un riferimento non costa quanto l'anagrafe.**
+///
+/// Prima costava esattamente quello: risolvere `![[esiste.png]]` calcolava fino
+/// a due chiavi di risoluzione **per ogni voce del vault** e chiudeva con un
+/// `min_by_key`, che non cortocircuita — quindi trovare costava quanto non
+/// trovare, e chi chiede una volta per ogni link di ogni documento (il controllo
+/// di salute qui, la riscrittura dei riferimenti quando si sposta un allegato)
+/// pagava il vault moltiplicato per sé stesso: la misura della voce diceva
+/// ventisette millisecondi a chiamata su ventimila voci, cioè quarantasei minuti
+/// per rinominare un allegato (difetto 0115).
+///
+/// Il banco tiene ferme le domande — venti note, un link ciascuna — e fa
+/// crescere **solo l'anagrafe**: cento allegati contro cinquecento, che nessuno
+/// nomina. Se il prezzo della risposta cresce con loro, la risposta li sta
+/// guardando uno per uno.
+///
+/// Come il presidio della pagina, non guarda il numero assoluto: guarda che
+/// quintuplicare l'anagrafe non cambi il prezzo di una domanda.
+#[test]
+fn risolvere_un_riferimento_non_cresce_con_l_anagrafe() {
+    let mut costi = Vec::new();
+    for riempitivi in [100usize, 500] {
+        let banco = vault_con_allegati(riempitivi);
+        // Un giro a vuoto, per la stessa ragione del presidio della pagina: la
+        // prima domanda paga ciò che si alloca una volta sola.
+        let _ = quanti_link_rotti(&banco);
+        costi.push(allocazioni_di(|| quanti_link_rotti(&banco)));
+    }
+
+    let (piccola, grande) = (costi[0], costi[1]);
+    assert!(
+        grande <= piccola + 20,
+        "venti riferimenti sono costati {piccola} allocazioni su un'anagrafe di \
+         cento allegati e {grande} su una di cinquecento: risolvere un \
+         riferimento guarda le voci una per una invece di chiederlo a una \
+         chiave, e chi risolve una volta per link — la riscrittura dei \
+         riferimenti di un allegato spostato — paga il vault moltiplicato per sé \
+         stesso"
+    );
+}
+
+/// Il controllo dei link rotti, che è la via pubblica per cui passa la
+/// risoluzione di un riferimento ad allegato.
+///
+/// L'allegato c'è, quindi la risposta giusta è **zero**: se fosse diversa da
+/// zero la misura sopra starebbe misurando la costruzione dei rapporti invece
+/// della risoluzione.
+fn quanti_link_rotti(ws: &Workspace) -> usize {
+    match ws
+        .query_index(IndexQuery::VaultHealth {
+            check: HealthCheck::BrokenLinks,
+            page: Some(Page::first(20)),
+        })
+        .expect("il controllo di salute risponde")
+    {
+        IndexResult::VaultHealth(paged) => {
+            assert_eq!(
+                paged.total, 0,
+                "l'allegato incorporato c'è: un link rotto qui vorrebbe dire che \
+                 il banco misura la costruzione dei rapporti invece della \
+                 risoluzione"
+            );
+            paged.items.len()
+        }
+        altro => panic!("atteso il controllo di salute, trovato {altro:?}"),
     }
 }

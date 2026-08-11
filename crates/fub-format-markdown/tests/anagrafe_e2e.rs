@@ -156,7 +156,7 @@ fn un_wikilink_a_un_allegato_omonimo_prende_il_path_intero() {
 /// Il motivo è che **ogni piano cerca l'omonimia nel registro che il proprio
 /// risolutore legge**, e i due risolutori sono due:
 ///
-/// - un wikilink verso un allegato passa da `named_entry_in`, che confronta il
+/// - un wikilink verso un allegato passa dai nomi dell'anagrafe, che portano il
 ///   nome del file **con la sua estensione** — `![[foto.png]]`, mai `[[foto]]`.
 ///   Quindi un allegato non contende mai un *nome pagina*, che l'estensione non
 ///   ce l'ha: `foto.png` e `foto` non si somigliano nemmeno;
