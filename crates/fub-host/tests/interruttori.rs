@@ -758,7 +758,7 @@ fn la_finestra_del_registro_fa_cadere_le_righe_vecchie() {
     host.with_session(None, |s| {
         let ws = s.workspace().read().unwrap();
         assert_eq!(
-            ws.journal().records.len(),
+            ws.journal().expect("registro").records.len(),
             2,
             "zero giorni = per sempre, e nessuna riga cade da sola"
         );
@@ -773,7 +773,7 @@ fn la_finestra_del_registro_fa_cadere_le_righe_vecchie() {
             fub_abi::settings::SettingValue::Number(7.0),
         )
         .expect("la chiave è dichiarata dal core");
-        let records = ws.journal().records;
+        let records = ws.journal().expect("registro").records;
         assert_eq!(
             records.len(),
             1,
@@ -810,7 +810,7 @@ fn la_finestra_del_registro_fa_cadere_le_righe_vecchie() {
     host.open(&v.root).expect("si riapre");
     host.with_session(None, |s| {
         let ws = s.workspace().read().unwrap();
-        let records = ws.journal().records;
+        let records = ws.journal().expect("registro").records;
         assert_eq!(
             records.len(),
             1,

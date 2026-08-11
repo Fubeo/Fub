@@ -1687,7 +1687,16 @@ impl Workspace {
         // `&mut` (vedi il suo doc); qui la si rifà subito, come prima, perché
         // `reindex` è il giro sincrono e chi lo chiama ha già il prestito in
         // mano — non c'è nessuno da non far aspettare.
-        self.collect_doc_data();
+        //
+        // L'esito **non** risale, e la ragione è quella del § qui sopra: il
+        // `Result` di un'apertura porta solo ciò che riguarda la scansione, e
+        // una cartella di dati che non si è potuta togliere non impedisce a
+        // nessuno di aprire una nota. Chi ha chiesto *espressamente* di
+        // raccogliere — `vault.repair` — la riceve invece, perché è la sola
+        // cosa che aveva chiesto.
+        if let Err(e) = self.collect_doc_data() {
+            tracing::warn!(target: "fub.kernel", "spazi per-documento non raccolti: {e}");
+        }
         Ok(apertura)
     }
 
@@ -2242,11 +2251,18 @@ impl Workspace {
         let esisteva = self.indexes.core.metas.contains_key(id);
         let from = match base {
             WriteBase::DescendsFrom(attesa) => {
-                // `ok()` e non `?`: un file che non c'è non è un errore di
-                // lettura da propagare, è una base che non combacia — chi
-                // scrive credeva di riscrivere qualcosa che nel frattempo è
-                // stato cestinato, e ha diritto alla stessa risposta.
-                let adesso = self.docs.vault.read(id).ok().map(|s| Revision::of(&s));
+                // Un file che **non c'è** non è un errore da propagare: è una
+                // base che non combacia — chi scrive credeva di riscrivere
+                // qualcosa che nel frattempo è stato cestinato, e ha diritto
+                // alla stessa risposta. Ogni **altro** guasto invece risale con
+                // il suo tipo, ed è la differenza che vale la riga: con `.ok()`
+                // chi non riusciva più a leggere la propria nota — permessi, un
+                // disco che sta fallendo, byte che non sono più testo — si
+                // sentiva dire «il documento è cambiato sotto di te», cioè un
+                // fatto del vault che non era avvenuto, e un conflitto vero non
+                // si distingueva da un supporto rotto.
+                let adesso =
+                    crate::error::se_c_e(self.docs.vault.read(id))?.map(|s| Revision::of(&s));
                 if adesso.as_ref() != Some(&attesa) {
                     return Err(KernelError::Stale(id.to_string()));
                 }
@@ -2330,8 +2346,16 @@ impl Workspace {
     /// sullo stesso file scrivono anche le altre installazioni aperte sulla
     /// stessa cartella, e una copia in memoria mostrerebbe solo le proprie
     /// righe.
-    pub fn journal(&self) -> Lettura {
-        self.journal.read()
+    ///
+    /// **Un registro che non si legge non è un registro vuoto** (§15.2): il
+    /// file assente resta una `Lettura` vuota, ogni altro guasto del supporto
+    /// arriva qui come [`KernelError::Io`] col path che non si è potuto
+    /// aprire.
+    pub fn journal(&self) -> Result<Lettura> {
+        self.journal.read().map_err(|e| KernelError::Io {
+            path: self.journal.path().to_owned(),
+            source: e,
+        })
     }
 
     /// Pota il registro alla finestra dichiarata (§23.9).
@@ -2392,8 +2416,16 @@ impl Workspace {
     /// Dal disco e non da una cache, per la ragione del registro: dopo un crash
     /// non c'è nessuna memoria da consultare, ed è l'unico momento in cui questa
     /// domanda conta davvero.
-    pub fn drafts(&self) -> Bozze {
-        self.drafts.read()
+    ///
+    /// E una cartella che **non si legge** non è una cartella senza bozze: là
+    /// dentro c'è l'unica copia di ciò che l'utente ha scritto e non ha ancora
+    /// salvato, quindi il guasto risale con il path invece di diventare un
+    /// elenco vuoto.
+    pub fn drafts(&self) -> Result<Bozze> {
+        self.drafts.read().map_err(|e| KernelError::Io {
+            path: self.drafts.dir().to_owned(),
+            source: e,
+        })
     }
 
     /// La revisione del sorgente di un documento: l'identità del testo su cui
@@ -5960,7 +5992,7 @@ impl Workspace {
                     crate::maintenance::T_JOURNAL_PLAN,
                     vec![fub_abi::text::Arg::int(
                         crate::maintenance::A_LINES,
-                        self.journal.read().records.len() as i64,
+                        self.journal()?.records.len() as i64,
                     )],
                 );
             }
@@ -5991,9 +6023,9 @@ impl Workspace {
                 // Il rebuild rifà il derivato; questo raccoglie ciò che il
                 // rebuild non guarda — i dati attaccati a note che non ci sono
                 // più — e **dice** ciò che non ripara, invece di tacerlo.
-                let raccolti = self.collect_doc_data();
-                let journal = self.journal.read();
-                let bozze = self.drafts.read();
+                let raccolti = self.collect_doc_data()?;
+                let journal = self.journal()?;
+                let bozze = self.drafts()?;
                 let orfane = bozze
                     .drafts
                     .iter()
@@ -6028,8 +6060,8 @@ impl Workspace {
                 )))
             }
             VAULT_DIAGNOSTIC_BUNDLE => {
-                let journal = self.journal.read();
-                let bozze = self.drafts.read();
+                let journal = self.journal()?;
+                let bozze = self.drafts()?;
                 let orfane = bozze
                     .drafts
                     .iter()
@@ -6134,7 +6166,14 @@ impl Workspace {
     /// **Chi la chiama**: [`reindex`](Workspace::reindex) per il giro sincrono,
     /// il runner di `fub-host` per l'apertura a fasi, e `vault.repair`. Che il
     /// secondo non se la dimentichi lo guarda un banco, non questa riga.
-    pub fn collect_doc_data(&self) -> usize {
+    ///
+    /// **Quante ne ha tolte, o cosa non è riuscita a togliere.** Una
+    /// cancellazione parziale prima era indistinguibile da una riuscita — il
+    /// conto tornava più piccolo e basta — e chi resta indietro sul disco non lo
+    /// segnalava nessuno. Adesso il guasto risale, e sono i due chiamanti a
+    /// decidere cosa farne: l'apertura lo registra e prosegue, `vault.repair` lo
+    /// dice a chi l'ha chiesto.
+    pub fn collect_doc_data(&self) -> Result<usize> {
         // **Una raccolta si fa su un'anagrafe che si dichiara completa, o non si
         // fa** (§23.1). È la stessa riga con cui `finish_index` non riconcilia
         // un'indicizzazione interrotta, applicata al suo vicino di tre righe
@@ -6149,11 +6188,11 @@ impl Workspace {
         // la porta a chi raccoglie senza aver aperto niente: chiude a chi ha
         // aperto a metà, che è l'unico caso in cui l'anagrafe mente.
         if self.indexes.core.watch.indexing != IndexingState::Ready {
-            return 0;
+            return Ok(0);
         }
         let roots = self.docs.plugin_data_roots();
         if roots.is_empty() {
-            return 0;
+            return Ok(0);
         }
         let cestinate = self.trashed_originals();
         let metas = &self.indexes.core.metas;

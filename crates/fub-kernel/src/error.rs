@@ -55,6 +55,56 @@ pub enum KernelError {
 
 pub type Result<T> = std::result::Result<T, KernelError>;
 
+/// Il solo errore che può diventare una risposta: **non c'era niente**.
+///
+/// Serve a [`se_c_e`], e vive su un tratto invece che su un `match` scritto al
+/// punto d'uso perché la domanda è la stessa per i due errori che il kernel
+/// maneggia — quello del supporto e il proprio — e chi la scrive a mano la
+/// scrive per uno solo.
+pub trait Assenza {
+    /// `true` **solo** se ciò che si cercava non c'è. Un permesso negato, un
+    /// disco che sta fallendo, un nome troppo lungo non sono assenze: sono
+    /// guasti, e chi li legge come assenze racconta un fatto del vault che non
+    /// è mai avvenuto.
+    fn e_assenza(&self) -> bool;
+}
+
+impl Assenza for std::io::Error {
+    fn e_assenza(&self) -> bool {
+        self.kind() == std::io::ErrorKind::NotFound
+    }
+}
+
+impl Assenza for KernelError {
+    fn e_assenza(&self) -> bool {
+        match self {
+            KernelError::Io { source, .. } => source.e_assenza(),
+            KernelError::NotFound(_) => true,
+            _ => false,
+        }
+    }
+}
+
+/// `Ok(None)` se la cosa non c'è, e **ogni altro errore risale con il suo
+/// tipo**.
+///
+/// È la cucitura di un difetto che stava in cinque posti diversi con la stessa
+/// forma: un `Result` di I/O degradato a `.ok()` o a un `let _`, cioè un guasto
+/// del supporto raccontato al chiamante come un fatto del vault — «non è un
+/// symlink», «il registro è vuoto», «non ci sono bozze», «la base non
+/// combacia», «cancellato». La domanda che quel `.ok()` voleva porre è
+/// legittima e sta qui una volta sola; ciò che non è legittimo è rispondere
+/// anche a tutte le altre.
+pub fn se_c_e<T, E: Assenza>(
+    esito: std::result::Result<T, E>,
+) -> std::result::Result<Option<T>, E> {
+    match esito {
+        Ok(v) => Ok(Some(v)),
+        Err(e) if e.e_assenza() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// Un errore del kernel **come lo vede chi sta dall'altra parte del contratto**.
 ///
 /// `KernelError` resta fuori dall'ABI e ci deve restare — è la lingua di *questo*

@@ -47,7 +47,9 @@
 //! almeno spegnersi rumorosamente.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_kernel::storage::{come_scrivere, ComeScrivere, FsStorage, NomiDelFile, VaultStorage};
+use fub_kernel::storage::{
+    come_scrivere, cosa_c_e, ComeScrivere, FsStorage, NomiDelFile, VaultStorage,
+};
 
 fn banco() -> (tempfile::TempDir, Utf8PathBuf) {
     let tmp = tempfile::tempdir().expect("cartella temporanea");
@@ -123,7 +125,7 @@ fn un_file_con_piu_nomi_non_si_sostituisce_dovunque_giri_questo_test() {
     FsStorage.write(&nota, b"prima").unwrap();
 
     let come = FsStorage
-        .write_con(&nota, b"seconda", |_, _| NomiDelFile::PiuDiUno)
+        .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::PiuDiUno)
         .unwrap();
 
     assert_eq!(come, ComeScrivere::SulPosto, "l'inode ha altri titolari");
@@ -147,7 +149,7 @@ fn un_conteggio_che_non_si_sa_non_e_un_nome_solo() {
     FsStorage.write(&nota, b"prima").unwrap();
 
     let come = FsStorage
-        .write_con(&nota, b"seconda", |_, _| NomiDelFile::Ignoto)
+        .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::Ignoto)
         .unwrap();
 
     assert_eq!(
@@ -167,7 +169,7 @@ fn un_nome_solo_compra_l_atomicita() {
     FsStorage.write(&nota, b"prima").unwrap();
 
     let come = FsStorage
-        .write_con(&nota, b"seconda", |_, _| NomiDelFile::Uno)
+        .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::Uno)
         .unwrap();
 
     assert_eq!(come, ComeScrivere::Sostituendo);
@@ -184,7 +186,7 @@ fn a_un_file_che_non_c_e_non_si_chiede_niente() {
     let chiesto = std::cell::Cell::new(false);
 
     let come = FsStorage
-        .write_con(&nota, b"prima", |_, _| {
+        .write_con(&nota, b"prima", cosa_c_e, |_, _| {
             chiesto.set(true);
             NomiDelFile::PiuDiUno
         })
@@ -222,7 +224,7 @@ fn su_un_collegamento_il_conteggio_non_si_chiede() {
     let chiesto = std::cell::Cell::new(false);
 
     let come = FsStorage
-        .write_con(&collegata, b"seconda", |_, _| {
+        .write_con(&collegata, b"seconda", cosa_c_e, |_, _| {
             chiesto.set(true);
             NomiDelFile::Uno
         })

@@ -713,7 +713,17 @@ impl Vault {
         }
         // Cestino vuoto = nessun sidecar da ricordare (inclusi eventuali
         // orfani lasciati da chi ha svuotato il cestino da un'altra app).
-        let _ = self.storage.remove_dir_all(&self.trash_meta_dir());
+        //
+        // Che la cartella **non ci sia** è il caso normale — nessun sidecar è
+        // mai stato scritto — e non è un guasto. Che ci sia e non si tolga lo
+        // è: prima il `let _` lo raccontava come uno svuotamento riuscito, e i
+        // sidecar rimasti indietro nominano voci del cestino che non esistono
+        // più senza che nessuno lo dica.
+        let meta = self.trash_meta_dir();
+        crate::error::se_c_e(self.storage.remove_dir_all(&meta)).map_err(|e| KernelError::Io {
+            path: meta.clone(),
+            source: e,
+        })?;
         Ok(entries.len())
     }
 }

@@ -162,6 +162,7 @@ fn eventi(rx: &Subscription) -> Vec<Notice> {
 
 fn bozza_di(ws: &Workspace, doc: &str) -> Option<String> {
     ws.drafts()
+        .expect("bozze")
         .drafts
         .into_iter()
         .find(|b| b.doc.as_str() == doc)

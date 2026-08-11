@@ -175,6 +175,11 @@ impl Drafts {
         }
     }
 
+    /// Dove stanno, per chi deve dire *su cosa* la lettura è fallita.
+    pub(crate) fn dir(&self) -> &Utf8Path {
+        &self.dir
+    }
+
     /// Il file di una bozza.
     fn path(&self, doc: &DocId) -> Utf8PathBuf {
         self.dir.join(format!("{}.{EXT}", encode(doc.as_str())))
@@ -219,13 +224,20 @@ impl Drafts {
 
     /// Tutte le bozze, dalla più recente.
     ///
-    /// Non fallisce: la cartella che non c'è è il caso normale (nessuno ha mai
-    /// avuto un buffer sporco), e un file rotto in mezzo si conta invece di
-    /// fermare la lettura degli altri.
-    pub(crate) fn read(&self) -> Bozze {
+    /// La cartella che **non c'è** è il caso normale — nessuno ha mai avuto un
+    /// buffer sporco — e un file rotto in mezzo si conta in
+    /// [`Bozze::scartate`] invece di fermare la lettura degli altri.
+    ///
+    /// **Una cartella che non si legge non è una cartella senza bozze**, e
+    /// prima lo era: un `list` fallito per permessi o per I/O faceva sparire in
+    /// silenzio dalla vista il lavoro non salvato dell'utente, e il salvataggio
+    /// successivo ci scriveva sopra convinto che non ci fosse niente. Qui il
+    /// posto in cui questo testo vive è l'unica copia al mondo, quindi il
+    /// guasto risale e chi ha chiesto lo vede.
+    pub(crate) fn read(&self) -> std::io::Result<Bozze> {
         let mut bozze = Bozze::default();
-        let Ok(entries) = self.storage.list(&self.dir) else {
-            return bozze;
+        let Some(entries) = crate::error::se_c_e(self.storage.list(&self.dir))? else {
+            return Ok(bozze);
         };
         for entry in entries {
             if !entry.stat.is_file() {
@@ -250,15 +262,24 @@ impl Drafts {
         // Dalla più recente: è l'ordine in cui si offre un recupero, perché la
         // bozza di dieci secondi fa è quella su cui l'utente era.
         bozze.drafts.sort_by_key(|d| std::cmp::Reverse(d.at));
-        bozze
+        Ok(bozze)
     }
 
-    /// La bozza di un documento, se c'è.
-    pub(crate) fn get(&self, doc: &DocId) -> Option<Draft> {
-        let bytes = self.storage.read(&self.path(doc)).ok()?;
-        serde_json::from_slice::<Draft>(&bytes)
-            .ok()
-            .filter(|d| d.v == SCHEMA_VERSION)
+    /// La bozza di un documento, se c'è — e un errore se non si è potuto
+    /// guardare.
+    ///
+    /// La stessa regola di [`Drafts::read`], al singolare: il file assente è
+    /// `None`, un file che non si legge è un guasto. Chi la chiama è
+    /// [`Drafts::migrate`], che su un `None` sposta soltanto il file: leggere un
+    /// permesso negato come «non c'era nessuna bozza» le farebbe portare a
+    /// destinazione un record che dice ancora il nome vecchio.
+    pub(crate) fn get(&self, doc: &DocId) -> std::io::Result<Option<Draft>> {
+        let bytes = crate::error::se_c_e(self.storage.read(&self.path(doc)))?;
+        Ok(bytes.and_then(|bytes| {
+            serde_json::from_slice::<Draft>(&bytes)
+                .ok()
+                .filter(|d| d.v == SCHEMA_VERSION)
+        }))
     }
 
     /// Segue una rinomina: la bozza di `from` diventa la bozza di `to`.
@@ -294,7 +315,7 @@ impl Drafts {
         // Il documento sta **dentro** il record, non solo nel nome del file: un
         // rename che spostasse il file lasciando il campo vecchio darebbe una
         // bozza che dice di appartenere a una nota che non è la sua.
-        if let Some(mut draft) = self.get(from) {
+        if let Some(mut draft) = self.get(from)? {
             draft.doc = to.clone();
             let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
             self.storage.write(&self.path(to), &bytes)?;
@@ -332,7 +353,7 @@ mod tests {
     fn una_bozza_si_scrive_e_si_rilegge() {
         let d = drafts();
         d.save(&doc("note/a.md"), "ciao", None, 10).unwrap();
-        let bozze = d.read();
+        let bozze = d.read().unwrap();
         assert_eq!(bozze.scartate, 0);
         assert_eq!(bozze.drafts.len(), 1);
         assert_eq!(bozze.drafts[0].text, "ciao");
@@ -346,8 +367,8 @@ mod tests {
         let d = drafts();
         let id = doc("cartella/sotto cartella/nota con spazi.md");
         d.save(&id, "x", None, 1).unwrap();
-        assert_eq!(d.read().drafts[0].doc, id);
-        assert_eq!(d.get(&id).unwrap().text, "x");
+        assert_eq!(d.read().unwrap().drafts[0].doc, id);
+        assert_eq!(d.get(&id).unwrap().unwrap().text, "x");
     }
 
     #[test]
@@ -355,7 +376,7 @@ mod tests {
         let d = drafts();
         d.save(&doc("a.md"), "vecchia", None, 1).unwrap();
         d.save(&doc("b.md"), "nuova", None, 99).unwrap();
-        let drafts = d.read().drafts;
+        let drafts = d.read().unwrap().drafts;
         assert_eq!(drafts[0].doc, doc("b.md"));
     }
 
@@ -364,7 +385,7 @@ mod tests {
         let d = drafts();
         d.save(&doc("a.md"), "uno", None, 1).unwrap();
         d.save(&doc("a.md"), "due", None, 2).unwrap();
-        let bozze = d.read();
+        let bozze = d.read().unwrap();
         assert_eq!(bozze.drafts.len(), 1);
         assert_eq!(bozze.drafts[0].text, "due");
     }
@@ -381,7 +402,7 @@ mod tests {
         d.save(&doc("nuova.md"), "x", None, 1).unwrap();
         d.save(&doc("vecchia.md"), "y", Some(Revision::of("prima")), 2)
             .unwrap();
-        let bozze = d.read();
+        let bozze = d.read().unwrap();
         let nuova = bozze.drafts.iter().find(|b| b.doc == doc("nuova.md"));
         let vecchia = bozze.drafts.iter().find(|b| b.doc == doc("vecchia.md"));
         assert!(nuova.unwrap().base.is_none());
@@ -393,7 +414,7 @@ mod tests {
         let d = drafts();
         d.save(&doc("prima.md"), "testo", None, 1).unwrap();
         d.migrate(&doc("prima.md"), &doc("dopo.md")).unwrap();
-        let bozze = d.read();
+        let bozze = d.read().unwrap();
         assert_eq!(bozze.drafts.len(), 1);
         // Non basta che il file si sia spostato: il record deve dire il nome
         // nuovo, o la bozza rivendicherebbe una nota che non è la sua.
@@ -418,14 +439,14 @@ mod tests {
             std::io::ErrorKind::AlreadyExists,
             "la destinazione era occupata, e lo si dice"
         );
-        let bozze = d.read();
+        let bozze = d.read().unwrap();
         assert_eq!(bozze.drafts.len(), 2, "nessuna delle due si è persa");
         assert_eq!(
-            d.get(&doc("dopo.md")).unwrap().text,
+            d.get(&doc("dopo.md")).unwrap().unwrap().text,
             "il testo che non esiste altrove"
         );
         assert_eq!(
-            d.get(&doc("prima.md")).unwrap().text,
+            d.get(&doc("prima.md")).unwrap().unwrap().text,
             "il testo che si sposta",
             "e chi non si è potuto spostare resta dov'era, invece di sparire da \
              tutte e due le parti"
@@ -442,7 +463,7 @@ mod tests {
                 br#"{"v":9999,"doc":"futura.md","at":1,"base":null,"text":"x"}"#,
             )
             .unwrap();
-        let bozze = d.read();
+        let bozze = d.read().unwrap();
         assert!(bozze.drafts.is_empty());
         assert_eq!(bozze.scartate, 1, "chi legge deve sapere di non aver letto");
     }
@@ -457,7 +478,7 @@ mod tests {
                 b"{ nz",
             )
             .unwrap();
-        let bozze = d.read();
+        let bozze = d.read().unwrap();
         assert_eq!(bozze.drafts.len(), 1);
         assert_eq!(bozze.scartate, 1);
     }

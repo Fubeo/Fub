@@ -856,6 +856,7 @@ fn dati_di(root: &Utf8PathBuf, doc: &str) -> Option<String> {
 
 fn bozza_di(ws: &Workspace, doc: &str) -> Option<String> {
     ws.drafts()
+        .expect("bozze")
         .drafts
         .into_iter()
         .find(|b| b.doc.as_str() == doc)

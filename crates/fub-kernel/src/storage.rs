@@ -466,6 +466,16 @@ pub fn come_scrivere(collegamento: bool, nomi: NomiDelFile) -> ComeScrivere {
     }
 }
 
+/// Cosa c'è **già** a questo path, senza seguire un eventuale collegamento.
+///
+/// Una riga sola con un nome, ed è la metà vera di [`FsStorage::write_con`] che
+/// tocca il disco: passandola invece di nominarla, un banco può far rispondere
+/// «permesso negato» a questa domanda senza rompere niente. Vedi il doc di
+/// `write_con`.
+pub fn cosa_c_e(path: &Utf8Path) -> io::Result<std::fs::Metadata> {
+    std::fs::symlink_metadata(path)
+}
+
 /// Quanti nomi ha il file a questo path, **chiedendolo alla piattaforma**.
 ///
 /// Riceve i metadati che il chiamante ha già letto *e* il path, perché le due
@@ -541,16 +551,28 @@ impl FsStorage {
     /// Restituisce la strada presa perché è l'unica cosa osservabile della
     /// scelta che non richieda di guardare un inode — cioè l'unica che un banco
     /// possa presidiare anche dove gli inode non ci sono.
+    ///
+    /// **Anche `cosa_c_e` è passato**, per la ragione del rilevatore portata
+    /// fino in fondo: la lettura di ciò che sta già al path è l'altra syscall di
+    /// questo corpo che può fallire *senza che il file manchi* — un permesso
+    /// negato sulla cartella, un nome troppo lungo, un disco che non risponde —
+    /// e finché era nominata qui dentro non c'era modo di farla fallire in un
+    /// banco senza rompere un disco. È esattamente il caso che contava: un
+    /// errore letto come «non c'è niente lì» manda la scrittura sul ramo
+    /// [`ComeScrivere::Sostituendo`], cioè stacca un nome che poteva esserci.
     pub fn write_con(
         &self,
         path: &Utf8Path,
         bytes: &[u8],
+        cosa_c_e: impl Fn(&Utf8Path) -> io::Result<std::fs::Metadata>,
         nomi: impl Fn(&Utf8Path, &std::fs::Metadata) -> NomiDelFile,
     ) -> io::Result<ComeScrivere> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let esistente = std::fs::symlink_metadata(path).ok();
+        // `se_c_e` e non `.ok()`: **non c'è** è una risposta, «non si è potuto
+        // guardare» no — e da qui dipende la scelta di come scrivere.
+        let esistente = crate::error::se_c_e(cosa_c_e(path))?;
         let collegamento = esistente
             .as_ref()
             .is_some_and(|meta| meta.file_type().is_symlink());
@@ -659,7 +681,8 @@ impl VaultStorage for FsStorage {
     /// Il corpo sta in [`FsStorage::write_con`], che prende il rilevatore invece
     /// di nominarlo: qui si passa quello vero.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
-        self.write_con(path, bytes, nomi_del_file).map(|_| ())
+        self.write_con(path, bytes, cosa_c_e, nomi_del_file)
+            .map(|_| ())
     }
 
     /// Il lucchetto di [`lock_esclusivo`] tenuto per il tempo della rilettura e

@@ -141,15 +141,30 @@ fn sposta(
 ///
 /// `esiste` risponde alla sola domanda che il disco non sa fare da sé: *questo
 /// documento è ancora nell'anagrafe del vault, o nel suo cestino?*
+///
+/// # Ciò che non si è potuto togliere **si dice**
+///
+/// Uno spazio dati che non c'è è il caso normale — un plugin che non ha mai
+/// scritto niente — e non è un guasto. Un `list` o un `remove_dir_all` che
+/// falliscono per qualunque altra ragione lo sono, e prima finivano in un
+/// `continue` e in un `is_ok()`: una cancellazione **parziale** — mezza
+/// cartella tolta, il resto no — tornava indietro come un numero più piccolo,
+/// indistinguibile da un vault in cui c'era meno da raccogliere. Adesso risale,
+/// e chi ha chiamato decide.
 pub(crate) fn collect(
     storage: &dyn VaultStorage,
     roots: &[Utf8PathBuf],
     esiste: &dyn Fn(&DocId) -> bool,
-) -> usize {
+) -> crate::Result<usize> {
     let mut tolti = 0usize;
     for root in roots {
         let base = root.join(doc_data::DOC_SPACE);
-        let Ok(entries) = storage.list(&base) else {
+        let Some(entries) =
+            crate::error::se_c_e(storage.list(&base)).map_err(|e| crate::KernelError::Io {
+                path: base.clone(),
+                source: e,
+            })?
+        else {
             continue;
         };
         for entry in entries {
@@ -182,12 +197,16 @@ pub(crate) fn collect(
             if esiste(&doc) {
                 continue;
             }
-            if storage.remove_dir_all(&entry.path).is_ok() {
-                tolti += 1;
-            }
+            storage
+                .remove_dir_all(&entry.path)
+                .map_err(|e| crate::KernelError::Io {
+                    path: entry.path.clone(),
+                    source: e,
+                })?;
+            tolti += 1;
         }
     }
-    tolti
+    Ok(tolti)
 }
 
 /// La cartella di `doc` dentro lo spazio dati di **un** plugin.
@@ -305,5 +324,97 @@ mod tests {
             annotazione(&storage, &root, "a.md").is_none(),
             "e il nome vecchio non nomina più niente"
         );
+    }
+
+    /// Un supporto che non lascia togliere niente: `remove_dir_all` si compone
+    /// da `remove`, quindi basta rifiutare quello.
+    struct SenzaCancellare(MemStorage);
+
+    impl VaultStorage for SenzaCancellare {
+        fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
+            self.0.read(path)
+        }
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+            self.0.write(path, bytes)
+        }
+        fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
+            self.0.update(path, fondi)
+        }
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+            self.0.append(path, bytes)
+        }
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+            self.0.rename(from, to)
+        }
+        fn remove(&self, _path: &Utf8Path) -> io::Result<()> {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "il supporto non fa cancellare",
+            ))
+        }
+        fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
+            self.0.list(dir)
+        }
+        fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
+            self.0.stat(path)
+        }
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+            self.0.remove_empty_dir(dir)
+        }
+    }
+
+    /// 0193 — **una raccolta a metà non è una raccolta riuscita.**
+    ///
+    /// L'esito del `remove_dir_all` finiva in un `is_ok()`: ciò che non si era
+    /// potuto togliere restava sul disco e il conto tornava semplicemente più
+    /// piccolo, indistinguibile da un vault in cui c'era meno da raccogliere.
+    #[test]
+    fn una_raccolta_a_meta_non_e_una_raccolta_riuscita() {
+        let storage = SenzaCancellare(MemStorage::new());
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/prova");
+        let roots = vec![root.clone()];
+        let morta = DocId::new("sparita.md");
+        storage
+            .write(&space_dir(&root, &morta).join("annotazione"), b"i dati")
+            .expect("scritto");
+
+        let esito = collect(&storage, &roots, &|_| false);
+
+        let errore = esito.expect_err("ciò che resta si dice");
+        assert!(
+            matches!(&errore, crate::KernelError::Io { path, .. }
+                     if path.as_str().contains(&doc_data::encode(morta.as_str()))),
+            "e dice quale spazio non si è tolto: {errore}"
+        );
+        assert!(
+            annotazione(&storage, &root, "sparita.md").is_some(),
+            "i dati sono ancora lì, ed è precisamente il fatto che nessuno diceva"
+        );
+    }
+
+    /// E la raccolta che riesce continua a contare ciò che ha tolto.
+    #[test]
+    fn una_raccolta_riuscita_conta_quel_che_ha_tolto() {
+        let storage = MemStorage::new();
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/prova");
+        let roots = vec![root.clone()];
+        storage
+            .write(
+                &space_dir(&root, &DocId::new("sparita.md")).join("annotazione"),
+                b"i dati",
+            )
+            .expect("scritto");
+        storage
+            .write(
+                &space_dir(&root, &DocId::new("viva.md")).join("annotazione"),
+                b"i dati",
+            )
+            .expect("scritto");
+
+        let tolti = collect(&storage, &roots, &|doc| doc.as_str() == "viva.md").expect("raccolta");
+
+        assert_eq!(tolti, 1);
+        assert!(annotazione(&storage, &root, "sparita.md").is_none());
+        assert!(annotazione(&storage, &root, "viva.md").is_some());
     }
 }
