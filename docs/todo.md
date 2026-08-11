@@ -12,7 +12,7 @@ Dal 2026-08-10 la domanda ha una nuova chiave di lettura. Otto file di
 domanda non cambia. Cambia la **grana** (la misura di precisione), da cui nasce
 la [seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md).
 
-Sono uscite 151 voci:
+Sono uscite 152 voci:
 - novantanove voci da sette giri sulla stessa domanda.
 - due voci da una **misura**. La §8.4 nasce dalla
   [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md) e si chiude con la
@@ -54,10 +54,14 @@ Sono uscite 151 voci:
   [mappa-visuale.md](architecture/mappa-visuale.md) scrivendo per ogni riquadro
   *cosa costa*, e cerca i costi che **nessuno ha ancora pagato**: ciò che il
   freeze rende definitivo senza che niente l'abbia esercitato.
+- **una** voce da un **cronometro sulla struttura**. La [seduta
+  28](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) misura la
+  forma della compilazione invece del prodotto, e cerca **quanto costa a chi
+  lavora sapere che niente si è rotto**.
 
 Centoquarantatré voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **undici** [conta: voci-aperte]. Questo file è il
+Le voci ancora aperte sono **dodici** [conta: voci-aperte]. Questo file è il
 loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -136,6 +140,12 @@ Si cercano le voci ponendo domande in questo ordine:
     per riquadro scrivendo *cosa costa*, e trovarsi tre volte a scrivere un
     costo che nessuno ha ancora pagato ([seduta
     27](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md)).
+14. **Il costo del ciclo di lavoro**. Non l'app accesa e chi la usa: il repo
+    fermo e chi ci lavora. Si cronometra la forma della compilazione — il grafo,
+    i `crate-type`, quanti eseguibili escono da `tests/` — e si cerca la cifra
+    che nessuno ha scelto. È la specie di costo che nessun presidio vede perché
+    non fallisce mai ([seduta
+    28](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md)).
 
 ## Le sedute
 
@@ -168,10 +178,11 @@ Si cercano le voci ponendo domande in questo ordine:
 | **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | **chiusa** — sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta era già scritta altrove nel repo: [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md), [0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md), [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md), [0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) | — | 2 |
 | **26** | [Otto gesti che l'app fa e nessuno può dichiarare](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) | otto gesti che l'app compie e che **nessun dato dichiara**: in tutti e otto la mossa che li renderebbe dichiarabili il repo l'ha già fatta accanto, su un problema confinante | 8 | — |
 | **27** | [Tre scommesse che nessuno ha ancora provato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md) | tre affermazioni che il freeze rende definitive e che **niente nel repo ha mai esercitato**: il confine WASM, il momento in cui un plugin può intervenire, la dimensione dell'oggetto dietro il lucchetto | 3 | — |
+| **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | una voce sola, e il soggetto non è il prodotto ma **il ciclo di chi lo scrive**: la struttura in otto crate regge alla misura, il tempo sta tutto nei centoventuno eseguibili che escono da `tests/` | 1 | — |
 
 ## Le voci
 
-Le voci aperte sono **undici** [conta: voci-aperte], e stanno in due sedute.
+Le voci aperte sono **dodici** [conta: voci-aperte], e stanno in tre sedute.
 
 Otto formano la [seduta
 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) (2026-08-10). La misura
@@ -190,6 +201,18 @@ intervenire, che oggi è sempre *dopo* (§27.2) — e una di kernel, la dimensio
 dell'oggetto dietro il lucchetto (§27.3). Le due P0 lo sono per la stessa
 ragione, ed è la [0002](decisions/0002-additivita-del-contratto.md): dopo il
 freeze non c'è una seconda occasione più economica.
+
+Una sola forma la [seduta
+28](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) (2026-08-11), ed
+è la prima voce il cui soggetto non è il prodotto ma **il ciclo di lavoro di chi
+lo scrive**. La domanda era se la struttura del progetto Rust fosse inutilmente
+complessa, e per gli otto crate la risposta misurata è no — grafo profondo
+quattro, senza cicli, e le otto librerie si compilano in una manciata di
+secondi. Il tempo sta nei **centoventuno file di `tests/`**, che sono
+centoventuno eseguibili da linkare: quattro minuti e dieci fra una riga cambiata
+nel kernel e il primo test che parte (§28.1, presidi, **P1**). È P1 e non P2 per
+il criterio della [seduta 17](roadmap/17-presidi-che-restano.md): il costo
+cresce con l'attesa, perché ogni voce chiusa aggiunge file a `tests/`.
 
 La roadmap infrastrutturale di M4 resta finita. La [seduta
 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) aveva chiuso
@@ -413,10 +436,11 @@ nessuno è tornato a prendere la casella.
 | **§27.1** | [Il confine di M5 non è mai stato attraversato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#271-il-confine-di-m5-non-è-mai-stato-attraversato) | 27. Tre scommesse che nessuno ha ancora provato | contratto | **P0** |
 | **§27.2** | [Un plugin può osservare dopo, non decidere prima](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#272-un-plugin-può-osservare-dopo-non-decidere-prima) | 27. Tre scommesse che nessuno ha ancora provato | contratto | **P0** |
 | **§27.3** | [La grana del lucchetto è il vault, e chi muterà non sarà di casa](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#273-la-grana-del-lucchetto-è-il-vault-e-chi-muterà-non-sarà-di-casa) | 27. Tre scommesse che nessuno ha ancora provato | kernel | **P1** |
+| **§28.1** | [Ogni file di prova è un eseguibile, e sono centoventuno](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md#281-ogni-file-di-prova-è-un-eseguibile-e-sono-centoventuno) | 28. Centoventuno eseguibili per provare una riga | presidi | **P1** |
 
 ## I difetti misurati
 
-Sono **ottantaquattro** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **ottantacinque** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -470,6 +494,14 @@ Quello che non regge è il versioning, che si aggancia a ogni scrittura e copia
 il vault intero per fotografarne una nota: si vede alla prima apertura
 (`0227`) e a ogni salvataggio (`0228`). Le due righe restano due perché i due
 momenti si misurano con due strumenti diversi e uno può guarire senza l'altro.
+Il nono blocco (`0229`) viene dallo stesso cronometro puntato però sul repo
+fermo invece che sull'app accesa, e la domanda era se la struttura del progetto
+Rust fosse inutilmente complessa. Sugli otto crate la risposta è no, ed è
+misurata: il grafo è profondo quattro, senza cicli, `fub-features` dipende dal
+solo `fub-abi` e compilare tutte le librerie costa una manciata di secondi. La
+riga sola che ne esce è meccanica — tre `crate-type` per 883 righe di sorgente —
+mentre l'altra metà della misura chiede di decidere e quindi è una voce, la
+[§28.1](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md#281-ogni-file-di-prova-è-un-eseguibile-e-sono-centoventuno).
 
 **Il numero è quello di `issues.md` e non scala**, per la stessa regola dei `§`:
 è citato dai verbali e dai messaggi di commit. I buchi nella sequenza sono le
@@ -567,6 +599,7 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0224 | `expand` in Rust ed `espandi` in TypeScript sono lo stesso motore di sostituzione `{nome}` scritto due volte, e sono **l'unica coppia dichiarata gemella che nessuna fixture presidia**: `rules-samples.json` lega `mirrored.ts` alle regole di `fub-abi` e non nomina né l'una né l'altra, mentre `strings.test.ts` prova `espandi` solo contro attese scritte lì accanto. Le due divergono **già**: in Rust il nome è tutto ciò che precede la prima `}` (quindi `foo-bar` è un nome), in TypeScript solo `\w+`; ogni regola nuova — un escape, una graffa letterale — va portata identica in due motori senza niente che li confronti | `fub-abi` · `text.rs` `expand` (con `frontend` · `i18n/strings.ts` `espandi`) | regole |
 | 0227 | la prima apertura di un vault cresce **col quadrato** delle note, e la causa non è l'indicizzazione: `VersionStore::snapshot` copia l'intera `BTreeMap` che nomina ogni documento del vault (`let mut piano = inner.docs.clone()`) una volta per fotografia, e la passata di apertura ne fa una per nota. Misurato su vault sintetici in 200 cartelle: 5 000 note 3,5 s, 10 000 note 16,0 s, 20 000 note **79 s** — quattro volte i file, ventidue volte il tempo. L'attribuzione è netta: a 10 000 note, spegnendo `fub.search` restano 16,0 s e spegnendo `fub.stats` 15,8 s, mentre spegnendo `fub.versioning` scende a **0,73 s**; strumentando la sola riga del clone, **8,9 s dei 15,6 s** stanno lì, e i totali parziali ogni 2 000 fotografie sono 0,24 → 1,02 → 2,62 → 5,22 → 8,90 s, cioè differenze che crescono linearmente. Il `docs.clone()` della **serializzazione** era già stato tolto (`IndexDaScrivere`, `versioning.rs:312`) e l'indice già si scrive una volta sola per passata (`in_lotto`): è rimasto quello del piano | `fub-features` · `versioning.rs` `VersionStore::snapshot` | prestazioni |
 | 0228 | **ogni salvataggio costa quanto il vault intero**, sotto il prestito esclusivo, e per la stessa riga dello `0227`: il `docs.clone()` del piano gira anche fuori dalla passata di apertura, a ogni scrittura che l'handler del versioning fotografa. Mediana su trenta salvataggi dello stesso documento, col versioning acceso e spento: 2 000 note 1,20 ms contro 0,16 ms, 8 000 note 3,56 ms contro 0,09 ms, 16 000 note **8,50 ms contro 0,09 ms** — spento è costante, acceso è lineare nel numero di note. È il costo che lo `0113` misura da un'altra parte del giro, e si somma a quello. La disciplina «costruisci il piano, installalo solo se il disco ha accettato» non è in discussione, ma per garantirla basta ricordare le chiavi toccate — una sola per `snapshot`, due per il rename — invece di copiare la mappa | `fub-features` · `versioning.rs` `Inner::applica` | lock e I/O |
+| 0229 | `fub-app` si compila **tre volte** per 883 righe di sorgente: `crate-type = ["staticlib", "cdylib", "rlib"]` chiede tre codegen e tre link dell'intero albero, tauri compreso, e lascia sul disco 1,2 GB di `.a` e 360 MB di `.so` che non consuma nessuno — il binario linka il solo `.rlib`, e `crates/fub-app/gen/schemas/` contiene solo `desktop-schema.json` e `linux-schema.json`, cioè le due parole sono l'avanzo del template mobile di Tauri e non c'è nessun target mobile; misurato con `touch crates/fub-abi/src/lib.rs` e ricostruzione dell'intero workspace su quattro core, tre giri per parte: 10,7 / 11,7 / 10,9 s così com'è contro 5,9 / 6,5 / 6,7 / 7,2 s con `crate-type = ["rlib"]` — i tempi assoluti ballano molto, ma il ramo `rlib` è anche il più stabile; toglierle va confermato con un `tauri build` vero, non con un `cargo build` | `fub-app` · `Cargo.toml:11` `crate-type` | prestazioni |
 
 ## Dove va una regola scritta due volte
 
