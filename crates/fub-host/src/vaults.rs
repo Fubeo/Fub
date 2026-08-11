@@ -67,6 +67,14 @@ pub struct VaultEntry {
     pub favorite: bool,
     /// Millisecondi dall'epoca UNIX dell'ultima apertura. È l'ordine
     /// dell'elenco, ed è l'unico campo che il registro scrive da sé.
+    ///
+    /// Una voce che nasce da un gesto che *non* è un'apertura — un nome, una
+    /// preferenza, le scorciatoie già guardate — porta l'istante di quel gesto,
+    /// cioè il momento in cui questa macchina l'ha conosciuta. Non è un tempo
+    /// finto: è la risposta vera alla domanda che l'elenco fa («quanto è
+    /// recente questo vault per me»), e l'alternativa — un «mai aperto» a
+    /// parte — vorrebbe comunque decidere dove ordinarlo, cioè la stessa
+    /// scelta con uno stato in più da tenere.
     #[serde(default)]
     pub last_opened: u64,
     /// Le scorciatoie di **questo vault che l'utente ha già guardato**, chiave
@@ -278,7 +286,17 @@ impl VaultRegistry {
                         name: String::new(),
                         icon: None,
                         favorite: false,
-                        last_opened: 0,
+                        // Una voce nasce **adesso**, anche quando il gesto che
+                        // la crea non è un'apertura. Zero è l'epoca, cioè per
+                        // il tetto qui sotto «la più vecchia di tutte»: il
+                        // vault a cui l'utente ha appena dato un nome sarebbe
+                        // stato il primo a essere sfrattato, e fino ad allora
+                        // l'ultimo dell'elenco. La data sta qui e non nei
+                        // singoli mutatori perché è del **nascere** e non del
+                        // gesto: chi aggiungerà un `set_…` la eredita senza
+                        // doverla sapere, e chi apre davvero la sovrascrive
+                        // subito sotto con la sua (`note_opened`).
+                        last_opened: fub_kernel::time::now_unix_millis(),
                         keys_seen: BTreeMap::new(),
                     };
                     f(&mut entry);
@@ -425,6 +443,55 @@ mod tests {
         // E chi esce è il più vecchio fra i recenti, mai l'ultimo aperto.
         assert!(list.iter().any(|e| e.root == format!("/v{}", RECENTI + 4)));
         assert!(!list.iter().any(|e| e.root == "/v0"));
+    }
+
+    /// **Ciò che l'utente ha appena scelto non nasce già il più vecchio di
+    /// tutti.**
+    ///
+    /// Una voce nasce anche da un gesto che non è un'apertura — dare un nome a
+    /// una chiavetta staccata, appuntarla, ricordarsi quali scorciatoie sono
+    /// state guardate — e nasceva con `last_opened` a zero, cioè con l'epoca,
+    /// che è esattamente il valore che il tetto qui sotto legge come «la più
+    /// vecchia di tutte»: il vault appena battezzato era il primo a uscire
+    /// dall'elenco, e finché ci restava stava in fondo, sotto quelli aperti
+    /// l'ultima volta un anno fa.
+    #[test]
+    fn una_voce_nata_da_un_gesto_non_e_gia_la_piu_vecchia() {
+        let reg = VaultRegistry::in_memory();
+        for i in 0..RECENTI {
+            reg.note_opened(Utf8Path::new(&format!("/v{i}")), 100 + i as u64)
+                .unwrap();
+        }
+
+        reg.set_look(
+            Utf8Path::new("/chiavetta"),
+            Some("usb".into()),
+            "La chiavetta".into(),
+        )
+        .unwrap();
+
+        let list = reg.list();
+        assert_eq!(list.len(), RECENTI, "il tetto vale come prima");
+        assert_eq!(
+            list[0].root, "/chiavetta",
+            "e chi è appena stato scelto è il più recente, non il più vecchio"
+        );
+        assert!(
+            !list.iter().any(|e| e.root == "/v0"),
+            "chi esce è il recente più vecchio davvero"
+        );
+
+        // Il secondo gesto lo eredita: la data non sta nel corpo di `set_look`
+        // ma nel punto in cui una voce nasce.
+        let mut chiavi = BTreeMap::new();
+        chiavi.insert("mod+k".to_string(), "vault.cerca".to_string());
+        reg.note_keys_seen(Utf8Path::new("/terza"), chiavi).unwrap();
+        let terza = reg
+            .list()
+            .into_iter()
+            .find(|e| e.root == "/terza")
+            .expect("la voce c'è");
+        assert!(terza.last_opened > 0, "e nemmeno questa nasce all'epoca");
     }
 
     #[test]
