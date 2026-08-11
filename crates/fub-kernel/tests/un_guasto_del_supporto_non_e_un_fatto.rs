@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::{Revision, WriteBase};
+use fub_abi::error::PluginError;
 use fub_abi::model::DocId;
 use fub_kernel::storage::{DirEntry, FsStorage, NomiDelFile, Stat, VaultStorage};
 use fub_kernel::{FormatRegistry, KernelError, MachineSettings, Workspace};
@@ -129,6 +130,10 @@ impl Banco {
         )
         .expect("l'apertura del vault riesce");
         ws.reindex().expect("reindex");
+        // Un plugin dichiarato serve a `with_host`: il kernel non presta
+        // capacità a una stringa (§7.3).
+        ws.register_core_feature("prova.plugin", "prova.plugin")
+            .expect("dichiarato");
         (
             Banco {
                 _dir: dir,
@@ -307,4 +312,81 @@ fn un_cestino_svuotato_a_meta_non_e_un_cestino_svuotato() {
         matches!(&errore, KernelError::Io { path, .. } if path.as_str().contains("trash")),
         "e dice cosa non si è tolto: {errore}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Il rovescio: un'assenza non è un guasto
+// ---------------------------------------------------------------------------
+
+/// 0221 — **chiedere un documento che non c'è è un «non trovato».**
+///
+/// Il contratto dichiara le due facce accanto e con ragioni diverse:
+/// `not-found` è *«semmai qualcuno l'ha cancellato nel frattempo»*, `io` è
+/// *«disco pieno, file in uso, cartella sparita sotto i piedi»* — e su questo
+/// secondo *«chi riprova ha ragione di farlo»*. Una lettura di ciò che non
+/// c'era rispondeva `io`, quindi chi automatizza riprovava per sempre una
+/// lettura che non ha niente da ritrovare, e chi disegna scriveva «riprova»
+/// dove il messaggio vero è «non esiste più».
+///
+/// La domanda si pone dove è già posta una volta sola — [`Assenza`], nata per
+/// `se_c_e` — ma sull'altro lato: nella **traduzione verso il contratto**, non
+/// dentro ogni capacità di lettura. Perciò il banco le prova tutte e quattro:
+/// è la seconda prova della barra, e una capacità di lettura nuova la eredita
+/// senza che nessuno se ne debba ricordare.
+///
+/// [`Assenza`]: fub_kernel::error::Assenza
+#[test]
+fn chiedere_un_documento_che_non_c_e_e_un_non_trovato() {
+    let (_banco, mut ws) = Banco::aperto();
+    let assente = DocId::new("mai-scritta.txt");
+
+    ws.with_host("prova.plugin", |host| {
+        for (quale, esito) in [
+            ("read_document", host.read_document(&assente).map(|_| ())),
+            (
+                "read_document_bytes",
+                host.read_document_bytes(&assente).map(|_| ()),
+            ),
+            ("read_model", host.read_model(&assente).map(|_| ())),
+            (
+                "document_revision",
+                host.document_revision(&assente).map(|_| ()),
+            ),
+        ] {
+            let e = esito.expect_err("il documento non c'è");
+            assert!(
+                matches!(e, PluginError::NotFound(_)),
+                "`{quale}` su un documento assente deve dire «non trovato», e \
+                 non «errore di I/O»: {e:?}"
+            );
+            assert!(
+                e.message().to_string().contains("mai-scritta.txt"),
+                "e deve nominare ciò che non ha trovato: {e}"
+            );
+        }
+    });
+}
+
+/// La metà che tiene onesta la riparazione: **un supporto che nega resta un
+/// guasto.**
+///
+/// Chi nega non ha detto «non c'è», ha detto «non ti faccio guardare», e la
+/// nota c'è ancora. Se anche questo diventasse `not-found`, chi legge
+/// smetterebbe di riprovare proprio dove riprovare è la mossa giusta — cioè lo
+/// stesso difetto scritto dall'altro capo, che è il verso che tutto questo file
+/// presidia.
+#[test]
+fn un_supporto_che_nega_resta_un_guasto_e_non_un_assenza() {
+    let (banco, mut ws) = Banco::aperto();
+    let id = DocId::new("Idea.txt");
+
+    banco.nega("Idea.txt");
+
+    ws.with_host("prova.plugin", |host| {
+        let e = host.read_document(&id).expect_err("il supporto nega");
+        assert!(
+            !matches!(e, PluginError::NotFound(_)),
+            "un permesso negato non è un'assenza: la nota c'è ancora — {e:?}"
+        );
+    });
 }

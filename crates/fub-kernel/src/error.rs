@@ -224,6 +224,21 @@ impl From<KernelError> for PluginError {
                 )
                 .into(),
             ),
+            // **Un'assenza non è un guasto** (0221), che è il rovescio esatto
+            // di ciò che [`se_c_e`] tiene fermo dall'altra parte. Il contratto
+            // dichiara le due facce accanto e con ragioni opposte: `not-found`
+            // è «semmai qualcuno l'ha cancellato nel frattempo», `io` è «disco
+            // pieno, file in uso» — e su quello «chi riprova ha ragione di
+            // farlo». Appiattire l'assenza su `io` faceva riprovare per sempre
+            // una lettura che non ha niente da ritrovare.
+            //
+            // La domanda è la stessa di `se_c_e` e sta nello stesso posto —
+            // [`Assenza`] —, ma posta qui: chi legge non deve ricordarsene, e
+            // una capacità di lettura nuova la eredita senza aggiungere niente.
+            KernelError::Io {
+                ref path,
+                ref source,
+            } if source.e_assenza() => PluginError::NotFound(path.to_string().into()),
             e @ (KernelError::Io { .. }
             | KernelError::NonUtf8Path(_)
             | KernelError::LinkRewrite(_)) => PluginError::Io(e.to_string().into()),
