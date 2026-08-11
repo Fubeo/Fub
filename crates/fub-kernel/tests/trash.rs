@@ -975,3 +975,71 @@ fn the_trash_lists_the_most_recent_first() {
     );
     assert!(originali.contains(&"Due.txt".to_string()));
 }
+
+/// 0208 — **una nota cestinata non lascia la bozza dietro di sé.**
+///
+/// La bozza è indicizzata per `DocId`, e cestinare cambia il `DocId`: il testo
+/// non salvato restava sotto la chiave vecchia, che dopo la cancellazione non
+/// nomina più niente. Non era un residuo innocuo — `recuperaBozze` all'avvio
+/// ripesca ogni bozza e la rimette in un buffer **sporco**, quindi la prima
+/// scrittura che passa di lì riscrive sul disco una nota che l'utente aveva
+/// chiesto di buttare: una cancellazione confermata che si disfa da sola.
+///
+/// La bozza muore col documento, come il buffer sporco che la shell chiude
+/// insieme alla nota: non è una perdita silenziosa, è il gesto che l'utente ha
+/// appena confermato.
+#[test]
+fn una_nota_cestinata_non_lascia_la_sua_bozza() {
+    let fx = Fixture::new();
+    fx.put("Idea.txt", "un'idea");
+    let mut ws = fx.workspace();
+    let id = DocId::new("Idea.txt");
+    ws.save_draft(&id, "l'idea che stavo ancora scrivendo", None)
+        .unwrap();
+    assert_eq!(bozze(&ws), vec!["Idea.txt".to_string()], "il banco parte da una bozza che c'è");
+
+    ws.delete_document(&id).unwrap();
+
+    assert!(
+        bozze(&ws).is_empty(),
+        "la bozza è rimasta sotto la chiave di una nota cestinata: il recupero \
+         all'avvio la rimette in un buffer sporco e la nota risorge"
+    );
+}
+
+/// L'altra metà, e senza di lei la riparazione diventa «ogni sparizione butta
+/// la bozza»: un file che se ne va **per mano d'altri** — un `rm` da terminale,
+/// un sync, un'altra app — non è una cancellazione confermata da nessuno, ed è
+/// precisamente il momento in cui la bozza è l'unica copia di ciò che si era
+/// scritto. Quel percorso è `remove_document`, non `delete_document`, e la
+/// bozza deve restare dov'è.
+#[test]
+fn un_file_sparito_da_fuori_lascia_la_bozza_dov_e() {
+    let fx = Fixture::new();
+    fx.put("Idea.txt", "un'idea");
+    let mut ws = fx.workspace();
+    let id = DocId::new("Idea.txt");
+    ws.save_draft(&id, "l'unica copia di ciò che avevo scritto", None)
+        .unwrap();
+
+    // Il `rm` di qualcun altro, e il watcher che passa di lì subito dopo.
+    std::fs::remove_file(fx.root.join("Idea.txt")).unwrap();
+    ws.sync_path(&fx.root.join("Idea.txt")).unwrap();
+
+    assert_eq!(
+        bozze(&ws),
+        vec!["Idea.txt".to_string()],
+        "la bozza è stata buttata insieme a un file che l'utente non ha \
+         chiesto di cancellare: era l'unica copia del suo testo"
+    );
+}
+
+/// I documenti che hanno una bozza, per nome.
+fn bozze(ws: &Workspace) -> Vec<String> {
+    ws.drafts()
+        .expect("bozze")
+        .drafts
+        .into_iter()
+        .map(|b| b.doc.to_string())
+        .collect()
+}

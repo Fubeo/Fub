@@ -2999,6 +2999,27 @@ impl Workspace {
         }
         let (trashed, sidecar_fault) = self.docs.vault.trash(id)?;
         self.remove_document(id);
+        // **E la bozza non salvata se ne va con la nota** (§15.2). Sta qui per
+        // la ragione per cui `migrate_side_data` la fa seguire una rinomina —
+        // una bozza è indicizzata per `DocId`, e un `DocId` che non nomina più
+        // niente è una bozza che nessuna vista raggiunge — ma con la risposta
+        // opposta, perché opposto è il gesto: chi rinomina vuole quel testo al
+        // nome nuovo, chi cestina ha appena detto che quella nota non la vuole.
+        // La bozza rimasta sotto la chiave vecchia non è un residuo innocuo: è
+        // ciò che il recupero all'avvio ripesca e rimette in un buffer sporco,
+        // cioè una nota cestinata che risorge alla prima scrittura di chi non ha
+        // chiesto niente (difetto 0208).
+        //
+        // `delete_document` e non `remove_document`, e la differenza è tutta:
+        // questo è il cestino dell'app, dove l'utente ha confermato: quello è il
+        // percorso del **watcher**, che reagisce a un file sparito dal disco per
+        // mano d'altri — ed è precisamente il momento in cui la bozza è l'unica
+        // copia di ciò che si era scritto, quindi lì non si tocca.
+        if let Err(e) = self.drafts.discard(id) {
+            self.organization.warn(format!(
+                "la bozza non salvata di {id} è rimasta dietro alla nota cestinata: {e}"
+            ));
+        }
         self.record(JournalOp::Trashed {
             doc: id.clone(),
             trash: trashed.clone(),
