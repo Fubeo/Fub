@@ -1038,11 +1038,24 @@ function scheduleDraft(doc: string): void {
   buf.draftTimer = window.setTimeout(() => void writeDraft(doc), DRAFT_MS);
 }
 
-/// Mette la bozza sul disco. Non racconta il proprio fallimento all'utente, ed è
-/// una scelta: è una rete di sicurezza che gira di fianco al lavoro vero, e un
-/// avviso per ogni bozza non scritta insegnerebbe a ignorare gli avvisi — che è
-/// il difetto che `consumaCambioSotto` esiste per non avere. Chi vuole saperlo lo trova
-/// nel rapporto diagnostico.
+/// **La rete è caduta**: da qui in poi le bozze non arrivano più sul disco.
+///
+/// Uno solo per volta, e non uno per bozza: il debounce ne prova una al secondo
+/// finché si scrive, e un avviso a ogni tentativo insegnerebbe a ignorare gli
+/// avvisi — che è il difetto che `consumaCambioSotto` esiste per non avere. Una
+/// volta però va detta, perché una rete di sicurezza che non c'è **si distingue
+/// da una che non è servita solo quando è troppo tardi** (difetto 0209).
+let bozzaCieca = false;
+
+/// Mette la bozza sul disco.
+///
+/// Il fallimento della singola bozza resta muto — è una rete che gira di fianco
+/// al lavoro vero, e chi vuole il dettaglio lo trova nel rapporto diagnostico —
+/// ma il **passaggio** da «scrive» a «non scrive più» no: un vault in sola
+/// lettura, un disco pieno, una share di rete caduta spengono il buffer di crash
+/// (§15.2) mentre chi scrive continua a credere di averlo, e lo scopre al
+/// riavvio dopo il crash, cioè nell'unico momento in cui non può più farci
+/// niente.
 async function writeDraft(doc: string): Promise<void> {
   const buf = buffers.get(doc);
   if (!buf?.dirty) return;
@@ -1057,8 +1070,14 @@ async function writeDraft(doc: string): Promise<void> {
       buf.text,
       buf.base.kind === "descends_from" ? buf.base.value : null,
     );
+    // Tornata a scrivere: il silenzio riparte da capo, così una share che va e
+    // viene lo dice ogni volta che se ne va invece di dirlo la prima e basta.
+    bozzaCieca = false;
   } catch {
-    // Volutamente muto: vedi sopra.
+    if (!bozzaCieca) {
+      bozzaCieca = true;
+      notify(t("draft.blind"), "guasto");
+    }
   }
 }
 

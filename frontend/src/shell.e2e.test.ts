@@ -23,7 +23,7 @@
 //
 // # Dieci gesti, contati da fuori
 //
-// I gesti sono **sedici** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **diciassette** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -469,6 +469,66 @@ describe("chiudere la finestra col ritardo che corre", () => {
     sblocca();
     await chiusura;
     ripara();
+  });
+});
+
+describe("le bozze di crash che smettono di arrivare sul disco", () => {
+  /// Il buffer di crash (§15.2) è una rete: gira di fianco al lavoro vero e non
+  /// racconta i propri inciampi, per la ragione scritta accanto a `writeDraft` —
+  /// un avviso per ogni bozza non scritta insegnerebbe a ignorare gli avvisi.
+  ///
+  /// Ciò che invece va detto è il **passaggio**: un vault in sola lettura, un
+  /// disco pieno, una share caduta spengono la rete mentre chi scrive continua a
+  /// credere di averla, e lo scopre al riavvio dopo il crash, cioè quando non
+  /// può più farci niente (difetto 0209). Le due metà si guardano insieme,
+  /// perché sono l'una il limite dell'altra: **lo dice**, e **lo dice una volta
+  /// sola** — il debounce ci riprova a ogni battuta, e una riga per tentativo
+  /// sarebbe di nuovo il rumore che il silenzio voleva evitare.
+  it("lo dicono la prima volta, e non a ogni tentativo", async () => {
+    const host = await avvia(VAULT);
+    const { avvisiRecenti } = await import("./ui/notify");
+    const cieche = () =>
+      avvisiRecenti().filter((a) => a.testo.includes("non arriva più sul disco"));
+    // Il vault diventa di sola lettura sotto i piedi: la nota non si salva e la
+    // bozza nemmeno. Il primo guasto è ciò che porta la bozza al disco senza
+    // aspettare il secondo — `scriviBuffer`, fallendo, la scrive subito.
+    const riparaDisco = host.guasta("writeDocument", "vault in sola lettura");
+    const riparaBozza = host.guasta("saveDraft", "vault in sola lettura");
+
+    battiNellEditor("la prima riga");
+    await attendi("la prima bozza tentata", () => host.aPorta("saveDraft").length >= 1);
+    expect(
+      cieche().length,
+      "le bozze non arrivano più sul disco e nessuno l'ha detto: la rete di " +
+        "sicurezza è spenta mentre chi scrive crede di averla",
+    ).toBe(1);
+
+    battiNellEditor(" e la seconda");
+    await attendi("la seconda bozza tentata", () => host.aPorta("saveDraft").length >= 2);
+    expect(
+      cieche().length,
+      "una riga di avviso per ogni bozza tentata: è il rumore che insegna a " +
+        "ignorare gli avvisi",
+    ).toBe(1);
+
+    // E la terza metà, senza la quale la prima diventa «lo dice una volta e poi
+    // mai più»: una share che va e viene se ne va più di una volta, e la
+    // seconda caduta è una notizia come la prima. La nota continua a non
+    // salvarsi — è ciò che porta la bozza al disco — ma la bozza sì, e con lei
+    // il silenzio riparte da capo.
+    riparaBozza();
+    battiNellEditor(" con la rete tornata");
+    await attendi("la bozza scritta davvero", () => host.aPorta("saveDraft").length >= 3);
+    host.guasta("saveDraft", "la share se n'è andata di nuovo");
+    battiNellEditor(" e la rete di nuovo caduta");
+    await attendi("la bozza tentata da capo", () => host.aPorta("saveDraft").length >= 4);
+    expect(
+      cieche().length,
+      "la rete è caduta due volte e l'ha detto una: dopo il primo guasto il " +
+        "canale resta muto per sempre",
+    ).toBe(2);
+
+    riparaDisco();
   });
 });
 
