@@ -130,7 +130,7 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 | impostazioni | [`crates/fub-kernel/src/settings.rs:83`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
 | versioning | [`crates/fub-features/src/versioning.rs:254`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
 | indice di ricerca | [`crates/fub-features/src/search.rs:91`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
-| registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:157`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
+| registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:232`](../crates/fub-kernel/src/maintenance.rs) | 1 | una copia di fatti che stanno altrove, per chi cerca un guasto |
 | sidecar del cestino | [`crates/fub-kernel/src/vault.rs:111`](../crates/fub-kernel/src/vault.rs) | 1 | da quale cartella veniva una voce cestinata |

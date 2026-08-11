@@ -440,7 +440,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **sessantuno** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **cinquantanove** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -531,8 +531,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0157 | `empty_trash` toglie le voci una per una e poi cammina `.trash/` con `remove_dir_all`: ciò che un altro processo cestina dentro la finestra o viene cancellato in silenzio o fa fallire la camminata a metà, senza rollback, senza conteggio parziale e senza una riga di registro per ciò che è stato distrutto — è la stessa forma del bug noto `il_vault_che_sparisce`; la mossa giusta è rinominare `.trash/` con un nome temporaneo e camminare **quello**. In coda, l'errore sui sidecar è ingoiato da un `let _`, quindi i metadati orfani non li segnala nessuno | `fub-kernel` · `vault.rs` `Vault::empty_trash` | lock e I/O |
 | 0159 | il `drop` del watcher non aspetta il debouncer: la chiusura del vault lascia il thread di debounce a consegnare eventi su un workspace che sta sparendo, e il rilascio della radice non ha nessuna barriera che garantisca che nessuno stia più scrivendo dentro `.fub/` | `fub-kernel` · `vault.rs` `Vault::drop` | lock e I/O |
 | 0160 | aprire un vault non verifica niente: `Vault::open` e `Vault::on` accettano una radice che non esiste, che è un file invece di una directory o su cui non si ha permesso di scrittura, e l'errore arriva solo alla prima operazione che tocca il disco — cioè a giro avanzato, con eventi già emessi e un'interfaccia che ha già mostrato un vault aperto | `fub-kernel` · `vault.rs` `Vault::open` | regole |
-| 0162 | `ripara_la_coda` legge il registro fuori dal lock e poi ci appende: fra la lettura che decide che la coda è mezza scritta e la scrittura che la ripara ci sta comodamente un'altra riga, e la riparazione la mangia | `fub-kernel` · `journal.rs` `ripara_la_coda` | lock e I/O |
-| 0163 | una riga appesa a metà non fa perdere sé stessa ma **quella dopo**: la coda troncata si ricuce col primo pezzo del record successivo, che diventa illeggibile e viene scartato dalla lettura, quindi il costo di un'interruzione è una riga in più di quella interrotta | `fub-kernel` · `journal.rs` `Journal::append` | lock e I/O |
 | 0167 | `docdata::migrate` rimuove la destinazione senza guardarne la forma e con l'errore ingoiato: se sotto la chiave nuova c'è già uno spazio-documento di un altro documento, quello viene tolto — annotazioni, pin, miniature — e se la rimozione fallisce nessuno lo segnala, così la migrazione prosegue su un posto che non è vuoto | `fub-kernel` · `docdata.rs` `migrate` | lock e I/O |
 | 0168 | fra la rinomina del documento e la migrazione del suo docdata c'è una finestra di crash non coperta da niente: il file è al nome nuovo e i suoi dati per-documento sono ancora sotto la chiave vecchia, dove la prima `collect` successiva li spazza perché non corrispondono a nessun documento vivo | `fub-kernel` · `workspace.rs` `rename_document_in_batch` (con `docdata.rs` `migrate`) | lock e I/O |
 | 0169 | i rami di fallimento di `Drafts::migrate` lasciano lo stato a metà: a seconda di dove si ferma restano due bozze per un documento solo, oppure una bozza il cui campo `doc` nomina un documento che non esiste più, e nessuna delle due configurazioni viene riconciliata da qualcosa | `fub-kernel` · `drafts.rs` `Drafts::migrate` | regole |

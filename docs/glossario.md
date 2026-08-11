@@ -227,7 +227,7 @@ cui il vault si apre, e `Node_Modules` su macOS è la cartella che
 `node_modules` nomina.
 
 ### finestra di conservazione
-`journal.retention.days` · [`kernel/journal.rs:173`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+`journal.retention.days` · [`kernel/journal.rs:193`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
 
 Per quanti giorni una riga resta nel [registro delle
 mutazioni](#registro-delle-mutazioni): fuori dalla finestra cade, qualunque sia
@@ -248,7 +248,7 @@ presa da make.md, e una delle regole che stanno in `rules/` perché il Rust e la
 shell devono applicarla nello stesso modo.
 
 ### impronta di una modifica
-`EditFootprint` · [`kernel/journal.rs:298`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+`EditFootprint` · [`kernel/journal.rs:318`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
 
 Ciò che il [registro](#registro-delle-mutazioni) tiene di una modifica
 chirurgica: **dove** ha toccato — lo [span](#span) — e **quanti** byte c'erano
@@ -270,7 +270,7 @@ spazi. Non è nel vault come contenuto, sta nel *sidecar*, e dalla 0038 è il
 kernel a possederlo — con la migrazione al rename inclusa.
 
 ### registro delle mutazioni
-`Journal` / `JournalOp` · [`kernel/journal.rs:252`](../crates/fub-kernel/src/journal.rs) · [0067](decisions/0067-il-registro-di-cio-che-e-successo.md), [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
+`Journal` / `JournalOp` · [`kernel/journal.rs:272`](../crates/fub-kernel/src/journal.rs) · [0067](decisions/0067-il-registro-di-cio-che-e-successo.md), [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
 
 `.fub/journal.jsonl`: una riga per ogni mutazione che il kernel ha fatto al
 vault — quando, chi l'ha chiesta (l'[origine](#origine)), dentro quale

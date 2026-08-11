@@ -238,6 +238,23 @@ verifica entrambe le metà, e la seconda è quella che sarebbe passata
 inosservata: un test che si ferma a rileggere dopo il troncamento resta verde
 anche senza la riparazione.
 
+**Poi la riparazione è caduta, e la riga che chiudeva è rimasta chiusa lo
+stesso.** Chiudere la coda all'apertura copriva solo chi passava di lì: la coda
+si tronca quando un processo muore, e chi appende dopo — un'altra Fub sullo
+stesso vault, o questa stessa a vault aperto — non riapre niente, e si
+riattaccava alla riga rotta come se la riparazione non ci fosse mai stata
+(difetto 0163). La riparazione, per giunta, decideva su una lettura fatta
+**fuori dal lucchetto**, e fra la lettura e l'aggiunta ci stava la riga di chi
+appendeva nel frattempo, che si mangiava (difetto 0162). Il delimitatore è
+quindi passato dalla parte del record: si appende `\n{…}\n`, cioè un record
+**si delimita da sé** e non chiede a nessuno di essere in buono stato. Non è un
+formato nuovo — una riga vuota non è un record e la lettura la saltava già,
+quindi il file di ieri si legge oggi e quello di oggi si legge col lettore di
+ieri —, e all'apertura sparisce una lettura invece di aggiungersene una. Il
+presidio è `una_coda_troncata_non_si_porta_via_la_riga_dopo_a_vault_aperto`, che
+la coda la tronca **senza riaprire**, cioè nel momento in cui il vecchio
+ragionamento non aveva niente da dire.
+
 ### Il tetto è dichiarato, e il taglio rispetta il confine di un lotto
 
 Un file in coda che nessuno tronca sarebbe l'unico posto del progetto che cresce
