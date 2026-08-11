@@ -45,6 +45,14 @@ use crate::custodia::Custodia;
 /// rilevatore stava in una mappa condivisa contando su un lucchetto che non lo
 /// prestava mai a due lettori — cioè su una proprietà che nessuno aveva scelto.
 ///
+/// **Lasciarne andare uno vuol dire che ha finito** (difetto 0159). Un
+/// rilevatore consegna da un thread suo, e quel thread entra nel workspace in
+/// scrittura: chi chiude un vault lascia andare il rilevatore **per primo**
+/// proprio perché nessun altro possa più entrarci, e un `Drop` che torna mentre
+/// una consegna è ancora in volo rende quell'ordine una dichiarazione senza
+/// effetto. Chi implementa questo trait aspetta i propri thread dentro il
+/// proprio `Drop`; chi non ne ha — [`NoWatcher`] — non ha niente da aspettare.
+///
 /// [decisione 0120]: ../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md
 pub trait VaultWatcher: Send + Sync {
     /// `true` se questo vault ha il rilevamento delle modifiche esterne
@@ -303,22 +311,33 @@ mod notify_watcher {
     use camino::{Utf8Path, Utf8PathBuf};
     use fub_kernel::Workspace;
     use notify::event::{EventKind, MetadataKind, ModifyKind, RenameMode};
-    use notify::RecursiveMode;
-    use notify_debouncer_full::{new_debouncer, DebounceEventResult};
+    use notify::{RecommendedWatcher, RecursiveMode};
+    use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 
     use super::{ExternalChange, ExternalSync, VaultWatcher, WatcherFactory};
 
     /// Il rilevatore di default: `notify` con un debouncer da 300 ms.
     pub struct NotifyWatcher;
 
-    /// Il debouncer vivo. Il tipo concreto di `notify_debouncer_full` è
-    /// parametrico sul backend della piattaforma, quindi resta cancellato: qui
-    /// interessa solo che stia in piedi finché la sessione è aperta.
+    /// Il debouncer vivo, **e il thread che consegna i lotti**.
+    ///
+    /// Il tipo concreto di `notify_debouncer_full` è parametrico sul backend
+    /// della piattaforma, e per questo stava dietro un `dyn Any`: interessava
+    /// solo che stesse in piedi finché la sessione è aperta. Ma non interessava
+    /// solo quello (difetto 0159): interessa anche **smettere per davvero**, e
+    /// smettere aspettando è `Debouncer::stop`, che prende il `self` concreto —
+    /// un `Any` non lo sa fare. Il prezzo è il nome del backend scritto qui; ciò
+    /// che si compra è che chiudere un vault voglia dire che nessuno ci sta più
+    /// scrivendo dentro.
     struct Debounced {
-        /// `+ Sync` da quando le sessioni si prestano in condivisione
-        /// (decisione 0120): il debouncer non lo tocca nessuno — sta qui per
-        /// restare vivo — ma il tipo che lo contiene sì.
-        _debouncer: Box<dyn std::any::Any + Send + Sync>,
+        /// `Option` perché `stop` vuole il debouncer per valore e un `drop` ha
+        /// solo un `&mut`: la `take` è il ponte fra i due.
+        ///
+        /// `+ Sync` (decisione 0120, le sessioni si prestano in condivisione) è
+        /// una proprietà del tipo concreto e non più una richiesta scritta qui:
+        /// se un backend smettesse di averlo, a dirlo sarebbe il compilatore su
+        /// `Box<dyn VaultWatcher>`.
+        debouncer: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
         /// La bandiera del kernel, che questo debouncer possiede finché è vivo.
         watching: Arc<AtomicBool>,
     }
@@ -330,11 +349,33 @@ mod notify_watcher {
     }
 
     impl Drop for Debounced {
-        /// **Chi smette lo dice.** Il debouncer si ferma quando viene distrutto,
-        /// e senza questa riga la bandiera resterebbe alzata su una sessione che
-        /// non guarda più niente — che è la stessa bugia di prima, spostata di
-        /// un momento (§9.7).
+        /// **Chi smette lo dice, e chi chiude aspetta che abbia smesso.**
+        ///
+        /// La bandiera è la metà che c'era già: senza, resterebbe alzata su una
+        /// sessione che non guarda più niente, che è la stessa bugia di prima
+        /// spostata di un momento (§9.7).
+        ///
+        /// L'altra metà è la 0159. Distruggere il debouncer *non lo aspettava*:
+        /// il suo `Drop` alza una bandiera di stop e torna, e il thread che
+        /// consegna i lotti la legge al giro dopo — se in quel momento sta
+        /// dentro un lotto, lo finisce. Solo che «finire un lotto» qui vuol dire
+        /// [`ExternalSync::batch`](super::ExternalSync::batch): prendere il
+        /// workspace in scrittura e rendere durevoli gli indici. Chi chiudeva un
+        /// vault tornava quindi con una scrittura ancora in volo verso `.fub/`,
+        /// che è precisamente ciò che l'ordine di `VaultSession::close` — «prima
+        /// smette di guardare» — dichiara di impedire: la dichiarazione c'era, e
+        /// la riga che la teneva non la teneva. `stop` invece **aspetta** il
+        /// thread, e al ritorno di questa riga nessuno sta più scrivendo là
+        /// dentro.
+        ///
+        /// Si paga con l'attesa di un tick — un quarto dei 300 ms del debounce,
+        /// cioè 75 — più il lotto in corso, una volta per chiusura di vault. Non
+        /// è un'attesa che si toglie andando più veloci: è il tempo che ci mette
+        /// a essere vero ciò che la chiusura dice di sé.
         fn drop(&mut self) {
+            if let Some(debouncer) = self.debouncer.take() {
+                debouncer.stop();
+            }
             self.watching.store(false, Ordering::Relaxed);
         }
     }
@@ -459,7 +500,7 @@ mod notify_watcher {
             // risposta giusta è ancora `false`.
             watching.store(true, Ordering::Relaxed);
             Ok(Box::new(Debounced {
-                _debouncer: Box::new(debouncer),
+                debouncer: Some(debouncer),
                 watching,
             }))
         }
@@ -469,6 +510,82 @@ mod notify_watcher {
     mod tests {
         use super::*;
         use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, RemoveKind};
+
+        /// 0159 — **chi lascia andare il rilevatore aspetta che abbia finito.**
+        ///
+        /// `VaultSession::close` lascia andare il watcher per primo, e dice
+        /// perché: «nessun altro thread deve poter entrare nel vault mentre lo
+        /// si chiude». Ma lasciarlo andare non era aspettare che avesse finito —
+        /// il `Drop` del debouncer alza una bandiera e torna — e un lotto già
+        /// partito continuava per conto suo a sincronizzare e a scrivere indici
+        /// dentro un vault chiuso.
+        ///
+        /// Qui la consegna dura, e chi lascia andare il rilevatore la trova
+        /// finita. Rimesso il `drop` che non aspetta, la riga nomina il difetto.
+        ///
+        /// Gli eventi li fa il filesystem, perché è il solo modo di far partire
+        /// una consegna vera; non è però un banco di **quanto ci mette**: la
+        /// scrittura si ripete finché la consegna non è partita, e ciò che si
+        /// pretende è un ordine fra due fatti, non un tempo (§23.16).
+        #[test]
+        fn chi_lascia_andare_il_rilevatore_aspetta_la_consegna_in_volo() {
+            let dir = tempfile::tempdir().expect("una cartella da guardare");
+            let (dice_sono_dentro, sono_dentro) = std::sync::mpsc::channel();
+            let consegnato = Arc::new(AtomicBool::new(false));
+            let dentro_al_lotto = consegnato.clone();
+            let mut debouncer = new_debouncer(
+                Duration::from_millis(20),
+                None,
+                move |result: DebounceEventResult| {
+                    if result.is_err() {
+                        return;
+                    }
+                    let _ = dice_sono_dentro.send(());
+                    // Ciò che un lotto vero fa qui è `ExternalSync::batch`: il
+                    // workspace in scrittura e gli indici resi durevoli. Quanto
+                    // duri non conta, conta che stia ancora durando.
+                    std::thread::sleep(Duration::from_millis(300));
+                    dentro_al_lotto.store(true, Ordering::SeqCst);
+                },
+            )
+            .expect("il debouncer parte");
+            debouncer
+                .watch(dir.path(), RecursiveMode::Recursive)
+                .expect("la radice si guarda");
+            let watching = Arc::new(AtomicBool::new(true));
+            let rilevatore = Debounced {
+                debouncer: Some(debouncer),
+                watching: watching.clone(),
+            };
+
+            let mut partita = false;
+            for n in 0..100 {
+                std::fs::write(dir.path().join(format!("nota-{n}.md")), b"ciao")
+                    .expect("una nota che cambia");
+                if sono_dentro.recv_timeout(Duration::from_millis(100)).is_ok() {
+                    partita = true;
+                    break;
+                }
+            }
+            assert!(
+                partita,
+                "il rilevatore non ha mai consegnato: senza un lotto in volo \
+                 questo banco non prova niente"
+            );
+
+            drop(rilevatore);
+
+            assert!(
+                consegnato.load(Ordering::SeqCst),
+                "il vault si è chiuso con un lotto ancora in volo: fra un istante \
+                 prenderà il workspace in scrittura e renderà durevoli gli indici \
+                 dentro un vault che nessuno guarda più"
+            );
+            assert!(
+                !watching.load(Ordering::Relaxed),
+                "chi ha smesso di guardare non l'ha detto"
+            );
+        }
 
         /// **L'anello che si chiudeva.** Questi sono gli eventi che inotify
         /// riporta quando Fub apre un documento per localizzare le occorrenze
