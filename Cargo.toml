@@ -15,6 +15,11 @@ members = [
     "crates/fub-app",
     # "crates/fub-wasm-host", # M5: host wasmtime per plugin di terzi
 ]
+# Il varco di `tools/varco-wasm` è fuori di proposito, non per dimenticanza: è
+# il contratto generato e compilato a `wasm32-unknown-unknown`, cioè un
+# bersaglio che il workspace non ha e che `cargo test --workspace` non deve
+# pretendere. La ragione per intero sta nel suo manifest e nel verbale 0146.
+exclude = ["tools/varco-wasm"]
 
 [workspace.package]
 version = "0.1.0"

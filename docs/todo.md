@@ -59,9 +59,9 @@ Sono uscite 152 voci:
   forma della compilazione invece del prodotto, e cerca **quanto costa a chi
   lavora sapere che niente si è rotto**.
 
-Centoquarantacinque voci sono chiuse. I loro verbali stanno in
+Centoquarantasei voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **dieci** [conta: voci-aperte]. Questo file è il
+Le voci ancora aperte sono **nove** [conta: voci-aperte]. Questo file è il
 loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -177,12 +177,12 @@ Si cercano le voci ponendo domande in questo ordine:
 | **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | **chiusa** — tre voci aperte perché toccavano una firma, e su due delle tre quel criterio non reggeva | — | — |
 | **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | **chiusa** — sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta era già scritta altrove nel repo: [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md), [0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md), [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md), [0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) | — | 2 |
 | **26** | [Otto gesti che l'app fa e nessuno può dichiarare](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) | otto gesti che l'app compie e che **nessun dato dichiara**: in tutti e otto la mossa che li renderebbe dichiarabili il repo l'ha già fatta accanto, su un problema confinante | 7 | 1 |
-| **27** | [Tre scommesse che nessuno ha ancora provato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md) | tre affermazioni che il freeze rende definitive e che **niente nel repo ha mai esercitato**: il confine WASM, il momento in cui un plugin può intervenire, la dimensione dell'oggetto dietro il lucchetto | 3 | — |
+| **27** | [Tre scommesse che nessuno ha ancora provato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md) | tre affermazioni che il freeze rende definitive e che **niente nel repo ha mai esercitato**: il confine WASM, il momento in cui un plugin può intervenire, la dimensione dell'oggetto dietro il lucchetto. Il confine l'ha attraversato la [0146](decisions/0146-il-contratto-attraversa-il-confine.md), e non serviva un motore: `abi.wit` genera i binding guest del mondo intero e compilano a `wasm32` | 2 | — |
 | **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | **chiusa** — una voce sola, e il soggetto non era il prodotto ma **il ciclo di chi lo scrive**: la [0145](decisions/0145-gli-eseguibili-restano-a-calare-e-quanto-pesa-un-link.md) l'ha chiusa fuori dalle tre forme che proponeva, perché il costo non era il *numero* degli eseguibili ma il *peso* di ognuno | — | — |
 
 ## Le voci
 
-Le voci aperte sono **dieci** [conta: voci-aperte], e stanno in due sedute.
+Le voci aperte sono **nove** [conta: voci-aperte], e stanno in due sedute.
 
 Sette formano la [seduta
 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) (2026-08-10). La misura
@@ -194,16 +194,24 @@ sola **P0** e la sola che scadesse prima del freeze: l'ha chiusa la
 manifest scrivesse il nome unico. Le dichiarazioni richiedono semplici
 spostamenti, poiché le mosse sono già risolte per problemi confinanti.
 
-Tre formano la [seduta
+Due formano la [seduta
 27](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md) (2026-08-11), e sono di
 una specie che le altre venticinque sedute non avevano: non cose che mancano e
 non cose misurate sbagliate, ma **affermazioni che il freeze rende definitive
-senza che niente le abbia esercitate**. Due di contratto e **P0** — il confine
-WASM che nessuno ha attraversato (§27.1) e il momento in cui un plugin può
-intervenire, che oggi è sempre *dopo* (§27.2) — e una di kernel, la dimensione
-dell'oggetto dietro il lucchetto (§27.3). Le due P0 lo sono per la stessa
-ragione, ed è la [0002](decisions/0002-additivita-del-contratto.md): dopo il
-freeze non c'è una seconda occasione più economica.
+senza che niente le abbia esercitate**. Una di contratto e **P0** — il momento in
+cui un plugin può intervenire, che oggi è sempre *dopo* (§27.2) — e una di
+kernel, la dimensione dell'oggetto dietro il lucchetto (§27.3). La P0 lo è per la
+ragione della [0002](decisions/0002-additivita-del-contratto.md): dopo il freeze
+non c'è una seconda occasione più economica.
+
+La terza era il confine WASM che nessuno aveva attraversato (§27.1), e l'ha
+chiusa la [0146](decisions/0146-il-contratto-attraversa-il-confine.md) scoprendo
+che attraversarlo non costava i giorni che la voce prezzava: `tools/varco-wasm/`
+genera da `abi.wit` i binding guest del mondo intero — export implementati
+compresi — e li compila a `wasm32-unknown-unknown` senza un errore, per un modulo
+di 275 073 byte che è il pedaggio di un plugin che non fa niente. Serviva un
+generatore, non un motore; il **costo** del passaggio, che il motore lo vuole,
+resta di M5 e sta scritto nel verbale.
 
 La [seduta
 28](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) (2026-08-11) è
@@ -436,7 +444,6 @@ nessuno è tornato a prendere la casella.
 | **§26.5** | [Il menu contestuale: la superficie c'è, il bersaglio del clic no](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#265-il-menu-contestuale-la-superficie-cè-il-bersaglio-del-clic-no) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 | **§26.7** | [Il trascinamento è un dato, il rilascio no](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#267-un-rilascio-si-consegna-un-bersaglio-non-si-dichiara) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 | **§26.8** | [La terza pila l'annulla dentro una view che non è del core](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#268-la-terza-pila-lannulla-dentro-una-view-che-non-è-del-core) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P2** |
-| **§27.1** | [Il confine di M5 non è mai stato attraversato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#271-il-confine-di-m5-non-è-mai-stato-attraversato) | 27. Tre scommesse che nessuno ha ancora provato | contratto | **P0** |
 | **§27.2** | [Un plugin può osservare dopo, non decidere prima](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#272-un-plugin-può-osservare-dopo-non-decidere-prima) | 27. Tre scommesse che nessuno ha ancora provato | contratto | **P0** |
 | **§27.3** | [La grana del lucchetto è il vault, e chi muterà non sarà di casa](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#273-la-grana-del-lucchetto-è-il-vault-e-chi-muterà-non-sarà-di-casa) | 27. Tre scommesse che nessuno ha ancora provato | kernel | **P1** |
 
@@ -658,7 +665,7 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centoquarantacinque** [conta: verbali], uno per file. Diceva
+  **centoquarantasei** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo

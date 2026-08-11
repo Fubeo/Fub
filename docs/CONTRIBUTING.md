@@ -69,6 +69,7 @@ node .github/scripts/check-tabelle.mjs
 node .github/scripts/check-cargo-versioni.mjs
 node .github/scripts/check-cargo-feature-default.mjs
 node .github/scripts/check-crate-type.mjs
+node .github/scripts/check-profilo-dev.mjs
 
 # le feature ufficiali si spengono davvero (§16.3)
 cargo build -p fub-features --no-default-features
@@ -88,6 +89,10 @@ Un comando della CI non sta nel ciclo locale, e la ragione sta dopo il `—`:
 
 - `cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc` —
   vuole installato il target `x86_64-pc-windows-msvc`.
+- `cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown` —
+  vuole installato il target `wasm32-unknown-unknown`. È il contratto portato di
+  là dal confine e compilato (verbale 0146); il crate sta fuori dal workspace
+  apposta, così `cargo test --workspace` non chiede quel target a nessuno.
 
 Tutto il resto lo esegue anche la CI: se passa in locale, passa in CI. I test
 girano su Linux, macOS e Windows, e a rompersi sono quasi sempre i path e i lock

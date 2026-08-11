@@ -6,6 +6,14 @@ tirate fino in fondo — e in cui **la prova che la scelta regge non è ancora
 stata fatta**. Non sono difetti: un difetto si misura, e queste si misurano solo
 facendo la cosa. Sono scommesse, e il freeze le incassa.
 
+**Una delle tre è stata provata, e la prova è costata mezz'ora invece dei giorni
+che la voce prezzava**: la §27.1 è chiusa dalla
+[0146](../decisions/0146-il-contratto-attraversa-il-confine.md), che genera da
+`abi.wit` i binding guest del mondo intero e li compila a `wasm32` — nessun
+errore, e un modulo di 275 073 byte che è il pedaggio di un plugin che non fa
+niente. Ne resta un presidio in CI, non un crate usa-e-getta, e la lezione per le
+altre due: *si prova alla grana in cui il secondo chiamante eredita la prova*.
+
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -28,9 +36,10 @@ una domanda sola:
 Non è la domanda dei buchi dichiarati — quelli sono fatti che si sanno e si
 scrivono. Non è la domanda dei difetti — quelli si misurano. È la domanda di
 ciò che *sembra vero perché è coerente*, che è la specie di errore che nessun
-presidio può vedere: tre reti verificano che il contratto non dipenda da
-wasmtime, e **zero** verificano che quello che il contratto dichiara ci passi
-attraverso.
+presidio può vedere: tre reti verificavano che il contratto non dipenda da
+wasmtime, e **zero** verificavano che quello che il contratto dichiara ci passi
+attraverso. La quarta rete adesso c'è ed è la 0146, ma è nata da questa domanda —
+non l'aveva chiesta nessun presidio.
 
 **Che cosa questa seduta non è.** Non è un dubbio sulle scelte. Il contratto a
 crate separato, l'osservazione degli eventi e il lucchetto di chi monta sono
@@ -61,91 +70,56 @@ scritto perché nessuno le riapra.**
 
 ### 27.1 Il confine di M5 non è mai stato attraversato
 
-*aperta · strato **contratto** · **P0***
+*chiusa dalla [0146](../decisions/0146-il-contratto-attraversa-il-confine.md) · strato **contratto** · **P0***
 
-**1. La domanda.** Il contratto è scritto per attraversare un confine WASM:
-niente `async`, niente generici, niente closure, niente riferimenti alla memoria
-del kernel, tutto serializzabile, chiamate brevi. **Qualcuno ha mai provato ad
-attraversarlo?** E se il costo del passaggio si rivelasse diverso da quello
-previsto, il freeze ci sarebbe già passato sopra?
+## Com'è finita, e cosa lascia
 
-**2. Che cosa si osserva oggi, misurato.** Censimento a `69e25b0`.
+**Il confine si attraversa, e attraversarlo non voleva un motore.** La voce
+prezzava lo spike «qualche giorno, e un crate usa-e-getta», ed è la premessa
+caduta: è costato mezz'ora, e ciò che ne resta non è un crate da buttare ma un
+presidio in CI.
 
-Il crate che dovrebbe ospitare il confine **non esiste**, ed è dichiarato tale
-in due punti: `Cargo.toml:4` («*il WASM per i plugin di terzi arriva a M5
-(fub-wasm-host, non ancora presente)*») e `Cargo.toml:16`, dove il membro è una
-riga commentata. Nel repo la parola `wasmtime` compare in cinque file e in tutti
-e cinque è la **negazione**: due invarianti di manifest (`fub-abi`,
-`fub-kernel`) e le tre reti di `crates/fub-abi/tests/dependency_invariant.rs`.
+`tools/varco-wasm/` dà `crates/fub-abi/wit/fub/abi.wit` in pasto a `wit-bindgen`,
+ne prende i binding guest di `plugin-world` **con gli export implementati**, e li
+compila a `wasm32-unknown-unknown`. Il risultato, misurato il 2026-08-11:
 
-Quindi le regole d'oro delle firme sono **presidiate al contrario**: il repo
-verifica che wasmtime non entri, e niente verifica che ciò che il contratto
-dichiara ci passi. Le due suite che potrebbero sembrare la prova non lo sono:
+| | |
+|---|---|
+| il mondo | 17 import + 11 export = **28 interfacce**, **75 funzioni** (40 di là, 35 di qua) |
+| il generato | 171 399 righe di Rust, 5,89 MB al netto del rientro |
+| la compilazione | **nessun errore**, 1 m 08 s a freddo, 37,9 s in release |
+| il modulo | 21 745 038 byte in debug, **275 073 byte in release** |
 
-| Suite | Cosa prova davvero | Perché non è la prova |
-|---|---|---|
-| `crates/fub-abi/tests/wit_conformance.rs` | Rust e WIT dichiarano le stesse cose | Confronta due **testi**, non due lati di un confine |
-| `crates/fub-features/tests/conformita.rs` | dieci feature girano contro `MemoryHost` | `MemoryHost` è in-process: nessun byte viene serializzato |
+L'ultimo è il numero che la voce cercava e che nessuno aveva: **un plugin che
+implementa il mondo intero e non fa niente paga 275 KB di solo passaggio.** E il
+mondo era più largo di come questa voce lo contava: diciassette interfacce e
+quaranta funzioni erano il **solo lato host**.
 
-E la superficie da attraversare non è piccola: **diciassette** interfacce e
-**quaranta** funzioni. La forma «al confine» è già stata progettata —
-`crates/fub-abi/src/arena.rs`, 2008 righe di alberi appiattiti con indici `u32`
-— e i suoi soli clienti oggi sono due test dell'ABI
-(`superficie_della_radice.rs`, `wit_conformance.rs`). Cioè: **la soluzione al
-problema del passaggio esiste, e il problema non è mai stato posto.**
+**Due cose che la voce chiedeva e che il giro ha risposto per traverso.**
 
-Il WIT vivo è 4029 righe, quello congelato 3122: la distanza fra i due è
-visibile per costruzione, ed è la misura di quanto resta da decidere prima che
-la porta si chiuda.
+* *«se l'arena serve davvero o è un'ottimizzazione per un problema che non c'è»*:
+  non è un'ottimizzazione. Un albero detto in modo diretto —
+  `record nodo { figli: list<nodo> }` — non **risolve** nemmeno in WIT. L'arena
+  appiattita con indici `u32` è l'unico modo in cui in WIT si può dire un albero,
+  e che i suoi soli clienti siano due test dell'ABI adesso vuol dire una cosa
+  diversa da come sembrava.
+* *«se le venti regole d'oro erano le regole giuste»*: per la parte che si può
+  sapere senza un motore, sì — il contratto si lascia generare e compilare per
+  intero, e nessuno dei costrutti provati per farlo cadere (un tipo chiamato come
+  lo `Stub` del generatore, un'interfaccia chiamata `%crate`) lo fa cadere.
 
-**Come si rimisura.**
+**Cosa resta scoperto, e non è una casella.** Il varco prova che il contratto è
+**costruibile**, non che il passaggio sia **economico**: non c'è un motore, nessun
+`Document` viene serializzato davvero, nessuna latenza è misurata. Quella metà
+vuole `fub-wasm-host`, che è di M5 e che la radice del `Cargo.toml` tiene
+commentato apposta. Non è lavoro già deciso da fare: è un crate che nasce a M5, e
+il giorno che nasce il numero da mettere accanto ai 275 KB si misura lì.
 
-```sh
-# tutti i comandi di questo blocco si danno dalla radice del repo
-grep -rn "wasmtime" --include=Cargo.toml --include='*.rs' crates | wc -l
-ls crates/ | grep wasm || echo "nessun crate wasm"
-wc -l crates/fub-abi/wit/fub/abi.wit crates/fub-abi/wit/frozen/0.1.0.wit
-grep -rln "arena::" crates/*/src crates/*/tests
-```
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Uno spike prima del freeze: una feature sola, di là dal confine.**
-      Si prende la più povera — l'outline, che è una `ViewProvider` e
-      nient'altro — la si compila a `wasm32`, e la si fa girare contro un host
-      di prova. Non per tenerla: per **misurare** il costo di serializzare un
-      `Document` e la latenza di un ridisegno. Paga **chi lo scrive**: qualche
-      giorno, e un crate usa-e-getta. In cambio si sa, con un numero, se le
-      venti regole d'oro erano le regole giuste — e se l'arena serve davvero o
-      è un'ottimizzazione per un problema che non c'è.
-- [ ] **(b) Congelare come si è, e provare dopo.** Paga **chi manterrà il
-      contratto**: se il costo del passaggio non torna, la correzione è una
-      major, cioè la cosa che la
-      [0002](../decisions/0002-additivita-del-contratto.md) è nata per rendere
-      cara. E paga per una ragione ingrata: non perché la scelta fosse
-      sbagliata, ma perché nessuno l'aveva provata quando provarla era gratis.
-- [ ] **(c) Restringere il freeze a ciò che è stato esercitato.** Congelare le
-      famiglie che le dieci feature ufficiali usano davvero, e lasciare
-      esplicitamente *non congelato* il resto. Paga **chi scriverà i primi
-      plugin**: contro una superficie più piccola e con meno garanzie. Onesto,
-      e scomodo da comunicare.
-
-**4. Che cosa il repo ha già deciso qui vicino.**
-
-* La [0002](../decisions/0002-additivita-del-contratto.md): dopo il freeze si
-  aggiunge, non si cambia. È ciò che rende questa voce **P0** e non P1 — non c'è
-  una seconda occasione più tardi.
-* La [0057](../decisions/0057-la-dieta-dell-ipc.md): la superficie IPC si tiene
-  sotto dieta perché ogni porta in più è una cosa che un plugin non avrà. La
-  disciplina è la stessa, applicata al varco.
-* La [0054](../decisions/0054-il-banco-del-lato-provider.md) e la
-  [0055](../decisions/0055-il-banco-del-lato-host.md): due banchi, uno per lato.
-  Nessuno dei due sta **sul confine**, e il verbale del primo lo dice —
-  `MemoryHost` è un doppio, e i test end-to-end col kernel vero sono la
-  mitigazione. Contro un guest WASM non esiste né l'uno né l'altro.
-* La [0064](../decisions/0064-il-supporto-sta-sotto.md): un fatto sulla forma
-  del contratto che non si può chiudere si **scrive**. Questa voce applica la
-  stessa regola a un fatto che non si può sapere.
+**Zero caselle**, e il consuntivo che la voce lascia alle altre due di questa
+seduta: *una scommessa si prova alla grana in cui il secondo chiamante eredita la
+prova*. Portare di là **una feature sola** avrebbe misurato una feature e sarebbe
+marcito; generare **il mondo** copre le ventotto interfacce e quelle che verranno,
+senza che nessuno se ne debba ricordare.
 
 ---
 
