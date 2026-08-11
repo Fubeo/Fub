@@ -119,7 +119,8 @@ fn attesa() -> Utf8PathBuf {
 /// ricetta invece di una cartella.
 #[test]
 fn un_vault_su_un_nome_relativo_tiene_una_radice_assoluta() {
-    let vault = Vault::on(RELATIVA, Arc::new(MemStorage::new()));
+    let vault =
+        Vault::on(RELATIVA, Arc::new(MemStorage::new())).expect("l'apertura del vault riesce");
     assert!(
         vault.root().is_absolute(),
         "la radice è restata relativa: {}",
@@ -151,7 +152,8 @@ fn nessuno_store_del_workspace_nomina_un_path_relativo() {
         FormatRegistry::new(),
         storage,
         MachineSettings::in_memory(),
-    );
+    )
+    .expect("l'apertura del vault riesce");
     assert!(
         ws.root().is_absolute(),
         "la radice del workspace è restata relativa: {}",

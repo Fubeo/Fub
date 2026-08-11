@@ -143,7 +143,7 @@ impl Vault {
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         ws.register_plugin(
             fub_abi::traits::PluginManifest::core(COMMANDS_ID, COMMANDS_ID)
                 .speaking("it", fub_features::commands::catalog()),

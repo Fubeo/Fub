@@ -84,7 +84,7 @@ fn workspace(dir: &Utf8PathBuf, mode: GraphUpdate) -> Workspace {
     registry
         .register(Box::new(LinkListProvider))
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(dir, registry);
+    let mut ws = Workspace::new(dir, registry).expect("l'apertura del vault riesce");
     ws.set_graph_update(mode);
     ws.reindex().expect("reindex di un vault vuoto");
     ws

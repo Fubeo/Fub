@@ -107,6 +107,14 @@ const ALLOWED_DIRECT: &[(&str, &[&str])] = &[
             "thiserror",
             "tracing",
             "windows-sys",
+            // La verifica di scrittura all'ingresso (0160): `access(2)`
+            // chiede al sistema se chi gira può scrivere nella radice, e la
+            // domanda va fatta a lui, non ai bit di permesso. Come
+            // `windows-sys`, è una syscall sola dietro un crate già
+            // nell'albero, dichiarata solo su unix — e compare lo stesso in
+            // questo elenco, per la stessa ragione di quella: la fotografia
+            // è del manifesto, non della macchina.
+            "libc",
         ],
     ),
 ];

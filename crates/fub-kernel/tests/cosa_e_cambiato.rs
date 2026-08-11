@@ -138,7 +138,7 @@ fn vault(mask: EventMask) -> (tempfile::TempDir, Workspace, Log) {
     registry
         .register(Box::new(FormatoConMetadati))
         .expect("formato");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature(SPIA, SPIA).expect("dichiarato");
     let log: Log = Arc::default();
     ws.register_event_handler(

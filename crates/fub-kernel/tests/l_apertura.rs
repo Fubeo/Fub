@@ -311,21 +311,43 @@ fn ogni_scarto_esce_come_guasto_dopo_che_il_vault_si_e_detto_aperto() {
 
 #[test]
 fn un_vault_che_non_si_scandisce_non_si_apre_a_meta() {
+    use std::os::unix::fs::PermissionsExt;
+
     // La scansione è l'unico passo il cui fallimento riguarda il vault intero
     // e non un suo documento, ed è per questo che `reindex` restituisce ancora
     // un `Result`: senza l'elenco dei file, `reconcile` direbbe agli indici che
     // l'insieme completo è vuoto, e ognuno cancellerebbe tutto ciò che sa.
     // Meglio non aprire — un danno raro e rumoroso — che aprire potando.
+    //
+    // Una radice che non esiste non arriva più fin qui: l'apertura la rifiuta
+    // all'ingresso (0160), ed è un banco a parte. Qui la camminata deve
+    // fallire su una radice che l'ingresso ha accettato, e l'ostacolo è una
+    // cartella dentro il vault che non si lascia elencare.
     let dir = tempfile::tempdir().expect("tempdir");
-    let root = camino::Utf8PathBuf::from_path_buf(dir.path().join("mai-esistita")).expect("utf8");
-    let mut ws = Workspace::new(&root, FormatRegistry::new());
+    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let ostacolo = dir.path().join("non-leggibile");
+    std::fs::create_dir(&ostacolo).expect("cartella");
+    std::fs::write(ostacolo.join("nota.md"), "x").expect("semina");
+    std::fs::set_permissions(&ostacolo, std::fs::Permissions::from_mode(0o000))
+        .expect("permesso tolto");
+    // Da root l'ostacolo non ostacola: lo dice la lettura, non un elenco di
+    // utenti, e se non ostacola il banco non può dimostrare niente.
+    if std::fs::read_dir(&ostacolo).is_ok() {
+        std::fs::set_permissions(&ostacolo, std::fs::Permissions::from_mode(0o700))
+            .expect("permesso restituito");
+        eprintln!("si salta: questo utente elenca anche una cartella 000");
+        return;
+    }
+    let mut ws = Workspace::new(&root, FormatRegistry::new()).expect("la radice vera si apre");
 
     let esito = ws.reindex();
 
     assert!(
         esito.is_err(),
-        "un vault la cui radice non si legge non si apre con un'apertura vuota"
+        "un vault la cui camminata non si legge non si apre con un'apertura vuota"
     );
+    std::fs::set_permissions(&ostacolo, std::fs::Permissions::from_mode(0o700))
+        .expect("permesso restituito per la pulizia");
 }
 
 #[test]

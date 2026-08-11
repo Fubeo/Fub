@@ -63,6 +63,7 @@ impl Banco {
 
     fn vault(&self) -> Vault {
         Vault::on(&self.root, Arc::new(FsStorage) as Arc<dyn VaultStorage>)
+            .expect("l'apertura del vault riesce")
     }
 
     fn workspace(&self) -> Workspace {
@@ -75,7 +76,8 @@ impl Banco {
             registry,
             Arc::new(FsStorage),
             MachineSettings::in_memory(),
-        );
+        )
+        .expect("l'apertura del vault riesce");
         ws.reindex().expect("la scansione della radice");
         ws
     }

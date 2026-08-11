@@ -175,7 +175,9 @@ impl Fixture {
     /// Due componenti dichiarati, con due cataloghi diversi, più le chiavi
     /// `locale.*` del core perché si possa cambiare lingua da un'impostazione.
     fn workspace(&self, system: Arc<SystemLocale>) -> Workspace {
-        let mut ws = Workspace::new(&self.root, FormatRegistry::new()).with_system_locale(system);
+        let mut ws = Workspace::new(&self.root, FormatRegistry::new())
+            .expect("l'apertura del vault riesce")
+            .with_system_locale(system);
         ws.register_plugin(
             PluginManifest::core("uno", "Uno")
                 .speaking("it", catalogo_uno())

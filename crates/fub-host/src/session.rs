@@ -571,9 +571,13 @@ impl Host {
             Arc::clone(&self.system_locale),
             &self.levels,
         )
-        // Le due cose che fanno fallire il montaggio sono un provider di formato
-        // in conflitto con sé stesso e il bundle di core che non si monta: è
-        // ciò che questo binario si porta dietro, non il disco di chi apre.
+        // Le tre cose che fanno fallire il montaggio sono un provider di
+        // formato in conflitto con sé stesso, un bundle di core che non si
+        // monta — ciò che questo binario si porta dietro — e, da quando
+        // l'apertura verifica la radice (0160), un posto che non esiste, che
+        // non è una cartella o su cui non si ha permesso di scrivere: per chi
+        // apre dal dialogo la prima delle tre filtra già in `Host::open`, le
+        // altre arrivano qui con il perché nel messaggio.
         .map_err(|e| PluginError::Internal(e.into()))?;
         let registry = Custodia::new("i componenti montati", registry);
 

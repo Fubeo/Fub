@@ -129,7 +129,7 @@ fn workspace(docs: &[&str]) -> (tempfile::TempDir, Workspace) {
     }
     let mut registry = FormatRegistry::new();
     registry.register(Box::new(Testo)).expect("registrazione");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     ws.register_core_feature("prova", "prova")

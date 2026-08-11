@@ -34,7 +34,7 @@ fn vault() -> (tempfile::TempDir, Utf8PathBuf, Workspace) {
     registry
         .register(TestoDiProva::per_estensione("md").boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     // Col suo catalogo, come lo monta `fub-host`: senza, l'esito uscirebbe
     // come una chiave invece che come una frase, e questo banco presidia anche
     // quello.
@@ -90,7 +90,7 @@ fn una_bozza_sopravvive_alla_chiusura() {
     registry
         .register(TestoDiProva::per_estensione("md").boxed())
         .expect("nessun conflitto");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.reindex().expect("reindex");
 
     let trovate = bozze(&ws);

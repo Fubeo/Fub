@@ -250,7 +250,7 @@ impl Banco {
         registry
             .register(TestoDiProva::per_estensione("txt").con_id("plain").boxed())
             .expect("formato");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         for id in ["prova.uno", "prova.due"] {
             dichiara(&mut ws, id);
         }

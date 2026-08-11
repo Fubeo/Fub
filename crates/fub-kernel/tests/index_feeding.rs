@@ -170,7 +170,7 @@ impl Fixture {
         registry
             .register(TestoDiProva::per_estensione("txt").boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         for plugin in [
             "test.spia",
             "test.loudmouth",

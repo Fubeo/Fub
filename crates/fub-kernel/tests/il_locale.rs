@@ -106,7 +106,9 @@ impl Fixture {
 
     /// Un workspace con la spia registrata e le chiavi `locale.*` dichiarate.
     fn workspace(&self, system: Arc<SystemLocale>) -> (Workspace, Spia) {
-        let mut ws = Workspace::new(&self.root, FormatRegistry::new()).with_system_locale(system);
+        let mut ws = Workspace::new(&self.root, FormatRegistry::new())
+            .expect("l'apertura del vault riesce")
+            .with_system_locale(system);
         ws.register_plugin(
             PluginManifest::core("test.spia", "Spia").configuring(chiavi()),
             Trust::Core,

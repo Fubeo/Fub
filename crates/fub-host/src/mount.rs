@@ -202,6 +202,10 @@ pub fn mount(
     }
 
     let mut ws = Workspace::with_machine_settings(root, formats, machine)
+        // L'apertura verifica la radice (0160): un posto che non esiste, che
+        // non è una cartella o su cui non si può scrivere arriva qui come
+        // rifiuto, non come primo errore di scrittura a vault già mostrato.
+        .map_err(|e| e.to_string())?
         .with_view_states(view_states)
         .with_system_locale(system_locale);
 

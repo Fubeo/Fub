@@ -227,7 +227,8 @@ impl Fixture {
     /// dichiarati: un `IndexProvider` si registra sotto l'identità di un
     /// plugin, e senza la dichiarazione non avrebbe uno spazio dati suo.
     fn montato(&self, canvas: bool) -> Workspace {
-        let mut ws = Workspace::new(&self.root, self.registry(canvas));
+        let mut ws =
+            Workspace::new(&self.root, self.registry(canvas)).expect("l'apertura del vault riesce");
         for plugin in ["test.memoria", "test.muto"] {
             ws.register_core_feature(plugin, plugin)
                 .expect("dichiarato");

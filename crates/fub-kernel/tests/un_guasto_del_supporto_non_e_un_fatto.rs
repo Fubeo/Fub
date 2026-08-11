@@ -126,7 +126,8 @@ impl Banco {
             registry,
             storage as Arc<dyn VaultStorage>,
             MachineSettings::in_memory(),
-        );
+        )
+        .expect("l'apertura del vault riesce");
         ws.reindex().expect("reindex");
         (
             Banco {

@@ -87,7 +87,8 @@ fn workspace(storage: Arc<dyn VaultStorage>) -> Workspace {
     registry
         .register(TestoDiProva::per_estensione("md").boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::on("/vault", registry, storage, MachineSettings::in_memory());
+    let mut ws = Workspace::on("/vault", registry, storage, MachineSettings::in_memory())
+        .expect("l'apertura del vault riesce");
     ws.reindex().expect("reindex");
     ws
 }

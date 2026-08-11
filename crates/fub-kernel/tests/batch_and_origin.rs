@@ -112,7 +112,7 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
     registry
         .register(Box::new(LinkListProvider))
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(dir, registry);
+    let mut ws = Workspace::new(dir, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     for plugin in [AUTOMA, "test.spia"] {

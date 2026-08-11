@@ -250,7 +250,7 @@ fn riapri(radice: &Utf8Path) -> (Workspace, Parser, Lotti) {
     formati
         .register(Box::new(parser.clone()))
         .expect("il formato del banco non collide");
-    let mut ws = Workspace::new(radice, formati);
+    let mut ws = Workspace::new(radice, formati).expect("l'apertura del vault riesce");
     ws.register_core_feature("test.banco", "test.banco")
         .expect("feature dichiarata una volta sola");
     ws.register_index_provider("test.banco".to_string(), Box::new(lotti.clone()))

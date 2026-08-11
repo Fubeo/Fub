@@ -114,7 +114,7 @@ impl Fixture {
         registry
             .register(Box::new(TxtProvider))
             .expect("nessun conflitto");
-        Workspace::new(&self.root, registry)
+        Workspace::new(&self.root, registry).expect("l'apertura del vault riesce")
     }
 
     /// Apre il vault da zero, come farebbe un riavvio dell'app.

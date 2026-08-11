@@ -1,6 +1,6 @@
 # Roadmap infrastrutturale — reggere il peso di FEATURES.md
 
-Torna a [PIANO.md](PIANO.md). 
+Torna a [PIANO.md](PIANO.md).
 
 Questo documento pone una domanda sola. **[FEATURES.md](FEATURES.md) elenca
 ~3000 voci. Quali pezzi di infrastruttura mancano per costruire queste voci
@@ -13,6 +13,7 @@ domanda non cambia. Cambia la **grana** (la misura di precisione), da cui nasce
 la [seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md).
 
 Sono uscite 152 voci:
+
 - novantanove voci da sette giri sulla stessa domanda.
 - due voci da una **misura**. La §8.4 nasce dalla
   [0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md) e si chiude con la
@@ -75,6 +76,7 @@ voci che è utile decidere in una volta sola. Ogni seduta ha un file dedicato in
 [`roadmap/`](roadmap/).
 
 Lo **strato** etichetta la voce per fissarne la **scadenza**:
+
 - **contratto** — costa una migrazione di versione in M4. Rende la voce una P0.
 - **kernel**, **shell**, **presidi** — seguono l'implementazione. Un presidio è
   un test che diventa rosso se una promessa smette di valere. Sono P0 solo se
@@ -91,6 +93,7 @@ kernel (`ViewProvider`, `CommandProvider`, `IndexProvider`, `FormatProvider`,
 Tauri bespoke, un pannello cablato in `main.ts` e un ramo `if` nel kernel.
 
 Si cercano le voci ponendo domande in questo ordine:
+
 1. **Cosa manca**. Un pezzo assente.
 2. **Cosa ha la forma sbagliata**. Firme da aggiungere o migrare per il freeze.
 3. **Cosa c'è e non mantiene**. Promesse mantenute a metà.
@@ -150,7 +153,7 @@ Si cercano le voci ponendo domande in questo ordine:
 ## Le sedute
 
 | # | Seduta | Perché insieme | Voci | Caselle |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **1** | [La forma della shell](roadmap/01-forma-della-shell.md) | dove sta cosa, prima che la superficie cresca | — | — |
 | **2** | [Cosa è una view](roadmap/02-cosa-e-una-view.md) | le firme dicono insieme che una view è una funzione pura, sincrona, senza stato | — | — |
 | **3** | [Chi disegna ciò che il core non conosce](roadmap/03-chi-disegna-cio-che-il-core-non-conosce.md) | una decisione sola vista da tre lati: sintassi, blocco, renderer nella shell | — | — |
@@ -229,6 +232,7 @@ centotrentasette insieme da 13,8 a 4,94 GB, e non si perde un byte.
 La roadmap infrastrutturale di M4 resta finita. La [seduta
 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) aveva chiuso
 sette voci:
+
 - §25.1: Chiusa da
   [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md). Forma (a)
   attuata, (b) rimane casella.
@@ -258,6 +262,7 @@ sette voci:
 
 La [seduta 24](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) aveva
 aperto tre voci (toccano la firma):
+
 - §24.1: [0130](decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md)
   per additività di `pub use`.
 - §24.2: [0131](decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md) per
@@ -436,7 +441,7 @@ dei permessi aspettava il §15.5, il §15.5 è chiuso da trentadue verbali, e
 nessuno è tornato a prendere la casella.
 
 | § | Voce | Seduta | Strato | |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **§26.1** | [Un accordo ha un contesto, o non ce l'ha](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#261-un-accordo-ha-un-contesto-o-non-ce-lha) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 | **§26.2** | [Cinque registri di tastiera, e il presidio ne guarda due](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#262-cinque-registri-di-tastiera-e-il-presidio-ne-guarda-due) | 26. Otto gesti che l'app fa e nessuno può dichiarare | shell | **P1** |
 | **§26.3** | [La grammatica di un accordo non sta nel contratto](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#263-la-grammatica-di-un-accordo-non-sta-nel-contratto) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P2** |
@@ -449,7 +454,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **cinquanta** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **quarantanove** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -523,7 +528,7 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 **riconta**, non deduce.
 
 | # | Difetto | Dove | Famiglia |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 0112 | l'anagrafe non ha forma incrementale: `EntryStore::open` deserializza l'intera `BTreeMap<DocId, StoredEntry>` e `EntryStore::store` la riserializza e la sostituisce tutta con una `VaultStorage::write`, così ogni apertura paga il vault intero anche quando non è cambiato un file | `fub-kernel` · `entries.rs` `EntryStore::store` | prestazioni |
 | 0113 | il prestito esclusivo di `finish_index` copre in fila cinque fasi, tre delle quali toccano il disco — ricostruzione integrale del grafo, riconciliazione degli indici, flush degli indici, ricongiungimento delle rinomine che cammina l'anagrafe persistita, riscrittura integrale di `entries.json` — così un lettore concorrente aspetta la somma di tutte e cinque e non la sola indicizzazione | `fub-kernel` · `workspace.rs` `Workspace::finish_index` | lock e I/O |
 | 0115 | risolvere un wikilink scandisce tutta l'anagrafe: `named_entry_in` calcola fino a due `resolution_key` per voce e chiude con un `min_by_key` che non cortocircuita, quindi trovare costa quanto non trovare — 27,8 ms a chiamata su 20.000 voci — e `entry_rewrite_plan` la chiama una volta per ogni link di ogni documento, cioè quarantasei minuti per rinominare un allegato | `fub-kernel` · `index/core.rs` `named_entry_in` | prestazioni |
@@ -538,7 +543,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0155 | i temporanei di scrittura `.{nome}.tmp{pid}-{n}` si puliscono solo sui rami di errore: un crash fra `File::create` e la rename li lascia sul posto per sempre, la policy di ignore li rende invisibili e nessuna routine di apertura li spazza, così ogni crash lascia un sedimento che cresce e che il riuso di un pid può far confondere con un temporaneo vivo | `fub-kernel` · `storage.rs` `tmp_path` | lock e I/O |
 | 0157 | `empty_trash` toglie le voci una per una e poi cammina `.trash/` con `remove_dir_all`: ciò che un altro processo cestina dentro la finestra o viene cancellato in silenzio o fa fallire la camminata a metà, senza rollback, senza conteggio parziale e senza una riga di registro per ciò che è stato distrutto — è la stessa forma del bug noto `il_vault_che_sparisce`; la mossa giusta è rinominare `.trash/` con un nome temporaneo e camminare **quello**. In coda, l'errore sui sidecar è ingoiato da un `let _`, quindi i metadati orfani non li segnala nessuno | `fub-kernel` · `vault.rs` `Vault::empty_trash` | lock e I/O |
 | 0159 | il `drop` del watcher non aspetta il debouncer: la chiusura del vault lascia il thread di debounce a consegnare eventi su un workspace che sta sparendo, e il rilascio della radice non ha nessuna barriera che garantisca che nessuno stia più scrivendo dentro `.fub/` | `fub-kernel` · `vault.rs` `Vault::drop` | lock e I/O |
-| 0160 | aprire un vault non verifica niente: `Vault::open` e `Vault::on` accettano una radice che non esiste, che è un file invece di una directory o su cui non si ha permesso di scrittura, e l'errore arriva solo alla prima operazione che tocca il disco — cioè a giro avanzato, con eventi già emessi e un'interfaccia che ha già mostrato un vault aperto | `fub-kernel` · `vault.rs` `Vault::open` | regole |
 | 0167 | `docdata::migrate` rimuove la destinazione senza guardarne la forma e con l'errore ingoiato: se sotto la chiave nuova c'è già uno spazio-documento di un altro documento, quello viene tolto — annotazioni, pin, miniature — e se la rimozione fallisce nessuno lo segnala, così la migrazione prosegue su un posto che non è vuoto | `fub-kernel` · `docdata.rs` `migrate` | lock e I/O |
 | 0168 | fra la rinomina del documento e la migrazione del suo docdata c'è una finestra di crash non coperta da niente: il file è al nome nuovo e i suoi dati per-documento sono ancora sotto la chiave vecchia, dove la prima `collect` successiva li spazza perché non corrispondono a nessun documento vivo | `fub-kernel` · `workspace.rs` `rename_document_in_batch` (con `docdata.rs` `migrate`) | lock e I/O |
 | 0169 | i rami di fallimento di `Drafts::migrate` lasciano lo stato a metà: a seconda di dove si ferma restano due bozze per un documento solo, oppure una bozza il cui campo `doc` nomina un documento che non esiste più, e nessuna delle due configurazioni viene riconciliata da qualcosa | `fub-kernel` · `drafts.rs` `Drafts::migrate` | regole |
@@ -583,7 +587,7 @@ La regola va posizionata nel modulo che ha il diritto di imporla
 Le case sono cinque:
 
 | Dove | Cosa ci va | Il precedente |
-|---|---|---|
+| --- | --- | --- |
 | `fub-abi` | ciò che vale per chiunque risolva la stessa domanda: l'ultimo segmento di un path, nome ed estensione, «sta dentro questa cartella», il primo nome libero, l'impronta, gli accessor di `IndexResult` | `heading_slug`, `fub_abi::html` |
 | `fub-testkit` | l'impalcatura dei banchi: la cartella usa-e-getta, i provider giocattolo, il montaggio di un vault di prova, la camminata del modello | `TestoDiProva`, `Banco` |
 | un modulo privato del crate | ciò che non esce di lì: il controllo di versione dei file di macchina, la fusione sotto lock, il prologo dei comandi | `update_atomic` in `storage.rs` |
@@ -592,7 +596,7 @@ Le case sono cinque:
 
 Un crate nuovo non costituisce una casa (aggiunge oneri come
 `check-cargo-versioni`, `check-cargo-feature-default`).
-Le regole gemelle non si estraggono a mano (es. difetto `0224`). 
+Le regole gemelle non si estraggono a mano (es. difetto `0224`).
 
 ## Come si semplifica la documentazione
 
@@ -604,7 +608,7 @@ Aggiungi undici voci a [glossario.md](glossario.md), nella sezione `## Il
 metodo`.
 
 | termine | volte in `docs/` | cosa vuol dire, in una riga | dove è già usato per esteso |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `banco` | 423 | un test — il tipo `Banco` di `fub-testkit` è il costruttore che quasi tutti usano | [PIANO.md](PIANO.md), `crates/fub-testkit/src/lib.rs` |
 | `casa` | 59 | il modulo che ha **il diritto** di imporre una regola, che è dove la regola va scritta una volta sola | la sezione qui sopra, `crates/fub-format-markdown/src/util.rs` |
 | `casella` | 367 | ciò che resta da fare dopo che una decisione è chiusa: nessuna scelta, solo lavoro | l'apertura di questo file |
@@ -639,6 +643,7 @@ manualmente.
 
 Rinominare `banco` a `test` (423 occorrenze) non è un difetto (`0143`). Si
 richiede l'apertura della seduta 27. Valutazioni richieste:
+
 1. `docs/decisions/` raccoglie 143 verbali, cioè quasi due terzi dei file di
    `docs/`. Il divieto di toccarli non c'è più — la
    [0143](decisions/0143-i-verbali-si-possono-riscrivere.md) distingue contenuto

@@ -221,7 +221,11 @@ pub struct Vault {
 
 impl Vault {
     /// Un vault sul filesystem, che è il caso di ogni chiamante di produzione.
-    pub fn open(root: impl AsRef<Utf8Path>) -> Self {
+    ///
+    /// Fallisce **all'ingresso** — prima di qualunque scansione, evento o
+    /// interfaccia — se la radice non esiste, non è una cartella o non si ha
+    /// permesso di scriverci (0160).
+    pub fn open(root: impl AsRef<Utf8Path>) -> Result<Self> {
         Vault::on(root, Arc::new(FsStorage))
     }
 
@@ -231,12 +235,25 @@ impl Vault {
     /// chiamante ha scritto: è la sua forma assoluta ([`radice_assoluta`]).
     /// Questa è la sola riga che la costruisce, quindi non esiste un `Vault` la
     /// cui radice si sposti sotto ai piedi.
-    pub fn on(root: impl AsRef<Utf8Path>, storage: Arc<dyn VaultStorage>) -> Self {
-        Vault {
-            root: radice_assoluta(root.as_ref()),
+    ///
+    /// È anche la sola riga che **verifica la radice**, e la verifica adesso:
+    /// chiede al supporto se può starci un vault ([`VaultStorage::radice_valida`])
+    /// e risponde con [`KernelError::RadiceInvalida`] se non può. Un errore più
+    /// tardi — alla prima operazione che tocca il disco — sarebbe un vault già
+    /// mostrato come aperto, con eventi già emessi (0160).
+    pub fn on(root: impl AsRef<Utf8Path>, storage: Arc<dyn VaultStorage>) -> Result<Self> {
+        let root = radice_assoluta(root.as_ref());
+        storage
+            .radice_valida(&root)
+            .map_err(|source| KernelError::RadiceInvalida {
+                path: root.clone(),
+                source,
+            })?;
+        Ok(Vault {
+            root,
             storage,
             settings: None,
-        }
+        })
     }
 
     /// Aggancia le impostazioni da cui leggere la politica di esclusione.
@@ -902,7 +919,10 @@ mod tests {
 
     #[test]
     fn what_is_ignored_is_ignored_at_any_depth() {
-        let v = Vault::open("/vault");
+        // La politica d'esclusione non guarda il disco: il vault si apre in
+        // memoria, dove una radice che sta per nascere è legittima (0160).
+        let v = Vault::on("/vault", Arc::new(crate::storage::MemStorage::new()))
+            .expect("un vault in memoria si apre");
         assert!(!v.is_ignored("/vault/note/Idea.md".into()));
         assert!(v.is_ignored("/vault/.trash/Idea.md".into()));
         assert!(v.is_ignored("/vault/.obsidian/plugins/x/main.js".into()));
@@ -929,7 +949,9 @@ mod tests {
         for (key, value) in valori {
             store.set(key, value.clone()).expect("chiave dichiarata");
         }
-        Vault::on("/vault", storage).watching(Arc::new(std::sync::RwLock::new(store)))
+        Vault::on("/vault", storage)
+            .expect("un vault in memoria si apre")
+            .watching(Arc::new(std::sync::RwLock::new(store)))
     }
 
     /// **La casella dei nascosti** (§3.2 del catalogo): mostrarli è una
@@ -1021,7 +1043,10 @@ mod tests {
         std::fs::create_dir(root.join("note")).expect("cartella");
         std::fs::write(root.join("note/Idea.md"), "una nota").expect("nota");
         std::os::unix::fs::symlink(root.join("note"), root.join("note/anello")).expect("anello");
-        let scan = Vault::open(&root).scan().expect("scansione");
+        let scan = Vault::open(&root)
+            .expect("la radice appena creata si apre")
+            .scan()
+            .expect("scansione");
         assert_eq!(scan.files.len(), 1, "{:?}", scan.files[0].id);
         assert_eq!(scan.folders, vec!["note".to_string()]);
     }

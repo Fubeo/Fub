@@ -313,6 +313,32 @@ pub trait VaultStorage: Send + Sync {
         a == b
     }
 
+    /// Su questa radice può stare un vault?
+    ///
+    /// È la domanda che [`Vault::on`](crate::Vault::on) fa **all'ingresso**, e
+    /// la risposta è del supporto: solo lui sa cosa significhi «esiste» e
+    /// «scrivibile» nel suo mondo (difetto 0160). Un supporto che rispondesse
+    /// di sì a una radice impossibile consegnerebbe un vault il cui primo
+    /// errore arriva a giro avanzato, con eventi già emessi.
+    ///
+    /// Il default è la semantica di un supporto che crea le cartelle alla
+    /// prima scrittura — [`MemStorage`] e chi ci si appoggia: una radice
+    /// mancante è un vault che sta per nascere, una radice che è un **file** è
+    /// un vault che non può stare. Un supporto su un disco vero
+    /// ([`FsStorage`]) la sovrascrive con la verità del disco: lì una radice
+    /// mancante è un errore di chi ha scelto, e va detto subito.
+    fn radice_valida(&self, root: &Utf8Path) -> io::Result<()> {
+        match self.stat(root) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e),
+            Ok(s) if s.kind == EntryKind::Dir => Ok(()),
+            Ok(_) => Err(io::Error::new(
+                io::ErrorKind::NotADirectory,
+                format!("la radice {root} non è una cartella"),
+            )),
+        }
+    }
+
     /// Toglie una cartella e tutto ciò che contiene.
     ///
     /// Ha un default composto dalle altre — si cammina e si toglie — perché
@@ -750,6 +776,47 @@ fn non_utf8(path: &std::path::Path) -> io::Error {
     )
 }
 
+/// **Può chi gira scrivere dentro questa cartella?**
+///
+/// È la metà «scrivibile» della verifica che l'apertura fa sulla radice
+/// (difetto 0160), e la risposta è della piattaforma: i bit di permesso
+/// mentono per le ACL, i mount di sola lettura e chi gira da root, quindi non
+/// si leggono — si chiede.
+///
+/// La domanda non crea nulla: un file di prova sarebbe visibile a chiunque
+/// cammini la radice mentre l'apertura è in corso, cioè un fantasma di pochi
+/// microsecondi, la specie di rumore che la verifica all'ingresso esiste per
+/// togliere.
+fn cartella_scrivibile(root: &Utf8Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        // `access(2)` applica i bit, le ACL e lo stato del mount, ed è la
+        // stessa domanda che il sistema risponde a chiunque altro voglia
+        // creare un file qui.
+        let c = std::ffi::CString::new(root.as_str()).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "una radice non può contenere NUL",
+            )
+        })?;
+        // SAFETY: `access` non trattiene il puntatore oltre la chiamata, e
+        // `c` resta vivo per tutto il tempo della chiamata.
+        if unsafe { libc::access(c.as_ptr(), libc::W_OK) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        // Senza `access(2)` non resta che la prova vera: si scrive un file
+        // e lo si toglie subito. Il fantasma è il prezzo della piattaforma.
+        let prova = root.join(format!(".fub-prova-{}", std::process::id()));
+        let esito = std::fs::write(&prova, b"");
+        let _ = std::fs::remove_file(&prova);
+        esito.map(|_| ())
+    }
+}
+
 impl VaultStorage for FsStorage {
     fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
         std::fs::read(path)
@@ -926,6 +993,39 @@ impl VaultStorage for FsStorage {
             // sono lo stesso file.
             _ => false,
         }
+    }
+
+    /// **Qui il default non basta**: sul disco una radice mancante non è un
+    /// vault che sta per nascere, è un errore di chi ha scelto — e va detto
+    /// all'ingresso, non alla prima operazione che tocca il disco (0160).
+    ///
+    /// La `stat` segue i link, come sempre nel kernel: una radice che è un
+    /// collegamento a una cartella è una cartella, e una radice che non c'è
+    /// fallisce già qui con `NotFound`.
+    fn radice_valida(&self, root: &Utf8Path) -> io::Result<()> {
+        let s = self.stat(root)?;
+        if s.kind != EntryKind::Dir {
+            return Err(io::Error::new(
+                io::ErrorKind::NotADirectory,
+                format!("la radice {root} non è una cartella"),
+            ));
+        }
+        // «Scrivibile» non si legge dai permessi del file: si chiede al
+        // sistema se chi gira può scriverci, e la domanda non crea nulla —
+        // un file di prova sarebbe visibile a chiunque cammini la radice
+        // mentre l'apertura è in corso, cioè un fantasma di pochi
+        // microsecondi, la specie di rumore che la verifica all'ingresso
+        // esiste per togliere (0160).
+        cartella_scrivibile(root).map_err(|e| {
+            if e.kind() == io::ErrorKind::PermissionDenied {
+                io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("non si ha permesso di scrivere su {root}"),
+                )
+            } else {
+                e
+            }
+        })
     }
 
     fn remove_dir_all(&self, dir: &Utf8Path) -> io::Result<()> {

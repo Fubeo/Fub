@@ -608,7 +608,7 @@ impl Workspace {
     /// Che sia questo il default e non l'altro è deliberato: una suite di test
     /// che scrivesse nella cartella di configurazione di chi la esegue è un
     /// difetto che si scopre tardi e per vie traverse.
-    pub fn new(root: impl AsRef<Utf8Path>, registry: FormatRegistry) -> Self {
+    pub fn new(root: impl AsRef<Utf8Path>, registry: FormatRegistry) -> Result<Self> {
         Workspace::with_machine_settings(root, registry, MachineSettings::in_memory())
     }
 
@@ -618,7 +618,7 @@ impl Workspace {
         root: impl AsRef<Utf8Path>,
         registry: FormatRegistry,
         machine: Arc<MachineSettings>,
-    ) -> Self {
+    ) -> Result<Self> {
         // **Un** supporto per workspace, non uno per proprietario: il vault, il
         // sidecar dell'organizzazione, la configurazione del vault e l'anagrafe
         // scrivono tutti nella stessa cartella, e due supporti per la stessa
@@ -642,7 +642,7 @@ impl Workspace {
         registry: FormatRegistry,
         storage: Arc<dyn crate::storage::VaultStorage>,
         machine: Arc<MachineSettings>,
-    ) -> Self {
+    ) -> Result<Self> {
         // Il registry è condiviso con l'indice del kernel invece che copiato:
         // "quali estensioni sono documenti" è una domanda sola (vedi
         // `CoreIndex::registry`).
@@ -673,13 +673,13 @@ impl Workspace {
         // scrivendo in questo archivio viaggia con questo archivio. Condivise
         // con l'indice del kernel, che è chi risponde a chi le chiede (0019).
         let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
-        Workspace {
+        Ok(Workspace {
             docs: DocumentStore::new(
                 root,
                 Arc::clone(&registry),
                 Arc::clone(&storage),
                 Arc::clone(&settings),
-            ),
+            )?,
             indexes: Indexes::new(
                 registry,
                 Arc::clone(&settings),
@@ -707,7 +707,7 @@ impl Workspace {
             drafts,
             doc_data_warnings: Vec::new(),
             sospesi_dal_dubbio: BTreeSet::new(),
-        }
+        })
     }
 
     /// Aggancia lo stato di vista della macchina (§11.2).

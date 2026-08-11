@@ -98,7 +98,7 @@ impl Fixture {
     }
 
     fn workspace(&self) -> Workspace {
-        Workspace::new(&self.root, FormatRegistry::new())
+        Workspace::new(&self.root, FormatRegistry::new()).expect("l'apertura del vault riesce")
     }
 }
 

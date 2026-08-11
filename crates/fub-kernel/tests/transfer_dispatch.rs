@@ -148,7 +148,7 @@ fn workspace() -> (tempfile::TempDir, Workspace) {
     registry
         .register(TestoDiProva::per_estensione("txt").boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     for plugin in ["spia.csv", "spia.txt", "spia.handler", "spia"] {

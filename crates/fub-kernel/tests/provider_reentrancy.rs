@@ -107,7 +107,7 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     registry
         .register(TestoDiProva::per_estensione("md").dentro_un_pre().boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     for plugin in ["recorder", "scrivente", "prova.plugin"] {
         ws.register_core_feature(plugin, plugin)
             .expect("dichiarato");

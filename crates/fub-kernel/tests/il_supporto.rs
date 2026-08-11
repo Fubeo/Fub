@@ -354,7 +354,7 @@ fn un_collegamento_non_e_la_cosa_a_cui_punta() {
     assert!(storage.stat(&root.join("finta")).unwrap().is_dir());
 
     // E la scansione del vault lo salta, come faceva prima di questo trait.
-    let vault = Vault::on(&root, Arc::new(FsStorage));
+    let vault = Vault::on(&root, Arc::new(FsStorage)).expect("l'apertura del vault riesce");
     let scan = vault.scan().unwrap();
     assert_eq!(scan.folders, vec!["vera".to_string()]);
     assert_eq!(
@@ -366,7 +366,8 @@ fn un_collegamento_non_e_la_cosa_a_cui_punta() {
 #[test]
 fn un_vault_intero_su_un_supporto_che_non_e_il_disco() {
     let storage = Arc::new(MemStorage::new());
-    let vault = Vault::on("/vault", Arc::clone(&storage) as Arc<dyn VaultStorage>);
+    let vault = Vault::on("/vault", Arc::clone(&storage) as Arc<dyn VaultStorage>)
+        .expect("l'apertura del vault riesce");
 
     let nota = DocId::new("progetti/Idea.md");
     vault.write(&nota, "# Idea\n").unwrap();

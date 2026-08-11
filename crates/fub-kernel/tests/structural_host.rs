@@ -103,7 +103,7 @@ fn vault(provider: Box<dyn FormatProvider>) -> (tempfile::TempDir, Workspace) {
     registry
         .register(provider)
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     for plugin in ["prova.plugin", "automazione", "test.macro"] {

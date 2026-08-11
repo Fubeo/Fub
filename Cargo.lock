@@ -1257,6 +1257,7 @@ dependencies = [
  "camino",
  "fub-abi",
  "fub-testkit",
+ "libc",
  "serde",
  "serde_json",
  "tempfile",

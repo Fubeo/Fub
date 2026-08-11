@@ -212,7 +212,7 @@ impl Banco {
             scrivi_in(&root, rel, corpo);
         }
 
-        let mut ws = Workspace::new(&root, self.formati);
+        let mut ws = Workspace::new(&root, self.formati).expect("la radice appena creata si apre");
 
         for id in &self.plugin {
             ws.register_core_feature(id, id)
@@ -356,7 +356,8 @@ impl Montato {
         // Si sostituisce il `Workspace` in posto con un segnaposto per poterlo
         // dare per valore: il banco resta il proprietario e chi chiama non deve
         // saperlo.
-        let segnaposto = Workspace::new(&self.root, FormatRegistry::new());
+        let segnaposto = Workspace::new(&self.root, FormatRegistry::new())
+            .expect("la radice del banco è già stata aperta al montaggio");
         let vero = std::mem::replace(&mut self.ws, segnaposto);
         self.ws = f(vero);
         self

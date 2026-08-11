@@ -115,7 +115,7 @@ fn banco() -> (tempfile::TempDir, Workspace) {
     std::fs::write(root.join("Nota.txt"), "una nota").unwrap();
     let mut formats = FormatRegistry::new();
     formats.register(Box::new(Fragile)).expect("registrato");
-    let mut ws = Workspace::new(&root, formats);
+    let mut ws = Workspace::new(&root, formats).expect("l'apertura del vault riesce");
     ws.register_core_feature("test.mina", "Mina")
         .expect("dichiarata");
     ws.reindex().expect("scansione");

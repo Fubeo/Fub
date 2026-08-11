@@ -11,6 +11,22 @@ pub enum KernelError {
         #[source]
         source: std::io::Error,
     },
+    /// La radice su cui si è chiesto di aprire il vault non va bene: non
+    /// esiste, è un file invece di una cartella, o non si ha permesso di
+    /// scriverci. È il rifiuto che [`Vault::open`](crate::Vault::open) e
+    /// [`Vault::on`](crate::Vault::on) danno **all'ingresso**, così l'errore
+    /// arriva prima che il vault abbia emesso eventi o mostrato un'interfaccia
+    /// (difetto 0160).
+    ///
+    /// Il `source` porta la specie del guasto (`NotFound`, `NotADirectory`,
+    /// `PermissionDenied`), ed è su quella che la traduzione verso il contratto
+    /// decide la faccia da mostrare.
+    #[error("la radice del vault non è valida ({path}): {source}")]
+    RadiceInvalida {
+        path: Utf8PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("nessun provider registrato per l'estensione {0:?}")]
     NoProvider(String),
     /// Nessun formato registrato, quindi nemmeno uno con cui far nascere una
@@ -211,6 +227,23 @@ impl From<KernelError> for PluginError {
             e @ (KernelError::Io { .. }
             | KernelError::NonUtf8Path(_)
             | KernelError::LinkRewrite(_)) => PluginError::Io(e.to_string().into()),
+            // La radice che l'apertura ha rifiutato (0160): la faccia la
+            // decide la specie del guasto, non la prosa. Un posto che non c'è
+            // o non è una cartella è la stessa cosa che [`Host::open`](crate::Host::open)
+            // rispondeva già a chi sceglie male dal dialogo — «non trovato»,
+            // perché non c'è niente da ritrovare; un permesso negato è invece
+            // la metà del contratto fatta apposta per «c'è, ma non puoi».
+            KernelError::RadiceInvalida { path, source } => match source.kind() {
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory => {
+                    PluginError::NotFound(format!("Non è una cartella valida: {path}").into())
+                }
+                std::io::ErrorKind::PermissionDenied => PluginError::PermissionDenied(
+                    format!("non si ha permesso di scrivere su {path}").into(),
+                ),
+                _ => PluginError::Io(
+                    format!("la radice del vault non è valida ({path}): {source}").into(),
+                ),
+            },
             e @ KernelError::Format(_) => PluginError::Internal(e.to_string().into()),
         }
     }
