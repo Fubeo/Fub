@@ -10,6 +10,7 @@ import {
   taskChecked,
   topicMatches,
 } from "./mirrored";
+import { espandi } from "../i18n/strings";
 import { normalizza } from "../ui/commands";
 import { byteToCharIndex, charToByteIndex } from "./offsets";
 // La fixture è generata dalle regole Rust — vedi
@@ -57,6 +58,9 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   // non la sa premere», e sono le stringhe su cui le due copie divergevano.
   accordo_canonico: (c) => normalizza(c.binding),
   byte_to_utf16: (c) => byteToCharIndex(c.text, c.byte),
+  // I due motori di sostituzione `{nome}`: l'unica coppia che il repo
+  // dichiarava gemella e nessuna fixture teneva tale (difetto 0224).
+  espansione: (c) => espandi(c.template, c.args),
   utf16_to_byte: (c) => charToByteIndex(c.text, c.unit),
   // La maschera di un abbonamento (§10.1). `mask_name` è solo l'etichetta che
   // rende leggibile un caso fallito: la regola guarda `mask` ed `event`.

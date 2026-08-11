@@ -821,17 +821,54 @@ function linguaCorrente(): string {
 
 /// Sostituisce `{nome}` con l'argomento che si chiama così.
 ///
-/// Le stesse due regole del motore del contratto, e non per simmetria: una
-/// graffa raddoppiata è letterale (serve a scrivere `{{"chiave": valore}}`), e
-/// un nome senza argomento **resta a vista** invece di sparire — una frase con
-/// un buco si nota, una frase a cui manca una parola no.
+/// Le stesse regole del motore del contratto (`fub_abi::text::expand`), e non
+/// per simmetria: una graffa raddoppiata è letterale (serve a scrivere
+/// `{{"chiave": valore}}`), e un nome senza argomento **resta a vista** invece
+/// di sparire — una frase con un buco si nota, una frase a cui manca una parola
+/// no.
+///
+/// I due motori sono la sola coppia che il repo dichiarava gemella senza che
+/// niente la tenesse tale, e divergevano già: di là un nome è **tutto ciò che
+/// precede la prima `}`**, qui era `\w+`, quindi un argomento che si chiama
+/// `foo-bar` — o `città` — veniva sostituito dal kernel e restava scritto a
+/// video dalla shell (difetto 0224). Adesso è lo stesso cammino, passo per
+/// passo, e a tenerlo tale è la fixture del mirror delle regole (`espansione`
+/// in `rules/rules-mirror.test.ts`): un motore che cambia da solo è rosso.
+///
+/// Il nome si cerca **fra le chiavi proprie** dell'oggetto e non con un
+/// accesso nudo: `{constructor}` in JavaScript trova qualcosa in qualunque
+/// oggetto, e sarebbe una funzione stampata in mezzo a una frase.
 export function espandi(template: string, args: Record<string, string | number>): string {
-  return template.replace(/\{\{|\}\}|\{(\w+)\}/g, (intero, nome?: string) => {
-    if (intero === "{{") return "{";
-    if (intero === "}}") return "}";
-    const valore = args[nome!];
-    return valore === undefined ? intero : String(valore);
-  });
+  let fuori = "";
+  let resto = template;
+  for (;;) {
+    const dove = resto.search(/[{}]/);
+    if (dove < 0) break;
+    fuori += resto.slice(0, dove);
+    const graffa = resto[dove]!;
+    resto = resto.slice(dove + 1);
+    // Raddoppiata = letterale, per l'una e per l'altra.
+    if (resto[0] === graffa) {
+      fuori += graffa;
+      resto = resto.slice(1);
+      continue;
+    }
+    // Una graffa chiusa spaiata è testo: non c'è niente da chiudere.
+    if (graffa === "}") {
+      fuori += "}";
+      continue;
+    }
+    const fine = resto.indexOf("}");
+    // Una graffa aperta che non si chiude mai: testo fino alla fine.
+    if (fine < 0) {
+      fuori += "{";
+      break;
+    }
+    const nome = resto.slice(0, fine);
+    fuori += Object.prototype.hasOwnProperty.call(args, nome) ? String(args[nome]) : `{${nome}}`;
+    resto = resto.slice(fine + 1);
+  }
+  return fuori + resto;
 }
 
 /// Il testo di una chiave, nella lingua di chi guarda.
