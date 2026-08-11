@@ -53,6 +53,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
+use crate::rules::cartelle;
 use crate::traits::{DocumentMatch, LinkDirection, PropertyFilter};
 
 /// Un'interrogazione sui documenti: le clausole sono in **OR**, e vuoto è
@@ -327,12 +328,12 @@ pub fn folder_of(doc: &DocId) -> String {
 /// La cartella che contiene un path, qualunque cosa quel path nomini: un file o
 /// **un'altra cartella** (§14.3). `""` per chi sta nella radice.
 pub fn parent_folder(path: &str) -> &str {
-    path.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("")
+    cartelle::genitrice(path)
 }
 
 /// Il documento sta in questa cartella? Con `descendants`, anche in una sua
-/// discendente. `path` senza slash finale; `""` è la radice — e la radice con
-/// `descendants` è tutto il vault.
+/// discendente. `""` è la radice — e la radice con `descendants` è tutto il
+/// vault; gli slash di cortesia ai due capi di `path` non contano.
 pub fn in_folder(doc: &DocId, path: &str, descendants: bool) -> bool {
     within_folder(parent_folder(doc.as_str()), path, descendants)
 }
@@ -342,15 +343,14 @@ pub fn in_folder(doc: &DocId, path: &str, descendants: bool) -> bool {
 ///
 /// Esiste perché la stessa domanda si fa su due cose diverse (§14.3): per un
 /// file `own` è la cartella che lo contiene, per una **cartella** è la sua
-/// genitrice — e da lì in poi le regole sono le stesse, radice compresa. Con
-/// due funzioni sarebbero due, e divergerebbero sul caso che nessuno prova.
+/// genitrice — e da lì in poi le regole sono le stesse, radice compresa.
+///
+/// Il corpo sta in [`cartelle::dentro`] e non qui: la stessa domanda la fanno
+/// anche la maschera degli eventi e la selezione di un'esportazione, e finché
+/// se la scrivevano ognuna per conto proprio davano tre risposte diverse alla
+/// stessa cartella (difetto 0141).
 pub fn within_folder(own: &str, path: &str, descendants: bool) -> bool {
-    let path = path.trim_end_matches('/');
-    if descendants {
-        path.is_empty() || own == path || own.strip_prefix(path).is_some_and(|r| r.starts_with('/'))
-    } else {
-        own == path
-    }
+    cartelle::dentro(path, own, descendants)
 }
 
 /// Un tag (in forma canonica) soddisfa la richiesta? Con `descendants`, anche

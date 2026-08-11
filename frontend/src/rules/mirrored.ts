@@ -282,11 +282,14 @@ export function topicMatches(prefix: string, topic: string): boolean {
 
 /// Questo documento sta dentro questa cartella, a qualunque profondità?
 ///
-/// Gemella di `fub_abi::rules::events::folder_contains`. La cartella è un
-/// prefisso di path perché nel kernel una cartella non esiste ancora (§14.3);
-/// la stringa vuota è la radice, e un `/` in coda non cambia niente.
+/// Gemella di `fub_abi::rules::cartelle::contiene`, che di là è la stessa riga
+/// per la maschera degli eventi, per i predicati d'indice e per la selezione di
+/// un'esportazione (difetto 0141). La cartella è un prefisso di path perché nel
+/// kernel una cartella non esiste ancora (§14.3); la stringa vuota è la radice,
+/// e gli slash ai due capi sono cortesia e non componenti — `Progetti`,
+/// `Progetti/` e `/Progetti/` sono la stessa cartella.
 export function folderContains(folder: string, id: string): boolean {
-  const f = folder.replace(/\/+$/, "");
+  const f = folder.replace(/^\/+|\/+$/g, "");
   if (f === "") return true;
   return id.length > f.length && id.startsWith(f) && id[f.length] === "/";
 }

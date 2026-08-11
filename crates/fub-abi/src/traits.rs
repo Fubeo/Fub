@@ -289,7 +289,9 @@ pub struct VaultFolder {
 /// vault).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FolderScope {
-    /// La cartella, senza slash finale. `""` è la radice del vault.
+    /// La cartella. `""` è la radice del vault, e gli slash ai due capi sono
+    /// cortesia: `Progetti`, `Progetti/` e `/Progetti/` sono la stessa cartella
+    /// ([`cartelle`](crate::rules::cartelle)).
     pub path: String,
     /// Anche ciò che sta nelle sue discendenti. `false` = i soli figli
     /// **diretti**, che è la domanda che disegna un livello di albero.
