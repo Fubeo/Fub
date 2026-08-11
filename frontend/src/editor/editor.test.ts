@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { EditorView } from "@codemirror/view";
-import { undo } from "@codemirror/commands";
+import { insertNewlineAndIndent, undo } from "@codemirror/commands";
 import { EditorSelection } from "@codemirror/state";
 import { createEditor, type Editor } from "./editor";
 
@@ -89,6 +89,54 @@ describe("setDoc", () => {
     const senzaPreview = view().state.facet(EditorView.decorations).length;
     ed.setDoc("altra nota");
     expect(view().state.facet(EditorView.decorations).length).toBe(senzaPreview);
+  });
+});
+
+// Un vault non è fatto solo di note nate qui: ci si sincronizza una cartella
+// scritta su Windows, ci si clona un repo, ci si copia dentro l'esportazione di
+// un altro programma. CodeMirror spezza su `\r\n` e ricompone su `\n`, quindi
+// aprire una di quelle note e battere **un carattere** la riscriveva tutta: un
+// diff che tocca ogni riga, cioè una cronologia che non si legge più e un
+// conflitto di sync che non ha niente da conflittare (difetto 0207).
+describe("un file che va a capo come Windows", () => {
+  it("resta com'era anche dopo che lo si è toccato", () => {
+    const { ed, view } = editor();
+    ed.setDoc("uno\r\ndue\r\ntre\r\n");
+    scrive(view(), "X");
+    expect(
+      ed.getDoc(),
+      "il file è tornato indietro tutto LF: chi ha cambiato una lettera si \
+ritrova un diff che tocca ogni riga",
+    ).toBe("Xuno\r\ndue\r\ntre\r\n");
+  });
+
+  it("va a capo come lui anche sotto le dita di adesso", () => {
+    // La metà che un `replace` all'uscita non avrebbe: dichiarare la forma
+    // allo stato vuol dire che il documento **è** fatto di quelle righe, e
+    // quindi anche l'a capo che si batte adesso è quello.
+    const { ed, view } = editor();
+    ed.setDoc("uno\r\ndue\r\n");
+    view().dispatch({ selection: EditorSelection.single(3) });
+    insertNewlineAndIndent(view());
+    expect(
+      ed.getDoc(),
+      "la riga nuova è nata LF in mezzo a un file CRLF: il file torna misto \
+per mano nostra",
+    ).toBe("uno\r\n\r\ndue\r\n");
+  });
+
+  it("un file già misto non ne ha una da conservare", () => {
+    // E prenderne una lo peggiorerebbe: sotto un separatore CRLF i suoi `\n`
+    // solitari smettono di essere righe, cioè cambia come il documento **si
+    // legge**, non solo come si riscrive. Meglio la normalizzazione di prima.
+    const { ed, view } = editor();
+    ed.setDoc("uno\r\ndue\ntre\r\n");
+    scrive(view(), "X");
+    expect(
+      ed.getDoc(),
+      "un file senza una forma sola se n'è vista imporre una: le sue righe \
+non sono più quelle che erano",
+    ).toBe("Xuno\ndue\ntre\n");
   });
 });
 

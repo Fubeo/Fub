@@ -620,7 +620,7 @@ sequenceDiagram
 
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
-| la pila del testo | [editor.ts:208](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
+| la pila del testo | [editor.ts:245](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
 | `UndoStack` | [undo.rs:75](../../crates/fub-kernel/src/undo.rs) | `VecDeque<Entry>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito — e la coda a due teste è lì perché si spinge da un capo e si pota dall'altro |
 | `undo::Entry` | [undo.rs:68](../../crates/fub-kernel/src/undo.rs) | la voce **e il conto dell'operazione**: i due arrivano dallo stesso esito e si separano una riga dopo, quindi o si appaiano lì o non si appaiano più (§23.14) |
 | `Undo` / `UndoStep` | [command.rs:712](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
