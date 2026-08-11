@@ -138,6 +138,13 @@ pub(crate) struct CoreIndex {
     /// `BTreeMap` per l'ordine, come `metas` e per lo stesso motivo: è ciò che
     /// rende stabile una risposta paginata.
     pub(crate) entries: BTreeMap<DocId, VaultEntry>,
+    /// I nomi di `entries`, mantenuti insieme a lei (difetto 0115).
+    ///
+    /// Non è una seconda anagrafe ed è ricavato: ci si passa dalle due sole
+    /// porte che toccano `entries` — [`set_entry`](CoreIndex::set_entry) e
+    /// [`remove_entry`](CoreIndex::remove_entry) — che è la ragione per cui un
+    /// conto ricavato qui non può divergere da ciò da cui è ricavato.
+    pub(crate) nomi: NomiDellAnagrafe,
     /// **Le cartelle** (§14.3), come la camminata le ha viste.
     ///
     /// Un insieme di path e non una mappa di record: ciò che si sa di una
@@ -209,13 +216,14 @@ pub(crate) struct CoreIndex {
 /// usa il controllo di salute, che riceve l'anagrafe e non chi la tiene.
 pub(crate) fn resolve_entry_in(
     entries: &BTreeMap<DocId, VaultEntry>,
+    nomi: &NomiDellAnagrafe,
     source: &DocId,
     target: &LinkTarget,
 ) -> Option<DocId> {
     let raw = match target {
         // Un wikilink nomina un file **per nome**, come nomina una nota per
         // nome: `![[foto.png]]` è il modo in cui si incorpora un allegato.
-        LinkTarget::Wiki { page, .. } => return named_entry_in(entries, page),
+        LinkTarget::Wiki { page, .. } => return nomi.nominato(page),
         LinkTarget::Path(raw) => raw,
         // Il mondo esterno non è nel vault.
         LinkTarget::Url(_) => return None,
@@ -231,43 +239,151 @@ pub(crate) fn resolve_entry_in(
     // la stessa regola con cui il grafo indicizza), e si paga solo quando il
     // confronto esatto ha già detto di no — cioè su un riferimento che sta per
     // essere dichiarato rotto.
-    let key = fub_abi::rules::path::resolution_key(id.as_str());
-    entries
-        .keys()
-        .find(|other| fub_abi::rules::path::resolution_key(other.as_str()) == key)
-        .cloned()
+    nomi.con_la_chiave_di_path(&fub_abi::rules::path::resolution_key(id.as_str()))
 }
 
-/// Il file che un **nome** nomina, fra quelli che non sono documenti (§14.1).
+/// **I nomi dell'anagrafe**, dalla chiave di risoluzione ai file che la portano.
 ///
-/// La regola è quella dei wikilink fra note, e lo è di proposito: si confronta
-/// la chiave di risoluzione (trim, NFC, minuscolo) contro il **nome del file
-/// con la sua estensione** — che è come si scrive `![[foto.png]]` — o contro il
-/// path intero, per chi disambigua scrivendolo. Fra omonimi vince il più vicino
-/// alla radice, e a parità l'ordine dei path: la stessa regola del grafo, perché
-/// due regole di risoluzione in un'app sola sono due risposte alla stessa
-/// domanda.
+/// Risolvere un riferimento è una domanda **per chiave**, e prima era una
+/// scansione: si calcolavano fino a due chiavi per ogni voce del vault e si
+/// chiudeva con un `min_by_key`, che non cortocircuita — quindi trovare costava
+/// quanto non trovare. Il chiamante caro non è il controllo di salute ma
+/// `entry_rewrite_plan`, che chiede una volta per ogni link di ogni documento:
+/// su ventimila voci, spostare un allegato voleva dire decine di minuti
+/// (difetto 0115). Qui la chiave si calcola **una volta per voce, quando la
+/// voce entra**, e la domanda diventa una ricerca in una mappa. È la stessa
+/// forma che il grafo ha da sempre per le note (`path_index`), portata
+/// sull'anagrafe.
 ///
-/// I documenti restano fuori: quelli li risolve il grafo, che conosce anche gli
-/// alias. Chi chiama prova prima lui.
-pub(crate) fn named_entry_in(entries: &BTreeMap<DocId, VaultEntry>, name: &str) -> Option<DocId> {
-    let wanted = fub_abi::rules::path::resolution_key(name);
-    if wanted.is_empty() {
-        return None;
+/// **Due mappe e non una**, perché le domande sono due e mescolarle darebbe
+/// risposte sbagliate: un `[[foto.png]]` può trovare un file che si chiama così
+/// in fondo a una cartella, un path scritto per intero no — e se stessero
+/// insieme, un `a/foto.png` indicizzato per nome verrebbe reso a chi ha scritto
+/// il path `foto.png`, che è un file diverso.
+///
+/// Il prezzo è due chiavi in memoria per voce, ed è il conto che questa forma
+/// paga per non riscandire: un'anagrafe di ventimila file tiene quarantamila
+/// stringhe corte invece di ricalcolarne quarantamila **a ogni link**.
+#[derive(Debug, Default)]
+pub(crate) struct NomiDellAnagrafe {
+    /// La chiave del **path intero**, per ogni voce di qualunque specie: è ciò
+    /// che serve al ripiego di [`resolve_entry_in`], che riconcilia NFD e NFC
+    /// dopo che il confronto esatto ha già detto di no. I documenti ci sono
+    /// perché quel ripiego li considera.
+    per_path: BTreeMap<String, BTreeSet<DocId>>,
+    /// Le chiavi con cui un **nome** trova un file che non è un documento: il
+    /// nome del file con la sua estensione — che è come si scrive
+    /// `![[foto.png]]` — e il path intero, per chi disambigua scrivendolo.
+    ///
+    /// I documenti restano fuori: quelli li risolve il grafo, che conosce anche
+    /// gli alias, e chi chiama prova prima lui.
+    per_nome: BTreeMap<String, BTreeSet<DocId>>,
+}
+
+impl NomiDellAnagrafe {
+    /// I nomi di un'anagrafe che c'è già, in una passata.
+    ///
+    /// **Solo per i banchi**, e la riga che lo dice è il `cfg`: in produzione
+    /// non esiste un'anagrafe senza chi la mantiene — a `entries` si arriva
+    /// dalle due porte di [`CoreIndex`], che tengono i nomi al passo. Chi
+    /// invece un'anagrafe se la costruisce a mano per provarci sopra una regola
+    /// (il controllo di salute, che riceve le due mappe e non l'indice) ha
+    /// bisogno di questa, e averla `pub(crate)` in produzione vorrebbe dire
+    /// tenere aperta una seconda via per fare i nomi — cioè il modo in cui due
+    /// elenchi cominciano a divergere.
+    #[cfg(test)]
+    pub(crate) fn di(entries: &BTreeMap<DocId, VaultEntry>) -> Self {
+        let mut nomi = NomiDellAnagrafe::default();
+        for (id, entry) in entries {
+            nomi.inserisci(id, entry.kind);
+        }
+        nomi
     }
-    entries
-        .iter()
-        .filter(|(_, entry)| entry.kind != EntryKind::Document)
-        .map(|(id, _)| id)
-        .filter(|id| {
-            let key = fub_abi::rules::path::resolution_key(id.as_str());
-            key == wanted
-                || fub_abi::rules::path::resolution_key(file_name_of(id.as_str())) == wanted
-        })
-        // Il più vicino alla radice, e a parità il primo in ordine di path:
-        // `BTreeMap` li offre già ordinati, quindi `min_by_key` è stabile.
-        .min_by_key(|id| id.as_str().matches('/').count())
-        .cloned()
+
+    /// Registra una voce, con la sua specie.
+    ///
+    /// Toglie prima di mettere perché la stessa voce può rientrare cambiando
+    /// specie, e una chiave vecchia rimasta dietro risponderebbe con un file
+    /// che non si chiama più così.
+    pub(crate) fn inserisci(&mut self, id: &DocId, kind: EntryKind) {
+        self.togli(id);
+        let path = fub_abi::rules::path::resolution_key(id.as_str());
+        let nome = fub_abi::rules::path::resolution_key(file_name_of(id.as_str()));
+        ricorda(&mut self.per_path, &path, id);
+        if kind != EntryKind::Document {
+            ricorda(&mut self.per_nome, &path, id);
+            ricorda(&mut self.per_nome, &nome, id);
+        }
+    }
+
+    /// Toglie una voce da tutte le chiavi che la portavano.
+    ///
+    /// Le chiavi si ricalcolano dall'id invece di tenerle scritte: sono due
+    /// stringhe corte, e un secondo elenco da mantenere è un secondo elenco che
+    /// può divergere dal primo. La specie qui non serve — togliere da una chiave
+    /// che non c'era non è un errore.
+    pub(crate) fn togli(&mut self, id: &DocId) {
+        let path = fub_abi::rules::path::resolution_key(id.as_str());
+        let nome = fub_abi::rules::path::resolution_key(file_name_of(id.as_str()));
+        scorda(&mut self.per_path, &path, id);
+        scorda(&mut self.per_nome, &path, id);
+        scorda(&mut self.per_nome, &nome, id);
+    }
+
+    pub(crate) fn svuota(&mut self) {
+        self.per_path.clear();
+        self.per_nome.clear();
+    }
+
+    /// Il file che un **nome** nomina, fra quelli che non sono documenti (§14.1).
+    ///
+    /// La regola è quella dei wikilink fra note, e lo è di proposito: si
+    /// confronta la chiave di risoluzione (trim, NFC, minuscolo) contro il nome
+    /// del file con la sua estensione, o contro il path intero. Fra omonimi
+    /// vince il più vicino alla radice, e a parità l'ordine dei path: la stessa
+    /// regola del grafo, perché due regole di risoluzione in un'app sola sono
+    /// due risposte alla stessa domanda.
+    ///
+    /// Gli omonimi di una chiave sono pochi — è la ragione per cui questa forma
+    /// guadagna: il `min_by_key` è rimasto, ma gira su loro e non sul vault.
+    pub(crate) fn nominato(&self, name: &str) -> Option<DocId> {
+        let wanted = fub_abi::rules::path::resolution_key(name);
+        if wanted.is_empty() {
+            return None;
+        }
+        self.per_nome
+            .get(&wanted)?
+            .iter()
+            // Il più vicino alla radice, e a parità il primo in ordine di path:
+            // il gruppo è ordinato, quindi `min_by_key` è stabile.
+            .min_by_key(|id| id.as_str().matches('/').count())
+            .cloned()
+    }
+
+    /// La voce il cui **path intero** ha questa chiave: la prima in ordine di
+    /// path, che è ciò che rispondeva la scansione.
+    pub(crate) fn con_la_chiave_di_path(&self, chiave: &str) -> Option<DocId> {
+        self.per_path.get(chiave)?.iter().next().cloned()
+    }
+}
+
+fn ricorda(mappa: &mut BTreeMap<String, BTreeSet<DocId>>, chiave: &str, id: &DocId) {
+    if chiave.is_empty() {
+        return;
+    }
+    mappa
+        .entry(chiave.to_string())
+        .or_default()
+        .insert(id.clone());
+}
+
+fn scorda(mappa: &mut BTreeMap<String, BTreeSet<DocId>>, chiave: &str, id: &DocId) {
+    if let Some(gruppo) = mappa.get_mut(chiave) {
+        gruppo.remove(id);
+        if gruppo.is_empty() {
+            mappa.remove(chiave);
+        }
+    }
 }
 
 /// Il nome di un file dentro il suo path.
@@ -488,6 +604,7 @@ impl CoreIndex {
         CoreIndex {
             metas: BTreeMap::new(),
             entries: BTreeMap::new(),
+            nomi: NomiDellAnagrafe::default(),
             folders: BTreeSet::new(),
             tags: TagCounts::default(),
             graph: LinkGraph::default(),
@@ -523,6 +640,7 @@ impl CoreIndex {
     pub(crate) fn clear(&mut self) {
         self.metas.clear();
         self.entries.clear();
+        self.nomi.svuota();
         self.folders.clear();
         self.tags.clear();
     }
@@ -566,7 +684,7 @@ impl CoreIndex {
     /// Il **file** che un riferimento nomina, se il vault ce l'ha — di
     /// qualunque specie (§14.1).
     pub(crate) fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId> {
-        resolve_entry_in(&self.entries, source, target)
+        resolve_entry_in(&self.entries, &self.nomi, source, target)
     }
 
     /// Mette (o aggiorna) una voce dell'anagrafe.
@@ -628,6 +746,7 @@ impl CoreIndex {
     }
 
     pub(crate) fn set_entry(&mut self, entry: VaultEntry) {
+        self.nomi.inserisci(&entry.id, entry.kind);
         self.entries.insert(entry.id.clone(), entry);
     }
 
@@ -688,6 +807,7 @@ impl CoreIndex {
     /// cui la sua specie si può ancora sapere, ed è ciò che un evento di
     /// sparizione deve portare con sé.
     pub(crate) fn remove_entry(&mut self, id: &DocId) -> Option<EntryKind> {
+        self.nomi.togli(id);
         self.entries.remove(id).map(|e| e.kind)
     }
 
@@ -1050,6 +1170,7 @@ impl IndexProvider for CoreIndex {
                     &health::VaultView {
                         graph: &self.graph,
                         entries: &self.entries,
+                        nomi: &self.nomi,
                     },
                     &self.registry.all_extensions(),
                     &self.date_formats(),

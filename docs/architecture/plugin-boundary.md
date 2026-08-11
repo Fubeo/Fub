@@ -653,7 +653,7 @@ arriva in fondo.
 | i thread | [runner.rs:72](../../crates/fub-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
 | l'host per chiamata | [jobs.rs:94](../../crates/fub-host/src/jobs.rs) | tiene la `Custodia<Workspace>` e prende un prestito **per capacità** |
 | la bandiera | [runner.rs:89](../../crates/fub-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
-| la riga viva | [core.rs:373](../../crates/fub-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
+| la riga viva | [core.rs:489](../../crates/fub-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
 
 **`JobStatus` è una struct, non un enum**
 ([traits.rs:114](../../crates/fub-abi/src/traits.rs)): cinque campi — `id`,
@@ -1231,7 +1231,7 @@ sequenceDiagram
 
 | Passo | Dove | Perché è lì e non altrove |
 |---|---|---|
-| `Host::open` | [session.rs:532](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
+| `Host::open` | [session.rs:537](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
 | `mount` | [mount.rs:188](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
 | `BundleRegistry::mount` | [registry.rs:269](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
 | `reindex` | [workspace.rs:157](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
