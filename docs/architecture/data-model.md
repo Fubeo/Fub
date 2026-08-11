@@ -86,8 +86,8 @@ case-insensitive (macOS/Windows). Conseguenze:
 
   | Funzione | Dove | Cosa fa | A cosa serve |
   |---|---|---|---|
-  | `resolution_key` | [`abi/rules/path.rs:49`](../../crates/fub-abi/src/rules/path.rs) | trim, NFC, minuscola | dice chi è **candidato** |
-  | `exact_key` | [`abi/rules/path.rs:66`](../../crates/fub-abi/src/rules/path.rs) | trim e NFC **senza** minuscolare | dice chi ha **ragione** fra i candidati |
+  | `resolution_key` | [`abi/rules/path.rs:48`](../../crates/fub-abi/src/rules/path.rs) | trim, NFC, minuscola | dice chi è **candidato** |
+  | `exact_key` | [`abi/rules/path.rs:65`](../../crates/fub-abi/src/rules/path.rs) | trim e NFC **senza** minuscolare | dice chi ha **ragione** fra i candidati |
 
   Fra gli omonimi di una chiave vince chi combacia esattamente. In sua assenza si
   torna alla priorità di sempre: path più corto, poi lessicografico. Con un
@@ -249,12 +249,12 @@ classDiagram
 
 | Tipo | Dove | Nota che il disegno non può portare |
 |---|---|---|
-| `DocumentModel` | [model.rs:241](../../crates/fub-abi/src/model.rs) | nove campi, di cui sette sono la stessa cosa vista in due modi; `frontmatter_present` non è uno di quei sette perché una mappa vuota non distingue «assente» da «presente e senza chiavi» |
-| `Block` | [model.rs:314](../../crates/fub-abi/src/model.rs) | ogni variante porta `anchor` e `span`, **anche** `ThematicBreak`, perché `Block::anchor` sia totale |
-| `Inline` | [model.rs:510](../../crates/fub-abi/src/model.rs) | `Custom` è l'unico varco: senza, un enum chiuso più il freeze WIT obbligherebbe a prevedere ogni sintassi futura |
-| `LinkTarget` | [model.rs:548](../../crates/fub-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
-| `Anchor` | [model.rs:774](../../crates/fub-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
-| `Span` | [model.rs:167](../../crates/fub-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` — e la sorgente sono i byte del file, BOM e terminatori compresi ([0058](../decisions/0058-un-nome-che-nasce.md)) |
+| `DocumentModel` | [model.rs:243](../../crates/fub-abi/src/model.rs) | nove campi, di cui sette sono la stessa cosa vista in due modi; `frontmatter_present` non è uno di quei sette perché una mappa vuota non distingue «assente» da «presente e senza chiavi» |
+| `Block` | [model.rs:316](../../crates/fub-abi/src/model.rs) | ogni variante porta `anchor` e `span`, **anche** `ThematicBreak`, perché `Block::anchor` sia totale |
+| `Inline` | [model.rs:512](../../crates/fub-abi/src/model.rs) | `Custom` è l'unico varco: senza, un enum chiuso più il freeze WIT obbligherebbe a prevedere ogni sintassi futura |
+| `LinkTarget` | [model.rs:550](../../crates/fub-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
+| `Anchor` | [model.rs:776](../../crates/fub-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
+| `Span` | [model.rs:169](../../crates/fub-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` — e la sorgente sono i byte del file, BOM e terminatori compresi ([0058](../decisions/0058-un-nome-che-nasce.md)) |
 | `VaultEntry` | [traits.rs:203](../../crates/fub-abi/src/traits.rs) | sta nei trait e non qui, perché è la risposta a `IndexQuery::Entries`; `kind` **non si persiste**, dipende da chi è registrato adesso |
 
 Il disegno mostra la forma **ad albero**. Al confine WIT ce n'è una seconda, e

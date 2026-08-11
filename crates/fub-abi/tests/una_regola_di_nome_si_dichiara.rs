@@ -164,17 +164,18 @@ fn regole() -> BTreeMap<&'static str, (Famiglia, &'static str)> {
             "crates/fub-abi/src/model.rs::canonical_tag",
             (
                 Famiglia::CasoContestuale,
-                "diverge da `resolution_key` per la NFC, che non fa: è il difetto 0140 e non una \
-                 ragione. Sta qui perché un tag non è un path e non passa dalla risoluzione, ma \
-                 il passo mancante è dichiarato, non giustificato.",
+                "non diverge da `resolution_key` sul terreno — compone con `composed` come lei — \
+                 ma sul dominio: un tag non è un path e non passa dalla risoluzione, quindi la \
+                 regola resta sua e la sua gerarchia la decide `rules/tag.rs`.",
             ),
         ),
         (
             "crates/fub-abi/src/model.rs::canonical_anchor",
             (
                 Famiglia::CasoContestuale,
-                "come `canonical_tag`, e per lo stesso difetto 0140. Diverge da lei per il solo \
-                 fatto che un'ancora non ha gerarchia: nessuna delle due normalizza.",
+                "come `canonical_tag`, e compone come lei. Diverge da lei per il solo fatto che \
+                 un'ancora non ha gerarchia, e per la regola di validità che le sta accanto \
+                 (`valid_anchor`), che a un nome di tag non si applica.",
             ),
         ),
         (
@@ -342,8 +343,8 @@ fn regole() -> BTreeMap<&'static str, (Famiglia, &'static str)> {
                 "la ragione è scritta sopra la funzione ed è l'asse di questa famiglia: «gli \
                  offset sono il prodotto di questa funzione: `to_lowercase` può cambiare la \
                  lunghezza in byte di ciò che tocca … e uno span misurato su un testo diverso da \
-                 quello che l'editor ha aperto porterebbe il cursore altrove». Le manca la NFC, \
-                 ed è il difetto 0140.",
+                 quello che l'editor ha aperto porterebbe il cursore altrove». La NFC la fa senza \
+                 rinunciarci, componendo un grappolo canonico per volta (`cluster_end`).",
             ),
         ),
         (
@@ -352,8 +353,8 @@ fn regole() -> BTreeMap<&'static str, (Famiglia, &'static str)> {
                 Famiglia::CasoPerCarattere,
                 "piega carattere per carattere perché sta già iterando i caratteri per tenere \
                  solo gli alfanumerici: non ha un offset da difendere come `prefix_len_ci`, ha \
-                 un filtro. È la ragione per cui su NFD non diverge soltanto ma **cancella** \
-                 l'accento (una `Mn` non è alfanumerica) — difetto 0140.",
+                 un filtro. Proprio per quel filtro compone **prima** di iterare: una `Mn` non è \
+                 alfanumerica, e senza `composed` l'accento non divergeva, spariva.",
             ),
         ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
@@ -439,6 +440,16 @@ fn regole() -> BTreeMap<&'static str, (Famiglia, &'static str)> {
             ),
         ),
         // -- SoloNfc: stessi caratteri, byte diversi ------------------------
+        (
+            "crates/fub-abi/src/rules/composition.rs::composed",
+            (
+                Famiglia::SoloNfc,
+                "non è una regola di identità: è il **terreno** su cui le altre la decidono, e \
+                 l'unica riga della tabella che le altre chiamano invece di riscrivere. Diverge \
+                 da `exact_key` perché non rifila: chi taglia gli spazi decide cosa sia un nome, \
+                 questa decide soltanto come sono scritti i suoi caratteri.",
+            ),
+        ),
         (
             "crates/fub-abi/src/rules/path.rs::exact_key",
             (
@@ -658,7 +669,10 @@ fn gesto(riga: &str) -> Option<Gesto> {
     if CASO.iter().any(|a| riga.contains(a)) {
         return Some(Gesto::Caso);
     }
-    if riga.contains(".nfc()") || riga.contains(".nfd()") {
+    // `composed(` è il gesto **comodo** della NFC da quando la forma composta ha
+    // un nome (difetto 0140): chi normalizza la chiama, e chi non la chiama non
+    // normalizza. `.nfc()` resta perché è ciò che `composed` stessa fa.
+    if riga.contains(".nfc()") || riga.contains(".nfd()") || riga.contains("composed(") {
         return Some(Gesto::Nfc);
     }
     match CONFINE.iter().any(|a| riga.contains(a)) {

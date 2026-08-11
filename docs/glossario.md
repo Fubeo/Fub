@@ -56,7 +56,7 @@ in ordine alfabetico.
 ## Il documento
 
 ### ancora
-`Anchor` · [`abi/model.rs:774`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Anchor` · [`abi/model.rs:776`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'identificatore che un blocco si porta dentro il testo — la forma `^id` in coda
 a un paragrafo — perché un link possa puntare a *quel* punto e non alla nota
@@ -65,7 +65,7 @@ regole di forma (`canonical_anchor`, `valid_anchor`) stanno in `rules/`, dove
 vanno le regole condivise con la shell.
 
 ### blocco
-`Block` · [`abi/model.rs:314`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Block` · [`abi/model.rs:316`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'unità di primo livello del documento: paragrafo, titolo, lista, tabella,
 citazione, blocco di codice, riga orizzontale, e l'escape hatch `Custom`. È un
@@ -73,20 +73,20 @@ enum chiuso di proposito: ciò che nessun formato conosce passa da `Custom`
 invece di allargare l'enum a ogni formato nuovo.
 
 ### frontmatter
-`Frontmatter` · [`abi/model.rs:190`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Frontmatter` · [`abi/model.rs:192`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Il blocco YAML in testa a una nota, proiettato su JSON. L'ordine delle chiavi si
 conserva (`serde_json` con `preserve_order`), perché riscrivere un file
 dell'utente non deve riordinargli le proprietà: è fedeltà, non estetica.
 
 ### inline
-`Inline` · [`abi/model.rs:510`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Inline` · [`abi/model.rs:512`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Ciò che sta *dentro* un blocco: testo, enfasi, codice, link, immagine, tag,
 interruzione. Stessa logica del blocco, incluso il `Custom`.
 
 ### modello del documento
-`DocumentModel` · [`abi/model.rs:241`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`DocumentModel` · [`abi/model.rs:243`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Il documento parsato in una forma che **nessun formato possiede**: né markdown
 né altro. È il centro dell'idea architetturale — il kernel lavora su questo, e il
@@ -94,7 +94,7 @@ markdown è solo il primo provider che sa produrlo. Dettaglio in
 [architecture/data-model.md](architecture/data-model.md).
 
 ### proprietà
-`PropertyValue` · [`abi/model.rs:1112`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`PropertyValue` · [`abi/model.rs:1126`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Un valore del frontmatter letto con un tipo invece che come JSON nudo: scalare,
 data, ora, lista. Serve a chi interroga (ordinare per data, filtrare per stato)
@@ -122,7 +122,7 @@ normalizzato» — è indistinguibile da questa. Se ne accorge solo quando un
 provider calcola degli offset su una e l'host li applica sull'altra.
 
 ### span
-`Span` · [`abi/model.rs:167`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md), [0058](decisions/0058-un-nome-che-nasce.md)
+`Span` · [`abi/model.rs:169`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md), [0058](decisions/0058-un-nome-che-nasce.md)
 
 L'intervallo di [sorgente](#sorgente) da cui un nodo del modello proviene, in
 **byte**. È ciò che rende possibile la live preview: la decorazione CodeMirror
@@ -131,7 +131,7 @@ sia quella sorgente è la 0058, e non è un dettaglio: gli span di due parti che
 la intendono diversamente cadono in punti diversi dello stesso file.
 
 ### wikilink
-`LinkTarget::Wiki` · [`abi/model.rs:548`](../crates/fub-abi/src/model.rs) · [0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)
+`LinkTarget::Wiki` · [`abi/model.rs:550`](../crates/fub-abi/src/model.rs) · [0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)
 
 Il link in stile Obsidian `[[Pagina#Titolo^blocco]]`, con i tre pezzi separati
 nel contratto. La risoluzione segue le regole di Obsidian — nome, alias, path, e
@@ -141,9 +141,9 @@ perché, e il prezzo, stanno nella 0004).
 Fra gli omonimi le chiavi sono **due** e fanno due lavori diversi:
 
 - `resolution_key`
-  ([`abi/rules/path.rs:49`](../crates/fub-abi/src/rules/path.rs)) fa trim, NFC e
+  ([`abi/rules/path.rs:48`](../crates/fub-abi/src/rules/path.rs)) fa trim, NFC e
   minuscolo, e dice **chi è candidato**.
-- `exact_key` ([`abi/rules/path.rs:66`](../crates/fub-abi/src/rules/path.rs)) fa
+- `exact_key` ([`abi/rules/path.rs:65`](../crates/fub-abi/src/rules/path.rs)) fa
   trim e NFC senza minuscolare, e dice **chi ha ragione fra i candidati**. È la
   scelta che prima toccava all'ordine ASCII.
 
@@ -221,7 +221,7 @@ somigliano:
 Le due porte che la chiedono sono la scansione e il watcher, e chiedono alla
 stessa politica. Un nome dichiarato e un nome che arriva dal disco si
 confrontano per **chiave** (`resolution_key`,
-[`abi/rules/path.rs:49`](../crates/fub-abi/src/rules/path.rs)) e non per byte:
+[`abi/rules/path.rs:48`](../crates/fub-abi/src/rules/path.rs)) e non per byte:
 la stessa dichiarazione deve escludere la stessa cartella su ogni macchina da
 cui il vault si apre, e `Node_Modules` su macOS è la cartella che
 `node_modules` nomina.

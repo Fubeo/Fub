@@ -32,6 +32,7 @@
 
 use fub_abi::model::Span;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextMode};
+use fub_abi::rules::composition::{cluster_end, composed};
 use fub_abi::traits::IndexQuery;
 
 /// Quante occorrenze al massimo si riportano per documento.
@@ -140,10 +141,13 @@ pub(crate) fn max_docs() -> usize {
 /// saltare, e `aa` in `aaaa` sono **due** punti, non tre.
 ///
 /// Il confronto ignora il **caso**, come lo ignora ogni motore di ricerca di
-/// note: chi cerca `rust` vuole anche il `Rust` in cima al paragrafo. Ignora
-/// solo quello — accenti, punteggiatura e forme flesse restano ciò che sono,
-/// perché normalizzarli qui vorrebbe dire riscrivere la tokenizzazione di chi
-/// indicizza, in un secondo posto e con altre regole.
+/// note: chi cerca `rust` vuole anche il `Rust` in cima al paragrafo. E ignora
+/// la **codifica**, cioè con quale sequenza di code point una lettera accentata
+/// è stata scritta, perché `però` battuto sulla tastiera e `però` sincronizzato
+/// da macOS sono la stessa parola. Ignora solo quelle due — un accento **c'è o
+/// non c'è** (`però` non è `pero`), e punteggiatura e forme flesse restano ciò
+/// che sono, perché normalizzarle qui vorrebbe dire riscrivere la
+/// tokenizzazione di chi indicizza, in un secondo posto e con altre regole.
 pub(crate) fn locate(source: &str, needles: &[String]) -> Vec<Span> {
     let mut spans: Vec<Span> = Vec::new();
     for needle in needles {
@@ -212,17 +216,47 @@ fn first_at_or_after(source: &str, needle: &str, from: usize) -> Option<Span> {
 /// funzione: `to_lowercase` può cambiare la lunghezza in byte di ciò che tocca
 /// (`İ` diventa due caratteri), e uno span misurato su un testo diverso da
 /// quello che l'editor ha aperto porterebbe il cursore altrove.
+///
+/// Lo stesso vincolo dice **come** ci entra la NFC. Comporre il documento non
+/// si può — la copia composta ha un'altra lunghezza in byte — quindi si avanza
+/// un **grappolo canonico** per volta ([`cluster_end`]) e si compone quello:
+/// `Café` scritto con l'accento combinante occupa i suoi byte nel file e vale
+/// `é` nel confronto, così chi digita `café` trova la nota sincronizzata da
+/// macOS e viceversa. Un grappolo si consuma **intero** o non si consuma: una
+/// occorrenza che finisse in mezzo a una combinante darebbe uno span che taglia
+/// una lettera a metà.
+///
+/// La corsia veloce è ASCII contro ASCII, dove la NFC è l'identità e non c'è
+/// niente da comporre — cioè su quasi ogni byte di quasi ogni scansione.
 fn prefix_len_ci(hay: &str, needle: &str) -> Option<usize> {
-    let mut chars = hay.char_indices();
-    let mut len = 0usize;
-    for wanted in needle.chars() {
-        let (at, found) = chars.next()?;
-        if !found.to_lowercase().eq(wanted.to_lowercase()) {
+    let (mut h, mut n) = (0usize, 0usize);
+    while n < needle.len() {
+        if h >= hay.len() {
             return None;
         }
-        len = at + found.len_utf8();
+        let (fine_h, fine_n) = (cluster_end(hay, h), cluster_end(needle, n));
+        let (grappolo_h, grappolo_n) = (&hay[h..fine_h], &needle[n..fine_n]);
+        let uguali = match (grappolo_h.as_bytes(), grappolo_n.as_bytes()) {
+            ([a], [b]) if a.is_ascii() && b.is_ascii() => a.eq_ignore_ascii_case(b),
+            _ => {
+                let (a, b) = (composed(grappolo_h), composed(grappolo_n));
+                let (mut a, mut b) = (a.chars(), b.chars());
+                loop {
+                    match (a.next(), b.next()) {
+                        (None, None) => break true,
+                        (Some(x), Some(y)) if x.to_lowercase().eq(y.to_lowercase()) => {}
+                        _ => break false,
+                    }
+                }
+            }
+        };
+        if !uguali {
+            return None;
+        }
+        h = fine_h;
+        n = fine_n;
     }
-    Some(len)
+    Some(h)
 }
 
 #[cfg(test)]
@@ -412,6 +446,46 @@ mod tests {
             ],
             "ogni termine ha la sua scansione, e le due si accavallano"
         );
+    }
+
+    /// **La codifica di un accento non nasconde una parola** (difetto 0140).
+    ///
+    /// `è` si scrive con un code point o con due, e chi ha scritto la nota non
+    /// ha scelto: un vault sincronizzato con macOS è in NFD, ciò che si digita
+    /// è in NFC. Il confronto deve reggere **nei due versi** — l'ago composto
+    /// dentro la paglia decomposta e viceversa — e lo span deve restare quello
+    /// del sorgente, che è ciò che l'editor apre.
+    ///
+    /// È la metà kernel di `crates/fub-abi/tests/una_sola_forma_normalizzata.rs`:
+    /// sta qui perché `prefix_len_ci` è privata, e privata resta.
+    #[test]
+    fn la_codifica_di_un_accento_non_nasconde_una_parola() {
+        let composta = "Il caffè è pronto";
+        let decomposta = "Il caffe\u{300} e\u{300} pronto";
+        assert_ne!(composta, decomposta, "o le due forme non provano niente");
+
+        for (paglia, ago) in [
+            (composta, "caffè"),
+            (decomposta, "caffè"),
+            (composta, "caffe\u{300}"),
+            (decomposta, "caffe\u{300}"),
+        ] {
+            let spans = locate(paglia, &[ago.to_string()]);
+            assert_eq!(spans.len(), 1, "`{ago}` non si trova in `{paglia}`");
+            // Lo span è in byte del **sorgente**: la fetta che ritaglia è la
+            // parola come sta nel file, non una copia normalizzata.
+            let fetta = &paglia[spans[0].start..spans[0].end];
+            assert_eq!(
+                fub_abi::rules::composition::composed(fetta),
+                "caffè",
+                "lo span ritaglia `{fetta:?}` invece della parola"
+            );
+        }
+
+        // E il verso che protegge: comporre non fonde un accento con la sua
+        // assenza. `pero` e `però` restano due parole, come dice `locate`.
+        assert!(locate("il pero in giardino", &["pero\u{300}".to_string()]).is_empty());
+        assert!(locate("però", &["pero".to_string()]).is_empty());
     }
 
     #[test]

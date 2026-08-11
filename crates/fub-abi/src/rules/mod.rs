@@ -24,6 +24,9 @@
 //!
 //! ## La mappa
 //!
+//! - [`composition`] — **la forma normalizzata** (NFC) su cui tutte le altre
+//!   giudicano: non decide se due nomi sono lo stesso nome, decide come sono
+//!   scritti i caratteri di cui si chiede;
 //! - [`ids`] — **di chi è un id**: la regola dei namespace, per tutti e otto
 //!   gli spazi di nomi del contratto (§7.4);
 //! - [`doc_data`] — **dove sta ciò che è attaccato a una nota**: il prefisso
@@ -72,6 +75,7 @@
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
 
 pub mod carichi;
+pub mod composition;
 pub mod doc_data;
 pub mod events;
 pub mod health;

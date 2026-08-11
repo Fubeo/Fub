@@ -262,10 +262,6 @@ pub fn divergenti() -> Vec<Caso> {
             "un cr nudo dentro una riga di tabella la spezza in due righe",
             "| a | b |\n| - | - |\n| 1 | 2 \r| 3 |\n",
         ),
-        caso(
-            "lo slug di un heading dipende dalla normalizzazione unicode",
-            "# Cafe\u{301}\n",
-        ),
     ]
 }
 
