@@ -28,7 +28,7 @@
 //! passano da `FsStorage::write_con`, che prende il rilevatore invece di
 //! nominarlo, e da `come_scrivere`, che è pura: i test di questo file che si
 //! compilano ed eseguono su ogni piattaforma sono
-//! **undici** [conta: durabilita-su-ogni-piattaforma].
+//! **quattordici** [conta: durabilita-su-ogni-piattaforma].
 //! Quel numero è il presidio del presidio: se qualcuno riportasse
 //! questa metà sotto un `#[cfg(…)]` qualunque, il conto scenderebbe e
 //! `check-prosa` diventerebbe rosso — mentre `cargo test` su Windows resterebbe
@@ -48,7 +48,8 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_kernel::storage::{
-    come_scrivere, cosa_c_e, ComeScrivere, FsStorage, NomiDelFile, VaultStorage,
+    cartelle_da_sincronizzare, come_scrivere, cosa_c_e, sincronizza_la_cartella, ComeScrivere,
+    FsStorage, NomiDelFile, VaultStorage,
 };
 
 fn banco() -> (tempfile::TempDir, Utf8PathBuf) {
@@ -404,6 +405,119 @@ fn i_file_di_fub_passano_dal_supporto() {
     assert!(
         !std::path::Path::new("/vault").exists(),
         "e nessuno dei due ha scritto sul filesystem vero"
+    );
+}
+
+// --- le mosse, che non scrivono niente e possono sparire lo stesso -----------
+//
+// La 0065 aveva trovato la riga che conta — è la **cartella** a portare il nome,
+// e senza il suo `fsync` un rename può sparire dopo un `Ok` — e l'aveva scritta
+// dentro la sola scrittura. Ma le operazioni che muovono o tolgono l'unica copia
+// di una nota sono le altre: cestinare, ripristinare, spostare, buttare una
+// bozza (difetto 0153).
+//
+// Vale anche qui il cappello di questo file: che dopo un crash vero la mossa ci
+// sia ancora non lo presidia nessun test, perché servirebbe un crash vero. Ciò
+// che si presidia è la **regola** — quali cartelle, e quante volte — e che
+// chiederne il `fsync` non abbia cambiato l'esito di ciò che le mosse
+// rispondono.
+
+/// Quali cartelle cambiano voce, come tabella: sei ingressi e nessun
+/// filesystem.
+///
+/// Le due righe che valgono la voce sono la seconda e l'ultima. Una rinomina
+/// **dentro la stessa cartella** la sincronizza una volta sola: due volte
+/// sarebbe un `fsync` in più su ogni rinomina, cioè il costo più caro che un
+/// disco sappia fare, pagato per niente. E un path senza genitore non produce
+/// la cartella vuota, che non si apre.
+#[test]
+fn le_cartelle_di_una_mossa_stanno_in_una_tabella() {
+    let casi: [(&str, Option<&str>, &[&str]); 6] = [
+        // Cestinare: la nota lascia una cartella e ne raggiunge un'altra.
+        (
+            "/v/note/Idea.md",
+            Some("/v/.trash/Idea.md"),
+            &["/v/note", "/v/.trash"],
+        ),
+        // Rinominare sul posto: una cartella sola, non due volte la stessa.
+        ("/v/note/Idea.md", Some("/v/note/Altra.md"), &["/v/note"]),
+        // Togliere: la voce che sparisce sta in una cartella sola.
+        ("/v/note/Idea.md", None, &["/v/note"]),
+        // Togliere una cartella: ciò che resta da far scendere sta sopra.
+        ("/v/.trash", None, &["/v"]),
+        // Una radice senza genitore non ha niente da sincronizzare.
+        ("Idea.md", None, &[]),
+        ("Idea.md", Some("Altra.md"), &[]),
+    ];
+    for (da, a, atteso) in casi {
+        let ottenuto = cartelle_da_sincronizzare(Utf8Path::new(da), a.map(Utf8Path::new));
+        let ottenuto: Vec<&str> = ottenuto.iter().map(|c| c.as_str()).collect();
+        assert_eq!(ottenuto, atteso, "da={da}, a={a:?}");
+    }
+}
+
+/// Chiedere il `fsync` di una cartella è **best-effort**: dove non si può, la
+/// mossa non fallisce.
+///
+/// È la metà che tiene la riparazione dal diventare un rifiuto di cestinare:
+/// su Windows una cartella non si apre come file, e una mossa che fallisse per
+/// questo sarebbe un danno certo al posto di uno improbabile.
+#[test]
+fn sincronizzare_una_cartella_e_best_effort() {
+    let (_tmp, root) = banco();
+    assert!(
+        sincronizza_la_cartella(&root),
+        "una cartella che c'è non si è lasciata sincronizzare"
+    );
+    assert!(
+        !sincronizza_la_cartella(&root.join("mai-esistita")),
+        "una cartella che non c'è ha detto di essere scesa sul disco"
+    );
+}
+
+/// E le mosse rispondono ancora ciò che rispondevano: il `fsync` in coda non ha
+/// trasformato un guasto in un `Ok`, né un `Ok` in un guasto.
+///
+/// È il rischio che la riparazione porta con sé, ed è la metà di lei che si
+/// vede: quattro operazioni hanno preso una coda, e una coda scritta male
+/// ingoia l'errore che veniva prima — infatti tolto un `?` a `remove` questo
+/// test dice «togliere ciò che non c'è ha risposto Ok». Che quella coda giri
+/// **dopo il `?`**, cioè che una mossa fallita non chieda niente al disco, è
+/// invece una riga letta in review come il `sync_all` stesso: spostarla prima
+/// non cambia niente di osservabile, cambia solo quanto ci mette un errore.
+#[test]
+fn una_mossa_risponde_ancora_cio_che_rispondeva() {
+    let (_tmp, root) = banco();
+    let storage = FsStorage;
+    let nota = root.join("note/Idea.md");
+    storage.write(&nota, b"prima").unwrap();
+
+    let cestinata = root.join(".trash/Idea.md");
+    storage.rename(&nota, &cestinata).expect("cestinare riesce");
+    assert!(storage.exists(&cestinata), "la nota è nel cestino");
+    assert!(!storage.exists(&nota), "e non è più dov'era");
+
+    assert!(
+        storage.rename(&nota, &cestinata).is_err(),
+        "spostare ciò che non c'è ha risposto Ok"
+    );
+    assert!(
+        storage.remove(&nota).is_err(),
+        "togliere ciò che non c'è ha risposto Ok"
+    );
+
+    storage.remove(&cestinata).expect("togliere riesce");
+    assert!(!storage.exists(&cestinata), "e la nota se n'è andata");
+
+    storage
+        .remove_dir_all(&root.join(".trash"))
+        .expect("svuotare riesce");
+    storage
+        .remove_empty_dir(&root.join("note"))
+        .expect("togliere una cartella vuota riesce");
+    assert!(
+        storage.remove_empty_dir(&root.join("note")).is_err(),
+        "togliere due volte la stessa cartella ha risposto Ok"
     );
 }
 
