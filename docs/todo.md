@@ -440,7 +440,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **ottantacinque** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **ottantaquattro** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -534,7 +534,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0158 | il recinto di `leave_trash` è lessicale e non risolve `..`: controlla che il path di destinazione cominci per la radice del vault confrontando i segmenti così come sono scritti, quindi un `to` che risale e ridiscende passa la guardia e il ripristino atterra fuori dal vault | `fub-kernel` · `vault.rs` `leave_trash` | regole |
 | 0159 | il `drop` del watcher non aspetta il debouncer: la chiusura del vault lascia il thread di debounce a consegnare eventi su un workspace che sta sparendo, e il rilascio della radice non ha nessuna barriera che garantisca che nessuno stia più scrivendo dentro `.fub/` | `fub-kernel` · `vault.rs` `Vault::drop` | lock e I/O |
 | 0160 | aprire un vault non verifica niente: `Vault::open` e `Vault::on` accettano una radice che non esiste, che è un file invece di una directory o su cui non si ha permesso di scrittura, e l'errore arriva solo alla prima operazione che tocca il disco — cioè a giro avanzato, con eventi già emessi e un'interfaccia che ha già mostrato un vault aperto | `fub-kernel` · `vault.rs` `Vault::open` | regole |
-| 0161 | il commento di `pota` dichiara chiusa una finestra che è ancora aperta: dice che l'`update` protegge dalla riga che cade fra la lettura e la riscrittura, ma l'`update` protegge solo chi passa dal lock e `append` non ci passa, quindi la prosa promette più di quanto il lock faccia. Il lock su `append` è una decisione (la 0067 lo rifiuta a verbale) ma la promessa falsa è un difetto: o la si corregge, o chi legge crede di avere una garanzia che non ha | `fub-kernel` · `journal.rs` `Journal::pota` | regole |
 | 0162 | `ripara_la_coda` legge il registro fuori dal lock e poi ci appende: fra la lettura che decide che la coda è mezza scritta e la scrittura che la ripara ci sta comodamente un'altra riga, e la riparazione la mangia | `fub-kernel` · `journal.rs` `ripara_la_coda` | lock e I/O |
 | 0163 | una riga appesa a metà non fa perdere sé stessa ma **quella dopo**: la coda troncata si ricuce col primo pezzo del record successivo, che diventa illeggibile e viene scartato dalla lettura, quindi il costo di un'interruzione è una riga in più di quella interrotta | `fub-kernel` · `journal.rs` `Journal::append` | lock e I/O |
 | 0164 | `Journal::read` ingoia gli errori di lettura e risponde «registro vuoto»: un file illeggibile per permessi o per I/O diventa indistinguibile da un vault senza storia, e da lì l'undo non ha niente da disfare senza che nessuno dica perché | `fub-kernel` · `journal.rs` `Journal::read` | lock e I/O |

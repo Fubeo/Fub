@@ -521,14 +521,26 @@ impl Journal {
     /// il suo registro non si è potuto potare, e la riga successiva ci si
     /// appende sopra lo stesso.
     pub(crate) fn pota(&self, giorni: u64) {
-        // Un **aggiornamento** e non una lettura seguita da una scrittura, ed è
-        // la differenza fra potare e perdere: le aggiunte sono `O_APPEND` e non
-        // aspettano nessuno, quindi fra un `read` fatto fuori e la `write` che
-        // sostituisce il file ci sta comodamente una riga — che sparirebbe
-        // scritta, cioè un'operazione appena riuscita che non si potrebbe più
-        // annullare. Qui il file si **sostituisce**, ed è l'unico momento in cui
-        // il registro passa dalla scrittura atomica del supporto (0065): l'unico
-        // in cui perderlo tutto insieme sarebbe possibile.
+        // Un **aggiornamento** e non una lettura seguita da una scrittura, e la
+        // differenza è vera ma più stretta di come si legge: `update` rilegge
+        // dentro il lucchetto (0066), quindi due potature dello stesso registro
+        // non si sovrascrivono a vicenda, e chi ricomponesse il file da una
+        // copia letta fuori riscriverebbe invece una fotografia vecchia.
+        //
+        // **La finestra però non è chiusa, e chi legge qui non deve credere di
+        // sì**: `append` non passa dal lucchetto — su `FsStorage` è `O_APPEND` e
+        // non aspetta nessuno, ed è la 0067 a rifiutarglielo apposta, perché un
+        // lock per riga si pagherebbe a ogni salvataggio —, quindi una riga
+        // appesa fra la rilettura e la `write` che sostituisce il file sparisce
+        // lo stesso. Ciò che si perde è il *racconto* di un'operazione riuscita,
+        // cioè un annullamento in meno, mai l'operazione: il registro si scrive
+        // dopo la mutazione (0067), non al posto suo. Il prezzo è dichiarato,
+        // non chiuso. (In memoria non si vede: là `append` e `update` prendono
+        // lo stesso mutex, quindi il caso da temere è il disco.)
+        //
+        // Qui il file si **sostituisce**, ed è l'unico momento in cui il
+        // registro passa dalla scrittura atomica del supporto (0065): l'unico in
+        // cui perderlo tutto insieme sarebbe possibile.
         let esito = self.storage.update(&self.path, &mut |attuale| {
             Ok(attuale.and_then(|raw| potato(raw, giorni)))
         });
