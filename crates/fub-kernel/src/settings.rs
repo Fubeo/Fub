@@ -75,6 +75,7 @@ use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
 use crate::storage::{update_atomic, Durevole, VaultStorage};
+use crate::veleno::Ricovero;
 use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
@@ -318,6 +319,16 @@ pub struct MachineSettings {
     /// Il file si è letto? Se no **non lo si riscrive**: vedi
     /// [`non_lo_sovrascrivo`].
     readable: bool,
+    /// **Il turno di chi scrive.** Non protegge un dato — lo protegge
+    /// [`values`](Self::values) — ma l'ordine di due scritture: vedi
+    /// [`MachineSettings::write`], dove serve perché il lucchetto dei valori
+    /// non copre più l'andata al disco.
+    ///
+    /// Un [`Ricovero`] e non un `Mutex` nudo perché la domanda «e se è
+    /// avvelenato?» ha una porta sola nel kernel (0126): qui poi la risposta è
+    /// la più facile di tutte — ciò che c'è dentro è `()`, e un ordine non si
+    /// corrompe.
+    scrittura: Ricovero<()>,
     values: RwLock<BTreeMap<String, SettingValue>>,
     /// Lo schema delle chiavi di macchina. Dietro un lock come i valori, e per
     /// la stessa ragione: l'`Arc` è condiviso da ogni vault aperto, e chi
@@ -339,6 +350,7 @@ impl MachineSettings {
             Arc::new(MachineSettings {
                 path: Some(path.to_owned()),
                 readable: warning.is_none(),
+                scrittura: Ricovero::new(()),
                 values: RwLock::new(values),
                 specs: RwLock::new(BTreeMap::new()),
             }),
@@ -351,6 +363,7 @@ impl MachineSettings {
         Arc::new(MachineSettings {
             path: None,
             readable: true,
+            scrittura: Ricovero::new(()),
             values: RwLock::new(BTreeMap::new()),
             specs: RwLock::new(BTreeMap::new()),
         })
@@ -480,9 +493,31 @@ impl MachineSettings {
     /// con la chiave nuova sopra: se un'altra installazione ha scritto altre
     /// chiavi dopo la nostra apertura, quelle sono nel file e da questo momento
     /// sono anche qui.
+    ///
+    /// # Due lucchetti, e coprono due cose diverse
+    ///
+    /// **La sezione critica di [`values`](Self::values) è la sostituzione in
+    /// memoria, tutta e sola.** L'andata al disco — il lock del file, la
+    /// rilettura, la fusione, la scrittura, la rename — sta **fuori**: questo
+    /// `Arc` è condiviso da ogni vault aperto e da chi disegna il pannello, e
+    /// tenerlo in scrittura per la durata di un'operazione di I/O vuol dire che
+    /// chiunque legga *un'altra* impostazione — il livello di log, il tema —
+    /// aspetta il disco per una cosa che non lo riguarda. Su un supporto lento
+    /// quell'attesa è la shell ferma.
+    ///
+    /// Il turno di [`scrittura`](Self::scrittura) è ciò che quel restringimento
+    /// costa, e non è un di più: **due scritture devono adottare nell'ordine in
+    /// cui il disco le ha accettate**. Senza il turno, la fusione più vecchia
+    /// può tornare per seconda e posarsi sopra la più recente, lasciando in
+    /// memoria una mappa che sul disco non c'è più — cioè la *lost update* che
+    /// la [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)
+    /// aveva tolto al file, rientrata dalla porta della memoria. Il lock del
+    /// file serializza le installazioni; questo serializza i thread, che quel
+    /// lock non li vede nemmeno.
     fn write(&self, key: &str, value: Option<SettingValue>) -> Result<(), String> {
-        let mut values = self.values.write().expect("livello macchina");
+        let _turno = self.scrittura.prendi();
         let Some(path) = &self.path else {
+            let mut values = self.values.write().expect("livello macchina");
             match value {
                 Some(v) => {
                     values.insert(key.to_string(), v);
@@ -496,7 +531,8 @@ impl MachineSettings {
         if !self.readable {
             return Err(non_lo_sovrascrivo(path));
         }
-        *values = store(path, key, value)?;
+        let fuso = store(path, key, value)?;
+        *self.values.write().expect("livello macchina") = fuso;
         Ok(())
     }
 }
@@ -1229,6 +1265,63 @@ mod tests {
             machine.get("log.verbose"),
             Some(SettingValue::Toggle(true)),
             "ed è finita nel file della macchina, non in quello del vault"
+        );
+    }
+
+    /// **Chi legge un'impostazione non aspetta il disco** (0172).
+    ///
+    /// Il fatto è uno — il lucchetto dei valori non copre l'andata al file — e
+    /// si osserva dal verso che si può fermare a comando invece che col
+    /// cronometro: un lettore tiene la sua guardia, e la scrittura arriva
+    /// **lo stesso** fino al disco. Se la sezione critica coprisse l'I/O quel
+    /// lettore la starebbe bloccando, il file resterebbe vuoto finché non
+    /// molla, e questo banco girerebbe fino alla scadenza — che è la stessa
+    /// cosa, letta dall'altro capo, del pannello che aspetta il disco per una
+    /// chiave che non sta scrivendo nessuno.
+    ///
+    /// Il cronometro qui non misura niente: è solo il modo di far fallire
+    /// un'attesa infinita con una frase invece che con un test appeso.
+    #[test]
+    fn chi_legge_non_aspetta_il_disco() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("settings.json");
+        let (machine, avviso) = MachineSettings::open(&path);
+        assert!(avviso.is_none(), "un file che non c'è non è un guasto");
+        machine
+            .declare(&[SettingSpec::toggle("log.verbose", "Verboso", false).per_machine()])
+            .unwrap();
+
+        // Un lettore fermo in mezzo alla sua lettura.
+        let lettore = machine.values.read().expect("livello macchina");
+
+        let scrittore = {
+            let machine = Arc::clone(&machine);
+            std::thread::spawn(move || machine.set("log.verbose", SettingValue::Toggle(true)))
+        };
+
+        let scadenza = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while load(&path).expect("leggibile").is_empty() {
+            assert!(
+                std::time::Instant::now() < scadenza,
+                "la scrittura non è arrivata al disco finché un lettore teneva il \
+                 lucchetto: la sezione critica copre l'I/O invece della sola \
+                 sostituzione in memoria"
+            );
+            std::thread::yield_now();
+        }
+
+        // E l'ordine resta quello di sempre: sul disco c'è già, in memoria non
+        // ancora, perché adottare è l'unica cosa che aspetta questo lettore.
+        assert!(
+            lettore.get("log.verbose").is_none(),
+            "la memoria non si muove prima del disco"
+        );
+        drop(lettore);
+        scrittore.join().expect("il thread di scrittura").unwrap();
+        assert_eq!(
+            machine.get("log.verbose"),
+            Some(SettingValue::Toggle(true)),
+            "e ciò che si adotta è ciò che il disco ha accettato"
         );
     }
 

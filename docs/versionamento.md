@@ -127,7 +127,7 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 | organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../crates/fub-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
 | anagrafe | [`crates/fub-kernel/src/entries.rs:90`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
-| impostazioni | [`crates/fub-kernel/src/settings.rs:83`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
+| impostazioni | [`crates/fub-kernel/src/settings.rs:84`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
 | versioning | [`crates/fub-features/src/versioning.rs:254`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
 | indice di ricerca | [`crates/fub-features/src/search.rs:91`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
