@@ -566,7 +566,11 @@ impl Shared {
         // senza motivo. Che il condiviso basti è la sua proprietà, non un
         // rilassamento: chi potrebbe far tornare una nota fra il giudizio e la
         // cancellazione vuole l'esclusivo, e da qui non lo ottiene.
-        self.workspace.read()?.collect_doc_data();
+        // L'esito non ferma l'apertura — è la stessa regola di `reindex` — ma
+        // non si perde: ciò che non si è potuto raccogliere si registra.
+        if let Err(e) = self.workspace.read()?.collect_doc_data() {
+            tracing::warn!(target: "fub.host", "spazi per-documento non raccolti: {e}");
+        }
         *in_corso.unread.write()? = apertura
             .scartati
             .iter()

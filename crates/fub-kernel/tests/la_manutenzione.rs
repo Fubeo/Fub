@@ -337,7 +337,7 @@ fn svuotare_il_registro_lo_svuota_e_dice_quante_righe() {
     .expect("scrittura");
     ws.rename_document(&DocId::new("Due.md"), &DocId::new("Tre.md"))
         .expect("rinomina");
-    let prima = ws.journal().records.len();
+    let prima = ws.journal().expect("registro").records.len();
     assert!(prima >= 2, "il registro ha delle righe da perdere: {prima}");
 
     let esito = ws
@@ -355,7 +355,7 @@ fn svuotare_il_registro_lo_svuota_e_dice_quante_righe() {
         "l'esito dice quante righe sono cadute ({prima}): {testo}"
     );
     assert_eq!(
-        ws.journal().records.len(),
+        ws.journal().expect("registro").records.len(),
         0,
         "e il registro è vuoto davvero, non solo raccontato tale"
     );
@@ -378,7 +378,7 @@ fn la_prova_di_uno_svuotamento_dice_quante_righe_cadrebbero() {
         fub_abi::edit::WriteBase::Dictated,
     )
     .expect("scrittura");
-    let quante = ws.journal().records.len();
+    let quante = ws.journal().expect("registro").records.len();
 
     let esito = ws
         .invoke_command(
@@ -400,7 +400,7 @@ fn la_prova_di_uno_svuotamento_dice_quante_righe_cadrebbero() {
         "il piano dice quante righe cadrebbero ({quante}): {sommario}"
     );
     assert_eq!(
-        ws.journal().records.len(),
+        ws.journal().expect("registro").records.len(),
         quante,
         "e una prova non ha tolto niente"
     );

@@ -1057,7 +1057,15 @@ impl IndexProvider for CoreIndex {
                 Ok(IndexResult::VaultHealth(Paged::window(issues, page)))
             }
             IndexQuery::Drafts { page } => {
-                let drafts = self.drafts.read();
+                // Il guasto risale a chi ha chiesto la pagina invece di
+                // diventare una pagina vuota: chiedere le bozze e riceverne
+                // zero perché la cartella non si è letta è il modo in cui il
+                // recupero di un testo non salvato non viene offerto a nessuno.
+                let drafts = self.drafts.read().map_err(|e| {
+                    PluginError::Io(
+                        format!("le bozze non si sono lette ({}): {e}", self.drafts.dir()).into(),
+                    )
+                })?;
                 // **Qui `Paged::from_source` non guadagna niente**, ed è un
                 // fatto misurato dal banco del §17.1 (decisione 0113) e non una
                 // scelta di comodo: la linearità di questa famiglia sta *a

@@ -459,8 +459,18 @@ impl Journal {
     /// perso da noi. Non si toglie niente e non si riscrive niente: la riga rotta
     /// resta, illeggibile, e la lettura la conta.
     fn ripara_la_coda(&self) {
-        let Ok(raw) = self.storage.read(&self.path) else {
-            return;
+        let raw = match crate::error::se_c_e(self.storage.read(&self.path)) {
+            Ok(Some(raw)) => raw,
+            // Nessun registro: non c'è nessuna coda da chiudere.
+            Ok(None) => return,
+            // Qui l'esito **non** risale — questa è la riparazione minima che
+            // gira all'apertura, e un vault si apre anche senza —, ma non
+            // diventa nemmeno «il registro è vuoto»: chi legge il registro lo
+            // scoprirà da sé, con l'errore vero, perché `read` non lo ingoia.
+            Err(e) => {
+                tracing::warn!(target: "fub.kernel", "registro: non letto per la coda: {e}");
+                return;
+            }
         };
         if raw.last() == Some(&b'\n') || raw.is_empty() {
             return;
@@ -472,12 +482,25 @@ impl Journal {
 
     /// Legge il registro, scartando ciò che non è una riga intera di questa
     /// versione.
-    pub(crate) fn read(&self) -> Lettura {
-        let Ok(raw) = self.storage.read(&self.path) else {
-            // Il file non c'è: un vault a cui non è ancora successo niente.
-            return Lettura::default();
-        };
-        parse(&raw)
+    ///
+    /// **Un registro che non si legge non è un registro vuoto.** Le due cose
+    /// avevano la stessa risposta, e da lì l'annullamento non aveva niente da
+    /// disfare senza che nessuno dicesse perché: un file illeggibile per
+    /// permessi o per I/O era indistinguibile da un vault a cui non è ancora
+    /// successo niente. Il file assente resta l'unico caso che risponde
+    /// [`Lettura::default`]; ogni altro guasto risale con il suo tipo.
+    ///
+    /// Ciò che sta *dentro* il file e non si capisce continua a contarsi in
+    /// [`Lettura::scartate`] invece di fermare la lettura: quella è una vista
+    /// parziale dichiarata, non un guasto del supporto.
+    pub(crate) fn read(&self) -> std::io::Result<Lettura> {
+        let raw = crate::error::se_c_e(self.storage.read(&self.path))?;
+        Ok(raw.as_deref().map(parse).unwrap_or_default())
+    }
+
+    /// Dove sta il file, per chi deve dire *su cosa* la lettura è fallita.
+    pub(crate) fn path(&self) -> &Utf8Path {
+        &self.path
     }
 
     /// Appende una riga. L'esito non risale: vedi [`Journal::pota`].
@@ -673,7 +696,7 @@ mod tests {
                 .append(Origin::by(Actor::User), rinomina(n))
                 .expect("appende");
         }
-        let lettura = journal.read();
+        let lettura = journal.read().expect("registro leggibile");
         assert_eq!(lettura.records.len(), 3);
         assert_eq!(lettura.scartate, 0);
         assert_eq!(lettura.records[0].op, rinomina(0));
@@ -710,11 +733,15 @@ mod tests {
                 .append(Origin::by(Actor::User), rinomina(n))
                 .expect("appende");
         }
-        assert_eq!(journal.read().records.len(), TETTO + 5, "prima di potare");
+        assert_eq!(
+            journal.read().expect("registro leggibile").records.len(),
+            TETTO + 5,
+            "prima di potare"
+        );
 
         // Potare avviene all'apertura, non a ogni riga.
         let riaperto = Journal::open(&root, storage as Arc<dyn VaultStorage>);
-        let lettura = riaperto.read();
+        let lettura = riaperto.read().expect("registro leggibile");
         assert_eq!(lettura.records.len(), TETTO);
         assert_eq!(
             lettura.records[0].op,

@@ -38,7 +38,12 @@ fn doc(id: &str) -> DocId {
 
 /// Le operazioni del registro, nell'ordine in cui sono successe.
 fn ops(ws: &Workspace) -> Vec<JournalOp> {
-    ws.journal().records.into_iter().map(|r| r.op).collect()
+    ws.journal()
+        .expect("registro")
+        .records
+        .into_iter()
+        .map(|r| r.op)
+        .collect()
 }
 
 #[test]
@@ -135,7 +140,7 @@ fn un_lotto_tiene_insieme_le_proprie_righe() {
             .unwrap();
     });
 
-    let records = banco.journal().records;
+    let records = banco.journal().expect("registro").records;
     assert_eq!(records.len(), 3);
     assert!(
         records[0].batch_key().is_none(),
@@ -250,7 +255,7 @@ fn una_coda_troncata_si_scarta_senza_far_rifiutare_il_resto() {
     std::fs::write(&path, &raw[..raw.len() - 12]).expect("tronca");
 
     let mut banco = Banco::su(&root).monta();
-    let lettura = banco.journal();
+    let lettura = banco.journal().expect("registro");
     assert_eq!(
         lettura.records.len(),
         1,
@@ -263,7 +268,7 @@ fn una_coda_troncata_si_scarta_senza_far_rifiutare_il_resto() {
     banco
         .write_document(&doc("c.md"), "tre", WriteBase::Dictated)
         .unwrap();
-    let dopo = banco.journal();
+    let dopo = banco.journal().expect("registro");
     assert_eq!(
         dopo.records.len(),
         2,
@@ -498,7 +503,7 @@ fn aprire_un_vault_non_rilegge_il_registro_piu_di_due_volte() {
     // E il registro si legge ancora: un'apertura che avesse smesso di leggerlo
     // passerebbe il tetto a mani basse.
     assert_eq!(
-        ws.journal().records.len(),
+        ws.journal().expect("registro").records.len(),
         1,
         "la riga di partenza c'è ancora"
     );
