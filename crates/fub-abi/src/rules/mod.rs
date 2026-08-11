@@ -56,6 +56,9 @@
 //!   (§25.7);
 //! - [`properties`] — filtro, ordinamento e faccette sul frontmatter;
 //! - [`tag`] — la gerarchia dei tag, accanto alla forma canonica del nome;
+//! - [`tasti`] — **che forma ha una scorciatoia**: la sequenza di accordi, i
+//!   modificatori in ordine, e quali stringhe questa app non sa premere
+//!   (§1.36);
 //! - [`health`] — cosa conta come link rotto, e cosa no.
 //!
 //! Le regole che erano **già** nel contratto restano dove sono e si raggiungono
@@ -94,6 +97,7 @@ pub mod path_policy;
 pub mod properties;
 pub mod snippet;
 pub mod tag;
+pub mod tasti;
 pub mod text_policy;
 
 pub use crate::model::{

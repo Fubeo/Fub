@@ -41,6 +41,7 @@ use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::rules::path_policy::{check, normalized, Naming};
+use fub_abi::rules::tasti;
 use fub_abi::Span;
 use serde_json::{json, Value};
 
@@ -561,6 +562,41 @@ fn scan_tags_cases() -> Vec<Value> {
 ///
 /// Una chiave qui è una regola che **esiste in due lingue**: aggiungerne una
 /// vuol dire scriverne la gemella TypeScript, o il gemello vitest resta rosso.
+/// La forma canonica di una scorciatoia (§1.36).
+///
+/// I casi che contano sono le tre specie su cui due implementazioni possono
+/// dissentire senza accorgersene. **L'ordine dei modificatori**, che è il motivo
+/// per cui una forma canonica esiste: `Shift-Mod-g` e `Mod-Shift-g` sono un
+/// gesto solo. **La sequenza**: `Mod-k d` è due accordi separati da uno spazio,
+/// e la copia che spezzasse solo sul `-` la leggerebbe come un accordo con un
+/// tasto che si chiama `k d` — è precisamente ciò che le due copie Rust facevano
+/// (difetto 0148). E **ciò che non si sa premere**, che non è una forma diversa
+/// ma un rifiuto: un modificatore che non esiste, un primo tasto nudo, un
+/// accordo senza tasto. Su queste la risposta è `null` dai due lati, o la shell
+/// rifiuta una riga che il resto dell'app ha già accettato.
+fn accordo_canonico_cases() -> Vec<Value> {
+    [
+        "Mod-Shift-g",
+        "Shift-Mod-g",
+        "Mod-k d",
+        "Mod-k  d",
+        "Mod-K",
+        "  Mod-g  ",
+        "Mod-ArrowUp",
+        "Alt-Mod-Shift-p",
+        // Ciò che questa app non sa premere.
+        "Ctrl-k",    // il modificatore che non esiste
+        "d",         // il primo tasto nudo, che ruberebbe una lettera a chi scrive
+        "Mod-",      // l'accordo senza tasto
+        "Mod-Mod-k", // il modificatore ripetuto
+        "",
+        "   ",
+    ]
+    .into_iter()
+    .map(|binding| json!({"binding": binding, "out": tasti::canonica(binding)}))
+    .collect()
+}
+
 fn expected() -> Value {
     json!({
         "page_name": page_name_cases(),
@@ -572,6 +608,7 @@ fn expected() -> Value {
         "folder_contains": folder_contains_cases(),
         "mask_wants": mask_wants_cases(),
         "scan_tags": scan_tags_cases(),
+        "accordo_canonico": accordo_canonico_cases(),
         "byte_to_utf16": offset_cases(true),
         "utf16_to_byte": offset_cases(false),
     })

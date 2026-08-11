@@ -10,6 +10,7 @@ import {
   taskChecked,
   topicMatches,
 } from "./mirrored";
+import { normalizza } from "../ui/commands";
 import { byteToCharIndex, charToByteIndex } from "./offsets";
 // La fixture è generata dalle regole Rust — vedi
 // `crates/fub-abi/tests/rules_mirror.rs`.
@@ -50,6 +51,11 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   // Il riconoscimento di un `#tag` (§4.4): la regola sale nel contratto
   // perché una superficie di scrittura la deve sapere senza avere il parser.
   scan_tags: (c) => scanTags(c.text),
+  // La forma di una scorciatoia (§1.36). La gemella di qua è quella vera — la
+  // shell la usa a ogni tasto premuto — e la copia del contratto serve a chi
+  // guarda il registro fermo; `null` da entrambe le parti vuol dire «questa app
+  // non la sa premere», e sono le stringhe su cui le due copie divergevano.
+  accordo_canonico: (c) => normalizza(c.binding),
   byte_to_utf16: (c) => byteToCharIndex(c.text, c.byte),
   utf16_to_byte: (c) => charToByteIndex(c.text, c.unit),
   // La maschera di un abbonamento (§10.1). `mask_name` è solo l'etichetta che
@@ -96,6 +102,18 @@ describe("mirror delle regole TS↔Rust", () => {
     expect(
       fixture.byte_to_utf16.some((c) => c.byte !== c.out),
       "manca un testo in cui byte e code unit non coincidono",
+    ).toBe(true);
+
+    // Le due specie di caso senza le quali la forma canonica non distinguerebbe
+    // niente: una sequenza (che una copia che spezza solo sul `-` sbaglia) e una
+    // scorciatoia rifiutata (che una copia che normalizza tutto accetta).
+    expect(
+      fixture.accordo_canonico.some((c) => String(c.binding).includes(" ") && c.out !== null),
+      "manca una sequenza fra i casi degli accordi",
+    ).toBe(true);
+    expect(
+      fixture.accordo_canonico.some((c) => c.out === null),
+      "manca un accordo che questa app non sa premere",
     ).toBe(true);
 
     // I due prefissi sbagliano nello stesso modo, e il caso che li distingue da

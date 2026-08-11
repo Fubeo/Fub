@@ -335,6 +335,17 @@ fn regole() -> BTreeMap<&'static str, (Famiglia, &'static str)> {
                  plugin di terzi eseguono.",
             ),
         ),
+        (
+            "crates/fub-abi/src/rules/tasti.rs::accordi",
+            (
+                Famiglia::CasoContestuale,
+                "l'identità qui non è un nome ma un **gesto**: `Mod-Shift-G` e `mod-shift-g` \
+                 sono lo stesso tasto premuto, e la NFC non c'entra perché il nome di un tasto \
+                 arriva da `KeyboardEvent.key` e non dalla tastiera di chi scrive una nota. \
+                 Diverge da `resolution_key` perché deve piegare **come la shell**, che è \
+                 `toLowerCase()` di JavaScript, e a tenerle uguali è il mirror delle regole.",
+            ),
+        ),
         // -- CasoPerCarattere: il caso in cui l'offset è il prodotto --------
         (
             "crates/fub-kernel/src/occurrences.rs::prefix_len_ci",

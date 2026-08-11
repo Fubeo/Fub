@@ -27,6 +27,7 @@
 
 use std::path::PathBuf;
 
+use fub_abi::rules::tasti::{canonica, oscura};
 use fub_host::shell::SHELL_COMMANDS;
 
 const HEADER: &str = "\
@@ -110,13 +111,14 @@ fn nessun_accordo_e_dichiarato_dai_due_registri() {
     let mut per_accordo: std::collections::BTreeMap<String, Vec<String>> = Default::default();
     let mut dal_kernel = 0usize;
     let mut dalla_shell = 0usize;
+    let mut impremibili: Vec<(String, String)> = Vec::new();
     for spec in fub_features::commands::CoreCommands::specs() {
         if let Some(k) = &spec.keybinding {
             dal_kernel += 1;
-            per_accordo
-                .entry(normalizza(k))
-                .or_default()
-                .push(spec.id.clone());
+            match canonica(k) {
+                Some(chiave) => per_accordo.entry(chiave).or_default().push(spec.id.clone()),
+                None => impremibili.push((spec.id.clone(), k.clone())),
+            }
         }
     }
     for (id, chord) in SHELL_COMMANDS {
@@ -124,10 +126,13 @@ fn nessun_accordo_e_dichiarato_dai_due_registri() {
             dalla_shell += 1;
         }
         if let Some(k) = chord {
-            per_accordo
-                .entry(normalizza(k))
-                .or_default()
-                .push((*id).to_string());
+            match canonica(k) {
+                Some(chiave) => per_accordo
+                    .entry(chiave)
+                    .or_default()
+                    .push((*id).to_string()),
+                None => impremibili.push(((*id).to_string(), (*k).to_string())),
+            }
         }
     }
     let contesi: Vec<_> = per_accordo
@@ -137,6 +142,15 @@ fn nessun_accordo_e_dichiarato_dai_due_registri() {
     assert!(
         contesi.is_empty(),
         "un accordo è dichiarato da due comandi che questa app spedisce: {contesi:?}"
+    );
+
+    // Un accordo che questa app non sa premere: la shell lo ignora, e finché la
+    // forma canonica era una copia che normalizzava qualunque stringa nessuno
+    // dei due registri poteva accorgersene (difetto 0148).
+    assert!(
+        impremibili.is_empty(),
+        "un comando che questa app spedisce dichiara un accordo che la shell \
+         non sa premere, e lo ignorerà senza dirlo a nessuno: {impremibili:?}"
     );
 
     // Il test del test: due elenchi vuoti non litigherebbero mai, e un elenco
@@ -166,16 +180,39 @@ fn nessun_id_sta_nei_due_registri() {
     assert!(doppi.is_empty(), "{doppi:?}");
 }
 
-/// L'accordo in forma canonica, come lo normalizza la shell (`normalizza` in
-/// `ui/commands.ts`): modificatori ordinati e minuscoli, o `Shift-Mod-g` e
-/// `Mod-Shift-g` sarebbero due accordi per la tastiera e uno per le dita.
-fn normalizza(binding: &str) -> String {
-    let mut parti: Vec<&str> = binding.split('-').collect();
-    let Some(tasto) = parti.pop() else {
-        return binding.to_lowercase();
-    };
-    let mut mods: Vec<String> = parti.iter().map(|p| p.to_lowercase()).collect();
-    mods.sort();
-    mods.push(tasto.to_lowercase());
-    mods.join("-")
+/// **Nessun accordo di questa app è irraggiungibile perché un altro lo
+/// precede.**
+///
+/// La domanda del banco qui sopra guarda i due registri insieme e vede gli
+/// accordi *uguali*; questa vede quelli che sono l'**inizio** di un altro, che
+/// con le sequenze è lo stesso danno per chi preme e nessuno dei due registri
+/// può vederlo da solo — la shell lo sapeva per i propri (`prefissiOscurati`) e
+/// il kernel non ne aveva copia (difetto 0148).
+#[test]
+fn nessun_accordo_delle_due_parti_ne_oscura_un_altro() {
+    let mut dichiarati: Vec<(String, String)> = fub_features::commands::CoreCommands::specs()
+        .into_iter()
+        .filter_map(|s| s.keybinding.map(|k| (s.id, k)))
+        .collect();
+    for (id, chord) in SHELL_COMMANDS {
+        if let Some(k) = chord {
+            dichiarati.push(((*id).to_string(), (*k).to_string()));
+        }
+    }
+    let oscurati: Vec<String> = dichiarati
+        .iter()
+        .flat_map(|(id_corto, corto)| {
+            dichiarati
+                .iter()
+                .filter(move |(_, lungo)| oscura(corto, lungo))
+                .map(move |(id_lungo, lungo)| {
+                    format!("«{corto}» ({id_corto}) copre «{lungo}» ({id_lungo})")
+                })
+        })
+        .collect();
+    assert!(
+        oscurati.is_empty(),
+        "un comando che questa app spedisce non si può premere, perché un altro \
+         accordo è un suo prefisso e si esegue prima: {oscurati:?}"
+    );
 }
