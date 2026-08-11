@@ -476,6 +476,40 @@ fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
 /// un giorno fa dappertutto.
 pub(crate) const SCADENZA_DEL_TEMPORANEO_MS: u64 = 24 * 60 * 60 * 1000;
 
+/// Il path del compagno di lock di un file: **accanto**, e con un nome che
+/// comincia per punto.
+///
+/// È la gemella di [`tmp_path`] e sta qui per la stessa ragione: chi conosce
+/// una forma è chi la scrive, e la forma la rilegge
+/// [`e_lock_di_scrittura`] qui accanto.
+fn lock_path(path: &Utf8Path) -> Utf8PathBuf {
+    let dir = path.parent().unwrap_or(Utf8Path::new(""));
+    let name = path.file_name().unwrap_or("senza-nome");
+    dir.join(format!(".{name}.lock"))
+}
+
+/// Questo nome è il compagno di lock di un file?
+///
+/// Il punto davanti **non basta a nasconderlo**, ed è la §15.6 nella stessa
+/// forma in cui vale per il temporaneo: da quando un vault può dichiarare che i
+/// nascosti sono documenti, un file di servizio nascosto dal punto è un
+/// documento appena qualcuno accende quella casella. Oggi ogni file protetto
+/// sta dentro `.fub/` o fuori dal vault, quindi il danno non si vede — ma a
+/// tenerlo lontano è *dove stanno quei file*, non una regola, e il giorno che
+/// qualcuno prende il lock su qualcosa che sta nella radice il suo compagno
+/// prende un [`DocId`](fub_abi::DocId), entra in anagrafe e si cerca. È il
+/// difetto 0151, e la riparazione è dichiarare la forma invece di fidarsi della
+/// posizione.
+///
+/// Riconosce `.qualcosa.lock` e non «finisce per `.lock`»: `Cargo.lock` e
+/// `flake.lock` sono note di nessuno ma sono file che uno può volersi tenere nel
+/// vault, e non cominciano per punto.
+pub(crate) fn e_lock_di_scrittura(name: &str) -> bool {
+    name.strip_prefix('.')
+        .and_then(|resto| resto.strip_suffix(".lock"))
+        .is_some_and(|base| !base.is_empty())
+}
+
 /// Questo nome è il temporaneo di una scrittura in corso?
 ///
 /// Sta qui e non nella politica di esclusione perché il nome lo compone
@@ -1156,10 +1190,20 @@ pub fn update_atomic<T>(
 ///
 /// `Err` non si propaga — vedi [`update_atomic`] — quindi qui il tipo di ritorno
 /// è un `Option`: o si ha il lock, o si procede senza.
+///
+/// **Il compagno non si toglie all'uscita, ed è voluto** (difetto 0151).
+/// Cancellarlo è la riparazione che sembra ovvia e che rompe il lock: fra
+/// l'`unlink` di chi esce e la `open` di chi arriva ci sta un terzo che crea un
+/// file *nuovo* a quel nome e se lo prende, mentre il secondo tiene ancora il
+/// lock sull'inode scollegato — due che scrivono, ciascuno convinto di essere
+/// solo, che è esattamente ciò che il lock esisteva per impedire. E non c'è
+/// niente da guadagnare: il compagno è **uno per file protetto**, e i file
+/// protetti sono un insieme fisso e piccolo — non cresce con le note, non
+/// cresce con l'uso, non cresce affatto. Ciò che va tolto è il fatto che si
+/// **veda**, e a toglierlo è [`e_lock_di_scrittura`].
 fn lock_esclusivo(path: &Utf8Path) -> Option<std::fs::File> {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
-    let name = path.file_name().unwrap_or("senza-nome");
-    let lock_path = dir.join(format!(".{name}.lock"));
+    let lock_path = lock_path(path);
     std::fs::create_dir_all(dir).ok()?;
     let file = std::fs::OpenOptions::new()
         .create(true)

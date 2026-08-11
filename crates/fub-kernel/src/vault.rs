@@ -963,8 +963,35 @@ mod tests {
         assert!(v.is_ignored("/vault/.fub/data/anagrafe.json".into()));
         assert!(v.is_ignored("/vault/.trash/Idea.2026-07-24T15-30-00.md".into()));
         assert!(v.is_ignored("/vault/note/.Idea.md.tmp1234-5".into()));
+        // Il compagno di lock è l'unico dei quattro che non se ne va mai — non
+        // si può togliere senza rompere il lock (difetto 0151) — quindi è
+        // l'unico per cui «non si vede» deve essere una regola e non un
+        // istante. Sta nella radice apposta: oggi ogni file protetto sta dentro
+        // `.fub/`, e un banco che lo mettesse lì proverebbe `.fub`.
+        assert!(
+            v.is_ignored("/vault/.Idea.md.lock".into()),
+            "il compagno di lock di un file della radice era un documento, \
+             e non se ne va mai"
+        );
         // E l'elenco delle cartelle escluse è l'altra metà, che questa non tocca.
         assert!(v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
+    }
+
+    /// La metà che impedisce alla riparazione di diventare «tutto ciò che
+    /// finisce per `.lock`»: un `Cargo.lock` o un `flake.lock` non sono note di
+    /// nessuno, ma sono file che uno può tenersi nel vault, e non cominciano
+    /// per punto.
+    #[test]
+    fn un_file_di_lock_che_non_e_nostro_resta_nel_vault() {
+        use fub_abi::settings::SettingValue;
+        let v = vault_che_dichiara(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
+        for lock in ["/vault/Cargo.lock", "/vault/note/flake.lock"] {
+            assert!(
+                !v.is_ignored(lock.into()),
+                "{lock} è sparito dal vault: la regola del compagno di lock \
+                 si è allargata a chiunque finisca per «.lock»"
+            );
+        }
     }
 
     /// **La casella della costante** (§15.6): l'elenco è dato, e dichiararne uno
