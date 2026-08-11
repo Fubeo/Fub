@@ -449,7 +449,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **cinquantacinque** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **cinquantaquattro** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -574,7 +574,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0209 | le bozze di crash possono smettere di essere scritte senza dirlo: se la scrittura periodica fallisce una volta il ciclo non riparte e non c'è nessun segnale, quindi la rete di sicurezza che esiste per il caso peggiore è spenta proprio mentre l'utente crede di averla | `frontend` · bozze di crash | regole |
 | 0210 | un tasto premuto dentro la finestra di migrazione di una rinomina ricrea il nome vecchio: il salvataggio parte con l'identità di prima mentre il file si è già mosso, e il risultato è la stessa nota in due posti con due contenuti diversi | `frontend` · rinomina (finestra di migrazione) | regole |
 | 0211 | `suspendSave` e `resumeSave` hanno un posto solo: due sospensioni annidate — una rinomina dentro una conversione, un'importazione mentre una modale è aperta — si pestano, e la seconda ripresa riaccende il salvataggio che la prima voleva ancora fermo; dalla stessa parte nasce la bozza transitoria marcata «superata» che compare e sparisce senza che nessuno l'abbia chiesta | `frontend` · `suspendSave` / `resumeSave` | regole |
-| 0212 | `scriviStato` non porta l'identità del vault: lo stato dell'interfaccia si salva con una chiave sola, quindi aprire un secondo vault ci scrive sopra e riaprire il primo ne restituisce la vista dell'altro | `frontend` · `scriviStato` | regole |
 | 0219 | il doppio del contratto risponde con un codice diverso dal kernel sugli stessi fatti — `BadArgs` dove il kernel dice `already-exists` o `not-found`, la forma dell'id di `trash_document` diversa, e la manopola `scritture_negate` che insegna `io` dove il kernel risponde `internal` — quindi chi sviluppa contro il doppio scrive gestione di errore che sul kernel non combacia | `fub-abi` · `MemoryHost` | regole |
 | 0221 | il kernel contraddice il proprio `not-found` in lettura: chiedere un documento che non c'è risponde `io` invece di `not-found`, cioè il codice che il contratto dichiara per quel caso, e chi distingue i due rami non può | `fub-kernel` · lettura di un documento assente | regole |
 | 0222 | la suite di conformità non copre le famiglie di **scrittura**: prova le letture e le query, mentre creazione, scrittura, rinomina, cestinazione e ripristino — cioè tutto ciò che tocca i byte dell'utente — non hanno nessun banco che verifichi che due host rispondano allo stesso modo, ed è esattamente lì che i due divergono | `fub-abi` · suite di conformità | regole |
