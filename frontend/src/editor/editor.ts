@@ -168,9 +168,24 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   const tema = new Compartment();
   let temaAttuale: Tema = temaCorrente();
 
+  /// Il documento **nella forma in cui sta sul disco**.
+  ///
+  /// Dichiarare il separatore non basta da solo, e la misura lo dice: dentro,
+  /// un a capo è un carattere solo qualunque forma abbia, e `Text.toString` lo
+  /// ricompone sempre a LF — la forma dichiarata la rende `sliceString`, ed è
+  /// `state.lineBreak` che la sa. Chi esce di qui passa da questa riga: il
+  /// salvataggio, la bozza, il riquadro gemello, la selezione (difetto 0207).
+  const reso = (state: EditorState = view.state) =>
+    state.doc.sliceString(0, state.doc.length, state.lineBreak);
+
+  /// La stessa posizione, contata sul testo reso: sotto CRLF ogni a capo che
+  /// sta prima vale un carattere in più, e sono tanti quante le righe finite.
+  const inReso = (pos: number) =>
+    view.state.lineBreak === "\n" ? pos : pos + view.state.doc.lineAt(pos).number - 1;
+
   const listener = EditorView.updateListener.of((u) => {
     if (u.docChanged && !programmatic) {
-      opts.onChange(u.state.doc.toString());
+      opts.onChange(reso(u.state));
     }
     // Anche una modifica sposta il cursore: chi ascolta vuole saperlo in
     // entrambi i casi, e un `setDoc` a livello di programma rimappa la
@@ -180,12 +195,34 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     }
   });
 
+  /// **Con che cosa questo documento va a capo**, o `null` per «come capita».
+  ///
+  /// CodeMirror spezza su `/\r\n?|\n/` e ricompone sempre con `\n`: un file
+  /// scritto su Windows, aperto e toccato in un punto solo, tornava sul disco
+  /// con **ogni riga cambiata** — un diff che non si legge, e in un vault sotto
+  /// git una cronologia che non serve più a niente (difetto 0207). La forma
+  /// originale non la ricordava nessuno perché la si perdeva all'ingresso, e
+  /// dichiararla a CodeMirror è il modo di non perderla affatto: il documento
+  /// *è* fatto di quelle righe, quindi anche l'a capo che si batte adesso è
+  /// quello, e chiunque legga `getDoc` — il salvataggio, la bozza, la
+  /// selezione — riceve ciò che c'era senza doverselo ricordare.
+  ///
+  /// Solo se il file è **tutto** CRLF. Un file misto non ha una forma da
+  /// preservare, e prendere il CRLF come separatore vorrebbe dire che i suoi
+  /// `\n` solitari smettono di essere righe: lì la normalizzazione di prima è
+  /// la risposta meno peggio, e resta.
+  const aCapoDi = (text: string): string | null =>
+    text.includes("\r\n") && !/(^|[^\r])\n/.test(text) ? "\r\n" : null;
+
   // La configurazione sta in una funzione perché serve **due volte**: alla
   // costruzione e a ogni `setDoc`, che rifà lo stato da zero per non portarsi
   // dietro la cronologia di un altro documento (§13.3). I due compartment
   // partono da ciò che vale adesso, o cambiare nota rimetterebbe la modalità
   // Sorgente in Live Preview e riaccenderebbe il tema di sistema.
-  const estensioni = () => [
+  const estensioni = (aCapo: string | null = null) => [
+    // Prima di `basicSetup` e di tutto il resto perché non è un'estensione fra
+    // le altre: è come il documento si legge.
+    ...(aCapo === null ? [] : [EditorState.lineSeparator.of(aCapo)]),
     // Le scorciatoie di editing sono già in `Prec.high`: l'ordine rispetto
     // a `basicSetup` non conta, ma il popup dei completamenti (precedenza
     // massima) vince comunque su Enter/frecce quando è aperto.
@@ -211,7 +248,9 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       // history» — la si azzera ricostruendo, ed è anche la forma più onesta,
       // perché ciò che si sta facendo è appunto cominciare un altro documento.
       programmatic = true;
-      view.setState(EditorState.create({ doc: text, extensions: estensioni() }));
+      view.setState(
+        EditorState.create({ doc: text, extensions: estensioni(aCapoDi(text)) }),
+      );
       programmatic = false;
       // `setState` non passa dai listener di aggiornamento (non è una
       // transazione), quindi il cursore nuovo lo annuncia questa riga. Senza,
@@ -220,19 +259,32 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       opts.onSelectionChange();
     },
     syncDoc(text: string) {
+      // **L'a capo resta quello con cui il documento è nato.** Qui non si rifà
+      // lo stato — è tutto il punto di questa funzione, che tiene il cursore
+      // dove sta — quindi un file che cambia fine riga *sul disco* a nota
+      // aperta continua a essere letto con la vecchia: è un limite dichiarato e
+      // non un caso da indovinare, perché la forma la decide chi apre e
+      // riaprire la nota la rimisura.
+      // Dentro si conta a LF — le posizioni della transazione sono di lì — ma
+      // ciò che si **inserisce** deve nascere già con la forma del documento:
+      // sotto un separatore CRLF un `\n` solitario non è un a capo, è un
+      // carattere in mezzo a una riga.
+      const sep = view.state.lineBreak;
+      const piatto = sep === "\n" ? text : text.split(sep).join("\n");
+      const aCapo = (t: string) => (sep === "\n" ? t : t.split("\n").join(sep));
       const attuale = view.state.doc.toString();
-      if (attuale === text) return;
+      if (attuale === piatto) return;
       // La modifica minima: il prefisso e il suffisso in comune non si toccano,
       // e ciò che resta in mezzo è l'unica cosa che è davvero cambiata. Un
       // `changes` che rimpiazza tutto il documento sarebbe corretto e
       // sposterebbe il cursore in fondo a ogni battuta dell'altro riquadro.
       let testa = 0;
-      const minimo = Math.min(attuale.length, text.length);
+      const minimo = Math.min(attuale.length, piatto.length);
       while (testa < minimo && attuale[testa] === text[testa]) testa++;
       let coda = 0;
       while (
         coda < minimo - testa &&
-        attuale[attuale.length - 1 - coda] === text[text.length - 1 - coda]
+        attuale[attuale.length - 1 - coda] === piatto[piatto.length - 1 - coda]
       ) {
         coda++;
       }
@@ -241,28 +293,32 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
         changes: {
           from: testa,
           to: attuale.length - coda,
-          insert: text.slice(testa, text.length - coda),
+          insert: aCapo(piatto.slice(testa, piatto.length - coda)),
         },
         annotations: Transaction.addToHistory.of(false),
       });
       programmatic = false;
     },
-    getDoc: () => view.state.doc.toString(),
+    getDoc: () => reso(),
     focus: () => view.focus(),
     selections() {
-      const text = view.state.doc.toString();
+      // Il testo reso, e le estremità contate su di lui: questi offset li usa
+      // chi taglia i **byte del file**, e in un file CRLF una posizione di
+      // CodeMirror è indietro di una riga per ogni riga che la precede.
+      const text = reso();
       const { ranges, mainIndex } = view.state.selection;
+      const estremi = ranges.map((r) => [inReso(r.from), inReso(r.to)] as const);
       // Una conversione sola per tutte le estremità: `charToByteIndex` è una
       // scansione dall'inizio, e questa funzione gira a ogni battuta di
       // tastiera. Vedi `charToByteIndices`.
       const byte = charToByteIndices(
         text,
-        ranges.flatMap((r) => [r.from, r.to]),
+        estremi.flatMap(([da, a]) => [da, a]),
       );
-      const tutte = ranges.map((r, i) => ({
+      const tutte = estremi.map(([da, a], i) => ({
         start: byte[2 * i],
         end: byte[2 * i + 1],
-        text: text.slice(r.from, r.to),
+        text: text.slice(da, a),
       }));
       return {
         primary: tutte[mainIndex],
