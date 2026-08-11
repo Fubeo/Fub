@@ -12,11 +12,15 @@ centoventidue riferimenti.
 
 **Il colpo d'occhio**
 
-- [mappa-visuale.md](mappa-visuale.md) — tutta l'architettura in tre disegni:
+- [mappa-visuale.md](mappa-visuale.md) — tutta l'architettura in quattro
+  disegni, dal macro al micro: i quattro riquadri che si guardano in un minuto,
   quello disposto a mano (gli otto crate, la shell, il disco, e — tratteggiato —
   ciò che non esiste ancora), il **grafo delle dipendenze**, che un test rilegge
   e confronta con `cargo metadata`, e **dove gira cosa** mentre l'app è accesa.
-  Da qui si capisce dove stanno gli altri documenti.
+  Sotto i disegni, un livello per volta: cosa c'è in ogni riquadro, due giri
+  completi dal tasto premuto al pixel, le scelte che hanno formato tutto col
+  loro prezzo scritto, e i buchi. Da qui si capisce dove stanno gli altri
+  documenti.
 
 Gli altri diagrammi non stanno qui. Stanno nel documento che spiega la cosa che
 disegnano, perché un flusso in mezzo alla sua prosa invecchia insieme a lei,
