@@ -203,6 +203,16 @@ pub struct Scan {
     /// Path relativi senza slash finale, in ordine. La radice non c'è: non ha
     /// un nome, non si rinomina e non si cancella.
     pub folders: Vec<String>,
+    /// I temporanei di scrittura che nessuno sta più scrivendo, in path
+    /// assoluto e in ordine (difetto 0155).
+    ///
+    /// Sono qui e non tolti qui perché **una lettura resta una lettura**: la
+    /// camminata è il solo posto in cui questi file si vedono senza un secondo
+    /// giro sul disco — li nasconde la politica di esclusione, quindi non
+    /// compaiono in nessun elenco, in nessun evento e in nessuna anagrafe — ma
+    /// chi decide di togliere qualcosa dal vault di qualcuno è chi ha chiesto
+    /// la scansione, non chi cammina.
+    pub temporanei_rimasti_indietro: Vec<Utf8PathBuf>,
 }
 
 pub struct Vault {
@@ -400,6 +410,7 @@ impl Vault {
         let mut out = Scan {
             files: Vec::new(),
             folders: Vec::new(),
+            temporanei_rimasti_indietro: Vec::new(),
         };
         // La politica si risolve **una volta per scansione** e non per voce di
         // directory: leggerla è prendere un lock e costruire un elenco, e una
@@ -411,6 +422,7 @@ impl Vault {
         self.walk(&self.root, &policy, &mut out)?;
         out.files.sort_by(|a, b| a.id.cmp(&b.id));
         out.folders.sort();
+        out.temporanei_rimasti_indietro.sort();
         Ok(out)
     }
 
@@ -428,6 +440,19 @@ impl Vault {
                 _ => Specie::File,
             };
             if policy.esclude(name, specie) {
+                // Un temporaneo di scrittura è escluso, ed è la §15.6: quel
+                // file esiste per una frazione di secondo e chi guarda il vault
+                // in quella frazione non lo deve vedere. Ma un crash fra la
+                // creazione e la rename ne lascia uno per terra **per sempre**,
+                // e da lì in poi la stessa riga che lo nascondeva lo rende
+                // invisibile anche a chi potrebbe toglierlo: la camminata è il
+                // solo posto da cui si vede (difetto 0155).
+                if specie == Specie::File
+                    && crate::storage::e_temporaneo_di_scrittura(name)
+                    && self.storage.e_rimasto_indietro(&entry.stat)
+                {
+                    out.temporanei_rimasti_indietro.push(entry.path.clone());
+                }
                 continue;
             }
             match entry.stat.kind {
