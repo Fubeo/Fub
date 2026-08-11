@@ -133,7 +133,7 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:232`](../crates/fub-kernel/src/maintenance.rs) | 1 | una copia di fatti che stanno altrove, per chi cerca un guasto |
-| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:111`](../crates/fub-kernel/src/vault.rs) | 1 | da quale cartella veniva una voce cestinata |
+| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:112`](../crates/fub-kernel/src/vault.rs) | 1 | da quale cartella veniva una voce cestinata |
 
 **La regola comune è il rifiuto in avanti.** Un file la cui `version` è
 **maggiore** di quella che questa copia di Fub conosce non si legge e non si
