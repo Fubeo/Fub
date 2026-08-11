@@ -83,13 +83,14 @@ pub(crate) fn radice_assoluta(root: &Utf8Path) -> Utf8PathBuf {
         .unwrap_or_else(|| root.to_owned())
 }
 
+pub use fub_abi::rules::cestino::TRASH_DIR;
 /// Nome della cartella cestino dentro il vault.
 ///
 /// È la stessa che usa Obsidian per "Move to Obsidian trash": un vault
 /// condiviso fra le due app ha **un solo** cestino (vedi
 /// `docs/PIANO.md`, "Decisioni (con il perché)", e
 /// `docs/architecture/data-model.md`, "Il cestino").
-pub const TRASH_DIR: &str = ".trash";
+use fub_abi::rules::cestino::{self, file_name_of, strip_stamp};
 
 /// Cartella (dentro [`data_root`]) dei sidecar del cestino: per ogni voce
 /// cestinata **da Fub**, un `<nome-cestinato>.json` con il path d'origine.
@@ -528,17 +529,12 @@ impl Vault {
         // La cartella del cestino non si crea qui: `VaultStorage::rename` crea
         // le cartelle di destinazione che mancano, e farlo una seconda volta
         // vorrebbe dire avere due idee di quando una cartella esiste.
-        let name = file_name_of(id.as_str());
         let stamp = stamp_from_unix(now_unix());
-        let target = (0u32..)
-            .map(|n| match n {
-                0 => name.to_string(),
-                1 => stamped_name(name, &stamp),
-                _ => stamped_name(name, &format!("{stamp}-{n}")),
-            })
-            .map(|candidate| DocId::new(format!("{TRASH_DIR}/{candidate}")))
-            .find(|candidate| !self.exists(candidate))
-            .expect("la sequenza dei candidati è infinita");
+        // Il nome nel cestino non se lo costruisce chi cestina: è una regola
+        // del contratto, e chi cestina è più di uno (0219).
+        let target = DocId::new(cestino::trashed_id(id.as_str(), &stamp, &mut |c| {
+            self.exists(&DocId::new(c))
+        }));
 
         self.storage
             .rename(&from, &self.path_for(&target)?)
@@ -811,111 +807,9 @@ enum TrashExit<'a> {
 /// costruisce.
 pub use fub_abi::traits::TrashEntry;
 
-fn file_name_of(path: &str) -> &str {
-    path.rsplit('/').next().unwrap_or(path)
-}
-
-/// `Nota.md` + `2026-07-24T15-30-00` → `Nota.2026-07-24T15-30-00.md`.
-///
-/// Il suffisso va **prima** dell'estensione, non dopo: un file che finisce per
-/// `.md` resta un file markdown, aperto da Obsidian come dagli altri.
-fn stamped_name(name: &str, stamp: &str) -> String {
-    match name.rsplit_once('.') {
-        Some((stem, ext)) if !stem.is_empty() => format!("{stem}.{stamp}.{ext}"),
-        _ => format!("{name}.{stamp}"),
-    }
-}
-
-/// L'inverso di [`stamped_name`]: il nome originale di un file cestinato.
-///
-/// Riconosce il suffisso dalla **forma**, non da un registro: il cestino è
-/// condiviso con Obsidian, che non tiene nota di nulla, e la ricostruzione deve
-/// funzionare anche su file che Fub non ha mai visto. Il prezzo è che una
-/// nota davvero intitolata `Riunione.2026-07-24T15-30-00` si ripristina come
-/// `Riunione` — l'utente la rinomina, e nessun dato è andato perso.
-fn strip_stamp(name: &str) -> String {
-    let Some((stem, ext)) = name.rsplit_once('.') else {
-        return name.to_string();
-    };
-    // Un file senza estensione porta il timbro in coda: lì l'estensione è il
-    // timbro stesso.
-    if !stem.is_empty() && is_stamp(ext) {
-        return stem.to_string();
-    }
-    match stem.rsplit_once('.') {
-        Some((base, tail)) if !base.is_empty() && is_stamp(tail) => format!("{base}.{ext}"),
-        _ => name.to_string(),
-    }
-}
-
-/// La forma `YYYY-MM-DDTHH-MM-SS`, eventualmente seguita da `-<contatore>`
-/// (due cancellazioni della stessa nota nello stesso secondo).
-fn is_stamp(s: &str) -> bool {
-    let b = s.as_bytes();
-    if b.len() < 19 {
-        return false;
-    }
-    let forma = b[..19].iter().enumerate().all(|(i, c)| match i {
-        4 | 7 | 13 | 16 => *c == b'-',
-        10 => *c == b'T',
-        _ => c.is_ascii_digit(),
-    });
-    let contatore = match &b[19..] {
-        [] => true,
-        [b'-', cifre @ ..] => !cifre.is_empty() && cifre.iter().all(|c| c.is_ascii_digit()),
-        _ => false,
-    };
-    forma && contatore
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_trashed_name_keeps_its_extension() {
-        // Il timbro sta in mezzo: il file resta un `.md`, e Obsidian lo apre.
-        assert_eq!(
-            stamped_name("Nota.md", "2026-07-24T15-30-00"),
-            "Nota.2026-07-24T15-30-00.md"
-        );
-        assert_eq!(
-            stamped_name("senza-estensione", "2026-07-24T15-30-00"),
-            "senza-estensione.2026-07-24T15-30-00"
-        );
-        // Un file che è solo estensione (`.gitignore`) non ha stem da timbrare.
-        assert_eq!(
-            stamped_name(".env", "2026-07-24T15-30-00"),
-            ".env.2026-07-24T15-30-00"
-        );
-    }
-
-    #[test]
-    fn the_original_name_survives_the_round_trip() {
-        for nome in ["Nota.md", "Con.punti.nel.nome.md", "senza-estensione"] {
-            let timbrato = stamped_name(nome, "2026-07-24T15-30-00");
-            assert_eq!(strip_stamp(&timbrato), nome, "andata e ritorno di {nome}");
-        }
-        // Anche col contatore delle collisioni nello stesso secondo.
-        assert_eq!(strip_stamp("Nota.2026-07-24T15-30-00-3.md"), "Nota.md");
-    }
-
-    #[test]
-    fn a_name_that_only_looks_stamped_is_left_alone() {
-        // Un file mai timbrato torna identico.
-        assert_eq!(strip_stamp("Nota.md"), "Nota.md");
-        // Forma sbagliata: non è un timbro, è parte del nome.
-        assert_eq!(
-            strip_stamp("Riunione.2026-07-24 15:30:00.md"),
-            "Riunione.2026-07-24 15:30:00.md"
-        );
-        assert_eq!(strip_stamp("Bilancio.2026.md"), "Bilancio.2026.md");
-        // Il contatore vuole cifre, non un suffisso qualsiasi.
-        assert_eq!(
-            strip_stamp("Nota.2026-07-24T15-30-00-bozza.md"),
-            "Nota.2026-07-24T15-30-00-bozza.md"
-        );
-    }
 
     #[test]
     fn what_is_ignored_is_ignored_at_any_depth() {

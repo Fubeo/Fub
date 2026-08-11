@@ -29,6 +29,7 @@ use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, Heading, Span};
 use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::rules::cestino;
 use fub_abi::rules::path_policy::{self, fenced_doc_id, Naming};
 use fub_abi::session::{
     AnchoredSelection, AnchoredSelections, PaneMode, SelectionSet, ViewContext,
@@ -615,7 +616,7 @@ impl VaultRead for MemoryHost {
             .unwrap()
             .get(id.as_str())
             .cloned()
-            .ok_or_else(|| PluginError::BadArgs(format!("{id} non esiste").into()))?;
+            .ok_or_else(|| PluginError::NotFound(id.to_string().into()))?;
         // Solo le letture **riuscite**, come per le scritture: chiedere un
         // documento che non c'è non è lavoro fatto sul disco.
         self.annota_lettura(id.as_str(), bytes.len());
@@ -752,7 +753,7 @@ impl VaultStructure for MemoryHost {
         let id = fenced_doc_id(id)?;
         let id = nato_qui(&id)?;
         if self.docs.lock().unwrap().contains_key(id.as_str()) {
-            return Err(PluginError::BadArgs(format!("{id} esiste già").into()));
+            return Err(PluginError::AlreadyExists(id.to_string().into()));
         }
         // Il nome è libero — la riga sopra l'ha appena verificato — quindi non
         // c'è nessuna revisione da cui discendere.
@@ -772,11 +773,11 @@ impl VaultStructure for MemoryHost {
             return Ok(());
         }
         if docs.contains_key(to.as_str()) {
-            return Err(PluginError::BadArgs(format!("{to} esiste già").into()));
+            return Err(PluginError::AlreadyExists(to.to_string().into()));
         }
         let source = docs
             .remove(from.as_str())
-            .ok_or_else(|| PluginError::BadArgs(format!("{from} non esiste").into()))?;
+            .ok_or_else(|| PluginError::NotFound(from.to_string().into()))?;
         docs.insert(to.to_string(), source);
         Ok(())
     }
@@ -785,8 +786,19 @@ impl VaultStructure for MemoryHost {
         let id = &fenced_doc_id(id)?;
         let source = self.read_document(id)?;
         self.docs.lock().unwrap().remove(id.as_str());
-        let stamp = self.trashed.fetch_add(1, Ordering::Relaxed);
-        let trashed = DocId::new(format!(".trash/{id}.{stamp}"));
+        // La forma dell'id la dà la regola del contratto, la stessa che usa il
+        // kernel: un cestino piatto, il timbro prima dell'estensione, e il
+        // contatore solo sulle collisioni (0219). Il timbro qui è un contatore
+        // travestito da istante — questo doppio non ha un orologio — ma la
+        // *forma* dell'id è quella vera, ed è la sola cosa su cui chi sviluppa
+        // contro il doppio scrive del codice.
+        let n = self.trashed.fetch_add(1, Ordering::Relaxed);
+        let stamp = format!("2026-01-01T00-00-{n:02}");
+        let occupati = self.trash.lock().unwrap();
+        let trashed = DocId::new(cestino::trashed_id(id.as_str(), &stamp, &mut |c| {
+            occupati.contains_key(c)
+        }));
+        drop(occupati);
         self.trash.lock().unwrap().insert(
             trashed.to_string(),
             (
@@ -809,7 +821,7 @@ impl VaultStructure for MemoryHost {
             .unwrap()
             .get(entry.as_str())
             .cloned()
-            .ok_or_else(|| PluginError::BadArgs(format!("{entry} non è nel cestino").into()))?;
+            .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?;
         // `entry` nomina un file dentro `.trash/`, che il recinto dei
         // documenti rifiuta apposta: chi lo valida è la ricerca fra le voci del
         // cestino, appena sopra. Il `to` invece atterra nel vault, ed è un nome
@@ -820,7 +832,7 @@ impl VaultStructure for MemoryHost {
             None => voce.original,
         };
         if self.docs.lock().unwrap().contains_key(target.as_str()) {
-            return Err(PluginError::BadArgs(format!("{target} esiste già").into()));
+            return Err(PluginError::AlreadyExists(target.to_string().into()));
         }
         self.write_document(&target, &source, WriteBase::Dictated)?;
         self.trash.lock().unwrap().remove(entry.as_str());

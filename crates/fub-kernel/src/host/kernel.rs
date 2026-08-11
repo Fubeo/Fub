@@ -207,7 +207,7 @@ impl DataRead for KernelHost<'_> {
             Ok(bytes) => Ok(Some(bytes)),
             // Mancare non è un errore: chi legge uno store vuoto lo scopre così.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}").into())),
+            Err(e) => Err(PluginError::Io(format!("{path}: {e}").into())),
         }
     }
 
@@ -230,7 +230,11 @@ impl DataWrite for KernelHost<'_> {
             .storage()
             .write(&path, bytes)
             .map(|_| ())
-            .map_err(|e| PluginError::Internal(format!("{path}: {e}").into()))
+            // Il supporto ha detto di no, e il contratto lo scrive accanto alla
+            // variante: `Internal` è «un difetto di chi ha scritto il codice»,
+            // questo è «il mondo» — disco pieno, file in uso. Chi riprova ha
+            // ragione di farlo, e con `internal` non lo saprebbe (0219).
+            .map_err(|e| PluginError::Io(format!("{path}: {e}").into()))
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
@@ -239,7 +243,7 @@ impl DataWrite for KernelHost<'_> {
             Ok(()) => Ok(()),
             // Idempotente: cancellare ciò che non c'è è già il risultato voluto.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}").into())),
+            Err(e) => Err(PluginError::Io(format!("{path}: {e}").into())),
         }
     }
 }
