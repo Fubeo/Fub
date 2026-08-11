@@ -42,6 +42,8 @@ use fub_abi::rules::events::{folder_contains, topic_matches};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::rules::path_policy::{check, normalized, Naming};
 use fub_abi::rules::tasti;
+use fub_abi::locale::Locale;
+use fub_abi::text::{ArgValue, Message, StringCatalog, Strings, Text};
 use fub_abi::Span;
 use serde_json::{json, Value};
 
@@ -597,6 +599,67 @@ fn accordo_canonico_cases() -> Vec<Value> {
     .collect()
 }
 
+/// La sostituzione dei `{nome}` di un template (§7.4).
+///
+/// I due motori — `fub_abi::text::expand` e `espandi` in `i18n/strings.ts` —
+/// sono la sola coppia che il repo **dichiarava** gemella senza che niente la
+/// tenesse tale (difetto 0224), e i casi qui sotto sono i punti in cui due
+/// motori scritti a mano si separano senza che nessuno lo veda: **cosa può
+/// chiamarsi un nome** (una copia leggeva fino alla prima `}`, l'altra soltanto
+/// `\w+`, quindi `{foo-bar}` era un argomento per l'una e testo per l'altra),
+/// **le graffe letterali e quelle spaiate**, e **il nome che non c'è**, che
+/// deve restare a vista invece di sparire.
+///
+/// Gli argomenti sono testo e basta: come si scrive un numero o un istante è
+/// un'altra regola, che di là non esiste affatto — `ArgValue::render` col suo
+/// locale — e infilarla qui vorrebbe dire pretendere dalla shell una risposta
+/// che non le è mai stata chiesta.
+fn espansione_cases() -> Vec<Value> {
+    let locale = Locale::default();
+    let casi: Vec<(&str, Vec<(&str, &str)>)> = vec![
+        ("ciao {nome}", vec![("nome", "mondo")]),
+        ("{n} e ancora {n}", vec![("n", "uno")]),
+        // Le graffe letterali, e la letterale attaccata a un nome.
+        ("{{a}}", vec![]),
+        ("{{{a}}}", vec![("a", "A")]),
+        // Il nome che non c'è: resta scritto com'è, graffe comprese.
+        ("<{ignoto}>", vec![]),
+        // Le spaiate.
+        ("aperta { e basta", vec![]),
+        ("chiusa } e basta", vec![]),
+        ("{}", vec![]),
+        // Cosa può chiamarsi un nome.
+        ("{foo-bar}", vec![("foo-bar", "x")]),
+        ("{città}", vec![("città", "Roma")]),
+        ("{a.b}", vec![("a.b", "1")]),
+        ("{ spaziato }", vec![("spaziato", "no")]),
+        // Un'aperta dentro un nome: il nome è ciò che precede la prima chiusa.
+        ("{a{b}", vec![("b", "B")]),
+        // Un nome che in JavaScript è un membro di ogni oggetto.
+        ("{constructor}", vec![]),
+        ("niente", vec![]),
+    ];
+    casi
+        .into_iter()
+        .map(|(template, args)| {
+            let catalogo = StringCatalog::new("it").with("t", template);
+            let cataloghi = [catalogo];
+            let strings = Strings::new(&cataloghi, "it", &locale);
+            let mut messaggio = Message::new("t");
+            let mut mappa = serde_json::Map::new();
+            for (nome, valore) in &args {
+                messaggio = messaggio.with(*nome, ArgValue::Text((*valore).to_string()));
+                mappa.insert((*nome).to_string(), json!(valore));
+            }
+            json!({
+                "template": template,
+                "args": Value::Object(mappa),
+                "out": strings.render(&Text::Message(messaggio)),
+            })
+        })
+        .collect()
+}
+
 fn expected() -> Value {
     json!({
         "page_name": page_name_cases(),
@@ -610,6 +673,7 @@ fn expected() -> Value {
         "scan_tags": scan_tags_cases(),
         "accordo_canonico": accordo_canonico_cases(),
         "byte_to_utf16": offset_cases(true),
+        "espansione": espansione_cases(),
         "utf16_to_byte": offset_cases(false),
     })
 }

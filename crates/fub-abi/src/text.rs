@@ -526,6 +526,14 @@ impl<'a> Strings<'a> {
 /// resta **scritto com'è**, graffe comprese: è la stessa scelta dell'ultimo
 /// gradino del ladder — un buco si deve vedere e si deve poter cercare, non
 /// diventare una lacuna silenziosa in mezzo a una frase.
+///
+/// **Un nome è tutto ciò che precede la prima `}`**, e non un insieme di
+/// caratteri scelto: chi scrive un argomento non deve indovinare quali lettere
+/// gli sono concesse, e un nome che non si può nominare sparirebbe in silenzio
+/// dalla frase di qualcun altro. La shell ha il suo motore — `espandi` in
+/// `i18n/strings.ts`, che gira senza un giro IPC — e a tenerlo uguale a questo
+/// è la fixture `espansione` del mirror delle regole, che prima non c'era e le
+/// due copie divergevano proprio su questa riga (difetto 0224).
 fn expand(template: &str, args: &[Arg], locale: &Locale) -> String {
     let mut out = String::with_capacity(template.len());
     let mut rest = template;

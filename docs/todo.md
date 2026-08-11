@@ -460,7 +460,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **trentacinque** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **trentaquattro** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -569,7 +569,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0210 | un tasto premuto dentro la finestra di migrazione di una rinomina ricrea il nome vecchio: il salvataggio parte con l'identità di prima mentre il file si è già mosso, e il risultato è la stessa nota in due posti con due contenuti diversi | `frontend` · rinomina (finestra di migrazione) | regole |
 | 0211 | `suspendSave` e `resumeSave` hanno un posto solo: due sospensioni annidate — una rinomina dentro una conversione, un'importazione mentre una modale è aperta — si pestano, e la seconda ripresa riaccende il salvataggio che la prima voleva ancora fermo; dalla stessa parte nasce la bozza transitoria marcata «superata» che compare e sparisce senza che nessuno l'abbia chiesta | `frontend` · `suspendSave` / `resumeSave` | regole |
 | 0222 | la suite di conformità non copre le famiglie di **scrittura**: prova le letture e le query, mentre creazione, scrittura, rinomina, cestinazione e ripristino — cioè tutto ciò che tocca i byte dell'utente — non hanno nessun banco che verifichi che due host rispondano allo stesso modo, ed è esattamente lì che i due divergono | `fub-abi` · suite di conformità | regole |
-| 0224 | `expand` in Rust ed `espandi` in TypeScript sono lo stesso motore di sostituzione `{nome}` scritto due volte, e sono **l'unica coppia dichiarata gemella che nessuna fixture presidia**: `rules-samples.json` lega `mirrored.ts` alle regole di `fub-abi` e non nomina né l'una né l'altra, mentre `strings.test.ts` prova `espandi` solo contro attese scritte lì accanto. Le due divergono **già**: in Rust il nome è tutto ciò che precede la prima `}` (quindi `foo-bar` è un nome), in TypeScript solo `\w+`; ogni regola nuova — un escape, una graffa letterale — va portata identica in due motori senza niente che li confronti | `fub-abi` · `text.rs` `expand` (con `frontend` · `i18n/strings.ts` `espandi`) | regole |
 
 ## Dove va una regola scritta due volte
 
@@ -605,7 +604,7 @@ metodo`.
 | `casa` | 59 | il modulo che ha **il diritto** di imporre una regola, che è dove la regola va scritta una volta sola | la sezione qui sopra, `crates/fub-format-markdown/src/util.rs` |
 | `casella` | 367 | ciò che resta da fare dopo che una decisione è chiusa: nessuna scelta, solo lavoro | l'apertura di questo file |
 | `difetto` | 530 | qualcosa di misurato nel codice che si ripara senza decidere niente — se la riparazione dipende da una decisione, non è un difetto | l'apertura di questo file |
-| `gemella` | 45 | una funzione scritta due volte in due linguaggi che devono restare d'accordo | la riga `0224`, `crates/fub-abi/tests/rules_mirror.rs` |
+| `gemella` | 45 | una funzione scritta due volte in due linguaggi che devono restare d'accordo | `crates/fub-abi/tests/rules_mirror.rs` con `frontend/src/rules/rules-mirror.test.ts` |
 | `gesto` | 171 | una singola interazione dell'utente — un tasto, un clic, un trascinamento — presa alla grana più fine | [FEATURES.md](FEATURES.md) §32, [microfeatures/](microfeatures/) |
 | `grana` | 92 | quanto è fine la misura che si sta facendo: «alla grana del gesto» vuol dire un'osservazione per interazione | questo file, [roadmap/](roadmap/) |
 | `innesco` | 13 | l'evento che fa scattare una casella, scritto al posto di una data quando la data non si sa | questo file |

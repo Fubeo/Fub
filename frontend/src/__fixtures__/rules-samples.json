@@ -2664,6 +2664,99 @@
       "out": 0
     }
   ],
+  "espansione": [
+    {
+      "template": "ciao {nome}",
+      "args": {
+        "nome": "mondo"
+      },
+      "out": "ciao mondo"
+    },
+    {
+      "template": "{n} e ancora {n}",
+      "args": {
+        "n": "uno"
+      },
+      "out": "uno e ancora uno"
+    },
+    {
+      "template": "{{a}}",
+      "args": {},
+      "out": "{a}"
+    },
+    {
+      "template": "{{{a}}}",
+      "args": {
+        "a": "A"
+      },
+      "out": "{A}"
+    },
+    {
+      "template": "<{ignoto}>",
+      "args": {},
+      "out": "<{ignoto}>"
+    },
+    {
+      "template": "aperta { e basta",
+      "args": {},
+      "out": "aperta { e basta"
+    },
+    {
+      "template": "chiusa } e basta",
+      "args": {},
+      "out": "chiusa } e basta"
+    },
+    {
+      "template": "{}",
+      "args": {},
+      "out": "{}"
+    },
+    {
+      "template": "{foo-bar}",
+      "args": {
+        "foo-bar": "x"
+      },
+      "out": "x"
+    },
+    {
+      "template": "{città}",
+      "args": {
+        "città": "Roma"
+      },
+      "out": "Roma"
+    },
+    {
+      "template": "{a.b}",
+      "args": {
+        "a.b": "1"
+      },
+      "out": "1"
+    },
+    {
+      "template": "{ spaziato }",
+      "args": {
+        "spaziato": "no"
+      },
+      "out": "{ spaziato }"
+    },
+    {
+      "template": "{a{b}",
+      "args": {
+        "b": "B"
+      },
+      "out": "{a{b}"
+    },
+    {
+      "template": "{constructor}",
+      "args": {},
+      "out": "{constructor}"
+    },
+    {
+      "template": "niente",
+      "args": {},
+      "out": "niente"
+    }
+  ],
   "utf16_to_byte": [
     {
       "text": "ascii puro",
