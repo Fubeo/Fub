@@ -471,53 +471,16 @@ fn regole() -> BTreeMap<&'static str, (Famiglia, &'static str)> {
         ),
         // -- ConfineDiCartella ---------------------------------------------
         (
-            "crates/fub-abi/src/query.rs::within_folder",
+            "crates/fub-abi/src/rules/cartelle.rs::normalizzata",
             (
                 Famiglia::ConfineDiCartella,
-                "taglia i soli `/` **finali** e ha il ramo su sé stessa (`own == path`), perché \
-                 risponde per un file **e** per una cartella: «per un file `own` è la cartella \
-                 che lo contiene, per una cartella è la sua genitrice» (query.rs). È la regola \
-                 dei predicati d'indice.",
-            ),
-        ),
-        (
-            "crates/fub-abi/src/rules/events.rs::folder_contains",
-            (
-                Famiglia::ConfineDiCartella,
-                "taglia i `/` finali e **non** ha il ramo su sé stessa, ed è deliberato: la \
-                 domanda degli eventi è «un documento dentro» e una cartella non è un documento. \
-                 Diverge da `within_folder` sul caso `folder == id`, che per un evento non si \
-                 presenta. Difetto 0141.",
-            ),
-        ),
-        (
-            "crates/fub-abi/src/transfer.rs::in_folder",
-            (
-                Famiglia::ConfineDiCartella,
-                "taglia i `/` da **entrambi** i capi, perché la cartella d'export arriva da una \
-                 richiesta di terzi e non da un `DocId`. È la terza risposta alla stessa \
-                 domanda, e il banco di `transfer.rs` asserisce vero ciò che `within_folder` dà \
-                 falso. Difetto 0141: qui è dichiarata, non risolta.",
-            ),
-        ),
-        (
-            "crates/fub-abi/src/transfer.rs::destination",
-            (
-                Famiglia::ConfineDiCartella,
-                "non chiede se qualcosa sta dentro: **compone** un `DocId` dentro la cartella \
-                 chiesta. Taglia da entrambi i capi come `in_folder` perché la stringa è la \
-                 stessa, e divergere significherebbe importare in una cartella diversa da quella \
-                 che poi si interroga.",
-            ),
-        ),
-        (
-            "crates/fub-features/src/search.rs::translate_predicate",
-            (
-                Famiglia::ConfineDiCartella,
-                "non confronta: costruisce il **termine** con cui l'indice full-text è stato \
-                 scritto, e taglia i `/` finali per farlo combaciare con `within_folder`, che è \
-                 la regola che ha prodotto quel campo. Un trim diverso qui sarebbe una ricerca \
-                 che non trova mai nulla.",
+                "è **la** regola: gli slash ai due capi sono cortesia e non componenti, e il \
+                 confine è per segmento. Erano tre — i predicati d'indice, la maschera degli \
+                 eventi, la selezione di un'esportazione — con tre trim diversi, al punto che il \
+                 banco di `transfer.rs` asseriva vero (`/x/` contiene `x/a.md`) ciò che \
+                 `within_folder` dava falso. Difetto 0141: adesso `within_folder`, \
+                 `folder_contains` e la selezione d'export sono nomi locali di questa riga, e \
+                 `una_cartella_sola.rs` è ciò che diventa rosso se una quarta se la riscrive.",
             ),
         ),
         (

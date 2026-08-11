@@ -54,6 +54,7 @@ use fub_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery, TextTolerance,
 };
+use fub_abi::rules::cartelle;
 use fub_abi::rules::snippet::SNIPPET_CHARS;
 use fub_abi::schema::SchemaVersion;
 use fub_abi::settings::{SettingKind, SettingSpec};
@@ -1315,7 +1316,12 @@ impl SearchIndex {
                 } else {
                     f.folder_exact
                 };
-                Ok(Some(term_query(field, path.trim_end_matches('/'))))
+                // Non confronta: **costruisce** il termine con cui il campo è stato
+                // scritto. La normalizzazione dev'essere quella di
+                // `within_folder`, che è la regola che quel campo l'ha
+                // prodotto — un trim diverso qui è una ricerca che non trova
+                // mai niente (difetto 0141).
+                Ok(Some(term_query(field, cartelle::normalizzata(path))))
             }
             QueryPredicate::Docs { docs } => {
                 if docs.is_empty() {

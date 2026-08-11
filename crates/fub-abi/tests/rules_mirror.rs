@@ -297,6 +297,12 @@ fn folder_contains_cases() -> Vec<Value> {
         ("Progetti", "Progetti/Alpha.md"),
         ("Progetti", "Progetti/2026/Alpha.md"),
         ("Progetti/", "Progetti/Alpha.md"),
+        // Gli slash di cortesia ai due capi: la stessa cartella scritta come la
+        // scrive chi la incolla da un file manager e chi la pensa come un path
+        // assoluto (difetto 0141).
+        ("/Progetti", "Progetti/Alpha.md"),
+        ("/Progetti/", "Progetti/Alpha.md"),
+        ("/Progetti/2026/", "Progetti/2027/Alpha.md"),
         ("Progetti", "Progetti-vecchi/Alpha.md"),
         ("Progetti", "Progetti"),
         ("Progetti", "Alpha.md"),

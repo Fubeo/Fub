@@ -61,7 +61,7 @@ dei crate parla a chi **ricompila**; questa parla a un componente WASM
 accettare o rifiutare da solo, guardando la stringa che il plugin dichiara.
 
 **La regola di caricamento** è
-[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:4333`), e sta
+[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:4335`), e sta
 in quattro righe:
 
 | Caso | Esito | Perché |
@@ -129,7 +129,7 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 | anagrafe | [`crates/fub-kernel/src/entries.rs:90`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
 | impostazioni | [`crates/fub-kernel/src/settings.rs:84`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
 | versioning | [`crates/fub-features/src/versioning.rs:254`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
-| indice di ricerca | [`crates/fub-features/src/search.rs:91`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
+| indice di ricerca | [`crates/fub-features/src/search.rs:92`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:232`](../crates/fub-kernel/src/maintenance.rs) | 1 | una copia di fatti che stanno altrove, per chi cerca un guasto |

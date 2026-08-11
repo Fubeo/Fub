@@ -802,6 +802,21 @@
       "out": true
     },
     {
+      "folder": "/Progetti",
+      "id": "Progetti/Alpha.md",
+      "out": true
+    },
+    {
+      "folder": "/Progetti/",
+      "id": "Progetti/Alpha.md",
+      "out": true
+    },
+    {
+      "folder": "/Progetti/2026/",
+      "id": "Progetti/2027/Alpha.md",
+      "out": false
+    },
+    {
       "folder": "Progetti",
       "id": "Progetti-vecchi/Alpha.md",
       "out": false

@@ -27,6 +27,9 @@
 //! - [`cestino`] — **che nome prende una nota cestinata**: il cestino
 //!   piatto, il timbro prima dell'estensione, e come si ritrova il nome di
 //!   prima senza nessun registro (D1, D2);
+//! - [`cartelle`] — **dove finisce una cartella**: gli slash di cortesia ai
+//!   due capi, e il confine per segmento che distingue `Progetti-vecchi` da
+//!   una discendente di `Progetti` (§14.3);
 //! - [`composition`] — **la forma normalizzata** (NFC) su cui tutte le altre
 //!   giudicano: non decide se due nomi sono lo stesso nome, decide come sono
 //!   scritti i caratteri di cui si chiede;
@@ -78,6 +81,7 @@
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
 
 pub mod carichi;
+pub mod cartelle;
 pub mod cestino;
 pub mod composition;
 pub mod doc_data;

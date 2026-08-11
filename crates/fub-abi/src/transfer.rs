@@ -91,6 +91,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
+use crate::rules::cartelle;
 use crate::traits::{HostApi, IndexQuery, IndexResult, ReadApi, TransferRead};
 
 /// Quanto chiede per volta chi legge una sorgente intera.
@@ -484,7 +485,11 @@ impl ImportRequest {
     /// Il `DocId` di destinazione per un nome di documento, dentro la cartella
     /// chiesta. Il nome è già un componente solo (vedi [`ImportSource::stem`]).
     pub fn destination(&self, name: &str) -> DocId {
-        let folder = self.folder.trim_matches('/');
+        // Gli slash di cortesia non diventano componenti vuote — ed è la
+        // **stessa** normalizzazione con cui poi si interroga la cartella:
+        // importare in `/Importati/` e chiedere `Importati` devono parlare
+        // della stessa cartella (difetto 0141).
+        let folder = cartelle::normalizzata(&self.folder);
         if folder.is_empty() {
             DocId::new(name)
         } else {
@@ -650,7 +655,7 @@ impl ExportSelection {
                 .list_documents(None)?
                 .items
                 .into_iter()
-                .filter(|doc| in_folder(doc, folder))
+                .filter(|doc| cartelle::contiene(folder, doc.as_str()))
                 .collect(),
             ExportSelection::Query(query) => match host.query_index(query.clone())? {
                 IndexResult::Backlinks(p) => p.items.into_iter().map(|b| b.source).collect(),
@@ -668,17 +673,6 @@ impl ExportSelection {
         docs.dedup();
         Ok(docs)
     }
-}
-
-/// Il documento sta in questa cartella o in una sua discendente? Cartella vuota
-/// = tutto il vault.
-fn in_folder(doc: &DocId, folder: &str) -> bool {
-    let folder = folder.trim_matches('/');
-    folder.is_empty()
-        || doc
-            .as_str()
-            .strip_prefix(folder)
-            .is_some_and(|rest| rest.starts_with('/'))
 }
 
 /// La domanda a un [`ExportProvider`]: cosa, verso dove, con quali opzioni.
@@ -955,17 +949,23 @@ mod tests {
         );
     }
 
+    /// La selezione per cartella non ha più una regola sua: chiede a quella del
+    /// contratto, la stessa a cui chiedono i predicati d'indice e la maschera
+    /// degli eventi (difetto 0141). Le righe restano qui perché è **qui** che
+    /// qualcuno un giorno si riscriverà le tre righe comode, e le sue attese
+    /// sono le stesse di prima — compreso `/x/`, che questo banco asseriva vero
+    /// mentre `within_folder` lo dava falso.
     #[test]
     fn a_folder_selection_takes_the_descendants_and_not_the_namesakes() {
-        assert!(in_folder(&DocId::new("a.md"), ""), "vuota = tutto il vault");
-        assert!(in_folder(&DocId::new("x/y/a.md"), "x"));
-        assert!(in_folder(&DocId::new("x/y/a.md"), "x/y"));
-        assert!(!in_folder(&DocId::new("x.md"), "x"));
+        assert!(cartelle::contiene("", "a.md"), "vuota = tutto il vault");
+        assert!(cartelle::contiene("x", "x/y/a.md"));
+        assert!(cartelle::contiene("x/y", "x/y/a.md"));
+        assert!(!cartelle::contiene("x", "x.md"));
         assert!(
-            !in_folder(&DocId::new("xy/a.md"), "x"),
+            !cartelle::contiene("x", "xy/a.md"),
             "`xy` non è dentro `x`: il confronto è per componente, non per prefisso"
         );
-        assert!(in_folder(&DocId::new("x/a.md"), "/x/"));
+        assert!(cartelle::contiene("/x/", "x/a.md"));
     }
 
     /// Un host che serve **una** sorgente e conta quanti byte per volta gli

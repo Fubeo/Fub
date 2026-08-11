@@ -53,17 +53,15 @@ pub fn topic_matches(prefix: &str, topic: &str) -> bool {
 /// La cartella è un **prefisso di path** e non un tipo perché nel kernel una
 /// cartella non esiste ancora (§14.3): esistono i `DocId`, che sono path. La
 /// stringa vuota — e quella fatta di soli `/` — è la radice, cioè tutto il
-/// vault; un `/` in coda non cambia niente, perché due modi di scrivere la
-/// stessa cartella che filtrano diversamente sarebbero un difetto che si vede
-/// una volta su venti.
+/// vault; gli slash ai due capi non cambiano niente, perché due modi di
+/// scrivere la stessa cartella che filtrano diversamente sono un difetto che si
+/// vede una volta su venti.
+///
+/// Il corpo è quello dei predicati d'indice, ed è lo stesso apposta: chi si
+/// abbona a una cartella e chi la interroga devono parlare della stessa
+/// cartella (difetto 0141).
 pub fn folder_contains(folder: &str, id: &str) -> bool {
-    let folder = folder.trim_end_matches('/');
-    if folder.is_empty() {
-        return true;
-    }
-    id.len() > folder.len()
-        && id.starts_with(folder)
-        && id.as_bytes().get(folder.len()) == Some(&b'/')
+    super::cartelle::contiene(folder, id)
 }
 
 /// Questo evento va consegnato a chi ha dichiarato questa maschera?
