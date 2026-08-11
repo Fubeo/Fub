@@ -7,6 +7,7 @@
 // una svista che si scopre il giorno del port su PWA o mobile.
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   BundleInfo,
   CommandOutcome,
@@ -247,4 +248,26 @@ export const api = {
 /// o il presidio diventa una formalità che si aggira con `import type`.
 export function onKernelEvent(handler: (n: KernelNotice) => void): Promise<() => void> {
   return listen<KernelNotice>("fub://event", (evt) => handler(evt.payload));
+}
+
+/// **Qualcuno ha chiesto di chiudere la finestra**, e la chiusura aspetta.
+///
+/// L'altro capo di `RunEvent::Exit` in `fub-app`: là il backend chiude gli
+/// indici di ogni vault aperto, ma quando quell'evento arriva la webview sta già
+/// morendo e ciò che la shell ha in mano non è più chiedibile a nessuno. Questa
+/// è l'unica finestra in cui lo è: il ponte è vivo, il gesto non è ancora
+/// avvenuto, e `onCloseRequested` aspetta la promessa prima di distruggere.
+///
+/// Il gestore **non può alzare**, e non è una cortesia: se rigetta, la chiusura
+/// non arriva mai e la finestra resta lì senza spiegazione. Un salvataggio che
+/// va storto è un fatto normale in questa riga — è precisamente il caso che
+/// rende la bozza utile — e non deve diventare una finestra che non si chiude.
+export function allaChiusura(prima: () => Promise<void>): Promise<() => void> {
+  return getCurrentWindow().onCloseRequested(async () => {
+    try {
+      await prima();
+    } catch {
+      // Muto per la ragione scritta sopra: chi chiude, chiude.
+    }
+  });
 }

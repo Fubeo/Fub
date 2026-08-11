@@ -137,6 +137,12 @@ export interface HostFinto {
   /// nuovo e crederebbe di aver provato il contrario.
   guasta(porta: string, motivo?: string): () => void;
 
+  /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
+  ///
+  /// Alza se nessuno si è iscritto: una chiusura consegnata a nessuno non
+  /// fallisce da sé, ed è esattamente il difetto che questo simula (0205).
+  chiudi(): Promise<void>;
+
   /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
   ///
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
@@ -154,6 +160,7 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
   const chiamate: Chiamata[] = [];
   const view = opzioni.view ?? [];
   let ascoltatore: ((n: KernelNotice) => void) | null = null;
+  let allaChiusura: (() => Promise<void>) | null = null;
   let revisione = 0;
   let cestinate = 0;
 
@@ -524,6 +531,13 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
         ascoltatore = null;
       });
     },
+    allaChiusura: (prima) => {
+      allaChiusura = prima;
+      chiamate.push({ porta: "allaChiusura", args: [] });
+      return Promise.resolve(() => {
+        allaChiusura = null;
+      });
+    },
   };
 
   /// L'albero che una view del finto disegna. Solo il cestino ne ha uno: è la
@@ -556,6 +570,10 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
     cestino: () => [...cestino].map(([id, d]) => ({ id, originale: d.originale })),
     chiamate,
     aPorta: (nome) => chiamate.filter((c) => c.porta === nome),
+    chiudi: async () => {
+      if (!allaChiusura) throw new Error("host finto: nessuno ascolta la chiusura della finestra");
+      await allaChiusura();
+    },
     frena: (nome) => {
       let sblocca!: () => void;
       freni.set(

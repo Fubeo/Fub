@@ -1143,6 +1143,29 @@ async function flushDoc(doc: string): Promise<string | null> {
   return buffers.get(doc)?.dirty === true ? doc : null;
 }
 
+/// **Si sta chiudendo**: ciò che è ancora in RAM esce adesso o non esce più.
+///
+/// I due ritardi della shell sono nati per non scrivere a ogni tasto — 400 ms il
+/// salvataggio, un secondo la bozza — e sono innocui finché c'è un dopo. Alla
+/// chiusura il dopo non c'è: chiudere la finestra mentre il ritardo corre
+/// buttava via l'ultima battuta senza chiedere niente e senza lasciarne traccia
+/// nemmeno nella bozza, che è la rete tesa apposta sotto questo caso e che al
+/// momento del guasto poteva essere più vecchia del testo (difetto 0205).
+///
+/// Non chiede conferma e non trattiene la chiusura oltre il proprio giro: chi ha
+/// premuto la X vuole chiudere, e la domanda giusta non è «vuoi salvare?» ma
+/// «dove finisce ciò che ho battuto». Se il disco rifiuta — vault in sola
+/// lettura, share di rete caduta — la battuta resta comunque nella bozza, cioè
+/// nel posto da cui il riavvio la ripesca (§15.2).
+export async function mettiInSalvoPrimaDiChiudere(): Promise<void> {
+  for (const buf of buffers.values()) window.clearTimeout(buf.draftTimer);
+  const appesi = await flushPendingSave();
+  // In fila e non insieme, perché sono l'ultima cosa che questa finestra fa: la
+  // chiusura aspetta questa promessa, e un `Promise.all` che ne perde una a
+  // metà lascerebbe l'ultima bozza a metà file.
+  for (const doc of appesi) await writeDraft(doc);
+}
+
 /// Disinnesca un salvataggio in attesa senza eseguirlo, e dice se ce n'era uno.
 ///
 /// Serve a chi sta per **chiedere conferma** di una cancellazione: senza,

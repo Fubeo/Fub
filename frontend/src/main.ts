@@ -9,7 +9,7 @@
 // e 18 variabili globali (§1.1, §1.2).
 import "./style.css";
 import { pickFolder } from "./host/dialog";
-import { api } from "./host/ipc";
+import { allaChiusura, api } from "./host/ipc";
 import { statoDelVault, vociDelVault } from "./host/query";
 import { inoltraNotifica, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
@@ -39,6 +39,7 @@ import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
 import { mountTheme } from "./theme/theme";
 import {
+  mettiInSalvoPrimaDiChiudere,
   mountDocument,
   openDocument,
   openWikilink,
@@ -120,6 +121,17 @@ async function init(): Promise<void> {
   // moduli dell'editor ricevono il mondo.
   mountDocument({ searchTag: (tag) => searchFor(`tags:${tag}`) });
   configurePreview({ openPage: openWikilink });
+
+  // Subito dopo il pannello del documento, perché è il suo testo che protegge, e
+  // **prima** del vault: il ritardo del salvataggio comincia a correre alla
+  // prima battuta, e un ascoltatore montato in fondo all'avvio sarebbe iscritto
+  // dopo l'unico momento in cui non serve. Non si attende — la promessa è
+  // l'iscrizione, non la chiusura — ma non è nemmeno buttata: un `catch` che
+  // dice cosa non c'è, perché una finestra che chiudendo perde l'ultima battuta
+  // non lo racconta a nessuno.
+  void allaChiusura(mettiInSalvoPrimaDiChiudere).catch(() => {
+    notify(t("document.close_unhooked"), "guasto");
+  });
 
   // L'host dei pannelli per primo: da qui in poi ogni pannello — nativo o
   // dichiarato dal backend — si presenta al registro invece di iscriversi da
