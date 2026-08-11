@@ -646,9 +646,10 @@ Due assenze da non disegnare:
 - **il redo non esiste** — è un'altra pila, e non c'è;
 - la pila non si legge dal canale dati: nessuna `IndexQuery` la nomina.
 
-Al confine `HostApi::undo_last` costa **due** capacità, `Commands` e
-`VaultWrite` ([guard.rs:591](../../crates/fub-kernel/src/host/guard.rs)): senza
-la seconda, un host di sola lettura avrebbe una scala per riscrivere il vault.
+Al confine `HostApi::undo_last` costa **due** capacità: `Commands` e
+`VaultWrite`. Il codice è a
+[guard.rs:591](../../crates/fub-kernel/src/host/guard.rs). Senza la seconda, un
+host di sola lettura avrebbe una scala per riscrivere il vault.
 
 ### `ViewProvider` — UI dichiarativa (M2: graph/outline/tag panel)
 

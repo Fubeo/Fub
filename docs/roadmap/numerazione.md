@@ -1,15 +1,19 @@
 # Corrispondenza fra la numerazione vecchia e questa
 
-I messaggi di commit, i commenti e i documenti di architettura usano i numeri precedenti alla riorganizzazione. Questo documento li traduce e mantiene validi questi riferimenti storici.
+I messaggi di commit, i commenti e i documenti di architettura usano i numeri
+precedenti alla riorganizzazione. Questo documento li traduce e mantiene validi
+questi riferimenti storici.
 
 [← indice](../todo.md)
 
 ---
 
-**Voci chiuse** — Il verbale si trova in [docs/decisions/](../decisions/README.md). Alcune righe mostrano due numeri:
+**Voci chiuse** — Il verbale si trova in
+[docs/decisions/](../decisions/README.md). Alcune righe mostrano due numeri:
 - Il primo è il numero del primo giro.
-- Il secondo è il numero della riorganizzazione in sedute.
-Le voci chiuse dopo la riorganizzazione usano entrambi i numeri. Entrambi i numeri puntano a questa tabella.
+- Il secondo è il numero della riorganizzazione in sedute. Le voci chiuse dopo
+  la riorganizzazione usano entrambi i numeri. Entrambi i numeri puntano a
+  questa tabella.
 
 | Vecchio | Decisione |
 |---|---|
@@ -94,7 +98,11 @@ Le voci chiuse dopo la riorganizzazione usano entrambi i numeri. Entrambi i nume
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
 
-**Voci trasferite** — Il numero rimane invariato. Il file cambia. Una seduta chiusa passa i propri residui alle sedute successive. La voce si sposta nella seduta di esecuzione quando rimane solo l'**esecuzione**. Il codice `§X.Y` segue la voce. La seduta originale mostra il rimando iniziale. Questa tabella indica la destinazione finale.
+**Voci trasferite** — Il numero rimane invariato. Il file cambia. Una seduta
+chiusa passa i propri residui alle sedute successive. La voce si sposta nella
+seduta di esecuzione quando rimane solo l'**esecuzione**. Il codice `§X.Y` segue
+la voce. La seduta originale mostra il rimando iniziale. Questa tabella indica
+la destinazione finale.
 
 | Voce | Dov'era | Dov'è adesso | Perché lì |
 |---|---|---|---|
@@ -128,18 +136,66 @@ Le voci chiuse dopo la riorganizzazione usano entrambi i numeri. Entrambi i nume
 | §4.5 | **§17.3** | Osservabilità |
 | §4.7 | **§16.3** | Un crate (pacchetto Rust) per bundle (pacchetto di funzionalità) di feature |
 
-**Voci senza un numero precedente.**
-Sette famiglie nascono con la numerazione per sedute. Queste voci introducono nuovi concetti.
+**Voci senza un numero precedente.** Sette famiglie nascono con la numerazione
+per sedute. Queste voci introducono nuovi concetti.
 
-- **§8.4**: È una misura. Questa voce evita il passaggio per un giro ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
-- **§20.5**: È l'applicazione del metodo a una decisione recente. Questa voce nasce per misurare la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) contro il codice invece che contro il documento descrittivo. La [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) traccia la destinazione degli eventi critici. L'evento sparisce da tre punti. Due freni (controlli) lo rispettano.
-- **§21.1–§21.9**: Sono le lacune introdotte dalla decisione di prodotto [0025](../decisions/0025-la-ricerca-predefinita.md). La ricerca è integrata e di tipo *omnisearch* (ricerca globale). Queste nove voci elencano i requisiti mancanti nel contratto per supportare questo comportamento.
-- **§22.1–§22.3**: Sono le tre lacune scoperte dalla **seconda verifica**. Questo metodo applica l'approccio della §21.10 alla lettura esterna di [FEATURES.md](../FEATURES.md). L'analisi rileva nove affermazioni. Sei risultano vere e presenti nella roadmap. Una tesi centrale risulta errata (la promozione di §15.1 e §15.2 a P0 scambia la leva per la scadenza). La validità della verifica dipende dalla scoperta di nuove osservazioni. La §21.10 deriva da una tesi errata. Queste tre derivano da una tesi errata contenente tre osservazioni vere.
-- **§21.10**: È una **verifica** generata da un'affermazione esterna **sbagliata** sull'architettura della lavagna (spazio di lavoro). L'affermazione dichiarava l'assenza del riferimento al blocco nel contratto. Il contratto include questo riferimento dalla [0003](../decisions/0003-modello-del-documento.md). La lacuna risiede nella risposta di `IndexQuery::Resolve`. Questa risposta indica il documento, trascurando la posizione interna. Questa è l'unica voce nata da un'affermazione **sbagliata**. Questo metodo trova voci ignorate dalle sei domande iniziali.
-- **§16.8**: È una **separazione** emersa chiudendo il §16.7 con la [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md). Quella voce teneva due voci interne. Il difetto condiviso consiste in un elenco obsoleto con indicatori positivi. Il presidio diverge. Un insieme estratto dai sorgenti richiede un presidio specifico. Un'affermazione in italiano in un documento richiede un altro metodo. Questa voce rappresenta l'opposto dell'accorpamento della [0053](../decisions/0053-il-contratto-ha-una-sorgente.md).
-- **§22.4**: È la **seconda separazione**. La differenza con la §16.8 merita attenzione. La §16.8 manteneva lo stesso difetto con un presidio diverso. Questa voce analizza la stessa **parola** con due domande sottostanti: *quando*. «Ogni ora» richiede il calcolo del tempo trascorso. «Alle 9» richiede un fuso orario e regole sull'ora legale. L'elenco di esempi della §22.1 le rendeva una cosa sola. Questo elenco misurava l'estensione del problema. I lettori lo interpretavano come stima del lavoro ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)).
-- **§23.1–§23.3**: Sono i risultati della **terza verifica** basata sui **verbali**. Un giro analizza il sistema. Queste tre voci valutano i costi del sistema per gli utenti e per gli sviluppatori futuri ([seduta 23](23-cosa-costano-le-decisioni-chiuse.md)). Queste voci possiedono questa provenienza unica.
-- **§23.4–§23.8**: Sono i risultati della **quarta** verifica condotta sui **primi dieci** verbali analizzati uno per uno. Il metodo confronta i verbali storici con i sorgenti attuali. Due delle cinque voci derivano da un criterio enunciato dal verbale stesso. Il verbale omette l'applicazione del criterio su sé stesso. Questa dinamica giustifica la rilettura dei verbali storici immutati.
+- **§8.4**: È una misura. Questa voce evita il passaggio per un giro
+  ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+- **§20.5**: È l'applicazione del metodo a una decisione recente. Questa voce
+  nasce per misurare la
+  [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) contro il codice
+  invece che contro il documento descrittivo. La
+  [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) traccia la
+  destinazione degli eventi critici. L'evento sparisce da tre punti. Due freni
+  (controlli) lo rispettano.
+- **§21.1–§21.9**: Sono le lacune introdotte dalla decisione di prodotto
+  [0025](../decisions/0025-la-ricerca-predefinita.md). La ricerca è integrata e
+  di tipo *omnisearch* (ricerca globale). Queste nove voci elencano i requisiti
+  mancanti nel contratto per supportare questo comportamento.
+- **§22.1–§22.3**: Sono le tre lacune scoperte dalla **seconda verifica**.
+  Questo metodo applica l'approccio della §21.10 alla lettura esterna di
+  [FEATURES.md](../FEATURES.md). L'analisi rileva nove affermazioni. Sei
+  risultano vere e presenti nella roadmap. Una tesi centrale risulta errata (la
+  promozione di §15.1 e §15.2 a P0 scambia la leva per la scadenza). La validità
+  della verifica dipende dalla scoperta di nuove osservazioni. La §21.10 deriva
+  da una tesi errata. Queste tre derivano da una tesi errata contenente tre
+  osservazioni vere.
+- **§21.10**: È una **verifica** generata da un'affermazione esterna
+  **sbagliata** sull'architettura della lavagna (spazio di lavoro).
+  L'affermazione dichiarava l'assenza del riferimento al blocco nel contratto.
+  Il contratto include questo riferimento dalla
+  [0003](../decisions/0003-modello-del-documento.md). La lacuna risiede nella
+  risposta di `IndexQuery::Resolve`. Questa risposta indica il documento,
+  trascurando la posizione interna. Questa è l'unica voce nata da
+  un'affermazione **sbagliata**. Questo metodo trova voci ignorate dalle sei
+  domande iniziali.
+- **§16.8**: È una **separazione** emersa chiudendo il §16.7 con la
+  [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md). Quella voce teneva
+  due voci interne. Il difetto condiviso consiste in un elenco obsoleto con
+  indicatori positivi. Il presidio diverge. Un insieme estratto dai sorgenti
+  richiede un presidio specifico. Un'affermazione in italiano in un documento
+  richiede un altro metodo. Questa voce rappresenta l'opposto dell'accorpamento
+  della [0053](../decisions/0053-il-contratto-ha-una-sorgente.md).
+- **§22.4**: È la **seconda separazione**. La differenza con la §16.8 merita
+  attenzione. La §16.8 manteneva lo stesso difetto con un presidio diverso.
+  Questa voce analizza la stessa **parola** con due domande sottostanti:
+  *quando*. «Ogni ora» richiede il calcolo del tempo trascorso. «Alle 9»
+  richiede un fuso orario e regole sull'ora legale. L'elenco di esempi della
+  §22.1 le rendeva una cosa sola. Questo elenco misurava l'estensione del
+  problema. I lettori lo interpretavano come stima del lavoro
+  ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)).
+- **§23.1–§23.3**: Sono i risultati della **terza verifica** basata sui
+  **verbali**. Un giro analizza il sistema. Queste tre voci valutano i costi del
+  sistema per gli utenti e per gli sviluppatori futuri
+  ([seduta 23](23-cosa-costano-le-decisioni-chiuse.md)). Queste voci possiedono
+  questa provenienza unica.
+- **§23.4–§23.8**: Sono i risultati della **quarta** verifica condotta sui
+  **primi dieci** verbali analizzati uno per uno. Il metodo confronta i verbali
+  storici con i sorgenti attuali. Due delle cinque voci derivano da un criterio
+  enunciato dal verbale stesso. Il verbale omette l'applicazione del criterio su
+  sé stesso. Questa dinamica giustifica la rilettura dei verbali storici
+  immutati.
 
-Queste voci appaiono solo nei commit successivi alla riorganizzazione. La loro creazione coincide con il nuovo sistema.
+Queste voci appaiono solo nei commit successivi alla riorganizzazione. La loro
+creazione coincide con il nuovo sistema.
 </SYSTEM_MESSAGE>
