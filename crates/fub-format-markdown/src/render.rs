@@ -47,9 +47,21 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             render_inlines(inlines, opts, out);
             out.push_str("</p>");
         }
-        Block::List { ordered, items, .. } => {
+        Block::List {
+            ordered,
+            items,
+            start,
+            ..
+        } => {
             let tag = if *ordered { "ol" } else { "ul" };
-            out.push_str(&format!("<{tag}{id}>"));
+            // `<ol start>` è il campo `start` del modello: senza, una lista che
+            // nel file comincia da 3 si legge da 1 in anteprima, cioè il testo
+            // e ciò che se ne vede dicono due cose diverse.
+            let da = match start {
+                Some(n) if *ordered && *n != 1 => format!(" start=\"{n}\""),
+                _ => String::new(),
+            };
+            out.push_str(&format!("<{tag}{id}{da}>"));
             for item in items {
                 match &item.task {
                     Some(t) => {
@@ -375,7 +387,7 @@ fn render_link(
                     "<div class=\"embed\"{}>",
                     wiki_attrs("embed", page, heading, block)
                 ));
-                render_link_label(label, page, out);
+                render_link_label(label, &interno(target, page), out);
                 out.push_str("</div>");
                 return;
             }
@@ -393,7 +405,7 @@ fn render_link(
                 out.push_str(" href=\"#\"");
             }
             out.push('>');
-            render_link_label(label, page, out);
+            render_link_label(label, &interno(target, page), out);
             out.push_str("</a>");
         }
         // Un riferimento incorporato che non è un wikilink è, quasi sempre,
@@ -432,6 +444,18 @@ fn render_link(
             out.push_str("</a>");
         }
     }
+}
+
+/// Ciò che si legge di un wikilink **senza alias**: l'interno intero, non la
+/// sola pagina.
+///
+/// `label: None` vuol dire «l'autore non ha scritto un alias», e allora ciò che
+/// si vede è ciò che sta fra le due parentesi — `Nota#Sezione`, non `Nota`.
+/// Finché il parser sintetizzava l'etichetta dal bersaglio la differenza non si
+/// vedeva mai da qui; adesso che non la sintetizza più, il ripiego sulla sola
+/// `page` mangerebbe l'heading a schermo.
+fn interno(target: &LinkTarget, page: &str) -> String {
+    target.wiki_inner().unwrap_or_else(|| page.to_string())
 }
 
 fn render_link_label(label: Option<&[Inline]>, fallback: &str, out: &mut String) {

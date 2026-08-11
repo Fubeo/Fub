@@ -281,6 +281,9 @@ interface model {
         items: list<list-item>,
         anchor: option<string>,
         span: span,
+        /// Il numero da cui parte un elenco ordinato (`3.` → 3). `none` per un
+        /// elenco puntato. In fondo al record perché la posizione è ABI.
+        start: option<u32>,
     }
     record block-code-block {
         lang: option<string>,
@@ -364,6 +367,11 @@ interface model {
         /// `#titolo` e `#^blocco` sono due sintassi e due spazi di nomi diversi.
         anchors: list<anchor>,
         text: string,
+        /// Il documento porta un frontmatter, anche se senza nessuna proprietà:
+        /// una mappa vuota non distingue «assente» da «presente e vuoto», e chi
+        /// riscrive il file toglierebbe due righe che l'utente ha battuto. In
+        /// fondo al record perché la posizione è ABI.
+        frontmatter-present: bool,
     }
 }
 

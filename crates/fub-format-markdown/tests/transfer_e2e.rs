@@ -1130,6 +1130,12 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
         sposta(&mut rimesso, delta);
         let mut atteso = modello(&source, a.path.as_str());
         atteso.frontmatter = Frontmatter::default();
+        // E la sua **presenza**, che dal 0213 è un campo a sé: una mappa vuota
+        // non distingue «non c'era» da «c'era e non aveva chiavi», e l'export
+        // senza metadati toglie i delimitatori insieme alle chiavi. Azzerare
+        // solo la mappa lascerebbe qui l'unica differenza che è proprio ciò
+        // che si voleva togliere.
+        atteso.frontmatter_present = false;
         assert_eq!(
             rimesso, atteso,
             "`{}`: il modello del documento tagliato, con gli span rimessi indietro \

@@ -56,7 +56,7 @@ in ordine alfabetico.
 ## Il documento
 
 ### ancora
-`Anchor` · [`abi/model.rs:739`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Anchor` · [`abi/model.rs:774`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'identificatore che un blocco si porta dentro il testo — la forma `^id` in coda
 a un paragrafo — perché un link possa puntare a *quel* punto e non alla nota
@@ -65,7 +65,7 @@ regole di forma (`canonical_anchor`, `valid_anchor`) stanno in `rules/`, dove
 vanno le regole condivise con la shell.
 
 ### blocco
-`Block` · [`abi/model.rs:295`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Block` · [`abi/model.rs:314`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 L'unità di primo livello del documento: paragrafo, titolo, lista, tabella,
 citazione, blocco di codice, riga orizzontale, e l'escape hatch `Custom`. È un
@@ -80,7 +80,7 @@ conserva (`serde_json` con `preserve_order`), perché riscrivere un file
 dell'utente non deve riordinargli le proprietà: è fedeltà, non estetica.
 
 ### inline
-`Inline` · [`abi/model.rs:475`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`Inline` · [`abi/model.rs:510`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Ciò che sta *dentro* un blocco: testo, enfasi, codice, link, immagine, tag,
 interruzione. Stessa logica del blocco, incluso il `Custom`.
@@ -94,7 +94,7 @@ markdown è solo il primo provider che sa produrlo. Dettaglio in
 [architecture/data-model.md](architecture/data-model.md).
 
 ### proprietà
-`PropertyValue` · [`abi/model.rs:1077`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
+`PropertyValue` · [`abi/model.rs:1112`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
 Un valore del frontmatter letto con un tipo invece che come JSON nudo: scalare,
 data, ora, lista. Serve a chi interroga (ordinare per data, filtrare per stato)
@@ -131,7 +131,7 @@ sia quella sorgente è la 0058, e non è un dettaglio: gli span di due parti che
 la intendono diversamente cadono in punti diversi dello stesso file.
 
 ### wikilink
-`LinkTarget::Wiki` · [`abi/model.rs:505`](../crates/fub-abi/src/model.rs) · [0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)
+`LinkTarget::Wiki` · [`abi/model.rs:548`](../crates/fub-abi/src/model.rs) · [0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)
 
 Il link in stile Obsidian `[[Pagina#Titolo^blocco]]`, con i tre pezzi separati
 nel contratto. La risoluzione segue le regole di Obsidian — nome, alias, path, e

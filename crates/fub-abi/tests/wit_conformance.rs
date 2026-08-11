@@ -1300,6 +1300,7 @@ fn block_case(b: &arena::Block) -> Case {
             items,
             anchor,
             span,
+            start,
         } => case_rec(
             "list",
             "block-list",
@@ -1308,6 +1309,7 @@ fn block_case(b: &arena::Block) -> Case {
                 ("items", wit(items)),
                 ("anchor", wit(anchor)),
                 ("span", wit(span)),
+                ("start", wit(start)),
             ],
         ),
         arena::Block::CodeBlock {
@@ -2339,6 +2341,7 @@ fn conform(source: &str) -> Result<(), String> {
                 items: vec![],
                 anchor: None,
                 span: sp,
+                start: None,
             }),
             block_case(&arena::Block::CodeBlock {
                 lang: None,
@@ -3017,6 +3020,7 @@ fn conform(source: &str) -> Result<(), String> {
         tags,
         anchors,
         text,
+        frontmatter_present,
     } = DocumentModel::empty(DocId::new("x.md"));
     contract.record(
         "document-model",
@@ -3031,6 +3035,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("tags", wit(&tags)),
             ("anchors", wit(&anchors)),
             ("text", wit(&text)),
+            ("frontmatter-present", wit(&frontmatter_present)),
         ],
     );
 

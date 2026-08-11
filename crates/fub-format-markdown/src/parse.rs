@@ -75,6 +75,11 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
 
     let mut acc = Acc::default();
     let mut frontmatter = Frontmatter::default();
+    // Il frontmatter c'era, anche quando non dichiarava niente: senza questo
+    // sì/no, `---\n\n---` e un file che comincia col corpo arrivano al
+    // serializer con la stessa mappa vuota, e la riscrittura toglie le due
+    // righe di delimitatori invece di ricopiarle.
+    let mut frontmatter_present = false;
     let mut body: Vec<Block> = Vec::new();
 
     for child in root.children() {
@@ -85,7 +90,10 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
             // identico a com'era. È contenuto dell'utente, e chi non l'ha capito
             // non è autorizzato a cancellarlo.
             match parse_frontmatter(raw) {
-                Ok(fm) => frontmatter = fm,
+                Ok(fm) => {
+                    frontmatter = fm;
+                    frontmatter_present = true;
+                }
                 Err(motivo) => {
                     body.push(frontmatter_non_letto(raw, motivo, span_of(child, &offsets)));
                 }
@@ -120,6 +128,7 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
         tags: acc.tags,
         anchors: acc.anchors,
         text: acc.text.trim().to_string(),
+        frontmatter_present,
     })
 }
 
@@ -358,6 +367,10 @@ fn convert_block<'a>(
                 items,
                 anchor: None,
                 span,
+                // Il numero del primo marcatore, e solo per un ordinato: in un
+                // puntato comrak lo riempie lo stesso (con `1`) e conservarlo
+                // vorrebbe dire dichiarare un dato che nel file non c'è.
+                start: ordered.then(|| u32::try_from(list.start).unwrap_or(1)),
             })
         }
         NodeValue::CodeBlock(cb) => {
@@ -646,15 +659,39 @@ fn inlines_del_blocco<'a>(
 /// un figlio solo, di testo, uguale all'url del nodo. `None` per tutto il
 /// resto, cioè per ogni etichetta che l'autore abbia scritto.
 ///
-/// **La zona cieca, dichiarata**: `[[Nota|Nota]]` — un alias battuto identico
-/// al bersaglio — risponde `Some`, perché dal nodo i due casi sono
-/// indistinguibili. Il testo che si vede è lo stesso, quindi l'unica differenza
-/// osservabile sarebbe un `#` dentro un alias uguale al proprio bersaglio
-/// (`[[#x|#x]]`), che è una nota che punta a un proprio heading scrivendo due
-/// volte la stessa cosa. Distinguerli vorrebbe dire riparsare l'interno del
-/// wikilink dalla sorgente, cioè tenere una seconda grammatica del `|` accanto
-/// a quella di comrak, e il costo di quella seconda grammatica è più alto del
-/// caso che risolve.
+/// **La zona cieca che era dichiarata qui, e perché non c'è più**:
+/// `[[Nota|Nota]]` — un alias battuto identico al bersaglio — risponde `Some`,
+/// perché *dal nodo* i due casi sono indistinguibili, e la riga che stava qui
+/// concludeva che distinguerli sarebbe costato una seconda grammatica del `|`
+/// accanto a quella di comrak. La differenza osservabile però non era solo il
+/// `#` di un alias: era **la riscrittura**, che toglieva dal file un `|Nota` che
+/// l'utente aveva battuto a mano. E la seconda grammatica non serviva, perché
+/// c'era già: [`scan::parse_wikilink_inner`] legge quel `|` per ricavare il
+/// bersaglio e restituisce il campo `alias`, che il chiamante buttava. La
+/// risposta di questa funzione resta quella che è — «il nodo da solo non lo sa»
+/// — e chi la chiama la incrocia con l'alias del contratto.
+/// L'autore ha scritto un `|` dentro queste due parentesi?
+///
+/// La domanda si fa **alla sorgente** perché il nodo di comrak non la sa
+/// rispondere: `wl.url` porta il solo bersaglio, e l'etichetta è un figlio di
+/// testo identico sia quando l'ha scritta l'autore sia quando l'ha sintetizzata
+/// il parser. A leggere l'interno è [`scan::parse_wikilink_inner`], la stessa
+/// funzione che ha già ricavato il bersaglio: qui la si applica ai byte giusti
+/// invece che a un url in cui l'alias non c'è più.
+fn alias_scritto(source: &str, span: Span) -> bool {
+    let Some(slice) = source.get(span.start..span.end) else {
+        return false;
+    };
+    let Some(inner) = slice
+        .trim_start_matches('!')
+        .strip_prefix("[[")
+        .and_then(|s| s.strip_suffix("]]"))
+    else {
+        return false;
+    };
+    scan::parse_wikilink_inner(inner).alias.is_some()
+}
+
 fn etichetta_sintetica<'a>(node: &'a AstNode<'a>, url: &str) -> Option<String> {
     let mut figli = node.children();
     let solo = figli.next()?;
@@ -750,29 +787,52 @@ fn convert_inlines<'a>(
                 // che l'autore ha scritto, e il suo `#tag` è un tag suo. È la
                 // metà da non rovesciare, ed è la ragione per cui la
                 // distinzione sta qui e non in `push_text_features`.
-                let (label, nel_testo) = match etichetta_sintetica(child, &wl.url) {
-                    Some(testo) => {
-                        let inizio = text_out.len();
-                        text_out.push_str(&testo);
-                        (vec![Inline::Text(testo)], inizio..text_out.len())
-                    }
-                    None => {
-                        let mut label_text = String::new();
-                        let l = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
-                        let inizio = text_out.len();
-                        text_out.push_str(&label_text);
-                        (l, inizio..text_out.len())
-                    }
+                //
+                // **E un'etichetta che nessuno ha scritto non è un'etichetta**:
+                // `label` è un `Option` da sempre, e riempirlo col testo che
+                // comrak sintetizza dal bersaglio rendeva `[[Nota]]` e
+                // `[[Nota|Nota]]` lo stesso modello — quindi la riscrittura
+                // toglieva il `|Nota` che l'utente aveva battuto a mano. Chi
+                // legge l'etichetta per mostrarla ha il bersaglio accanto e ci
+                // ricade da sé ([`LinkTarget::wiki_inner`]); chi la legge per
+                // riscriverla non aveva nient'altro con cui distinguere i due
+                // casi.
+                //
+                // A dire se l'alias c'era è `parse_wikilink_inner`, cioè **la
+                // stessa regola** che ha appena letto il bersaglio: non è una
+                // seconda grammatica del `|` accanto a quella di comrak — che
+                // era il costo per cui la distinzione era stata dichiarata
+                // troppo cara — è il campo `alias` che quella funzione
+                // restituiva già e che qui si buttava.
+                //
+                // Il terzo caso è quello che tiene ferma la promessa già
+                // presidiata da `un_riferimento_si_riscrive_com_era`: quando la
+                // forma scritta dal bersaglio **non è quella canonica**
+                // (`[[Nota^blocco]]`, che il nostro lettore accetta per
+                // indulgenza), l'etichetta sintetica dice qualcosa che il
+                // bersaglio canonico non direbbe più — «Nota^blocco» contro
+                // «Nota#^blocco» — e allora è contenuto da conservare, non da
+                // ricalcolare. Riparare dove un riferimento *punta* non è titolo
+                // per cambiare ciò che si *legge*.
+                let sintetica = etichetta_sintetica(child, &wl.url);
+                let scritta_a_mano = alias_scritto(source, span)
+                    || sintetica.as_deref() != parsed.target.wiki_inner().as_deref();
+                let (label, nel_testo) = if scritta_a_mano {
+                    let mut label_text = String::new();
+                    let l = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
+                    let inizio = text_out.len();
+                    text_out.push_str(&label_text);
+                    (Some(l), inizio..text_out.len())
+                } else {
+                    // Il testo mostrato entra nel testo del blocco lo stesso —
+                    // è ciò che si legge a schermo, e la finestra di contesto di
+                    // un backlink si centra lì — ma senza passare per la
+                    // scansione dei tag, che è il difetto qui sopra.
+                    let inizio = text_out.len();
+                    text_out.push_str(&wl.url);
+                    (None, inizio..text_out.len())
                 };
-                push_link(
-                    acc,
-                    &mut out,
-                    parsed.target,
-                    Some(label),
-                    embed,
-                    span,
-                    nel_testo,
-                );
+                push_link(acc, &mut out, parsed.target, label, embed, span, nel_testo);
             }
             NodeValue::Image(img) => {
                 let mut label_text = String::new();
@@ -897,11 +957,15 @@ fn push_text_features(
         // della fetta di sorgente, che coincide col testo fintanto che non ci
         // sono entità da decodificare davanti — e se ce ne sono, la finestra
         // si centra male ma la regola normalizza i confini senza mai panicare.
+        // L'alias di un embed è dell'autore quanto quello di un link, e finché
+        // questa strada passava `None` senza guardarlo un `![[Nota|Alias]]`
+        // rientrava dal giro come `![[Nota]]`.
+        let label = parsed.alias.map(|a| vec![Inline::Text(a)]);
         push_link(
             acc,
             out,
             parsed.target,
-            None,
+            label,
             embed,
             abs,
             (abs.start - base)..(abs.end - base),

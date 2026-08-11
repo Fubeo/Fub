@@ -257,6 +257,24 @@ pub struct DocumentModel {
     pub anchors: Vec<Anchor>,
     /// Proiezione a testo semplice, per l'indicizzazione full-text.
     pub text: String,
+    /// Il documento **porta** un frontmatter, anche se non dichiara nessuna
+    /// proprietà.
+    ///
+    /// `frontmatter` è una mappa, e una mappa vuota non sa dire la differenza
+    /// fra «il file non ha un frontmatter» e «il file ha un frontmatter senza
+    /// chiavi» — cioè le due righe di delimitatori che si scrivono per dire
+    /// «i metadati di questa nota li compilo dopo». Chi riscriveva il file
+    /// leggeva la mappa vuota, concludeva «niente frontmatter» e toglieva dal
+    /// documento due righe che l'utente aveva battuto.
+    ///
+    /// Non è un campo di markdown: TOML, JSON e ogni altra sintassi di
+    /// frontmatter hanno lo stesso vuoto da distinguere. Sta **in fondo** al
+    /// record perché la posizione dei campi è ABI (`wit_additivity`), e ha un
+    /// `serde(default)` perché un modello serializzato prima che il campo
+    /// esistesse si rilegge come «nessun frontmatter», che è ciò che quel
+    /// modello diceva.
+    #[serde(default)]
+    pub frontmatter_present: bool,
 }
 
 impl DocumentModel {
@@ -272,6 +290,7 @@ impl DocumentModel {
             tags: Vec::new(),
             anchors: Vec::new(),
             text: String::new(),
+            frontmatter_present: false,
         }
     }
 }
@@ -309,6 +328,22 @@ pub enum Block {
         items: Vec<ListItem>,
         anchor: Option<String>,
         span: Span,
+        /// Il numero da cui parte un elenco **ordinato**: `3.` come primo
+        /// marcatore vuol dire `Some(3)`. `None` per un elenco puntato, e per
+        /// un ordinato costruito da un generatore che non ha un numero da
+        /// dichiarare — che vale `1`, cioè il default di ogni formato.
+        ///
+        /// **Non è impaginazione.** Un elenco che comincia da 3 riprende un
+        /// elenco interrotto — una procedura spezzata da una nota, i passi
+        /// continuati dopo un blocco di codice — e riportarlo a 1 fa dire al
+        /// documento riscritto una cosa diversa da quella che il documento
+        /// letto diceva. È dato: `<ol start>` in HTML ce l'ha, CommonMark ce
+        /// l'ha, e finché non c'era qui il numero si perdeva fra il file e il
+        /// file.
+        ///
+        /// Sta **in fondo** al record perché la posizione dei campi è ABI
+        /// (`wit_additivity`): ciò che c'era non si muove.
+        start: Option<u32>,
     },
     CodeBlock {
         lang: Option<String>,
