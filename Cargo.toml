@@ -74,6 +74,22 @@ fub-format-markdown = { path = "crates/fub-format-markdown", version = "0.1.0" }
 fub-features = { path = "crates/fub-features", version = "0.1.0", default-features = false }
 fub-host = { path = "crates/fub-host", version = "0.1.0" }
 
+# Il profilo di chi lavora. Ogni chiave qui dentro è una decisione, e accanto
+# c'è chi la paga: `.github/scripts/check-profilo-dev.mjs` pretende che siano
+# queste e non altre.
 [profile.dev]
 # compilazione più veloce mantenendo debug info utile
 opt-level = 0
+# L'informazione di debug resta nei `.o` invece di essere **copiata dentro ogni
+# eseguibile** (decisione 0145). Non se ne perde un byte — i `.o` stanno accanto
+# ai binari in `target/`, e un backtrace continua a stampare file e riga —, ma
+# il linker smette di ricopiarla: un eseguibile di prova passa da 62,4 a 25,6 MB
+# di mediana e i centotrentasette insieme da 13,8 a 4,9 GB. È la metà del costo
+# che il piano attribuiva al **numero** degli eseguibili e che invece stava nel
+# **peso** di ognuno: nessuno aveva mai scelto questa riga, era il default.
+#
+# Il prezzo, dichiarato: l'informazione di debug segue `target/`. Un eseguibile
+# copiato fuori di lì resta senza — il che per dei binari di prova e per l'app
+# in sviluppo non lo paga nessuno, e per il profilo `release` non vale, perché
+# `release` questa riga non ce l'ha.
+split-debuginfo = "unpacked"

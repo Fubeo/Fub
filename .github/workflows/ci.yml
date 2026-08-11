@@ -72,6 +72,17 @@ jobs:
       # parole, tutto compila.
       - name: ogni forma di libreria è consumata da qualcuno (0229)
         run: node .github/scripts/check-crate-type.mjs
+      # E la terza riga di manifest della stessa famiglia, sull'altra metà dello
+      # stesso conto: non *quante volte* si linka, ma **quanto pesa un link**.
+      # Misurato: `[profile.dev]` non diceva niente su `split-debuginfo`, cioè
+      # prendeva il default che copia l'informazione di debug dentro ognuno dei
+      # centotrentasette eseguibili che escono da `tests/` — mediana 62,4 MB,
+      # 13,8 GB in tutto. Con `unpacked` restano nei `.o` accanto ai binari:
+      # 25,6 MB di mediana, 4,9 GB in tutto, backtrace con file e riga intatti.
+      # È la decisione 0145, ed è la riga che ha risposto alla §28.1 senza
+      # toccare né un test né un'asserzione né un `--test` di questo file.
+      - name: il profilo dev è quello deciso, chiave per chiave (0145)
+        run: node .github/scripts/check-profilo-dev.mjs
       # Il terzo confine, e l'unico che si GENERA: le union di stringhe del
       # mirror TS sono emesse dagli enum senza payload del contratto
       # (decisione 0053). Sta qui e non solo nel `cargo test --workspace`
