@@ -1,70 +1,96 @@
 # `wit/` — contratto WIT di Fub
 
-L'albero che contiene il contratto **WIT** rispecchiante `fub-abi`. Serve a
-rendere **verificabile** la regola d'oro: ogni tipo che attraversa la firma di un
-trait è esprimibile come record/variant/enum WIT, così che il runtime WASM di
-[M5](../milestones/M5-wasm-runtime.md) sia meccanico e non una rincorsa a firme
-non serializzabili.
+Questa directory contiene il contratto **WIT** (WebAssembly Interface Type).
+Esso mappa `fub-abi` (la libreria Rust che definisce l'interfaccia dei plugin).
+Il contratto garantisce la validazione di una regola d'oro.
+Ogni tipo presente in un trait risulta sempre esprimibile come record, variant o enum WIT.
+Questo approccio rende meccanica l'implementazione del runtime WASM (l'ambiente di esecuzione isolato) di [M5](../milestones/M5-wasm-runtime.md).
+Assicura inoltre la serializzazione automatica di tutte le firme.
 
-- Contratto: [`fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit) — package `fub:abi@0.1.0`.
-- Contratto **com'era**, versione per versione: [`frozen/`](wit-congelato.md).
-- Mapping tipo-abi → costrutto WIT: [traits.md](traits.md).
-- Modello dati: [data-model.md](data-model.md).
+- **Contratto attuale**: [`fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit) — package `fub:abi@0.1.0`.
+- **Versioni storiche**: [`frozen/`](wit-congelato.md).
+- **Mapping tipo-abi → WIT**: [traits.md](traits.md).
+- **Modello dati**: [data-model.md](data-model.md).
 
 ## Ciclo di vita ("vivo da M2, freeze a M4")
 
-- **Da M2 (ora):** il WIT è mantenuto **vivo** insieme a `fub-abi`. Un test di
-  conformità gira a ogni `cargo test` e rompe se i due divergono. La superficie è
-  ancora libera di evolvere.
-- **A [M4](../milestones/M4-wit-hardening.md):** la superficie viene
-  **congelata**; da lì i cambi sono additivi e versionati, i breaking richiedono
-  un bump del package.
+- **M2 (ora)** (la milestone corrente): Il WIT evolve assieme a `fub-abi`.
+  La superficie dell'interfaccia cambia liberamente.
+  Un test di conformità analizza la coerenza durante ogni `cargo test`.
+  Il fallimento del test segnala una divergenza tra i due componenti.
+- **[M4](../milestones/M4-wit-hardening.md)** (la milestone di stabilizzazione): La superficie viene **congelata**.
+  I futuri cambiamenti seguono un approccio additivo e versionato.
+  I cambiamenti incompatibili comportano un bump (un incremento di versione) del package.
 
 ## Conformità
 
-Test: [`crates/fub-abi/tests/wit_conformance.rs`](../../crates/fub-abi/tests/wit_conformance.rs).
+**Test**: [`crates/fub-abi/tests/wit_conformance.rs`](../../crates/fub-abi/tests/wit_conformance.rs).
 
-Parsa `abi.wit` con `wit-parser` e confronta nomi **e tipi** *dichiarati*, non
-sottostringhe del sorgente. `wit-parser` è una **dev-dependency**: l'invariante
-di `fub-abi` riguarda le dipendenze normali, presidiate da
-[`dependency_invariant.rs`](../../crates/fub-abi/tests/dependency_invariant.rs).
+Il test convalida la corrispondenza esatta tra le interfacce.
+Il modulo analizza `abi.wit` mediante `wit-parser` (uno strumento di parsing formale).
+L'analisi confronta i nomi e i tipi dichiarati effettivi.
+Il pacchetto `wit-parser` opera come **dev-dependency** (una dipendenza limitata allo sviluppo).
+Questo garantisce l'invariante di `fub-abi` sulle dipendenze standard.
+Il file [`dependency_invariant.rs`](../../crates/fub-abi/tests/dependency_invariant.rs) presidia quest'ultima regola.
 
-Le quattro direzioni di pressione, i tipi attesi dedotti invece che scritti a
-mano e il test-del-test (quattordici divergenze introdotte ad arte) sono
-descritti in [traits.md](traits.md), "Come la conformità è verificata".
+Il documento [traits.md](traits.md) ("Come la conformità è verificata") approfondisce i seguenti aspetti:
+
+- Le quattro direzioni di pressione.
+- La deduzione automatica dei tipi attesi.
+- Il test-del-test (una convalida basata su quattordici divergenze di prova).
 
 ## Additività: l'altra promessa, l'altro test
 
-Test: [`crates/fub-abi/tests/wit_additivity.rs`](../../crates/fub-abi/tests/wit_additivity.rs).
+**Test**: [`crates/fub-abi/tests/wit_additivity.rs`](../../crates/fub-abi/tests/wit_additivity.rs).
 
-La conformità dice che abi e WIT concordano **oggi, fra di loro**. Non dice
-niente su ieri: si può rinominare un campo in tutti e due, restare conformi, e
-aver rotto ogni plugin già compilato — e `abi_compatible`, la regola a runtime,
-in quel caso dice **sì**, perché la minor non è cambiata.
+L'additività rappresenta la garanzia di retrocompatibilità.
+La conformità valuta esclusivamente lo stato presente di abi e WIT.
+Rinominare un campo in tutti e due mantiene l'esito positivo della conformità.
+Questa azione causa tuttavia la rottura dei plugin compilati.
+La regola `abi_compatible` (la funzione di verifica a runtime) ammette questi cambiamenti quando la minor (la seconda cifra di versione semantica) resta identica.
 
-Il presidio è una copia del contratto per ogni versione pubblicata in
-[`frozen/`](wit-congelato.md), più un test che verifica che il contratto attuale
-sappia ancora servire ognuna di quelle che dichiara di servire: campi, casi,
-alias, firme e world già pubblicati devono essere intatti **e nella stessa
-posizione**; il nuovo può stare solo in coda. Regole complete, e come si aggiorna
-la linea di base, in [`frozen/README.md`](wit-congelato.md).
+Il sistema archivia una copia del contratto per ogni versione all'interno di [`frozen/`](wit-congelato.md).
+Un test specifico valida il supporto attuale verso ogni iterazione storica.
+Le regole di compatibilità storica si applicano a:
+
+- Campi
+- Casi
+- Alias
+- Firme
+- World
+
+Questi elementi richiedono il mantenimento esatto del nome e della posizione.
+L'inserimento di novità avviene esclusivamente in coda.
+Il documento [`frozen/README.md`](wit-congelato.md) elenca le regole complete e le istruzioni di aggiornamento.
 
 ## Convenzioni
 
-- I nomi WIT sono in **kebab-case**; corrispondono ai nomi Rust (le varianti
-  serde usano già `rename_all = "snake_case"`, che mappa 1:1 sul kebab WIT).
-- I valori JSON liberi — frontmatter, `attrs` dell'escape hatch `Custom`,
-  argomenti dei comandi, storage dei plugin — attraversano il confine come
-  `type json = string`. Scelta deliberata per preservare la flessibilità
-  dell'escape hatch; da confermare al freeze di M4.
-- I payload di variante con più campi usano record ausiliari (`block-heading`,
-  `link-target-wiki`, `ui-stack`, …) perché una `variant` WIT porta un solo tipo
-  per caso.
-- Gli **alberi ricorsivi** (`block`, `inline`, `ui-node`) al confine sono
-  un'**arena**: lista piatta di nodi + indici `u32` (`block-ref`, `inline-ref`,
-  `ui-ref`), perché WIT non ammette tipi ricorsivi. I tipi Rust nativi restano
-  alberi; la conversione è `fub_abi::arena`, e il proxy WASM di M5 la chiamerà
-  invece di riscriverla. Il perché — e perché non una stringa JSON — è in
-  [traits.md](traits.md), "Alberi ricorsivi al confine".
-- `list`, `result` e `from` sono **keyword WIT**: dove sono nomi di variante o di
-  campo compaiono con l'escape `%`. I nomi Rust non cambiano.
+Le regole seguenti definiscono la traduzione dei tipi tra l'ecosistema Rust e il formato WIT.
+
+- **Nomenclatura**:
+  - I nomi WIT usano il formato **kebab-case**.
+  - Essi corrispondono direttamente ai nomi Rust.
+  - Le varianti serde impiegano `rename_all = "snake_case"`.
+  - Questo attributo mappa in proporzione 1:1 sul formato kebab WIT.
+- **Valori JSON liberi**:
+  - Tali valori comprendono frontmatter, `attrs` di `Custom` (una via d'uscita per dati arbitrari), argomenti dei comandi e storage dei plugin.
+  - Questi elementi attraversano il confine usando `type json = string`.
+  - La struttura preserva la flessibilità dell'escape hatch (il meccanismo di fallback).
+  - Il team confermerà questa decisione al momento del freeze di M4.
+- **Payload di variante**:
+  - Le varianti con molteplici campi usano record ausiliari.
+  - Esempi di record: `block-heading`, `link-target-wiki`, `ui-stack`.
+  - Una `variant` WIT accetta un solo tipo per ogni caso.
+- **Alberi ricorsivi**:
+  - Le strutture (`block`, `inline`, `ui-node`) diventano un'arena al confine.
+  - Un'arena consiste in una lista piatta di nodi e indici `u32` (`block-ref`, `inline-ref`, `ui-ref`).
+  - Il linguaggio WIT supporta esclusivamente strutture piatte.
+  - L'utilizzo dell'arena adatta le strutture dati complesse a questo vincolo.
+  - I tipi Rust nativi rimangono dei veri alberi.
+  - Il modulo `fub_abi::arena` gestisce l'intera conversione.
+  - Il proxy WASM di M5 (il livello intermedio di esecuzione) invocherà questa funzione.
+  - Il documento [traits.md](traits.md) ("Alberi ricorsivi al confine") approfondisce i motivi architetturali per la scelta dell'arena rispetto a una stringa JSON.
+- **Keyword riservate**:
+  - Le parole `list`, `result` e `from` sono **keyword WIT**.
+  - Il carattere escape `%` precede queste parole nei nomi di variante o di campo.
+  - I nomi Rust mantengono la propria sintassi originale.

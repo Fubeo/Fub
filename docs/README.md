@@ -23,7 +23,7 @@ Fuori da questa cartella trovi solo:
 | Cartella | Cosa contiene | Chi la mantiene aggiornata |
 |---|---|---|
 | [architecture/](architecture/) | com'è fatto il sistema **oggi**: contratto, modello dati, protocollo UI, confine dei plugin, shell, WIT, mappa visuale | chi cambia il codice che descrivono |
-| [decisions/](decisions/README.md) | i verbali delle decisioni chiuse, numerati e immutabili | chi chiude una decisione, aggiungendo un file |
+| [decisions/](decisions/README.md) | i verbali delle decisioni chiuse, numerati; il contenuto è immutabile, la forma si può riscrivere ([0143](decisions/0143-i-verbali-si-possono-riscrivere.md)) | chi chiude una decisione, aggiungendo un file |
 | [roadmap/](roadmap/) | il lavoro aperto, una seduta per file, più i **tre** allegati di metodo | chi chiude una voce, spuntandola in `todo.md` |
 | [milestones/](milestones/) | `M2`…`M5`: cosa entra in ciascuna e cosa la dichiara finita | chi pianifica una milestone |
 | [personas/](personas/) | le **sei** personas e le interviste da cui vengono | nessuno: materiale di ricerca, datato e congelato |

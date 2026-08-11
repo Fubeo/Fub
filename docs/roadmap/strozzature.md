@@ -6,41 +6,54 @@ Una riga per **famiglia di FEATURES**: cosa servirebbe perché quelle voci siano
 
 ---
 
-**Come si legge questo file, e come mente.** Una riga barrata è chiusa e porta il
-verbale; una riga viva dice cosa manca **oggi**. Il modo in cui questo file
-diventa falso è uno solo, e non è che qualcuno ci scriva una bugia: una riga
-invecchia quando la cosa che descrive si chiude **altrove**, in un file che chi
-chiude non sta guardando. Un giro dedicato ne ha trovate **diciassette** che il
-codice smentiva — su ottantasette — e le barrate sono passate da ventinove a
-quarantasei senza che si chiudesse niente di nuovo. Prima di quel giro erano già
-successe due volte, ed è raccontato: la riga «nessun `^block-id`» è stata falsa
-per undici verbali, quella su `views()` per trentaquattro. **Chi entra da qui
-cerca se una cosa manca, ed è per questo che una riga vecchia non allunga il
-lavoro: lo dirotta.** La [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
-ha chiuso il presidio dei **numeri** ([0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)),
-e questo file resta la metà che non copre: una riga di qui non porta un
-conteggio, porta un **giudizio**, e renderla rossa chiede prima di decidere cosa
-significhi «chiusa» per una strozzatura. Il collegamento però è verificabile
-quanto un link rotto — un `§X.Y` che si è chiuso, un simbolo che non esiste più —
-ed è da lì che ricomincia chi la prende.
+**Come si legge questo file.**
+
+* Una riga barrata è chiusa e porta il verbale.
+* Una riga viva dice cosa manca **oggi**.
+
+**Come mente.** Il modo in cui questo file diventa falso è uno solo, e non è che
+qualcuno ci scriva una bugia: una riga invecchia quando la cosa che descrive si
+chiude **altrove**, in un file che chi chiude non sta guardando.
+
+* Un giro dedicato ne ha trovate **diciassette** che il codice smentiva, su
+  ottantasette. Le barrate sono passate da ventinove a quarantasei senza che si
+  chiudesse niente di nuovo.
+* Prima di quel giro era già successo due volte: la riga «nessun `^block-id`» è
+  stata falsa per undici verbali, quella su `views()` per trentaquattro.
+* **Chi entra da qui cerca se una cosa manca, ed è per questo che una riga
+  vecchia non allunga il lavoro: lo dirotta.**
+
+**Perché nessun presidio lo copre.** La
+[§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
+ha chiuso il presidio dei **numeri**
+([0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)), e
+questo file resta la metà che non copre.
+
+* Una riga di qui non porta un conteggio, porta un **giudizio**.
+* Renderla rossa chiede prima di decidere cosa significhi «chiusa» per una
+  strozzatura.
+* Il collegamento però è verificabile quanto un link rotto: un `§X.Y` che si è
+  chiuso, un simbolo che non esiste più. Ed è da lì che ricomincia chi la prende.
 
 **Ed è successo di nuovo.** Una rilettura riga per riga contro il codice — non un
-giro, un collaudo — ne ha trovate **ventitré** false in un colpo solo, di cui due
-nominavano un simbolo che nel repo non esiste più (`saveCurrent`,
-`ViewContext.selection`) e una si dichiarava «l'unica P0» quando di P0 aperte non
-ce n'era più nessuna. Le barrate sono passate da **sessanta** a **settantotto**,
-di nuovo senza che si chiudesse niente di nuovo. La riga che
-questo file ha imparato per la terza volta è sempre la stessa, e vale la pena
-scriverla come regola: **chi chiude una voce cerchi qui dentro il simbolo che ha
-appena cambiato**, perché la riga che lo nomina non è nella seduta che sta
-guardando.
+giro, un collaudo — ne ha trovate **ventitré** false in un colpo solo.
+
+* Due nominavano un simbolo che nel repo non esiste più (`saveCurrent`,
+  `ViewContext.selection`).
+* Una si dichiarava «l'unica P0» quando di P0 aperte non ce n'era più nessuna.
+* Le barrate sono passate da **sessanta** a **settantotto**, di nuovo senza che
+  si chiudesse niente di nuovo.
+
+La regola che ne esce, imparata per la terza volta: **chi chiude una voce cerchi
+qui dentro il simbolo che ha appena cambiato**, perché la riga che lo nomina non
+è nella seduta che sta guardando.
 
 | Famiglia FEATURES | Cosa serve | Cosa manca oggi |
 |---|---|---|
 | ~~4.2 slash/hotkey, 16.2 automazioni, 27.1 CLI, 20.1 comandi plugin~~ | ~~`CommandProvider` vivo~~ | **chiuso ([decisione 0009](../decisions/0009-registro-dei-comandi.md))**: `Workspace` ha la tabella (`commands()`, `workspace.rs`) e `CoreCommands` ci sta dentro con quindici comandi (`features/src/commands.rs`). Questa riga ha detto «nessuno lo registra» per **quarantuno verbali** dopo che il registro c'era — ed è la prima riga del file, cioè quella che chi entra da qui legge per prima |
 | ~~8.2 proprietà, 11 database, 16.1 template, 19.3 form, 28 settings~~ | ~~`UiNode` con **input**~~ | **chiuso ([decisione 0016](../decisions/0016-cosa-e-una-view.md))**: le varianti di `ui-kind` sono **trentatré**, e fra loro ci sono `text-input`, `text-area`, `number`, `checkbox`, `select`, `radio`, `slider`, `date-picker`, `form`, `table` e `tree` — cioè esattamente le cinque che questa riga elencava come mancanti |
 | ~~20.1 impostazioni plugin, 28 config/profili, D7 spegnibilità~~ | ~~store di configurazione + schema dichiarativo~~ | **chiuso ([decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md))**: lo schema lo dichiara il **manifest** (`PluginManifest.settings`, prima di `activate`, con i nomi passati a `rules::ids::check` come i servizi), il valore vive **nel vault** (`.fub/settings.json`) sopra il default dello schema — un posto solo, dalla [decisione 0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md), con la sola diagnostica (`log.*`) rimasta nel file della macchina perché deve valere anche quando un vault non si apre — e `SettingSource` dice chi ha vinto. `FUB_VERSIONING` non c'è più: è `versioning.enabled`, e accanto le sta `plugins.disabled`, che è l'interruttore dell'host. Di variabili d'ambiente ne restano **due, per decisione**: `FUB_VAULT` non è una preferenza che dura ma un **argomento di avvio** (il gemello del `fub <path>` della CLI 27.1), e `FUB_CONFIG_DIR` è il **bootstrap** — dove stanno le impostazioni è l'unica cosa che non può essere un'impostazione |
-| ~~13 allegati, 12 canvas, 11.4 CSV/JSON, 6.1 media~~ | ~~entry di vault che non sono documenti~~ | **chiuso ([decisione 0046](../decisions/0046-l-anagrafe-del-vault.md))**: `IndexQuery::Entries` porta un `VaultEntry { id, kind, size, mtime }` per **ogni** file, e la specie non si persiste perché dipende da chi è registrato adesso. `Vault::list_documents` non esiste più in `vault.rs`: un PNG esiste, e il controllo di salute distingue un allegato che c'è da uno che manca. Resta la **scrittura** degli allegati, che è la casella residua del [§14.1](14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti) e sarà additiva |
+| ~~13 allegati, 12 canvas, 11.4 CSV/JSON, 6.1 media~~ | ~~entry di vault che non sono documenti~~ | **chiuso ([decisione 0046](../decisions/0046-l-anagrafe-del-vault.md))**: `IndexQuery::Entries` porta un `VaultEntry { id, kind, size, mtime }` per **ogni** file, e la specie non si persiste perché dipende da chi è registrato adesso. `Vault::list_documents` non esiste più in `vault.rs`: un PNG esiste, e il controllo di salute distingue un allegato che c'è da uno che manca. Resta la **scrittura** degli allegati, che è la casella residua del [§14.1](14-entry-cartelle-lista.md#141-il-vault-cartella-di-progetto-include-documenti-e-asset) e sarà additiva |
 | ~~18 sync, 23.1 cifratura at-rest, 26.3 PWA/OPFS, 3.1 vault read-only~~ | ~~astrazione sullo storage~~ | **chiuso ([decisione 0064](../decisions/0064-il-supporto-sta-sotto.md))**: `trait VaultStorage` in `kernel/storage.rs`, con `FsStorage` di default e un `MemStorage` che lo tiene onesto; sotto la linea del vault — documenti, cestino, sidecar, spazio dati dei plugin — `std::fs` non compare più, quindi un supporto che cifra è un `impl` e non un `if`. I **tre** file di `.fub/` che restavano fuori ci sono saliti con la [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), che ha dato al supporto l'atomicità che loro avevano già; resta il varco di `plugin_data_dir`, che consegna a un provider nativo una cartella vera — su un supporto che cifra è il punto in cui la cifratura si ferma, e la sua risposta è M5 |
 | 10 task, 5.2 id di blocco, 7.1 link a blocco | modello con task e ancore stabili, **e un link che ci arrivi** | **quasi chiuso ([0003](../decisions/0003-modello-del-documento.md) + [0049](../decisions/0049-una-posizione-dentro-un-documento.md))**: il modello ce l'ha dalla 0003 — `ListItem.task` porta lo stato di spunta insieme al marcatore, ogni blocco porta un `anchor`, esiste `Anchor { id, span, marker }` con `canonical_anchor`/`valid_anchor` in `rules/`, e `LinkTarget::Wiki` porta il `block`. Il **link** adesso arriva: `Resolved(option<resolved-ref>)` ha dove mettere il punto, il kernel tiene le ancore in cache e nell'anagrafe, e il renderer emette `data-wikilink-block`. Resta una metà sola, e non è di firma: **nessuno conia** un'ancora — «copia il link a questo blocco» è una scrittura, quindi passa da `write_document`/`apply_edit` ([0008](../decisions/0008-modifica-chirurgica.md)) e non scade col freeze. Questa riga ha detto «nessun `^block-id`» per undici verbali dopo che l'ancora era entrata — un indice inverso vecchio non allunga il lavoro, lo **dirotta** |
 | 9.1 faceted/field search, 9.2 query engine, 8.4 collezioni | canale query su **proprietà** | c'è (0005) e adesso si **compone** col testo (0019): resta da disegnare chi lo usa — il builder e le viste salvate |
@@ -90,7 +103,7 @@ guardando.
 | ~~9.2 query engine, 22.1 vettoriale, 8.2 proprietà, 11 database, 15.1 citazioni~~ | ~~routing delle query verso gli indici~~ | **chiuso ([decisione 0019](../decisions/0019-il-canale-dati.md))**: chi serve cosa è **dichiarato alla registrazione** (`QueryRoute`, `index/routing.rs`), non scoperto interpellando in ordine finché uno non dice `BadArgs`; un conflitto si vede al montaggio, e ciò che nessuno serve torna `PluginError::Unserved` invece dell'errore dell'ultimo interpellato |
 | ~~2.2 UUID, 8.3 Zettelkasten ID, 10.4 calendario, 25.2 collazione~~ | ~~caso, fuso orario, locale come capacità~~ | **chiuso ([decisione 0039](../decisions/0039-il-locale-e-il-caso.md))**: `HostEnv` non ha più solo l'orologio — `user_locale()` rende lingua, fuso IANA, offset in minuti, primo giorno della settimana e orologio a 12/24 ore, e `random_bytes(n)` rende l'entropia. Il locale lo **pubblica la shell** (la webview porta un ICU intero, il kernel avrebbe avuto bisogno di un database dei fusi per rispondere peggio) e il kernel lo compone con le chiavi `locale.*`; le **forme** di un'identità — UUID v4/v7, id corti — stanno in `fub_sdk::ids`, perché la capacità è l'entropia e il formato è codice di libreria |
 | ~~6.3 stampa/PDF, 19.4 pubblicazione, 6.2 CSS per nota, 5.3 sanitizzazione~~ | ~~opzioni di rendering~~ | **chiuso ([decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md))**: `RenderOptions { target: RenderTarget, options: OptionMap }` (`abi/format.rs`) — il bersaglio è dichiarato (schermo, stampa) e le opzioni sono la stessa mappa con namespace del `ParseContext` |
-| ~~8.1 note recenti, 24.1 apertura rapida, 18.1 sync differenziale, 3.2 duplicati~~ | ~~mtime, dimensione, impronta per entry~~ | **chiuso ([decisione 0046](../decisions/0046-l-anagrafe-del-vault.md))**: l'anagrafe è durevole in `.fub/data/entries.json` e `reindex` **chiede agli indici cosa hanno già** (`IndexProvider::up_to_date`) prima di leggere e parsare. `mtime + size` basta a **saltare** e non a **credere** (la regola *racily clean* di git); l'impronta esiste come campo `Option` e a riempirla manca il job, che è la casella residua del [§14.1](14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti) |
+| ~~8.1 note recenti, 24.1 apertura rapida, 18.1 sync differenziale, 3.2 duplicati~~ | ~~mtime, dimensione, impronta per entry~~ | **chiuso ([decisione 0046](../decisions/0046-l-anagrafe-del-vault.md))**: l'anagrafe è durevole in `.fub/data/entries.json` e `reindex` **chiede agli indici cosa hanno già** (`IndexProvider::up_to_date`) prima di leggere e parsare. `mtime + size` basta a **saltare** e non a **credere** (la regola *racily clean* di git); l'impronta esiste come campo `Option` e a riempirla manca il job, che è la casella residua del [§14.1](14-entry-cartelle-lista.md#141-il-vault-cartella-di-progetto-include-documenti-e-asset) |
 | 24.1 vault grandi, 3.3 split e finestre, 22 AI, 18 sync | letture che non si mettono in coda dietro una scrittura | **quasi chiuso ([0022](../decisions/0022-il-kernel-a-pezzi.md) + [0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md))**: cinque proprietari invece di ventiquattro campi, e un `RwLock` al posto del `Mutex` — le view che si ridisegnano vanno da 7 a 25 volte più veloci e chi salva non viene più affamato (6,4 s di attesa misurati, prima). Da quando la [0026](../decisions/0026-due-query-insieme.md) ha tolto il lock interno alla ricerca — un provider poteva rimettersi in fila da sé dentro il prestito condiviso, e il `RwLock` del kernel non lo attraversa — anche il **carico misto** scala (1,0× → 6,8× a otto thread). Dalla [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) anche il **lavoro lungo** può uscire dal lock: `run_job` ha l'`HostApi` e se lo prende una chiamata alla volta (chi salva aspetta 0,6 µs invece di tutta la camminata). E adesso c'è anche chi lo esegue: la [0032](../decisions/0032-il-runner-dei-job.md) chiude il **§9.3** con un pool di thread per vault che drena la coda da sé, si lascia annullare e si ferma prima che il vault chiuda |
 | 20.1 UI di plugin, 21.1 moduli installabili separatamente | far entrare un renderer di terzi nella shell | **quasi chiuso ([decisione 0079](../decisions/0079-il-grafo-esce-dall-overlay.md))**: `renderUiNode` resta uno `switch` esaustivo, ma `UiKind::Custom { ns }` ha un registro suo (`ui/custom.ts`, `customRenderer`) e un `fallback` dichiarativo per chi quel `ns` non lo conosce — il grafo è uscito dall'overlay passando di lì. Il limite che resta è **dichiarato** in quel file e non è più lo `switch`: registrare un renderer è codice della shell, non di un plugin, e quel passo è M5 |
 | ~~23.3 SBOM/licenze/CVE, 20.3 reproducible builds, dependency audit~~ | ~~tooling di supply chain~~ | **chiuso ([decisione 0001](../decisions/0001-supply-chain-e-sbom.md))**: la CI ha il job `supply chain` con `cargo-deny-action` su [`deny.toml`](../../deny.toml) e l'SBOM SPDX 2.3 come artefatto (`.github/workflows/ci.yml`), e gira anche nella corsa settimanale perché un advisory nuovo non aspetta il prossimo push |

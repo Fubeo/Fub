@@ -1,20 +1,26 @@
 # Modello dati comune (`fub-abi`)
 
 Il modello di documento **comune e agnostico rispetto al formato**, in
-`crates/fub-abi/src/model.rs`. È abbastanza ricco da rappresentare markdown in
-modo fedele, ma **non nomina nulla di specifico del markdown**: i concetti
-trasversali (link, tag, heading, frontmatter) sono estratti in tabelle piatte, e
-ciò che è peculiare di un formato (callout, math, embed, tabelle) finisce
-nell'escape hatch `Custom`.
+`crates/fub-abi/src/model.rs`.
+
+- È abbastanza ricco da rappresentare markdown in modo fedele.
+- **Non nomina nulla di specifico del markdown.**
+- I concetti trasversali — link, tag, heading, frontmatter — stanno in tabelle
+  piatte.
+- Ciò che è peculiare di un formato — callout, math, embed, tabelle — finisce
+  nell'escape hatch `Custom`.
 
 **Che tipo di agnosticismo è.** Il modello non nomina la *sintassi* di nessun
-formato, ma il kernel possiede una *semantica* precisa dei link: la risoluzione
-wikilink in stile Obsidian (shortest unique path, alias nel frontmatter con
-chiavi `aliases`/`alias`, priorità fra omonimi). Un futuro provider (org-mode,
-AsciiDoc) non porta la propria semantica di risoluzione: mappa i propri
-riferimenti su `LinkTarget::Wiki` e adotta quella del kernel. «Zero modifiche al
-kernel» vale per la sintassi; per la semantica vale «una sola, quella del
-kernel».
+formato. La *semantica* dei link, invece, ce l'ha il kernel, ed è precisa:
+risoluzione wikilink in stile Obsidian, cioè shortest unique path, alias nel
+frontmatter con chiavi `aliases`/`alias`, priorità fra omonimi.
+
+Un futuro provider (org-mode, AsciiDoc) non porta la propria semantica di
+risoluzione: mappa i propri riferimenti su `LinkTarget::Wiki` e adotta quella del
+kernel. Detto in due righe:
+
+- **sintassi**: zero modifiche al kernel;
+- **semantica**: una sola, quella del kernel.
 
 Torna a [../PIANO.md](../PIANO.md) · vedi anche [traits.md](traits.md).
 
@@ -29,54 +35,75 @@ inclusa. `page_name()` restituisce il basename senza estensione (lo usa la
 risoluzione wikilink). La risoluzione wikilink → `DocId` è compito del **kernel**,
 non dei provider.
 
-**Identità e rename.** Poiché l'identità È il path, un rename cambia identità: il
-contratto lo tratta come operazione di prima classe, non come remove+add.
-`Event::DocumentRenamed { from, to }` è l'evento dedicato (chi tiene stato
-per-documento migra la chiave) e `Workspace::rename_document` è l'operazione:
-sposta il file, migra modello e grafo, ed esegue la **riscrittura chirurgica**
-dei wikilink entranti — solo il testo-pagina dentro lo `Span` del link, e solo
-per i riferimenti **per nome o per path** che risolvevano davvero al documento
-rinominato. I riferimenti per **alias** non si toccano (l'alias vive nel
-frontmatter del target e sopravvive al rename); quelli a un **omonimo** vincente
-non vengono dirottati. Le forme che la riscrittura può scrivere sono **tre**, in quest'ordine: il nome pagina se
-nessun altro documento lo contende, il path **senza** estensione se nessun altro
-lo contende, e altrimenti il path **intero**. La terza esiste perché la seconda
-non è «sempre univoca», come questo paragrafo ha affermato fino alla
-[0107](../decisions/0107-il-caso-di-una-lettera.md): la chiave di `path_index` è
-`resolution_key(strip_ext(…))`, quindi `sub/Nota.md` e `sub/nota.txt` la
-condividono, e un path senza estensione si contende esattamente come si contende
-un nome. Qui non si sceglie cosa mostrare a schermo — si scrive su disco **dentro
-i documenti di terzi** —, quindi la condizione si verifica invece di affermarla.
+**Identità e rename.** L'identità *è* il path, quindi un rename cambia identità.
+Il contratto lo tratta come operazione di prima classe, non come remove+add:
 
-**Case dei path.** Il `DocId` è **byte-exact** (conserva il case del filesystem);
-la **risoluzione** wikilink è **case-insensitive** (le chiavi degli indici del
-grafo sono normalizzate a minuscolo). Così la semantica osservabile è la stessa
-su FS case-sensitive (Linux) e case-insensitive (macOS/Windows). Conseguenze:
+- `Event::DocumentRenamed { from, to }` è l'evento dedicato — chi tiene stato
+  per-documento migra la chiave;
+- `Workspace::rename_document` è l'operazione: sposta il file, migra modello e
+  grafo, e riscrive i wikilink entranti.
 
-- il **rename case-only** (`nota.md` → `Nota.md`) è supportato: su FS
+La riscrittura è **chirurgica**. Tocca solo il testo-pagina dentro lo `Span` del
+link, e solo i riferimenti **per nome o per path** che risolvevano davvero al
+documento rinominato. Non tocca:
+
+- i riferimenti per **alias** — l'alias vive nel frontmatter del target e
+  sopravvive al rename;
+- i riferimenti a un **omonimo** vincente, che non vengono dirottati.
+
+Le forme che può scrivere sono **tre**, in quest'ordine:
+
+1. il nome pagina, se nessun altro documento lo contende;
+2. il path **senza** estensione, se nessun altro lo contende;
+3. altrimenti il path **intero**.
+
+La terza esiste perché la seconda non è «sempre univoca», come questo paragrafo
+ha affermato fino alla [0107](../decisions/0107-il-caso-di-una-lettera.md): la
+chiave di `path_index` è `resolution_key(strip_ext(…))`, quindi `sub/Nota.md` e
+`sub/nota.txt` la condividono, e un path senza estensione si contende esattamente
+come si contende un nome. Qui non si sceglie cosa mostrare a schermo — si scrive
+su disco **dentro i documenti di terzi** — quindi la condizione si verifica,
+invece di affermarla.
+
+**Case dei path.** Due regole, e vanno lette insieme:
+
+- il `DocId` è **byte-exact**: conserva il case del filesystem;
+- la **risoluzione** wikilink è **case-insensitive**: le chiavi degli indici del
+  grafo sono normalizzate a minuscolo.
+
+Così la semantica osservabile è la stessa su FS case-sensitive (Linux) e
+case-insensitive (macOS/Windows). Conseguenze:
+
+- **Il rename case-only** (`nota.md` → `Nota.md`) è supportato. Su FS
   case-insensitive `vault.exists(to)` vedrebbe lo *stesso* file, quindi il kernel
-  salta il check sul disco quando i due path coincidono a meno del case (una vera
-  collisione è intercettata dalla cache dei modelli, perché il vault è l'unica
-  fonte dei `DocId`);
-- due documenti che differiscono solo per il case possono esistere solo su FS
-  case-sensitive, e lì la chiave sola non basta a scegliere. Accanto a
-  `resolution_key` ([`abi/rules/path.rs:49`](../../crates/fub-abi/src/rules/path.rs))
-  sta perciò `exact_key`
-  ([`abi/rules/path.rs:66`](../../crates/fub-abi/src/rules/path.rs)), che fa trim
-  e NFC **senza** minuscolare: la prima dice chi è candidato, la seconda chi ha
-  ragione fra i candidati. Fra gli omonimi di una chiave vince chi combacia
-  esattamente, e in sua assenza si torna alla priorità di sempre (path più corto,
-  poi lessicografico) — con un candidato solo le due si comportano identiche,
-  quindi `[[nOtA]]` continua a trovare `sub/Nota.md`: la case-insensitivity non
-  si è ristretta, si è **ordinata** ([0107](../decisions/0107-il-caso-di-una-lettera.md));
-- dove nemmeno la chiave esatta può decidere non c'è una regola, c'è un avviso.
-  `resolve_key` consulta l'indice dei path solo se la chiave contiene `/`, quindi
-  per `Nota.md` e `nota.md` nella **radice** del vault non esiste nessun wikilink
-  che disambigui: la collisione la dice `HealthCheck::CollidingPaths`, che
-  cammina l'anagrafe — `foto.PNG` e `foto.png` collidono come due note — sulla
-  chiave del path **intero, con estensione**, ed emette una issue per **ogni**
-  membro del gruppo. Riparare non è compito suo: quale dei due file abbia il nome
-  sbagliato lo sa solo chi possiede il vault.
+  salta il check sul disco quando i due path coincidono a meno del case. Una vera
+  collisione la intercetta la cache dei modelli, perché il vault è l'unica fonte
+  dei `DocId`.
+
+- **Due documenti che differiscono solo per il case** possono esistere solo su FS
+  case-sensitive, e lì la chiave sola non basta a scegliere. Ci sono perciò due
+  funzioni, non una:
+
+  | Funzione | Dove | Cosa fa | A cosa serve |
+  |---|---|---|---|
+  | `resolution_key` | [`abi/rules/path.rs:49`](../../crates/fub-abi/src/rules/path.rs) | trim, NFC, minuscola | dice chi è **candidato** |
+  | `exact_key` | [`abi/rules/path.rs:66`](../../crates/fub-abi/src/rules/path.rs) | trim e NFC **senza** minuscolare | dice chi ha **ragione** fra i candidati |
+
+  Fra gli omonimi di una chiave vince chi combacia esattamente. In sua assenza si
+  torna alla priorità di sempre: path più corto, poi lessicografico. Con un
+  candidato solo le due si comportano identiche, quindi `[[nOtA]]` continua a
+  trovare `sub/Nota.md`. La case-insensitivity non si è ristretta: si è
+  **ordinata** ([0107](../decisions/0107-il-caso-di-una-lettera.md)).
+
+- **Dove nemmeno la chiave esatta può decidere** non c'è una regola: c'è un
+  avviso. `resolve_key` consulta l'indice dei path solo se la chiave contiene
+  `/`, quindi per `Nota.md` e `nota.md` nella **radice** del vault non esiste
+  nessun wikilink che disambigui. La collisione la dice
+  `HealthCheck::CollidingPaths`, che cammina l'anagrafe sulla chiave del path
+  **intero, con estensione** — così `foto.PNG` e `foto.png` collidono come due
+  note — ed emette una issue per **ogni** membro del gruppo. Riparare non è
+  compito suo: quale dei due file abbia il nome sbagliato lo sa solo chi possiede
+  il vault.
 
 ## `Span` — ancoraggio alla sorgente
 
@@ -89,16 +116,21 @@ perno delle decorazioni di live-preview in CodeMirror (M3) e delle modifiche
 in-place. Costante `Span::EMPTY` per i test del kernel che non conoscono alcun
 formato.
 
-**E «la sorgente» sono i byte del file decodificati, integralmente**: il BOM se
+**«La sorgente» sono i byte del file decodificati, integralmente**: il BOM se
 c'era, i terminatori di riga come stanno sul disco, nessuna normalizzazione. È la
-stessa stringa che `read_document` restituisce, quella su cui `Revision::of` è
-calcolata e quella che `write_document` scrive — quindi uno `Span { start: 0, end:
-0 }` su un file col BOM inserisce *prima* del BOM, e chi vuole la testa del
-contenuto parte da `text_policy::bom_len`. Il perché sta nella
-[decisione 0058](../decisions/0058-un-nome-che-nasce.md): l'altra lettura
-possibile — «un testo già normalizzato» — è indistinguibile da questa fino al
-momento in cui un provider calcola gli offset su una e l'host li applica
-sull'altra, e allora gli edit atterrano spostati senza che niente diventi rosso.
+stessa stringa che:
+
+- `read_document` restituisce;
+- `Revision::of` prende per calcolare l'impronta;
+- `write_document` scrive.
+
+Quindi uno `Span { start: 0, end: 0 }` su un file col BOM inserisce *prima* del
+BOM, e chi vuole la testa del contenuto parte da `text_policy::bom_len`.
+
+Il perché sta nella [decisione 0058](../decisions/0058-un-nome-che-nasce.md).
+L'altra lettura possibile — «un testo già normalizzato» — è indistinguibile da
+questa fino al momento in cui un provider calcola gli offset su una e l'host li
+applica sull'altra: lì gli edit atterrano spostati, e non diventa rosso niente.
 
 Chi parsa un formato che non tollera il BOM lo salta **senza uscire dalle
 coordinate**: `text_policy::strip_bom` per il parser, `bom_len` sommato agli

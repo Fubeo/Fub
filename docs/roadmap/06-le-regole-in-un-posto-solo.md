@@ -1,30 +1,34 @@
 # 6. Le regole in un posto solo
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): la stessa regola serve a tre consumatori — provider, shell, e a M5 un guest WASM. La risposta è nella [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md); qui non resta niente.
+Questo file è una **seduta** (fase di lavoro) della [roadmap infrastrutturale](../todo.md).
+La regola tecnica serve a tre consumatori:
+- provider (fornitori di dati)
+- shell (interfaccia utente)
+- M5 (un guest WASM, modulo eseguibile)
+
+La risposta è nella [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md). Questo file non contiene compiti residui.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Due voci su due sono chiuse dalla
-[decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md), e insieme,
-che era la condizione che questo capitolo poneva: le regole sono salite in
-`fub-abi` per i provider **e** la cartella `frontend/src/rules/` ha adesso il
-presidio che le lega a quelle, invece di riscriverle e dichiararlo in un
-commento.
+La [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md) chiude due voci su due contemporaneamente. L'azione congiunta era una condizione del capitolo.
 
-Le due cose che la seduta chiedeva e che si sono viste solo facendole:
+**Modifiche implementate:**
+* Le regole risiedono in `fub-abi` per i provider.
+* La cartella `frontend/src/rules/` include un presidio (sistema di validazione automatica).
+Il presidio vincola il codice frontend a `fub-abi`. Questo sostituisce i commenti dichiarativi.
 
-- **Il criterio non era l'elenco dei quattro `mod`.** È *se una risposta del
-  contratto ha una parte che non dipende da chi la dà*, e applicandolo è salita
-  anche `properties::finish` — la coda di ogni risposta a `Documents`, che il
-  §6.1 non nominava e che aveva già due chiamanti e un commento a dire che due
-  implementazioni sarebbero divergute.
-- **La domanda del §6.2 sull'ordinamento aveva una risposta, e non era un
-  presidio.** L'ordine di presentazione è della shell; il kernel espone un ordine
-  totale e senza locale perché è ciò che tiene onesta la paginazione. Sta scritto
-  in testa a `fub_abi::rules`, accanto alle regole.
+Il lavoro pratico ha evidenziato due scoperte:
 
-Il §6.2 aveva anche una **scadenza morbida** — ogni regola che nasce prima di
-lui nasce senza presidio, e il capitolo 15 da solo ne porta sei — ed è stata
-onorata: le sei del [§15](15-il-disco.md) nasceranno con la loro fixture.
+1. **Il criterio di astrazione.**
+   * La regola applicata isola le risposte del contratto (interfaccia dati) indipendenti dal fornitore. L'elenco precedente dei quattro `mod` è superato.
+   * Il nuovo criterio ha promosso `properties::finish` (la coda di ogni risposta a `Documents`).
+   * Il §6.1 ometteva questa funzione. Essa contava già due chiamanti e portava il rischio di due implementazioni divergenti.
+
+2. **L'ordinamento (domanda del §6.2).**
+   * L'ordine di presentazione appartiene alla shell.
+   * Il kernel (nucleo dell'applicazione) fornisce un ordine totale e oggettivo. Questo approccio garantisce la corretta paginazione.
+   * Le spiegazioni risiedono all'inizio di `fub_abi::rules`. La soluzione adotta un approccio architetturale.
+
+Il §6.2 presentava una **scadenza morbida** (limite temporale flessibile). Le regole antecedenti mantengono l'architettura originale. Il capitolo 15 introduce sei nuove regole. La scadenza è onorata: le sei regole del [§15](15-il-disco.md) nasceranno dotate della propria fixture (ambiente di test dedicato).

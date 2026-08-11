@@ -1,16 +1,18 @@
 # Glossario
 
 Il lessico di Fub è preciso e **non è standard**: lotto, porta, ponte, anagrafe,
-sidecar, superficie, revisione, ricongiungimento, derivato, autorevole. Ogni parola è stata scelta per dire una
-cosa sola, quasi sempre in un verbale, e da lì è finita nei nomi dei tipi, nei
-commenti e nei messaggi di commit. Chi arriva la incontra prima di incontrare la
-sua definizione, e finora la definizione stava sparsa nel documento che l'aveva
-usata per primo.
+sidecar, superficie, revisione, ricongiungimento, derivato, autorevole. Ogni
+parola è stata scelta per dire una cosa sola, quasi sempre in un verbale, e da lì
+è finita nei nomi dei tipi, nei commenti e nei messaggi di commit. Chi arriva la
+incontra prima di incontrare la sua definizione.
 
 Questo file la raccoglie. **Non è una spiegazione dell'architettura**: per quella
 c'è [architecture/](architecture/), e ogni voce qui sotto rimanda al documento
 che tratta la cosa per esteso. Qui c'è la frase minima che permette di leggere
 gli altri documenti senza fermarsi.
+
+Le parole del **metodo** — come questo repo organizza il proprio lavoro — non
+stanno qui: sono in [leggimi-prima.md](leggimi-prima.md).
 
 ## Come si legge
 
@@ -21,22 +23,24 @@ Ogni voce ha la stessa forma:
 >
 > Cos'è, in due o tre righe.
 
-Le tre coordinate non sono decorazione. Il **tipo** è il nome da cercare nei
-sorgenti; il **file** è un link vero, quindi il
-[check dei link](../.github/scripts/check-doc-links.mjs) diventa rosso se quel
-file si sposta o sparisce — un glossario che invecchia in silenzio sarebbe
-peggio di nessun glossario; il **verbale** è dove sta il perché, che qui non si
-ripete.
+Le tre coordinate non sono decorazione:
 
-Il numero di riga è indicativo e non è presidiato: si muove a ogni modifica del
-file, ed è lì per far atterrare la ricerca vicino, non per essere esatto. Il
+- Il **tipo** è il nome da cercare nei sorgenti.
+- Il **file** è un link vero, quindi il
+  [check dei link](../.github/scripts/check-doc-links.mjs) diventa rosso se quel
+  file si sposta o sparisce. Un glossario che invecchia in silenzio sarebbe
+  peggio di nessun glossario.
+- Il **verbale** è dove sta il perché, che qui non si ripete.
+
+Il numero di riga è indicativo e nessuno lo controlla: si muove a ogni modifica
+del file, ed è lì per far atterrare la ricerca vicino, non per essere esatto. Il
 nome del tipo, quello, è esatto.
 
-**Non c'è un indice alfabetico.** Sarebbe un secondo elenco degli stessi termini,
-e una voce dimenticata lì dentro non romperebbe niente: si cerca con `Ctrl-F`,
-che è quello che si fa comunque in un glossario. Le famiglie sono sei, in
-ordine di quanto presto le si incontra, e dentro ognuna i termini sono in ordine
-alfabetico.
+**Non c'è un indice alfabetico.** Sarebbe un secondo elenco degli stessi
+termini, e una voce dimenticata lì dentro non romperebbe niente: si cerca con
+`Ctrl-F`, che è quello che si fa comunque in un glossario. Le famiglie sono
+sei, in ordine di quanto presto le si incontra, e dentro ognuna i termini sono
+in ordine alfabetico.
 
 | Famiglia | Cosa raccoglie |
 |---|---|
@@ -56,7 +60,7 @@ alfabetico.
 
 L'identificatore che un blocco si porta dentro il testo — la forma `^id` in coda
 a un paragrafo — perché un link possa puntare a *quel* punto e non alla nota
-intera. Ogni blocco ha un `anchor: Option<String>` con un accessore totale, e le
+intera. Ogni blocco ha un `anchor: Option<String>` con un accessore totale. Le
 regole di forma (`canonical_anchor`, `valid_anchor`) stanno in `rules/`, dove
 vanno le regole condivise con la shell.
 
@@ -65,7 +69,7 @@ vanno le regole condivise con la shell.
 
 L'unità di primo livello del documento: paragrafo, titolo, lista, tabella,
 citazione, blocco di codice, riga orizzontale, e l'escape hatch `Custom`. È un
-enum chiuso di proposito — ciò che nessun formato conosce passa da `Custom`
+enum chiuso di proposito: ciò che nessun formato conosce passa da `Custom`
 invece di allargare l'enum a ogni formato nuovo.
 
 ### frontmatter
@@ -84,8 +88,8 @@ interruzione. Stessa logica del blocco, incluso il `Custom`.
 ### modello del documento
 `DocumentModel` · [`abi/model.rs:241`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md)
 
-Il documento parsato in una forma che **nessun formato possiede**: né markdown né
-altro. È il centro dell'idea architetturale — il kernel lavora su questo, e il
+Il documento parsato in una forma che **nessun formato possiede**: né markdown
+né altro. È il centro dell'idea architetturale — il kernel lavora su questo, e il
 markdown è solo il primo provider che sa produrlo. Dettaglio in
 [architecture/data-model.md](architecture/data-model.md).
 
@@ -101,45 +105,51 @@ senza costringere ogni consumatore a indovinare che forma abbia una chiave.
 
 L'identità del testo su cui si sta per calcolare una modifica. È **opaca**: solo
 l'uguaglianza è contratto, come l'host la derivi non è promesso a nessuno.
-Serve a fare in modo che una modifica calcolata su un testo non venga applicata a
-un altro.
+Serve a fare in modo che una modifica calcolata su un testo non venga applicata
+a un altro.
 
 ### sorgente
 `String` · [`abi/model.rs:22`](../crates/fub-abi/src/model.rs) · [0058](decisions/0058-un-nome-che-nasce.md)
 
 I **byte del file decodificati, integralmente**: il BOM se c'era, i terminatori
-di riga come stanno sul disco, nessuna normalizzazione. È ciò che `read_document`
-restituisce, ciò su cui la [revisione](#revisione) è calcolata, ciò che
-`write_document` scrive, e il sistema di coordinate di ogni [span](#span). La
-parola ha una voce sua perché l'altra lettura possibile — «un testo già
-normalizzato» — è indistinguibile da questa finché un provider non calcola degli
-offset su una e l'host non li applica sull'altra.
+di riga come stanno sul disco, nessuna normalizzazione. È ciò che
+`read_document` restituisce, ciò su cui la [revisione](#revisione) è calcolata,
+ciò che `write_document` scrive, e il sistema di coordinate di ogni
+[span](#span).
+
+La parola ha una voce sua perché l'altra lettura possibile — «un testo già
+normalizzato» — è indistinguibile da questa. Se ne accorge solo quando un
+provider calcola degli offset su una e l'host li applica sull'altra.
 
 ### span
 `Span` · [`abi/model.rs:167`](../crates/fub-abi/src/model.rs) · [0003](decisions/0003-modello-del-documento.md), [0058](decisions/0058-un-nome-che-nasce.md)
 
 L'intervallo di [sorgente](#sorgente) da cui un nodo del modello proviene, in
-**byte**. È ciò che rende possibile la live preview: la decorazione CodeMirror sa
-a quali byte del file attaccarsi perché il modello se li ricorda. Che cosa sia
-quella sorgente è la 0058, e non è un dettaglio: gli span di due parti che la
-intendono diversamente cadono in punti diversi dello stesso file.
+**byte**. È ciò che rende possibile la live preview: la decorazione CodeMirror
+sa a quali byte del file attaccarsi perché il modello se li ricorda. Che cosa
+sia quella sorgente è la 0058, e non è un dettaglio: gli span di due parti che
+la intendono diversamente cadono in punti diversi dello stesso file.
 
 ### wikilink
 `LinkTarget::Wiki` · [`abi/model.rs:505`](../crates/fub-abi/src/model.rs) · [0004](decisions/0004-il-grafo-e-i-link-non-wiki.md)
 
 Il link in stile Obsidian `[[Pagina#Titolo^blocco]]`, con i tre pezzi separati
 nel contratto. La risoluzione segue le regole di Obsidian — nome, alias, path, e
-shortest-path fra omonimi — ed è l'unica specie di link che il grafo conosce
-(il perché, e il prezzo, stanno nella 0004).
+shortest-path fra omonimi — ed è l'unica specie di link che il grafo conosce (il
+perché, e il prezzo, stanno nella 0004).
 
 Fra gli omonimi le chiavi sono **due** e fanno due lavori diversi:
-`resolution_key` ([`abi/rules/path.rs:49`](../crates/fub-abi/src/rules/path.rs))
-fa trim, NFC e minuscolo e dice **chi è candidato**; `exact_key`
-([`abi/rules/path.rs:66`](../crates/fub-abi/src/rules/path.rs)) fa trim e NFC
-senza minuscolare e dice **chi ha ragione fra i candidati**, che è la scelta che
-prima toccava all'ordine ASCII. Dove nemmeno quella può decidere — due file che
-differiscono per una maiuscola nella **radice** del vault, dove nessun wikilink
-disambigua — non si sceglie affatto: lo dice `HealthCheck::CollidingPaths`
+
+- `resolution_key`
+  ([`abi/rules/path.rs:49`](../crates/fub-abi/src/rules/path.rs)) fa trim, NFC e
+  minuscolo, e dice **chi è candidato**.
+- `exact_key` ([`abi/rules/path.rs:66`](../crates/fub-abi/src/rules/path.rs)) fa
+  trim e NFC senza minuscolare, e dice **chi ha ragione fra i candidati**. È la
+  scelta che prima toccava all'ordine ASCII.
+
+Dove nemmeno quella può decidere — due file che differiscono per una maiuscola
+nella **radice** del vault, dove nessun wikilink disambigua — non si sceglie
+affatto: lo dice `HealthCheck::CollidingPaths`
 ([0107](decisions/0107-il-caso-di-una-lettera.md)).
 
 ---
@@ -162,9 +172,9 @@ che non si è potuto leggere resta in anagrafe e non arriva a nessun indice.
 `FUB_DIR` · [`kernel/vault.rs:32`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 
 Un dato che, perso, **non si ricostruisce da niente**: l'organizzazione della
-sidebar, le impostazioni del vault, gli snapshot del versioning. Chi lo tiene, se
-non riesce a leggerlo, **non lo sovrascrive**. Oggi la classe non è dicibile nel
-contratto e si legge dal path — direttamente sotto `.fub/` — che è il §15.4
+sidebar, le impostazioni del vault, gli snapshot del versioning. Chi lo tiene,
+se non riesce a leggerlo, **non lo sovrascrive**. Oggi la classe non è dicibile
+nel contratto e si legge dal path — direttamente sotto `.fub/` — che è il §15.4
 ancora aperto per metà. Il suo opposto è [derivato](#derivato).
 
 ### cestino
@@ -179,36 +189,42 @@ percorso che la aggira come un problema di sicurezza e non come un bug.
 `data_root` · [`kernel/vault.rs:49`](../crates/fub-kernel/src/vault.rs) · [0048](decisions/0048-una-radice-sola.md)
 
 Un dato che si può **buttare e rifare** dal vault: l'indice di ricerca,
-l'anagrafe, le cache. Chi lo tiene, se non riesce a leggerlo, non avvisa nessuno:
-lo rifà. Vive sotto `.fub/data/`, ed è l'unico posto in cui la sua classe è
-scritta. Non dice «senza valore» ma «ricostruibile»: che sotto quella radice ci
-sia anche roba che nessuno saprebbe rifare — gli snapshot del versioning — è il
-difetto che il §15.4 esiste per togliere. Il suo opposto è
-[autorevole](#autorevole).
+l'anagrafe, le cache. Chi lo tiene, se non riesce a leggerlo, non avvisa
+nessuno: lo rifà. Vive sotto `.fub/data/`, ed è l'unico posto in cui la sua
+classe è scritta.
+
+Non dice «senza valore» ma «ricostruibile». Che sotto quella radice ci sia anche
+roba che nessuno saprebbe rifare — gli snapshot del versioning — è il problema
+che il §15.4 esiste per togliere. Il suo opposto è [autorevole](#autorevole).
 
 ### entry
 `VaultEntry` · [`abi/traits.rs:203`](../crates/fub-abi/src/traits.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
 
 **Ogni file del vault**, non solo le note: un PNG, un PDF e un `.md` sono tutti
-entry. La distinzione fra loro è la *specie*, e la specie non si persiste —
-dipende da chi è registrato adesso, e un file diventa una nota il giorno in cui
-qualcuno sa parsarlo.
+entry. La distinzione fra loro non si salva su disco — dipende da chi è
+registrato adesso, e un file diventa una nota il giorno in cui qualcuno sa
+parsarlo.
 
 ### esclusione
 `IgnorePolicy` · [`kernel/ignore.rs:149`](../crates/fub-kernel/src/ignore.rs) · [0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
 
 Cosa di una cartella **non** fa parte del vault, e sono **due** cose che non si
-somigliano. La *preferenza* è dato di questo vault e si dichiara — le cartelle
-escluse (`files.excluded-folders`) e se i file nascosti siano documenti
-(`files.show-hidden`). La *struttura* — `.fub/`, `.trash/`, il temporaneo di una
-scrittura — non la dichiara nessuno e nessuna impostazione la rivela: mostrarla
-vorrebbe dire indicizzare l'indice e riesumare il cestino. Le due porte che la
-chiedono sono la scansione e il watcher, e chiedono alla stessa politica. Un
-nome dichiarato e un nome che arriva dal disco si confrontano per **chiave**
-(`resolution_key`, [`abi/rules/path.rs:49`](../crates/fub-abi/src/rules/path.rs))
-e non per byte: la stessa dichiarazione deve escludere la stessa cartella su
-ogni macchina da cui il vault si apre, e `Node_Modules` su macOS è la cartella
-che `node_modules` nomina.
+somigliano:
+
+- La *preferenza* è dato di questo vault e si dichiara: le cartelle escluse
+  (`files.excluded-folders`) e se i file nascosti siano documenti
+  (`files.show-hidden`).
+- La *struttura* — `.fub/`, `.trash/`, il temporaneo di una scrittura — non la
+  dichiara nessuno e nessuna impostazione la rivela: mostrarla vorrebbe dire
+  indicizzare l'indice e riesumare il cestino.
+
+Le due porte che la chiedono sono la scansione e il watcher, e chiedono alla
+stessa politica. Un nome dichiarato e un nome che arriva dal disco si
+confrontano per **chiave** (`resolution_key`,
+[`abi/rules/path.rs:49`](../crates/fub-abi/src/rules/path.rs)) e non per byte:
+la stessa dichiarazione deve escludere la stessa cartella su ogni macchina da
+cui il vault si apre, e `Node_Modules` su macOS è la cartella che
+`node_modules` nomina.
 
 ### finestra di conservazione
 `journal.retention.days` · [`kernel/journal.rs:173`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
@@ -216,12 +232,13 @@ che `node_modules` nomina.
 Per quanti giorni una riga resta nel [registro delle
 mutazioni](#registro-delle-mutazioni): fuori dalla finestra cade, qualunque sia
 il conto. **Zero — il default — vuol dire per sempre**, perché il registro è
-[autorevole](#autorevole) e accorciare da soli un dato che non si ricostruisce da
-niente, in un vault che si è appena aggiornato, non è difendibile. Non è il tetto
-dei diecimila record, che resta e non è la stessa cosa: quello è una scadenza che
-dipende da quanto si scrive, questa da cosa si vuole tenere. Vale da quando è
-dichiarata e da lì a ogni volta che la si cambia — chi la stringe a trenta giorni
-lo fa per far cadere ciò che c'è **adesso**.
+[autorevole](#autorevole) e accorciare da soli un dato che non si ricostruisce
+da niente, in un vault che si è appena aggiornato, non è difendibile.
+
+Non è il tetto dei diecimila record, che resta e non è la stessa cosa: quello è
+una scadenza che dipende da quanto si scrive, questa da cosa si vuole tenere.
+Vale da quando è dichiarata e da lì a ogni volta che la si cambia — chi la
+stringe a trenta giorni lo fa per far cadere ciò che c'è **adesso**.
 
 ### folder note
 — · [`frontend/src/rules/organizer.ts`](../frontend/src/rules/organizer.ts) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
@@ -234,15 +251,16 @@ shell devono applicarla nello stesso modo.
 `EditFootprint` · [`kernel/journal.rs:298`](../crates/fub-kernel/src/journal.rs) · [0103](decisions/0103-un-registro-dice-cosa-e-successo.md)
 
 Ciò che il [registro](#registro-delle-mutazioni) tiene di una modifica
-chirurgica: **dove** ha toccato — lo [span](#span) — e **quanti** byte c'erano al
-suo posto, mai quali. Ha preso il posto dell'inverso dell'edit, che erano i byte
-appena sostituiti dall'utente conservati in chiaro dentro un file che
-sopravviveva alla nota da cui venivano. Anche il nome è parte della decisione:
-`inverse` prometteva di poter tornare indietro, e un nome che lo promette prima o
-poi qualcuno prova ad applicarlo. Si perde la facoltà di disfare un edit da lì —
-mai esercitata, perché l'annullamento vero è l'[undo a due
-pile](#undo-a-due-pile), in memoria — e si guadagna un conto che l'inverso
-perdeva: quanti edit erano.
+chirurgica: **dove** ha toccato — lo [span](#span) — e **quanti** byte c'erano
+al suo posto, mai quali.
+
+Ha preso il posto dell'inverso dell'edit, che erano i byte appena sostituiti
+dall'utente conservati in chiaro dentro un file che sopravviveva alla nota da
+cui venivano. Anche il nome è parte della decisione: `inverse` prometteva di
+poter tornare indietro, e un nome che lo promette prima o poi qualcuno prova ad
+applicarlo. Si perde la facoltà di disfare un edit da lì — mai esercitata,
+perché l'annullamento vero è l'[undo a due pile](#undo-a-due-pile), in memoria —
+e si guadagna un conto che l'inverso perdeva: quanti edit erano.
 
 ### organizzazione
 `Organization` · [`abi/organization.rs:61`](../crates/fub-abi/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
@@ -258,11 +276,11 @@ kernel a possederlo — con la migrazione al rename inclusa.
 vault — quando, chi l'ha chiesta (l'[origine](#origine)), dentro quale
 [lotto](#lotto), e quale nota è stata creata, salvata, modificata, cestinata,
 ripristinata o rinominata. È [autorevole](#autorevole), si scrive in coda dopo
-che la mutazione è riuscita, porta la versione di schema **su ogni riga** e **non
-si spegne**: un registro che si può perdere non serve a niente.
+che la mutazione è riuscita, porta la versione di schema **su ogni riga** e
+**non si spegne**: un registro che si può perdere non serve a niente.
 
-Dice cosa è successo, **non cosa c'era scritto**: dalla 0103 il testo dell'utente
-non ci passa più nemmeno per una modifica chirurgica, dove resta
+Dice cosa è successo, **non cosa c'era scritto**: dalla 0103 il testo
+dell'utente non ci passa più nemmeno per una modifica chirurgica, dove resta
 l'[impronta](#impronta-di-una-modifica). Ciò che ne rimane — i path e i tempi —
 ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
@@ -272,19 +290,21 @@ dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
-nota. Serve perché il path è la chiave
+nota.
+
+Serve perché il path è la chiave
 ([0043](decisions/0043-il-path-e-la-chiave.md)) e chi rinomina da fuori — un
-client di sync, il Finder — scollegherebbe la bozza non salvata, le versioni e lo
-spazio per-documento. Accoppia **uno a uno o niente**, e nel dubbio non accoppia *e non
-raccoglie*: fra le due mosse, quella irreversibile si sospende.
+client di sync, il Finder — scollegherebbe la bozza non salvata, le versioni e
+lo spazio per-documento. Accoppia **uno a uno o niente**, e nel dubbio non
+accoppia *e non raccoglie*: fra le due mosse, quella irreversibile si sospende.
 
 ### sidecar
 `.fub/workspace.json` · [`kernel/organization.rs:74`](../crates/fub-kernel/src/organization.rs) · [0038](decisions/0038-il-kernel-possiede-il-sidecar.md)
 
 Il file accanto al vault che tiene ciò che riguarda il vault ma non è contenuto
 di nessuna nota. Sta in `<vault>/.fub/`, cioè direttamente nella radice unica e
-non sotto `data/`, perché è [autorevole](#autorevole); viaggia col vault se lo si
-copia, e porta un numero di schema (vedi
+non sotto `data/`, perché è [autorevole](#autorevole); viaggia col vault se lo
+si copia, e porta un numero di schema (vedi
 [versionamento.md](versionamento.md)).
 
 ### sospensione
@@ -292,9 +312,10 @@ copia, e porta un numero di schema (vedi
 
 Una chiave che sta nel file del vault ma **non vale ancora**: il valore c'è, il
 file non si tocca, e `resolve` risponde il default finché qualcuno non decide.
+
 Serve per una specie sola di impostazioni — quelle che **cambiano cosa fa un
-gesto dell'utente**, cioè oggi le sole `keys.*` — perché un tema che arriva da un
-vault altrui si vede e si disfa, una scorciatoia si scopre premendola. Chi
+gesto dell'utente**, cioè oggi le sole `keys.*` — perché un tema che arriva da
+un vault altrui si vede e si disfa, una scorciatoia si scopre premendola. Chi
 sospende non è il kernel ma l'host, l'unico che veda insieme il file del vault e
 i tasti che questa macchina ha già visto; e la risposta si dà **una chiave alla
 volta**.
@@ -309,10 +330,11 @@ ordine propri. Sta nell'organizzazione, quindi nel sidecar.
 `DataRead` / `DataWrite` · [`abi/traits.rs:692`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La cartella privata di un componente, dove tiene ciò che non è una nota: un
-indice, una cache, un manifest. È `.fub/data/plugins/<id>/`, l'host la assegna
-e la impone, e ci si accede per path relativo; le due metà — leggere e scrivere —
-sono capacità distinte perché negarle vuol dire due cose diverse. Che oggi sia
-una sola e valga per entrambe le classi è il §15.4: la
+indice, una cache, un manifest. È `.fub/data/plugins/<id>/`, l'host la assegna e
+la impone, e ci si accede per path relativo. Le due metà — leggere e scrivere —
+sono capacità distinte perché negarle vuol dire due cose diverse.
+
+Che oggi sia una sola e valga per entrambe le classi è il §15.4: la
 [0048](decisions/0048-una-radice-sola.md) ha scelto la forma — una seconda
 famiglia per il derivato — e non l'ha ancora scritta.
 
@@ -321,11 +343,16 @@ famiglia per il derivato — e non l'ha ancora scritta.
 
 Una cartella di file markdown, aperta come spazio di lavoro. È il termine di
 Obsidian e vuol dire la stessa cosa: **nessun formato proprietario, nessun
-database**, i file restano file. Il vault contiene due alberi che non sono
-contenuto: `.fub/`, la **radice unica** di ciò che Fub scrive
-([0048](decisions/0048-una-radice-sola.md)) — in cima l'autorevole, sotto `data/`
-il derivato — e `.trash/`, che sta fuori perché è il cestino **condiviso con
-Obsidian**. La mappa è
+database**, i file restano file.
+
+Il vault contiene due alberi che non sono contenuto:
+
+- `.fub/`, la **radice unica** di ciò che Fub scrive
+  ([0048](decisions/0048-una-radice-sola.md)) — in cima l'autorevole, sotto
+  `data/` il derivato.
+- `.trash/`, che sta fuori perché è il cestino **condiviso con Obsidian**.
+
+La mappa è
 [architecture/on-disk-layout.md](architecture/on-disk-layout.md).
 
 ### versione di schema
@@ -335,11 +362,12 @@ Quale **formato** sono i byte di un file che Fub ha scritto. Ce n'è una per
 formato e sono indipendenti fra loro (undici oggi, la tabella è in
 [versionamento.md](versionamento.md#3-le-versioni-degli-schemi-su-disco)): gli
 schemi cambiano in momenti diversi, e legarli vorrebbe dire migrare dieci file
-per una modifica a uno. È un **tipo** e non una costante che si è chiamata bene:
-finché il presidio che le cerca guardava il nome, una versione chiamata in un
-altro modo gli passava accanto senza che nessuno avesse sbagliato niente. Su
-disco resta un intero nudo (`#[serde(transparent)]`), perché quei file sono già
-sui dischi delle persone.
+per una modifica a uno.
+
+È un **tipo** e non una costante che si è chiamata bene: finché il controllo che
+le cerca guardava il nome, una versione chiamata in un altro modo gli passava
+accanto senza che nessuno avesse sbagliato niente. Su disco resta un intero nudo
+(`#[serde(transparent)]`), perché quei file sono già sui dischi delle persone.
 
 ### versioning
 `SCHEMA_VERSION` · [`features/versioning.rs:254`](../crates/fub-features/src/versioning.rs) · —
@@ -359,8 +387,8 @@ questo repo, dove `docs/` è aperta come vault di prova. Sta sotto la radice del
 La promessa che dopo il freeze il contratto **cresca solo per aggiunta**: un
 campo in fondo a un record, un caso in fondo a un variant, una funzione nuova.
 Cosa conta esattamente come aggiunta sta in
-[architecture/wit-congelato.md](architecture/wit-congelato.md), ed è verificato a
-ogni push contro la linea di base congelata.
+[architecture/wit-congelato.md](architecture/wit-congelato.md), ed è verificato
+a ogni push contro la linea di base congelata.
 
 ### bundle
 `Bundle` · [`host/registry.rs:55`](../crates/fub-host/src/registry.rs) · [0031](decisions/0031-chi-possiede-i-bundle.md)
@@ -375,13 +403,13 @@ doveva avere **una strada sola**, la stessa per chi è nativo e per chi non lo �
 Ciò che un componente può chiedere all'host: leggere il vault, scriverlo,
 cambiarne la struttura, leggere i propri dati, emettere eventi, interrogare
 l'indice, invocare comandi, sapere che ora è. Sono venticinque, e non stanno in
-un trait solo — vedi *famiglia*.
+un trait solo — vedi [famiglia](#famiglia).
 
 ### confine
 — · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0021](decisions/0021-il-confine.md)
 
 La linea fra il kernel e chi lo estende. Oggi è una linea di tipi, perché ogni
-provider è codice nativo compilato nello stesso binario; a M5 diventa il confine
+provider è codice nativo compilato nello stesso binario. A M5 diventa il confine
 di un componente WASM, e la 0021 esiste per fare in modo che le due cose abbiano
 la **stessa firma**, non due discipline scritte due volte.
 
@@ -400,19 +428,22 @@ Uno dei **quindici** gruppi in cui le capacità sono divise, e il criterio è
 **cosa vuol dire negarne una**: leggere il vault è separato dallo scriverlo, e
 scriverlo dal cambiarne la struttura. Chi le implementa tutte lo dichiara una
 volta sola (`HostApi` è una somma con una impl generica, e `ReadApi` è la somma
-delle sei di sola lettura); al confine WIT ogni famiglia è un'`interface` — sono
+delle sei di sola lettura). Al confine WIT ogni famiglia è un'`interface` — sono
 quindici `host-*` in `abi.wit` — e negarne una non è un rifiuto a runtime, è
 l'**assenza della funzione**.
 
 Dal lato di **chi concede** i nomi sono **diciotto**, e `Capability` ne porta
-tre che nel contratto non hanno un trait loro. Due per la
-[0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md), perché `HostEnv`
-presta dallo stesso metodo una cosa della macchina (l'orologio) e due
-dell'utente (quale nota guarda, cosa ci ha selezionato); una per la
-[0096](decisions/0096-una-bozza-non-e-una-nota.md), perché `HostQuery` porta una
-domanda — le **bozze** — il cui contenuto non è nel vault, e il cancello guarda
-quindi *quale* richiesta passa. L'invariante che il compilatore presidia è
-quindi «nessun trait senza almeno una famiglia», non «una famiglia, un trait».
+tre che nel contratto non hanno un trait loro:
+
+- Due per la [0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md), perché
+  `HostEnv` presta dallo stesso metodo una cosa della macchina (l'orologio) e
+  due dell'utente (quale nota guarda, cosa ci ha selezionato).
+- Una per la [0096](decisions/0096-una-bozza-non-e-una-nota.md), perché
+  `HostQuery` porta una domanda — le **bozze** — il cui contenuto non è nel
+  vault, e il cancello guarda quindi *quale* richiesta passa.
+
+L'invariante che il compilatore presidia è quindi «nessun trait senza almeno una
+famiglia», non «una famiglia, un trait».
 
 ### freeze
 — · [milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md) · [0002](decisions/0002-additivita-del-contratto.md)
@@ -428,9 +459,11 @@ Una chiave che l'host timbra e che solo lui sa risolvere, per non far viaggiare
 i byte di un trasferimento **dentro** il record. Non si costruisce, si riceve, e
 nomina esattamente la sorgente che l'utente ha scelto: è la stessa forma con cui
 il confine tiene fuori il filesystem, applicata al *contenuto* invece che al
-*percorso*. Leggere da un handle è **posizionale** (`offset` e `len`, non «il
-prossimo pezzo»), perché la cosa che si importa più spesso è un archivio e la
-directory di un archivio sta in fondo.
+*percorso*.
+
+Leggere da un handle è **posizionale** (`offset` e `len`, non «il prossimo
+pezzo»), perché la cosa che si importa più spesso è un archivio e la directory
+di un archivio sta in fondo.
 
 ### linea di base
 `wit/frozen/0.1.0.wit` · [`crates/fub-abi/wit/frozen/`](../crates/fub-abi/wit/frozen/README.md) · [0002](decisions/0002-additivita-del-contratto.md)
@@ -443,28 +476,29 @@ tocca e dice perché — così si vede in review.
 ### manifest
 `PluginManifest` · [`abi/traits.rs:3791`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
-La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e i
-permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria: se
-si dichiarasse solo chi non esiste ancora, il punto di applicazione non sarebbe
-provato da nessuno.
+La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e
+i permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria:
+se si dichiarasse solo chi non esiste ancora, il punto di applicazione non
+sarebbe provato da nessuno.
 
 ### metro del guest
 — · [architecture/plugin-boundary.md](architecture/plugin-boundary.md) · [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md)
 
 Le domande con cui si decide se una cosa può essere **solo** un guest. Le prime
 tre pesano un **costo** — posizione rispetto al prestito, frequenza × payload,
-prima o dopo la scrittura — e chi inciampa in una sola non può esserlo. La
-**quarta**, *se la superficie esiste*, non pesa niente: nomina chi le passa tutte
-e resta fuori lo stesso, perché una porta non c'è. È arrivata dopo, misurando: un
-metro che sa dire solo «quanto costa» lascia quel caso non vietato, non caro e
-non previsto.
+prima o dopo la scrittura — e chi inciampa in una sola non può esserlo.
+
+La **quarta**, *se la superficie esiste*, non pesa niente: nomina chi le passa
+tutte e resta fuori lo stesso, perché una porta non c'è. È arrivata dopo,
+misurando: un metro che sa dire solo «quanto costa» lascia quel caso non
+vietato, non caro e non previsto.
 
 ### permesso
 `permission::*` · [`abi/options.rs:18`](../crates/fub-abi/src/options.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La stringa con cui un manifest chiede una capacità: `fub:read-vault`,
-`fub:write-vault`, `fub:network`, `fub:clipboard`, `fub:run-command`… È
-il lato dichiarativo di ciò che la *famiglia* è dal lato dei tipi.
+`fub:write-vault`, `fub:network`, `fub:clipboard`, `fub:run-command`… È il lato
+dichiarativo di ciò che la [famiglia](#famiglia) è dal lato dei tipi.
 
 Sono **tredici** [conta: permessi-dichiarabili], e l'elenco è chiuso: sta in
 `permission::ALL`, e ciò che non è lì dentro un manifest lo può scrivere ma
@@ -476,20 +510,22 @@ nessun cancello lo consuma.
 valore della chiave è una allowlist di host, e il `Guard` la **legge**. Gli
 altri tre — i prefissi di path di `read-vault`, `write-vault` ed `external-fs` —
 sono scritti nei manifest e non li guarda nessuno (la casella del
-[§7.1](roadmap/07-il-confine.md#la-casella-rimasta)), quindi per loro vale ancora
-che *presente = acceso e basta*, ed è la ragione per cui il pannello dei permessi
-mostra il parametro **solo** della rete: mostrare gli altri sarebbe scrivere una
-promessa che l'app non mantiene. È anche la ragione per cui
-`fub:network` **senza** elenco significa *qualunque host* invece di *nessuno*:
-ribaltarlo avrebbe reso questa l'unica chiave la cui assenza di parametro
-significa il contrario che altrove, e ciò che cambia deve restare nella frase che
-l'utente legge accettando, non nella regola di lettura della mappa.
+[§7.1](roadmap/07-il-confine.md#la-casella-rimasta)), quindi per loro vale
+ancora che *presente = acceso e basta*.
 
-Di norma sono uno per famiglia, e i due della sessione —
-`fub:read-session` (quale nota guardo) e `fub:read-selection` (cosa ci ho
-selezionato), [0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) —
-sono i soli a governare **un metodo solo** in due: la scelta che servivano a
-dare all'utente sta in mezzo, e un permesso solo non sapeva esprimerla.
+È la ragione per cui il pannello dei permessi mostra il parametro **solo** della
+rete: mostrare gli altri sarebbe scrivere una promessa che l'app non mantiene.
+Ed è anche la ragione per cui `fub:network` **senza** elenco significa
+*qualunque host* invece di *nessuno*: ribaltarlo avrebbe reso questa l'unica
+chiave la cui assenza di parametro significa il contrario che altrove, e ciò che
+cambia deve restare nella frase che l'utente legge accettando, non nella regola
+di lettura della mappa.
+
+Di norma sono uno per famiglia, e i due della sessione — `fub:read-session`
+(quale nota guardo) e `fub:read-selection` (cosa ci ho selezionato),
+[0095](decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) — sono i soli a
+governare **un metodo solo** in due: la scelta che servivano a dare all'utente
+sta in mezzo, e un permesso solo non sapeva esprimerla.
 
 `fub:read-drafts` ([0096](decisions/0096-una-bozza-non-e-una-nota.md)) fa la
 stessa cosa a `query_index`, con una differenza che vale saperla: quei due si
@@ -503,7 +539,7 @@ recupera ciò che non è stato salvato dopo un crash.
 dichiara è concesso finché qualcuno non dice di no, e il «no» è una chiave
 d'impostazione che il kernel fabbrica per ogni coppia componente-permesso —
 `com.acme:permissions.network` — allo stesso modo in cui fabbrica quella di una
-scorciatoia. Vale **subito** e sopravvive allo spegnimento del componente; la
+scorciatoia. Vale **subito** e sopravvive allo spegnimento del componente. La
 frase che si legge negandolo la scrive la shell e non il manifest, perché chi
 chiede un permesso non deve poter scrivere la frase con cui glielo si concede.
 
@@ -511,23 +547,25 @@ chiede un permesso non deve poter scrivere la frase con cui glielo si concede.
 `safety::Gate` · [`kernel/safety.rs`](../crates/fub-kernel/src/safety.rs) · [0105](decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)
 
 Un punto del kernel da cui si entra in **codice di un terzo**, e quindi un punto
-in cui serve la *rete al confine*. Sono **tredici** [conta: porte-verso-un-terzo], una per specie — un comando,
-una view che disegna, una che agisce, un servizio, un evento consegnato, le
-quattro degli indici, il `parse` di un formato, l'innesto di una regola di
-sintassi, il disegno di un renderer, un job — e sono un **enum**, non una frase:
-finché stavano in prosa il conto diceva otto ed era sbagliato. Da non confondere
-con *porta* nell'altra famiglia, che è il passaggio unico verso l'host.
+in cui serve la [rete al confine](#rete-al-confine).
+
+Sono **tredici** [conta: porte-verso-un-terzo], una per specie — un comando, una
+view che disegna, una che agisce, un servizio, un evento consegnato, le quattro
+degli indici, il `parse` di un formato, l'innesto di una regola di sintassi, il
+disegno di un renderer, un job. E sono un **enum**, non una frase: finché
+stavano in prosa il conto diceva otto ed era sbagliato. Da non confondere con
+[porta](#porta) nell'altra famiglia, che è il passaggio unico verso l'host.
 
 Ogni porta dice il **verbo** della frase che l'utente legge quando un componente
-esplode («eseguendo `x`»), il sito che chiama dice il soggetto; `Gate::what` è un
-`match` senza `_`, quindi una porta nuova non compila finché non ha una frase e
-finché il banco non dichiara dove è provata.
+esplode («eseguendo `x`»), il sito che chiama dice il soggetto. `Gate::what` è
+un `match` senza `_`, quindi una porta nuova non compila finché non ha una frase
+e finché non è dichiarato dove è provata.
 
 ### provider
 `FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1850`](../crates/fub-abi/src/traits.rs) · —
 
-Chi implementa un trait del contratto e si registra: è **il** modo in cui Fub
-si estende. Il criterio di tutta la roadmap è che la stragrande maggioranza delle
+Chi implementa un trait del contratto e si registra: è **il** modo in cui Fub si
+estende. Il criterio di tutta la roadmap è che la stragrande maggioranza delle
 voci di [FEATURES.md](FEATURES.md) sia un provider — ciò che non può esserlo
 diventa un comando cablato e un `if` nel kernel.
 
@@ -538,30 +576,30 @@ Il `catch_unwind` attorno alla chiamata di un provider, e a niente di più: un
 panico costa **la chiamata, non il vault**. Non è un `Result` in più nel
 contratto — un panico resta un difetto — e non è una disattivazione: sta lì per
 non avvelenare il lock e lasciare il vault irraggiungibile fino al riavvio. Sta
-su tutte e tredici le *porte verso un terzo*, in tre maglie a seconda che chi ha
-chiamato possa ricevere un no (`calling`, `caught`) o non aspetti niente
-(`reporting`).
+su tutte e tredici le [porte verso un terzo](#porta-verso-un-terzo), in tre
+maglie a seconda che chi ha chiamato possa ricevere un no (`calling`, `caught`)
+o non aspetti niente (`reporting`).
 
 Presuppone una cosa sola, **che un panico srotoli**, e a verificarla non è un
 test ma il compilatore: un `#[cfg(panic = "abort")] compile_error!` rifiuta quel
 profilo. Un test non lo vedrebbe — Cargo ignora `panic` per i profili `test` e
-`bench` — e resterebbe verde attestando una rete che nel binario spedito non
-c'è più.
+`bench` — e resterebbe verde attestando una rete che nel binario spedito non c'è
+più.
 
 ### superficie
 — · [architecture/wit.md](architecture/wit.md) · [0002](decisions/0002-additivita-del-contratto.md)
 
 L'insieme di ciò che il contratto espone e che qualcuno di esterno può nominare:
-firme, campi, varianti. «Congelare la superficie» vuol dire promettere che quelle
-forme non cambieranno. Da non confondere con *superficie di vista*, che sta
-nell'altra famiglia.
+firme, campi, varianti. «Congelare la superficie» vuol dire promettere che
+quelle forme non cambieranno. Da non confondere con [superficie di
+vista](#superficie-di-vista), che sta nell'altra famiglia.
 
 ### WIT
 `fub:abi@0.1.0` · [`crates/fub-abi/wit/`](../crates/fub-abi/wit/README.md) · —
 
 Lo stesso contratto detto nella lingua del component model di WebAssembly. Vive
 accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
-(`wit_conformance`). Perché esista e cosa presidia:
+(`wit_conformance`). Perché esista e cosa controlla:
 [architecture/wit.md](architecture/wit.md).
 
 ---
@@ -602,8 +640,8 @@ il canale dati esiste anche per non far sapere a chi chiede quale sia quale.
 
 Come il kernel decide **a chi** mandare una query. Si dichiara alla
 registrazione, non si scopre per tentativi: la tabella delle rotte
-(`index/routing.rs`) rifiuta due provider che dichiarino la stessa cosa invece di
-sceglierne uno a caso.
+(`index/routing.rs`) rifiuta due provider che dichiarino la stessa cosa invece
+di sceglierne uno a caso.
 
 ### pianificatore
 `QueryPlan` · [`kernel/index/plan.rs:437`](../crates/fub-kernel/src/index/plan.rs) · [0026](decisions/0026-due-query-insieme.md)
@@ -617,21 +655,24 @@ la ricerca è passata da 1,0× a 6,8× su otto thread.
 
 Un documento che risponde a una query, con quello che serve per mostrarlo: il
 punteggio, lo snippet, ciò che ha fatto scattare la corrispondenza. È il tipo su
-cui pesavano tre delle voci di firma della
-[seduta 21](roadmap/21-la-ricerca-predefinita.md): sono state prese prima del
-freeze, e in tutto il repo non resta aperta **nessuna** P0.
+cui pesavano tre delle voci di firma della [seduta
+21](roadmap/21-la-ricerca-predefinita.md): sono state prese prima del freeze, e
+in tutto il repo non resta aperta **nessuna** P0.
 
 ### query di testo
 `TextQuery` · [`abi/query.rs:132`](../crates/fub-abi/src/query.rs) · [0025](decisions/0025-la-ricerca-predefinita.md)
 
 Come si chiede una ricerca full-text: il testo, il modo, i campi. La 0025 ha
-stabilito che la ricerca di Fub è **built-in e di classe *omnisearch***, e da
-lì è venuto ciò che a questo record mancava: `tolerance` — un'intenzione
-(`Exact`/`Typos`), mai una distanza di edit — e `partial_last_term` per il
-prefisso mentre si digita ([0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)),
-e le occorrenze dentro la nota aperta
-([0049](decisions/0049-una-posizione-dentro-un-documento.md)). Il fuzzy vero
-resta lavoro di provider, e non scade.
+stabilito che la ricerca di Fub è **built-in e di classe *omnisearch***, e da lì
+è venuto ciò che a questo record mancava:
+
+- `tolerance` — un'intenzione (`Exact`/`Typos`), mai una distanza di edit — e
+  `partial_last_term` per il prefisso mentre si digita
+  ([0050](decisions/0050-cosa-si-chiede-a-una-ricerca.md)).
+- Le occorrenze dentro la nota aperta
+  ([0049](decisions/0049-una-posizione-dentro-un-documento.md)).
+
+Il fuzzy vero resta lavoro di provider, e non scade.
 
 ---
 
@@ -655,34 +696,37 @@ prefissi che non sono `starts_with`.
 ### evento
 `Event` · [`abi/event.rs:374`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
 
-Il fatto che qualcosa nel vault è cambiato, con l'*origine* attaccata. Ogni
-evento porta anche un `EventKind` e un `Subject`, e un `DocumentChanged` porta
-**cosa** è cambiato: sono ciò su cui una maschera filtra. Uno solo non nasce da
-un fatto del vault — `TimerFired`, che lo fa nascere una *sveglia*.
+Il fatto che qualcosa nel vault è cambiato, con l'[origine](#origine) attaccata.
+Ogni evento porta anche un `EventKind` e un `Subject`, e un `DocumentChanged`
+porta **cosa** è cambiato: sono ciò su cui una maschera filtra. Uno solo non
+nasce da un fatto del vault — `TimerFired`, che lo fa nascere una
+[sveglia](#sveglia).
 
 ### freno
 — · [`host/bridge.rs`](../crates/fub-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
 
-Il tetto che il *ponte* mette a quanti messaggi consegna. Sta **con chi ritira**,
-non con chi emette, e la finestra non è temporale: il ciclo aspetta il primo
-avviso e poi drena ciò che c'è già. Se il vault è fermo, la raffica è di uno e
-la latenza è zero; se il kernel corre più del webview, la raffica è grande
-esattamente quanto il ritardo. Nessuna costante da indovinare.
+Il tetto che il [ponte](#ponte) mette a quanti messaggi consegna. Sta **con chi
+ritira**, non con chi emette, e la finestra non è temporale: il ciclo aspetta il
+primo avviso e poi drena ciò che c'è già.
+
+Se il vault è fermo, la raffica è di uno e la latenza è zero. Se il kernel corre
+più del webview, la raffica è grande esattamente quanto il ritardo. Nessuna
+costante da indovinare.
 
 ### job
 `JobSpec` / `JobId` · [`abi/traits.rs:48`](../crates/fub-abi/src/traits.rs) · [0027](decisions/0027-il-lavoro-lungo-vede-il-vault.md), [0032](decisions/0032-il-runner-dei-job.md)
 
-Il lavoro lungo: import, export, reindicizzazione, backup, OCR. Gira **fuori** dal
-giro sincrono del kernel, riceve l'`HostApi` per chiamata — non uno snapshot,
-perché camminare il vault era esattamente ciò che non poteva fare — e si ferma a
-bandiera. Il runner tiene un pool per vault.
+Il lavoro lungo: import, export, reindicizzazione, backup, OCR. Gira **fuori**
+dal giro sincrono del kernel, riceve l'`HostApi` per chiamata — non uno
+snapshot, perché camminare il vault era esattamente ciò che non poteva fare — e
+si ferma a bandiera. Il runner tiene un pool per vault.
 
 ### lotto
 `BatchId` · [`abi/event.rs:146`](../crates/fub-abi/src/event.rs) · [0011](decisions/0011-il-lotto.md)
 
 Il raggruppamento di più scritture in **una** operazione dal punto di vista di
 chi guarda: una rinomina che tocca duecento backlink è un lotto, e chi disegna
-ridisegna una volta invece di duecento. L'id è opaco e **non ordinabile** —
+ridisegna una volta invece di duecento. L'id è opaco e **non ordinabile**:
 confrontarlo con `<` assume un ordine che un host con più sessioni non deve a
 nessuno.
 
@@ -693,21 +737,23 @@ Cosa un abbonato vuole ricevere. Dalla 0033 dice anche **dove** — non solo la
 specie dell'evento ma il suo soggetto, così un pannello che guarda una cartella
 non si sveglia per il resto del vault — e dalla
 [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md) anche **cosa**, per
-aspetto. Non dice, e non dirà, *quando*: una maschera filtra ciò che accade, e un
-timer fa accadere.
+aspetto. Non dice, e non dirà, *quando*: una maschera filtra ciò che accade, e
+un timer fa accadere.
 
 ### origine
 `Origin` · [`abi/event.rs:201`](../crates/fub-abi/src/event.rs) · [0012](decisions/0012-origine-degli-eventi.md)
 
-L'*attore* più il *lotto*: da dove viene un evento. `batch: None` non vuol dire
-«non importante», vuol dire che quella scrittura sta da sola.
+L'[attore](#attore) più il [lotto](#lotto): da dove viene un evento.
+`batch: None` non vuol dire «non importante», vuol dire che quella scrittura sta
+da sola.
 
 ### ponte
 — · [`host/bridge.rs`](../crates/fub-host/src/bridge.rs) · [0034](decisions/0034-il-freno-e-il-raggruppamento.md)
 
 Il pezzo che porta gli eventi dal bus del kernel a chi guarda: il webview, ma
-anche una CLI o un flusso SSE. Ha un *freno* e un *raggruppamento*, e sta
-nell'host proprio perché chi guarda non è per forza un webview.
+anche una CLI o un flusso SSE. Ha un [freno](#freno) e un
+[raggruppamento](#raggruppamento), e sta nell'host proprio perché chi guarda non
+è per forza un webview.
 
 ### progresso
 `JobProgress` · [`abi/traits.rs:89`](../crates/fub-abi/src/traits.rs) · [0035](decisions/0035-il-lavoro-lungo-si-racconta.md)
@@ -730,11 +776,11 @@ prima.
 ### sveglia
 `TimerSpec` · [`abi/traits.rs`](../crates/fub-abi/src/traits.rs) · [0069](decisions/0069-cosa-sa-dire-un-abbonamento.md)
 
-Un nome e ogni quanto suona, dichiarati nel *manifest* di un componente. Quando
-scade, l'host emette un `Event::TimerFired`: informa, quindi è un evento e non
-una capacità ([0013](decisions/0013-elenco-delle-capacita.md)). Si misura in
-tempo trascorso — `every` e `after` — e non in orario di parete, che vuole un
-fuso (§22.4).
+Un nome e ogni quanto suona, dichiarati nel [manifest](#manifest) di un
+componente. Quando scade, l'host emette un `Event::TimerFired`: informa, quindi
+è un evento e non una capacità
+([0013](decisions/0013-elenco-delle-capacita.md)). Si misura in tempo trascorso
+— `every` e `after` — e non in orario di parete, che vuole un fuso (§22.4).
 
 ### azione
 `UiAction` / `ActionId` · [`abi/ui.rs:789`](../crates/fub-abi/src/ui.rs) · [0016](decisions/0016-cosa-e-una-view.md)
@@ -755,23 +801,25 @@ comandi le azioni strutturali della shell, e sei comandi Tauri sono spariti.
 
 *Di N cose, quante e quali non sono riuscite.* Non è una terza parola accanto a
 riuscito e fallito: un'operazione a metà **è riuscita** per la parte che ha
-fatto, e chi la annulla annulla quella parte. I guasti stanno uno per uno col
-proprio `PluginError`, perché un conto non dice quale nota riaprire e la specie
-dell'errore dice se ha senso riprovare. Assente vuol dire *non è mancato
-niente*, e non *non lo so*: dichiararsi a metà senza esserlo insegna a cliccare
-via gli avvisi.
+fatto, e chi la annulla annulla quella parte.
+
+I guasti stanno uno per uno col proprio `PluginError`, perché un conto non dice
+quale nota riaprire e la specie dell'errore dice se ha senso riprovare. Assente
+vuol dire *non è mancato niente*, e non *non lo so*: dichiararsi a metà senza
+esserlo insegna a cliccare via gli avvisi.
 
 Il resto — `attempted - done - failures` — non ha un campo apposta: ci si arriva
-sia perché non c'era **niente da fare**, sia perché non è stato **provato**, e un
-nome solo farebbe mentire uno dei due.
+sia perché non c'era **niente da fare**, sia perché non è stato **provato**, e
+un nome solo farebbe mentire uno dei due.
 
 ### cucitura
 `host/` · [`frontend/src/host/ipc.ts`](../frontend/src/host/ipc.ts) · [0015](decisions/0015-la-forma-della-shell.md)
 
 L'unico punto della shell che parla con l'esterno. Nessun modulo importa
-`@tauri-apps` fuori da `host/ipc.ts` e `host/dialog.ts` — **anche per i tipi**, o
-la regola si aggira con una parola — e un test lo verifica leggendo i sorgenti.
-Non è stile: è il prerequisito del PWA, del mobile e degli e2e headless.
+`@tauri-apps` fuori da `host/ipc.ts` e `host/dialog.ts` — **anche per i tipi**,
+o la regola si aggira con una parola — e un test lo verifica leggendo i
+sorgenti. Non è stile: è il prerequisito del PWA, del mobile e degli e2e
+headless.
 
 ### esemplare
 `ViewInstance` · [`abi/traits.rs:1592`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
@@ -785,13 +833,14 @@ aperta due volte, e le due hanno stato diverso. La chiave dello stato la compone
 
 Ciò che la shell sa eseguire quando qualcosa glielo chiede: `Navigate`,
 `Reveal`, `RunSearch`. Il tipo è letteralmente l'unione delle due sorgenti — un
-`ViewUpdate` di una view (meno `replace`, che non è un intento ma un
-rimpiazzo) e un `CommandEffect` di un comando — perché sono gli stessi intenti:
-sono **della shell**, non del chiamante.
+`ViewUpdate` di una view (meno `replace`, che non è un intento ma un rimpiazzo)
+e un `CommandEffect` di un comando — perché sono gli stessi intenti: sono
+**della shell**, non del chiamante.
 
-Da non confondere con `Intent` di [`abi/ui.rs:98`](../crates/fub-abi/src/ui.rs),
-che è tutt'altro: il **tono** di un nodo di interfaccia (`Neutral`, `Primary`,
-`Danger`). Stessa parola, due famiglie diverse.
+Da non confondere con `Intent` di
+[`abi/ui.rs:98`](../crates/fub-abi/src/ui.rs), che è tutt'altro: il **tono** di
+un nodo di interfaccia (`Neutral`, `Primary`, `Danger`). Stessa parola, due
+famiglie diverse.
 
 ### porta
 — · [`frontend/src/host/ipc.ts`](../frontend/src/host/ipc.ts) · [0015](decisions/0015-la-forma-della-shell.md), [0035](decisions/0035-il-lavoro-lungo-si-racconta.md)
@@ -814,8 +863,8 @@ una regola su quando è lecito usarlo:
 
 Ciò che è selezionato in un pannello — o dove stanno i cursori, che sono
 selezioni vuote. Sono **N**, con la **primaria** nominata da un campo e non
-dedotta dalla posizione, e o sono tutte *ancorate* al sorgente che il kernel ha
-in mano o non lo è nessuna: a deciderlo è lo stato del **buffer**, che è uno per
+dedotta dalla posizione. O sono tutte *ancorate* al sorgente che il kernel ha in
+mano, o non lo è nessuna: a deciderlo è lo stato del **buffer**, che è uno per
 pannello.
 
 ### shell
@@ -836,8 +885,8 @@ arrivati a leggere.
 ### superficie di scrittura
 `ViewSurface::Main` · [`abi/traits.rs:1518`](../crates/fub-abi/src/traits.rs) · [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md)
 
-L'editor visto come una superficie che **si presta**: *«l'editor è della shell»*
-vuol dire questo editor, non l'editing, e un terzo che porti la propria
+L'editor visto come una superficie che **si presta**: *«l'editor è della
+shell»* vuol dire questo editor, non l'editing, e un terzo che porti la propria
 esperienza di scrittura — una modalità modale, un editor strutturato — è un
 cliente previsto. Non vietata, **non attrezzata**: mancano un evento di tastiera
 nel contratto e una via di disegno non riservata a `Trust::Core`, ed è un *buco
@@ -869,7 +918,6 @@ che aveva bisogno di un nome, non il fallimento.
 ### view
 `ViewProvider` / `ViewSpec` · [`abi/traits.rs:1644`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
-Un pannello dichiarato dal core: cosa mostra, dove sta, cosa si può fare
-dentro. Backlink, outline, tag e statistiche sono view vere — non rami del
-kernel — ed è la prova che il canale dati basta.
-
+Un pannello dichiarato dal core: cosa mostra, dove sta, cosa si può fare dentro.
+Backlink, outline, tag e statistiche sono view vere — non rami del kernel — ed è
+la prova che il canale dati basta.

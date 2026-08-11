@@ -1,106 +1,52 @@
 # 7. Il confine: quante volte si scrive la disciplina
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): la disciplina del confine, vista da chi lo attraversa e da chi lo presta. La risposta è nella [decisione 0021](../decisions/0021-il-confine.md); resta una casella, in fondo.
+Questo documento rappresenta una **seduta** della [roadmap infrastrutturale](../todo.md). Analizza la disciplina del confine. Chi attraversa il confine e chi lo presta condividono la medesima vista. La [decisione 0021](../decisions/0021-il-confine.md) fornisce la risposta. In fondo rimane una sola casella.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Sei voci su sei sono chiuse dalla
-[decisione 0021](../decisions/0021-il-confine.md), e insieme, che era la
-condizione che questo capitolo poneva: il §7.1 e il §7.2 erano «la stessa
-domanda vista una volta dal lato di chi il confine lo attraversa e una da chi lo
-presta», e il §7.3 le moltiplicava.
+La [decisione 0021](../decisions/0021-il-confine.md) chiude sei voci su sei contemporaneamente. Questo capitolo richiedeva questa condizione. Il §7.1 e il §7.2 affrontano la stessa domanda da due lati. Il primo lato è l'attraversamento del confine. Il secondo lato è il prestito del confine. Il §7.3 moltiplica le casistiche.
 
-Le quattro cose che la seduta chiedeva e che si sono viste solo facendole:
+La seduta evidenzia quattro aspetti pratici emersi durante lo sviluppo:
 
-- **Le due strade del §7.1 non erano alternative.** La seduta le poneva come una
-  scelta — il `Guard<H, P>` nel kernel *oppure* la scomposizione in sotto-trait
-  — e sono due metà: il wrapper toglie la impl gemella che serve a dire di no,
-  la scomposizione toglie i **rifiuti che non sono nemmeno rifiuti** (i dodici
-  `unreachable!()` del percorso di lettura, che dicevano il vero e non erano un
-  tipo). Con una sola delle due, l'altra metà restava scritta a mano.
-- **Al confine WIT la scomposizione compra una cosa che in Rust non si vede.**
-  Un `world` che non importa `host-vault-write` non rifiuta la scrittura a
-  runtime: non ha la funzione. È l'argomento che ha deciso di farla anche là — e
-  quindi di farla adesso, perché dopo il freeze una funzione non si sposta più
-  da un'interfaccia all'altra.
-- **Le copie della disciplina di consegna erano quattro, non tre.** La quarta
-  era in `import`, con sopra un commento che diceva «stessa disciplina di
-  `view_action`»: la dichiarazione della duplicazione al posto del suo presidio.
-- **Cinque capacità del contratto non sanno dire di no.** `emit`, `free_name`,
-  `format_of`, `now_unix_millis`, `active_context` non hanno un `Result`, quindi
-  una politica che le nega può solo dare la risposta nulla. È la lezione che
-  questa seduta lascia alla [decisione 0013](../decisions/0013-elenco-delle-capacita.md):
-  una capacità nuova dovrebbe portare un esito **anche quando "non può
-  fallire"**, perché non potendo fallire non può nemmeno essere negata.
+*   **Le due strade del §7.1 sono complementari.** La seduta proponeva una scelta esclusiva. Le opzioni prevedevano `Guard<H, P>` nel kernel (nucleo del sistema) o la scomposizione in sotto-trait (interfacce). Nella pratica risultano due metà necessarie:
+    *   Il wrapper (tipo contenitore) elimina la impl (implementazione) gemella per i divieti.
+    *   La scomposizione rimuove le condizioni impossibili. Elimina i dodici `unreachable!()` nel percorso di lettura. Tali condizioni indicavano vincoli reali ignorati dal sistema dei tipi.
+    L'adozione di una sola soluzione obbliga a scrivere l'altra metà a mano.
+*   **La scomposizione WIT offre un vantaggio assente in Rust.** Al confine WIT (WebAssembly Interface Type), un `world` (ambiente di esecuzione) privo di `host-vault-write` impedisce strutturalmente la scrittura. La funzione risulta assente a runtime. Questo argomento giustifica l'applicazione della scomposizione in quel contesto. L'implementazione avviene prima del freeze (blocco delle modifiche). Il blocco impedisce futuri spostamenti di funzioni tra le interfacce.
+*   **Le copie della disciplina di consegna sono quattro.** Precedentemente risultavano tre. La quarta risiede in `import`. Riporta il commento «stessa disciplina di `view_action`». Questo commento dichiara apertamente la duplicazione.
+*   **Cinque capacità del contratto richiedono un meccanismo di rifiuto.** Le funzioni `emit`, `free_name`, `format_of`, `now_unix_millis` e `active_context` omettono un `Result` (tipo Rust per gli errori). Una politica restrittiva restituisce semplicemente una risposta nulla. Questa scoperta arricchisce la [decisione 0013](../decisions/0013-elenco-delle-capacita.md). Ogni nuova capacità deve fornire un esito. Questa regola si applica alle operazioni infallibili. Garantisce la possibilità di negarle strutturalmente.
 
-Il §7.4 era la voce **più datata** del piano — l'unica che non riguardava ciò
-che avremmo scritto ma ciò che avremmo già pubblicato — e il suo costo è stato
-quello previsto: nessuno, perché nessun id di terzi esiste ancora. È il solo
-momento in cui poteva costare così.
+Il §7.4 rappresenta la voce **più datata** del piano. Riguarda le componenti già pubblicate. Il costo dell'intervento risulta nullo. L'assenza di id (identificatori) di terze parti azzera l'impatto. Solo in questo momento il costo rimane pari a zero.
 
 ## La casella rimasta
 
-*strato kernel — è lavoro, non una decisione: il criterio è già scritto e il bloccante è caduto*
+*Questo task appartiene allo strato kernel. Rappresenta lavoro operativo. Il criterio esiste già. Il bloccante risulta risolto.*
 
-- [ ] **Le allowlist dei permessi non filtrano — tranne una.** `read_vault` e
-      `write_vault`
-      hanno un **parametro** — un elenco di prefissi di path, la forma che la
-      [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) ha
-      dato a un permesso — e la politica di oggi legge la sola presenza della
-      chiave: un plugin con `read-vault` ristretto a `Progetti/` legge tutto il
-      vault. La [0021](../decisions/0021-il-confine.md) lo dichiara nel suo
-      «cosa resta fuori» e ne nomina il bloccante — il §15.5, «la politica dei
-      path in un modulo solo», *per non nascere con due idee di cosa sia un
-      prefisso*. Quel bloccante è caduto con la
-      [0058](../decisions/0058-un-nome-che-nasce.md): `fub_abi::rules::path` è
-      il posto, e un prefisso ha una definizione sola. Resta additivo dentro
-      `Granted`, e resta una casella e non una voce perché la decisione — *dove
-      si applica, e con quale nozione di prefisso* — è già presa in tutte e due
-      le sue metà. La
-      [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) ci aggiunge
-      un posto in cui applicarlo che non era in conto: `fub:read-session` e
-      `fub:read-selection` **un path da confrontare ce l'hanno**, ed è
-      `ViewContext.doc`. È la differenza con `Query`, che il prefisso non lo può
-      onorare per costruzione — una risposta aggregata non ha un path — e vale
-      saperla il giorno che si scrive il filtro, perché i due casi si somigliano
-      e si comportano in modo opposto. La
-      [0096](../decisions/0096-una-bozza-non-e-una-nota.md) ne aggiunge un terzo,
-      ed è dalla parte dei filtrabili: `fub:read-drafts` governa una risposta i
-      cui elementi un path ce l'hanno (`DraftInfo.doc`), quindi il prefisso si
-      onora voce per voce, scartando le bozze fuori dall'allowlist invece di
-      negare la domanda intera. Messi in fila, il criterio che li distingue è
-      più semplice di come sembrava: **si filtra ciò che nomina un documento,
-      non ciò che ne aggrega molti**.
+- [ ] **Le allowlist dei permessi filtrano in un solo caso.** 
+    *   Le capacità `read_vault` e `write_vault` ricevono un **parametro**. Il parametro comprende un elenco di prefissi di path (percorsi). La [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) definisce questa struttura.
+    *   La politica attuale valuta esclusivamente la presenza della chiave. Un plugin (estensione) con `read-vault` limitato a `Progetti/` accede all'intero vault (archivio documenti).
+    *   La [0021](../decisions/0021-il-confine.md) relega questo problema nella sezione «cosa resta fuori». Segnala il bloccante §15.5 («la politica dei path in un modulo solo»).
+    *   La [0058](../decisions/0058-un-nome-che-nasce.md) rimuove il bloccante. Il modulo `fub_abi::rules::path` fornisce l'unica definizione di prefisso. Il sistema mantiene natura additiva dentro `Granted`. 
 
-      **E la casella si è ristretta invece di chiudersi.** La
-      [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
-      ha reso `fub:network` il **primo parametro di permesso letto in questo
-      repo**: un plugin che dichiara `["api.acme.com"]` raggiunge quell'host e
-      nessun altro, e la frase in testa a questa casella non è più vera in
-      generale. Ciò che resta sono i **prefissi di path** di
-      `read-vault`/`write-vault` (più i tre posti qui sopra), e il fatto che la
-      rete sia arrivata prima non è una scorciatoia: là il divario era di
-      un'altra specie — un `read-vault` ristretto che legge tutto è un recinto
-      che perde, mentre un manifest che dichiara un host, **mostrato e accettato
-      dall'utente**, che poi ne raggiunga un altro è una frase falsa scritta
-      dall'app. La differenza è chi ha letto la promessa.
+    **Applicazioni aggiuntive:**
+    *   **Contesto vista:** La [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) estende l'applicazione a `fub:read-session` e `fub:read-selection`. Possiedono un path da confrontare: `ViewContext.doc`.
+    *   **Risposte aggregate:** Il tipo `Query` ignora il filtro per costruzione. Una risposta aggregata omette il path. 
+    *   **Bozze:** La [0096](../decisions/0096-una-bozza-non-e-una-nota.md) aggiunge `fub:read-drafts`. Gli elementi possiedono un path (`DraftInfo.doc`). Il filtro agisce voce per voce. Scarta le bozze omesse dall'allowlist (lista delle eccezioni consentite).
 
-      Va tenuta anche la ragione per cui i due filtri **non condividono una
-      riga**, perché è la stessa che questa casella dovrà onorare quando verrà
-      presa: `Policy::denies_host` è deliberatamente stretta — host, non
-      «bersaglio generico» — perché un path si confronta **per prefisso dentro
-      una radice che è dell'utente** e un host **per nome dentro uno spazio che
-      non è di nessuno**, dove `acme.com` che copre `evil-acme.com` è una
-      consegna del dominio di qualcun altro. Una funzione sola avrebbe avuto due
-      semantiche, cioè esattamente il timore che la 0021 scrive nel bloccante di
-      questa casella. Chi la prende scriva la **seconda** funzione, non
-      generalizzi la prima.
+    **Criterio di distinzione:** **si filtra ciò che nomina un documento, si esclude dal filtro ciò che aggrega documenti.**
 
-      Che sia rimasta ferma per trentadue verbali dopo che il suo indirizzo era
-      stato onorato è la ragione per cui adesso è **contata** in
-      [todo.md](../todo.md) invece di vivere solo dentro un verbale: una casella
-      che nessun totale nomina non la cerca nessuno, ed è la stessa diagnosi che
-      la [§16.7](16-crate-sdk-banchi-di-prova.md) fa agli elenchi — *chi lo
-      legge, lo trova?*
+    **Evoluzione della casella:**
+    Il perimetro della casella risulta ridotto. La [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md) introduce `fub:network`. Rappresenta il **primo parametro di permesso letto nel repo (repository)**. Un plugin che dichiara `["api.acme.com"]` raggiunge esclusivamente quell'host. La dichiarazione iniziale della casella perde validità generale. L'intervento riguarda i **prefissi di path** di `read-vault`/`write-vault` e le tre eccezioni sopraelencate. L'implementazione anticipata della rete segue una priorità legittima. Là il divario possedeva natura differente. La distinzione riguarda chi legge la promessa:
+    1.  **Recinto bucato:** Un `read-vault` ristretto che accede all'intero vault costituisce una vulnerabilità tecnica.
+    2.  **Falsa promessa:** Un manifest (file di configurazione) dichiara un host. L'utente lo accetta. L'app (applicazione) raggiunge un host differente. Questa azione costituisce una menzogna esplicita dell'app.
+
+    **Separazione dei filtri:**
+    I due filtri richiedono implementazioni indipendenti. La soluzione futura deve rispettare questo vincolo. La funzione `Policy::denies_host` valuta strettamente l'host. Rifiuta un bersaglio generico. La logica di valutazione differisce:
+    *   **Path:** Il sistema valuta il prefisso dentro una radice dell'utente.
+    *   **Host:** Il sistema valuta il nome in uno spazio pubblico. Permettere ad `acme.com` di coprire `evil-acme.com` compromette domini terzi.
+    Una funzione condivisa unificherebbe due semantiche distinte. La decisione 0021 segnalava questo esatto rischio nel bloccante. Lo sviluppatore incaricato scriverà una **seconda** funzione. L'estensione della prima funzione è proibita.
+
+    **Tracciamento:**
+    La casella è rimasta bloccata per trentadue verbali dopo la risoluzione del suo indirizzo. Questo motivo la rende **contata** in [todo.md](../todo.md). Mantiene visibilità oltre il singolo verbale. I conteggi visibili attraggono l'attenzione. La [§16.7](16-crate-sdk-banchi-di-prova.md) applica la stessa diagnosi agli elenchi. La visibilità garantisce l'esecuzione.

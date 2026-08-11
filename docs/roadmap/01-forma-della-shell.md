@@ -1,35 +1,37 @@
 # 1. La forma della shell — la precondizione di tutto il resto
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): dove sta cosa, prima che la superficie cresca.
+Questa è una **seduta** (sessione di lavoro) della [roadmap infrastrutturale](../todo.md). Definisce la posizione dei componenti prima della crescita della superficie del progetto.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Stava per prima perché è l'unica cosa che *tutte* le altre presuppongono e
-nessuna dichiara. La precedenza dura del sesto giro — **la forma della shell
-prima dei nodi di `UiNode`** — è stata rispettata: l'albero era dichiarato e
-abitato quando la seduta 2 è arrivata, e le venticinque specie di nodo nuove
-hanno trovato un file dove atterrare invece di un `main.ts` da 1622 righe.
+La forma della shell (interfaccia utente principale) si posizionava per prima. Tutte le altre fasi richiedono questa struttura. Tutte le altre fasi omettono questa dichiarazione.
+La precedenza rigorosa del sesto giro è stata rispettata. La regola stabilisce: **la forma della shell prima dei nodi (elementi) di `UiNode`**.
+L'albero (struttura delle cartelle e dei file) era già definito. L'albero era popolato all'arrivo della seduta 2.
+Le venticinque specie di nodo nuove hanno trovato un file specifico di destinazione. Questo approccio sostituisce un file `main.ts` da 1622 righe.
 
-Le tre voci rispondevano a *dove sta cosa*: l'albero (1.1), cosa ci si mette
-dentro (1.2) e qual è l'unico modulo che ha diritto di parlare con Tauri (1.3).
-La prima e la terza sono chiuse con la [decisione 0015](../decisions/0015-la-forma-della-shell.md);
-la mappa dell'albero — quella da consultare scrivendo un file nuovo — sta in
-[architecture/shell.md](../architecture/shell.md).
+Le tre voci definiscono la posizione dei componenti:
+- L'albero (voce 1.1).
+- Il contenuto (voce 1.2).
+- L'unico modulo autorizzato a comunicare con Tauri (framework desktop) (voce 1.3).
 
-**Non resta niente da decidere.** Della seconda voce restano due punti di
-esecuzione — migrare cestino e cronologia a `ViewProvider`, e il modello di
-layout — e sono **shell**: stanno nella
-[§1.2 in coda alla seduta 18](18-editor-e-tastiera.md#12-smontare-il-monolite),
-dove verranno fatti, insieme alle altre tre code delle sedute chiuse. Il numero
-resta il suo: si trasferisce, non si rinomina.
+Stato delle voci:
+- La prima e la terza voce sono chiuse con la [decisione 0015](../decisions/0015-la-forma-della-shell.md).
+- La mappa dell'albero si trova in [architecture/shell.md](../architecture/shell.md). Serve per consultare la struttura durante la scrittura di un file nuovo.
 
-Il modello di layout è ciò che sblocca il grafo nell'area principale
-([§3.3](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell)),
-ed è anche l'unico dei due che non è un refactor ma una **feature** (FEATURES
-3.3): la sua metà kernel va decisa con `PaneId`. Le sessioni multiple, che le
-stavano davanti, **ci sono**
-([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)):
-l'host tiene una mappa di vault aperti e ogni comando IPC accetta un `vault`
-opzionale, quindi ciò che manca è tutto da questo lato.
+**Le decisioni sono completate.** Della seconda voce restano due punti di esecuzione:
+- La migrazione del cestino e della cronologia a `ViewProvider` (gestore delle viste).
+- Lo sviluppo del modello di layout.
+
+Questi elementi sono componenti della shell. Si trovano nel paragrafo [§1.2 in coda alla seduta 18](18-editor-e-tastiera.md#12-smontare-il-monolite). Verranno eseguiti in quella posizione. Verranno completati insieme alle altre tre code delle sedute chiuse.
+Il numero mantiene il suo valore. Il numero si trasferisce e conserva l'identificativo originale.
+
+Il modello di layout sblocca il grafo (rappresentazione visiva dei collegamenti) nell'area principale ([§3.3](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell)).
+È l'unico dei due punti che rappresenta una **feature** (funzionalità operativa, in contrasto con un refactor strutturale) (FEATURES 3.3).
+La sua metà kernel (logica di backend) richiede una decisione tramite `PaneId` (identificativo del pannello).
+
+Le sessioni multiple le precedevano e **sono attive** ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)):
+- L'host (processo principale) conserva una mappa dei vault (archivi dati) aperti.
+- Ogni comando IPC (comunicazione tra processi) accetta un parametro `vault` opzionale.
+- Il lavoro rimanente riguarda esclusivamente l'interfaccia utente.

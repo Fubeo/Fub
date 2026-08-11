@@ -1,466 +1,156 @@
 # 16. I crate, l'SDK, i banchi di prova
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): i banchi e i confini fra crate, **prima** di ciò che li moltiplica.
+Questa è una **seduta** della [roadmap infrastrutturale](../todo.md). L'argomento sono i banchi di prova e i confini fra i crate, **prima** dei moltiplicatori.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Delle sette voci con cui questa seduta è nata non ne resta **nessuna**: la 16.3
-si è chiusa per ultima, con la
-[decisione 0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md),
-e questa riga è un **consuntivo**. Il secondo tempo della 16.3 — il confine fra
-crate — non è stato fatto e non era da fare: è tenuto fuori da una condizione che
-non è una scadenza, e da oggi quella condizione la **valuta un banco** invece di
-starsene scritta in italiano ([decisione 0073](../decisions/0073-una-condizione-che-nessuno-valuta.md)).
-La casella resta, con il suo guardiano; la voce no, perché di deciso non c'era
-più niente. La 16.8 — il presidio sulla prosa, nata qui — è chiusa dalla
-[decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).
-Le precedenze che la seduta dichiarava sono tutte
-**decadute**, e vale la pena dire come, perché due sono decadute insieme alla
-voce e una si è rivelata falsa.
+**Stato delle sette voci iniziali:**
+- Nessuna delle sette voci resta attiva.
+- La voce 16.3 si è chiusa per ultima con la [decisione 0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md).
+- Questa riga costituisce un **consuntivo**.
 
-La precedenza dura del sesto giro — **16.2 prima di 16.3**, o i venti bundle di
-21.2 si portano dietro venti copie del banco di prova — è **soddisfatta**: la
-16.2 è chiusa dalla [decisione 0055](../decisions/0055-il-banco-del-lato-host.md).
-La 16.4 prima delle P0 del terzo giro è decaduta con la voce
-([0053](../decisions/0053-il-contratto-ha-una-sorgente.md), che ha chiuso la 16.4
-con la 16.5 come la seduta chiedeva). E la 16.6 dopo la 5.4 era già soddisfatta
-quando è stata presa.
+**Stato del secondo tempo della 16.3 (confine fra crate):**
+- Il lavoro è in attesa.
+- Una condizione valuta il confine tramite un banco di prova automatico invece di un testo in italiano ([decisione 0073](../decisions/0073-una-condizione-che-nessuno-valuta.md)).
+- La casella resta attiva con il suo guardiano. La voce scompare.
 
-Il cappello diceva anche che 16.1 e 16.2 erano due banchi **diversi**, e che non
-potevano stare nello stesso crate perché «`fub-kernel` nel grafo dell'SDK
-violerebbe l'invariante che `dependency_invariant.rs` presidia». La conclusione
-regge — le due voci sono chiuse da due verbali, la
-[0054](../decisions/0054-il-banco-del-lato-provider.md) e la
-[0055](../decisions/0055-il-banco-del-lato-host.md) — ma **la ragione era
-falsa**: quel file non nominava `fub-sdk` da nessuna parte. L'invariante c'era
-nelle intenzioni e non nel test, e adesso c'è in tutti e due. La ragione vera è
-più stretta di quella che il cappello dava: `fub-sdk` è dipendenza **normale**
-di `fub-format-markdown` **oggi**, quindi il kernel là dentro non finirebbe nel
-grafo di un futuro guest — finirebbe nella libreria di un provider che esiste.
+**Stato della voce 16.8 (presidio sulla prosa):**
+- È chiusa dalla [decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).
 
-Ed è il primo caso in cui un cappello di seduta ha dichiarato in anticipo una
-**separazione** invece di un accorpamento: la 0053 aveva inaugurato la forma, e
-queste due mostrano che la stessa forma può concludere all'opposto. Il criterio
-sta nel [README delle decisioni](../decisions/README.md).
+**Stato delle precedenze dichiarate:**
+Tutte le precedenze sono decadute. Due precedenze sono decadute insieme alla voce. Una precedenza si è rivelata falsa.
 
-## Le due voci che si ponevano la stessa domanda, e la risposta che le ha divise
+- **16.2 prima di 16.3 (sesto giro):** **Soddisfatta.** Evita venti copie del banco di prova per i venti bundle della 21.2. La 16.2 è chiusa dalla [decisione 0055](../decisions/0055-il-banco-del-lato-host.md).
+- **16.4 prima delle P0 del terzo giro:** **Decaduta.** Decaduta insieme alla voce 16.4. La [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) ha chiuso la 16.4 con la 16.5.
+- **16.6 dopo la 5.4:** **Soddisfatta.** Già soddisfatta al momento della presa in carico.
 
-La 16.6 e la 16.7 sono state prese insieme, e il primo lavoro è stato stabilire
-se fossero la stessa voce. Il §16.7 accusava gli elenchi scritti a mano; il §16.6
-proponeva come soluzione **un elenco scritto a mano**. Non era una contraddizione:
-sono la stessa frase in due posizioni logiche **opposte**.
+**Separazione dei banchi 16.1 e 16.2:**
+Il documento iniziale descriveva 16.1 e 16.2 come due banchi **diversi**. Vietava l'inclusione di entrambi nello stesso crate. La motivazione citata era la protezione dell'invariante in `dependency_invariant.rs` da parte di `fub-kernel` nel grafo dell'SDK.
 
-- Un elenco da cui un test **itera** non nota le aggiunte: l'insieme vero vive
-  altrove, e nessuno confronta le due cose. È il difetto del §16.7.
-- Un elenco con cui un test **asserisce un'uguaglianza** non può che notarle. È
-  l'allowlist del §16.6, cioè lo stesso difetto già risolto — per una superficie
-  sola.
+La separazione è confermata. Le due voci sono chiuse da due verbali, la [0054](../decisions/0054-il-banco-del-lato-provider.md) e la [0055](../decisions/0055-il-banco-del-lato-host.md).
+Tuttavia, **la ragione iniziale era falsa**. Il file non nominava `fub-sdk` da nessuna parte. L'invariante c'era nelle intenzioni. Oggi l'invariante è presente in tutti e due i file.
 
-Il criterio che sceglie la forma è uno: **la produzione può leggere l'elenco?**
-Se sì, l'elenco smette di essere una copia e diventa la **sorgente** da cui la
-cosa esiste; se no — `tauri::generate_handler!` prende identificatori a compile
-time e non itera niente — resta una copia, e va confrontata. Stessa tassonomia,
-due risposte: un confine, quindi due verbali, per il criterio che la
-[0055](../decisions/0055-il-banco-del-lato-host.md) ha fissato.
+La **ragione vera** è la dipendenza **normale** di `fub-sdk` da `fub-format-markdown` **oggi**. L'inserimento del kernel in `fub-sdk` includerebbe il kernel nella libreria di un provider esistente, invece che nel grafo di un futuro guest.
 
-Le due decisioni sono la [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)
-(l'inventario delle feature ufficiali, e le capacità) e la
-[0057](../decisions/0057-la-dieta-dell-ipc.md) (l'allowlist della superficie
-IPC). La 0056 lascia dietro di sé la **16.8**, qui sotto, ed è una separazione
-dichiarata guardando le voci insieme, come la seduta chiede.
+Questo è il primo caso di una **separazione** dichiarata in anticipo nel cappello della seduta. La [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) aveva introdotto la forma per un accorpamento. Queste due voci mostrano la stessa forma per il risultato opposto. Il criterio decisionale si trova nel [README delle decisioni](../decisions/README.md).
+
+## Le due voci con la stessa domanda, e la risposta che le ha divise
+
+Le voci 16.6 e 16.7 sono state gestite insieme. Il primo compito era valutarne l'uguaglianza.
+- Il §16.7 criticava gli elenchi scritti a mano.
+- Il §16.6 proponeva **un elenco scritto a mano** come soluzione.
+
+Queste posizioni sono logiche e opposte.
+- **Iterazione da elenco (test):** Il test itera (ripete) su un elenco. Le aggiunte sono ignorate. L'insieme reale vive altrove. Nessuno confronta le due cose. Questo è il difetto del §16.7.
+- **Asserzione da elenco (test):** Il test usa un elenco per asserire un'uguaglianza. Le aggiunte sono rilevate. Costituisce un'allowlist (lista consentita) per una superficie sola. Questo risolve il difetto, nel §16.6.
+
+Il criterio di scelta fra le forme è uno solo: **la produzione può leggere l'elenco?**
+- **Se sì:** L'elenco diventa la **sorgente** della funzionalità.
+- **Se no:** L'elenco resta una copia e va confrontata. Ad esempio, la macro `tauri::generate_handler!` richiede identificatori a compile time (tempo di compilazione) e non itera niente.
+
+Questa tassonomia ha generato due risposte. Il confine ha prodotto due verbali, basati sul criterio della [0055](../decisions/0055-il-banco-del-lato-host.md).
+Le due decisioni sono la [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) (l'inventario delle feature ufficiali, e le capacità) e la [0057](../decisions/0057-la-dieta-dell-ipc.md) (l'allowlist della superficie IPC). La 0056 lascia dietro di sé la voce **16.8** spiegata sotto. La separazione deriva dalla visione congiunta delle voci.
 
 ### 16.3 Un crate per bundle di feature
 
 *ex §4.7 · presidi · **P1** · **chiusa** dalla [decisione 0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md) — il primo tempo era della [0071](../decisions/0071-una-feature-si-spegne-dove-si-dichiara.md); lo split in crate **resta come casella**, tenuto fuori da una condizione che un banco valuta ([0073](../decisions/0073-una-condizione-che-nessuno-valuta.md))*
 
-- [x] **`fub-features` era un crate solo**: tantivy era dipendenza dell'intero
-      crate, quindi compilare il pannello outline compilava un motore di ricerca.
-      Con i moduli di 21.2 (FubTasks, FubDB, FubCanvas, FubCalendar, FubAI,
-      FubMaps…) diventa un monolite con il grafo di dipendenze di venti feature,
-      non disattivabile a compile time e senza confini contro l'accoppiamento
-      feature↔feature — l'invariante "una feature ufficiale è ciò che scriverà un
-      plugin" resterebbe vera nel documento e falsa nel `Cargo.toml`.
-- [x] **Primo tempo: una cargo feature per bundle, con tantivy dietro la sua.**
-      Fatto ([0071](../decisions/0071-una-feature-si-spegne-dove-si-dichiara.md)):
-      otto cargo feature omonime dei moduli, `default` che le accende tutte,
-      `tantivy` `optional` dietro `search`. Il guadagno promesso è arrivato
-      intero, e adesso è un numero: il grafo delle dipendenze di `fub-features`
-      passa da **120 crate a 26** compilando la sola `outline`. `fub-host` le
-      inoltra una per una; `fub-app` no, perché l'app che spediamo è la build
-      piena. CI compila tre configurazioni parziali con `build` e non con `test`
-      — la domanda è se compila, non se funziona, e il `cargo test --workspace`
-      da solo non se ne accorgerebbe mai.
-- [x] **Il cliente arrivato dalla
-      [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)**: l'inventario
-      delle feature ufficiali è il posto da cui la cargo feature si legge, perché
-      è già l'elenco di *cosa esiste* — e una riga che sparisce dietro un
-      `#[cfg]` sparisce da lì. È così: il `#[cfg]` sta sulla **riga**
-      dell'inventario e non solo sul `pub mod`, quindi non esiste una build in
-      cui l'elenco prometta un bundle che nessuno ha compilato.
-      `tests/le_cargo_feature.rs` confronta i due elenchi **senza una tabella di
-      corrispondenza**: l'id è `fub.<nome del modulo>` e la cargo feature ha il
-      nome del modulo, quindi si calcola.
-- [ ] **Secondo tempo: lo split in crate — la casella che la voce lascia.** È
-      l'unica forma che compra
-      il **confine contro l'accoppiamento feature↔feature**, perché dentro un
-      crate solo `pub(crate)` lascia passare tutto. È giustificato dai venti
-      moduli di 21.2 — che oggi non esistono: i moduli di feature sono
-      dieci [conta: moduli-di-feature], e non si citano fra loro: l'unico
-      riferimento incrociato nei sorgenti è un link di documentazione a
-      `backlinks::catalog`.
-      Farlo adesso significa pagare venti `Cargo.toml` per dieci moduli che non si
-      parlano; farlo mai significa scoprire l'accoppiamento quando districarlo
-      costa venti volte tanto. **La condizione che lo sblocca è scritta e non è
-      una data**: il primo import fra due moduli di feature che non sia un link
-      di documentazione. Il primo tempo non anticipa niente di questo — la cargo
-      feature per bundle è ciò da cui uno split partirebbe comunque.
-- [x] **E la condizione la valuta qualcuno**, dalla
-      [decisione 0073](../decisions/0073-una-condizione-che-nessuno-valuta.md):
-      `crates/fub-features/tests/i_moduli_non_si_parlano.rs` chiede che nessun
-      modulo di feature nomini `crate::`, e quando è rosso non accusa chi ha
-      scritto — dice che **questa voce si è sbloccata** e la consegna da leggere.
-      Serviva perché una condizione che vive solo in italiano è una scadenza che
-      non arriva mai: il momento in cui scade è quello in cui nessuno la guarda.
-      Il confine del compilatore, che il primo tempo aveva regalato, copre solo
-      metà del caso — nella build della sola `outline` un `use crate::search`
-      non compila, ma la riparazione che quell'errore suggerisce è mettergli
-      davanti un `#[cfg(feature = "search")]`, e da lì l'accoppiamento c'è e
-      tutto torna verde. La forma che evade il confine è quella attenta, ed è il
-      confine stesso a insegnarla; per questo la domanda si pone ai sorgenti,
-      cioè prima del `cfg`. Un modulo condiviso legittimo non indebolisce la
-      soglia: entra in `RADICE` con la sua ragione.
-- [x] **Un cliente in più, arrivato dalla ~~§18.2~~**
-      ([0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)): **la
-      scorciatoia di un comando di shell non si riconfigura.** La chiave `keys.*`
-      la fabbricava il kernel registrando un `CommandProvider`
-      ([0077](../decisions/0077-una-scorciatoia-e-una-chiave.md)), e un comando
-      che vive nella webview un provider non ce l'ha — il pannello impostazioni
-      le mostrava di sola lettura. Era la stessa domanda di questa voce vista da
-      fuori: *la shell diventa un componente come gli altri*.
+- [x] **Situazione iniziale (crate singolo):** `fub-features` era un crate solo. Il motore di ricerca tantivy era una dipendenza dell'intero crate. Compilare il pannello outline compilava un motore di ricerca. I moduli della 21.2 (FubTasks, FubDB, FubCanvas, FubCalendar, FubAI, FubMaps) rendono il crate un monolite con il grafo di dipendenze di venti feature. Non è disattivabile a compile time. Manca di confini contro l'accoppiamento fra feature (feature↔feature). L'invariante "una feature ufficiale è ciò che scriverà un plugin" era falsa nel file `Cargo.toml`.
+- [x] **Primo tempo: una cargo feature per bundle.** Realizzato tramite la [0071](../decisions/0071-una-feature-si-spegne-dove-si-dichiara.md). Create otto cargo feature omonime dei moduli. La feature `default` le accende tutte. La feature `tantivy` è `optional` dietro `search`.
+  Il guadagno promesso è misurabile. Il grafo delle dipendenze di `fub-features` passa da **120 crate a 26** compilando la sola feature `outline`. `fub-host` le inoltra una per una. `fub-app` compila la build piena dell'app. CI (Continuous Integration) compila tre configurazioni parziali con il comando `build` e non con `test`. Il comando `cargo test --workspace` non rileverebbe problemi.
+- [x] **Il cliente arrivato dalla [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md):** L'inventario delle feature ufficiali gestisce la lettura della cargo feature. L'inventario è l'elenco di ciò che esiste. Una riga nascosta da `#[cfg]` sparisce dall'inventario.
+  Il marcatore `#[cfg]` sta sulla **riga** dell'inventario e non solo sul `pub mod`. Nessuna build promette un bundle che nessuno ha compilato. Il test `tests/le_cargo_feature.rs` confronta i due elenchi **senza una tabella di corrispondenza**. Calcola l'identificatore `fub.<nome del modulo>` usando la cargo feature.
+- [ ] **Secondo tempo: lo split in crate.** L'unica forma che assicura il **confine contro l'accoppiamento feature↔feature**. Dentro un crate singolo, il modificatore `pub(crate)` aggira le protezioni. La divisione è giustificata dai venti moduli della 21.2 (oggi inesistenti). Attualmente i moduli di feature sono dieci [conta: moduli-di-feature]. Non si citano fra loro. L'unico riferimento incrociato nei sorgenti è un link di documentazione a `backlinks::catalog`.
+  La divisione immediata costa venti `Cargo.toml` per dieci moduli indipendenti. Non dividerli mai costa venti volte tanto in futuro. **La condizione per sbloccare la voce non è una data.** La condizione è il primo import fra due moduli di feature (esclusi link documentali). Il primo tempo prepara la struttura da cui lo split partirebbe comunque.
+- [x] **La condizione è valutata meccanicamente.** Implementato dalla [decisione 0073](../decisions/0073-una-condizione-che-nessuno-valuta.md). Il test `crates/fub-features/tests/i_moduli_non_si_parlano.rs` controlla l'assenza di riferimenti `crate::` nei moduli di feature. Un test rosso (fallito) avvisa che **questa voce si è sbloccata** e consegna il testo da leggere. Una condizione scritta solo in italiano è ignorata.
+  Il confine del compilatore (primo tempo) copriva metà del caso. Nella build di `outline`, il comando `use crate::search` non compila. L'aggiunta del marcatore `#[cfg(feature = "search")]` ripristina la compilazione e genera l'accoppiamento. Il test esamina i file sorgenti prima dei `cfg`, per questo mantiene forte la soglia. Un modulo condiviso legittimo entra in `RADICE` con la sua ragione.
+- [x] **Un cliente in più dalla ~~§18.2~~ ([0090](../decisions/0090-una-sequenza-e-una-modalita-che-scade.md)): la scorciatoia di un comando di shell non si riconfigura.** Il kernel fabbricava la chiave `keys.*` tramite la registrazione di un `CommandProvider` ([0077](../decisions/0077-una-scorciatoia-e-una-chiave.md)). Un comando nella webview non possiede un provider. Il pannello impostazioni mostrava queste chiavi in sola lettura. Il problema corrispondeva a: *la shell diventa un componente come gli altri*.
 
-      **Fatto** dalla [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md),
-      e non dandole un provider. La 0090 aveva misurato la scorciatoia che
-      eviterebbe di aspettare — un `CommandProvider` **di prossimità** registrato
-      da `fub-host` per conto della shell, al solo scopo di far nascere le chiavi
-      — e ne aveva scritto cinque ostacoli perché chi esegue questa voce non li
-      rimisuri. Rimisurati: **reggono tutti e cinque**, ed è la prima volta in
-      molti giri che le premesse di una casella sono tutte vere. A cambiare è la
-      conclusione: **non sono cinque ostacoli, è uno visto da cinque lati** —
-      nascono tutti dall'aver chiesto un *comando* dove serviva una *chiave*. I
-      primi tre (`invoke` obbligatorio; nessun `PluginError` che dica «dichiarato
-      qui, eseguito altrove»; `allCommands()` che concatena senza deduplicare)
-      esistono solo se il comando di shell entra nel registro del kernel, dove
-      non deve entrare; il quarto — la fixture `command-keys.json` cieca a un
-      provider nuovo, cioè il buco della
-      [0081](../decisions/0081-un-accordo-ha-un-proprietario.md) — non si chiude
-      aggiungendo un confronto ma **spostando la sorgente**, e la tabella degli
-      accordi della shell adesso sta in Rust; e il quinto, che la 0090 chiamava
-      una **contraddizione** — i provider si registrano per vault e le chiavi
-      `keys.*` sono di scope `Vault`
-      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), ma
-      `shell.vault.open` è il comando che esiste *prima* di ogni vault — non è
-      una contraddizione della strada: è **la regola mancante**. *Lo scope di una
-      chiave segue la vita di ciò che la dichiara*, quindi le `keys.shell.*` sono
-      di macchina, non per eccezione ma per conseguenza.
+  **Fatto** dalla [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md), e non dandole un provider.
+  La 0090 aveva misurato una scorciatoia. La scorciatoia era un `CommandProvider` **di prossimità** registrato da `fub-host` per conto della shell, per far nascere le chiavi. Aveva scritto cinque ostacoli. Rimisurati, gli ostacoli **reggono tutti e cinque**.
+  La conclusione cambia: **non sono cinque ostacoli, è uno visto da cinque lati.** Nascono dall'aver chiesto un *comando* dove serviva una *chiave*.
+  I primi tre ostacoli (l'uso obbligatorio di `invoke`, nessun `PluginError` specifico per dichiarazioni remote, `allCommands()` che concatena senza deduplicare) esistono solo se il comando di shell entra nel registro del kernel. Il quarto ostacolo (la fixture `command-keys.json` cieca a un provider nuovo, cioè il buco della [0081](../decisions/0081-un-accordo-ha-un-proprietario.md)) si chiude **spostando la sorgente**. La tabella degli accordi della shell sta in Rust. Il quinto ostacolo (la 0090 la chiamava contraddizione fra i provider di scope `Vault` dalla [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md) e il comando `shell.vault.open` che precede ogni vault) non è una contraddizione. È **la regola mancante**. *Lo scope di una chiave segue la vita di ciò che la dichiara*. Di conseguenza, le chiavi `keys.shell.*` sono di macchina.
 
 ### 16.6 Dieta dell'IPC
 
 *ex §4.2 · presidi · **chiusa** con la [0057](../decisions/0057-la-dieta-dell-ipc.md); resta una casella, ed è un numero che un test presidia*
 
-- [x] **Test che presidia la superficie.** C'è: `crates/fub-app/tests/dieta_ipc.rs`
-      estrae dal sorgente due insiemi indipendenti — i comandi *definiti* e i
-      comandi *registrati* — e li confronta con un'allowlist in cui ogni riga
-      porta **la ragione** per cui quel comando non poteva essere un comando del
-      registro, una view o una query. Aggiungerne uno è rosso, e il messaggio
-      elenca le tre alternative.
-      Il numero che questa voce faceva proprio era sbagliato per la **terza**
-      volta: diceva «38», ed erano **37**. Sotto c'era una trappola che vale più
-      dell'errore — i conti possibili sono quattro (43 col grep sul workspace, 39
-      col grep su `lib.rs`, 37 attributi veri, 37 registrati) e le sei occorrenze
-      di troppo sono **prosa**, cioè `#[tauri::command]` scritto dentro un
-      commento per spiegare dove una cosa stava prima. Un presidio che contasse
-      la prosa morirebbe alla prima riga di documentazione: l'estrattore salta i
-      commenti, e un test gli dà in pasto un sorgente finto con la trappola
-      dentro.
-- [x] **La riga che divide**, dalla [decisione 0013](../decisions/0013-elenco-delle-capacita.md):
-      un comando fa accadere qualcosa e risponde con un messaggio e un effetto;
-      ciò che risponde con **dati** non può essere un comando. Applicata ai 37,
-      ha prodotto **sei** categorie e non tre — fra cui *la porta è una
-      credenziale*, che salva sei comandi da una migrazione sbagliata (`set_setting`
-      non poteva essere `settings.set`: sono due autorità, non due strade).
-- [ ] **Migrare i bespoke che restano — e adesso sono due.** ~~cestino (4)~~,
-      ~~organizzazione (2)~~ e ~~grafo (1)~~ erano già fatti; il grafo lo era **da
-      prima**, con la [0019](../decisions/0019-il-canale-dati.md), e questa riga
-      non se n'era accorta. ~~Il versioning (3)~~ se n'è andato con la
-      [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md), e non
-      come questa riga si aspettava: `restore_version` è diventato davvero un
-      comando del registro (`version.restore`), ma `list_versions` e
-      `read_version` **non sono migrate a `IndexQuery`** — sono sparite, perché
-      chi le chiamava era il pannello cronologia di questa shell, che adesso è un
-      `ViewProvider` della feature versioning e legge dal proprio spazio dati.
-      Davanti a un bespoke la prima domanda non è *su che canale lo sposto*: è
-      **chi lo chiama, e da che parte del confine dovrebbe stare**.
-      Restano i **due che nessuno nominava**: `render_preview` e
-      `render_embed`, che rispondono con dati e per cui un `ViewProvider` non ha
-      nessuna porta mentre la shell ce l'ha. Il criterio per farlo è deciso,
-      quindi è lavoro; ma chi lo prende deve porre una domanda di firma che qui
-      non si poteva porre — rendere passa dal confine di fiducia, e portarne
-      l'HTML su un canale che anche un plugin di comunità può chiamare va deciso
-      lì. **Il residuo non vive più in questa riga**: è
-      `il_debito_dichiarato_e_un_numero_presidiato`, e migrarne uno costringe a toccare il
-      numero.
+- [x] **Test a presidio della superficie IPC (Inter-Process Communication):** Presente in `crates/fub-app/tests/dieta_ipc.rs`. Estrae due insiemi indipendenti dal sorgente: i comandi *definiti* e i comandi *registrati*. Confronta questi insiemi con un'allowlist. Ogni riga porta **la ragione** per cui il comando non poteva essere un comando del registro, una view o una query. L'aggiunta di un comando fa fallire il test (rosso). Il messaggio elenca le tre alternative.
+  Il numero della voce era sbagliato per la **terza** volta. Il numero corretto è **37** invece di 38. Esistono quattro conti possibili (43 col grep sul workspace, 39 col grep su `lib.rs`, 37 attributi veri, 37 registrati). Le sei occorrenze in più sono **prosa** (l'uso di `#[tauri::command]` dentro un commento). Un presidio per contare la prosa fallirebbe al primo commento. L'estrattore salta i commenti tramite un test con un sorgente finto.
+- [x] **La riga che divide (dalla [decisione 0013](../decisions/0013-elenco-delle-capacita.md)):** Un comando fa accadere qualcosa e risponde con un messaggio e un effetto. Una funzione che risponde con **dati** non può essere un comando.
+  Applicata ai 37 comandi, ha prodotto **sei** categorie invece di tre. Fra cui *la porta è una credenziale*. Questa salva sei comandi da una migrazione sbagliata. I percorsi `set_setting` e `settings.set` sono due autorità e non due strade.
+- [ ] **Migrare i bespoke che restano — adesso sono due.** Le voci ~~cestino (4)~~, ~~organizzazione (2)~~ e ~~grafo (1)~~ sono concluse. La migrazione del grafo è avvenuta **da prima** con la [0019](../decisions/0019-il-canale-dati.md) (non segnalata). La voce ~~versioning (3)~~ è migrata tramite la [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md), in modo diverso dal previsto. Il comando `restore_version` è diventato un comando del registro (`version.restore`). Le chiamate `list_versions` e `read_version` **non sono migrate a `IndexQuery`**. Sono state rimosse. Il pannello cronologia ora è un `ViewProvider` e legge dal proprio spazio dati.
+  Prima di migrare un bespoke (canale su misura) si valuta **chi lo chiama, e da che parte del confine dovrebbe stare**.
+  Restano i **due che nessuno nominava**: `render_preview` e `render_embed`. Entrambi rispondono con dati. Un `ViewProvider` non ha nessuna porta per i dati (HTML), mentre la shell la possiede. Il criterio di azione è deciso. L'esecuzione richiede una decisione sul confine di fiducia. Il sistema deve confermare l'esposizione sicura di output HTML su un canale per i plugin di comunità.
+  **Il residuo si sposta in una variabile:** Il debito diventa la variabile `il_debito_dichiarato_e_un_numero_presidiato`. Migrare un elemento costringe all'aggiornamento del numero.
 
 ### 16.8 La prosa che conta i sorgenti non ha nessun presidio
 
 *ottavo giro · presidi · **P1** — separata dalla 16.7 dalla [decisione 0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) · **chiusa** dalla [decisione 0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)*
 
-Questa voce era la seconda metà del §16.7, e ne è stata staccata chiudendolo. La
-ragione è quella con cui la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md)
-ne aveva accorpate due, letta al contrario: è lo stesso **difetto** — un elenco
-che smette di dire il vero senza diventare rosso — ma non lo stesso **presidio**.
-Ciò che la 0056 ha chiuso sono insiemi che un test può estrarre dai sorgenti; ciò
-che resta qui è un'**affermazione scritta in italiano dentro un documento**, che
-nessun compilatore legge. Deciderle insieme avrebbe voluto dire decidere due volte
-la forma dell'annotazione, la seconda contro la prima.
+La voce è la seconda metà del §16.7. La separazione avviene chiudendo il §16.7. La motivazione è la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) letta al contrario. Il **difetto** è identico (elenco falso senza avviso), ma il **presidio** è diverso. La 0056 gestisce insiemi estratti dai sorgenti. Questa voce affronta **affermazioni scritte in italiano** invisibili al compilatore. Decidere in blocco richiederebbe di applicare regole contrastanti.
 
-- [x] **La famiglia più grande non sono i presidi: è la prosa che conta i
-      sorgenti.** Un giro dedicato ha ricontato i numeri dei documenti contro il
-      codice, e in **quattro famiglie** li ha trovati falsi — tutti silenziosi:
-      `HostApi` dichiarata di «ventitré metodi» in [PIANO.md](../PIANO.md) e in
-      [traits.md](../architecture/traits.md) e di «trentadue» **duecento righe
-      più in là nello stesso file**, mentre `abi.wit` ne ha trentaquattro; due
-      `SCHEMA_VERSION` su disco dichiarati in
-      [versionamento.md](../versionamento.md) con una versione più bassa di
-      quella nel codice (l'anagrafe a 1 invece di 2, l'indice di ricerca a 4
-      invece di 5), cioè **il numero il cui errore non si annulla**, perché è la
-      promessa fatta ai file dell'utente; i conteggi del §16.2 raddoppiati; le
-      cinque capacità del `TriesEverything` diventate sette. Nessuno di questi
-      ha rotto un test, e ognuno è dello stesso tipo.
-- [x] **E chiudere la 16.7 ne ha trovate altre quattro in mezza giornata**, che è
-      la misura di quanto la famiglia sia fitta
-      ([0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)): `guard.rs` dice
-      «**dieci** famiglie» in **tre** punti dove ne ha quattordici — e cinque
-      righe sopra il primo c'è un doc-comment che dice «quattordici» giusto; la
-      [0013](../decisions/0013-elenco-delle-capacita.md) e
-      [plugin-boundary.md](../architecture/plugin-boundary.md) dicono «tutte e
-      **sei** le strutturali» e poi ne elencano cinque, che è quanti metodi ha
-      `VaultStructure`; e lo stesso documento sbaglia **la portata** più del
-      numero, perché il varco nega sette famiglie e lui ne nomina una. Da tenere
-      per disegnare il presidio: la prima sta nello **stesso file** del codice che
-      descrive, quindi la distanza fra la frase e la cosa non è la ragione per cui
-      invecchia — e un'annotazione che vale solo per i `.md` ne mancherebbe metà.
-- [x] **E c'è una quinta specie, che non è un conteggio: il numero di riga.**
-      [glossario.md](../glossario.md) ancora un file di codice **e una riga**
-      (`abi/event.rs:253`), e quella riga invecchia a ogni commit che aggiunge
-      qualcosa più in alto nel file — cioè senza che nessuno tocchi né la voce né
-      la cosa che nomina. La [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)
-      ne ha spostate cinque in un colpo solo facendo crescere `event.rs` di
-      duecento righe, e tre delle cinque erano **giuste** fino a quel commit; una
-      quarta era sbagliata da prima e nessuno se n'era accorto. È la specie
-      peggiore da presidiare a mano e la più facile da presidiare a macchina —
-      il link c'è già, gli manca solo di verificare che a quella riga ci sia
-      ancora ciò che la voce nomina — ed è l'unica di questa voce che
-      `check-doc-links.mjs` **quasi** copre: controlla che il file esista, non
-      che la riga dica ancora la stessa cosa.
-- [x] **E la mezza voce del §17.1 ne ha trovate altre due**
-      ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)), che insieme
-      dicono una cosa che le otto di sopra non dicevano. La prima è nella
-      [0054](../decisions/0054-il-banco-del-lato-provider.md): «un terzo crate per
-      **otto** funzioni», e una tabella che ne elencava otto, dove
-      `grep -c "^pub fn " crates/fub-sdk/src/testing/conformita.rs` oggi ne
-      conta **ventitré** — ma il punto non è lo scarto, è che ne contava
-      **quattordici già nel commit che scriveva «otto»**. Non un numero
-      invecchiato: un numero che **nessuno ha mai ricavato dalla sua sorgente**, e
-      la differenza decide la riparazione, perché uno invecchiato si aggiorna e
-      uno senza sorgente si aggiorna e torna falso al giro dopo. La seconda è il
-      numero della riga in fondo a questa voce, per la **nona** volta — e le due
-      insieme mostrano che il caso «falso il giorno in cui è stato scritto», che
-      la settima occorrenza di quel numero aveva inaugurato, non era un incidente:
-      è ciò che succede **ogni volta** che un conteggio si scrive a mano nello
-      stesso commit che cambia ciò che conta. Da tenere per disegnare il presidio:
-      un'annotazione che rifà il conto solo *dopo*, in CI, arriverebbe comunque
-      prima di chi legge — nessuno di questi due numeri è stato letto da qualcuno
-      prima che il presidio lo ricontasse a mano.
-- [x] **E un giro di verifica fatto chiudendo quella mezza voce ne ha trovate
-      altre cinque, più un bersaglio nuovo.** Non sono riparate lì — sono il
-      lavoro di questa voce — e stanno scritte col comando accanto perché chi la
-      prende le trovi. `crates/fub-abi/wit/fub/abi.wit` è **3400 righe di cui
-      1697 di commento** dove la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md)
-      e [M4](../milestones/M4-wit-hardening.md) dicono 3386 e 1683 (`wc -l`,
-      `grep -cE '^\s*//'`) — e lo stesso criterio dà i numeri vecchi *esatti* al
-      commit della 0053, quindi il conto era giusto e la prosa è invecchiata di
-      quattordici righe di commento; il contratto in Rust è **18 058** righe e la
-      0053 dice 17 150; i `console.warn`/`console.error` della shell sono
-      **quindici** e non quattordici ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md),
-      [leva](leva.md)), col criterio che la 0052 stessa dichiara; e
-      [plugin-boundary.md](../architecture/plugin-boundary.md) nomina
-      `safety::notifying` come se esistesse, descrivendolo come «una riga su
-      stderr» — si chiama **`reporting`** e *restituisce* il panico invece di
-      stamparlo, che è precisamente ciò che la 0052 ha cambiato: **sesta specie**,
-      smentita da un verbale a due file di distanza.
-- [x] **Il bersaglio nuovo è meccanico, ed è a portata di un presidio che c'è
-      già**: **quindici** link della forma `[file.rs:N](…)` portano un numero di
-      riga stantio — sei in [data-model.md](../architecture/data-model.md)
-      (sfalsati tutti di **+44**, cioè `model.rs` è cresciuto sopra quel punto),
-      cinque in [traits.md](../architecture/traits.md), quattro in
-      plugin-boundary.md. `check-doc-links.mjs` valida **il file** e non il `:N`,
-      quindi questa è la prima famiglia di questa voce che non chiede
-      un'annotazione nuova: chiede di leggere due caratteri in più in un link che
-      il presidio già apre. I sei di `data-model.md` sono corretti nel giro della
-      mezza voce del §17.1, perché quel file era già aperto; gli altri nove no, e
-      sono qui. Da tenere per il disegno: un numero di riga è la sola specie di
-      questo elenco che **non** ha bisogno che qualcuno dichiari come si ricava.
-- [x] **E ci sono due specie peggiori dei numeri.** La **quinta**: il *limite
-      dichiarato* che non esiste più — [traits.md](../architecture/traits.md)
-      scriveva «limite dichiarato: l'**ordine** dei casi di un variant è
-      confrontato con l'ordine in cui il test li elenca, non con quello dell'enum
-      Rust», ed era falsa da **settantacinque commit**. Un conteggio invecchiato
-      fa sopravvalutare una copertura; un limite invecchiato la fa
-      **sottovalutare**, cioè invita a non fidarsi di una garanzia che c'è — o a
-      ricostruirla altrove. La **sesta**, che le batte tutte: la *garanzia
-      dichiarata* che non è mai esistita — il cappello di questa seduta diceva
-      che il kernel dentro l'SDK «violerebbe l'invariante che
-      `dependency_invariant.rs` presidia», e quel file non nominava `fub-sdk`
-      da nessuna parte ([0054](../decisions/0054-il-banco-del-lato-provider.md),
-      che l'ha scritto). Le prime cinque riguardano una **descrizione**
-      invecchiata di qualcosa che esiste; questa no — non c'è niente da
-      aggiornare, perché non c'è mai stato niente. E nessuno se ne accorge,
-      perché **il motivo per cui si scrive una garanzia è smettere di doverci
-      pensare**: un conteggio qualcuno prima o poi lo ricontrolla, una rete che
-      si crede tesa non la guarda nessuno.
-- [x] **Il presidio è a portata, e il repo ne ha già uno dello stesso genere.**
-      `check-doc-links.mjs` esiste perché «una promessa senza presidio meccanico
-      decade», e presidia i **link**; i **conteggi** sono la stessa promessa
-      nella stessa prosa. La forma non è un linter di prosa — impossibile — ma
-      un'**annotazione**: un numero che afferma qualcosa sui sorgenti si scrive
-      accanto a come lo si ricava, e il presidio rifà il conto. Il conto
-      meccanico esiste già per ognuno dei casi qui sopra: le funzioni delle
-      quattordici interfacce `host-*` in `abi.wit` (**34**, ricontate chiudendo
-      la 16.7 e giuste in [traits.md](../architecture/traits.md)), i
-      `const SCHEMA_VERSION` nei crate, i `fn vault(`/`fn workspace(` sotto
-      `crates/*/tests/`. **Ciò che manca non è il conto: è il posto in cui
-      scriverlo una volta e leggerlo da due parti** — che è la stessa forma del
-      `rules_mirror.rs` → `rules-samples.json` della
-      [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md),
-      applicata alla prosa invece che alle regole.
-- [x] **E per la sesta specie il presidio è lo stesso, letto al contrario**: non
-      «rifai il conto», ma **una frase che dice *questo è presidiato da X* deve
-      nominare un X che esiste** — e `X` è un nome di test, cioè una cosa che si
-      può cercare meccanicamente. Il primo posto in cui girerebbe è il cappello di
-      ogni seduta, che è dove la garanzia inesistente è stata trovata.
-- [x] **E c'è una seconda metà che i conteggi non coprono: gli elenchi che
-      rimandano.** [strozzature.md](strozzature.md) è l'indice inverso — si entra
-      da un capitolo di FEATURES per sapere *cosa manca* — e una sua riga
-      invecchia quando qualcosa si chiude **altrove**, cioè in un file che chi
-      chiude non sta guardando. Un giro ne ha trovate **diciassette** che il
-      codice smentiva — su ottantasette, cioè una riga su cinque: le barrate del
-      file sono passate da ventinove a quarantasei in un pomeriggio, senza che si
-      chiudesse niente. Non è nuovo: la [leva](leva.md) racconta già la riga
-      «nessun `^block-id`» falsa da undici verbali, e un'altra ha detto «`views()`
-      è un elenco statico» per trentaquattro. Qui il presidio meccanico è più
-      difficile — la riga è un giudizio, non un conteggio — ma il **collegamento**
-      no: una riga di strozzature che nomina un `§X.Y` chiuso, o un simbolo che
-      non esiste più nei sorgenti, è verificabile esattamente come un link rotto.
-      Che è precisamente ciò che questo presidio già fa, un livello più in giù.
-- [x] **Il terzo presidio che si spegneva da solo è già chiuso.**
-      `.github/scripts/check-doc-links.mjs` saltava ogni cartella con un
-      `.fub/` dentro, e bastava aprire `docs/` come vault perché il controllo
-      passasse da **68 file e 718 link a 9 file e 17 link** stampando «0 rotti»
-      in entrambi i casi. **Fatto**, e con la causa invece del solo sintomo: la
-      regola del vault resta ma non si applica a una cartella in cui **git tiene
-      dei `.md`**; ogni albero saltato è una riga in uscita; **zero file
-      controllati esce rosso**. Oggi: **145 file, 2965 link**, più 123 numeri
-      di riga verificati dalla [0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).
-      Questa riga ha detto, in fila: «81 file, 1105 link», «122 file, 2155»,
-      «125 file, 2231», «127 file, 2284», «129 file, 2336», «132 file, 2464»,
-      «132 file, 2475», «134 file, 2553». La correzione di oggi è la **nona**,
-      e ha la causa più semplice di tutte: **il commit che chiude la §16.8 aggiunge
-      prosa**, cioè un verbale e le righe che lo linkano. Chiudere la voce che
-      presidia i conteggi ha falsificato il conteggio che la voce non presidia —
-      il che non è un'ironia, è il criterio funzionante: questo numero sta fuori
-      dal registro *proprio perché* si muove così — e infatti la prima stesura di
-      questa riga diceva 2964 ed era falsa di uno prima di essere salvata, perché
-      il link alla 0072 due righe più su l'ha invecchiata mentre la si scriveva:
-      la quinta specie, colta in diretta per la seconda volta —, e resta scritto a mano nel
-      solo posto che tiene anche il conto delle sue falsificazioni.
-      La correzione precedente era l'**ottava**, e stavolta il numero
-      si ricostruisce: sono i valori che `git log -- questo file` restituisce, uno
-      per riscrittura. L'ordinale che c'era prima diceva «nona» e poi «decima» e non
-      si ricostruiva da niente — con cinque valori elencati e nove falsificazioni
-      dichiarate, mancava un elenco all'appello, ed era il sesto: «132 file, 2464
-      link». Che il presidio della prosa non presidiasse **il conteggio delle volte
-      in cui questa prosa è stata falsa** è la cosa più circolare che questa voce
-      abbia prodotto, ed è scritta qui perché non torni.
-      Delle ultime quattro, tre cause diverse e una che si ripete. La quinta era
-      falsa **nel commit stesso che la scriveva**: la riga diceva 2284 e il
-      controllo ne contava già 2285, cioè il numero è invecchiato fra il momento in
-      cui è stato misurato e quello in cui è stato scritto. La sesta e la settima
-      hanno una causa esterna alla riga — dei verbali nuovi e i loro rimandi, che in
-      un pomeriggio hanno portato 2285 a 2336 e poi a 2475. L'ottava, questa, ne
-      aggiunge una specie nuova e peggiore: **la riga era già falsa senza che
-      nessuno l'avesse toccata.** A HEAD dichiarava 2475 e il controllo ne contava
-      **2468**: il rename di `21c3562` e la ripulitura di `0d85342` hanno tolto
-      sette link, e nessuno dei due commit è passato da qui. Un numero che
-      invecchia quando lo si scrive è un fastidio; uno che invecchia mentre nessuno
-      lo guarda è la voce.
-      E c'è una coda che vale la pena: il conteggio dei **file** dipende anche da
-      cosa c'è nell'albero di lavoro. Lo script cammina il disco e non
-      `git ls-files`, quindi un `.md` di appunti non tracciato in radice fa 134
-      invece di 133. Il valore scritto qui è quello che vede un clone pulito, che è
-      l'unico che possa valere qualcosa.
-      Il presidio funziona, la **frase che lo descrive** no — e non perché nessuno
-      la guardi, ma perché un numero che conta i documenti di un repo che documenta
-      sé stesso non ha un valore fermo abbastanza a lungo da poter essere scritto a
-      mano. È l'argomento più corto a favore di questa voce, ed è stato prodotto
-      scrivendola — quattro volte su otto.
+- [x] **La famiglia più grande è la prosa che conta i sorgenti.** Un giro dedicato ha ricontato i numeri dei documenti contro il codice. Sono state individuate **quattro famiglie** con valori falsi e silenziosi.
+  - L'interfaccia `HostApi` ha «ventitré metodi» in [PIANO.md](../PIANO.md) e in [traits.md](../architecture/traits.md), e «trentadue» a **duecento righe di distanza nello stesso file**. Il file `abi.wit` ne ha trentaquattro.
+  - Due versioni `SCHEMA_VERSION` in [versionamento.md](../versionamento.md) presentano un numero inferiore rispetto al codice (1 invece di 2 per l'anagrafe, 4 invece di 5 per l'indice). Questo è il **numero il cui errore non si annulla** perché viola la promessa fatta ai file dell'utente.
+  - I conteggi del §16.2 sono raddoppiati.
+  - Le cinque capacità del `TriesEverything` sono diventate sette. Nessun test si è rotto.
+- [x] **La chiusura della 16.7 ne ha trovate altre quattro in mezza giornata** ([0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)). Questa è la misura della densità della famiglia.
+  - `guard.rs` cita «**dieci** famiglie» in **tre** punti. Il codice ne conta quattordici. Un doc-comment a cinque righe di distanza indica correttamente «quattordici».
+  - La [0013](../decisions/0013-elenco-delle-capacita.md) e [plugin-boundary.md](../architecture/plugin-boundary.md) citano «tutte e **sei** le strutturali». Elencano poi cinque famiglie basate sui metodi di `VaultStructure`.
+  - Lo stesso documento sbaglia **la portata**: nega sette famiglie ma ne nomina una.
+  La prima occorrenza si trova nello **stesso file** del codice descritto. L'invecchiamento non deriva dalla distanza fra testo e codice. Un'annotazione dedicata solo ai file `.md` salterebbe metà degli errori.
+- [x] **La quinta specie: il numero di riga.** Il file [glossario.md](../glossario.md) punta al codice e a **una riga** specifica (`abi/event.rs:253`). Aggiungere codice sopra la riga invalida il riferimento senza toccare la riga stessa. La [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) ha spostato cinque righe aggiungendo duecento righe a `event.rs`. Tre delle cinque righe erano **giuste** prima del commit. Una quarta era sbagliata in precedenza. Un presidio meccanico è semplice, manca solo la validazione del contenuto al numero di riga. Il file `check-doc-links.mjs` copre la casistica controllando solo l'esistenza del file, non del `:N`.
+- [x] **La mezza voce del §17.1 ne ha trovate altre due** ([0060](../decisions/0060-il-modello-dice-il-vero-sui-byte.md)). Entrambe aggiungono difetti.
+  - La prima è nella [0054](../decisions/0054-il-banco-del-lato-provider.md): «un terzo crate per **otto** funzioni». La tabella elencava otto funzioni. Il comando `grep -c "^pub fn " crates/fub-sdk/src/testing/conformita.rs` conta oggi **ventitré** funzioni. Il codice ne contava **quattordici già nel commit che scriveva «otto»**. Questo numero non è invecchiato, è un numero che **nessuno ha mai ricavato dalla sua sorgente**. La riparazione si differenzia.
+  - La seconda è il numero di riga in fondo a questa voce, per la **nona** volta.
+  La settima occorrenza mostra che la falsità al momento della scrittura è una costante. La scrittura manuale nel commit e la modifica del codice creano un disallineamento immediato. Un'annotazione risolta dopo in CI (Continuous Integration) arriverebbe prima del lettore. Nessuno dei due numeri è stato letto prima della verifica.
+- [x] **Altre cinque discrepanze più un bersaglio nuovo durante il giro della mezza voce.** Registrate qui per la riparazione.
+  - Il file `crates/fub-abi/wit/fub/abi.wit` ha **3400 righe di cui 1697 di commento**. La [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) e la [M4](../milestones/M4-wit-hardening.md) indicavano 3386 e 1683. L'aumento corrisponde all'aggiunta di quattordici righe di commento (tramite `wc -l` e `grep -cE '^\s*//'`).
+  - Il contratto in Rust conta **18 058** righe, contro le 17 150 dichiarate dalla 0053.
+  - I messaggi `console.warn`/`console.error` della shell sono **quindici** e non quattordici ([0052](../decisions/0052-cio-che-va-storto-e-un-evento.md), [leva](leva.md)).
+  - Il file [plugin-boundary.md](../architecture/plugin-boundary.md) nomina `safety::notifying` come se esistesse, e la descrive come «una riga su stderr». La funzione vera si chiama **`reporting`** e *restituisce* il panico invece di stamparlo. La 0052 ha effettuato questo cambiamento a due file di distanza. Questa è la **sesta specie**: smentita da un verbale vicino.
+- [x] **Il bersaglio nuovo è meccanico e gestibile dal presidio attuale.** Trovati **quindici** link nella forma `[file.rs:N](…)` con un numero di riga stantio. Trovati sei in [data-model.md](../architecture/data-model.md) (sfalsati tutti di **+44**, cioè `model.rs` è cresciuto sopra quel punto). Trovati cinque in [traits.md](../architecture/traits.md) e quattro in plugin-boundary.md. Lo script `check-doc-links.mjs` valida **il file** e non il `:N`. Questa è la prima famiglia senza necessità di annotazione nuova. Serve leggere due caratteri in più. I sei link di `data-model.md` sono corretti (nel giro della mezza voce §17.1). Nove link rimangono da correggere. Il numero di riga **non** necessita della dichiarazione della sorgente.
+- [x] **Due specie peggiori dei numeri.**
+  La **quinta specie**: il *limite dichiarato* non esistente. Il file [traits.md](../architecture/traits.md) descriveva un controllo sull'ordine dei variant Rust nei test. L'informazione era falsa da **settantacinque commit**. Un limite invecchiato fa **sottovalutare** la copertura. Invita a non fidarsi di una garanzia reale.
+  La **sesta specie** (la peggiore): la *garanzia dichiarata* inesistente. Il cappello iniziale della seduta sosteneva che `dependency_invariant.rs` presidiava un invariante. Quel file non nominava `fub-sdk` da nessuna parte ([0054](../decisions/0054-il-banco-del-lato-provider.md)). Non esiste invecchiamento descrittivo, la garanzia non è mai esistita. Nessuno verifica, perché **il motivo per cui si scrive una garanzia è smettere di doverci pensare**.
+- [x] **Il presidio è a portata con risorse simili nel repo.** Lo script `check-doc-links.mjs` esiste contro la decadenza. I **conteggi** sono ugualmente vulnerabili. La soluzione è un'**annotazione**: il numero si scrive accanto al processo di estrazione per il calcolo meccanico.
+  Il sistema per i calcoli è pronto. Le interfacce `host-*` in `abi.wit` (**34** funzioni verificate alla chiusura della 16.7 in [traits.md](../architecture/traits.md)). Le variabili `const SCHEMA_VERSION` nei crate. Le funzioni `fn vault(`/`fn workspace(` sotto `crates/*/tests/`.
+  Ciò che manca è **il posto in cui scriverlo una volta e leggerlo da due parti**. La formula è identica alla gestione delle regole `rules_mirror.rs` → `rules-samples.json` della [decisione 0020](../decisions/0020-le-regole-in-un-posto-solo.md).
+- [x] **Presidio inverso per la sesta specie:** Una frase del tipo *questo è presidiato da X* deve menzionare un test `X` che esiste. La stringa `X` è tracciabile meccanicamente. Il primo controllo gira nei cappelli delle sedute.
+- [x] **Gli elenchi che rimandano (seconda metà esclusa dai conteggi).** L'indice inverso [strozzature.md](strozzature.md) invecchia in caso di chiusure in **altrove**. Un giro ha trovato **diciassette** chiusure false rispetto a ottantasette righe totali (una riga su cinque). Le voci sbarrate sono passate da ventinove a quarantasei in un pomeriggio, senza nuove chiusure. Il file [leva](leva.md) conferma questo invecchiamento: la riga «nessun `^block-id`» falsa da undici verbali, e un'altra ha detto «`views()` è un elenco statico» per trentaquattro.
+  Il presidio meccanico è più difficile per via del giudizio umano, ma il **collegamento** è validabile come un link rotto (es. rimando a `§X.Y` chiuso o codice assente).
+- [x] **Risoluzione del terzo presidio disattivato.** Il file `.github/scripts/check-doc-links.mjs` saltava ogni cartella contenente un `.fub/`. L'apertura della directory `docs/` come vault riduceva il controllo da **68 file e 718 link a 9 file e 17 link** stampando «0 rotti».
+  **Fatto**. La regola ignora la cartella a meno che **git tiene dei `.md`**. Gli alberi saltati appaiono in output. L'esito su zero file controllati diventa rosso.
+  Oggi controlla **145 file, 2965 link**, e 123 numeri di riga tramite la [0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).
+  Questa riga ha mostrato progressioni: «81 file, 1105 link», «122 file, 2155», «125 file, 2231», «127 file, 2284», «129 file, 2336», «132 file, 2464», «132 file, 2475», «134 file, 2553». La correzione di oggi è la **nona**. La causa principale è l'aggiunta di prosa dalla voce 16.8. Chiudere il presidio ha falsificato il conteggio che la voce non presidia. Il salvataggio includeva una riga 2964, resa falsa dall'inserzione (per la seconda volta colta in diretta).
+  La correzione precedente era l'**ottava**. Lo script ricostruisce la storia tramite i log (`git log -- questo file`). L'ordinale sfalsato («nona», poi «decima») saltava l'elenco sesto («132 file, 2464 link»). Delle ultime quattro correzioni, tre cause sono diverse e una si ripete. La quinta era falsa durante la scrittura (da 2284 a 2285). La sesta e la settima erano provocate dai verbali (da 2285 a 2336 a 2475). L'ottava rivelava un invecchiamento intrinseco: dichiarati 2475, calcolati 2468 (sette link rimossi da due puliture `21c3562` e `0d85342`). I conteggi dei file dipendono dall'albero di lavoro (134 invece di 133 con appunti `.md` tramite `git ls-files`).
+  I numeri dipendono dal clone pulito. Il presidio funziona, la frase descrittiva no. Un repository che documenta sé stesso non mantiene valori fissi a lungo. Questa è la giustificazione della voce (dimostrata quattro volte su otto).
 
 **Chiusa dalla [0072](../decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).**
-La forma è quella che questa voce chiedeva: `.github/scripts/conteggi.mjs` tiene
-**i comandi e non i valori** — un nome, il comando che ricava il numero dai
-sorgenti, la ragione per cui quel numero conta — e `check-prosa.mjs` rifà il
-conto e lo confronta con ogni riga che lo cita per nome, nei `.md` **e nei
-commenti del codice**, perché la prima falsità del censimento stava dentro
-`guard.rs`. Le due direzioni tutte e due le volte: un numero che cambia nel
-codice è rosso, e una voce che nessuno cita più è rossa anche lei. Il secondo
-controllo è la sesta specie letta al contrario — una frase che dice «presidiato
-da X» deve nominare un `fn` o un file di test che esiste — e il terzo è il
-bersaglio meccanico: `check-doc-links.mjs` legge il `:N` e chiede che a quella
-riga ci sia ancora il nome che la voce scrive lì accanto.
+Il formato è implementato. Lo script `.github/scripts/conteggi.mjs` memorizza **i comandi e non i valori** (un nome, un comando di calcolo, uno scopo).
+Lo script `check-prosa.mjs` verifica ogni citazione nei `.md` **e nei commenti del codice**.
+Tre controlli:
+- Numeri o voci false generano errori (entrambe le direzioni).
+- Regola inversa (sesta specie): il «presidiato da X» deve nominare un `fn` o un file di test che esiste — e `X` è tracciabile meccanicamente.
+- Bersaglio meccanico: `check-doc-links.mjs` valida il numero `:N`.
 
-Cosa ha trovato accendendosi, che è la misura di quanto la famiglia fosse fitta:
-gli `SCHEMA_VERSION` su disco dichiarati **sette** e sono otto — il numero il cui
-errore non si annulla, di nuovo lui; i messaggi alla console della shell dati per
-quattordici e risaliti a **sedici**, cioè un numero che deve scendere e che
-nessuno guardava salire; le righe di commento di `abi.wit` ferme a 1683 su 3386
-quando sono 1758 su 3502; `safety::notifying` che non esiste e non è mai esistito
-sotto quel nome; e i numeri di riga stantii, stimati **quindici** e contati
-**cinquantuno** — di cui 49 riparati leggendo il numero che il presidio stesso
-stampava, e due che erano la specie senza riparazione meccanica.
+Rilevamenti all'accensione:
+- Valori `SCHEMA_VERSION` passati da sette a **otto** (il numero il cui errore non si annulla).
+- Errori in console aumentati da quindici a **sedici** (numero che doveva calare).
+- Commenti in `abi.wit` registrati come 1683 su 3386. I valori reali sono 1758 su 3502.
+- `safety::notifying`, che non esiste e non è mai esistito sotto quel nome.
+- Numeri di riga stantii: stimati a **quindici** ma registrati a **cinquantuno** (49 riparati dal presidio, due senza meccanismo automatico).
 
-Tre cose che il disegno ha deciso e che non vanno ridiscusse senza motivo stanno
-nel verbale: il registro tiene i comandi perché un valore scritto a mano
-tornerebbe falso al giro dopo; il numero sta sulla **stessa riga**
-dell'annotazione, e il presidio l'ha subito dimostrato segnalando tre
-annotazioni andate a capo mentre le si scriveva; e **un verbale non si
-presidia**, perché è prosa datata — è la sola regola sotto cui la 0053 e la 0060
-possono raccontare un nome che è cambiato.
+Tre decisioni consolidate per il verbale:
+- Il registro gestisce i comandi, non i valori.
+- Il numero richiede l'annotazione sulla **stessa riga** (previene tre annotazioni sfasate in diretta).
+- **Un verbale non si presidia**. Protegge l'obsolescenza della 0053 e della 0060.
 
-Resta fuori, con la sua ragione, la seconda metà: gli **elenchi che rimandano**.
-Una riga di [strozzature.md](strozzature.md) invecchia quando qualcosa si chiude
-altrove, e il giudizio che porta non è un conteggio — il presidio giusto chiede
-prima di decidere cosa significhi «chiusa» per una strozzatura. E resta fuori il
-numero di questa riga qui sotto, che **non** è entrato nel registro: dipende
-anche da cosa c'è nell'albero di lavoro, e un numero che cambia per un `.md` non
-tracciato in radice non è una promessa che valga la pena presidiare. Quel numero
-continua a vivere in una riga sola, la casella del §16.7 qui sopra, che lo tiene
-insieme all'elenco delle volte in cui è stato falso — ed è l'unico posto del repo
-in cui una famiglia di prosa falsa si racconta da sé. Il controllo dice anche
-quanti dei suoi link portano un numero di riga e quanti di quelli non hanno un
-nome accanto da cercare: quei secondi il presidio li **dice**, invece di far
-finta di averli guardati.
+Elementi esclusi:
+- La seconda metà: gli **elenchi che rimandano** (es. [strozzature.md](strozzature.md)). Definire "chiusa" esige l'intervento umano, non calcoli meccanici.
+- Il numero del log del §16.7. Manca dal registro a causa della fluttuazione sui cloni (`.md` locali). Rimane l'unica prova autogenerata della decadenza della prosa. Il presidio quantifica quanti link hanno il numero di riga e quanti dei secondi possiedono l'ancoraggio.
 
-*Sblocca:* 27.4 (plugin sandbox test, security test, upgrade migration test),
-27.3 (plugin linting, test utilities), 20.3 (permission revocation, crash
-isolation).
+*Sblocca:* 27.4 (plugin sandbox test, security test, upgrade migration test), 27.3 (plugin linting, test utilities), 20.3 (permission revocation, crash isolation).

@@ -1,26 +1,33 @@
 # Confine dei plugin: `Plugin`, `HostApi`, capability
 
 Il **confine di fiducia** fra il core e un plugin — nativo (M4) o WASM (M5). Il
-kernel vede `dyn Trait` e non distingue un backend dall'altro; la differenza è
-nel *come* le chiamate attraversano il confine e in *quali capacità* il core
-concede.
+kernel vede `dyn Trait` e non distingue un backend dall'altro. La differenza sta
+in due cose sole:
+
+- *come* le chiamate attraversano il confine;
+- *quali capacità* il core concede.
 
 Torna a [../PIANO.md](../PIANO.md) · vedi [traits.md](traits.md).
 
 ## `HostApi`: l'unico varco
 
 Un plugin non tocca mai il filesystem o il bus direttamente: passa da `HostApi`
-(firma in [traits.md](traits.md)). Questo dà **un solo punto** in cui applicare i
+(firma in [traits.md](traits.md)). Così c'è **un solo punto** in cui applicare i
 permessi.
 
 Dalla [decisione 0021](../decisions/0021-il-confine.md) l'`HostApi` è la **somma
-di famiglie** — quattordici dal §11.2, al confine WIT altrettante `interface`
-importate una per una dal `plugin-world` — e il punto di applicazione esiste
-davvero: il kernel tiene un
-[registro dei plugin](../../crates/fub-kernel/src/plugins.rs) con manifest,
-permessi e grado di fiducia, e ogni host nasce dentro un `Guard<H, P: Policy>`
-che nega ciò che la politica del suo plugin non concede. Prima
-`PluginPermissions` esisteva nel contratto e non lo leggeva nessuno.
+di famiglie**: quattordici dal §11.2, e al confine WIT altrettante `interface`,
+importate una per una dal `plugin-world`.
+
+Il punto di applicazione esiste davvero, non è una promessa:
+
+- il kernel tiene un [registro dei
+  plugin](../../crates/fub-kernel/src/plugins.rs) con manifest, permessi e grado
+  di fiducia;
+- ogni host nasce dentro un `Guard<H, P: Policy>` che nega ciò che la politica
+  del suo plugin non concede.
+
+Prima `PluginPermissions` esisteva nel contratto e non lo leggeva nessuno.
 
 Ne segue la regola di montaggio: **chi registra qualcosa si dichiara prima**
 (`register_plugin`). Un id non dichiarato non è un plugin creato al volo: è un
@@ -48,23 +55,32 @@ sceglie il proprio recinto non è dentro a un recinto. Verifica in
 
 `storage_get/set` — chiave → JSON, volatile — **è stato tolto** dal contratto con
 la [decisione 0013](../decisions/0013-elenco-delle-capacita.md), ritagliando la
-linea di base (`crates/fub-abi/wit/frozen/0.1.0.wit`): è la sola rottura di
-quel giro. Con `data_*` da una parte e le impostazioni del §11.1 dall'altra non
-gli restava un caso d'uso, e «ricordare qualcosa per la durata della sessione» il
-chiamante lo aveva già risolto senza saperlo — un provider è un **oggetto vivo**
-nel workspace, e a M5 un componente WASM ha la propria memoria lineare.
+linea di base (`crates/fub-abi/wit/frozen/0.1.0.wit`). È la sola rottura di quel
+giro, e i motivi sono due:
+
+- con `data_*` da una parte e le impostazioni del §11.1 dall'altra, non gli
+  restava un caso d'uso;
+- «ricordare qualcosa per la durata della sessione» il chiamante lo aveva già
+  risolto senza saperlo — un provider è un **oggetto vivo** nel workspace, e a M5
+  un componente WASM ha la propria memoria lineare.
 
 **Lo stato per-documento ha un posto dichiarato**
 ([decisione 0044](../decisions/0044-lo-stato-per-documento.md)):
 `doc/<documento codificato>/<nome>`, con la convenzione e il suo inverso in
-[`fub_abi::rules::doc_data`](../../crates/fub-abi/src/rules/doc_data.rs). Non
-è una capacità in più: è `data_*` con un prefisso che il **kernel riconosce**, e
-riconoscendolo lo migra al rename e lo raccoglie quando la nota non è più né nel
-vault né nel cestino. Chi ci mette qualcosa smette di doversi migrare la chiave
-da sé — cioè smette di avere il buco che tutte le copie di quel rito avevano: chi
-ascolta `DocumentRenamed` non sente ciò che è successo mentre non c'era. Regola:
-**sotto `doc/` sta ciò che non ha senso senza il documento**; ciò che deve
-sopravvivergli (i tombstone del versioning) sta fuori.
+[`fub_abi::rules::doc_data`](../../crates/fub-abi/src/rules/doc_data.rs).
+
+Non è una capacità in più. È `data_*` con un prefisso che il **kernel
+riconosce**, e riconoscendolo fa due cose da sé:
+
+- lo migra quando il documento viene rinominato;
+- lo raccoglie quando la nota non è più né nel vault né nel cestino.
+
+Chi ci mette qualcosa smette di doversi migrare la chiave da sé, cioè smette di
+avere il buco che tutte le copie di quel rito avevano: chi ascolta
+`DocumentRenamed` non sente ciò che è successo mentre non c'era.
+
+Regola: **sotto `doc/` sta ciò che non ha senso senza il documento**. Ciò che
+deve sopravvivergli — i tombstone del versioning — sta fuori.
 
 **La configurazione è un'altra cosa** ([decisione 0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)):
 `setting` / `set_setting` / `reset_setting`. Le chiavi le **dichiara un
@@ -72,13 +88,18 @@ manifest** (non se le inventa chi scrive), il valore lo decide l'utente (non il
 plugin), il file è leggibile a mano, e ciò che il file contiene senza che nessuno
 lo dichiari resta lì senza essere letto.
 
-**I due cancelli della scrittura**, ed è la parte che riguarda il confine: il
-permesso `fub:write-settings` dice *chi* può scrivere,
-`SettingSpec.program_writable` dice *cosa* si può scrivere — con `false` come
-default, per la stessa regola di `Trust::default`. La seconda esiste perché il
-divieto che conta (privacy e AI non si spostano da sole) non dipende da chi
-chiede. La persona davanti allo schermo passa da un'altra porta — la shell scrive
-sul workspace — ed è la distinzione dell'origine
+**I due cancelli della scrittura**, ed è la parte che riguarda il confine:
+
+| Cancello | Risponde a | Default |
+|---|---|---|
+| il permesso `fub:write-settings` | *chi* può scrivere | — |
+| `SettingSpec.program_writable` | *cosa* si può scrivere | `false`, per la stessa regola di `Trust::default` |
+
+Il secondo esiste perché il divieto che conta — privacy e AI non si spostano da
+sole — non dipende da chi chiede.
+
+La persona davanti allo schermo passa da un'altra porta: la shell scrive sul
+workspace. È la distinzione dell'origine
 ([0012](../decisions/0012-origine-degli-eventi.md)) applicata alla
 configurazione.
 
@@ -88,17 +109,23 @@ sua.
 
 **Perché blob e non un'API filesystem scoped.** Un filesystem scoped chiede al
 plugin di comporre path e all'host di verificarli: il recinto diventa una
-convenzione. Con i blob il plugin non ha mai in mano un path del filesystem, non
-sa dove sia la radice del vault e non può nominare niente che stia fuori — path
-assoluti, `..` e separatori di sistema sono `PermissionDenied`. Il recinto è una
-proprietà della firma.
+convenzione. Con i blob, invece:
+
+- il plugin non ha mai in mano un path del filesystem;
+- non sa dove sia la radice del vault;
+- non può nominare niente che stia fuori — path assoluti, `..` e separatori di
+  sistema sono `PermissionDenied`.
+
+Il recinto è una proprietà della firma.
 
 **L'unica eccezione, e sta fuori dal contratto.** Un provider **nativo** che
 avvolge un motore con un proprio formato su disco non può passare da `data_*`:
 tantivy mmappa i propri segmenti e li rilegge quando gli pare, anche dai thread
-di merge. Per questi c'è `Workspace::plugin_data_dir(id)`, che restituisce **la
-stessa cartella** del recinto come path del filesystem. È un metodo del workspace
-e non una capacità dell'`HostApi`, deliberatamente: così un plugin WASM non ce
+di merge.
+
+Per questi c'è `Workspace::plugin_data_dir(id)`, che restituisce **la stessa
+cartella** del recinto, ma come path del filesystem. È un metodo del workspace e
+non una capacità dell'`HostApi`, deliberatamente: così un plugin WASM non ce
 l'ha. A M5 l'equivalente per un componente è un preopen WASI sulla stessa radice.
 
 **Perché esiste.** Lo ha chiesto il dogfooding del versioning, che è un
@@ -147,27 +174,36 @@ provider **condivisi** (`Arc`) invece che estratti dal workspace per la durata
 della chiamata: un comando che invoca deve trovare gli altri comandi, compresi
 quelli del proprio provider.
 
-**Dove sta il permesso.** `PluginPermissions` porta `fub:write-vault` e **non
-lo legge nessuno** — non per dimenticanza: questo kernel non ha plugin, ha
-provider registrati per id, e `Plugin::manifest()` non viene mai chiamata perché
-non c'è niente che installi, abiliti o verifichi. Applicare `write_vault` oggi
-vorrebbe dire inventare il registro che tiene i manifest, cioè il §7.3 e M5. Il
-varco però esiste già ([0010](../decisions/0010-comando-descritto-a-una-macchina.md)):
-un comando in **sola lettura** o **simulato** riceve un host che nega con un
-errore che dice perché — e nega più delle strutturali: le famiglie che `ReadOnly`
-rifiuta sono **sette** (`VaultWrite`, `VaultStructure`, `DataWrite`,
-`SettingsWrite`, `ViewStateWrite`, `Events`, `Services`), cioè anche la
-configurazione, lo stato di vista, i propri blob, i job e i servizi di terzi, che
-strutturali non sono in nessun senso. Il presidio è
-`crates/fub-kernel/tests/invoke_command.rs`,
-`every_structural_capability_is_refused_by_the_same_gate`, e dalla
+**Dove sta il permesso.** `PluginPermissions` porta `fub:write-vault` e **non lo
+legge nessuno**. Non è una dimenticanza:
+
+- questo kernel non ha plugin, ha provider registrati per id;
+- `Plugin::manifest()` non viene mai chiamata, perché non c'è niente che
+  installi, abiliti o verifichi;
+- applicare `write_vault` oggi vorrebbe dire inventare il registro che tiene i
+  manifest, cioè il §7.3 e M5.
+
+Il varco però esiste già
+([0010](../decisions/0010-comando-descritto-a-una-macchina.md)). Un comando in
+**sola lettura** o **simulato** riceve un host che nega, con un errore che dice
+perché. E nega più delle strutturali: le famiglie che `ReadOnly` rifiuta sono
+**sette** — `VaultWrite`, `VaultStructure`, `DataWrite`, `SettingsWrite`,
+`ViewStateWrite`, `Events`, `Services` — cioè anche la configurazione, lo stato
+di vista, i propri blob, i job e i servizi di terzi, che strutturali non sono in
+nessun senso.
+
+Il presidio è `every_structural_capability_is_refused_by_the_same_gate`, in
+`crates/fub-kernel/tests/invoke_command.rs`. Dalla
 [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) l'insieme atteso lo
-**calcola** da `Capability::ALL` invece di elencarlo — quindi una famiglia negata
-che nessuno prova è rossa. *(Questa riga diceva «tutte e sei le strutturali»: il
-numero era sbagliato — i metodi di `VaultStructure` sono cinque [conta: capacita-strutturali] — e la portata lo
-era di più, perché nominava una famiglia sola su sette.)* Il giorno che
-`write_vault` diventerà vincolante non dovrà costruire il rifiuto: dovrà
-aggiungere una seconda ragione per negare.
+**calcola** da `Capability::ALL` invece di elencarlo: così una famiglia negata
+che nessuno prova diventa rossa.
+
+*(Questa riga diceva «tutte e sei le strutturali». Il numero era sbagliato — i
+metodi di `VaultStructure` sono cinque [conta: capacita-strutturali] — e la
+portata lo era di più, perché nominava una famiglia sola su sette.)*
+
+Il giorno che `write_vault` diventerà vincolante non dovrà costruire il rifiuto:
+dovrà aggiungere una seconda ragione per negare.
 
 ### Interrogazione, contesto, struttura
 
@@ -200,61 +236,73 @@ Quattro capacità aggiunte prima del freeze; la semantica di ognuna sta in
 
 ### La regola dello span
 
-Una selezione porta il **testo** sempre; le **coordinate** solo quando valgono
-anche per il sorgente che il kernel ha in mano — cioè a buffer pulito. Non è
-prudenza: è l'unico modo di rendere impossibile l'errore che il contratto
-altrimenti inviterebbe a fare — leggere il documento con `read_document` e
-ritagliarlo con offset calcolati su un altro testo, cioè tagliare i byte
-sbagliati **proprio mentre l'utente scrive**.
+Una selezione porta sempre il **testo**. Porta le **coordinate** solo a buffer
+pulito, cioè quando valgono anche per il sorgente che il kernel ha in mano.
 
-Dove sta quella scelta lo dice la
-[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md): **sopra
-l'insieme**, non dentro le singole selezioni. `SelectionSet` è `Anchored` o
-`Floating`, perché a decidere è lo stato del **buffer**, che è uno per pannello:
-con più cursori le selezioni sono N e non possono cadere una alla volta. Nel
-caso ancorato lo `span` non è facoltativo — un insieme metà posizionato e metà
-no non è rappresentabile, ed è il punto: un provider che agisse solo sulle
-posizionate agirebbe su due dei tre punti che l'utente vede.
+Non è prudenza: senza questa regola il contratto inviterebbe a un errore preciso
+— leggere il documento con `read_document`, ritagliarlo con offset calcolati su
+un altro testo, e tagliare i byte sbagliati **proprio mentre l'utente scrive**.
 
-La stessa invariante è tenuta dal kernel dall'altro lato: quando il sorgente
-sotto la selezione cambia, viene rinominato o sparisce, la selezione **cade**
+Quella scelta sta **sopra l'insieme** e non dentro le singole selezioni, e lo
+dice la [0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md):
+
+- `SelectionSet` è `Anchored` o `Floating`, perché a decidere è lo stato del
+  **buffer**, che è uno per pannello;
+- con più cursori le selezioni sono N, e non possono cadere una alla volta;
+- nel caso ancorato lo `span` non è facoltativo. Un insieme metà posizionato e
+  metà no non è rappresentabile, ed è il punto: un provider che agisse solo
+  sulle posizionate agirebbe su due dei tre punti che l'utente vede.
+
+Dall'altro lato la stessa invariante la tiene il kernel. Quando il sorgente sotto
+la selezione cambia, viene rinominato o sparisce, la selezione **cade**
 (`Session::invalidate`, in `kernel/src/session.rs`). Uno span stantio è peggio di
-uno span assente. La shell ne ripubblica uno vero al salvataggio successivo.
+uno span assente; la shell ne ripubblica uno vero al salvataggio successivo.
 
 ### Chi si ridisegna, e quando
 
-`ViewSpec` dichiara due maschere: `refresh: EventMask` per gli eventi del
-**vault**, `follows: ContextMask` per le parti del contesto di **sessione**
-(documento, selezione, modalità). Il contesto non passa dall'event bus di
-proposito: un cursore che si muove non è un fatto del vault, e farlo passare di
-là significherebbe consegnare ogni battuta di tasto a ogni handler registrato.
+`ViewSpec` dichiara due maschere:
 
-`Workspace::set_active_context` restituisce **gli id delle view da ridisegnare**
-— quelle la cui `follows` interseca ciò che è cambiato. Il conto sta nel kernel e
-non nella shell perché la risposta non deve dipendere da chi la calcola: a M5 un
-host diverso avrà la stessa regola. La shell resta padrona del *quando* e ignara
-del *chi*.
+| Maschera | Guarda | Esempi |
+|---|---|---|
+| `refresh: EventMask` | gli eventi del **vault** | una nota scritta, un indice aggiornato |
+| `follows: ContextMask` | il contesto di **sessione** | documento, selezione, modalità |
 
-Il giro completo di una view passa tutto dal contratto: la shell pubblica il
-contesto → chiama `render_view` sulle view che il kernel le indica → il provider
-chiede contesto e dati all'host → un click torna come `on_action` e il provider
-risponde con un `ViewUpdate`, che la shell esegue. Prove end-to-end:
-`crates/fub-features/tests/backlinks_view_e2e.rs` (il giro base),
-`outline_view_e2e.rs` (il cursore che arriva alla view) e `stats_view_e2e.rs` (il
-testo selezionato che vale anche a buffer sporco).
+Il contesto non passa dall'event bus, ed è deliberato: un cursore che si muove
+non è un fatto del vault, e passare di là vorrebbe dire consegnare ogni battuta
+di tasto a ogni handler registrato.
+
+`Workspace::set_active_context` restituisce **gli id delle view da ridisegnare**,
+cioè quelle la cui `follows` interseca ciò che è cambiato. Il conto sta nel
+kernel e non nella shell perché la risposta non deve dipendere da chi la calcola:
+a M5 un host diverso avrà la stessa regola. La shell decide il *quando* e ignora
+il *chi*.
+
+Il giro completo di una view passa tutto dal contratto:
+
+1. la shell pubblica il contesto;
+2. chiama `render_view` sulle view che il kernel le indica;
+3. il provider chiede contesto e dati all'host;
+4. un click torna come `on_action`, il provider risponde con un `ViewUpdate`, e
+   la shell lo esegue.
+
+Prove end-to-end: `crates/fub-features/tests/backlinks_view_e2e.rs` (il giro
+base), `outline_view_e2e.rs` (il cursore che arriva alla view) e
+`stats_view_e2e.rs` (il testo selezionato che vale anche a buffer sporco).
 
 ## Il lotto e l'origine
 
-Un `EventHandler` non riceve un `Event` nudo ma un **`Notice { event, origin }`**,
-e `Origin { actor, batch }` risponde alle due domande che il confine non sapeva
-porre.
+Un `EventHandler` non riceve un `Event` nudo ma un
+**`Notice { event, origin }`**. `Origin { actor, batch }` risponde alle due domande che il confine non sapeva
+porre: chi ha chiesto, e di quale lotto fa parte.
 
 **Chi ha chiesto** — `Actor { User, Watcher, Kernel, Plugin { id } }`. È *chi ha
 chiesto*, non chi ha eseguito: un comando invocato da un'automazione scrive con
-l'origine dell'automazione. La difficoltà che risolve è concreta: un'automazione
-su-modifica **che scrive** si richiama da sola, e prima di questo campo l'unica
-difesa era il budget del dispatch, che tronca — cioè una rete di sicurezza al
-posto di una semantica. La forma di quella difesa è una riga:
+l'origine dell'automazione.
+
+Il problema che risolve è concreto. Un'automazione su-modifica **che scrive** si
+richiama da sola, e prima di questo campo l'unica difesa era il budget del
+dispatch, che tronca — cioè una rete di sicurezza al posto di una semantica. La
+difesa vera è una riga:
 
 ```rust
 fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
@@ -265,38 +313,46 @@ fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), Plug
 }
 ```
 
-Riconoscerle dal **contenuto** non è equivalente: funziona finché la scrittura
+Riconoscerle dal **contenuto** non è equivalente. Funziona finché la scrittura
 cambia il proprio innesco, e smette di funzionare proprio nel caso normale di
-un'automazione che appende (un diario, un log, un sommario), dove ogni scrittura
+un'automazione che appende — un diario, un log, un sommario — dove ogni scrittura
 è diversa dalla precedente.
 
 **Di quale lotto fa parte** — `batch: Option<BatchId>`
 ([decisione 0011](../decisions/0011-il-lotto.md)). Un lotto è uno scope del
-kernel dentro cui N scritture sono *una* cosa (il caso vero: una rinomina con 200
-backlink). Cosa succede dentro un lotto — `IndexUpdated` coalizzato in un
+kernel dentro cui N scritture sono *una* cosa; il caso vero è una rinomina con
+200 backlink. Cosa succede dentro un lotto — `IndexUpdated` coalizzato in un
 `BatchEnded`, dispatch rimandato alla chiusura, e la regola *chi dichiara
 `IndexUpdated` dichiara anche `BatchEnded`* — sta in [traits.md](traits.md),
-`EventHandler`. Le due proprietà che riguardano il **confine**:
+`EventHandler`.
 
-- **Un plugin non apre un lotto**: uno scope a chiusura garantita non attraversa
-  il confine dei componenti, e un lotto lasciato aperto da un'istanza morta
-  terrebbe sospesi gli eventi del vault per sempre. Il lotto di un plugin è la
-  sua **invocazione di comando**, che l'host apre e chiude per lui.
-- **Un lotto non è una transazione.** Se una scrittura fallisce, le altre restano
-  fatte, e chi lo ha aperto lo scopre dal proprio valore di ritorno. Il
-  tutto-o-niente vuole il journal del §15.2 — che dalla
-  [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md) **c'è**, e tiene
-  di ogni operazione i confini, l'origine e il tempo: a mancare adesso è chi lo
-  ripercorre, non il posto. L'informazione, però, non basta per tutto e lo
-  dichiara: dalla
+Al **confine** riguardano due proprietà.
+
+**Un plugin non apre un lotto.** Uno scope a chiusura garantita non attraversa il
+confine dei componenti, e un lotto lasciato aperto da un'istanza morta terrebbe
+sospesi gli eventi del vault per sempre. Il lotto di un plugin è la sua
+**invocazione di comando**, che l'host apre e chiude per lui.
+
+**Un lotto non è una transazione.** Se una scrittura fallisce, le altre restano
+fatte, e chi lo ha aperto lo scopre dal proprio valore di ritorno. Il
+tutto-o-niente vuole il journal del §15.2, e lì la situazione è questa:
+
+- il posto **c'è**, dalla
+  [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md): di ogni
+  operazione tiene i confini, l'origine e il tempo. A mancare è chi lo
+  ripercorre;
+- l'informazione non basta per tutto, e lo dichiara. Dalla
   [0103](../decisions/0103-un-registro-dice-cosa-e-successo.md) una modifica
   chirurgica ci lascia l'**impronta** — dove ha toccato e quanti byte — e non il
-  testo sostituito, quindi un rollback costruito su questo file rimetterà i nomi
-  al loro posto e ripescherà dal cestino, e **non** disferà gli edit. Era già
-  così per i salvataggi, che un inverso non l'hanno mai avuto; adesso è così in
-  modo uniforme, e `JournalOp::is_invertible` lo risponde invece di lasciarlo
-  scoprire applicando. Prometterlo qui con un nome (`transaction`, `rollback`) lo
-  farebbe comunque credere a chi legge solo la firma.
+  testo sostituito;
+- quindi un rollback costruito su questo file rimetterà i nomi al loro posto e
+  ripescherà dal cestino, e **non** disferà gli edit. Era già così per i
+  salvataggi, che un inverso non l'hanno mai avuto: adesso è così in modo
+  uniforme, e `JournalOp::is_invertible` lo risponde invece di lasciarlo scoprire
+  applicando.
+
+Per questo qui non compaiono i nomi `transaction` e `rollback`: chi legge solo la
+firma ci crederebbe.
 
 Prove: `crates/fub-kernel/tests/batch_and_origin.rs` (incluso il confronto fra
 un'automazione che si difende con l'origine e la stessa che non lo fa),
@@ -320,31 +376,35 @@ quale, due modifiche concorrenti — un'automazione e l'utente che scrive — si
 cancellano a vicenda senza che nessuna delle due lo sappia.
 
 La `Revision` è **opaca**: solo l'uguaglianza è contratto. Non è un numero
-d'ordine, e come l'host la derivi (impronta del contenuto, digest, `mtime+size`)
-non è promesso a nessuno — la si chiede con `document_revision`. Questo host usa
-l'impronta del contenuto, e la scelta si vede in un caso vero: chi scrive un
+d'ordine, e come l'host la derivi — impronta del contenuto, digest, `mtime+size`
+— non è promesso a nessuno: la si chiede con `document_revision`. Questo host usa
+l'impronta del contenuto, e la scelta si vede in un caso vero. Chi scrive un
 carattere e lo cancella riporta il documento al testo di prima, e un edit
 calcolato allora è ancora valido; un contatore direbbe di no.
 
-Gli span della richiesta sono in byte del sorgente della base — mai del testo in
+Gli span della richiesta sono in byte del sorgente della base, mai del testo in
 corso di produzione: chi calcola gli edit li elenca e basta, l'host li ordina e
-li applica in un colpo solo. Ciò che non sta in piedi (fuori dal sorgente, a metà
-di un carattere, sovrapposti, due nello stesso punto) è `BadArgs`, e non lascia
-mai un documento modificato a metà.
+li applica in un colpo solo. Ciò che non sta in piedi — fuori dal sorgente, a
+metà di un carattere, sovrapposti, due nello stesso punto — è `BadArgs`, e non
+lascia mai un documento modificato a metà.
 
-Il rapporto (`EditReport { revision, applied }`) torna nelle coordinate del testo
-**nuovo** e porta ciò che è stato sostituito: con quei due pezzi si mette il
-cursore dove l'utente se lo aspetta (16.1) e si costruisce l'edit **inverso**
-(`EditReport::inverse`). Di chi sia la proprietà dell'undo l'ha deciso la
+Il rapporto è `EditReport { revision, applied }`. Torna nelle coordinate del
+testo **nuovo** e porta ciò che è stato sostituito, e con quei due pezzi si fanno
+due cose:
+
+- si mette il cursore dove l'utente se lo aspetta (16.1);
+- si costruisce l'edit **inverso** (`EditReport::inverse`).
+
+Di chi sia la proprietà dell'undo l'ha deciso la
 [0045](../decisions/0045-l-undo-ha-due-pile.md): le pile sono **due** e non si
 fondono — il testo nell'editor, le operazioni nel kernel. Questa è la forma con
 cui la seconda esprime i propri passi testuali (`UndoStep::Edit`); l'inverso di
 un cambiamento **strutturale** ha avuto bisogno di una forma nuova, un comando e
 non un vocabolario.
 
-Il primo cliente è il kernel stesso: la riscrittura dei wikilink su rename
+Il primo cliente è il kernel stesso. La riscrittura dei wikilink su rename
 (`Workspace::rename_document`) applica un `EditRequest` per sorgente invece di
-riscrivere N file interi — quindi una nota che qualcun altro ha toccato fra il
+riscrivere N file interi, quindi una nota che qualcun altro ha toccato fra il
 calcolo del piano e la sua applicazione non viene più sovrascritta.
 
 ## Invocare un comando: cosa l'host fa rispettare
@@ -355,8 +415,8 @@ palette, la tastiera, una macro (16.2), la CLI (27.1), l'API locale (27.2), il
 centro di comando LLM (22.4). Da qui in poi una feature nuova non aggiunge un
 comando Tauri: aggiunge una riga a un `CommandProvider`.
 
-La parte che riguarda questo documento è cosa il confine **garantisce** a chi
-invoca senza aver letto il codice del comando:
+Qui interessa cosa il confine **garantisce** a chi invoca senza aver letto il
+codice del comando:
 
 | Chi invoca dichiara | Chi implementa dichiara | Cosa gli presta l'host |
 |---|---|---|
@@ -364,7 +424,7 @@ invoca senza aver letto il codice del comando:
 | `InvokeMode::Apply` | `scope.writes: false` | host in **sola lettura**: ogni scrittura è `PermissionDenied` |
 | `InvokeMode::DryRun` | qualunque cosa | host in **sola lettura** |
 
-Due conseguenze, ed è per esse che la tabella esiste:
+La tabella esiste per due conseguenze.
 
 - **La simulazione è un modo di invocare, non una cortesia di chi implementa.**
   Un dry-run che dipendesse dalla buona volontà del comando sarebbe una
@@ -373,15 +433,15 @@ Due conseguenze, ed è per esse che la tabella esiste:
 - **Dichiararsi innocuo è vincolante.** `writes: false` non è una decorazione da
   mostrare nella palette: chi lo dichiara riceve un host che rifiuta.
 
-Gli **argomenti** sono l'altra metà: l'host li convalida contro la `CommandSpec`
+Gli **argomenti** sono l'altra metà. L'host li convalida contro la `CommandSpec`
 prima di chiamare (`validate_args`), quindi un comando non si difende da solo e
-chi sbaglia riceve un `BadArgs` che dice *cosa* manca. Un argomento non dichiarato
-è un errore e non un argomento ignorato.
+chi sbaglia riceve un `BadArgs` che dice *cosa* manca. Un argomento non
+dichiarato è un errore, non un argomento ignorato.
 
 **Chi invoca dice anche chi è**, e l'host apre un lotto:
 `invoke_command(command, args, mode, by: Actor)`. `vault.replace` su 40 note
 emette un `batch-ended` solo, e ogni evento che ne nasce porta `by` come attore.
-Il parametro non ha un default per la stessa ragione per cui non ce l'ha
+Il parametro non ha un default, per la stessa ragione per cui non ce l'ha
 `InvokeMode`. Sul confine Tauri l'attore è fissato a `User` invece di essere un
 parametro dell'IPC: da lì passa la webview, e un chiamante che potesse firmarsi
 come vuole avrebbe aggirato quella difesa dall'altra parte.
@@ -393,9 +453,12 @@ sarebbe una policy nascosta in un'implementazione, e le policy hanno un posto
 
 ### Il consenso non è una capacità
 
-`PluginPermissions` (§7.3) risponde a «questo componente *può*, in generale?».
-22.4 chiede un'altra cosa: «l'utente approva **questa** esecuzione, su **queste**
-40 note?». La risposta di Fub è il giro **dry-run → piano → approvazione →
+Sono due domande diverse:
+
+- `PluginPermissions` (§7.3) risponde a «questo componente *può*, in generale?»;
+- 22.4 chiede «l'utente approva **questa** esecuzione, su **queste** 40 note?».
+
+La risposta di Fub alla seconda è il giro **dry-run → piano → approvazione →
 apply**, e non una capacità `HostApi::confirm`. Due ragioni:
 
 1. **Un host non può fermarsi a chiedere.** Il kernel è chiamato *dalla* shell e
@@ -406,21 +469,21 @@ apply**, e non una capacità `HostApi::confirm`. Due ragioni:
    comando *sceglie* di dire; un `CommandPlan` mostra i documenti impattati e gli
    edit proposti, e li mostra prima. È la differenza fra «sei sicuro?» e il diff.
 
-*Quando* chiedere lo decide chi invoca, dal `CommandScope` dichiarato: la shell
-mostra il piano quando un comando scrive su più di una nota o si dichiara non
-reversibile (`needsPlan` in `frontend/src/ui/palette.ts`). Una CLI in uno script
-può avere un'altra politica sullo stesso dato — è per questo che il raggio sta
-nella spec e la politica no.
+*Quando* chiedere lo decide chi invoca, a partire dal `CommandScope` dichiarato:
+la shell mostra il piano quando un comando scrive su più di una nota o si
+dichiara non reversibile (`needsPlan` in `frontend/src/ui/palette.ts`). Una CLI in uno
+script può avere un'altra politica sullo stesso dato, ed è per questo che il
+raggio sta nella spec e la politica no.
 
-Resta fuori, dichiarato: l'**attribuzione** (chi ha chiesto l'operazione: utente,
-comando, modello, prompt) è l'origine degli eventi
+Resta fuori, dichiarato: l'**attribuzione** — chi ha chiesto l'operazione:
+utente, comando, modello, prompt — è l'origine degli eventi
 ([0012](../decisions/0012-origine-degli-eventi.md)) applicata al lotto
 ([0011](../decisions/0011-il-lotto.md)).
 
 ## Import ed export: il confine è di byte, non di path
 
 Il capitolo 17 di FEATURES (~120 voci) è, in ogni altra applicazione, quello che
-il filesystem lo tocca più di tutti. Qui **nessuna delle due firme nomina un
+tocca il filesystem più di tutti. Qui **nessuna delle due firme nomina un
 percorso**:
 
 - `ImportProvider::import(source, request, host)` riceve
@@ -433,23 +496,27 @@ percorso**:
   posto **dentro l'esito** (un albero relativo), non sul disco.
 
 Il `content` è la sola cosa cambiata dalla
-[0102](../decisions/0102-i-byte-non-stanno-nel-record.md): i byte possono stare
-nel record (`SourceContent::Bytes`, il caso comune) **oppure** restare dall'host
-dietro una chiave che solo lui risolve — `read_source(handle, offset, len)`, che
-è posizionale perché la directory di un archivio sta in fondo. Un handle non si
-costruisce, si riceve, e nomina la sorgente che l'utente ha appena scelto: è la
-stessa forma di questo capitolo — chi apre e chi legge resta l'host — applicata
-al *contenuto* invece che al *percorso*.
+[0102](../decisions/0102-i-byte-non-stanno-nel-record.md). I byte possono stare
+in due posti:
+
+- nel record — `SourceContent::Bytes`, il caso comune;
+- dall'host, dietro una chiave che solo lui risolve, posizionale perché la
+  directory di un archivio sta in fondo:
+  `read_source(handle, offset, len)`.
+
+Un handle non si costruisce, si riceve, e nomina la sorgente che l'utente ha
+appena scelto. È la stessa forma di questo capitolo — chi apre e chi legge resta
+l'host — applicata al *contenuto* invece che al *percorso*.
 
 Chi apre il dialogo di sistema e chi posa i byte è **l'host**, che è già l'unico
-a sapere dove sia il vault. La conseguenza è che import ed export non chiedono
-nessuna capacità nuova oltre a `free_name`, e che a M5 la sandbox **non deve
-concedere niente**: la riga «Filesystem: nessun accesso diretto» resta vera senza
-eccezioni.
+a sapere dove sia il vault. Ne seguono due cose: import ed export non chiedono
+nessuna capacità nuova oltre a `free_name`, e a M5 la sandbox **non deve
+concedere niente** — la riga «Filesystem: nessun accesso diretto» resta vera
+senza eccezioni.
 
-Il prezzo che la [0006](../decisions/0006-import-export-come-trait.md)
-dichiarava — *sorgente e artefatti stanno in memoria* — era scusato da una
-condizione che è **scaduta**: valeva «finché un job non vede il vault», e dalla
+La [0006](../decisions/0006-import-export-come-trait.md) dichiarava un prezzo:
+*sorgente e artefatti stanno in memoria*. Era scusato da una condizione
+**scaduta** — valeva «finché un job non vede il vault», e dalla
 [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md) il lavoro lungo il
 vault lo vede. La 0102 l'ha pagato senza toccare questa pagina nella sostanza:
 restare in memoria è ancora il caso comune, ma adesso è una scelta **dichiarata**
@@ -465,10 +532,14 @@ distrazione, il recinto serve perché non ci si possa andare apposta
 
 ## Lavoro lungo: i job
 
-I trait sono sincroni e il `Workspace` vive dietro un lock: **qualunque cosa
-lenta dentro una chiamata sincrona blocca l'app**, e a M5 la deadline la tronca.
-Il contratto quindi dà al lavoro lungo (rete, calcolo pesante) una strada propria
-— i **job**:
+In tre righe: **un plugin chiede, qualcun altro esegue fuori dal lock, l'esito
+torna come evento**. Sotto: i tre passi, cosa se ne guadagna, cosa manca, e come
+si annulla.
+
+Il motivo: i trait sono sincroni e il `Workspace` vive dietro un lock, quindi
+**qualunque cosa lenta dentro una chiamata sincrona blocca l'app**, e a M5 la
+deadline la tronca. Il contratto dà allora al lavoro lungo — rete, calcolo
+pesante — una strada propria, i **job**:
 
 1. **Richiesta (sincrona, istantanea).** Il plugin chiama
    `HostApi::spawn_job(JobSpec { job, payload })` e riceve subito un `JobId`. Il
@@ -492,36 +563,43 @@ E in mezzo il job **si racconta**
 nomina il job perché `run_job` non riceve la propria identità, sono in
 [traits.md](traits.md), `HostApi`.
 
-Conseguenze:
+Cosa se ne guadagna:
 
-- il giro sincrono resta **breve per definizione**: la deadline di M5 può essere
-  severa senza uccidere i plugin legittimi;
-- **niente snapshot**: fra due chiamate il vault può cambiare, e chi lo cammina
+- il giro sincrono resta **breve per definizione**, quindi la deadline di M5 può
+  essere severa senza uccidere i plugin legittimi;
+- un job lento o ostile non congela nulla: al peggio il suo `JobDone` porta un
+  errore (timeout dell'host);
+- il permesso `network` si applica **al job**;
+- **al confine WIT non si vede**: le capacità sono import del world, non un
+  parametro di `run-job`, quindi «dentro un job non c'è `host-api`» era una
+  regola solo Rust.
+
+Cosa un job **non** dà:
+
+- **niente snapshot.** Fra due chiamate il vault può cambiare, e chi lo cammina
   vedrà qualcosa che non è mai stato vero tutto insieme. La guardia è quella di
   tutti — `apply_edit` con la sua `base` e `Conflict`
   ([0008](../decisions/0008-modifica-chirurgica.md)), `create_document` che
   rifiuta un path occupato — e un job non è né una transazione né un lotto;
-- **al confine WIT non si vede**: le capacità sono import del world, non un
-  parametro di `run-job`, quindi «dentro un job non c'è `host-api`» era una
-  regola solo Rust;
-- il permesso `network` si applica **al job**;
-- un job lento o ostile non congela nulla: al peggio il suo `JobDone` porta un
-  errore (timeout dell'host);
-- **si può annullare, e la cancellazione è cooperativa**: `Host::cancel_job` alza
-  una bandiera, e da quel momento l'host del job **rifiuta** ogni capacità
-  fallibile con `PluginError::Cancelled`. Le sei infallibili non hanno dove
-  metterlo, un rifiuto; `emit` e `report_progress` restano aperte di proposito,
-  perché l'ultima cosa che un job che smette può voler dire è che sta smettendo,
-  e a che punto era. Nel contratto non compare nessuna capacità nuova: un job
-  scritto prima che la cancellazione esistesse si ferma comunque, alla prima cosa
-  che prova a fare. Limite dichiarato: **un job che non chiama mai l'host arriva
-  in fondo**, perché in Rust un thread non si uccide; la risposta vera è la
-  deadline di M5. Chiudere il vault annulla tutto, ferma il pool e aspetta chi ha
-  già cominciato: nessun job sparisce senza il suo `JobDone`;
-- il **progresso** c'è, lo **streaming** no: un job consegna un esito solo, e chi
+- il **progresso** c'è, lo **streaming** no. Un job consegna un esito solo, e chi
   vuole mandare risultati parziali oggi lo fa con un `Event::Custom` suo. Se
   servirà davvero (AI, indicizzazioni lunghe) sarà un canale in più *prima* del
   freeze — vedi [../appendix/ai-autocomplete.md](../appendix/ai-autocomplete.md).
+
+**Si può annullare, e la cancellazione è cooperativa.** `Host::cancel_job` alza
+una bandiera; da quel momento l'host del job **rifiuta** ogni capacità fallibile
+con `PluginError::Cancelled`. Attorno a questo:
+
+- le sei infallibili non hanno dove metterlo, un rifiuto;
+- `emit` e `report_progress` restano aperte di proposito: l'ultima cosa che un
+  job che smette può voler dire è che sta smettendo, e a che punto era;
+- nel contratto non compare nessuna capacità nuova, quindi un job scritto prima
+  che la cancellazione esistesse si ferma comunque, alla prima cosa che prova a
+  fare;
+- limite dichiarato: **un job che non chiama mai l'host arriva in fondo**, perché
+  in Rust un thread non si uccide. La risposta vera è la deadline di M5;
+- chiudere il vault annulla tutto, ferma il pool e aspetta chi ha già cominciato:
+  nessun job sparisce senza il suo `JobDone`.
 
 ### Il giro completo, con un annullamento in mezzo
 
@@ -562,9 +640,9 @@ sequenceDiagram
     W-->>U: Event::JobDone { result } — non recuperabile, passa sempre
 ```
 
-Il punto che il disegno rende visibile meglio della prosa è che **annullare non
-interrompe niente**: alza un booleano, e a fermarsi è il job, alla prima cosa che
-prova a fare. Fra l'`Err(Cancelled)` e la bandiera alzata c'è tutto il tempo che
+Il punto che il disegno rende visibile meglio della prosa: **annullare non
+interrompe niente**. Alza un booleano, e a fermarsi è il job, alla prima cosa che
+prova a fare. Fra la bandiera alzata e l'`Err(Cancelled)` c'è tutto il tempo che
 il job impiega ad arrivare alla capacità successiva — e se non ci arriva mai,
 arriva in fondo.
 
@@ -580,10 +658,13 @@ arriva in fondo.
 **`JobStatus` è una struct, non un enum**
 ([traits.rs:114](../../crates/fub-abi/src/traits.rs)): cinque campi — `id`,
 `job`, `plugin`, `since`, `progress` — e nessuno è uno stato. Lo stato di un job
-è **implicito** e vive in due strutture che non si parlano: la riga in
-`JobsState` (kernel) dice che è vivo, la bandiera in `Flags` (host) dice che è
-stato annullato. Perciò un job annullato resta indistinguibile da uno che lavora
-finché non arriva il suo `JobDone` — è una conseguenza del taglio, non una svista.
+è **implicito** e vive in due strutture che non si parlano:
+
+- la riga in `JobsState` (kernel) dice che è vivo;
+- la bandiera in `Flags` (host) dice che è stato annullato.
+
+Perciò un job annullato resta indistinguibile da uno che lavora finché non arriva
+il suo `JobDone`. È una conseguenza del taglio, non una svista.
 
 ```mermaid
 stateDiagram-v2
@@ -601,17 +682,23 @@ stateDiagram-v2
     end note
 ```
 
-Nessuno di questi nomi esiste come variante di un enum: sono i **portatori** dello
-stato, e il diagramma li nomina per non far credere che ci sia un `JobState` da
-cercare. Quel che manca davvero, ed è dichiarato: non c'è transizione osservabile
-«in coda → in esecuzione», non c'è timeout né deadline (a M5 la porta l'host
-WASM), e niente di tutto questo è persistente — un riavvio perde ogni job in
-volo, e nessun evento lo dice.
+Nessuno di questi nomi esiste come variante di un enum: sono i **portatori**
+dello stato, e il diagramma li nomina per non far credere che ci sia un `JobState` da
+cercare. Quel che manca davvero, ed è dichiarato:
+
+- non c'è transizione osservabile «in coda → in esecuzione»;
+- non c'è timeout né deadline (a M5 la porta l'host WASM);
+- niente di tutto questo è persistente: un riavvio perde ogni job in volo, e
+  nessun evento lo dice.
 
 ## Onestà sul modello di minaccia: nativo = fidato
 
-L'enforcement in `HostApi` confina davvero **solo chi non può aggirarlo**: un
-plugin nativo è codice Rust in-process e può fare qualunque cosa, permessi o no.
+Tre affermazioni, in ordine: **un plugin nativo è codice fidato**, il confine di
+fiducia vero arriva **a M5**, e l'unica cosa che si compra oggi è l'isolamento
+dagli *incidenti*.
+
+L'enforcement in `HostApi` confina davvero **solo chi non può aggirarlo**, e un
+plugin nativo è codice Rust in-process: può fare qualunque cosa, permessi o no.
 Quindi, esplicitamente:
 
 - **«plugin nativo» significa codice fidato** — feature ufficiali e plugin
@@ -622,44 +709,56 @@ Quindi, esplicitamente:
   consenso → `HostApi` con permessi → attivazione), così M5 cambia il backend,
   non inventa il confine.
 
-**Un panico al confine costa la chiamata, non il vault.** L'unico isolamento che
-si può comprare da un plugin nativo è quello dai suoi *incidenti*, e c'è: ogni
-porta da cui si entra in codice di un provider gira dentro una rete
+**Un panico al confine costa la chiamata, non il vault.** Ogni porta da cui si
+entra in codice di un provider gira dentro una rete
 (`fub-kernel/src/safety.rs`) che cattura il panico e lo traduce nell'errore di
-casa, nominando il colpevole. La rete sta **attorno alla chiamata del provider e
-a niente di più**: dentro quella chiamata il kernel ha invarianti da rimettere a
-posto, e quel codice gira già sul ramo dell'errore. Senza la rete, un provider
-che pania sotto il prestito esclusivo avvelenava il `RwLock` del workspace e
-rendeva il vault irraggiungibile fino al riavvio.
+casa, nominando il colpevole.
 
-Le porte **sono un dato, non una frase**: `safety::Gate` le enumera, e sono
-**tredici** [conta: porte-verso-un-terzo] — un comando, una view che disegna, una view che agisce, un servizio,
-la consegna a un `EventHandler`, le quattro degli indici (alimentare,
-dimenticare, `up_to_date`, riconciliare), il `parse` di un `FormatProvider`,
-l'innesto di una `SyntaxRule`, il disegno di un `CustomRenderer`, un job sul
-pool. Erano **otto** finché l'elenco stava in prosa, e il conto era sbagliato: la
-0032 lo aveva dichiarato esaustivo a memoria, `up_to_date` è nata dopo
+La rete sta **attorno alla chiamata del provider e a niente di più**: dentro
+quella chiamata il kernel ha invarianti da rimettere a posto, e quel codice gira
+già sul ramo dell'errore. Senza la rete, un provider che pania sotto il prestito
+esclusivo avvelenava il `RwLock` del workspace e rendeva il vault irraggiungibile
+fino al riavvio.
+
+Le porte **sono un dato, non una frase**: le enumera `safety::Gate`, e sono
+**tredici** [conta: porte-verso-un-terzo] —
+
+- un comando, una view che disegna, una view che agisce, un servizio;
+- la consegna a un `EventHandler`;
+- le quattro degli indici: alimentare, dimenticare, `up_to_date`, riconciliare;
+- il `parse` di un `FormatProvider`, l'innesto di una `SyntaxRule`, il disegno di
+  un `CustomRenderer`;
+- un job sul pool.
+
+Erano **otto** finché l'elenco stava in prosa, e il conto era sbagliato: la 0032
+lo aveva dichiarato esaustivo a memoria, `up_to_date` è nata dopo
 ([0046](../decisions/0046-l-anagrafe-del-vault.md)) senza toccarlo, e altre erano
-sfuggite al censimento del suo tempo. Adesso `Gate::what` è un `match` senza `_`
-— chi apre una porta nuova **non compila** finché non le dà una frase — e un
-secondo `match` senza `_` in `il_panico.rs` non compila finché non si dichiara
-dove quella porta è provata, o perché non lo è
-([0105](../decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)).
+sfuggite al censimento del suo tempo. Adesso i `match` senza `_` sono due
+([0105](../decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)):
+
+- `Gate::what` — chi apre una porta nuova **non compila** finché non le dà una
+  frase;
+- uno in `il_panico.rs` — non compila finché non si dichiara dove quella porta è
+  provata, o perché non lo è.
+
 La frase che l'utente legge è della porta, il soggetto («quale comando», «quale
 view») è del sito che chiama, e un presidio verifica che nessuna porta accetti un
 dettaglio per poi buttarlo via.
 
 La rete **presuppone che un panico srotoli**, e il presupposto lo verifica il
 compilatore: un `#[cfg(panic = "abort")] compile_error!` in `fub-kernel` rifiuta
-quel profilo. Non è un test perché un test non lo vedrebbe — Cargo ignora `panic`
-per i profili `test` e `bench`, quindi un `[profile.release] panic = "abort"` non
-arriva nemmeno a `cargo test --release` e il banco resterebbe **verde**
-attestando una rete che nel binario spedito non c'è più. Non è nemmeno una
-lettura del `Cargo.toml`, che non vedrebbe `RUSTFLAGS=-Cpanic=abort`. E non è un
-divieto per sempre: è un divieto finché la risposta a un componente che pania è
-*catturarlo* — il giorno che quel profilo lo si vuole davvero, la risposta è
-isolare i componenti fuori dal processo (§24.2, o il guest WASM di M5), e sta
-scritto nel messaggio dell'errore.
+quel profilo. Perché così e non altrimenti:
+
+- **non è un test**, perché un test non lo vedrebbe. Cargo ignora `panic` per i
+  profili `test` e `bench`, quindi un `[profile.release] panic = "abort"` non
+  arriva nemmeno a `cargo test --release`, e il banco resterebbe **verde**
+  attestando una rete che nel binario spedito non c'è più;
+- **non è una lettura del `Cargo.toml`**, che non vedrebbe
+  `RUSTFLAGS=-Cpanic=abort`;
+- **non è un divieto per sempre**: vale finché la risposta a un componente che
+  pania è *catturarlo*. Il giorno che quel profilo lo si vuole davvero, la
+  risposta è isolare i componenti fuori dal processo (§24.2, o il guest WASM di
+  M5), e sta scritto nel messaggio dell'errore.
 
 La rete ha **tre maglie**, e quale si usa dipende da una domanda sola: chi ha
 chiamato ha un modo di ricevere un no?
@@ -689,20 +788,22 @@ flowchart TD
 | `caught` | [safety.rs:238](../../crates/fub-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
 | `reporting` | [safety.rs:273](../../crates/fub-kernel/src/safety.rs) | il `PluginError` **restituito** a chi chiama, perché non c'è nessuno a cui dire di no |
 
-Non disattiva niente, e il riquadro finale del disegno dice esattamente questo:
-il meccanismo per smontare esiste (`BundleRegistry::unmount`), e dal §11.1 esiste
-anche il modo di **riaccendere** (`BundleRegistry::enable`, con lo stato in
-`plugins.disabled`) — ma **nulla collega un panico a quel meccanismo**. Non c'è
-un contatore di panici, non c'è una soglia, non c'è nessun tipo che rappresenti
-una quarantena: il «safe mode» è una voce di roadmap (§20.2), non un pezzo di
-codice. Ciò che manca **non è più il canale** — dirlo si può (`Event::Trouble`,
+Nessuna delle tre disattiva niente, ed è ciò che dice il riquadro finale del
+disegno. Il meccanismo per smontare esiste (`BundleRegistry::unmount`), e dal
+§11.1 esiste anche il modo di **riaccendere** (`BundleRegistry::enable`, con lo
+stato in `plugins.disabled`) — ma **nulla collega un panico a quel meccanismo**:
+non c'è un contatore di panici, non c'è una soglia, non c'è nessun tipo che
+rappresenti una quarantena. Il «safe mode» è una voce di roadmap (§20.2), non un
+pezzo di codice.
+
+Quindi ciò che manca **non è più il canale**: dirlo si può (`Event::Trouble`,
 [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)) e riaccendere anche
-(§11.1): manca la **politica**, cioè una decisione di prodotto su quanti panici
+(§11.1). Manca la **politica**, cioè una decisione di prodotto su quanti panici
 costino cosa, e nessuna voce la pone. L'isolamento vero resta la sandbox di M5.
 
 Stesso principio per la UI: un provider non fidato non può emettere
-`UiNode::Html`/`WebView` (iniettano contenuto attivo nella webview privilegiata
-del core, scavalcando la sandbox). L'host lo rifiuta con
+`UiNode::Html`/`WebView`, che iniettano contenuto attivo nella webview
+privilegiata del core scavalcando la sandbox. L'host lo rifiuta con
 `UiNode::validate_untrusted()`, in un punto solo — `Workspace::render_view` /
 `view_action`. Vedi [ui-protocol.md](ui-protocol.md).
 
@@ -714,35 +815,51 @@ pub struct PluginPermissions { pub granted: OptionMap }   // `ns:nome` → param
 ```
 
 Erano **tre booleani** fino alla
-[decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md),
-ed è la forma che è cambiata, non la larghezza: un booleano non ha dove mettere
-il **parametro** di un permesso, e «rete» senza allowlist è o tutto o niente —
-mentre 20.3 chiede proprio l'allowlist, di rete e di file. Le chiavi del core
-stanno in `options::permission`; un permesso con un namespace di terzi attraversa
-il confine intatto, e un host che non lo conosce può **rifiutarlo** — che è
-esattamente ciò che un enum chiuso non gli avrebbe permesso di fare.
+[decisione 0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md).
+È cambiata la forma, non la larghezza:
+
+- un booleano non ha dove mettere il **parametro** di un permesso;
+- «rete» senza allowlist è o tutto o niente, mentre 20.3 chiede proprio
+  l'allowlist, di rete e di file.
+
+Le chiavi del core stanno in `options::permission`. Un permesso con un namespace
+di terzi attraversa il confine intatto, e un host che non lo conosce può
+**rifiutarlo** — che è esattamente ciò che un enum chiuso non gli avrebbe
+permesso di fare.
 
 ## La chiave del carico di un `custom_kind` di terzi
 
-Quando una `SyntaxRule` produce un `Custom` (blocco o inline), i byte
-dell'utente che la resa generica deve mostrare stanno negli `attrs`. Per i kind
-del core la chiave la dichiara la tabella `custom_kind::CARICHI`; un kind di
-terzi in quella tabella **non può entrare** — l'elenco è del core, e il conto a
-due versi lo presidia — quindi la sua chiave è la convenzione: **`source`**
-(§25.7, forma (b)). La regola sta in `fub_abi::rules::carichi`, ed è la stessa
-che il provider WASM di M5 erediterà: chi dichiara i propri byte sotto `source`
-si vede rendere dalla resa generica di qualunque provider, chi li porta sotto
-un'altra chiave si rende vuoto — e il silenzio è dichiarato, perché la resa
-generica è il degrado della [0122](../decisions/0122-una-sorgente-non-degrada-si-rifiuta.md),
-non un errore.
+Quando una `SyntaxRule` produce un `Custom` (blocco o inline), i byte dell'utente
+che la resa generica deve mostrare stanno negli `attrs`. La chiave sotto cui
+stanno dipende da chi ha dichiarato il kind:
+
+- **kind del core**: la dichiara la tabella `custom_kind::CARICHI`;
+- **kind di terzi**: in quella tabella **non può entrare** — l'elenco è del core,
+  e il conto a due versi lo presidia — quindi la chiave è la convenzione,
+  **`source`** (§25.7, forma (b)).
+
+La regola sta in `fub_abi::rules::carichi`, ed è la stessa che il provider WASM
+di M5 erediterà. Chi dichiara i propri byte sotto `source` si vede rendere dalla
+resa generica di qualunque provider; chi li porta sotto un'altra chiave si rende
+vuoto. Il silenzio è dichiarato, perché la resa generica è il degrado della
+[0122](../decisions/0122-una-sorgente-non-degrada-si-rifiuta.md), non un errore.
 
 ## Modello capability: **ibrido**
 
-**Grana grossa (un permesso per capacità) + allowlist come parametro del
-permesso.** Non grana fine con prompt di consenso runtime (troppo costo host/UI
-per il valore), non permessi nudi (troppo poco per limitare *dove* un plugin
-legge, scrive o si connette). L'allowlist è il **valore** della voce, ed è la
-ragione per cui i tre booleani sono diventati una mappa.
+Il modello in tre righe: **un permesso per capacità** (grana grossa), con
+l'**allowlist come parametro** del permesso, applicato in **un solo punto**. Poi
+l'elenco delle voci, e in fondo l'unico pezzo che ancora non si onora: il filtro
+per path.
+
+Le due alternative scartate:
+
+- **grana fine con prompt di consenso runtime** — troppo costo host/UI per il
+  valore;
+- **permessi nudi** — troppo poco per limitare *dove* un plugin legge, scrive o
+  si connette.
+
+L'allowlist è il **valore** della voce, ed è la ragione per cui i tre booleani
+sono diventati una mappa.
 
 - **Concessione all'installazione:** le voci di `granted` sono mostrate e
   accettate quando il plugin viene installato/attivato.
@@ -765,12 +882,12 @@ ragione per cui i tre booleani sono diventati una mappa.
   modalità) e `fub:read-selection` (il testo selezionato, verbatim) —
   [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md). Sono l'unico
   caso in cui **un metodo solo** (`active_context`) ha due cancelli, e l'unica
-  eccezione alla grana «un permesso per capacità» qui sopra: la scelta che
-  serve all'utente — *«sai che nota guardo, non sai cosa ci sto scrivendo»* —
-  cade esattamente in mezzo a una famiglia. Nessuno dei due sta sotto
-  `read-vault`, che pure governa il contenuto dei documenti: legarceli avrebbe
-  reso impossibile concedere il vault e negare la selezione, cioè avrebbe
-  tolto la scelta invece di darla.
+  eccezione alla grana «un permesso per capacità»: la scelta che serve
+  all'utente — *«sai che nota guardo, non sai cosa ci sto scrivendo»* — cade
+  esattamente in mezzo a una famiglia. Nessuno dei due sta sotto `read-vault`,
+  che pure governa il contenuto dei documenti: legarceli avrebbe reso
+  impossibile concedere il vault e negare la selezione, cioè avrebbe tolto la
+  scelta invece di darla.
 - **Le bozze, a parte:** `fub:read-drafts` per `IndexQuery::Drafts` —
   [0096](../decisions/0096-una-bozza-non-e-una-nota.md). Prima passava da
   `fub:read-vault` come ogni altra query, quindi chi poteva leggere una nota
@@ -790,20 +907,23 @@ ragione per cui i tre booleani sono diventati una mappa.
   non una impl gemella, davanti a ogni host — col registro dei plugin in cui chi
   si registra si dichiara con manifest, permessi e fiducia (`kernel/plugins.rs`).
   È il §7.3, chiuso dalla [decisione 0021](../decisions/0021-il-confine.md).
-  Quello che **non** c'è è il filtro per **path**: per `read-vault` e
-  `write-vault` la politica legge la presenza della chiave e non il suo
-  parametro, quindi un plugin ristretto a `Progetti/` legge tutto. Non vale più
-  in generale — dalla
+
+Quello che **non** c'è è il filtro per **path**. Per `read-vault` e
+`write-vault` la politica legge la presenza della chiave e non il suo parametro,
+quindi un plugin ristretto a `Progetti/` legge tutto. Tre cose da sapere:
+
+- non vale più in generale: dalla
   [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
-  `fub:network` il suo parametro lo onora, ed è il primo —, e i due filtri non
-  condividono una riga di proposito: un path si confronta per prefisso dentro
-  una radice che è dell'utente, un host per nome dentro uno spazio che non è di
-  nessuno. Resta additivo dentro `Granted`. Il bloccante che la
-  [0021](../decisions/0021-il-confine.md) gli aveva dato — il §15.5, *«la
-  politica dei path in un modulo solo»*, perché due idee di cosa sia un prefisso
-  sarebbero peggio di nessuna — è **caduto con la
-  [0058](../decisions/0058-un-nome-che-nasce.md)**, che ha fatto di
-  `fub_abi::rules::path` quel modulo: questa riga ha detto «aspetta il §15.5»
+  `fub:network` il suo parametro lo onora, ed è il primo;
+- i due filtri non condividono una riga di proposito. Un path si confronta per
+  prefisso dentro una radice che è dell'utente; un host per nome dentro uno
+  spazio che non è di nessuno. Il filtro dei path resta additivo dentro
+  `Granted`;
+- il bloccante è **caduto**. La [0021](../decisions/0021-il-confine.md) gli
+  aveva dato il §15.5 — *«la politica dei path in un modulo solo»*, perché due
+  idee di cosa sia un prefisso sarebbero peggio di nessuna — e la
+  [0058](../decisions/0058-un-nome-che-nasce.md) ha fatto di
+  `fub_abi::rules::path` quel modulo. Questa riga ha detto «aspetta il §15.5»
   per trentadue verbali dopo che non aspettava più niente. È la casella del
   [§7.1](../roadmap/07-il-confine.md#la-casella-rimasta).
 
@@ -818,17 +938,23 @@ rifiuti al frontend/all'IPC.
 
 ## Sandbox WASM (M5)
 
+Cosa cambia a M5, in tre righe: il plugin diventa un **componente wasmtime** che
+non vede la memoria del core; tutto ciò che tocca il mondo — disco, rete, tempo —
+passa da una **host function**; chi è lento o ostile viene **interrotto** a
+scadenza. L'elenco dice poi, voce per voce, cosa gli si concede.
+
 - **Runtime:** wasmtime, **component model**; plugin come componenti
   `wasm32-wasip2`, compilati a parte con `cargo component` (vedi
   [M5](../milestones/M5-wasm-runtime.md)).
 - **Isolamento di memoria:** dato dal component model; il plugin non vede la
   memoria del core, solo i dati che passano dalle host function.
-- **Rete:** negata di default, e adesso la riga nomina una cosa sola perché le
-  due si sono ricongiunte. `fub:network` è un **permesso** con la sua allowlist
-  di host, e dalla
+- **Rete:** negata di default. La riga adesso nomina una cosa sola perché le due
+  si sono ricongiunte: `fub:network` è un **permesso** con la sua allowlist di
+  host, e dalla
   [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
-  la **capacità** che lo usa esiste: `HostNetwork::fetch`. `http_fetch` non fu
-  rifiutato genericamente ma con due bloccanti nominati
+  la **capacità** che lo usa esiste, `HostNetwork::fetch`.
+
+  `http_fetch` non fu rifiutato genericamente, ma con due bloccanti nominati
   ([0013](../decisions/0013-elenco-delle-capacita.md)): *«§9.1 (un lavoro lungo
   che vede il vault) perché sia utile e §7.3 (`network` letto da qualcuno)
   perché sia sicura. Due bloccanti, entrambi nominati; dopo, additiva»*.
@@ -836,17 +962,19 @@ rifiuti al frontend/all'IPC.
   [0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md), il §7.3 con la
   [0021](../decisions/0021-il-confine.md), che ha perfino scritto dove atterra:
   *«il giorno che `http_fetch` entrerà, `Capability::permission()` è la riga che
-  le dà un permesso»*. La condizione che la 0013 aveva posto era soddisfatta da
-  settantasei verbali e **nessuno lo aveva registrato**, per una ragione che
-  vale come metodo: la voce era **additiva**, quindi non scadeva, ed è per
-  questo che non saliva da sé — il criterio della
-  [seduta 20](../roadmap/20-quando-qualcosa-va-storto.md). Adesso è entrata, e
-  la riga che resta è quella di M5: un guest deve trovare **questa** strada e
-  non un'altra: una che gli venisse da WASI invece che dall'`HostApi` sarebbe
-  una seconda porta con una seconda politica, cioè ciò che l'«enforcement in un
-  solo punto» esiste per non far succedere. E a M4 il cancello vale come
-  **dichiarazione** e non come imposizione, perché un plugin nativo gira
-  in-process e `std::net` non passa dal `Guard`.
+  le dà un permesso»*.
+
+  La condizione posta dalla 0013 era soddisfatta da settantasei verbali e
+  **nessuno lo aveva registrato**. La ragione vale come metodo: la voce era
+  **additiva**, quindi non scadeva, ed è per questo che non saliva da sé — il
+  criterio della [seduta 20](../roadmap/20-quando-qualcosa-va-storto.md).
+
+  Adesso è entrata, e la riga che resta è quella di M5: un guest deve trovare
+  **questa** strada e non un'altra. Una che gli venisse da WASI invece che
+  dall'`HostApi` sarebbe una seconda porta con una seconda politica, cioè ciò
+  che l'«enforcement in un solo punto» esiste per non far succedere. E a M4 il
+  cancello vale come **dichiarazione** e non come imposizione, perché un plugin
+  nativo gira in-process e `std::net` non passa dal `Guard`.
 - **Filesystem:** nessun accesso diretto; i documenti passano da
   `read_document`/`read_model`/`write_document`/`list_documents`, i dati del
   plugin da `data_*`. **Import ed export non fanno eccezione**, ed è una
@@ -873,10 +1001,12 @@ rifiuti al frontend/all'IPC.
 
 ### Cosa non può essere **solo** un guest, e il metro per deciderlo
 
-I "Rischi" in fondo dicono una riga sola — *«costo di serializzazione al confine
-WASM: accettato solo per i plugin di terzi; le feature ufficiali restano
-native»* — e la [mappa](mappa-visuale.md) disegna l'**intera** FubSuite sotto
-`fub-wasm-host`, sync compreso. Le due cose non possono essere vere insieme.
+C'è una contraddizione da sciogliere. I "Rischi" in fondo dicono una riga sola —
+*«costo di serializzazione al confine WASM: accettato solo per i plugin di terzi;
+le feature ufficiali restano native»* — mentre la [mappa](mappa-visuale.md)
+disegna l'**intera** FubSuite sotto `fub-wasm-host`, sync compreso. Le due cose
+non possono essere vere insieme.
+
 Qui si dice quale cede, e in base a cosa: il metro ha tre voci, e nessuna è
 un'opinione sul valore di una feature.
 
@@ -886,15 +1016,15 @@ un'opinione sul valore di una feature.
    o rotto — non chi è lento e legittimo, che è il caso più comune.
 2. **Frequenza × payload.** Gli alberi al confine sono un'**arena** — lista
    piatta più indici `u32`, conversione in `fub_abi::arena` — quindi una copia
-   per direzione: ciò che porta *il modello* o *il contenuto* paga in proporzione
-   alla nota, ogni volta. E ciò che tocca **ogni** documento — indicizzare,
-   parsare, digerire — si paga a ogni documento: su un `reindex` il fattore è il
-   vault intero, che è la ragione per cui la grana della chiamata era una domanda
+   per direzione. Ciò che porta *il modello* o *il contenuto* paga in proporzione
+   alla nota, ogni volta; ciò che tocca **ogni** documento — indicizzare,
+   parsare, digerire — si paga a ogni documento. Su un `reindex` il fattore è il
+   vault intero, ed è la ragione per cui la grana della chiamata era una domanda
    della [decisione 0051](../decisions/0051-l-alimentazione-risponde.md) e non un
    dettaglio di implementazione: l'alimentazione di un indice è passata **a
-   lotti** proprio con questa aritmetica in mano — e con il limite dichiarato,
-   perché il lotto riduce il numero di attraversamenti e non il volume, che
-   attraversa comunque per intero.
+   lotti** proprio con questa aritmetica in mano, e col limite dichiarato, perché
+   il lotto riduce il numero di attraversamenti e non il volume, che attraversa
+   comunque per intero.
 3. **Prima o dopo la scrittura.** Il contratto permette di **osservare** una
    modifica — `EventHandler`, dopo — e non di **interporsi**: non esiste nessun
    punto che preceda `write_document` e possa dire di no. Chi deve decidere
@@ -907,113 +1037,134 @@ qui l'arena è un pedaggio che non si vede, e la regola non deve mangiarsi tutto
 **La quarta voce, e perché è arrivata dopo.** Le tre di sopra misurano un
 **costo**: quanto tiene il vault, quanto attraversa, quando arriva. Sono le
 domande giuste per chi vuole fare da guest *ciò che il contratto sa già dire*, e
-per tre anni di decisioni sono bastate. Ma un metro che pesa solo il costo non
-sa nominare chi non passa perché **non c'è una porta**, e allora quel caso non
-risulta da nessuna parte: non è vietato, non è caro, non è impossibile — è
-semplicemente non previsto, e lo si scopre scrivendolo.
+per tre anni di decisioni sono bastate. Ma un metro che pesa solo il costo non sa
+nominare chi non passa perché **non c'è una porta**: quel caso non è vietato, non
+è caro, non è impossibile — è non previsto, e lo si scopre scrivendolo.
 
 4. **Se la superficie esiste.** Un plugin può occupare una superficie solo se il
    contratto ne nomina una che gli serve, e solo se ciò che ci disegna sa
    ricevere ciò che gli serve. `ViewSurface` ne nomina dieci e sono tutte di
-   **ancoraggio** — dicono *dove* una view si attacca, non *cosa* può fare
+   **ancoraggio**: dicono *dove* una view si attacca, non *cosa* può fare
    dentro. Chi ha bisogno di un gesto che il contratto non trasporta non
    inciampa in nessuna delle tre voci di sopra: le passa tutte, e resta fuori.
 
 **Il caso che la quarta voce trova, ed è un buco dichiarato.** È la **superficie
-di scrittura**, cioè l'editor, e non è vietata a un terzo: è **non attrezzata**,
-il che è un'altra cosa e va detta con le sue parole.
+di scrittura**, cioè l'editor. Non è vietata a un terzo: è **non attrezzata**, il
+che è un'altra cosa e va detta con le sue parole.
 
-Ciò che c'è già, ed è più di quanto sembri: un plugin di terzi ha
-`VaultWrite::apply_edit`, quindi **può scrivere il testo di una nota**; ha
-`ViewSurface::Main`, che dalla [0079](../decisions/0079-il-grafo-esce-dall-overlay.md)
-è ospitata davvero, e un riquadro tiene una tab di *view* e non per forza un
-documento; ha il `pane` del `ViewContext` dalla
-[0007](../decisions/0007-contesto-di-sessione.md), quindi sa dove sta; e dalla
-[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md) sa leggere le
-selezioni. La strada per il riquadro esiste, ed è percorribile oggi.
+Ciò che c'è già è più di quanto sembri. Un plugin di terzi ha:
 
-Ciò che manca è **due cose, e nessuna delle due è stata decisa**. La prima: nel
-contratto **non esiste nessun evento di tastiera** — non un `KeyEvent`, non una
-`key`, niente. Un provider riceve `UiAction`, cioè un gesto già interpretato da
-qualcun altro; sotto una superficie di scrittura l'interpretazione *è* il lavoro.
-La seconda: `UiNode` è dichiarativo per costruzione, i suoi nodi di testo
-(`TextInput`, `TextArea`) non hanno cursore né selezione, e `Html`/`WebView` sono
-riservati a `Trust::Core` — cioè la via d'uscita che un terzo userebbe per
-disegnarsi la propria superficie è chiusa a chiave, e per ottime ragioni che
-riguardano il contenuto attivo e non l'editing.
+- `VaultWrite::apply_edit`, quindi **può scrivere il testo di una nota**;
+- `ViewSurface::Main`, che dalla
+  [0079](../decisions/0079-il-grafo-esce-dall-overlay.md) è ospitata davvero — un
+  riquadro tiene una tab di *view* e non per forza un documento;
+- il `pane` del `ViewContext` dalla
+  [0007](../decisions/0007-contesto-di-sessione.md), quindi sa dove sta;
+- dalla [0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md), il
+  modo di leggere le selezioni.
 
-**La decisione, perché una riga che dice «si vedrà» non serve a nessuno.** «L'editor
-è della shell» vuol dire **questo** editor, non *l'editing*. La superficie si
-presta: un terzo che porti la propria esperienza di scrittura — una modalità
-modale, un editor strutturato, una tela di scrittura — è un cliente previsto, non
-un abuso, e il giorno in cui arriva la strada che percorre è quella di sopra più
-le due porte che mancano. Non sono aperte oggi perché nessuno le ha chieste, e si
-aprono in modo additivo: un evento di tastiera è un tipo nuovo, non un tipo
-cambiato.
+La strada per il riquadro esiste, ed è percorribile oggi. Ciò che manca è **due
+cose, e nessuna delle due è stata decisa**:
+
+1. nel contratto **non esiste nessun evento di tastiera** — non un `KeyEvent`,
+   non una `key`, niente. Un provider riceve `UiAction`, cioè un gesto già
+   interpretato da qualcun altro; sotto una superficie di scrittura
+   l'interpretazione *è* il lavoro;
+2. `UiNode` è dichiarativo per costruzione. I suoi nodi di testo (`TextInput`,
+   `TextArea`) non hanno cursore né selezione, e `Html`/`WebView` sono riservati
+   a `Trust::Core` — cioè la via d'uscita che un terzo userebbe per disegnarsi la
+   propria superficie è chiusa a chiave, e per ottime ragioni che riguardano il
+   contenuto attivo e non l'editing.
+
+**La decisione, perché una riga che dice «si vedrà» non serve a nessuno.**
+«L'editor è della shell» vuol dire **questo** editor, non *l'editing*. La
+superficie si presta: un terzo che porti la propria esperienza di scrittura — una
+modalità modale, un editor strutturato, una tela di scrittura — è un cliente
+previsto, non un abuso. Il giorno in cui arriva, la strada che percorre è quella
+di sopra più le due porte che mancano. Non sono aperte oggi perché nessuno le ha
+chieste, e si aprono in modo additivo: un evento di tastiera è un tipo nuovo, non
+un tipo cambiato.
 
 **Sta scritto qui perché chi vorrà portare la propria superficie di scrittura
 deve trovarlo prima di scoprirlo.** Non è lavoro rimandato e non è un no: è un
-fatto sulla forma del contratto di oggi, e la differenza fra «non si può» e «non
-c'è ancora la porta» è esattamente ciò che un terzo non ha modo di dedurre da
-solo. Chi legge l'invariante — *una feature ufficiale è ciò che scriverà un
-plugin di terzi* — ne dedurrebbe di poter scrivere un editor, e ci arriverebbe
-lontano prima di accorgersi che gli manca un tasto.
+fatto sulla forma del contratto di oggi. La differenza fra «non si può» e «non
+c'è ancora la porta» un terzo non ha modo di dedurla da solo: chi legge
+l'invariante — *una feature ufficiale è ciò che scriverà un plugin di terzi* — ne
+dedurrebbe di poter scrivere un editor, e ci arriverebbe lontano prima di
+accorgersi che gli manca un tasto.
 
 **L'invariante, misurato.** Quella frase resta vera dove è **provata**, e dove
-sia provata adesso si legge invece di dedursi: le feature ufficiali di questo
-repo stanno su **quattro** delle **dieci** [conta: superfici-di-vista] superfici, e le altre sei sono dichiarate
-scoperte una per una in `fub-features/tests/conformita.rs`
-(`il_dogfooding_dichiara_fin_dove_arriva`), con la ragione accanto. Un dogfooding
-che copre meno di metà di ciò di cui parla non è un dogfooding sbagliato — è un
-dogfooding che finora non sapeva dirsi, e un invariante che non sa dire dove
-finisce è il modo in cui una garanzia diventa una scusa.
+sia provata adesso si legge invece di dedursi. Le feature ufficiali di questo
+repo stanno su **quattro** delle **dieci** [conta: superfici-di-vista] superfici;
+le altre sei sono dichiarate scoperte una per una in
+`fub-features/tests/conformita.rs` (`il_dogfooding_dichiara_fin_dove_arriva`),
+con la ragione accanto. Un dogfooding che copre meno di metà di ciò di cui parla
+non è un dogfooding sbagliato: è un dogfooding che finora non sapeva dirsi, e un
+invariante che non sa dire dove finisce è il modo in cui una garanzia diventa una
+scusa.
 
 **Il caso che la mappa sbaglia è il sync**, e non per la rete — quella è una voce
-additiva le cui condizioni sono cadute (sopra). È il punto 3, e poi il 2. Un sync
-deve decidere il merge **prima** che il file atterri, e da `EventHandler` arriva
-dopo, su una coda che per contratto può troncare: il versioning si compra la
-perdita riconciliando su `Event::Overflow` (`features/src/versioning.rs`) perché
-perdere un evento gli costa **una versione in ritardo**, mentre a un sync costa
-una **divergenza su un altro device**, e non c'è riconciliazione che la renda
-gratis. E un ciclo di sync è hashing del vault intero: nativo è leggere e
-digerire in-process, da guest è copiare il vault attraverso l'arena a ogni giro.
+additiva le cui condizioni sono cadute (sopra). È il punto 3, e poi il 2.
+
+- **Punto 3.** Un sync deve decidere il merge **prima** che il file atterri, e da
+  `EventHandler` arriva dopo, su una coda che per contratto può troncare. Il
+  versioning si compra la perdita riconciliando su `Event::Overflow`
+  (`features/src/versioning.rs`) perché perdere un evento gli costa **una
+  versione in ritardo**; a un sync costa una **divergenza su un altro device**, e
+  non c'è riconciliazione che la renda gratis.
+- **Punto 2.** Un ciclo di sync è hashing del vault intero: nativo è leggere e
+  digerire in-process, da guest è copiare il vault attraverso l'arena a ogni
+  giro.
+
 Il paragone con Obsidian — dove il sync è un plugin — non regge *qui*: là i
 plugin sono JS non sandboxato con accesso pieno all'app, cioè il modello che
 "Onestà sul modello di minaccia" rifiuta per intero. Il sync è un **servizio del
 core**, estendibile semmai nei backend di trasporto.
 
 **Due che restano nativi per costruzione**, e la ragione è già scritta altrove.
-Il **motore di ricerca** predefinito: tantivy vive di segmenti mmappati e il
-varco esiste apposta (`plugin_data_dir`), la §21.2 vuole un ranking *per
-battuta*, e i 6,8× della [0026](../decisions/0026-due-query-insieme.md) vengono
-da thread che un guest non condivide. La **firma** resta da provider — un motore
-alternativo di terzi deve poter esistere, ed è la
-[0025](../decisions/0025-la-ricerca-predefinita.md) — ma quello **acceso di
-default** è nativo. E il **`FormatProvider` di casa**, per il punto 2 e **non**
-per il punto 1: la live preview non chiama il provider a ogni battuta, perché la
-[0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha deciso che il modello
-verso il webview non ci va e il buffer lo decora Lezer nella shell — e ciò che
-Lezer non conosce lo decora interpretando la **dichiarazione** del contratto,
-che è la risposta della [0115](../decisions/0115-la-verita-e-la-dichiarazione.md)
-alla §4.4 e vale anche per una superficie di scrittura di terzi. Ma
-ogni salvataggio e ogni `reindex` passano di lì, e un vault da 100k note sono
-100k parse oltre il confine. Un formato di terzi paga quel pedaggio perché lo
-sceglie; quello che apre le note di tutti no.
 
-**Il rovescio, che è la parte che tiene onesta la regola.** Il **versioning** è
-la prova vivente che il modello regge: per-evento, throughput e non latenza,
-perdita riconciliabile. I **job** — import, export, OCR, pubblicazione — sono
-lavoro lungo con una deadline propria su un'istanza separata, ed è la strada che
-questo documento ha costruito apposta. Ciò che sopra un canale dati sano è una
-**view sottile più dei comandi** sta di là senza asterischi. E dove il lavoro
-vero costa 50–500 ms — un'inferenza, una conversione — il pedaggio dell'arena è
-rumore di fondo: il numeratore conta solo quando il denominatore è piccolo.
+- Il **motore di ricerca** predefinito. Tantivy vive di segmenti mmappati e il
+  varco esiste apposta (`plugin_data_dir`); la §21.2 vuole un ranking *per
+  battuta*; i 6,8× della [0026](../decisions/0026-due-query-insieme.md) vengono
+  da thread che un guest non condivide. La **firma** resta da provider — un
+  motore alternativo di terzi deve poter esistere, ed è la
+  [0025](../decisions/0025-la-ricerca-predefinita.md) — ma quello **acceso di
+  default** è nativo.
+- Il **`FormatProvider` di casa**, per il punto 2 e **non** per il punto 1. La
+  live preview non chiama il provider a ogni battuta, perché la
+  [0018](../decisions/0018-chi-vede-il-modello-parsato.md) ha deciso che il
+  modello verso il webview non ci va e il buffer lo decora Lezer nella shell — e
+  ciò che Lezer non conosce lo decora interpretando la **dichiarazione** del
+  contratto, che è la risposta della
+  [0115](../decisions/0115-la-verita-e-la-dichiarazione.md) alla §4.4 e vale
+  anche per una superficie di scrittura di terzi. Ma ogni salvataggio e ogni
+  `reindex` passano di lì, e un vault da 100k note sono 100k parse oltre il
+  confine. Un formato di terzi paga quel pedaggio perché lo sceglie; quello che
+  apre le note di tutti no.
+
+**Il rovescio, che è la parte che tiene onesta la regola.**
+
+- Il **versioning** è la prova vivente che il modello regge: per-evento,
+  throughput e non latenza, perdita riconciliabile.
+- I **job** — import, export, OCR, pubblicazione — sono lavoro lungo con una
+  deadline propria su un'istanza separata, ed è la strada che questo documento ha
+  costruito apposta.
+- Ciò che sopra un canale dati sano è una **view sottile più dei comandi** sta di
+  là senza asterischi.
+- Dove il lavoro vero costa 50–500 ms — un'inferenza, una conversione — il
+  pedaggio dell'arena è rumore di fondo: il numeratore conta solo quando il
+  denominatore è piccolo.
 
 ## Percorso di attivazione
 
-Chi lo percorre è il **`BundleRegistry`** di `fub-host`
-([decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)), e sta dalla parte
-dell'host per una ragione sola: l'`HostApi` non ha capacità di registrazione
+Il percorso in tre righe: **legge il manifest, lo dichiara al kernel, poi accende
+il plugin**, e lo spegnimento lo ripercorre al contrario. I quattro passi qui
+sotto valgono uguali a M4 e a M5.
+
+A percorrerlo è il **`BundleRegistry`** di `fub-host`
+([decisione 0031](../decisions/0031-chi-possiede-i-bundle.md)), mai il plugin.
+Sta dalla parte dell'host per una ragione sola: l'`HostApi` non ha capacità di
+registrazione
 ([0013](../decisions/0013-elenco-delle-capacita.md)), quindi **un plugin non può
 registrarsi da sé**. A M5 il caricatore WASM percorre gli stessi passi; cambia
 come si costruisce il `Plugin`, non chi lo dichiara.
@@ -1088,7 +1239,7 @@ sequenceDiagram
 | `JobRunner::start` | [runner.rs:914](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
 La riga che è facile perdere è la prima: **`fub.core` è un bundle come gli
-altri** e si monta per primo, e non registra nulla — esiste per avere un'identità
+altri** e si monta per primo. Non registra nulla: esiste per avere un'identità
 nel registro, e perché è la riga che dichiara la chiave `plugins.disabled`, cioè
 quella che decide se le altre otto si montano.
 
@@ -1114,13 +1265,17 @@ stateDiagram-v2
 ```
 
 Anche qui **nessuno di questi stati ha un enum**. Sono l'appartenenza a una mappa
-e un booleano: un vault è aperto se sta in `Sessions.open`
-([session.rs:209](../../crates/fub-host/src/session.rs)), un workspace è chiuso
-se `Workspace.closed` è vero ([workspace.rs:522](../../crates/fub-kernel/src/workspace.rs)),
-un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
-([registry.rs:218](../../crates/fub-host/src/registry.rs)). Le uniche
-transizioni che il **contratto** nomina sono eventi, non stati: `VaultOpened`,
-`VaultClosed`, `IndexUpdated`.
+e un booleano:
+
+- un vault è aperto se sta in `Sessions.open`
+  ([session.rs:209](../../crates/fub-host/src/session.rs));
+- un workspace è chiuso se `Workspace.closed` è vero
+  ([workspace.rs:522](../../crates/fub-kernel/src/workspace.rs));
+- un bundle è montato se sta in `BundleRegistry.mounted` e non solo in `known`
+  ([registry.rs:218](../../crates/fub-host/src/registry.rs)).
+
+Le uniche transizioni che il **contratto** nomina sono eventi, non stati:
+`VaultOpened`, `VaultClosed`, `IndexUpdated`.
 
 L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 
@@ -1135,12 +1290,14 @@ La seconda regola è quella che tiene in piedi la terza. `deactivate` prende
 `&mut self`, quindi vuole il plugin di **uno solo**, e l'unico altro che può
 tenerne una copia è un job in volo: `body` gli rende un `Arc` clonato apposta,
 perché un job dura minuti. Perciò **chi spegne aspetta prima di bussare**, e le
-porte da cui si arriva sono due — chi chiude il vault ferma il pool intero
-(`JobRunner::stop`), chi spegne un solo componente ferma i job *suoi*
-(`JobRunner::ferma_bundle`, [runner.rs:1000](../../crates/fub-host/src/runner.rs)).
-La seconda alza la bandiera dell'annullamento dei job di quel bundle e poi
-aspetta che escano: un job cooperativo se ne accorge alla prima capacità che
-chiede, e nel frattempo nessun job nuovo di quel bundle parte più.
+porte da cui si arriva sono due:
+
+- chi chiude il vault ferma il pool intero (`JobRunner::stop`);
+- chi spegne un solo componente ferma i job *suoi* (`JobRunner::ferma_bundle`,
+  [runner.rs:1000](../../crates/fub-host/src/runner.rs)). Questa alza la bandiera
+  dell'annullamento dei job di quel bundle e poi aspetta che escano: un job
+  cooperativo se ne accorge alla prima capacità che chiede, e nel frattempo
+  nessun job nuovo di quel bundle parte più.
 
 Se malgrado tutto una copia resta in giro, `deactivate` non viene chiamato e al
 suo posto si produce un errore che lo **dice**
@@ -1150,6 +1307,36 @@ chiusura — gli errori dello spegnimento si accumulano e tornano come lista,
 perché fermarsi al primo lascerebbe metà dei componenti accesi dentro un vault
 che l'utente considera chiuso.
 
+## I buchi dichiarati
+
+Un **buco dichiarato** è un fatto sulla forma del contratto che chi legge
+dedurrebbe **al contrario**, scritto nel posto in cui ci si inciampa mentre ci si
+chiede se una cosa si può fare — non in fondo a un verbale, e non come casella da
+spuntare. Non entra in nessun totale e non è lavoro rimandato: è ciò che si
+sarebbe scoperto dopo.
+
+Sono **otto** [conta: buchi-dichiarati]:
+
+| # | Il buco | Verbale |
+|---|---|---|
+| 1 | `plugin_data_dir`, che consegna a un provider nativo una cartella vera | [0064](../decisions/0064-il-supporto-sta-sotto.md) |
+| 2 | «su task completato» non ha un campo nel modello, quindi in `DocChange` non si può nominare | [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) |
+| 3 | la superficie di scrittura di un terzo: non è vietata, ma non è attrezzata | [0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md) |
+| 4 | il formato su disco nasce senza costante nominata e senza riga in tabella | [0106](../decisions/0106-un-formato-si-presenta.md) |
+| 5 | ciò che di Windows da qui non si può provare | [0109](../decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md) |
+| 6 | che il ponte Tauri serializzi davvero questi record, e che la webview li disegni | [0112](../decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md) |
+| 7 | il rapporto fra due tempi, che nessun conto di operazioni sa sostituire | [0113](../decisions/0113-il-banco-conta-le-operazioni.md) |
+| 8 | `SchemaVersion::new(1)` scritto al volo dentro il record, senza una costante che lo nomini: è del tipo giusto, quindi il compilatore è contento, e non lo conta nessuno | [0128](../decisions/0128-una-versione-di-schema-e-un-tipo.md) |
+
+Il numero ha una storia sua, ed è la ragione per cui adesso porta un conto
+accanto. Questa riga ha detto «due» mentre erano tre, e poi «quattro» mentre
+erano sei: è rimasta indietro **tre volte**.
+
+La serie che i verbali si timbrano a vicenda — *n. 5* nella 0112, *n. 6* nella
+0113 — è l'ordinale dei soli buchi **numerati**, non dell'inventario: la 0069 ne
+aveva dichiarato uno prima che la numerazione esistesse, e nessun consuntivo
+l'aveva raccolto. Il posto dove il conto torna è questo.
+
 ## Rischi
 
 - **Superficie `HostApi` troppo stretta o troppo larga** — mitigato dal primo
@@ -1158,31 +1345,3 @@ che l'utente considera chiuso.
   terzi; le feature ufficiali restano native.
 - **Glob del `vault_scope`** — semantica (case, symlink, path traversal `..`) da
   fissare con test dedicati a M4.
-
-
-## Buchi dichiarati
-
-Un fatto sulla forma del contratto che chi legge dedurrebbe **al contrario**,
-scritto nel posto in cui ci si inciampa mentre ci si chiede se una cosa si può —
-non in fondo a un verbale e non come casella da spuntare. Non entra in nessun
-totale e non è lavoro rimandato: è ciò che si sarebbe scoperto dopo.
-
-Sono **otto** [conta: buchi-dichiarati]: `plugin_data_dir`, che consegna a un
-provider nativo una cartella vera (0064); «su task completato» che non ha un
-campo nel modello, quindi in `DocChange` non si può nominare (0069); la
-superficie di scrittura di un terzo, che non è vietata ma non è attrezzata
-(0104); il formato su disco che nasce senza costante nominata e senza riga in
-tabella (0106); ciò che di Windows da qui non si può provare (0109); che il
-ponte Tauri serializzi davvero questi record e che la webview li disegni (0112);
-il rapporto fra due tempi, che nessun conto di operazioni sa sostituire (0113);
-e la versione di schema scritta al volo dentro il record — `SchemaVersion::new(1)`
-senza una costante che la nomini: è del tipo giusto, quindi il compilatore è
-contento, e non la conta nessuno (0128).
-
-Il numero ha una storia sua, ed è la ragione per cui adesso porta un conto
-accanto: questa riga ha detto «due» mentre erano tre e poi «quattro» mentre
-erano sei, cioè è rimasta indietro **tre volte** — e la serie che i verbali si
-timbrano a vicenda (*n. 5* nella 0112, *n. 6* nella 0113) è l'ordinale dei soli
-buchi numerati, non dell'inventario: la 0069 ne aveva dichiarato uno prima che
-la numerazione esistesse, e nessun consuntivo l'aveva raccolto. Un verbale non
-si riscrive, quindi il posto dove il conto torna è questo.

@@ -1,101 +1,71 @@
 # 14. Le entry, le cartelle, e la lista dei documenti
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): lo stesso lavoro visto da quattro lati: entry, metadati, cartelle, lista.
+Una **seduta** della [roadmap infrastrutturale](../todo.md). È lo stesso lavoro visto da quattro lati: entry, metadati, cartelle, lista.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Quattro voci che il piano dichiara essere **lo stesso lavoro visto da lati
-diversi**, a coppie: §14.2 e §14.1 «vanno fatte nella stessa passata» (il
-`VaultEntry` esteso ai documenti, non solo agli asset), §14.3 e §14.4 «sono lo
-stesso lavoro visto da due lati» (la cartella come cittadino, e il canale con cui
-si chiede cosa c'è dentro). Farle separate significa aggiungere due volte gli
-stessi campi alla stessa scansione.
+Quattro voci formano lo stesso lavoro visto da lati diversi. Questo lavoro richiede un approccio a coppie per evitare di aggiungere due volte gli stessi campi alla stessa scansione:
+- **§14.2 e §14.1**: Il `VaultEntry` si applica ai documenti e agli asset. Queste voci vanno fatte nella stessa passata.
+- **§14.3 e §14.4**: Definiscono la cartella e il canale per leggerla. Sono lo stesso lavoro visto da due lati.
 
-**La prima coppia è chiusa** con la
-[0046](../decisions/0046-l-anagrafe-del-vault.md), in un verbale solo perché era
-una scansione sola: un file esiste anche se nessuno lo sa parsare, di ogni file
-si sa dimensione e data, e `reindex` **chiede agli indici cosa hanno già** prima
-di leggere e parsare. Il cliente vero è il controllo di salute, che adesso
-distingue un allegato che c'è da uno che manca invece di tacere su tutti; il
-cliente visibile è l'albero della shell, che si alimenta da `IndexQuery::Entries`
-invece che da `list_documents`.
+**La prima coppia è chiusa** dalla decisione [0046](../decisions/0046-l-anagrafe-del-vault.md). L'implementazione utilizza una singola scansione descritta in un verbale solo.
+* **Esistenza**: Un file esiste indipendentemente dal parsing.
+* **Metadati**: Il sistema registra dimensione e data di ogni file.
+* **Ottimizzazione**: `reindex` **chiede agli indici cosa hanno già** prima di leggere e parsare.
+* **Controllo di salute**: Questo cliente distingue un allegato presente da uno mancante, superando il silenzio passato su tutti i file.
+* **Albero della shell (interfaccia utente)**: Questo cliente usa `IndexQuery::Entries` come sorgente dati.
 
-**Anche la seconda è chiusa**, con la
-[0047](../decisions/0047-la-cartella-esiste-nel-kernel.md): una cartella esiste
-perché il disco ce l'ha — vuota compresa — si chiede con `IndexQuery::Folders`
-un livello per volta, e `IndexQuery::Entries` prende una cartella. `list_documents`
-non è più un comando IPC e `VaultInfo` non porta più l'elenco del vault.
+**Anche la seconda è chiusa** dalla decisione [0047](../decisions/0047-la-cartella-esiste-nel-kernel.md).
+* **Esistenza**: Una cartella esiste come riflesso del disco, incluse le cartelle vuote.
+* **Lettura**: Il sistema interroga un livello per volta con `IndexQuery::Folders`. `IndexQuery::Entries` riceve una cartella in input.
+* **Architettura IPC**: Il sistema delega l'elenco del vault (la directory di lavoro) a queste query, superando i vecchi comandi `list_documents` e `VaultInfo`.
 
-Della seduta restano **tre** caselle aperte del §14.1 — l'impronta degli
-allegati, la politica della cartella allegati e le derivate in `.fub/data/` —
-che hanno una milestone propria. Erano contate come due qui e nell'[indice](../todo.md)
-finché qualcuno non le ha ricontate: è la [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)
-applicata al piano invece che ai sorgenti.
+Restano **tre** caselle aperte del §14.1. Hanno una milestone propria:
+1. L'impronta degli allegati.
+2. La politica della cartella allegati.
+3. Le derivate in `.fub/data/`.
 
-### 14.1 Il vault non è solo documenti
+L'[indice](../todo.md) indicava queste caselle come due, prima di un ricalcolo. Questo aggiornamento estende l'applicazione della regola [§16.8](16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio) al piano.
 
-*ex §2.2 · kernel · **P2** — **decisa** con la [0046](../decisions/0046-l-anagrafe-del-vault.md), restano tre caselle*
+### 14.1 Il vault (cartella di progetto) include documenti e asset
 
-- [x] **`VaultEntry { id, kind: Document | Asset | Unknown, size, mtime }`** e
-      una scansione che vede **tutti** i file, non solo le estensioni dei
-      provider registrati. La specie **non si persiste**: è una proprietà del
-      file *dato chi è registrato adesso*, e un `.canvas` diventa un documento il
-      giorno che qualcuno rivendica quell'estensione, senza che un byte cambi.
-- [x] **Metadata degli asset**: dimensione e data ci sono per tutti, il MIME è
-      una **regola** (`rules::media::mime_of`) e non un campo — è funzione pura
-      del nome, e copiarla per file sarebbe una copia che invecchia. Il campo
-      `fingerprint` c'è ed è `Option`: si calcola dove i byte sono già in mano,
-      mai aprendo un file apposta.
-- [ ] **Chi riempie l'impronta degli allegati** — cioè il job che la calcola per
-      dedup (13.1), rilevamento duplicati (3.2) e verifica d'integrità (24.2). Il
-      campo c'è, il lavoro lungo ha il suo posto
-      ([0032](../decisions/0032-il-runner-dei-job.md)), e nessuno lo fa ancora.
-      Dalla [0099](../decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
-      questa casella ha un **cliente** e non solo tre usi futuri: il
-      ricongiungimento delle rinomine fatte ad app chiusa accoppia i documenti
-      per impronta, e un allegato rinominato con Fub chiuso resta scollegato
-      **solo** perché la sua impronta non la calcola nessuno. Il giorno che c'è,
-      si ricongiunge di lì senza una riga in più — e vale la pena scriverlo per
-      la ragione che [todo.md](../todo.md) dà di sé: *un indirizzo dice chi
-      potrà, non chi lo farà*.
-- [ ] **Politica cartella allegati** — configurabile, e adesso si sa come: una
-      chiave dichiarata nel manifest di chi la legge
-      ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)). I
-      **riferimenti aggiornati su rinomina/spostamento** invece ci sono già:
-      spostare `foto.png` in `allegati/` riscrive sia i `![[foto.png]]` sia i
-      `![alt](../foto.png)` di chi la mostra.
-- [ ] **Thumbnail/cache derivate** in `.fub/data/` (mai autorevoli): aspettano
-      chi le disegna.
+*ex §2.2 · kernel (il modulo core rust) · **P2** — **decisa** con la [0046](../decisions/0046-l-anagrafe-del-vault.md), restano tre caselle*
 
-### 14.2 Nessun metadato di entry: né mtime, né dimensione, né impronta
+- [x] **Struttura `VaultEntry { id, kind: Document | Asset | Unknown, size, mtime }`**. Una scansione elabora **tutti** i file presenti, superando il limite delle estensioni registrate. La specie del file è calcolata a runtime in base ai provider attivi. L'estensione determina il tipo: un file `.canvas` diventa un documento appena il provider rivendica, mantenendo inalterato ogni singolo byte.
+- [x] **Metadata degli asset**.
+  - **Dimensione e data**: Questi valori sono disponibili per tutti.
+  - **MIME type**: Il MIME costituisce una **regola** (`rules::media::mime_of`). Questo approccio usa la funzione pura del nome e sostituisce un campo fisso, evitando una copia soggetta a obsolescenza.
+  - **Impronta (`fingerprint`)**: Il campo è di tipo `Option`. Il sistema lo calcola con i byte già in memoria, ottimizzando l'accesso a un file.
+- [ ] **Job dell'impronta degli allegati**.
+  - **Funzione**: Il job calcola l'impronta per deduplicazione (13.1), rilevamento duplicati (3.2) e verifica d'integrità (24.2).
+  - **Stato**: Il campo esiste e l'infrastruttura asincrona è pronta ([0032](../decisions/0032-il-runner-dei-job.md)). L'esecuzione effettiva è in attesa di sviluppo.
+  - **Cliente attuale**: La decisione [0099](../decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md) definisce un **cliente** attivo, oltre a tre usi futuri.
+  - **Ricongiungimento**: L'app abbina i documenti rinominati esternamente tramite l'impronta. Al momento, un allegato rinominato a Fub (l'applicazione) chiuso perde il collegamento in attesa del calcolo dell'impronta.
+  - **Vantaggio**: L'implementazione permetterà il ricongiungimento automatico, risparmiando la stesura di una riga di codice extra. Come riporta [todo.md](../todo.md): *un indirizzo abilita l'azione futura*.
+- [ ] **Politica della cartella allegati**.
+  - **Configurazione**: Il sistema usa una chiave dichiarata nel manifest del lettore ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)).
+  - **Riferimenti dinamici**: I percorsi si aggiornano durante rinomine o spostamenti. Spostare `foto.png` in `allegati/` aggiorna automaticamente i formati `![[foto.png]]` e `![alt](../foto.png)`.
+- [ ] **Thumbnail e cache derivate**. Questi file in `.fub/data/` fungono da dati temporanei. Attendono il componente grafico per il rendering.
 
-*ex §2.20 · kernel · **P2** — **chiusa** con la [0046](../decisions/0046-l-anagrafe-del-vault.md)*
+### 14.2 Metadati di entry: mtime, dimensione, impronta
 
-- [x] **`DocMeta` tiene id, frontmatter, outline e link** (`index/core.rs`)
-      e il `Vault` non espone uno `stat`: mtime e dimensione li legge già, ma solo
-      per le voci del cestino (`vault.rs`), e per i documenti non li tiene
-      nessuno. Quindi `reindex` **rilegge e riparsa l'intero vault a ogni
-      apertura** (`workspace.rs`): «un indice
-      persistente riconosce e salta gli immutati» è vero per l'indice, non per
-      il kernel, che paga comunque lettura + parse di tutto prima ancora di
-      chiedere all'indice se gli interessa.
-      → La domanda che mancava è `IndexProvider::up_to_date`, e l'anagrafe è
-      durevole in `.fub/data/entries.json` (derivata: illeggibile si butta).
-      `mtime + size` basta a **saltare** e non a **credere**, con la regola
-      *racily clean* di git; l'impronta è ciò che riconosce mille file che un
-      `git checkout` ha ritimbrato senza cambiarne uno.
-- [x] **Ed è la fonte che manca a un elenco di feature che sembrano
-      indipendenti**: apertura rapida di vault grandi ed enormi (24.1),
-      rilevamento duplicati e deduplicazione (3.2, 13.1), sync differenziale
-      (18.1), verifica d'integrità, checksum e corruption detection (2.1,
-      24.2), «stale notes» (7.2, 9.3) e — le più banali e le più visibili —
-      «note create di recente» e «note modificate di recente» (8.1).
-      → La fonte adesso c'è: `IndexQuery::Entries` porta `mtime` per ogni file.
-      Le feature restano da scrivere, ma non aspettano più un dato che non
-      esiste.
-- [x] È il `VaultEntry` del §14.1 esteso ai **documenti**, non solo agli asset:
-      le due voci sono lo stesso lavoro e vanno fatte insieme, come §14.3 e
-      §14.4.
+*ex §2.20 · kernel (il modulo core) · **P2** — **chiusa** con la [0046](../decisions/0046-l-anagrafe-del-vault.md)*
 
+- [x] **Integrazione `DocMeta` e ottimizzazione letture**.
+  - **Struttura base**: `DocMeta` conserva id, frontmatter, outline e link (`index/core.rs`).
+  - **Stato precedente**: Il componente `Vault` limitava l'uso di uno `stat` alle sole voci del cestino (`vault.rs`). Questo costringeva il comando `reindex` a rileggere e parsare il vault (la directory di progetto) a ogni apertura (`workspace.rs`).
+  - **Problema di efficienza**: Il principio teorico per cui un indice persistente salta i file immutati si applicava solo all'indice. Il kernel (core) eseguiva comunque lettura e parsing completi.
+  - **Soluzione anagrafica**: L'API introduce `IndexProvider::up_to_date`. L'anagrafe risiede stabilmente in `.fub/data/entries.json` come cache scartabile in caso di errore.
+  - **Euristiche di salto**: I parametri `mtime + size` autorizzano il salto dell'operazione, seguendo la regola *racily clean* di git. L'impronta agisce da validatore definitivo. Questo strumento riconosce mille file con timestamp aggiornati da un `git checkout`, verificando l'assenza di variazioni nei contenuti e confermandone la stabilità, elaborandoli uno alla volta.
+- [x] **Abilitazione di nuove funzionalità**.
+  - L'anagrafe fornisce la base dati per un elenco di funzionalità correlate:
+    - **Apertura rapida**: Supporto per vault (directory di progetto) grandi ed enormi (24.1).
+    - **Gestione duplicati**: Rilevamento e deduplicazione (3.2, 13.1).
+    - **Sincronizzazione**: Sync differenziale (18.1).
+    - **Sicurezza**: Verifica d'integrità, checksum e corruption detection (2.1, 24.2).
+    - **Manutenzione**: Gestione delle «stale notes» (7.2, 9.3).
+    - **Viste utente**: Liste delle «note create di recente» e «note modificate di recente» (8.1).
+  - **Stato attuale**: L'implementazione di `IndexQuery::Entries` distribuisce il valore `mtime` per ogni file. Le funzionalità hanno a disposizione i dati necessari per lo sviluppo futuro.
+- [x] **Estensione del `VaultEntry`**. Il tipo `VaultEntry` definito nel §14.1 si applica ora ai **documenti** e agli asset. Le due voci condividono la medesima base tecnica e richiedono un'implementazione congiunta, parallelamente a quanto avviene per §14.3 e §14.4.
