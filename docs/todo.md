@@ -59,9 +59,9 @@ Sono uscite 152 voci:
   forma della compilazione invece del prodotto, e cerca **quanto costa a chi
   lavora sapere che niente si è rotto**.
 
-Centoquarantaquattro voci sono chiuse. I loro verbali stanno in
+Centoquarantacinque voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **undici** [conta: voci-aperte]. Questo file è il
+Le voci ancora aperte sono **dieci** [conta: voci-aperte]. Questo file è il
 loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -178,11 +178,11 @@ Si cercano le voci ponendo domande in questo ordine:
 | **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | **chiusa** — sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta era già scritta altrove nel repo: [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md), [0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md), [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md), [0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) | — | 2 |
 | **26** | [Otto gesti che l'app fa e nessuno può dichiarare](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) | otto gesti che l'app compie e che **nessun dato dichiara**: in tutti e otto la mossa che li renderebbe dichiarabili il repo l'ha già fatta accanto, su un problema confinante | 7 | 1 |
 | **27** | [Tre scommesse che nessuno ha ancora provato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md) | tre affermazioni che il freeze rende definitive e che **niente nel repo ha mai esercitato**: il confine WASM, il momento in cui un plugin può intervenire, la dimensione dell'oggetto dietro il lucchetto | 3 | — |
-| **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | una voce sola, e il soggetto non è il prodotto ma **il ciclo di chi lo scrive**: la struttura in otto crate regge alla misura, il tempo sta tutto nei centoventuno eseguibili che escono da `tests/` | 1 | — |
+| **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | **chiusa** — una voce sola, e il soggetto non era il prodotto ma **il ciclo di chi lo scrive**: la [0145](decisions/0145-gli-eseguibili-restano-a-calare-e-quanto-pesa-un-link.md) l'ha chiusa fuori dalle tre forme che proponeva, perché il costo non era il *numero* degli eseguibili ma il *peso* di ognuno | — | — |
 
 ## Le voci
 
-Le voci aperte sono **undici** [conta: voci-aperte], e stanno in tre sedute.
+Le voci aperte sono **dieci** [conta: voci-aperte], e stanno in due sedute.
 
 Sette formano la [seduta
 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) (2026-08-10). La misura
@@ -205,17 +205,18 @@ dell'oggetto dietro il lucchetto (§27.3). Le due P0 lo sono per la stessa
 ragione, ed è la [0002](decisions/0002-additivita-del-contratto.md): dopo il
 freeze non c'è una seconda occasione più economica.
 
-Una sola forma la [seduta
-28](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) (2026-08-11), ed
-è la prima voce il cui soggetto non è il prodotto ma **il ciclo di lavoro di chi
-lo scrive**. La domanda era se la struttura del progetto Rust fosse inutilmente
-complessa, e per gli otto crate la risposta misurata è no — grafo profondo
-quattro, senza cicli, e le otto librerie si compilano in una manciata di
-secondi. Il tempo sta nei **centoventuno file di `tests/`**, che sono
-centoventuno eseguibili da linkare: quattro minuti e dieci fra una riga cambiata
-nel kernel e il primo test che parte (§28.1, presidi, **P1**). È P1 e non P2 per
-il criterio della [seduta 17](roadmap/17-presidi-che-restano.md): il costo
-cresce con l'attesa, perché ogni voce chiusa aggiunge file a `tests/`.
+La [seduta
+28](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) (2026-08-11) è
+**chiusa il giorno stesso in cui è stata aperta**, e la sua voce sola era la
+prima il cui soggetto non fosse il prodotto ma **il ciclo di lavoro di chi lo
+scrive**. La [0145](decisions/0145-gli-eseguibili-restano-a-calare-e-quanto-pesa-un-link.md)
+l'ha chiusa **fuori dalle tre forme che proponeva**, perché la premessa non
+reggeva: i quattro minuti fra una riga cambiata nel kernel e il primo test che
+parte non erano il *numero* degli eseguibili di `tests/` ma il *peso* di ognuno,
+e il peso non l'aveva scelto nessuno — era il default di cargo, che ricopia
+l'informazione di debug dentro ogni binario. Una riga di `[profile.dev]` la
+lascia nei `.o`: mediana di un eseguibile di prova da 62,4 a 25,6 MB, i
+centotrentasette insieme da 13,8 a 4,94 GB, e non si perde un byte.
 
 La roadmap infrastrutturale di M4 resta finita. La [seduta
 25](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) aveva chiuso
@@ -438,7 +439,6 @@ nessuno è tornato a prendere la casella.
 | **§27.1** | [Il confine di M5 non è mai stato attraversato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#271-il-confine-di-m5-non-è-mai-stato-attraversato) | 27. Tre scommesse che nessuno ha ancora provato | contratto | **P0** |
 | **§27.2** | [Un plugin può osservare dopo, non decidere prima](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#272-un-plugin-può-osservare-dopo-non-decidere-prima) | 27. Tre scommesse che nessuno ha ancora provato | contratto | **P0** |
 | **§27.3** | [La grana del lucchetto è il vault, e chi muterà non sarà di casa](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md#273-la-grana-del-lucchetto-è-il-vault-e-chi-muterà-non-sarà-di-casa) | 27. Tre scommesse che nessuno ha ancora provato | kernel | **P1** |
-| **§28.1** | [Ogni file di prova è un eseguibile, e sono centoventuno](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md#281-ogni-file-di-prova-è-un-eseguibile-e-sono-centoventuno) | 28. Centoventuno eseguibili per provare una riga | presidi | **P1** |
 
 ## I difetti misurati
 
@@ -658,7 +658,7 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centoquarantaquattro** [conta: verbali], uno per file. Diceva
+  **centoquarantacinque** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo
