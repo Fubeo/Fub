@@ -132,7 +132,7 @@ pub struct DirEntry {
 
 /// Il supporto su cui vive un vault.
 ///
-/// Otto operazioni, e sono quelle che il kernel usa davvero. La regola con cui
+/// Nove operazioni, e sono quelle che il kernel usa davvero. La regola con cui
 /// questo trait è nato era «sette, e chi ne aggiunge un'ottava sta chiedendo al
 /// supporto di sapere qualcosa sul contenuto»; l'ottava è arrivata
 /// ([`VaultStorage::append`], con la
@@ -142,11 +142,22 @@ pub struct DirEntry {
 /// sapere **dove finisce**, che è l'unica cosa che un supporto sa già di ogni
 /// file che tiene.
 ///
+/// La nona ([`VaultStorage::update`]) passa lo stesso metro dall'altro verso:
+/// non chiede al supporto di sapere cosa ci sia nel file — a saperlo è la
+/// [`Fusione`], che il chiamante porta con sé — ma di **stare fermo** fra la
+/// lettura e la scrittura, che è l'unica cosa che il supporto sa e chi chiama
+/// non può sapere. Fuori di qui quella fermata non si può ottenere: chi legge,
+/// compone e riscrive dall'esterno perde ciò che un altro ha scritto nel mezzo,
+/// e lo perde in silenzio
+/// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+///
 /// Il criterio vero per distinguere un'operazione da una comodità sta più sotto,
 /// in [`VaultStorage::remove_dir_all`]: ciò che si **compone** dalle altre ha un
 /// default e non è una capacità in più. `append` non si compone — leggi+riscrivi
 /// costa l'intero file a ogni riga, e non è nemmeno la stessa cosa quando la si
-/// paga — quindi è un'operazione.
+/// paga — quindi è un'operazione. `update` nemmeno, e per un motivo più netto:
+/// composta da `read` e `write` sarebbe la stessa firma **senza la sola cosa
+/// che promette**.
 ///
 /// # Gli errori sono `io::Error` e non `KernelError`
 ///
@@ -160,6 +171,16 @@ pub struct DirEntry {
 ///
 /// Perché il vault lo attraversano i job (§9.3), che girano su altri thread.
 /// Non è una richiesta di questo modulo: è il posto in cui si vede.
+/// **La fusione** che [`VaultStorage::update`] chiama fra la rilettura e la
+/// scrittura: riceve i byte che ci sono sul supporto *adesso* — `None` se il
+/// file non c'è — e restituisce i byte da scrivere, oppure `None` per «non
+/// scrivere affatto».
+///
+/// Ha un nome suo perché è un **parametro di protocollo** e non un dettaglio di
+/// firma: chi implementa il supporto deve poterla nominare per riscriverla
+/// uguale, e i quattro doppioni di prova nei test la nominano.
+pub type Fusione<'a> = &'a mut dyn FnMut(Option<&[u8]>) -> io::Result<Option<Vec<u8>>>;
+
 pub trait VaultStorage: Send + Sync {
     /// I byte a questo path.
     fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>>;
@@ -181,6 +202,34 @@ pub trait VaultStorage: Send + Sync {
     /// [`FsStorage::write`] per cosa costa darla e per i due casi in cui il
     /// prezzo si rifiuta di pagarlo.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()>;
+
+    /// **Rilegge, fonde, riscrive** — sotto un lucchetto che tiene fuori chi sta
+    /// aggiornando lo stesso file.
+    ///
+    /// Non è una [`write`](VaultStorage::write) con un passo in più, ed è la
+    /// stessa distinzione che [`append`](VaultStorage::append) fa dall'altro
+    /// lato: `write` promette «questi byte o quelli di prima», e chi la chiama
+    /// ricompone il contenuto intero dalla **propria copia in memoria**, che è
+    /// vecchia dall'apertura. La seconda finestra che salva atterra così un file
+    /// integro e senza ciò che la prima aveva scritto nel frattempo — una *lost
+    /// update*, che nessuna quantità di `fsync` risolve perché non è un file a
+    /// metà: è un file intero e vecchio
+    /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+    ///
+    /// `fondi` riceve i byte **che stanno sul supporto adesso** (`None` se il
+    /// file non c'è) e torna quelli da scrivere, oppure `None` per non scrivere
+    /// affatto — che è come si dice «niente è cambiato» senza toccare il disco.
+    ///
+    /// Non ha un default composto da `read` + `write`, e la ragione è la
+    /// differenza con [`remove_dir_all`](VaultStorage::remove_dir_all): là il
+    /// default *è* l'operazione, qui sarebbe l'operazione **meno la sua unica
+    /// garanzia**. Un supporto che non sa prendere un lucchetto lo deve dire
+    /// scrivendolo, non ereditandolo.
+    ///
+    /// **`fondi` non deve rientrare in questo supporto**: il lucchetto è già
+    /// preso, e chiedergli qualcosa da dentro è come minimo un giro inutile e su
+    /// [`MemStorage`] un blocco.
+    fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()>;
 
     /// Aggiunge i byte **in coda** a ciò che c'è, creando il file e le cartelle
     /// se mancano.
@@ -613,6 +662,36 @@ impl VaultStorage for FsStorage {
         self.write_con(path, bytes, nomi_del_file).map(|_| ())
     }
 
+    /// Il lucchetto di [`lock_esclusivo`] tenuto per il tempo della rilettura e
+    /// della scrittura, che è la sola cosa che questo supporto aggiunge al giro
+    /// `read` → `fondi` → `write`. È **best-effort** di proposito: dove il lock
+    /// non c'è — una share di rete che non lo implementa — la rilettura vale lo
+    /// stesso, e rifiutarsi di salvare sarebbe un danno certo al posto di uno
+    /// improbabile.
+    ///
+    /// Il lucchetto si prende **solo se la cartella c'è già**, perché
+    /// [`lock_esclusivo`] la creerebbe per posarci accanto il proprio file: un
+    /// aggiornamento che non trova niente da aggiornare non deve lasciare
+    /// dietro di sé la cartella di un vault che nessuno ha ancora aperto — è la
+    /// differenza fra una radice che non si legge, e che quindi non si apre, e
+    /// una radice che l'apertura stessa ha fatto esistere vuota. Senza cartella
+    /// non c'è nemmeno il file, quindi non c'è nessun contenuto che un altro
+    /// processo possa perdere: `fondi` riceve `None` e, se decide di scrivere,
+    /// è [`write`](VaultStorage::write) a creare l'albero.
+    fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
+        let cartella_c_e = path.parent().map(Utf8Path::exists).unwrap_or(true);
+        let _lock = cartella_c_e.then(|| lock_esclusivo(path));
+        let attuale = match self.read(path) {
+            Ok(bytes) => Some(bytes),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e),
+        };
+        match fondi(attuale.as_deref())? {
+            Some(bytes) => self.write(path, &bytes),
+            None => Ok(()),
+        }
+    }
+
     /// `O_APPEND` e **nessun `fsync`**: la scelta è a verbale
     /// ([0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md)),
     /// e sta tutta nell'ordine in cui le due scritture avvengono. Chi appende lo
@@ -856,6 +935,22 @@ impl<T> Durevole<T> {
         self.0 = nuovo;
         Ok(())
     }
+
+    /// **Aggiorna**: adotta ciò che la scrittura ha prodotto, invece di dettarlo.
+    ///
+    /// È la gemella di [`scrivi`](Durevole::scrivi) per i file che si fondono
+    /// invece di sostituirsi ([`VaultStorage::update`]): là il chiamante sa già
+    /// cosa andrà nel file, qui no — il valore nuovo nasce mettendo il proprio
+    /// cambiamento sopra ciò che sul disco c'è *adesso*, e chi lo compone è la
+    /// scrittura. Adottare la propria copia mutata al posto di quella fusa
+    /// vorrebbe dire tenere in memoria l'unico stato che non è di nessuno.
+    ///
+    /// L'ordine resta quello del tipo: se `su_disco` fallisce la memoria non si
+    /// muove.
+    pub fn aggiorna<E>(&mut self, su_disco: impl FnOnce() -> Result<T, E>) -> Result<(), E> {
+        self.0 = su_disco()?;
+        Ok(())
+    }
 }
 
 impl<T> std::ops::Deref for Durevole<T> {
@@ -974,6 +1069,32 @@ impl VaultStorage for MemStorage {
         mem.tick += 1;
         let tick = mem.tick;
         mem.files.insert(path.to_owned(), (bytes.to_vec(), tick));
+        Ok(())
+    }
+
+    /// Qui l'aggiornamento è atomico **davvero**, e non per modo di dire come
+    /// l'atomicità della `write`: il lucchetto della mappa si tiene per tutto il
+    /// giro, quindi fra la rilettura e la scrittura non ci si infila nessuno. È
+    /// anche la ragione per cui `fondi` non deve rientrare nel supporto — questo
+    /// `Mutex` non è rientrante.
+    fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
+        let mut mem = self.lock();
+        if mem.dirs.contains(path) {
+            return Err(io::Error::new(
+                io::ErrorKind::IsADirectory,
+                format!("{path}: è una cartella"),
+            ));
+        }
+        let attuale = mem.files.get(path).map(|(bytes, _)| bytes.clone());
+        let Some(nuovi) = fondi(attuale.as_deref())? else {
+            return Ok(());
+        };
+        if let Some(parent) = path.parent() {
+            mem.make_dirs(parent);
+        }
+        mem.tick += 1;
+        let tick = mem.tick;
+        mem.files.insert(path.to_owned(), (nuovi, tick));
         Ok(())
     }
 

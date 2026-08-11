@@ -178,6 +178,80 @@ fn store(
     )
 }
 
+/// Scrive **una chiave** del livello del vault, fondendola con ciò che sul
+/// supporto c'è adesso. Torna la mappa fusa.
+///
+/// È la gemella di [`store`] — stessa regola, altro livello — e per un pezzo non
+/// lo è stata: il livello del vault ricomponeva il file intero dalla copia presa
+/// **all'apertura**, cioè la *lost update* che la 0066 aveva tolto alla macchina
+/// e lasciata dove pesa di più. La macchina è di una installazione sola; il file
+/// del vault lo condividono due finestre sullo stesso vault e due macchine che
+/// lo sincronizzano, ed è lì che «l'altra ha scritto dopo che io avevo letto»
+/// smette di essere teorico.
+///
+/// **Il file riletto si giudica come all'apertura**: se adesso è malformato non
+/// lo si sovrascrive: è la stessa regola di [`non_lo_sovrascrivo`] applicata al
+/// momento in cui il danno si può ancora evitare — fra l'apertura e questa
+/// scrittura il file può essere stato rotto da un editor di testo o da una
+/// sincronizzazione a metà, e `vault_readable` racconta com'era ieri.
+fn store_vault(
+    storage: &dyn VaultStorage,
+    path: &Utf8Path,
+    key: &str,
+    value: Option<SettingValue>,
+) -> Result<BTreeMap<String, SettingValue>, String> {
+    // Il valore si consuma dentro una `FnMut`, che potrebbe essere chiamata più
+    // volte per quel che ne sa il tipo: `Option::take` è ciò che dice al
+    // compilatore quel che il supporto garantisce, cioè una chiamata sola.
+    let mut da_scrivere = Some(value);
+    let mut fuso = None;
+    // Il guasto di *dominio* viaggia di fianco invece che dentro l'`io::Error`,
+    // o la sua frase uscirebbe da qui avvolta in un «non riesco a scrivere» che
+    // dice la cosa sbagliata: il file non si è potuto **leggere**.
+    let mut guasto = None;
+    let esito = storage.update(path, &mut |attuale| {
+        let letto = load_from(path, |_| match attuale {
+            Some(bytes) => Ok(bytes.to_vec()),
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "mai configurato",
+            )),
+        });
+        let mut disco = match letto {
+            Ok(disco) => disco,
+            Err(e) => {
+                guasto = Some(e);
+                return Err(std::io::Error::other("il file non si è potuto leggere"));
+            }
+        };
+        match da_scrivere
+            .take()
+            .expect("il supporto fonde una volta sola")
+        {
+            Some(v) => {
+                disco.insert(key.to_string(), v);
+            }
+            None => {
+                disco.remove(key);
+            }
+        }
+        let bytes = match encode(&disco) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                guasto = Some(e);
+                return Err(std::io::Error::other("il file non si è potuto comporre"));
+            }
+        };
+        fuso = Some(disco);
+        Ok(Some(bytes))
+    });
+    match (esito, guasto) {
+        (_, Some(guasto)) => Err(guasto),
+        (Err(e), None) => Err(format!("non riesco a scrivere {path}: {e}")),
+        (Ok(()), None) => Ok(fuso.expect("una fusione riuscita ha lasciato la mappa")),
+    }
+}
+
 /// Il rifiuto di sovrascrivere un file che all'apertura non si è potuto leggere.
 ///
 /// È la seconda metà della regola di [`load`], e senza di essa la prima non vale
@@ -744,22 +818,17 @@ impl SettingsStore {
                 // Su disco prima, in memoria dopo: non più perché lo dica
                 // questo commento, ma perché `Durevole` non sa esprimere
                 // l'altro ordine — la ragione sta là sopra.
-                let mut next = (*self.vault).clone();
-                match value {
-                    Some(v) => {
-                        next.insert(spec.key.clone(), v);
-                    }
-                    None => {
-                        next.remove(&spec.key);
-                    }
-                }
+                //
+                // E **ciò che si adotta è la fusione, non la propria copia
+                // mutata**: la chiave che si scrive è una, il file può averne
+                // altre che qualcun altro ha messo dopo la nostra apertura, e
+                // tenersi la propria mappa vorrebbe dire essere l'unico a non
+                // sapere che ci sono (vedi [`store_vault`]).
                 let (path, storage) = (&self.vault_path, self.storage.as_ref());
-                self.vault.scrivi(next, |next| {
-                    let bytes = encode(next).map_err(|e| PluginError::Internal(e.into()))?;
-                    storage
-                        .write(path, &bytes)
-                        .map_err(|e| PluginError::Internal(format!("{path}: {e}").into()))
-                })?;
+                let key = spec.key.clone();
+                self.vault
+                    .aggiorna(|| store_vault(storage, path, &key, value))
+                    .map_err(|e| PluginError::Internal(e.into()))?;
                 // **Scrivere risveglia**, e sta qui perché qui passano tutti e
                 // due i modi di scrivere — il valore e l'azzeramento. A scrivere
                 // un'impostazione è una persona davanti al pannello (la via dei

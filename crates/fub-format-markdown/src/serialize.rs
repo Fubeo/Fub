@@ -44,9 +44,10 @@ use fub_abi::model::{
     custom_kind, custom_kind::Carico, Block, ColumnAlign, DocumentModel, Inline, LinkTarget,
     TableRow,
 };
+use fub_abi::rules::tag::scan_tags;
 use fub_abi::FormatError;
 
-use crate::util::fila_massima;
+use crate::util::{disescapa, fila_massima};
 
 /// # Ciò che non si sa scrivere **risale**, non sparisce
 ///
@@ -120,9 +121,20 @@ fn attr_richiesto<'a>(
 /// perdita di questo file che si vede da fuori del documento.
 ///
 /// La forma è quella in coda alla riga, che è ciò che
-/// `parse::trailing_anchor` legge: il `^` preceduto da uno spazio. La forma su
-/// riga propria non va bene per tutti i blocchi — dopo un elenco diventa una
-/// continuazione pigra della voce.
+/// `parse::trailing_anchor` legge: il `^` preceduto da uno spazio.
+///
+/// **Va bene per un paragrafo e per nient'altro**, ed è il difetto che
+/// [`write_anchor_a_capo`] chiude: un paragrafo ha una coda di testo dove
+/// scrivere l'ancora, gli altri sei blocchi hanno in coda un *delimitatore*, e
+/// appendere ` ^id` a un delimitatore lo rompe. Misurato sul giro completo,
+/// blocco per blocco:
+///
+/// | blocco | usciva | cosa succedeva al giro dopo |
+/// |---|---|---|
+/// | tabella | `\| 1 \| 2 \| ^tab` | la cella in più si butta: **l'ancora sparisce** |
+/// | codice | ``` ``` ^cod ``` | il recinto non chiude più: `^cod` **entra nel codice** |
+/// | riga | `--- ^hr` | non è più una riga orizzontale: diventa un paragrafo |
+/// | elenco, citazione, callout | `- b ^lis`, `> citata ^cit` | l'id resta, ma indirizza il **figlio** invece del contenitore |
 ///
 /// Gli heading non passano di qui: la loro `anchor` è lo **slug generato** dal
 /// testo, non un id che l'utente ha scritto, e riscriverlo lo trasformerebbe in
@@ -135,6 +147,31 @@ fn write_anchor(anchor: &Option<String>, out: &mut String) {
         out.pop();
     }
     out.push(' ');
+    out.push('^');
+    out.push_str(id);
+    out.push('\n');
+}
+
+/// L'ancora esplicita su **riga propria**, dopo una riga vuota: la forma con
+/// cui si indirizza un blocco che in coda non ha del testo.
+///
+/// È la stessa forma che il parser dichiara — «l'ancora su riga propria (`^abc`
+/// da solo, subito dopo un blocco) è la sola forma con cui si indirizza un
+/// contenitore» — e che rilegge da `lone_anchor`: un paragrafo di sola ancora
+/// non resta un blocco, si attacca a quello che lo precede.
+///
+/// **La riga vuota è obbligatoria** e non è impaginazione: senza, dopo un
+/// elenco il `^abc` è una continuazione pigra dell'ultima voce e finisce
+/// *dentro* di essa. Con la riga vuota è un blocco a sé, ed è la condizione da
+/// cui `lone_anchor` lo riconosce.
+fn write_anchor_a_capo(anchor: &Option<String>, out: &mut String) {
+    let Some(id) = anchor else {
+        return;
+    };
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push('\n');
     out.push('^');
     out.push_str(id);
     out.push('\n');
@@ -213,7 +250,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                 }
                 out.push('\n');
             }
-            write_anchor(anchor, out);
+            write_anchor_a_capo(anchor, out);
         }
         Block::Table {
             head,
@@ -231,10 +268,25 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             let write_row = |row: &TableRow, out: &mut String| -> Result<(), FormatError> {
                 out.push('|');
                 for i in 0..columns {
-                    out.push(' ');
+                    // **La cella si scrive a parte per via del `|`.** In GFM la
+                    // barra verticale è il delimitatore, e l'unico modo di
+                    // averne una *dentro* una cella è `\|`: il testo la porta
+                    // nuda (il parser l'ha già disescapata) e un alias di
+                    // wikilink ne scrive una sua. Scritta nuda, la riga guadagna
+                    // una colonna che la riga di separazione non ha — misurato
+                    // su `| a \| b | c |`, che al primo giro diventa una tabella
+                    // di tre celle su due, e al secondo **non è più una
+                    // tabella**.
+                    //
+                    // Il buffer comincia con lo spazio che separa dalla barra
+                    // perché `scrivi_testo` legge lì se è a inizio riga: un
+                    // buffer vuoto direbbe di sì, e un `-` in testa alla cella
+                    // si prenderebbe una barra rovescia che non gli serve.
+                    let mut cella = String::from(" ");
                     if let Some(c) = row.cells.get(i) {
-                        write_inlines(&c.inlines, out)?;
+                        write_inlines(&c.inlines, &mut cella)?;
                     }
+                    out.push_str(&cella.replace('|', "\\|"));
                     out.push_str(" |");
                 }
                 out.push('\n');
@@ -260,7 +312,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             for r in rows {
                 write_row(r, out)?;
             }
-            write_anchor(anchor, out);
+            write_anchor_a_capo(anchor, out);
         }
         Block::CodeBlock {
             lang,
@@ -283,7 +335,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             }
             out.push_str(&fence);
             out.push('\n');
-            write_anchor(anchor, out);
+            write_anchor_a_capo(anchor, out);
         }
         Block::Quote {
             blocks,
@@ -301,11 +353,11 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                 out.push_str(line);
                 out.push('\n');
             }
-            write_anchor(anchor, out);
+            write_anchor_a_capo(anchor, out);
         }
         Block::ThematicBreak { anchor, span: _ } => {
             out.push_str("---\n");
-            write_anchor(anchor, out);
+            write_anchor_a_capo(anchor, out);
         }
         Block::Custom {
             custom_kind,
@@ -315,7 +367,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             span: _,
         } => {
             write_custom_block(custom_kind, attrs, blocks, out)?;
-            write_anchor(anchor, out);
+            write_anchor_a_capo(anchor, out);
         }
     }
     Ok(())
@@ -366,7 +418,18 @@ fn write_custom_block(
     }
     if kind == custom_kind::CALLOUT {
         let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
-        out.push_str(&format!("> [!{ty}]\n"));
+        // **Il titolo sta negli `attrs`, e non è nei figli.** `> [!warning]
+        // Attenzione` dava `title: "Attenzione"` e blocchi `[corpo]`: chi
+        // scriveva solo `> [!warning]` non appiattiva il titolo dentro il
+        // corpo, lo **cancellava dal file** — e `render.rs` intanto lo mostrava
+        // (`callout-title`), quindi la stessa nota aveva un titolo in anteprima
+        // e nessuno sul disco.
+        let title = attrs.get("title").and_then(|v| v.as_str()).unwrap_or("");
+        if title.is_empty() {
+            out.push_str(&format!("> [!{ty}]\n"));
+        } else {
+            out.push_str(&format!("> [!{ty}] {title}\n"));
+        }
         let mut inner = String::new();
         for b in blocks {
             write_block(b, &mut inner)?;
@@ -433,7 +496,7 @@ fn write_inlines(inlines: &[Inline], out: &mut String) -> Result<(), FormatError
 /// firma permettesse di scrivere.
 fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
     match inline {
-        Inline::Text(s) => out.push_str(s),
+        Inline::Text(s) => scrivi_testo(s, out),
         Inline::Emph(children) => {
             out.push('*');
             write_inlines(children, out)?;
@@ -502,6 +565,86 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
     Ok(())
 }
 
+/// **Il testo del modello riscritto come sorgente**, cioè con le barre rovesce
+/// che servono perché rileggendolo torni lo stesso testo.
+///
+/// # Il testo decodificato non è sorgente
+///
+/// `Inline::Text` porta il testo **come si legge**: il parser decodifica gli
+/// escape di comrak, quindi `\#nontag` arriva qui come `#nontag`. Riscriverlo
+/// così com'era — `out.push_str(s)`, che è ciò che questo ramo faceva — non
+/// è lossy, è **cambiare il documento**: al giro dopo lo stesso file dice
+/// un'altra cosa.
+///
+/// Le due specie di danno, misurate:
+///
+/// - **si inventa una feature**: `\#nontag` esce `#nontag`, e `scan_tags` (che è
+///   la stessa regola che decide qui) lo rilegge come un tag vero, che entra
+///   nell'indice e nel pannello. Lo stesso per `==`, `[[`, `*`, `` ` ``;
+/// - **cambia il tipo di blocco**: un paragrafo che comincia col testo `# ...`
+///   (da `\# ...`) si riscrive `# ...` e torna un `Block::Heading`. Vale per
+///   `>`, `-`, `+`, `1.`, `:` e `|` in testa alla riga: P→H1, P→citazione,
+///   P→elenco.
+///
+/// La seconda specie è la ragione per cui questa funzione guarda `out`: «inizio
+/// riga» è una proprietà di **dove si sta scrivendo**, non del testo. Il buffer
+/// di una voce d'elenco o di una citazione comincia vuoto, ed è giusto che lì
+/// valga come inizio riga — quel `#` un heading lo aprirebbe davvero, dentro la
+/// voce.
+///
+/// # Cosa si escapa, e perché non tutto
+///
+/// Ogni barra rovescia in più è un byte nel file dell'utente, quindi il criterio
+/// non è «tutta la punteggiatura ASCII» ma «questo carattere, **qui**, rileggerebbe
+/// come sintassi»: `_` solo fuori da una parola, `<` solo davanti a un nome,
+/// `~ = %` solo raddoppiati, `^` solo dove sarebbe un marcatore d'ancora, `#`
+/// solo dove [`scan_tags`] prende un tag — che non è una regola somigliante,
+/// è **la** regola, chiamata qui perché sia la stessa da tutt'e due i lati.
+///
+/// La `&` resta fuori di proposito: escaparla riscriverebbe come letterale
+/// un'entità che il documento aveva (`&amp;` → `\&amp;`), che è la stessa
+/// specie di danno con il segno cambiato.
+fn scrivi_testo(s: &str, out: &mut String) {
+    let tag: std::collections::HashSet<usize> =
+        scan_tags(s).into_iter().map(|t| t.span.start).collect();
+    // Nessuno ha ancora scritto su questa riga: un delimitatore di blocco qui
+    // aprirebbe un blocco.
+    let mut inizio_riga = out.is_empty() || out.ends_with('\n');
+    // …e finora ha scritto solo cifre, cioè il `.` che segue aprirebbe un
+    // elenco numerato.
+    let mut solo_cifre = inizio_riga;
+    let mut i = 0;
+    while i < s.len() {
+        let c = s[i..].chars().next().expect("i è un confine di carattere");
+        let dopo = s[i + c.len_utf8()..].chars().next();
+        let prima = s[..i].chars().next_back();
+        let scappa = match c {
+            '\\' | '[' | ']' | '*' | '`' => true,
+            // In testa alla riga si escapa **sempre**: `#`, `##`, `###` sono
+            // tutti heading, e la regola dei tag non prende `##` (nome vuoto).
+            '#' => inizio_riga || tag.contains(&i),
+            '_' => {
+                !(prima.is_some_and(char::is_alphanumeric)
+                    && dopo.is_some_and(char::is_alphanumeric))
+            }
+            '<' => dopo.is_some_and(|d| d.is_alphanumeric() || "/!?".contains(d)),
+            '~' | '=' | '%' => dopo == Some(c),
+            '$' => dopo.is_some_and(|d| !d.is_whitespace()),
+            '^' => prima.is_none_or(char::is_whitespace) && dopo.is_some_and(char::is_alphanumeric),
+            '>' | '-' | '+' | ':' | '|' => inizio_riga,
+            '.' | ')' => solo_cifre && i > 0,
+            _ => false,
+        };
+        if scappa {
+            out.push('\\');
+        }
+        out.push(c);
+        inizio_riga = inizio_riga && c.is_whitespace();
+        solo_cifre = solo_cifre && c.is_ascii_digit();
+        i += c.len_utf8();
+    }
+}
+
 fn write_link(
     target: &LinkTarget,
     label: Option<&[Inline]>,
@@ -535,6 +678,9 @@ fn write_link(
             if let Some(inlines) = label {
                 let mut lbl = String::new();
                 write_inlines(inlines, &mut lbl)?;
+                // Dentro le due parentesi non c'è escape: l'alias è testo nudo
+                // fino a `]]` (vedi [`disescapa`]).
+                let lbl = disescapa(&lbl);
                 // L'alias si scrive solo se **dice qualcosa di diverso** dal
                 // bersaglio, e il confronto è con l'interno intero. Era col solo
                 // `page`, quindi ogni link con un punto rientrava dal giro con

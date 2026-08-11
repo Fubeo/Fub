@@ -267,10 +267,29 @@ impl Drafts {
     /// rinominata mentre il suo buffer era sporco lascerebbe una bozza sotto un
     /// nome che nessuno visita più — cioè testo dell'utente perso in silenzio,
     /// che è precisamente ciò che questo modulo esiste per impedire.
+    /// **La destinazione non si sovrascrive**, e questa è l'unica delle tre
+    /// migrazioni che se lo deve dire da sé. Le altre due si affidano alla
+    /// garanzia di `migrate_side_data` — «il `to` è libero, perché il rename
+    /// rifiuta un documento che esiste» — ma quella garanzia parla di
+    /// **documenti**, e una bozza può esserci senza che il documento ci sia: è
+    /// il caso di una nota mai salvata, cioè esattamente quella la cui bozza è
+    /// l'unica copia al mondo. Rinominare `appunti.md` in `idee.md` mentre
+    /// `idee.md` è una nota mai salvata e ancora sporca passava il controllo
+    /// dell'anagrafe — il documento non c'è — e cancellava il testo.
+    ///
+    /// Trovandola occupata non si sposta niente: la bozza di `from` resta dov'è,
+    /// quella di `to` pure, e l'errore diventa un avviso. Due bozze vive in due
+    /// posti sono un disordine; una sola, cancellata, non si ripara.
     pub(crate) fn migrate(&self, from: &DocId, to: &DocId) -> std::io::Result<()> {
         let vecchio = self.path(from);
         if !self.storage.exists(&vecchio) {
             return Ok(());
+        }
+        if self.storage.exists(&self.path(to)) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{to} ha già una bozza non salvata, e non la si sovrascrive"),
+            ));
         }
         // Il documento sta **dentro** il record, non solo nel nome del file: un
         // rename che spostasse il file lasciando il campo vecchio darebbe una
@@ -380,6 +399,37 @@ mod tests {
         // nuovo, o la bozza rivendicherebbe una nota che non è la sua.
         assert_eq!(bozze.drafts[0].doc, doc("dopo.md"));
         assert_eq!(bozze.drafts[0].text, "testo");
+    }
+
+    #[test]
+    fn una_rinomina_non_seppellisce_la_bozza_che_trova() {
+        // Il caso che la garanzia dell'anagrafe non copre: `dopo.md` non è un
+        // documento — non lo è mai stato — quindi il rename passa, e la bozza
+        // che sta lì sotto è l'unica copia di ciò che qualcuno ha scritto.
+        let d = drafts();
+        d.save(&doc("prima.md"), "il testo che si sposta", None, 1)
+            .unwrap();
+        d.save(&doc("dopo.md"), "il testo che non esiste altrove", None, 2)
+            .unwrap();
+
+        let esito = d.migrate(&doc("prima.md"), &doc("dopo.md"));
+        assert_eq!(
+            esito.unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists,
+            "la destinazione era occupata, e lo si dice"
+        );
+        let bozze = d.read();
+        assert_eq!(bozze.drafts.len(), 2, "nessuna delle due si è persa");
+        assert_eq!(
+            d.get(&doc("dopo.md")).unwrap().text,
+            "il testo che non esiste altrove"
+        );
+        assert_eq!(
+            d.get(&doc("prima.md")).unwrap().text,
+            "il testo che si sposta",
+            "e chi non si è potuto spostare resta dov'era, invece di sparire da \
+             tutte e due le parti"
+        );
     }
 
     #[test]

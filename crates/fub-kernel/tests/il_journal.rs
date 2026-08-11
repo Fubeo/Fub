@@ -392,6 +392,20 @@ impl fub_kernel::VaultStorage for SupportoCheConta {
     fn write(&self, path: &camino::Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
         self.inner.write(path, bytes)
     }
+    /// Un aggiornamento **rilegge**, quindi conta come una lettura: la potatura
+    /// passa di qui e non da `read`, e non contarla farebbe scendere il numero
+    /// senza che nessuna lettura sia sparita.
+    fn update(
+        &self,
+        path: &camino::Utf8Path,
+        fondi: fub_kernel::storage::Fusione<'_>,
+    ) -> std::io::Result<()> {
+        if path.file_name() == Some("journal.jsonl") {
+            self.letture
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        self.inner.update(path, fondi)
+    }
     fn append(&self, path: &camino::Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
         self.inner.append(path, bytes)
     }

@@ -48,8 +48,17 @@
 //! - **Se un file *partecipa*** — se la scansione lo guarda, se la ricerca lo
 //!   indicizza, se il sync lo porta — non è una domanda sul nome, è la politica
 //!   di esclusione del §15.6 (`fub_kernel::ignore`), il gemello di questa voce
-//!   sul lato *quali file*. L'unico punto in cui i due si toccano è il punto
-//!   iniziale, e si toccano in un modo che vale la pena dire: `.nota.md` è
+//!   sul lato *quali file*. I due si toccano in due punti, e valgono entrambi la
+//!   pena di essere detti.
+//!
+//!   Il primo è **lo spazio macchina** ([`MACHINE_DIRS`]), e lì non si toccano:
+//!   è la stessa regola scritta due volte perché serve a due domande. Di là dice
+//!   che la scansione non guarda `.fub/` e `.trash/`; di qua dice che nessuno li
+//!   **nomina**. Tenerla solo di là voleva dire che il percorso di scrittura non
+//!   la applicava affatto, e la protezione era accidentale — reggeva finché
+//!   nessuno registrava un provider per `.json`.
+//!
+//!   Il secondo è il punto iniziale: `.nota.md` è
 //!   **legale** su ogni filesystem, quindi non è un problema di portabilità; è
 //!   un problema perché di norma la scansione la salterebbe, cioè Fub creerebbe
 //!   una nota che Fub non vede. Per questo [`NameFault::Hidden`] c'è, ed è la
@@ -105,6 +114,25 @@ pub const DOS_DEVICES: &[&str] = &[
     "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
+/// I nomi di cartella che sono **lo spazio macchina** di un vault, non il suo
+/// contenuto: `.fub` (impostazioni, registro, anagrafe, bozze, blob dei plugin)
+/// e `.trash` (le note cestinate e i loro sidecar).
+///
+/// Stanno qui, nel contratto, e non solo in `fub_kernel::ignore`, perché sono la
+/// **stessa** regola letta dalle due parti: la politica di esclusione dice che
+/// la scansione non li guarda, e questa dice che nessuno li nomina. Finché la
+/// regola viveva solo di là, un `write_document(".fub/data/plugins/altro/x.md")`
+/// superava il recinto — `Naming::Existing` non guarda il punto in testa, per
+/// scelta — e atterrava in un posto che l'anagrafe non elenca e che nessuna
+/// fusione protegge: i metadati di un vault sovrascritti da byte arbitrari, o lo
+/// spazio dati di un altro plugin scritto aggirando il recinto per-plugin di
+/// `data_*`.
+///
+/// Il confronto è su **ogni** segmento, non solo sul primo, ed è il verso di
+/// `is_ignored`: un `.fub` a metà path è invisibile alla scansione esattamente
+/// quanto quello in radice, e ciò che non si vede non si scrive.
+pub const MACHINE_DIRS: &[&str] = &[".fub", ".trash"];
+
 /// Quale delle due domande si sta ponendo su un nome.
 ///
 /// Non ha un valore di default **di proposito**: la tolleranza sbagliata è
@@ -117,7 +145,9 @@ pub enum Naming {
     /// si rifiuta soltanto ciò che non nomina un posto **dentro** il vault.
     ///
     /// È il recinto, e vale in entrambi i versi: `../../.ssh/authorized_keys`
-    /// non è un documento né da leggere né da scrivere.
+    /// non è un documento né da leggere né da scrivere. Con lui vale il recinto
+    /// interno ([`MACHINE_DIRS`]): `.fub/settings.json` è dentro il vault e non
+    /// è comunque un documento.
     Existing,
     /// Un nome che **sta nascendo**: creazione, destinazione di un rename,
     /// import, template. Il recinto più tutto il resto.
@@ -136,6 +166,11 @@ pub enum NameFault {
     /// Un segmento vuoto (`a//b`), `.` oppure `..`. È il recinto: un `..` di
     /// troppo esce dal vault, e ciò che sta fuori dal vault non è un documento.
     Traversal { segment: String },
+    /// Un segmento che nomina lo spazio macchina ([`MACHINE_DIRS`]). È l'altra
+    /// metà del recinto: `.fub/` e `.trash/` stanno *dentro* il vault, ma non
+    /// sono il vault — sono come è fatto, e non si nominano come si nomina una
+    /// nota.
+    Machine { segment: String },
     /// Un carattere di controllo (`\n`, `\t`, `\0`, U+0080–U+009F). Nessun
     /// filesystem li vuole, e un nome che ne contiene uno non si scrive né si
     /// stampa: si vede sparire.
@@ -176,6 +211,7 @@ impl NameFault {
         match self {
             NameFault::Empty => "empty",
             NameFault::Traversal { .. } => "traversal",
+            NameFault::Machine { .. } => "machine",
             NameFault::Control { .. } => "control",
             NameFault::Reserved { .. } => "reserved",
             NameFault::Device { .. } => "device",
@@ -190,6 +226,7 @@ impl NameFault {
         match self {
             NameFault::Empty => None,
             NameFault::Traversal { segment }
+            | NameFault::Machine { segment }
             | NameFault::Control { segment, .. }
             | NameFault::Reserved { segment, .. }
             | NameFault::Device { segment }
@@ -208,6 +245,11 @@ impl std::fmt::Display for NameFault {
                 f,
                 "`{segment}` non nomina un posto dentro il vault: un documento si \
                  nomina con un path relativo, senza `.` né `..`"
+            ),
+            NameFault::Machine { segment } => write!(
+                f,
+                "`{segment}` è lo spazio macchina del vault, non il suo contenuto: \
+                 non nomina un documento"
             ),
             NameFault::Control { segment, ch } => write!(
                 f,
@@ -278,7 +320,8 @@ impl std::error::Error for NameFault {}
 /// # L'ordine dei controlli è dichiarato
 ///
 /// Un nome può essere sbagliato in più modi insieme, e questa funzione risponde
-/// col primo che trova. L'ordine è: il recinto, i caratteri di controllo, i
+/// col primo che trova. L'ordine è: il recinto — segmenti vuoti, `.`, `..` e lo
+/// spazio macchina ([`MACHINE_DIRS`]) —, i caratteri di controllo, i
 /// caratteri riservati, i device, il punto in coda, il punto in testa, la
 /// lunghezza; e i segmenti si guardano da sinistra a destra. Non è
 /// un'implementazione che si può cambiare senza guardare: è la risposta che la
@@ -297,14 +340,48 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
     if path.trim().is_empty() {
         return Err(NameFault::Empty);
     }
-    for segment in path.split('/') {
+    for (i, segment) in path.split('/').enumerate() {
         // Il recinto, sempre: un segmento vuoto, `.` o `..`.
         if segment.is_empty() || segment == "." || segment == ".." {
             return Err(NameFault::Traversal {
                 segment: segment.to_string(),
             });
         }
+        // E il recinto interno, sempre anche lui: lo spazio macchina non è
+        // fuori dal vault, è **sotto** — e un documento non lo nomina. Vale per
+        // entrambe le domande, e per una che nasce arriva prima di `Hidden`:
+        // `.fub/nota.md` non è «un nome che la scansione salterebbe», è la
+        // cartella di Fub, e chi lo legge merita la frase giusta.
+        if MACHINE_DIRS.contains(&segment) {
+            return Err(NameFault::Machine {
+                segment: segment.to_string(),
+            });
+        }
         if naming == Naming::Existing {
+            // E l'altra metà del recinto, quella che si vede solo sapendo cosa
+            // succede a valle: un path che **comincia** con una lettera di drive
+            // non nomina un posto dentro il vault, lo nomina al posto del vault.
+            // Su Windows `Path::join` con un argomento così **butta via la
+            // base** — `<radice>.join("C:/Users/x/segreto.md")` è
+            // `C:/Users/x/segreto.md` — quindi non è un nome strano: è la fuga,
+            // e vale per leggere, per scrivere e per cestinare.
+            //
+            // Sta qui dentro perché per un nome che **nasce** la porta è già
+            // chiusa e meglio: `:` è fra i [`RESERVED_CHARS`], e chi digita
+            // `a:b.md` come titolo va avvisato che quel carattere non si può
+            // usare, non che sta uscendo dal vault. La falla era tutta di qua —
+            // i caratteri riservati non si guardano su un nome che si dichiara
+            // esistente, ed è da lì che la fuga passava.
+            //
+            // Solo il primo segmento, perché solo lì Windows legge un prefisso;
+            // il prezzo è che su Linux un file chiamato davvero `C:` in radice
+            // smette di essere apribile, e il verso è giusto — sul sistema per
+            // cui la regola c'è un nome così non esiste, e la fuga sì.
+            if i == 0 && drive_prefix(segment) {
+                return Err(NameFault::Traversal {
+                    segment: segment.to_string(),
+                });
+            }
             continue;
         }
         if let Some(ch) = segment.chars().find(|c| c.is_control()) {
@@ -382,6 +459,17 @@ pub fn normalized(path: &str) -> String {
         .join("/")
 }
 
+/// Il segmento comincia con una lettera di drive (`C:`, `c:nota.md`)?
+///
+/// È la forma che su Windows fa di un path un **altro posto** invece di un
+/// pezzo di questo: sia quella con la radice (`C:/x`, che qui arriva così perché
+/// chi accetta la forma Windows converte i separatori prima di chiamare) sia
+/// quella relativa al drive (`C:x`), che è il caso che si dimentica.
+fn drive_prefix(segment: &str) -> bool {
+    let mut chars = segment.chars();
+    matches!((chars.next(), chars.next()), (Some(c), Some(':')) if c.is_ascii_alphabetic())
+}
+
 /// Il segmento è un device DOS? Si guarda il nome fino al primo punto, senza
 /// distinzione di caso: `con`, `CON.md` e `Con.txt.md` sono tutti la console.
 fn is_dos_device(segment: &str) -> bool {
@@ -409,9 +497,33 @@ mod tests {
             assert_eq!(faults("./nota.md", naming), Some("traversal"));
             assert_eq!(faults("a//b.md", naming), Some("traversal"));
             assert_eq!(faults("/assoluto.md", naming), Some("traversal"));
+            // La fuga che il recinto non vedeva. Su un nome che **nasce** era
+            // già chiusa dai caratteri riservati, e infatti il guasto è un
+            // altro: qui si assertisce che sia rifiutata in entrambi i versi,
+            // non che si chiami allo stesso modo.
+            assert!(check("C:/Users/x/segreto.md", naming).is_err());
+            assert!(check("c:nota.md", naming).is_err());
+            assert!(check("C:", naming).is_err());
             assert_eq!(faults("", naming), Some("empty"));
             assert_eq!(faults("   ", naming), Some("empty"));
             assert_eq!(faults("Progetti/Alpha.md", naming), None);
+        }
+        // E il guasto per nome, che è la parte che una persona legge: chi apre
+        // un path fuori dal vault sta uscendo dal recinto, chi *digita* `a:b.md`
+        // ha usato un carattere che un filesystem si riserva.
+        assert_eq!(
+            faults("C:/Users/x/segreto.md", Naming::Existing),
+            Some("traversal")
+        );
+        assert_eq!(
+            faults("C:/Users/x/segreto.md", Naming::New),
+            Some("reserved")
+        );
+        // E ciò che *non* è una lettera di drive resta leggibile: il due punti
+        // da solo è un carattere come un altro su Linux, e un vault che lo
+        // contiene si apre (vedi `un_nome_che_ce_gia_si_legge…`).
+        for dentro in ["note/C:/dentro.md", "CC:/dentro.md", "domande: e r.md"] {
+            assert_eq!(faults(dentro, Naming::Existing), None, "`{dentro}` esiste");
         }
     }
 
@@ -479,8 +591,38 @@ mod tests {
             Some("trailing-dot")
         );
         assert_eq!(faults(".gitignore", Naming::New), Some("hidden"));
-        assert_eq!(faults(".fub/roba.md", Naming::New), Some("hidden"));
         assert_eq!(faults("Progetti/.nascosta.md", Naming::New), Some("hidden"));
+    }
+
+    /// Lo spazio macchina non si nomina, **e nemmeno si legge**: il recinto che
+    /// prima si applicava solo ai nomi nuovi lasciava passare da `Existing`
+    /// `.fub/settings.json` e `.trash/Nota.md`, cioè i metadati del vault e le
+    /// note cestinate, che nessuna anagrafe elenca e nessuna fusione protegge.
+    #[test]
+    fn lo_spazio_macchina_non_e_un_documento() {
+        for naming in [Naming::Existing, Naming::New] {
+            for dentro in [
+                ".fub",
+                ".fub/settings.json",
+                ".fub/data/plugins/altro/cache.md",
+                ".trash",
+                ".trash/Nota.2026-07-24T15-30-00.md",
+                // A ogni profondità, come `is_ignored`: un `.fub` a metà strada
+                // è invisibile alla scansione quanto quello in radice.
+                "Progetti/.fub/nota.md",
+                "a/b/.trash/nota.md",
+            ] {
+                assert_eq!(faults(dentro, naming), Some("machine"), "`{dentro}`");
+            }
+            // È il nome esatto, non un prefisso: una nota che *comincia* come lo
+            // spazio macchina è una nota.
+            assert_eq!(
+                faults(".fubbo/nota.md", naming).is_some(),
+                naming == Naming::New
+            );
+            assert_eq!(faults("fub/nota.md", naming), None);
+            assert_eq!(faults("Progetti/trash/nota.md", naming), None);
+        }
     }
 
     #[test]

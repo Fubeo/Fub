@@ -750,6 +750,7 @@ function startRename(li: HTMLElement, id: string): void {
 const MOTIVO: Record<NameFault, Chiave> = {
   empty: "name_fault.empty",
   traversal: "name_fault.traversal",
+  machine: "name_fault.machine",
   control: "name_fault.control",
   reserved: "name_fault.reserved",
   device: "name_fault.device",

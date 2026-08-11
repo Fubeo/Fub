@@ -44,6 +44,13 @@ impl VaultStorage for SupportoCheRifiuta {
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
         self.inner.write(path, bytes)
     }
+    fn update(
+        &self,
+        path: &Utf8Path,
+        fondi: fub_kernel::storage::Fusione<'_>,
+    ) -> std::io::Result<()> {
+        self.inner.update(path, fondi)
+    }
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
         self.inner.append(path, bytes)
     }

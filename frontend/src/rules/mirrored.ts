@@ -74,6 +74,7 @@ export type Naming = "existing" | "new";
 export type NameFault =
   | "empty"
   | "traversal"
+  | "machine"
   | "control"
   | "reserved"
   | "device"
@@ -90,6 +91,11 @@ const DOS_DEVICES = new Set([
   "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
   "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ]);
+
+/// Le cartelle che sono lo **spazio macchina** del vault e non il suo
+/// contenuto. Gemella di `MACHINE_DIRS`: di là la politica di esclusione dice
+/// che la scansione non le guarda, qui che nessun nome le nomina.
+const MACHINE_DIRS = new Set([".fub", ".trash"]);
 
 /// Il massimo per **segmento**, in byte. Gemella di `MAX_SEGMENT_BYTES`.
 const MAX_SEGMENT_BYTES = 255;
@@ -127,9 +133,26 @@ function isDosDevice(segment: string): boolean {
 export function nameFault(path: string, naming: Naming): NameFault | null {
   const giudicato = naming === "new" ? normalizedName(path) : path;
   if (giudicato.trim() === "") return "empty";
-  for (const segment of giudicato.split("/")) {
+  const segments = giudicato.split("/");
+  for (const [i, segment] of segments.entries()) {
     if (segment === "" || segment === "." || segment === "..") return "traversal";
-    if (naming === "existing") continue;
+    // Il recinto interno, e vale per entrambe le domande: `.fub/` e `.trash/`
+    // stanno dentro il vault e non sono il vault. Arriva prima di `hidden`
+    // perché a chi legge serve la frase giusta — quella cartella non è «un nome
+    // che la scansione salterebbe», è la cartella di Fub.
+    if (MACHINE_DIRS.has(segment)) return "machine";
+    if (naming === "existing") {
+      // L'altra metà del recinto: un primo segmento che comincia con una
+      // lettera di drive non nomina un posto **dentro** il vault, lo nomina al
+      // posto del vault — su Windows `Path::join` butta via la base davanti a
+      // `C:/…`. Sta qui e non fuori dal ramo perché per un nome che **nasce** la
+      // porta è già chiusa dai caratteri riservati, e con la frase giusta: chi
+      // digita `a:b.md` va avvisato del due punti, non di essere uscito dal
+      // vault. La falla era tutta di qua — i riservati non si guardano su un
+      // nome che si dichiara esistente.
+      if (i === 0 && /^[A-Za-z]:/.test(segment)) return "traversal";
+      continue;
+    }
     for (const ch of segment) {
       // `\p{Cc}` è la categoria Unicode dei controlli, la stessa che Rust legge
       // con `char::is_control`.

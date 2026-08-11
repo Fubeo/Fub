@@ -3041,9 +3041,24 @@ impl Workspace {
         // serve la risoluzione con il vecchio nome ancora in vigore.
         let plan = self.link_rewrite_plan(from, to);
 
-        self.docs.vault.rename(from, to)?;
-        let source = self.docs.vault.read(to)?;
+        // **Ciò che può fallire va prima di ciò che non si disfa.** Leggere e
+        // parsare stanno qui e non dopo la `rename` per la ragione per cui ci
+        // stanno in `write_source` e in `restore_document`: un errore di parse —
+        // un provider che rifiuta quel testo, un file sparito nella finestra —
+        // risaliva con `?` **a rename avvenuta**, e allora il disco aveva il
+        // nome nuovo, la memoria il vecchio (nessun `migrate_identity`), il
+        // registro non aveva la riga `Renamed`, e chi aveva chiamato riceveva un
+        // `Err` per un'operazione che sul disco era successa. Un secondo
+        // tentativo rispondeva `NotFound(from)`, e la nota spariva dalla vista
+        // fino alla riapertura del vault.
+        //
+        // Si legge `from` e si parsa **col nome nuovo**: i byte sono gli stessi
+        // — una rinomina non li tocca — e il nome serve al parse per risolvere i
+        // link relativi, che devono essere quelli di dove il documento sta per
+        // andare.
+        let source = self.docs.vault.read(from)?;
         let model = self.docs.parse(to, &source)?;
+        self.docs.vault.rename(from, to)?;
         self.migrate_identity(from, to, model, Revision::of(&source));
         // La riga del rename va **prima** di quelle delle sorgenti riscritte:
         // sono tutte dentro lo stesso lotto, e chi le ripercorre all'indietro le

@@ -100,6 +100,70 @@ use crate::rules::text_policy;
 /// dall'host ([`VaultRead::document_revision`](crate::traits::VaultRead::document_revision));
 /// [`Revision::of`] è la derivazione di *questo* host, non una promessa del
 /// confine.
+/// FNV-1a a 64 bit: l'impronta stabile di questo repo.
+///
+/// A mano invece che con [`DefaultHasher`](std::collections::hash_map::DefaultHasher)
+/// perché quest'ultimo non promette lo stesso valore fra versioni di Rust né
+/// fra piattaforme, e questi numeri **sopravvivono su disco** — l'indice di
+/// ricerca e lo store delle versioni li rileggono a un avvio successivo, magari
+/// dopo un aggiornamento.
+///
+/// Sta qui e non in una scatola di utilità perché la casa di questa regola è
+/// chi ha il diritto di imporla: [`Revision::of_bytes`] è l'impronta che il
+/// confine dichiara, e chi ne vuole il numero grezzo — perché lo scrive in un
+/// suo archivio, non lo mostra — deve prendere *quella*, non riscriverla con le
+/// stesse due costanti. Le due costanti compaiono una volta sola in tutto il
+/// repo, ed è questo tipo.
+///
+/// Si mangia a pezzi perché chi impronta un documento non ha un unico blocco di
+/// byte ma una sequenza di campi da separare:
+///
+/// ```
+/// use fub_abi::Fnv1a;
+/// let mut h = Fnv1a::nuova();
+/// h.mangia(b"note/a.md");
+/// h.mangia(&[0]);
+/// h.mangia(b"testo");
+/// assert_eq!(h.valore(), Fnv1a::di(b"note/a.md\0testo"));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fnv1a(u64);
+
+impl Fnv1a {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+
+    pub fn nuova() -> Self {
+        Fnv1a(Self::OFFSET)
+    }
+
+    /// Aggiunge byte a ciò che è già stato mangiato.
+    pub fn mangia(&mut self, bytes: &[u8]) {
+        for b in bytes {
+            self.0 ^= *b as u64;
+            self.0 = self.0.wrapping_mul(Self::PRIME);
+        }
+    }
+
+    /// Il numero grezzo di ciò che è stato mangiato finora.
+    pub fn valore(self) -> u64 {
+        self.0
+    }
+
+    /// L'impronta di un blocco solo, per chi non ha pezzi da separare.
+    pub fn di(bytes: &[u8]) -> u64 {
+        let mut h = Fnv1a::nuova();
+        h.mangia(bytes);
+        h.valore()
+    }
+}
+
+impl Default for Fnv1a {
+    fn default() -> Self {
+        Fnv1a::nuova()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Revision(pub String);
 
@@ -134,13 +198,7 @@ impl Revision {
     /// famiglia e non una seconda: un documento non cambia impronta il giorno
     /// che qualcuno lo rivendica a byte.
     pub fn of_bytes(source: &[u8]) -> Self {
-        const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-        const PRIME: u64 = 0x0000_0100_0000_01b3;
-        let mut h = OFFSET;
-        for b in source {
-            h ^= *b as u64;
-            h = h.wrapping_mul(PRIME);
-        }
+        let h = Fnv1a::di(source);
         Revision(format!("{h:016x}"))
     }
 
@@ -690,6 +748,28 @@ mod tests {
         // edit calcolato allora vale ancora adesso.
         let req = request("testo", vec![TextEdit::insert(0, "x")]);
         assert!(req.apply_to("testo").is_ok());
+    }
+
+    /// I due vettori canonici di FNV-1a a 64 bit, scritti a mano.
+    ///
+    /// Sono l'unica cosa che tiene ferma l'impronta il giorno che qualcuno la
+    /// «semplifica»: da quando l'indice di ricerca e lo store delle versioni
+    /// passano di qui (difetto 0223), cambiare una delle due costanti non fa
+    /// più fallire niente per conto suo — ogni archivio resta coerente con sé
+    /// stesso — ma rende illeggibile ciò che è già su disco.
+    #[test]
+    fn l_impronta_non_si_muove() {
+        assert_eq!(Fnv1a::di(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(Fnv1a::di(b"a"), 0xaf63_dc4c_8601_ec8c);
+        // Mangiata a pezzi o in un blocco solo è lo stesso numero: è ciò su cui
+        // conta chi impronta un documento campo per campo.
+        let mut h = Fnv1a::nuova();
+        h.mangia(b"fo");
+        h.mangia(b"obar");
+        assert_eq!(h.valore(), Fnv1a::di(b"foobar"));
+        // E la revisione del confine è quel numero in esadecimale, non un'altra
+        // famiglia di impronte.
+        assert_eq!(Revision::of("foobar").as_str(), "85944171f73967e8");
     }
 
     #[test]

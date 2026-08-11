@@ -224,35 +224,9 @@ impl OrganizationStore {
     /// nota entra in coda all'alfabetico, come una appena creata — che è ciò che
     /// è, per quella cartella.
     pub fn migrate(&self, from: &str, to: &str) -> Result<bool, String> {
-        let mut data = self.data.write().expect("organizzazione");
-        let mut next = (**data).clone();
         let mut cambiata = false;
-
-        if let Some(icon) = next.icons.remove(from) {
-            next.icons.insert(to.to_string(), icon);
-            cambiata = true;
-        }
-        for p in next.pinned.iter_mut() {
-            if p == from {
-                *p = to.to_string();
-                cambiata = true;
-            }
-        }
-        if let Some(names) = next.order.get_mut(parent_of(from)) {
-            if let Some(at) = names.iter().position(|n| n == child_name(from)) {
-                if parent_of(from) == parent_of(to) {
-                    names[at] = child_name(to).to_string();
-                } else {
-                    names.remove(at);
-                }
-                cambiata = true;
-            }
-        }
-        if !cambiata {
-            return Ok(false);
-        }
-        data.scrivi(next, |next| self.store(next))?;
-        Ok(true)
+        self.update(|org| cambiata = migra(org, from, to))?;
+        Ok(cambiata)
     }
 
     /// Gli avvisi accumulati dopo l'apertura, svuotandoli: chi li prende se ne
@@ -272,24 +246,24 @@ impl OrganizationStore {
         self.warnings.write().expect("organizzazione").push(message);
     }
 
+    /// Applica `f` **a ciò che sta nel sidecar adesso**, e adotta il risultato.
+    ///
+    /// È il punto 2 in testa al modulo, che per un pezzo è stato solo scritto:
+    /// «si scrive per chiave, non a blob intero». I mutatori qui sopra erano già
+    /// per chiave, ma il file veniva ricomposto dalla copia presa
+    /// **all'apertura** — cioè la lost update era stata spostata dalla shell al
+    /// kernel invece che tolta, e con due finestre aperte sullo stesso vault
+    /// l'icona messa nell'una spariva al primo pin messo nell'altra. Il
+    /// cambiamento va quindi messo sopra il file riletto sotto lucchetto
+    /// ([`VaultStorage::update`]), e ciò che si tiene in memoria è la fusione.
     fn update(&self, f: impl FnOnce(&mut Organization)) -> Result<(), String> {
         let mut data = self.data.write().expect("organizzazione");
-        let mut next = (**data).clone();
-        f(&mut next);
-        if next == **data {
-            // Niente è cambiato: non si tocca il disco. Cliccare due volte lo
-            // stesso interruttore non è una scrittura.
-            return Ok(());
-        }
-        data.scrivi(next, |next| self.store(next))
-    }
-
-    /// La sola metà «su disco» di [`Durevole::scrivi`]: che la memoria si
-    /// muova solo dopo di lei non è più una riga da ricordarsi di scrivere qui
-    /// sotto, è ciò che il tipo del campo `data` sa esprimere.
-    fn store(&self, org: &Organization) -> Result<(), String> {
-        let Some(path) = &self.path else {
-            return Ok(());
+        // Lo store in memoria — quello di un test — non ha un disco da
+        // rileggere: ciò che c'è «adesso» è ciò che si ha.
+        let (Some(path), Some(storage)) = (&self.path, &self.storage) else {
+            let mut next = (**data).clone();
+            f(&mut next);
+            return data.scrivi(next, |_| Ok(()));
         };
         if !self.readable {
             return Err(format!(
@@ -298,19 +272,118 @@ impl OrganizationStore {
                  Correggilo o spostalo, e riapri."
             ));
         }
+        // Ciò che si ha in memoria viaggia con la fusione, e serve **solo** se
+        // il file non c'è: vedi il § in testa a `fondi`.
+        let in_memoria = (**data).clone();
+        data.aggiorna(|| fondi(storage.as_ref(), path, &in_memoria, f))
+    }
+}
+
+/// Rilegge il sidecar, ci mette sopra `f`, lo riscrive: torna ciò che è finito
+/// nel file.
+///
+/// Un file che **adesso** non si legge non si sovrascrive, ed è la stessa regola
+/// dell'apertura applicata al momento giusto: `readable` racconta com'era il
+/// file ieri, e fra ieri e adesso ci può essere passato un editor di testo o una
+/// sincronizzazione a metà.
+///
+/// # Un file che non c'è non è un file vuoto
+///
+/// La rilettura sotto lucchetto risponde a «cosa c'è nel file adesso», e per un
+/// file **sparito** la risposta letterale sarebbe `Organization::default()` —
+/// cioè: nessuna icona, nessun preferito, nessun ordine. Presa alla lettera si
+/// scriverebbe quella, e con lei la si adotterebbe in memoria: un sidecar
+/// cancellato a metà sessione — da una sincronizzazione, da un editor, da chi
+/// fa pulizia in `.fub/` — porterebbe via l'organizzazione di tutto il vault al
+/// primo click, **senza che nessuno l'abbia chiesto**.
+///
+/// La base di una fusione senza file è quindi ciò che si ha in memoria, e il
+/// primo cambiamento **ricostruisce** il sidecar invece di svuotarlo. È anche
+/// l'unico verso coerente con la riga sopra: un file illeggibile ci si rifiuta
+/// di sovrascriverlo perché l'organizzazione andrebbe persa, e obbedire a uno
+/// assente sarebbe perderla per la stessa ragione, con una porta diversa.
+///
+/// Ciò che questa riparazione **non** è: un modo di rimettere la lost update.
+/// Quando il file c'è, la memoria non si guarda affatto — la fusione parte dai
+/// byte riletti, come deve.
+fn fondi(
+    storage: &dyn VaultStorage,
+    path: &Utf8Path,
+    in_memoria: &Organization,
+    f: impl FnOnce(&mut Organization),
+) -> Result<Organization, String> {
+    // `f` si consuma dentro una `FnMut`, che per il tipo potrebbe girare più
+    // volte: la `take` è come si dice al compilatore ciò che il supporto
+    // garantisce, cioè una fusione sola.
+    let mut f = Some(f);
+    let mut fuso = None;
+    let mut guasto = None;
+    let esito = storage.update(path, &mut |attuale| {
+        let letto = match attuale {
+            Some(bytes) => decode(path, bytes),
+            None => Ok(in_memoria.clone()),
+        };
+        let disco = match letto {
+            Ok(disco) => disco,
+            Err(e) => {
+                guasto = Some(e);
+                return Err(std::io::Error::other("il file non si è potuto leggere"));
+            }
+        };
+        let mut next = disco.clone();
+        f.take().expect("il supporto fonde una volta sola")(&mut next);
+        if next == disco {
+            // Niente è cambiato: non si tocca il disco. Cliccare due volte lo
+            // stesso interruttore non è una scrittura.
+            fuso = Some(next);
+            return Ok(None);
+        }
         let file = OrganizationFile {
             version: SCHEMA_VERSION,
-            organization: org.clone(),
+            organization: next.clone(),
         };
-        let json = serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())?;
-        let storage = self
-            .storage
-            .as_ref()
-            .expect("uno store con un path ha un supporto");
-        storage
-            .write(path, &json)
-            .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
+        let json = match serde_json::to_vec_pretty(&file) {
+            Ok(json) => json,
+            Err(e) => {
+                guasto = Some(e.to_string());
+                return Err(std::io::Error::other("il file non si è potuto comporre"));
+            }
+        };
+        fuso = Some(next);
+        Ok(Some(json))
+    });
+    match (esito, guasto) {
+        (_, Some(guasto)) => Err(guasto),
+        (Err(e), None) => Err(format!("non riesco a scrivere {path}: {e}")),
+        (Ok(()), None) => Ok(fuso.expect("una fusione riuscita ha lasciato l'organizzazione")),
     }
+}
+
+/// Le tre mosse di un rename dentro l'organizzazione. Torna `true` se la nota
+/// era organizzata, cioè se qualcosa si è spostato davvero.
+fn migra(org: &mut Organization, from: &str, to: &str) -> bool {
+    let mut cambiata = false;
+    if let Some(icon) = org.icons.remove(from) {
+        org.icons.insert(to.to_string(), icon);
+        cambiata = true;
+    }
+    for p in org.pinned.iter_mut() {
+        if p == from {
+            *p = to.to_string();
+            cambiata = true;
+        }
+    }
+    if let Some(names) = org.order.get_mut(parent_of(from)) {
+        if let Some(at) = names.iter().position(|n| n == child_name(from)) {
+            if parent_of(from) == parent_of(to) {
+                names[at] = child_name(to).to_string();
+            } else {
+                names.remove(at);
+            }
+            cambiata = true;
+        }
+    }
+    cambiata
 }
 
 /// La cartella di un path (`""` per la radice), con la stessa regola del
@@ -332,22 +405,27 @@ fn child_name(path: &str) -> &str {
 
 fn load(path: &Utf8Path, storage: &dyn VaultStorage) -> Result<Organization, String> {
     match storage.read(path) {
-        Ok(raw) => {
-            let file: OrganizationFile = serde_json::from_slice(&raw)
-                .map_err(|e| format!("{path} non è un workspace.json valido: {e}"))?;
-            if file.version > SCHEMA_VERSION {
-                return Err(format!(
-                    "{path} è scritto nella versione {} di questo formato, e questa \
-                     copia di Fub legge fino alla {SCHEMA_VERSION}",
-                    file.version
-                ));
-            }
-            Ok(file.organization)
-        }
+        Ok(raw) => decode(path, &raw),
         // Assente = vault mai personalizzato: è un esito normale.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Organization::default()),
         Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
     }
+}
+
+/// I byte del sidecar, giudicati. Sta a parte perché lo leggono in due —
+/// l'apertura e ogni fusione ([`fondi`]) — e due letture con due idee di cosa
+/// sia un file valido sarebbero due politiche.
+fn decode(path: &Utf8Path, raw: &[u8]) -> Result<Organization, String> {
+    let file: OrganizationFile = serde_json::from_slice(raw)
+        .map_err(|e| format!("{path} non è un workspace.json valido: {e}"))?;
+    if file.version > SCHEMA_VERSION {
+        return Err(format!(
+            "{path} è scritto nella versione {} di questo formato, e questa \
+             copia di Fub legge fino alla {SCHEMA_VERSION}",
+            file.version
+        ));
+    }
+    Ok(file.organization)
 }
 
 #[cfg(test)]
@@ -501,6 +579,40 @@ mod tests {
             .expect_err("non si scrive su ciò che non si è letto");
         assert!(e.contains("non lo sovrascrive"), "{e}");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), rotto);
+    }
+
+    /// Il gemello del precedente sull'altro guasto: là il file **c'è e non si
+    /// legge**, qui non c'è più. Le due risposte devono andare nello stesso
+    /// verso — non si perde l'organizzazione — e ci vanno in due modi diversi,
+    /// perché su un file rotto c'è qualcosa da non sovrascrivere e su uno
+    /// sparito c'è solo da rifarlo.
+    #[test]
+    fn un_sidecar_sparito_a_meta_sessione_non_porta_via_l_organizzazione() {
+        let (_tmp, root) = tempdir();
+        let path = organization_path(&root);
+        let (store, _) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
+        store.set_icon("a.md", Some("📌".into())).unwrap();
+        store.set_pinned("b.md", true).unwrap();
+
+        // Qualcun altro lo toglie di sotto: una sincronizzazione, un editor,
+        // chi fa pulizia in `.fub/`.
+        std::fs::remove_file(&path).unwrap();
+
+        store.set_icon("c.md", Some("📎".into())).unwrap();
+        let org = store.snapshot();
+        assert_eq!(
+            org.icons.get("a.md").map(String::as_str),
+            Some("📌"),
+            "l'icona di prima è ancora lì"
+        );
+        assert_eq!(org.pinned, ["b.md"], "e il preferito pure");
+        assert_eq!(org.icons.get("c.md").map(String::as_str), Some("📎"));
+
+        // E il sidecar è tornato, con dentro tutto.
+        let (riletto, warning) =
+            OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
+        assert!(warning.is_none(), "{warning:?}");
+        assert_eq!(riletto.snapshot(), org);
     }
 
     #[test]

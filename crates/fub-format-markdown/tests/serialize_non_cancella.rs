@@ -501,3 +501,136 @@ fn nessun_ramo_muto() {
         }
     }
 }
+
+/// **L'ancora di un blocco che non è un paragrafo va su una riga sua.**
+///
+/// Il file scriveva l'`^id` in un modo solo — ` ^id` in coda all'ultima riga —
+/// e per un paragrafo va bene, perché in coda a un paragrafo c'è del testo. Per
+/// gli altri sei in coda c'è un **delimitatore**, e appenderci l'ancora lo
+/// rompe. Misurato blocco per blocco, prima della riparazione:
+///
+/// - tabella: `| 1 | ^tab` — la cella in più la butta il lettore di GFM, e
+///   l'ancora **sparisce dal file** al primo giro;
+/// - codice: `` ``` ^cod `` — il recinto non chiude più, e `^cod` diventa una
+///   riga **dentro il codice**, che al giro dopo si allunga ancora;
+/// - riga orizzontale: `--- ^hr` non è più una riga orizzontale (H→P);
+/// - elenco, citazione, callout: l'id resta ma si sposta sul **figlio**, cioè
+///   `[[Nota#^lis]]` non indirizza più il contenitore ma la sua ultima voce.
+///
+/// Le prime tre sono perdita, le altre tre sono un indirizzo che cambia
+/// bersaglio; nessuna delle sei la vedeva il conto sul corpus — che confronta
+/// le ancore **appiattite**, quindi non distingue il contenitore dal figlio, e
+/// che non ha un caso con la tabella o il codice ancorati.
+///
+/// La misura qui è la più stretta che ci sia: **byte per byte**. Queste sette
+/// sorgenti sono già nella forma che il serializer produce, quindi il giro deve
+/// tornare al punto fisso, e ogni carattere in più o in meno è un difetto.
+#[test]
+fn l_ancora_di_un_contenitore_non_finisce_in_coda_a_un_delimitatore() {
+    for (nome, sorgente) in [
+        ("paragrafo", "testo ^par\n"),
+        ("elenco", "- a\n- b\n\n^lis\n"),
+        ("codice", "```rs\nx\n```\n\n^cod\n"),
+        ("citazione", "> citata\n\n^cit\n"),
+        ("riga orizzontale", "---\n\n^hr\n"),
+        ("callout", "> [!note]\n> corpo\n\n^cal\n"),
+        ("tabella", "| a |\n| --- |\n| 1 |\n\n^tab\n"),
+    ] {
+        let m1 = parse(sorgente);
+        let riscritto = serialize(&m1);
+        assert_eq!(
+            riscritto, sorgente,
+            "«{nome}»: il giro non è tornato al punto fisso.",
+        );
+        // E l'ancora è **di quel blocco**, non di un suo figlio: il confronto
+        // appiattito non lo direbbe.
+        let m2 = parse(&riscritto);
+        assert_eq!(
+            m2.body.first().and_then(|b| b.anchor()),
+            m1.body.first().and_then(|b| b.anchor()),
+            "«{nome}»: l'ancora ha cambiato blocco.\n  riscritto: {riscritto:?}",
+        );
+    }
+}
+
+/// **Il titolo di un callout è negli `attrs`, e va scritto.**
+///
+/// `> [!warning] Attenzione` dà `title: "Attenzione"` e un solo figlio, il
+/// corpo: il titolo **non è nei blocchi**, quindi chi scriveva `> [!{ty}]` e i
+/// figli non lo appiattiva nel corpo, lo cancellava dal file. Intanto
+/// `render.rs` lo mostrava (`callout-title`) leggendolo dagli `attrs`: la stessa
+/// nota aveva un titolo in anteprima e nessuno sul disco.
+///
+/// Il conto sul corpus non lo vedeva pur avendo il caso «callout con titolo»:
+/// confronta le parole e la forma dei figli, e il titolo perso non toglie
+/// parole al documento — restava come paragrafo dentro il corpo. Qui la misura
+/// è di nuovo byte per byte, e c'è anche il caso senza titolo, perché la riga
+/// non deve guadagnare uno spazio in coda.
+#[test]
+fn il_titolo_di_un_callout_torna_sul_file() {
+    for sorgente in ["> [!warning] Attenzione\n> corpo\n", "> [!note]\n> corpo\n"] {
+        let m = parse(sorgente);
+        assert_eq!(serialize(&m), sorgente);
+    }
+}
+
+/// **Un escape non si perde, e ciò che proteggeva non diventa una feature.**
+///
+/// `Inline::Text` porta il testo **come si legge**: il parser decodifica gli
+/// escape di comrak, quindi `\#nontag` arriva al serializer come `#nontag`. Il
+/// ramo era `Inline::Text(s) => out.push_str(s)`, e riscriverlo così non è
+/// lossy — è cambiare il documento, in due modi che il conto sul corpus non
+/// vedeva perché non toglie né parole né blocchi al **modello**:
+///
+/// - `\#nontag` esce `#nontag` e al giro dopo è un **tag vero**, nell'indice e
+///   nel pannello; `\[[Nota]]` esce `[[Nota]]` ed è un **link vero**, con un
+///   arco nel grafo che l'autore non ha scritto;
+/// - `\# titolo` in testa a un paragrafo esce `# titolo`, e il paragrafo
+///   **diventa un heading** — con la sua voce nell'indice del documento.
+///
+/// La misura è di nuovo byte per byte: queste sorgenti sono già nella forma che
+/// il serializer produce, quindi il giro deve essere fermo. Il secondo giro c'è
+/// perché il danno di questa specie si vede al giro **dopo**: un file che a
+/// ogni riscrittura dice una cosa diversa non è un file che si è degradato una
+/// volta.
+#[test]
+fn un_escape_non_si_perde_e_non_diventa_una_feature() {
+    for sorgente in [
+        "\\#nontag non è un tag\n",
+        "\\[\\[Nota\\]\\] non è un link\n",
+        "\\*niente\\* enfasi e \\`niente\\` codice\n",
+        "\\# non è un titolo\n",
+        "\\## nemmeno questo\n",
+        "\\> non è una citazione\n",
+        "\\- non è un elenco\n",
+        "1\\. nemmeno questo\n",
+        "\\==niente\\== evidenziato\n",
+        "a\\<b non è HTML\n",
+        "| a \\| b | c |\n| --- | --- |\n| 1 | 2 |\n",
+    ] {
+        let m1 = parse(sorgente);
+        let uno = serialize(&m1);
+        assert_eq!(uno, sorgente, "il primo giro ha già cambiato il documento.");
+        let m2 = parse(&uno);
+        assert_eq!(serialize(&m2), sorgente, "il secondo giro diverge.");
+        assert_eq!(
+            m2.tags.len(),
+            m1.tags.len(),
+            "{sorgente:?}: il giro ha inventato un tag."
+        );
+        assert_eq!(
+            m2.links.len(),
+            m1.links.len(),
+            "{sorgente:?}: il giro ha inventato un link."
+        );
+        let f1: Vec<String> = m1.body.iter().map(forma).collect();
+        let f2: Vec<String> = m2.body.iter().map(forma).collect();
+        assert_eq!(f1, f2, "{sorgente:?}: il giro ha cambiato tipo di blocco.");
+    }
+    // E l'altro verso, che è ciò che rende la riparazione una riparazione e non
+    // un escape a tappeto: un tag scritto **senza** barra resta un tag, e la
+    // regola che lo dice è la stessa dalle due parti (`scan_tags`).
+    let m = parse("#vero e \\#finto\n");
+    assert_eq!(m.tags.len(), 1);
+    assert_eq!(serialize(&m), "#vero e \\#finto\n");
+}

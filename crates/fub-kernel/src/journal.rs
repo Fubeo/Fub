@@ -435,10 +435,17 @@ impl Journal {
     /// Scrive un file vuoto invece di toglierlo, perché un file che non c'è e un
     /// file vuoto si distinguono solo per chi guarda il disco, e il secondo dice
     /// che qui un registro c'è ed è stato svuotato.
+    /// Le righe si contano **dentro** l'aggiornamento e non prima: fra una
+    /// lettura fatta fuori e la scrittura ci sta un'aggiunta, e il numero che si
+    /// dà a chi ha svuotato sarebbe di una riga che nel frattempo è stata
+    /// buttata senza essere contata.
     pub(crate) fn clear(&self) -> Result<usize, String> {
-        let quante = self.read().records.len();
+        let mut quante = 0;
         self.storage
-            .write(&self.path, b"")
+            .update(&self.path, &mut |attuale| {
+                quante = attuale.map(|raw| parse(raw).records.len()).unwrap_or(0);
+                Ok(Some(Vec::new()))
+            })
             .map(|()| quante)
             .map_err(|e| format!("non riesco a svuotare {}: {e}", self.path))
     }
@@ -514,50 +521,64 @@ impl Journal {
     /// il suo registro non si è potuto potare, e la riga successiva ci si
     /// appende sopra lo stesso.
     pub(crate) fn pota(&self, giorni: u64) {
-        let Ok(raw) = self.storage.read(&self.path) else {
-            return;
-        };
-        // Solo le righe **intere**: ciò che resta senza terminatore lo ha già
-        // chiuso `ripara_la_coda`, quindi qui o è tutto terminato o il file non
-        // si è potuto riparare — e in quel caso non lo si riscrive di certo.
-        let righe: Vec<&[u8]> = raw.split(|b| *b == b'\n').collect();
-        let (Some(ultima), righe) = (righe.last(), &righe[..righe.len().saturating_sub(1)]) else {
-            return;
-        };
-        if !ultima.is_empty() {
-            return;
-        }
-        let mut taglio = righe
-            .len()
-            .saturating_sub(TETTO)
-            .max(scadute(righe, giorni));
-        if taglio == 0 {
-            return;
-        }
-        let chiave = |riga: &[u8]| -> Option<(String, BatchId)> {
-            let r: JournalRecord = serde_json::from_slice(riga).ok()?;
-            r.origin.batch.map(|b| (r.writer, b))
-        };
-        while taglio > 0 && taglio < righe.len() {
-            let qui = chiave(righe[taglio]);
-            if qui.is_none() || qui != chiave(righe[taglio - 1]) {
-                break;
-            }
-            taglio += 1;
-        }
-        let mut bytes = Vec::new();
-        for riga in &righe[taglio..] {
-            bytes.extend_from_slice(riga);
-            bytes.push(b'\n');
-        }
-        // Una `write` e non una `append`: qui il file si **sostituisce**, ed è
-        // l'unico momento in cui il registro passa dalla scrittura atomica del
-        // supporto (0065) — cioè l'unico in cui perderlo tutto insieme sarebbe
-        // possibile, se non fosse atomica.
-        if let Err(e) = self.storage.write(&self.path, &bytes) {
+        // Un **aggiornamento** e non una lettura seguita da una scrittura, ed è
+        // la differenza fra potare e perdere: le aggiunte sono `O_APPEND` e non
+        // aspettano nessuno, quindi fra un `read` fatto fuori e la `write` che
+        // sostituisce il file ci sta comodamente una riga — che sparirebbe
+        // scritta, cioè un'operazione appena riuscita che non si potrebbe più
+        // annullare. Qui il file si **sostituisce**, ed è l'unico momento in cui
+        // il registro passa dalla scrittura atomica del supporto (0065): l'unico
+        // in cui perderlo tutto insieme sarebbe possibile.
+        let esito = self.storage.update(&self.path, &mut |attuale| {
+            Ok(attuale.and_then(|raw| potato(raw, giorni)))
+        });
+        if let Err(e) = esito {
             tracing::warn!(target: "fub.kernel", "registro: non potato: {e}");
         }
     }
+}
+
+/// Il registro potato, o `None` se non c'è niente da togliere.
+///
+/// È il corpo di [`Journal::pota`] senza il disco: prende i byte che ci sono
+/// adesso e torna quelli che ci devono essere. Sta fuori perché è ciò che gira
+/// **dentro** il lucchetto del supporto, e ciò che gira là dentro non deve poter
+/// toccare il supporto.
+fn potato(raw: &[u8], giorni: u64) -> Option<Vec<u8>> {
+    // Solo le righe **intere**: ciò che resta senza terminatore lo ha già
+    // chiuso `ripara_la_coda`, quindi qui o è tutto terminato o il file non
+    // si è potuto riparare — e in quel caso non lo si riscrive di certo.
+    let righe: Vec<&[u8]> = raw.split(|b| *b == b'\n').collect();
+    let (Some(ultima), righe) = (righe.last(), &righe[..righe.len().saturating_sub(1)]) else {
+        return None;
+    };
+    if !ultima.is_empty() {
+        return None;
+    }
+    let mut taglio = righe
+        .len()
+        .saturating_sub(TETTO)
+        .max(scadute(righe, giorni));
+    if taglio == 0 {
+        return None;
+    }
+    let chiave = |riga: &[u8]| -> Option<(String, BatchId)> {
+        let r: JournalRecord = serde_json::from_slice(riga).ok()?;
+        r.origin.batch.map(|b| (r.writer, b))
+    };
+    while taglio > 0 && taglio < righe.len() {
+        let qui = chiave(righe[taglio]);
+        if qui.is_none() || qui != chiave(righe[taglio - 1]) {
+            break;
+        }
+        taglio += 1;
+    }
+    let mut bytes = Vec::new();
+    for riga in &righe[taglio..] {
+        bytes.extend_from_slice(riga);
+        bytes.push(b'\n');
+    }
+    Some(bytes)
 }
 
 /// Quante righe in testa sono più vecchie della finestra. Zero giorni = per
