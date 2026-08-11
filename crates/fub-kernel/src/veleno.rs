@@ -222,9 +222,34 @@ impl<T> Condizione<T> {
     /// più d'uno, e un fatto già avvenuto non si ripete. Svegliarne uno solo
     /// lascerebbe gli altri fermi davanti a qualcosa che è già successo — che è
     /// il genere di attesa che non scade mai.
+    ///
+    /// # La campana suona anche uscendo per srotolamento
+    ///
+    /// La suonata sta in un `Drop` e non su una riga dopo `f`, perché su quella
+    /// riga passa tutto ciò che pania: `f` riceve `&mut T` e ci può morire
+    /// dentro. Chi aspettava restava appeso **per sempre** — un `Condvar` non
+    /// scade da sé — e il panico che l'aveva causato era già stato inghiottito
+    /// dal `Mutex` avvelenato, cioè nessuno diceva niente a nessuno. Un `Drop` è
+    /// l'unica cosa che vede tutte le strade d'uscita, e la eredita chiunque
+    /// aggiunga un secondo modo di cambiare lo stato: non c'è una suonata da
+    /// ricordarsi di chiamare.
+    ///
+    /// **Cosa vede chi si sveglia dopo un panico: lo stato come `f` lo ha
+    /// lasciato**, non quello di prima. Non è una resa a ciò che il tipo sa
+    /// fare — anche potendo, tornare indietro sarebbe la risposta sbagliata
+    /// qui — ed è la stessa premessa scritta in testa al modulo: ciò che questi
+    /// lucchetti proteggono è un conto monotòno, che un panico a metà non rende
+    /// incredibile, e chi aspetta lo riguarda con la sua condizione. Al peggio
+    /// manca l'ultimo incremento, e la sveglia in più è una sveglia, non un
+    /// lavoro (vedi [`crate::dispatcher::JobBell`]). Un dato che il mezzo
+    /// cambiamento renderebbe incredibile non va dietro un `Ricovero`: va dietro
+    /// una `Custodia`, che risponde di no.
     pub fn cambia(&self, f: impl FnOnce(&mut T)) {
+        // Dichiarata **prima**, quindi cade **dopo**: il prestito è già stato
+        // reso quando la campana suona — su tutte e due le strade — e chi si
+        // sveglia trova il lucchetto libero invece di rimettersi in fila.
+        let _campana = Suonata(&self.campana);
         f(&mut self.prendi());
-        self.campana.notify_all();
     }
 
     /// Aspetta finché `ancora` resta vero. Non pania: se il lucchetto si
@@ -264,6 +289,19 @@ impl<T> Condizione<T> {
 
     fn denunce_di_sotto(&self) -> u32 {
         self.stato.denunce()
+    }
+}
+
+/// **Una campana da suonare cadendo**, per [`Condizione::cambia`].
+///
+/// Non prende il lucchetto e non lo vuole: `notify_all` non chiede la guardia, e
+/// suonare tenendola in mano rimetterebbe in fila chi si sveglia. Vive quanto la
+/// chiamata, e la sua unica ragione è che *nessuna* strada d'uscita la salti.
+struct Suonata<'c>(&'c Condvar);
+
+impl Drop for Suonata<'_> {
+    fn drop(&mut self) {
+        self.0.notify_all();
     }
 }
 
@@ -382,6 +420,58 @@ mod tests {
             sveglia.join().expect("chi aspettava è arrivato in fondo"),
             1
         );
+        assert_eq!(c.denunce(), 1);
+    }
+
+    /// **Chi muore cambiando lo stato sveglia lo stesso chi aspettava.**
+    ///
+    /// È il difetto che il `Drop` di `Suonata` esiste per non avere: con la
+    /// suonata scritta come una riga *dopo* `f`, un panico dentro `f` la
+    /// saltava, e chi dormiva sulla campana non veniva svegliato da nessuno —
+    /// per sempre, perché un `Condvar` non scade da sé e il panico era già stato
+    /// inghiottito dal lucchetto avvelenato.
+    ///
+    /// Il risveglio si aspetta su un canale con un tetto di tempo e **non** con
+    /// un `join`: senza la riparazione un `join` resterebbe appeso insieme a chi
+    /// aspetta, e un banco che si blocca non è un banco rosso.
+    #[test]
+    fn chi_muore_cambiando_sveglia_lo_stesso() {
+        // Lo stato porta anche «sono dentro l'attesa», e non è un dettaglio del
+        // banco: senza, il misfatto potrebbe arrivare *prima* che l'altro thread
+        // si addormenti, e allora quello si sveglierebbe da sé riguardando la
+        // condizione — cioè il banco sarebbe verde anche senza la riparazione,
+        // una volta ogni tanto. La bandiera si alza **sotto il lucchetto**, e
+        // l'unico posto in cui quel lucchetto si rende è dentro `wait_while`:
+        // vederla alzata da qui vuol dire che chi aspetta sta dormendo davvero.
+        let c = Arc::new(Condizione::new((0u64, false)));
+        let (dice, sentito) = std::sync::mpsc::channel();
+        let sveglia = {
+            let c = Arc::clone(&c);
+            std::thread::spawn(move || {
+                let mut stato = c.prendi();
+                stato.1 = true;
+                let visto = c.aspetta(stato, |s| s.0 == 0).0;
+                let _ = dice.send(visto);
+            })
+        };
+        while !c.prendi().1 {
+            std::thread::yield_now();
+        }
+        avvelena(|| {
+            c.cambia(|s| {
+                s.0 += 1;
+                panic!("qualcuno muore cambiando lo stato");
+            });
+        });
+        let visto = sentito
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect(
+                "nessuno ha suonato la campana: chi aspettava è appeso a una \
+                 condizione che è già cambiata, e resterà appeso finché il \
+                 processo muore",
+            );
+        assert_eq!(visto, 1, "si vede lo stato come il panico lo ha lasciato");
+        sveglia.join().expect("chi aspettava è arrivato in fondo");
         assert_eq!(c.denunce(), 1);
     }
 
