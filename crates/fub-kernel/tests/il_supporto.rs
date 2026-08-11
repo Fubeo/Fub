@@ -206,6 +206,101 @@ fn le_due_implementazioni_rispondono_uguale() {
             dice("ed è sparito ciò che aveva dentro")
         );
 
+        // --- il doppio sbaglia dove sbaglia il disco -------------------------
+        //
+        // Le righe che seguono non provano cosa il supporto sa fare, ma **cosa
+        // si rifiuta di fare**, ed è la metà che un doppio si dimentica: un
+        // `Ok` di troppo qui non rompe niente in memoria, rende verde di qua un
+        // banco che di là sarebbe rosso, e chi lo scrive non lo saprà mai.
+        // Nessuna asserzione sulla specie dell'errore: cosa dica il sistema
+        // operativo cambia fra Linux, macOS e Windows, e il contratto è che sia
+        // un errore.
+        storage.write(&root.join("scritti/uno.md"), b"1").unwrap();
+        assert!(
+            storage.write(&root.join("scritti"), b"x").is_err(),
+            "{}",
+            dice("scrivere su una cartella")
+        );
+        assert!(
+            storage
+                .update(&root.join("scritti"), &mut |_| Ok(Some(b"x".to_vec())))
+                .is_err(),
+            "{}",
+            dice("aggiornare una cartella")
+        );
+        assert!(
+            storage.append(&root.join("scritti"), b"x").is_err(),
+            "{}",
+            dice("appendere a una cartella")
+        );
+        // E un file non è una cartella nemmeno da genitore: `create_dir_all` di
+        // là si ferma, e un path che fosse insieme file e cartella è uno stato
+        // che il filesystem non sa rappresentare.
+        assert!(
+            storage
+                .write(&root.join("scritti/uno.md/sotto.md"), b"x")
+                .is_err(),
+            "{}",
+            dice("scrivere sotto un file")
+        );
+
+        // Una cartella ha una data, e non è zero — che nel contratto di `Stat`
+        // vuol dire «non lo so». Un doppio che rispondesse sempre zero direbbe
+        // «non è cambiata» dove il disco dice «è cambiata». Che poi la data
+        // **avanzi** lo prova il banco unitario del contatore in `storage.rs`:
+        // qui un orologio vero e un contatore possono promettere solo che una
+        // data c'è e che non torna indietro.
+        let dir = root.join("scritti");
+        let quando = storage.stat(&dir).unwrap().mtime;
+        assert_ne!(quando, 0, "{}", dice("una cartella ha una data"));
+        let voci = storage.list(&root).unwrap();
+        let elencata = voci.iter().find(|v| v.path == dir).expect("nell'elenco");
+        assert_ne!(
+            elencata.stat.mtime,
+            0,
+            "{}",
+            dice("e ce l'ha anche nell'elenco")
+        );
+        storage.write(&dir.join("due.md"), b"2").unwrap();
+        assert!(
+            storage.stat(&dir).unwrap().mtime >= quando,
+            "{}",
+            dice("la data di una cartella non torna indietro")
+        );
+
+        // «Vuota» vuol dire vuota: togliere una cartella che ha dentro qualcosa
+        // è un errore, e non un `Ok` che lascia orfano ciò che c'era.
+        assert!(
+            storage.remove_empty_dir(&dir).is_err(),
+            "{}",
+            dice("una cartella piena non si toglie")
+        );
+        assert!(
+            storage.exists(&dir.join("due.md")),
+            "{}",
+            dice("e ciò che aveva dentro è ancora lì")
+        );
+        storage.remove_dir_all(&dir).unwrap();
+
+        // Un `fondi` che va in panico non porta via il supporto con sé: di là
+        // il lucchetto del file si rilascia e si continua a leggere, di qua il
+        // `Mutex` resterebbe avvelenato e ogni accesso successivo morirebbe.
+        let esito = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = storage.update(&root.join("fusione.md"), &mut |_| {
+                panic!("la fusione esplode")
+            });
+        }));
+        assert!(esito.is_err(), "{}", dice("il panico risale"));
+        assert!(
+            !storage.exists(&root.join("fusione.md")),
+            "{}",
+            dice("e non ha scritto niente")
+        );
+        storage
+            .write(&root.join("dopo.md"), b"d")
+            .unwrap_or_else(|e| panic!("{} — {e}", dice("il supporto regge al panico")));
+        assert_eq!(storage.read(&root.join("dopo.md")).unwrap(), b"d");
+
         // Leggere ciò che non c'è è un `NotFound`, e non un altro errore: sopra
         // di qui `data_read` ci distingue «lo store è vuoto» da «il disco è
         // rotto», e sbagliare specie di errore trasformerebbe un guasto in un

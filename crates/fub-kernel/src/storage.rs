@@ -59,7 +59,9 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::io::Write as _;
-use std::sync::Mutex;
+use std::sync::MutexGuard;
+
+use crate::veleno::Ricovero;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -1143,24 +1145,79 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Durevole<T> {
 /// contatore risponde a quella domanda in modo deterministico — cioè senza la
 /// risoluzione dell'orologio di mezzo, che sui filesystem veri è il motivo per
 /// cui mtime+size bastano a saltare un file e non a crederci.
+///
+/// **Anche una cartella ha una data**, e cambia quando cambia ciò che le sta
+/// dentro *direttamente* — nasce un file, se ne va, ne arriva uno da un rename.
+/// Un doppio che rispondesse sempre zero direbbe «non è cambiata» dove il disco
+/// dice «è cambiata», e questo è il verso in cui una divergenza fa male: rende
+/// verde qui un banco che sul disco sarebbe rosso.
+///
+/// # Il doppio sbaglia dove sbaglia il disco
+///
+/// Un path non è insieme un file e una cartella, un `update` che va in panico
+/// non lascia il supporto inservibile, e scrivere dove non si può è un errore
+/// e non un `Ok`: sono le tre righe che [`FsStorage`] ottiene dal sistema
+/// operativo senza scriverle, e che qui vanno scritte a mano perché nessuno le
+/// regala. Il presidio è appaiato — le stesse asserzioni sui due supporti — e
+/// sta in `crates/fub-kernel/tests/il_supporto.rs`.
 #[derive(Debug, Default)]
 pub struct MemStorage {
-    inner: Mutex<Mem>,
+    inner: Ricovero<Mem>,
 }
 
 #[derive(Debug, Default)]
 struct Mem {
     files: BTreeMap<Utf8PathBuf, (Vec<u8>, u64)>,
-    dirs: std::collections::BTreeSet<Utf8PathBuf>,
+    /// Le cartelle, ognuna con la sua data: vedi la nota sul tempo di
+    /// [`MemStorage`].
+    dirs: BTreeMap<Utf8PathBuf, u64>,
     tick: u64,
 }
 
 impl Mem {
-    fn make_dirs(&mut self, path: &Utf8Path) {
+    /// Il prossimo istante. Si prende **prima** di toccare qualunque cosa,
+    /// perché una sola operazione può datare più posti — il file e la cartella
+    /// che lo contiene — e devono portare la stessa data.
+    fn ora(&mut self) -> u64 {
+        self.tick += 1;
+        self.tick
+    }
+
+    /// Fa nascere le cartelle che mancano, e **si ferma se una di esse è già un
+    /// file**: `create_dir_all` sul disco risponde un errore, e un doppio che
+    /// invece accettasse si ritroverebbe uno stesso path elencato come file e
+    /// come cartella, cioè uno stato che il filesystem non sa rappresentare.
+    fn make_dirs(&mut self, path: &Utf8Path, ora: u64) -> io::Result<()> {
         let mut cur = Utf8PathBuf::new();
         for comp in path.components() {
             cur.push(comp);
-            self.dirs.insert(cur.clone());
+            if self.files.contains_key(&cur) {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("{cur}: è un file, non una cartella"),
+                ));
+            }
+            if !self.dirs.contains_key(&cur) {
+                self.dirs.insert(cur.clone(), ora);
+                // Una cartella nuova cambia quella che la contiene.
+                if let Some(parent) = cur.parent() {
+                    self.tocca(parent, ora);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Data la cartella che contiene `path`, se è una cartella conosciuta.
+    fn tocca_il_genitore(&mut self, path: &Utf8Path, ora: u64) {
+        if let Some(parent) = path.parent() {
+            self.tocca(parent, ora);
+        }
+    }
+
+    fn tocca(&mut self, dir: &Utf8Path, ora: u64) {
+        if let Some(quando) = self.dirs.get_mut(dir) {
+            *quando = ora;
         }
     }
 }
@@ -1174,8 +1231,24 @@ impl MemStorage {
         Self::default()
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Mem> {
-        self.inner.lock().expect("supporto in memoria")
+    /// Il prestito, **avvelenato o no**.
+    ///
+    /// Un `fondi` che va in panico dentro [`VaultStorage::update`] unwinda con
+    /// la guardia in mano e avvelena il lucchetto; su [`FsStorage`] lo stesso
+    /// panico rilascia il lucchetto del file e lascia il supporto usabile, e chi
+    /// raccoglie il panico continua a leggere. Un `Mutex` nudo con un `expect`
+    /// farebbe morire ogni accesso successivo — cioè il doppio si romperebbe
+    /// dove il disco regge.
+    ///
+    /// La politica non è scritta qui: è quella del [`Ricovero`], che è la porta
+    /// del kernel per un dato che un panico a metà non rende incredibile
+    /// ([0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md)).
+    /// Ed è il caso: `fondi` non riceve niente della mappa, e l'unica mutazione
+    /// dell'`update` avviene **dopo** che è tornato, quindi ciò che il panico
+    /// lascia dietro di sé è lo stato di prima — esattamente ciò che lascia il
+    /// disco.
+    fn lock(&self) -> MutexGuard<'_, Mem> {
+        self.inner.prendi()
     }
 }
 
@@ -1197,18 +1270,20 @@ impl VaultStorage for MemStorage {
     /// `crates/fub-kernel/tests/il_supporto.rs`.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
         let mut mem = self.lock();
-        if mem.dirs.contains(path) {
+        if mem.dirs.contains_key(path) {
             return Err(io::Error::new(
                 io::ErrorKind::IsADirectory,
                 format!("{path}: è una cartella"),
             ));
         }
+        let ora = mem.ora();
         if let Some(parent) = path.parent() {
-            mem.make_dirs(parent);
+            mem.make_dirs(parent, ora)?;
         }
-        mem.tick += 1;
-        let tick = mem.tick;
-        mem.files.insert(path.to_owned(), (bytes.to_vec(), tick));
+        mem.files.insert(path.to_owned(), (bytes.to_vec(), ora));
+        // Anche una riscrittura data la cartella: di là è una rename dentro di
+        // essa (§15.2), e una rename è una voce di directory che cambia.
+        mem.tocca_il_genitore(path, ora);
         Ok(())
     }
 
@@ -1219,7 +1294,7 @@ impl VaultStorage for MemStorage {
     /// `Mutex` non è rientrante.
     fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
         let mut mem = self.lock();
-        if mem.dirs.contains(path) {
+        if mem.dirs.contains_key(path) {
             return Err(io::Error::new(
                 io::ErrorKind::IsADirectory,
                 format!("{path}: è una cartella"),
@@ -1229,47 +1304,58 @@ impl VaultStorage for MemStorage {
         let Some(nuovi) = fondi(attuale.as_deref())? else {
             return Ok(());
         };
+        let ora = mem.ora();
         if let Some(parent) = path.parent() {
-            mem.make_dirs(parent);
+            mem.make_dirs(parent, ora)?;
         }
-        mem.tick += 1;
-        let tick = mem.tick;
-        mem.files.insert(path.to_owned(), (nuovi, tick));
+        mem.files.insert(path.to_owned(), (nuovi, ora));
+        mem.tocca_il_genitore(path, ora);
         Ok(())
     }
 
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
         let mut mem = self.lock();
-        if mem.dirs.contains(path) {
+        if mem.dirs.contains_key(path) {
             return Err(io::Error::new(
                 io::ErrorKind::IsADirectory,
                 format!("{path}: è una cartella"),
             ));
         }
+        let ora = mem.ora();
         if let Some(parent) = path.parent() {
-            mem.make_dirs(parent);
+            mem.make_dirs(parent, ora)?;
         }
-        mem.tick += 1;
-        let tick = mem.tick;
+        let nato_adesso = !mem.files.contains_key(path);
         let voce = mem
             .files
             .entry(path.to_owned())
-            .or_insert_with(|| (Vec::new(), tick));
+            .or_insert_with(|| (Vec::new(), ora));
         voce.0.extend_from_slice(bytes);
-        voce.1 = tick;
+        voce.1 = ora;
+        // Aggiungere in coda a un file che c'è già non tocca la cartella: di là
+        // è una scrittura sull'inode, non una voce di directory in più.
+        if nato_adesso {
+            mem.tocca_il_genitore(path, ora);
+        }
         Ok(())
     }
 
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
         let mut mem = self.lock();
+        let ora = mem.ora();
         if let Some(parent) = to.parent() {
-            mem.make_dirs(parent);
+            mem.make_dirs(parent, ora)?;
         }
         if let Some(entry) = mem.files.remove(from) {
+            // La data del file non si tocca — una rename non riscrive l'inode,
+            // ed è la proprietà su cui poggia il timbro del cestino — ma le due
+            // cartelle sì: una voce se ne va di là e ne arriva una di qua.
             mem.files.insert(to.to_owned(), entry);
+            mem.tocca_il_genitore(from, ora);
+            mem.tocca_il_genitore(to, ora);
             return Ok(());
         }
-        if !mem.dirs.contains(from) {
+        if !mem.dirs.contains_key(from) {
             return Err(not_found(from));
         }
         // Una cartella si sposta con tutto ciò che ha dentro, e i path dentro
@@ -1297,26 +1383,30 @@ impl VaultStorage for MemStorage {
         let dirs: Vec<_> = mem
             .dirs
             .iter()
-            .filter_map(|k| sposta(k).map(|nuovo| (k.clone(), nuovo)))
+            .filter_map(|(k, quando)| sposta(k).map(|nuovo| (k.clone(), nuovo, *quando)))
             .collect();
-        for (vecchio, nuovo) in dirs {
+        for (vecchio, nuovo, quando) in dirs {
             mem.dirs.remove(&vecchio);
-            mem.dirs.insert(nuovo);
+            mem.dirs.insert(nuovo, quando);
         }
+        mem.tocca_il_genitore(from, ora);
+        mem.tocca_il_genitore(to, ora);
         Ok(())
     }
 
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
-        self.lock()
-            .files
-            .remove(path)
-            .map(|_| ())
-            .ok_or_else(|| not_found(path))
+        let mut mem = self.lock();
+        if mem.files.remove(path).is_none() {
+            return Err(not_found(path));
+        }
+        let ora = mem.ora();
+        mem.tocca_il_genitore(path, ora);
+        Ok(())
     }
 
     fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
         let mem = self.lock();
-        if !mem.dirs.contains(dir) {
+        if !mem.dirs.contains_key(dir) {
             return Err(not_found(dir));
         }
         let figlio = |path: &Utf8Path| path.parent() == Some(dir);
@@ -1335,13 +1425,13 @@ impl VaultStorage for MemStorage {
             .chain(
                 mem.dirs
                     .iter()
-                    .filter(|path| figlio(path))
-                    .map(|path| DirEntry {
+                    .filter(|(path, _)| figlio(path))
+                    .map(|(path, quando)| DirEntry {
                         path: path.clone(),
                         stat: Stat {
                             kind: EntryKind::Dir,
                             size: 0,
-                            mtime: 0,
+                            mtime: *quando,
                         },
                     }),
             )
@@ -1359,11 +1449,11 @@ impl VaultStorage for MemStorage {
                 mtime: *tick,
             });
         }
-        if mem.dirs.contains(path) {
+        if let Some(quando) = mem.dirs.get(path) {
             return Ok(Stat {
                 kind: EntryKind::Dir,
                 size: 0,
-                mtime: 0,
+                mtime: *quando,
             });
         }
         Err(not_found(path))
@@ -1371,9 +1461,23 @@ impl VaultStorage for MemStorage {
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
         let mut mem = self.lock();
-        if !mem.dirs.remove(dir) {
+        if !mem.dirs.contains_key(dir) {
             return Err(not_found(dir));
         }
+        // **Vuota vuol dire vuota**: `remove_dir` di là si rifiuta, e un doppio
+        // che invece togliesse la cartella lascerebbe dentro la mappa dei file
+        // che nessun `list` sa più raggiungere — cioè renderebbe verde qui la
+        // camminata che di là si ferma.
+        let figlio = |path: &Utf8Path| path.parent() == Some(dir);
+        if mem.files.keys().any(|p| figlio(p)) || mem.dirs.keys().any(|p| figlio(p)) {
+            return Err(io::Error::new(
+                io::ErrorKind::DirectoryNotEmpty,
+                format!("{dir}: non è vuota"),
+            ));
+        }
+        mem.dirs.remove(dir);
+        let ora = mem.ora();
+        mem.tocca_il_genitore(dir, ora);
         Ok(())
     }
 }
@@ -1381,6 +1485,47 @@ impl VaultStorage for MemStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// La data di una cartella **avanza** quando cambia ciò che le sta dentro.
+    ///
+    /// Sta qui e non nel banco appaiato di `tests/il_supporto.rs` per la
+    /// ragione che rende utile un contatore: di là c'è un orologio vero, e due
+    /// scritture nello stesso millisecondo non si distinguono senza una
+    /// `sleep`. Il banco appaiato prova ciò che i due sanno promettere insieme
+    /// — una data c'è, e non torna indietro — questo prova il modello.
+    #[test]
+    fn la_data_di_una_cartella_segue_cio_che_ci_sta_dentro() {
+        let mem = MemStorage::new();
+        let dir = Utf8Path::new("/vault/note");
+        mem.write(&dir.join("a.md"), b"a").unwrap();
+        let nascita = mem.stat(dir).unwrap().mtime;
+        assert_ne!(nascita, 0, "una cartella nasce con una data");
+
+        mem.write(&dir.join("b.md"), b"b").unwrap();
+        let con_due = mem.stat(dir).unwrap().mtime;
+        assert!(con_due > nascita, "un file nuovo data la cartella");
+
+        // Appendere a un file che c'è già non è una voce di directory in più.
+        mem.append(&dir.join("b.md"), b"bb").unwrap();
+        assert_eq!(
+            mem.stat(dir).unwrap().mtime,
+            con_due,
+            "appendere non tocca la cartella"
+        );
+
+        // Togliere sì, e la data del file che trasloca non si muove con lui.
+        let quando_del_file = mem.stat(&dir.join("a.md")).unwrap().mtime;
+        mem.rename(&dir.join("a.md"), Utf8Path::new("/vault/altrove/a.md"))
+            .unwrap();
+        assert!(mem.stat(dir).unwrap().mtime > con_due, "l'uscita data");
+        assert_eq!(
+            mem.stat(Utf8Path::new("/vault/altrove/a.md"))
+                .unwrap()
+                .mtime,
+            quando_del_file,
+            "una rename non riscrive il file"
+        );
+    }
 
     /// Il temporaneo di una scrittura vive dentro il vault per una frazione di
     /// secondo, e in quella frazione **non deve essere un documento**.
