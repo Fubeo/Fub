@@ -243,7 +243,7 @@ Le caselle residue oggi sono **venticinque**, e stanno in venti posti:
 
 - [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) — una: i workspace salvati
   con un nome. La casa è decisa, il formato aspetta di vedere assetti veri.
-- [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-cartella-di-progetto-include-documenti-e-asset)
+- [§14.1](roadmap/14-entry-cartelle-lista.md#141-il-vault-non-è-solo-documenti)
   — tre: l'impronta degli allegati, la politica della cartella allegati, le
   derivate.
 - [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)

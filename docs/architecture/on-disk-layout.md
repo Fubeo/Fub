@@ -1,35 +1,50 @@
 # Cosa Fub scrive sul disco
 
-Questa è la mappa di **chi scrive dove**. Mostra la classe, la versione di schema e la disciplina di scrittura per ogni file. Questo documento è la metà documentale del [§15.4](../roadmap/15-il-disco.md). La sua motivazione è spiegata nella [decisione 0048](../decisions/0048-una-radice-sola.md).
+Questa è la mappa di **chi scrive dove**, e per ogni file dice classe, versione
+di schema e disciplina di scrittura. È la metà documentale del
+[§15.4](../roadmap/15-il-disco.md); il perché sta nella [decisione
+0048](../decisions/0048-una-radice-sola.md).
 
-[← architecture/](README.md) · [il colpo d'occhio](mappa-visuale.md) · [i tre numeri di versione](../versionamento.md)
+[← architecture/](README.md) · [il colpo d'occhio](mappa-visuale.md) · [i tre
+numeri di versione](../versionamento.md)
 
 ## Chi ci arriva
 
-Il `VaultStorage` (`kernel/storage.rs`) è un supporto solo per i byte sotto la linea del vault (la cartella principale dei documenti). Questo concetto è spiegato nella [0064](../decisions/0064-il-supporto-sta-sotto.md).
+Sotto la linea del vault — cioè dentro la cartella dei documenti — i byte
+passano da un solo supporto, `VaultStorage` (`kernel/storage.rs`). È la
+[0064](../decisions/0064-il-supporto-sta-sotto.md).
 
-Il supporto gestisce:
+Ci passano:
 - Il vault.
-- Il cestino e i suoi sidecar (file di metadati aggiuntivi).
-- Lo spazio dati dei plugin (estensioni funzionali).
+- Il cestino e i suoi sidecar (i file di metadati che gli stanno accanto).
+- Lo spazio dati dei plugin.
 - Le tre righe di `.fub/`: `workspace.json`, `settings.json` ed `entries.json`.
 
-Questi file usano il supporto in base alla [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md). Questa decisione garantisce la loro atomicità.
+Passando di lì diventano atomici, ed è la
+[0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md): una scrittura o c'è
+o non c'è.
 
-Dentro un workspace (lo spazio di lavoro) il supporto è **uno**. Esso è condiviso tra il vault, i tre store e il registro delle mutazioni. Fuori dal vault i file appartengono alla macchina e la funzione `write_atomic` gestisce la loro atomicità.
+Dentro un workspace il supporto è **uno**, condiviso fra il vault, i tre store e
+il registro delle mutazioni. Fuori dal vault i file sono della macchina, e
+l'atomicità la dà `write_atomic`.
 
 ## La regola
 
-**Tutti i dati scritti da Fub dentro un vault si trovano in una radice sola: `.fub/`.** La profondità definisce la classe:
+**Tutti i dati scritti da Fub dentro un vault si trovano in una radice sola:
+`.fub/`.** La profondità definisce la classe:
 
 | Dove | Classe | Cosa vuol dire |
 |---|---|---|
-| `<vault>/.fub/` | **autorevole** | Il file è irrecuperabile in caso di perdita. I lettori bloccati mantengono il file esistente. |
-| `<vault>/.fub/data/` | **derivato** | Il sistema ricrea il file leggendo il vault. I lettori bloccati ricreano il file in modo silenzioso. |
+| `<vault>/.fub/` | **autorevole** | Se si perde, è perso. Chi non riesce a leggerlo tiene il file che c'è. |
+| `<vault>/.fub/data/` | **derivato** | Si rifà rileggendo il vault. Chi non riesce a leggerlo lo rifà in silenzio. |
 
-La cartella `<vault>/.trash/` resta fuori dalla radice. Questo cestino appartiene all'utente ed è **condiviso con Obsidian** (`kernel/vault.rs`, `TRASH_DIR`). La cartella contiene i file eliminati dall'utente.
+`<vault>/.trash/` sta fuori dalla radice apposta: è dell'utente, e lo
+**condivide con Obsidian** (`kernel/vault.rs`, `TRASH_DIR`).
 
-Il contratto omette la classe. La funzione `data_write` ignora questo attributo. Il path rappresenta l'unico indicatore attuale della classe. Il sistema userà una seconda famiglia di capacità per rendere esplicito il derivato. Questa modifica rappresenta il residuo del §15.4 e aspetta l'implementazione. Nel frattempo, questa tabella funge da definizione operativa. Le tre righe di eccezioni sono descritte nelle sezioni successive.
+La classe il contratto non la dice: `data_write` non la guarda, e oggi si legge
+solo dal path. Il derivato diventerà esplicito con una seconda famiglia di
+capacità — è il residuo del §15.4, e ancora non c'è. Fino ad allora la
+definizione operativa è questa tabella, più le tre eccezioni qui sotto.
 
 ## Dentro il vault
 
@@ -42,7 +57,7 @@ Il contratto omette la classe. La funzione `data_write` ignora questo attributo.
 | `.fub/data/entries.json` | `kernel/entries.rs` | derivato | 2 | `VaultStorage::write` |
 | `.fub/data/diagnostics.json` | `kernel/workspace.rs` (`vault.diagnostic-bundle`) | derivato | 1 | `VaultStorage::write` — copia fatti esterni e permette la sua distruzione |
 | `.fub/data/trash/<nome>.json` | `kernel/vault.rs` | **classe indipendente** (sotto) | 1 | `VaultStorage::write`, best-effort |
-| `.fub/data/plugins/<id>/…` | possessori di `DataWrite` | dichiarata derivata, **di fatto entrambe** (sotto) | per plugin | `VaultStorage::write` (`host/kernel.rs`) |
+| `.fub/data/plugins/<id>/…` | possessori di `DataWrite` | dichiarata derivata, **di fatto entrambe** (sotto) | per plugin | `VaultStorage::write` (`kernel/host/kernel.rs`) |
 | `.fub/data/plugins/fub.search/` | `features/search.rs` | derivato | 5 | l'indice tantivy e un `manifest.json` |
 | `.fub/data/plugins/fub.versioning/` | `features/versioning.rs` | **autorevole** (sotto) | 1 | `versions.json` deriva dallo store, mentre gli snapshot sono autorevoli |
 | `.fub/data/plugins/<id>/doc/<documento>/…` | regola generale | ereditata dal plugin | del plugin | lo stato per-documento della [0044](../decisions/0044-lo-stato-per-documento.md): il posto risiede in `abi/rules/doc_data.rs`. Il kernel migra i dati durante il rename. Questo include i rename ad app chiusa, riconosciuti dall'impronta alla riapertura ([0099](../decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)) |
@@ -50,86 +65,138 @@ Il contratto omette la classe. La funzione `data_write` ignora questo attributo.
 
 ## Cosa c'è dentro il registro delle mutazioni
 
-Il registro delle mutazioni documenta le azioni dell'utente riga per riga. Il suo contenuto segue una regola scritta.
+Il registro delle mutazioni scrive una riga per ogni azione dell'utente.
 
 ### Contenuto del registro
-Il registro memorizza i dettagli degli eventi:
-- **Timestamp**: quando è successo.
-- **Autore**: chi l'ha chiesto (l'`Origin` intera).
-- **Gruppo**: dentro quale lotto.
-- **Azione**: creazione, salvataggio, modifica, cestinamento, ripristino o rinomina di una nota.
+Ogni riga dice:
+- **Quando**: il timestamp.
+- **Chi**: l'`Origin` intera, cioè chi l'ha chiesto.
+- **Dentro quale lotto**.
+- **Cosa**: creazione, salvataggio, modifica, cestinamento, ripristino o
+  rinomina di una nota.
 
-Il registro esclude il testo eliminato o sostituito. Fino alla [0103](../decisions/0103-un-registro-dice-cosa-e-successo.md), la modifica includeva i byte sostituiti dall'utente. Attualmente il registro salva solo l'**impronta**:
-- Lo span toccato.
-- La quantità di byte presenti in precedenza.
+Quello che **non** c'è è il testo cancellato o sostituito. Fino alla
+[0103](../decisions/0103-un-registro-dice-cosa-e-successo.md) una modifica si
+portava dietro i byte che l'utente aveva sostituito; adesso resta solo
+l'**impronta**: lo span toccato, e quanti byte c'erano prima.
 
-Un audit trova risposte su *quando, chi, dove e quanto*. Il sistema sposta la conservazione dei contenuti storici nel versioning (il sistema di controllo delle versioni). `JournalOp::is_invertible` identifica le operazioni invertibili esplicitamente. Le quattro varianti strutturali ammettono l'inversione. Le due varianti testuali impediscono l'inversione diretta.
+Così un audit risponde a *quando, chi, dove e quanto*, e il contenuto storico lo
+tiene il versioning. `JournalOp::is_invertible` dice a voce alta quali
+operazioni tornano indietro: le quattro strutturali sì, le due testuali no.
 
 ### Regole di conservazione
-Il registro mantiene i path e i tempi in chiaro per garantire la sua funzione. L'utente definisce la durata della conservazione tramite due criteri:
+Path e tempi restano in chiaro: senza, il registro non servirebbe a niente. A
+decidere per quanto restano sono due criteri:
 
-1. **Finestra temporale (`journal.retention.days`)**: Definisce i giorni di conservazione. I record oltre questa finestra decadono. Il valore zero indica una conservazione permanente. Questo rappresenta l'impostazione predefinita per un dato autorevole.
-2. **Limite strutturale**: Fissa il tetto a diecimila record. Questo limite dipende dal volume delle scritture.
+1. **Una finestra di giorni (`journal.retention.days`)**. I record più vecchi
+   decadono. Zero vuol dire per sempre, ed è il default: è un dato autorevole.
+2. **Un tetto di diecimila record**, che morde quando si scrive molto.
 
-Il sistema evita l'esecuzione di due potature separate. Seleziona il taglio più avanzato tra i due criteri. Da quel punto, scorre una volta sola fino al confine di lotto.
+Le potature non sono due. Si prende il taglio più avanti fra i due criteri, e da
+lì si scorre una volta sola fino al confine di lotto.
 
-Gestione dei record anomali:
-- **Record datati ma illeggibili**: Subiscono la valutazione standard.
-- **Record senza data**: Bloccano la scansione per evitare l'eliminazione di dati ignoti.
+I record strani:
+- **Datati ma illeggibili**: si giudicano come gli altri.
+- **Senza data**: fermano la scansione, perché buttare un dato ignoto è peggio
+  che tenerlo.
 
 ### Svuotamento manuale
-L'utente può usare il comando `vault.clear-journal` (`kernel/maintenance.rs`). Questo comando distrugge tutti i record intenzionalmente. Elimina anche le righe ignorate dalla potatura standard. È l'unico comando di manutenzione irreversibile. Gli altri tre comandi di manutenzione mantengono i dati intatti. Lo svuotamento richiede un gesto esplicito dell'utente, differenziandosi dalla potatura automatica.
+Il comando `vault.clear-journal` (`kernel/maintenance.rs`) butta tutto, comprese
+le righe che la potatura salterebbe. È l'unico comando di manutenzione
+irreversibile: gli altri tre lasciano i dati dove sono. Serve un gesto esplicito
+dell'utente, e questo lo distingue dalla potatura automatica.
 
 ## Fuori dal vault
 
-La configurazione risiede nella cartella della macchina (`host/config.rs`: `config_dir`, `FUB_CONFIG_DIR`, o la modalità portable vicino all'eseguibile). Questa cartella contiene i dati legati all'installazione locale. Questi file restano separati dal vault.
+La configurazione della macchina sta nella cartella della macchina
+(`host/config.rs`: `config_dir`, `FUB_CONFIG_DIR`, o la modalità portable
+accanto all'eseguibile). Riguarda l'installazione locale, non il vault, e per
+questo sta fuori.
 
 | Posto | Chi lo scrive | Classe | Schema | Scrittura |
 |---|---|---|---|---|
-| `settings.json` | `kernel/settings.rs` | autorevole | 1 | Atomica. Il sistema aggiorna il file rileggendolo sotto lock. |
-| `vaults.json` | `host/vaults.rs` | autorevole | 1 | Atomica. Il sistema aggiorna il registro dei vault conosciuti sotto lock ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)). |
-| `view-state.json` | `kernel/viewstate.rs` | autorevole | 1 | Atomica. Il sistema salva la posizione dell'esemplare di vista sotto lock ([0037](../decisions/0037-lo-stato-di-vista.md)). |
-| `.<nome>.lock` | `kernel/storage.rs` | indipendente | — | Compagno di lock per ciascuno dei tre file. Il file risulta vuoto e serve esclusivamente per l'apertura controllata ([0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md)). |
+| `settings.json` | `kernel/settings.rs` | autorevole | 1 | Atomica: si rilegge sotto lock e si riscrive. |
+| `vaults.json` | `host/vaults.rs` | autorevole | 1 | Atomica, sotto lock. È il registro dei vault conosciuti ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)). |
+| `view-state.json` | `kernel/viewstate.rs` | autorevole | 1 | Atomica, sotto lock. È dove si è fermato ogni esemplare di vista ([0037](../decisions/0037-lo-stato-di-vista.md)). |
+| `.<nome>.lock` | `kernel/storage.rs` | indipendente | — | Un compagno di lock per ciascuno dei tre. È vuoto: serve solo ad aprirlo ([0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md)). |
 
-I tre file richiedono un aggiornamento continuo. Due installazioni di Fub sulla stessa cartella mantengono copie separate in memoria. Una semplice riscrittura cancellerebbe le modifiche parallele. Una scrittura atomica omette questa protezione a causa della sostituzione integrale del file. 
+Questi tre file si aggiornano di continuo, e due Fub aperti sulla stessa
+cartella ne tengono due copie in memoria. Riscriverli e basta cancellerebbe le
+modifiche dell'altro — anche riscrivendoli in modo atomico, perché atomico vuol
+dire che il file nuovo sostituisce il vecchio intero.
 
-Le modifiche passano da `update_atomic` (`kernel/storage.rs`). Questa funzione esegue tre passi:
-1. Rilegge i dati sotto lock.
+Per questo passano da `update_atomic` (`kernel/storage.rs`), che fa tre cose:
+1. Rilegge sotto lock.
 2. Fonde i cambiamenti.
-3. Restituisce lo stato fuso al chiamante.
+3. Restituisce al chiamante lo stato fuso.
 
-Il lock risiede su un file adiacente. La scrittura atomica sostituisce l'inode (l'identificatore del file nel sistema). Un lock sul file rimpiazzato consentirebbe l'accesso simultaneo.
+Il lock sta su un file **accanto**, non sul file stesso: la scrittura atomica
+cambia l'inode (il numero con cui il sistema identifica il file), e un lock
+preso sul file sostituito non tratterrebbe più nessuno.
 
 ## Le tre righe che contraddicono la regola
 
-Questo documento espone apertamente le eccezioni per garantire una mappa accurata. Questo elenco definisce le correzioni necessarie per la seconda metà del §15.4.
+Le eccezioni stanno scritte qui perché una mappa che le nasconde è una mappa
+sbagliata. Sono anche l'elenco di cosa correggere nella seconda metà del §15.4.
 
-Il registro delle mutazioni rispetta la regola generale. Il suo sviluppo ha seguito questa tabella fin dall'inizio. Il piano originale in `todo.md` suggeriva `.fub/data/`. Questa scelta avrebbe trattato il registro come un file derivato. Gli snapshot del versioning (l'eccezione numero uno qui sotto) rientrano esattamente in questa descrizione. Tuttavia, il registro risiede un livello superiore per mantenere la sua natura autorevole, evitando di generare una quarta eccezione.
+Il registro delle mutazioni **non** è fra loro, e per poco. Il piano in
+`todo.md` lo metteva in `.fub/data/`, cioè fra i derivati — che è esattamente il
+posto sbagliato in cui stanno gli snapshot del versioning, l'eccezione numero
+uno. Si è scritto un livello più su, dove la sua classe è quella vera, e la
+quarta eccezione non è nata.
 
-Ecco le tre eccezioni attuali:
+Le tre di oggi:
 
-1. **Gli snapshot del versioning appaiono come derivati pur essendo autorevoli.** La ricostruzione di stati passati risulta impossibile. La loro posizione dipende dallo spazio dati del plugin, che è uno solo. L'introduzione della famiglia `cache_*` risolverà il problema. I dati `data_*` diventeranno autorevoli salendo di un livello. La ricerca, essendo derivata, si sposterà in `cache_*` e permetterà la ricostruzione.
-2. **Il sidecar del cestino appartiene a una classe mista, eludendo le due classi standard.** La sua perdita comporta conseguenze minori. Il ripristino di `progetti/Nota.md` lo sposta nella radice anziché in `progetti/`. Questo meccanismo si chiama **degrado garbato** (`kernel/vault.rs`). Corrisponde al comportamento di Obsidian, il quale gestisce i file cestinati privi di sidecar.
-3. ~~**I dati di `data_write` mancano di scrittura atomica**~~ — **Questa terza eccezione appartiene al passato.** Prima, un crash durante la scrittura troncava i file autorevoli come gli snapshot. La decisione [0064](../decisions/0064-il-supporto-sta-sotto.md) ha centralizzato i cinque punti vulnerabili in **uno** solo. La decisione [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) ha implementato la soluzione: `VaultStorage::write` assicura l'atomicità in modo automatico. Questa evoluzione spiega la priorità del §15.1 rispetto al §15.2.
+1. **Gli snapshot del versioning sembrano derivati e sono autorevoli.** Uno
+   stato passato non si ricostruisce da nessuna parte. Stanno lì perché lo
+   spazio dati di un plugin è uno solo. Li sistemerà la famiglia `cache_*`: i
+   `data_*` salgono di un livello e diventano autorevoli, la ricerca — che
+   derivata lo è davvero — scende in `cache_*` e si può rifare.
+2. **Il sidecar del cestino non sta in nessuna delle due classi.** Perderlo
+   costa poco: `progetti/Nota.md` ripristinato torna nella radice invece che in
+   `progetti/`. Si chiama **degrado garbato** (`kernel/vault.rs`), ed è quello
+   che fa Obsidian con i file cestinati senza sidecar.
+3. ~~**I dati di `data_write` non erano atomici**~~ — **questa eccezione non c'è
+   più.** Prima un crash a metà scrittura troncava anche un file autorevole,
+   snapshot compresi. La [0064](../decisions/0064-il-supporto-sta-sotto.md) ha
+   ridotto cinque punti di scrittura a **uno**, e la
+   [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) ha reso quell'uno
+   atomico: oggi `VaultStorage::write` lo è senza che nessuno lo chieda. È il
+   motivo per cui il §15.1 veniva prima del §15.2.
 
-**L'indice di ricerca evita il passaggio standard.** La funzione `plugin_data_dir` fornisce a tantivy (il motore di ricerca) una cartella fisica del filesystem. Questo rappresenta un limite accettato della 0064. Queste scritture perdono l'atomicità e la futura cifratura. Questa mancanza risulta innocua per un dato derivato, ma delimita i confini del supporto cifrato.
+**L'indice di ricerca passa di fianco al supporto.** `plugin_data_dir` dà a
+tantivy una cartella vera del filesystem, ed è un limite accettato della 0064:
+quelle scritture non sono atomiche e non saranno cifrate. Su un dato derivato
+non fa danno, ma segna fin dove arriverà il supporto cifrato.
 
 ## Il nome di prima
 
-Il sistema usava **due** radici dentro il vault (una per l'autorevole e una, separata, per il derivato) prima della [0048](../decisions/0048-una-radice-sola.md). Attualmente ne esiste **una**, descritta nelle sezioni precedenti.
+Prima della [0048](../decisions/0048-una-radice-sola.md) le radici dentro il
+vault erano **due**: una per l'autorevole e una, separata, per il derivato.
+Adesso è **una**, ed è quella descritta qui sopra.
 
-Il sistema omette le traduzioni dei vecchi nomi. Il kernel (il nucleo del sistema) gestiva un rename automatico per i vault precedenti. Questo codice risulta rimosso insieme al vecchio nome del progetto. Il vecchio formato riguarda zero vault esterni a questa macchina. Mantenere una migrazione inutile comporterebbe la conservazione di un nome obsoleto per sempre.
+I vecchi nomi non sono tradotti da nessuna parte. Il kernel aveva un rename
+automatico per i vault di prima, ed è stato tolto insieme al vecchio nome del
+progetto: fuori da questa macchina quei vault sono zero, e tenere la migrazione
+avrebbe voluto dire tenere per sempre anche il nome vecchio.
 
-Questo stabilisce una regola chiara per i futuri cambi di layout: **una migrazione di layout resta facoltativa prima della pubblicazione del progetto, diventando obbligatoria successivamente.** Questa distinzione riflette la responsabilità delle modifiche. Gli sviluppatori spostano le cartelle prima del rilascio. Gli utenti affrontano le migrazioni dopo la pubblicazione.
+Da qui la regola per i cambi di layout futuri: **prima della pubblicazione una
+migrazione è facoltativa, dopo è obbligatoria.** Cambia chi paga. Prima del
+rilascio le cartelle le sposta chi sviluppa; dopo, le migrazioni le subisce chi
+usa l'app.
 
 ## Cosa manca attualmente
 
-La tabella integrerà nuovi elementi in futuro. Ogni elemento possiede una voce specifica:
+Queste righe la tabella non ce l'ha ancora. Ognuna ha già la sua voce aperta:
 - Temi e snippet (§6.2).
 - Plugin installati da file (§20.2).
-- Il buffer di crash ([§15.2](../roadmap/15-il-disco.md#152-durabilità-e-recovery)). Il suo journal esiste già come prima riga convertita di questo elenco ad aver guadagnato una riga nella tabella.
+- Il buffer di crash
+  ([§15.2](../roadmap/15-il-disco.md#152-durabilità-e-recovery)). È l'unica voce
+  di questo elenco che una riga in tabella ce l'ha già in parte: il suo journal.
 - Thumbnail e cache derivate (§14.1).
 - I backup (§18.2).
 - I layout salvati (§11.2).
 
-**Ogni nuovo elemento definisce la sua posizione tramite questa tabella, evitando l'imitazione.** Ciascun elemento aggiungerà una riga contenente la propria classe, la versione di schema (§15.3) e la disciplina di scrittura.
+**Il posto si sceglie da questa tabella, non imitando l'ultimo file che si è
+guardato.** Ognuna aggiungerà una riga con la sua classe, la sua versione di
+schema (§15.3) e la sua disciplina di scrittura.

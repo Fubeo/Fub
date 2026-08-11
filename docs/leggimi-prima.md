@@ -2,35 +2,49 @@
 
 ## 1. Cos'è Fub
 
-Fub è un'applicazione per prendere note su una cartella di file `.md`. È compatibile con i vault di Obsidian. Il suo nucleo gestisce dati generici e usa provider esterni per imparare il markdown.
+Fub è un'applicazione per prendere note su una cartella di file `.md`. È
+compatibile con i vault di Obsidian. Il suo nucleo gestisce dati generici e usa
+provider esterni per imparare il markdown.
 
 ## 2. Com'è diviso
 
 I crate in ordine di dipendenza e il frontend:
 
-- **`fub-abi`**: il contratto. Definisce il modello del documento e le interfacce per estendere il sistema.
-- **`fub-kernel`**: il motore sui file. Gestisce il disco, l'anagrafe dei documenti e gli eventi.
+- **`fub-abi`**: il contratto. Definisce il modello del documento e le
+  interfacce per estendere il sistema.
+- **`fub-kernel`**: il motore sui file. Gestisce il disco, l'anagrafe dei
+  documenti e gli eventi.
 - **`fub-sdk`**: gli strumenti per scrivere i provider.
-- **`fub-format-markdown`**: il primo provider nativo. Legge e scrive i file markdown.
-- **`fub-features`**: le funzioni ufficiali come ricerca e backlink. Usano il contratto come veri plugin.
+- **`fub-format-markdown`**: il primo provider nativo. Legge e scrive i file
+  markdown.
+- **`fub-features`**: le funzioni ufficiali come ricerca e backlink. Usano il
+  contratto come veri plugin.
 - **`fub-host`**: il coordinatore. Assembla i pezzi e osserva il disco.
-- **`fub-app`**: l'app Tauri. Gestisce finestre e menu del sistema operativo.
-- **`fub-testkit`**: il motore per testare il kernel esplorando le varianti.
-- **`fub-wasm-host`**: l'ambiente per i plugin di terzi (arriverà con `M5`).
+- **`fub-app`**: l'app Tauri. Comandi ed eventi IPC, finestre, dialoghi.
+- **`fub-testkit`**: il banco del lato host. Monta un vault vero sul kernel vero
+  e dice quali eventi sono usciti. Serve solo ai test.
+- **`fub-wasm-host`**: l'ambiente per i plugin di terzi. **Non esiste ancora**:
+  arriverà con `M5`.
 - **`frontend`**: l'interfaccia utente.
 
-Il disegno d'insieme è in [architecture/mappa-visuale.md](architecture/mappa-visuale.md).
+Il disegno d'insieme è in
+[architecture/mappa-visuale.md](architecture/mappa-visuale.md).
 
 ## 3. I quattro documenti che contano
 
-- [decisions/](decisions/README.md): i verbali. Spiegano perché un sistema è fatto così. Ogni file è unico; il contenuto è immutabile, ma la forma si può riscrivere per chiarezza.
-- [todo.md](todo.md): l'indice del lavoro. Mostra cosa manca, in **tre** categorie con conteggi separati.
-- [architecture/](architecture/README.md): il funzionamento attuale. Spiega com'è fatto il progetto adesso.
+- [decisions/](decisions/README.md): i verbali. Spiegano perché un sistema è
+  fatto così. Ogni file è unico; il contenuto è immutabile, ma la forma si può
+  riscrivere per chiarezza.
+- [todo.md](todo.md): l'indice del lavoro. Mostra cosa manca, in **tre**
+  categorie con conteggi separati.
+- [architecture/](architecture/README.md): il funzionamento attuale. Spiega
+  com'è fatto il progetto adesso.
 - [FEATURES.md](FEATURES.md): il catalogo. Elenca dove vogliamo arrivare.
 
 ## 4. Il dizionario del dialetto
 
-Il [glossario.md](glossario.md) definisce le parole del prodotto. Questa tabella definisce le parole del metodo interno:
+Il [glossario.md](glossario.md) definisce le parole del prodotto. Questa tabella
+definisce le parole del metodo interno:
 
 | Parola | In italiano normale |
 |---|---|

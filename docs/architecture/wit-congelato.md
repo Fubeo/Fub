@@ -1,21 +1,33 @@
 # `crates/fub-abi/wit/frozen/` — il contratto com'era
 
-Questa cartella contiene una copia del contratto per ogni versione **pubblicata**. Il nome del file è uguale alla versione (`0.1.0.wit` ↔ `package fub:abi@0.1.0`).
+Qui dentro c'è una copia del contratto per ogni versione **pubblicata**. Il nome
+del file è la versione (`0.1.0.wit` ↔ `package fub:abi@0.1.0`).
 
-Questa cartella è la linea di base. Il test [`crates/fub-abi/tests/wit_additivity.rs`](../../crates/fub-abi/tests/wit_additivity.rs) usa questi file per verificare una promessa. La promessa è il freeze (blocco) di M4: **post-freeze il contratto cresce solo per aggiunta**.
+È la linea di base. Il test
+[`crates/fub-abi/tests/wit_additivity.rs`](../../crates/fub-abi/tests/wit_additivity.rs)
+legge questi file per tenere in piedi la promessa del freeze di M4: **dopo il
+freeze il contratto cresce solo per aggiunta**.
 
 ## Perché non bastava ciò che c'era
 
-I presidi precedenti non coprono la promessa di sola aggiunta.
+Nessuno dei due presidi che c'erano già copre quella promessa.
 
-- [`wit_conformance.rs`](../../crates/fub-abi/tests/wit_conformance.rs) confronta `fub-abi` e `crates/fub-abi/wit/fub/abi.wit`. Il confronto avviene **oggi**, fra i due file attuali. Una rinomina di un campo in entrambi mantiene la conformità. Questo rompe ogni plugin (estensione) già compilato.
-- `abi_compatible` applica la regola a runtime (esecuzione). Una major (versione principale) diversa causa un rifiuto. Una minor (versione secondaria) del plugin ≤ minor dell'host (programma principale) viene accettata. Rimuovere una variante o rinominare un campo mantiene la minor intatta. Il plugin viene accettato. Il confine si rompe a valle (più tardi). La rete di sicurezza fallisce proprio nel caso critico.
+- [`wit_conformance.rs`](../../crates/fub-abi/tests/wit_conformance.rs)
+  confronta `fub-abi` e `crates/fub-abi/wit/fub/abi.wit` così come sono
+  **oggi**. Se un campo si rinomina in tutti e due, resta verde — e ogni plugin
+  già compilato si rompe.
+- `abi_compatible` decide a runtime, e guarda solo i numeri di versione: major
+  diversa, rifiuto; minor del plugin ≤ minor dell'host, si passa. Ma togliere
+  una variante o rinominare un campo la minor non la muove. Il plugin entra, e
+  il confine si rompe più tardi. La rete cede proprio dove serviva.
 
-Il costo della scoperta tardiva è asimmetrico. La build (compilazione) del repo (repository) resta verde (corretta). I plugin di terzi si rompono dopo il rilascio.
+Il costo di accorgersene tardi non è distribuito in parti uguali: nel repo la
+build resta verde, e a rompersi sono i plugin di terzi, dopo il rilascio.
 
 ## Cosa conta come aggiunta
 
-Una aggiunta richiede il mantenimento della forma di ogni elemento già pubblicato. Ogni elemento deve restare intatto **e nella stessa posizione**. I nuovi elementi possono stare solo in coda.
+Perché sia un'aggiunta, ogni elemento già pubblicato deve restare intatto **e
+nella stessa posizione**. Il nuovo va solo in coda.
 
 | costrutto | additivo | rotto |
 |---|---|---|
@@ -27,21 +39,46 @@ Una aggiunta richiede il mantenimento della forma di ogni elemento già pubblica
 | interfaccia | un'interfaccia **nuova** | toglierne una, o spostarci dentro un tipo esistente |
 | `world` | un import/export in più | toglierne uno |
 
-Lo spostamento di un tipo tra interfacce è una **rinomina** del suo nome qualificato. Questo rompe la compatibilità. Il nome nudo intatto non evita la rottura.
+Spostare un tipo da un'interfaccia a un'altra **è** una rinomina: cambia il suo
+nome qualificato, e rompe. Che il nome nudo resti uguale non salva niente.
 
-La posizione dell'interfaccia cambia l'effetto della riga «funzione nuova».
-Sulle interfacce che il plugin **importa**, una funzione aggiunta mantiene la compatibilità. Un componente già compilato ignora la funzione nuova e continua a girare. Questo è il caso della [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
-Sulle interfacce che il plugin **esporta** (quelle elencate nel `world` e implementate dal plugin), una funzione nuova è un obbligo. Il componente compilato contro `fub:abi@0.1.0` esporta solo le vecchie funzioni. Un `world` con nuove richieste impedisce l'instanziazione del componente. Questo rappresenta una major travestita da riga in coda. La [decisione 0102](../decisions/0102-i-byte-non-stanno-nel-record.md) ha identificato questo problema dopo due casi precedenti (`index::up-to-date` e `view::interests`). Questi casi sono elencati in `OBBLIGAZIONI_NOTE` dentro `wit_additivity.rs` per motivi specifici.
+La riga «funzione nuova» vale in due modi opposti, e dipende da chi la
+implementa.
 
-Il requisito "in fondo" garantisce sicurezza. Nel component model (modello dei componenti) aggiungere un caso a un `variant` altera il binario. Questo progetto considera l'aggiunta accettabile. Il discriminante (valore identificativo) degli elementi esistenti deve rimanere fisso.
+- Sulle interfacce che il plugin **importa**, una funzione in più non rompe: un
+  componente già compilato la ignora e continua a girare. È il caso della
+  [decisione 0013](../decisions/0013-elenco-delle-capacita.md).
+- Sulle interfacce che il plugin **esporta** — quelle elencate nel `world` e
+  scritte dal plugin — una funzione in più è un **obbligo**. Il componente
+  compilato contro `fub:abi@0.1.0` esporta solo le vecchie, e un `world` che ne
+  chiede una nuova non lo lascia nemmeno istanziare. È una major travestita da
+  riga in coda. L'ha vista la [decisione
+  0102](../decisions/0102-i-byte-non-stanno-nel-record.md), dopo che era già
+  successo due volte (`index::up-to-date` e `view::interests`); quei due stanno
+  in `OBBLIGAZIONI_NOTE` dentro `wit_additivity.rs`, ciascuno con la sua
+  ragione.
+
+Perché «in fondo» e non «da qualche parte»: nel component model aggiungere un
+caso a un `variant` cambia comunque il binario. Qui l'aggiunta si accetta lo
+stesso, a una condizione — il discriminante di ciò che c'era già non si muove.
 
 ## Come si aggiorna
 
-**Prima del freeze di M4**, la superficie può evolvere. Il test rende visibili i cambiamenti. Una rottura deliberata richiede una modifica alla linea di base. Questo avviene tramite un commit (salvataggio) che **tocca `0.1.0.wit`** con una giustificazione. Il cambiamento risulta evidente in fase di review (revisione). Questo differisce dal passato, dove i cambiamenti restavano nascosti.
+**Prima del freeze di M4** la superficie si muove ancora, e il test serve a
+rendere il movimento visibile. Una rottura voluta si fa in un commit che **tocca
+`0.1.0.wit`** e dice perché: in review si vede. Prima, cambiamenti così
+passavano senza lasciare traccia.
 
-Il test può risultare **verde e corretto** in un caso specifico. Un elemento creato *dopo* la definizione della linea di base risulta non pubblicato. Una sua modifica non rompe alcuna promessa. Lo snapshot (fotografia dello stato) rimane invariato. Aggiungere un nuovo tipo falsificherebbe lo storico delle pubblicazioni. La rottura affligge comunque chi compila contro l'`abi.wit` attuale. La tabella seguente elenca anche queste rotture. Il test copre *ciò che è uscito* e tralascia *ciò che è cambiato*. L'assenza di errori non garantisce un'aggiunta sicura.
+C'è un caso in cui il test è **verde ed è giusto che lo sia**: un elemento nato
+*dopo* il taglio della linea di base non è mai stato pubblicato, quindi
+cambiarlo non rompe nessuna promessa e lo snapshot resta com'è. Metterlo dentro
+a posteriori falsificherebbe lo storico. La rottura però esiste per chi compila
+contro l'`abi.wit` di oggi, e per questo la tabella la elenca lo stesso: il test
+copre *ciò che è uscito*, non *ciò che è cambiato*. Verde non vuol dire
+additivo.
 
-La tabella raccoglie **i ritagli fatti finora** in ordine cronologico. Questo centralizza l'elenco delle rotture deliberate.
+La tabella raccoglie **tutti i ritagli fatti finora**, in ordine cronologico, in
+un posto solo.
 
 | Decisione | Cosa è stato ritagliato |
 |---|---|
@@ -64,22 +101,33 @@ La tabella raccoglie **i ritagli fatti finora** in ordine cronologico. Questo ce
 | [decisione 0102](../decisions/0102-i-byte-non-stanno-nel-record.md) | - **Il campo `import-source.bytes` diventa `content: source-content`. Il campo `export-artifact.bytes` diventa `content: artifact-content`** (§23.6). <br> - Sono due campi di record ritipati (la prima delle venti rotture di `wit_additivity`). <br> - Aggiunge i tipi `source-handle`, `artifact-handle`, `streamed-source`, `source-content`, `artifact-content` e le due interfacce `host-transfer-read`, `host-transfer-write`. <br> - A differenza della [0049](../decisions/0049-una-posizione-dentro-un-documento.md) e della [0101](../decisions/0101-una-voce-non-e-un-passo.md), **questa operazione modifica `0.1.0.wit` davvero**. <br> - I due campi esistevano nella linea di base originale. Questa alterazione tocca elementi pubblicati. Per questo si esegue prima del freeze M4. <br> - Benefici: i byte del trasferimento non risiedono **dentro** il record. Viaggiano tramite una chiave validata dall'host nei due versi. <br> - Assenza di costi: nessuna richiesta di permessi filesystem (sistema di file) in nessuno dei due versi. La regola della [0006](../decisions/0006-import-export-come-trait.md) rimane valida. <br> - Il mantenimento in memoria è consentito e frequente (`source-content.bytes` rimane disponibile). Adesso richiede una scelta esplicita invece di essere l'unica. <br> - Il `read-chunk` di 256 KiB **non** viene incluso nel confine. Come indicato nella [0094](../decisions/0094-un-tetto-che-si-fa-sentire.md), un numero pubblicato diventa una promessa congelata. |
 | [decisione 0132](../decisions/0132-un-rifiuto-non-e-una-frase.md) | - **Il caso `format-error.unsupported` passa da `string` al record `format-error-unsupported { format, got }`** (§24.3). <br> - Questo `variant` **ritipato** rappresenta la seconda delle venti rotture rilevate da `wit_additivity`. Include un nuovo tipo nella medesima interfaccia. <br> - Come per la [0102](../decisions/0102-i-byte-non-stanno-nel-record.md), e diversamente dalle [0049](../decisions/0049-una-posizione-dentro-un-documento.md) e [0101](../decisions/0101-una-voce-non-e-un-passo.md), **questa modifica tocca `0.1.0.wit`**. Il caso esisteva nella linea di base. <br> - L'impatto è significativo. Il tipo `format-error` gestisce gli errori di cinque funzioni **esportate** dal plugin (`format.parse`, `format.render-html`, `format.serialize`, `syntax.apply`, `custom-render.render`). <br> - Questa modifica è un'obbligazione. Il vecchio plugin non può ignorarla. Deve rispondere in questa forma. <br> - La `string` precedente era prosa libera scritta dal provider. Era l'unico errore che arrivava allo schermo senza permettere la composizione della frase a chi lo mostra. <br> - Il nuovo record fornisce i **due dati** grezzi. Chi mostra l'errore si occupa di comporre la frase. <br> - L'approccio additivo (caso in coda con il vecchio `unsupported(string)`) è stato respinto. Similmente alle [0049](../decisions/0049-una-posizione-dentro-un-documento.md) e [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md), avrebbe mantenuto **due modi di rifiutare una sorgente, di cui uno intraducibile**. I provider avrebbero preferito l'opzione più breve. |
 
-La [decisione 0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) **non compare in questa tabella**. Tocca però un punto delicato.
-Aggiunge un caso in coda al `variant event` (`timer-fired`). Aggiunge uno in coda all'`enum event-kind`. Introduce cinque tipi nuovi. Aggiunge tre campi in fondo a tre record.
-Questo progetto classifica queste operazioni come **completamente additive**. Il discriminante dei vecchi elementi resta fisso. Il test `wit_additivity` risulta verde. Il file `frozen/0.1.0.wit` rimane intatto.
-Il precedente per un'aggiunta in coda a un `variant` è la [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md). Questa aveva aggiunto tre elementi a `plugin-error`.
-La regola rimane imperfetta. Nel component model, un caso extra altera il binario (non è totalmente additivo). La regola impone *almeno* di non modificare l'ordine esistente.
+La [decisione 0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) **non è in
+tabella**, e vale la pena dire perché. Aggiunge un caso in coda
+al `variant event` (`timer-fired`), uno in coda all'`enum event-kind`,
+cinque tipi nuovi e tre campi in fondo a tre record. Qui questo conta
+come **completamente additivo**: il discriminante dei vecchi non si muove, `wit_additivity` è verde e
+`frozen/0.1.0.wit` non si tocca. Il precedente è la
+[0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md), che aveva
+messo tre casi in coda a `plugin-error`.
+
+La regola resta imperfetta, e si sa: nel component model un caso in più cambia
+il binario, quindi additivo del tutto non lo è. Quello che pretende è *almeno*
+che l'ordine di prima resti quello.
 
 ## Dopo il freeze
 
-Un file inserito in questa cartella **dopo il freeze** diventa immodificabile.
-Procedura per la pubblicazione di una versione nuova:
+Un file messo qui **dopo il freeze** non si tocca più. Per pubblicare una
+versione nuova:
 
 ```sh
 cp crates/fub-abi/wit/fub/abi.wit crates/fub-abi/wit/frozen/<nuova-versione>.wit
 ```
 
-Il file precedente rimane come presidio di controllo.
-Il confronto ignora gli snapshot con una major diversa dall'attuale. Una rottura di major viene dichiarata esplicitamente. Il sistema `abi_compatible` rifiuta automaticamente quei plugin.
-Lo svuotamento della cartella disattiva il presidio. Non genera avvisi rossi (errori).
-Per prevenire questo, il test fallisce intenzionalmente se manca una linea di base con la major corrente.
+Quella di prima resta dov'è, e continua a presidiare.
+
+Il confronto salta gli snapshot con una major diversa da quella corrente: una
+rottura di major si dichiara, e `abi_compatible` rifiuta quei plugin da sé.
+
+Svuotare la cartella spegnerebbe il presidio senza far diventare rosso niente.
+Per questo il test fallisce apposta se non trova una linea di base con la major
+corrente.

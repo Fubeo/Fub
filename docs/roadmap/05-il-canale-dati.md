@@ -1,29 +1,35 @@
 # 5. Il canale dati: chi risponde, e chi instrada
 
-Questa **seduta** (incontro di pianificazione) della [roadmap infrastrutturale](../todo.md) stabilisce i ruoli di risposta e instradamento delle query (richieste di dati). La soluzione risiede nella [decisione 0019](../decisions/0019-il-canale-dati.md). Il documento è svuotato.
+Questa **seduta** (incontro di pianificazione) della
+[roadmap infrastrutturale](../todo.md) stabilisce i ruoli di risposta e
+instradamento delle query (richieste di dati). La soluzione risiede nella
+[decisione 0019](../decisions/0019-il-canale-dati.md). Il documento è svuotato.
 
-[← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
+[← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
+[i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-La [decisione 0019](../decisions/0019-il-canale-dati.md) chiude cinque voci su cinque. L'ordine vincolante è rispettato.
+La [decisione 0019](../decisions/0019-il-canale-dati.md) chiude cinque voci su
+cinque. L'ordine vincolante è rispettato.
 
 **Sequenza eseguita**:
 - **5.1 prima di 5.2**.
 
 **Motivazione**:
 - Un routing (instradamento) dichiarato richiede canali funzionanti.
-- La dispersione di sette varianti su nove rende il sistema difettoso per tre quarti.
+- La dispersione di sette varianti su nove rende il sistema difettoso per tre
+  quarti.
 
-L'ordine funziona unendo le due voci **insieme** alla 5.3. La seduta esiste per questo scopo. Il motivo emerge in una riga.
+L'ordine funziona unendo le due voci **insieme** alla 5.3. La seduta esiste per
+questo scopo. Il motivo emerge in una riga.
 
 **Evoluzione in albero delle query**:
 - La determinazione degli indici per le varianti risulta insufficiente.
 - Una domanda ha *foglie* (nodi terminali).
 - Le foglie appartengono a proprietari diversi.
 
-**Tipologie di routing richieste dal §5.2**:
-Il routing necessita di due specie:
+**Tipologie di routing richieste dal §5.2**: Il routing necessita di due specie:
 - Una **famiglia**: ha un padrone.
 - Una **foglia**: possiede più d'uno.
 
