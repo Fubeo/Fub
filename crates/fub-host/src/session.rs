@@ -207,6 +207,11 @@ impl VaultSession {
     /// chiusi — cioè scrivere in un vault che si sta chiudendo, che è la
     /// versione a due thread del problema che questa funzione risolve.
     ///
+    /// «Smette di guardare» vuol dire **e ha smesso**: lasciarlo andare aspetta
+    /// il suo thread di consegna, ed è una riga del rilevatore e non di qui
+    /// ([`VaultWatcher`], difetto 0159). Prima non lo aspettava, e questo
+    /// commento raccontava un ordine che la riga sotto non teneva.
+    ///
     /// La chiusura passa dal registry e non dal workspace, ed è l'unica
     /// differenza col §9.5: l'ordine resta quello di [`Workspace::close`] —
     /// l'evento mentre tutti sono vivi, il flush, poi ognuno che smette a
