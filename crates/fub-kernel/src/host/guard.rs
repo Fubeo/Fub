@@ -243,6 +243,43 @@ impl Capability {
             | Capability::SettingsRead => None,
         }
     }
+
+    /// Questa famiglia **cambia il vault dell'utente**?
+    ///
+    /// Sono le due della scrittura — il testo di un documento e la struttura —
+    /// e non ogni famiglia il cui nome contiene `Write`: i propri blob, la
+    /// configurazione e lo stato di vista cambiano cose che il vault non
+    /// contiene, e chi le confondesse chiederebbe `write-settings` per
+    /// annullare una rinomina.
+    ///
+    /// Il `match` è **esaustivo di proposito**, e senza un `_`: una famiglia
+    /// nuova non compila finché qualcuno non ha detto se il vault lo tocca. Con
+    /// un ramo di scarto atterrerebbe su `false` restando verde, e il cancello
+    /// di [`HostCommands::undo_last`], che è l'unico posto che questa domanda la
+    /// fa, tornerebbe silenziosamente più largo di quello che aveva ammesso
+    /// l'operazione.
+    pub fn writes_the_vault(self) -> bool {
+        match self {
+            Capability::VaultWrite | Capability::VaultStructure => true,
+            Capability::VaultRead
+            | Capability::DataRead
+            | Capability::DataWrite
+            | Capability::Query
+            | Capability::Drafts
+            | Capability::Env
+            | Capability::Session
+            | Capability::SessionSelection
+            | Capability::Events
+            | Capability::Commands
+            | Capability::Services
+            | Capability::Network
+            | Capability::SettingsRead
+            | Capability::SettingsWrite
+            | Capability::ViewStateRead
+            | Capability::ViewStateWrite
+            | Capability::Transfer => false,
+        }
+    }
 }
 
 /// Chi decide quali famiglie un host può servire.
@@ -974,8 +1011,8 @@ impl<H, P: Policy> Guard<H, P> {
     /// [0019](../../../docs/decisions/0019-il-canale-dati.md) — resta una
     /// domanda sola con un instradamento solo — e non allarga la [`Policy`],
     /// che continua a rispondere a nomi e a non sapere niente di query: è la
-    /// stessa mossa di `undo_last`, che da un metodo ricava due famiglie perché
-    /// due sono le cose che fa.
+    /// stessa mossa di `undo_last`, che da un metodo ricava più famiglie perché
+    /// più d'una sono le cose che fa.
     fn query_capability(kind: &fub_abi::traits::QueryKind) -> (Capability, &'static str) {
         use fub_abi::traits::QueryKind;
         match kind {
@@ -1010,15 +1047,42 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
     }
 
     fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
-        // **Due** controlli, e non è pignoleria. Annullare è invocare — i passi
+        // **Due cancelli**, e non è pignoleria. Annullare è invocare — i passi
         // di un annullamento sono per metà comandi — ma è anche, sempre e per
         // definizione, **scrivere**: e ciò che scrive non passa dal recinto del
-        // chiamante, perché a eseguirlo è il kernel. Senza il secondo controllo
-        // un host di sola lettura avrebbe una scala per riscrivere il vault, e
-        // un plugin senza `write-vault` un modo di disfare il lavoro di
-        // qualcuno.
+        // chiamante, perché a eseguirlo è il kernel. Senza il secondo un host di
+        // sola lettura avrebbe una scala per riscrivere il vault, e un plugin
+        // senza `write-vault` un modo di disfare il lavoro di qualcuno.
+        //
+        // # Il secondo cancello non è più largo di quello che ha ammesso l'operazione
+        //
+        // Chiedeva [`Capability::VaultWrite`] e basta, cioè *il testo di un
+        // documento*, mentre i passi che sta per far girare disfano ciò che una
+        // rinomina, una creazione o un cestinamento avevano fatto — e quelle
+        // sono passate da [`Capability::VaultStructure`]. Chi aveva il permesso
+        // per una sola delle due famiglie disfaceva anche l'altra: il cancello
+        // dell'annullamento era più largo di quello dell'operazione, il che è il
+        // solo modo in cui un recinto può perdere restando scritto.
+        //
+        // La specie **qui non si sa**, e non è una svista di questa riga: la
+        // pila è privata del kernel (vedi
+        // [`HostCommands::undo_last`](fub_abi::traits::HostCommands::undo_last)),
+        // il `Guard` sta davanti a un host e non dentro, e la voce in cima la
+        // vede solo chi la esegue. Non sapendo quale delle due sia, si chiedono
+        // **tutte e due**: un cancello che indovina è un cancello che sbaglia
+        // metà delle volte, e la metà in cui sbaglia lascia passare. Il prezzo è
+        // per chi avesse una delle due famiglie e non l'altra — che oggi non è
+        // nessuno, perché `write-vault` le concede insieme
+        // ([`Capability::permission`]) e `ReadOnly` le nega insieme.
+        //
+        // L'elenco non è scritto qui: lo dà [`Capability::writes_the_vault`], il
+        // cui `match` esaustivo obbliga una famiglia nuova a dichiararsi. Così
+        // il giorno che il vault avesse una terza specie di scrittura, questo
+        // cancello la eredita senza che nessuno se ne debba ricordare.
         self.check(Capability::Commands, || "annullare".into())?;
-        self.check(Capability::VaultWrite, || "annullare".into())?;
+        for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
+            self.check(cap, || "annullare".into())?;
+        }
         self.inner.undo_last()
     }
 }
@@ -1311,6 +1375,70 @@ mod tests {
     fn a_different_denial_leaves_entropy_alone() {
         let guard = Guard::new(Generoso, Nega(Capability::VaultWrite));
         assert_eq!(guard.random_bytes(4).unwrap().len(), 4);
+    }
+
+    /// Un host che annulla e basta: ciò che si prova qui è il cancello, non ciò
+    /// che sta dietro. Un `undo_last` arrivato fin qui è un annullamento
+    /// **eseguito**, ed è esattamente ciò che i banchi qui sotto pretendono di
+    /// vedere o di non vedere.
+    struct CheAnnulla;
+
+    impl HostCommands for CheAnnulla {
+        fn run_command(
+            &mut self,
+            _command: &str,
+            _args: serde_json::Value,
+        ) -> Result<CommandOutcome, PluginError> {
+            unreachable!("nessun banco di questo modulo invoca un comando")
+        }
+
+        fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
+            Ok(Some(Undone::whole(fub_abi::text::Text::Literal(
+                "la rinomina".into(),
+            ))))
+        }
+    }
+
+    /// **Disfare chiede lo stesso permesso di fare.**
+    ///
+    /// La voce in cima alla pila può essere l'inverso di una rinomina, di una
+    /// creazione o di un cestinamento — cose che sono passate da
+    /// [`Capability::VaultStructure`] — e il cancello dell'annullamento chiedeva
+    /// la sola [`Capability::VaultWrite`]: chi aveva il permesso di riscrivere
+    /// il testo di una nota poteva disfare un trasloco che non avrebbe potuto
+    /// fare. Un recinto che perde restando scritto è il difetto peggiore che un
+    /// recinto possa avere, perché nessuno lo va a rileggere.
+    #[test]
+    fn annullare_non_disfa_una_famiglia_che_non_e_concessa() {
+        let mut guard = Guard::new(CheAnnulla, Nega(Capability::VaultStructure));
+        let err = guard
+            .undo_last()
+            .expect_err("senza `VaultStructure` non si disfa una rinomina");
+        assert!(
+            matches!(err, PluginError::PermissionDenied(_)),
+            "il rifiuto deve essere un rifiuto di permesso: {err}"
+        );
+        assert!(
+            err.message().to_string().contains("annullare"),
+            "e deve dire cosa si stava facendo: {err}"
+        );
+    }
+
+    /// L'altra metà, che è ciò che rende il banco qui sopra una misura e non un
+    /// divieto: con le famiglie della scrittura concesse l'annullamento arriva
+    /// all'host e torna con la sua voce. Una famiglia estranea negata non lo
+    /// tocca — il cancello resta quello dell'annullamento, non un no generico.
+    #[test]
+    fn con_le_famiglie_concesse_l_annullamento_passa() {
+        let mut guard = Guard::new(CheAnnulla, Nega(Capability::Network));
+        let undone = guard
+            .undo_last()
+            .expect("negare la rete non ha niente a che vedere con l'annullare")
+            .expect("l'host ha una voce da disfare");
+        assert_eq!(
+            undone.label,
+            fub_abi::text::Text::Literal("la rinomina".into())
+        );
     }
 
     /// L'ultima famiglia dichiarata, nominata dal **compilatore** e non da un
