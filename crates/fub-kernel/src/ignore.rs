@@ -148,7 +148,28 @@ pub const SHOW_HIDDEN: &str = "files.show-hidden";
 /// Ciò che un vault esclude quando non dichiara niente: la lista che fino alla
 /// §15.6 era la costante `IGNORED_DIRS`, meno le due che sono **struttura** e
 /// che nessuna dichiarazione può togliere.
-pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules"];
+///
+/// # Che cosa fa entrare un nome qui
+///
+/// Non «le cartelle che di solito non servono», che è un elenco senza fine:
+/// **ciò che un attrezzo scrive e nessuno legge**. Un nome entra se soddisfa
+/// tutte e tre — il suo contenuto lo rigenera un comando, dentro non ci si
+/// scrivono note, e il nome è una convenzione abbastanza forte che usarlo per
+/// le proprie note sorprenderebbe chi lo legge. `node_modules` e `.git` erano
+/// già così; `target` è lo stesso nome per Cargo, ed è entrato per un vault
+/// misurato: quello di questo progetto (difetto 0118).
+///
+/// I due errori non si pagano uguale, ed è la ragione per cui la lista è corta
+/// ma non vuota. Un nome che manca costa **silenzio**: da quando il vault dice
+/// cosa contiene invece di filtrare per estensione (§14.1), ogni file di
+/// `target/` prende un [`DocId`](fub_abi::DocId) ed entra in anagrafe — decine
+/// di migliaia di voci, un indice che le porta, e una ricerca che pesca
+/// artefatti; e non se ne accorge nessuno finché non è già successo. Un nome
+/// di troppo costa **una riga da togliere** da un elenco che si vede, in una
+/// casella che l'utente compila. Questo è un default, non una regola: chi
+/// dichiara la propria lista la sostituisce, e chi tiene le sue note in una
+/// cartella che si chiama `target` scrive una riga e ha finito.
+pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules", "target"];
 
 /// Questa **chiave** è struttura, cioè non è roba dell'utente?
 ///
@@ -393,7 +414,14 @@ mod tests {
     #[test]
     fn chi_non_dichiara_niente_esclude_come_ieri() {
         let p = IgnorePolicy::default();
-        for name in [".obsidian", ".git", ".fub", ".trash", "node_modules"] {
+        for name in [
+            ".obsidian",
+            ".git",
+            ".fub",
+            ".trash",
+            "node_modules",
+            "target",
+        ] {
             assert!(p.esclude(name, Specie::Cartella), "{name}");
         }
         assert!(

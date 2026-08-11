@@ -879,6 +879,33 @@ mod tests {
         assert!(!v.is_ignored("/altrove/.trash/Idea.md".into()));
     }
 
+    /// **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
+    /// scrive Cargo, e da quando il vault dice *cosa contiene* invece di
+    /// filtrare per estensione (§14.1) ogni file lì dentro prendeva un
+    /// [`DocId`] ed entrava in anagrafe — decine di migliaia di voci, un indice
+    /// che le porta, e una ricerca che pesca artefatti.
+    ///
+    /// Il banco sta qui e non solo sulla costante perché è un difetto che si
+    /// vede **dal vault**, non dalla lista: la lista si legge e sembra a posto.
+    #[test]
+    fn un_vault_che_e_anche_un_repo_non_indicizza_cio_che_scrive_cargo() {
+        let v = Vault::on("/vault", Arc::new(crate::storage::MemStorage::new()))
+            .expect("un vault in memoria si apre");
+        for rel in ["target/debug/appunti.md", "Idea.md"] {
+            let path = Utf8Path::new("/vault").join(rel);
+            v.storage().write(&path, b"x").expect("scrittura");
+        }
+        let visti: Vec<String> = v
+            .scan()
+            .expect("scansione")
+            .files
+            .into_iter()
+            .map(|f| f.id.0)
+            .collect();
+        assert_eq!(visti, vec!["Idea.md"], "«target/» entrava in anagrafe");
+        assert!(v.is_ignored("/vault/target/debug/appunti.md".into()));
+    }
+
     /// Un vault con le impostazioni di un vero montaggio, con la politica di
     /// esclusione già dichiarata.
     fn vault_che_dichiara(valori: &[(&str, fub_abi::settings::SettingValue)]) -> Vault {
