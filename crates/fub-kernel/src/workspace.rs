@@ -280,7 +280,11 @@ impl Indicizzazione {
 /// perché il tipo non ne porta con sé nessun pezzo.
 pub struct ParsedChange {
     id: DocId,
-    model: DocumentModel,
+    /// `None` quando il file letto porta **l'impronta che l'anagrafe ha già**:
+    /// è la scrittura del kernel che rientra dal rilevatore, e non c'è niente
+    /// da parsare né da ingerire (difetto 0196, vedi
+    /// [`Workspace::already_ingested`]).
+    model: Option<DocumentModel>,
     /// L'impronta del sorgente che è stato letto: è quella che finirà in
     /// anagrafe.
     fingerprint: Revision,
@@ -2096,6 +2100,31 @@ impl Workspace {
         let Some((size, mtime)) = self.docs.vault.stat(id) else {
             return self.indexes.core.remove_entry(id);
         };
+        Some(self.set_entry(id, size, mtime, fingerprint))
+    }
+
+    /// La metà di [`touch_entry`](Workspace::touch_entry) **che non guarda il
+    /// disco**: mette in anagrafe una dimensione e una data che il chiamante
+    /// già sa.
+    ///
+    /// Le sa chi ha appena scritto — [`Vault::write`](crate::Vault::write) le
+    /// rende insieme all'esito — e chiederle di nuovo era il difetto 0179: fra
+    /// la scrittura riuscita e la `stat` ci sta la cancellazione di un altro
+    /// processo, e in quella finestra l'anagrafe *toglieva la voce* di un
+    /// documento che aveva appena risposto `Ok` e per cui era già uscito
+    /// `DocumentChanged`. Il rimedio non è guardare meglio: è non guardare
+    /// affatto, perché la risposta era già in mano.
+    ///
+    /// Chi invece **non** ha scritto niente — il rilevatore, un ripristino dal
+    /// cestino — passa da `touch_entry`, dove togliere la voce di un file che
+    /// non c'è è la risposta giusta.
+    fn set_entry(
+        &mut self,
+        id: &DocId,
+        size: u64,
+        mtime: u64,
+        fingerprint: Option<Revision>,
+    ) -> EntryKind {
         let kind = media::kind_of(id, &self.docs.registry.all_extensions());
         // Un file che c'è dice che le cartelle che attraversa ci sono (§14.3):
         // senza questa riga una nota creata in una cartella nuova comparirebbe
@@ -2108,7 +2137,7 @@ impl Workspace {
             mtime,
             fingerprint,
         });
-        Some(kind)
+        kind
     }
 
     /// Scrive l'anagrafe, perché la prossima apertura non debba rifare ciò che
@@ -2305,9 +2334,12 @@ impl Workspace {
         // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
         // pur avendo scritto.
         let model = self.docs.parse(id, source)?;
-        self.docs.vault.write(id, source)?;
+        // Dimensione e data arrivano dalla scrittura stessa: sono ciò che i byte
+        // appena posati dicono di sé, e ripeterle al disco con una `stat` era il
+        // difetto 0179.
+        let posato = self.docs.vault.write(id, source)?;
         let revision = Revision::of(source);
-        self.ingest_model(id, model, revision.clone());
+        self.ingest_model(id, model, revision.clone(), Some(posato));
         self.dispatch_pending();
         Ok(revision)
     }
@@ -2485,25 +2517,45 @@ impl Workspace {
     /// L'origine è [`Actor::Watcher`] (decisione 0012): questa modifica non è passata da
     /// noi, e chi la riceve — la shell col buffer aperto, un'automazione — deve
     /// poterla distinguere da una scrittura che ha chiesto lui.
-    pub fn refresh_from_disk(&mut self, id: &DocId) -> Result<()> {
+    ///
+    /// **Ciò che il kernel ha già in memoria non si riparsa**: risponde `false`
+    /// e non emette niente, che è la verità — nessuno ha cambiato niente da
+    /// quando lo si è letto l'ultima volta. Vedi
+    /// [`already_ingested`](Workspace::already_ingested) per il perché.
+    pub fn refresh_from_disk(&mut self, id: &DocId) -> Result<bool> {
         self.as_actor(Actor::Watcher, |ws| {
             let src = ws.docs.vault.read(id)?;
+            if ws.already_ingested(id, &Revision::of(&src)) {
+                return Ok(false);
+            }
             ws.ingest(id, &src)?;
             ws.dispatch_pending();
-            Ok(())
+            Ok(true)
         })
     }
 
     fn ingest(&mut self, id: &DocId, source: &str) -> Result<()> {
         let model = self.docs.parse(id, source)?;
-        self.ingest_model(id, model, Revision::of(source));
+        self.ingest_model(id, model, Revision::of(source), None);
         Ok(())
     }
 
     /// La coda di ogni scrittura: indici, conteggi tag, grafo, metadati in
     /// cache, eventi. Prende il modello già parsato — è ciò che permette a
     /// `write_document` di parsare prima di toccare il disco.
-    fn ingest_model(&mut self, id: &DocId, model: DocumentModel, fingerprint: Revision) {
+    ///
+    /// `posato` è **dimensione e data di ciò che sta sul disco, per chi le sa
+    /// già**: chi ha appena scritto le ha ricevute dal supporto insieme
+    /// all'esito, e non deve tornare a chiederle (difetto 0179, vedi
+    /// [`set_entry`](Workspace::set_entry)). `None` per chi porta dentro un
+    /// cambiamento che non ha fatto lui.
+    fn ingest_model(
+        &mut self,
+        id: &DocId,
+        model: DocumentModel,
+        fingerprint: Revision,
+        posato: Option<(u64, u64)>,
+    ) {
         // L'anagrafe segue ogni scrittura (§14.1): dimensione, data e impronta
         // di un documento appena scritto sono cambiate, e una voce ferma a
         // prima direbbe che il file è quello di ieri — a chi la interroga
@@ -2515,7 +2567,14 @@ impl Workspace {
         // nuovi e `self.metas` i metadati nuovi, e dire *cosa* è cambiato
         // costerebbe una lettura del disco invece di zero.
         let changes = self.indexes.core.changes_for(&model, &fingerprint);
-        self.touch_entry(id, Some(fingerprint));
+        match posato {
+            Some((size, mtime)) => {
+                self.set_entry(id, size, mtime, Some(fingerprint));
+            }
+            None => {
+                self.touch_entry(id, Some(fingerprint));
+            }
+        }
         // Gli indici vedono la modifica nella stessa operazione del grafo:
         // stessa verità, nessun canale che può perdere pezzi per strada. E la
         // vedono ADESSO, sul modello intero: è l'unico momento in cui corpo e
@@ -2600,13 +2659,49 @@ impl Workspace {
             return None;
         }
         let source = self.docs.vault.read(&id).ok()?;
-        let model = self.docs.parse(&id, &source).ok()?;
+        let fingerprint = Revision::of(&source);
+        // L'eco della propria scrittura non si riparsa (§14.1, difetto 0196).
+        let model = if self.already_ingested(&id, &fingerprint) {
+            None
+        } else {
+            Some(self.docs.parse(&id, &source).ok()?)
+        };
         Some(ParsedChange {
             seen: self.entry_fingerprint(&id),
-            fingerprint: Revision::of(&source),
+            fingerprint,
             id,
             model,
         })
+    }
+
+    /// **Questi byte sono già quelli che il kernel ha in memoria?**
+    ///
+    /// L'impronta in anagrafe è quella dell'ultimo sorgente ingerito, e se il
+    /// file sul disco ne porta una uguale non c'è niente da fare: il modello in
+    /// cache è già quello che un parse rifarebbe identico.
+    ///
+    /// È così che una scrittura si riconosce quando **rientra dal rilevatore**
+    /// (difetto 0196). Ogni salvataggio del kernel passa da una rename, la
+    /// rename è un evento del filesystem, e il lotto che ne segue riportava
+    /// dentro il documento appena scritto: riletto, riparsato, reingerito, con
+    /// un `DocumentChanged` a nome del rilevatore su una modifica che l'utente
+    /// aveva appena fatto lui. Il conto si paga su ogni salvataggio di ogni
+    /// nota.
+    ///
+    /// **Si riconosce dai byte e non dalla data**, e la differenza è
+    /// correttezza: `mtime + size` è il criterio dell'anagrafe (§14.1) ma
+    /// sbaglia nel verso caro — una scrittura altrui nello stesso millisecondo
+    /// e della stessa lunghezza passerebbe per «immutato», e l'indice resterebbe
+    /// fermo su un documento vecchio. L'impronta non ha quella finestra: costa
+    /// la lettura del file, che il piano fa comunque, e non costa il parse né la
+    /// coda di ingestione, che sono la parte cara.
+    ///
+    /// La cache dei metadati va **guardata insieme all'impronta**: un documento
+    /// che sta in anagrafe ma non in cache — uno che alla scansione non si è
+    /// potuto parsare — non è «già dentro», e va riprovato.
+    fn already_ingested(&self, id: &DocId, fingerprint: &Revision) -> bool {
+        self.indexes.core.metas.contains_key(id)
+            && self.entry_fingerprint(id).as_ref() == Some(fingerprint)
     }
 
     /// L'impronta che l'anagrafe attribuisce **adesso** a un documento: è ciò
@@ -2649,8 +2744,13 @@ impl Workspace {
             fingerprint,
             ..
         } = plan;
+        // Niente da parsare vuol dire niente da applicare: il piano ha
+        // riconosciuto l'eco di una scrittura del kernel (difetto 0196).
+        let Some(model) = model else {
+            return Ok(false);
+        };
         let outcome = self.as_actor(Actor::Watcher, |ws| {
-            ws.ingest_model(&id, model, fingerprint);
+            ws.ingest_model(&id, model, fingerprint, None);
             ws.dispatch_pending();
             Ok(true)
         });
@@ -2680,8 +2780,7 @@ impl Workspace {
             return self.sync_entry_here(&id, abs);
         }
         if abs.exists() {
-            self.refresh_from_disk(&id)?;
-            Ok(true)
+            self.refresh_from_disk(&id)
         } else {
             self.as_actor(Actor::Watcher, |ws| {
                 let existed = ws.indexes.core.metas.contains_key(&id);
@@ -2978,7 +3077,7 @@ impl Workspace {
         // ciò che teneva per lei.
         self.docs.vault.restore_trashed(trash_id, &target)?;
         match model {
-            Some((model, revision)) => self.ingest_model(&target, model, revision),
+            Some((model, revision)) => self.ingest_model(&target, model, revision, None),
             None => {
                 // L'impronta di un allegato non c'è, come per ogni voce che
                 // nessuno parsa: l'anagrafe la ricava dal disco.

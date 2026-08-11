@@ -49,7 +49,7 @@ impl VaultStorage for SenzaCaso {
     fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
         self.0.read(&Self::giu(path))
     }
-    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<fub_kernel::storage::Stat> {
         self.0.write(&Self::giu(path), bytes)
     }
     fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> std::io::Result<()> {

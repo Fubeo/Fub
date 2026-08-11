@@ -588,7 +588,11 @@ impl VaultStorage for SupportoCheEsplode {
     fn read(&self, path: &camino::Utf8Path) -> std::io::Result<Vec<u8>> {
         self.inner.read(path)
     }
-    fn write(&self, path: &camino::Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+    fn write(
+        &self,
+        path: &camino::Utf8Path,
+        bytes: &[u8],
+    ) -> std::io::Result<fub_kernel::storage::Stat> {
         self.forse_esplodi(path);
         self.inner.write(path, bytes)
     }

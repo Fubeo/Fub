@@ -141,7 +141,7 @@ impl VaultStorage for SupportoCheConta {
         }
         self.inner.read(path)
     }
-    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<fub_kernel::storage::Stat> {
         if path.as_str().ends_with("entries.json") {
             self.scritture_dell_anagrafe.fetch_add(1, Ordering::Relaxed);
         }

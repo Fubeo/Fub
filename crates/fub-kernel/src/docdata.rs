@@ -241,7 +241,7 @@ mod tests {
         fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
             self.0.read(&Self::giu(path))
         }
-        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
             self.0.write(&Self::giu(path), bytes)
         }
         fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
@@ -334,7 +334,7 @@ mod tests {
         fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
             self.0.read(path)
         }
-        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
             self.0.write(path, bytes)
         }
         fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {

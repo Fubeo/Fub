@@ -67,7 +67,7 @@ impl VaultStorage for SupportoCheNega {
             None => self.inner.read(path),
         }
     }
-    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<fub_kernel::storage::Stat> {
         self.inner.write(path, bytes)
     }
     fn update(
