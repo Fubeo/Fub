@@ -173,18 +173,24 @@ pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules", "ta
 
 /// Questa **chiave** è struttura, cioè non è roba dell'utente?
 ///
-/// È la metà della politica che nessuna impostazione può spostare, e le tre
-/// righe che contiene sono tre danni diversi: la cartella di Fub è dove sta
+/// È la metà della politica che nessuna impostazione può spostare, e le quattro
+/// righe che contiene sono quattro danni diversi: la cartella di Fub è dove sta
 /// l'indice (indicizzarlo lo raddoppierebbe a ogni giro), il cestino contiene
-/// note che qualcuno ha buttato (mostrarle è riesumarle), e il temporaneo di
+/// note che qualcuno ha buttato (mostrarle è riesumarle), il temporaneo di
 /// una scrittura è un file che fra un istante non esiste — chi lo vedesse gli
-/// darebbe un [`DocId`](fub_abi::DocId) e lo perderebbe subito dopo.
+/// darebbe un [`DocId`](fub_abi::DocId) e lo perderebbe subito dopo — e il
+/// compagno di lock è un file che invece **non se ne va mai**, perché toglierlo
+/// romperebbe il lock (difetto 0151): l'unica cosa che si può togliere è che si
+/// veda.
 ///
 /// Riceve una chiave di [`resolution_key`] e non un nome di directory grezzo:
 /// le tre costanti che confronta sono già in quella forma, e su un filesystem
 /// insensibile al caso `.Fub` è la cartella di Fub.
 pub(crate) fn e_struttura(key: &str) -> bool {
-    key == FUB_DIR || key == TRASH_DIR || crate::storage::e_temporaneo_di_scrittura(key)
+    key == FUB_DIR
+        || key == TRASH_DIR
+        || crate::storage::e_temporaneo_di_scrittura(key)
+        || crate::storage::e_lock_di_scrittura(key)
 }
 
 /// Che cosa è la voce di cui si sta chiedendo.
@@ -364,8 +370,9 @@ pub fn catalog() -> Vec<StringCatalog> {
                  scrivere o no — `build`, `build/` e `/build` sono la stessa \
                  cartella — e parla di **cartelle**: un file che si chiama come \
                  una di loro resta un file di questo vault. La cartella di Fub \
-                 (`.fub`), il cestino (`.trash`) e i temporanei di una \
-                 scrittura restano esclusi comunque: non sono una preferenza. \
+                 (`.fub`), il cestino (`.trash`) e i file di servizio di una \
+                 scrittura — il temporaneo e il compagno di lock — restano \
+                 esclusi comunque: non sono una preferenza. \
                  Un cambiamento vale dal prossimo «Ricostruisci gli indici».",
             )
             .with(I_HIDDEN, "Mostra i file nascosti")
@@ -373,8 +380,8 @@ pub fn catalog() -> Vec<StringCatalog> {
                 I_HIDDEN_DESC,
                 "Considera documenti anche i file e le cartelle il cui nome \
                  comincia per punto. Restano esclusi comunque la cartella di \
-                 Fub, il cestino, i temporanei di una scrittura e tutto ciò che \
-                 è elencato fra le cartelle escluse. Un cambiamento vale dal \
+                 Fub, il cestino, i file di servizio di una scrittura e tutto ciò \
+                 che è elencato fra le cartelle escluse. Un cambiamento vale dal \
                  prossimo «Ricostruisci gli indici».",
             ),
         StringCatalog::new("en")
@@ -390,15 +397,16 @@ pub fn catalog() -> Vec<StringCatalog> {
                  `build/` and `/build` are the same folder — and this is about \
                  **folders**: a file named like one of them stays a file of \
                  this vault. Fub's \
-                 own folder (`.fub`), the trash (`.trash`) and the temporary \
-                 files of a write stay excluded regardless: they are not a \
+                 own folder (`.fub`), the trash (`.trash`) and the service files \
+                 of a write — the temporary and the lock companion — stay \
+                 excluded regardless: they are not a \
                  preference. A change applies from the next «Rebuild indexes».",
             )
             .with(I_HIDDEN, "Show hidden files")
             .with(
                 I_HIDDEN_DESC,
                 "Treat files and folders whose name starts with a dot as \
-                 documents too. Fub's own folder, the trash, the temporary \
+                 documents too. Fub's own folder, the trash, the service \
                  files of a write and everything listed under excluded folders \
                  stay excluded regardless. A change applies from the next \
                  «Rebuild indexes».",
