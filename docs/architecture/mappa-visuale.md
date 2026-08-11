@@ -593,11 +593,11 @@ fare, il kernel dice a chi. I nomi che una politica sa negare sono
 **diciannove** [conta: guard-famiglie]
 ([0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md)), mentre i
 permessi che un manifest può **dichiarare** sono
-**tredici** [conta: permessi-dichiarabili]. I due numeri divergono apposta:
+**quattordici** [conta: permessi-dichiarabili]. I due numeri divergono apposta:
 alcune famiglie non hanno permesso perché il recinto c'è già per costruzione (i
 propri blob, l'orologio, lo stato di vista), e alcuni permessi non hanno ancora
 una famiglia che li consumi (`camera`, `microphone`, `external-fs`,
-`clipboard`). Toglierli perché non fanno niente vorrebbe dire scoprire, il
+`read-clipboard`, `write-clipboard`). Toglierli perché non fanno niente vorrebbe dire scoprire, il
 giorno della prima capacità, che il nome era libero.
 
 **Perché un crate separato.** L'invariante è scritta nel manifest stesso: questo
