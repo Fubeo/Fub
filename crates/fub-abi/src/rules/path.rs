@@ -36,9 +36,8 @@
 //! `[t](nota%20uno.md)` e `[t](<nota uno.md>)` sono lo stesso link, e devono
 //! essere lo stesso arco.
 
-use unicode_normalization::UnicodeNormalization;
-
 use crate::model::DocId;
+use crate::rules::composition::composed;
 
 /// La chiave con cui una stringa entra nella risoluzione: trim, NFC, minuscolo.
 ///
@@ -47,7 +46,7 @@ use crate::model::DocId;
 /// l'autocompletamento — deve passare da qui, o due pezzi del sistema avranno
 /// due idee di quando due nomi sono lo stesso nome.
 pub fn resolution_key(s: &str) -> String {
-    s.trim().nfc().collect::<String>().to_lowercase()
+    composed(s.trim()).to_lowercase()
 }
 
 /// La stessa chiave **senza** il passo che collassa le maiuscole: trim e NFC.
@@ -64,7 +63,7 @@ pub fn resolution_key(s: &str) -> String {
 /// La differenza in una riga: `resolution_key` dice **chi è candidato**,
 /// `exact_key` dice **chi ha ragione fra i candidati**.
 pub fn exact_key(s: &str) -> String {
-    s.trim().nfc().collect::<String>()
+    composed(s.trim())
 }
 
 /// Il path senza l'ultima estensione: `note/v1.2.md` → `note/v1.2`.

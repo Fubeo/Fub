@@ -663,18 +663,6 @@ fn divergenze_dichiarate() -> Vec<(&'static str, Perche, fn(&DocumentModel, &str
                     })
             },
         ),
-        (
-            "lo slug di un heading dipende dalla normalizzazione unicode",
-            Perche::DipendeDaiByte,
-            |d, _| {
-                d.outline.first().map(|h| h.slug.as_str()) == Some("cafe")
-                    && parse("# Caf\u{e9}\n")
-                        .outline
-                        .first()
-                        .map(|h| h.slug.as_str())
-                        == Some("caf\u{e9}")
-            },
-        ),
     ]
 }
 
@@ -683,16 +671,16 @@ fn le_divergenze_sono_quelle_dichiarate() {
     let dichiarate = divergenze_dichiarate();
     let sorgenti = divergenti();
     assert!(
-        dichiarate.len() >= 10,
-        "l'elenco delle divergenze si è svuotato: {} righe su dieci. Se sono\n\
+        dichiarate.len() >= 9,
+        "l'elenco delle divergenze si è svuotato: {} righe su nove. Se sono\n\
          state riparate è una bella notizia e va scritta dove la riparazione sta\n\
          — e allora si abbassa questo numero **nello stesso commit**, che è ciò\n\
          che lo tiene una soglia e non un desiderio; se è l'elenco che si è\n\
          rotto, questo file ha smesso di presidiare la cosa per cui esiste.\n\
-         L'ultima scesa: «un link a un heading di questa nota inventa un tag»\n\
-         — l'etichetta che comrak sintetizza dal bersaglio non si scandisce\n\
-         più come prosa, e la sorgente `[[#Sezione]]` stava già nel corpus\n\
-         curato col nome «wikilink al solo heading».",
+         L'ultima scesa: «lo slug di un heading dipende dalla normalizzazione\n\
+         unicode» — `heading_slug` compone in NFC come il resto delle regole di\n\
+         identità di un nome (difetto 0140), e l'NFD resta nel corpus curato\n\
+         col nome «nfd nel contenuto», dove le proprietà lo pretendono tutto.",
         dichiarate.len()
     );
 

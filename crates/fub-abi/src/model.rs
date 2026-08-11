@@ -31,6 +31,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::rules::composition::composed;
+
 /// L'identità di un documento nel vault: **il path**, e non un'altra cosa.
 ///
 /// È il path relativo al vault, normalizzato con separatori `/` e senza
@@ -780,20 +782,26 @@ pub struct Anchor {
     pub marker: Span,
 }
 
-/// La forma **canonica** di un nome di tag: spazi esterni via, minuscolo
-/// (Unicode). Stile Obsidian: `#Rust` e `#rust` sono lo stesso tag,
-/// case-insensitive come chiave e case-preserving per il display.
+/// La forma **canonica** di un nome di tag: spazi esterni via, NFC
+/// ([`composed`]), minuscolo (Unicode). Stile Obsidian: `#Rust` e `#rust` sono
+/// lo stesso tag, case-insensitive come chiave e case-preserving per il
+/// display.
 ///
 /// È LA chiave con cui i tag si contano (aggregazione del kernel), si
 /// indicizzano e si interrogano (campo tag della ricerca): la regola vive nel
 /// contratto perché kernel e feature non si vedono tra loro, e due copie
 /// divergerebbero al primo ritocco — il nome del tag sta diventando chiave di
 /// pannelli, grafo e query salvate.
+///
+/// La NFC non è un ornamento: `#caffè` digitato e `#caffè` copiato da una nota
+/// scritta su macOS sono byte diversi, e senza [`composed`] il pannello dei tag
+/// ne conterebbe due con lo stesso nome sullo schermo.
 pub fn canonical_tag(name: &str) -> String {
-    name.trim().to_lowercase()
+    composed(name.trim()).to_lowercase()
 }
 
-/// La forma **canonica** di un id di blocco: spazi esterni via, minuscolo.
+/// La forma **canonica** di un id di blocco: spazi esterni via, NFC
+/// ([`composed`]), minuscolo.
 ///
 /// Sta accanto a [`canonical_tag`] e per la stessa ragione: è LA chiave con cui
 /// un `[[Nota#^Blocco]]` trova il suo blocco, e chi scrive l'ancora e chi la
@@ -801,7 +809,7 @@ pub fn canonical_tag(name: &str) -> String {
 /// case-insensitive come il resto della risoluzione (§ "Case dei path" in
 /// `docs/architecture/data-model.md`).
 pub fn canonical_anchor(id: &str) -> String {
-    id.trim().to_lowercase()
+    composed(id.trim()).to_lowercase()
 }
 
 /// Un id di blocco è **valido**? Lettere, cifre, `-` e `_`, almeno uno.
@@ -823,7 +831,13 @@ pub fn valid_anchor(id: &str) -> bool {
 /// e sta nel contratto per la stessa ragione per cui ci sta quella: era una
 /// funzione privata del provider markdown, quindi due provider potevano dare
 /// due id diversi allo stesso titolo e il link dell'uno non risolveva sull'altro.
+///
+/// Il testo si compone ([`composed`]) **prima** di filtrare, e qui la NFC non
+/// spostava soltanto la risposta: un accento combinante è una `Mn`, non è
+/// alfanumerico, e senza comporlo `# Café` scritto su macOS dava `cafe` — cioè
+/// l'accento **sparito** invece che diverso.
 pub fn heading_slug(text: &str) -> String {
+    let text = composed(text);
     let mut slug = String::with_capacity(text.len());
     let mut last_dash = false;
     for c in text.chars() {
@@ -1820,15 +1834,18 @@ mod tests {
     ///
     /// Diceva: «`heading_slug` non normalizza in NFC, quindi `# Café` scritto da
     /// macOS e lo stesso link digitato altrove danno due slug diversi **e i link
-    /// si rompono**». La prima metà è vera — ed è il difetto 0140, che riguarda
-    /// quattro regole e non una. La seconda no: [`heading_matches`] è una
-    /// **disgiunzione**, e il secondo ramo passa da `resolution_key`, che la NFC
-    /// la fa. La risoluzione tiene **nei due versi**; ciò che si rompe è
-    /// l'`id=` HTML, che di rami ne ha uno solo.
+    /// si rompono**». La prima metà era vera — era il difetto 0140, che
+    /// riguardava quattro regole e non una, ed è chiuso: [`heading_slug`] compone
+    /// col resto (`rules::composition::composed`). La seconda no, e resta la
+    /// riga che questo banco difende: [`heading_matches`] è una **disgiunzione**,
+    /// e anche quando il primo ramo taceva il secondo passava da
+    /// `resolution_key`, che la NFC la faceva. La risoluzione teneva **nei due
+    /// versi**; ciò che si rompeva era l'`id=` HTML, che di rami ne ha uno solo.
     ///
     /// Senza questo banco qualcuno «riparerebbe» di nuovo la metà che non è
-    /// rotta, e la strada che salva la risoluzione oggi non è provata da
-    /// nessuna parte.
+    /// rotta, e la strada che salva la risoluzione anche a slug divergenti non
+    /// sarebbe provata da nessuna parte — perciò il titolo su cui si prova qui è
+    /// uno che i due rami vedono **diverso**.
     #[test]
     fn nfd_e_nfc_si_incontrano_sul_testo_e_non_sullo_slug() {
         let nfc = "Café";
@@ -1838,32 +1855,35 @@ mod tests {
             "le due forme sono byte diversi, o non si prova niente"
         );
 
-        // Lo slug diverge, e non diverge soltanto: su NFD **cancella**
-        // l'accento, perché `U+0301` è una `Mn` e non è alfanumerica.
+        // Lo slug non diverge più: è la chiusura del 0140, e la coppia completa
+        // sta in `crates/fub-abi/tests/una_sola_forma_normalizzata.rs`.
         assert_eq!(heading_slug(nfc), "café");
-        assert_eq!(heading_slug(nfd), "cafe");
+        assert_eq!(heading_slug(nfd), "café");
 
-        let heading = Heading {
+        // Il ramo del **testo**, provato da solo. Ci vuole un titolo il cui slug
+        // non sia la forma pura, e in un documento vero è il secondo omonimo:
+        // `## Café` due volte dà `café` e `café-1`, e chi scrive `[[Nota#Café]]`
+        // nomina il testo, non lo slug che gli è toccato.
+        let secondo = |testo: &str| Heading {
             level: 2,
-            text: nfd.to_string(),
-            slug: heading_slug(nfd),
+            text: testo.to_string(),
+            slug: format!("{}-1", heading_slug(testo)),
             span: Span::EMPTY,
         };
-        // Il primo ramo non aggancia — è la metà vera del difetto —, il secondo
-        // sì, e basta lui.
-        assert_ne!(heading_slug(nfc), heading.slug);
+        let scritto_nfd = secondo(nfd);
+        assert_ne!(
+            heading_slug(nfc),
+            scritto_nfd.slug,
+            "il primo ramo non deve poter rispondere, o il secondo non è provato"
+        );
         assert!(
-            heading_matches(nfc, &heading),
+            heading_matches(nfc, &scritto_nfd),
             "NFC non trova il titolo NFD"
         );
 
-        let heading = Heading {
-            slug: heading_slug(nfc),
-            text: nfc.to_string(),
-            ..heading
-        };
+        let scritto_nfc = secondo(nfc);
         assert!(
-            heading_matches(nfd, &heading),
+            heading_matches(nfd, &scritto_nfc),
             "NFD non trova il titolo NFC"
         );
     }
