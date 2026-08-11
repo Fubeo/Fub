@@ -125,6 +125,17 @@ export interface HostFinto {
   /// arrivo lo scrive il banco — è la stessa forma della finta scrittura di
   /// `state/salvataggio.test.ts`, portata sul confine invece che sul modulo.
   frena(porta: string): () => void;
+  /// Fa rispondere **no** a una porta, finché non si chiama ciò che torna.
+  ///
+  /// L'altra faccia di [`frena`](HostFinto.frena): quella tiene in volo, questa
+  /// rifiuta. Serve ai banchi che provano cosa succede **dopo** un guasto — un
+  /// disco pieno, un permesso negato — che è il solo momento in cui si vede se
+  /// una precondizione ignorata fa danno.
+  ///
+  /// Ciò che la porta avrebbe fatto **non lo fa**: una scrittura guasta non
+  /// lascia i byte, o un banco che chiede «il disco rifiuta» leggerebbe il file
+  /// nuovo e crederebbe di aver provato il contrario.
+  guasta(porta: string, motivo?: string): () => void;
 
   /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
   ///
@@ -160,8 +171,19 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
   /// che quella porta risponde resta in volo.
   const freni = new Map<string, Promise<void>>();
 
+  /// Le porte guaste, col motivo che rispondono.
+  const guasti = new Map<string, string>();
+
   function porta<T>(nome: string, args: unknown[], esito: T): T {
     chiamate.push({ porta: nome, args });
+    const guasto = guasti.get(nome);
+    if (guasto !== undefined && esito instanceof Promise) {
+      // La risposta che questa porta avrebbe dato si butta, e si butta
+      // **guardandola**: una promessa rifiutata che nessuno ascolta è un
+      // avviso di runtime in mezzo all'output del banco.
+      void (esito as Promise<unknown>).catch(() => {});
+      return Promise.reject(new Error(guasto)) as T;
+    }
     const freno = freni.get(nome);
     // La chiamata è **già registrata**: un banco che aspetta «la scrittura è
     // partita» deve vederla partire anche mentre è frenata, o non avrebbe modo
@@ -416,6 +438,13 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
         );
       },
       writeDocument: (id, source, base) => {
+        // Il guasto si chiede **prima** di posare i byte: `scrivi` gira mentre
+        // si compone l'argomento di `porta`, quindi una porta guasta che ci
+        // passasse dentro risponderebbe «no» avendo già scritto.
+        const guasto = guasti.get("writeDocument");
+        if (guasto !== undefined) {
+          return porta("writeDocument", [id, source, base], Promise.reject(new Error(guasto)));
+        }
         const prima = docs.get(id);
         if (base.kind === "descends_from" && prima && prima.revisione !== base.value) {
           return porta(
@@ -538,6 +567,12 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
       return () => {
         freni.delete(nome);
         sblocca();
+      };
+    },
+    guasta: (nome, motivo) => {
+      guasti.set(nome, motivo ?? `host finto: «${nome}» è guasta`);
+      return () => {
+        guasti.delete(nome);
       };
     },
     emetti,

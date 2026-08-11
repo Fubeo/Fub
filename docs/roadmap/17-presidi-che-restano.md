@@ -196,11 +196,13 @@ Un E2E attivo su un solo OS ripropone il difetto.
     *   **Gesti di controllo**: I gesti passano da cinque a **sette**. L'azione
         "rinomina" copre due casistiche (interfaccia ed evento esterno). La
         seconda casistica celava un bug. Il conteggio aggiornato segna
-        **dodici** gesti [conta: gesti-della-shell]. La
+        **quattordici** gesti [conta: gesti-della-shell]. La
         [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
         include due interazioni per le scorciatoie. L'undicesimo simula il link
         **dentro** la nota. Il dodicesimo gestisce l'avviso di sessione della
-        25.5.
+        25.5. Il tredicesimo e il quattordicesimo guardano i due gesti che
+        **spostano un file** — la rinomina e la conversione in cartella — quando
+        il testo battuto non è ancora sul disco (difetto 0206).
     *   **Difetti isolati**: La simulazione ha rimosso Due difetti del
         cablaggio, sfuggiti alla
         [0015](../decisions/0015-la-forma-della-shell.md). L'invio della

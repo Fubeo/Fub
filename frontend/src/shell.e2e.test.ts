@@ -23,7 +23,7 @@
 //
 // # Dieci gesti, contati da fuori
 //
-// I gesti sono **dodici** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **quattordici** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -405,6 +405,64 @@ describe("rinomina", () => {
     // coprendo qualunque cosa ci sia senza guardare. Misurato: togliendo la
     // migrazione, un presidio che guardasse solo il path resterebbe **verde**.
     expect(scritta.args[2]).toEqual({ kind: "descends_from", value: "r1" });
+  });
+});
+
+describe("spostare un file col testo non ancora sul disco", () => {
+  /// Il gesto è la rinomina, e ciò che si guarda è **se parte**.
+  ///
+  /// `flushPendingSave` esiste per una ragione sola: il kernel, muovendo un
+  /// file, riscrive i wikilink entranti di file di terzi, e un buffer rimasto
+  /// sporco li ricopre col testo di prima al salvataggio successivo. La
+  /// funzione però non alzava mai — un salvataggio fallito lo dice il buffer,
+  /// che resta sporco — quindi chi la chiamava proseguiva identico che i byte
+  /// fossero sul disco o no: una precondizione di cui nessuno leggeva l'esito
+  /// (difetto 0206).
+  it("la rinomina non parte, e lo dice", async () => {
+    const host = await avvia(VAULT);
+    battiNellEditor("testo che il disco rifiuta");
+    const ripara = host.guasta("writeDocument", "disco pieno");
+
+    await menuContestuale(riga("Benvenuto"), "Rinomina");
+    const campo = document.querySelector<HTMLInputElement>("#file-list input");
+    if (!campo) throw new Error("la riga non è diventata un campo");
+    campo.value = "Indice";
+    campo.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await riposa(20);
+
+    const rinomine = host.aPorta("invokeCommand").filter((c) => c.args[0] === "note.rename");
+    expect(
+      rinomine,
+      "il file si è mosso mentre il testo battuto era solo in RAM: la " +
+        "riscrittura dei wikilink del kernel finirà sotto il salvataggio dopo",
+    ).toEqual([]);
+    expect(Object.keys(host.file())).toContain("Benvenuto.md");
+    // E chi guarda lo sa: il rifiuto è una frase, non un gesto che non fa niente.
+    expect(document.body.textContent).toContain("Benvenuto.md non è sul disco");
+
+    ripara();
+  });
+
+  /// L'altra metà: `convertToFolder` sposta il file esattamente come la
+  /// rinomina — è una rinomina — e non metteva in salvo niente affatto.
+  it("la conversione in cartella mette in salvo prima di muovere", async () => {
+    const host = await avvia(VAULT);
+    battiNellEditor("battuta prima di convertire");
+
+    await menuContestuale(riga("Benvenuto"), "Converti in cartella");
+    await riposa(20);
+
+    const scrittura = host.chiamate.findIndex((c) => c.porta === "writeDocument");
+    const mossa = host.chiamate.findIndex(
+      (c) => c.porta === "invokeCommand" && c.args[0] === "note.rename",
+    );
+    expect(mossa, "la conversione non è arrivata al kernel").toBeGreaterThan(-1);
+    expect(
+      scrittura,
+      "il file è stato mosso senza mettere in salvo il buffer: il testo battuto " +
+        "è ancora solo in RAM mentre il kernel riscrive i wikilink",
+    ).toBeGreaterThan(-1);
+    expect(scrittura).toBeLessThan(mossa);
   });
 });
 

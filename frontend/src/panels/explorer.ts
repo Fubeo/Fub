@@ -787,7 +787,10 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   // Il rename riscrive i wikilink entranti, cioè file di terzi — e fra questi
   // può esserci il documento aperto. Il buffer va messo in salvo prima, o la
   // riscrittura del kernel finirebbe sotto una copia più vecchia.
-  await flushPendingSave();
+  if (await nonInSalvo()) {
+    renderFileList();
+    return;
+  }
   try {
     await renameNote(from, to);
   } catch (e) {
@@ -798,6 +801,25 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   // e chi la migra è un solo punto.
 }
 
+/// **Il testo non salvato esce prima**, e se non ce la fa l'operazione non parte.
+///
+/// Vale per i gesti che **spostano un file**: il kernel, muovendo, riscrive
+/// anche i wikilink entranti di file di terzi, e un buffer rimasto sporco li
+/// ricoprirebbe col testo di prima al salvataggio successivo. Guarda ogni
+/// documento appeso e non solo quello mosso, perché quelli riscritti dal kernel
+/// sono gli **altri**: chi ha una battuta non salvata in una nota che cita
+/// questa è precisamente chi ci rimette.
+///
+/// Chi legge un documento — aprirne un altro, un'azione di view — continua a
+/// chiamare `flushPendingSave` e a proseguire: lì il testo non salvato resta nel
+/// suo buffer, che è sporco, e il tentativo dopo riparte da lì.
+async function nonInSalvo(): Promise<boolean> {
+  const appesi = await flushPendingSave();
+  if (appesi.length === 0) return false;
+  notify(t("document.unsaved_blocks", { doc: appesi.join(", ") }), "guasto");
+  return true;
+}
+
 /// `p/X.md` → `p/X/X.md`: la nota diventa la folder note di una cartella nuova
 /// col suo nome. I wikilink entranti li riscrive il rename del kernel; icona e
 /// pin migrano sull'evento `document_renamed`, come per ogni rename.
@@ -806,6 +828,9 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
 /// era `.md` cablata, che avrebbe cambiato formato a una nota per il solo fatto
 /// di spostarla in una cartella.
 async function convertToFolder(id: string): Promise<void> {
+  // Sposta un file esattamente come la rinomina — è una rinomina — e prima non
+  // metteva in salvo niente affatto (difetto 0206).
+  if (await nonInSalvo()) return;
   const stem = pageName(id);
   const dir = parentOf(id);
   const folderPath = dir ? `${dir}/${stem}` : stem;
