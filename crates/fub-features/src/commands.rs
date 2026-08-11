@@ -2597,6 +2597,7 @@ mod tests {
         let esterna = ListItem {
             blocks: vec![Block::List {
                 ordered: false,
+                start: None,
                 items: vec![interna],
                 anchor: None,
                 span: Span::new(22, 32),
@@ -2610,6 +2611,7 @@ mod tests {
         let mut model = DocumentModel::empty(DocId::new("nota.md"));
         model.body = vec![Block::List {
             ordered: false,
+            start: None,
             items: vec![esterna],
             anchor: None,
             span: Span::new(0, 32),

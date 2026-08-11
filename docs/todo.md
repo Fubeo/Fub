@@ -440,7 +440,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **ottantuno** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **settantasei** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -585,12 +585,7 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0210 | un tasto premuto dentro la finestra di migrazione di una rinomina ricrea il nome vecchio: il salvataggio parte con l'identità di prima mentre il file si è già mosso, e il risultato è la stessa nota in due posti con due contenuti diversi | `frontend` · rinomina (finestra di migrazione) | regole |
 | 0211 | `suspendSave` e `resumeSave` hanno un posto solo: due sospensioni annidate — una rinomina dentro una conversione, un'importazione mentre una modale è aperta — si pestano, e la seconda ripresa riaccende il salvataggio che la prima voleva ancora fermo; dalla stessa parte nasce la bozza transitoria marcata «superata» che compare e sparisce senza che nessuno l'abbia chiesta | `frontend` · `suspendSave` / `resumeSave` | regole |
 | 0212 | `scriviStato` non porta l'identità del vault: lo stato dell'interfaccia si salva con una chiave sola, quindi aprire un secondo vault ci scrive sopra e riaprire il primo ne restituisce la vista dell'altro | `frontend` · `scriviStato` | regole |
-| 0213 | un frontmatter vuoto — le due sole righe di trattini — sparisce alla riscrittura: chi lo aveva messo per marcare che la nota ha dei metadati ancora da compilare se lo ritrova tolto senza averlo chiesto | `fub-format-markdown` · `serialize.rs` (frontmatter) | regole |
-| 0214 | un alias esplicito uguale al bersaglio si perde: `[[Nota\|Nota]]` viene riscritto `[[Nota]]` perché la scrittura confronta il testo con il bersaglio e omette l'alias quando coincidono, ma quell'alias era scritto a mano e la riscrittura lo toglie | `fub-format-markdown` · `serialize.rs` (wikilink) | regole |
-| 0215 | il numero di partenza di una lista ordinata si perde: una lista che comincia da 3 torna a cominciare da 1, e il documento riscritto dice una cosa diversa da quello letto | `fub-format-markdown` · `serialize.rs` (liste ordinate) | regole |
-| 0216 | una nota a piè di pagina su più blocchi viene appiattita in uno solo: i paragrafi, gli elenchi e i blocchi di codice dentro la definizione si fondono, e ciò che rientra non è ciò che era uscito | `fub-format-markdown` · `serialize.rs` (note a piè di pagina) | regole |
 | 0217 | `render_link_label` ignora le `RenderOptions` che riceve: l'etichetta di un link esce sempre nella stessa forma qualunque cosa il chiamante abbia chiesto, quindi una via di configurazione del contratto è dichiarata e non ha effetto | `fub-format-markdown` · `render_link_label` | regole |
-| 0218 | le destinazioni di link con spazi o parentesi non vengono escapate né racchiuse fra parentesi angolari: un link a un file il cui nome contiene uno spazio esce come Markdown rotto, e alla rilettura non è più un link | `fub-format-markdown` · `serialize.rs` (destinazioni dei link) | regole |
 | 0219 | il doppio del contratto risponde con un codice diverso dal kernel sugli stessi fatti — `BadArgs` dove il kernel dice `already-exists` o `not-found`, la forma dell'id di `trash_document` diversa, e la manopola `scritture_negate` che insegna `io` dove il kernel risponde `internal` — quindi chi sviluppa contro il doppio scrive gestione di errore che sul kernel non combacia | `fub-abi` · `MemoryHost` | regole |
 | 0220 | il doppio del contratto non applica **nessun** recinto sui path: accetta `..`, path assoluti e segmenti nascosti che il kernel rifiuta, quindi una view di terzi che passa la conformità può essere rifiutata dal vero host — e, peggio, chi scrive i banchi non ha modo di accorgersi che il proprio recinto non esiste | `fub-abi` · `MemoryHost` | regole |
 | 0221 | il kernel contraddice il proprio `not-found` in lettura: chiedere un documento che non c'è risponde `io` invece di `not-found`, cioè il codice che il contratto dichiara per quel caso, e chi distingue i due rami non può | `fub-kernel` · lettura di un documento assente | regole |

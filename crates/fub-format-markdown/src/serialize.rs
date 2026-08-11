@@ -60,14 +60,29 @@ use crate::util::{disescapa, fila_massima};
 /// `Err` che arriva a chi ha chiesto la scrittura.
 pub fn serialize(model: &DocumentModel) -> Result<String, FormatError> {
     let mut out = String::new();
-    if !model.frontmatter.is_empty() {
-        let yaml = serde_yaml_ng::to_string(&model.frontmatter.0).map_err(|e| {
-            FormatError::Serialize(format!(
-                "il frontmatter non si è potuto scrivere in YAML: {e}"
-            ))
-        })?;
+    // **La condizione è «c'era», non «dice qualcosa».** Era `!is_empty()`, e
+    // così un frontmatter presente e senza chiavi — le due righe di
+    // delimitatori che si scrivono per dire «i metadati li compilo dopo» —
+    // rientrava dal giro cancellato: la mappa vuota di un file che ce l'ha e
+    // quella di un file che non ce l'ha sono la stessa mappa, e a distinguerle
+    // è `frontmatter_present`.
+    if model.frontmatter_present || !model.frontmatter.is_empty() {
         out.push_str("---\n");
-        out.push_str(&yaml);
+        if model.frontmatter.is_empty() {
+            // **La riga vuota non è impaginazione**: `---\n---` in testa a un
+            // file non è un frontmatter vuoto per il lettore che lo rileggerà,
+            // sono due righe orizzontali. Fra i due delimitatori ci va almeno
+            // una riga, e quella riga è ciò che rende il blocco riconoscibile
+            // al giro dopo.
+            out.push('\n');
+        } else {
+            let yaml = serde_yaml_ng::to_string(&model.frontmatter.0).map_err(|e| {
+                FormatError::Serialize(format!(
+                    "il frontmatter non si è potuto scrivere in YAML: {e}"
+                ))
+            })?;
+            out.push_str(&yaml);
+        }
         out.push_str("---\n\n");
     }
     for (i, block) in model.body.iter().enumerate() {
@@ -177,6 +192,31 @@ fn write_anchor_a_capo(anchor: &Option<String>, out: &mut String) {
     out.push('\n');
 }
 
+/// I blocchi di un contenitore, **separati dalla riga vuota che li tiene
+/// distinti**.
+///
+/// È la stessa regola del giro principale in [`serialize`] — fra un blocco e il
+/// successivo ci va una riga vuota — e finora la applicava **solo** quello: i
+/// cinque contenitori (la definizione di una nota a piè di pagina, il callout,
+/// la citazione, la descrizione di una definition list, la voce d'elenco)
+/// concatenavano i figli senza separatore, e al giro dopo due paragrafi
+/// rientravano **come uno**. La perdita non è di forma: due paragrafi fusi sono
+/// un blocco che non c'era, e ciò che stava dentro il secondo — un elenco, un
+/// blocco di codice — smette di essere sé stesso.
+///
+/// Sta in una funzione perché la regola è una: chi aggiunge il sesto
+/// contenitore la eredita chiamando questa invece di riscrivere il `for`.
+fn blocchi_in_stringa(blocks: &[Block]) -> Result<String, FormatError> {
+    let mut inner = String::new();
+    for (i, b) in blocks.iter().enumerate() {
+        if i > 0 {
+            inner.push('\n');
+        }
+        write_block(b, &mut inner)?;
+    }
+    Ok(inner)
+}
+
 /// I `match` di questo modulo non hanno `..`: ogni campo è nominato.
 ///
 /// È il presidio più economico che esista per la classe di difetto che questo
@@ -212,10 +252,17 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             items,
             anchor,
             span: _,
+            start,
         } => {
+            // **Il numero di partenza è quello del documento**, non `1`: una
+            // lista che comincia da 3 riprende una lista interrotta, e
+            // riportarla a 1 fa dire al file riscritto una cosa diversa da
+            // quella che il file letto diceva. `1` resta il ripiego per un
+            // ordinato che arriva da un generatore senza numero.
+            let primo = start.unwrap_or(1);
             for (i, item) in items.iter().enumerate() {
                 let marcatore = if *ordered {
-                    format!("{}. ", i + 1)
+                    format!("{}. ", primo as u64 + i as u64)
                 } else {
                     "- ".to_string()
                 };
@@ -228,10 +275,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                     out.push(t.symbol.unwrap_or(' '));
                     out.push_str("] ");
                 }
-                let mut inner = String::new();
-                for b in &item.blocks {
-                    write_block(b, &mut inner)?;
-                }
+                let inner = blocchi_in_stringa(&item.blocks)?;
                 // Le righe dopo la prima si rientrano sotto il marcatore. Senza
                 // questo, un elenco annidato usciva **appiattito** — `- a` e
                 // `- b` fratelli dove `b` era figlio di `a` — e la struttura che
@@ -342,10 +386,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             anchor,
             span: _,
         } => {
-            let mut inner = String::new();
-            for b in blocks {
-                write_block(b, &mut inner)?;
-            }
+            let inner = blocchi_in_stringa(blocks)?;
             for line in inner.trim_end().lines() {
                 // `"> "` su una riga vuota lascerebbe uno spazio in coda, che è
                 // ciò che ogni linter di questo repo toglie a mano.
@@ -409,11 +450,25 @@ fn write_custom_block(
     // --- la metà che è di markdown ------------------------------------------
     if kind == custom_kind::FOOTNOTE_DEFINITION {
         let label = attr_richiesto(attrs, "label", kind)?;
-        let mut inner = String::new();
-        for b in blocks {
-            write_block(b, &mut inner)?;
+        let inner = blocchi_in_stringa(blocks)?;
+        // **Una definizione su più blocchi resta su più blocchi.** Prima era
+        // `inner.trim()` dentro una riga sola: i paragrafi, gli elenchi e i
+        // blocchi di codice della definizione uscivano fusi in una riga, e ciò
+        // che rientrava non era ciò che era uscito. La continuazione di una
+        // nota a piè di pagina si rientra di quattro spazi — è la stessa forma
+        // del rientro sotto il marcatore di una voce d'elenco, e senza, la
+        // seconda riga esce dalla definizione e torna un blocco del documento.
+        out.push_str(&format!("[^{label}]:"));
+        for (n, riga) in inner.trim_end().lines().enumerate() {
+            if n > 0 {
+                out.push('\n');
+            }
+            if !riga.is_empty() {
+                out.push_str(if n == 0 { " " } else { "    " });
+                out.push_str(riga);
+            }
         }
-        out.push_str(&format!("[^{label}]: {}\n", inner.trim()));
+        out.push('\n');
         return Ok(());
     }
     if kind == custom_kind::CALLOUT {
@@ -430,10 +485,7 @@ fn write_custom_block(
         } else {
             out.push_str(&format!("> [!{ty}] {title}\n"));
         }
-        let mut inner = String::new();
-        for b in blocks {
-            write_block(b, &mut inner)?;
-        }
+        let inner = blocchi_in_stringa(blocks)?;
         for line in inner.trim_end().lines() {
             out.push_str(if line.is_empty() { ">" } else { "> " });
             out.push_str(line);
@@ -444,10 +496,7 @@ fn write_custom_block(
     if kind == custom_kind::DEFINITION_DESCRIPTION {
         // `: ` è la sintassi che la rende una descrizione. Senza, la riga
         // tornava un paragrafo qualunque e la definition list si scioglieva.
-        let mut inner = String::new();
-        for b in blocks {
-            write_block(b, &mut inner)?;
-        }
+        let inner = blocchi_in_stringa(blocks)?;
         for line in inner.trim_end().lines() {
             out.push_str(": ");
             out.push_str(line);
@@ -467,11 +516,7 @@ fn write_custom_block(
                 out.push('\n');
             }
         }
-        Some(Carico::Figli) => {
-            for b in blocks {
-                write_block(b, out)?;
-            }
-        }
+        Some(Carico::Figli) => out.push_str(&blocchi_in_stringa(blocks)?),
         Some(Carico::Corpo(_)) | None => return Err(non_esprimibile("il blocco", kind)),
     }
     Ok(())
@@ -645,6 +690,65 @@ fn scrivi_testo(s: &str, out: &mut String) {
     }
 }
 
+/// La destinazione di un link `[testo](qui)`, **nella forma in cui rileggendola
+/// torna la stessa destinazione**.
+///
+/// Una destinazione nuda in CommonMark non può contenere spazi, caratteri di
+/// controllo, `<`, `>`, una barra rovescia, né parentesi tonde spaiate: la forma
+/// per tutto il resto sono le **parentesi angolari**, che è la stessa forma da
+/// cui il parser l'aveva letta. Scrivendola nuda, `[testo](<file con spazi.md>)`
+/// tornava sul disco come `[testo](file con spazi.md)`, che al giro dopo **non è
+/// più un link**: il documento riscritto ha perso un arco del grafo, e chi lo
+/// rilegge vede del testo fra parentesi.
+///
+/// Dentro le angolari si escapano `<`, `>` e `\`, cioè i tre soli caratteri che
+/// chiuderebbero o storcerebbero la parentesi. Le parentesi tonde **bilanciate**
+/// restano nude: sono legali così, ed è la forma che l'utente ha scritto.
+fn scrivi_destinazione(url: &str, out: &mut String) {
+    if destinazione_nuda(url) {
+        out.push_str(url);
+        return;
+    }
+    out.push('<');
+    for c in url.chars() {
+        if matches!(c, '<' | '>' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out.push('>');
+}
+
+/// La destinazione si può scrivere senza le parentesi angolari?
+///
+/// Il ciclo è scritto a `if` e non a `match` di proposito: un `match` qui
+/// vorrebbe il braccio muto `_ => {}` per il carattere ordinario, e
+/// `nessun_ramo_muto` (`tests/serialize_non_cancella.rs`) lo legge come una
+/// cancellazione silenziosa. Ha ragione a leggerlo così ovunque scriva, e qui
+/// non scrive — ma un presidio che deve distinguere i due casi si guarda le
+/// eccezioni invece del file, e allora conviene non avere il braccio.
+fn destinazione_nuda(url: &str) -> bool {
+    if url.is_empty() {
+        return false;
+    }
+    let mut profondita: i32 = 0;
+    for c in url.chars() {
+        if matches!(c, '<' | '>' | '\\') || c.is_whitespace() || c.is_control() {
+            return false;
+        }
+        if c == '(' {
+            profondita += 1;
+        }
+        if c == ')' {
+            profondita -= 1;
+            if profondita < 0 {
+                return false;
+            }
+        }
+    }
+    profondita == 0
+}
+
 fn write_link(
     target: &LinkTarget,
     label: Option<&[Inline]>,
@@ -681,15 +785,17 @@ fn write_link(
                 // Dentro le due parentesi non c'è escape: l'alias è testo nudo
                 // fino a `]]` (vedi [`disescapa`]).
                 let lbl = disescapa(&lbl);
-                // L'alias si scrive solo se **dice qualcosa di diverso** dal
-                // bersaglio, e il confronto è con l'interno intero. Era col solo
-                // `page`, quindi ogni link con un punto rientrava dal giro con
-                // un alias che nel file non c'era: `[[Nota#Sez]]` usciva
-                // `[[Nota#Sez|Nota#Sez]]`, e un altro giro lo allungava ancora.
-                if lbl != inner {
-                    out.push('|');
-                    out.push_str(&lbl);
-                }
+                // **L'alias si scrive perché c'è.** Il confronto col bersaglio
+                // stava qui — «se dice la stessa cosa non serve» — e toglieva
+                // dal file il `|Nota` di un `[[Nota|Nota]]` che l'utente aveva
+                // battuto a mano. Non era una regola di scrittura: era il
+                // rimedio a un modello che l'alias assente e l'alias uguale al
+                // bersaglio li rappresentava allo stesso modo. Adesso il
+                // modello li distingue — `label: None` è «nessun alias scritto»
+                // (parse.rs, `scritta_a_mano`) — e qui non c'è più niente da
+                // indovinare.
+                out.push('|');
+                out.push_str(&lbl);
             }
             out.push_str("]]");
         }
@@ -699,7 +805,7 @@ fn write_link(
                 write_inlines(inlines, out)?;
             }
             out.push_str("](");
-            out.push_str(url);
+            scrivi_destinazione(url, out);
             out.push(')');
         }
     }

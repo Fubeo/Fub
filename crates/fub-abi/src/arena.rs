@@ -257,6 +257,9 @@ pub enum Block {
         items: Vec<ListItem>,
         anchor: Option<String>,
         span: Span,
+        /// Il numero da cui parte un elenco ordinato. In fondo al record perché
+        /// la posizione dei campi è ABI.
+        start: Option<u32>,
     },
     CodeBlock {
         lang: Option<String>,
@@ -534,6 +537,7 @@ impl DocumentTree {
                 items,
                 anchor,
                 span,
+                start,
             } => model::Block::List {
                 ordered: *ordered,
                 items: items
@@ -548,6 +552,7 @@ impl DocumentTree {
                     .collect::<Result<_, ArenaError>>()?,
                 anchor: anchor.clone(),
                 span: (*span).try_into()?,
+                start: *start,
             },
             Block::CodeBlock {
                 lang,
@@ -720,6 +725,7 @@ fn tree_push_block(tree: &mut DocumentTree, b: &model::Block) -> BlockRef {
             items,
             anchor,
             span,
+            start,
         } => Block::List {
             ordered: *ordered,
             items: items
@@ -732,6 +738,7 @@ fn tree_push_block(tree: &mut DocumentTree, b: &model::Block) -> BlockRef {
                 .collect(),
             anchor: anchor.clone(),
             span: (*span).into(),
+            start: *start,
         },
         model::Block::CodeBlock {
             lang,
@@ -1504,6 +1511,7 @@ mod tests {
                 ],
                 anchor: None,
                 span: S::new(106, 145),
+                start: Some(1),
             },
             B::CodeBlock {
                 lang: Some("rust".into()),
@@ -1853,6 +1861,7 @@ mod tests {
                 }],
                 anchor: None,
                 span: Span::default(),
+                start: None,
             }],
             inlines: Vec::new(),
             roots: vec![BlockRef(0)],
