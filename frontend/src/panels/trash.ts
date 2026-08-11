@@ -21,6 +21,7 @@
 import { confirm } from "../host/dialog";
 import { primaNota, refreshDocuments, trashNote } from "../state/vault";
 import { pageName } from "../rules/organizer";
+import { docAttivo } from "../state/layout";
 import { closeDocument, isOpen, openDocument, resumeSave, suspendSave } from "./document";
 import { t } from "../i18n/strings";
 
@@ -29,6 +30,21 @@ import { t } from "../i18n/strings";
 /// Un salvataggio in attesa su quel documento lo farebbe risorgere subito dopo
 /// la cancellazione: si disinnesca **prima ancora di chiedere**, e lo si rimette
 /// in coda se l'utente ci ripensa.
+///
+/// # Si chiude **quella** nota, non quella a schermo
+///
+/// `isOpen` domanda «è aperta in *qualche* riquadro», e la risposta veniva usata
+/// per chiudere il documento **attivo** — che con due riquadri non è lo stesso.
+/// Cestinare dall'esploratore una nota aperta nell'altro riquadro chiudeva
+/// quella su cui l'utente stava scrivendo, e col buffer sporco dentro: il testo
+/// non salvato se ne andava senza che niente lo dicesse, mentre la nota appena
+/// cestinata restava a schermo. La frase qui sotto — «il buffer sporco di un
+/// documento cancellato muore col documento» — vale solo se il documento è
+/// quello cancellato.
+///
+/// Per la stessa ragione la nota di rimpiazzo si apre **solo se non è rimasto
+/// niente**: chiudere una nota in un riquadro che non si guarda non è un motivo
+/// per cambiare quello che si guarda.
 export async function trashWithConfirm(id: string): Promise<void> {
   const salvataggioInAttesa = suspendSave(id);
 
@@ -43,16 +59,17 @@ export async function trashWithConfirm(id: string): Promise<void> {
   }
 
   await trashNote(id);
-  if (isOpen(id)) {
+  const era_aperta = isOpen(id);
+  if (era_aperta) {
     // Il buffer sporco di un documento cancellato muore col documento: non è
     // una perdita silenziosa, è l'azione che l'utente ha appena confermato.
-    closeDocument();
-    refreshDocuments();
+    closeDocument(id);
+  }
+  refreshDocuments();
+  if (era_aperta && !docAttivo()) {
     // La prima nota che c'è, chiesta con una finestra da uno: prendere il primo
     // elemento di un elenco intero era chiedere il vault per aprirne una (§14.4).
     const prima = await primaNota();
     if (prima) await openDocument(prima);
-  } else {
-    refreshDocuments();
   }
 }

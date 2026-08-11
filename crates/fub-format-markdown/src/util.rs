@@ -35,6 +35,42 @@ pub fn fila_massima(s: &str, c: char) -> usize {
     max
 }
 
+/// Il testo riportato a **come si legge**: `\*` → `*`.
+///
+/// La chiedono i due lati del giro, ed è la ragione per cui sta qui:
+///
+/// - `parse`, nel solo ramo che emette **sorgente** invece del testo
+///   decodificato da comrak — i segmenti fra un tag e l'altro, che si prendono
+///   dalla fetta perché è lì che si sono misurati gli span. Senza,
+///   `Inline::Text` porterebbe due cose diverse a seconda del ramo, e
+///   `serialize::scrivi_testo` — che ri-escapa ciò che rileggerebbe come
+///   sintassi — raddoppierebbe le barre di uno dei due;
+/// - `serialize`, dentro un `[[…]]`: fra la barra verticale e le due parentesi
+///   chiuse **non c'è escape**, l'alias è testo nudo fino a `]]`. Scriverlo
+///   escapato non lo proteggeva da niente e cambiava ciò che si legge a schermo
+///   — e, siccome l'alias si scrive solo quando dice qualcosa di diverso dal
+///   bersaglio, faceva anche nascere un `|` dove non ce n'era: `[[#Sezione]]`
+///   usciva `[[#Sezione|\#Sezione]]`.
+///
+/// La regola è quella di CommonMark: una barra rovescia escapa un segno di
+/// punteggiatura ASCII, e davanti a qualunque altra cosa è un carattere.
+pub fn disescapa(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            let mut avanti = chars.clone();
+            if let Some(n) = avanti.next().filter(|n| n.is_ascii_punctuation()) {
+                out.push(n);
+                chars = avanti;
+                continue;
+            }
+        }
+        out.push(c);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

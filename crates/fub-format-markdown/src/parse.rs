@@ -17,6 +17,7 @@ use fub_abi::FormatError;
 use fub_sdk::scan;
 
 use crate::offsets::Offsets;
+use crate::util::disescapa;
 
 /// Costruisce le opzioni comrak per il dialetto Obsidian.
 pub fn build_options(ctx: &ParseContext) -> Options<'static> {
@@ -873,7 +874,7 @@ fn push_text_features(
         Vec::new()
     };
     if embeds.is_empty() {
-        push_plain_or_tags(slice, decoded, base, ctx, acc, out);
+        push_plain_or_tags(source, slice, decoded, base, ctx, acc, out);
         return;
     }
     let mut cursor = 0;
@@ -888,7 +889,7 @@ fn push_text_features(
         let inizio = abs.start - base;
         if inizio > cursor {
             let seg = &slice[cursor..inizio];
-            push_plain_or_tags(seg, seg, base + cursor, ctx, acc, out);
+            push_plain_or_tags(source, seg, seg, base + cursor, ctx, acc, out);
         }
         let parsed = scan::parse_wikilink_inner(&inner);
         // L'embed testuale sta DENTRO il testo pushato (comrak non l'ha
@@ -909,7 +910,7 @@ fn push_text_features(
     }
     if cursor < slice.len() {
         let seg = &slice[cursor..];
-        push_plain_or_tags(seg, seg, base + cursor, ctx, acc, out);
+        push_plain_or_tags(source, seg, seg, base + cursor, ctx, acc, out);
     }
 }
 
@@ -1014,6 +1015,7 @@ fn is_entity_hash(text: &str, idx: usize) -> bool {
 /// Segmento senza embed: estrae i `#tag` (se abilitati) o emette testo piatto.
 /// `slice`/`decoded`/`base` come in [`push_text_features`].
 fn push_plain_or_tags(
+    source: &str,
     slice: &str,
     decoded: &str,
     base: usize,
@@ -1026,7 +1028,10 @@ fn push_plain_or_tags(
             .into_iter()
             // Sul sorgente gli pseudo-tag si riconoscono: `\#` è sotto escape,
             // `&#x27;` è un'entità — nessuno dei due è un tag per Obsidian.
-            .filter(|t| !is_escaped(slice, t.span.start) && !is_entity_hash(slice, t.span.start))
+            .filter(|t| {
+                !sotto_escape(source, slice, base, t.span.start)
+                    && !is_entity_hash(slice, t.span.start)
+            })
             .collect()
     } else {
         Vec::new()
@@ -1040,7 +1045,12 @@ fn push_plain_or_tags(
     let mut cursor = 0;
     for tag in tags {
         if tag.span.start > cursor {
-            out.push(Inline::Text(slice[cursor..tag.span.start].to_string()));
+            // Il testo fra le feature viene dal **sorgente**, dove gli escape
+            // sono ancora scritti: `Inline::Text` porta il testo come si legge
+            // (è l'invariante da cui `serialize` decide cosa ri-escapare), e
+            // una barra rovescia di sintassi lì dentro sarebbe letta come testo
+            // e riscritta raddoppiata.
+            out.push(Inline::Text(disescapa(&slice[cursor..tag.span.start])));
         }
         let abs = Span::new(base + tag.span.start, base + tag.span.end);
         out.push(Inline::TagRef {
@@ -1054,8 +1064,32 @@ fn push_plain_or_tags(
         cursor = tag.span.end;
     }
     if cursor < slice.len() {
-        out.push(Inline::Text(slice[cursor..].to_string()));
+        out.push(Inline::Text(disescapa(&slice[cursor..])));
     }
+}
+
+/// Il carattere a `idx` è sotto escape, **anche quando la barra rovescia è
+/// fuori dal nodo**?
+///
+/// `is_escaped` guarda la fetta, e per un escape in mezzo alla fetta basta. Il
+/// caso che si perdeva è quello in testa: il `sourcepos` di comrak per un
+/// carattere escapato comincia **dal carattere**, non dalla barra, quindi su
+/// `\#nontag` la fetta del nodo è `#nontag` e la barra è il byte prima —
+/// invisibile a chi guarda solo la fetta. Il commento accanto alla chiamata
+/// diceva già la cosa giusta («sul sorgente gli escape sono ancora visibili»),
+/// ma la fetta non è il sorgente: il risultato era che `\#nontag` **dichiarava
+/// un tag**, che finiva nell'indice e nel pannello dei tag.
+fn sotto_escape(source: &str, slice: &str, base: usize, idx: usize) -> bool {
+    if is_escaped(slice, idx) {
+        return true;
+    }
+    // Solo in testa, e solo se la fetta è davvero quella del sorgente a `base`:
+    // il ripiego di `convert_inlines` passa il testo decodificato, e lì gli
+    // offset non allineano.
+    idx == 0
+        && base > 0
+        && source.get(base..base + slice.len()) == Some(slice)
+        && is_escaped(source, base)
 }
 
 /// Il frontmatter proiettato su JSON, oppure **perché non si è potuto**.

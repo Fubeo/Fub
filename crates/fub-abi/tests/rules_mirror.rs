@@ -130,6 +130,14 @@ fn name_fault_cases() -> Vec<Value> {
         "/assoluto.md",
         "",
         "   ",
+        // La lettera di drive: su Windows `join` butta via la base, quindi il
+        // recinto la rifiuta in entrambe le tolleranze. E i due casi che *non*
+        // lo sono, o la regola diventerebbe «niente due punti».
+        "C:/Users/x/segreto.md",
+        "c:nota.md",
+        "C:",
+        "note/C:/dentro.md",
+        "CC:/dentro.md",
         // Legittimi in entrambe.
         "Progetti/Alpha.md",
         "nota (1).md",
@@ -154,8 +162,19 @@ fn name_fault_cases() -> Vec<Value> {
         "nota.",
         "cartella./nota.md",
         ".gitignore",
-        ".fub/roba.md",
         "Progetti/.nascosta.md",
+        // Lo spazio macchina, che il recinto guarda in entrambe le domande: è
+        // il caso in cui le due gemelle divergerebbero in silenzio scrivendo
+        // dentro `.fub/` da una parte e rifiutando dall'altra.
+        ".fub/roba.md",
+        ".fub",
+        ".fub/settings.json",
+        ".trash/Nota.2026-07-24T15-30-00.md",
+        "Progetti/.fub/nota.md",
+        // E i quasi-spazio-macchina: cominciano come lui e non lo sono.
+        ".fubbo/nota.md",
+        "fub/nota.md",
+        "Progetti/trash/nota.md",
         // I quasi-device: cominciano come un device e non lo sono.
         "CONtratto.md",
         "Console.md",

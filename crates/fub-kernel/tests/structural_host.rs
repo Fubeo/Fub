@@ -165,6 +165,55 @@ fn a_created_document_cannot_escape_the_vault() {
     assert!(ws.documents().is_empty(), "niente è stato creato");
 }
 
+/// Il recinto **interno**: `.fub/` e `.trash/` stanno dentro il vault, quindi
+/// nessun `..` li nomina e il recinto di sopra non li vedeva. Ci si scriveva —
+/// con `write_document`, che sovrascrive — i metadati del vault, i blob di un
+/// altro plugin (aggirando il recinto per-plugin di `data_*`, che è la ragione
+/// per cui `DataWrite` non chiede permesso) e le note cestinate.
+///
+/// Vale per ogni verso, non solo per la scrittura: `read_document(".fub/…")`
+/// sarebbe la stessa fuga dall'altra parte.
+#[test]
+fn lo_spazio_macchina_non_si_nomina_da_un_plugin() {
+    let (_dir, mut ws) = vault_plain();
+    let root = ws.root().to_path_buf();
+    // Un file dentro lo spazio macchina, messo lì alle spalle del kernel: è ciò
+    // che la scrittura di un plugin coprirebbe.
+    let bersaglio = root.join(".fub").join("data").join("nota.md");
+    std::fs::create_dir_all(bersaglio.parent().expect("padre")).expect("cartella");
+    std::fs::write(&bersaglio, "roba di Fub").expect("scritto");
+
+    ws.with_host("prova.plugin", |host| {
+        for id in [
+            ".fub/data/nota.md",
+            ".fub/settings.json",
+            ".trash/Nota.2026-07-24T15-30-00.md",
+            "Progetti/.fub/nota.md",
+        ] {
+            let id = DocId::new(id);
+            for esito in [
+                host.write_document(&id, "non dovrei essere qui", WriteBase::Dictated)
+                    .map(|_| ()),
+                host.create_document(&id, "nemmeno"),
+                host.read_document(&id).map(|_| ()),
+                host.rename_document(&DocId::new("nota.md"), &id),
+                host.trash_document(&id).map(|_| ()),
+            ] {
+                assert!(
+                    matches!(esito, Err(PluginError::PermissionDenied(_))),
+                    "`{id}` doveva essere rifiutato, invece: {esito:?}"
+                );
+            }
+        }
+    });
+
+    assert_eq!(
+        std::fs::read_to_string(&bersaglio).expect("c'è ancora"),
+        "roba di Fub",
+        "niente ha toccato lo spazio macchina"
+    );
+}
+
 #[test]
 fn free_name_and_create_compose_into_what_create_note_did() {
     let (_dir, mut ws) = vault_plain();

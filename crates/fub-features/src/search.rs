@@ -48,7 +48,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use camino::Utf8Path;
-use fub_abi::edit::Revision;
+use fub_abi::edit::{Fnv1a, Revision};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
 use fub_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fub_abi::query::{
@@ -289,31 +289,24 @@ struct Manifest {
 
 /// Impronta stabile di ciò che finisce nell'indice per un documento.
 ///
-/// FNV-1a a mano invece di `DefaultHasher`: quest'ultimo non garantisce lo
-/// stesso valore fra versioni di Rust o piattaforme, e questa impronta
-/// sopravvive su disco fra un avvio e l'altro.
+/// L'impronta è quella del contratto ([`Fnv1a`]) e non una copia con le stesse
+/// due costanti: questi numeri sopravvivono su disco fra un avvio e l'altro, e
+/// una copia che diverge renderebbe illeggibile un indice già scritto senza che
+/// nessun banco se ne accorga — ogni copia resta coerente con sé stessa.
 fn fingerprint(doc: &DocumentModel) -> u64 {
-    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-    let mut h = OFFSET;
-    let mut eat = |bytes: &[u8]| {
-        for b in bytes {
-            h ^= *b as u64;
-            h = h.wrapping_mul(PRIME);
-        }
-    };
+    let mut h = Fnv1a::nuova();
     // Il path intero e non il solo nome: da quando l'indice porta la cartella
     // (`folder`, v3), spostare una nota cambia ciò che è indicizzato anche a
     // contenuto identico.
-    eat(doc.id.as_str().as_bytes());
-    eat(&[0]);
-    eat(doc.text.as_bytes());
-    eat(&[0]);
+    h.mangia(doc.id.as_str().as_bytes());
+    h.mangia(&[0]);
+    h.mangia(doc.text.as_bytes());
+    h.mangia(&[0]);
     for tag in &doc.tags {
-        eat(tag.name.as_bytes());
-        eat(&[0x1f]);
+        h.mangia(tag.name.as_bytes());
+        h.mangia(&[0x1f]);
     }
-    h
+    h.valore()
 }
 
 /// I campi dello schema, risolti una volta sola.

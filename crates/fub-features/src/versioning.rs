@@ -77,7 +77,7 @@ use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     InvokeMode, ParamKind, ParamSpec,
 };
-use fub_abi::edit::WriteBase;
+use fub_abi::edit::{Fnv1a, WriteBase};
 use fub_abi::event::{Event, EventKind, EventMask, Notice, Severity};
 use fub_abi::model::DocId;
 use fub_abi::schema::SchemaVersion;
@@ -1216,17 +1216,12 @@ fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions
     Ok(docs)
 }
 
-/// FNV-1a: la stessa impronta stabile fra versioni di Rust e piattaforme che
-/// usa l'indice di ricerca — questi valori sopravvivono su disco.
+/// La stessa impronta stabile fra versioni di Rust e piattaforme che usa
+/// l'indice di ricerca — questi valori sopravvivono su disco. Il commento lo
+/// dichiarava già da prima che fosse vero: adesso è la [`Fnv1a`] del contratto,
+/// non una terza copia delle stesse due costanti.
 fn fingerprint(source: &str) -> u64 {
-    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-    let mut h = OFFSET;
-    for b in source.as_bytes() {
-        h ^= *b as u64;
-        h = h.wrapping_mul(PRIME);
-    }
-    h
+    Fnv1a::di(source.as_bytes())
 }
 
 /// Il campionatore: un [`EventHandler`] come quelli che scriveranno i plugin.

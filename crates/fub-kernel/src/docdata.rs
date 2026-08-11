@@ -55,7 +55,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::DocId;
 use fub_abi::rules::doc_data;
 
-use crate::storage::VaultStorage;
+use crate::storage::{EntryKind, VaultStorage};
 
 /// Sposta lo spazio per-documento di `from` sotto `to`, in **ogni** spazio dati
 /// di plugin che ne ha uno. Restituisce ciò che non è riuscito, per plugin.
@@ -78,21 +78,62 @@ pub(crate) fn migrate(
             continue;
         }
         let destinazione = space_dir(root, to);
-        // Il path di destinazione era **libero** — il kernel rifiuta un rename
-        // verso un documento che esiste, e da fuori lo rifiuta la guardia di
-        // `sync_renamed_path_here` (decisione 0135) — quindi una cartella già
-        // lì è di una nota che non c'è più: la raccolta l'avrebbe tolta al
-        // prossimo giro, e qui va tolta subito o la `rename` non ha dove
-        // atterrare.
-        if storage.exists(&destinazione) {
-            let _ = storage.remove_dir_all(&destinazione);
-        }
-        if let Err(e) = storage.rename(&sorgente, &destinazione) {
-            let plugin = root.file_name().unwrap_or(root.as_str());
+        let plugin = root.file_name().unwrap_or(root.as_str());
+        if let Err(e) = sposta(storage, &sorgente, &destinazione) {
             errori.push(format!("{plugin}: {e}"));
         }
     }
     errori
+}
+
+/// Sposta una cartella di spazio per-documento, **passando di lato**.
+///
+/// # La destinazione che era la sorgente
+///
+/// Il path di destinazione era libero — il kernel rifiuta un rename verso un
+/// documento che esiste, e da fuori lo rifiuta la guardia di
+/// `sync_renamed_path_here` (decisione 0135) — quindi una cartella già lì è di
+/// una nota che non c'è più: la raccolta l'avrebbe tolta al prossimo giro, e
+/// qui va tolta subito o la `rename` non ha dove atterrare.
+///
+/// Quel ragionamento aveva **un caso in cui era falso**, e ci perdeva i dati.
+/// Su un filesystem che non distingue il caso (APFS, NTFS) rinominare `Nota.md`
+/// in `nota.md` è una rinomina legittima e frequente — la si fa per correggere
+/// una maiuscola — ma la codifica dello spazio dati *conserva il caso*
+/// ([`doc_data::encode`]), quindi i due nomi di cartella sono diversi per Fub e
+/// **la stessa cartella** per il disco. La destinazione «già lì» non era il
+/// residuo di una nota morta: era la sorgente, vista con l'altro nome, e la
+/// `remove_dir_all` la cancellava. Poi la `rename` falliva perché non c'era più
+/// niente da spostare, e l'errore diceva che la migrazione non era riuscita —
+/// non che i dati erano stati distrutti.
+///
+/// La domanda «è un residuo o è la sorgente?» non si può porre a un
+/// `VaultStorage`, che non ha inode da confrontare. Quindi non si pone: la
+/// cartella si sposta **prima** di lato, e ciò che a quel punto sta ancora sulla
+/// destinazione è per costruzione un'altra cartella — la sorgente non è più lì
+/// con nessuno dei due nomi. Il prezzo è una `rename` in più, dentro la stessa
+/// cartella, su un'operazione che avviene una volta per rinomina e solo per i
+/// plugin che hanno dati su quel documento.
+///
+/// Un crash fra le due lascia una cartella `.in-corso`, e quei dati sono persi
+/// comunque: il documento è già stato rinominato, il nome vecchio non lo nomina
+/// più nessuno, e nessuno andrebbe a cercarli lì. La raccolta la legge come lo
+/// spazio di un documento che non c'è — `.in-corso` attraversa `encode`/`decode`
+/// senza cambiare — e al prossimo giro la toglie, che è l'unica cosa che resti
+/// da fare. È la stessa finestra che c'è già fra la rinomina del documento e
+/// questa migrazione.
+fn sposta(
+    storage: &dyn VaultStorage,
+    sorgente: &Utf8Path,
+    destinazione: &Utf8Path,
+) -> std::io::Result<()> {
+    let nome = sorgente.file_name().unwrap_or("spazio");
+    let di_lato = sorgente.with_file_name(format!("{nome}.in-corso"));
+    storage.rename(sorgente, &di_lato)?;
+    if storage.exists(destinazione) {
+        let _ = storage.remove_dir_all(destinazione);
+    }
+    storage.rename(&di_lato, destinazione)
 }
 
 /// Toglie gli spazi per-documento delle note che non esistono più, in ogni
@@ -124,6 +165,19 @@ pub(crate) fn collect(
             // componente del documento, mentre `doc_of` parte da un path
             // relativo e lo isola. Passare di là vorrebbe dire ricomporre un
             // path per farselo smontare subito dopo.
+            // **Si raccoglie solo ciò che questa convenzione ha scritto.**
+            // `decode` è totale — a ogni nome risponde qualcosa — quindi da solo
+            // non distingue una cartella nostra da una che un plugin ha messo
+            // lì: chiedere che il nome sia il proprio `encode` è la domanda
+            // giusta, ed è gratis perché la codifica è reversibile in tutti e
+            // due i versi. E dev'essere una **cartella**: uno spazio
+            // per-documento lo è, e `remove_dir_all` su un file fallirebbe in
+            // silenzio invece di dire che quel file non era da toccare.
+            if entry.stat.kind != EntryKind::Dir
+                || doc_data::encode(&doc_data::decode(nome)) != nome
+            {
+                continue;
+            }
             let doc = DocId::new(doc_data::decode(nome));
             if esiste(&doc) {
                 continue;
@@ -140,4 +194,116 @@ pub(crate) fn collect(
 fn space_dir(root: &Utf8Path, doc: &DocId) -> Utf8PathBuf {
     root.join(doc_data::DOC_SPACE)
         .join(doc_data::encode(doc.as_str()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::{DirEntry, Fusione, MemStorage, Stat};
+    use std::io;
+
+    /// Un supporto che **non distingue il caso**, come APFS e NTFS: due nomi che
+    /// differiscono solo per una maiuscola sono lo stesso posto.
+    ///
+    /// È un doppio e non una macchina, ed è il punto: la macchina su cui il
+    /// difetto vive non è quella su cui gira la CI, quindi la proprietà —
+    /// «rinominare `Nota.md` in `nota.md` non fa sparire i dati» — o si scrive
+    /// contro un supporto così o non si scrive affatto.
+    #[derive(Default)]
+    struct SenzaCaso(MemStorage);
+
+    impl SenzaCaso {
+        fn giu(path: &Utf8Path) -> Utf8PathBuf {
+            Utf8PathBuf::from(path.as_str().to_lowercase())
+        }
+    }
+
+    impl VaultStorage for SenzaCaso {
+        fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
+            self.0.read(&Self::giu(path))
+        }
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+            self.0.write(&Self::giu(path), bytes)
+        }
+        fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
+            self.0.update(&Self::giu(path), fondi)
+        }
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+            self.0.append(&Self::giu(path), bytes)
+        }
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+            self.0.rename(&Self::giu(from), &Self::giu(to))
+        }
+        fn remove(&self, path: &Utf8Path) -> io::Result<()> {
+            self.0.remove(&Self::giu(path))
+        }
+        fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
+            self.0.list(&Self::giu(dir))
+        }
+        fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
+            self.0.stat(&Self::giu(path))
+        }
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+            self.0.remove_empty_dir(&Self::giu(dir))
+        }
+    }
+
+    fn annotazione(storage: &dyn VaultStorage, root: &Utf8Path, doc: &str) -> Option<Vec<u8>> {
+        storage
+            .read(&space_dir(root, &DocId::new(doc)).join("annotazione"))
+            .ok()
+    }
+
+    /// **Correggere una maiuscola non è cancellare i dati.** La destinazione
+    /// «già occupata» era la sorgente stessa, vista con l'altro nome.
+    #[test]
+    fn una_rinomina_di_solo_caso_non_porta_via_lo_spazio_del_documento() {
+        let storage = SenzaCaso::default();
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/prova");
+        let roots = vec![root.clone()];
+        let from = DocId::new("Nota.md");
+        let to = DocId::new("nota.md");
+        storage
+            .write(&space_dir(&root, &from).join("annotazione"), b"i dati")
+            .expect("scritto");
+
+        let errori = migrate(&storage, &roots, &from, &to);
+
+        assert!(errori.is_empty(), "{errori:?}");
+        assert_eq!(
+            annotazione(&storage, &root, "nota.md").as_deref(),
+            Some(&b"i dati"[..]),
+            "i dati sono ancora lì, sotto il nome nuovo"
+        );
+    }
+
+    /// E il caso per cui la pulizia della destinazione esiste resta chiuso: una
+    /// cartella di una nota che non c'è più non blocca la migrazione.
+    #[test]
+    fn un_residuo_sulla_destinazione_si_toglie_e_non_ferma_il_trasloco() {
+        let storage = MemStorage::new();
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/prova");
+        let roots = vec![root.clone()];
+        let from = DocId::new("a.md");
+        let to = DocId::new("b.md");
+        storage
+            .write(&space_dir(&root, &from).join("annotazione"), b"i dati di a")
+            .expect("scritto");
+        storage
+            .write(&space_dir(&root, &to).join("annotazione"), b"un residuo")
+            .expect("scritto");
+
+        let errori = migrate(&storage, &roots, &from, &to);
+
+        assert!(errori.is_empty(), "{errori:?}");
+        assert_eq!(
+            annotazione(&storage, &root, "b.md").as_deref(),
+            Some(&b"i dati di a"[..]),
+            "il residuo ha ceduto il posto"
+        );
+        assert!(
+            annotazione(&storage, &root, "a.md").is_none(),
+            "e il nome vecchio non nomina più niente"
+        );
+    }
 }

@@ -113,6 +113,56 @@
       "out": "empty"
     },
     {
+      "path": "C:/Users/x/segreto.md",
+      "naming": "existing",
+      "out": "traversal"
+    },
+    {
+      "path": "C:/Users/x/segreto.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "c:nota.md",
+      "naming": "existing",
+      "out": "traversal"
+    },
+    {
+      "path": "c:nota.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "C:",
+      "naming": "existing",
+      "out": "traversal"
+    },
+    {
+      "path": "C:",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "note/C:/dentro.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "note/C:/dentro.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
+      "path": "CC:/dentro.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "CC:/dentro.md",
+      "naming": "new",
+      "out": "reserved"
+    },
+    {
       "path": "Progetti/Alpha.md",
       "naming": "existing",
       "out": null
@@ -225,7 +275,7 @@
     {
       "path": "a:b.md",
       "naming": "existing",
-      "out": null
+      "out": "traversal"
     },
     {
       "path": "a:b.md",
@@ -333,16 +383,6 @@
       "out": "hidden"
     },
     {
-      "path": ".fub/roba.md",
-      "naming": "existing",
-      "out": null
-    },
-    {
-      "path": ".fub/roba.md",
-      "naming": "new",
-      "out": "hidden"
-    },
-    {
       "path": "Progetti/.nascosta.md",
       "naming": "existing",
       "out": null
@@ -351,6 +391,86 @@
       "path": "Progetti/.nascosta.md",
       "naming": "new",
       "out": "hidden"
+    },
+    {
+      "path": ".fub/roba.md",
+      "naming": "existing",
+      "out": "machine"
+    },
+    {
+      "path": ".fub/roba.md",
+      "naming": "new",
+      "out": "machine"
+    },
+    {
+      "path": ".fub",
+      "naming": "existing",
+      "out": "machine"
+    },
+    {
+      "path": ".fub",
+      "naming": "new",
+      "out": "machine"
+    },
+    {
+      "path": ".fub/settings.json",
+      "naming": "existing",
+      "out": "machine"
+    },
+    {
+      "path": ".fub/settings.json",
+      "naming": "new",
+      "out": "machine"
+    },
+    {
+      "path": ".trash/Nota.2026-07-24T15-30-00.md",
+      "naming": "existing",
+      "out": "machine"
+    },
+    {
+      "path": ".trash/Nota.2026-07-24T15-30-00.md",
+      "naming": "new",
+      "out": "machine"
+    },
+    {
+      "path": "Progetti/.fub/nota.md",
+      "naming": "existing",
+      "out": "machine"
+    },
+    {
+      "path": "Progetti/.fub/nota.md",
+      "naming": "new",
+      "out": "machine"
+    },
+    {
+      "path": ".fubbo/nota.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": ".fubbo/nota.md",
+      "naming": "new",
+      "out": "hidden"
+    },
+    {
+      "path": "fub/nota.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "fub/nota.md",
+      "naming": "new",
+      "out": null
+    },
+    {
+      "path": "Progetti/trash/nota.md",
+      "naming": "existing",
+      "out": null
+    },
+    {
+      "path": "Progetti/trash/nota.md",
+      "naming": "new",
+      "out": null
     },
     {
       "path": "CONtratto.md",

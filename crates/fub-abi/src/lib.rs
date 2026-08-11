@@ -84,7 +84,7 @@ pub use custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
     SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
-pub use edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit, WriteBase};
+pub use edit::{AppliedEdit, EditReport, EditRequest, Fnv1a, Revision, TextEdit, WriteBase};
 pub use error::{FormatError, PluginError};
 pub use event::{
     Actor, BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Notice, Origin, Severity,
