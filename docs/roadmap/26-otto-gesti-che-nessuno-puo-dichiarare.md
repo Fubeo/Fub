@@ -867,6 +867,21 @@ metà che si dimentica»*) e con il suo presidio (`ui/a11y.test.ts:221-239`). Il
 difetto nasce **dall'averne due**, che è una cosa che nessuno dei due presidi
 prova: entrambi i banchi di `a11y.test.ts` aprono **una sola** trappola.
 
+⚠️ **Il censimento qui sopra è quello di `3d6df0e`, e la metà shell non è più
+così.** Il difetto 0149 — la metà misurata di questa voce — è stato riparato:
+l'ordine della tastiera adesso è **dichiarato**, e la regola è che comanda
+l'ultima trappola aperta (`ui/a11y.ts`, con la pila delle trappole aperte); le
+due superfici a tutto schermo che intrappolano il fuoco stanno sullo stesso
+piano `--z-modal`, la regola che le lega sta scritta accanto ai piani in
+`theme/tokens.css`, e `--z-overlay` — il piano che zero regole citavano — non
+c'è più. La riparazione è la sostanza della **(a)** senza il parametro: l'ordine
+si deduce dall'apertura invece di farlo scegliere a ogni chiamante, che è la
+stessa ragione per cui la trappola sta in un posto solo. **Questa voce resta
+aperta**, e la domanda che le resta è quella che la (a) non tocca: se un livello
+sia un fatto che una superficie di terzi **dichiara** — la **(b)**, il campo in
+fondo a `view-spec` — o qualcosa che il terzo prende come gli capita. Chi la
+riprende rimisuri la §2 prima di usarla.
+
 ---
 
 ### 26.5 Il menu contestuale: la superficie c'è, il bersaglio del clic no

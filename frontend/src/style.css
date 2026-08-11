@@ -906,10 +906,18 @@ button:hover {
    restano sotto sono i pezzi *dentro* — la casella, la lista, il piano — che
    una modale nuova riusa se le servono e ignora se non le servono. */
 
+/* Il piano è quello delle modali e non quello dei popover, che è dove stava:
+   questa superficie intrappola il fuoco, e una che intrappola il fuoco dipinta
+   *sotto* un'altra manda a scrivere alla cieca dentro qualcosa che non si vede
+   (difetto 0149). La regola sta scritta accanto ai piani, in `theme/tokens.css`.
+   Sullo stesso piano di `#views-modal`, e fra due dello stesso piano decide
+   l'ordine nel DOM: queste si appendono al `body` quando si aprono, quindi
+   l'ultima aperta è anche l'ultima dipinta — che è la stessa regola con cui
+   `intrappolaFuoco` sceglie chi comanda. */
 .modale {
   position: fixed;
   inset: 0;
-  z-index: var(--z-popover);
+  z-index: var(--z-modal);
   display: flex;
   justify-content: center;
   align-items: flex-start;

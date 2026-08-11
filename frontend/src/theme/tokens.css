@@ -98,12 +98,16 @@
   /* I piani. Erano sei numeri sparsi fra 50 e 90, e l'ordine fra loro era
      leggibile solo confrontandoli a mano in file diversi. Qui l'ordine è la
      lista: chi ne aggiunge uno vede subito sopra e sotto cosa passa. */
-  /* `--z-overlay` e `--z-menu` valgono lo stesso numero, ed è voluto: oggi il
-     grafo e il menu contestuale stanno sullo stesso piano, e nessuno dei due si
-     apre sopra l'altro. Sono però due ruoli, non uno — il giorno che il grafo
-     avrà un menu contestuale suo, separarli è cambiare un numero qui invece che
-     scoprire in quale dei due file stava scritto. */
-  --z-overlay: 50;
+  /* La regola che lega i piani a ciò che fanno: **una superficie che intrappola
+     il fuoco sta su `--z-modal`**, e sotto di lei non ci va nessun'altra che lo
+     intrappoli. Chi prende il fuoco deve essere chi si vede, o si scrive alla
+     cieca dentro qualcosa dipinto sotto; e a decidere chi comanda fra due
+     trappole aperte è `ui/a11y.ts`, che dà il tasto all'**ultima aperta** — sullo
+     stesso piano, l'ultima aperta è anche l'ultima dipinta (difetto 0149). */
+  /* `--z-overlay` non c'è più: valeva 50 come `--z-menu` per il grafo, che era
+     una finestra sopra le cose e adesso è un riquadro come gli altri (`.pane-view
+     .graph-canvas`). Zero regole lo citavano, e un piano che non tiene su niente
+     è una riga che il prossimo legge come se dicesse dov'è qualcosa. */
   --z-menu: 50;
   --z-picker: 60;
   --z-popover: 70;
