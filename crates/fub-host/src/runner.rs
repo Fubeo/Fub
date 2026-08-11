@@ -167,6 +167,15 @@ impl Flags {
 /// continuare vorrebbe dire spegnere un componente mentre un suo job è dentro.
 const VELENO: &str = "il conto dei job in volo è avvelenato";
 
+/// Come si dice a un job che non parte, e perché.
+///
+/// Una funzione e non due frasi uguali in due punti: la stessa riga la scrive
+/// chi rifiuta un job intero e chi ne calcola l'esito senza eseguirlo, e sono lo
+/// stesso fatto visto da due altezze.
+fn rifiuto(job: &PendingJob, why: &str) -> PluginError {
+    PluginError::Cancelled(format!("il job `{}` {why}", job.spec.job).into())
+}
+
 /// **Chi è dentro il codice di un bundle adesso, e chi non ci deve più
 /// entrare.**
 ///
@@ -700,6 +709,28 @@ impl Shared {
     /// regola che la [0028](../../../docs/decisions/0028-come-un-componente-smette.md)
     /// ha già scritto per i job di chi si disattiva.
     fn run(&self, job: PendingJob) -> Result<(), PluginError> {
+        let outcome = self.esito(&job);
+        // Le bandiere si puliscono dopo l'esito e **prima** della riconsegna,
+        // ma il loro guasto non la scavalca: un `?` qui buttava via un esito
+        // che c'era già — il job aveva girato, la risposta era in mano — per un
+        // lucchetto che con quella risposta non c'entra niente. Si riconsegna,
+        // e poi lo si dice.
+        let bandiere = self.forget(job.id);
+        self.workspace
+            .write()?
+            .complete_job(job.id, job.spec.job, outcome);
+        bandiere
+    }
+
+    /// **Ciò che questo job risponde, comunque vada** — anche quando ciò che va
+    /// storto non è il job ma il runner.
+    ///
+    /// È qui che sta la differenza fra «il job non è partito» e «il job non
+    /// esiste più»: un lucchetto avvelenato, un componente che si sta
+    /// spegnendo, un bundle smontato non sono un motivo per sparire, sono la
+    /// **risposta**. Sparire lo è solo per il workspace, che è il canale stesso
+    /// su cui la risposta viaggia.
+    fn esito(&self, job: &PendingJob) -> Result<serde_json::Value, PluginError> {
         let flag = self.flag(job.id)?;
         // **Ci si annuncia prima di prendere il corpo**, e il guard si dichiara
         // per primo perché cada per **ultimo**: fra queste due righe ci sta chi
@@ -709,14 +740,13 @@ impl Shared {
         // ordine inverso sveglierebbe chi spegne con una copia ancora in giro,
         // che è il difetto scritto al contrario.
         let Some(_dentro) = self.entra(&job.plugin, job.id, &flag) else {
-            self.refuse(job, "non parte: il suo componente si sta spegnendo")?;
-            return Ok(());
+            return Err(rifiuto(job, "non parte: il suo componente si sta spegnendo"));
         };
         // Il corpo lo tiene il registry, e lo si prende **senza tenere il suo
         // lock** per la durata del job: chi chiude deve poterci passare.
         let plugin = self.bundles.read()?.body(&job.plugin);
 
-        let outcome = match plugin {
+        match plugin {
             None => Err(PluginError::Internal(
                 format!(
                     "`{}` non è un bundle montato: il job `{}` non ha un corpo",
@@ -750,23 +780,21 @@ impl Shared {
                     || plugin.run_job(&job.spec.job, job.spec.payload.clone(), &mut host),
                 )
             }
-        };
-
-        self.forget(job.id)?;
-        self.workspace
-            .write()?
-            .complete_job(job.id, job.spec.job, outcome);
-        Ok(())
+        }
     }
 
     /// Riconsegna un job **senza eseguirlo**: è stato chiesto, e chi lo ha
     /// chiesto aspetta un `JobDone`.
     fn refuse(&self, job: PendingJob, why: &str) -> Result<PluginError, PluginError> {
-        let refusal = PluginError::Cancelled(format!("il job `{}` {why}", job.spec.job).into());
-        self.forget(job.id)?;
+        let refusal = rifiuto(&job, why);
+        // Come in `run`: le bandiere prima, ma il loro guasto **dopo** la
+        // riconsegna. Chi rifiuta è già dentro un guaio, ed è il momento in cui
+        // un esito perso non lo nota nessuno.
+        let bandiere = self.forget(job.id);
         self.workspace
             .write()?
             .complete_job(job.id, job.spec.job, Err(refusal.clone()));
+        bandiere?;
         Ok(refusal)
     }
 
@@ -896,21 +924,68 @@ impl Shared {
                 }
                 continue;
             }
-            self.claim(&jobs)?;
-            for job in jobs {
-                // Il controllo è **dentro** il ciclo e non solo in cima: un
-                // drenaggio prende tutta la coda, e senza questa riga chiudere
-                // vorrebbe dire eseguire fino in fondo tutto ciò che un thread
-                // si è trovato in mano. Chi chiude aspetta chi ha *già*
-                // cominciato, non chi non è ancora partito.
-                if self.stopping.load(Ordering::Acquire) {
-                    self.refuse(job, "non parte: il vault si sta chiudendo")?;
-                    continue;
-                }
-                self.run(job)?;
-            }
+            self.lotto(jobs)?;
         }
         Ok(())
+    }
+
+    /// Un lotto **già drenato**, fino in fondo o fino al primo guasto.
+    ///
+    /// Il lotto è la parte fragile e non il singolo job: `take_pending_jobs`
+    /// svuota la coda, quindi da questa riga in poi quei job non stanno più da
+    /// nessuna parte tranne che in questo `Vec`. Un `?` in mezzo al ciclo li
+    /// portava via con sé — chi li aveva chiesti restava ad aspettare un
+    /// `JobDone` che non poteva più arrivare, perché `refuse_pending` alla
+    /// chiusura guarda **la coda**, non le mani di questo thread — e il ramo che
+    /// lo faceva è precisamente quello che si imbocca quando qualcosa è già
+    /// andato storto (difetto 0203).
+    ///
+    /// Il guasto ferma il pool come prima: ciò che cambia è che se ne va dopo
+    /// aver dato un esito a chi era in mano, e non prima.
+    fn lotto(&self, jobs: Vec<PendingJob>) -> Result<(), PluginError> {
+        // La presa in carico è dentro il conto e non prima: se fallisce lei il
+        // lotto è già fuori dalla coda uguale, e il posto dove va a finire è lo
+        // stesso di ogni altro guasto. Una via d'uscita sola, che è anche il
+        // modo in cui questa riparazione ha un presidio: due drenaggi scritti
+        // due volte sono due, e uno dei due non lo prova nessuno.
+        let mut guasto = self.claim(&jobs).err();
+        let mut resto = jobs.into_iter();
+        while guasto.is_none() {
+            let Some(job) = resto.next() else { break };
+            // Il controllo è **dentro** il ciclo e non solo in cima: un
+            // drenaggio prende tutta la coda, e senza questa riga chiudere
+            // vorrebbe dire eseguire fino in fondo tutto ciò che un thread
+            // si è trovato in mano. Chi chiude aspetta chi ha *già*
+            // cominciato, non chi non è ancora partito.
+            let fatto = if self.stopping.load(Ordering::Acquire) {
+                self.refuse(job, "non parte: il vault si sta chiudendo")
+                    .map(|_| ())
+            } else {
+                self.run(job)
+            };
+            guasto = fatto.err();
+        }
+        match guasto {
+            // **L'unica via d'uscita che perde qualcosa**, e non perde niente:
+            // ciò che resta in mano riceve il proprio esito prima che questo
+            // thread se ne vada.
+            Some(e) => {
+                self.abbandona(resto);
+                Err(e)
+            }
+            None => Ok(()),
+        }
+    }
+
+    /// L'esito di chi non partirà: il pool si è fermato, e questi erano in mano.
+    ///
+    /// Il rifiuto può fallire a sua volta — se ad avvelenarsi è il workspace non
+    /// c'è più nessun canale su cui rispondere, ed è il limite che la 0120
+    /// dichiara — ma è l'ultima cosa che si prova, non la prima che si salta.
+    fn abbandona(&self, jobs: impl IntoIterator<Item = PendingJob>) {
+        for job in jobs {
+            let _ = self.refuse(job, "non parte: il pool si è fermato");
+        }
     }
 }
 
@@ -1372,6 +1447,102 @@ mod tests {
             1,
             "la fetta ha letto e parsato, ma non ha applicato niente"
         );
+    }
+
+    /// **Un job che il runner non riesce nemmeno a preparare ha comunque un
+    /// esito** (0028, e il difetto 0203).
+    ///
+    /// La bandiera nasce prima del corpo, e prenderla vuol dire prendere un
+    /// lucchetto che con la risposta di questo job non c'entra niente: se è
+    /// avvelenato il job non parte, ma il canale su cui rispondere — il
+    /// workspace — è vivo e ha tutto ciò che serve. Un `?` lì buttava via il
+    /// job insieme al guasto, e chi lo aveva chiesto aspettava un `JobDone`
+    /// che non sarebbe mai arrivato.
+    #[test]
+    fn un_job_che_non_si_riesce_a_preparare_ha_comunque_un_esito() {
+        let (_dir, shared, _id) = un_vault_da_indicizzare();
+        let ascolto = shared.workspace.read().unwrap().bus().subscribe();
+        avvelena(&shared.flags);
+
+        let esito = shared.run(un_job(7));
+
+        assert!(
+            esito.is_err(),
+            "il veleno delle bandiere deve restare visibile: è ciò che ferma il pool"
+        );
+        assert_eq!(
+            conclusi(&ascolto),
+            vec!["lavoro-7".to_string()],
+            "il job è sparito senza dire niente: chi lo ha chiesto aspetta un \
+             `JobDone` che non arriverà, e il workspace era vivo"
+        );
+    }
+
+    /// **Un lotto già drenato non sparisce insieme al pool che si ferma.**
+    ///
+    /// `take_pending_jobs` svuota la coda: da lì in poi quei job stanno solo
+    /// nelle mani di questo thread, e `refuse_pending` alla chiusura guarda la
+    /// coda. Un `?` in mezzo al ciclo li portava via tutti — non solo quello su
+    /// cui si è inciampato — e succedeva nel ramo che si imbocca quando
+    /// qualcosa è già andato storto, cioè quando nessuno sta guardando.
+    #[test]
+    fn un_lotto_gia_drenato_non_sparisce_col_pool() {
+        let (_dir, shared, _id) = un_vault_da_indicizzare();
+        let ascolto = shared.workspace.read().unwrap().bus().subscribe();
+        avvelena(&shared.flags);
+
+        let esito = shared.lotto(vec![un_job(1), un_job(2), un_job(3)]);
+
+        assert!(esito.is_err(), "il guasto che ferma il pool resta un guasto");
+        assert_eq!(
+            conclusi(&ascolto),
+            vec![
+                "lavoro-1".to_string(),
+                "lavoro-2".to_string(),
+                "lavoro-3".to_string()
+            ],
+            "il lotto è uscito dalla coda e non è arrivato da nessuna parte: \
+             chi aveva chiesto quei job li aspetta per sempre"
+        );
+    }
+
+    /// Un job da eseguire, di un componente che non esiste: qui non si guarda
+    /// cosa risponde: si guarda **se** risponde.
+    fn un_job(id: u64) -> PendingJob {
+        PendingJob {
+            id: JobId(id),
+            plugin: "prova.componente".to_string(),
+            spec: fub_abi::traits::JobSpec {
+                job: format!("lavoro-{id}"),
+                payload: serde_json::Value::Null,
+            },
+        }
+    }
+
+    /// I job che hanno ricevuto un esito, nell'ordine in cui l'hanno ricevuto.
+    fn conclusi(ascolto: &fub_kernel::bus::Subscription) -> Vec<String> {
+        let mut fatti = Vec::new();
+        while let Ok(notice) = ascolto.try_recv() {
+            if let fub_abi::Event::JobDone { job, .. } = notice.event {
+                fatti.push(job);
+            }
+        }
+        fatti
+    }
+
+    /// Avvelena una custodia come la avvelena la vita: un thread che pania
+    /// tenendo il prestito **esclusivo**. Il panico è di proposito e non deve
+    /// sporcare l'output del banco.
+    fn avvelena<T: Send + Sync + 'static>(c: &Custodia<T>) {
+        let copia = c.clone();
+        let hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let _ = std::thread::spawn(move || {
+            let _g = copia.write().expect("viva prima del misfatto");
+            panic!("a metà");
+        })
+        .join();
+        std::panic::set_hook(hook);
     }
 
     /// Un vault seminato, scansionato e con la sua identità di job: il punto in
