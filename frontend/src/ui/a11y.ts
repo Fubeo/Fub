@@ -84,6 +84,14 @@ export function nonAttivabile(el: HTMLElement): void {
 /// `tabindex="-1"` è escluso di proposito: vuol dire «raggiungibile da un
 /// programma, non dal tab», ed è esattamente ciò che il contenitore di una
 /// modale usa per potersi prendere il fuoco senza entrare nel giro.
+/// Le trappole aperte, dalla più vecchia alla più recente.
+///
+/// È di modulo perché la regola che tiene è fra le trappole e non dentro una:
+/// «comanda l'ultima» non si può scrivere in una superficie che le altre non le
+/// vede. Si svuota da sé — ogni trappola si toglie quando la si scioglie — e a
+/// shell ferma è vuota.
+const pila: object[] = [];
+
 export function fuocabili(root: HTMLElement): HTMLElement[] {
   const selettore =
     'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
@@ -111,8 +119,36 @@ export function fuocabili(root: HTMLElement): HTMLElement[] {
 /// in una `Vita` (`vita.aggiungi(intrappolaFuoco(...))`) invece che in una
 /// variabile che qualcuno deve ricordarsi di chiamare — è così che lo prendono
 /// il menu contestuale e il selettore di icona.
+///
+/// **Quando ce ne sono due aperte, comanda l'ultima** (difetto 0149). Prima non
+/// comandava nessuna: gli ascoltatori stanno tutti su `document` in cattura,
+/// quindi partivano *tutti*, nell'ordine in cui erano stati attaccati — cioè il
+/// **primo** ad aprirsi si riprendeva il tab, e Escape chiudeva due superfici
+/// con un tasto solo. Chi prende il fuoco non era chi sta sopra: era chi era
+/// arrivato prima, che è l'esatto contrario di ciò che vede chi guarda lo
+/// schermo. La pila qui sotto è quella regola detta una volta: le superfici si
+/// aprono e si chiudono a nido — un selettore di icona sopra un menu, la palette
+/// sopra la modale delle view — e a nido l'ultima aperta è quella che si sta
+/// guardando. Le altre non si sciolgono: **stanno ferme**, e tornano a comandare
+/// quando quella sopra se ne va.
+///
+/// Che l'ultima aperta sia anche quella dipinta sopra non è un caso da sperare:
+/// una superficie che intrappola il fuoco sta sul piano `--z-modal`, ed è scritto
+/// in `theme/tokens.css` accanto ai piani.
 export function intrappolaFuoco(root: HTMLElement, chiudi: () => void): Smontaggio {
   const vita = apriVita();
+  // Il segnaposto di *questa* trappola nella pila. Un oggetto vuoto basta: serve
+  // solo la sua identità, e due trappole sulla stessa `root` sono due.
+  const io = {};
+  pila.push(io);
+  vita.aggiungi(() => {
+    // `filter`, non `pop`: chi apre e chi chiude non sono obbligati a farlo in
+    // ordine — una superficie sotto può chiudersi per conto suo (un comando, un
+    // documento che sparisce) mentre sopra ce n'è un'altra, e togliere la cima
+    // lascerebbe a comandare una trappola che non c'è più.
+    const dove = pila.lastIndexOf(io);
+    if (dove >= 0) pila.splice(dove, 1);
+  });
   const precedente = document.activeElement as HTMLElement | null;
   // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
   // chiudere una modale rimanda chi naviga da tastiera all'inizio del
@@ -124,6 +160,8 @@ export function intrappolaFuoco(root: HTMLElement, chiudi: () => void): Smontagg
   });
 
   const suTasto = (e: KeyboardEvent) => {
+    // Aperta ma non in cima: c'è una superficie sopra questa, e il tasto è suo.
+    if (pila[pila.length - 1] !== io) return;
     if (e.key === "Escape") {
       e.preventDefault();
       chiudi();

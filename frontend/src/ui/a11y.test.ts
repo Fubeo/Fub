@@ -31,6 +31,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import html from "../../index.html?raw";
 import samples from "../__fixtures__/mirror-samples.json";
 import type { UiNode } from "../host/contract";
+import css from "../style.css?raw";
 import { nomeAccessibile, raccontaProblemi, verificaAccessibilita } from "./a11y-check";
 import { attivabile, intrappolaFuoco, nonAttivabile } from "./a11y";
 import { mountTree } from "./node";
@@ -255,5 +256,133 @@ describe("una modale non lascia uscire il fuoco", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     expect(document.activeElement?.id).toBe("b");
     sciogli();
+  });
+});
+
+describe("due modali aperte: comanda l'ultima", () => {
+  /// Due superfici che intrappolano il fuoco insieme — la palette aperta con la
+  /// sua scorciatoia mentre la modale delle view è già lì, un selettore di icona
+  /// aperto da un menu contestuale — e la domanda è quale delle due prende il
+  /// tasto. Prima lo prendevano **tutte e due**: gli ascoltatori stanno su
+  /// `document` in cattura, quindi partivano nell'ordine in cui erano stati
+  /// attaccati e a vincere era la più vecchia, cioè quella dipinta sotto
+  /// (difetto 0149).
+  function apriDue() {
+    document.body.innerHTML = `
+      <button id="fuori">Apri</button>
+      <div id="sotto" tabindex="-1"><button id="s1">S1</button><button id="s2">S2</button></div>
+      <div id="sopra" tabindex="-1"><button id="p1">P1</button><button id="p2">P2</button></div>`;
+    const conti = { sotto: 0, sopra: 0 };
+    const sciogliSotto = intrappolaFuoco(document.querySelector<HTMLElement>("#sotto")!, () => {
+      conti.sotto += 1;
+    });
+    const sciogliSopra = intrappolaFuoco(document.querySelector<HTMLElement>("#sopra")!, () => {
+      conti.sopra += 1;
+    });
+    return { conti, sciogliSotto, sciogliSopra };
+  }
+
+  it("il tab non passa nemmeno per la superficie di sotto", () => {
+    const { sciogliSotto, sciogliSopra } = apriDue();
+    expect(document.activeElement?.id, "il fuoco entra nell'ultima aperta").toBe("p1");
+
+    // Dove il fuoco è *passato*, non solo dove si è fermato: con due trappole
+    // che si sentono lo stesso tasto il giro finiva comunque al posto giusto —
+    // per un pelo, perché l'ultima attaccata parla per ultima — ma la prima nel
+    // frattempo aveva tirato il fuoco dentro di sé, e un `focus` sulla
+    // superficie di sotto è un evento che qualcuno riceve: la riga che si apre,
+    // il pannello che si ridisegna, il lettore di schermo che annuncia una cosa
+    // che non si sta guardando.
+    const passaggi: string[] = [];
+    for (const id of ["s1", "s2"]) {
+      document
+        .querySelector<HTMLElement>(`#${id}`)!
+        .addEventListener("focus", () => passaggi.push(id));
+    }
+
+    document.querySelector<HTMLElement>("#p2")!.focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    expect(document.activeElement?.id, "il giro si chiude dentro quella sopra").toBe("p1");
+    expect(
+      passaggi,
+      "il tab ha toccato la superficie di sotto: comanda anche chi si è aperto " +
+        "prima, e il fuoco attraversa una superficie che sullo schermo sta sotto " +
+        "un'altra",
+    ).toEqual([]);
+
+    sciogliSopra();
+    sciogliSotto();
+  });
+
+  it("Escape ne chiude una sola, e quella sotto torna a comandare", () => {
+    const { conti, sciogliSotto, sciogliSopra } = apriDue();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(
+      [conti.sopra, conti.sotto],
+      "un solo Escape ha chiuso due superfici: le trappole aperte si sentono " +
+        "tutte lo stesso tasto",
+    ).toEqual([1, 0]);
+
+    // Chi ha chiesto la chiusura è chi la esegue: qui lo fa il banco, come lo
+    // farebbe il pannello che l'ha aperta.
+    sciogliSopra();
+    document.querySelector<HTMLElement>("#s2")!.focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    expect(document.activeElement?.id, "chiusa quella sopra, comanda di nuovo quella sotto").toBe(
+      "s1",
+    );
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(conti.sotto, "e adesso Escape è suo").toBe(1);
+    sciogliSotto();
+  });
+
+  it("una che si chiude fuori ordine non lascia a comandare un fantasma", () => {
+    // Le superfici non si chiudono per forza in ordine: quella di sotto può
+    // andarsene per conto suo — un comando, un documento che sparisce — mentre
+    // sopra ce n'è ancora una.
+    const { conti, sciogliSotto, sciogliSopra } = apriDue();
+    sciogliSotto();
+
+    document.querySelector<HTMLElement>("#p2")!.focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    expect(document.activeElement?.id, "quella rimasta comanda ancora").toBe("p1");
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(conti.sopra).toBe(1);
+    sciogliSopra();
+  });
+});
+
+describe("i piani di chi intrappola il fuoco", () => {
+  /// La metà dipinta della stessa regola. Il tasto lo dà `intrappolaFuoco`
+  /// all'ultima aperta, ma se quell'ultima è dipinta sotto un'altra superficie
+  /// modale il tasto arriva dove l'occhio non è: le due superfici a tutto schermo
+  /// che intrappolano il fuoco — `.modale` (palette, ricerca nella nota, quick
+  /// switcher) e `#views-modal` — stanno quindi sullo **stesso** piano, e fra
+  /// due dello stesso piano decide l'ordine nel DOM, che è di nuovo l'ordine di
+  /// apertura (difetto 0149).
+  function pianoDi(selettore: string): string | null {
+    // I commenti via per primi, e non dentro il selettore: una virgola dentro un
+    // commento spezzerebbe l'elenco dei selettori prima di poterlo pulire.
+    const nudo = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const blocchi = [...nudo.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+    for (const blocco of blocchi.reverse()) {
+      const selettori = blocco[1].split(",").map((s) => s.trim());
+      if (!selettori.includes(selettore)) continue;
+      const z = /z-index\s*:\s*var\(\s*(--[\w-]+)\s*\)/.exec(blocco[2]);
+      if (z) return z[1]!;
+    }
+    return null;
+  }
+
+  it("le superfici che intrappolano il fuoco stanno sul piano delle modali", () => {
+    expect(
+      [pianoDi(".modale"), pianoDi("#views-modal")],
+      "una superficie che intrappola il fuoco è dipinta sotto un'altra: chi " +
+        "prende il tasto non è chi si vede, e chi naviga da tastiera scrive " +
+        "dentro qualcosa che sullo schermo sta sotto",
+    ).toEqual(["--z-modal", "--z-modal"]);
   });
 });
