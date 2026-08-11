@@ -313,10 +313,93 @@ struct Index {
 /// tutti i `Vec`, per poi buttarla subito dopo. Il formato su disco è lo stesso
 /// campo per campo: `#[serde(rename)]` non serve, perché i nomi dei campi
 /// coincidono già.
+///
+/// `docs` è generico e non un `&BTreeMap` perché i due chiamanti hanno in mano
+/// due cose diverse: [`VersionStore::in_lotto`] ha l'anagrafe viva, e
+/// [`Inner::applica`] ha l'anagrafe viva **più un piano** che non è ancora
+/// stato installato ([`DocsDelPiano`]).
 #[derive(Serialize)]
-struct IndexDaScrivere<'a> {
+struct IndexDaScrivere<D: Serialize> {
     schema_version: SchemaVersion,
-    docs: &'a BTreeMap<String, DocVersions>,
+    docs: D,
+}
+
+/// Che cosa una scrittura cambia nell'anagrafe: **le chiavi che tocca**.
+///
+/// È l'unità del piano, e ha due varianti perché una scrittura può far sparire
+/// una chiave — [`VersionStore::rename`] la fa — e «assente dal piano» vuol già
+/// dire «non toccata». Un `Option` le confonderebbe.
+enum Voce {
+    /// Come sarà quel documento se il disco accetta.
+    Messa(DocVersions),
+    /// Quel documento non ci sarà più.
+    Tolta,
+}
+
+/// Il piano: le sole chiavi toccate, con ciò che diranno.
+///
+/// **Non** è una copia dell'anagrafe. Lo era: ogni scrittura cominciava con un
+/// `docs.clone()`, cioè copiava la mappa che nomina *tutti* i documenti del
+/// vault per cambiarne una voce sola, e questo rendeva ogni fotografia
+/// proporzionale al vault intero — quadratico nella passata di apertura (3,5 s
+/// su 5 000 note, 79 s su 20 000) e lineare in ogni salvataggio a vault aperto
+/// (8,5 ms contro 0,09 ms su 16 000 note, sotto il prestito esclusivo). Quel
+/// che serviva davvero della copia non era la mappa: era **non installare
+/// niente finché il disco non ha accettato**, e per quello basta un elenco di
+/// una chiave (due nel rename). Vedi [`Inner::applica`], dove la disciplina è
+/// scritta per intero.
+type Piano = BTreeMap<String, Voce>;
+
+/// Il piano di una chiave sola: la forma di tutte le scritture tranne il
+/// rename.
+fn piano_di(id: &DocId, doc: DocVersions) -> Piano {
+    Piano::from([(id.to_string(), Voce::Messa(doc))])
+}
+
+/// L'anagrafe **come sarà** se il disco accetta il piano, senza costruirla.
+///
+/// Serve a scrivere `versions.json`, che nomina tutti i documenti e quindi
+/// costa O(N) byte per definizione: il punto non è scrivere di meno, è non
+/// **copiare** N voci per scriverne N. Le due mappe sono ordinate sulla stessa
+/// chiave, quindi si fondono scorrendole in parallelo, e ciò che il piano
+/// dichiara [`Voce::Tolta`] semplicemente non esce.
+struct DocsDelPiano<'a> {
+    vivi: &'a BTreeMap<String, DocVersions>,
+    piano: &'a Piano,
+}
+
+impl Serialize for DocsDelPiano<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        // La lunghezza non si dichiara perché non si conosce senza contare, e
+        // contare vorrebbe dire scorrere due volte: JSON non ne ha bisogno.
+        let mut mappa = serializer.serialize_map(None)?;
+        let mut vivi = self.vivi.iter().peekable();
+        let mut toccati = self.piano.iter().peekable();
+        loop {
+            let ordine = match (vivi.peek(), toccati.peek()) {
+                (None, None) => break,
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (Some((vivo, _)), Some((toccato, _))) => vivo.as_str().cmp(toccato.as_str()),
+            };
+            if ordine == std::cmp::Ordering::Less {
+                let (chiave, doc) = vivi.next().expect("c'è, l'ho appena guardato");
+                mappa.serialize_entry(chiave, doc)?;
+                continue;
+            }
+            // Il piano ha l'ultima parola sulla chiave che nomina: se è anche
+            // viva, la voce viva si salta.
+            if ordine == std::cmp::Ordering::Equal {
+                vivi.next();
+            }
+            let (chiave, voce) = toccati.next().expect("c'è, l'ho appena guardato");
+            if let Voce::Messa(doc) = voce {
+                mappa.serialize_entry(chiave, doc)?;
+            }
+        }
+        mappa.end()
+    }
 }
 
 /// Ciò che una cartella dello store dice di sé. Basta a ricostruire l'indice.
@@ -504,11 +587,9 @@ impl VersionStore {
                 // il tombstone se ne va comunque, o "il vault al tempo T" la
                 // crederebbe cancellata per sempre.
                 if doc.deleted_at.is_some() {
-                    let mut piano = inner.docs.clone();
-                    if let Some(doc) = piano.get_mut(id.as_str()) {
-                        doc.deleted_at = None;
-                    }
-                    inner.applica(piano, id, host)?;
+                    let mut risorto = doc.clone();
+                    risorto.deleted_at = None;
+                    inner.applica(piano_di(id, risorto), id, host)?;
                 }
                 return Ok(None);
             }
@@ -525,8 +606,7 @@ impl VersionStore {
             hash,
             size: source.len() as u64,
         };
-        let mut piano = inner.docs.clone();
-        let doc = piano.entry(id.to_string()).or_default();
+        let mut doc = inner.docs.get(id.as_str()).cloned().unwrap_or_default();
         doc.dir = dir_doc;
         doc.versions.push(version);
         // Una nota che torna in vita non è più morta: il tombstone se ne va, o
@@ -540,8 +620,8 @@ impl VersionStore {
         // e un indice vecchio che li nomina tutti: si perde la potatura, non
         // una versione. Stessa forma di `rename`, stessa ragione di `trasloca`
         // — vedi il commento là.
-        let potati = pota(&mut piano, id, host);
-        inner.applica(piano, id, host)?;
+        let potati = pota(&mut doc, id, host);
+        inner.applica(piano_di(id, doc), id, host)?;
         if !potati.is_empty() {
             tracing::info!(
                 target: "fub.versioning",
@@ -579,9 +659,12 @@ impl VersionStore {
         let esistente = inner.docs.get(to.as_str()).cloned();
         let trasloco = trasloca(&doc, from, esistente.as_ref(), to, host)?;
         // Da qui l'indice si muove, e si muove su contenuti già al loro posto.
-        let mut piano = inner.docs.clone();
-        piano.remove(from.as_str());
-        piano.insert(to.to_string(), trasloco.doc);
+        // Le due sole chiavi che cambiano. L'ordine dei due `insert` conta se
+        // `from` e `to` coincidono — un rename di solo caso su un filesystem
+        // che non lo distingue: là la chiave resta, con la storia unita.
+        let mut piano = Piano::new();
+        piano.insert(from.to_string(), Voce::Tolta);
+        piano.insert(to.to_string(), Voce::Messa(trasloco.doc));
         inner.applica(piano, to, host)?;
         // Ultimo ciò che resta indietro: è spazio sprecato, non una bugia, e
         // non vale la pena di far fallire un rename già andato a buon fine.
@@ -604,11 +687,9 @@ impl VersionStore {
         if doc.deleted_at.is_some() {
             return Ok(());
         }
-        let mut piano = inner.docs.clone();
-        if let Some(doc) = piano.get_mut(id.as_str()) {
-            doc.deleted_at = Some(now);
-        }
-        inner.applica(piano, id, host)
+        let mut morto = doc.clone();
+        morto.deleted_at = Some(now);
+        inner.applica(piano_di(id, morto), id, host)
     }
 
     /// Questo documento risulta cancellato?
@@ -820,11 +901,11 @@ impl Inner {
     /// togliendo la rivendicazione vecchia prima che qui se ne scriva una nuova.
     fn applica(
         &mut self,
-        piano: BTreeMap<String, DocVersions>,
+        piano: Piano,
         meta_di: &DocId,
         host: &mut dyn HostApi,
     ) -> Result<(), PluginError> {
-        if let Some(doc) = piano.get(meta_di.as_str()) {
+        if let Some(Voce::Messa(doc)) = piano.get(meta_di.as_str()) {
             scrivi_meta(meta_di, doc, host)?;
         }
         // Dentro un lotto l'indice non si scrive: lo scrive
@@ -835,9 +916,26 @@ impl Inner {
         // l'indice ne è il derivato, e un derivato che manca non è una bugia,
         // è la condizione da cui [`VersionStore::open`] ricostruisce.
         if !self.lotto {
-            scrivi_index(&piano, host)?;
+            scrivi_index(
+                DocsDelPiano {
+                    vivi: &self.docs,
+                    piano: &piano,
+                },
+                host,
+            )?;
         }
-        self.docs = piano;
+        // E solo adesso il piano entra: una chiave per volta, non una mappa al
+        // posto di un'altra. Ciò che il piano non nomina non è cambiato.
+        for (chiave, voce) in piano {
+            match voce {
+                Voce::Messa(doc) => {
+                    self.docs.insert(chiave, doc);
+                }
+                Voce::Tolta => {
+                    self.docs.remove(&chiave);
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -876,10 +974,7 @@ fn scrivi_meta(id: &DocId, doc: &DocVersions, host: &mut dyn HostApi) -> Result<
     host.data_write(&blob(&doc.dir, META_FILE), &raw)
 }
 
-fn scrivi_index(
-    docs: &BTreeMap<String, DocVersions>,
-    host: &mut dyn HostApi,
-) -> Result<(), PluginError> {
+fn scrivi_index(docs: impl Serialize, host: &mut dyn HostApi) -> Result<(), PluginError> {
     let index = IndexDaScrivere {
         schema_version: SCHEMA_VERSION,
         docs,
@@ -907,11 +1002,8 @@ fn scrivi_index(
 /// l'elenco in memoria e poi non riuscire a scrivere l'indice toglierebbe da
 /// sotto gli occhi versioni che sul disco ci sono ancora.
 #[must_use = "sono i contenuti da spazzare dopo aver scritto l'indice"]
-fn pota(docs: &mut BTreeMap<String, DocVersions>, id: &DocId, host: &dyn HostApi) -> Vec<String> {
+fn pota(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Vec<String> {
     let ora = host.now_unix_millis();
-    let Some(doc) = docs.get(id.as_str()) else {
-        return Vec::new();
-    };
     let mut tenute: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
     let mut fasce_viste: Vec<(u8, u64)> = Vec::new();
     // Dalla più recente: dentro ogni fascia vince la più recente.
@@ -941,16 +1033,13 @@ fn pota(docs: &mut BTreeMap<String, DocVersions>, id: &DocId, host: &dyn HostApi
         return Vec::new();
     }
 
-    let dir = doc.dir.clone();
     let avanzati: Vec<String> = doc
         .versions
         .iter()
         .filter(|v| !tenute.iter().any(|t| t.ts == v.ts))
-        .map(|v| blob(&dir, &snapshot_name(v.ts, id.as_str())))
+        .map(|v| blob(&doc.dir, &snapshot_name(v.ts, id.as_str())))
         .collect();
-    if let Some(doc) = docs.get_mut(id.as_str()) {
-        doc.versions = tenute;
-    }
+    doc.versions = tenute;
     avanzati
 }
 
