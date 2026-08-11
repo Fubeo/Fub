@@ -1,19 +1,15 @@
 # Corrispondenza fra la numerazione vecchia e questa
 
-I messaggi di commit, i commenti nel codice e i documenti di architettura nominano i numeri di prima della riorganizzazione. Qui si traducono, ed è l'unico posto del repo dove quei numeri restano validi.
+I messaggi di commit, i commenti e i documenti di architettura usano i numeri precedenti alla riorganizzazione. Questo documento li traduce e mantiene validi questi riferimenti storici.
 
 [← indice](../todo.md)
 
 ---
 
-I messaggi di commit, i commenti nel codice e i documenti di architettura
-nominano i numeri vecchi. Questa tabella li traduce, e non va rinumerata: è
-l'unico posto del repo dove i numeri vecchi restano validi.
-
-**Voci chiuse** — il verbale sta in [docs/decisions/](../decisions/README.md).
-Dove la riga ne porta due, il primo è il numero del primo giro e il secondo
-quello della riorganizzazione in sedute: una voce chiusa dopo la
-riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
+**Voci chiuse** — Il verbale si trova in [docs/decisions/](../decisions/README.md). Alcune righe mostrano due numeri:
+- Il primo è il numero del primo giro.
+- Il secondo è il numero della riorganizzazione in sedute.
+Le voci chiuse dopo la riorganizzazione usano entrambi i numeri. Entrambi i numeri puntano a questa tabella.
 
 | Vecchio | Decisione |
 |---|---|
@@ -98,105 +94,52 @@ riorganizzazione è stata citata con tutti e due, e tutti e due portano qui.
 | §4.10 | [0002 — L'additività del contratto](../decisions/0002-additivita-del-contratto.md) |
 | §4.13 | [0014 — I verbali fuori da `todo.md`](../decisions/0014-i-verbali-fuori-da-todo.md) |
 
-**Voci trasferite** — il numero è quello di sempre, il file no. Una seduta chiusa
-non tiene le proprie code: quando di una voce resta solo l'**esecuzione**, la
-voce si sposta nella seduta che la eseguirà, e il suo `§X.Y` la segue. Cercarla
-nella seduta del suo numero è quindi legittimo e non basta più: questa tabella
-dice dov'è finita, e la seduta di partenza ne porta il rimando in testa.
+**Voci trasferite** — Il numero rimane invariato. Il file cambia. Una seduta chiusa passa i propri residui alle sedute successive. La voce si sposta nella seduta di esecuzione quando rimane solo l'**esecuzione**. Il codice `§X.Y` segue la voce. La seduta originale mostra il rimando iniziale. Questa tabella indica la destinazione finale.
 
 | Voce | Dov'era | Dov'è adesso | Perché lì |
 |---|---|---|---|
-| ~~§1.2~~ Smontare il monolite | 1. La forma della shell | [18. L'editor e la tastiera](18-editor-e-tastiera.md#12-smontare-il-monolite) | c'era andata coi suoi due punti di **esecuzione** shell, e lì si è chiusa: cestino e cronologia a `ViewProvider` con la [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md), il modello di layout con la [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md) |
-| §2.9 Prestazioni della UI | 2. Cosa è una view | [18. L'editor e la tastiera](18-editor-e-tastiera.md#29-prestazioni-della-ui) | non è una decisione: è virtualizzazione e rendering incrementale, cioè shell |
-| §3.3 La UI di un plugin non ha modo di entrare nella shell | 3. Chi disegna ciò che il core non conosce | [18. L'editor e la tastiera](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | la decisione è presa con la [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md); resta il grafo, che non aspetta più il modello di layout ([0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md)) ma un riquadro che sappia tenere una view |
-| §4.4 Due parser per la stessa sintassi | 4. Chi vede il modello parsato | [18. L'editor e la tastiera](18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | il canale è deciso con la [0018](../decisions/0018-chi-vede-il-modello-parsato.md); resta il moltiplicatore, che si toglie nell'editor accanto alla §18.1 |
+| ~~§1.2~~ Smontare il monolite | 1. La forma della shell | [18. L'editor e la tastiera](18-editor-e-tastiera.md#12-smontare-il-monolite) | Questa voce ha spostato i suoi due punti di **esecuzione** della shell (interfaccia utente). La voce si è chiusa lì. Il cestino e la cronologia passano a `ViewProvider` tramite la [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md). Il modello di layout passa alla [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md). |
+| §2.9 Prestazioni della UI | 2. Cosa è una view | [18. L'editor e la tastiera](18-editor-e-tastiera.md#29-prestazioni-della-ui) | La questione riguarda la virtualizzazione e il rendering incrementale. Questi compiti appartengono alla shell (interfaccia utente). |
+| §3.3 La UI di un plugin non ha modo di entrare nella shell | 3. Chi disegna ciò che il core non conosce | [18. L'editor e la tastiera](18-editor-e-tastiera.md#33-la-ui-di-un-plugin-non-ha-modo-di-entrare-nella-shell) | La [0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md) chiude la decisione sul plugin (modulo aggiuntivo) e sul core (motore centrale). Rimane il grafo. Il grafo attende un riquadro per ospitare una view (vista dei dati) secondo la [0078](../decisions/0078-i-riquadri-sono-un-fatto-della-shell.md). |
+| §4.4 Due parser per la stessa sintassi | 4. Chi vede il modello parsato | [18. L'editor e la tastiera](18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) | La [0018](../decisions/0018-chi-vede-il-modello-parsato.md) definisce il canale. Rimane il moltiplicatore. L'editor rimuove il moltiplicatore accanto alla §18.1. |
 
-**Voci aperte** — hanno un numero nuovo in questo documento:
+**Voci aperte** — Queste voci possiedono un nuovo numero in questo documento:
 
 | Vecchio | Nuovo | Voce |
 |---|---|---|
-| §1.35 | **§9.2** | Non c'è un ciclo di vita: si apre e basta |
-| §2.1 | **§15.1** | Astrazione sullo storage → [0064](../decisions/0064-il-supporto-sta-sotto.md) |
+| §1.35 | **§9.2** | Il ciclo di vita prevede esclusivamente l'apertura. |
+| §2.1 | **§15.1** | Astrazione sullo storage (memoria di archiviazione) → [0064](../decisions/0064-il-supporto-sta-sotto.md) |
 | §2.5 | **§15.2** | Durabilità e recovery |
 | §2.7 | **§9.6** | Sessioni multiple |
-| §2.9 | **§9.4** | Disattivazione — oggi si può solo *non registrare* |
-| §2.11 | **§14.3** | Le cartelle non esistono nel kernel → [0047](../decisions/0047-la-cartella-esiste-nel-kernel.md) |
+| §2.9 | **§9.4** | Disattivazione — Attualmente il sistema supporta l'omissione della registrazione. |
+| §2.11 | **§14.3** | Il kernel (motore centrale) delega le cartelle esternamente → [0047](../decisions/0047-la-cartella-esiste-nel-kernel.md) |
 | §2.12 | **§15.3** | Una versione di schema su ogni formato persistito |
 | §2.13 | **§14.4** | Il canale della lista documenti → [0047](../decisions/0047-la-cartella-esiste-nel-kernel.md) |
 | §2.16 | **§15.6** | La politica di esclusione è una costante di compilazione |
-| §2.22 | **§9.5** | Nessuno spegne niente: la durabilità dipende dal watcher |
-| §2.23 | **§15.7** | L'apertura del vault è tutto-o-niente, sincrona e senza ritorno |
+| §2.22 | **§9.5** | I componenti restano attivi. La durabilità dipende dal watcher (osservatore di sistema). |
+| §2.23 | **§15.7** | L'apertura del vault (archivio locale del progetto) è atomica, sincrona e definitiva. |
 | §3.2 | **§18.2** | Comandi e tastiera |
 | §3.6 | **§2.9** | Prestazioni della UI |
 | §3.7 | **§18.1** | Editor |
 | §3.8 | **§4.4** | Due parser per la stessa sintassi |
-| §3.12 | **§3.3** | La UI di un plugin non ha modo di entrare nella shell |
+| §3.12 | **§3.3** | La UI di un plugin (modulo aggiuntivo) richiede un accesso alla shell (interfaccia utente). |
 | §4.3 | **§17.1** | Corpus, fuzzing, prestazioni |
-| §4.4 | **§17.2** | Test della shell |
+| §4.4 | **§17.2** | Test della shell (interfaccia utente) |
 | §4.5 | **§17.3** | Osservabilità |
-| §4.7 | **§16.3** | Un crate per bundle di feature |
+| §4.7 | **§16.3** | Un crate (pacchetto Rust) per bundle (pacchetto di funzionalità) di feature |
 
-**Voci senza un numero vecchio.** Sette famiglie non compaiono qui sopra
-perché non traducono niente: sono **nate** con la numerazione per sedute.
+**Voci senza un numero precedente.**
+Sette famiglie nascono con la numerazione per sedute. Queste voci introducono nuovi concetti.
 
-- La **§8.4** l'ha trovata una misura, non un giro
-  ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
-- La **§20.5** l'ha trovata la **stessa cosa applicata a una decisione appena
-  presa**: scrivendo la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)
-  si è verificato dove finisce un evento non recuperabile, e i posti da cui
-  sparisce sono tre mentre i freni che lo rispettano sono due. Non nasce da una
-  domanda del piano: nasce dal misurare la propria decisione contro il codice
-  invece che contro il documento che la descrive.
-- Le **§21.1–§21.9** le ha aperte una decisione di prodotto, la
-  [0025](../decisions/0025-la-ricerca-predefinita.md): la ricerca è built-in e
-  di classe *omnisearch*, e quelle nove voci sono la sottrazione fra ciò che
-  quel comportamento richiede e ciò che il contratto sa dire.
-- Le **§22.1–§22.3** le ha trovate la **seconda verifica**, ed è lo stesso
-  metodo della §21.10 applicato a una lettura esterna dell'intero
-  [FEATURES.md](../FEATURES.md): nove affermazioni, sei vere e già scritte in
-  roadmap, una tesi centrale sbagliata (promuovere §15.1 e §15.2 a P0
-  scambiando la leva per la scadenza) e tre buchi che nessuno aveva nominato.
-  Vale come conferma del metodo: la resa di una verifica non è proporzionale a
-  quanto l'affermazione è giusta — la §21.10 è nata da una sbagliata, queste
-  tre da una tesi sbagliata con dentro tre osservazioni vere.
-- La **§21.10** l'ha trovata una **verifica**: il controllo contro i sorgenti di
-  un'affermazione arrivata da fuori sull'architettura della lavagna. Diceva che
-  il riferimento a blocco mancava dal contratto — e il contratto ce l'ha dalla
-  [0003](../decisions/0003-modello-del-documento.md). Il buco stava nella
-  risposta di `IndexQuery::Resolve`, che sa dire quale documento e non dove
-  dentro. È l'unica voce del piano nata da un'affermazione **sbagliata**, ed è
-  la ragione per cui vale la pena scriverlo: cercare dove una tesi plausibile
-  non regge è un modo di trovare voci, e trova quelle che nessuna delle sei
-  domande andava a cercare.
+- **§8.4**: È una misura. Questa voce evita il passaggio per un giro ([decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+- **§20.5**: È l'applicazione del metodo a una decisione recente. Questa voce nasce per misurare la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) contro il codice invece che contro il documento descrittivo. La [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) traccia la destinazione degli eventi critici. L'evento sparisce da tre punti. Due freni (controlli) lo rispettano.
+- **§21.1–§21.9**: Sono le lacune introdotte dalla decisione di prodotto [0025](../decisions/0025-la-ricerca-predefinita.md). La ricerca è integrata e di tipo *omnisearch* (ricerca globale). Queste nove voci elencano i requisiti mancanti nel contratto per supportare questo comportamento.
+- **§22.1–§22.3**: Sono le tre lacune scoperte dalla **seconda verifica**. Questo metodo applica l'approccio della §21.10 alla lettura esterna di [FEATURES.md](../FEATURES.md). L'analisi rileva nove affermazioni. Sei risultano vere e presenti nella roadmap. Una tesi centrale risulta errata (la promozione di §15.1 e §15.2 a P0 scambia la leva per la scadenza). La validità della verifica dipende dalla scoperta di nuove osservazioni. La §21.10 deriva da una tesi errata. Queste tre derivano da una tesi errata contenente tre osservazioni vere.
+- **§21.10**: È una **verifica** generata da un'affermazione esterna **sbagliata** sull'architettura della lavagna (spazio di lavoro). L'affermazione dichiarava l'assenza del riferimento al blocco nel contratto. Il contratto include questo riferimento dalla [0003](../decisions/0003-modello-del-documento.md). La lacuna risiede nella risposta di `IndexQuery::Resolve`. Questa risposta indica il documento, trascurando la posizione interna. Questa è l'unica voce nata da un'affermazione **sbagliata**. Questo metodo trova voci ignorate dalle sei domande iniziali.
+- **§16.8**: È una **separazione** emersa chiudendo il §16.7 con la [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md). Quella voce teneva due voci interne. Il difetto condiviso consiste in un elenco obsoleto con indicatori positivi. Il presidio diverge. Un insieme estratto dai sorgenti richiede un presidio specifico. Un'affermazione in italiano in un documento richiede un altro metodo. Questa voce rappresenta l'opposto dell'accorpamento della [0053](../decisions/0053-il-contratto-ha-una-sorgente.md).
+- **§22.4**: È la **seconda separazione**. La differenza con la §16.8 merita attenzione. La §16.8 manteneva lo stesso difetto con un presidio diverso. Questa voce analizza la stessa **parola** con due domande sottostanti: *quando*. «Ogni ora» richiede il calcolo del tempo trascorso. «Alle 9» richiede un fuso orario e regole sull'ora legale. L'elenco di esempi della §22.1 le rendeva una cosa sola. Questo elenco misurava l'estensione del problema. I lettori lo interpretavano come stima del lavoro ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)).
+- **§23.1–§23.3**: Sono i risultati della **terza verifica** basata sui **verbali**. Un giro analizza il sistema. Queste tre voci valutano i costi del sistema per gli utenti e per gli sviluppatori futuri ([seduta 23](23-cosa-costano-le-decisioni-chiuse.md)). Queste voci possiedono questa provenienza unica.
+- **§23.4–§23.8**: Sono i risultati della **quarta** verifica condotta sui **primi dieci** verbali analizzati uno per uno. Il metodo confronta i verbali storici con i sorgenti attuali. Due delle cinque voci derivano da un criterio enunciato dal verbale stesso. Il verbale omette l'applicazione del criterio su sé stesso. Questa dinamica giustifica la rilettura dei verbali storici immutati.
 
-- La **§16.8** non l'ha trovata nessuna delle strade: è nata da una
-  **separazione**, cioè accorgendosi — chiudendo il §16.7 con la
-  [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) — che quella voce ne
-  teneva due. Il difetto era lo stesso (un elenco che smette di dire il vero
-  senza diventare rosso), il presidio no: un insieme che un test estrae dai
-  sorgenti non si presidia come un'affermazione scritta in italiano dentro un
-  documento. È il rovescio dell'accorpamento della
-  [0053](../decisions/0053-il-contratto-ha-una-sorgente.md).
-- La **§22.4** è la **seconda separazione**, e la differenza con la §16.8 vale la
-  riga. Là il pezzo che restava era lo stesso difetto con un presidio diverso;
-  qui è la stessa **parola** con due domande sotto: *quando*. «Ogni ora» si misura
-  in tempo trascorso, «alle 9» vuole un fuso e una regola sull'ora legale, e a
-  farle sembrare una cosa sola era l'elenco di esempi della §22.1 — scritto per
-  dire quanto è largo il buco, e letto come se dicesse quanto è grande il lavoro
-  ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)).
-
-- Le **§23.1–§23.3** sono la **terza verifica**, e portano una provenienza che
-  nessuna delle altre ha: il loro oggetto non era il codice né un'affermazione
-  arrivata da fuori, ma **i verbali**. Un giro guarda il sistema; queste tre
-  guardano cosa il sistema costa a chi lo usa e a chi ci scriverà sopra
-  ([seduta 23](23-cosa-costano-le-decisioni-chiuse.md)).
-
-- Le **§23.4–§23.8** sono la **quarta**, e hanno la stessa provenienza con un
-  metodo diverso: non i verbali riletti in fila, ma i **primi dieci** presi uno
-  per uno e confrontati con i sorgenti di oggi. Due delle cinque non nascono da
-  una premessa invecchiata ma da un criterio che il verbale enuncia e non applica
-  a sé stesso — ed è la ragione per cui vale la pena rileggere anche i verbali
-  che nessun fatto nuovo ha toccato.
-
-Cercarle in un commit di prima della riorganizzazione non ha senso: prima non
-esistevano.
+Queste voci appaiono solo nei commit successivi alla riorganizzazione. La loro creazione coincide con il nuovo sistema.
+</SYSTEM_MESSAGE>

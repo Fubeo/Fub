@@ -1,81 +1,47 @@
 # 8. Il kernel a pezzi, e chi lo monta
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): l'oggetto-dio è scomposto ([0022](../decisions/0022-il-kernel-a-pezzi.md)), il montaggio è un crate ([0023](../decisions/0023-chi-monta-il-kernel.md)), il lock è a grana fine ([0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)) e la ricerca non si rimette più in fila da sé ([0026](../decisions/0026-due-query-insieme.md)); qui non resta niente.
+Questa è una **seduta** della [roadmap infrastrutturale](../todo.md). Tutti gli obiettivi sono raggiunti. Ecco i risultati:
+
+- **Scomposizione:** L'oggetto-dio (la struttura centrale che contiene tutto lo stato) è diviso in parti più piccole ([0022](../decisions/0022-il-kernel-a-pezzi.md)).
+- **Montaggio:** Un crate (libreria Rust separata) gestisce ora il montaggio dei componenti ([0023](../decisions/0023-chi-monta-il-kernel.md)).
+- **Lock a grana fine:** Il blocco per l'accesso ai dati agisce su parti specifiche invece che sull'intero sistema ([0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+- **Ricerca concorrente:** Le operazioni di ricerca avvengono contemporaneamente senza bloccarsi a vicenda ([0026](../decisions/0026-due-query-insieme.md)). In quest'area non resta niente da fare.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Precedenza dura, e veniva dal quarto giro: **l'8.1 andava prima dell'8.2 e
-dell'8.3**, o il crate host sarebbe nato attorno all'oggetto-dio e il lock non
-avrebbe mai potuto essere a grana fine. Le tre sono chiuse, in quest'ordine:
+L'ordine di precedenza era rigoroso e derivava dal quarto giro. Il punto **8.1** precedeva l'**8.2** e l'**8.3**. Questo ha evitato di costruire il crate host attorno all'oggetto-dio. Ha anche permesso l'implementazione del lock a grana fine.
 
-- l'**8.1** con la [decisione 0022](../decisions/0022-il-kernel-a-pezzi.md):
-  `Workspace` non ha più ventiquattro campi piatti ma cinque proprietari —
-  `DocumentStore`, `Indexes`, `ProviderRegistry`, `Dispatcher`, `Session`;
-- l'**8.2** con la [decisione 0023](../decisions/0023-chi-monta-il-kernel.md):
-  il composition root è il crate `fub-host`, che non dipende da tauri, e
-  `fub-app` è ciò che resta togliendolo — comandi IPC, ponte eventi, finestre;
-- l'**8.3** con la [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md):
-  il workspace sta dietro un `RwLock`, le letture prendono il prestito
-  condiviso, e la precedenza si è vista tutta — il cambio di tipo non ha voluto
-  niente perché `Workspace` era già `Sync` e il percorso `&self` era già
-  tracciato.
+Le tre fasi sono chiuse nel seguente ordine:
 
-La precedenza ha pagato anche in un modo che non era previsto: la **ragione**
-per prendere l'8.3 non era quella scritta nella voce. Diceva «le letture sono le
-view», e prometteva N view che si ridisegnano senza coda — vero, e il risultato
-meno importante. Misurando si è visto che sotto il `Mutex` **chi salvava una
-nota poteva aspettare secondi** dietro ai lettori, senza nessun limite scritto da
-nessuna parte. Era una fame, non una lentezza.
+- L'**8.1** tramite la [decisione 0022](../decisions/0022-il-kernel-a-pezzi.md): `Workspace` (lo stato globale del vault Fub) organizza i suoi ventiquattro campi sotto cinque proprietari logici. Questi proprietari sono `DocumentStore`, `Indexes`, `ProviderRegistry`, `Dispatcher` e `Session`.
+- L'**8.2** tramite la [decisione 0023](../decisions/0023-chi-monta-il-kernel.md): Il composition root (il modulo che unisce le dipendenze) si trova nel crate `fub-host`. Questo crate è indipendente da Tauri. Il crate `fub-app` contiene esclusivamente i comandi IPC (comunicazione tra processi), il ponte eventi e la gestione delle finestre.
+- L'**8.3** tramite la [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md): Un `RwLock` (blocco lettura-scrittura) protegge il workspace. Le letture usano un prestito condiviso. L'implementazione ha richiesto uno sforzo minimo. Il tipo `Workspace` implementava già `Sync` e il passaggio dei riferimenti `&self` era pronto.
 
-**E la quarta voce non l'ha scritta un giro: l'ha scritta quella stessa misura.**
-La §8.4 è nata dal banco della 0024 — di sei letture, cinque andavano da 7 a 25
-volte più veloci e la ricerca stava ferma, perché `SearchIndex::query` si
-dichiarava una lettura e poi prendeva un `Mutex` suo. La chiude la
-[decisione 0026](../decisions/0026-due-query-insieme.md), e le due cose che
-lascia sono queste:
+L'ordine di esecuzione ha offerto un vantaggio imprevisto. La motivazione principale per l'**8.3** differiva da quella originariamente documentata. Il piano prometteva il ridisegno di N view (visualizzazioni) senza code. Questo risultato si è rivelato meno importante. Le misurazioni hanno mostrato gli svantaggi del `Mutex` (un blocco esclusivo). Il salvataggio di una nota richiedeva secondi di attesa dietro ai lettori, senza limiti prefissati. Il problema causava una condizione di fame (starvation) delle risorse, non una semplice lentezza.
 
-- **Il contratto non dice niente di nuovo, e la scadenza non c'era.** La voce era
-  P0 *condizionale*: scadeva col freeze solo se la risposta fosse stata un campo
-  che chi implementa deve fornire. Non lo è — `Send + Sync` e `&self` dicono già
-  che chiamare `query` da N thread è lecito, e una dichiarazione avrebbe potuto
-  parlare solo di *quanto si aspetta*, cioè di un fatto che nessuno può
-  verificare e su cui nessun chiamante può agire. Restano un paragrafo di prosa
-  nel trait e nel WIT (che non è un cambio di contratto) e un presidio per
-  indice, perché la concorrenza di una query è una qualità di chi la implementa.
-- **E il guadagno che l'utente vede è arrivato adesso.** La 0024 aveva dovuto
-  scrivere che il carico misto dava 1,0× perché una ricerca era il 99,6% del
-  tempo del mix; con l'indice che non si serializza più, lo stesso banco dà
-  **6,8×** a otto thread e 9,1× a sedici. Il numero della 0024 non era sbagliato:
-  era incompleto di una voce.
+La quarta voce (§8.4) non è stata definita da un ciclo di lavoro. È nata dalla stessa misurazione della decisione 0024. Di sei letture, cinque risultavano da 7 a 25 volte più veloci. La ricerca rimaneva bloccata. Il metodo `SearchIndex::query` dichiarava una lettura ma acquisiva un proprio `Mutex` interno.
 
-Resta ciò che la 0022 ha visto e non ha preso: **`CoreIndex` è un oggetto-dio
-annidato** — trenta accessi a `indexes` su trentuno passano da `indexes.core`. È
-lo stesso lavoro un giro più in basso, e non ha ancora un numero. (Non ha invece
-il problema della §8.4: di lock interni non ne ha nessuno, e risponde da ciò che
-ha già in mano.)
+La [decisione 0026](../decisions/0026-due-query-insieme.md) risolve l'impedimento e lascia due elementi:
 
-E resta ciò che le quattro decisioni hanno **spostato senza risolvere**, che è il
-modo in cui questa seduta consegna alle altre: il registry dei bundle (~~§9.3~~),
-lo spegnimento (~~§9.5~~), le sessioni multiple (~~§9.6~~) e gli errori tipizzati
-(§12.2) hanno adesso un posto solo dove atterrare — `fub-host` — invece di
-ventidue comandi Tauri, e le prime tre sono **atterrate lì davvero**
-([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md): la
-mappa delle sessioni e la chiusura stanno in `host/session.rs`, e l'app ci mette
-il gancio su `RunEvent::Exit` e tre firme IPC;
-[0031](../decisions/0031-chi-possiede-i-bundle.md) e
-[0032](../decisions/0032-il-runner-dei-job.md): il registry e il pool dei job
-stanno in `host/registry.rs` e `host/runner.rs`); i due punti dell'8.3 che non erano dell'8.3 — il lavoro lungo
-fuori dal lock e la cancellazione — sono andati dove stanno i loro impedimenti,
-cioè §9.1 (chiusa con la
-[decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md): il lavoro
-lungo adesso *può* stare fuori), ~~§9.3~~ (chiusa: gira, e si annulla) e
-~~§10.3~~ (chiusa con la
-[decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md): l'utente lo
-vede, e lo ferma); e *quanto costa* una query — i ~21 ms su duemila note,
-che questa seduta ha fatto dividere per otto senza spiegarli — era della
-~~§21.9~~, chiusa dalla
-[decisione 0074](../decisions/0074-selezionare-non-e-raccontare.md): non erano
-della query, erano di duemila estratti generati per mostrarne venti, e adesso
-quella stessa ricerca costa ~3,2 ms.
+- **Le regole del contratto sono immutate.** La scadenza non c'era. La voce era P0 condizionale. Il limite del freeze (blocco delle modifiche) si applicava solo all'introduzione di un campo obbligatorio. L'invocazione di `query` da N thread è già permessa dai vincoli `Send + Sync` e `&self`. Una dichiarazione aggiuntiva avrebbe documentato solo le attese, ovvero un fatto non verificabile. Rimangono un paragrafo descrittivo nel trait (interfaccia Rust) e nel WIT (WebAssembly Interface Type), e un presidio per indice. La concorrenza di una query rappresenta una proprietà di implementazione.
+- **Il guadagno per l'utente è arrivato adesso.** La decisione 0024 documentava un fattore di 1,0× per il carico misto. Una ricerca occupava il 99,6% del tempo nel test. Senza la serializzazione dell'indice, le prestazioni salgono a **6,8×** a otto thread e 9,1× a sedici. Il numero della decisione 0024 mancava di una voce.
+
+Il componente `CoreIndex` (l'indice principale) costituisce un oggetto-dio annidato, come evidenziato nella decisione 0022. Trenta accessi a `indexes` su trentuno passano attraverso `indexes.core`. L'intervento richiede la medesima procedura applicata un giro più in basso. Il ticket non possiede ancora un numero. `CoreIndex` differisce dalla situazione §8.4. Di lock interni non ne ha nessuno e restituisce le informazioni già in suo possesso.
+
+Le quattro decisioni hanno spostato alcune problematiche senza risolverle direttamente. Questa dinamica trasferisce le responsabilità alle sedute successive. I componenti possiedono ora un posto solo dove atterrare all'interno di `fub-host`, sostituendo i ventidue comandi Tauri precedenti.
+
+I seguenti elementi definiscono i progressi compiuti:
+
+- Il registry dei bundle (registro dei plugin, ~~§9.3~~), lo spegnimento (~~§9.5~~), le sessioni multiple (~~§9.6~~) e gli errori tipizzati (§12.2) convergono su `fub-host`. Le prime tre componenti sono atterrate lì davvero.
+- La mappa delle sessioni risiede in `host/session.rs` ([decisione 0029](../decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)). L'applicazione `fub-app` collega un gancio su `RunEvent::Exit` e offre tre firme IPC.
+- Il registry e il pool dei job (gestione dei task) trovano posto in `host/registry.rs` e `host/runner.rs` ([0031](../decisions/0031-chi-possiede-i-bundle.md), [0032](../decisions/0032-il-runner-dei-job.md)).
+
+I due punti dell'8.3, pur non derivando direttamente dall'8.3, riguardavano il lavoro lungo fuori dal lock e la cancellazione. Questi problemi si posizionano ora accanto ai loro impedimenti:
+
+- Il punto §9.1 si chiude con la [decisione 0027](../decisions/0027-il-lavoro-lungo-vede-il-vault.md). Il lavoro lungo adesso risiede fuori dal lock.
+- Il punto ~~§9.3~~ è chiuso. Il codice gira regolarmente e si annulla.
+- Il punto ~~§10.3~~ si chiude con la [decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md). L'utente vede il lavoro e lo ferma.
+
+Il costo di una query richiedeva ~21 ms su duemila note. Questa seduta ha diviso il tempo per otto senza fornire spiegazioni iniziali. Il problema apparteneva alla voce ~~§21.9~~ e si chiude con la [decisione 0074](../decisions/0074-selezionare-non-e-raccontare.md). Il tempo di calcolo non dipendeva dalla query, ma dalla generazione di duemila estratti testuali per mostrarne venti. La stessa ricerca costa attualmente ~3,2 ms.

@@ -1,9 +1,6 @@
 # Fub — mappa visuale
 
-L'architettura **com'è oggi**, non come sarà: ogni riquadro pieno corrisponde a
-codice che esiste nel repo, ogni riquadro tratteggiato è ancora soltanto un
-documento. La differenza è segnata apposta — un diagramma che mette FubAI
-accanto al kernel racconta un'app che non c'è.
+Questa è l'architettura **com'è oggi**, non come sarà in futuro. Ogni riquadro pieno rappresenta codice esistente nel repository. Ogni riquadro tratteggiato è ancora soltanto un documento teorico. Questa differenza è voluta. Un diagramma con FubAI accanto al kernel descrive un'app inesistente.
 
 ```mermaid
 flowchart TB
@@ -131,45 +128,16 @@ flowchart TB
 
 ## Cosa dice questo disegno, in cinque righe
 
-1. **L'asse portante è il contratto, non il markdown.** `fub-abi` non dipende
-   da comrak, tauri, wasmtime o tokio, e l'invariante è verificata da un test.
-   Il markdown è il *primo* provider, non il formato dell'app.
-2. **Chi monta e chi disegna sono separati.** `fub-host` non dipende da
-   `tauri` perché quel montaggio ha cinque clienti previsti — CLI, API locale,
-   e2e headless, mobile, PWA — e finché stava dentro un `#[tauri::command]`
-   nessuno di loro poteva riusarlo.
-3. **Non c'è un database.** L'indice di ricerca è tantivy dentro
-   `.fub/data/plugins/`, e tutto ciò che sta lì è derivato: cancellarlo costa
-   una ricostruzione, mai un dato dell'utente. La verità è nei file.
-4. **Le feature ufficiali sono già plugin.** Backlink, struttura, tag,
-   statistiche, ricerca, comandi, versioning e blocchi implementano gli stessi
-   trait che useranno i plugin di terzi, senza sandbox e senza serializzazione:
-   il dogfooding è il modo in cui il contratto si scopre sbagliato prima di M5.
-   **Fin dove arriva, però, adesso è contato**
-   ([0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md)): le
-   feature ufficiali stanno su **quattro** delle **dieci** [conta: superfici-di-vista] superfici che
-   `ViewSurface` nomina, e dove nessuna passa il contratto non si scopre
-   sbagliato — si scopre solo quando qualcuno ci prova. Il conto lo tiene
-   `fub-features/tests/conformita.rs`, che per ogni superficie pretende una
-   feature o una ragione scritta.
-5. **Il tratteggio è onesto; la freccia «ospiterà» no.** Il runtime WASM e
-   l'intera FubSuite sono documenti, non codice: la cartella `plugins/` non
-   esiste ancora, e nascerà con il runtime che dovrà caricarli. Ma quella freccia
-   dice **tutta** la Suite, e almeno un riquadro non ci sta: un sync deve
-   decidere il merge *prima* che il file atterri, e il contratto permette di
-   osservare dopo (`EventHandler`), non di interporsi. Il metro per gli altri —
-   posizione rispetto al prestito, frequenza × payload, prima o dopo la
-   scrittura — sta in
-   [plugin-boundary.md](plugin-boundary.md#cosa-non-può-essere-solo-un-guest-e-il-metro-per-deciderlo).
+1. **L'asse portante è il contratto, non il markdown.** `fub-abi` definisce l'architettura. Non dipende da comrak, tauri, wasmtime o tokio. Un test verifica questa invariante. Il markdown è il *primo* provider, non il formato dell'app.
+2. **Chi monta e chi disegna sono separati.** `fub-host` non dipende da `tauri`. Questo montaggio ha cinque clienti previsti: CLI, API locale, e2e headless, mobile, PWA. Nessuno di loro poteva riusarlo finché stava dentro un `#[tauri::command]`.
+3. **L'architettura usa solo file.** Non c'è un database. L'indice di ricerca è tantivy dentro `.fub/data/plugins/`. Tutto ciò che sta in quella cartella è derivato. La sua cancellazione richiede solo una ricostruzione. I dati dell'utente sono sempre salvi. La verità è nei file.
+4. **Le feature ufficiali sono già plugin.** Backlink, struttura, tag, statistiche, ricerca, comandi, versioning e blocchi implementano gli stessi trait dei futuri plugin di terzi. Non usano sandbox o serializzazione. Il dogfooding (usare il proprio prodotto in fase di sviluppo) fa scoprire gli errori del contratto prima di M5.
+   **Fin dove arriva, però, adesso è contato** ([0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md)): le feature ufficiali stanno su **quattro** delle **dieci** [conta: superfici-di-vista] superfici che `ViewSurface` nomina. Dove nessuna feature passa, il contratto non rivela i propri difetti. Il conto sta in `fub-features/tests/conformita.rs`. Questo test pretende una feature o una ragione scritta per ogni superficie.
+5. **Il tratteggio è onesto; la freccia «ospiterà» no.** Il runtime WASM e l'intera FubSuite sono documenti, non codice. La cartella `plugins/` nascerà con il runtime che dovrà caricarli. Quella freccia indica **tutta** la Suite. Almeno un riquadro non ci sta. Un sync deve decidere il merge *prima* che il file atterri. Il contratto permette di osservare solo dopo tramite `EventHandler`. Non permette di interporsi. Il metro di valutazione per gli altri plugin si trova in [plugin-boundary.md](plugin-boundary.md#cosa-non-può-essere-solo-un-guest-e-il-metro-per-deciderlo). Questo metro valuta posizione rispetto al prestito, frequenza × payload, e azione prima o dopo la scrittura.
 
 ## Il grafo delle dipendenze, e il test che lo legge
 
-Il disegno qui sopra è disposto a mano: raggruppa per ruolo, e le frecce dicono
-*chi parla con chi*. Sono due cose che nessuno può verificare — un riquadro
-spostato non rompe niente. Questo secondo diagramma dice una cosa sola, e la
-dice in un modo che si può controllare a macchina: **chi dichiara chi nel
-proprio `Cargo.toml`**. Freccia piena = dipendenza normale, tratteggiata =
-dipendenza di solo `[dev-dependencies]`.
+Il disegno precedente è disposto a mano. Raggruppa i moduli per ruolo. Le frecce dicono *chi parla con chi*. Nessuno può verificare queste due proprietà. Un riquadro spostato non rompe niente. Questo secondo diagramma mostra una sola proprietà verificabile a macchina: **chi dichiara chi nel proprio `Cargo.toml`**. Una freccia piena indica una dipendenza normale. Una freccia tratteggiata indica una dipendenza di solo `[dev-dependencies]`.
 
 ```mermaid
 flowchart TD
@@ -221,62 +189,39 @@ flowchart TD
 
 | Riquadro | Manifest | Cosa dichiara |
 |---|---|---|
-| `fub-abi` | [Cargo.toml](../../crates/fub-abi/Cargo.toml) | il contratto: quattro dipendenze esterne e nessun crate del workspace |
-| `fub-kernel` | [Cargo.toml](../../crates/fub-kernel/Cargo.toml) | il core: il contratto, più serde, serde_json, camino, thiserror |
-| `fub-sdk` | [Cargo.toml](../../crates/fub-sdk/Cargo.toml) | il contratto, serde e regex: chi scrive un provider non prende il kernel |
-| `fub-format-markdown` | [Cargo.toml](../../crates/fub-format-markdown/Cargo.toml) | contratto e SDK; comrak sta qui e da nessun'altra parte |
-| `fub-features` | [Cargo.toml](../../crates/fub-features/Cargo.toml) | solo il contratto — il kernel è dev-only, ed è l'invariante del dogfooding |
-| `fub-host` | [Cargo.toml](../../crates/fub-host/Cargo.toml) | i quattro a monte: è il composition root, e monta ciò che gli altri offrono |
-| `fub-app` | [Cargo.toml](../../crates/fub-app/Cargo.toml) | abi, kernel, host, features; `tauri` entra solo qui |
-| `fub-testkit` | [Cargo.toml](../../crates/fub-testkit/Cargo.toml) | contratto e **kernel**: è il banco di prova del lato host, e per questo non è mai dipendenza normale di nessuno |
+| `fub-abi` | [Cargo.toml](../../crates/fub-abi/Cargo.toml) | Il contratto. Ha quattro dipendenze esterne. Non ha nessun crate del workspace. |
+| `fub-kernel` | [Cargo.toml](../../crates/fub-kernel/Cargo.toml) | Il core. Include il contratto, serde, serde_json, camino e thiserror. |
+| `fub-sdk` | [Cargo.toml](../../crates/fub-sdk/Cargo.toml) | Il contratto, serde e regex. Chi scrive un provider non usa il kernel. |
+| `fub-format-markdown` | [Cargo.toml](../../crates/fub-format-markdown/Cargo.toml) | Il contratto e SDK. comrak si trova solo qui. |
+| `fub-features` | [Cargo.toml](../../crates/fub-features/Cargo.toml) | Solo il contratto. Il kernel è dev-only. Questa è l'invariante del dogfooding. |
+| `fub-host` | [Cargo.toml](../../crates/fub-host/Cargo.toml) | I quattro crate precedenti. È il composition root. Monta le risorse degli altri moduli. |
+| `fub-app` | [Cargo.toml](../../crates/fub-app/Cargo.toml) | abi, kernel, host e features. `tauri` si trova solo qui. |
+| `fub-testkit` | [Cargo.toml](../../crates/fub-testkit/Cargo.toml) | Il contratto e il **kernel**. È il banco (l'ambiente di test) del lato host. Per questo motivo non è mai una dipendenza normale di nessuno. |
 
-Le frecce tratteggiate sono la parte che vale la pena guardare, perché sono un
-confine e non una comodità: `fub-features` e `fub-format-markdown` usano
-`fub-kernel` **solo nei test**. Le loro librerie girano con ciò che avrà un
-plugin di terzi — il contratto e nient'altro — e quel «nient'altro» è verificato
-da `official_features_do_not_depend_on_the_kernel`
-([dependency_invariant.rs:317](../../crates/fub-abi/tests/dependency_invariant.rs)).
-Se una feature prendesse la scorciatoia, il test diventerebbe rosso prima che
-il diagramma diventasse falso.
+Le frecce tratteggiate indicano un confine architetturale. Non sono una comodità. `fub-features` e `fub-format-markdown` usano `fub-kernel` **solo nei test**. Le loro librerie usano solo il contratto. Questo simula l'ambiente di un plugin di terzi. Il test `official_features_do_not_depend_on_the_kernel` ([dependency_invariant.rs:375](../../crates/fub-abi/tests/dependency_invariant.rs)) verifica questa assenza di dipendenze. Se una feature usasse il kernel, il test fallirebbe prima di rendere falso il diagramma.
 
-Quel «nient'altro» riguarda le **dipendenze**, e non promette che un terzo possa
-fare tutto ciò che fa una feature ufficiale: la
-[0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md) dice dove la
-somiglianza finisce — un guest non ha `UiNode::Html`/`WebView` (riservati a
-`Trust::Core`), non riceve eventi di tastiera perché il contratto non ne
-trasporta, e la **superficie di scrittura** è per questo non attrezzata pur non
-essendo vietata. È la quarta voce del metro in
-[plugin-boundary.md](plugin-boundary.md#cosa-non-può-essere-solo-un-guest-e-il-metro-per-deciderlo).
+L'assenza di dipendenze extra non garantisce piene capacità. Un plugin di terzi non può fare tutto ciò che fa una feature ufficiale. Il verbale [0104](../decisions/0104-la-superficie-di-scrittura-si-presta.md) spiega i limiti:
+- Un guest non ha `UiNode::Html`/`WebView`. Questi sono riservati a `Trust::Core`.
+- Un guest non riceve eventi di tastiera. Il contratto non li trasporta.
+- La **superficie di scrittura** non vieta queste azioni, ma manca degli strumenti per eseguirle.
 
-E il diagramma stesso non può invecchiare in silenzio: `il_diagramma_dice_le_dipendenze_vere`
-lo rilegge da questo file e lo confronta con `cargo metadata` **nei due versi**.
-Un arco disegnato che non esiste è rosso; una dipendenza reale che il disegno
-non mostra è rossa anche lei, ed è quella che conta — un diagramma incompleto
-mente più di uno sbagliato, perché ha l'aria di essere completo. Vale anche per
-un crate nuovo: nasce, e il diagramma che non lo nomina fallisce.
+Questi limiti rappresentano la quarta voce del metro di giudizio in [plugin-boundary.md](plugin-boundary.md#cosa-non-può-essere-solo-un-guest-e-il-metro-per-deciderlo).
 
-`fub-app` non compare in nessun altro riquadro come dipendenza: è una foglia,
-e ci sta apposta. `fub-testkit` è la foglia opposta — **nessuna** freccia piena
-esce verso di lui, e ci sta apposta anche quello: un banco di prova che entrasse
-in una libreria si porterebbe dietro il kernel, ed è ciò che
-`il_banco_di_prova_non_entra_in_nessuna_libreria` impedisce guardando *tutti* i
-membri invece di un elenco.
+Il diagramma si auto-verifica. Il test `il_diagramma_dice_le_dipendenze_vere` legge questo file e lo confronta con `cargo metadata` **nei due versi**.
+- Un arco disegnato che non esiste fa fallire il test.
+- Una dipendenza reale omessa fa fallire il test. Un diagramma incompleto mente più di uno sbagliato, perché ha l'aria di essere completo.
+- Un nuovo crate creato senza aggiornare il diagramma fa fallire il test.
 
-`fub-sdk` ha un cliente solo fra le dipendenze piene, `fub-format-markdown`,
-ed è il fatto da cui dipende un intero ragionamento: è quella freccia — non il
-guest WASM di M5 — a rendere impossibile mettere il kernel nell'SDK
-([0054](../decisions/0054-il-banco-del-lato-provider.md)). Fra le tratteggiate ha
-anche `fub-features`, che da lì prende `MemoryHost`.
+`fub-app` è una foglia. Nessun altro crate lo usa come dipendenza. Questa è una scelta architetturale.
+`fub-testkit` è la foglia opposta. **Nessuna** freccia piena esce verso di lui. Un banco (ambiente di test) non deve entrare in una libreria. Altrimenti si porterebbe dietro il kernel. Il test `il_banco_di_prova_non_entra_in_nessuna_libreria` impedisce questo errore esaminando *tutti* i membri.
 
-L'elenco a indentazione in [PIANO.md](../PIANO.md#struttura-dei-crate) sembra un
-grafo ma non lo è: nomina anche `fub-wasm-host`, che non esiste. Quello è
-l'elenco di destinazione; questo è la fotografia.
+`fub-sdk` ha un solo cliente fra le dipendenze piene: `fub-format-markdown`. Questa freccia guida un intero ragionamento: rende impossibile inserire il kernel nell'SDK ([0054](../decisions/0054-il-banco-del-lato-provider.md)). Fra le dipendenze tratteggiate ha anche `fub-features`. Da lì prende `MemoryHost`.
+
+L'elenco a indentazione in [PIANO.md](../PIANO.md#struttura-dei-crate) non è un grafo. Indica la destinazione finale. Nomina anche il crate futuro `fub-wasm-host`. Questo diagramma fotografa invece lo stato attuale.
 
 ## Dove gira cosa
 
-I due disegni sopra dicono com'è fatto il codice. Questo dice come si dispone
-mentre l'app è accesa: **un processo**, un webview, e un gruppo di thread che
-nasce a ogni vault aperto e muore quando quel vault si chiude.
+I due diagrammi precedenti mostrano la struttura del codice. Questo diagramma mostra la disposizione a runtime. L'app usa **un processo**, un webview e vari gruppi di thread. Un gruppo di thread nasce per ogni vault aperto. Muore quando quel vault si chiude.
 
 ```mermaid
 flowchart TB
@@ -323,90 +268,76 @@ flowchart TB
     Main --> S2
 ```
 
-| Cosa | Quante ce ne sono | Dove |
+| Cosa | Quantità e dettagli | Dove |
 |---|---|---|
-| processi | **uno**: non c'è né un demone né un servizio | [fub-app/src/lib.rs](../../crates/fub-app/src/lib.rs) |
-| webview | uno, e il core lo considera **privilegiato** — è la ragione per cui `UiNode::Html` è negato a chi non è fidato | [ui-protocol.md](ui-protocol.md) |
-| `VaultSession` | una per vault aperto, in una mappa | [session.rs:106](../../crates/fub-host/src/session.rs) |
-| thread del ponte | uno per vault; dorme su `recv()` e non consuma niente a vault fermo | [bridge.rs:7](../../crates/fub-host/src/bridge.rs) |
-| thread del rilevatore | uno per vault, ed è **facoltativo**: dietro una cargo feature, altrimenti nessuno | [watcher.rs:74](../../crates/fub-host/src/watcher.rs) |
-| thread dei job | **due** di default, per vault e non globali | [runner.rs:67](../../crates/fub-host/src/runner.rs) |
-| database | **nessuno** | — |
+| Processi | **Uno**. Il sistema non usa demoni o servizi. | [fub-app/src/lib.rs](../../crates/fub-app/src/lib.rs) |
+| Webview | Uno. Il core lo considera **privilegiato**. Per questo motivo, `UiNode::Html` è negato al codice non fidato. | [ui-protocol.md](ui-protocol.md) |
+| `VaultSession` | Una per vault aperto. Si conservano in una mappa. | [session.rs:106](../../crates/fub-host/src/session.rs) |
+| Thread del ponte | Uno per vault. Dorme su `recv()`. Non consuma risorse a vault fermo. | [bridge.rs:7](../../crates/fub-host/src/bridge.rs) |
+| Thread del rilevatore | Uno per vault. È **facoltativo**. Si attiva solo dietro una cargo feature. | [watcher.rs:74](../../crates/fub-host/src/watcher.rs) |
+| Thread dei job | **Due** di default per vault. Non sono globali. | [runner.rs:67](../../crates/fub-host/src/runner.rs) |
+| Database | **Nessuno**. | — |
 
-Il lock è per vault, non per app: due vault aperti non si aspettano a vicenda. E
-il pool dei job è per vault per la stessa ragione — un'indicizzazione lunga su un
-archivio non deve rallentare le note di lavoro.
+Il lock agisce per vault, non per applicazione. Due vault aperti non si aspettano a vicenda. Il pool dei job usa la stessa logica. Un'indicizzazione lunga su un archivio non deve rallentare le note di lavoro.
 
-Cosa ciascuno di quei riquadri del disco contiene, con quale classe e quale
-disciplina di scrittura, non si ridisegna qui: è una tabella, ed è in
-[on-disk-layout.md](on-disk-layout.md).
+La tabella completa dei riquadri del disco si trova in [on-disk-layout.md](on-disk-layout.md). Specifica contenuto, classe e regole di scrittura.
 
 ## Il dettaglio, per riquadro
 
-**📜 `fub-abi`** — modello di documento comune e la sua forma al confine
-(alberi appiattiti, span a larghezza fissa: la conversione che il proxy WASM
-erediterà); i trait di estensione; `HostApi` come somma di quattordici trait
-(che una politica nega con sedici nomi, [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md));
-il linguaggio delle interrogazioni; i comandi con argomenti e raggio dichiarati,
-e la simulazione come modo di invocarli; import ed export a byte e non a path;
-l'edit come coppia span-testo sopra una revisione; il protocollo di UI
-dichiarativa e gli eventi con chi ha chiesto e di che lotto fanno parte; il
-locale; le impostazioni; e `rules/`, la parte di risposta che non dipende da chi
-la dà — sta lì e non nel kernel perché chi serve una query può non avere il
-kernel fra le mani. In `crates/fub-abi/wit/` lo stesso contratto una seconda volta, con una
-linea di base congelata presidiata da un test di conformità.
+**📜 `fub-abi`** — Contiene i seguenti elementi:
+- Il modello di documento comune e la sua forma al confine. Usa alberi appiattiti e span a larghezza fissa. Il proxy WASM erediterà questa conversione.
+- I trait di estensione.
+- `HostApi`. È la somma di quattordici trait. Una politica lo nega tramite sedici nomi ([0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md)).
+- Il linguaggio delle interrogazioni.
+- I comandi. Hanno argomenti e raggio dichiarati. La simulazione è il modo per invocarli.
+- Le funzioni di import ed export. Lavorano a byte e non a path.
+- L'edit. È una coppia span-testo sopra una revisione.
+- Il protocollo di UI dichiarativa. Gli eventi specificano chi ha chiesto l'operazione e il lotto (gruppo di modifiche coerenti) di appartenenza.
+- Il locale e le impostazioni.
+- `rules/`. È la parte di risposta indipendente da chi la formula. Si trova nell'ABI perché chi serve una query potrebbe non avere il kernel.
+- `crates/fub-abi/wit/`. Contiene lo stesso contratto definito una seconda volta in WIT. Un test di conformità presidia (protegge) una linea di base congelata.
 
-**🚀 `fub-kernel`** — `Workspace` non è uno struct con ventiquattro campi
-piatti: ne ha cinque, e il taglio passa fra *decidere* e *chiamare*. È anche la
-linea lungo cui sta il `RwLock`: chi legge prende il prestito condiviso, chi
-chiama un provider quello esclusivo. Il canale dati è la parte più recente: le
-risposte del kernel sono **un provider registrato per primo**, non un ramo prima
-del ciclo, e chi serve cosa è dichiarato al montaggio — un conflitto si vede
-subito, e «nessuno la serve» è distinguibile da «chi la serve ha fallito».
+**🚀 `fub-kernel`**
+- `Workspace` non è uno struct con ventiquattro campi piatti. Ne ha cinque. La divisione separa chi *decide* da chi *chiama*.
+- `RwLock` segue la stessa divisione. Chi legge prende il prestito condiviso. Chi chiama un provider usa il prestito esclusivo.
+- Il canale dati gestisce le risposte del kernel come **un provider registrato per primo**. Non usa un ramo prima del ciclo. I gestori delle richieste si dichiarano al montaggio. Questo rivela subito un conflitto. Il sistema distingue il caso «nessuno la serve» dal caso «chi la serve ha fallito».
 
-**🧩 I provider** — nove bundle di feature montati da `fub-host` (ricerca,
-versioning — che dalla [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)
-porta anche la sua view e il suo comando —, cinque view, comandi, blocchi), più
-un decimo intestato al core
-stesso, che non registra nulla e serve solo a dargli un'identità nel registro.
-E il provider markdown, che è il primo cliente del `FormatRegistry` e non un
-caso speciale.
+**🧩 I provider**
+- Nove bundle di feature montati da `fub-host`. Includono: ricerca, versioning, cinque view, comandi e blocchi. Il versioning porta la sua view e il suo comando, in base al verbale [0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md).
+- Un decimo provider è intestato al core stesso. Non registra nulla. Serve solo a fornirgli un'identità nel registro.
+- Il provider markdown è il primo cliente del `FormatRegistry`. Non è un caso speciale.
 
-**🔧 `fub-host`** — il composition root. Le tre porte sono ciò che di un'app
-vera *non* può stare lì dentro: chi vede le scritture altrui (`notify` debounced
-dietro una cargo feature, oppure nessuno), dove finiscono gli eventi una volta
-usciti (il webview, stdout, niente), e chi decide *quando* si apre — l'host non
-apre da sé. Il runner dei job possiede i thread e costruisce un `HostApi` **per
-chiamata**, perché il kernel non sa che esiste un lock.
+**🔧 `fub-host`**
+- È il composition root.
+- Le tre porte gestiscono funzionalità non incluse nel core dell'app. Gestiscono chi vede le scritture altrui (`notify` debounced attivato da una cargo feature, oppure nessuno). Gestiscono la destinazione degli eventi in uscita (la webview, stdout o niente). Decidono *quando* l'app si apre, poiché l'host non si apre da sé.
+- Il runner dei job possiede i thread. Costruisce un `HostApi` **per chiamata**. Il kernel non conosce l'esistenza del lock.
 
-**🪟 `fub-app`** — se una riga di questo crate si può spiegare senza nominare
-Tauri, sta nel posto sbagliato.
+**🪟 `fub-app`**
+- Ogni riga di questo crate serve a interagire con Tauri. Altrimenti si trova nel posto sbagliato.
 
-**🖥️ `frontend/`** — `main.ts` compone e nient'altro. Un pannello dichiara chi
-è, dove sta e cosa lo fa invecchiare; `panel-host` decide quando chiamarlo — una
-view dichiarata dal backend e un pannello nativo, da lì in giù, non si
-distinguono.
+**🖥️ `frontend/`**
+- `main.ts` si limita a comporre l'interfaccia.
+- Ogni pannello dichiara la propria identità, posizione e condizione di invecchiamento (quando i dati scadono).
+- `panel-host` decide quando chiamare il pannello.
+- Da questo livello in poi, una view dichiarata dal backend e un pannello nativo non si distinguono.
 
-**💾 Il disco** — dentro il vault: i file dell'utente e **una** radice nostra,
-`.fub/` ([0048](../decisions/0048-una-radice-sola.md)): in cima ciò che si
-sincronizza (impostazioni del vault, organizzazione), sotto `data/` ciò che si
-può buttare (anagrafe delle entry, stato per-documento sotto `doc/`, spazio dei
-plugin con l'indice tantivy e gli snapshot del versioning). Fuori resta
-`.trash/`, che è il cestino condiviso con Obsidian, col sidecar che ricorda la
-provenienza. La mappa per esteso è
-[on-disk-layout.md](on-disk-layout.md). Fuori dal vault, la config della macchina:
-un solo bootstrap via `FUB_CONFIG_DIR`, o il modo portable accanto
-all'eseguibile.
+**💾 Il disco**
+- Il vault contiene i file dell'utente e **una** sola radice nostra: `.fub/` ([0048](../decisions/0048-una-radice-sola.md)).
+- La cima della cartella contiene i dati da sincronizzare. Includono le impostazioni del vault e l'organizzazione.
+- La cartella `data/` contiene dati eliminabili. Includono l'anagrafe (il registro) delle entry, lo stato per-documento sotto `doc/` e lo spazio dei plugin (con l'indice tantivy e gli snapshot del versioning).
+- Fuori dal vault si trova `.trash/`. È il cestino condiviso con Obsidian. Usa un file sidecar (file di supporto) per ricordare la provenienza dei file eliminati.
+- La mappa completa del disco si trova in [on-disk-layout.md](on-disk-layout.md).
+- Fuori dal vault si trova la configurazione della macchina. L'app si avvia tramite un solo bootstrap via `FUB_CONFIG_DIR`, oppure usa la modalità portable dalla cartella dell'eseguibile.
 
 ## Legenda dei colori
 
 | Colore | Cosa |
 |---|---|
-| 🟣 viola | il contratto — `fub-abi` e il suo gemello WIT |
-| ⚫ grigio scuro | il core agnostico — `fub-kernel` |
-| 🔵 blu | i provider nativi — markdown, le otto feature, l'SDK |
-| 🟢 verde scuro | chi monta — `fub-host` |
-| 🟠 arancio | la colla Tauri — `fub-app` |
-| ⚪ grigio | la shell — `frontend/` |
-| 🟩 verde | il disco |
-| ⬜ tratteggiato | non esiste ancora |
+| 🟣 viola | Il contratto. Comprende `fub-abi` e il suo gemello WIT. |
+| ⚫ grigio scuro | Il core agnostico. Comprende `fub-kernel`. |
+| 🔵 blu | I provider nativi. Includono markdown, le otto feature e l'SDK. |
+| 🟢 verde scuro | Chi monta. Comprende `fub-host`. |
+| 🟠 arancio | L'integrazione di Tauri. Comprende `fub-app`. |
+| ⚪ grigio | La shell. Comprende `frontend/`. |
+| 🟩 verde | Il disco. |
+| ⬜ tratteggiato | Componenti non ancora scritti. |

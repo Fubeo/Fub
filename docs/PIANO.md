@@ -120,8 +120,8 @@ plugins/               (M5) plugin di esempio (wasm32-wasip2)
 ```
 
 Questo elenco è di **destinazione**: nomina `fub-wasm-host`, che non esiste, e
-l'indentazione raggruppa per ruolo, non per dipendenza. Chi
-dipende davvero da chi sta in
+l'indentazione raggruppa per ruolo, non per dipendenza. Chi dipende davvero da
+chi sta in
 [architecture/mappa-visuale.md](architecture/mappa-visuale.md#il-grafo-delle-dipendenze-e-il-test-che-lo-legge),
 dove un test rilegge il disegno e lo confronta con `cargo metadata`.
 
@@ -160,20 +160,37 @@ Mappa **di dettaglio**, documento per documento. La porta di `docs/` — percors
 di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
 
 **Architettura** (trasversale ai milestone):
-- [architecture/mappa-visuale.md](architecture/mappa-visuale.md) — l'intera architettura in tre disegni: quello disposto a mano (gli otto crate, la shell, il disco, e tratteggiato ciò che non esiste ancora), il grafo delle dipendenze presidiato da un test, e dove gira cosa mentre l'app è accesa.
-- [architecture/data-model.md](architecture/data-model.md) — `DocumentModel`, `Block`/`Inline`, `Span`, `LinkTarget`, escape hatch `Custom`.
-- [architecture/traits.md](architecture/traits.md) — i trait del contratto, chi li implementa e a quale milestone, la tabella di esprimibilità WIT.
-- [architecture/ui-protocol.md](architecture/ui-protocol.md) — protocollo `UiNode`, mapping sul frontend, regola dell'escape hatch web-view.
-- [architecture/plugin-boundary.md](architecture/plugin-boundary.md) — `Plugin`/`HostApi`/`PluginManifest`, modello capability ibrido, sandbox WASM.
-- [architecture/shell.md](architecture/shell.md) — l'albero del frontend, la cucitura unica con l'host, i due bus.
-- [architecture/wit.md](architecture/wit.md) — il contratto nella lingua dei componenti WASM: perché l'albero `wit/` esiste e cosa presidia.
-- [architecture/wit-congelato.md](architecture/wit-congelato.md) — la linea di base versione per versione, e la promessa di additività su cui poggia il freeze di M4.
+- [architecture/mappa-visuale.md](architecture/mappa-visuale.md) — l'intera
+  architettura in tre disegni: quello disposto a mano (gli otto crate, la shell,
+  il disco, e tratteggiato ciò che non esiste ancora), il grafo delle dipendenze
+  presidiato da un test, e dove gira cosa mentre l'app è accesa.
+- [architecture/data-model.md](architecture/data-model.md) — `DocumentModel`,
+  `Block`/`Inline`, `Span`, `LinkTarget`, escape hatch `Custom`.
+- [architecture/traits.md](architecture/traits.md) — i trait del contratto, chi
+  li implementa e a quale milestone, la tabella di esprimibilità WIT.
+- [architecture/ui-protocol.md](architecture/ui-protocol.md) — protocollo
+  `UiNode`, mapping sul frontend, regola dell'escape hatch web-view.
+- [architecture/plugin-boundary.md](architecture/plugin-boundary.md) —
+  `Plugin`/`HostApi`/`PluginManifest`, modello capability ibrido, sandbox WASM.
+- [architecture/shell.md](architecture/shell.md) — l'albero del frontend, la
+  cucitura unica con l'host, i due bus.
+- [architecture/wit.md](architecture/wit.md) — il contratto nella lingua dei
+  componenti WASM: perché l'albero `wit/` esiste e cosa presidia.
+- [architecture/wit-congelato.md](architecture/wit-congelato.md) — la linea di
+  base versione per versione, e la promessa di additività su cui poggia il
+  freeze di M4.
 
 **Milestone**:
-- [milestones/M2-search-graph.md](milestones/M2-search-graph.md) — ricerca (tantivy), grafo/indice incrementali, graph view, outline/tag panel, "crea nota".
-- [milestones/M3-editor-fidelity.md](milestones/M3-editor-fidelity.md) — live-preview in-editor, command palette, settings dichiarativi, rendering callout/embed/math.
-- [milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md) — freeze del contratto, WIT, conformità abi↔WIT, primo plugin nativo.
-- [milestones/M5-wasm-runtime.md](milestones/M5-wasm-runtime.md) — `fub-wasm-host`, proxy WASM, applicazione delle capability, plugin di esempio.
+- [milestones/M2-search-graph.md](milestones/M2-search-graph.md) — ricerca
+  (tantivy), grafo/indice incrementali, graph view, outline/tag panel, "crea
+  nota".
+- [milestones/M3-editor-fidelity.md](milestones/M3-editor-fidelity.md) —
+  live-preview in-editor, command palette, settings dichiarativi, rendering
+  callout/embed/math.
+- [milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md) — freeze del
+  contratto, WIT, conformità abi↔WIT, primo plugin nativo.
+- [milestones/M5-wasm-runtime.md](milestones/M5-wasm-runtime.md) —
+  `fub-wasm-host`, proxy WASM, applicazione delle capability, plugin di esempio.
 
 **Piani di lavoro**:
 - [todo.md](todo.md) — la **roadmap infrastrutturale**: quali pezzi mancano
@@ -192,22 +209,41 @@ di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
   (`.github/scripts/check-doc-links.mjs`).
 
 **Il lessico**:
-- [glossario.md](glossario.md) — le parole di questo repo che non sono standard, sei famiglie, una voce per termine: cos'è in due righe, il tipo Rust da cercare, il file in cui vive (link vero, quindi presidiato) e il verbale che l'ha deciso. Non spiega l'architettura: rimanda a chi la spiega.
+- [glossario.md](glossario.md) — le parole di questo repo che non sono standard,
+  sei famiglie, una voce per termine: cos'è in due righe, il tipo Rust da
+  cercare, il file in cui vive (link vero, quindi presidiato) e il verbale che
+  l'ha deciso. Non spiega l'architettura: rimanda a chi la spiega.
 
 **Il repo come progetto pubblico** (primo livello di `docs/`, perché la prosa sta
 in un posto solo; i nomi sono in inglese perché GitHub li cerca **per nome** — la
 ragione per esteso è in [README.md](README.md)):
-- [leggimi-prima.md](leggimi-prima.md) — cos'è Fub in cinque righe, i crate in ordine di dipendenza, e il dizionario del dialetto.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — le quattro invarianti presidiate, il ciclo locale, i sei job della CI, la forma dei commit, come si chiude una decisione.
-- [SECURITY.md](SECURITY.md) — il canale privato per una vulnerabilità, il perimetro (dentro: il contenuto dei file come input non fidato; fuori: il sandbox WASM, che a M5 non esiste ancora), e i presidi già in piedi.
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1, traduzione ufficiale italiana, ripreso parola per parola.
-- [versionamento.md](versionamento.md) — i **tre** numeri di versione: i crate (SemVer, un numero solo per il workspace), il contratto (`ABI_VERSION` + `package fub:abi@…`, con la regola di caricamento) e i sette `SCHEMA_VERSION` su disco. L'additività del contratto non si ripete lì: rimanda a [architecture/wit-congelato.md](architecture/wit-congelato.md).
-- [CHANGELOG.md](CHANGELOG.md) — cosa cambia per chi usa Fub, alla grana della milestone finché non esiste un rilascio.
+- [leggimi-prima.md](leggimi-prima.md) — il progetto in cinque righe, i crate in
+  ordine di dipendenza, e il dizionario del dialetto: le parole con cui questo
+  repo organizza il proprio lavoro, quelle che il glossario non tiene.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — le quattro invarianti presidiate, il
+  ciclo locale, i sei job della CI, la forma dei commit, come si chiude una
+  decisione.
+- [SECURITY.md](SECURITY.md) — il canale privato per una vulnerabilità, il
+  perimetro (dentro: il contenuto dei file come input non fidato; fuori: il
+  sandbox WASM, che a M5 non esiste ancora), e i presidi già in piedi.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1,
+  traduzione ufficiale italiana, ripreso parola per parola.
+- [versionamento.md](versionamento.md) — i **tre** numeri di versione: i crate
+  (SemVer, un numero solo per il workspace), il contratto (`ABI_VERSION` +
+  `package fub:abi@…`, con la regola di caricamento) e i sette `SCHEMA_VERSION`
+  su disco. L'additività del contratto non si ripete lì: rimanda a
+  [architecture/wit-congelato.md](architecture/wit-congelato.md).
+- [CHANGELOG.md](CHANGELOG.md) — cosa cambia per chi usa Fub, alla grana della
+  milestone finché non esiste un rilascio.
 
 **Appendici**:
-- [appendix/ai-autocomplete.md](appendix/ai-autocomplete.md) — design (non milestone) dell'autocompletamento AI.
-- [appendix/funzionalita-future.md](appendix/funzionalita-future.md) — funzionalità post-M5 (mobile, sync, flashcard, export editoriale…) dalle interviste alle personas; include il principio della **spegnibilità totale**.
-- [appendix/platforms-ci.md](appendix/platforms-ci.md) — matrice OS e CI multi-piattaforma.
+- [appendix/ai-autocomplete.md](appendix/ai-autocomplete.md) — design (non
+  milestone) dell'autocompletamento AI.
+- [appendix/funzionalita-future.md](appendix/funzionalita-future.md) —
+  funzionalità post-M5 (mobile, sync, flashcard, export editoriale…) dalle
+  interviste alle personas; include il principio della **spegnibilità totale**.
+- [appendix/platforms-ci.md](appendix/platforms-ci.md) — matrice OS e CI
+  multi-piattaforma.
 
 Nota storica: `ORGANIZZAZIONE_VAULT.md` è stato **cancellato** con la
 [0003](decisions/0003-modello-del-documento.md) (commit `0a4ee40`). La feature

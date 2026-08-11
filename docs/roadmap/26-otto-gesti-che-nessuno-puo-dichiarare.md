@@ -81,43 +81,49 @@ mano. Non c'è niente di rotto che si veda. Ciò che manca è il **dato** — la
 dichiarazione che rende quel gesto una cosa che si può guardare, cambiare,
 spegnere o portare da fuori.
 
-Non c'è un contesto per un accordo (§26.1); non c'è un registro che raccolga gli
-accordi montati dentro l'editor (§26.2); non c'è una grammatica dichiarata di
-che cosa sia un accordo (§26.3); non c'è un livello che dica quale superficie
-prende il tasto (§26.4); non c'è un bersaglio che dica su che cosa è caduto il
-clic destro (§26.5); non c'è la grana che separi *leggere* gli appunti dallo
-*scriverci* (§26.6); non c'è un modo di dichiarare che un nodo accetta un
-rilascio (§26.7); non c'è un modo per una view di dire che ha un proprio annulla
-(§26.8).
+Ciò che manca, voce per voce:
 
-E c'è una seconda proprietà, che è la ragione per cui queste otto si decidono
-insieme e non una per volta: **in tutte e otto la mossa giusta il repo l'ha già
+* un contesto per un accordo (§26.1);
+* un registro che raccolga gli accordi montati dentro l'editor (§26.2);
+* una grammatica dichiarata di che cosa sia un accordo (§26.3);
+* un livello che dica quale superficie prende il tasto (§26.4);
+* un bersaglio che dica su che cosa è caduto il clic destro (§26.5);
+* la grana che separi *leggere* gli appunti dallo *scriverci* (§26.6);
+* un modo di dichiarare che un nodo accetta un rilascio (§26.7);
+* un modo per una view di dire che ha un proprio annulla (§26.8).
+
+**E c'è una seconda proprietà, che è la ragione per cui queste otto si decidono
+insieme e non una per volta: in tutte e otto la mossa giusta il repo l'ha già
 fatta accanto, su un problema confinante, e questo è il posto in cui non l'ha
-fatta.** La [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md) ha reso
-una scorciatoia una chiave d'impostazione — per i 32 comandi dei due registri che
-il presidio conosce, non per i tasti nudi (§26.1). La
-[0081](../decisions/0081-un-accordo-ha-un-proprietario.md) ha costruito il
-presidio dei conflitti — su due registri di cinque, e il terzo lo aveva
-indirizzato a una voce che si è chiusa senza guardarlo (§26.2).
-`crates/fub-abi/src/rules/` tiene dodici moduli di regole condivise fra i due
-lati del confine — e nessuno di loro è la grammatica di un accordo, che infatti
-è scritta due volte e diverge (§26.3). `frontend/src/theme/tokens.css:98-100`
-dichiara che l'ordine delle superfici è una lista in un posto solo — per i
-pixel, non per i tasti, ed è la ragione per cui i due ordini si contraddicono
-già oggi (§26.4). La
-[0079](../decisions/0079-il-grafo-esce-dall-overlay.md) ha aperto la superficie
-principale a chi non è il core — per una superficie, non per il menu
-contestuale, che il contratto nomina e che rimanda a un campo che non esiste
-(§26.5). La
-[0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) e la
-[0096](../decisions/0096-una-bozza-non-e-una-nota.md) hanno spaccato
-due permessi perché una frase fosse esprimibile — e la stessa frase, sugli
-appunti, non lo è (§26.6). La
-[0140](../decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md) ha deciso dove stanno i byte
-di un kind di terzi — e il carico di un rilascio non ha nessuna chiave (§26.7).
-La [0045](../decisions/0045-l-undo-ha-due-pile.md) ha scritto che *«a decidere
-quale risponde è il fuoco»* — con due pile e due fuochi, che è il caso in cui la
-regola non serviva ancora (§26.8).
+fatta.**
+
+* La [0077](../decisions/0077-una-scorciatoia-e-una-chiave.md) ha reso una
+  scorciatoia una chiave d'impostazione: per i 32 comandi dei due registri che il
+  presidio conosce, non per i tasti nudi (§26.1).
+* La [0081](../decisions/0081-un-accordo-ha-un-proprietario.md) ha costruito il
+  presidio dei conflitti: su due registri di cinque, e il terzo lo aveva
+  indirizzato a una voce che si è chiusa senza guardarlo (§26.2).
+* `crates/fub-abi/src/rules/` tiene dodici moduli di regole condivise fra i due
+  lati del confine, e nessuno di loro è la grammatica di un accordo — che infatti
+  è scritta due volte e diverge (§26.3).
+* `frontend/src/theme/tokens.css:98-100` dichiara che l'ordine delle superfici è
+  una lista in un posto solo: per i pixel, non per i tasti, ed è la ragione per
+  cui i due ordini si contraddicono già oggi (§26.4).
+* La [0079](../decisions/0079-il-grafo-esce-dall-overlay.md) ha aperto la
+  superficie principale a chi non è il core: per una superficie, non per il menu
+  contestuale, che il contratto nomina e che rimanda a un campo che non esiste
+  (§26.5).
+* La [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) e la
+  [0096](../decisions/0096-una-bozza-non-e-una-nota.md) hanno spaccato due
+  permessi perché una frase fosse esprimibile, e la stessa frase, sugli appunti,
+  non lo è (§26.6).
+* La
+  [0140](../decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md) ha deciso
+  dove stanno i byte di un kind di terzi, e il carico di un rilascio non ha
+  nessuna chiave (§26.7).
+* La [0045](../decisions/0045-l-undo-ha-due-pile.md) ha scritto che *«a decidere
+  quale risponde è il fuoco»*: con due pile e due fuochi, che è il caso in cui la
+  regola non serviva ancora (§26.8).
 
 **Nessuna delle otto scade col freeze**, ed è misurato voce per voce: sei non
 toccano il contratto affatto nella forma raccomandata, e le altre passano tutte

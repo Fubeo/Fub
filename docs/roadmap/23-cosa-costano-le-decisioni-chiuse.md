@@ -6,46 +6,63 @@ Una **seduta chiusa** della [roadmap infrastrutturale](../todo.md): prezzi dichi
 
 ---
 
-**Chiusa**, dalla [0109](../decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md).
-Diciassette voci, e questa seduta lascia una cosa che le altre non lasciano: il
-**consuntivo del metodo** con cui è nata. La domanda era *una decisione presa
-bene, cosa costa a chi usa l'app?*, e la risposta misurata è che il prezzo
-dichiarato dai verbali era quasi sempre **vero** e la diagnosi che ne dava la
-voce quasi sempre **incompleta** — le premesse cadute sono state almeno una per
-voce, e nelle ultime otto il difetto peggiore stava ogni volta *fuori* dalla voce
-che lo aveva fatto trovare. È il rovescio esatto del pregio che la seduta
-celebrava: scrivere il prezzo accanto alla scelta ha retto su tutti e novanta i
-verbali, e la riga scritta allora — letta a distanza — dice **dove guardare**, non
-**cosa troverai**.
+**Chiusa**, dalla
+[0109](../decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md).
+Diciassette voci.
 
-**Questa seduta l'ha trovata una verifica, ed è la terza.** Le due precedenti —
-quella che ha aperto la [§21.10](21-la-ricerca-predefinita.md) e quella che ha
-aperto la [seduta 22](22-cosa-sa-dire-un-abbonamento.md) — controllavano contro i
-sorgenti un'affermazione arrivata **da fuori**. Questa ha un oggetto nuovo: i
-**verbali stessi**, riletti in fila con una domanda che nessuna delle sei del
-[criterio](../todo.md) pone. Le sei guardano il sistema — cosa manca, cosa ha la
-forma sbagliata, cosa non mantiene, quante volte è scritto, a quale domanda
-nessuno ha risposto, cosa fallisce in silenzio. Questa guarda **chi usa l'app** e
-**chi scriverà un plugin**: *una decisione presa bene, cosa costa a loro?*
+**Il consuntivo del metodo, che è la cosa che questa seduta lascia e le altre
+no.** La domanda era *una decisione presa bene, cosa costa a chi usa l'app?* La
+risposta misurata è doppia:
 
-**Perché stanno insieme.** Tutte nascono dallo stesso movimento, e non da
-un errore: una decisione argomentata bene dichiara il proprio prezzo in una riga
-del verbale — «la migrazione non copre la rinomina fatta ad app chiusa», «la
-capacità manca per sempre», «servono prima §9.1 e §7.3» — e lì la riga resta. Il
-verbale è immutabile e fa il suo mestiere; ciò che manca è che qualcuno **sommi
-quei prezzi** e decida se sono ancora quelli. È la famiglia della
-[0054](../decisions/0054-il-banco-del-lato-provider.md) vista dal verso mite: non
-una garanzia dichiarata che non esiste, ma un costo dichiarato che nessuno
-rilegge — perché il motivo per cui lo si scrive è smettere di doverci pensare.
+* Il prezzo dichiarato dai verbali era quasi sempre **vero**.
+* La diagnosi che ne dava la voce era quasi sempre **incompleta**: le premesse
+  cadute sono state almeno una per voce, e nelle ultime otto il difetto peggiore
+  stava ogni volta *fuori* dalla voce che lo aveva fatto trovare.
 
-Le prime tre si sono trovate in tre punti diversi della stessa rilettura, e la
-proprietà che le lega la si vede solo mettendole in fila: **in tutte e tre la
-decisione regge e la sua premessa no**. La 0043 ha scartato l'unica alternativa
-che aveva guardato; l'invariante dei terzi è vera nel documento che la scrive e
-falsa su una superficie che sei verbali hanno costruito dopo; i due bloccanti che
-tenevano fuori la rete sono caduti uno per uno, in due sedute che non sapevano di
-toccarli. Sono tre modi diversi di invecchiare, e nessuno dei tre si vede
-rileggendo il verbale contro i sorgenti **del suo tempo**.
+È il rovescio esatto del pregio che la seduta celebrava. Scrivere il prezzo
+accanto alla scelta ha retto su tutti e novanta i verbali, e la riga scritta
+allora — letta a distanza — dice **dove guardare**, non **cosa troverai**.
+
+**Questa seduta l'ha trovata una verifica, ed è la terza.**
+
+* Le due precedenti — quella che ha aperto la
+  [§21.10](21-la-ricerca-predefinita.md) e quella che ha aperto la
+  [seduta 22](22-cosa-sa-dire-un-abbonamento.md) — controllavano contro i
+  sorgenti un'affermazione arrivata **da fuori**.
+* Questa ha un oggetto nuovo: i **verbali stessi**, riletti in fila con una
+  domanda che nessuna delle sei del [criterio](../todo.md) pone.
+* Le sei guardano il sistema: cosa manca, cosa ha la forma sbagliata, cosa non
+  mantiene, quante volte è scritto, a quale domanda nessuno ha risposto, cosa
+  fallisce in silenzio.
+* Questa guarda **chi usa l'app** e **chi scriverà un plugin**: *una decisione
+  presa bene, cosa costa a loro?*
+
+**Perché stanno insieme.** Tutte nascono dallo stesso movimento, e non da un
+errore.
+
+* Una decisione argomentata bene dichiara il proprio prezzo in una riga del
+  verbale: «la migrazione non copre la rinomina fatta ad app chiusa», «la
+  capacità manca per sempre», «servono prima §9.1 e §7.3».
+* Lì la riga resta. Il verbale è immutabile e fa il suo mestiere.
+* Ciò che manca è che qualcuno **sommi quei prezzi** e decida se sono ancora
+  quelli.
+* È la famiglia della
+  [0054](../decisions/0054-il-banco-del-lato-provider.md) vista dal verso mite:
+  non una garanzia dichiarata che non esiste, ma un costo dichiarato che nessuno
+  rilegge — perché il motivo per cui lo si scrive è smettere di doverci pensare.
+
+**Le prime tre voci: la decisione regge e la sua premessa no.** Si sono trovate
+in tre punti diversi della stessa rilettura, e la proprietà che le lega la si
+vede solo mettendole in fila.
+
+* La 0043 ha scartato l'unica alternativa che aveva guardato.
+* L'invariante dei terzi è vera nel documento che la scrive e falsa su una
+  superficie che sei verbali hanno costruito dopo.
+* I due bloccanti che tenevano fuori la rete sono caduti uno per uno, in due
+  sedute che non sapevano di toccarli.
+
+Sono tre modi diversi di invecchiare, e nessuno dei tre si vede rileggendo il
+verbale contro i sorgenti **del suo tempo**.
 
 **Cosa questa strada produce soprattutto, e va scritto.** Falsi positivi. La
 stessa rilettura ne ha prodotti cinque, tutti plausibili e tutti caduti al primo
@@ -69,28 +86,32 @@ controllo, e vale la pena elencarli perché chi la ripercorre non li ribatta:
   regge alla lettera: spegnere è non registrare, e ciò che non è registrato non
   esiste.
 
-**La seconda rilettura, e perché questa seduta cresce invece di chiudersi.** La
-prima ha riletto i verbali **in fila**, cercando i prezzi dichiarati ovunque
-fossero. La seconda ha fatto l'opposto: ha preso i **primi dieci** e li ha letti
-uno per uno contro i sorgenti di **oggi**, con le due domande di questa seduta —
-*cosa costa a chi usa l'app, cosa costa a chi scriverà un plugin*. Ne sono uscite
-cinque voci (§23.4–§23.8), e la ragione per cui non stanno in una seduta nuova è
-che hanno la stessa forma delle prime tre: la decisione regge, il prezzo lo
-dichiara il verbale, nessuno l'ha risommato.
+**La seconda rilettura, e perché questa seduta cresce invece di chiudersi.**
 
-Ma il **verso** in cui la premessa invecchia, qui, è un altro, e va scritto
-perché è ciò che questa rilettura insegna alla prossima. Nelle prime tre la
-premessa era vera e il mondo si è mosso sotto. In due delle cinque nuove la
-premessa era **incompleta il giorno stesso**: la
-[0007](../decisions/0007-contesto-di-sessione.md) ha scritto il criterio giusto —
-«un campo in più a un record è una migrazione di ogni provider che lo riceve»,
-quindi i campi si mettono tutti adesso — e poi ha lasciato che uno di quei campi
-avesse il **tipo** sbagliato; la stessa decisione ha messo il testo dell'utente
-dentro una capacità la cui riga di documentazione dice «che ore sono». Nessuna
-delle due si vede rileggendo il verbale: il verbale le dichiara entrambe, con
-tanto di prezzo. Si vedono solo **eseguendo il criterio del verbale sul verbale
-stesso**, che è la cosa che nessuna delle dieci strade del
-[criterio](../todo.md) chiede di fare.
+* La prima ha riletto i verbali **in fila**, cercando i prezzi dichiarati ovunque
+  fossero.
+* La seconda ha fatto l'opposto: ha preso i **primi dieci** e li ha letti uno per
+  uno contro i sorgenti di **oggi**, con le due domande di questa seduta — *cosa
+  costa a chi usa l'app, cosa costa a chi scriverà un plugin*.
+* Ne sono uscite cinque voci (§23.4–§23.8). Non stanno in una seduta nuova
+  perché hanno la stessa forma delle prime tre: la decisione regge, il prezzo lo
+  dichiara il verbale, nessuno l'ha risommato.
+
+**Ma il verso in cui la premessa invecchia, qui, è un altro**, ed è ciò che
+questa rilettura insegna alla prossima.
+
+* Nelle prime tre la premessa era vera e il mondo si è mosso sotto.
+* In due delle cinque nuove la premessa era **incompleta il giorno stesso**.
+* La [0007](../decisions/0007-contesto-di-sessione.md) ha scritto il criterio
+  giusto — «un campo in più a un record è una migrazione di ogni provider che lo
+  riceve», quindi i campi si mettono tutti adesso — e poi ha lasciato che uno di
+  quei campi avesse il **tipo** sbagliato.
+* La stessa decisione ha messo il testo dell'utente dentro una capacità la cui
+  riga di documentazione dice «che ore sono».
+* Nessuna delle due si vede rileggendo il verbale: il verbale le dichiara
+  entrambe, con tanto di prezzo. Si vedono solo **eseguendo il criterio del
+  verbale sul verbale stesso**, che è la cosa che nessuna delle dieci strade del
+  [criterio](../todo.md) chiede di fare.
 
 **Tre falsi positivi in più, dalla seconda rilettura.** Stessa disciplina: si
 elencano perché chi la ripercorre non li ribatta, e tutti e tre venivano da un
@@ -122,42 +143,51 @@ le voci aperte: la disciplina è cercarla nell'indice prima di scriverla, perch�
 una voce in doppio non si vede come un errore — si vede come due lavori.
 
 **La terza rilettura, e cosa cambia a leggerli tutti insieme.** La prima ha
-riletto i verbali in fila; la seconda ha preso i primi dieci e li ha letti uno per
-uno contro i sorgenti di oggi. La terza li ha presi **tutti e novanta**, divisi in
-cinque lotti letti in parallelo, con una domanda più stretta delle due di questa
-seduta: *questa decisione toglie a chi usa l'app **qualità**, **libertà** di
-modificare e scegliere, o **privacy**?* Ne sono uscite otto voci (§23.9–§23.16).
+riletto i verbali in fila; la seconda ha preso i primi dieci e li ha letti uno
+per uno contro i sorgenti di oggi. La terza li ha presi **tutti e novanta**,
+divisi in cinque lotti letti in parallelo, con una domanda più stretta delle due
+di questa seduta: *questa decisione toglie a chi usa l'app **qualità**,
+**libertà** di modificare e scegliere, o **privacy**?* Ne sono uscite otto voci
+(§23.9–§23.16).
 
-Quello che la lettura in parallelo trova e le due precedenti non potevano trovare
-è una cosa sola, e vale come metodo: **le coppie**. Un lotto solo non le vede
-perché stanno in due verbali che non si nominano a vicenda, e una lettura in fila
-le separa nel tempo. Sono tre, e sono le tre voci più forti del giro: le
-scorciatoie sono diventate dati del vault ([0077](../decisions/0077-una-scorciatoia-e-una-chiave.md))
-il giorno dopo che le impostazioni erano diventate dati del vault
-([0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)), e l'argomento di
-rischio che la prima aveva smontato valeva su tema e lingua, non sui tasti; le
-bozze sono negate in scrittura **per sempre** perché troppo private e concesse in
-lettura a chiunque legga il vault ([0088](../decisions/0088-cio-che-non-e-ancora-successo.md));
-la `base` di una scrittura è nata facoltativa
-([0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md)) proprio dove il
-rilevamento delle modifiche esterne non c'è
-([0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md)). In tutte e tre,
-ciascuna metà è difendibile e il prodotto delle due non l'ha guardato nessuno —
-che è la forma della [§23.3](#233-due-bloccanti-caduti-e-la-rete-non-se-nè-accorta),
-ritrovata tre volte.
+**Quello che la lettura in parallelo trova e le due precedenti non potevano
+trovare è una cosa sola, e vale come metodo: le coppie.** Un lotto solo non le
+vede, perché stanno in due verbali che non si nominano a vicenda, e una lettura
+in fila le separa nel tempo. Sono tre, e sono le tre voci più forti del giro.
 
-E una seconda cosa, che è il rovescio del pregio di questo repo: **quasi tutti
+* Le scorciatoie sono diventate dati del vault
+  ([0077](../decisions/0077-una-scorciatoia-e-una-chiave.md)) il giorno dopo che
+  le impostazioni erano diventate dati del vault
+  ([0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)), e l'argomento
+  di rischio che la prima aveva smontato valeva su tema e lingua, non sui tasti.
+* Le bozze sono negate in scrittura **per sempre** perché troppo private, e
+  concesse in lettura a chiunque legga il vault
+  ([0088](../decisions/0088-cio-che-non-e-ancora-successo.md)).
+* La `base` di una scrittura è nata facoltativa
+  ([0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md)) proprio dove il
+  rilevamento delle modifiche esterne non c'è
+  ([0030](../decisions/0030-il-rilevamento-si-puo-chiedere.md)).
+
+In tutte e tre, ciascuna metà è difendibile e il prodotto delle due non l'ha
+guardato nessuno: è la forma della
+[§23.3](#233-due-bloccanti-caduti-e-la-rete-non-se-nè-accorta), ritrovata tre
+volte.
+
+**E una seconda cosa, che è il rovescio del pregio di questo repo: quasi tutti
 questi difetti li dichiarano i verbali stessi**, spesso nella riga accanto al
-codice che li causa — «il caso resta scoperto, e questa riga è il posto dove si
-vede» ([0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), riga che la
-[§23.16](#2316-su-windows-un-hardlink-si-stacca-in-silenzio) ha poi tolto perché
-**un commento non prende nessuna decisione**), «se un giorno
-lo facesse questa è la riga da rileggere»
-([0032](../decisions/0032-il-runner-dei-job.md)). Nessuno è stato dedotto contro
-il testo. È esattamente il difetto che questa seduta esiste per riparare, visto
-alla sua densità massima: la disciplina di scrivere il prezzo accanto alla scelta
-ha retto su tutti e novanta, e il debito non sta nell'averlo nascosto — sta nel
-non aver ancora fatto la somma.
+codice che li causa.
+
+* «Il caso resta scoperto, e questa riga è il posto dove si vede»
+  ([0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)) — riga che la
+  [§23.16](#2316-su-windows-un-hardlink-si-stacca-in-silenzio) ha poi tolto,
+  perché **un commento non prende nessuna decisione**.
+* «Se un giorno lo facesse questa è la riga da rileggere»
+  ([0032](../decisions/0032-il-runner-dei-job.md)).
+
+Nessuno è stato dedotto contro il testo. È esattamente il difetto che questa
+seduta esiste per riparare, visto alla sua densità massima: la disciplina di
+scrivere il prezzo accanto alla scelta ha retto su tutti e novanta, e il debito
+non sta nell'averlo nascosto, sta nel non aver ancora fatto la somma.
 
 **Cinque falsi positivi del terzo giro**, con la stessa disciplina degli altri due
 elenchi — si scrivono perché chi ripercorre non li ribatta. Uno è di specie nuova
@@ -194,24 +224,27 @@ e va guardato per primo:
   ha un lucchetto — la costante `SOTTO_AA` — quindi non può crescere in silenzio.
   È il modello di come si tiene un debito, non un debito da riaprire.
 
-**E tre delle sedici sono P0.** Le prime tre non lo erano, e la riga qui sopra diceva
-che la tentazione, su una seduta che parla di prezzi pagati dall'utente, è
-chiamarle P0 per **importanza** — cioè commettere l'errore che la
-[seduta 22](22-cosa-sa-dire-un-abbonamento.md) ha appena contestato a chi
-l'ha aperta. La riga resta vera e il criterio non cambia: **P0 è la scadenza, non
-l'importanza**, e [leva.md](leva.md) esiste apposta per dire che una voce può
-essere P1 e restare la più importante da capire. Passate una per una: la §23.1 è
-una regola dentro `reconcile` e non tocca una firma; la §23.2 è una riga di prosa
-e una decisione di prodotto; la §23.3 aggiungeva una capacità, e l'elenco della
-0013 è chiuso alla **sottrazione**, non alla crescita — la
-[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
-l'ha aggiunta senza toccare una firma, che è la conferma del criterio; la §23.5 sposta un
-permesso e non una firma; la §23.6 diceva di aggiungere un modo accanto a quello
-che c'è, e la [0102](../decisions/0102-i-byte-non-stanno-nel-record.md) ha
-scoperto misurandolo che quella frase era **falsa** — un modo nuovo su
-un'interfaccia che il plugin *esporta* è un'obbligazione, non un'aggiunta, e il
-presidio che avrebbe dovuto dirlo guardava il lato sbagliato; la §23.7 e la §23.8
-sono regole del kernel.
+**E tre delle sedici sono P0.** Le prime tre non lo erano. La tentazione, su una
+seduta che parla di prezzi pagati dall'utente, è chiamarle P0 per **importanza**:
+cioè commettere l'errore che la
+[seduta 22](22-cosa-sa-dire-un-abbonamento.md) ha appena contestato a chi l'ha
+aperta. Il criterio non cambia: **P0 è la scadenza, non l'importanza**, e
+[leva.md](leva.md) esiste apposta per dire che una voce può essere P1 e restare
+la più importante da capire. Passate una per una:
+
+* La §23.1 è una regola dentro `reconcile` e non tocca una firma.
+* La §23.2 è una riga di prosa e una decisione di prodotto.
+* La §23.3 aggiungeva una capacità, e l'elenco della 0013 è chiuso alla
+  **sottrazione**, non alla crescita. La
+  [0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+  l'ha aggiunta senza toccare una firma, che è la conferma del criterio.
+* La §23.5 sposta un permesso e non una firma.
+* La §23.6 diceva di aggiungere un modo accanto a quello che c'è. La
+  [0102](../decisions/0102-i-byte-non-stanno-nel-record.md) ha scoperto
+  misurandolo che quella frase era **falsa**: un modo nuovo su un'interfaccia che
+  il plugin *esporta* è un'obbligazione, non un'aggiunta, e il presidio che
+  avrebbe dovuto dirlo guardava il lato sbagliato.
+* La §23.7 e la §23.8 sono regole del kernel.
 
 La **§23.4** è l'eccezione, e lo è per il criterio e non contro: `Selection` è un
 campo di un **record** del contratto, e passare da uno a molti gli cambia il
@@ -222,21 +255,28 @@ non cresce di poco per volta: cresce **tutto in una volta**, il giorno del
 freeze.
 
 **Le altre due P0 le ha portate il terzo giro, e hanno la stessa forma della
-§23.4** — non l'importanza, il **tipo**. La §23.11 voleva che `base` smettesse di
-essere `Option`, e la
-[§23.12](#2312-un-troncamento-che-il-chiamante-non-può-vedere) che `random-bytes`
-smetta di restituire una lista nuda: in tutti e tre i casi ciò che cambia è il
-tipo di qualcosa di già pubblicato, cioè la riga che
-[`wit_additivity`](../architecture/wit-congelato.md) fa diventare rossa. Che
-fossero tre su sedici, e che le altre tredici non lo siano nemmeno parlando di
-privacy e di dati persi, è la prova che il criterio ha retto anche a un giro
+§23.4**: non l'importanza, il **tipo**.
+
+* La §23.11 voleva che `base` smettesse di essere `Option`.
+* La [§23.12](#2312-un-troncamento-che-il-chiamante-non-può-vedere) voleva che
+  `random-bytes` smettesse di restituire una lista nuda.
+* In tutti e tre i casi ciò che cambia è il tipo di qualcosa di già pubblicato,
+  cioè la riga che [`wit_additivity`](../architecture/wit-congelato.md) fa
+  diventare rossa.
+
+Che fossero tre su sedici, e che le altre tredici non lo siano nemmeno parlando
+di privacy e di dati persi, è la prova che il criterio ha retto anche a un giro
 fatto con una lente — qualità, libertà, privacy — che spinge in direzione
-opposta. **Sono chiuse tutte e tre**, in tre commit di fila: la §23.11 dalla
-[0092](../decisions/0092-una-base-si-dichiara.md), la §23.4 dalla
-[0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md) — la più larga
-delle tre, e l'unica con una decisione di forma vera dentro — e la §23.12 dalla
-[0094](../decisions/0094-un-tetto-che-si-fa-sentire.md), la più piccola, che lo
-diceva di sé. **Non resta nessuna P0 prima del freeze di M4.**
+opposta. **Sono chiuse tutte e tre**, in tre commit di fila:
+
+* la §23.11 dalla [0092](../decisions/0092-una-base-si-dichiara.md);
+* la §23.4 dalla
+  [0093](../decisions/0093-le-selezioni-sono-n-e-il-buffer-e-uno.md), la più
+  larga delle tre e l'unica con una decisione di forma vera dentro;
+* la §23.12 dalla [0094](../decisions/0094-un-tetto-che-si-fa-sentire.md), la più
+  piccola, che lo diceva di sé.
+
+**Non resta nessuna P0 prima del freeze di M4.**
 
 Le tre insieme dicono una cosa che nessuna diceva da sola: in tutti e tre i casi
 la firma pubblicata **rappresentava meno di quanto l'app sapesse già fare** — una

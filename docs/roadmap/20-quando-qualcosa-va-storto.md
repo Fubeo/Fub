@@ -1,270 +1,97 @@
 # 20. Quando qualcosa va storto, chi lo dice e a chi
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): il canale che dice cosa è andato storto, visto da chi non può dirlo, da chi lo butta via e da chi non ha dove scriverlo. **Tutte e cinque le voci sono chiuse.**
+Questa è una **seduta** (un raggruppamento tematico di task) della [roadmap infrastrutturale](../todo.md). Il tema è il canale degli errori. Riguarda chi omette di segnalare un problema, chi scarta la segnalazione e chi manca di un posto per registrarla. **Tutte e cinque le voci sono chiuse.**
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Il settimo giro ha fatto una domanda che i primi sei non avevano fatto: **cosa
-fallisce senza produrre nessun segnale** — né per un test, né per un log, né per
-l'utente, finché il danno non è già fatto. Le quattro voci nate da lì erano lo
-stesso percorso interrotto in tre punti: chi ha visto il problema **non poteva
-dirlo** (la firma non restituiva niente, §20.1), chi lo diceva trovava un
-ascoltatore che **lo buttava via** (§20.3), e chi lo ascoltava non aveva **dove
-scriverlo** perché nel contratto la variante non c'era (§20.2) e nella shell la
-superficie non c'è (§20.4).
+Il settimo giro ha posto una domanda aggiuntiva rispetto ai primi sei. L'analisi identifica **cosa fallisce in modo silenzioso**. I fallimenti omettono segnali per un test, per un log o per l'utente, causando danni prima della scoperta. Questa analisi ha generato quattro voci. Le voci descrivono lo stesso percorso interrotto in tre punti:
+- **Segnalazione bloccata**: chi rileva il problema omette di comunicarlo (la firma omette il risultato, §20.1).
+- **Scarto del messaggio**: l'ascoltatore elimina la segnalazione ricevuta (§20.3).
+- **Mancanza di destinazione**: l'ascoltatore manca di un registro per l'errore. Il contratto omette la variante necessaria (§20.2). La shell (l'interfaccia utente) manca di una superficie visibile (§20.4).
 
-**Quattro di quelle si sono chiuse in tre verbali**, perché sono tre ragionamenti e non quattro:
-la [0051](../decisions/0051-l-alimentazione-risponde.md) ha dato un esito
-all'alimentazione — a lotti, perché forma e grana avevano una risposta sola — e
-la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) ha dato a quell'esito
-una destinazione, chiudendo insieme la variante di evento e il kernel che
-scartava. Deciderne una sola avrebbe dato un canale senza destinazione o una
-destinazione senza niente da metterci dentro. La quarta l'ha chiusa la
-[0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md), che è la
-metà umana delle prime tre: i quattordici avvisi che nella shell nascevano di
-qua dal confine — e che quindi da un evento del kernel non passano — hanno la
-stessa destinazione, e il salvataggio, che non aveva nemmeno un esito da
-mandarci, adesso ne ha uno con quattro stati.
+Tre verbali (documenti di decisione) chiudono **quattro di quelle voci**. I ragionamenti logici sono tre e non quattro:
+- La decisione [0051](../decisions/0051-l-alimentazione-risponde.md) definisce un esito per l'alimentazione (l'inserimento dati). Gestisce i dati a lotti, fornendo una sola risposta per forma e grana.
+- La decisione [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) assegna una destinazione a questo esito. Risolve contemporaneamente la variante di evento e lo scarto del kernel (il nucleo del sistema). Deciderne una sola avrebbe creato un canale vuoto o una destinazione isolata.
+- La decisione [0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md) risolve la quarta voce. Rappresenta la metà umana delle prime tre. Indirizza i quattordici avvisi generati dalla shell verso la stessa destinazione. Questi avvisi bypassano gli eventi del kernel. Il salvataggio ometteva un esito. Adesso ne possiede uno con quattro stati.
 
-**Il progetto aveva già l'invariante, e la presidiava su un canale solo.**
-[traits.md](../architecture/traits.md) lo scrive per esteso a proposito
-dell'`Event::Overflow`: *«è la versione rumorosa del troncamento: perdite
-silenziose non esistono per contratto»*. Era vero, ed era vero soltanto lì.
-Adesso vale su quattro canali: l'alimentazione degli indici, l'esito di un
-handler, il flush e — con la 0080 — quello che va dallo schermo indietro, cioè i
-guasti che la shell produce di suo. E vale anche sul caso che la 0052 aveva
-scoperto misurandosi, il troncamento a budget esaurito: lo ha chiuso la
-[0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), che è la quinta e
-ultima voce di questa seduta.
+**Il progetto possedeva l'invariante (la regola fissa) presidiata su un canale solo.**
+Il file [traits.md](../architecture/traits.md) lo descrive chiaramente per `Event::Overflow`: segnala rumorosamente il troncamento. Il contratto vieta le perdite silenziose. Questa regola limitata ora si applica su quattro canali:
+- L'alimentazione degli indici.
+- L'esito di un handler (il gestore di eventi).
+- Il flush (lo svuotamento dei buffer).
+- I guasti generati dalla shell, gestiti dalla 0080.
 
-Restava anche il fatto strutturale, e la ragione per cui sette giri non avevano
-trovato queste voci: di quelle quattro **una sola scadeva col freeze**. Le altre
-non erano firme, quindi nessun criterio di scadenza le aveva mai messe in cima —
-e intanto il loro costo non si pagava a M4, si stava pagando in difetti che non
-si diagnosticavano. È il criterio di [seduta 17](17-presidi-che-restano.md)
-applicato al contrario: il costo dell'attesa non cresceva, era già massimo. Le due
-che restavano avevano esattamente quella forma, ed è la ragione per cui sono
-state prese guardandole e non aspettando che scadessero. Della seconda — la
-§20.5 — è valso parola per parola fino alla misura che l'ha chiusa, che ne ha
-corretto il conto (i posti da cui un evento sparisce erano quattro, non tre) e
-la scelta finale (le due strade che proponeva non erano alternative: servono
-tutt'e due, in due punti diversi).
+La regola copre anche il troncamento a budget esaurito. La 0052 ha scoperto questo caso tramite misurazione. La decisione [0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md) risolve il problema. Questa è la quinta e ultima voce di questa seduta.
+
+Rimaneva il problema strutturale. Sette giri hanno mancato queste voci per un motivo preciso. Tra quelle quattro, **una sola scadeva col freeze (il blocco delle modifiche)**. Le altre omettevano le firme. I criteri di scadenza le hanno mantenute in basso. Il loro costo generava difetti complessi da diagnosticare, anticipando la fase M4 (lo stadio di sviluppo avanzato).
+Questo applica inversamente il criterio della [seduta 17](17-presidi-che-restano.md). Il costo dell'attesa partiva dal livello massimo. Le due voci rimanenti presentavano questa struttura. Il team le ha affrontate tramite analisi diretta, anticipandone la scadenza.
+Il testo della seconda voce, il §20.5, rimane valido fino alla misurazione conclusiva. La misurazione corregge il conteggio: un evento sparisce da quattro posti, invece di tre. Corregge anche la scelta finale. Le due soluzioni proposte risultano complementari. Il sistema richiede tutt'e due in due punti diversi.
 
 ### 20.2 Ciò che va storto ha un canale nel contratto e nessuna destinazione
 
-*settimo giro · contratto · **P1** — **chiusa** con la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md); resta una casella, che è adozione e non forma*
+*settimo giro · contratto · **P1** — **chiusa** con la [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md); rimane una singola casella di adozione strutturale*
 
-- [x] **La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) aveva
-      già deciso la forma, e rimandato per mancanza di clienti** — *«quando
-      arriveranno, arriveranno come Event, ed è additivo»*. È andata esattamente
-      così: `Event::Trouble { severity, subject, error }` è una variante **in
-      coda**, additiva, e non ha toccato la linea di base.
-- [x] **Le due cose che questa voce aspettava c'erano tutte e due**, e una delle
-      due righe che lo negavano era **morta**: il payload doveva aspettare il
-      §12.2, ma il §12.2 è chiuso dalla
-      [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) da
-      quattro sedute — ogni payload di `PluginError` è già un `Text`, cioè una
-      chiave e i suoi argomenti. La riga *«oggi è prosa italiana composta …
-      quella è P0 mentre questa no»* descriveva un repo che non esiste più.
-- [x] **La severità e il soggetto, che erano la domanda vera.** Due gradini, e
-      il criterio del taglio non è a occhio: **la classe del dato perso dice la
-      severità** ([0048](../decisions/0048-una-radice-sola.md)) — un derivato si
-      ricostruisce riaprendo il vault ed è un avviso, ciò che era autorevole non
-      torna ed è un guasto. Il soggetto è il documento; **chi** ha fallito lo
-      dice `origin.actor`, che c'era già dalla
-      [0012](../decisions/0012-origine-degli-eventi.md), quindi nessun campo
-      `plugin` nel record.
-- [x] **Il posto dove atterra c'era ed è vivo**: il centro notifiche
-      ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), il cui commento
-      diceva *«il giorno che quella variante arriva le si attacca il router degli
-      eventi invece di venti chiamanti»*. È `ascoltaIGuasti()` in
-      `ui/notify.ts`.
-- [ ] **Portarci dentro i ventisette.** La forma c'è; l'adozione no. I punti che
-      oggi scrivono su `stderr` nel backend sono **ventisette** (contati col
-      criterio scritto nella 0052 — il numero che questa voce riportava, 25, era
-      vecchio di due giri) e vanno convertiti uno a uno. Non è gratis per tutti:
-      alcuni non hanno il workspace fra le mani, e il caso limite è la regola
-      sintattica che pania (`kernel/syntax.rs`), che sta dentro il **parse** —
-      portarla dentro il canale vuol dire dare un esito a `DocumentStore::parse`
-      e ai suoi otto chiamanti. Non è una decisione: è la sua conseguenza, ed è
-      qui perché non deve sparire senza essere stata fatta.
+- [x] **La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) definisce la forma**. Il rinvio deriva dalla mancanza di clienti. La nota specifica l'arrivo futuro come `Event` additivo. Lo sviluppo segue questa linea. `Event::Trouble { severity, subject, error }` aggiunge una variante **in coda**. Mantiene intatta la linea di base.
+- [x] **Il sistema possiede tutte e due le dipendenze richieste**. Una delle due affermazioni ostacolanti risulta **morta**. Il payload attende il §12.2. La decisione [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) chiude il §12.2 da quattro sedute. Ogni payload di `PluginError` è un `Text` (una chiave con i suoi argomenti). La vecchia riga menzionava la prosa italiana composta e classificava la priorità come P0. Questo testo descrive un repo superato.
+- [x] **La severità e il soggetto risolvono la domanda centrale**. Il sistema usa due gradini strutturati. **La classe del dato perso definisce la severità** ([0048](../decisions/0048-una-radice-sola.md)). I dati derivati si ricostruiscono aprendo il vault (la cartella di lavoro) e generano un avviso. I dati autorevoli persi causano un guasto. Il soggetto indica il documento. Il campo `origin.actor` identifica l'autore del fallimento, introdotto dalla [0012](../decisions/0012-origine-degli-eventi.md). Il record omette il campo `plugin`.
+- [x] **La destinazione esiste e risulta attiva**. Corrisponde al centro notifiche ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)). L'arrivo della variante sostituisce venti chiamanti col router degli eventi. Il codice risiede in `ascoltaIGuasti()` dentro `ui/notify.ts`.
+- [ ] **Integrazione dei ventisette punti**. La forma esiste, l'adozione richiede lavoro. Il backend scrive su `stderr` in **ventisette** punti. La decisione 0052 definisce il criterio di conteggio. Il vecchio numero 25 risultava obsoleto di due giri. La conversione procede uno a uno. Alcuni punti mancano del workspace. Il caso limite riguarda la regola sintattica in panico dentro `kernel/syntax.rs` (fase di **parse**). L'integrazione fornisce un esito a `DocumentStore::parse` e ai suoi otto chiamanti. Questa conseguenza strutturale richiede esecuzione obbligatoria.
 
-*Sblocca:* 10.5 (notification center, alert stale notes / broken links / sync
-errors / backup errors / plugin errors — ~28 voci che ora **hanno** una
-sorgente), 24.2 (error reporting chiaro, diagnostica), 16.3 (automation error
-handling, retries, notifications), 18.1 (errori di sync dettagliati, stato sync
-visibile).
+*Sblocca:* 
+- 10.5 (notification center, alert stale notes / broken links / sync errors / backup errors / plugin errors — ~28 voci fornite di una sorgente).
+- 24.2 (error reporting chiaro, diagnostica).
+- 16.3 (automation error handling, retries, notifications).
+- 18.1 (errori di sync dettagliati, stato sync visibile).
 
 ### 20.4 La shell non ha una superficie dove dire niente, e il salvataggio non ha esito
 
-*settimo giro · shell · **P1** — **chiusa** con la [0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md); era la metà umana del §20.2, e il caso peggiore era una perdita di dati*
+*settimo giro · shell · **P1** — **chiusa** con la [0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md); rappresenta la metà umana del §20.2. Il caso peggiore causa una perdita di dati*
 
-- [x] **`saveCurrent` non ha un `catch`, e la shell non ha uno stato di
-      salvataggio.** `await api.writeDocument(currentDoc, text)`
-      (`panels/document.ts`) è invocato da un `setTimeout`: se la scrittura
-      fallisce — vault in sola lettura, disco pieno, file bloccato da un'altra
-      app, permessi cambiati — la promise rifiuta in un contesto senza
-      gestore, e nella UI **non cambia niente**. Una superficie per un
-      messaggio adesso c'è (`notify`, `ui/notify.ts`) e il salvataggio non la
-      usa; uno **stato di salvataggio** non esiste proprio — non c'è «salvato»,
-      non c'è «salvataggio in corso», non c'è «non salvato». L'utente continua
-      a scrivere per un'ora dentro una nota che nessuno sta scrivendo su disco.
-- [x] **La shell sa già di stare per distruggere il lavoro di un'altra
-      applicazione, e lo dice alla console.** `reloadIfClean`
-      (`panels/document.ts`) col buffer sporco e `origin.actor == watcher`
-      stampa, testualmente, *«è stato cambiato da un'altra applicazione mentre
-      il buffer è sporco: il buffer vince e quella modifica andrà persa al
-      prossimo salvataggio»*. La diagnosi è giusta, è completa, distingue il
-      caso grave da quello innocuo grazie alla [decisione 0012](../decisions/0012-origine-degli-eventi.md) — e va in un posto
-      che non ha lettori. [data-model.md](../architecture/data-model.md)
-      descrive quel comportamento così: *«il conflitto è segnalato (warn), non
-      silenzioso»*. Con la superficie che c'è oggi, «segnalato» e «silenzioso»
-      sono la stessa cosa. Il **dialogo di conflitto** è lavoro dichiarato di M3
-      (§18.1); questa voce è ciò che serve **prima** e comunque, perché lo stesso
-      buco copre altri undici avvisi che un dialogo di conflitto non riguarda.
-- [x] **Un'organizzazione congelata è una sessione di lavoro buttata.**
-      Se `.fub/workspace.json` non si legge, non lo si sovrascrive: la
-      decisione è giusta, ed è la stessa della configurazione. Ciò che manca è
-      **dirlo a chi sta lavorando**. Dal §11.3
-      ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)) il rifiuto
-      almeno *torna al chiamante* — è il kernel a negare ogni scrittura, una per
-      una, invece di una shell che smetteva di salvare in silenzio — e la shell
-      lo scrive in console. Ma la console di un'app impacchettata non si apre:
-      finché non c'è una superficie, ogni icona e ogni riordino continuano a
-      essere accettati, disegnati e persi senza un segno che l'utente veda.
-- [x] **Gli altri punti dello stesso buco**, sparsi per la shell: una view che
-      non si ridisegna lascia montato l'albero precedente (`ui/panel-host.ts`) —
-      cioè un pannello **stantio identico a uno vivo**, che è il sintomo che il
-      test del lotto ([decisione 0011](../decisions/0011-il-lotto.md)) esiste per prevenire in un altro modo; un ascoltatore
-      di eventi del kernel che lancia lo scrive alla console (`state/kernel.ts`);
-      una rinomina rifiutata, una conversione in cartella e uno spostamento
-      falliti tornano indietro senza dire perché (`panels/explorer.ts`);
-      l'organizzazione non salvata (`state/organization.ts`); la nota da
-      wikilink mancante non creata (`panels/preview.ts`).
+- [x] **La funzione `saveCurrent` manca di `catch` e la shell omette uno stato di salvataggio.** Un `setTimeout` invoca `await api.writeDocument(currentDoc, text)` in `panels/document.ts`. I fallimenti (vault in sola lettura, disco pieno, file bloccato da un'altra app, permessi invalidi) causano il rifiuto della promise in un contesto privo di gestore. L'interfaccia utente (UI) rimane inalterata. Il sistema possiede una superficie per un messaggio (`notify`, `ui/notify.ts`), ma il salvataggio la ignora. Il sistema omette uno **stato di salvataggio** (mancano le etichette «salvato», «salvataggio in corso», «non salvato»). L'utente scrive per un'ora in una nota ignorata dal disco.
+- [x] **La shell rileva la distruzione di lavoro di un'altra applicazione e avvisa la console.** La funzione `reloadIfClean` (`panels/document.ts`) con buffer sporco e `origin.actor == watcher` stampa un avviso chiaro. Segnala la perdita della modifica esterna a favore del buffer locale. La diagnosi risulta corretta e completa. La [decisione 0012](../decisions/0012-origine-degli-eventi.md) permette di distinguere i casi gravi da quelli innocui. Il messaggio finisce in un log invisibile. Il file [data-model.md](../architecture/data-model.md) definisce il conflitto segnalato e visibile. L'attuale superficie rende indistinguibili le segnalazioni dai silenzi. Il **dialogo di conflitto** fa parte dei lavori M3 (§18.1). Questa voce fornisce la base preventiva. Questo intervento risolve altri undici avvisi indipendenti da un dialogo di conflitto.
+- [x] **Un'organizzazione congelata invalida una sessione di lavoro.** Il sistema preserva il file `.fub/workspace.json` illeggibile. Questa decisione corretta ricalca la logica della configurazione. Il sistema omette di avvisare l'utente. Dal §11.3 ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)), il rifiuto ritorna al chiamante. Il kernel nega ogni scrittura una per una, abbandonando i fallimenti silenziosi della shell. La shell registra l'errore in console. La console di un'app impacchettata rimane inaccessibile. La mancanza di una superficie fa accettare, disegnare e perdere ogni icona e ogni riordino senza un segno visibile all'utente.
+- [x] **I punti mancanti nella shell si distribuiscono in varie aree**:
+  - Una view difettosa mantiene visibile l'albero precedente (`ui/panel-host.ts`). Mostra un pannello **stantio identico a uno vivo**. Il test del lotto ([decisione 0011](../decisions/0011-il-lotto.md)) previene questo sintomo diversamente.
+  - Un ascoltatore di eventi del kernel registra gli errori solo alla console (`state/kernel.ts`).
+  - Una rinomina rifiutata, una conversione in cartella e uno spostamento falliti omettono i motivi del rifiuto (`panels/explorer.ts`).
+  - L'organizzazione fallisce il salvataggio silenziosamente (`state/organization.ts`).
+  - La nota da wikilink mancante annulla la creazione (`panels/preview.ts`).
+  
+  **Il conteggio verificato dalla [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) stabilisce il criterio per i controlli futuri**. I richiami a `console.warn` e `console.error` fuori dai `.test.ts` ammontano a **quattordici**, distribuiti in nove file. Uno dei quattordici (l'avvio in `main.ts`) raggiunge l'utente tramite la barra del vault. Gli altri tredici rimangono invisibili. Un punto aggiuntivo omette perfino la console: `state.commandSpecs = await api.listCommands().catch(() => [])` (`state/vault.ts`). Il fallimento nel recupero dei comandi all'apertura del vault svuota la palette. Rende **morta ogni scorciatoia dichiarata**, senza una riga da nessuna parte. Esistono quindi **quattordici punti da far emergere**. Questo non è un numero da fidarsi a memoria. La documentazione precedente riportava «tredici» in un posto e «quattordici» in un altro. L'aggiunta di un pannello incrementa il numero. (La palette esegue un `notify` durante la ricarica autonoma dei comandi: `ui/palette.ts`.)
+- [x] Il lavoro richiede l'utilizzo del centro notifiche esistente. Il centro **esiste già** (§10.3, [decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)). Fornisce toast (avvisi a scomparsa), storico, raggruppamento, due toni visivi e una singola porta d'accesso (`notify`). Possiede una **sorgente** dati dal backend ([decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md): `Event::Trouble` vi approda automaticamente). L'obiettivo richiede l'integrazione dei quattordici eventi locali. Questi nascono direttamente nella shell, eludendo un evento del kernel. Serve inoltre uno **stato di salvataggio** accanto al documento. L'ordine di implementazione risulta invertito rispetto alla pianificazione iniziale. La superficie minima esisteva in precedenza, sbloccando subito i lavori estetici. L'implementazione attuale nel repository stabilisce la regola. L'unico fallimento visibile all'utente deriva dall'avvio. Questo fallimento scrive nella barra del vault (`main.ts`, in coda). Costituisce il posto più visibile della shell. Questa regola corretta trova applicazione **una volta su quattordici**.
 
-      **Il conto, ricontato dalla [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md)
-      e col criterio scritto perché il prossimo lo rifaccia**: `console.warn` e
-      `console.error` fuori dai `.test.ts` sono **quattordici**, in nove file. Uno
-      dei quattordici — l'avvio, in `main.ts` — arriva **già** all'utente, perché
-      scrive anche nella barra del vault; gli altri tredici no. A questi si
-      aggiunge un punto che non ha nemmeno la console, ed è peggiore di tutti:
-      `state.commandSpecs = await api.listCommands().catch(() => [])`
-      (`state/vault.ts`) — se l'elenco dei comandi non arriva all'apertura del
-      vault, la palette è vuota e **ogni scorciatoia dichiarata è morta**, senza
-      una riga da nessuna parte. **Quattordici punti da portare a galla**, quindi,
-      e non è un numero da fidarsi a memoria: il precedente diceva «tredici» in
-      un posto e «quattordici» in un altro, e cresce da sé a ogni pannello nuovo.
-      (La palette, quando è lei a ricaricare i comandi, un `notify` lo fa:
-      `ui/palette.ts`.)
-- [x] Cosa serve, e non è più costruire un centro notifiche: **quello c'è**
-      (§10.3, [decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)
-      — toast, storico, raggruppamento, due toni, e una porta sola, `notify`), e
-      adesso ha anche una **sorgente** dal backend
-      ([decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md):
-      `Event::Trouble` arriva lì dentro da sé). Quel che manca è portarci i
-      quattordici **di questa parte del confine** — che non passano da un evento
-      del kernel, perché nascono di qua — e uno **stato di salvataggio** accanto
-      al documento. L'ordine si è invertito rispetto a come questa voce se lo
-      aspettava, e non cambia niente di ciò che le resta da fare: la superficie
-      minima esisteva già, quindi la voce che doveva farla bella non ha dovuto
-      aspettare. Il precedente è già in repo e vale come regola: l'unico
-      fallimento che oggi arriva all'utente è quello dell'avvio, che scrive nella
-      barra del vault perché *«è il posto più visibile che la shell ha»*
-      (`main.ts`, in coda). La regola è scritta, è giusta, ed è applicata **una
-      volta su quattordici**.
+**Risultati e scoperte durante l'esecuzione**. Il lavoro ha rivelato alcuni aspetti:
+- **Prima scoperta**: la superficie esisteva dal §10.3. Il salvataggio la ignorava per la mancanza di **un esito**. La comunicazione copriva metà dell'attività. L'altra metà ha separato due stati confusi in un singolo campo: «c'è qualcosa da scrivere» e «ciò che ho scritto è arrivato». In caso di coesistenza, il guasto ha la priorità per evitare l'occultamento causato da una battuta successiva.
+- **Seconda scoperta**: il conteggio escludeva alcuni elementi. Il quindicesimo punto (l'elenco comandi assente e le scorciatoie morte) mancava di una `console` per il tracciamento. La sedicesima riga («nessuno lo disegna») risiedeva in `VaultInfo.unread`. Un conteggio rileva le tracce esistenti. La lettura diretta scopre le omissioni totali.
+- **Una terza scoperta derivante dall'uso**: l'utilizzo ha svelato la frequenza dei tre conflitti su un buffer sporco. I due casi documentati risultavano rari. Il terzo caso (la scrittura respinta dal nostro stesso autosave) colpisce frequentemente ogni nota estesa. Un avviso generato senza eventi reali non costituisce un avviso utile. Questo diseduca l'utente, spingendolo a ignorare gli allarmi veri.
 
-**Com'è andata**, e le due cose che si sono scoperte facendola. La prima: la
-superficie non era il problema — c'era dal §10.3 — e il salvataggio non la usava
-perché non aveva **un esito da darle**. Dirlo era metà del lavoro; l'altra metà è
-stata separare i due fatti che stavano in un campo solo, «c'è qualcosa da
-scrivere» e «ciò che ho scritto è arrivato», e decidere quale dei due vince
-quando sono veri insieme (vince il guasto: altrimenti la battuta dopo lo
-nasconde). La seconda: il conto era giusto e non copriva tutto. Il quindicesimo
-punto — l'elenco dei comandi che non arriva, e ogni scorciatoia dichiarata muore
-— non aveva nemmeno una `console` da contare, e la sedicesima riga che diceva
-«nessuno lo disegna» era in `VaultInfo.unread`. **Un conteggio trova ciò che ha
-lasciato una traccia; ciò che non ne ha lasciata nessuna si trova solo
-leggendo.** E una terza, arrivata **usandola**: dei tre casi in cui il file
-cambia sotto un buffer sporco, i due nominati erano quelli rari, e il terzo — la
-scrittura che torna indietro dal nostro stesso autosave — era quello che capita
-a ogni nota lunga. Un avviso che compare quando non è successo niente non è un
-avviso in più: è ciò che insegna a ignorare gli altri.
-
-*Sblocca:* 2.1 (autosave, crash recovery, gestione conflitti file), 24.2
-(error reporting chiaro, autosave recovery), 3.1 (vault read-only, vault su
-cloud drive: oggi falliscono senza dirlo), 4.2, 3.3 (undo toast e quick actions
-vogliono la stessa superficie), 10.5.
+*Sblocca:* 
+- 2.1 (autosave, crash recovery, gestione conflitti file).
+- 24.2 (error reporting chiaro, autosave recovery).
+- 3.1 (vault read-only, vault su cloud drive: la versione attuale fallisce silenziosamente).
+- 4.2.
+- 3.3 (undo toast e quick actions richiedono la stessa superficie).
+- 10.5.
 
 ### 20.5 Il budget del dispatch tronca senza guardare cosa sta troncando
 
-*nata misurando la [decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) · kernel · **P2** — **chiusa** dalla [0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), e con lei la seduta intera: il budget è un tetto sul lavoro, non sui fatti, e i posti da cui un evento spariva erano quattro invece di tre*
+*nata misurando la [decisione 0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) · kernel · **P2** — **chiusa** dalla [0111](../decisions/0111-il-budget-e-un-tetto-sul-lavoro.md), concludendo la seduta intera: il budget funge da tetto sul lavoro, preservando i fatti. Gli eventi sparivano da quattro posti, invece di tre*
 
-- [x] **Un documento dice una cosa che il codice smentisce.**
-      `Event::is_recoverable` (`abi/event.rs`) si presenta così: *«è la
-      classificazione su cui poggia **ogni freno del canale** (§10.2,
-      [decisione 0034](../decisions/0034-il-freno-e-il-raggruppamento.md)) …
-      sta qui e non in chi frena perché i freni sono **due** — il tetto del bus
-      e il raggruppamento del ponte — e una seconda idea di cosa sia
-      sacrificabile sarebbe un evento perso in silenzio da uno dei due»*. I
-      freni che la guardano sono davvero due, ed è verificato
-      (`bus.rs`, `host/bridge.rs`). Ma i posti da cui un evento **sparisce**
-      sono tre: il terzo è `Dispatcher::next_to_deliver` (`kernel/dispatcher.rs`),
-      che a budget esaurito fa `self.pending.clear()` — tutta la coda, senza
-      leggere `is_recoverable`.
+- [x] **Il codice smentisce le affermazioni di un documento.**
+      La funzione `Event::is_recoverable` (`abi/event.rs`) descrive la classificazione a fondamento di **ogni freno del canale** (§10.2, [decisione 0034](../decisions/0034-il-freno-e-il-raggruppamento.md)). La classificazione risiede nel tipo di evento e non nel freno perché i freni ammontano a **due** (il tetto del bus, che è il canale di comunicazione interno, e il raggruppamento del ponte). Una seconda idea di sacrificabilità causerebbe un evento perso in silenzio da uno dei due freni. I file `bus.rs` e `host/bridge.rs` confermano l'esistenza di due freni attenti a questa proprietà. I posti da cui un evento **sparisce** ammontano a tre. Il terzo risiede in `Dispatcher::next_to_deliver` (`kernel/dispatcher.rs`). A budget esaurito, esegue `self.pending.clear()`, svuotando l'intera coda e ignorando `is_recoverable`.
 
-      **Erano quattro, non tre**, e il quarto stava a quattro righe dal terzo:
-      `drop_pending`, che scartava ciò che gli handler emettevano *gestendo*
-      l'`Overflow` — un guasto compreso, e senza contarlo. La riga qui sopra
-      guardava chi **decide** di troncare invece di chi **butta**, ed è per
-      questo che il quarto le è sfuggito.
+      I punti di sparizione risultavano **quattro, non tre**. Il quarto si trovava a quattro righe dal terzo: `drop_pending`. Questo metodo scartava i dati emessi dagli handler durante la gestione dell'`Overflow`. Scartava anche un guasto, omettendo di contarlo. L'analisi precedente focalizzava l'attenzione sul decisore del troncamento, ignorando l'esecutore materiale. Per questo motivo il quarto punto sfuggiva.
 
-      E l'architettura diceva di più, e più esplicitamente:
-      [traits.md](../architecture/traits.md) elencava le **tre** sorgenti di
-      `Overflow` — «il budget del dispatch, il tetto degli arretrati di un
-      subscriber del bus e il tetto della raffica del ponte» — e concludeva che
-      *«il secondo gruppo passa sempre»*. Passa sempre da due su tre. La riga è
-      stata corretta nel giro in cui è stata verificata, ed è il terzo caso di
-      questa famiglia dopo il §21.10 e la riga morta del §20.2: **un documento
-      che afferma una proprietà del codice va riletto contro il codice, non
-      contro sé stesso**.
-- [x] **Perché adesso si vede, e prima no.** Finché ciò che poteva essere
-      buttato erano `document-changed` e `index-updated`, il troncamento a
-      budget era ciò che dice di essere: una rete contro le cascate, con un
-      `Overflow` che dice «riconcilia da zero» ed è più forte di ognuno dei
-      singoli eventi buttati. Con la
-      [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) nella coda
-      passa `Event::Trouble`, che è dichiarato **non recuperabile** perché porta
-      l'unica copia di un fatto: «riconcilia da zero» non lo ricostruisce, non
-      c'è niente da riconciliare. Un guasto emesso mentre la coda è satura può
-      quindi non arrivare mai a un `EventHandler`, ed è il caso in cui le cose
-      stanno già andando male — cioè quello per cui la variante esiste.
-- [x] **La portata, misurata e non temuta.** Non riguarda la shell: il ponte
-      verso la webview parte dal **bus**, che `is_recoverable` la guarda, quindi
-      il centro notifiche riceve comunque. Riguarda gli `EventHandler` — cioè i
-      plugin, e il primo è già scritto: un handler di diagnostica, un log su
-      file, un'automazione che reagisce ai guasti (16.3) sono esattamente i
-      clienti di questa variante, e sono tutti dall'altra parte del troncamento.
-- [x] Cosa serve, ed è una scelta fra due: che il troncamento **conservi** ciò
-      che non è recuperabile invece di svuotare (il budget resta un tetto sul
-      lavoro, non sui fatti), oppure che l'`Overflow` **dica quanti** ne ha
-      buttati di non recuperabili, così che chi legge sappia di aver perso
-      qualcosa che non può riconciliare. La prima costa una partizione della
-      coda; la seconda costa un campo e non ripara niente. Da decidere insieme
-      alla domanda che nessuno ha posto: *se un budget esiste per fermare una
-      cascata, perché la ferma buttando via anche ciò che la cascata non ha
-      causato?*
+      L'architettura aggiungeva dettagli espliciti. Il file [traits.md](../architecture/traits.md) elencava le **tre** sorgenti di `Overflow` (il budget del dispatch per lo smistamento dei messaggi, il tetto degli arretrati di un subscriber del bus, il tetto della raffica del ponte). Concludeva affermando il passaggio garantito per il secondo gruppo. Il passaggio si verifica solo da due sorgenti su tre. La verifica ha corretto la riga errata. Questo costituisce il terzo caso di questa famiglia, dopo il §21.10 e la riga morta del §20.2. **La validazione di un documento richiede il confronto col codice, ignorando la coerenza interna del testo**.
+- [x] **La visibilità del problema emerge ora.** Finché le procedure scartavano solo `document-changed` e `index-updated`, il troncamento a budget funzionava come rete contro le cascate. Produceva un `Overflow` imponente la riconciliazione da zero. L'`Overflow` risulta più forte di ognuno dei singoli eventi scartati. L'introduzione della [0052](../decisions/0052-cio-che-va-storto-e-un-evento.md) inserisce `Event::Trouble` nella coda. Questa variante omette il recupero perché trasporta l'unica copia di un fatto. La direttiva "riconcilia da zero" fallisce la ricostruzione, omettendo i dati iniziali. Un guasto emesso durante la saturazione della coda impedisce l'arrivo a un `EventHandler`. Questo oblio colpisce il sistema nel momento di massima criticità. La variante esiste appositamente per gestire queste crisi.
+- [x] **Misurazione oggettiva della portata del problema.** L'impatto esclude la shell. Il ponte verso la webview (il componente di visualizzazione) origina dal **bus**. Il bus controlla `is_recoverable`. Il centro notifiche riceve comunque le informazioni. Il problema colpisce gli `EventHandler` (i plugin). Il primo plugin esiste già. Un gestore di diagnostica, un log su file, un'automazione reattiva ai guasti (16.3) rappresentano i clienti diretti di questa variante. Risiedono tutti oltre la barriera del troncamento.
+- [x] L'intervento impone una scelta fra due strade. Prima opzione: il troncamento **conserva** i dati irrecuperabili evitando lo svuotamento. Il budget resta un tetto sul lavoro, preservando i fatti. Seconda opzione: l'`Overflow` **dichiara quanti** elementi irrecuperabili ha scartato. Il lettore identifica la perdita di dati impossibili da riconciliare. La prima soluzione richiede una partizione della coda. La seconda aggiunge un campo strutturale omettendo la riparazione. L'analisi impone di rispondere a una domanda fondamentale: se un budget ferma una cascata, perché distrugge i dati estranei all'origine del sovraccarico?
 
-      **Non era una scelta fra due**: servono tutt'e due, in due punti diversi.
-      La prima vale per ciò che è già in coda quando il budget finisce — una
-      fotografia, quindi finita, quindi consegnabile per intero; la seconda per
-      ciò che gli handler emettono *mentre* ricevono quel tratto finale, che non
-      si può consegnare (la coda deve terminare) ma si può contare. Applicata da
-      sola, la prima **spegne il segnale**: un ping-pong di `custom` — che non
-      sono recuperabili — non lascerebbe niente da buttare, quindi nessun
-      `Overflow`, quindi un troncamento muto. Lo dice un test che diventa rosso.
+  La soluzione richiede **l'implementazione di tutt'e due le opzioni in due punti diversi**. La prima gestisce i dati presenti in coda all'esaurimento del budget. La coda rappresenta una fotografia statica, interamente consegnabile. La seconda conta le emissioni degli handler durante la ricezione del tratto finale. Il sistema interrompe la consegna (la coda deve terminare) garantendo il conteggio. L'applicazione esclusiva della prima opzione **spegne il segnale**. Un ping-pong di eventi `custom` (irrecuperabili) blocca gli scarti. Questo elimina la generazione di `Overflow` e produce un troncamento muto. Un test fallito (diventato rosso) conferma questo comportamento.
 
-*Sblocca:* 16.3 (automation error handling, retries, notifications: il primo
-consumatore non-shell di `trouble`), 24.2 (diagnostica), e ogni handler che
-oggi non esiste perché il canale non c'era.
+*Sblocca:* 
+- 16.3 (automation error handling, retries, notifications: il primo consumatore non-shell di `trouble`).
+- 24.2 (diagnostica).
+- Ogni handler attualmente ostacolato dalla passata mancanza del canale.

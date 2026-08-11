@@ -1,76 +1,67 @@
 # 24. Tre firme che il freeze rende definitive
 
-Una **seduta chiusa** della [roadmap infrastrutturale](../todo.md): un punto del contratto che oggi costa un campo e dopo il freeze di M4 costa una migrazione di versione. **Tutte e tre le voci sono chiuse, e due delle tre non scadevano affatto**: la §24.1 con la [0130](../decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md) — i tipi invisibili dalla radice erano sessantuno e non sette, e un `pub use` è additivo — e la §24.2 con la [0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md), perché `enabled` è un metodo Rust di comodo e al confine WIT non esiste: la `option-map` i tre stati li portava già tutti. La §24.3 sì, e a dirlo è stata la sola cosa che poteva dirlo: la [0132](../decisions/0132-un-rifiuto-non-e-una-frase.md) ha dovuto **ritagliare la linea di base congelata**, perché `format-error` è il tipo d'errore delle funzioni che un plugin di formato *esporta* e ritiparne un caso non è un'aggiunta in nessuna lettura.
+Una **seduta chiusa** (gruppo di lavori completati) della [roadmap infrastrutturale](../todo.md). Un punto del contratto costa oggi un campo. Dopo il freeze (congelamento) di M4 costa una migrazione di versione. Tutte e **tre** le voci risultano chiuse. **Due** delle **tre** voci rimanevano permanenti nel tempo:
+
+*   §24.1 con la [0130](../decisions/0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md): un `pub use` è additivo. I tipi invisibili dalla radice erano **sessantuno** invece di **sette**.
+*   §24.2 con la [0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md): la `option-map` portava già tutti i **tre** stati. Il metodo Rust `enabled` serve per comodità. La firma risulta assente al confine WIT (WebAssembly Interface Type, interfaccia tra host e modulo plugin).
+*   La §24.3 scadeva. La [0132](../decisions/0132-un-rifiuto-non-e-una-frase.md) ha dovuto **ritagliare la linea di base congelata**. Il tipo d'errore `format-error` appartiene alle funzioni esportate da un plugin di formato (modulo per formati di file). Ritiparne un caso produce sempre una rottura di compatibilità strutturale.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-**Questa seduta non l'ha trovata un giro, e nemmeno una verifica sui verbali:
-l'ha trovata un consuntivo.** `docs/issues.md` era un contenitore di
-osservazioni scritte in un audit del 2026-07-31 e mai lavorate: novantadue
-righe, di cui settantuno rimandavano a voci che non sono mai state committate —
-il rimando cieco che [`numerazione.md`](numerazione.md) esiste per impedire,
-arrivato dal lato che quella disciplina non copre. Rilette contro i sorgenti di
-oggi, sedici erano già chiuse, una era falsa il giorno stesso, cinque non erano
-difetti. Settanta reggevano.
+**Un consuntivo (bilancio finale) ha trovato questa seduta.** I giri standard o le verifiche sui verbali omettevano questo risultato. Il file `docs/issues.md` conteneva osservazioni in sospeso da un audit del 2026-07-31:
 
-**Sessantasette di quelle settanta non sono voci**, e stanno nell'elenco dei
-[difetti misurati](../todo.md#i-difetti-misurati): nessuna chiede una decisione,
-nessuna è il residuo di un verbale. Sono lavoro già deciso che qualcuno deve
-ancora fare, e aprirle come voci vorrebbe dire chiedere a `todo.md` di rispondere
-a una domanda che non è la sua.
+*   **novantadue** righe totali.
+*   **settantuno** righe rimandavano a voci assenti nei commit. Questo rappresenta il rimando cieco impedito dal file [`numerazione.md`](numerazione.md). La disciplina di quel file tralascia questo lato.
 
-**Tre lo erano, e sono nate qui per un criterio solo**: toccano una **firma**.
-È il criterio che questo piano usa per le P0 fin dalla prima riga — *la forma
-scade col freeze: oggi costa un campo, dopo costa una migrazione di versione* —
-e non la loro importanza, che è modesta. **Il criterio, su due delle tre, non
-reggeva**, e a scoprirlo è stato ogni volta il giro che l'ha chiusa — non chi le
-ha scritte: quello che scade non si deduce leggendo la voce, si misura andando a
-vedere se la firma attraversa davvero il confine. Sulla §24.3 quella misura ha
-dato **sì**, ed è l'unica delle tre.
+Rilettura contro i sorgenti attuali:
+*   **sedici** righe risultavano già chiuse.
+*   **una** riga risultava falsa dal primo giorno.
+*   **cinque** righe descrivevano comportamenti corretti.
+*   **settanta** righe rimanevano valide.
+
+**Sessantasette** di quelle **settanta** rappresentano lavoro ordinario anziché voci dedicate. Esse stanno nell'elenco dei [difetti misurati](../todo.md#i-difetti-misurati). Tutte richiedono semplice esecuzione. Tutte derivano da lavoro confermato. Esse necessitano di un completamento pratico. Aprirle come voci forzerebbe `todo.md` a rispondere a domande fuori dal suo perimetro.
+
+**Tre** lo erano. Esse sono nate qui per un criterio solo: toccano una **firma**.
+Questo piano usa il criterio per le P0 (priorità massima) dalla **prima** riga. La forma scade col freeze. Oggi costa un campo. Dopo costa una migrazione di versione. L'importanza intrinseca risulta modesta.
+
+**Il giro di chiusura scopriva l'invalidità del criterio su due delle tre voci.** La scoperta avveniva sul campo. La scadenza richiede la misura dell'attraversamento del confine da parte della firma. Sulla §24.3 quella misura ha dato **sì**. Essa risulta l'unica delle **tre**.
 
 ---
 
-**Perché stanno insieme.** Sono la stessa domanda a tre distanze dal confine:
-*ciò che il contratto dice, arriva a chi deve leggerlo?* La §24.1 era ciò che il
-contratto **espone** e che non si vedeva da dove tutti guardano; la §24.2 era ciò
-che il contratto **sa** e che la firma con cui lo si chiedeva non riusciva a
-dire; la §24.3 è ciò che il contratto **rifiuta**, senza dire a nessuno perché.
-Decise separate darebbero tre rattoppi in tre file; decise insieme sono un
-criterio — *una risposta a due valori per una domanda che ne ha tre non è una
-semplificazione, è una perdita* — che la [0094](../decisions/0094-un-tetto-che-si-fa-sentire.md)
-ha già preso una volta, su `random-bytes`, e la
-[0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md) una seconda,
-scoprendo che il verso opposto vale insieme al primo: la firma a due valori
-resta, perché sei chiamanti su sei fanno la stessa cosa nei due casi, e a
-cambiare è che adesso è una **proiezione** di quella che risponde per intero.
+**Perché stanno insieme.** Le voci rappresentano la stessa domanda a **tre** distanze dal confine:
+*ciò che il contratto dice, arriva a chi deve leggerlo?*
+
+| Voce | Distanza | Problema |
+|---|---|---|
+| §24.1 | Ciò che il contratto **espone**. | L'esposizione rimaneva invisibile dal punto di vista comune. |
+| §24.2 | Ciò che il contratto **sa**. | La firma limitava l'espressione della risposta. |
+| §24.3 | Ciò che il contratto **rifiuta**. | Il rifiuto ometteva le motivazioni. |
+
+Decisioni separate produrrebbero **tre** rattoppi in **tre** file. Decisioni congiunte creano un criterio condiviso.
+
+*Una risposta a **due** valori per una domanda che ne ha **tre** costituisce una perdita di informazione.*
+La [0094](../decisions/0094-un-tetto-che-si-fa-sentire.md) ha già applicato questo criterio una volta su `random-bytes`.
+La [0131](../decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md) lo ha applicato una **seconda** volta. Il verso opposto vale assieme al primo. La firma a **due** valori resta. **Sei** chiamanti su **sei** fanno la stessa cosa nei **due** casi. La firma cambia per diventare una **proiezione** della risposta intera.
 
 ---
 
 ## Com'è finita, e cosa lascia
 
-**Due P0 su tre erano P0 per la ragione sbagliata**, ed è il consuntivo che
-questa seduta lascia al piano. Non è un caso di tre: è un caso di **come sono
-state aperte**. Le tre voci sono nate da un criterio dichiarato — *tocca una
-firma, quindi scade col freeze* — applicato **leggendo**, e leggendo si vede che
-un simbolo esiste, non dove arriva. La §24.1 nominava una firma che si ripara
-per aggiunta; la §24.2 nominava una firma che al confine **non c'è**; solo la
-§24.3 nominava un caso di variant pubblicato, ed è l'unica che ha acceso il
-presidio che quella promessa la sorveglia (`wit_additivity`).
+**Due P0 su tre risultavano P0 per la ragione sbagliata.** Questo rappresenta il consuntivo lasciato dalla seduta al piano. Il problema riguarda l'apertura delle voci in generale, superando il caso specifico di **tre**. Le **tre** voci derivano dal criterio dichiarato sull'impatto della firma. L'applicazione avveniva per lettura. La lettura mostra l'esistenza di un simbolo e omette la sua propagazione reale.
 
-La regola che ne esce, e che vale per la prossima P0 di firma di questo piano:
-**«scade col freeze» non è una lettura, è una misura**, e la misura è una sola —
-il simbolo attraversa `crates/fub-abi/wit/`, e la riparazione tocca
-`wit/frozen/`? Finché quella misura non è fatta, la sigla «P0» dice quanto si è
-preoccupato chi scriveva la voce, non quanto costa aspettare. Le tre volte in cui
-è stata fatta, ha cambiato la conclusione due volte su tre.
+*   La §24.1 nominava una firma riparabile per aggiunta.
+*   La §24.2 nominava una firma assente al confine.
+*   La §24.3 nominava un caso di variant pubblicato (tipo enumerativo visibile all'esterno). Essa accende il presidio di sorveglianza della promessa (`wit_additivity`).
 
-Il consuntivo ha però un verso opposto, e va scritto insieme all'altro: **tutte
-e tre sono valse il giro lo stesso**, e per una ragione che non era nella loro
-urgenza. Ognuna delle tre ha trovato la cosa vera un centimetro più in là di
-dove la voce guardava — sessantuno tipi invece di sette, due funzioni che
-leggevano la stessa mappa in due modi, un banco della
-[0054](../decisions/0054-il-banco-del-lato-provider.md) che citava una regola nel
-commento e ne provava metà nel corpo. Una voce sbagliata sulla scadenza può
-essere giusta sul posto dove guardare.
+La regola risultante per la prossima P0 di firma:
+**«scade col freeze» è una misura.** La misura è una sola. Il simbolo attraversa `crates/fub-abi/wit/`? La riparazione tocca `wit/frozen/`? La sigla «P0» mostra l'allarme dello scrittore fino al completamento della misura. Il calcolo dell'attesa richiede la misura completata. Le **tre** volte d'esecuzione della misura hanno cambiato la conclusione **due** volte su **tre**.
+
+Il consuntivo possiede un valore aggiunto: **tutte e tre le voci sono valse il giro per altre ragioni.** Ognuna delle **tre** ha rivelato la verità un centimetro oltre il bersaglio iniziale:
+
+*   **sessantuno** tipi invece di **sette**.
+*   **due** funzioni leggevano la stessa mappa in **due** modi diversi.
+*   Un banco di test della [0054](../decisions/0054-il-banco-del-lato-provider.md) citava una regola nel commento testandone la **metà** nel corpo.
+
+Una voce errata sulla scadenza conserva la sua utilità sull'obiettivo da indagare.

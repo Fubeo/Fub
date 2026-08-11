@@ -1,313 +1,158 @@
 # 22. Cosa sa dire un abbonamento
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): un abbonamento è come questo contratto tiene il lavoro fuori dal confine — qui stanno le tre cose che non sa dire.
+Questa è una **seduta** della [roadmap infrastrutturale](../todo.md). Un abbonamento (una dichiarazione di interesse) mantiene il lavoro fuori dal confine. Qui si trovano le tre capacità mancanti.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-**Questa seduta non l'ha trovata un giro, e nemmeno una decisione di prodotto:
-l'ha trovata una verifica.** È la seconda, dopo quella che ha aperto la
-[§21.10](21-la-ricerca-predefinita.md) — e per questo vale scriverne il metodo
-accanto alle voci. Una lettura esterna di [FEATURES.md](../FEATURES.md) ha
-prodotto nove affermazioni sull'architettura di questo repo. Controllate contro i
-sorgenti: sei erano vere **e già scritte** — la cifratura at-rest che poggia sulla
-[§15.1](../decisions/0064-il-supporto-sta-sotto.md) sta nella voce da quando la
-voce esiste, l'`Origin` che impedisce a un'automazione di richiamarsi da sola è
-la [0012](../decisions/0012-origine-degli-eventi.md), la maschera valutata dal
-kernel è la [0033](../decisions/0033-la-grana-di-un-abbonamento.md). La tesi
-centrale — *«§15.1 e §15.2 non sono più P2, sono il pavimento»* — era invece
-sbagliata nel modo che [`todo.md`](../todo.md) nomina per primo: **P0 è la
-scadenza, non l'importanza**, e [`leva.md`](leva.md) esiste apposta per dire che
-una voce può essere P2 e restare la più importante da capire. La prova che la
-disciplina aveva già funzionato è nella stessa seduta 15: la sua unica **metà di
-firma** era la §15.4, ed era P0, ed è chiusa dalla
-[0048](../decisions/0048-una-radice-sola.md) prima del freeze; il `trait
-VaultStorage` è rimasto P2 perché è un trait interno al kernel e non scade.
+**Questa seduta nasce da una verifica.** È la seconda verifica dopo la [§21.10](21-la-ricerca-predefinita.md). Il metodo si basa su una lettura esterna di [FEATURES.md](../FEATURES.md). Questa lettura ha prodotto nove affermazioni sull'architettura di questo repo.
 
-Restano tre cose che nessuno aveva scritto. Sono qui, e sono **tutte e tre
-chiuse**: la terza dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md),
-che ne lascia una casella, e le altre due dalla
-[0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md), che ne ha aperta una
-quarta — la §22.4, l'orario di parete, chiusa a sua volta dalla
-[0091](../decisions/0091-un-orario-di-parete-non-e-un-intervallo.md), che ne
-lascia anche lei una casella. **La seduta non ha più voci aperte.**
+Risultati del controllo sui sorgenti:
+- **Sei affermazioni confermate e già scritte:**
+  - La cifratura at-rest poggia sulla [§15.1](../decisions/0064-il-supporto-sta-sotto.md).
+  - L'`Origin` ferma le chiamate ricorsive delle automazioni ([0012](../decisions/0012-origine-degli-eventi.md)).
+  - Il kernel (il nucleo del sistema) valuta la maschera ([0033](../decisions/0033-la-grana-di-un-abbonamento.md)).
+- **Tesi centrale errata:** *«§15.1 e §15.2 non sono più P2, sono il pavimento»*.
+  - **P0 indica la scadenza.**
+  - **P2 indica l'importanza.**
+  - [`todo.md`](../todo.md) e [`leva.md`](leva.md) spiegano la convivenza di questi valori.
+- **Prova di funzionamento dalla seduta 15:**
+  - La metà di firma §15.4 (P0) è chiusa dalla [0048](../decisions/0048-una-radice-sola.md) prima del freeze (il blocco delle modifiche all'interfaccia).
+  - Il `trait VaultStorage` resta P2 poiché costituisce un componente interno al kernel esente da scadenze.
 
-**Un avvertimento su questo cappello, scritto dopo.** La frase qui sotto — «tre
-estensioni della stessa maschera» — **è sbagliata**, e le due decisioni che hanno
-chiuso la seduta l'hanno smentita ognuna a modo suo: la §22.3 è diventata una
-funzione su `ViewProvider` ([0063](../decisions/0063-la-maschera-e-dell-esemplare.md))
-e la §22.1 un campo di manifest, perché *una maschera filtra e non causa*
-([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)). L'accorpamento che
-questo cappello dichiarava ha retto lo stesso, ma per un'altra ragione — la
-**regola** che il ritiro della 0063 ha messo a verbale, non il record — e resta
-scritto qui com'era perché è il caso su cui il criterio della
-[0054](../decisions/0054-il-banco-del-lato-provider.md) si è precisato: un
-cappello si legge per cosa afferma, e ciò che afferma può essere falso senza che
-la sua conclusione lo sia.
+Tre elementi mancavano all'appello. Oggi risultano **tutti e tre chiusi**:
+- La terza voce è chiusa dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md) (lasciando aperta una casella).
+- Le prime due voci sono chiuse dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md).
+- La [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) ha aperto la quarta voce (§22.4 sull'orario di parete).
+- La §22.4 è chiusa dalla [0091](../decisions/0091-un-orario-di-parete-non-e-un-intervallo.md) (lasciando aperta una casella).
 
-**Perché stanno insieme.** Un **abbonamento** — in questa seduta: ogni
-dichiarazione di interesse, non solo `subscriptions()` — è il modo con cui questo
-contratto tiene il lavoro fuori dal confine: chi ascolta dichiara prima, il
-kernel valuta, e il guest si sveglia solo a corrispondenza avvenuta
-([0033](../decisions/0033-la-grana-di-un-abbonamento.md)). Le tre voci sono tre
-cose che quella dichiarazione non sa dire: **quando** (§22.1), **cosa è
-cambiato** (§22.2), e **per quale esemplare** (§22.3). Decise separate darebbero
-tre estensioni della stessa maschera, disegnate da tre lati, con tre modi di
-essere valutate.
+**La seduta presenta zero voci aperte.**
 
-**E nessuna delle tre scade col freeze** — né la quarta, che è nata chiudendo la
-prima. Vale scriverlo perché la tentazione era
-chiamarle P0 per importanza — cioè commettere l'errore che questa stessa seduta
-ha appena contestato a chi l'ha aperta. Passate una per una alla tabella di
-[`architecture/wit-congelato.md`](../architecture/wit-congelato.md): la
-dichiarazione di un timer è un campo di manifest, un campo di maschera o
-un'interfaccia nuova — tutte e tre in coda; il *cosa è cambiato* è un campo in
-fondo a un record e uno in fondo alla maschera; una maschera per esemplare è una
-funzione nuova su un'interfaccia che c'è già. **Niente di pubblicato si sposta.**
-Sono P1: vanno con M3, e il loro conto lo paga chi scriverà la prima automazione.
-La §22.3 è la sola che ha un modo di diventare P0, ed è scritto nella sua ultima
-casella — la [0063](../decisions/0063-la-maschera-e-dell-esemplare.md) ha preso
-l'altro verso, quello additivo, e con lui la voce non scade più.
+**Avvertimento.** La definizione originaria «tre estensioni della stessa maschera» risulta superata dai fatti. Le decisioni hanno preso strade diverse:
+- La §22.3 diventa una funzione su `ViewProvider` ([0063](../decisions/0063-la-maschera-e-dell-esemplare.md)).
+- La §22.1 diventa un campo del manifest (il file di configurazione del plugin) ([0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md)).
+- La maschera filtra gli eventi, omettendo azioni causali.
 
-**Le due che restano sono state tentate una volta, e ritirate.** Vale scriverlo
-qui perché la prossima volta la tentazione tornerà nella stessa forma: i campi
-c'erano — `document-changes` e `schedule` in fondo alla maschera, un `changes` in
-fondo a `event-document-changed`, un `timer-fired` in coda al variant — e non li
-guardava nessuno. `mask_wants` non filtrava, `ingest_model` riempiva `None`, il
-timer non lo faceva scattare niente. Aggiungere la dichiarazione è la parte
-facile di tutte e due queste voci, ed è la parte che non serve a nulla da sola:
-finché il kernel non la valuta, una maschera che si può scrivere è una promessa
-fatta a chi la scrive.
+L'accorpamento originario rimane valido in base alla regola introdotta dalla 0063. Il testo mantiene la forma iniziale per illustrare il criterio della [0054](../decisions/0054-il-banco-del-lato-provider.md): un cappello illustra un'affermazione. L'affermazione può rivelarsi errata mantenendo valida la propria conclusione.
+
+**Motivo dell'accorpamento.** Un **abbonamento** raggruppa ogni dichiarazione di interesse (inclusa `subscriptions()`). Questo contratto mantiene il lavoro fuori dal confine. Il flusso funziona secondo la [0033](../decisions/0033-la-grana-di-un-abbonamento.md):
+1. L'ascoltatore dichiara l'interesse.
+2. Il kernel valuta.
+3. Il guest (il plugin ospitato) si sveglia solo alla corrispondenza.
+
+Le tre voci indicano i limiti espressivi della dichiarazione. La dichiarazione omette:
+- **Il tempo** (§22.1).
+- **Le variazioni** (§22.2).
+- **L'esemplare interessato** (§22.3).
+
+L'analisi separata produrrebbe tre estensioni disgiunte della stessa maschera, ognuna con una valutazione isolata.
+
+**Validità post-freeze.** Tutte e quattro le voci mantengono validità dopo il freeze. Chiamarle P0 per importanza ripropone un errore già contestato. Analisi basata su [`architecture/wit-congelato.md`](../architecture/wit-congelato.md):
+- Il timer impiega un campo di manifest, un campo di maschera o una nuova interfaccia (elementi in coda).
+- Il parametro sulle variazioni usa un campo in fondo a un record (la struttura dati) e uno in fondo alla maschera.
+- La maschera per esemplare richiede una nuova funzione su un'interfaccia esistente.
+
+**Gli elementi pubblicati mantengono le proprie posizioni.** Le voci classificate P1 seguono M3. Il creatore della prima automazione pagherà il costo implementativo. La §22.3 offriva una via verso P0. La [0063](../decisions/0063-la-maschera-e-dell-esemplare.md) ha adottato il percorso additivo, garantendo la persistenza della voce.
+
+**Tentativi precedenti.** Le due voci rimanenti presentano un tentativo pregresso ritirato. I campi esistevano (`document-changes` e `schedule` nella maschera, un `changes` in `event-document-changed`, un `timer-fired` in coda al variant) ma restavano ignorati:
+- `mask_wants` ometteva i filtri.
+- `ingest_model` assegnava `None`.
+- Il timer restava inattivo.
+
+La dichiarazione rappresenta il passaggio semplice ma isolato. Il kernel deve valutare la maschera per trasformare la promessa in realtà.
 
 ### 22.1 Un abbonamento non sa dire quando
 
-*chiusa dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) — la dichiarazione sta nel manifest, perché una maschera filtra e non causa; e ne nasce la §22.4*
+*chiusa dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) — la dichiarazione risiede nel manifest. La maschera agisce come filtro. Da qui nasce la §22.4*
 
-- [x] **Il no della [0013](../decisions/0013-elenco-delle-capacita.md) è ancora
-      giusto; la sua ragione no.** `schedule_at`/`schedule_every` erano stati
-      esclusi così: «*il kernel è sincrono e non possiede thread: `spawn_job`
-      accoda e chi ha i thread (l'app) drena*». Dalla
-      [0032](../decisions/0032-il-runner-dei-job.md) i thread ci sono — un pool
-      per vault, posseduto dall'host, che aspetta un campanello **prestato** dal
-      kernel (`JobBell`), che è la stessa mossa della bandiera di cancellazione.
-      Il bloccante nominato non c'è più. La conclusione resta valida lo stesso, ma
-      per **l'altra** regola della stessa 0013: *una capacità è ciò di cui il
-      chiamante ha bisogno della risposta per proseguire; ciò che si limita a
-      informare è un evento.* Una sveglia informa. Quindi non `schedule_at`: un
-      evento — e il precedente che dice che funziona è la
-      [0035](../decisions/0035-il-lavoro-lungo-si-racconta.md), che ha fatto
-      esattamente questo col progresso.
+- [x] **La conclusione della [0013](../decisions/0013-elenco-delle-capacita.md) rimane valida per un motivo diverso.** `schedule_at`/`schedule_every` mancavano perché il kernel sincrono usava `spawn_job` per accodare e delegava lo svuotamento all'app. 
+      La [0032](../decisions/0032-il-runner-dei-job.md) introduce un pool di thread per vault (l'archivio dei documenti) gestito dall'host (l'applicazione principale). Questo pool attende il campanello `JobBell` prestato dal kernel (uguale alla bandiera di cancellazione). 
+      La conclusione regge in base alla regola parallela della 0013: 
+      - Una capacità richiede la risposta per proseguire. 
+      - Un evento si limita a informare. 
+      Una sveglia informa tramite un evento. La [0035](../decisions/0035-il-lavoro-lungo-si-racconta.md) dimostra questo approccio informando sul progresso.
 
-      *Confermato, e con la premessa smentita per iscritto: dalla
-      [0032](../decisions/0032-il-runner-dei-job.md) i thread ci sono, quindi a
-      reggere la conclusione è l'altra regola. La 0013 aveva anche previsto la
-      forma — «quando arriveranno, arriveranno come `Event`, ed è additivo» — e
-      `Event::TimerFired { owner, timer }` è quella riga resa vera.*
-- [x] **Ciò che manca è la dichiarazione, non lo scheduler.** `EventMask` sa dire
-      tre cose — le specie, il prefisso di topic, il soggetto (`event.rs`) — e
-      nessuna delle tre è *quando*. Un plugin che voglia svegliarsi alle 9, o
-      ogni ora, o fra dieci minuti, non ha **dove scriverlo**: non nella
-      maschera, non nel manifest, non fra le capacità. Lo scheduler in sé è
-      codice dell'host e non costa una decisione; il posto dove un plugin
-      dichiara un timer sì, ed è l'unica parte che il freeze guarda.
+      *Riscontro: la [0032](../decisions/0032-il-runner-dei-job.md) garantisce la presenza dei thread. L'altra regola supporta la conclusione. La 0013 aveva previsto la forma `Event`. `Event::TimerFired { owner, timer }` concretizza la previsione usando un approccio additivo.*
+- [x] **Necessità della dichiarazione.** `EventMask` definisce tre elementi (le specie, il prefisso di topic, il soggetto in `event.rs`). Il momento temporale manca all'appello. Un plugin manca di un luogo per registrare sveglie. 
+      Lo scheduler appartiene all'host. Il luogo di dichiarazione del timer richiede un intervento sottoposto al freeze.
 
-      *Il posto è il `PluginManifest` (`timers: list<timer-spec>`), e la ragione
-      per cui **non** è la maschera è più forte di «non ci stava»: una maschera si
-      applica agli eventi che accadono, e un timer che nessuno ha fatto partire
-      non ne genera nessuno da filtrare. Era un errore di categoria, ed è la
-      ragione per cui il tentativo ritirato non poteva trovare un valutatore. Lo
-      scheduler è dell'host come previsto, ma la **regola** di quando suona sta
-      nel contratto (`TimerSchedule::nth_after`): il kernel non legge l'orologio,
-      e due host non devono avere due idee di cosa voglia dire «ogni ora».*
-- [x] **Chi lo chiede.** FEATURES 16.2 (trigger su orario, su data, su
-      intervallo), 16.3 (schedule, delay, retry), 10.5 (promemoria e notifiche a
-      scadenza), 18.1 (sync periodico), 24.2 (background sync efficiente). Sono
-      l'unica famiglia di trigger del 16.2 che **non** nasce da un evento del
-      vault: tutte le altre hanno già il canale e aspettano solo chi le ascolti.
+      *Soluzione: il `PluginManifest` accoglie i timer (`timers: list<timer-spec>`). La maschera richiede l'esistenza degli eventi. Un timer inattivo produce zero eventi. L'errore di categoria bloccava la valutazione nel tentativo ritirato. Lo scheduler risiede nell'host. Il contratto stabilisce la regola di attivazione (`TimerSchedule::nth_after`). Il kernel delega la lettura dell'orologio. Gli host condividono l'interpretazione per espressioni come «ogni ora».*
+- [x] **Richieste collegate.** FEATURES 16.2 (trigger (l'evento scatenante) su orario, data, intervallo), 16.3 (schedule, delay, retry), 10.5 (promemoria, notifiche), 18.1 (sync periodico), 24.2 (background sync). Questa famiglia di trigger del 16.2 ha origine esterna al vault. Gli altri trigger sfruttano canali esistenti per l'ascolto.
 
-      *Servite, meno l'orario di parete: `every` e `after` coprono «ogni ora» e
-      «fra dieci minuti», «alle 9» diventa la §22.4.*
-- [x] **Perché non è P0.** Le tre forme che la dichiarazione può prendere sono
-      tutte additive: un campo del `PluginManifest` (il precedente è `settings`,
-      [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), un campo in
-      fondo a `EventMask`, o un'interfaccia nuova. Il caso di `Event` per la
-      sveglia è additivo per la regola che questo progetto si è scelto — con
-      l'avvertenza che
-      [`wit-congelato.md`](../architecture/wit-congelato.md) scrive a chiare
-      lettere: nel component model un caso in più su un `variant` non è nemmeno
-      additivo davvero.
+      *Risultato: richieste soddisfatte, escluso l'orario di parete. I parametri `every` e `after` gestiscono il tempo trascorso («ogni ora» e «fra dieci minuti»). Il caso «alle 9» confluisce nella §22.4.*
+- [x] **Classificazione diversa da P0.** Le tre opzioni di dichiarazione sono additive: un campo in `PluginManifest` (come `settings`, [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), un campo in coda a `EventMask`, o una nuova interfaccia. Il caso `Event` per la sveglia risulta additivo secondo le regole del progetto. Il documento [`wit-congelato.md`](../architecture/wit-congelato.md) precisa un limite del component model: l'aggiunta a un `variant` rompe la compatibilità.
 
-      *Presa la prima delle tre — il campo di manifest —, e il caso in coda al
-      `variant` c'è comunque. `frozen/0.1.0.wit` **non è stato toccato**: il
-      precedente per il caso in coda è la
-      [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md), che ne
-      aveva aggiunti tre a `plugin-error` chiamandoli additivi.*
+      *Soluzione adottata: campo in manifest. Il caso in coda al `variant` rimane presente. `frozen/0.1.0.wit` resta intatto. La [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md) fornisce il precedente, avendo aggiunto tre casi a `plugin-error` classificandoli come additivi.*
 
 ### 22.2 Un evento dice quale documento, non cosa è cambiato
 
-*chiusa dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) — si filtra per aspetto e si legge per nome*
+*chiusa dalla [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) — il filtro sfrutta l'aspetto, la lettura sfrutta il nome*
 
-- [x] **`DocumentChanged { id }` e basta** (`abi.wit`, `event-document-changed`).
-      Chi ascolta sa che *quella nota* è cambiata, non cosa: per sapere se è
-      cambiato un tag deve rileggere il modello e confrontarlo con quello che si
-      era tenuto.
+- [x] **Struttura di `DocumentChanged { id }`** (`abi.wit`, `event-document-changed`). 
+      L'ascoltatore rileva la modifica della nota ignorando le variazioni interne. Il controllo dei tag richiede la rilettura del modello e il confronto con lo stato precedente.
 
-      *Adesso dice anche cosa: `changes: option<doc-changes>`. E i due stati
-      dell'`option` sono due cose diverse — assente è *non lo so* e passa ogni
-      filtro, presente e vuoto è *niente è cambiato* e non passa.*
-- [x] **La 16.2 chiede tre trigger che sono esattamente questo**: «trigger su tag
-      aggiunto», «su proprietà cambiata», «su task completato». Nessuno dei tre è
-      una specie di evento e nessuno dei tre è filtrabile da una maschera:
-      un'automazione su «la scadenza è cambiata» si sveglia a **ogni** scrittura
-      di **ogni** nota del suo soggetto, e rilegge per scoprire che non la
-      riguardava. È la famiglia di automazioni più grande del capitolo 16, ed è
-      quella che paga il conto più alto.
+      *Aggiornamento: l'evento espone i dettagli tramite `changes: option<doc-changes>`. I due stati dell'`option` assumono significati distinti:*
+      - *Assente significa "ignoto" e supera ogni filtro.*
+      - *Presente e vuoto significa "invariato" e subisce il blocco.*
+- [x] **Richieste della 16.2.** Le funzionalità includono: «trigger su tag aggiunto», «su proprietà cambiata», «su task completato». 
+      Questi elementi mancano di una propria specie di evento. La maschera fallisce nel filtrarli. Un'automazione sulle scadenze si attiva a **ogni** scrittura di **ogni** nota del soggetto. L'automazione richiede una rilettura per determinare l'irrilevanza. Questa famiglia genera il carico maggiore dell'intero capitolo 16.
 
-      *Due dei tre sono serviti per nome (`tags_added`/`tags_removed` e
-      `properties`); il terzo — «task completato» — **non ha un campo nel
-      modello**, quindi non è distinguibile da un cambio di corpo. Non è stato
-      nominato in `DocChange` per non promettere una grana che il kernel non sa
-      produrre: è un buco dichiarato, e l'enum cresce in coda il giorno che
-      `DocumentModel` avrà i task.*
-- [x] **È l'argomento della [0033](../decisions/0033-la-grana-di-un-abbonamento.md)
-      un piano più in basso.** Quella voce esisteva perché con la sola grana
-      delle specie ogni handler si svegliava per N feature × M documenti; la
-      maschera ha guadagnato il topic e il soggetto, e il conto è sceso di due
-      ordini. Il *cosa* è la terza grana, e la sua assenza rimette in piedi lo
-      stesso moltiplicatore sull'evento più caldo del contratto.
+      *Risultati: i primi due trigger usano i nomi (`tags_added`/`tags_removed` e `properties`). Il terzo («task completato») manca di un campo nel modello, risultando indistinguibile da un cambio di corpo. `DocChange` omette questo campo per evitare promesse impossibili al kernel. Questo vuoto esplicito anticipa l'estensione dell'enum all'arrivo dei task in `DocumentModel`.*
+- [x] **Argomento della [0033](../decisions/0033-la-grana-di-un-abbonamento.md).** La sola grana delle specie attivava ogni handler (il gestore dell'evento) per N feature × M documenti. L'aggiunta di topic e soggetto alla maschera riduce il carico di due ordini. 
+      Il parametro *cosa* rappresenta la terza grana. L'assenza di questo parametro ripristina il moltiplicatore sull'evento più frequente del contratto.
 
-      *La terza grana è `DocChange`, sei aspetti chiusi dal contratto. Il
-      moltiplicatore che resta è sul **risveglio** e non più sulla **rilettura**,
-      che era la parte cara: chi si sveglia sa già, dai nomi che l'evento porta,
-      se lo riguardava.*
-- [x] **Il posto dove la differenza è calcolabile esiste, ed è uno solo**:
-      `Workspace::ingest_model` (`workspace.rs`), la coda di ogni scrittura. Lì
-      il modello nuovo è in mano e i metadati di prima sono ancora in cache —
-      `on_document_indexed(&model)` è la riga che li sostituisce. Chi volesse
-      dire *cosa* è cambiato non deve andarlo a ricalcolare da nessuna parte: gli
-      basta guardare prima di sovrascrivere. È la stessa specie di spreco della
-      [seduta 20](20-quando-qualcosa-va-storto.md) — un esito che si ha in mano e
-      si butta — vista sul canale degli eventi invece che su quello degli errori.
+      *Soluzione: `DocChange` copre sei aspetti definiti dal contratto. Il moltiplicatore residuo impatta unicamente sul **risveglio**, escludendo la **rilettura** (l'operazione costosa). I nomi nell'evento indicano subito la pertinenza all'ascoltatore risvegliato.*
+- [x] **Luogo di calcolo della differenza.** L'operazione avviene in un unico punto: `Workspace::ingest_model` (`workspace.rs`), in coda a ogni scrittura. 
+      In quella fase l'host possiede il nuovo modello e conserva i vecchi metadati in cache. La riga `on_document_indexed(&model)` sostituisce i dati. L'estrazione delle variazioni evita ricalcoli: basta analizzare i dati prima della sovrascrittura. L'omissione di questa analisi genera uno spreco equivalente a quello della [seduta 20](20-quando-qualcosa-va-storto.md), spostato sul canale degli eventi.
 
-      *Esatto, e il diff costa **zero letture dal disco**: si calcola in
-      `ingest_model` prima di toccare qualunque cosa. Il corpo non stava in
-      cache — è lo split metadata/body — e a rispondere per lui è l'impronta che
-      l'anagrafe teneva dal giro prima (§14.1), che era già in memoria.*
-- [x] **Perché non è P0**: un campo in fondo a `event-document-changed` e uno in
-      fondo a `EventMask` per filtrarlo. Due record, due aggiunte in coda.
+      *Conferma: il diff richiede **zero letture dal disco**. Il calcolo avviene in `ingest_model` prima di alterare i dati. Il corpo risiedeva fuori dalla cache (split metadata/body). L'impronta mantenuta dall'anagrafe dal giro precedente (§14.1) risponde per il corpo direttamente dalla memoria.*
+- [x] **Esclusione da P0.** Le modifiche implicano un campo in fondo a `event-document-changed` e uno in fondo a `EventMask`. Entrambi configurano aggiunte in coda a dei record.
 
-      *Alla lettera, più tre tipi nuovi (`doc-change`, `doc-changes`) e nessun
-      ritaglio della linea di base.*
+      *Risultato: aggiunta di tre tipi nuovi (`doc-change`, `doc-changes`) conservando la linea di base intatta.*
 
 ### 22.3 La maschera di ridisegno è della view, non dell'esemplare
 
-*chiusa dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md) — resta una casella, ed è la sola metà che non si risolveva nel contratto delle view*
+*chiusa dalla [0063](../decisions/0063-la-maschera-e-dell-esemplare.md) — resta una casella, l'unica metà priva di soluzione nel contratto delle view*
 
-`ViewProvider` ha `interests(&ViewInstance) -> ViewInterests { refresh, follows }`,
-e il record sta nel WIT accanto a `view-spec`. I due campi della spec restano il
-caso largo e il default — la decisione è additiva, e la §22.3 non scade più. Le
-maschere si risolvono **dove le spec si chiedono**, alla registrazione
-(`specs_dichiarate`), perché la verità su cosa un provider offre è del registro e
-non di chi interroga; chi apre un esemplare con parametri la chiede a
-`Workspace::view_interests`, e non è passata dall'IPC perché la domanda che la
-shell fa oggi ha già la sua risposta dentro `list_views`
-([0057](../decisions/0057-la-dieta-dell-ipc.md)).
+`ViewProvider` possiede `interests(&ViewInstance) -> ViewInterests { refresh, follows }`. Il record si trova nel WIT accanto a `view-spec` (la specifica della vista). 
+I due campi della spec gestiscono il caso generale e il default. La decisione ha natura additiva, mantenendo aperta la §22.3. 
 
-- [ ] **Resta il secondo cliente, che non è nemmeno una view.** Una query
-      **incorporata in una nota** (9.2, «query embed») non è un esemplare di
-      `ViewSpec`: è un blocco reso dal renderer, dentro il documento aperto. Per
-      quella un canale di invalidazione non esiste **affatto**, e la domanda
-      «chi la ridisegna quando cambia ciò che interroga» oggi non ha una riga in
-      nessuna voce. La seduta diceva che le due metà vanno decise insieme «o le
-      due si sceglieranno due meccanismi»: la prima, decisa, **è** il meccanismo
-      — una dichiarazione di interesse per esemplare, valutata da chi possiede
-      l'evento — e ciò che resta è portarcelo dentro, non sceglierne un altro.
-      Un blocco reso dentro un documento non ha un id di view a cui appendere una
-      spec, e la sua dipendenza nasce dal testo che lo contiene: è lì che la
-      risposta va cercata, non in `ViewSpec`.
+La risoluzione delle maschere avviene **durante la richiesta delle spec**, alla registrazione (`specs_dichiarate`). Il registro detiene la verità sulle offerte del provider. 
+L'apertura di un esemplare con parametri interroga `Workspace::view_interests`. L'operazione evita l'IPC (la comunicazione tra processi) poiché `list_views` ([0057](../decisions/0057-la-dieta-dell-ipc.md)) contiene già la risposta per la shell (l'interfaccia utente).
+
+- [ ] **Il secondo cliente esula dal concetto di view.** Una query **incorporata in una nota** (9.2, «query embed») differisce da un esemplare di `ViewSpec`. Costituisce un blocco generato dal renderer (il motore di visualizzazione) all'interno del documento aperto. 
+      Questo blocco manca completamente di un canale di invalidazione. Il ridisegno conseguente alla variazione dei dati resta un problema ignorato dalle voci. 
+      Le due metà richiedono una decisione congiunta per evitare meccanismi discordanti. Il meccanismo stabilito prevede una dichiarazione di interesse per esemplare, valutata dal possessore dell'evento. L'obiettivo consiste nell'adottare questo meccanismo universale.
+      Un blocco nel documento manca di un id di view per la spec. La dipendenza deriva dal testo contenitore: la soluzione richiede l'analisi del testo, lontano da `ViewSpec`.
 
 ### 22.4 Un orario di parete non è un intervallo
 
-*chiusa dalla [0091](../decisions/0091-un-orario-di-parete-non-e-un-intervallo.md) — la regola di una sveglia che il contratto non può calcolare da sé nasce **accanto** a quella che c'era, e non al suo posto · resta una casella*
+*chiusa dalla [0091](../decisions/0091-un-orario-di-parete-non-e-un-intervallo.md) — la regola della sveglia autonoma nasce **accanto** a quella esistente · resta una casella*
 
-`TimerSchedule` sapeva dire `every` e `after`, cioè le due forme che si misurano
-in **tempo trascorso**: «ogni ora» e «fra dieci minuti». La §22.1 ne nominava tre,
-e la terza — «alle 9» — non è la stessa specie di domanda.
+`TimerSchedule` definiva `every` e `after`. Queste forme misurano il **tempo trascorso** («ogni ora», «fra dieci minuti»). La §22.1 aggiungeva un terzo caso («alle 9») basato su principi separati.
 
-- [x] **Un orario di parete vuole un fuso, e nessuno sa da dove lo prende.** Il
-      sistema? Un'impostazione (§11.1)? Il locale della
-      [0039](../decisions/0039-il-locale-e-il-caso.md), che l'host già conosce e
-      che però dice *come si scrive un'ora*, non *in che fuso si vive*? Sono tre
-      risposte diverse e producono tre comportamenti diversi per un vault
-      sincronizzato fra due macchine in due paesi — che è il caso normale, non
-      quello di frontiera.
+- [x] **Gestione del fuso orario.** Un orario di parete richiede un fuso di origine ignota. 
+      Fonti ipotizzate:
+      - Il sistema.
+      - Un'impostazione (§11.1).
+      - Il locale della [0039](../decisions/0039-il-locale-e-il-caso.md) (l'host conosce il formato dell'ora omettendo il fuso di residenza).
+      Queste opzioni generano comportamenti diversi per un vault sincronizzato tra macchine geograficamente distanti. Questo rappresenta il caso operativo tipico.
 
-      *L'esclusione del terzo era sbagliata, ed è la quinta volta che una voce
-      ferma non si esegue ma si rimisura: il `Locale` di questo repo dice **tutte
-      e due** — `locale.timezone` è il nome IANA e lo dice per iscritto nel
-      proprio modulo, «chi deve fare aritmetica su date usa `Locale::timezone`,
-      che si porta dietro le regole». Di più: è già un'impostazione, con la scala
-      vault → macchina → default, e il default vuoto vuol dire «chiedilo al
-      sistema». I tre candidati non erano tre risposte diverse: erano **tre
-      strati della stessa risposta, già montati**, e leggerli ha risparmiato una
-      chiave nuova — che sarebbe stata la seconda con lo stesso significato.
-      Il fuso è quindi **della macchina** per default, perché «alle 9» quasi
-      sempre vuol dire «quando comincio a lavorare» e ogni macchina fa già girare
-      il proprio scheduler. E il caso che la voce nominava — due macchine in due
-      paesi — ha guadagnato un **terzo strato nuovo**: `zone: option<string>`,
-      con cui una sveglia dichiara il proprio fuso quando il suo significato è
-      ancorato a un posto («il digest delle 9 dell'ufficio di Roma»), che è la
-      cosa che un fuso implicito non sa dire. Un nome che il database non conosce
-      non fa suonare la sveglia e non ripiega su UTC.*
-- [x] **E vuole una regola sull'ora legale.** Il giorno in cui l'ora legale
-      entra, le 2:30 non esistono; il giorno in cui esce, esistono due volte. Una
-      sveglia dichiarata a quell'ora o salta un giro o ne fa due, e quale delle
-      due sia giusta dipende da cosa la sveglia fa: un promemoria vuole saltare,
-      un backup vuole girare. È una decisione, e prenderla di straforo dentro
-      un'implementazione vorrebbe dire che nessuno la trova più.
+      *Risultato: la misurazione conferma la soluzione esistente nel `Locale`. Il modulo dichiara `locale.timezone` come nome IANA, prescrivendo l'uso di `Locale::timezone` per l'aritmetica sulle date. Il sistema applica la scala vault → macchina → default (il valore vuoto interroga il sistema). I tre candidati formano **tre strati integrati**, evitando chiavi duplicate.*
+      *Il fuso default corrisponde alla **macchina** («alle 9» indica l'inizio del lavoro locale). Il caso geografico guadagna un **terzo strato nuovo**: `zone: option<string>`. La sveglia dichiara il fuso quando vincolata a un luogo («il digest delle 9 dell'ufficio di Roma»). Un fuso implicito omette questa informazione. Un nome ignoto al database ferma la sveglia ed evita il ripiego su UTC.*
+- [x] **Regola sull'ora legale.** All'ingresso dell'ora legale le 2:30 spariscono; all'uscita si duplicano. 
+      La sveglia salta un giro o esegue due giri in base al compito (un promemoria salta, un backup esegue). Questa decisione richiede visibilità per evitare implementazioni nascoste.
 
-      *Presa, e **non è un campo**, che era la forma che la voce si aspettava. Le
-      2:30 che esistono due volte suonano una volta per un invariante e non per
-      una scelta — un'occorrenza è la sua **data civile** e non il suo istante —
-      e le 2:30 che non esistono si spostano in avanti della durata del salto
-      (la disambiguazione `compatible` di RFC 5545, cioè ciò che fa ogni
-      calendario), quindi una sveglia di parete non perde mai un giorno. Un campo
-      c'è, ma risponde a una domanda che la voce **non faceva**: cosa fa
-      un'occorrenza passata mentre nessuno guardava — la macchina dormiva, il pool
-      era occupato, l'app era chiusa. `catch_up_seconds` è una **finestra** e non
-      una bandiera, e la differenza si vede sul caso che una bandiera sbaglia:
-      una macchina riaccesa dopo due giorni suona **zero** volte, non due.*
-- [x] **Chi lo chiede.** FEATURES 16.2 (trigger su orario e su data), 10.5
-      (promemoria e notifiche a scadenza). Sono la metà della famiglia che la
-      §22.1 ha servito: chi vuole svegliarsi *ogni tanto* è servito, chi vuole
-      svegliarsi *alle nove* no.
+      *Risultato: la soluzione rifiuta l'uso del campo previsto. Le 2:30 duplicate suonano una sola volta per un invariante: l'occorrenza usa la **data civile** invece dell'istante esatto. Le 2:30 mancanti avanzano della durata del salto (disambiguazione `compatible` della RFC 5545). La sveglia di parete preserva tutti i giorni.*
+      *Il campo aggiunto gestisce le occorrenze passate durante l'inattività (macchina in sospensione, pool occupato, app chiusa), un problema ignorato dalla voce. `catch_up_seconds` definisce una **finestra** in opposizione alle bandiere binarie. Una macchina riaccesa dopo due giorni suona **zero** volte, evitando i recuperi multipli.*
+- [x] **Richieste collegate.** FEATURES 16.2 (trigger su orario e data) e 10.5 (promemoria e notifiche). Questa metà completa la famiglia della §22.1. Le sveglie a intervalli funzionavano, le sveglie fisse restavano scoperte.
 
-      *Servita: `at-wall-clock` dice «ogni giorno alle 9» e «il lunedì alle
-      7:30» — un caso solo, con l'elenco dei giorni vuoto a dire «ogni giorno»,
-      perché un `daily` e un `weekly` separati sarebbero stati due discriminanti
-      per la stessa aritmetica.*
-- [x] **Perché non è P0.** `timer-schedule` è un `variant` nato con la
-      [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) e mai pubblicato:
-      un caso in coda è additivo, e chi ha dichiarato `every` non se ne accorge.
-      Ciò che il freeze guarda — il posto della dichiarazione — è già deciso ed è
-      il manifest.
+      *Soluzione: `at-wall-clock` gestisce casi come «ogni giorno alle 9» e «il lunedì alle 7:30». Un singolo caso accomuna queste forme: l'elenco dei giorni vuoto indica «ogni giorno». Questa scelta previene l'uso di discriminanti multiple (`daily`, `weekly`) per la medesima aritmetica.*
+- [x] **Esclusione da P0.** Il `variant` `timer-schedule` nasce con la [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) e resta inedito. Un caso in coda ha natura additiva e preserva la compatibilità per chi usa `every`. Il freeze controlla il luogo della dichiarazione nel manifest.
 
-      *Confermato alla lettera, e con la sola firma che poteva contraddirlo
-      lasciata intatta: `nth_after` non cambia forma, perché la regola dell'ora
-      civile nasce **accanto** e non al suo posto. `frozen/0.1.0.wit` non è stato
-      toccato, e non c'era niente da ritagliare: `timer-schedule` non ci compare
-      affatto.*
-
-- [ ] **Resta il recupero attraverso un riavvio dell'app.** `catch_up_seconds` è
-      onorato dentro una sessione e attraverso il sonno della macchina, non
-      attraverso una chiusura: lo scheduler non persiste dove è arrivato, quindi
-      al primo giro l'occorrenza passata si **consuma in silenzio** invece di
-      essere recuperata. È deliberato — altrimenti aprire Fub alle dieci farebbe
-      suonare la sveglia delle nove per il solo fatto di essere le dieci — ma
-      vuol dire che un backup notturno dichiarato con una finestra larga non
-      recupera se l'app era chiusa, che è precisamente il caso in cui una
-      finestra larga serviva. Recuperare davvero vuole un posto dove scrivere
-      l'ultima occorrenza onorata, per sveglia e per macchina: è un meccanismo
-      suo, e la casa naturale è il file della macchina della
-      [0037](../decisions/0037-lo-stato-di-vista.md).
+      *Conferma totale. La firma `nth_after` mantiene la forma originale. La regola dell'ora civile nasce **accanto** alla precedente. Il file `frozen/0.1.0.wit` rimane intatto e privo di `timer-schedule`.*
+- [ ] **Recupero post-riavvio dell'app.** `catch_up_seconds` agisce durante la sessione e la sospensione della macchina, escludendo le chiusure dell'app. 
+      Lo scheduler dimentica l'ultimo stato salvato. L'occorrenza passata si **consuma in silenzio** al primo giro, bloccando il recupero. L'apertura dell'app alle dieci evita l'attivazione automatica della sveglia delle nove. 
+      Questa limitazione ferma il recupero dei backup notturni ad ampia finestra se l'app risultava chiusa (il caso d'uso principale della finestra larga). 
+      Il recupero completo richiede la memorizzazione dell'ultima occorrenza onorata (per sveglia e macchina). Il file di stato della macchina della [0037](../decisions/0037-lo-stato-di-vista.md) ospiterà questo meccanismo dedicato.

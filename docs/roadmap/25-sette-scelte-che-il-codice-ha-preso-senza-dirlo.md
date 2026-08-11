@@ -1,58 +1,69 @@
 # 25. Sette scelte che il codice ha preso senza dirlo
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): sette punti in cui una posizione è già presa — l'ha presa il codice, scrivendosi — e nessuno l'ha scelta. Non sono pezzi mancanti del piano di M4: sono scelte di prodotto e di contratto rimaste implicite dentro un'implementazione.
+Una **seduta** — un momento di lavoro isolato su un tema — della
+[roadmap infrastrutturale](../todo.md): sette punti in cui il codice ha già
+preso una posizione da solo. Nessuno l'ha scelta. Queste decisioni sono scelte
+di prodotto e di contratto rimaste implicite dentro un'implementazione. Non
+sono pezzi mancanti del piano di M4.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-**Da dove viene questa seduta: dal giro del 2026-08-07.** La
-[24](24-tre-firme-che-il-freeze-rende-definitive.md) l'aveva trovata un
-consuntivo; questa l'ha trovata una **rilettura**. Cinque letture indipendenti
-hanno ripreso le osservazioni che questo repo si portava avanti di giro in giro
-— righe di difetto, premesse citate, affermazioni sull'architettura — e le hanno
-rimisurate contro i sorgenti di oggi, a `bc1d27d`. L'esito è il fatto principale
-del giro, e va scritto prima delle voci: **la rimisurazione ha smentito più
-spesso di quanto abbia confermato.**
+**Da dove viene questa seduta: dal giro — l'iterazione di sviluppo — del
+2026-08-07.** La [24](24-tre-firme-che-il-freeze-rende-definitive.md) l'aveva
+trovata un consuntivo. Questa l'ha trovata una **rilettura**. Cinque letture
+indipendenti hanno ripreso le osservazioni del repo: righe di difetto,
+premesse citate, affermazioni sull'architettura. Le hanno rimisurate contro i
+sorgenti di oggi, al commit `bc1d27d`. L'esito è il fatto principale del giro.
+**La rimisurazione ha smentito più spesso di quanto abbia confermato.**
 
-Delle venticinque righe di difetto riprese, **tre erano false** e **dieci
-dicevano una cosa diversa** da quella che si osserva — non più piccola: diversa,
-con un altro soggetto o un altro meccanismo — e due difetti veri sono stati
-trovati **accanto** a una riga falsa, cercando la prova che la smentiva. Delle
-cinque osservazioni sui link ne sono rimaste **due**, e tre premesse sono cadute
-intere. Delle tre «decisioni portate avanti», **una non era una voce affatto**: era
-prosa falsa in tre presidi, e il repo aveva già deciso per iscritto contro
-l'unica forma che l'avrebbe resa una decisione. E la voce più grave di tutte,
-la [§25.1](#251-una-rinomina-che-atterra-su-una-nota-viva), regge **per una
-strada diversa** da quella con cui era stata scritta: tutte e quattro le sue
-premesse originali sono false, e il danno c'è lo stesso, in un'altra funzione.
+Risultati sulle venticinque righe di difetto riprese:
+- **Tre erano false.**
+- **Dieci dicevano una cosa diversa.** Mostravano un altro soggetto o un altro
+  meccanismo rispetto a ciò che si osserva.
+- **Due difetti veri** sono stati trovati accanto a una riga falsa, cercando
+  la prova per smentirla.
+- Delle cinque osservazioni sui link ne sono rimaste **due**.
+- Tre premesse sono cadute intere.
+- Delle tre «decisioni portate avanti», **una non era una voce affatto**. Era
+  prosa falsa in tre presidi — test che falliscono se una promessa del repo
+  smette di valere —. Il repo aveva già deciso per iscritto contro l'unica
+  forma che l'avrebbe resa una decisione.
+- La voce più grave, la [§25.1](#251-una-rinomina-che-atterra-su-una-nota-viva),
+  regge **per una strada diversa**. Tutte e quattro le sue premesse originali
+  sono false. Il danno esiste in un'altra funzione.
 
 ---
 
-**Perché stanno insieme.** In tutte e sette il codice ha già preso una
-posizione, e l'ha presa senza che nessuno la scegliesse: **schiacciare** ciò che
-apparteneva a un'altra identità (§25.1), **lasciar nascere** una regola di
-identità di un nome senza che nessuno la veda (§25.2), chiamare la prima
-fotografia di un vault **dal posto in cui capita** invece che da quello deciso
-(§25.3), **copiare il blocco intero** in ogni contesto di backlink (§25.4),
-**tacere** quando lo stato dell'applicazione non si può più salvare (§25.5),
-**tenere un lucchetto** di macchina per il tempo di un `fsync` (§25.6),
-**campionare tre chiavi cablate** per trovare i byte di un blocco di terzi
-(§25.7).
+**Perché stanno insieme.** In tutte e sette le scelte, il codice ha già preso
+una posizione senza una scelta esplicita:
+- **§25.1**: **Schiacciare** ciò che apparteneva a un'altra identità.
+- **§25.2**: **Lasciar nascere** una regola di identità di un nome in
+  silenzio.
+- **§25.3**: Chiamare la prima fotografia di un vault **dal posto in cui
+  capita** invece che da quello deciso.
+- **§25.4**: **Copiare il blocco intero** in ogni contesto di backlink.
+- **§25.5**: **Tacere** quando lo stato dell'applicazione non si salva più.
+- **§25.6**: **Tenere un lucchetto** di macchina per il tempo di un `fsync`.
+- **§25.7**: **Campionare tre chiavi cablate** per trovare i byte di un blocco
+  di terzi.
 
-E c'è una seconda proprietà, che è la ragione per cui queste sette si decidono
-insieme e non una per volta: **in sei casi su sette la risposta giusta è già
-scritta nel repo, sullo stesso problema, e il codice non la applica.** Il
-versioning fonde le storie invece di buttarne una (§25.1); la forma del conto che
-pretende una dichiarazione esiste già per i lucchetti (§25.2); la
-[0070](../decisions/0070-un-vault-si-apre-in-due-tempi.md) scrive il criterio di
-cosa sta nell'apertura sincrona (§25.3); la ricerca ha un tetto di 220 caratteri
-sull'estratto (§25.4); la
-[0062](../decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) dice che
-il log è il pavimento e l'evento è la porta (§25.5); il commento di
-`set_view_state` scrive parola per parola perché lì non si prende il prestito
-esclusivo (§25.6). La settima, la §25.7, è l'eccezione che regge il conto: lì la
-regola non è scritta **da nessuna parte**, e quello è precisamente il difetto.
+C'è una seconda proprietà. È la ragione per cui queste sette si decidono
+insieme: **in sei casi su sette la risposta giusta è già scritta nel repo e il
+codice non la applica.**
+- **§25.1**: Il versioning fonde le storie invece di buttarne una.
+- **§25.2**: La forma del conto che pretende una dichiarazione esiste già per
+  i lucchetti.
+- **§25.3**: La [0070](../decisions/0070-un-vault-si-apre-in-due-tempi.md)
+  scrive il criterio di cosa sta nell'apertura sincrona.
+- **§25.4**: La ricerca ha un tetto di 220 caratteri sull'estratto.
+- **§25.5**: La [0062](../decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)
+  dice che il log è il pavimento e l'evento è la porta.
+- **§25.6**: Il commento di `set_view_state` scrive parola per parola perché
+  lì non si prende il prestito esclusivo.
+- **§25.7**: Questa è l'eccezione che regge il conto. La regola non è scritta
+  **da nessuna parte**, ed è proprio questo il difetto.
 
 ---
 
@@ -60,35 +71,38 @@ regola non è scritta **da nessuna parte**, e quello è precisamente il difetto.
 
 *chiusa dalla [0135](../decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md) · strato **kernel** · **P0***
 
-**Com'è finita, e cosa lascia.** La voce chiedeva chi vince quando una rinomina
-fatta da fuori atterra su un'identità che nel vault esiste già, e la risposta è
-la **forma (a)**: se `to_id` è già in anagrafe non è un rename, è
-`remove(from)` + `sync_path(to)`. La misura che l'ha decisa era che dei quattro
-canali di stato attaccati a un'identità **tre la distruggevano e uno la
-fondeva**, e che il canale distrutto più grave — la bozza — è per dichiarazione
-del modulo che la tiene «l'unica copia di ciò che l'utente ha scritto»: `mv A.md
-B.md` da un terminale, con Fub aperto e il buffer di `B` sporco, cancellava per
-sempre quel testo senza dirlo. La guardia sta in una riga sola, nel punto che
-tutte e tre le porte attraversano, e la degradazione esisteva già lì accanto.
+**Com'è finita e cosa lascia.** La voce chiedeva chi vince quando una rinomina
+esterna atterra su un'identità già esistente nel vault. La risposta è la
+**forma (a)**. Se `to_id` è già in anagrafe, non è un rename. È un
+`remove(from)` seguito da `sync_path(to)`.
 
-Delle quattro premesse con cui la voce era stata scritta **nessuna reggeva**, e
-il danno c'era lo stesso in un'altra funzione: è il caso di scuola di una voce
-sbagliata sul meccanismo e giusta sul posto dove guardare. Il dettaglio sta nel
-verbale.
+La decisione si basa su una misura dei quattro canali di stato attaccati a
+un'identità. Di questi, **tre la distruggevano e uno la fondeva**. Il canale
+distrutto più grave è la bozza. Il modulo la dichiara come «l'unica copia di
+ciò che l'utente ha scritto». Eseguire `mv A.md B.md` da un terminale, con Fub
+aperto e il buffer di `B` sporco, cancellava per sempre quel testo in
+silenzio. La guardia si trova in una riga sola. Tutte e tre le porte
+attraversano questo punto. La degradazione esisteva già lì accanto.
 
-Resta aperta la sola **forma (b)**, e resta perché non è urgente, non perché sia
-stata scartata:
+Delle quattro premesse originali della voce, **nessuna reggeva**. Il danno
+esisteva comunque in un'altra funzione. Questo è un caso esemplare di una voce
+sbagliata sul meccanismo ma giusta sul posto da osservare. Il dettaglio si
+trova nel verbale.
 
-- [ ] **(b) Migrare senza mai schiacciare**, cioè la regola del versioning estesa
-      agli altri tre canali: dove fondere ha senso si fonde, dove non ce l'ha
-      vince la destinazione e ciò che resta indietro si **nomina**
-      (`doc_data_warnings` c'è già, `organization.warn` pure). Il modello è già
-      scritto — `VersionStore::rename` unisce le due storie in ordine di tempo,
-      «buttarne una sarebbe perdere versioni senza dirlo» — ma le politiche da
-      scrivere sono **tre**, una per canale, e non sono la stessa: due bozze non
-      salvate non si fondono senza inventare un testo che nessuno ha scritto.
-      Paga **chi manterrà il codice**, ed è l'unica forma in cui nessuno perde
-      niente in silenzio.
+Resta aperta la sola **forma (b)**. Non è stata scartata, ma resta aperta
+perché non è urgente:
+
+- [ ] **(b) Migrare senza mai schiacciare.** La regola del versioning si
+      estende agli altri tre canali.
+  - Se fondere ha senso, si fonde.
+  - Se non ha senso, vince la destinazione e ciò che resta indietro si
+    **nomina**. `doc_data_warnings` e `organization.warn` esistono già.
+  - Il modello è già scritto. `VersionStore::rename` unisce le due storie in
+    ordine di tempo per non perdere versioni in silenzio.
+  - Le politiche da scrivere sono **tre**, una per canale, e tutte diverse.
+    Due bozze non salvate non si fondono senza inventare un testo inesistente.
+  - Paga **chi manterrà il codice**. È l'unica forma in cui nessuno perde
+    niente in silenzio.
 
 ---
 
@@ -96,33 +110,40 @@ stata scartata:
 
 *chiusa dalla [0136](../decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md) · strato **contratto** · **P1***
 
-**Com'è finita, e cosa lascia.** La voce chiedeva se una regola nuova di «quando
-due nomi sono lo stesso nome» si dichiara o nasce in silenzio, e la risposta è la
-**forma (a)** che la voce stessa raccomandava: un **conto sulle sorgenti** —
-`crates/fub-abi/tests/una_regola_di_nome_si_dichiara.rs` — che pretende
-**famiglia e ragione** per ognuna delle regole in produzione, e diventa rosso
-sotto `cargo test` a chi ne aggiunge una senza dichiararla. La **(b)**, una porta
-`fub_abi::rules` esclusiva, **non si fa**: risponde a una domanda che quattro
-verbali hanno già chiuso con un no, ed è irreversibile perché WIT-adiacente.
+**Com'è finita e cosa lascia.** La voce chiedeva se una regola nuova su
+«quando due nomi sono lo stesso nome» si dichiara o nasce in silenzio. La
+risposta è la **forma (a)**, raccomandata dalla voce stessa.
+Questa forma è un **conto sulle sorgenti** nel file
+`crates/fub-abi/tests/una_regola_di_nome_si_dichiara.rs`. Questo conto
+pretende **famiglia e ragione** per ognuna delle regole in produzione. Diventa
+rosso sotto `cargo test` se si aggiunge una regola senza dichiararla.
+La forma **(b)** è una porta `fub_abi::rules` esclusiva. Questa **non si fa**.
+Risponde a una domanda che quattro verbali hanno già chiuso con un no. Inoltre
+è irreversibile perché adiacente al WIT.
 
-Il numero misurato dal censimento — 44 regole per la stessa domanda — *sembrava*
-una duplicazione da unificare e **non lo era**: la duplicazione vera stava nella
-**dichiarazione mancante**, non nelle regole. Il presidio è nato verde su
-**quaranta** righe, ed è stato acceso rosso nei due versi (una regola non
-dichiarata, una famiglia mentita). Il difetto `0142` — la piegatura scritta a
-mano due volte nel rename — è stato riparato qui: adesso è `solo_il_caso`, che
-chiama `resolution_key`. E tre righe di difetto che questa voce nominava sono
-risultate **false**: `0070` (`İ` e `ẞ` sono le risposte giuste e deliberate),
-`0093` sulla conseguenza (`heading_matches` è una disgiunzione: si rompe l'`id=`
-HTML, non la risoluzione), `0018` sul posto (la scansione che si paga sempre è
-nel ramo `Wiki`, ed è il difetto `0115`). Il dettaglio sta nel verbale.
+Il censimento ha misurato 44 regole per la stessa domanda. Sembrava una
+duplicazione da unificare, ma **non lo era**. La vera duplicazione era nella
+**dichiarazione mancante**. Il presidio — il test di salvaguardia — è nato
+verde su **quaranta** righe. È stato acceso rosso nei due versi: con una
+regola non dichiarata e con una famiglia mentita.
+Il difetto `0142` descriveva la piegatura scritta a mano due volte nel rename.
+È stato riparato qui tramite `solo_il_caso`, che chiama `resolution_key`.
+Tre righe di difetto nominate da questa voce sono risultate **false**:
+- `0070`: `İ` e `ẞ` sono le risposte giuste e deliberate.
+- `0093` sulla conseguenza: `heading_matches` è una disgiunzione. Rompe
+  l'`id=` HTML, non la risoluzione.
+- `0018` sul posto: la scansione sempre pagata è nel ramo `Wiki`, ed è il
+  difetto `0115`.
+Il dettaglio sta nel verbale.
 
-Ciò che la (a) **non** fa è riparare una divergenza: restano aperti, come
-difetti misurati e non come caselle, il `0115` (risolvere un wikilink scandisce
-l'anagrafe), il `0140` (quattro regole senza NFC) e il `0141` (tre risposte
-incompatibili a «sta dentro questa cartella?»). Le loro righe di allowlist li
-nominano per numero invece di travestirli da ragione: una divergenza dichiarata
-è più visibile di una taciuta, e resta una divergenza.
+La forma (a) **non** ripara una divergenza. Restano aperti come difetti
+misurati, e non come caselle — elementi di lavoro da completare —:
+- Il `0115`: risolvere un wikilink scandisce l'anagrafe.
+- Il `0140`: quattro regole senza NFC.
+- Il `0141`: tre risposte incompatibili a «sta dentro questa cartella?».
+Le loro righe di allowlist li nominano per numero invece di travestirli da
+ragione. Una divergenza dichiarata è più visibile di una taciuta e rimane
+tale.
 
 ---
 
@@ -130,59 +151,65 @@ nominano per numero invece di travestirli da ragione: una divergenza dichiarata
 
 *chiusa dalla [0141](../decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) · strato **kernel** · **P1***
 
-**Com'è finita, e cosa lascia.** La voce chiedeva se la prima fotografia di un
-vault mai visto debba stare dentro l'apertura sincrona o possa essere differita,
-e la risposta è la **forma (a)** che la voce stessa raccomandava: la finestra
-scoperta resta **zero**, e la sola cosa che si sposta è *dove* sta la chiamata,
-non *quando*. La passata esce dalla fase 1 e la chiama il **runner**, una volta
-per apertura, **prima della prima fetta**. Il *quando* non cambia di un'unità
-osservabile — la fotografia precede ancora qualunque scrittura dell'utente —, ma
-il *chi* sì: non più un ramo `Event::VaultOpened` dentro `VersioningHandler`, che
-ci finiva per caso perché l'evento usciva di lì, ma una chiusura che il montaggio
-consegna alla sessione. Il ramo e la sua maschera si tolgono, e `InCorso` porta
-una chiusura consumata col `take`: la garanzia una-sola-volta è **il tipo, non un
-flag**.
+**Com'è finita e cosa lascia.** La voce chiedeva dove posizionare la prima
+fotografia di un vault mai visto: dentro l'apertura sincrona o in differita.
+La risposta è la **forma (a)**, raccomandata dalla voce stessa.
+La finestra scoperta resta **zero**. Si sposta solo *dove* avviene la
+chiamata, non *quando*.
+- La passata esce dalla fase 1.
+- La chiama il **runner**, una volta per apertura, **prima della prima fetta**.
+Il *quando* non cambia di un'unità osservabile. La fotografia precede ancora
+qualunque scrittura dell'utente. Il *chi* invece cambia.
+Non è più un ramo `Event::VaultOpened` dentro `VersioningHandler`, dove finiva
+per caso perché l'evento nasceva lì. Diventa una chiusura consegnata dal
+montaggio alla sessione. Il ramo e la sua maschera si eliminano. `InCorso`
+porta una chiusura consumata con `take`. La garanzia di esecuzione
+una-sola-volta si ottiene con **il tipo, non con un flag**.
 
-L'argomento è il numero della voce — riparato l'O(N²) restano ~167 ms su 5000
-note, il prezzo di una finestra di lunghezza zero su un dato che, perso, non si
-ricostruisce da niente — e il posto lo detta la
-[0070](../decisions/0070-un-vault-si-apre-in-due-tempi.md): la fase 1 dice
-**quali** documenti esistono, la passata legge il **contenuto**, quindi stava
-dalla parte sbagliata della riga.
+L'argomento a favore è il numero della voce. Riparato l'O(N²), restano circa
+167 ms su 5000 note. Questo è il prezzo per una finestra di lunghezza zero su
+un dato impossibile da ricostruire in caso di perdita. Il posto è dettato
+dalla [0070](../decisions/0070-un-vault-si-apre-in-due-tempi.md). La fase 1
+identifica **quali** documenti esistono, mentre la passata legge il
+**contenuto**. Quindi si trovava dalla parte sbagliata della separazione.
 
-**La forma approvata è morta sul banco, ed è la premessa caduta che vale il
-verbale.** Era un `JobHost` per-capacità, per far girare la passata senza il
-prestito esclusivo del workspace — la stessa mossa che nella
-[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
-aveva pagato. Qui **chiude un ciclo di lock**: la passata tiene il mutex interno
-dello store attraverso le proprie scritture, le scritture normali tengono il
-workspace attraverso le chiamate alla feature, e `concorrenza.rs` è rimasto
-appeso oltre sessanta secondi — non rosso, **in deadlock**. La passata gira sotto
-l'esclusivo, come girava in fase 1: della forma originale resta il taglio e cade
-l'ambizione sul lock, che nessuna riga della voce chiedeva. La seconda premessa
-caduta è di fatto: `first_snapshot_of_the_vault` sta in **`fub-features`**, non in
-`fub-kernel`.
+**La forma approvata è morta sul banco — la suite di test —.** La premessa
+caduta giustifica il verbale. La forma prevedeva un `JobHost` per-capacità.
+Serviva a far girare la passata senza il prestito esclusivo del workspace,
+come aveva funzionato nella
+[0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md).
+Qui invece **chiude un ciclo di lock**. La passata mantiene il mutex interno
+dello store durante le proprie scritture. Le scritture normali mantengono il
+workspace attraverso le chiamate alla feature. Di conseguenza,
+`concorrenza.rs` è rimasto appeso oltre sessanta secondi in **deadlock**.
+La passata gira sotto l'esclusivo, come in fase 1. Della forma originale
+rimane il taglio, ma l'ambizione sul lock viene scartata. Nessuna riga della
+voce richiedeva questo lock. La seconda premessa caduta riguarda il
+posizionamento. La funzione `first_snapshot_of_the_vault` sta in
+**`fub-features`**, non in `fub-kernel`.
 
-Le altre tre forme non si fanno. La **(b)** e la **(c)** aprono una finestra
-lunga quanto l'indicizzazione, in cui chi comincia subito a scrivere perde per
-sempre lo stato in cui ha trovato la nota — il baratto che la 0124 ha già
-rifiutato — e la (c) ci aggiunge una superficie da disegnare in cambio di niente
-che la (b) non dia. La **(d)** vuole un evento che porti il sorgente, cioè un
-campo nel WIT e un byte-per-byte dei documenti nella coda degli eventi, ed è
-l'unica non reversibile: non chiude comunque la finestra, la accorcia.
+Le altre tre forme non si fanno e sono state scartate:
 
-Ciò che la voce lascia scoperto non è una casella e non è una riga di difetto:
-**il residuo O(N²)** del versioning — `let mut piano = inner.docs.clone()`, due
-volte in `VersionStore::snapshot` e i gemelli in `rename` e `tombstone`. La copia
-*è* la forma `Durevole`, e riscriverla come un delta con rollback significa
-abbandonarla; la sua riparazione dipende dalla decisione che il difetto `0113`
-tiene aperta, e un difetto la cui riparazione dipende da una decisione non è un
-difetto. Sta nel verbale come fatto misurato in attesa di decisione.
+| Alternativa | Perché no |
+|---|---|
+| **(b)** | Apre una finestra lunga quanto l'indicizzazione. Chi scrive subito perde lo stato iniziale della nota. La 0124 ha già rifiutato il compromesso. |
+| **(c)** | Ha gli stessi difetti della (b). In più aggiunge una superficie da disegnare senza ulteriori vantaggi. |
+| **(d)** | Richiede un evento con il sorgente, un campo nel WIT e il byte-per-byte dei documenti nella coda. È un'opzione irreversibile e accorcia la finestra senza chiuderla. |
 
-*Quello che si diceva e che non regge.* Si diceva che la passata girasse «fuori
-dal ciclo a fette del `JobRunner`»: era più grave, girava **prima che il ciclo
-esistesse**. E il numero che circolava — «1542 ms su 2358» — non aveva riscontro
-nel repo: era una stima, non una misura.
+La voce lascia scoperto un elemento che non è né una casella né una riga di
+difetto. Si tratta del **residuo O(N²)** — il debito di calcolo — del
+versioning. Il codice chiama `let mut piano = inner.docs.clone()` due volte in
+`VersionStore::snapshot` e nei comandi gemelli `rename` e `tombstone`. Questa
+copia *è* la forma `Durevole`. Riscriverla come un delta con rollback
+significa abbandonare questa forma. La sua riparazione dipende dalla decisione
+mantenuta aperta dal difetto `0113`. Un difetto legato a una decisione in
+sospeso non è un vero difetto. È registrato nel verbale come un fatto misurato
+in attesa di una decisione.
+
+*Quello che si diceva e che non regge.* Si affermava che la passata girasse
+«fuori dal ciclo a fette del `JobRunner`». La realtà era più grave: girava
+**prima che il ciclo esistesse**. Il numero riportato di «1542 ms su 2358» non
+trovava riscontro nel repo. Si trattava di una stima, non di una vera misura.
 
 ---
 
@@ -190,37 +217,47 @@ nel repo: era una stima, non una misura.
 
 *chiusa dalla [0138](../decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md) · strato **contratto** · **P1***
 
-**Com'è finita, e cosa lascia.** La risposta è la forma **(b)** che la voce
-stessa raccomandava: il contesto di un backlink è una **finestra di 220
-caratteri attorno al link**, ritagliata sul testo renderizzato del blocco che
-lo contiene, con l'ellissi ai bordi dove taglia — e il link non si taglia mai,
-perché è il riferimento di cui la riga parla. La regola sta in
-`fub-abi::rules::snippet` (`window(testo, intervallo) -> String`), così il
-provider WASM di M5 la eredita invece di reinventarla (0020), e il tetto resta
-una costante Rust fuori dal contratto, visibile quando morde e mai
-interrogabile (0094): il WIT continua a dire `context: option<string>`, e la
-(b) ci mette meno byte dentro. Il numero è lo stesso dello snippet di ricerca:
-`SNIPPET_CHARS` è migrata da `fub-features/src/search.rs` (oggi
-`search.rs:1195` per tantivy, `:1218` per `head_of`) in un posto solo, e la
-ricerca e i backlink smettono di avere due idee di quanto sia un estratto. Il
-parser registra la posizione di ogni link nel testo renderizzato del blocco —
-che non esisteva da nessuna parte, ed è il costo che la voce non contava — in
-un contenitore unico che non può disallinearsi, e il trim passa dopo il
-ritaglio. Con la voce si chiude il difetto `0110`, come «vera e trascurabile,
-detta coi numeri» e non come «riparata con la fetta condivisa»: le copie della
-catena restano strutturalmente — sono **due copie e una move**, non tre, e la
-riga non contava né il clone del render né il disco — ma ognuna scende da una
-mediana di 341 byte (massimo 195.738) a ≤222 caratteri: 4.367 link × ≤222 ≈
-**969 KB** invece di **53.994.565 byte**, l'1,8%. Le forme scartate: la (a)
-taglia in testa e il link finisce fuori dall'ellissi; la (c) sposta il costo
-dall'indice alla lettura e il pannello si ridisegna a ogni cambio di documento;
-la (d) non ripara `entries.json`, che è JSON e si serializza N volte lo stesso.
-Restano i fatti, non i difetti: `entries.json` è ancora riletto e riscritto per
-intero a ogni apertura (0112 è un'altra riga), e il pannello attraversa ancora
-l'IPC con `page: None` — ma con ≤222 caratteri per riga. Le premesse cadute
-sono nel [verbale](../decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md),
-con la più grossa che vale ripetere: il difetto non era la duplicazione, era la
-dimensione.
+**Com'è finita e cosa lascia.** La risposta è la forma **(b)**, raccomandata
+dalla voce stessa. Il contesto di un backlink diventa una **finestra di 220
+caratteri attorno al link**. Si ritaglia sul testo renderizzato del blocco
+contenitore, usando l'ellissi ai bordi del taglio. Il link non si taglia mai
+perché rappresenta il riferimento di cui la riga parla.
+La regola si trova in `fub-abi::rules::snippet`, cioè
+`window(testo, intervallo) -> String`. Il provider WASM di M5 la eredita così senza doverla
+reinventare (0020). Il tetto rimane una costante Rust fuori dal contratto
+(0094). Il WIT continua a esporre `context: option<string>`, ma la forma (b)
+vi inserisce meno byte. Il numero 220 corrisponde allo snippet di ricerca. La
+costante `SNIPPET_CHARS` è migrata in un posto solo da
+`fub-features/src/search.rs` (oggi `search.rs:1195` per tantivy, `:1218` per
+`head_of`). La ricerca e i backlink condividono ora la stessa definizione di
+estratto. Il parser registra la posizione di ogni link nel testo renderizzato
+del blocco in un contenitore unico che non può disallinearsi. Questa
+registrazione prima non esisteva, ed è il costo che la voce non considerava.
+Il trim si applica dopo il ritaglio.
+
+La voce chiude il difetto `0110` descrivendolo come «vera e trascurabile,
+detta coi numeri» invece di «riparata con la fetta condivisa». Le copie della
+catena rimangono strutturalmente presenti come **due copie e una move**, non
+tre. La riga originale trascurava sia il clone del render sia il disco. Ognuna
+scende da una mediana di 341 byte (fino a un massimo di 195.738) a ≤222
+caratteri. Il calcolo diventa: 4.367 link × ≤222 ≈ **969 KB** al posto di
+**53.994.565 byte**, pari all'1,8%.
+
+Le forme scartate:
+
+| Alternativa | Perché no |
+|---|---|
+| **(a)** | Taglia il testo all'inizio. Il link finisce fuori dall'ellissi. |
+| **(c)** | Sposta il costo dall'indice alla lettura. Causa il ridisegno del pannello a ogni cambio di documento. |
+| **(d)** | Non ripara `entries.json`, che essendo JSON viene serializzato N volte lo stesso. |
+
+Rimangono dei fatti, non difetti aperti: `entries.json` viene ancora riletto
+e riscritto interamente a ogni apertura (il 0112 è un'altra riga). Il pannello
+attraversa ancora l'IPC con `page: None`, anche se con ≤222 caratteri per
+riga. Le premesse cadute sono elencate nel
+[verbale](../decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md).
+La più importante si ripete qui: il vero difetto era la dimensione dei dati,
+non la loro duplicazione.
 
 ---
 
@@ -228,111 +265,138 @@ dimensione.
 
 *chiusa dalla [0139](../decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md) · strato **kernel** · **P1***
 
-**Com'è finita, e cosa lascia.** La risposta è la **forma (a)** che la voce
-stessa raccomandava — si parte, e si dice una volta per sessione — con il
-**quando** che la voce non diceva e che decideva tutto: la porta non può
-essere una spinta all'avvio, perché a quell'ora non ascolta nessuno. Il ponte
-degli eventi nasce dentro `Host::open`, al primo vault aperto, e la shell si
-iscrive agli eventi ancora dopo; un `Trouble` emesso all'avvio si perderebbe
-in ogni caso — prima del `setup` di Tauri come `Consegna::Persa`, dopo come
-un `app.emit` che torna `Ok` senza nessun ascoltatore, perché Tauri non
-accoda. Quindi la diagnosi che `pavimento` componeva per `stderr` — il primo
-a provare a scrivere in quella cartella è il log — esce da `install_logging`,
-entra nell'host con `with_avviso_di_sessione`, e si consegna a un
-**tiraggio**: il comando `avviso_di_sessione`, che la shell chiede in `init()`
-appena il router è in piedi, prima di `initial_vault`. Il `take` rende la
-«una volta per sessione» strutturale: la seconda chiamata — da un secondo
-frontend, da un test, dalla CI — riceve `None`, e nessun latch serve. Anche
-il ramo in cui `config_dir()` è `None` parla, con un messaggio suo: prima
-taceva, e il banco che presidiava quel silenzio
-(`senza_cartella_di_configurazione_stderr_non_e_un_guasto`) è stato riscritto
-nel verso nuovo. I banchi tengono ferma la forma nei due versi: il `take`
-rimosso diventa rosso, il tiraggio tolto da `init()` diventa rosso, e il gesto
-nuovo della finestra senza vault — il dodicesimo di
-[17-presidi-che-restano](../roadmap/17-presidi-che-restano.md) — vede la
-chiamata arrivare alla porta e il toast comparire.
+**Com'è finita e cosa lascia.** La risposta è la **forma (a)** raccomandata
+dalla voce stessa: si parte e si notifica l'errore una volta sola per
+sessione.
+Il dettaglio cruciale è il **quando**. La porta non può inviare una spinta
+all'avvio perché nessuno è in ascolto. Il ponte degli eventi nasce dentro
+`Host::open` al primo vault aperto. La shell si iscrive agli eventi in un
+momento successivo. Un `Trouble` emesso all'avvio andrebbe perso comunque:
+- Prima del `setup` di Tauri si perderebbe come `Consegna::Persa`.
+- Dopo il `setup` si perderebbe come un `app.emit` che restituisce `Ok` senza
+  ascoltatori, poiché Tauri non accoda i messaggi.
 
-**Le premesse cadute, e il residuo.** La citazione «undici derivati, zero
-originali» attribuita alla [0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md)
-è falsa — la frase vive solo in questa voce, e la sostanza del verbale regge
-lo stesso. E «alla prima scrittura fallita» si è rivelato essere il momento
-in cui la diagnosi nasce: la prima scrittura fallita è l'apertura del log, ed
-è quella riga che il tiraggio consegna. Resta fuori, dichiarato nel verbale e
-**non** come casella (non ha un innesco, e una casella senza innesco è una
-riga scritta a vuoto): la normalizzazione dei tre percorsi di errore del punto
-7 — `PluginError::Io` per il registro vault, `Internal` per le impostazioni
-macchina, `String` nudo per lo stato di vista — che la forma (a) informa ma
-non uniforma; e la tensione fra il toast `guasto` di `set_setting` e il tono
-`info` della porta, due frasi che dicono due momenti diversi.
+La diagnosi composta da `pavimento` per `stderr` si sposta. Il log è il primo
+a tentare di scrivere in quella cartella. La diagnosi esce da
+`install_logging`, entra nell'host con `with_avviso_di_sessione`, e viene
+consegnata tramite un **tiraggio** — un meccanismo di lettura su richiesta —.
+Questo tiraggio è il comando `avviso_di_sessione`. La shell lo richiede in
+`init()` appena il router è attivo, prima di `initial_vault`. Il `take` rende
+la garanzia «una volta per sessione» strutturale. La seconda chiamata
+restituisce `None` senza usare alcun latch. Il ramo dove `config_dir()` è
+`None` ora comunica con un proprio messaggio, mentre prima taceva. Il banco
+che presidiava quel silenzio
+è stato riscritto per verificare il nuovo comportamento, e oggi si chiama
+`un_avviso_di_sessione_si_dice_una_volta_sola`
+(`crates/fub-host/tests/la_macchina_senza_vault.rs:289`). I banchi bloccano le modifiche errate
+nei due versi: se si rimuove il `take` il test fallisce, se si toglie il
+tiraggio da `init()` il test fallisce. Il nuovo gesto della finestra senza
+vault — il dodicesimo descritto in
+[17-presidi-che-restano](../roadmap/17-presidi-che-restano.md) — verifica che
+la chiamata arrivi alla porta e mostri il toast.
+
+**Le premesse cadute e il residuo.** La citazione «undici derivati, zero
+originali» attribuita alla
+[0076](../decisions/0076-le-impostazioni-vivono-nel-vault.md) è falsa. La
+frase esiste solo in questa voce, ma la sostanza del verbale rimane valida.
+La premessa «alla prima scrittura fallita» identifica il momento in cui nasce
+la diagnosi. La prima scrittura fallita coincide con l'apertura del log.
+Questa è la riga consegnata dal tiraggio. Resta fuori una normalizzazione,
+dichiarata nel verbale ma **non** come casella. Non possiede un innesco — una
+condizione che ne forzi l'esecuzione —, e una casella senza innesco è una riga
+inutile. La normalizzazione riguarda i tre percorsi di errore del punto 7:
+- `PluginError::Io` per il registro vault.
+- `Internal` per le impostazioni macchina.
+- `String` nudo per lo stato di vista.
+La forma (a) informa su questi percorsi ma non li uniforma. Resta anche la
+tensione tra il toast `guasto` di `set_setting` e il tono `info` della porta.
+Sono due frasi destinate a momenti diversi.
 
 ### 25.6 Chi paga la latenza di una scrittura fatta dentro un comando IPC
 
 *chiusa dalla [0137](../decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md) · strato **shell** · **P2***
 
-**Com'è finita, e cosa lascia.** La risposta è la **forma (a)** che la voce
-stessa raccomandava: una scrittura su disco dentro un comando IPC **si accoda
-nella shell** — coalescendo per chiave, così due scritture della stessa chiave
-accavallate diventano una scrittura sola con l'ultimo valore — e non si rende
-`async` nel thread dell'IPC. La coda sta in `frontend/src/ui/corsa.ts`, accanto
-a `Coda`, perché la erediti gratis chiunque: i chiamanti di `scriviStato` sono
-**cinque** in tre moduli, e la premessa della voce che ne contava due era falsa.
-La (b) si scarta per la [0057](../decisions/0057-la-dieta-dell-ipc.md) — una
-seconda convenzione di chiamata rompe l'elenco chiuso — e la (c) resta chiusa
-**fino alla soglia**: si accetta il lucchetto di macchina finché il file di
-stato resta sotto la taglia misurata — 5,036 ms su 137 KB con 20 vault contro
-2,561 ms su 2,4 KB, dominato dall'`fsync` e non dalla fusione — e quel giorno
-si riapre la (c), che è l'unica forma irreversibile. Il «caso peggiore» che la
-voce nominava — `set_setting_for_user` e `reset_setting_for_user` con il
-prestito esclusivo del workspace — **non è un difetto aperto**: la ritrattazione
-(`53972d4`) l'aveva già tolto come falso prima che questa voce si chiudesse,
-perché il prestito esclusivo di `set_setting_for_user` non è lì per la scrittura
-su disco ma perché scrivere un'impostazione rifà i recinti, pota il registro ed
-emette, e i quattro fratelli che prendono il condiviso non fanno niente di tutto
-questo. La voce originale lo citava ancora perché la ritrattazione aveva ripulito
-la tabella senza toccare la voce che la nominava.
+**Com'è finita e cosa lascia.** La risposta è la **forma (a)** raccomandata
+dalla voce stessa: una scrittura su disco in un comando IPC **si accoda nella
+shell**. I valori vengono coalesi per chiave. Due scritture accavallate sulla
+stessa chiave diventano una sola scrittura contenente l'ultimo valore. La
+chiamata non si rende `async` nel thread dell'IPC.
+La coda si trova in `frontend/src/ui/corsa.ts`, accanto a `Coda`, affinché sia
+ereditabile gratuitamente da tutti. I chiamanti di `scriviStato` sono
+**cinque** in tre moduli. La premessa originale, che ne contava due, era
+falsa.
+
+Le alternative scartate o sospese sono due:
+- La **(b)** si scarta in base alla
+  [0057](../decisions/0057-la-dieta-dell-ipc.md). Una seconda convenzione di
+  chiamata violerebbe l'elenco chiuso.
+- La **(c)** resta chiusa **fino alla soglia**. Si accetta il lucchetto di
+  macchina finché il file di stato non supera la taglia misurata. Questi
+  valori sono 5,036 ms su 137 KB con 20 vault, contro 2,561 ms su 2,4 KB. La
+  metrica è dominata dall'`fsync` e non dalla fusione. Quel giorno si
+  riaprirà l'opzione (c), che è l'unica forma irreversibile.
+
+Il «caso peggiore» descritto nella voce — l'uso di `set_setting_for_user` e
+`reset_setting_for_user` con il prestito esclusivo del workspace — **non è un
+difetto aperto**. La ritrattazione nel commit `53972d4` aveva già smentito
+questo falso problema prima che questa voce si chiudesse. Il prestito
+esclusivo in `set_setting_for_user` non serve alla scrittura su disco. Serve a
+rifare i recinti, potare il registro ed emettere eventi. I quattro fratelli
+che usano il prestito condiviso non eseguono queste azioni. La voce originale
+lo citava ancora perché la ritrattazione aveva ripulito la tabella ma non il
+testo della voce stessa.
 
 ### 25.7 Dove stanno i byte di un `kind` di terzi
 
 *chiusa dalla [0140](../decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md) · strato **contratto** · **P2***
 
-**Com'è finita, e cosa lascia.** La risposta è la **forma (b)** che la voce
-stessa raccomandava: la chiave del carico di un `kind` di terzi è `source`, e
-la regola sta in `fub_abi::rules::carichi` (`CHIAVE_DEL_CARICO` +
-`carico_testuale`) perché la erediti gratis il secondo chiamante — il provider
-WASM di M5 (0020). `CARICHI` **non cresce e non può crescere**: il conto a due
-versi di `ogni_kind_dichiara_cosa_porta` rifiuta la riga che non nomina una
-`const` del core — la domanda che la voce poneva come scelta era già decisa, e
-a deciderla è un presidio. Il campione a tre chiavi esce da `render.rs`, che
-adesso chiede la risposta al contratto; `html` e `text` si tolgono, e le due
-fixture che li usavano su kind di terzi si migrano a `source` nello stesso
-commit — altrimenti sarebbero diventate mute in silenzio (provato: il banco
-resta verde con la fixture che rende vuoto).
+**Com'è finita e cosa lascia.** La risposta è la **forma (b)** raccomandata
+dalla voce: la chiave del carico di un `kind` di terzi è `source`.
+La regola è scritta in `fub_abi::rules::carichi` con `CHIAVE_DEL_CARICO` e
+`carico_testuale`. In questo modo il secondo chiamante, il provider WASM di M5
+(0020), può ereditarla gratuitamente.
+La lista `CARICHI` **non cresce e non può crescere**. Il conto a due versi di
+`ogni_kind_dichiara_cosa_porta` rifiuta ogni riga che non nomina una `const`
+del core. La scelta posta dalla voce era già stata decisa da questo presidio.
+Il campione a tre chiavi sparisce da `render.rs`. Ora il render chiede la
+risposta direttamente al contratto. Le chiavi `html` e `text` vengono
+eliminate. Le due fixture di test che le usavano su kind di terzi sono migrate
+a `source` nel medesimo commit. Senza questa migrazione le fixture sarebbero
+diventate mute in silenzio. Il banco resta verde anche con una fixture che
+restituisce un risultato vuoto.
 
-Il silenzio a runtime resta e si dichiara nella forma della 0052: chi vede il
-guasto — la resa, in `fub-format-markdown` — non ha il bus fra le mani, e una
-porta dal render sarebbe la seconda convenzione accanto a quella dell'avvio
-della §25.5. Il pavimento (`tracing` nel provider) si rimanda a un verbale
-suo: costa una dipendenza nuova a un crate che deliberatamente non ce l'ha
+Il silenzio a runtime rimane e viene dichiarato secondo la decisione 0052. Chi
+vede il guasto — il sistema di resa in `fub-format-markdown` — non possiede il
+bus. Aprire una porta dal render costituirebbe una seconda convenzione, in
+aggiunta a quella dell'avvio citata nel §25.5. Il pavimento (`tracing` nel
+provider) viene rimandato a un verbale specifico. Questa modifica
+richiederebbe una dipendenza nuova in un crate progettato per non averne
 (0062).
 
-Il presidio è un banco nei due versi,
-`un_kind_di_terzi_degradato_mostra_i_byte_della_chiave_convenzionale`
-(`custom_blocks_e2e.rs`), provato rosso in entrambi: la chiave rinominata in
-produzione fa cadere l'asserzione con un `<div>` vuoto nel messaggio, il
-campione riallargato fa vincere `TESTO-SBAGLIATO` su `source`. È il banco che
-il §7 dichiarava mancante — ed esisteva già a metà: il passaggio c'era,
-mancava l'asserzione sul contenuto.
+Il presidio è un banco nei due versi, chiamato
+`un_kind_di_terzi_degradato_mostra_i_byte_della_chiave_convenzionale` in
+`custom_blocks_e2e.rs`. È stato provato rosso in entrambi i versi:
+- Rinominare la chiave in produzione fa fallire l'asserzione, mostrando un
+  `<div>` vuoto nel messaggio.
+- Riallargare il campione fa vincere `TESTO-SBAGLIATO` su `source`.
+Questo è il banco che il §7 dichiarava mancante. In realtà esisteva già a
+metà: il passaggio era presente, ma mancava l'asserzione sul contenuto.
 
-Resta aperta la sola forma **(a)**, e resta perché non è urgente, non perché
-sia stata scartata:
+Resta aperta la sola forma **(a)**. Non è stata scartata, ma resta in sospeso
+perché non è urgente:
 
-- [ ] **(a) Un campo in fondo a `syntax-rule-spec`** (`carichi: list<carico>`
-      più un `variant carico`), consultato prima della convenzione. L'innesco
-      è osservabile: **il primo `custom_kind` di terzi che ha bisogno di
-      dichiarare il proprio carico invece di seguire la convenzione** — un
-      plugin che deve dire *dove* tiene i byte (più di una chiave, una chiave
-      che non è `source`, carichi in più punti), e per cui `source` è una
-      limitazione, non una risposta. Additivo per la regola scritta del repo
-      (un campo in fondo, `wit_additivity.rs`), ma il nome e la forma del
-      `variant` si pagano per sempre (0002): è la casella che questo verbale
-      lascia aperta, col suo trigger.
+- [ ] **(a) Un campo in fondo a `syntax-rule-spec`.** Questo campo definirebbe
+      `carichi: list<carico>` più un `variant carico`, da consultare prima
+      della convenzione.
+  - L'innesco è osservabile. Coinciderà con **il primo `custom_kind` di terzi
+    che richiede di dichiarare il proprio carico** senza seguire la
+    convenzione.
+  - Si tratterebbe di un plugin che deve specificare *dove* conserva i byte
+    (usando più di una chiave, una chiave diversa da `source`, o carichi in
+    più punti). Per questo plugin `source` rappresenterebbe una limitazione
+    invece di una soluzione.
+  - È un intervento additivo per la regola scritta del repo, poiché si tratta
+    di un campo in fondo (`wit_additivity.rs`). Tuttavia, il nome e la forma
+    del `variant` si pagherebbero per sempre (0002).
+  - Questa è la casella che il verbale lascia registrata, con il suo trigger
+    pronto a scattare.

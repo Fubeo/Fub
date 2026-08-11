@@ -1,75 +1,59 @@
 # 19. Debito riportato dal quarto audit
 
-Una **seduta** della [roadmap infrastrutturale](../todo.md): le voci ancora aperte dei quattro giri di audit, col loro milestone.
+Questa è una **seduta** della [roadmap infrastrutturale](../todo.md). L'elenco mostra le voci aperte dei quattro giri di audit con il loro milestone.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) · [i verbali delle decisioni chiuse](../decisions/README.md)
 
 ---
 
-Voci ancora aperte, con il loro milestone.
+**Stato attuale**
 
-**Cosa è rimasto, e cosa vuol dire.** Delle quattro, **due** sono **chiuse** e
-**due** restano aperte; nessuna ha più un contenuto proprio, perché sono quattro
-**rimandi** e il lavoro sta nella seduta che le ha assorbite. Per questo la
-seduta non ha nessuna voce nell'[indice](../todo.md) e la sua colonna *Voci* è
-vuota: le due caselle si contano lì fra le **residue**, che è il posto che prima
-non c'era — e finché non c'era, due caselle non spuntate non entravano in nessun
-totale da nessuna parte. Questa seduta esiste perché i quattro giri di audit sono citati
-per nome altrove nel repo e vale la pena poter rispondere «dove è finito quel
-punto?»; il giorno in cui le sedute che le assorbono si chiudono, questa si
-chiude con loro e non lascia niente indietro.
+Questo documento traccia la destinazione dei punti sollevati durante i quattro giri di audit. Il file risponde alla domanda sulla ricollocazione di ogni segnalazione.
 
-- [x] ~~**Mutex unico sul `Workspace`**~~ → assorbito dal §8.3, e **chiuso**
-      con la [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md).
-      La [0022](../decisions/0022-il-kernel-a-pezzi.md) aveva tolto il motivo per
-      cui il lock non *poteva* essere a grana fine — cinque proprietari invece di
-      ventiquattro campi — e aveva lasciato il lock dov'era; la 0024 lo ha
-      sostituito con un `RwLock`, misurando prima come la voce chiedeva. Il
-      guadagno vero non era quello previsto: non le view che si ridisegnano
-      insieme (pure, da 7 a 25 volte), ma il fatto che chi salva una nota **non
-      viene più affamato** dai lettori — sotto il `Mutex` un salvataggio ha
-      aspettato 6,4 secondi.
-- [ ] **UI di produzione = IPC bespoke** → assorbito da [decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0016](../decisions/0016-cosa-e-una-view.md), §1.2 e §16.6;
-      il caso concreto resta la UI del versioning.
-- [ ] **Organizzazione sidebar chiusa ai plugin** (scelta O3): rivalutare alla
-      superficie plugin di M5 — con i nodi `Tree`/`Custom`, che dalla
-      [decisione 0016](../decisions/0016-cosa-e-una-view.md) esistono, la scelta
-      cambia natura.
-- [x] ~~**"Tre copie" custodite da un flag TS**: merge esplicito a M3 (§18.1).~~
-      **Chiuso** con la
-      [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md), e non nel modo
-      che questa riga si aspettava. Le tre copie non si sono **fuse**: il flag TS
-      (`dirty`) resta dov'era, perché dice una cosa vera che nessun altro dice —
-      *c'è qualcosa da scrivere*. Ciò che è cambiato è che la **correttezza** non
-      dipende più da lui: la guardia è nel kernel, che confronta col disco e
-      risponde `Conflict`, e un flag della shell non la può ingannare. Un merge
-      esplicito fra le tre copie sarebbe stato il modo lungo per ottenere ciò che
-      si ottiene togliendo a una delle tre il compito di avere ragione.
+Delle quattro voci originali:
+*   **Due** voci sono **chiuse**.
+*   **Due** voci restano aperte.
 
-**Due voci sono state tolte da qui, e per due ragioni diverse.**
+Le quattro voci fungono esclusivamente da **rimandi**. Il lavoro effettivo si svolge nelle sedute di destinazione. La chiusura delle sedute assorbenti determinerà la chiusura definitiva di questa seduta.
 
-Il **ponte byte↔UTF-16** era segnato `[~]`, «l'inversa resta». Non resta:
-`charToByteIndex` sta in `frontend/src/rules/offsets.ts`, la usa l'editor
-(`editor/editor.ts`) ed è testata su accenti ed emoji in andata e ritorno. È la
-[decisione 0007](../decisions/0007-contesto-di-sessione.md), che ne aveva bisogno
-per far attraversare il confine alla selezione, ed è già spuntata nel
-[§18.1](18-editor-e-tastiera.md#181-editor). Questa riga dichiarava aperto ciò
-che l'indice, due schermate più in là, dichiara chiuso: la contraddizione era
-**dentro il documento**, non fra il documento e il codice.
+La seduta presenta queste caratteristiche:
+*   Manca dall'[indice](../todo.md) principale.
+*   La colonna *Voci* risulta vuota.
+*   Le due caselle aperte rientrano tra le voci **residue**. La categoria delle voci **residue** dà un posto ai numeri altrimenti omessi dai conteggi. Prima della sua creazione, due caselle aperte restavano invisibili nei totali.
 
-L'**orfana `index/` sotto la radice dei derivati** era marcata «cosmetico», e non era una voce di
-questa roadmap: il criterio in testa a [todo.md](../todo.md) è *quali pezzi di
-infrastruttura mancano perché FEATURES.md si possa costruire*, e una cartella da
-cancellare a mano su un vault di sviluppo non regge nessuna voce di FEATURES. Se
-un giorno la migrazione dei dati derivati conterà davvero, la risposta è già
-scritta due volte: il [§15.3](15-il-disco.md#153-una-versione-di-schema-su-ogni-formato-persistito)
-(versione di schema → *butto e ricostruisco*) e il
-[§15.4](15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe)
-(la mappa di chi scrive dove, e con quale classe — che dalla
-[0048](../decisions/0048-una-radice-sola.md) è un documento vero,
-[on-disk-layout.md](../architecture/on-disk-layout.md)).
+**Voci aperte e chiuse**
 
-Le due tolte hanno una morale in comune, ed è quella del
-[decisione 0056](../decisions/0056-un-elenco-che-e-la-sorgente.md):
-**un elenco tenuto a mano smette di essere vero senza diventare rosso.** Vale
-per i presidi del repo, e vale per questo file.
+*   [x] ~~**Mutex unico sul `Workspace`**~~ → Assorbito dal §8.3 e **chiuso** con la [decisione 0024](../decisions/0024-chi-legge-non-aspetta-chi-legge.md).
+    *   **Contesto:** La [0022](../decisions/0022-il-kernel-a-pezzi.md) ha frazionato la proprietà in cinque referenti (sostituendo i ventiquattro campi iniziali). Il blocco necessitava di una modifica proporzionata.
+    *   **Soluzione:** La decisione 0024 ha misurato le prestazioni. Ha sostituito il blocco con un `RwLock` (blocco a lettura condivisa e scrittura esclusiva).
+    *   **Risultato principale:** Il salvataggio di una nota ottiene subito la priorità. In passato un salvataggio bloccato dal `Mutex` (blocco di esclusione reciproca) sul `Workspace` (spazio di lavoro centrale) ha atteso fino a 6,4 secondi.
+    *   **Risultato secondario:** Le view (viste dell'interfaccia) ridisegnate simultaneamente incrementano le prestazioni (da 7 a 25 volte).
+*   [ ] **UI di produzione = IPC bespoke** → Assorbito da [decisione 0009](../decisions/0009-registro-dei-comandi.md), [decisione 0016](../decisions/0016-cosa-e-una-view.md), §1.2 e §16.6.
+    *   **Dettaglio:** La UI (interfaccia utente) del versioning impiega attualmente logiche IPC (comunicazione inter-processo) bespoke (su misura).
+*   [ ] **Organizzazione sidebar chiusa ai plugin** (scelta O3)
+    *   **Dettaglio:** La superficie per i plugin (moduli di estensione) introdotta con il milestone M5 richiede una rivalutazione di questa impostazione.
+    *   **Contesto:** La [decisione 0016](../decisions/0016-cosa-e-una-view.md) introduce i nodi `Tree`/`Custom`. Questa introduzione modifica le premesse iniziali della scelta.
+*   [x] ~~**"Tre copie" custodite da un flag TS**: merge esplicito a M3 (§18.1).~~ → **Chiuso** con la [0089](../decisions/0089-da-cosa-e-partita-una-scrittura.md).
+    *   **Stato:** Il problema vanta una risoluzione inaspettata. Le tre copie mantengono la loro indipendenza.
+    *   **Flag TypeScript:** Il flag TS denominato `dirty` mantiene il proprio ruolo. Segnala in modo esclusivo la presenza di dati in sospeso.
+    *   **Nuova validazione:** Il controllo della correttezza spetta esclusivamente al kernel (motore centrale). Il kernel confronta i dati con il disco ed emette il messaggio `Conflict`. Il kernel blocca sistematicamente i tentativi della shell (interfaccia di base) di ingannare il sistema.
+    *   **Motivazione:** Sollevare una delle tre copie dall'obbligo di verità assoluta assicura i vantaggi di un merge (fusione) esplicito. Questa scelta produce un notevole risparmio di tempo.
+
+**Due voci rimosse**
+
+Abbiamo eliminato le restanti voci per due ragioni distinte:
+
+1.  **Ponte byte↔UTF-16** (segnato come `[~]`, «l'inversa resta»)
+    *   **Stato reale:** La funzione risulta attiva e completa. `charToByteIndex` risiede nel file `frontend/src/rules/offsets.ts`. L'editor testuale (`editor/editor.ts`) sfrutta correntemente questo strumento. I test automatici coprono accenti ed emoji in andata e ritorno.
+    *   **Contesto originario:** La [decisione 0007](../decisions/0007-contesto-di-sessione.md) richiede questa logica per spingere la selezione testuale oltre i limiti dell'editor. L'implementazione appare già spuntata nel [§18.1](18-editor-e-tastiera.md#181-editor).
+    *   **Motivo della rimozione:** L'indice (posto due schermate più avanti) segnalava questo task come chiuso. L'incoerenza risiedeva esclusivamente all'interno del presente documento.
+2.  **Orfana `index/` sotto la radice dei derivati** (marcata «cosmetico»)
+    *   **Fuori contesto:** Questo elemento risiedeva fuori dal perimetro della roadmap. Il file [todo.md](../todo.md) traccia esclusivamente i blocchi infrastrutturali essenziali a completare le voci di FEATURES.md. La cancellazione manuale di una cartella all'interno di un vault (archivio di progetto) di sviluppo risulta ininfluente per gli obiettivi di FEATURES.
+    *   **Soluzione standard:** La risposta sui dati derivati si trova già scritta due volte:
+        *   [§15.3](15-il-disco.md#153-una-versione-di-schema-su-ogni-formato-persistito): L'aggiornamento della versione di schema forza la distruzione e la successiva ricostruzione dei dati derivati.
+        *   [§15.4](15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe): Le scritture su disco seguono una rigorosa mappa formale. Con l'adozione della decisione [0048](../decisions/0048-una-radice-sola.md), questa mappa corrisponde al documento [on-disk-layout.md](../architecture/on-disk-layout.md).
+
+**Morale**
+
+Le due voci eliminate condividono un insegnamento fondamentale stabilito dalla [decisione 0056](../decisions/0056-un-elenco-che-e-la-sorgente.md):
+**Un elenco compilato a mano diventa obsoleto in modo invisibile, conservando un'apparenza di correttezza.** Questa regola vale per i controlli del repo (repository del codice sorgente) ed è parimenti valida per il presente file.
