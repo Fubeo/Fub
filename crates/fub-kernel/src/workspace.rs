@@ -2935,14 +2935,22 @@ impl Workspace {
         // vault, ed è sano per costruzione; il `to` del chiamante invece
         // arriva dall'IPC e va validato.
         //
-        // Validato col recinto e **non** con la portabilità (§15.5): ripristinare
-        // non fa nascere un nome, ne rimette uno che c'era. Una nota che si
-        // chiamava `CON.md` prima di finire nel cestino deve poter tornare — e
+        // Le due strade fanno **due domande diverse**, ed è la distinzione del
+        // §15.5 letta sul cestino. Senza `to` non nasce nessun nome: ne torna
+        // uno che c'era, e va giudicato col solo recinto — una nota che si
+        // chiamava `CON.md` prima di finire nel cestino deve poter tornare, e
         // sarebbe un modo curioso di perdere un file, rifiutarsi di restituirlo
-        // per un nome che il vault conteneva già.
+        // per un nome che il vault conteneva già. Con `to` invece il nome
+        // **nasce adesso**: `to` è opzionale proprio perché è il caso in cui il
+        // path d'origine era occupato e l'utente ne ha digitato un altro, cioè
+        // Fub sta scegliendo dove mettere un file. Finché anche questa strada
+        // chiedeva il solo recinto, un ripristino poteva atterrare su
+        // `.nascosta/Nota.md` — legale su ogni filesystem, saltato dalla
+        // scansione — e la nota tornava invisibile a chi l'aveva ripristinata,
+        // con la sua voce fantasma in anagrafe. Era il difetto 0186.
         let original = entry.original.clone();
         let target = match to {
-            Some(to) => valid_doc_id(to.as_str())?,
+            Some(to) => new_doc_id(to.as_str())?,
             None => entry.original,
         };
         if self.indexes.core.metas.contains_key(&target) || self.docs.vault.exists(&target) {
@@ -6484,16 +6492,19 @@ fn solo_il_caso(from: &DocId, to: &DocId) -> bool {
 /// Il giudizio è del contratto — [`path_policy::check`] con
 /// [`Naming::Existing`] — e non più di questa funzione: la stessa regola serve a
 /// un indice di terzi e a un guest WASM, che `fub-kernel` non lo hanno
-/// (decisione 0020). Qui resta la **tolleranza del varco**: la conversione dei
-/// separatori Windows e il trim, che sono di questo ingresso e non della regola.
+/// (decisione 0020). Anche la **tolleranza del varco** — la conversione dei
+/// separatori Windows e il trim — è del contratto
+/// ([`path_policy::from_outside`]), e non perché sia una regola sui nomi: perché
+/// i varchi sono più d'uno. Il sidecar dell'organizzazione e il doppio dell'SDK
+/// fanno lo stesso ingresso senza avere `fub-kernel` fra le mani, e tre trim
+/// scritti a mano sono tre tolleranze che divergono senza che nessuno le veda.
 ///
 /// È la regola di ogni percorso che trasforma input esterno in un `DocId`:
 /// rename, restore, i comandi IPC e il confine delle capacità
 /// ([`fenced_doc_id`]). Chi invece fa **nascere** un nome passa da
 /// [`new_doc_id`], che è più stretta — e la differenza è il §15.5.
 pub fn valid_doc_id(name: &str) -> Result<DocId> {
-    let normalizzato = name.replace('\\', "/");
-    let pulito = normalizzato.trim().trim_start_matches('/');
+    let pulito = &path_policy::from_outside(name);
     path_policy::check(pulito, Naming::Existing).map_err(|why| KernelError::BadName {
         name: name.to_string(),
         why: why.to_string(),
@@ -6538,13 +6549,15 @@ pub fn new_doc_id(name: &str) -> Result<DocId> {
 /// comandi IPC, altro varco. L'errore è `PermissionDenied` e non `BadArgs`
 /// perché è la stessa risposta che `data_*` dà a una risalita — per chi la
 /// riceve, i due recinti si comportano allo stesso modo.
-pub(crate) fn fenced_doc_id(id: &DocId) -> std::result::Result<DocId, PluginError> {
-    valid_doc_id(id.as_str()).map_err(|_| {
-        PluginError::PermissionDenied(
-            format!("`{id}`: un documento si nomina con un path relativo dentro il vault").into(),
-        )
-    })
-}
+///
+/// Vive nel **contratto** e non qui perché il kernel non è l'unico a ospitare
+/// un plugin: `MemoryHost`, il doppio con cui si prova una feature prima che
+/// esista un vault, deve dire di no agli stessi path, e finché la funzione
+/// stava dentro `fub-kernel` — che il doppio non può nemmeno vedere — non
+/// c'era modo di fargliela chiamare invece di riscriverla (0220). La riga qui
+/// resta come nome: chi arriva dai varchi del kernel continua a trovarla dove
+/// l'ha sempre cercata, e il corpo è uno solo.
+pub(crate) use fub_abi::rules::path_policy::fenced_doc_id;
 
 /// La validazione del confine di fiducia della UI, in un posto solo.
 ///

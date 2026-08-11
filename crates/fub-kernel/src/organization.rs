@@ -59,6 +59,8 @@ use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::organization::Organization;
+use fub_abi::rules::path_policy;
+use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
 use crate::storage::{Durevole, VaultStorage};
@@ -126,17 +128,21 @@ impl OrganizationStore {
     /// ciò che non si è riusciti a leggere.
     pub fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> (Arc<Self>, Option<String>) {
         let path = organization_path(root);
-        let (data, warning) = match load(&path, storage.as_ref()) {
-            Ok(data) => (data, None),
-            Err(e) => (Organization::default(), Some(e)),
+        let (data, scartate, warning) = match load(&path, storage.as_ref()) {
+            Ok((data, scartate)) => (data, scartate, None),
+            Err(e) => (Organization::default(), Vec::new(), Some(e)),
         };
         (
             Arc::new(OrganizationStore {
-                path: Some(path),
+                path: Some(path.clone()),
                 storage: Some(storage),
                 readable: warning.is_none(),
                 data: RwLock::new(Durevole::letto(data)),
-                warnings: RwLock::new(Vec::new()),
+                // Le chiavi che il recinto ha scartato **non** rendono il file
+                // illeggibile: il resto dell'organizzazione vale, e la
+                // scrittura successiva le lascerà indietro. Quello che non
+                // possono fare è sparire in silenzio.
+                warnings: RwLock::new(avviso_scartate(&path, scartate).into_iter().collect()),
             }),
             warning,
         )
@@ -275,7 +281,14 @@ impl OrganizationStore {
         // Ciò che si ha in memoria viaggia con la fusione, e serve **solo** se
         // il file non c'è: vedi il § in testa a `fondi`.
         let in_memoria = (**data).clone();
-        data.aggiorna(|| fondi(storage.as_ref(), path, &in_memoria, f))
+        let mut scartate = Vec::new();
+        let esito = data.aggiorna(|| fondi(storage.as_ref(), path, &in_memoria, &mut scartate, f));
+        // Il file può essere stato riscritto a mano *dopo* l'apertura: la
+        // fusione rilegge, e ciò che il recinto scarta lo si dice adesso.
+        if let Some(avviso) = avviso_scartate(path, scartate) {
+            self.warnings.write().expect("organizzazione").push(avviso);
+        }
+        esito
     }
 }
 
@@ -310,6 +323,7 @@ fn fondi(
     storage: &dyn VaultStorage,
     path: &Utf8Path,
     in_memoria: &Organization,
+    scartate: &mut Vec<String>,
     f: impl FnOnce(&mut Organization),
 ) -> Result<Organization, String> {
     // `f` si consuma dentro una `FnMut`, che per il tipo potrebbe girare più
@@ -321,10 +335,13 @@ fn fondi(
     let esito = storage.update(path, &mut |attuale| {
         let letto = match attuale {
             Some(bytes) => decode(path, bytes),
-            None => Ok(in_memoria.clone()),
+            None => Ok((in_memoria.clone(), Vec::new())),
         };
         let disco = match letto {
-            Ok(disco) => disco,
+            Ok((disco, fuori)) => {
+                scartate.extend(fuori);
+                disco
+            }
             Err(e) => {
                 guasto = Some(e);
                 return Err(std::io::Error::other("il file non si è potuto leggere"));
@@ -403,19 +420,41 @@ fn child_name(path: &str) -> &str {
     }
 }
 
-fn load(path: &Utf8Path, storage: &dyn VaultStorage) -> Result<Organization, String> {
+fn load(
+    path: &Utf8Path,
+    storage: &dyn VaultStorage,
+) -> Result<(Organization, Vec<String>), String> {
     match storage.read(path) {
         Ok(raw) => decode(path, &raw),
         // Assente = vault mai personalizzato: è un esito normale.
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Organization::default()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Ok((Organization::default(), Vec::new()))
+        }
         Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
     }
+}
+
+/// La frase con cui le chiavi scartate arrivano a chi guarda, o `None` se non
+/// ce n'è nessuna.
+fn avviso_scartate(path: &Utf8Path, scartate: Vec<String>) -> Option<String> {
+    (!scartate.is_empty()).then(|| {
+        format!(
+            "{path} nomina {} posizioni che non stanno in questo vault, e Fub \
+             le lascia indietro: {}",
+            scartate.len(),
+            scartate.join(", ")
+        )
+    })
 }
 
 /// I byte del sidecar, giudicati. Sta a parte perché lo leggono in due —
 /// l'apertura e ogni fusione ([`fondi`]) — e due letture con due idee di cosa
 /// sia un file valido sarebbero due politiche.
-fn decode(path: &Utf8Path, raw: &[u8]) -> Result<Organization, String> {
+///
+/// Torna anche **le chiavi scartate dal recinto**: chi legge se ne fa carico
+/// dicendolo, perché una chiave che sparisce senza che nessuno dica perché è
+/// metà difetto.
+fn decode(path: &Utf8Path, raw: &[u8]) -> Result<(Organization, Vec<String>), String> {
     let file: OrganizationFile = serde_json::from_slice(raw)
         .map_err(|e| format!("{path} non è un workspace.json valido: {e}"))?;
     if file.version > SCHEMA_VERSION {
@@ -425,7 +464,87 @@ fn decode(path: &Utf8Path, raw: &[u8]) -> Result<Organization, String> {
             file.version
         ));
     }
-    Ok(file.organization)
+    let mut organization = file.organization;
+    let scartate = recinta(&mut organization);
+    Ok((organization, scartate))
+}
+
+/// Il recinto applicato alle chiavi del sidecar, che sono l'unico path del
+/// vault che arrivava dal disco **senza passare da nessun varco**.
+///
+/// `.fub/workspace.json` è un file di testo dentro il vault: lo scrive Fub, ma
+/// lo può scrivere anche una mano, una sincronizzazione o un altro strumento, e
+/// ogni sua chiave nomina un documento o una cartella. Finché non passavano di
+/// qui, un `"pinned": ["../../.ssh/authorized_keys"]` o un
+/// `"icons": {"..\\..\\altrove": "📌"}` diventavano una riga della sidebar e un
+/// path composto da chi la disegna. Era il difetto 0177, e la risposta è quella
+/// di ogni altro ingresso: [`fenced_doc_id`], la stessa funzione dei comandi
+/// IPC e del confine dei plugin — inclusa la sua tolleranza, così una chiave
+/// scritta a mano con i separatori di Windows nomina ciò che voleva nominare
+/// invece di essere buttata.
+///
+/// # Perché qui si pota, e in testa al modulo si dice di non potare
+///
+/// Non è la stessa potatura. Gli orfani che restano sono chiavi che nominano un
+/// posto **che potrebbe tornare**: un file da un backup, un branch che si
+/// rimonta. Una chiave che il recinto rifiuta non nomina un posto che può
+/// tornare — nomina un posto che in questo vault non può esistere, perché
+/// nessuna strada che crea o rinomina un documento la lascerebbe nascere. Non
+/// si sta buttando un dato autorevole: si sta togliendo un nome che non è di
+/// nessuno.
+fn recinta(org: &mut Organization) -> Vec<String> {
+    let mut scartate = Vec::new();
+    org.icons = std::mem::take(&mut org.icons)
+        .into_iter()
+        .filter_map(|(k, v)| ammessa(&k, &mut scartate).map(|k| (k, v)))
+        .collect();
+    org.pinned = std::mem::take(&mut org.pinned)
+        .into_iter()
+        .filter_map(|p| ammessa(&p, &mut scartate))
+        .collect();
+    org.spaces = std::mem::take(&mut org.spaces)
+        .into_iter()
+        .filter_map(|s| ammessa(&s, &mut scartate))
+        .collect();
+    org.order = std::mem::take(&mut org.order)
+        .into_iter()
+        .filter_map(|(cartella, nomi)| {
+            // La radice è la chiave vuota, ed è l'unica cartella che si nomina
+            // non nominandola: il recinto la rifiuterebbe come «non nomina
+            // niente», che qui è invece esattamente ciò che vuol dire.
+            let cartella = match cartella.is_empty() {
+                true => String::new(),
+                false => ammessa(&cartella, &mut scartate)?,
+            };
+            // I valori non sono path ma **nomi di figli**, e chi disegna li
+            // compone con la cartella: un nome che risale o che porta un
+            // separatore comporrebbe un path che la chiave non dichiara. Un
+            // nome è un path di un segmento solo, e si chiede così.
+            let nomi = nomi
+                .into_iter()
+                .filter(|n| {
+                    let dentro = path_policy::fenced(n).is_ok() && !n.contains(['/', '\\']);
+                    if !dentro {
+                        scartate.push(format!("{cartella}/{n}"));
+                    }
+                    dentro
+                })
+                .collect();
+            Some((cartella, nomi))
+        })
+        .collect();
+    scartate
+}
+
+/// Una chiave, se nomina un posto di questo vault. Vedi [`recinta`].
+fn ammessa(chiave: &str, scartate: &mut Vec<String>) -> Option<String> {
+    match path_policy::fenced_doc_id(&DocId::new(chiave)) {
+        Ok(pulita) => Some(pulita.to_string()),
+        Err(_) => {
+            scartate.push(chiave.to_string());
+            None
+        }
+    }
 }
 
 #[cfg(test)]

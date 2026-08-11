@@ -29,6 +29,7 @@ use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, Heading, Span};
 use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::rules::path_policy::{self, fenced_doc_id, Naming};
 use fub_abi::session::{
     AnchoredSelection, AnchoredSelections, PaneMode, SelectionSet, ViewContext,
 };
@@ -40,6 +41,26 @@ use fub_abi::traits::{
     VaultEntry, VaultRead, VaultStructure, VaultWrite, ViewStateRead, ViewStateWrite,
 };
 use fub_abi::{PluginError, MAX_RANDOM_BYTES};
+
+/// Il nome di un documento che **nasce** in questo doppio: il recinto l'ha già
+/// messo [`fenced_doc_id`], qui si aggiunge la portabilità e la forma NFC
+/// (§15.5), come fa `KernelHost::create_document`.
+fn nato_qui(id: &DocId) -> Result<DocId, PluginError> {
+    path_policy::check(id.as_str(), Naming::New)
+        .map_err(|why| PluginError::BadArgs(format!("`{id}`: {why}").into()))?;
+    Ok(DocId::new(path_policy::normalized(id.as_str())))
+}
+
+/// Il recinto sui path dello **spazio dati**.
+///
+/// L'host vero confina ogni plugin nella sua cartella
+/// (`Workspace::plugin_data_path`); questo doppio non ha cartelle, quindi non
+/// può confinare — ma la metà che *è* una regola del contratto, cioè che un
+/// path non risale e non nomina un'unità, la applica, ed è la stessa funzione.
+fn recinto_dati(path: &str) -> Result<(), PluginError> {
+    path_policy::fenced(path)
+        .map_err(|why| PluginError::PermissionDenied(format!("`{path}`: {why}").into()))
+}
 
 /// Storage dei blob e dei documenti in memoria, più un orologio pilotabile.
 #[derive(Default)]
@@ -587,6 +608,7 @@ impl VaultRead for MemoryHost {
     }
 
     fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
+        let id = fenced_doc_id(id)?;
         let bytes = self
             .docs
             .lock()
@@ -617,6 +639,7 @@ impl VaultRead for MemoryHost {
     /// cui nessuno ha seminato il modello risponde come uno che non esiste — chi
     /// prova una feature sul modello deve dire quale modello sta provando.
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
+        let id = fenced_doc_id(id)?;
         self.models
             .lock()
             .unwrap()
@@ -686,6 +709,7 @@ impl VaultWrite for MemoryHost {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
+        let id = fenced_doc_id(id)?;
         let mut docs = self.docs.lock().unwrap();
         if let WriteBase::DescendsFrom(attesa) = base {
             let adesso = docs
@@ -722,12 +746,17 @@ impl VaultWrite for MemoryHost {
 
 impl VaultStructure for MemoryHost {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
+        // Due letture dello stesso nome, come le fa `KernelHost`: il recinto —
+        // sta dentro il vault? — e la portabilità, che vale solo perché qui il
+        // nome **nasce**.
+        let id = fenced_doc_id(id)?;
+        let id = nato_qui(&id)?;
         if self.docs.lock().unwrap().contains_key(id.as_str()) {
             return Err(PluginError::BadArgs(format!("{id} esiste già").into()));
         }
         // Il nome è libero — la riga sopra l'ha appena verificato — quindi non
         // c'è nessuna revisione da cui discendere.
-        self.write_document(id, source, WriteBase::Dictated)
+        self.write_document(&id, source, WriteBase::Dictated)
             .map(|_| ())
     }
 
@@ -736,6 +765,8 @@ impl VaultStructure for MemoryHost {
     /// proprietà del kernel e si prova contro il kernel (`tests/`); qui si
     /// prova che una feature sappia chiederla.
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
+        let from = &fenced_doc_id(from)?;
+        let to = &fenced_doc_id(to)?;
         let mut docs = self.docs.lock().unwrap();
         if from == to {
             return Ok(());
@@ -751,6 +782,7 @@ impl VaultStructure for MemoryHost {
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
+        let id = &fenced_doc_id(id)?;
         let source = self.read_document(id)?;
         self.docs.lock().unwrap().remove(id.as_str());
         let stamp = self.trashed.fetch_add(1, Ordering::Relaxed);
@@ -778,8 +810,19 @@ impl VaultStructure for MemoryHost {
             .get(entry.as_str())
             .cloned()
             .ok_or_else(|| PluginError::BadArgs(format!("{entry} non è nel cestino").into()))?;
-        let target = to.unwrap_or(voce.original);
-        self.create_document(&target, &source)?;
+        // `entry` nomina un file dentro `.trash/`, che il recinto dei
+        // documenti rifiuta apposta: chi lo valida è la ricerca fra le voci del
+        // cestino, appena sopra. Il `to` invece atterra nel vault, ed è un nome
+        // che **nasce**: senza `to` torna quello che c'era, e quello non si
+        // rigiudica (è la stessa asimmetria di `Workspace::restore_from_trash`).
+        let target = match to {
+            Some(to) => nato_qui(&fenced_doc_id(&to)?)?,
+            None => voce.original,
+        };
+        if self.docs.lock().unwrap().contains_key(target.as_str()) {
+            return Err(PluginError::BadArgs(format!("{target} esiste già").into()));
+        }
+        self.write_document(&target, &source, WriteBase::Dictated)?;
         self.trash.lock().unwrap().remove(entry.as_str());
         Ok(target)
     }
@@ -794,6 +837,7 @@ impl VaultStructure for MemoryHost {
 
 impl DataRead for MemoryHost {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        recinto_dati(path)?;
         let blob = self.blobs.lock().unwrap().get(path).cloned();
         if let Some(bytes) = &blob {
             self.annota_lettura(path, bytes.len());
@@ -802,6 +846,11 @@ impl DataRead for MemoryHost {
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
+        // Il prefisso vuoto è la radice dello spazio dati, e non nomina niente
+        // apposta: è l'unico path che non passa dal recinto.
+        if !prefix.is_empty() {
+            recinto_dati(prefix)?;
+        }
         // Semantica di *cartella*, come l'host vero (`KernelHost`), non di
         // prefisso testuale: un finto che si comporta diversamente dal vero è
         // una trappola che scatta il giorno che si cambia chiamante.
@@ -818,6 +867,7 @@ impl DataRead for MemoryHost {
 
 impl DataWrite for MemoryHost {
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
+        recinto_dati(path)?;
         if self.scritture_negate.lock().unwrap().contains(path) {
             return Err(PluginError::Io(
                 format!("scrittura negata su `{path}`").into(),
@@ -838,6 +888,7 @@ impl DataWrite for MemoryHost {
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
+        recinto_dati(path)?;
         self.blobs.lock().unwrap().remove(path);
         Ok(())
     }
