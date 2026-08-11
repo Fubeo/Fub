@@ -460,7 +460,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **trentaquattro** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **trentatré** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -562,7 +562,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0203 | un workspace avvelenato lascia un job senza esito: la richiesta viene rifiutata prima di entrare, ma il canale di risposta non riceve né un risultato né un errore, quindi chi ha chiesto aspetta per sempre — e siccome è il ramo che si imbocca quando qualcosa è già andato storto, è proprio lì che l'interfaccia si pianta | `fub-host` · `session` (runner dei job) | regole |
 | 0204 | `ricorda_i_tasti_visti` legge l'insieme dei tasti già visti, lo modifica e lo riscrive senza tenerlo fermo in mezzo: due sessioni che imparano un tasto nello stesso momento se ne perdono uno | `fub-host` · `session.rs` `ricorda_i_tasti_visti` | lock e I/O |
 | 0205 | la chiusura dell'applicazione non forza il salvataggio pendente: il salvataggio è ritardato di circa un secondo e mezzo, e chiudere la finestra mentre il ritardo corre butta via l'ultima battitura senza chiedere niente e senza lasciarne traccia nella bozza | `frontend` · chiusura dell'app (salvataggio ritardato) | regole |
-| 0206 | `flushPendingSave` ignora l'esito del salvataggio che forza: se la scrittura fallisce, la funzione risponde comunque e il chiamante prosegue come se i byte fossero sul disco — e `convertToFolder`, che sposta il documento, non forza affatto il salvataggio prima di muoverlo | `frontend` · `flushPendingSave` (con `convertToFolder`) | regole |
 | 0207 | un file con fine riga CRLF viene riscritto tutto LF al primo salvataggio: l'editor normalizza in ingresso e nessuno ricorda la forma originale, quindi aprire una nota e battere un carattere produce un diff che tocca ogni riga del file | `frontend` · editor (fine riga) | regole |
 | 0208 | cestinare una nota ne lascia la bozza: il documento se ne va nel cestino e il lavoro non salvato resta sotto la chiave vecchia, dove non è più raggiungibile da nessuna vista e dove la prima raccolta lo spazza | `frontend` · cestino (con `fub-kernel` · `drafts.rs`) | regole |
 | 0209 | le bozze di crash possono smettere di essere scritte senza dirlo: se la scrittura periodica fallisce una volta il ciclo non riparte e non c'è nessun segnale, quindi la rete di sicurezza che esiste per il caso peggiore è spenta proprio mentre l'utente crede di averla | `frontend` · bozze di crash | regole |

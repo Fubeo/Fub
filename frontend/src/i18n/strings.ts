@@ -406,6 +406,11 @@ const IT = {
   "document.deleted_dirty":
     "{doc} è stato cancellato su disco mentre il buffer è sporco: il buffer vince, e il prossimo salvataggio lo ricrea.",
   "document.save_failed": "{doc} non è stato salvato: {reason}",
+  // Dice **perché il gesto non è partito**, e nomina il documento appeso: chi
+  // legge ha appena chiesto di spostare una nota e deve capire che il rifiuto
+  // riguarda un salvataggio, non la rinomina.
+  "document.unsaved_blocks":
+    "{doc} non è sul disco: l'operazione si ferma qui, perché spostare il file lascerebbe indietro il testo non salvato.",
   // Dice **che non è stato scritto niente**, e non è un dettaglio tecnico: è la
   // sola frase che distingue questo caso da «non ci sono riuscito», e senza di
   // essa chi legge crede di aver perso il proprio testo.
@@ -732,6 +737,8 @@ const EN: Record<Chiave, string> = {
   "document.deleted_dirty":
     "{doc} was deleted on disk while the buffer is dirty: the buffer wins, and the next save recreates it.",
   "document.save_failed": "{doc} was not saved: {reason}",
+  "document.unsaved_blocks":
+    "{doc} is not on disk: the operation stops here, because moving the file would leave the unsaved text behind.",
   "document.save_conflict":
     "{doc} changed on disk since you opened it: nothing was written, and your changes are still here. Choose which text to keep from the command palette.",
   "document.conflict_none": "No conflict to resolve on this document.",

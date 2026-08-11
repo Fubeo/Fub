@@ -1113,21 +1113,34 @@ function scheduleSave(doc: string): void {
   buf.timer = window.setTimeout(() => void saveDoc(doc), 400);
 }
 
-/// Salva subito **ogni** buffer che ha un salvataggio in attesa.
+/// Salva subito **ogni** buffer che ha un salvataggio in attesa, e **dice quali
+/// non ce l'hanno fatta**.
 ///
 /// Da chiamare prima di ogni operazione che riscrive file (rename, ripristino di
 /// una versione): la riscrittura del kernel finirebbe altrimenti sotto una copia
 /// più vecchia. Con N riquadri il «buffer corrente» non basta più — l'operazione
 /// può riguardare una nota aperta in un riquadro che non ha il fuoco.
-export async function flushPendingSave(): Promise<void> {
-  await Promise.all([...buffers.keys()].map(flushDoc));
+///
+/// La risposta è l'elenco dei documenti **ancora sporchi**, e prima non c'era:
+/// un salvataggio che fallisce non alza — lo dice il buffer, che resta sporco e
+/// riproverà — quindi questa funzione tornava uguale che i byte fossero sul
+/// disco o no, e chi la chiamava proseguiva a spostare il file (difetto 0206).
+/// Una precondizione di cui non si legge l'esito è una decorazione: chi chiede
+/// «mettimi in salvo» deve poter sapere che non è successo.
+export async function flushPendingSave(): Promise<string[]> {
+  const esiti = await Promise.all([...buffers.keys()].map(flushDoc));
+  return esiti.filter((doc): doc is string => doc !== null);
 }
 
-async function flushDoc(doc: string): Promise<void> {
+/// Il documento, se dopo il tentativo è **ancora** sporco; `null` se è a posto.
+async function flushDoc(doc: string): Promise<string | null> {
   const buf = buffers.get(doc);
-  if (!buf?.dirty) return;
+  if (!buf?.dirty) return null;
   window.clearTimeout(buf.timer);
   await saveDoc(doc);
+  // Riletto dalla mappa: fra l'attesa e adesso il buffer può essere stato
+  // congedato, e un buffer che non c'è più non è un lavoro rimasto indietro.
+  return buffers.get(doc)?.dirty === true ? doc : null;
 }
 
 /// Disinnesca un salvataggio in attesa senza eseguirlo, e dice se ce n'era uno.
