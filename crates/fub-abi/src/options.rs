@@ -347,8 +347,31 @@ pub mod permission {
     pub const WRITE_VAULT: &str = "fub:write-vault";
     /// Rete. Parametro: allowlist di host (20.3, «network allowlist»).
     pub const NETWORK: &str = "fub:network";
-    /// Appunti di sistema.
-    pub const CLIPBOARD: &str = "fub:clipboard";
+    /// **Leggere** gli appunti di sistema: ciò che l'utente ha copiato, da
+    /// qualunque applicazione.
+    ///
+    /// Sta accanto a [`WRITE_CLIPBOARD`] e non insieme, per la stessa ragione
+    /// per cui [`READ_SELECTION`] sta accanto a [`READ_SESSION`]: sono due
+    /// domande diverse e un utente può voler rispondere di sì all'una e di no
+    /// all'altra. *«Questo plugin può mettere un link negli appunti, non
+    /// leggere ciò che ci ho copiato dentro»* è la frase che il nome unico
+    /// rendeva inesprimibile.
+    ///
+    /// **La lettura è la metà che non ha recinto.** Chi legge il vault legge un
+    /// documento *che ha nominato*, e un parametro può restringerlo a un
+    /// prefisso; gli appunti non hanno **nessun campo** da filtrare — il loro
+    /// contenuto è ciò che l'utente ha copiato da un'altra applicazione, cioè
+    /// la password appena presa dal gestore di password, l'IBAN, il token. Il
+    /// solo recinto possibile è il sì/no, e per questo il sì/no dev'essere il
+    /// suo.
+    pub const READ_CLIPBOARD: &str = "fub:read-clipboard";
+    /// **Scrivere** negli appunti di sistema.
+    ///
+    /// È la metà innocua della coppia — mettere un testo negli appunti non
+    /// rivela niente di ciò che c'era prima — e sta separata da
+    /// [`READ_CLIPBOARD`] perché è quella che un plugin chiede davvero: «copia
+    /// il link di questa nota», «copia questa citazione».
+    pub const WRITE_CLIPBOARD: &str = "fub:write-clipboard";
     pub const CAMERA: &str = "fub:camera";
     pub const MICROPHONE: &str = "fub:microphone";
     /// Filesystem fuori dal vault. Parametro: elenco di path (20.3, «file
@@ -430,7 +453,7 @@ pub mod permission {
     /// il solo cliente che questa domanda abbia mai avuto.
     pub const READ_DRAFTS: &str = "fub:read-drafts";
 
-    /// **Tutti e tredici** [conta: permessi-dichiarabili], in ordine di
+    /// **Tutti e quattordici** [conta: permessi-dichiarabili], in ordine di
     /// dichiarazione: l'elenco che questo host sa nominare.
     ///
     /// Serve a chi deve *mostrarli* — un pannello, una CLI, il momento in cui
@@ -447,15 +470,19 @@ pub mod permission {
     /// (`ogni_permesso_di_una_famiglia_e_nominato`): ogni famiglia che ha un
     /// permesso ha il proprio nome qui dentro. Il verso opposto **non** è
     /// presidiato e non deve esserlo — [`CAMERA`], [`MICROPHONE`],
-    /// [`EXTERNAL_FS`] e [`CLIPBOARD`] sono nomi senza famiglia, cioè permessi
-    /// che si dichiarano e che nessuna capacità di oggi consuma. Toglierli
-    /// perché «non fanno niente» vorrebbe dire scoprire il giorno della prima
-    /// capacità che il nome era libero.
-    pub const ALL: [&str; 13] = [
+    /// [`EXTERNAL_FS`], [`READ_CLIPBOARD`] e [`WRITE_CLIPBOARD`] sono nomi
+    /// senza famiglia, cioè permessi che si dichiarano e che nessuna capacità
+    /// di oggi consuma. Toglierli perché «non fanno niente» vorrebbe dire
+    /// scoprire il giorno della prima capacità che il nome era libero — e
+    /// **tenerli non basta: bisogna anche tenerli della grana giusta**, perché
+    /// la grana di un nome si può correggere gratis solo finché nessun manifest
+    /// l'ha scritto (0144).
+    pub const ALL: [&str; 14] = [
         READ_VAULT,
         WRITE_VAULT,
         NETWORK,
-        CLIPBOARD,
+        READ_CLIPBOARD,
+        WRITE_CLIPBOARD,
         CAMERA,
         MICROPHONE,
         EXTERNAL_FS,

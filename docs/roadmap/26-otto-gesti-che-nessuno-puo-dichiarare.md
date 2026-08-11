@@ -5,6 +5,12 @@ un gesto funziona — l'app lo compie, per sé — e **non esiste il dato che lo
 dichiara**. Non sono funzionalità mancanti: sono porte mancanti fra un gesto e
 il contratto, e finché non ci sono, ogni gesto nuovo si paga per intero.
 
+**Una delle otto è chiusa**, ed era la sola la cui finestra si chiudesse prima
+del freeze: la §26.6 con la
+[0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md), che ha spaccato
+`fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` finché farlo
+costava sei righe e zero manifest da migrare.
+
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
 
@@ -118,7 +124,8 @@ fatta.**
 * La [0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) e la
   [0096](../decisions/0096-una-bozza-non-e-una-nota.md) hanno spaccato due
   permessi perché una frase fosse esprimibile, e la stessa frase, sugli appunti,
-  non lo è (§26.6).
+  non lo era (§26.6 — la terza spaccatura l'ha fatta la
+  [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md)).
 * La [0140](../decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md) ha
   deciso dove stanno i byte di un kind di terzi, e il carico di un rilascio non
   ha nessuna chiave (§26.7).
@@ -141,9 +148,10 @@ non lette, dicono che *«nel component model aggiungere un caso a un `variant`
 non è nemmeno additivo davvero; la regola che questo progetto ha scelto
 (`abi_compatible`) dice che lo è»*. Chi sceglie una di quelle forme si appoggia
 alla riga più debole della tabella, e deve saperlo: regge la lettera, non lo
-spirito. Una sola voce ha una scadenza più vicina del freeze, ed è la §26.6: la
-sua finestra a costo zero si chiude col **primo manifest** che scriva
-`fub:clipboard`, cioè prima di M3, non insieme.
+spirito. Una sola voce aveva una scadenza più vicina del freeze, ed era la
+§26.6: la sua finestra a costo zero si chiudeva col **primo manifest** che
+scrivesse `fub:clipboard`, cioè prima di M3, non insieme. È stata chiusa per
+prima, e con la finestra ancora aperta.
 
 ---
 
@@ -1000,152 +1008,59 @@ appoggiarsi, né in TypeScript né in Rust.
 
 ### 26.6 Gli appunti sono una spunta sola, e le domande sono due
 
-*aperta · strato **contratto** · **P0** (il motivo non è il freeze — vedi §5)*
+*chiusa dalla [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md) ·
+strato **contratto** · **P0***
 
-**1. La domanda.** «Può leggere e scrivere gli appunti di sistema» è **una**
-domanda o **due**? Cioè: il nome del permesso è `fub:clipboard`, o sono
-`fub:read-clipboard` e `fub:write-clipboard`?
+## Com'è finita, e cosa lascia
 
-**2. Che cosa si osserva oggi, misurato.** Censimento a `3d6df0e`.
+La domanda era se «può leggere e scrivere gli appunti di sistema» fosse una
+domanda o due. **Sono due**, e la forma presa è la (a) che la voce stessa
+raccomandava: `fub:clipboard` non esiste più, al suo posto ci sono
+`fub:read-clipboard` e `fub:write-clipboard`, e `permission::ALL` passa da
+tredici a quattordici.
 
-**Il nome c'è, ed è già davanti all'utente.**
-`crates/fub-abi/src/options.rs:351` — `permission::CLIPBOARD = "fub:clipboard"`,
-quarta riga di `permission::ALL: [&str; 13]` (`options.rs:454-468`, annotato a
-`:433` col conto `permessi-dichiarabili` e ripetuto in `docs/glossario.md:471`).
-La frase che l'utente legge è `frontend/src/i18n/strings.ts:264` — *«Può leggere
-e scrivere gli appunti di sistema»* (`:619` in inglese) — e il pannello che la
-disegna esiste, `frontend/src/ui/permessi.ts:54` e `:85`. **Non è una stringa
-morta: è una riga vera in una scheda vera, e in quella riga ci sono due verbi.**
+**La premessa ha retto per intero**, ed è il primo caso di questa specie dopo la
+seduta 24, che aveva insegnato a diffidarne. Rimisurata sui sorgenti del
+2026-08-11: il nome c'era con quella grafia, la frase con due verbi era davanti
+all'utente in due lingue, nessuna capacità lo consumava, il contratto non lo
+nominava (`grep -c clipboard` su `abi.wit` e su `wit/frozen/0.1.0.wit` → zero
+prima e zero adesso), e nessuno dei cinque verbali che nominano gli appunti
+aveva mai posto la domanda della grana.
 
-**Nessuna capacità lo consuma, e questo è dichiarato.**
-`crates/fub-kernel/src/host/guard.rs:65` — `Capability` ha 19 varianti;
-`Capability::permission()` (la `fn` comincia a `guard.rs:189`) rende un permesso
-per 11 famiglie e ne nomina **9**. `CLIPBOARD`, `CAMERA`, `MICROPHONE`,
-`EXTERNAL_FS` sono i quattro che non compaiono mai, e **restano apposta**: la
-prosa che lo dice sta accanto all'elenco, in
-`crates/fub-abi/src/options.rs:448-453` — *«il verso opposto **non** è
-presidiato e non deve esserlo … toglierli perché "non fanno niente" vorrebbe
-dire scoprire il giorno della prima capacità che il nome era libero»* — e il
-banco che tiene onesto il verso buono la ripete in casa propria, a
-`guard.rs:1438-1442`, sopra `ogni_permesso_di_una_famiglia_e_nominato`. *Due
-copie della stessa frase in due crate: chi cita l'una citi anche l'altra, perché
-una sola delle due si trova cercando `Capability`.*
+**Il prezzo dichiarato era esatto, e si è pagato tutto**: sei posti — il
+contratto, i due elenchi della shell, le due chiavi i18n per due lingue, il
+conto `permessi-dichiarabili` nei suoi punti di prosa, la riga di
+[strozzature.md](strozzature.md) dove i permessi senza famiglia erano quattro e
+sono cinque, e il commento gemello accanto a
+`ogni_permesso_di_una_famiglia_e_nominato`. Zero manifest migrati, zero WIT
+toccato. Il presidio `i_permessi_sono_gli_stessi_di_qua_e_di_la` si è aggiornato
+da sé perché legge i due elenchi invece di conoscerli, ed è stato verificato
+rosso togliendo `"fub:write-clipboard"` dal solo lato della shell.
 
-**E quelle due copie non sono un'opinione del codice: sono la copia di un
-verbale.** La [0098](../decisions/0098-un-permesso-si-vede-e-si-nega.md)
-(`:268-272`) ha **deciso** di non presidiare il verso opposto — *«`fub:camera`,
-`fub:microphone`, `fub:clipboard` e `fub:external-fs` sono nomi che nessuna
-famiglia consuma ancora, e pretendere la corrispondenza piena costringerebbe a
-toglierli»* — e la [0021](../decisions/0021-il-confine.md) (`:209`) l'aveva già
-scritto prima: *«non governano niente, e non è una dimenticanza»*. Va detto
-subito, perché cambia la forma della domanda: **che `fub:clipboard` esista senza
-capacità è deciso**, e questa voce non lo rimette in discussione. Ciò che
-nessuno dei due verbali ha mai posto è se quel nome sia **uno** o **due**.
+**Quello che la voce non diceva, e che si vede solo aprendo il file**: la
+seconda tabella della shell (`FRASI`) è un `Record<Permesso, Chiave>` esaustivo,
+quindi il prezzo della shell non era pagabile a metà nemmeno volendo. È il
+motivo per cui questa era la voce più economica delle otto: due dei sei posti li
+tiene insieme il compilatore, e un terzo un banco.
 
-**Nel contratto, zero.** `grep -c clipboard` su `crates/fub-abi/wit/fub/abi.wit`
-→ **0**; su `wit/frozen/0.1.0.wit` → **0**; su `crates/fub-abi/src/traits.rs` →
-**0**; su `crates/fub-sdk/src/*.rs` → **0**. Le uniche quattro occorrenze in
-`crates/` sono tre in `options.rs` e una in un commento di `guard.rs`.
+**Cosa non è stato deciso, perché era già deciso altrove.** Che quei nomi non
+abbiano una capacità che li consumi resta come l'hanno scritto la
+[0021](../decisions/0021-il-confine.md) e la
+[0098](../decisions/0098-un-permesso-si-vede-e-si-nega.md); la capacità vera nel
+WIT — la forma (d) — resta fuori per la ragione della
+[0013](../decisions/0013-elenco-delle-capacita.md), ed è indipendente nel verso
+che conta: si può avere il nome giusto oggi e la capacità fra un anno, il
+contrario no.
 
-**E ciò che la shell sa fare è un ramo cablato.** Un solo
-`navigator.clipboard.writeText`, in `frontend/src/ui/intents.ts:72`, raggiunto
-da `applyIntent` con un `if` su un `ns` letterale (`intents.ts:42`,
-`if (intent.ns === SETTINGS_EXPORT_NS)`); qualunque altro `ns` finisce nel
-`console.info` di riga 49.
+**La casella che resta**, e sono i diciassette gesti di appunti che il corpus
+chiede in sette degli otto file:
 
-**Cosa chiede il corpus:** **17** gesti di appunti in **7** degli 8 file
-(`editor-di-testo.md:48,52,53,56`; `markdown-e-preview.md:29,33`;
-`canvas-e-database.md:25,41`; `app-e-piattaforma.md:19`;
-`media-e-allegati.md:16`; `vault-ed-esploratore.md:40,41,42`;
-`block-editor-parita.md:56,119,136,154`). Tutti e diciassette, oggi, devono
-essere core.
-
-**Come si rimisura.**
-
-```sh
-grep -n 'CLIPBOARD\|clipboard' crates/fub-abi/src/options.rs
-grep -c clipboard crates/fub-abi/wit/fub/abi.wit crates/fub-abi/wit/frozen/0.1.0.wit
-grep -n 'fn permission' -A 20 crates/fub-kernel/src/host/guard.rs
-grep -n 'permission.clipboard' frontend/src/i18n/strings.ts
-grep -rn 'clipboard' frontend/src/ui/intents.ts
-```
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Spaccare il nome adesso, senza capacità** — `fub:read-clipboard` e
-      `fub:write-clipboard` al posto di `fub:clipboard`. Paga **chi mantiene il
-      contratto**, e il prezzo è **misurato e piccolo**: `permission::ALL` da 13
-      a 14; `PERMESSI`/`FRASI` in `ui/permessi.ts` da 13 a 14 (il compilatore TS
-      obbliga la seconda tabella, che è un `Record<Permesso, Chiave>`
-      esaustivo); due chiavi i18n × due lingue al posto di una × due; il conto
-      `permessi-dichiarabili` in due posti (`glossario.md:471`,
-      `options.rs:433`); e il presidio
-      `i_permessi_sono_gli_stessi_di_qua_e_di_la`
-      (`crates/fub-host/tests/interruttori.rs:258`) si aggiorna da sé, perché
-      legge i due elenchi. **Zero manifest da migrare: nessuno lo dichiara
-      ancora.** Nessuna firma tocca il WIT.
-- [ ] **(b) Un nome solo adesso, e si spacca il giorno della capacità.** Paga
-      **chi avrà scritto un manifest nel frattempo**: la migrazione. E paga il
-      rischio della 0095 al contrario — spaccare un permesso che qualcuno ha già
-      ottenuto vuol dire **togliergli** qualcosa che aveva.
-- [ ] **(c) Non spaccare mai, e appoggiare la lettura a un altro cancello.** È
-      la strada che la 0095 ha esaminato e scartato per `read-vault`, con
-      l'argomento riusabile: *«un permesso riusato è economico finché la sua
-      grana è quella giusta; quando non lo è, il riuso non è parsimonia, è una
-      decisione presa di nascosto»*.
-- [ ] **(d) La capacità vera adesso** — `interface host-clipboard` nel WIT con
-      `read`/`write`. Paga **chi mantiene il contratto**, e **questa sì scade
-      col freeze**: un'interfaccia nuova non è additiva. La
-      [0013](../decisions/0013-elenco-delle-capacita.md) la tiene fuori finché
-      nessun cliente la chiede — *«una capacità concessa a nessuno è superficie
-      da mantenere e sandboxare per sempre»*.
-
-**4. Che cosa il repo ha già deciso qui vicino.** Il repo **sa** spaccare, e
-l'ha fatto due volte per questa ragione esatta: la
-[0095](../decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md) ha spaccato una
-famiglia in due perché *«può sapere che nota guardo, non cosa ci sto scrivendo»*
-fosse una frase esprimibile, e la
-[0096](../decisions/0096-una-bozza-non-e-una-nota.md) l'ha rifatto per le bozze;
-il criterio sta scritto e citato tre volte (`options.rs:404-419`,
-`guard.rs:72-90`). La [0021](../decisions/0021-il-confine.md) ha reso i permessi
-una **mappa con parametro** apposta perché l'elenco crescesse senza toccare il
-contratto, e a `0021:209` elenca `fub:clipboard` fra i quattro che *«non
-governano niente»* — **un buco dichiarato, non una decisione**. Nessuno dei
-cinque verbali che nominano gli appunti chiede: *leggere e scrivere sono la
-stessa domanda?*
-
-**5. Reversibile? La forma (a) non scade col freeze — e ha lo stesso una
-scadenza, che è più vicina.** Un permesso è una stringa dell'`OptionMap` del
-manifest, non una firma: la 0095 ha fatto questa mossa esatta e il suo verbale
-lo scrive, *«Nessuna firma cambia. Non c'è ritaglio del congelato»*. **Ma la
-finestra a costo zero non è quella del freeze: si chiude col primo manifest che
-scrive `fub:clipboard`**, e i manifest cominciano a esistere con M3. Per questo
-è **P0** — non perché il freeze la tocchi, ma perché la sua scadenza cade
-**prima** di M3, non insieme.
-
-**6. La raccomandazione: (a), adesso.** È l'unica delle quattro il cui prezzo si
-conosce tutto (sei posti, tutti misurati sopra) e il cui prezzo **cresce con il
-tempo invece di calare**. La (d) non va fatta adesso per la ragione della 0013,
-ed è indipendente: si può avere il nome giusto oggi e la capacità fra un anno;
-il contrario no.
-
-**7. Che cosa resta rotto se non si decide.** Un utente che vuole dare a un
-plugin il diritto di **mettere** un link negli appunti gli dà anche il diritto
-di **leggere** ciò che ha copiato da qualunque altra applicazione: la password
-appena presa dal gestore di password, l'IBAN, il token di accesso. Ed è peggio
-che nel caso della selezione, su un punto misurabile: la selezione viene dal
-vault, dove `ViewContext.doc` dà almeno un percorso da confrontare con una
-allowlist; gli appunti non hanno **nessun campo** da filtrare. Il recinto per la
-lettura degli appunti è, per costruzione, solo il sì/no — e oggi quel sì/no è
-attaccato anche alla scrittura.
-
-*Quello che si diceva e che non regge.* Che «gli appunti non sono nel
-contratto»: il permesso c'è, è il quarto di tredici, ed è mostrato all'utente
-con la sua frase. Ciò che non c'è è la **capacità**, e ciò che non è deciso è la
-**grana**. Che `fub:clipboard` sia una dimenticanza da togliere: no, ed è
-scritto in due punti (`options.rs:450-457`, `guard.rs:1439-1444`) che resta
-apposta. Ciò che quei due punti non hanno mai scritto è che il nome giusto
-potrebbe essere **due**.
+- [ ] **Quando nasce la capacità degli appunti, sono due famiglie e non una, e
+      la lettura non ha parametro.** Oggi tutti e diciassette devono essere
+      core, e la shell sa fare `navigator.clipboard.writeText` in un punto solo
+      (`frontend/src/ui/intents.ts:72`), dietro un `if` su un `ns` letterale.
+      Questa voce ha dato il nome giusto al recinto; costruirlo è un'altra
+      volta.
 
 ---
 

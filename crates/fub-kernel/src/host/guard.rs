@@ -1436,10 +1436,16 @@ mod tests {
     /// esattamente il difetto da cui questa voce è nata, ripetuto in silenzio.
     ///
     /// Il verso opposto **non** si presidia, ed è deliberato: `fub:camera`,
-    /// `fub:microphone`, `fub:clipboard` e `fub:external-fs` sono nomi che
-    /// nessuna famiglia consuma ancora, e pretendere la corrispondenza piena
-    /// costringerebbe a toglierli — cioè a lasciare liberi quattro nomi che
-    /// qualcun altro potrebbe prendersi.
+    /// `fub:microphone`, `fub:read-clipboard`, `fub:write-clipboard` e
+    /// `fub:external-fs` sono nomi che nessuna famiglia consuma ancora, e
+    /// pretendere la corrispondenza piena costringerebbe a toglierli — cioè a
+    /// lasciare liberi cinque nomi che qualcun altro potrebbe prendersi.
+    ///
+    /// E un nome tenuto senza famiglia va tenuto **della grana giusta**: gli
+    /// appunti erano uno e sono due dalla 0144, perché una spunta sola diceva
+    /// insieme *«può incollare»* e *«può leggere ciò che hai copiato»*, e la
+    /// grana di un permesso si corregge gratis solo finché nessun manifest l'ha
+    /// scritto.
     #[test]
     fn ogni_permesso_di_una_famiglia_e_nominato() {
         for cap in Capability::ALL {

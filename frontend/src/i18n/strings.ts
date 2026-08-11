@@ -262,7 +262,9 @@ const IT = {
   "permission.write-vault":
     "Può cambiare le tue note: scriverle, crearne di nuove, rinominarle e cestinarle.",
   "permission.network": "Può connettersi a internet e mandare fuori ciò che legge.",
-  "permission.clipboard": "Può leggere e scrivere gli appunti di sistema.",
+  "permission.read-clipboard":
+    "Può leggere gli appunti di sistema: ciò che hai copiato da qualunque applicazione.",
+  "permission.write-clipboard": "Può copiare del testo negli appunti di sistema.",
   "permission.camera": "Può usare la fotocamera.",
   "permission.microphone": "Può usare il microfono.",
   "permission.external-fs": "Può leggere e scrivere file fuori dal vault.",
@@ -618,7 +620,9 @@ const EN: Record<Chiave, string> = {
   "permission.write-vault":
     "It can change your notes: write them, create new ones, rename them and move them to the trash.",
   "permission.network": "It can connect to the internet and send out what it reads.",
-  "permission.clipboard": "It can read and write the system clipboard.",
+  "permission.read-clipboard":
+    "It can read the system clipboard: whatever you copied, from any application.",
+  "permission.write-clipboard": "It can copy text to the system clipboard.",
   "permission.camera": "It can use the camera.",
   "permission.microphone": "It can use the microphone.",
   "permission.external-fs": "It can read and write files outside the vault.",

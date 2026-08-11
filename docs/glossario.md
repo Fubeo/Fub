@@ -497,10 +497,11 @@ vietato, non caro e non previsto.
 `permission::*` · [`abi/options.rs:18`](../crates/fub-abi/src/options.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La stringa con cui un manifest chiede una capacità: `fub:read-vault`,
-`fub:write-vault`, `fub:network`, `fub:clipboard`, `fub:run-command`… È il lato
+`fub:write-vault`, `fub:network`, `fub:read-clipboard`, `fub:run-command`… È il
+lato
 dichiarativo di ciò che la [famiglia](#famiglia) è dal lato dei tipi.
 
-Sono **tredici** [conta: permessi-dichiarabili], e l'elenco è chiuso: sta in
+Sono **quattordici** [conta: permessi-dichiarabili], e l'elenco è chiuso: sta in
 `permission::ALL`, e ciò che non è lì dentro un manifest lo può scrivere ma
 nessun cancello lo consuma.
 

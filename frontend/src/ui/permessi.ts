@@ -51,7 +51,8 @@ export const PERMESSI = [
   "fub:read-vault",
   "fub:write-vault",
   "fub:network",
-  "fub:clipboard",
+  "fub:read-clipboard",
+  "fub:write-clipboard",
   "fub:camera",
   "fub:microphone",
   "fub:external-fs",
@@ -71,8 +72,8 @@ export type Permesso = (typeof PERMESSI)[number];
 /// È la regola che `strings.test.ts` pretende e che `REACH_KEYS` in
 /// `ui/palette.ts` ha inaugurato: una chiave che si compone è una chiave che
 /// nessun presidio sa cercare, e che quindi nessuno sa cancellare il giorno in
-/// cui la riga sparisce. Qui paga due volte, perché queste tredici frasi sono
-/// insieme le più facili da lasciare marcire e le più gravi.
+/// cui la riga sparisce. Qui paga due volte, perché queste quattordici frasi
+/// sono insieme le più facili da lasciare marcire e le più gravi.
 ///
 /// Che l'elenco dei nomi sia scritto **due** volte — qui e in [`PERMESSI`] — non
 /// è un doppione che possa divergere: `Record<Permesso, Chiave>` non compila se
@@ -82,7 +83,8 @@ export const FRASI: Record<Permesso, Chiave> = {
   "fub:read-vault": "permission.read-vault",
   "fub:write-vault": "permission.write-vault",
   "fub:network": "permission.network",
-  "fub:clipboard": "permission.clipboard",
+  "fub:read-clipboard": "permission.read-clipboard",
+  "fub:write-clipboard": "permission.write-clipboard",
   "fub:camera": "permission.camera",
   "fub:microphone": "permission.microphone",
   "fub:external-fs": "permission.external-fs",
