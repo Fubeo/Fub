@@ -274,6 +274,32 @@ pub trait VaultStorage: Send + Sync {
         self.stat(path).is_ok()
     }
 
+    /// Questi due path nominano **lo stesso file**?
+    ///
+    /// È la domanda che [`exists`](VaultStorage::exists) non sa fare, e senza la
+    /// quale ogni guardia «la destinazione è occupata?» sbaglia sulla rinomina
+    /// che corregge una maiuscola: `nota.md` → `Nota.md` trova sé stessa dove il
+    /// supporto non distingue il caso (APFS, NTFS), e trova un file davvero
+    /// diverso dove lo distingue (ext4). Chi risponde guardando il **nome** —
+    /// un `to_lowercase`, o la chiave di risoluzione — risponde per la
+    /// piattaforma di chi ha scritto la riga, non per quella su cui gira; e la
+    /// differenza fra le due risposte è una bozza cancellata di là e un
+    /// documento seppellito di qua (difetti 0165 e 0182).
+    ///
+    /// Il default è l'uguaglianza dei path, che è la risposta **giusta** per
+    /// ogni supporto che tratti un path come una chiave esatta — [`MemStorage`]
+    /// e ogni supporto che ci si appoggi. Chi piega i nomi lo deve dire qui,
+    /// come lo dice in `read` e in `write`: un supporto che risponde a due nomi
+    /// con lo stesso contenuto e a questa domanda con «sono due» è un supporto
+    /// che si contraddice.
+    ///
+    /// Non risale un errore: «non lo so» e «no» sono la stessa cosa per chi
+    /// chiama, perché la guardia che ne segue è comunque quella prudente — si
+    /// crede che siano due file, e la rinomina si ferma invece di sovrascrivere.
+    fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
+        a == b
+    }
+
     /// Toglie una cartella e tutto ciò che contiene.
     ///
     /// Ha un default composto dalle altre — si cammina e si toglie — perché
@@ -535,6 +561,79 @@ pub fn nomi_del_file(path: &Utf8Path, meta: &std::fs::Metadata) -> NomiDelFile {
     }
 }
 
+/// **Chi è** il file a questo path, secondo la piattaforma: il volume e il
+/// numero che lo distinguono dagli altri file dello stesso volume.
+///
+/// È la sola risposta possibile alla domanda «questi due path nominano lo stesso
+/// file?», e nessun confronto fra stringhe la sostituisce: se `nota.md` e
+/// `Nota.md` siano un posto o due lo decide **il filesystem** — APFS e NTFS
+/// dicono uno, ext4 due, e sullo stesso volume APFS può dire l'una o l'altra
+/// perché la sensibilità al caso si sceglie a formattazione. Un `to_lowercase()`
+/// scritto al posto di questa funzione risponderebbe per la piattaforma su cui
+/// gira chi lo ha scritto.
+///
+/// `None` è «non lo so», e comprende il file che non c'è: chi la chiama non deve
+/// poterlo confondere con un'identità: due `None` **non** sono lo stesso file.
+/// È la stessa distinzione di [`NomiDelFile::Ignoto`] e per la stessa ragione —
+/// davanti a un dubbio si paga ciò che si vede, e ciò che si vede è un file
+/// seppellito.
+///
+/// Segue i collegamenti di proposito, al contrario di [`cosa_c_e`]: la domanda è
+/// «dove si finisce a scrivere», e chi scrive attraverso un symlink scrive nel
+/// file puntato.
+pub fn identita_del_file(path: &Utf8Path) -> Option<Identita> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = std::fs::metadata(path).ok()?;
+        Some(Identita {
+            volume: meta.dev() as u64,
+            file: meta.ino(),
+        })
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+        };
+
+        // Come per il conteggio dei nomi (§23.16), su questa piattaforma
+        // l'identità sta dietro un handle: i metadati di `std` non la portano.
+        let file = std::fs::File::open(path).ok()?;
+        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        // SAFETY: l'handle è vivo per tutta la chiamata (`file` non cade prima),
+        // e `info` è una struttura del chiamante che la funzione riempie.
+        let esito = unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) };
+        if esito == 0 {
+            return None;
+        }
+        Some(Identita {
+            volume: info.dwVolumeSerialNumber as u64,
+            file: ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+        })
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// L'identità di un file: il volume e il numero che lo distingue là dentro.
+///
+/// Due path con la stessa [`Identita`] sono lo stesso file, comunque siano
+/// scritti; due path con identità diverse sono due file, anche se i byte dentro
+/// sono gli stessi.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Identita {
+    /// Il volume: `st_dev` su unix, il numero di serie del volume su Windows.
+    /// Senza, due file su due dischi diversi possono avere lo stesso numero.
+    pub volume: u64,
+    /// Il file dentro il volume: l'inode su unix, l'indice del file su Windows.
+    pub file: u64,
+}
+
 impl FsStorage {
     /// Il corpo di [`VaultStorage::write`], col **rilevatore passato** invece
     /// che nominato.
@@ -785,6 +884,24 @@ impl VaultStorage for FsStorage {
 
     fn exists(&self, path: &Utf8Path) -> bool {
         path.exists()
+    }
+
+    /// **Qui il default non basta**, ed è l'unico supporto per cui non basta:
+    /// il filesystem è l'unico che decide da sé se due nomi siano un posto o
+    /// due, e lo dice con [`identita_del_file`]. Due path uguali sono lo stesso
+    /// file senza chiedere niente — anche se non c'è niente là — e per gli altri
+    /// si va a guardare l'inode.
+    fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
+        if a == b {
+            return true;
+        }
+        match (identita_del_file(a), identita_del_file(b)) {
+            (Some(a), Some(b)) => a == b,
+            // Un file che non c'è, o un'identità che la piattaforma non sa
+            // dare: vedi il doc di `identita_del_file`, due «non lo so» non
+            // sono lo stesso file.
+            _ => false,
+        }
     }
 
     fn remove_dir_all(&self, dir: &Utf8Path) -> io::Result<()> {
