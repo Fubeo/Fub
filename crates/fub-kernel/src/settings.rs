@@ -878,7 +878,7 @@ pub type SharedSettings = Arc<RwLock<SettingsStore>>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{write_atomic, FsStorage};
+    use crate::storage::{write_atomic, FsStorage, Stat};
     use fub_abi::settings::SettingKind;
 
     fn store_su(dir: &Utf8Path) -> SettingsStore {
@@ -931,7 +931,7 @@ mod tests {
         fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
             self.0.read(path)
         }
-        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
             self.0.write(path, bytes)
         }
         fn update(
@@ -974,7 +974,7 @@ mod tests {
         fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
             self.0.read(path)
         }
-        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
             self.0.write(path, bytes)
         }
         fn update(

@@ -124,7 +124,7 @@ fn un_file_con_piu_nomi_non_si_sostituisce_dovunque_giri_questo_test() {
     let nota = root.join("Idea.md");
     FsStorage.write(&nota, b"prima").unwrap();
 
-    let come = FsStorage
+    let (come, _) = FsStorage
         .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::PiuDiUno)
         .unwrap();
 
@@ -148,7 +148,7 @@ fn un_conteggio_che_non_si_sa_non_e_un_nome_solo() {
     let nota = root.join("Idea.md");
     FsStorage.write(&nota, b"prima").unwrap();
 
-    let come = FsStorage
+    let (come, _) = FsStorage
         .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::Ignoto)
         .unwrap();
 
@@ -168,7 +168,7 @@ fn un_nome_solo_compra_l_atomicita() {
     let nota = root.join("Idea.md");
     FsStorage.write(&nota, b"prima").unwrap();
 
-    let come = FsStorage
+    let (come, _) = FsStorage
         .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::Uno)
         .unwrap();
 
@@ -185,7 +185,7 @@ fn a_un_file_che_non_c_e_non_si_chiede_niente() {
     let nota = root.join("sotto/Nuova.md");
     let chiesto = std::cell::Cell::new(false);
 
-    let come = FsStorage
+    let (come, _) = FsStorage
         .write_con(&nota, b"prima", cosa_c_e, |_, _| {
             chiesto.set(true);
             NomiDelFile::PiuDiUno
@@ -223,7 +223,7 @@ fn su_un_collegamento_il_conteggio_non_si_chiede() {
     std::os::unix::fs::symlink(&vera, &collegata).unwrap();
     let chiesto = std::cell::Cell::new(false);
 
-    let come = FsStorage
+    let (come, _) = FsStorage
         .write_con(&collegata, b"seconda", cosa_c_e, |_, _| {
             chiesto.set(true);
             NomiDelFile::Uno

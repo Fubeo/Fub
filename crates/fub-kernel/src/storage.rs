@@ -203,7 +203,18 @@ pub trait VaultStorage: Send + Sync {
     /// sopravvivere, e uno che scrive su un disco vero la deve. Vedi
     /// [`FsStorage::write`] per cosa costa darla e per i due casi in cui il
     /// prezzo si rifiuta di pagarlo.
-    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()>;
+    ///
+    /// # Perché torna uno [`Stat`] e non `()`
+    ///
+    /// Perché **chi ha appena scritto sa già cosa c'è a quel path**, e chi lo
+    /// richiedesse con una [`stat`](VaultStorage::stat) non otterrebbe la stessa
+    /// risposta: fra la scrittura e la domanda ci sta la cancellazione di un
+    /// altro processo, e chi teneva un elenco di ciò che esiste si sentiva dire
+    /// «non c'è» di un file che aveva appena posato — dopo aver risposto `Ok` e
+    /// aver annunciato la modifica (difetto 0179). La dimensione la sanno i
+    /// byte; la **data** la sa solo il supporto, e solo mentre il file che ha
+    /// scritto è ancora quello suo.
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat>;
 
     /// **Rilegge, fonde, riscrive** — sotto un lucchetto che tiene fuori chi sta
     /// aggiornando lo stesso file.
@@ -651,7 +662,11 @@ impl FsStorage {
     ///
     /// Restituisce la strada presa perché è l'unica cosa osservabile della
     /// scelta che non richieda di guardare un inode — cioè l'unica che un banco
-    /// possa presidiare anche dove gli inode non ci sono.
+    /// possa presidiare anche dove gli inode non ci sono. Accanto le va lo
+    /// [`Stat`] di **ciò che si è scritto**, preso dal descrittore ancora aperto
+    /// e non dal path: sul ramo che sostituisce, quel descrittore è il
+    /// temporaneo prima della rename, cioè il solo file che nessun altro
+    /// processo può aver già tolto (difetto 0179).
     ///
     /// **Anche `cosa_c_e` è passato**, per la ragione del rilevatore portata
     /// fino in fondo: la lettura di ciò che sta già al path è l'altra syscall di
@@ -667,7 +682,7 @@ impl FsStorage {
         bytes: &[u8],
         cosa_c_e: impl Fn(&Utf8Path) -> io::Result<std::fs::Metadata>,
         nomi: impl Fn(&Utf8Path, &std::fs::Metadata) -> NomiDelFile,
-    ) -> io::Result<ComeScrivere> {
+    ) -> io::Result<(ComeScrivere, Stat)> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -690,11 +705,11 @@ impl FsStorage {
             let mut file = std::fs::File::create(path)?;
             file.write_all(bytes)?;
             file.sync_all()?;
-            return Ok(come);
+            return Ok((come, stat_con(EntryKind::File, &file.metadata()?)));
         }
 
         let tmp = tmp_path(path);
-        let scritto = (|| -> io::Result<()> {
+        let scritto = (|| -> io::Result<Stat> {
             let mut file = std::fs::File::create(&tmp)?;
             file.write_all(bytes)?;
             if let Some(meta) = &esistente {
@@ -702,12 +717,19 @@ impl FsStorage {
                 // chiavetta) non è una ragione per non salvare la nota.
                 let _ = std::fs::set_permissions(&tmp, meta.permissions());
             }
-            file.sync_all()
+            file.sync_all()?;
+            // La data si chiede **al descrittore, prima della rename**: dopo, il
+            // path può già essere di qualcun altro, e la rename non cambia
+            // l'mtime del file che porta con sé.
+            Ok(stat_con(EntryKind::File, &file.metadata()?))
         })();
-        if let Err(e) = scritto {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(e);
-        }
+        let stat = match scritto {
+            Ok(stat) => stat,
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(e);
+            }
+        };
         if let Err(e) = std::fs::rename(&tmp, path) {
             let _ = std::fs::remove_file(&tmp);
             return Err(e);
@@ -717,7 +739,7 @@ impl FsStorage {
                 let _ = dir.sync_all();
             }
         }
-        Ok(come)
+        Ok((come, stat))
     }
 }
 
@@ -781,9 +803,9 @@ impl VaultStorage for FsStorage {
     ///
     /// Il corpo sta in [`FsStorage::write_con`], che prende il rilevatore invece
     /// di nominarlo: qui si passa quello vero.
-    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
         self.write_con(path, bytes, cosa_c_e, nomi_del_file)
-            .map(|_| ())
+            .map(|(_, stat)| stat)
     }
 
     /// Il lucchetto di [`lock_esclusivo`] tenuto per il tempo della rilettura e
@@ -811,7 +833,7 @@ impl VaultStorage for FsStorage {
             Err(e) => return Err(e),
         };
         match fondi(attuale.as_deref())? {
-            Some(bytes) => self.write(path, &bytes),
+            Some(bytes) => self.write(path, &bytes).map(|_| ()),
             None => Ok(()),
         }
     }
@@ -934,6 +956,7 @@ impl VaultStorage for FsStorage {
 pub fn write_atomic(path: &Utf8Path, bytes: &[u8]) -> Result<(), String> {
     FsStorage
         .write(path, bytes)
+        .map(|_| ())
         .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
 }
 
@@ -1268,7 +1291,7 @@ impl VaultStorage for MemStorage {
     /// memoria. È la ragione per cui i test di durabilità stanno su
     /// [`FsStorage`] e non qui: vedi il modulo di
     /// `crates/fub-kernel/tests/il_supporto.rs`.
-    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
         let mut mem = self.lock();
         if mem.dirs.contains_key(path) {
             return Err(io::Error::new(
@@ -1284,7 +1307,11 @@ impl VaultStorage for MemStorage {
         // Anche una riscrittura data la cartella: di là è una rename dentro di
         // essa (§15.2), e una rename è una voce di directory che cambia.
         mem.tocca_il_genitore(path, ora);
-        Ok(())
+        Ok(Stat {
+            kind: EntryKind::File,
+            size: bytes.len() as u64,
+            mtime: ora,
+        })
     }
 
     /// Qui l'aggiornamento è atomico **davvero**, e non per modo di dire come

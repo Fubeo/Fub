@@ -440,10 +440,17 @@ impl Vault {
             .map_err(|e| KernelError::Io { path, source: e })
     }
 
-    pub fn write(&self, id: &DocId, source: &str) -> Result<()> {
+    /// Scrive il sorgente, e rende **dimensione e data di ciò che ha scritto**.
+    ///
+    /// Le due cose tornano da qui e non da una [`stat`](Vault::stat) fatta dopo,
+    /// per la ragione scritta su [`VaultStorage::write`]: chiedere di nuovo al
+    /// disco vuol dire chiedere di un file che nel frattempo può essere un
+    /// altro, o nessuno (difetto 0179).
+    pub fn write(&self, id: &DocId, source: &str) -> Result<(u64, u64)> {
         let path = self.path_for(id)?;
         self.storage
             .write(&path, source.as_bytes())
+            .map(|stat| (stat.size, stat.mtime))
             .map_err(|e| KernelError::Io { path, source: e })
     }
 
@@ -573,6 +580,7 @@ impl Vault {
         .expect("un path è sempre serializzabile");
         self.storage
             .write(&path, json.as_bytes())
+            .map(|_| ())
             .map_err(|e| KernelError::Io { path, source: e })
     }
 

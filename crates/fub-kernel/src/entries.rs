@@ -263,6 +263,7 @@ impl EntryStore {
             // sta scritta una volta sola (§15.1).
             storage
                 .write(path, &json)
+                .map(|_| ())
                 .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
         })
     }

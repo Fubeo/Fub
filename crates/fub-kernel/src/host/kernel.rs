@@ -229,6 +229,7 @@ impl DataWrite for KernelHost<'_> {
         self.ws
             .storage()
             .write(&path, bytes)
+            .map(|_| ())
             .map_err(|e| PluginError::Internal(format!("{path}: {e}").into()))
     }
 

@@ -459,7 +459,11 @@ impl fub_kernel::VaultStorage for SupportoCheConta {
         }
         self.inner.read(path)
     }
-    fn write(&self, path: &camino::Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+    fn write(
+        &self,
+        path: &camino::Utf8Path,
+        bytes: &[u8],
+    ) -> std::io::Result<fub_kernel::storage::Stat> {
         self.inner.write(path, bytes)
     }
     /// Un aggiornamento **rilegge**, quindi conta come una lettura: la potatura

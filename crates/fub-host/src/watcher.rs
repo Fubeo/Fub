@@ -153,6 +153,19 @@ pub enum ExternalChange {
 ///    mano;
 /// 3. **rendere durevole** con un prestito suo.
 ///
+/// # E il lotto sente rientrare le scritture di Fub
+///
+/// Non c'è nessun filtro qui che le tolga, e non ci deve essere: un salvataggio
+/// del kernel è una rename, `notify` la riporta come qualunque altra, e un
+/// rilevatore che provasse a indovinare quali eventi sono suoi si sbaglierebbe
+/// nel verso caro — su una rename fatta da un altro processo nello stesso
+/// momento. A riconoscerle è il kernel, che le riconosce **per impronta**:
+/// `plan_sync` legge il file, e se ne porta l'impronta che l'anagrafe già ha non
+/// parsa niente e la fase 2 non applica niente (difetto 0196). Prima, ogni
+/// salvataggio di ogni nota tornava dentro riletto, riparsato e reingerito, con
+/// un `DocumentChanged` a nome del rilevatore su una modifica che l'utente
+/// aveva appena fatto lui.
+///
 /// La terza fase resta esclusiva, e non per distrazione: `IndexProvider::flush`
 /// riceve un `&mut dyn HostApi`, che il kernel costruisce su `&mut Workspace` —
 /// finché la firma è quella, la durevolezza degli indici *non può* stare fuori

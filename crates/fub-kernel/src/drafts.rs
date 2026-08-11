@@ -207,7 +207,7 @@ impl Drafts {
             text: text.to_string(),
         };
         let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
-        self.storage.write(&self.path(doc), &bytes)
+        self.storage.write(&self.path(doc), &bytes).map(|_| ())
     }
 
     /// Butta la bozza di un documento. Non c'era: non è un errore — chi salva
@@ -340,7 +340,7 @@ impl Drafts {
                 // che chi cammina la cartella legga il caso nuovo, e poi ci si
                 // scrive dentro il record aggiornato.
                 self.storage.rename(&vecchio, &nuovo)?;
-                return self.storage.write(&nuovo, &bytes);
+                return self.storage.write(&nuovo, &bytes).map(|_| ());
             }
             self.storage.write(&nuovo, &bytes)?;
             return self.storage.remove(&vecchio);
