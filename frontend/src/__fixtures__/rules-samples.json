@@ -2179,6 +2179,64 @@
       "out": []
     }
   ],
+  "accordo_canonico": [
+    {
+      "binding": "Mod-Shift-g",
+      "out": "mod-shift-g"
+    },
+    {
+      "binding": "Shift-Mod-g",
+      "out": "mod-shift-g"
+    },
+    {
+      "binding": "Mod-k d",
+      "out": "mod-k d"
+    },
+    {
+      "binding": "Mod-k  d",
+      "out": "mod-k d"
+    },
+    {
+      "binding": "Mod-K",
+      "out": "mod-k"
+    },
+    {
+      "binding": "  Mod-g  ",
+      "out": "mod-g"
+    },
+    {
+      "binding": "Mod-ArrowUp",
+      "out": "mod-arrowup"
+    },
+    {
+      "binding": "Alt-Mod-Shift-p",
+      "out": "alt-mod-shift-p"
+    },
+    {
+      "binding": "Ctrl-k",
+      "out": null
+    },
+    {
+      "binding": "d",
+      "out": null
+    },
+    {
+      "binding": "Mod-",
+      "out": null
+    },
+    {
+      "binding": "Mod-Mod-k",
+      "out": null
+    },
+    {
+      "binding": "",
+      "out": null
+    },
+    {
+      "binding": "   ",
+      "out": null
+    }
+  ],
   "byte_to_utf16": [
     {
       "text": "ascii puro",

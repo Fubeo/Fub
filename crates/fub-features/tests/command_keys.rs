@@ -19,6 +19,12 @@
 //!
 //! Il verbale è la [0081](../../../docs/decisions/0081-un-accordo-ha-un-proprietario.md).
 //!
+//! La forma canonica di un accordo **non è scritta qui**: è una regola del
+//! contratto (`fub_abi::rules::tasti`), tenuta uguale alla copia della shell dal
+//! mirror delle regole. Prima era ricopiata qui e in `shell_keys_mirror.rs`, e
+//! le due copie si annunciavano «come lo normalizza la shell» senza esserlo
+//! (difetto 0148).
+//!
 //! # Cosa NON presidia
 //!
 //! I comandi dei **plugin**. Un plugin dichiara le proprie spec a runtime, e i
@@ -27,6 +33,7 @@
 //! romperlo a chi scrive il codice. Qui stanno i comandi che spediamo noi, per i
 //! quali un conflitto è un difetto e non una convivenza da segnalare.
 
+use fub_abi::rules::tasti::{canonica, oscura};
 use fub_features::commands::CoreCommands;
 use serde_json::{Map, Value};
 
@@ -101,13 +108,14 @@ fn command_keys_fixture_is_in_sync_with_the_command_registry() {
 /// aspettare che qualcuno lanci la suite di là.
 #[test]
 fn no_two_official_commands_want_the_same_chord() {
-    let mut per_accordo: std::collections::HashMap<String, Vec<String>> = Default::default();
+    let mut per_accordo: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    let mut impremibili: Vec<(String, String)> = Vec::new();
     for spec in CoreCommands::specs() {
         if let Some(k) = &spec.keybinding {
-            per_accordo
-                .entry(normalizza(k))
-                .or_default()
-                .push(spec.id.clone());
+            match canonica(k) {
+                Some(chiave) => per_accordo.entry(chiave).or_default().push(spec.id.clone()),
+                None => impremibili.push((spec.id.clone(), k.clone())),
+            }
         }
     }
     let contesi: Vec<_> = per_accordo
@@ -118,18 +126,46 @@ fn no_two_official_commands_want_the_same_chord() {
         contesi.is_empty(),
         "due comandi ufficiali vogliono lo stesso accordo: {contesi:?}"
     );
+
+    // La domanda che prima non si faceva: la forma canonica arrivava da una
+    // copia che normalizzava **qualunque** stringa, quindi un accordo che questa
+    // app non sa premere — `Ctrl-k`, un tasto nudo — passava di qua verde e
+    // moriva di là in silenzio (difetto 0148).
+    assert!(
+        impremibili.is_empty(),
+        "un comando ufficiale dichiara un accordo che questa app non sa \
+         premere, e la shell lo ignorerà senza dirlo a nessuno: {impremibili:?}"
+    );
 }
 
-/// L'accordo in forma canonica, come lo normalizza la shell (`normalizza` in
-/// `ui/commands.ts`): modificatori ordinati e minuscoli, o `Shift-Mod-g` e
-/// `Mod-Shift-g` sarebbero due accordi per la tastiera e uno per le dita.
-fn normalizza(binding: &str) -> String {
-    let mut parti: Vec<&str> = binding.split('-').collect();
-    let Some(tasto) = parti.pop() else {
-        return binding.to_lowercase();
-    };
-    let mut mods: Vec<String> = parti.iter().map(|p| p.to_lowercase()).collect();
-    mods.sort();
-    mods.push(tasto.to_lowercase());
-    mods.join("-")
+/// **Nessun comando ufficiale è irraggiungibile perché un altro lo precede.**
+///
+/// L'altra metà del conflitto, quella che nasce con le sequenze: `Mod-k` e
+/// `Mod-k d` non sono lo stesso accordo, quindi il banco qui sopra non li vede,
+/// ma chi preme `Mod-k` esegue il primo e il secondo non si preme mai. La shell
+/// la sapeva (`prefissiOscurati` in `ui/commands.ts`) e di qua non c'era copia:
+/// il giorno che un comando ufficiale dichiara una sequenza, il rosso arriva a
+/// chi tocca il registro invece che all'utente che preme (difetto 0148).
+#[test]
+fn nessun_accordo_ufficiale_ne_oscura_un_altro() {
+    let dichiarati: Vec<(String, String)> = CoreCommands::specs()
+        .into_iter()
+        .filter_map(|s| s.keybinding.map(|k| (s.id, k)))
+        .collect();
+    let oscurati: Vec<String> = dichiarati
+        .iter()
+        .flat_map(|(id_corto, corto)| {
+            dichiarati
+                .iter()
+                .filter(move |(_, lungo)| oscura(corto, lungo))
+                .map(move |(id_lungo, lungo)| {
+                    format!("«{corto}» ({id_corto}) copre «{lungo}» ({id_lungo})")
+                })
+        })
+        .collect();
+    assert!(
+        oscurati.is_empty(),
+        "un comando ufficiale non si può premere, perché un altro accordo è un \
+         suo prefisso e si esegue prima: {oscurati:?}"
+    );
 }
