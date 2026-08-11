@@ -83,7 +83,7 @@
 //! ciò che non conosce e legge il resto — che è la stessa regola della coda
 //! troncata, qui sotto, applicata a una riga che non è rotta ma è di domani.
 //!
-//! # La coda troncata
+//! # La coda troncata, e perché costa **una riga sola**
 //!
 //! Un crash a metà aggiunta lascia in coda dei byte incompleti — il supporto non
 //! li può evitare ([`VaultStorage::append`]). Il formato li rende riconoscibili:
@@ -92,6 +92,26 @@
 //! non si parsa; ciò che viene prima si legge tutto. È il principio del §15.7:
 //! la verità non si rifiuta di aprire, si apre dicendo cosa non ha letto — e
 //! infatti [`Lettura::scartate`] lo dice.
+//!
+//! Scartare in lettura però non basta, e ciò che manca non è la riga rotta: è
+//! **quella dopo**. Se l'aggiunta seguente cominciasse dai byte del suo JSON si
+//! attaccherebbe in fondo alla riga rotta, e le due diventerebbero una riga
+//! illeggibile sola — un record perso dal crash e un secondo perso da noi. Per
+//! questo il delimitatore sta da **tutte e due** le parti del record: si appende
+//! `\n{…}\n`, cioè un record **si delimita da sé** e chi lo scrive non deve
+//! sapere come è finito chi lo precede. Una riga vuota non è un record e la
+//! lettura la salta già, quindi il file di ieri si legge oggi e il file di oggi
+//! si legge con il lettore di ieri: non è un formato nuovo, è lo stesso formato
+//! che non chiede più a nessuno di essere in buono stato.
+//!
+//! È il posto dove è finita la riparazione che questo modulo faceva
+//! all'apertura — rileggere il file e, se non finiva con `\n`, appendercene uno.
+//! Chiudeva la riga rotta, ma decideva su una lettura fatta **fuori dal
+//! lucchetto**: fra quella lettura e l'aggiunta che riparava ci stava la riga di
+//! un altro processo, che la riparazione si attaccava addosso esattamente come
+//! avrebbe fatto la riga dopo (difetti 0162 e 0163). Un delimitatore che ogni
+//! record si porta davanti non ha nessuna finestra da chiudere: costa un byte
+//! per riga, e all'apertura non costa nessuna lettura.
 //!
 //! # Quanto cresce, e chi lo pota
 //!
@@ -421,7 +441,10 @@ impl Journal {
                 .map(|b| format!("{b:02x}"))
                 .collect(),
         };
-        journal.ripara_la_coda();
+        // Nessuna riparazione della coda, e non è una dimenticanza: un record
+        // porta il proprio delimitatore davanti (vedi [`Journal::append`]),
+        // quindi non c'è niente da chiudere prima di appendere — e la lettura
+        // che avrebbe deciso di chiuderlo starebbe fuori dal lucchetto.
         // Il tetto e basta: qui la finestra **non si sa ancora**. Lo schema di
         // una chiave arriva alla dichiarazione, che è dopo, e leggerne una non
         // dichiarata darebbe un errore — non un default. La potatura per età la
@@ -448,36 +471,6 @@ impl Journal {
             })
             .map(|()| quante)
             .map_err(|e| format!("non riesco a svuotare {}: {e}", self.path))
-    }
-
-    /// Se il file non finisce con un terminatore, ne aggiunge uno.
-    ///
-    /// È la riparazione minima della coda troncata, e serve a **limitare il
-    /// danno a ciò che il crash ha già fatto**: senza, la prima aggiunta dopo la
-    /// riapertura si attaccherebbe in fondo alla riga rotta e le due diventerebbero
-    /// una riga illeggibile sola — cioè un record perso dal crash e un secondo
-    /// perso da noi. Non si toglie niente e non si riscrive niente: la riga rotta
-    /// resta, illeggibile, e la lettura la conta.
-    fn ripara_la_coda(&self) {
-        let raw = match crate::error::se_c_e(self.storage.read(&self.path)) {
-            Ok(Some(raw)) => raw,
-            // Nessun registro: non c'è nessuna coda da chiudere.
-            Ok(None) => return,
-            // Qui l'esito **non** risale — questa è la riparazione minima che
-            // gira all'apertura, e un vault si apre anche senza —, ma non
-            // diventa nemmeno «il registro è vuoto»: chi legge il registro lo
-            // scoprirà da sé, con l'errore vero, perché `read` non lo ingoia.
-            Err(e) => {
-                tracing::warn!(target: "fub.kernel", "registro: non letto per la coda: {e}");
-                return;
-            }
-        };
-        if raw.last() == Some(&b'\n') || raw.is_empty() {
-            return;
-        }
-        if let Err(e) = self.storage.append(&self.path, b"\n") {
-            tracing::warn!(target: "fub.kernel", "registro: coda non chiusa: {e}");
-        }
     }
 
     /// Legge il registro, scartando ciò che non è una riga intera di questa
@@ -512,9 +505,19 @@ impl Journal {
             writer: self.writer.clone(),
             op,
         };
-        let mut riga = serde_json::to_vec(&record).map_err(|e| e.to_string())?;
-        // Il terminatore fa parte del record: senza, l'ultima riga di un file
-        // scritto per intero sarebbe indistinguibile da una troncata a metà.
+        let json = serde_json::to_vec(&record).map_err(|e| e.to_string())?;
+        // I **due** delimitatori fanno parte del record, e ognuno ha il suo
+        // lavoro. Quello in coda dice che la riga è finita: senza, l'ultima riga
+        // di un file scritto per intero sarebbe indistinguibile da una troncata
+        // a metà. Quello in testa dice che la riga **comincia qui**: senza, una
+        // coda lasciata a metà da un crash si porterebbe via anche questo
+        // record, e per evitarlo bisognerebbe prima leggere com'è finito il file
+        // — cioè decidere fuori dal lucchetto ciò che si scrive dentro. Costa un
+        // byte per riga; la riga vuota che ne esce quando il file era intero non
+        // è un record e la lettura la salta (vedi il § in testa al modulo).
+        let mut riga = Vec::with_capacity(json.len() + 2);
+        riga.push(b'\n');
+        riga.extend_from_slice(&json);
         riga.push(b'\n');
         self.storage
             .append(&self.path, &riga)
@@ -580,20 +583,26 @@ impl Journal {
 /// **dentro** il lucchetto del supporto, e ciò che gira là dentro non deve poter
 /// toccare il supporto.
 fn potato(raw: &[u8], giorni: u64) -> Option<Vec<u8>> {
-    // Solo le righe **intere**: ciò che resta senza terminatore lo ha già
-    // chiuso `ripara_la_coda`, quindi qui o è tutto terminato o il file non
-    // si è potuto riparare — e in quel caso non lo si riscrive di certo.
-    let righe: Vec<&[u8]> = raw.split(|b| *b == b'\n').collect();
-    let (Some(ultima), righe) = (righe.last(), &righe[..righe.len().saturating_sub(1)]) else {
+    // Solo un file che finisce per intero si pota: se in coda c'è una riga
+    // lasciata a metà da un crash, non la si riscrive di certo — la prossima
+    // aggiunta si delimita da sé e il file torna potabile da lì.
+    let tutte: Vec<&[u8]> = raw.split(|b| *b == b'\n').collect();
+    let (Some(ultima), tutte) = (tutte.last(), &tutte[..tutte.len().saturating_sub(1)]) else {
         return None;
     };
     if !ultima.is_empty() {
         return None;
     }
+    // Una riga vuota non è un record: è il delimitatore in testa di
+    // [`Journal::append`] visto da qui. Contarla farebbe tagliare al tetto
+    // sbagliato — a metà dei record, con un delimitatore per riga —, e tenerla
+    // nel file riscritto non servirebbe a niente: dopo una riscrittura la coda è
+    // integra per costruzione, e il record che verrà si delimita da sé.
+    let righe: Vec<&[u8]> = tutte.iter().copied().filter(|r| !r.is_empty()).collect();
     let mut taglio = righe
         .len()
         .saturating_sub(TETTO)
-        .max(scadute(righe, giorni));
+        .max(scadute(&righe, giorni));
     if taglio == 0 {
         return None;
     }

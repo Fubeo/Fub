@@ -17,7 +17,10 @@
 //!    riscrittura integrale, cioè l'unica che per costruzione non poteva
 //!    portarlo, e restava verde mentre la modifica chirurgica ce lo metteva
 //!    (§23.9, [0103](../../../docs/decisions/0103-un-registro-dice-cosa-e-successo.md));
-//! 4. **una coda troncata non fa rifiutare il resto** (§15.7);
+//! 4. **una coda troncata non fa rifiutare il resto** (§15.7), **e costa la
+//!    sola riga interrotta**: il record si delimita da sé, quindi chi appende
+//!    dopo un'interruzione non si attacca in fondo a ciò che il crash ha
+//!    lasciato — nemmeno se nessuno riapre il vault (difetti 0162 e 0163);
 //! 5. **la finestra è dell'utente, e il registro si può svuotare.**
 //!
 //! Cosa questi test **non** presidiano, per la ragione di `la_durabilita.rs`:
@@ -278,6 +281,68 @@ fn una_coda_troncata_si_scarta_senza_far_rifiutare_il_resto() {
     assert_eq!(dopo.scartate, 1, "e non se ne perde una seconda");
 }
 
+/// **Un'interruzione costa la riga interrotta, e non anche quella dopo — anche
+/// se nessuno riapre il vault** (difetti 0162 e 0163).
+///
+/// # Cosa era falso
+///
+/// Che il costo fosse limitato dalla riparazione all'apertura. Lo era solo per
+/// chi passava di lì: la coda si tronca quando un processo muore, e l'altro
+/// processo che scrive sullo stesso vault — o questo stesso, dopo una `write`
+/// arrivata a metà — non riapre niente, appende. La sua riga si attaccava in
+/// fondo a quella rotta e diventavano una riga illeggibile sola: due record
+/// persi per un'interruzione sola. E la riparazione stessa decideva su una
+/// lettura fatta fuori dal lucchetto, quindi poteva mangiarsi allo stesso modo
+/// la riga di chi appendeva nel frattempo.
+///
+/// Adesso il record si delimita da sé — `\n{…}\n` — e non c'è più niente da
+/// riparare né da leggere prima di scrivere.
+///
+/// # Chi è stato rosso
+///
+/// Questo banco, con il solo terminatore in coda: zero record contro uno, cioè
+/// la riga nuova mangiata dalla coda rotta.
+#[test]
+fn una_coda_troncata_non_si_porta_via_la_riga_dopo_a_vault_aperto() {
+    let dir = tempfile::tempdir().expect("cartella temporanea");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("path UTF-8");
+    let mut banco = Banco::su(&root).monta();
+    banco
+        .write_document(&doc("a.md"), "uno", WriteBase::Dictated)
+        .unwrap();
+
+    // Un record intero comincia dopo un a capo e finisce con un a capo: è ciò
+    // che rende il prossimo indipendente da come è finito questo.
+    let path = fub_kernel::journal_path(&root);
+    let raw = std::fs::read(&path).expect("il registro c'è");
+    assert_eq!(
+        raw.first(),
+        Some(&b'\n'),
+        "il record porta il proprio inizio"
+    );
+    assert_eq!(raw.last(), Some(&b'\n'), "e la propria fine");
+
+    // Il crash di **un altro** che scrive sullo stesso registro: gli ultimi byte
+    // non sono arrivati sul disco. Il vault qui resta aperto, quindi nessuna
+    // riapertura può rimediare.
+    std::fs::write(&path, &raw[..raw.len() - 12]).expect("tronca");
+
+    banco
+        .write_document(&doc("b.md"), "due", WriteBase::Dictated)
+        .unwrap();
+    let lettura = banco.journal().expect("registro");
+    assert_eq!(
+        lettura.records.len(),
+        1,
+        "la riga appesa dopo il troncamento si legge: {:?}",
+        lettura.records
+    );
+    assert_eq!(
+        lettura.scartate, 1,
+        "e l'interruzione costa la sola riga interrotta"
+    );
+}
+
 /// Il registro sta **direttamente** in `.fub/`, non sotto `.fub/data/`: la
 /// profondità dichiara la classe ([0048](../../../docs/decisions/0048-una-radice-sola.md)),
 /// e un registro di ciò che è successo non si rifà da niente.
@@ -435,9 +500,9 @@ impl fub_kernel::VaultStorage for SupportoCheConta {
 ///
 /// # Perché un tetto e non un'uguaglianza
 ///
-/// Perché le due letture di adesso — `ripara_la_coda`, che guarda l'ultimo byte,
-/// e `pota(0)`, che deve rileggere perché la prima può averci appeso un
-/// terminatore — non sono un numero da difendere: sono il numero che c'è. Ciò
+/// Perché la lettura di adesso — una sola, quella di `pota(0)`, da quando il
+/// record si delimita da sé e non c'è più una coda da chiudere all'apertura —
+/// non è un numero da difendere: è il numero che c'è. Ciò
 /// che va difeso è che non diventino quattro. Un'uguaglianza andrebbe rossa
 /// anche a chi le fonde, cioè proprio a chi migliora la cosa che questo banco
 /// presidia; un tetto va rosso solo a chi la peggiora.
@@ -542,6 +607,49 @@ fn disteso(codice: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// **Aprire il registro non ci scrive dentro** (difetto 0162).
+///
+/// # Perché un conto e non un banco
+///
+/// Perché la corsa che questo tiene fuori non si sa fabbricare — vorrebbe due
+/// processi sullo stesso file, e in memoria `MemStorage` prende lo stesso mutex
+/// per `append` e per `update`, quindi un banco sarebbe verde per la ragione
+/// sbagliata (è la stessa ragione del conto qui sotto). Ciò che si può tenere
+/// fermo è la forma: `Journal::open` **legge e pota**, e non aggiunge byte
+/// decisi da una lettura fatta fuori dal lucchetto. La riparazione della coda
+/// era esattamente quella forma, e il suo posto l'ha preso il delimitatore che
+/// ogni record si porta davanti.
+///
+/// # Chi è stato rosso
+///
+/// Questo conto, con la `journal.ripara_la_coda();` di prima rimessa in
+/// `Journal::open`.
+#[test]
+fn aprire_il_registro_non_ci_scrive_dentro() {
+    const JOURNAL: &str = include_str!("../src/journal.rs");
+
+    let apertura = corpo(
+        JOURNAL,
+        "impl Journal {",
+        "pub(crate) fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> Self {",
+    );
+    let codice: String = apertura
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.starts_with("//"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    for gesto in ["append", "ripara"] {
+        assert!(
+            !codice.contains(gesto),
+            "`Journal::open` nomina «{gesto}»: aprire il registro non ci scrive \
+             dentro, perché ciò che si scriverebbe lo deciderebbe una lettura \
+             fatta fuori dal lucchetto — e fra le due ci sta la riga di chi \
+             appende (difetto 0162). Un record si delimita da sé: {codice}"
+        );
+    }
 }
 
 /// **La potatura non promette un lucchetto che `append` non prende** (difetto
