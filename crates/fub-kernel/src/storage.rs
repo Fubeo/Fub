@@ -1681,7 +1681,7 @@ mod tests {
             let tmp = tmp_path(Utf8Path::new(path));
             let nome = tmp.file_name().expect("il temporaneo ha un nome");
             assert!(
-                tutto.esclude(nome),
+                tutto.esclude(nome, crate::ignore::Specie::File),
                 "{nome}: la scansione lo vedrebbe come un documento nuovo"
             );
         }

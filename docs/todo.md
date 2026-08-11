@@ -460,7 +460,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **quarantasei** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **quarantacinque** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -554,7 +554,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0170 | il cancello che decide se si può scrivere nel vault viene da una bandiera letta **una volta** all'apertura: se il vault diventa illeggibile o di sola lettura dopo, le scritture continuano a partire e falliscono una per una invece di essere fermate, e se lo era e non lo è più restano rifiutate finché non si riapre | `fub-kernel` · `settings.rs` `vault_readable` | regole |
 | 0171 | la prima scrittura in un vault avviene senza lock: quando `.fub/` non esiste ancora, `lock_esclusivo` non ha dove creare il proprio file e il ramo di creazione procede senza protezione, cioè proprio nel momento in cui due installazioni che aprono lo stesso vault nuovo si pestano | `fub-kernel` · `settings.rs` `store_vault` | lock e I/O |
 | 0174 | le chiavi JSON duplicate si perdono in silenzio: la fusione sotto lock rilegge il file e riscrive la mappa, quindi un file scritto a mano (o da un'altra versione) con due volte la stessa chiave ne conserva una sola e l'utente non sa quale delle due ha perso | `fub-kernel` · `settings.rs` `Durevole::aggiorna` | regole |
-| 0176 | l'esclusione guarda il nome e non la specie: una cartella dichiarata esclusa esclude anche i **file** che si chiamano allo stesso modo, e una dichiarazione scritta con lo slash finale — `build/`, la forma che chiunque venga da `.gitignore` scrive per prima — non combacia mai con niente, quindi non esclude un bel niente e nessuno lo dice | `fub-kernel` · `ignore.rs` `is_ignored` | regole |
 | 0180 | se il documento esisteva o no lo decide l'anagrafe in memoria e non il disco: un file creato da un'altra applicazione e non ancora indicizzato fa registrare `Created` dove il fatto è `Written`, e il registro — che la 0067 dichiara autorevole — racconta un evento che non è successo | `fub-kernel` · `workspace.rs` `write_document` | regole |
 | 0181 | `sync_renamed_path_here` sposta prima di rileggere, cioè la forma che il codice stesso documenta come difetto in `restore_from_trash` e lì evita: se la rilettura o il parse della destinazione fallisce, la funzione risponde `Err` con il disco già spostato e memoria, grafo, indici, registro ed eventi fermi al nome vecchio | `fub-kernel` · `workspace.rs` `sync_renamed_path_here` | lock e I/O |
 | 0183 | l'esportazione scrive direttamente sul destinatario: `File::create` tronca il file precedente all'apertura, i byte vanno sul path finale senza temp né rename, e la ricevuta `Delivered` esce dopo un semplice `flush()` che non garantisce niente sul disco — un export interrotto ha già distrutto quello di prima e ne certifica come consegnato uno a metà | `fub-kernel` · `transfer.rs` `DirectorySink::open_artifact` (con `close_artifact`) | lock e I/O |

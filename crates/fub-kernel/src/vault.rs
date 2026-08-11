@@ -11,7 +11,7 @@ use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{KernelError, Result};
-use crate::ignore::IgnorePolicy;
+use crate::ignore::{IgnorePolicy, Specie};
 use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
@@ -334,7 +334,52 @@ impl Vault {
             return false;
         };
         let policy = self.ignore_policy();
-        rel.components().any(|c| policy.esclude(c.as_str()))
+        let mut componenti = rel.components().peekable();
+        while let Some(c) = componenti.next() {
+            let nome = c.as_str();
+            if componenti.peek().is_some() {
+                // Chi sta in mezzo a un path contiene ciò che segue, quindi è
+                // una cartella: non c'è niente da chiedere a nessuno.
+                if policy.esclude(nome, Specie::Cartella) {
+                    return true;
+                }
+            } else {
+                // L'ultimo è il solo componente che può essere un file, e la
+                // sua specie conta soltanto se quel nome è dichiarato fra le
+                // cartelle escluse: è l'unico ramo in cui le due risposte
+                // differiscono, ed è lì — e solo lì — che si chiede al
+                // supporto di cosa si tratti.
+                let escluso = policy.esclude(nome, Specie::File)
+                    || (policy.esclude(nome, Specie::Cartella) && self.e_una_cartella(abs));
+                if escluso {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// L'ultimo componente di un path è una cartella?
+    ///
+    /// Lo sa il supporto, e glielo si chiede **solo quando la risposta cambia
+    /// qualcosa**: cioè solo quando quel nome è dichiarato fra le cartelle
+    /// escluse, che è il solo ramo in cui le due specie non rispondono uguale.
+    /// Sul path di un evento qualunque del rilevatore questa domanda non si fa,
+    /// e la porta d'ingresso del watcher non paga una `stat` per file.
+    ///
+    /// Un path che non c'è più conta come cartella, ed è la scelta
+    /// conservativa detta: se quel nome è dichiarato escluso, ciò che è sparito
+    /// era quasi certamente la cartella dichiarata, e trattarlo come un file
+    /// vorrebbe dire far rientrare dalla porta del rilevatore proprio ciò che
+    /// la scansione tiene fuori — che è il difetto per cui [`is_ignored`]
+    /// esiste.
+    ///
+    /// [`is_ignored`]: Vault::is_ignored
+    fn e_una_cartella(&self, abs: &Utf8Path) -> bool {
+        self.storage
+            .stat(abs)
+            .map(|stat| stat.kind == EntryKind::Dir)
+            .unwrap_or(true)
     }
 
     /// **Tutto** ciò che il vault contiene, in ordine: i file con dimensione e
@@ -376,7 +421,13 @@ impl Vault {
         })?;
         for entry in entries {
             let name = entry.path.file_name().unwrap_or_default();
-            if policy.esclude(name) {
+            // La specie qui è già in mano: la porta la voce di directory, e
+            // l'elenco delle cartelle escluse parla di cartelle (difetto 0176).
+            let specie = match entry.stat.kind {
+                EntryKind::Dir => Specie::Cartella,
+                _ => Specie::File,
+            };
+            if policy.esclude(name, specie) {
                 continue;
             }
             match entry.stat.kind {
@@ -878,6 +929,73 @@ mod tests {
         // La struttura non è nell'elenco e non ci entra: toglierla dalla lista
         // non la rivela.
         assert!(v.is_ignored("/vault/.fub/settings.json".into()));
+    }
+
+    /// **La prima metà della 0176, dalle due porte.** `build/` è la forma che
+    /// scrive per prima chi arriva da un `.gitignore`, e confrontata per
+    /// uguaglianza con il nome che il disco restituisce non combaciava con
+    /// niente: quella riga non escludeva un bel niente, e a dirlo non c'era
+    /// nessuno — un'esclusione che non scatta non dà errore, dà un vault che
+    /// indicizza `build/`.
+    #[test]
+    fn una_cartella_dichiarata_con_lo_slash_resta_fuori_dal_vault() {
+        use fub_abi::settings::SettingValue;
+        let v = vault_che_dichiara(&[(
+            crate::ignore::EXCLUDED_FOLDERS,
+            SettingValue::List(vec!["build/".into()]),
+        )]);
+        for rel in ["build/out.md", "note/Idea.md"] {
+            let path = Utf8Path::new("/vault").join(rel);
+            v.storage().write(&path, b"x").expect("scrittura");
+        }
+        let visti: Vec<String> = v
+            .scan()
+            .expect("scansione")
+            .files
+            .into_iter()
+            .map(|f| f.id.0)
+            .collect();
+        assert_eq!(visti, vec!["note/Idea.md"], "«build/» non escludeva niente");
+        assert!(v.is_ignored("/vault/build/out.md".into()));
+    }
+
+    /// **La seconda metà della 0176, dalle due porte.** L'elenco si chiama
+    /// «cartelle escluse»: un file che si chiama come una di loro è un file di
+    /// questo vault, e toglierlo è toglierlo davvero — niente [`DocId`],
+    /// niente voce d'anagrafe, nessun evento che lo dica.
+    ///
+    /// Le due porte si provano insieme apposta: la scansione la specie ce
+    /// l'ha in mano dalla voce di directory, il watcher ha in mano un path e
+    /// basta, e se le due rispondessero diverso il file rientrerebbe al primo
+    /// salvataggio o sparirebbe al primo evento.
+    #[test]
+    fn un_file_che_si_chiama_come_una_cartella_esclusa_resta_nel_vault() {
+        use fub_abi::settings::SettingValue;
+        let v = vault_che_dichiara(&[(
+            crate::ignore::EXCLUDED_FOLDERS,
+            SettingValue::List(vec!["archivio".into()]),
+        )]);
+        for rel in ["archivio", "note/archivio/vecchia.md", "note/Idea.md"] {
+            let path = Utf8Path::new("/vault").join(rel);
+            v.storage().write(&path, b"x").expect("scrittura");
+        }
+        let visti: Vec<String> = v
+            .scan()
+            .expect("scansione")
+            .files
+            .into_iter()
+            .map(|f| f.id.0)
+            .collect();
+        assert_eq!(
+            visti,
+            vec!["archivio", "note/Idea.md"],
+            "il file «archivio» spariva dal vault insieme alla cartella"
+        );
+        assert!(!v.is_ignored("/vault/archivio".into()));
+        // E la cartella che si chiama come lui resta fuori, dai due versi: il
+        // path del file dentro, e il path della cartella stessa.
+        assert!(v.is_ignored("/vault/note/archivio/vecchia.md".into()));
+        assert!(v.is_ignored("/vault/note/archivio".into()));
     }
 
     /// **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
