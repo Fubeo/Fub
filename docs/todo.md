@@ -449,7 +449,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **cinquantasette** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **cinquantasei** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -547,7 +547,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0171 | la prima scrittura in un vault avviene senza lock: quando `.fub/` non esiste ancora, `lock_esclusivo` non ha dove creare il proprio file e il ramo di creazione procede senza protezione, cioè proprio nel momento in cui due installazioni che aprono lo stesso vault nuovo si pestano | `fub-kernel` · `settings.rs` `store_vault` | lock e I/O |
 | 0172 | `MachineSettings::write` tiene il `values.write()` per tutta la durata dell'I/O: ogni lettore di un'impostazione aspetta il disco invece della sola sostituzione in memoria, e su un supporto lento questo blocca la shell su un'operazione che con la 0066 dovrebbe costare solo la fusione | `fub-kernel` · `settings.rs` `MachineSettings::write` | lock e I/O |
 | 0174 | le chiavi JSON duplicate si perdono in silenzio: la fusione sotto lock rilegge il file e riscrive la mappa, quindi un file scritto a mano (o da un'altra versione) con due volte la stessa chiave ne conserva una sola e l'utente non sa quale delle due ha perso | `fub-kernel` · `settings.rs` `Durevole::aggiorna` | regole |
-| 0175 | `migra` produce doppioni in `order` e in `pinned`: la migrazione riscrive le liste senza deduplicare, quindi un id che era già presente compare due volte e da lì l'ordine dell'esploratore mostra la stessa voce in due posti | `fub-kernel` · `organization.rs` `migra` | regole |
 | 0176 | l'esclusione guarda il nome e non la specie: una cartella dichiarata esclusa esclude anche i **file** che si chiamano allo stesso modo, e una dichiarazione scritta con lo slash finale — `build/`, la forma che chiunque venga da `.gitignore` scrive per prima — non combacia mai con niente, quindi non esclude un bel niente e nessuno lo dice | `fub-kernel` · `ignore.rs` `is_ignored` | regole |
 | 0179 | `touch_entry` ristata il file appena scritto per prenderne mtime e dimensione, e se in quella finestra qualcuno lo elimina risponde togliendo la voce: la scrittura ha risposto Ok, l'evento `DocumentChanged` è uscito, e l'anagrafe dice che il documento non c'è — i byte scritti bastavano a rispondere senza tornare sul disco | `fub-kernel` · `workspace.rs` `touch_entry` | lock e I/O |
 | 0180 | se il documento esisteva o no lo decide l'anagrafe in memoria e non il disco: un file creato da un'altra applicazione e non ancora indicizzato fa registrare `Created` dove il fatto è `Written`, e il registro — che la 0067 dichiara autorevole — racconta un evento che non è successo | `fub-kernel` · `workspace.rs` `write_document` | regole |

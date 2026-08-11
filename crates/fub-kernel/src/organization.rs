@@ -55,6 +55,7 @@
 //!   condividono un prefisso è un indovinello, non un fatto — e questo file
 //!   tiene dati autorevoli.
 
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -263,6 +264,14 @@ impl OrganizationStore {
     /// cambiamento va quindi messo sopra il file riletto sotto lucchetto
     /// ([`VaultStorage::update`]), e ciò che si tiene in memoria è la fusione.
     fn update(&self, f: impl FnOnce(&mut Organization)) -> Result<(), String> {
+        // Ogni mutazione passa di qui, e quindi ci passa anche l'invariante che
+        // nessuna di loro deve poter rompere: vedi [`senza_doppioni`]. Metterla
+        // dentro i mutatori vorrebbe dire ricordarsela al prossimo, e il
+        // prossimo è chi scriverà il mutatore che ancora non c'è.
+        let f = |org: &mut Organization| {
+            f(org);
+            senza_doppioni(org);
+        };
         let mut data = self.data.write().expect("organizzazione");
         // Lo store in memoria — quello di un test — non ha un disco da
         // rileggere: ciò che c'è «adesso» è ciò che si ha.
@@ -378,6 +387,10 @@ fn fondi(
 
 /// Le tre mosse di un rename dentro l'organizzazione. Torna `true` se la nota
 /// era organizzata, cioè se qualcosa si è spostato davvero.
+///
+/// Le liste che riscrive possono nominare la destinazione già per conto loro:
+/// che ne resti una copia sola non lo decide qui, lo decide
+/// [`senza_doppioni`], che passa dopo **ogni** mutazione.
 fn migra(org: &mut Organization, from: &str, to: &str) -> bool {
     let mut cambiata = false;
     if let Some(icon) = org.icons.remove(from) {
@@ -401,6 +414,36 @@ fn migra(org: &mut Organization, from: &str, to: &str) -> bool {
         }
     }
     cambiata
+}
+
+/// Le liste dell'organizzazione sono **insiemi ordinati**: lo stesso id non ci
+/// sta due volte.
+///
+/// Nasceva un doppione ogni volta che una mutazione portava un id **addosso a
+/// un altro**, e il caso misurato è la rinomina ([`migra`]): appuntate `a.md` e
+/// `c.md`, rinominare `a.md` in `c.md` scriveva `["c.md", "c.md"]`, e con lo
+/// stesso gesto sull'ordine di una cartella l'esploratore mostrava la stessa
+/// voce in due posti.
+///
+/// **Chi c'era già non si sposta**, cioè sopravvive la posizione della prima
+/// occorrenza. Non è una politica nuova: è quella che
+/// [`OrganizationStore::set_pinned`] scrive già a parole — appuntare due volte
+/// la stessa nota non la sposta — e un insieme ordinato si comporta così anche
+/// altrove. La posizione della copia migrata, invece, sarebbe una seconda
+/// regola per lo stesso caso, e l'utente vedrebbe due esiti diversi a seconda di
+/// come l'id è arrivato lì.
+fn senza_doppioni(org: &mut Organization) {
+    una_volta_sola(&mut org.pinned);
+    una_volta_sola(&mut org.spaces);
+    for nomi in org.order.values_mut() {
+        una_volta_sola(nomi);
+    }
+}
+
+/// La lista senza le ripetizioni, tenendo la **prima** di ognuna al suo posto.
+fn una_volta_sola(lista: &mut Vec<String>) {
+    let mut visti = HashSet::new();
+    lista.retain(|id| visti.insert(id.clone()));
 }
 
 /// La cartella di un path (`""` per la radice), con la stessa regola del
@@ -630,6 +673,52 @@ mod tests {
             org.order[""],
             ["b.md"],
             "il posto invece era dei figli di quella cartella"
+        );
+    }
+
+    #[test]
+    fn una_migrazione_non_lascia_lo_stesso_id_in_due_posti() {
+        let store = OrganizationStore::in_memory();
+        store.set_pinned("a.md", true).unwrap();
+        store.set_pinned("c.md", true).unwrap();
+        // `c.md` sta *prima* di `a.md` in una cartella e *dopo* nell'altra: se
+        // sopravvivesse la copia migrata invece della prima, i due esiti
+        // sarebbero l'uno il rovescio dell'altro.
+        store
+            .set_order("uno", vec!["c.md".into(), "x.md".into(), "a.md".into()])
+            .unwrap();
+        store
+            .set_order("due", vec!["a.md".into(), "x.md".into(), "c.md".into()])
+            .unwrap();
+
+        assert!(store.migrate("uno/a.md", "uno/c.md").unwrap());
+        assert!(store.migrate("due/a.md", "due/c.md").unwrap());
+        assert!(store.migrate("a.md", "c.md").unwrap());
+
+        let org = store.snapshot();
+        assert_eq!(org.pinned, ["c.md"], "una nota appuntata una volta sola");
+        assert_eq!(
+            org.order["uno"],
+            ["c.md", "x.md"],
+            "chi c'era già non si sposta"
+        );
+        assert_eq!(
+            org.order["due"],
+            ["c.md", "x.md"],
+            "e la copia che arriva addosso non porta via il posto di nessuno"
+        );
+    }
+
+    #[test]
+    fn un_ordine_con_un_doppione_non_lo_conserva() {
+        let store = OrganizationStore::in_memory();
+        store
+            .set_order("", vec!["a.md".into(), "b.md".into(), "a.md".into()])
+            .unwrap();
+        assert_eq!(
+            store.snapshot().order[""],
+            ["a.md", "b.md"],
+            "una lista di id è un insieme ordinato da qualunque porta arrivi"
         );
     }
 

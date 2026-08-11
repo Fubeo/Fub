@@ -124,7 +124,7 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 | Schema | Dove | Oggi | Cosa contiene |
 |---|---|---|---|
 | registro dei vault | [`crates/fub-host/src/vaults.rs:41`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
-| organizzazione | [`crates/fub-kernel/src/organization.rs:77`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
+| organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../crates/fub-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
 | anagrafe | [`crates/fub-kernel/src/entries.rs:90`](../crates/fub-kernel/src/entries.rs) | **2** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
 | impostazioni | [`crates/fub-kernel/src/settings.rs:83`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
