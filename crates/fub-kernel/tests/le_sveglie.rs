@@ -65,7 +65,7 @@ fn vault(timers: Vec<TimerSpec>) -> (tempfile::TempDir, Workspace, Log) {
     registry
         .register(TestoDiProva::per_estensione("txt").boxed())
         .expect("formato");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature(SPIA, SPIA).expect("dichiarato");
     ws.register_plugin(
         PluginManifest::new(ACME, ACME)
@@ -165,7 +165,8 @@ fn two_alarms_with_the_same_name_are_refused() {
     ] {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-        let mut ws = Workspace::new(&root, FormatRegistry::new());
+        let mut ws =
+            Workspace::new(&root, FormatRegistry::new()).expect("l'apertura del vault riesce");
         let esito = ws.register_plugin(
             PluginManifest::new(ACME, ACME).waking(timers),
             Trust::Community,

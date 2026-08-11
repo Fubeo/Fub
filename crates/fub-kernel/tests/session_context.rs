@@ -134,7 +134,8 @@ impl Fixture {
     /// Un workspace con tre view: una che segue solo il documento, una che
     /// segue anche la selezione, una che non segue niente.
     fn workspace(&self) -> Workspace {
-        let mut ws = Workspace::new(&self.root, FormatRegistry::new());
+        let mut ws =
+            Workspace::new(&self.root, FormatRegistry::new()).expect("l'apertura del vault riesce");
         // I plugin di prova si dichiarano prima di registrare (§7.3): il
         // kernel non presta capacità a una stringa.
         for plugin in ["test.doc", "test.sel", "test.sorda"] {
@@ -318,7 +319,7 @@ fn con_provider(root: &Utf8PathBuf) -> Workspace {
     registry
         .register(Box::new(TestoNudo))
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(root, registry);
+    let mut ws = Workspace::new(root, registry).expect("l'apertura del vault riesce");
     for plugin in ["test.doc", "test.sel", "test.sorda"] {
         ws.register_core_feature(plugin, plugin)
             .expect("dichiarato");

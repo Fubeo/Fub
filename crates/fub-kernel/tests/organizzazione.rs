@@ -165,7 +165,7 @@ fn un_sidecar_illeggibile_non_si_sovrascrive() {
 
     // Il vault si apre lo stesso: perdere l'organizzazione non vale un'app che
     // non parte — ma lo dice.
-    let ws = Workspace::new(&root, registro());
+    let ws = Workspace::new(&root, registro()).expect("l'apertura del vault riesce");
     let avvisi = ws.organization_warnings();
     assert!(!avvisi.is_empty(), "un sidecar rotto si dice");
 

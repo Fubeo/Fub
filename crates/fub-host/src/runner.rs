@@ -1400,7 +1400,7 @@ mod tests {
                 .expect("semina");
         }
 
-        let mut ws = Workspace::new(&root, formats);
+        let mut ws = Workspace::new(&root, formats).expect("la radice appena creata si apre");
         let work = ws.scan_vault().expect("la scansione riesce");
         assert_eq!(work.totale(), quante as u64, "le note seminate si leggono");
         let id = ws.begin_index_job();

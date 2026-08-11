@@ -82,7 +82,7 @@ impl Vault {
     fn open(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry.register(Box::new(Note)).expect("nessun conflitto");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         ws.reindex().expect("reindex");
         ws
     }

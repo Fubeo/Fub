@@ -178,7 +178,7 @@ fn a_plugin_can_look_around_the_vault_not_only_react_to_events() {
     registry
         .register(Box::new(TxtProvider))
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     for plugin in ["prova.plugin", "uno", "due"] {

@@ -76,7 +76,7 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     registry
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.reindex().expect("reindex");
     (dir, ws)
 }
@@ -426,7 +426,7 @@ fn vault_di_scadenze(note: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
     registry
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.register_plugin(
         PluginManifest::core("fub.core", "Core")
             .configuring(fub_kernel::properties::properties_settings()),

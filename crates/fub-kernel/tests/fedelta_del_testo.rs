@@ -26,7 +26,7 @@ use fub_kernel::Vault;
 fn tempvault() -> (tempfile::TempDir, Vault) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let vault = Vault::open(&root);
+    let vault = Vault::open(&root).expect("l'apertura del vault riesce");
     (dir, vault)
 }
 

@@ -58,7 +58,7 @@ impl Vault {
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         ws.register_core_feature(BLOCKS_ID, "Blocchi")
             .expect("dichiarato");
         ws.register_syntax_rule(BLOCKS_ID, Box::new(DiagramRule))
@@ -158,7 +158,7 @@ fn un_kind_senza_renderer_arriva_all_anteprima_col_suo_sorgente() {
 
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&v.root, registry);
+    let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature(BLOCKS_ID, "Blocchi")
         .expect("dichiarato");
     ws.register_syntax_rule(BLOCKS_ID, Box::new(MathRule))
@@ -317,7 +317,7 @@ fn una_sintassi_di_terzi_percorre_tutti_e_tre_i_lati() {
     v.put("g.md", "```ganttino\na\nb\n```\n");
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&v.root, registry);
+    let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     // Un plugin di terzi, dichiarato come tale: il grado di fiducia sta nella
     // dichiarazione, non su ogni cosa che registra (§7.3).
     ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
@@ -345,7 +345,7 @@ fn da_un_renderer_non_fidato_il_contenuto_attivo_non_passa() {
     v.put("g.md", "```ganttino\na\n```\n");
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&v.root, registry);
+    let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
         .expect("dichiarato");
     ws.register_syntax_rule("terzi", Box::new(GanttinoRule))
@@ -419,7 +419,7 @@ fn un_kind_di_terzi_degradato_mostra_i_byte_della_chiave_convenzionale() {
     v.put("c.md", "```convenzione\ngiro\n```\n");
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&v.root, registry);
+    let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     // Un plugin di terzi, dichiarato come tale: il grado di fiducia sta nella
     // dichiarazione, non su ogni cosa che registra (§7.3).
     ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
@@ -449,7 +449,7 @@ fn due_regole_sulla_stessa_sintassi_non_si_registrano_in_silenzio() {
     let v = Vault::new();
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&v.root, registry);
+    let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature(BLOCKS_ID, "Blocchi")
         .expect("dichiarato");
 
@@ -496,7 +496,7 @@ fn un_kind_prodotto_e_mai_disegnato_si_puo_contare() {
     let v = Vault::new();
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&v.root, registry);
+    let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature(BLOCKS_ID, "Blocchi")
         .expect("dichiarato");
 
@@ -533,7 +533,7 @@ fn un_plugin_revocato_non_registra_niente() {
     let v = Vault::new();
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&v.root, registry);
+    let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     // Dichiararsi si può — per dire che qualcuno è revocato bisogna sapere che
     // esiste. Registrare no: una regola e un renderer sono codice che gira a
     // ogni parse e a ogni anteprima, e non passa da nessun guard.
@@ -593,7 +593,7 @@ fn un_terzo_non_si_fa_passare_per_il_core() {
     v.put("b.md", "```ganttino\nx\n```\n");
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&v.root, registry);
+    let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
         .unwrap();
 

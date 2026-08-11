@@ -44,7 +44,7 @@ impl Vault {
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         ws.register_core_feature(GRAPH_ID, GRAPH_ID)
             .expect("dichiarato");
         ws.register_view_provider(GRAPH_ID, Box::new(GraphView))

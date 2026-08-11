@@ -181,7 +181,8 @@ impl Fixture {
         registry
             .register(TestoDiProva::per_estensione("txt").boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::on(&self.root, registry, storage, MachineSettings::in_memory());
+        let mut ws = Workspace::on(&self.root, registry, storage, MachineSettings::in_memory())
+            .expect("l'apertura del vault riesce");
         // I plugin di prova si dichiarano prima di registrare (§7.3): il
         // kernel non presta capacità a una stringa.
         ws.register_core_feature("test.spia", "test.spia")

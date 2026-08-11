@@ -84,7 +84,7 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
     registry
         .register(Box::new(TestoNudo))
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(dir, registry);
+    let mut ws = Workspace::new(dir, registry).expect("l'apertura del vault riesce");
     ws.reindex().expect("scansione");
     ws
 }

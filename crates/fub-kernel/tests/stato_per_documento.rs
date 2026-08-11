@@ -67,7 +67,7 @@ fn vault() -> (tempfile::TempDir, Utf8PathBuf, Workspace) {
     registry
         .register(Box::new(NudoProvider))
         .expect("nessun conflitto");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.reindex().expect("reindex del vault vuoto");
     (dir, root, ws)
 }

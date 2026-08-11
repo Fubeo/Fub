@@ -79,16 +79,16 @@ impl DocumentStore {
         registry: Arc<FormatRegistry>,
         storage: Arc<dyn crate::storage::VaultStorage>,
         settings: crate::settings::SharedSettings,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             // Le impostazioni arrivano fin qui per una riga sola, ed è la
             // §15.6: **quali file sono del vault** è una dichiarazione di
             // questo vault, non una costante di chi ha compilato.
-            vault: Vault::on(root, storage).watching(settings),
+            vault: Vault::on(root, storage)?.watching(settings),
             registry,
             syntax: SyntaxRegistry::new(),
             renderers: RendererRegistry::new(),
-        }
+        })
     }
 
     /// La radice del vault.

@@ -17,7 +17,7 @@ fn open(root: &Utf8PathBuf) -> Workspace {
     registry
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(root, registry);
+    let mut ws = Workspace::new(root, registry).expect("l'apertura del vault riesce");
     ws.reindex().expect("reindex del vault di esempio");
     ws
 }

@@ -44,7 +44,7 @@ impl Vault {
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         // I plugin di prova si dichiarano prima di registrare (§7.3): il
         // kernel non presta capacità a una stringa.
         // **Col catalogo**, e non `register_core_feature`: da quando i comandi

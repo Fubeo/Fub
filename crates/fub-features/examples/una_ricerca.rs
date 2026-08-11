@@ -152,7 +152,7 @@ fn main() {
 
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("la radice appena creata si apre");
     ws.register_core_feature(SEARCH_ID, SEARCH_ID).unwrap();
     let data = ws.plugin_data_dir(SEARCH_ID).unwrap();
     // Lo stesso posto in cui il provider apre l'indice: `<spazio dati>/index`.

@@ -63,7 +63,7 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     registry
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     ws.register_core_feature(SEARCH_ID, SEARCH_ID)
@@ -544,7 +544,7 @@ fn vault_a_pari_merito() -> (tempfile::TempDir, Workspace) {
     registry
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature(SEARCH_ID, SEARCH_ID)
         .expect("dichiarato");
     let data = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
@@ -725,7 +725,7 @@ fn vault_con_punti() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
     registry
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature(SEARCH_ID, SEARCH_ID)
         .expect("dichiarato");
     let data = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
@@ -954,7 +954,7 @@ fn vault_con_omonimi() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
     registry
         .register(MarkdownProvider::boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.reindex().expect("reindex");
     (dir, ws, root)
 }

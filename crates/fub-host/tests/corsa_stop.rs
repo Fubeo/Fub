@@ -45,7 +45,7 @@ fn chi_chiude_un_pool_torna_sempre() {
         for _ in 0..GIRI {
             let workspace = Custodia::new(
                 "il vault di prova",
-                Workspace::new(&root, Default::default()),
+                Workspace::new(&root, Default::default()).expect("l'apertura del vault riesce"),
             );
             let registry = Custodia::new("i componenti di prova", BundleRegistry::new());
             JobRunner::start(workspace, registry, THREAD, None)

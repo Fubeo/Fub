@@ -30,7 +30,7 @@ fn workspace() -> Workspace {
     registry
         .register(TestoDiProva::per_estensione("txt").boxed())
         .expect("plain");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature("test.dice", "test.dice")
         .expect("dichiarato");
     ws

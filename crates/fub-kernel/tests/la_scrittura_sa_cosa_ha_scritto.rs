@@ -191,7 +191,8 @@ impl Banco {
             registry,
             supporto.clone(),
             MachineSettings::in_memory(),
-        );
+        )
+        .expect("l'apertura del vault riesce");
         ws.reindex().expect("scansione iniziale");
         let rx = ws.bus().subscribe();
         supporto.azzera();

@@ -557,7 +557,8 @@ fn aprire_un_vault_non_rilegge_il_registro_piu_di_due_volte() {
         fub_kernel::FormatRegistry::new(),
         storage as std::sync::Arc<dyn fub_kernel::VaultStorage>,
         fub_kernel::MachineSettings::in_memory(),
-    );
+    )
+    .expect("l'apertura del vault riesce");
     let quante = letture.load(std::sync::atomic::Ordering::Relaxed);
     assert!(
         quante >= 1,

@@ -109,7 +109,7 @@ fn banco() -> Banco {
     formati
         .register(Box::new(Lento(cancello.clone())))
         .expect("nessun conflitto");
-    let mut ws = Workspace::new(&root, formati);
+    let mut ws = Workspace::new(&root, formati).expect("l'apertura del vault riesce");
     // La scansione iniziale passa dal parse: il cancello è ancora aperto.
     ws.reindex().expect("scansione iniziale");
 

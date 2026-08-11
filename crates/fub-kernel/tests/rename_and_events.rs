@@ -126,7 +126,7 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
     registry
         .register(Box::new(LinkListProvider))
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(dir, registry);
+    let mut ws = Workspace::new(dir, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     for plugin in ["test.chaining", "test.pingpong", "test.jobs"] {
@@ -272,7 +272,7 @@ fn rename_to_a_contended_path_writes_the_whole_path() {
     registry
         .register(fub_testkit::TestoDiProva::per_estensione("txt").boxed())
         .unwrap();
-    let mut ws = Workspace::new(&dir.0, registry);
+    let mut ws = Workspace::new(&dir.0, registry).expect("l'apertura del vault riesce");
     ws.reindex().unwrap();
 
     ws.write_document(&DocId::new("Altra.lnk"), "", WriteBase::Dictated)

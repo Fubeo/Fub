@@ -14,6 +14,15 @@ camino = { workspace = true }
 thiserror = { workspace = true }
 # Solo la facciata: il collettore è `crate::log`, e non ha dipendenze.
 tracing = { workspace = true }
+# La verifica di scrittura all'apertura (0160) chiede al sistema «posso
+# scrivere qui?» con `access(2)`, e la domanda va fatta alla piattaforma.
+# La regola della supply chain (0001) ha una risposta misurata anche qui:
+# `libc 0.2.189` era **già** nell'albero — tirato da notify e da glib — e
+# dipende dal solo `libc` stesso. Zero crate nuovi, e il verso alternativo —
+# una `extern "C"` scritta a mano — è la forma che la 0001 ha già rifiutato
+# per il conteggio dei nomi su Windows: un `unsafe` che non si può rileggere.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 # INVARIANTE: niente comrak/pulldown, wasmtime, tauri qui dentro. Il core non
 # sa cosa sia il markdown.

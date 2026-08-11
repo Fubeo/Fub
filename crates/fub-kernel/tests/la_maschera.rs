@@ -72,7 +72,7 @@ fn vault(mask: EventMask) -> (tempfile::TempDir, Workspace, Log) {
     registry
         .register(TestoDiProva::per_estensione("txt").boxed())
         .expect("formato");
-    let mut ws = Workspace::new(&root, registry);
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     ws.register_core_feature(SPIA, SPIA).expect("dichiarato");
     for plugin in [ACME, ALTRO] {
         ws.register_plugin(

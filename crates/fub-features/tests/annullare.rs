@@ -52,9 +52,10 @@ impl Vault {
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
         let mut ws = match storage {
-            None => Workspace::new(&self.root, registry),
+            None => Workspace::new(&self.root, registry).expect("l'apertura del vault riesce"),
             Some(storage) => {
                 Workspace::on(&self.root, registry, storage, MachineSettings::in_memory())
+                    .expect("l'apertura del vault riesce")
             }
         };
         ws.register_plugin(

@@ -124,7 +124,8 @@ fn aperto(storage: Arc<MemStorage>) -> Workspace {
         registry,
         storage as Arc<dyn VaultStorage>,
         MachineSettings::in_memory(),
-    );
+    )
+    .expect("l'apertura del vault riesce");
     ws.reindex().expect("apertura");
     ws
 }

@@ -44,7 +44,7 @@ impl Vault {
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         // I due bundle: chi disegna e chi possiede i comandi che disegna. È la
         // stessa coppia che monta l'app, e il pannello non sa niente dell'altro
         // se non i due id.

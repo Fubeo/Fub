@@ -100,7 +100,7 @@ impl Fixture {
         registry
             .register(TestoDiProva::per_estensione("txt").boxed())
             .expect("plain");
-        let mut ws = Workspace::new(&self.root, registry);
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         for plugin in ["test.rifiuta", "test.fallisce"] {
             ws.register_core_feature(plugin, plugin)
                 .expect("dichiarato");
