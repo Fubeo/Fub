@@ -387,7 +387,7 @@ fn render_link(
                     "<div class=\"embed\"{}>",
                     wiki_attrs("embed", page, heading, block)
                 ));
-                render_link_label(label, &interno(target, page), out);
+                render_link_label(label, &interno(target, page), opts, out);
                 out.push_str("</div>");
                 return;
             }
@@ -405,7 +405,7 @@ fn render_link(
                 out.push_str(" href=\"#\"");
             }
             out.push('>');
-            render_link_label(label, &interno(target, page), out);
+            render_link_label(label, &interno(target, page), opts, out);
             out.push_str("</a>");
         }
         // Un riferimento incorporato che non è un wikilink è, quasi sempre,
@@ -419,7 +419,7 @@ fn render_link(
                 "<div class=\"embed\"{}>",
                 attr("data-embed-url", url)
             ));
-            render_link_label(label, url, out);
+            render_link_label(label, url, opts, out);
             out.push_str("</div>");
         }
         LinkTarget::Path(p) if embed => {
@@ -427,12 +427,12 @@ fn render_link(
                 "<div class=\"embed\"{}>",
                 attr("data-embed-path", p)
             ));
-            render_link_label(label, p, out);
+            render_link_label(label, p, opts, out);
             out.push_str("</div>");
         }
         LinkTarget::Url(url) => {
             out.push_str(&format!("<a{}>", attr("href", url)));
-            render_link_label(label, url, out);
+            render_link_label(label, url, opts, out);
             out.push_str("</a>");
         }
         LinkTarget::Path(p) => {
@@ -440,7 +440,7 @@ fn render_link(
                 "<a class=\"internal-path\"{} href=\"#\">",
                 attr("data-path", p)
             ));
-            render_link_label(label, p, out);
+            render_link_label(label, p, opts, out);
             out.push_str("</a>");
         }
     }
@@ -458,11 +458,30 @@ fn interno(target: &LinkTarget, page: &str) -> String {
     target.wiki_inner().unwrap_or_else(|| page.to_string())
 }
 
-fn render_link_label(label: Option<&[Inline]>, fallback: &str, out: &mut String) {
+/// L'etichetta di un link, **con le opzioni di chi ha chiesto la resa**.
+///
+/// Un'etichetta non è testo piatto: è una fetta di inline come le altre, e può
+/// contenere un wikilink (`[vai a [[Nota]]](url)`, l'`alt` di un'immagine). Qui
+/// si costruiva un `RenderOptions::default()` sul posto, cioè **le opzioni di
+/// nessuno**: gli inline dentro l'etichetta venivano resi come se il chiamante
+/// non avesse chiesto niente, e `WIKILINKS_AS_DATA_ATTRS` — l'unica opzione che
+/// la resa legge, quella che l'anteprima del kernel accende sempre — smetteva di
+/// valere appena un link entrava dentro l'etichetta di un altro. Lo stesso
+/// wikilink usciva con l'`href="#"` in mezzo a un paragrafo e senza dentro
+/// un'etichetta, e a dirlo non c'era niente.
+///
+/// La riparazione è passare le `opts` che il chiamante ha già in mano, come fa
+/// ogni altro ramo della resa: così **un'opzione nuova la ereditano tutti e sei
+/// i siti** che rendono un'etichetta, e ogni inline annidato la vede a qualunque
+/// profondità, senza che nessuno debba ricordarsene di nuovo.
+fn render_link_label(
+    label: Option<&[Inline]>,
+    fallback: &str,
+    opts: &RenderOptions,
+    out: &mut String,
+) {
     match label {
-        Some(inlines) if !inlines.is_empty() => {
-            render_inlines(inlines, &RenderOptions::default(), out)
-        }
+        Some(inlines) if !inlines.is_empty() => render_inlines(inlines, opts, out),
         _ => out.push_str(&escape(fallback)),
     }
 }

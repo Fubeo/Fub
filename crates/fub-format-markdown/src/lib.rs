@@ -87,7 +87,8 @@ impl FormatProvider for MarkdownProvider {
 mod tests {
     use super::*;
     use fub_abi::model::{
-        custom_kind, Block, ColumnAlign, DateFormats, Inline, LinkTarget, PropertyValue,
+        custom_kind, Block, ColumnAlign, DateFormats, DocId, Inline, LinkTarget, PropertyValue,
+        Span,
     };
 
     fn parse(src: &str) -> DocumentModel {
@@ -283,6 +284,71 @@ mod tests {
         let doc = parse("# Titolo Uno\n\n## Sotto Sezione\n");
         assert_eq!(doc.outline[0].slug, "titolo-uno");
         assert_eq!(doc.outline[1].slug, "sotto-sezione");
+    }
+
+    /// **Le opzioni del chiamante valgono anche dentro l'etichetta di un link.**
+    ///
+    /// `render_link_label` rendeva gli inline dell'etichetta con un
+    /// `RenderOptions::default()` fabbricato sul posto invece delle opzioni che
+    /// il chiamante aveva chiesto: lo stesso wikilink usciva con l'`href="#"`
+    /// in mezzo a un paragrafo e **senza** dentro l'etichetta di un altro link,
+    /// cioè una via di configurazione del contratto era dichiarata e in quel
+    /// punto non aveva effetto. `WIKILINKS_AS_DATA_ATTRS` è l'unica opzione che
+    /// questa resa legge, quindi è quella che lo misura; la riparazione però non
+    /// è su quel nome — è passare le `opts` giù come fa ogni altro ramo, così
+    /// **un'opzione nuova la ereditano tutti e sei i siti** senza che nessuno
+    /// debba ricordarsene.
+    ///
+    /// Il modello si costruisce qui a mano e non da una sorgente markdown perché
+    /// comrak non innesta un wikilink dentro il testo di un link — ma
+    /// `render_html` è una funzione pura del **modello**, e un modello con
+    /// quella forma è ciò che una `SyntaxRule` di terzi produce
+    /// (`SyntaxProduct::Block` porta i propri `blocks`, e quei blocchi arrivano
+    /// qui). Il banco misura ciò che questa funzione promette: le `opts`
+    /// arrivano intere ovunque ci sia un inline.
+    #[test]
+    fn le_opzioni_del_chiamante_valgono_anche_dentro_l_etichetta() {
+        let dentro = Inline::Link {
+            target: LinkTarget::Wiki {
+                page: "Nota".into(),
+                heading: None,
+                block: None,
+            },
+            label: None,
+            embed: false,
+            span: Span::EMPTY,
+        };
+        let mut doc = DocumentModel::empty(DocId::new("nota.md"));
+        doc.body.push(Block::Paragraph {
+            inlines: vec![
+                dentro.clone(),
+                Inline::Link {
+                    target: LinkTarget::Url("https://esempio.it".into()),
+                    label: Some(vec![Inline::Text("vai a ".into()), dentro]),
+                    embed: false,
+                    span: Span::EMPTY,
+                },
+            ],
+            anchor: None,
+            span: Span::EMPTY,
+        });
+
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &RenderOptions::preview())
+            .unwrap();
+        assert_eq!(
+            html.matches("class=\"wikilink\" data-wikilink-page=\"Nota\" href=\"#\"")
+                .count(),
+            2,
+            "il wikilink dentro l'etichetta esce come quello fuori: {html}"
+        );
+
+        // E il verso opposto, che tiene il banco una misura e non un divieto:
+        // senza l'opzione, nessuno dei due porta l'`href`.
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &RenderOptions::default())
+            .unwrap();
+        assert!(!html.contains("href=\"#\""), "html: {html}");
     }
 
     #[test]
