@@ -68,6 +68,7 @@ node .github/scripts/check-tabelle.mjs
 # invarianti
 node .github/scripts/check-cargo-versioni.mjs
 node .github/scripts/check-cargo-feature-default.mjs
+node .github/scripts/check-crate-type.mjs
 
 # le feature ufficiali si spengono davvero (§16.3)
 cargo build -p fub-features --no-default-features

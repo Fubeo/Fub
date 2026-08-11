@@ -8,7 +8,15 @@ description = "Colla Tauri v2 di Fub: comandi/eventi IPC, finestre, dialoghi. Ch
 
 [lib]
 name = "fub_app_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# **Solo `rlib`.** Il template di Tauri v2 scrive qui
+# `["staticlib", "cdylib", "rlib"]` perché il `.a` serve a iOS e il `.so` ad
+# Android; qui non c'è nessun target mobile — `gen/schemas/` conosce solo
+# `desktop-schema.json` e `linux-schema.json` — e i due artefatti in più non li
+# consumava nessuno: il binario `fub` linka il solo `.rlib`, e lo stesso fa
+# `tests/ts_mirror_app.rs`. Erano tre codegen e tre link dell'intero albero,
+# tauri compreso, per 883 righe di sorgente. Se un giorno arriva il mobile, le
+# due parole tornano **insieme al target che le consuma**, non prima.
+crate-type = ["rlib"]
 
 [[bin]]
 name = "fub"

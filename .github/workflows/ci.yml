@@ -61,6 +61,17 @@ jobs:
       # volte, e qui bastava togliere una parola da un elenco.
       - name: ogni cargo feature è compilata da qualcuno (decisione 0129)
         run: node .github/scripts/check-cargo-feature-default.mjs
+      # E la gemella sull'altra riga di manifest che nessuno guardava: **questa
+      # forma di libreria, qualcuno la apre?** Un `crate-type` in più è un
+      # codegen e un link dell'intero albero a ogni compilazione. Misurato:
+      # `fub-app` portava `["staticlib", "cdylib", "rlib"]` dal template mobile
+      # di Tauri senza nessun target mobile, e la ricostruzione del workspace
+      # dopo un `touch` su `fub-abi` costava 10,7 / 11,7 / 10,9 s contro
+      # 5,9 / 6,5 / 6,7 / 7,2 s con `rlib` da solo — per un `.a` e un `.so` che
+      # non apriva nessuno. Nient'altro se ne accorgeva: con o senza le due
+      # parole, tutto compila.
+      - name: ogni forma di libreria è consumata da qualcuno (0229)
+        run: node .github/scripts/check-crate-type.mjs
       # Il terzo confine, e l'unico che si GENERA: le union di stringhe del
       # mirror TS sono emesse dagli enum senza payload del contratto
       # (decisione 0053). Sta qui e non solo nel `cargo test --workspace`
