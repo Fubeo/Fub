@@ -4905,8 +4905,12 @@ impl Workspace {
         let quanti = voce.undo.steps.len();
         // Tutto dentro un lotto solo: annullare una rinomina che aveva riscritto
         // quaranta sorgenti è un gesto, quindi un `batch-ended` e un ridisegno.
-        let prima = self.undo.begin_replay();
-        let caduto = self.batch(|ws| {
+        // La bandiera dell'annullamento è un prestito e si chiude cadendo (vedi
+        // [`Riproduzione`]): su questo tratto passa tutto ciò che pania — un
+        // supporto che esplode invece di rispondere, una `expect` del kernel — e
+        // una riga di ripristino scritta dopo la chiamata la salterebbe.
+        let mut replay = Riproduzione::apri(self);
+        let caduto = replay.batch(|ws| {
             let mut fatti = 0usize;
             for step in &voce.undo.steps {
                 let esito = match step {
@@ -4926,7 +4930,7 @@ impl Workspace {
             }
             (fatti, None)
         });
-        self.undo.end_replay(prima);
+        drop(replay);
 
         let (fatti, guasto) = caduto;
         let Some(guasto) = guasto else {
@@ -6706,6 +6710,59 @@ impl Drop for Lotto<'_> {
             return;
         }
         self.ws.end_batch();
+    }
+}
+
+/// **Un annullamento in corso è un prestito, e si chiude cadendo.**
+///
+/// È il [`Lotto`] applicato all'altra bandiera che [`Workspace::undo_last`]
+/// alzava a mano: `replaying` dice *annullare non è annullabile*, e finché è
+/// alzata ogni [`UndoStack::push`] viene scartata. Il ripristino era una riga
+/// **dopo** la chiamata, e su quella riga passa tutto ciò che pania — un
+/// supporto che esplode invece di rispondere, una `expect` del kernel: la
+/// bandiera restava alzata, e da lì in poi nessuna operazione entrava più in
+/// pila. Ctrl-Z smetteva di funzionare per sempre, in silenzio, e chi lo premeva
+/// leggeva «non c'è niente da annullare» avendo appena scritto.
+///
+/// La ragione per cui non era già un `Drop` era vera e la risposta è
+/// nell'oggetto prestato: un guardiano sulla **pila** avrebbe tenuto occupato
+/// `self.undo` per tutta la durata delle scritture, che passano dal workspace
+/// intero. Questo presta il **workspace**, come `Lotto`, e non toglie niente a
+/// nessuno.
+struct Riproduzione<'w> {
+    ws: &'w mut Workspace,
+    /// Com'era la bandiera prima: un annullamento annidato non spegne quello di
+    /// fuori uscendo.
+    prima: bool,
+}
+
+impl<'w> Riproduzione<'w> {
+    fn apri(ws: &'w mut Workspace) -> Self {
+        let prima = ws.undo.begin_replay();
+        Riproduzione { ws, prima }
+    }
+}
+
+impl Drop for Riproduzione<'_> {
+    fn drop(&mut self) {
+        // Niente ramo per `std::thread::panicking()`, ed è la differenza con
+        // `Lotto`: qui non si chiama nessuno, si rimette a posto un `bool` di
+        // questo oggetto. Non c'è un secondo panico da temere.
+        self.ws.undo.end_replay(self.prima);
+    }
+}
+
+impl std::ops::Deref for Riproduzione<'_> {
+    type Target = Workspace;
+
+    fn deref(&self) -> &Workspace {
+        self.ws
+    }
+}
+
+impl std::ops::DerefMut for Riproduzione<'_> {
+    fn deref_mut(&mut self) -> &mut Workspace {
+        self.ws
     }
 }
 

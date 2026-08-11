@@ -123,16 +123,22 @@ impl UndoStack {
         self.entries.pop_back()
     }
 
-    /// Segna che un annullamento sta girando, e per quanto.
+    /// Segna che un annullamento sta girando, e dice com'era prima.
     ///
-    /// Il ripristino della bandiera è di chi ha in mano il valore restituito:
-    /// un `Drop` sarebbe stato più sicuro e avrebbe voluto prestare la pila per
-    /// tutta la durata dell'annullamento — cioè per tutta la durata delle
-    /// scritture che l'annullamento fa, che passano dal workspace intero.
+    /// **Non si chiama da fuori del suo guardiano**, ed è l'unica cosa che conta
+    /// qui: le due metà stanno insieme in
+    /// [`Riproduzione`](crate::workspace::Riproduzione), che le chiude cadendo.
+    /// L'obiezione che teneva la bandiera a mano era che un `Drop` avrebbe
+    /// voluto prestare *la pila* per tutta la durata dell'annullamento — cioè
+    /// per tutta la durata delle scritture, che passano dal workspace intero — e
+    /// la risposta è che il guardiano presta **il workspace**, non la pila: la
+    /// stessa forma di `Lotto`, un piano più in là.
     pub(crate) fn begin_replay(&mut self) -> bool {
         std::mem::replace(&mut self.replaying, true)
     }
 
+    /// Rimette la bandiera com'era. Vedi
+    /// [`begin_replay`](UndoStack::begin_replay): la chiama il guardiano.
     pub(crate) fn end_replay(&mut self, prima: bool) {
         self.replaying = prima;
     }

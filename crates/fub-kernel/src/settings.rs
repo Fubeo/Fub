@@ -200,10 +200,14 @@ fn store_vault(
     key: &str,
     value: Option<SettingValue>,
 ) -> Result<BTreeMap<String, SettingValue>, String> {
-    // Il valore si consuma dentro una `FnMut`, che potrebbe essere chiamata più
-    // volte per quel che ne sa il tipo: `Option::take` è ciò che dice al
-    // compilatore quel che il supporto garantisce, cioè una chiamata sola.
-    let mut da_scrivere = Some(value);
+    // Il valore **non si consuma**, e la ragione non è di stile. `fondi` è una
+    // `FnMut`: il supporto la può chiamare due volte, ed è ciò che farebbe un
+    // supporto che riprova quando qualcun altro gli ha cambiato il file sotto.
+    // Prima qui c'era un `Option::take` con un `expect` accanto — «il supporto
+    // fonde una volta sola» — cioè una promessa che nella firma non c'è: chi
+    // avesse montato un supporto suo l'avrebbe scoperta con un panico, e un
+    // panico uccide il processo (0032). Rileggerlo a ogni giro è anche l'unica
+    // cosa *giusta* da fare: la seconda fusione parte da byte diversi.
     let mut fuso = None;
     // Il guasto di *dominio* viaggia di fianco invece che dentro l'`io::Error`,
     // o la sua frase uscirebbe da qui avvolta in un «non riesco a scrivere» che
@@ -224,12 +228,9 @@ fn store_vault(
                 return Err(std::io::Error::other("il file non si è potuto leggere"));
             }
         };
-        match da_scrivere
-            .take()
-            .expect("il supporto fonde una volta sola")
-        {
+        match &value {
             Some(v) => {
-                disco.insert(key.to_string(), v);
+                disco.insert(key.to_string(), v.clone());
             }
             None => {
                 disco.remove(key);
@@ -248,7 +249,15 @@ fn store_vault(
     match (esito, guasto) {
         (_, Some(guasto)) => Err(guasto),
         (Err(e), None) => Err(format!("non riesco a scrivere {path}: {e}")),
-        (Ok(()), None) => Ok(fuso.expect("una fusione riuscita ha lasciato la mappa")),
+        // Un supporto che dice di aver scritto senza aver fuso niente non
+        // lascia una mappa da adottare, e qui c'era un `expect`: la stessa
+        // promessa non scritta di sopra, dall'altro lato. Adesso è un errore
+        // come tutti gli altri — chi ha montato quel supporto legge una frase e
+        // la sua configurazione in memoria resta quella di prima, invece di
+        // perdere il processo.
+        (Ok(()), None) => fuso.ok_or_else(|| {
+            format!("{path}: il supporto ha detto di aver scritto senza fondere niente")
+        }),
     }
 }
 
@@ -869,7 +878,7 @@ pub type SharedSettings = Arc<RwLock<SettingsStore>>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::write_atomic;
+    use crate::storage::{write_atomic, FsStorage};
     use fub_abi::settings::SettingKind;
 
     fn store_su(dir: &Utf8Path) -> SettingsStore {
@@ -908,6 +917,139 @@ mod tests {
             .set("keys.note.create", SettingValue::Text(chord.into()))
             .unwrap();
         store
+    }
+
+    /// **Un supporto che fonde due volte non è un panico**, è un supporto.
+    ///
+    /// `Fusione` è una `FnMut`: il protocollo permette di chiamarla più di una
+    /// volta, ed è ciò che fa un supporto che riprova quando qualcun altro gli
+    /// ha cambiato il file sotto. Il `FsStorage` non lo fa, quindi il secondo
+    /// giro non lo vedeva nessuno finché il solo supporto montabile era lui.
+    struct SupportoCheFondeDueVolte(crate::storage::FsStorage);
+
+    impl VaultStorage for SupportoCheFondeDueVolte {
+        fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+            self.0.read(path)
+        }
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+            self.0.write(path, bytes)
+        }
+        fn update(
+            &self,
+            path: &Utf8Path,
+            fondi: crate::storage::Fusione<'_>,
+        ) -> std::io::Result<()> {
+            // Il primo giro si butta via, come lo butterebbe via chi riprova
+            // dopo essersi accorto che il file è cambiato: ciò che conta è che
+            // il secondo parta dai byte di adesso e dia lo stesso risultato.
+            let prima = self.0.read(path).ok();
+            let _ = fondi(prima.as_deref())?;
+            self.0.update(path, fondi)
+        }
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+            self.0.append(path, bytes)
+        }
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.0.rename(from, to)
+        }
+        fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+            self.0.remove(path)
+        }
+        fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<crate::storage::DirEntry>> {
+            self.0.list(dir)
+        }
+        fn stat(&self, path: &Utf8Path) -> std::io::Result<crate::storage::Stat> {
+            self.0.stat(path)
+        }
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+            self.0.remove_empty_dir(dir)
+        }
+    }
+
+    /// Un supporto che dice di sì **senza fondere niente**: il caso limite
+    /// dell'altro lato, e l'altro `expect` che stava qui.
+    struct SupportoCheNonFonde(crate::storage::FsStorage);
+
+    impl VaultStorage for SupportoCheNonFonde {
+        fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+            self.0.read(path)
+        }
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+            self.0.write(path, bytes)
+        }
+        fn update(
+            &self,
+            _path: &Utf8Path,
+            _fondi: crate::storage::Fusione<'_>,
+        ) -> std::io::Result<()> {
+            Ok(())
+        }
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+            self.0.append(path, bytes)
+        }
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.0.rename(from, to)
+        }
+        fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+            self.0.remove(path)
+        }
+        fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<crate::storage::DirEntry>> {
+            self.0.list(dir)
+        }
+        fn stat(&self, path: &Utf8Path) -> std::io::Result<crate::storage::Stat> {
+            self.0.stat(path)
+        }
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+            self.0.remove_empty_dir(dir)
+        }
+    }
+
+    fn store_col_supporto(dir: &Utf8Path, storage: Arc<dyn VaultStorage>) -> SettingsStore {
+        let mut store = SettingsStore::open(dir, storage, MachineSettings::in_memory());
+        store
+            .declare(
+                "fub.core",
+                &[SettingSpec::new(
+                    "keys.note.create",
+                    "Nuova nota",
+                    SettingKind::Text {
+                        default: String::new(),
+                    },
+                )],
+            )
+            .unwrap();
+        store
+    }
+
+    /// **Chi monta un supporto suo riceve una risposta, non un panico.**
+    ///
+    /// Erano due `expect` in `store_vault`, che promettevano al posto della
+    /// firma: «il supporto fonde una volta sola» e «una fusione riuscita ha
+    /// lasciato la mappa». Nessuna delle due sta nel tratto, e la 0032 dice cosa
+    /// costa scoprirlo: un panico uccide il processo, cioè il vault di chi stava
+    /// scrivendo.
+    #[test]
+    fn un_supporto_che_non_e_il_disco_riceve_un_errore_e_non_un_panico() {
+        let (_tmp, dir) = tempdir();
+        let mut store = store_col_supporto(&dir, Arc::new(SupportoCheFondeDueVolte(FsStorage)));
+        // Non pania (se paniasse il banco morirebbe qui), e ciò che resta è il
+        // valore giusto: la seconda fusione ha rifatto il lavoro, non l'ha
+        // raddoppiato.
+        store
+            .set("keys.note.create", SettingValue::Text("Mod-j".into()))
+            .expect("scrive");
+        assert_eq!(
+            store.vault_keybindings().get("keys.note.create"),
+            Some(&"Mod-j".to_string())
+        );
+
+        let mut store = store_col_supporto(&dir, Arc::new(SupportoCheNonFonde(FsStorage)));
+        let esito = store.set("keys.note.create", SettingValue::Text("Mod-k".into()));
+        assert!(
+            esito.is_err(),
+            "un supporto che dice di aver scritto senza fondere non lascia \
+             niente da adottare: la risposta è una frase, non un processo morto"
+        );
     }
 
     /// Una chiave sospesa si legge come se il file non ne parlasse (§23.13). E
