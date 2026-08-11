@@ -829,10 +829,8 @@ impl FsStorage {
             let _ = std::fs::remove_file(&tmp);
             return Err(e);
         }
-        if let Some(dir) = path.parent() {
-            if let Ok(dir) = std::fs::File::open(dir) {
-                let _ = dir.sync_all();
-            }
+        for dir in cartelle_da_sincronizzare(&tmp, Some(path)) {
+            sincronizza_la_cartella(&dir);
         }
         Ok((come, stat))
     }
@@ -884,6 +882,58 @@ fn cartella_scrivibile(root: &Utf8Path) -> io::Result<()> {
         let _ = std::fs::remove_file(&prova);
         esito.map(|_| ())
     }
+}
+
+/// Le cartelle la cui **voce** cambia quando qualcosa si sposta o si toglie, e
+/// che quindi vanno sincronizzate perché la mossa sopravviva a un crash
+/// (difetto 0153).
+///
+/// La [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+/// aveva già trovato la riga che conta — *è la cartella a portare il nome*, e
+/// senza il suo `fsync` un rename può sparire dopo un `Ok` — e l'aveva scritta
+/// dentro la sola scrittura. Ma le operazioni che muovono o tolgono l'**unica
+/// copia** di una nota sono le altre: cestinare, ripristinare, spostare,
+/// buttare una bozza. Lì un `Ok` che non è sceso lascia una voce di cestino che
+/// punta al nulla, o una nota che risorge dov'era, con il registro che dice il
+/// contrario — e il registro, per la
+/// [0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md),
+/// si scrive *dopo* la mossa proprio per non raccontare mai ciò che non è
+/// successo: una mossa che torna indietro da sola gli toglie quella garanzia.
+///
+/// Sta qui, pura e restituita come elenco, per la ragione di
+/// [`come_scrivere`]: la regola è una tabella — *quali* cartelle, e quante
+/// volte — e una tabella si legge tutta insieme e si presidia dove gli inode
+/// non ci sono. Le due righe che dice:
+///
+/// - una mossa dentro la stessa cartella la sincronizza **una volta sola**. Non
+///   è un'ottimizzazione: è un `fsync` in più per ogni rinomina, che è il costo
+///   più caro che un disco sappia fare;
+/// - una radice senza genitore — un path relativo di un solo segmento — non
+///   produce niente da sincronizzare invece di produrre la cartella vuota, che
+///   non si apre.
+pub fn cartelle_da_sincronizzare(da: &Utf8Path, a: Option<&Utf8Path>) -> Vec<Utf8PathBuf> {
+    let mut out: Vec<Utf8PathBuf> = Vec::with_capacity(2);
+    for path in std::iter::once(da).chain(a) {
+        if let Some(dir) = path.parent().filter(|d| !d.as_str().is_empty()) {
+            if !out.iter().any(|c| c == dir) {
+                out.push(dir.to_owned());
+            }
+        }
+    }
+    out
+}
+
+/// Il `fsync` di una cartella, **best-effort**: rende `false` dove non si è
+/// potuto fare, e non è un guasto della mossa che l'ha chiesto.
+///
+/// A provarci soltanto c'è la ragione già scritta nella 0065: su Windows una
+/// cartella non si apre come file e la rename ha un'altra semantica. Una mossa
+/// che fallisse perché la sua cartella non si è lasciata aprire rifiuterebbe di
+/// cestinare una nota su una piattaforma dove il difetto che questa riga cura
+/// non esiste — un danno certo al posto di uno improbabile, che è la stessa
+/// misura con cui `update` tratta il proprio lock.
+pub fn sincronizza_la_cartella(dir: &Utf8Path) -> bool {
+    std::fs::File::open(dir).and_then(|d| d.sync_all()).is_ok()
 }
 
 impl VaultStorage for FsStorage {
@@ -996,15 +1046,31 @@ impl VaultStorage for FsStorage {
         file.write_all(bytes)
     }
 
+    /// La mossa, e poi il `fsync` delle cartelle che hanno cambiato voce: senza,
+    /// un rename può sparire dopo aver risposto `Ok`
+    /// ([`cartelle_da_sincronizzare`]). Si sincronizza **dopo il `?`**, cioè
+    /// solo se la mossa è riuscita: non c'è niente da far scendere di una mossa
+    /// che non è avvenuta, e chiederlo lo stesso trasformerebbe un errore in un
+    /// errore più lento.
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::rename(from, to)
+        std::fs::rename(from, to)?;
+        for dir in cartelle_da_sincronizzare(from, Some(to)) {
+            sincronizza_la_cartella(&dir);
+        }
+        Ok(())
     }
 
+    /// Togliere è una mossa come le altre: la voce che sparisce sta in una
+    /// cartella, e finché quella non è scesa il file può tornare.
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
-        std::fs::remove_file(path)
+        std::fs::remove_file(path)?;
+        for dir in cartelle_da_sincronizzare(path, None) {
+            sincronizza_la_cartella(&dir);
+        }
+        Ok(())
     }
 
     fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
@@ -1097,12 +1163,27 @@ impl VaultStorage for FsStorage {
         })
     }
 
+    /// Le voci di dentro se ne vanno con la cartella che le conteneva, quindi
+    /// ciò che resta da far scendere è la voce **della cartella**, che sta in
+    /// quella sopra.
     fn remove_dir_all(&self, dir: &Utf8Path) -> io::Result<()> {
-        std::fs::remove_dir_all(dir)
+        std::fs::remove_dir_all(dir)?;
+        for sopra in cartelle_da_sincronizzare(dir, None) {
+            sincronizza_la_cartella(&sopra);
+        }
+        Ok(())
     }
 
+    /// Anche una cartella vuota, che non porta via dati e non per questo può
+    /// risorgere: chi la toglie lo fa per un motivo — un ramo rimasto vuoto dopo
+    /// uno spostamento — e ritrovarla al riavvio è la stessa incoerenza fra ciò
+    /// che il registro dice e ciò che c'è.
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
-        std::fs::remove_dir(dir)
+        std::fs::remove_dir(dir)?;
+        for sopra in cartelle_da_sincronizzare(dir, None) {
+            sincronizza_la_cartella(&sopra);
+        }
+        Ok(())
     }
 }
 
