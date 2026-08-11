@@ -1704,6 +1704,34 @@ impl Workspace {
         Ok(apertura)
     }
 
+    /// Toglie i temporanei di scrittura che la camminata ha trovato rimasti
+    /// indietro (difetto 0155).
+    ///
+    /// Sta qui e non nella camminata perché è l'unica mutazione dell'apertura
+    /// che non nasce da ciò che l'utente ha scritto, e sta **nell'apertura** e
+    /// non in `vault.repair` perché il sedimento cresce a ogni crash e un
+    /// comando che nessuno lancia non lo ferma: il posto giusto per raccogliere
+    /// ciò che un crash ha lasciato è il giro successivo a quel crash.
+    ///
+    /// Un guasto non risale, per la ragione con cui non risale quello della
+    /// raccolta degli spazi per-documento: un residuo che non si è potuto
+    /// togliere non impedisce a nessuno di aprire una nota, e la prossima
+    /// apertura ci riprova.
+    fn spazza_i_temporanei(&self, temporanei: &[Utf8PathBuf]) {
+        for path in temporanei {
+            match self.docs.vault.storage().remove(path) {
+                Ok(()) => tracing::info!(
+                    target: "fub.kernel",
+                    "temporaneo di scrittura rimasto indietro, tolto: {path}"
+                ),
+                Err(e) => tracing::warn!(
+                    target: "fub.kernel",
+                    "temporaneo di scrittura {path} non tolto: {e}"
+                ),
+            }
+        }
+    }
+
     /// **La prima fase dell'apertura** (§15.7): guarda cosa c'è, e basta.
     ///
     /// Al ritorno il vault è **utilizzabile** — l'anagrafe c'è, le cartelle ci
@@ -1721,6 +1749,7 @@ impl Workspace {
     /// Chi apre aspetta la prima e non la seconda.
     pub fn scan_vault(&mut self) -> Result<Indicizzazione> {
         let scanned = self.docs.vault.scan()?;
+        self.spazza_i_temporanei(&scanned.temporanei_rimasti_indietro);
         let doc_extensions = self.docs.registry.all_extensions();
 
         // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da

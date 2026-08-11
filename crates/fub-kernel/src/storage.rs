@@ -339,6 +339,22 @@ pub trait VaultStorage: Send + Sync {
         }
     }
 
+    /// Da quanto nessuno tocca questa voce — cioè: è **rimasta indietro**?
+    ///
+    /// La domanda è del supporto per la ragione di
+    /// [`radice_valida`](VaultStorage::radice_valida): la risposta si legge sul
+    /// **suo** orologio, ed è quello con cui lui data ciò che scrive
+    /// ([`Stat::mtime`]). Il default è il tempo di un disco vero, millisecondi
+    /// dall'epoca; [`MemStorage`], dove il tempo è un contatore di operazioni,
+    /// lo sovrascrive con la stessa forma letta nella sua unità.
+    ///
+    /// Serve a una cosa sola, e sta sul trait perché quella cosa la fa il
+    /// kernel su qualunque supporto: riconoscere il temporaneo di una scrittura
+    /// che non finirà mai (difetto 0155, [`SCADENZA_DEL_TEMPORANEO_MS`]).
+    fn e_rimasto_indietro(&self, stat: &Stat) -> bool {
+        crate::time::now_unix_millis().saturating_sub(stat.mtime) >= SCADENZA_DEL_TEMPORANEO_MS
+    }
+
     /// Toglie una cartella e tutto ciò che contiene.
     ///
     /// Ha un default composto dalle altre — si cammina e si toglie — perché
@@ -440,6 +456,25 @@ fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
         TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ))
 }
+
+/// Quanto vecchio dev'essere un temporaneo di scrittura perché nessuno lo stia
+/// più scrivendo: **un giorno**.
+///
+/// Un temporaneo vive una frazione di secondo — il file si crea, i byte
+/// atterrano, la rename lo porta al suo nome — e le vie d'errore lo tolgono
+/// tutte. L'unica cosa che gliene lascia uno per terra è un **crash** fra la
+/// creazione e la rename: da lì in poi quel file non ha più nessuno che lo
+/// scriva e nessuno che lo veda, perché la politica di esclusione lo nasconde
+/// apposta (§15.6), e ogni crash ne aggiunge un altro.
+///
+/// La soglia è generosa perché i due errori non si pagano uguale: tenersi un
+/// residuo un giorno di troppo costa un file invisibile su un disco, toglierne
+/// uno vivo costa la scrittura di qualcuno, che si ritrova la rename senza
+/// sorgente. Ed è l'**età** e non il pid che il nome pure porta: un pid è un
+/// fatto di *una* macchina — su un vault condiviso non vuol dire niente, e chi
+/// lo riusa fa scambiare per vivo un temporaneo morto — mentre un giorno fa è
+/// un giorno fa dappertutto.
+pub(crate) const SCADENZA_DEL_TEMPORANEO_MS: u64 = 24 * 60 * 60 * 1000;
 
 /// Questo nome è il temporaneo di una scrittura in corso?
 ///
@@ -1283,6 +1318,11 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Durevole<T> {
 /// operativo senza scriverle, e che qui vanno scritte a mano perché nessuno le
 /// regala. Il presidio è appaiato — le stesse asserzioni sui due supporti — e
 /// sta in `crates/fub-kernel/tests/il_supporto.rs`.
+/// La [`SCADENZA_DEL_TEMPORANEO_MS`] letta nell'unità di [`MemStorage`], dove il
+/// tempo non è un orologio ma un contatore di operazioni: **sedici operazioni
+/// fa**.
+const SCADENZA_DEL_TEMPORANEO_IN_MEMORIA: u64 = 16;
+
 #[derive(Debug, Default)]
 pub struct MemStorage {
     inner: Ricovero<Mem>,
@@ -1519,6 +1559,13 @@ impl VaultStorage for MemStorage {
         mem.tocca_il_genitore(from, ora);
         mem.tocca_il_genitore(to, ora);
         Ok(())
+    }
+
+    /// Qui il tempo è un contatore di operazioni e non un orologio (vedi la
+    /// nota sul tempo di [`MemStorage`]), quindi la soglia si legge in
+    /// operazioni: [`SCADENZA_DEL_TEMPORANEO_IN_MEMORIA`].
+    fn e_rimasto_indietro(&self, stat: &Stat) -> bool {
+        self.lock().tick.saturating_sub(stat.mtime) >= SCADENZA_DEL_TEMPORANEO_IN_MEMORIA
     }
 
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
