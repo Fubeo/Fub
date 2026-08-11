@@ -455,6 +455,24 @@ impl Vault {
             .is_ok_and(|path| self.storage.exists(&path))
     }
 
+    /// Questi due id nominano **lo stesso file**?
+    ///
+    /// La domanda che una guardia «la destinazione è occupata?» deve fare prima
+    /// di credere a [`exists`](Vault::exists): dove il supporto non distingue il
+    /// caso, `nota.md` e `Nota.md` sono un file solo, e la destinazione occupata
+    /// **è la sorgente**. La risposta è del supporto e non di questo modulo —
+    /// vedi [`VaultStorage::same_file`] — perché è il supporto l'unico a saperlo.
+    ///
+    /// Un id fuori dal recinto non nomina nessun posto di questo vault, quindi
+    /// non è lo stesso file di niente: è la stessa risposta di
+    /// [`exists`](Vault::exists), letta dall'altro lato.
+    pub fn same_file(&self, a: &DocId, b: &DocId) -> bool {
+        match (self.path_for(a), self.path_for(b)) {
+            (Ok(a), Ok(b)) => self.storage.same_file(&a, &b),
+            _ => false,
+        }
+    }
+
     /// Sposta un documento (creando le cartelle di destinazione se mancano).
     pub fn rename(&self, from: &DocId, to: &DocId) -> Result<()> {
         let from_path = self.path_for(from)?;

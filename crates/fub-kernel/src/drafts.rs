@@ -301,12 +301,29 @@ impl Drafts {
     /// Trovandola occupata non si sposta niente: la bozza di `from` resta dov'è,
     /// quella di `to` pure, e l'errore diventa un avviso. Due bozze vive in due
     /// posti sono un disordine; una sola, cancellata, non si ripara.
+    ///
+    /// # «Occupata» è una domanda sul file, non sul nome
+    ///
+    /// Perché la rinomina che corregge una maiuscola — `nota.md` → `Nota.md` —
+    /// dove il supporto non distingue il caso porta le due bozze **allo stesso
+    /// file**: la destinazione occupata *è* la sorgente, e chiedere solo
+    /// `exists` faceva fallire ogni correzione di maiuscola lasciando la bozza
+    /// orfana sotto la chiave vecchia mentre il documento si era mosso (0165).
+    /// La domanda giusta la fa [`VaultStorage::same_file`], e chi la risponde è
+    /// il supporto.
+    ///
+    /// Sullo stesso file cambia anche il **come**: scrivere il record nuovo e
+    /// togliere il vecchio sono due nomi della stessa cosa, e la `remove`
+    /// cancellerebbe ciò che la `write` ha appena messo. Si sposta prima il nome
+    /// e si riscrive dopo.
     pub(crate) fn migrate(&self, from: &DocId, to: &DocId) -> std::io::Result<()> {
         let vecchio = self.path(from);
+        let nuovo = self.path(to);
         if !self.storage.exists(&vecchio) {
             return Ok(());
         }
-        if self.storage.exists(&self.path(to)) {
+        let stesso_file = self.storage.same_file(&vecchio, &nuovo);
+        if !stesso_file && self.storage.exists(&nuovo) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 format!("{to} ha già una bozza non salvata, e non la si sovrascrive"),
@@ -318,10 +335,17 @@ impl Drafts {
         if let Some(mut draft) = self.get(from)? {
             draft.doc = to.clone();
             let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
-            self.storage.write(&self.path(to), &bytes)?;
+            if stesso_file {
+                // Il nome sul disco resterebbe quello di prima: si sposta, così
+                // che chi cammina la cartella legga il caso nuovo, e poi ci si
+                // scrive dentro il record aggiornato.
+                self.storage.rename(&vecchio, &nuovo)?;
+                return self.storage.write(&nuovo, &bytes);
+            }
+            self.storage.write(&nuovo, &bytes)?;
             return self.storage.remove(&vecchio);
         }
-        self.storage.rename(&vecchio, &self.path(to))
+        self.storage.rename(&vecchio, &nuovo)
     }
 }
 
