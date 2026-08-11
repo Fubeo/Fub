@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §12.4 (seduta 12) — **chiude la seduta** |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/12-stringhe-errori-locale.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/12-stringhe-errori-locale.md)
 
 ---
 
@@ -33,9 +34,10 @@ Le tre facce precedenti della seduta erano già chiuse: la
 [0039](0039-il-locale-e-il-caso.md) ha dato il locale all'host, la
 [0040](0040-chi-localizza.md) ha deciso **chi localizza** — `Text::Literal` per
 i dati, `Text::Message` per ciò che si traduce, risolto dal kernel sulla via
-d'uscita dal contratto — e la [0041](0041-un-errore-e-testo-che-qualcuno-legge.md)
-ha portato la stessa forma agli errori. Questa è l'ultima, ed è quella che la
-0040 aveva **ristretto** invece di allargare.
+d'uscita dal contratto — e la
+[0041](0041-un-errore-e-testo-che-qualcuno-legge.md) ha portato la stessa forma
+agli errori. Questa è l'ultima, ed è quella che la 0040 aveva **ristretto**
+invece di allargare.
 
 ## Ciò che la 0040 ha lasciato scoperto, ed è esattamente questo
 
@@ -54,14 +56,14 @@ soluzioni diverse, ed è la parte più interessante di questo verbale.
 
 `outline`, `stats`, `blocks`, `search`, `versioning`, `commands` hanno adesso il
 loro catalogo di manifest, come `tags` e `backlinks` già avevano; il core ne ha
-due (`fub-host/src/settings.rs` e `fub-kernel/src/locale.rs`), e
-`mount.rs` li lega con `.speaking(…)`.
+due (`fub-host/src/settings.rs` e `fub-kernel/src/locale.rs`), e `mount.rs` li
+lega con `.speaking(…)`.
 
 I due presidi nuovi (`fub-features/tests/i_cataloghi.rs`,
-`fub-host/tests/i_cataloghi.rs`) camminano sui cataloghi e verificano tre
-cose: che le lingue siano simmetriche, che ogni chiave dichiarata abbia una
-voce, e che **nessuna spec porti prosa cablata**. Il terzo è quello che vale: è
-il modo in cui una feature nuova non può nascere con l'italiano dentro.
+`fub-host/tests/i_cataloghi.rs`) camminano sui cataloghi e verificano tre cose:
+che le lingue siano simmetriche, che ogni chiave dichiarata abbia una voce, e
+che **nessuna spec porti prosa cablata**. Il terzo è quello che vale: è il modo
+in cui una feature nuova non può nascere con l'italiano dentro.
 
 Una riga dell'ABI è stata corretta lungo la strada, ed era un difetto vero:
 `Strings::template` restituiva il **primo** catalogo trovato per una lingua
@@ -101,9 +103,9 @@ l'hanno è la cosa da ricordare:
 
 > **Se una frase porta un numero, la scrive chi conosce il numero.**
 
-«Attività 3», «Avvisi 7», e il titolo del pannello note — che a casa dice
-«Note» e dentro uno spazio dice il nome dello spazio. Un `data-i18n` su quegli
-elementi non sarebbe stato inutile: sarebbe stato **attivamente sbagliato**.
+«Attività 3», «Avvisi 7», e il titolo del pannello note — che a casa dice «Note»
+e dentro uno spazio dice il nome dello spazio. Un `data-i18n` su quegli elementi
+non sarebbe stato inutile: sarebbe stato **attivamente sbagliato**.
 `applicaStringhe` gira a ogni cambio di lingua e scriverebbe «Attività», cioè
 cancellerebbe il conteggio; sul titolo dello spazio riporterebbe «Note» proprio
 quando l'utente non ha cambiato spazio. Due proprietari per la stessa parola
@@ -169,8 +171,8 @@ Questa non era prevista, ed è la scoperta più utile della voce.
 `t()` risolve sulla lingua di chi guarda, e nei test chi guarda è
 `navigator.language` — cioè **il locale della macchina che lancia `vitest`**.
 Lasciato così, `scopeLabel` restituisce «scrive · più note» sul computer di chi
-ha scritto il presidio e «writes · several notes» su quello di chiunque altro: la
-suite passa o fallisce *secondo chi la lancia*. Cinque presidi che asserivano
+ha scritto il presidio e «writes · several notes» su quello di chiunque altro:
+la suite passa o fallisce *secondo chi la lancia*. Cinque presidi che asserivano
 prosa italiana sono diventati rossi appena il catalogo è entrato in funzione, e
 avevano ragione a farlo — stavano dicendo che non c'era nessuna lingua
 dichiarata.
@@ -197,9 +199,9 @@ si riscrive un pannello, la chiave resta, e la si traduce per anni in ogni
 lingua che arriva. È stata tolta, che è la risposta giusta: una chiave senza
 cliente non si conserva «per sicurezza», si cancella.
 
-Quel presidio ha una condizione per funzionare, ed è scritta accanto:
-**le chiavi si nominano come letterali, mai composte**. Una chiave costruita
-(`` `palette.reach.${x}` ``) è una chiave che nessun presidio sa cercare e che
+Quel presidio ha una condizione per funzionare, ed è scritta accanto: **le
+chiavi si nominano come letterali, mai composte**. Una chiave costruita (``
+`palette.reach.${x}` ``) è una chiave che nessun presidio sa cercare e che
 quindi nessuno saprà mai cancellare. È anche la ragione per cui `REACH_KEYS`
 elenca le cinque chiavi per esteso invece di comporle da un prefisso: costa
 cinque righe e le rende trovabili.
@@ -271,8 +273,8 @@ quelli di domani.
 ## Cosa si è trovato e **non** si è toccato
 
 **`SettingKind::rejects()` porta italiano cablato dentro l'ABI**
-(`crates/fub-abi/src/settings.rs`): «`{n}` è fuori dall'intervallo ammesso
-(…)», «`{v}` non è fra le scelte ammesse (…)».
+(`crates/fub-abi/src/settings.rs`): «`{n}` è fuori dall'intervallo ammesso (…)»,
+«`{v}` non è fra le scelte ammesse (…)».
 
 Non è stato corretto, e la ragione è che **non è un fix meccanico**: nessun
 catalogo appartiene all'ABI. Il contratto definisce la forma di un catalogo, non

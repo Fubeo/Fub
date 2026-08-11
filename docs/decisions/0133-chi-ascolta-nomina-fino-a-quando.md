@@ -1,12 +1,10 @@
 # 0133 — Chi ascolta nomina fino a quando
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: i difetti misurati **0016**, **0024** e **0083**, che sono la stessa
-frase; e la seconda zona cieca lasciata scritta dalla
-[0125](0125-un-albero-riusato-riceve-una-porta-non-un-handler.md) — *«nessun
-attore vede un `addEventListener` scritto a mano»*
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: i difetti misurati **0016**,
+**0024** e **0083**, che sono la stessa frase; e la seconda zona cieca lasciata
+scritta dalla [0125](0125-un-albero-riusato-riceve-una-porta-non-un-handler.md)
+— *«nessun attore vede un `addEventListener` scritto a mano»* **Commit**:
+*(questo commit)*
 
 ---
 
@@ -24,8 +22,9 @@ Sono tre sintomi di una domanda che il codice non obbligava nessuno a farsi:
 **fino a quando vive questo ascoltatore?** Chiuderli uno per uno voleva dire
 scrivere tre volte la stessa promessa — *ricordati il gemello* — e lasciarla da
 riscrivere al quarto posto. Questo repo la specie l'aveva già chiusa due volte,
-su due lati: la [0125](0125-un-albero-riusato-riceve-una-porta-non-un-handler.md)
-sul lato azioni (una `Porta` invece di un handler) e la
+su due lati: la
+[0125](0125-un-albero-riusato-riceve-una-porta-non-un-handler.md) sul lato
+azioni (una `Porta` invece di un handler) e la
 [0079](0079-il-grafo-esce-dall-overlay.md) sul lato DOM. Il terzo lato — gli
 ascoltatori globali e i registri di modulo — non l'aveva chiuso nessuno.
 
@@ -55,29 +54,28 @@ deciso la forma: con tre, riparare tre volte era difendibile; con dieci, no.
 
 `frontend/src/ui/vita.ts` — una `Vita`, che è chi possiede un insieme di
 ascolti. Si apre con `apriVita()`, si chiude una volta sola, e ha tre cose:
-`ascolta(bersaglio, tipo, ascoltatore, opzioni)`, `aggiungi(smontaggio)` per
-ciò che qualcun altro ha prodotto (la trappola del fuoco, un `onLingua`, la
+`ascolta(bersaglio, tipo, ascoltatore, opzioni)`, `aggiungi(smontaggio)` per ciò
+che qualcun altro ha prodotto (la trappola del fuoco, un `onLingua`, la
 rimozione di un nodo), e `chiudi()`.
 
-Il punto non è che `ascolta` faccia qualcosa di speciale — fa
-`addEventListener` e si ricorda il gemello. Il punto è che **è un metodo**:
-non lo si chiama senza avere in mano l'oggetto che sa anche smettere. È la
-stessa mossa della `Porta`, un piano più in là: là ciò che circolava nel
-riconciliatore non era un handler ma un rinvio, qui ciò che si passa a chi
-ascolta non è un bersaglio ma una vita.
+Il punto non è che `ascolta` faccia qualcosa di speciale — fa `addEventListener`
+e si ricorda il gemello. Il punto è che **è un metodo**: non lo si chiama senza
+avere in mano l'oggetto che sa anche smettere. È la stessa mossa della `Porta`,
+un piano più in là: là ciò che circolava nel riconciliatore non era un handler
+ma un rinvio, qui ciò che si passa a chi ascolta non è un bersaglio ma una vita.
 
 La forma alternativa, e il motivo per cui è stata scartata: **far tornare a ogni
 `onQualcosa` una funzione di disiscrizione** e fermarsi lì. È ciò che la riga
 0016 chiedeva alla lettera, funziona, ed è il modo in cui `onKernelEvent` è già
 scritto. Non basta per due ragioni. La prima è che TypeScript non ha un
 *must-use*: un valore di ritorno ignorato non è un errore, quindi la promessa
-resta da ricordarsi — spostata dal `removeEventListener` al `const smonta =`.
-La seconda è che non copre il caso peggiore dei tre, il 0024, dove **non c'è
-nessun chiamante da istruire**: chi registra e chi dovrebbe disiscriversi sono
-la stessa funzione, un istante dopo.
+resta da ricordarsi — spostata dal `removeEventListener` al `const smonta =`. La
+seconda è che non copre il caso peggiore dei tre, il 0024, dove **non c'è nessun
+chiamante da istruire**: chi registra e chi dovrebbe disiscriversi sono la
+stessa funzione, un istante dopo.
 
-Le due si compongono, e così sono state prese: `onLingua` torna uno
-`Smontaggio` (il tipo di `vita.ts`), e chi ha una `Vita` scrive
+Le due si compongono, e così sono state prese: `onLingua` torna uno `Smontaggio`
+(il tipo di `vita.ts`), e chi ha una `Vita` scrive
 `vita.aggiungi(onLingua(ridisegna))`. Chi non ce l'ha lo ignora, ed è corretto —
 vedi sotto.
 
@@ -95,8 +93,8 @@ vedi sotto.
    `aggiungi` esegue subito ciò che riceve. Non è una comodità: **è la
    riparazione del 0024**. Là il `document.addEventListener` arrivava da un
    `setTimeout(…, 0)` — il ritardo esiste perché il click che *apre* il menu non
-   lo chiuda — e se il menu si chiudeva prima che il timer scattasse (Escape,
-   o una voce scelta col ritorno a capo) l'ascoltatore si attaccava un istante
+   lo chiuda — e se il menu si chiudeva prima che il timer scattasse (Escape, o
+   una voce scelta col ritorno a capo) l'ascoltatore si attaccava un istante
    dopo a un menu che non c'era più. Il `once: true` non serviva a niente:
    restava lì fino al primo click qualunque, e se nel frattempo se n'era aperto
    un altro chiudeva quello. Con la vita, quel ramo non è un caso da gestire:
@@ -124,8 +122,8 @@ sbagliavano perché non c'era un posto in cui l'elenco fosse uno. Adesso il post
 **«`onLingua` non torna una funzione di disiscrizione»: vero, e non morde.** I
 quattro chiamanti — il centro attività, il titolo dello spazio nell'esplora, la
 riga di salvataggio del pannello documento, il pulsante degli avvisi — sono
-superfici montate una volta che vivono quanto la finestra, e nessuna finisce.
-Il difetto è del **secondo chiamante**, che sarà un pannello: ogni montaggio
+superfici montate una volta che vivono quanto la finestra, e nessuna finisce. Il
+difetto è del **secondo chiamante**, che sarà un pannello: ogni montaggio
 lascerebbe la sua iscrizione nella lista, e alla terza apertura un cambio di
 lingua ridisegnerebbe tre volte, due delle quali su superfici che non ci sono
 più. La riga si toglie lo stesso, e la riparazione è la stessa: cambia solo che
@@ -136,20 +134,20 @@ i quattro chiamanti di oggi restano identici.
 locale e della tastiera sono chiamati una volta da `main.ts` e vivono quanto la
 pagina — è la stessa cosa che `state/store.ts` dichiara di sé da tempo (*«i
 moduli della shell vivono quanto la finestra, e un `off()` che nessuno chiama è
-solo una firma in più da spiegare»*). Sono passati per la porta lo stesso, e
-non per uniformità: perché il conto qui sotto non ha eccezioni, e un'eccezione
-per quattro casi «tanto vanno bene» è la prima riga del prossimo difetto. La
-loro `Vita` è `vitaFinestra` in `main.ts`, che nessuno chiude, e la riga che lo
-dice sta lì.
+solo una firma in più da spiegare»*). Sono passati per la porta lo stesso, e non
+per uniformità: perché il conto qui sotto non ha eccezioni, e un'eccezione per
+quattro casi «tanto vanno bene» è la prima riga del prossimo difetto. La loro
+`Vita` è `vitaFinestra` in `main.ts`, che nessuno chiude, e la riga che lo dice
+sta lì.
 
 **Ciò che è restato fuori, e la ragione.** I quattro registri di modulo
 (`onEvent`, `onAnyEvent`, `store.on`, `onLingua`) potevano prendere una `Vita`
-come parametro obbligatorio: sarebbe stato «impossibile» invece di
-«possibile». Sono ventotto chiamanti, tutti app-lifetime, che avrebbero scritto
-tutti la stessa vita globale — cioè la regola scritta **nei chiamanti**, che è
-il contrario del criterio. E contraddirebbe una decisione già scritta e datata
-in `store.ts`, che nomina il §9.4 come il momento in cui quella riga cambia.
-Quando arriveranno i pannelli smontabili, il posto è uno e la `Vita` esiste già.
+come parametro obbligatorio: sarebbe stato «impossibile» invece di «possibile».
+Sono ventotto chiamanti, tutti app-lifetime, che avrebbero scritto tutti la
+stessa vita globale — cioè la regola scritta **nei chiamanti**, che è il
+contrario del criterio. E contraddirebbe una decisione già scritta e datata in
+`store.ts`, che nomina il §9.4 come il momento in cui quella riga cambia. Quando
+arriveranno i pannelli smontabili, il posto è uno e la `Vita` esiste già.
 
 ## Il rosso
 
@@ -158,20 +156,20 @@ Quando arriveranno i pannelli smontabili, il posto è uno e la `Vita` esiste gi�
 e `matchMedia(…).addEventListener`, in tutto `frontend/src/` tranne i banchi e
 tranne la porta. Provato rosso **sei volte, una per sito**, rimettendo ogni riga
 com'era e guardando l'uscita: sei violazioni distinte, sei uscite a 1. Le zone
-cieche sono dichiarate nel commento in testa allo script — l'alias (`const d =
-document`), un `EventTarget` passato da fuori, gli elementi (voluto: quell'
-ascoltatore muore col nodo, ed è il lato che la 0079 ha già chiuso), i banchi.
-Ciò che il conto **non** dice, e non deve: che ogni `addEventListener` abbia un
-`removeEventListener` gemello. Quella è la promessa ripetuta, cioè la cosa da
-cui si sta scappando — contarne le occorrenze farebbe passare per verde chi ne
-scrive due e ne chiama uno.
+cieche sono dichiarate nel commento in testa allo script — l'alias
+(`const d = document`), un `EventTarget` passato da fuori, gli elementi (voluto:
+quell' ascoltatore muore col nodo, ed è il lato che la 0079 ha già chiuso), i
+banchi. Ciò che il conto **non** dice, e non deve: che ogni `addEventListener`
+abbia un `removeEventListener` gemello. Quella è la promessa ripetuta, cioè la
+cosa da cui si sta scappando — contarne le occorrenze farebbe passare per verde
+chi ne scrive due e ne chiama uno.
 
 **I banchi** — `ui/vita.test.ts`, `ui/menu.test.ts`, `i18n/onlingua.test.ts`,
 quindici casi. Ognuno provato rosso rompendo apposta ciò che difende: `chiudi`
 che non stacca, `ascolta` che registra anche da chiusa, `aggiungi` che non
 esegue su una vita chiusa, l'ordine diretto invece che inverso, uno smontaggio
-che sbaglia e ferma gli altri; le tre righe del menu rimesse com'erano prima
-(il `document.addEventListener` nel `setTimeout`, il
+che sbaglia e ferma gli altri; le tre righe del menu rimesse com'erano prima (il
+`document.addEventListener` nel `setTimeout`, il
 `getElementById("icon-picker")?.remove()`, la trappola non affidata alla vita);
 `onLingua` che torna uno smontaggio che non smonta, uno `splice` sull'indice
 sbagliato, `rileggi` che itera la lista viva. Nessuna prova aspetta: si emette
@@ -180,33 +178,33 @@ l'evento e si guarda chi risponde.
 La spia per «la trappola del fuoco non c'è più» è `defaultPrevented` su un Tab —
 la trappola *mangia* il tasto, quindi un Tab che passa è un Tab che nessuno ha
 intercettato. È la forma scrivibile in `happy-dom`, dove il layout non esiste
-(buco n. 5 della [0112](0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md)) e quindi non si può guardare dove
-il fuoco sia finito.
+(buco n. 5 della [0112](0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md))
+e quindi non si può guardare dove il fuoco sia finito.
 
 ### Due presidi che NON sono diventati rossi, ed è l'informazione migliore
 
 **Il primo è stato cancellato.** *«Le opzioni tornano identiche allo
-smontaggio»* era scritto, passava, e sarebbe passato **anche togliendo
-`opzioni` dal `removeEventListener`**: `happy-dom` stacca un ascoltatore in
-cattura anche se glielo si chiede senza la fase. In un browser vero sarebbe
-stato rosso — e la proprietà non è teorica, la trappola del fuoco e il selettore
-di icona ascoltano tutti e due in cattura, e un `removeEventListener` che perde
-il `capture` non toglie niente e non lo dice. La prova è stata tolta e al suo
-posto c'è la riga che dice perché: la proprietà la tiene **la forma** di
-`ascolta`, una variabile letta due volte, che è il verso che il compilatore ha
-già. È la mossa della 0125, dove un presidio è stato scritto e poi cancellato
-per la stessa ragione — e la regola sotto è che *un presidio che passerebbe
-comunque è peggio di nessun presidio*, perché occupa il posto di quello vero.
+smontaggio»* era scritto, passava, e sarebbe passato **anche togliendo `opzioni`
+dal `removeEventListener`**: `happy-dom` stacca un ascoltatore in cattura anche
+se glielo si chiede senza la fase. In un browser vero sarebbe stato rosso — e la
+proprietà non è teorica, la trappola del fuoco e il selettore di icona ascoltano
+tutti e due in cattura, e un `removeEventListener` che perde il `capture` non
+toglie niente e non lo dice. La prova è stata tolta e al suo posto c'è la riga
+che dice perché: la proprietà la tiene **la forma** di `ascolta`, una variabile
+letta due volte, che è il verso che il compilatore ha già. È la mossa della
+0125, dove un presidio è stato scritto e poi cancellato per la stessa ragione —
+e la regola sotto è che *un presidio che passerebbe comunque è peggio di nessun
+presidio*, perché occupa il posto di quello vero.
 
 **Il secondo ha cambiato il codice invece del banco.** *«Chiudere due volte
 disfa una volta sola»* non diventava rosso togliendo il
-`if (this.#chiusa) return` in testa a `chiudi()`, **né** togliendo lo svuotamento
-della lista: ce n'erano due, di difese, e ognuna copriva l'altra. Una proprietà
-vera due volte non è presidiata da niente — nessun banco può diventare rosso
-togliendone una. La guardia in testa è stata tolta: lo svuotamento serve
-comunque (una vita chiusa che tenesse i suoi smontaggi terrebbe in vita ciò che
-hanno catturato), è l'unico meccanismo rimasto, e adesso togliendolo il caso
-diventa rosso.
+`if (this.#chiusa) return` in testa a `chiudi()`, **né** togliendo lo
+svuotamento della lista: ce n'erano due, di difese, e ognuna copriva l'altra.
+Una proprietà vera due volte non è presidiata da niente — nessun banco può
+diventare rosso togliendone una. La guardia in testa è stata tolta: lo
+svuotamento serve comunque (una vita chiusa che tenesse i suoi smontaggi
+terrebbe in vita ciò che hanno catturato), è l'unico meccanismo rimasto, e
+adesso togliendolo il caso diventa rosso.
 
 ## Cosa resta scoperto
 

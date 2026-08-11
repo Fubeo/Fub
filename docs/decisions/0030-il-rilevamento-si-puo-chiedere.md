@@ -6,12 +6,13 @@
 | **Origine** | `todo.md` §9.7 (seduta 9) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)
 
 ---
 
-Il file watcher è **l'unico** meccanismo con cui Fub viene a sapere che
-qualcun altro ha toccato il vault. Non ce n'è un secondo: `reindex` gira solo
+Il file watcher è **l'unico** meccanismo con cui Fub viene a sapere che qualcun
+altro ha toccato il vault. Non ce n'è un secondo: `reindex` gira solo
 all'apertura, non esiste una riconciliazione periodica, e niente confronta mai
 la cache col disco. Da lì venivano tre silenzi, ed erano lo stesso silenzio:
 
@@ -63,8 +64,8 @@ proprio `Result`.**
   rilevatore la alza; il debouncer la abbassa quando riporta errori e quando
   viene distrutto. Non un valore **copiato** dentro il kernel al montaggio: una
   copia è una seconda verità, e sarebbe stata alzata una volta e mai più
-  abbassata — cioè lo stesso `true` perenne di prima, spostato di un livello.
-  Il presidio è che `Host::is_watching` e `IndexQuery::VaultStatus` leggono lo
+  abbassata — cioè lo stesso `true` perenne di prima, spostato di un livello. Il
+  presidio è che `Host::is_watching` e `IndexQuery::VaultStatus` leggono lo
   stesso bit, e fallisce se la funzione ne rende uno nuovo.
 - **La serve il `CoreIndex`, non un ramo prima del router.** «Le risposte del
   kernel sono un provider» è la [0019](0019-il-canale-dati.md), e intercettare
@@ -76,10 +77,11 @@ proprio `Result`.**
 - **Gli esiti si registrano DENTRO il kernel.** Non «i chiamanti smettano di
   scrivere `let _ =`»: un chiamante distratto è la condizione normale, e una
   regola che chiede attenzione a ogni chiamata la perde alla prima riga scritta
-  di fretta. `sync_path` e `sync_renamed_path` registrano da sé e **restituiscono
-  quello che restituivano**: il `Result` resta identico per chi lo legge, e chi
-  non lo legge non può più nasconderlo. Il presidio chiama `let _ = ws.sync_path(…)`
-  esattamente come il watcher, e chiede al vault se se ne ricorda.
+  di fretta. `sync_path` e `sync_renamed_path` registrano da sé e
+  **restituiscono quello che restituivano**: il `Result` resta identico per chi
+  lo legge, e chi non lo legge non può più nasconderlo. Il presidio chiama
+  `let _ = ws.sync_path(…)` esattamente come il watcher, e chiede al vault se se
+  ne ricorda.
 - **Il conto non si azzera da solo.** Una sincronizzazione riuscita dopo una
   fallita non cancella la fallita: «è già successo» resta vero, e ciò che è
   rimasto indietro non torna indietro da sé — chi vuole ripartire pulito riapre
@@ -94,10 +96,10 @@ proprio `Result`.**
 È la domanda che il §9.7 poneva come la decisione vera, perché «oggi promette la
 stessa cosa e ne mantiene un'altra». La risposta:
 
-**Fub promette che la verità è il vault sul disco, e che le proprie risposte
-ne sono un riflesso aggiornato *soltanto quando `watching` è vero*. Dove non lo
-è, la promessa è più piccola, ed è questa: ciò che passa da Fub è coerente;
-ciò che passa da fuori si vede alla riapertura.**
+**Fub promette che la verità è il vault sul disco, e che le proprie risposte ne
+sono un riflesso aggiornato *soltanto quando `watching` è vero*. Dove non lo è,
+la promessa è più piccola, ed è questa: ciò che passa da Fub è coerente; ciò che
+passa da fuori si vede alla riapertura.**
 
 Due conseguenze che vanno con la frase, o la frase non vale niente:
 
@@ -113,10 +115,11 @@ Due conseguenze che vanno con la frase, o la frase non vale niente:
 ## Trovato per strada
 
 - **Chi smette lo dice, e ci vuole un `Drop`.** Un debouncer si ferma quando
-  viene distrutto — è il modo in cui la [0029](0029-chiudere-un-vault-e-chiuderli-tutti.md)
-  lo spegne, per prima cosa, chiudendo un vault. Senza abbassare la bandiera lì,
-  sarebbe rimasta alzata su una sessione che non guarda più niente: la stessa
-  bugia di prima, spostata di un momento.
+  viene distrutto — è il modo in cui la
+  [0029](0029-chiudere-un-vault-e-chiuderli-tutti.md) lo spegne, per prima cosa,
+  chiudendo un vault. Senza abbassare la bandiera lì, sarebbe rimasta alzata su
+  una sessione che non guarda più niente: la stessa bugia di prima, spostata di
+  un momento.
 - **La bandiera si alza DOPO che `watch` è riuscita.** Fra il debouncer
   costruito e la radice effettivamente osservata c'è un errore possibile, e in
   quella finestra la risposta giusta è ancora `false`. Alzarla alla costruzione
@@ -140,16 +143,16 @@ Due conseguenze che vanno con la frase, o la frase non vale niente:
   vuole i metadati di entry che il §14.2 non ha ancora (né mtime, né dimensione,
   né impronta). Confrontare senza impronte vorrebbe dire rileggere tutto, cioè
   reindicizzare a intervalli.
-- **`write_document` continua a non avere una `base`, ed è il residuo nominato.**
-  Il §9.7 lo chiamava «la conseguenza peggiore è una scrittura, non una
-  lettura»: la [0008](0008-modifica-chirurgica.md) ha dato la guardia giusta —
-  una revisione nella firma, e `Conflict` invece della sovrascrittura silenziosa
-  — ma vale per `apply_edit`, cioè per i *provider*. Il salvataggio dell'editor
-  passa da `write_document`, che una base non ce l'ha. Questa decisione non lo
-  chiude e non lo può chiudere da sola: è il conflitto buffer↔disco esplicito
-  del [§18.1](../roadmap/18-editor-e-tastiera.md), dove è stato scritto. Ciò che
-  cambia è che adesso quel rischio è **misurabile** da chi disegna — con
-  `watching: false` la copertura è nulla e si sa.
+- **`write_document` continua a non avere una `base`, ed è il residuo
+  nominato.** Il §9.7 lo chiamava «la conseguenza peggiore è una scrittura, non
+  una lettura»: la [0008](0008-modifica-chirurgica.md) ha dato la guardia giusta
+  — una revisione nella firma, e `Conflict` invece della sovrascrittura
+  silenziosa — ma vale per `apply_edit`, cioè per i *provider*. Il salvataggio
+  dell'editor passa da `write_document`, che una base non ce l'ha. Questa
+  decisione non lo chiude e non lo può chiudere da sola: è il conflitto
+  buffer↔disco esplicito del [§18.1](../roadmap/18-editor-e-tastiera.md), dove è
+  stato scritto. Ciò che cambia è che adesso quel rischio è **misurabile** da
+  chi disegna — con `watching: false` la copertura è nulla e si sa.
 - **Nessun indicatore permanente nella shell.** Un vault senza rilevamento
   produce un avviso all'apertura (`notify`), che è ciò che questa shell può
   mostrare oggi senza inventarsi una superficie. L'indicatore che sta lì e resta
@@ -162,8 +165,8 @@ Due conseguenze che vanno con la frase, o la frase non vale niente:
   contratto, con un cliente solo davanti.
 - **Un errore solo, e non una lista.** L'ultimo è quello che serve a chi guarda
   («cosa è successo adesso»); una lista è un log, e un log ha una destinazione
-  (§20.2) che non c'è ancora. Il contatore dice che ce ne sono stati altri, che è
-  la parte che non si può ricostruire dopo.
+  (§20.2) che non c'è ancora. Il contatore dice che ce ne sono stati altri, che
+  è la parte che non si può ricostruire dopo.
 
 ## Verifica
 
@@ -189,11 +192,11 @@ Due conseguenze che vanno con la frase, o la frase non vale niente:
     bandiera del kernel, non una sua»). È la prova che due copie non passano.
 - **Contratto:** `IndexQuery::VaultStatus`, `QueryKind::VaultStatus`,
   `IndexResult::VaultStatus(VaultStatus)` e il record `vault-status` sono **in
-  coda** ai rispettivi variant, quindi additivi; presidiati da `wit_conformance`,
-  che verifica anche l'ordine dei casi contro la dichiarazione Rust. Il mirror TS
-  è rigenerato, con un campione che ha il rilevamento **acceso e già inciampato**
-  — coi default il mirror non vedrebbe né un `true` né una stringa dentro
-  l'opzione, cioè metà della forma.
+  coda** ai rispettivi variant, quindi additivi; presidiati da
+  `wit_conformance`, che verifica anche l'ordine dei casi contro la
+  dichiarazione Rust. Il mirror TS è rigenerato, con un campione che ha il
+  rilevamento **acceso e già inciampato** — coi default il mirror non vedrebbe
+  né un `true` né una stringa dentro l'opzione, cioè metà della forma.
 - `cd frontend && npx vitest run` — 11 file, 173 test verdi; `npx tsc --noEmit`
   pulita.
 - `cargo fmt --all` — pulita.

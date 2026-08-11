@@ -6,33 +6,35 @@
 | **Origine** | `todo.md` §1.9 (secondo giro) |
 | **Commit** | `0cf0717` |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO.md](../PIANO.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[PIANO.md](../PIANO.md)
 
 ---
 
-- [x] **Forma del contesto decisa**: `HostApi::active_context() -> Option<ViewContext>`
-      con `ViewContext { pane: PaneId, doc: Option<DocId>, selection:
-      Option<Selection>, mode: PaneMode }` (`abi/session.rs`, interface `session`
-      nel WIT). `active_document` non esiste più: due firme per la stessa
-      domanda sarebbero state la trappola che questa voce descrive.
-- [x] **La selezione attraversa il confine**: `Selection { span: Option<Span>,
-      text: String }`. Il ponte inverso code unit → byte del §18.1
-      (`charToByteIndex` in `frontend/src/rules/offsets.ts`) è stato scritto qui, con
-      i suoi test: era il prerequisito, e senza di esso lo `Span` non si sapeva
-      nemmeno costruire.
+- [x] **Forma del contesto decisa**:
+  `HostApi::active_context() -> Option<ViewContext>` con
+  `ViewContext { pane: PaneId, doc: Option<DocId>, selection: Option<Selection>, mode: PaneMode }`
+  (`abi/session.rs`, interface `session` nel WIT). `active_document` non esiste
+  più: due firme per la stessa domanda sarebbero state la trappola che questa
+  voce descrive.
+- [x] **La selezione attraversa il confine**:
+  `Selection { span: Option<Span>, text: String }`. Il ponte inverso code unit →
+  byte del §18.1 (`charToByteIndex` in `frontend/src/rules/offsets.ts`) è stato
+  scritto qui, con i suoi test: era il prerequisito, e senza di esso lo `Span`
+  non si sapeva nemmeno costruire.
 - [x] **Chi imposta il contesto resta la shell**, e la chiave è il pannello:
-      `Workspace::set_active_context(Option<ViewContext>) -> Vec<String>` (gli id
-      delle view da ridisegnare), comando IPC `set_active_context`. Il
-      `PaneId` è nel contesto anche se questa shell ha un pannello solo: quando
-      ne avrà due, il contratto non cambia.
+  `Workspace::set_active_context(Option<ViewContext>) -> Vec<String>` (gli id
+  delle view da ridisegnare), comando IPC `set_active_context`. Il `PaneId` è
+  nel contesto anche se questa shell ha un pannello solo: quando ne avrà due, il
+  contratto non cambia.
 - [x] **`ViewSpec.follows: ContextMask`**: la metà mancante del protocollo.
-      Senza, "la shell ridisegna al cambio di nota attiva" diventa "ridisegna a
-      ogni battuta di tasto" appena il contesto porta la selezione.
+  Senza, "la shell ridisegna al cambio di nota attiva" diventa "ridisegna a ogni
+  battuta di tasto" appena il contesto porta la selezione.
 - [x] Clienti veri nello stesso giro: l'**outline** segna la sezione in cui sta
-      il cursore, il pannello **statistiche** (`fub-features/src/stats.rs`,
-      quarto `ViewProvider` ufficiale) conta le parole della selezione e cambia
-      faccia in lettura. La shell pubblica il contesto vero: tre modalità
-      (Sorgente / Live / Lettura) commutabili dalla barra.
+  il cursore, il pannello **statistiche** (`fub-features/src/stats.rs`, quarto
+  `ViewProvider` ufficiale) conta le parole della selezione e cambia faccia in
+  lettura. La shell pubblica il contesto vero: tre modalità (Sorgente / Live /
+  Lettura) commutabili dalla barra.
 
 *Sblocca:* 3.3 (tab, split, finestre, note history per pane), 4.1 (modalità
 per-nota e per-pane), 4.2-4.3 (azioni sulla selezione), 13.3, 22.2.
@@ -43,7 +45,8 @@ per-nota e per-pane), 4.2-4.3 (azioni sulla selezione), 13.3, 22.2.
 dopo il freeze è una minor; **un campo in più a un record è una migrazione di
 ogni provider che lo riceve**. I quattro campi sono perciò tutti qui — pannello,
 documento, selezione, modalità — e non un sottoinsieme da completare dopo. È la
-stessa ragione per cui `select` è entrato in `IndexQuery::Properties` alla [decisione 0005](0005-canale-dati-verso-le-view.md).
+stessa ragione per cui `select` è entrato in `IndexQuery::Properties` alla
+[decisione 0005](0005-canale-dati-verso-le-view.md).
 
 *La regola dello span: `text` sempre, `span` solo se vero.* Una selezione ha
 coordinate del **buffer**; il kernel conosce il **file salvato**. Finché
@@ -89,11 +92,11 @@ sempre da tenere allineata, mentre "esclusive" è ciò che `PaneMode` dichiara.
 Entrare in lettura fa prima un flush del buffer, perché il documento reso lo
 produce il kernel dal sorgente salvato e leggere la nota di un minuto fa non
 sarebbe leggerla. E i colori sono **gli stessi** — fondo, testo e titoli: la
-tavolozza della superficie
-del documento (`--doc-*` in `style.css`) è ora l'unico posto dove sono scritti,
-e la legge sia la resa di Lettura sia il tema della live preview sia il fondo
-dell'editor — tre modalità della stessa nota non possono essere di tre colori
-diversi, e due copie degli stessi hex divergono al primo ritocco.
+tavolozza della superficie del documento (`--doc-*` in `style.css`) è ora
+l'unico posto dove sono scritti, e la legge sia la resa di Lettura sia il tema
+della live preview sia il fondo dell'editor — tre modalità della stessa nota non
+possono essere di tre colori diversi, e due copie degli stessi hex divergono al
+primo ritocco.
 
 *Trovato per strada e chiuso (guardando l'app girare):* riaprire **lo stesso
 vault** dal dialogo piantava l'app per sempre. `open_vault` costruiva la
@@ -120,6 +123,6 @@ nozione di elemento corrente, ed è roba del §2.1/§2.8; il **multi-cursore e l
 selezioni multiple** (4.2) — `Selection` ne porta una, e la seconda sarebbe
 `list<selection>`, cioè additiva solo cambiando il tipo del campo: qui la scelta
 è dichiarata, non dimenticata (una shell con più cursori pubblica quello
-primario finché non arriva 4.2); il **conflitto buffer↔disco** (§18.1), che resta
-custodito da un flag della shell — il contesto ne subisce l'effetto (niente
-span) ma non lo risolve.
+primario finché non arriva 4.2); il **conflitto buffer↔disco** (§18.1), che
+resta custodito da un flag della shell — il contesto ne subisce l'effetto
+(niente span) ma non lo risolve.

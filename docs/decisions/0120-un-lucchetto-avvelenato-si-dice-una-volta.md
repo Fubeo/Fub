@@ -1,9 +1,8 @@
 # 0120 — Un lucchetto avvelenato si dice una volta
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: il difetto *«che il vault avvelenato uccida l'applicazione è una scelta, e non è stata fatta»* di [«I difetti da correggere»](../todo.md)
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: il difetto *«che il vault
+avvelenato uccida l'applicazione è una scelta, e non è stata fatta»* di
+[«I difetti da correggere»](../todo.md) **Commit**: *(questo commit)*
 
 ---
 
@@ -55,9 +54,9 @@ presta `&T` a più thread insieme. La mappa delle sessioni contiene un
 detto di no: quel rilevatore stava in una struttura condivisa contando su una
 proprietà che **nessuno aveva scelto** — che il suo lucchetto non lo prestasse
 mai a due lettori. Da qui `VaultWatcher: Send + Sync` (e il `Box<dyn Any + Send
-+ Sync>` che tiene vivo il debouncer). Il guadagno che ne viene non era
-cercato: due IPC su due vault diversi non si serializzano più sul lucchetto
-delle sessioni.
++ Sync>` che tiene vivo il debouncer). Il guadagno che ne viene non era cercato:
+  due IPC su due vault diversi non si serializzano più sul lucchetto delle
+  sessioni.
 
 **Falso: che il `Result` della porta bastasse a impedire il panico.** Vedi «Il
 rosso», in fondo: è successo scrivendo questa decisione.
@@ -75,10 +74,11 @@ metà del regalo della [0024](0024-chi-legge-non-aspetta-chi-legge.md). Quindi
 «avvelenato», qui, non vuol dire «qualcuno è morto lì vicino»: vuol dire **una
 mutazione si è fermata a metà**. Un `Workspace` preso a quel punto ha un indice
 alimentato per metà, un documento in tabella e non nel grafo, un lotto aperto
-che nessuno chiuderà — e dalla [0119](0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)
-anche un piano applicato a metà. `into_inner` restituirebbe quello stato
-facendolo passare per buono: chi cerca riceverebbe risposte **sbagliate** invece
-di risposte **mancanti**, che è il modo peggiore di sopravvivere. Ricuperare qui
+che nessuno chiuderà — e dalla
+[0119](0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md) anche un
+piano applicato a metà. `into_inner` restituirebbe quello stato facendolo
+passare per buono: chi cerca riceverebbe risposte **sbagliate** invece di
+risposte **mancanti**, che è il modo peggiore di sopravvivere. Ricuperare qui
 non è ricuperare — è mentire.
 
 **Perché una volta e non a ogni chiamata.** «Irrecuperabile» non autorizza il
@@ -93,19 +93,21 @@ dice che i file sul disco non sono toccati e dice di riavviare. Sull'IPC quello
 
 `fub_host::Custodia<T>` (`crates/fub-host/src/custodia.rs`). Un `Arc<RwLock<T>>`
 con il lucchetto **privato al modulo**: `read`/`write` consegnano la guardia o
-l'errore, `.lock()` su una `Custodia` non esiste e quindi non compila. È la forma
-del `mod intake` di `fub-kernel/src/bus.rs` e della porta unica `ascolta` della
+l'errore, `.lock()` su una `Custodia` non esiste e quindi non compila. È la
+forma del `mod intake` di `fub-kernel/src/bus.rs` e della porta unica `ascolta`
+della
 [0118](0118-una-chiusura-non-cattura-cio-che-il-riconciliatore-aggiorna.md).
 
 Che sia **generico** non è eleganza: è la prova che il secondo chiamante la
-eredita gratis. Sette specie di dato ci sono passate dentro — workspace, registro
-dei bundle, bandiere dei job, sveglie, apertura in corso, scarti, mappa delle
-sessioni, registro dei vault, store delle versioni — e nessuna ha ridiscusso
-niente. Il conto delle denunce è **della custodia** e non del processo: due vault
-aperti sono due stati, e sapere che il primo è morto non dice niente del secondo.
+eredita gratis. Sette specie di dato ci sono passate dentro — workspace,
+registro dei bundle, bandiere dei job, sveglie, apertura in corso, scarti, mappa
+delle sessioni, registro dei vault, store delle versioni — e nessuna ha
+ridiscusso niente. Il conto delle denunce è **della custodia** e non del
+processo: due vault aperti sono due stati, e sapere che il primo è morto non
+dice niente del secondo.
 
-Il costo: `read`/`write` rendono un `Result`, quindi settanta siti hanno preso un
-`?`. Dove la firma un canale ce l'aveva già, la risposta ci è entrata:
+Il costo: `read`/`write` rendono un `Result`, quindi settanta siti hanno preso
+un `?`. Dove la firma un canale ce l'aveva già, la risposta ci è entrata:
 
 - `VaultSession::close` e `Host::close` rendono `Vec<PluginError>` — il veleno
   diventa uno degli errori di chiusura, che è il canale giusto e c'era;
@@ -153,28 +155,28 @@ insieme, perché si rompono separatamente.
 `fub-host/src` e `fub-app/src`, salta la prosa (la trappola di `dieta_ipc.rs`) e
 pretende che ogni `Mutex`/`RwLock` nudo abbia una riga con la sua ragione;
 l'allowlist si controlla in tutte e due le direzioni. Restano **tre** righe e
-**due** ragioni: `Condizione` — `std::sync::Condvar` è definita su `MutexGuard` e
-su niente altro, quindi la condizione «ha finito» tiene il suo `Mutex` — e
+**due** ragioni: `Condizione` — `std::sync::Condvar` è definita su `MutexGuard`
+e su niente altro, quindi la condizione «ha finito» tiene il suo `Mutex` — e
 `SoloTest`, che è il sito di `config.rs`. Rimesso in giro un `RwLock` a mano in
 `jobs.rs`: rosso, con file, riga e la riga colpevole stampata.
 `ogni_file_e_guardato` confronta l'elenco con la cartella vera, perché un
 presidio che legge un elenco sa quell'elenco.
 
-**La zona cieca, e non è teorica: è successa addosso.** `Custodia::read` rende un
-`Result`, e su un `Result` si scrive `.unwrap()`. La sostituzione automatica su
-`crates/fub-app/src/lib.rs` non ha agganciato (indentazione diversa da quella
-cercata), il crate ha continuato a compilare **verde** con quattordici `.unwrap()`
-addosso alla porta nuova, `cargo clippy` non ha detto niente e nessun errore del
-compilatore poteva dirlo — perché non c'era niente di illegale: `Result::unwrap`
-è legittimo. La riparazione strutturale, da sola, aveva lasciato in piedi il
-difetto nel file dove era stato misurato. Da lì il secondo caso,
-`nessuno_srotola_la_risposta_della_porta`, che è un conto e non un tipo perché il
-tipo qui non può: rimessi gli `unwrap` di prima in `fub-app` e in `watcher.rs`,
-rosso.
+**La zona cieca, e non è teorica: è successa addosso.** `Custodia::read` rende
+un `Result`, e su un `Result` si scrive `.unwrap()`. La sostituzione automatica
+su `crates/fub-app/src/lib.rs` non ha agganciato (indentazione diversa da quella
+cercata), il crate ha continuato a compilare **verde** con quattordici
+`.unwrap()` addosso alla porta nuova, `cargo clippy` non ha detto niente e
+nessun errore del compilatore poteva dirlo — perché non c'era niente di
+illegale: `Result::unwrap` è legittimo. La riparazione strutturale, da sola,
+aveva lasciato in piedi il difetto nel file dove era stato misurato. Da lì il
+secondo caso, `nessuno_srotola_la_risposta_della_porta`, che è un conto e non un
+tipo perché il tipo qui non può: rimessi gli `unwrap` di prima in `fub-app` e in
+`watcher.rs`, rosso.
 
 **Comportamento.** Il veleno si produce come lo produce la vita — un thread che
-pania tenendo il prestito esclusivo — con l'hook dei panici messo a tacere per la
-durata del misfatto, o un panico voluto stamperebbe la sua traccia e farebbe
+pania tenendo il prestito esclusivo — con l'hook dei panici messo a tacere per
+la durata del misfatto, o un panico voluto stamperebbe la sua traccia e farebbe
 sembrare rotto un banco verde.
 
 - `un_vault_avvelenato_risponde_di_no_a_ogni_chiamata`: dieci chiamate di fila,

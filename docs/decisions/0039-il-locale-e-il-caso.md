@@ -6,18 +6,19 @@
 | **Origine** | `todo.md` §12.3 (seduta 12) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/12-stringhe-errori-locale.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/12-stringhe-errori-locale.md)
 
 ---
 
-Il versioning, facendo dogfooding, aveva trovato un buco e l'argomento giusto per
-tapparlo: sotto sandbox un componente **non ha orologio** — WASI lo può negare —
-e uno che chiamasse `SystemTime::now` per conto proprio sarebbe non testabile e
-non funzionante. Da lì è nato `HostEnv::now_unix_millis`, e il tempo è diventato
-una capacità come le altre.
+Il versioning, facendo dogfooding, aveva trovato un buco e l'argomento giusto
+per tapparlo: sotto sandbox un componente **non ha orologio** — WASI lo può
+negare — e uno che chiamasse `SystemTime::now` per conto proprio sarebbe non
+testabile e non funzionante. Da lì è nato `HostEnv::now_unix_millis`, e il tempo
+è diventato una capacità come le altre.
 
-Quell'argomento, però, non era stato applicato fino in fondo. Restavano fuori tre
-cose, e il §12.3 le aveva elencate senza deciderle:
+Quell'argomento, però, non era stato applicato fino in fondo. Restavano fuori
+tre cose, e il §12.3 le aveva elencate senza deciderle:
 
 - **Il caso.** Sotto WASI l'entropia non c'è più dell'orologio, ed è
   letteralmente lo stesso buco un metodo più in là. Ogni identità che Fub
@@ -26,12 +27,13 @@ cose, e il §12.3 le aveva elencate senza deciderle:
   (13.3).
 - **Il tempo civile e il fuso.** `now_unix_millis` dà millisecondi UTC: sa dire
   *quando* è successo e **non sa dirlo a nessuno**. Note periodiche (8.3),
-  calendario con «first day of week» e «workweek localization» (10.4), promemoria
-  ricorrenti (10.5, 10.1), ricerca per date relative (9.1) hanno bisogno del fuso
-  e del calendario *dell'utente*.
+  calendario con «first day of week» e «workweek localization» (10.4),
+  promemoria ricorrenti (10.5, 10.1), ricerca per date relative (9.1) hanno
+  bisogno del fuso e del calendario *dell'utente*.
 - **Il locale.** Qualunque risposta si dia al §12.1 sulle stringhe di UI, un
-  provider ne ha comunque bisogno per l'ordinamento e la collazione («locale-aware
-  sorting/collation», 25.2) e per formattare numeri, date, valute e unità.
+  provider ne ha comunque bisogno per l'ordinamento e la collazione
+  («locale-aware sorting/collation», 25.2) e per formattare numeri, date, valute
+  e unità.
 
 Il buco non era teorico. Il pannello dei tag ordina; le statistiche contano; il
 cestino stampa una data nel nome di un file. Nessuno di questi, oggi, sa in che
@@ -50,16 +52,16 @@ famiglia, un metodo più in là: l'host dà i byte, l'SDK dà le forme.**
 
 ### Un record solo, e non quattro capacità
 
-`Locale` porta cinque campi — lingua, fuso, offset, primo giorno della settimana,
-orologio — e li porta **insieme**. Chi lo chiede lo chiede tutto: formattare una
-data vuole il fuso *e* la lingua *e* l'orologio. Quattro chiamate avrebbero dato
-quattro istantanee che possono venire da momenti diversi, e il caso in cui
-divergono non è ipotetico — l'offset cambia da solo l'ultima domenica di ottobre,
-in mezzo a un job che dura.
+`Locale` porta cinque campi — lingua, fuso, offset, primo giorno della
+settimana, orologio — e li porta **insieme**. Chi lo chiede lo chiede tutto:
+formattare una data vuole il fuso *e* la lingua *e* l'orologio. Quattro chiamate
+avrebbero dato quattro istantanee che possono venire da momenti diversi, e il
+caso in cui divergono non è ipotetico — l'offset cambia da solo l'ultima
+domenica di ottobre, in mezzo a un job che dura.
 
-È lo stesso argomento di
-[`SettingEntry`](../../crates/fub-abi/src/settings.rs), che tiene insieme
-schema, valore e provenienza per non farli riconciliare a chi disegna.
+È lo stesso argomento di [`SettingEntry`](../../crates/fub-abi/src/settings.rs),
+che tiene insieme schema, valore e provenienza per non farli riconciliare a chi
+disegna.
 
 ### Lo pubblica la shell, e non lo deriva il kernel
 
@@ -87,8 +89,9 @@ per vault — e come quelle è un `Arc` condiviso.
 
 ### Un gradino nuovo nella precedenza, e sta sotto la configurazione
 
-La [0036](0036-le-impostazioni-e-i-tre-stati.md) aveva fissato **vault → macchina
-→ default dello schema**. Il locale ne aggiunge uno in mezzo agli ultimi due:
+La [0036](0036-le-impostazioni-e-i-tre-stati.md) aveva fissato **vault →
+macchina → default dello schema**. Il locale ne aggiunge uno in mezzo agli
+ultimi due:
 
 > **vault → macchina → ciò che la shell riporta del sistema → `Locale::default()`**
 
@@ -99,17 +102,17 @@ sistema inglese ha scelto — e ha tutto il titolo a scavalcare un default scrit
 in un contratto che non sa dove gira.
 
 Le chiavi sono **quattro e non una**, e la ragione è il caso che serve davvero:
-scegliere la lingua senza toccare il fuso, che è la condizione di chiunque lavori
-in una lingua diversa da quella del posto in cui vive. Un'impostazione ha un
-valore, e `Locale` ne ha cinque.
+scegliere la lingua senza toccare il fuso, che è la condizione di chiunque
+lavori in una lingua diversa da quella del posto in cui vive. Un'impostazione ha
+un valore, e `Locale` ne ha cinque.
 
 ### «Come il sistema» è la stringa vuota, non una parola
 
 Il valore sentinella è `""`. Con una parola come `"system"` ci sarebbero stati
 **due** modi di dire la stessa cosa — il default dello schema e la parola — e un
-file scritto a mano con `""` ne avrebbe voluto dire una terza. La stringa vuota è
-ciò che si ottiene *non scegliendo*, quindi è anche il default naturale, e le due
-cose non possono divergere.
+file scritto a mano con `""` ne avrebbe voluto dire una terza. La stringa vuota
+è ciò che si ottiene *non scegliendo*, quindi è anche il default naturale, e le
+due cose non possono divergere.
 
 ### Il default del contratto non nomina nessun paese
 
@@ -118,13 +121,14 @@ ore. Le ultime tre sono ciò che dice ISO 8601; la prima è ciò che dice BCP-47
 quando nessuno ha detto niente.
 
 Un default `it-IT` avrebbe cablato un paese dentro il contratto, e — peggio —
-avrebbe reso indistinguibili «l'utente ha scelto l'italiano» e «nessuno ha ancora
-parlato». Con `und` chi risolve una traduzione sa di dover andare dritto alla
-lingua di default del catalogo, invece di cercarne uno che nessuno scriverà mai.
+avrebbe reso indistinguibili «l'utente ha scelto l'italiano» e «nessuno ha
+ancora parlato». Con `und` chi risolve una traduzione sa di dover andare dritto
+alla lingua di default del catalogo, invece di cercarne uno che nessuno scriverà
+mai.
 
-Il default è anche **deterministico**, ed è la stessa ragione per cui l'orologio è
-una capacità: è ciò che riceve la CLI (27.1), un test, un job che gira prima che
-la finestra si sia aperta.
+Il default è anche **deterministico**, ed è la stessa ragione per cui l'orologio
+è una capacità: è ciò che riceve la CLI (27.1), un test, un job che gira prima
+che la finestra si sia aperta.
 
 ### L'offset è minuti, e vale per adesso
 
@@ -166,21 +170,22 @@ chiama `random_bytes` attraverso il confine come lo chiama un provider nativo.
 
 Il v7 c'è accanto al v4 perché **si ordina**: due id nati in ordine si
 confrontano in ordine anche come stringhe, quindi un indice che li usa come
-chiave scrive in coda invece che in mezzo. È la forma da preferire per l'identità
-di una nota.
+chiave scrive in coda invece che in mezzo. È la forma da preferire per
+l'identità di una nota.
 
 ### Per l'identità, non per i segreti — e lo dice il contratto
 
 Questa capacità promette che due chiamate non diano lo stesso valore. **Non**
-promette che il prossimo valore sia imprevedibile. La riga sta nel doc del trait,
-nel WIT e nel modulo del kernel che la implementa, perché è esattamente il genere
-di cosa che qualcuno, fra un anno, userebbe per generare un token di sessione.
+promette che il prossimo valore sia imprevedibile. La riga sta nel doc del
+trait, nel WIT e nel modulo del kernel che la implementa, perché è esattamente
+il genere di cosa che qualcuno, fra un anno, userebbe per generare un token di
+sessione.
 
 Il kernel la implementa senza dipendenze, da `RandomState` — che la libreria
-standard semina dal sistema operativo — fatta avanzare da un contatore. Il *seme*
-è buono, il *flusso* non è di qualità crittografica, e prendere un crate che
-promettesse il contrario avrebbe messo in casa una promessa più grande dell'uso:
-è così che una promessa vera a metà entra in un progetto.
+standard semina dal sistema operativo — fatta avanzare da un contatore. Il
+*seme* è buono, il *flusso* non è di qualità crittografica, e prendere un crate
+che promettesse il contrario avrebbe messo in casa una promessa più grande
+dell'uso: è così che una promessa vera a metà entra in un progetto.
 
 Quando servirà un generatore crittografico sarà una capacità sua, con una firma
 sua — come il portachiavi di sistema per i segreti, che
@@ -192,9 +197,9 @@ sua — come il portachiavi di sistema per i segreti, che
 sono due ordini di grandezza sopra ogni identità immaginabile. Il tetto c'è
 perché una capacità senza tetto è un modo di far allocare all'host quanto pare a
 chi chiama — la stessa disciplina del freno degli eventi
-([0034](0034-il-freno-e-il-raggruppamento.md)), dove il tetto sta con chi ritira.
-Chi chiede di più riceve mille byte e **non** un errore: una richiesta assurda
-non deve far fallire la generazione di un id.
+([0034](0034-il-freno-e-il-raggruppamento.md)), dove il tetto sta con chi
+ritira. Chi chiede di più riceve mille byte e **non** un errore: una richiesta
+assurda non deve far fallire la generazione di un id.
 
 ### Chi non ha la capacità riceve il default, non una bugia
 
@@ -206,15 +211,15 @@ altre due della famiglia. Negate:
   un host senza shell, non un locale plausibile e falso;
 - `random_bytes()` rende **il vuoto**, e da lì `fub_sdk::ids` rende `None`. Dei
   byte fissi sarebbero identità che collidono, e chi le genera non se ne
-  accorgerebbe finché due note non hanno lo stesso id. *Un id che non si è potuto
-  generare non è un id di zeri.*
+  accorgerebbe finché due note non hanno lo stesso id. *Un id che non si è
+  potuto generare non è un id di zeri.*
 
 ### Si ricompone a ogni chiamata
 
 `Workspace::locale()` non tiene una copia risolta. Le due sorgenti cambiano da
 due parti — la shell che ripubblica, l'utente che scrive un'impostazione — e una
-copia che non si accorge di una delle due è il modo in cui la lingua resta quella
-di prima finché non si riavvia.
+copia che non si accorge di una delle due è il modo in cui la lingua resta
+quella di prima finché non si riavvia.
 
 ### La shell ripubblica al ritorno del focus
 
@@ -222,26 +227,26 @@ Le due sorgenti di cambio del sistema sono l'utente che tocca le impostazioni e
 l'ora legale che scatta da sola. Nessuna delle due manda un evento alla webview,
 e un timer che le inseguisse resterebbe acceso per sempre su una cosa che cambia
 due volte l'anno. Il ritorno del focus è il momento in cui l'utente sta per
-**guardare** l'app: è l'unico in cui vale accorgersene. E il ridisegno scatta solo
-se qualcosa è davvero cambiato — `set_system_locale` risponde `true` o `false` —
-o si ridisegnerebbe a ogni alt-tab.
+**guardare** l'app: è l'unico in cui vale accorgersene. E il ridisegno scatta
+solo se qualcosa è davvero cambiato — `set_system_locale` risponde `true` o
+`false` — o si ridisegnerebbe a ogni alt-tab.
 
 ## Cosa si è scartato, e perché
 
 - **Il kernel deduce il locale da `LANG` e da `/etc/localtime`.** Sarebbe stato
-  un ICU in miniatura: `LANG=it_IT.UTF-8` si sa leggere, ma il primo giorno della
-  settimana no, l'orologio no, e l'offset richiede di parsare un file TZif. Il
-  risultato sarebbe stato *più codice* per una risposta **peggiore** di quella
-  che la webview dà gratis, e sbagliata in silenzio nei paesi che nessuno ha
-  guardato.
+  un ICU in miniatura: `LANG=it_IT.UTF-8` si sa leggere, ma il primo giorno
+  della settimana no, l'orologio no, e l'offset richiede di parsare un file
+  TZif. Il risultato sarebbe stato *più codice* per una risposta **peggiore** di
+  quella che la webview dà gratis, e sbagliata in silenzio nei paesi che nessuno
+  ha guardato.
 - **Una tabella lingua → primo giorno della settimana, come riserva.** Stessa
   ragione, in piccolo. Quando il motore non sa dire `getWeekInfo()`, il kernel
   tiene il suo default (lunedì, ISO 8601) e resta la chiave per chi vuole
   decidere: meglio un default dichiarato che una tabella che sbaglia sui paesi
   che chi l'ha scritta non conosceva.
 - **Una sola chiave `locale`, con dentro un JSON.** Avrebbe reso impossibile la
-  cosa che serve — cambiare la lingua senza toccare il fuso — e non avrebbe avuto
-  una specie che il pannello del §11.1 sappia disegnare: `SettingKind` ha
+  cosa che serve — cambiare la lingua senza toccare il fuso — e non avrebbe
+  avuto una specie che il pannello del §11.1 sappia disegnare: `SettingKind` ha
   `Text`, `Choice`, `Toggle`, `Number`, `List`, e nessuno di questi è «un
   oggetto».
 - **`Locale` dentro le impostazioni come valore.** È il divieto che la 0036 ha
@@ -262,26 +267,27 @@ o si ridisegnerebbe a ogni alt-tab.
 
 ## Cosa resta scoperto (e dove è scritto)
 
-- **Nessuno formatta ancora niente.** Questa voce mette il *fatto* nel contratto;
-  chi lo usa per stampare una data leggibile, ordinare due titoli per collazione
-  o disegnare un calendario arriva con le feature che lo chiedono (10.4, 8.3,
-  9.1). L'SDK ha per ora `ids` e non `fmt`: aggiungerlo non tocca nessuna firma.
-- **L'aritmetica del calendario dell'utente.** `Locale::to_civil_millis` sposta un
-  istante di un offset, e non è un calendario: mesi, settimane e ricorrenze su
-  date lontane vogliono il database dei fusi, che chi lo vuole si porta. Il
+- **Nessuno formatta ancora niente.** Questa voce mette il *fatto* nel
+  contratto; chi lo usa per stampare una data leggibile, ordinare due titoli per
+  collazione o disegnare un calendario arriva con le feature che lo chiedono
+  (10.4, 8.3, 9.1). L'SDK ha per ora `ids` e non `fmt`: aggiungerlo non tocca
+  nessuna firma.
+- **L'aritmetica del calendario dell'utente.** `Locale::to_civil_millis` sposta
+  un istante di un offset, e non è un calendario: mesi, settimane e ricorrenze
+  su date lontane vogliono il database dei fusi, che chi lo vuole si porta. Il
   contratto dà il nome IANA proprio perché quel giorno sia possibile senza
   cambiarlo.
-- **Il locale non è ancora un evento.** Quando cambia, la shell ridisegna le view
-  dichiarate; un `EventHandler` che volesse saperlo non ha un `EventKind` suo.
-  Non serve a nessuno oggi, e aggiungerlo è additivo: sta scritto qui perché il
-  giorno che serve non si ridiscuta la forma.
-- **Le chiavi `locale.*` sono di livello macchina, quindi il pannello le mostra e
-  un vault non le decide** — e questo è ciò che si voleva. Resta però che un
+- **Il locale non è ancora un evento.** Quando cambia, la shell ridisegna le
+  view dichiarate; un `EventHandler` che volesse saperlo non ha un `EventKind`
+  suo. Non serve a nessuno oggi, e aggiungerlo è additivo: sta scritto qui
+  perché il giorno che serve non si ridiscuta la forma.
+- **Le chiavi `locale.*` sono di livello macchina, quindi il pannello le mostra
+  e un vault non le decide** — e questo è ciò che si voleva. Resta però che un
   *profilo di vault* («questo vault è in inglese») non è esprimibile, e non lo
-  sarà: sarebbe un file che arriva da fuori e cambia l'interfaccia di chi lo apre,
-  che è la riga della 0036 e non si tocca.
+  sarà: sarebbe un file che arriva da fuori e cambia l'interfaccia di chi lo
+  apre, che è la riga della 0036 e non si tocca.
 - **Il §12.1 e il §12.2 restano aperti**, e sono il resto di questa seduta: dove
   quelle stringhe vengono composte, e da chi. Il locale c'è perché serve **a
-  prescindere** dalla risposta che si darà lì — è l'osservazione con cui il §12.3
-  chiudeva il cerchio — ma con questa voce sola nessuna frase italiana cablata in
-  un provider si è ancora mossa.
+  prescindere** dalla risposta che si darà lì — è l'osservazione con cui il
+  §12.3 chiudeva il cerchio — ma con questa voce sola nessuna frase italiana
+  cablata in un provider si è ancora mossa.

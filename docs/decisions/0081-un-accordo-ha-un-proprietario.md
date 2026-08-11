@@ -6,7 +6,11 @@
 | **Origine** | Nessuna voce: un **difetto** trovato leggendo, e il presidio che avrebbe dovuto trovarlo. Lascia aperta la §18.2 ([seduta 18](../roadmap/18-editor-e-tastiera.md)), a cui consegna la metà mancante — la scorciatoia di un comando di shell non è ancora riconfigurabile |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [una scorciatoia è una chiave, 0077](0077-una-scorciatoia-e-una-chiave.md) · [registro dei comandi, 0009](0009-registro-dei-comandi.md) · [le regole in un posto solo, 0020](0020-le-regole-in-un-posto-solo.md) · [una porta per chi cerca, 0082](0082-una-porta-per-chi-cerca.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[una scorciatoia è una chiave, 0077](0077-una-scorciatoia-e-una-chiave.md) ·
+[registro dei comandi, 0009](0009-registro-dei-comandi.md) ·
+[le regole in un posto solo, 0020](0020-le-regole-in-un-posto-solo.md) ·
+[una porta per chi cerca, 0082](0082-una-porta-per-chi-cerca.md)
 
 ---
 
@@ -59,8 +63,8 @@ keybinding** e resta raggiungibile dalla palette. Le ragioni, in ordine di peso:
   scorciatoia più usata dell'app.
 - **Un comando con un parametro obbligatorio non è un buon cliente di una
   scorciatoia.** Il gesto della scorciatoia è *premo e sono dove volevo*; il
-  gesto di `search.open` è *premo, compilo un modulo, confermo*. La palette
-  quel modulo lo sa chiedere ed è il posto naturale per farlo: la
+  gesto di `search.open` è *premo, compilo un modulo, confermo*. La palette quel
+  modulo lo sa chiedere ed è il posto naturale per farlo: la
   [0010](0010-comando-descritto-a-una-macchina.md) e la
   [0009](0009-registro-dei-comandi.md) hanno reso i parametri una cosa che si
   compila lì, e questo è il caso per cui serve.
@@ -81,7 +85,8 @@ sbaglierebbe più — farebbe qualcosa).
 
 La domanda va posta ai **due registri insieme**, senza accendere l'app. Il
 precedente è il §6.2: le regole scritte in due lingue si presidiano con una
-fixture generata da Rust e letta da vitest ([0020](0020-le-regole-in-un-posto-solo.md)).
+fixture generata da Rust e letta da vitest
+([0020](0020-le-regole-in-un-posto-solo.md)).
 
 Qui è la stessa forma applicata agli accordi:
 
@@ -90,8 +95,8 @@ Qui è la stessa forma applicata agli accordi:
   l'accordo che dichiara, `null` se non ne vuole. Stesso giro delle altre tre
   fixture: il test confronta il committato, e `UPDATE_MIRROR=1` rigenera.
 - `frontend/src/ui/keybindings.test.ts` legge quella fixture **insieme** alla
-  tabella degli accordi della shell, e fa la domanda che prima si faceva su
-  metà dei dati.
+  tabella degli accordi della shell, e fa la domanda che prima si faceva su metà
+  dei dati.
 
 Due dettagli non ovvi, e sono i due che rendono il presidio non svuotabile:
 
@@ -120,7 +125,8 @@ dichiarano i pannelli, e importare un pannello in un test tira dentro un
 `document` globale e mezza shell. Una tabella di accordi non importa niente e la
 legge chiunque — ed è anche il posto in cui la §18.2 troverà la chiave da
 riconfigurare, il giorno in cui gli accordi della shell diventeranno chiavi di
-impostazione come quelli del kernel ([0077](0077-una-scorciatoia-e-una-chiave.md)).
+impostazione come quelli del kernel
+([0077](0077-una-scorciatoia-e-una-chiave.md)).
 
 ## Cosa il presidio non copre, e perché va bene
 
@@ -137,12 +143,13 @@ CodeMirror (`Mod-b`, `Mod-i`, `Mod-k`, …) che sono un **terzo** registro, e no
 passano né dal kernel né da `SHELL_KEYS`. Sono di un'altra specie — vivono solo
 dentro l'editor a fuoco, e alcuni *devono* vincere sulla shell — ma la domanda
 «questo tasto è già di qualcuno?» oggi lì non si può fare a macchina, e chi
-aggiunge una scorciatoia deve ricordarsi di guardare due file invece di uno.
-Sta scritto qui perché è la cosa che il prossimo conflitto userà per nascere; è
+aggiunge una scorciatoia deve ricordarsi di guardare due file invece di uno. Sta
+scritto qui perché è la cosa che il prossimo conflitto userà per nascere; è
 materia della §18.2, che è aperta.
 
 ## L'esito, in breve
 
 Il kernel dichiara un solo accordo (`vault.undo` su `Mod-Alt-z`), la shell
-dodici, e nessuno dei tredici è dichiarato due volte — provato a ogni `cargo
-test` e a ogni `npm test`, invece che dal primo utente che preme il tasto.
+dodici, e nessuno dei tredici è dichiarato due volte — provato a ogni
+`cargo test` e a ogni `npm test`, invece che dal primo utente che preme il
+tasto.

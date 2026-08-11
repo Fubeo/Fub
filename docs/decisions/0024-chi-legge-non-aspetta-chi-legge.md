@@ -6,13 +6,15 @@
 | **Origine** | `todo.md` §8.3 (seduta 8, *ex* §2.4) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/08-il-kernel-a-pezzi.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/08-il-kernel-a-pezzi.md)
 
 ---
 
 La voce aveva una precedenza dura e una regola sola. La precedenza è stata
-rispettata — l'[8.1](0022-il-kernel-a-pezzi.md) prima, l'[8.2](0023-chi-monta-il-kernel.md)
-poi — e la regola era la sua prima riga: **misurare prima**.
+rispettata — l'[8.1](0022-il-kernel-a-pezzi.md) prima,
+l'[8.2](0023-chi-monta-il-kernel.md) poi — e la regola era la sua prima riga:
+**misurare prima**.
 
 Misurando è cambiata la ragione per farlo. La voce diceva «le letture sono le
 view», e prometteva quindi che N view si ridisegnassero senza mettersi in coda:
@@ -83,23 +85,23 @@ e si rilancia: `cargo run --release -p fub-host --example contesa`.
   panico e i panici erano ventidue, uno per comando IPC. Un `RwLock` si avvelena
   **solo** se a paniare è chi tiene il prestito esclusivo. Disegnare è una
   lettura, quindi il caso più probabile — e l'unico che un provider di terzi
-  produrrà davvero, perché disegnare è ciò che un provider fa più spesso — smette
-  di portarsi via il vault. **Non è la 24.2**: il panico attraversa ancora il
-  chiamante e nessuno lo cattura; quello che cambia è che si porta via *quella
-  chiamata* invece del vault. C'è un test, e con `write()` al posto di `read()`
-  fallisce con `PoisonError`.
-- **`Host::session` resta un `Mutex`, ed è un lock diverso.** Tiene lo slot della
-  sessione — chi apre, chi chiude, chi si clona l'handle — e lo si prende per il
-  tempo di un `take` o di un `clone`. Non ha lettori da parallelizzare, e
-  confonderlo con il lock del workspace vorrebbe dire avere due nomi per due cose
-  che si comportano diverso.
-- **I presidi sono tre, e mordono tutti e tre.** Girando i tre prestiti condivisi
-  in esclusivi, `due_letture_stanno_nel_workspace_insieme` fallisce (nessuna
-  sovrapposizione), `chi_scrive_non_aspetta_i_lettori_piu_di_un_battito` fallisce
-  (244 ms contro i 50 di soglia) e
-  `una_view_che_pania_disegnando_non_avvelena_il_vault` fallisce con
-  `PoisonError`. Un `write()` scritto al posto di un `read()` compila, passa ogni
-  test funzionale e non si vede in nessuna diff che non sia questa: è
+  produrrà davvero, perché disegnare è ciò che un provider fa più spesso —
+  smette di portarsi via il vault. **Non è la 24.2**: il panico attraversa
+  ancora il chiamante e nessuno lo cattura; quello che cambia è che si porta via
+  *quella chiamata* invece del vault. C'è un test, e con `write()` al posto di
+  `read()` fallisce con `PoisonError`.
+- **`Host::session` resta un `Mutex`, ed è un lock diverso.** Tiene lo slot
+  della sessione — chi apre, chi chiude, chi si clona l'handle — e lo si prende
+  per il tempo di un `take` o di un `clone`. Non ha lettori da parallelizzare, e
+  confonderlo con il lock del workspace vorrebbe dire avere due nomi per due
+  cose che si comportano diverso.
+- **I presidi sono tre, e mordono tutti e tre.** Girando i tre prestiti
+  condivisi in esclusivi, `due_letture_stanno_nel_workspace_insieme` fallisce
+  (nessuna sovrapposizione),
+  `chi_scrive_non_aspetta_i_lettori_piu_di_un_battito` fallisce (244 ms contro i
+  50 di soglia) e `una_view_che_pania_disegnando_non_avvelena_il_vault` fallisce
+  con `PoisonError`. Un `write()` scritto al posto di un `read()` compila, passa
+  ogni test funzionale e non si vede in nessuna diff che non sia questa: è
   esattamente l'invariante che nessuno rompe apposta e che tutti romperebbero
   per comodità.
 
@@ -107,13 +109,13 @@ e si rilancia: `cargo run --release -p fub-host --example contesa`.
 
 - **La ricerca non ha accelerato di un filo, e diventa la §8.4.** `query_index`
   fa 43 op/s a un thread e 43 a otto, identici nei due modi. Il motivo è che
-  `SearchIndex::query` prende `&self` e poi lock**a** il proprio
-  `Mutex<Inner>` — perché `Inner::search` vuole `&mut self`, e lo vuole per una
-  ragione sola: il commit pigro che fa vedere a chi interroga le proprie
-  scritture. Il prestito condiviso del workspace non attraversa il lock di un
-  provider, e la lettura che l'utente scatena più spesso è proprio quella che non
-  è migliorata. Non era prevedibile senza misurare, ed è la ragione per cui
-  «misurare prima» era la prima riga della voce.
+  `SearchIndex::query` prende `&self` e poi lock**a** il proprio `Mutex<Inner>`
+  — perché `Inner::search` vuole `&mut self`, e lo vuole per una ragione sola:
+  il commit pigro che fa vedere a chi interroga le proprie scritture. Il
+  prestito condiviso del workspace non attraversa il lock di un provider, e la
+  lettura che l'utente scatena più spesso è proprio quella che non è migliorata.
+  Non era prevedibile senza misurare, ed è la ragione per cui «misurare prima»
+  era la prima riga della voce.
 - **Ed è per questo che il carico misto dà 1,0×.** Sembra una smentita e non lo
   è: una ricerca costa ~23 ms e le altre cinque letture insieme ne costano ~0,1,
   quindi la ricerca **è** il 99,6% del tempo del mix e il totale non si muove.
@@ -132,15 +134,15 @@ e si rilancia: `cargo run --release -p fub-host --example contesa`.
 
 - **I due punti restanti della voce non sono stati fatti, e non erano di questa
   voce.** «Lavoro lungo fuori dal lock» e «cancellazione» non dipendono dal tipo
-  del lock: dipendono dal fatto che oggi il lavoro lungo **non può** stare fuori.
-  `Plugin::run_job` è senza `HostApi` per costruzione, quindi l'unico modo di
-  dargli in pasto il vault è che il chiamante lo legga dentro il giro sincrono —
-  cioè faccia in esclusiva esattamente il lavoro che il job doveva togliere da
-  lì. È la §9.1, è **P0**, ed è la voce che dice questo di sé stessa. E non c'è
-  niente da cancellare finché `spawn_job` accoda e basta: il runner è la §9.3.
-  Reindicizzazione, import, export ed embedding aspettano quelle due; il centro
-  attività è la §10.3. I tre rimandi sono scritti nelle voci di destinazione, non
-  solo qui.
+  del lock: dipendono dal fatto che oggi il lavoro lungo **non può** stare
+  fuori. `Plugin::run_job` è senza `HostApi` per costruzione, quindi l'unico
+  modo di dargli in pasto il vault è che il chiamante lo legga dentro il giro
+  sincrono — cioè faccia in esclusiva esattamente il lavoro che il job doveva
+  togliere da lì. È la §9.1, è **P0**, ed è la voce che dice questo di sé
+  stessa. E non c'è niente da cancellare finché `spawn_job` accoda e basta: il
+  runner è la §9.3. Reindicizzazione, import, export ed embedding aspettano
+  quelle due; il centro attività è la §10.3. I tre rimandi sono scritti nelle
+  voci di destinazione, non solo qui.
 - **Non c'è nessun lock più fine dei cinque componenti della 0022.** Uno per
   `DocumentStore`, uno per `Indexes` e così via si potrebbe: ma ogni chiamata a
   un provider vuole un `HostApi` costruito su **tutto** il workspace (0022), e
@@ -148,17 +150,18 @@ e si rilancia: `cargo run --release -p fub-host --example contesa`.
   pagherebbero cinque lock per parallelizzare ciò che è già parallelo, e si
   comprerebbe la possibilità di prenderli in ordini diversi. La linea giusta era
   quella fra leggere e chiamare, ed è quella che la 0022 aveva tracciato.
-- **Nessun `catch_unwind` al confine.** Un provider che pania si porta ancora via
-  la chiamata di chi l'ha invocato. Che non si porti più via anche il vault è un
-  effetto di questa voce, non il suo scopo: l'isolamento vero — catturare,
+- **Nessun `catch_unwind` al confine.** Un provider che pania si porta ancora
+  via la chiamata di chi l'ha invocato. Che non si porti più via anche il vault
+  è un effetto di questa voce, non il suo scopo: l'isolamento vero — catturare,
   disattivare, avvisare — è la 24.2, e resta aperto.
 - **Niente vieta a un chiamante futuro di riprendere il lock mentre lo tiene.**
-  Oggi non succede: ogni comando IPC prende una guardia sola, il ponte eventi non
-  tocca il workspace, il watcher prende `write()` e basta. Ma un `read()`
+  Oggi non succede: ogni comando IPC prende una guardia sola, il ponte eventi
+  non tocca il workspace, il watcher prende `write()` e basta. Ma un `read()`
   annidato dentro un `read()` mentre uno scrittore aspetta è un blocco, e
   `std::sync::RwLock` non promette di accorgersene. Non c'è un presidio che lo
   impedisca, e non se ne è inventato uno per un problema che nessuno ha: è
-  scritto qui perché il giorno che qualcuno lo ha, questa è la riga da ritrovare.
+  scritto qui perché il giorno che qualcuno lo ha, questa è la riga da
+  ritrovare.
 
 ## Verifica
 

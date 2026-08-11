@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §21.1 + §21.2 (seduta 21) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/21-la-ricerca-predefinita.md) · [la gemella, che decide dove sta un risultato](0049-una-posizione-dentro-un-documento.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/21-la-ricerca-predefinita.md) ·
+[la gemella, che decide dove sta un risultato](0049-una-posizione-dentro-un-documento.md)
 
 ---
 
@@ -52,23 +54,23 @@ rende la scelta una sola.
 «Due caratteri» è un parametro di un motore. In una firma vorrebbe dire che
 **cambiare motore cambia il significato delle query salvate**: la stessa
 collezione, lo stesso template, la stessa vista tornerebbero risultati diversi
-perché sotto è cambiato l'implementatore. Ciò che il contratto porta è
-*esatto* o *tollerante*; la traduzione è del provider, come già lo è la
-tokenizzazione ([0019](0019-il-canale-dati.md)).
+perché sotto è cambiato l'implementatore. Ciò che il contratto porta è *esatto*
+o *tollerante*; la traduzione è del provider, come già lo è la tokenizzazione
+([0019](0019-il-canale-dati.md)).
 
 ### L'altra metà è quella che conta: adesso si può chiedere **l'esattezza**
 
-L'esattezza era implicita, e ciò che è implicito non si può pretendere. Il giorno
-in cui `SearchIndex` fosse diventato tollerante, lo sarebbero diventati **tutti**
-i suoi chiamanti nello stesso istante: `vault.replace` su N note, le collezioni
-(§8.4), le viste salvate (§8.3), i template (§16.1), l'automazione su-modifica
-(§16.2). Un motore che indovina, su un canale che poi **scrive**, è un difetto —
-e la variante va aggiunta *prima* del comportamento, non insieme.
+L'esattezza era implicita, e ciò che è implicito non si può pretendere. Il
+giorno in cui `SearchIndex` fosse diventato tollerante, lo sarebbero diventati
+**tutti** i suoi chiamanti nello stesso istante: `vault.replace` su N note, le
+collezioni (§8.4), le viste salvate (§8.3), i template (§16.1), l'automazione
+su-modifica (§16.2). Un motore che indovina, su un canale che poi **scrive**, è
+un difetto — e la variante va aggiunta *prima* del comportamento, non insieme.
 
 ### La variante prima del comportamento, dichiarata
 
-`Typos` è **dicibile e non ancora onorato**: il fuzzy di tantivy resta lavoro suo,
-e non scade col freeze. Chi lo chiede oggi riceve una ricerca esatta — meno
+`Typos` è **dicibile e non ancora onorato**: il fuzzy di tantivy resta lavoro
+suo, e non scade col freeze. Chi lo chiede oggi riceve una ricerca esatta — meno
 risultati, non risultati sbagliati — ed è il solo verso in cui questo silenzio è
 innocuo. Il `match` su `TextTolerance` in `search.rs` è esaustivo apposta: il
 giorno che `Typos` diventa una `FuzzyTermQuery`, il compilatore porta chi lo
@@ -76,8 +78,8 @@ scrive esattamente lì, invece di lasciare il caso assorbito da un `_`.
 
 ### `partial_last_term` è una proprietà dell'invocazione, e chi salva normalizza
 
-Cercare `arch` deve trovare *architettura* prima che la parola sia finita: è metà
-di ciò che fa sembrare istantanea una ricerca. Ma una query messa in una
+Cercare `arch` deve trovare *architettura* prima che la parola sia finita: è
+metà di ciò che fa sembrare istantanea una ricerca. Ma una query messa in una
 collezione o in un template non deve restare «col prefisso» per sempre —
 l'utente aveva finito di scrivere, e nessuno era lì a vederlo.
 
@@ -113,8 +115,8 @@ si butta, come sempre. Il prefisso è una `RegexQuery` sul dizionario dei termin
 (e una `PhrasePrefixQuery` quando la modalità è *frase*): è **un intervallo
 aperto nella term dictionary**, cioè esattamente una delle due operazioni che la
 [§21.9](../roadmap/21-la-ricerca-predefinita.md) prevede possano far salire il
-costo per query. Quella voce resta aperta e adesso ha un motivo in più per essere
-misurata.
+costo per query. Quella voce resta aperta e adesso ha un motivo in più per
+essere misurata.
 
 ## Il cliente, nello stesso giro
 
@@ -130,4 +132,5 @@ l'ordine giusto.
   lavoro di provider e non scade.
 - **I pesi regolabili** (§21.6): il boost degli heading è un default buono e
   resta un default. Diventerà una chiave di impostazione quando quella voce si
-  aprirà, e adesso ha dove atterrare ([0036](0036-le-impostazioni-e-i-tre-stati.md)).
+  aprirà, e adesso ha dove atterrare
+  ([0036](0036-le-impostazioni-e-i-tre-stati.md)).

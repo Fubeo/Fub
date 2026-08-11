@@ -1,12 +1,10 @@
 # 0128 — Una versione di schema è un tipo, e un nome non lo fa rispettare nessuno
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: la zona cieca che la
-[0106](0106-un-formato-si-presenta.md) aveva lasciata scritta — *«resta fuori ciò che una versione la
-dichiara senza dirlo nel nome (`const E_SCHEMA_REV`): la porta è che una
-versione di schema si chiama `VERSION`»*
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: la zona cieca che la
+[0106](0106-un-formato-si-presenta.md) aveva lasciata scritta — *«resta fuori
+ciò che una versione la dichiara senza dirlo nel nome (`const E_SCHEMA_REV`): la
+porta è che una versione di schema si chiama `VERSION`»* **Commit**: *(questo
+commit)*
 
 ---
 
@@ -47,11 +45,12 @@ che smette di vedere un formato e resta verde.
 
 **Il nome non diventa una regola. Diventa una regola il tipo.**
 
-`SchemaVersion` ([`crates/fub-abi/src/schema.rs`](../../crates/fub-abi/src/schema.rs))
-è un `u32` con un nome, `#[serde(transparent)]` — su disco non è cambiato un
-byte, e non poteva: quei file sono sui dischi delle persone. Le undici costanti
-lo dichiarano, e **gli undici campi dei record lo pretendono**: `v: 1` non
-compila più.
+`SchemaVersion`
+([`crates/fub-abi/src/schema.rs`](../../crates/fub-abi/src/schema.rs)) è un
+`u32` con un nome, `#[serde(transparent)]` — su disco non è cambiato un byte, e
+non poteva: quei file sono sui dischi delle persone. Le undici costanti lo
+dichiarano, e **gli undici campi dei record lo pretendono**: `v: 1` non compila
+più.
 
 Chi la fa rispettare è quindi il **compilatore**, e il conto passa dal nome al
 tipo:
@@ -60,9 +59,10 @@ tipo:
 
 Da cui due proprietà che il nome non dava:
 
-- **una rinomina non rompe niente e non nasconde niente.** `const E_SCHEMA_REV:
-  SchemaVersion` è contata come le altre — è il caso esatto che la 0106 aveva
-  dichiarato scoperto, e adesso è coperto senza chiedere niente a chi scrive;
+- **una rinomina non rompe niente e non nasconde niente.**
+  `const E_SCHEMA_REV: SchemaVersion` è contata come le altre — è il caso esatto
+  che la 0106 aveva dichiarato scoperto, e adesso è coperto senza chiedere
+  niente a chi scrive;
 - **un intero che si chiama `VERSION` e non è una versione di schema non entra
   più.** La forma vecchia contava per omonimia, e in un codebase che cresce
   l'omonimia arriva.
@@ -113,12 +113,13 @@ servirebbe un tipo che ogni scrittura durevole attraversi, e non c'è perché
 **dalla stessa porta passano i file di Fub e i file dell'utente** — il markdown
 di una nota un numero di schema non deve averlo.
 
-**La seconda è un buco dichiarato nuovo, e nasce con questa forma**: una versione scritta al volo dentro il
-record — `v: SchemaVersion::new(1)`, senza una costante che la nomini — è di
-tipo giusto e non la conta nessuno. Il tipo rende impossibile scrivere `v: 1`;
-non rende impossibile non dare un nome all'1. Si prenderebbe con un conto sulle
-`SchemaVersion::new(` fuori da una `const`, e non si è scritto perché sarebbe un
-quarto presidio su una superficie che ne ha già tre e nessun caso misurato.
+**La seconda è un buco dichiarato nuovo, e nasce con questa forma**: una
+versione scritta al volo dentro il record — `v: SchemaVersion::new(1)`, senza
+una costante che la nomini — è di tipo giusto e non la conta nessuno. Il tipo
+rende impossibile scrivere `v: 1`; non rende impossibile non dare un nome all'1.
+Si prenderebbe con un conto sulle `SchemaVersion::new(` fuori da una `const`, e
+non si è scritto perché sarebbe un quarto presidio su una superficie che ne ha
+già tre e nessun caso misurato.
 
 ## Una premessa caduta, scrivendo
 

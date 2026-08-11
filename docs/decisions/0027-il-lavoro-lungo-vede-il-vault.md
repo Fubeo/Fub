@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §9.1 (seduta 9) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/09-il-lavoro-lungo-e-lo-spegnimento.md)
 
 ---
 
@@ -21,13 +22,13 @@ sync (18.1), backup e snapshot (18.2), sito statico (19.4), OCR e trascrizione
 (13.4), health check e diagnostic bundle (24.2), reindicizzazione (24.1). Tutte
 camminano il vault, e quasi tutte ci scrivono.
 
-Era la voce a leva più alta del piano per una ragione che vale solo per lei e per
-poche altre: non allargava una capacità, ne rendeva una **inesprimibile**.
+Era la voce a leva più alta del piano per una ragione che vale solo per lei e
+per poche altre: non allargava una capacità, ne rendeva una **inesprimibile**.
 
 ## La risposta, in una frase
 
-**Il job riceve l'`HostApi` intero — quello di sempre, con davanti i permessi del
-suo plugin — e lo riceve *per chiamata*: nessuno snapshot, nessuna scrittura
+**Il job riceve l'`HostApi` intero — quello di sempre, con davanti i permessi
+del suo plugin — e lo riceve *per chiamata*: nessuno snapshot, nessuna scrittura
 differita, e contro il vault che cambia nel frattempo la guardia è quella che il
 contratto ha già dalla [0008](0008-modifica-chirurgica.md).**
 
@@ -57,17 +58,17 @@ salva aspetta *una* lettura da una parte e *tutte* dall'altra.
 - **«Un job può scrivere?» non è una domanda della firma: è una domanda del
   permesso**, e ha già un posto dove essere fatta. Dalla
   [0021](0021-il-confine.md) ogni prestito passa da una politica che compone i
-  permessi dichiarati e la fiducia; un job di chi non ha `write_vault` riceve gli
-  stessi rifiuti che riceve il suo `handle`, con lo stesso messaggio. Metterlo
-  nella firma avrebbe voluto dire deciderlo **una volta per tutti i plugin**,
-  che è l'opposto di ciò che una politica serve a fare.
+  permessi dichiarati e la fiducia; un job di chi non ha `write_vault` riceve
+  gli stessi rifiuti che riceve il suo `handle`, con lo stesso messaggio.
+  Metterlo nella firma avrebbe voluto dire deciderlo **una volta per tutti i
+  plugin**, che è l'opposto di ciò che una politica serve a fare.
 - **Il prestito è per chiamata, ed è contratto — non un dettaglio del
-  `JobHost`.** Ogni capacità prende il prestito del workspace, fa il suo lavoro e
-  lo rilascia; fra due chiamate il vault può cambiare, e chi lo cammina vedrà
-  qualcosa che non è mai stato vero tutto insieme. Detto così sembra una rinuncia
-  ed è la cosa comprata: l'alternativa è un'app ferma per la durata di un export.
-  Non dirlo sarebbe stato peggio che non averlo — una promessa di atomicità che
-  nessuno mantiene è come si scrivono le corse invisibili.
+  `JobHost`.** Ogni capacità prende il prestito del workspace, fa il suo lavoro
+  e lo rilascia; fra due chiamate il vault può cambiare, e chi lo cammina vedrà
+  qualcosa che non è mai stato vero tutto insieme. Detto così sembra una
+  rinuncia ed è la cosa comprata: l'alternativa è un'app ferma per la durata di
+  un export. Non dirlo sarebbe stato peggio che non averlo — una promessa di
+  atomicità che nessuno mantiene è come si scrivono le corse invisibili.
 - **La semantica di «e se il vault è cambiato nel frattempo» era già decisa, e
   vale per entrambi come la voce chiedeva.** Chi scrive un pezzo passa da
   `apply_edit` con la `base` che `document_revision` gli ha dato e riceve
@@ -82,8 +83,8 @@ salva aspetta *una* lettura da una parte e *tutte* dall'altra.
   **import del world**, non un parametro di `run-job`: un componente che gira un
   job può chiamarle, e l'host non ha modo di impedirglielo perché non esiste il
   posto dove dire «queste no, adesso». Cioè «dentro un job non c'è `HostApi`»
-  era una regola **solo Rust**, che a M5 sarebbe stata falsa in silenzio. Ciò che
-  scadeva col freeze era la firma Rust, ed è quella che è cambiata; il WIT
+  era una regola **solo Rust**, che a M5 sarebbe stata falsa in silenzio. Ciò
+  che scadeva col freeze era la firma Rust, ed è quella che è cambiata; il WIT
   guadagna la prosa che dice la disciplina, e zero campi.
 - **Ed è per questo che era P0.** Una funzione **nuova** in un'interfaccia è
   additiva (è il ragionamento del §9.2); un **parametro in più su una firma
@@ -102,8 +103,8 @@ salva aspetta *una* lettura da una parte e *tutte* dall'altra.
   prestito esclusivo anche per leggere, e un job che cammina il vault fa quasi
   solo letture — sarebbero state migliaia di serializzazioni di chi disegna, in
   silenzio, perché `write()` al posto di `read()` compila.
-- **Il default di `run_job` resta, e con esso il job puro.** Chi non tocca l'host
-  scrive lo stesso job di prima: la firma vecchia non era sbagliata, era
+- **Il default di `run_job` resta, e con esso il job puro.** Chi non tocca
+  l'host scrive lo stesso job di prima: la firma vecchia non era sbagliata, era
   insufficiente, e toglierle il caso che serviva sarebbe stato cambiarla due
   volte. Il presidio che c'era nel kernel — un handler che chiede un job e ne
   scrive l'esito al rientro — non è stato toccato e passa com'era.
@@ -112,53 +113,55 @@ salva aspetta *una* lettura da una parte e *tutte* dall'altra.
 
 - **`JobSpec.payload` cambia significato senza cambiare forma.** Era «tutto
   l'input necessario» perché non c'era altro modo di farlo entrare; adesso sono
-  gli **argomenti** del job — quale cartella esportare, quale URL importare. Zero
-  campi aggiunti, zero tolti, e un record che al freeze si congela dicendo una
-  cosa che è vera.
-- **Il secondo punto del §8.3 atterra qui, e adesso ha un numero.** «Lavoro lungo
-  fuori dal lock» non dipendeva dal tipo del lock ma dal fatto che il lavoro
-  lungo *non potesse* stare fuori. La [0024](0024-chi-legge-non-aspetta-chi-legge.md)
-  aveva reso il costo visibile (780 ms di workspace tenuto in esclusiva da
-  `reindex` su 2000 note); qui il costo si toglie, e la distanza fra le due
-  strade è di **tre ordini di grandezza** sulla stessa camminata.
-- **La rete non ha più bloccanti nominati.** La [0013](0013-elenco-delle-capacita.md)
-  aveva lasciato fuori `http_fetch` legandola a due voci: §9.1 «perché sia
-  utile», §7.3 «perché sia sicura». La seconda l'ha chiusa la
-  [0021](0021-il-confine.md), questa chiude la prima. Non entra qui — non è
-  questa voce, ed è additiva — ma va detto cosa resta prima di aggiungerla: le
-  **allowlist dei permessi non sono ancora applicate** (lo dichiara la 0021),
-  quindi oggi `network` sarebbe tutto-o-niente invece che un elenco di host.
+  gli **argomenti** del job — quale cartella esportare, quale URL importare.
+  Zero campi aggiunti, zero tolti, e un record che al freeze si congela dicendo
+  una cosa che è vera.
+- **Il secondo punto del §8.3 atterra qui, e adesso ha un numero.** «Lavoro
+  lungo fuori dal lock» non dipendeva dal tipo del lock ma dal fatto che il
+  lavoro lungo *non potesse* stare fuori. La
+  [0024](0024-chi-legge-non-aspetta-chi-legge.md) aveva reso il costo visibile
+  (780 ms di workspace tenuto in esclusiva da `reindex` su 2000 note); qui il
+  costo si toglie, e la distanza fra le due strade è di **tre ordini di
+  grandezza** sulla stessa camminata.
+- **La rete non ha più bloccanti nominati.** La
+  [0013](0013-elenco-delle-capacita.md) aveva lasciato fuori `http_fetch`
+  legandola a due voci: §9.1 «perché sia utile», §7.3 «perché sia sicura». La
+  seconda l'ha chiusa la [0021](0021-il-confine.md), questa chiude la prima. Non
+  entra qui — non è questa voce, ed è additiva — ma va detto cosa resta prima di
+  aggiungerla: le **allowlist dei permessi non sono ancora applicate** (lo
+  dichiara la 0021), quindi oggi `network` sarebbe tutto-o-niente invece che un
+  elenco di host.
 - **Un job che chiama `run_command` non porta i comandi fuori dal kernel: ce li
   fa entrare.** Il comando gira dentro il prestito esclusivo, nel giro sincrono,
-  esattamente come se lo avesse invocato la shell — e quindi eredita modo, attore
-  e lotto come li eredita chiunque altro. Non è stato deciso qui: è ciò che la
-  [0009](0009-registro-dei-comandi.md) e la [0011](0011-il-lotto.md) dicono già,
-  e che il `JobHost` non aveva titolo a dire diversamente.
+  esattamente come se lo avesse invocato la shell — e quindi eredita modo,
+  attore e lotto come li eredita chiunque altro. Non è stato deciso qui: è ciò
+  che la [0009](0009-registro-dei-comandi.md) e la [0011](0011-il-lotto.md)
+  dicono già, e che il `JobHost` non aveva titolo a dire diversamente.
 
 ## Cosa NON è stato fatto, e perché
 
-- **Il runner resta il §9.3, e con lui la cancellazione.** Qui c'è ciò che un job
-  riceve, non chi lo esegue: `spawn_job` accoda ancora e in produzione nessuno
-  draina. La differenza è che il pool del §9.3 adesso ha **qualcosa da passare al
-  job**, e prima non ce l'aveva — un runner scritto ieri avrebbe eseguito
-  soltanto funzioni pure. La cancellazione va disegnata *con* il pool, perché un
-  pool che non nasce cancellabile si riscrive per diventarlo.
+- **Il runner resta il §9.3, e con lui la cancellazione.** Qui c'è ciò che un
+  job riceve, non chi lo esegue: `spawn_job` accoda ancora e in produzione
+  nessuno draina. La differenza è che il pool del §9.3 adesso ha **qualcosa da
+  passare al job**, e prima non ce l'aveva — un runner scritto ieri avrebbe
+  eseguito soltanto funzioni pure. La cancellazione va disegnata *con* il pool,
+  perché un pool che non nasce cancellabile si riscrive per diventarlo.
 - **Nessuno snapshot, e nessuna revisione dell'intero vault.** Un job che vuole
-  sapere se il vault gli è cambiato sotto una camminata può chiedere la revisione
-  di un documento (ce l'ha) e non ha un fatto solo da guardare per l'insieme.
-  Inventarne uno qui avrebbe voluto dire decidere cosa sia una versione del vault
-  senza la sua domanda davanti: è il §15.2 (durabilità e recovery) col §14.2 (i
-  metadati di entry).
+  sapere se il vault gli è cambiato sotto una camminata può chiedere la
+  revisione di un documento (ce l'ha) e non ha un fatto solo da guardare per
+  l'insieme. Inventarne uno qui avrebbe voluto dire decidere cosa sia una
+  versione del vault senza la sua domanda davanti: è il §15.2 (durabilità e
+  recovery) col §14.2 (i metadati di entry).
 - **Un job non è un lotto, e non gli è stato dato modo di aprirne uno.** N
   scritture da un job sono N eventi, come da chiunque altro; raggrupparle è il
   §10.2 (il freno e il raggruppamento del ponte eventi), che vale per ogni
   sorgente di eventi e non per questa. Il lotto (0011) copre ciò che accade
   dentro **una** chiamata del kernel, e un job dura più di una chiamata per
   definizione.
-- **Nessun limite di durata, nessuna deadline.** Il confine dichiara che a M5 una
-  deadline tronca le chiamate sincrone; un job è per definizione ciò che sta
-  fuori da quel limite, e ucciderlo a tempo è una politica dell'host che vuole il
-  runner per avere dove stare (§9.3) e il §10.3 per avere dove mostrarsi.
+- **Nessun limite di durata, nessuna deadline.** Il confine dichiara che a M5
+  una deadline tronca le chiamate sincrone; un job è per definizione ciò che sta
+  fuori da quel limite, e ucciderlo a tempo è una politica dell'host che vuole
+  il runner per avere dove stare (§9.3) e il §10.3 per avere dove mostrarsi.
 - **`Plugin` continua a non avere implementatori in produzione.** Il primo vero
   arriva col registry del §9.3; quello del presidio è un plugin di banco, e lo
   dice.
@@ -177,6 +180,6 @@ salva aspetta *una* lettura da una parte e *tutte* dall'altra.
 - Il presidio del confronto, provato al contrario: la colonna «prima» è nel test
   stesso, ed è la camminata dentro un prestito solo — se il `JobHost` tenesse il
   prestito per la durata del job, le due colonne coinciderebbero e il test
-  fallirebbe con il proprio messaggio. Misurato su tre corse: 0,63 / 0,63 /
-  1,14 µs contro 5,02 / 4,98 / 5,39 ms.
+  fallirebbe con il proprio messaggio. Misurato su tre corse: 0,63 / 0,63 / 1,14
+  µs contro 5,02 / 4,98 / 5,39 ms.
 - `cargo fmt --all` — pulita.

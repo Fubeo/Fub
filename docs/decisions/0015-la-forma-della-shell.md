@@ -6,30 +6,32 @@
 | **Origine** | `todo.md` §1.1 e §1.3 (seduta 1, *ex* §3.13 e §3.11) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la mappa dell'albero](../architecture/shell.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la mappa dell'albero](../architecture/shell.md)
 
 ---
 
 - [x] **Quattordici file piatti in `frontend/src/`**, `main.ts` a 1622 righe con
-      81 funzioni di primo livello e 18 variabili globali mutabili. Il §1.2
-      chiede «un modulo per dominio» e ha ragione, ma senza un albero dichiarato
-      la divisione la decide chi tocca il file per ultimo — che è come sono nate
-      le quattordici.
+  81 funzioni di primo livello e 18 variabili globali mutabili. Il §1.2 chiede
+  «un modulo per dominio» e ha ragione, ma senza un albero dichiarato la
+  divisione la decide chi tocca il file per ultimo — che è come sono nate le
+  quattordici.
 - [x] **Le voci in arrivo scrivono tutte negli stessi due file**: il §2.1
-      riversa una ventina di nodi sul renderer, il §2.8 ci mette accanto un
-      riconciliatore, il §2.2 aggiunge cinque superfici a `main.ts`, il §18.2 un
-      registro comandi, il §10.3 un centro notifiche.
+  riversa una ventina di nodi sul renderer, il §2.8 ci mette accanto un
+  riconciliatore, il §2.2 aggiunge cinque superfici a `main.ts`, il §18.2 un
+  registro comandi, il §10.3 un centro notifiche.
 - [x] **`api.ts` è l'unica cucitura verso Tauri — tranne `main.ts`**, che
-      importa `@tauri-apps/plugin-dialog` per le conferme e il file picker.
-      Basta una riga perché la shell smetta di essere portabile.
+  importa `@tauri-apps/plugin-dialog` per le conferme e il file picker. Basta
+  una riga perché la shell smetta di essere portabile.
 
 ## La forma
 
 L'albero è dichiarato e **abitato** (`host/`, `state/`, `ui/`, `panels/`,
-`editor/`, `rules/`, `theme/`), e sta in [architecture/shell.md](../architecture/shell.md),
-non qui: una mappa che si consulta scrivendo un file nuovo non va nell'archivio
-delle decisioni. `main.ts` è passato da **1622 a 137 righe** e non contiene più
-logica di dominio: compone, inietta due collegamenti e apre il vault.
+`editor/`, `rules/`, `theme/`), e sta in
+[architecture/shell.md](../architecture/shell.md), non qui: una mappa che si
+consulta scrivendo un file nuovo non va nell'archivio delle decisioni. `main.ts`
+è passato da **1622 a 137 righe** e non contiene più logica di dominio: compone,
+inietta due collegamenti e apre il vault.
 
 Le decisioni prese, da NON ridiscutere senza motivo:
 
@@ -86,9 +88,9 @@ Le decisioni prese, da NON ridiscutere senza motivo:
 - **`i18n/` non si crea.** Dipende dal §12.1, che è una decisione non ancora
   presa (dove vive il catalogo, chi localizza gli errori del confine, in che
   forma): fare la cartella prima della decisione significa deciderla per
-  inerzia. `theme/` invece si crea, ma coi soli **token di oggi** spostati dentro
-  senza toccarli: il sistema vero è 6.2/25.1, e ciò che mancava era il posto
-  dove atterrerà.
+  inerzia. `theme/` invece si crea, ma coi soli **token di oggi** spostati
+  dentro senza toccarli: il sistema vero è 6.2/25.1, e ciò che mancava era il
+  posto dove atterrerà.
 
 Cambiamento collaterale, piccolo e voluto: `$` lancia nominando il selettore
 invece di restituire `null` travestito da elemento con un cast. Un id sbagliato
@@ -104,8 +106,8 @@ Il §1.2 resta **aperto** per due metà, ed è deliberato:
   multiple (§9.6). Farla dentro un giro di riordino significherebbe deciderla
   per inerzia — lo stesso errore che questa decisione evita per `i18n/`. Ciò che
   è già pronto è che il contesto pubblicato porta l'identità del pannello, così
-  il giorno che i pannelli saranno due nessuno dovrà inventarsi da dove viene
-  la risposta.
+  il giorno che i pannelli saranno due nessuno dovrà inventarsi da dove viene la
+  risposta.
 - **Un solo modo di montare un pannello**: cestino, cronologia, ricerca e grafo
   non passano dal view host. Il grafo per decisione di M2 (superficie
   privilegiata fuori da `UiNode`); gli altri perché il protocollo non ha ancora

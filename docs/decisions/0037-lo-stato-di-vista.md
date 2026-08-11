@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §11.2 (seduta 11) — ne chiude **metà**: lo stato di vista c'è, resta il layout |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/11-impostazioni-e-i-tre-stati.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/11-impostazioni-e-i-tre-stati.md)
 
 ---
 
@@ -15,10 +16,10 @@ Il §11.2 teneva insieme **tre** stati che non avevano un contenitore, e la
 impostazioni — lasciando degli altri due la sola cosa che col freeze di M4
 scadeva: *dove non vanno*. Questo verbale chiude il secondo.
 
-Prima di questa decisione, «dove si era rimasti» stava in due posti e nessuno dei
-due era una scelta. Per la **shell**: in `localStorage`, che era il posto giusto
-per la ragione giusta — non viaggia col vault — e sbagliato per due che si
-vedono usandolo. Moriva col profilo della webview: una reinstallazione, un
+Prima di questa decisione, «dove si era rimasti» stava in due posti e nessuno
+dei due era una scelta. Per la **shell**: in `localStorage`, che era il posto
+giusto per la ragione giusta — non viaggia col vault — e sbagliato per due che
+si vedono usandolo. Moriva col profilo della webview: una reinstallazione, un
 *clear site data*, e le cartelle aperte non c'erano più. E non lo conosceva
 nessuno **fuori** dalla webview: un backend che volesse sapere come si stava
 guardando un vault — o potarlo quando quel vault viene dimenticato — non aveva
@@ -41,20 +42,21 @@ credendo di averne uno per uno.
 
 ## La risposta, in una frase
 
-**Lo stato di vista è una famiglia di capacità (due, in verità: si rilegge mentre
-si disegna e da lì non si deve poter scrivere), la sua chiave la compone l'host
-con dentro il proprietario e l'esemplare — non il chiamante — e il valore vive in
-un file della macchina che il kernel possiede, accanto alle impostazioni di
-macchina e al registro dei vault, con la stessa disciplina: versione di schema,
-scrittura atomica, e un file che non si è potuto leggere non si riscrive.**
+**Lo stato di vista è una famiglia di capacità (due, in verità: si rilegge
+mentre si disegna e da lì non si deve poter scrivere), la sua chiave la compone
+l'host con dentro il proprietario e l'esemplare — non il chiamante — e il valore
+vive in un file della macchina che il kernel possiede, accanto alle impostazioni
+di macchina e al registro dei vault, con la stessa disciplina: versione di
+schema, scrittura atomica, e un file che non si è potuto leggere non si
+riscrive.**
 
 ## Le decisioni prese, da NON ridiscutere senza motivo
 
 ### Due famiglie, non una
 
-`ViewStateRead` sta in `ReadApi`, `ViewStateWrite` solo in `HostApi`. È la stessa
-divisione dei blob e delle impostazioni, e qui la ragione è più stretta che
-altrove: il momento in cui una view rilegge il proprio scroll **è mentre si
+`ViewStateRead` sta in `ReadApi`, `ViewStateWrite` solo in `HostApi`. È la
+stessa divisione dei blob e delle impostazioni, e qui la ragione è più stretta
+che altrove: il momento in cui una view rilegge il proprio scroll **è mentre si
 disegna**, cioè da sotto un prestito condiviso del workspace (`render_view`
 prende `&dyn ReadApi`). Se ce ne fosse una sola, o `render_view` avrebbe dovuto
 prendere un `&mut` — e allora disegnare potrebbe scrivere, che è precisamente
@@ -75,9 +77,9 @@ identificatore di pannello ha tre conseguenze buone e nessuna cattiva:
    d'accordo col primo;
 2. sopravvive al modello di layout (§1.2): il giorno che i pannelli saranno più
    d'uno, ognuno avrà i propri esemplari e la chiave non cambia forma;
-3. è la grana giusta *oggi*. Un `PaneId` avrebbe legato lo stato al riquadro; due
-   view diverse nello stesso riquadro hanno stati diversi, e la stessa view in
-   due riquadri ne ha due — che è esattamente ciò che l'esemplare dice e il
+3. è la grana giusta *oggi*. Un `PaneId` avrebbe legato lo stato al riquadro;
+   due view diverse nello stesso riquadro hanno stati diversi, e la stessa view
+   in due riquadri ne ha due — che è esattamente ciò che l'esemplare dice e il
    riquadro no.
 
 ### Chi scrive non è un parametro
@@ -112,9 +114,9 @@ handler di eventi non stanno disegnando per conto di nessuna istanza:
 
 `view-state.json` nella cartella di configurazione, accanto a `settings.json` e
 `vaults.json`. **Non** dentro il vault: lo scroll di ieri sul portatile non è un
-fatto sul vault, e sincronizzarlo vorrebbe dire far litigare due macchine su dove
-si era rimasti — che è il difetto che i vault sincronizzati con strumenti esterni
-producono per primo.
+fatto sul vault, e sincronizzarlo vorrebbe dire far litigare due macchine su
+dove si era rimasti — che è il difetto che i vault sincronizzati con strumenti
+esterni producono per primo.
 
 E **un file solo**, col root del vault come prima chiave, non un file per vault:
 i vault che una macchina conosce sono venti più i preferiti (il tetto del
@@ -138,13 +140,13 @@ qualunque potrebbe rileggere e riscrivere lo stato di un provider.
 
 Un cambiamento visibile, e va detto perché non è un effetto collaterale: la
 **modalità** era globale — una chiave sola per tutte le cartelle — e ora è per
-vault, perché il vault è la prima chiave dello store. È la grana giusta: un vault
-di appunti che si legge e uno di note che si scrive non hanno ragione di
+vault, perché il vault è la prima chiave dello store. È la grana giusta: un
+vault di appunti che si legge e uno di note che si scrive non hanno ragione di
 condividere la modalità, e chi ne tiene uno solo non vede differenza.
 
-L'esemplare della shell è **uno**, e si chiama `window`. Dichiararlo è più onesto
-che lasciarlo implicito: oggi l'area principale è un pannello solo, quindi non
-c'è niente da distinguere.
+L'esemplare della shell è **uno**, e si chiama `window`. Dichiararlo è più
+onesto che lasciarlo implicito: oggi l'area principale è un pannello solo,
+quindi non c'è niente da distinguere.
 
 ### Il cliente vero è il pannello dei tag
 
@@ -176,10 +178,10 @@ viaggiano con lui. Un vault in cloud avrebbe portato lo scroll del portatile sul
 fisso, e due macchine avrebbero litigato su un dato che non è del vault.
 
 **Farne un'impostazione.** Un'impostazione ha un valore per chiave e la decide
-l'utente; questo ha un valore per esemplare e non lo decide nessuno — si deposita
-mentre si guarda. Metterlo là avrebbe voluto dire un pannello di impostazioni con
-dentro lo scroll di ieri, e uno schema dichiarato per una chiave che il provider
-inventa mentre lavora.
+l'utente; questo ha un valore per esemplare e non lo decide nessuno — si
+deposita mentre si guarda. Metterlo là avrebbe voluto dire un pannello di
+impostazioni con dentro lo scroll di ieri, e uno schema dichiarato per una
+chiave che il provider inventa mentre lavora.
 
 **Far rientrare lo `storage_*` della 0013.** È l'obiezione da fare a questo
 verbale, e la risposta è che le tre proprietà che a quello mancavano ci sono
@@ -193,29 +195,32 @@ per i tre motivi che lo avevano fatto ritirare.
 concetto di «quale pannello» da tenere d'accordo con `ViewInstance`, e con la
 grana sbagliata.
 
-**Il layout, adesso.** Il §11.2 chiedeva due contenitori e ne consegna uno. Non è
-una scorciatoia: oggi l'area principale è **un pannello solo**, quindi non esiste
-nessuna disposizione da salvare, e un formato deciso adesso descriverebbe una
-cosa che non c'è. Va col modello di layout ([§1.2](../roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite),
-seduta 18), che è anche dove nasce ciò che gli darebbe senso.
+**Il layout, adesso.** Il §11.2 chiedeva due contenitori e ne consegna uno. Non
+è una scorciatoia: oggi l'area principale è **un pannello solo**, quindi non
+esiste nessuna disposizione da salvare, e un formato deciso adesso descriverebbe
+una cosa che non c'è. Va col modello di layout
+([§1.2](../roadmap/18-editor-e-tastiera.md#12-smontare-il-monolite), seduta 18),
+che è anche dove nasce ciò che gli darebbe senso.
 
 ## Cosa resta scoperto (e dove è scritto)
 
 - **Il layout.** Metà del §11.2, che resta aperta — col precedente della
   [0031](0031-chi-possiede-i-bundle.md), che è stata la prima a chiuderne mezza.
-  Il criterio è in [README.md](README.md): un verbale per pezzo di voce si scrive
-  quando il pezzo è una decisione intera.
-- **Ogni scrittura è sincrona e riscrive il file intero.** Digitare nel filtro dei
-  tag salva a ogni carattere; il file è di pochi KB (venti vault più i preferiti,
-  qualche chiave per esemplare) e la scrittura è atomica, quindi oggi non è un
-  problema — ma è un costo reale e va detto invece di scoprirlo. Se un giorno lo
-  diventerà, la via d'uscita è una scrittura differita, e sarà una voce sua.
+  Il criterio è in [README.md](README.md): un verbale per pezzo di voce si
+  scrive quando il pezzo è una decisione intera.
+- **Ogni scrittura è sincrona e riscrive il file intero.** Digitare nel filtro
+  dei tag salva a ogni carattere; il file è di pochi KB (venti vault più i
+  preferiti, qualche chiave per esemplare) e la scrittura è atomica, quindi oggi
+  non è un problema — ma è un costo reale e va detto invece di scoprirlo. Se un
+  giorno lo diventerà, la via d'uscita è una scrittura differita, e sarà una
+  voce sua.
 - **Gli orfani non si potano.** Un esemplare che non si riaprirà mai — una view
   di un plugin disinstallato, un `instance` che la shell non genera più — lascia
   la sua chiave nel file. Non è la crescita senza fine che la potatura per vault
   evita, ed è comunque una cosa che nessuno pulisce: se servirà, si pota quando
   si conosce l'inventario di ciò che può esistere, cioè non prima del modello di
   layout.
-- **La shell ha un esemplare solo (`window`).** Il giorno che le finestre saranno
-  più d'una, due finestre sullo stesso vault condivideranno modalità, cartelle
-  aperte e spazio selezionato. È la stessa domanda del layout, e si risponde là.
+- **La shell ha un esemplare solo (`window`).** Il giorno che le finestre
+  saranno più d'una, due finestre sullo stesso vault condivideranno modalità,
+  cartelle aperte e spazio selezionato. È la stessa domanda del layout, e si
+  risponde là.

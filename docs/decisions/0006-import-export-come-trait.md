@@ -6,27 +6,28 @@
 | **Origine** | `todo.md` §1.7 (primo giro) |
 | **Commit** | `a138ada` |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [PIANO.md](../PIANO.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[PIANO.md](../PIANO.md)
 
 ---
 
-- [x] **`ImportProvider`** (`can_handle(source) -> bool`, `import(source,
-      request, host) -> Result<ImportReport>`) e **`ExportProvider`**
-      (`targets() -> Vec<ExportTarget>`, `export(request, host)`), in
-      `abi/transfer.rs` e rispecchiati nel WIT (`transfer`, `importer`,
-      `exporter`, più due export del world: tutto additivo, la linea di base non
-      si tocca).
+- [x] **`ImportProvider`** (`can_handle(source) -> bool`,
+  `import(source, request, host) -> Result<ImportReport>`) e
+  **`ExportProvider`** (`targets() -> Vec<ExportTarget>`,
+  `export(request, host)`), in `abi/transfer.rs` e rispecchiati nel WIT
+  (`transfer`, `importer`, `exporter`, più due export del world: tutto additivo,
+  la linea di base non si tocca).
 - [x] **`ImportReport` nel contratto, e niente `MigrationPlan`**: il piano *è*
-      il rapporto di una prova a vuoto (`ImportMode::Preview`). Log
-      (`TransferNote { level, message, entry }`), esiti per documento
-      (`ImportOutcome`) e politica dei duplicati (`ConflictPolicy`) stanno qui e
-      non nel primo importer. Rollback e resume no: sono la [decisione 0011](../decisions/0011-il-lotto.md) + §15.2.
+  il rapporto di una prova a vuoto (`ImportMode::Preview`). Log
+  (`TransferNote { level, message, entry }`), esiti per documento
+  (`ImportOutcome`) e politica dei duplicati (`ConflictPolicy`) stanno qui e non
+  nel primo importer. Rollback e resume no: sono la
+  [decisione 0011](../decisions/0011-il-lotto.md) + §15.2.
 - [x] Primo cliente vero: `MarkdownImport`/`MarkdownExport` in
-      `fub-format-markdown`, registrati nel `Workspace`
-      (`register_import_provider` / `register_export_provider`) e provati
-      end-to-end contro il kernel — preview che non scrive, tre politiche di
-      conflitto, selezione per cartella e per query, export con e senza
-      metadati, round-trip vault→artefatti→vault.
+  `fub-format-markdown`, registrati nel `Workspace` (`register_import_provider`
+  / `register_export_provider`) e provati end-to-end contro il kernel — preview
+  che non scrive, tre politiche di conflitto, selezione per cartella e per
+  query, export con e senza metadati, round-trip vault→artefatti→vault.
 
 *Sblocca:* 17 (~120 voci), 6.3 (export PDF/Pandoc/Typst), 15.1 (BibTeX/CSL),
 14.3 (email/EML), 11.4 (CSV/JSON).
@@ -63,10 +64,10 @@ proprio modo di dirlo.
 *L'import scrive, l'export legge, e si vede dalla firma.* `import` è `&mut self`
 (17.3 chiede resume e retry: un provider che riprende ricorda — con `&self`
 quella famiglia sarebbe chiusa dalla firma, che è il difetto imputato a
-`ViewProvider` nel §2.4); `export` è `&self` con un host in sola lettura,
-quindi il kernel lo serve sotto prestito **condiviso** come `render_view`: un
-export lungo non mette in coda le letture dell'app. Il dispatch dell'import
-chiede esplicitamente `can_handle` invece di dedurlo da un `BadArgs` come fa
+`ViewProvider` nel §2.4); `export` è `&self` con un host in sola lettura, quindi
+il kernel lo serve sotto prestito **condiviso** come `render_view`: un export
+lungo non mette in coda le letture dell'app. Il dispatch dell'import chiede
+esplicitamente `can_handle` invece di dedurlo da un `BadArgs` come fa
 `query_index`, perché una sorgente si riconosce **senza** provare a importarla —
 e provare, qui, vuol dire scrivere. I byte stanno dentro `ImportSource` e non
 solo nel parametro di `import` perché `.docx`, `.epub`, `.odt` e mezzo mondo dei
@@ -88,19 +89,22 @@ arrivi per distrazione.
 **e** sul disco; un importer che risolvesse `ConflictPolicy::Rename` rifacendola
 darebbe nomi diversi da `create_note` e dal ripristino dal cestino. Con ~50
 importer nel solo 17.1, l'alternativa erano cinquanta convenzioni. È una voce in
-più nell'elenco della [decisione 0013](../decisions/0013-elenco-delle-capacita.md), trovata come la [decisione 0013](../decisions/0013-elenco-delle-capacita.md) dice che si trovano: da un
-cliente vero.
+più nell'elenco della
+[decisione 0013](../decisions/0013-elenco-delle-capacita.md), trovata come la
+[decisione 0013](../decisions/0013-elenco-delle-capacita.md) dice che si
+trovano: da un cliente vero.
 
-*Resta fuori, dichiarato:* **rollback e resume** ([decisione 0011](../decisions/0011-il-lotto.md) + §15.2: senza lotto e
-senza journal, un `batch_id` qui sarebbe un campo che nessuno consuma — e un
-import di N documenti emette oggi N eventi, che è esattamente il debito della
-[decisione 0011](../decisions/0011-il-lotto.md)); il **lavoro lungo** (§9.1: un import gira nel giro sincrono, quindi un
-vault Obsidian da 4 GiB non entra — e non deve, finché un job non vede il
-vault); il **modello parsato** a un exporter (§4.2: l'export markdown vuole la
-sorgente com'è, ma un export PDF/Typst dovrebbe riparsare per conto proprio); i
-**contenitori** (zip, cartelle: una sorgente per volta — la firma regge N
-documenti in un rapporto, il primo cliente non ne ha bisogno); e la
-**superficie IPC**, perché senza il dialogo di sistema sarebbero due comandi
-Tauri senza chiamanti — cioè la scorciatoia bespoke contro cui è scritto il
-piano. La quarta copia del protocollo di dispatch nel `Workspace` è il prezzo
-già previsto dal §7.2.
+*Resta fuori, dichiarato:* **rollback e resume**
+([decisione 0011](../decisions/0011-il-lotto.md) + §15.2: senza lotto e senza
+journal, un `batch_id` qui sarebbe un campo che nessuno consuma — e un import di
+N documenti emette oggi N eventi, che è esattamente il debito della
+[decisione 0011](../decisions/0011-il-lotto.md)); il **lavoro lungo** (§9.1: un
+import gira nel giro sincrono, quindi un vault Obsidian da 4 GiB non entra — e
+non deve, finché un job non vede il vault); il **modello parsato** a un exporter
+(§4.2: l'export markdown vuole la sorgente com'è, ma un export PDF/Typst
+dovrebbe riparsare per conto proprio); i **contenitori** (zip, cartelle: una
+sorgente per volta — la firma regge N documenti in un rapporto, il primo cliente
+non ne ha bisogno); e la **superficie IPC**, perché senza il dialogo di sistema
+sarebbero due comandi Tauri senza chiamanti — cioè la scorciatoia bespoke contro
+cui è scritto il piano. La quarta copia del protocollo di dispatch nel
+`Workspace` è il prezzo già previsto dal §7.2.

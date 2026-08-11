@@ -6,15 +6,16 @@
 | **Origine** | `todo.md` §14.1 + §14.2 (seduta 14) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/14-entry-cartelle-lista.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/14-entry-cartelle-lista.md)
 
 ---
 
 Il piano diceva che §14.1 e §14.2 sono **lo stesso lavoro visto da due lati**, e
 lo diceva in una riga: «è il `VaultEntry` del §14.1 esteso ai *documenti*, non
 solo agli asset». Farle separate avrebbe voluto dire aggiungere due volte gli
-stessi campi alla stessa scansione. Questo verbale le chiude insieme, e le
-altre due voci della seduta — la cartella come cittadino (§14.3) e il canale
+stessi campi alla stessa scansione. Questo verbale le chiude insieme, e le altre
+due voci della seduta — la cartella come cittadino (§14.3) e il canale
 per-cartella della lista (§14.4) — restano aperte: sono l'altra coppia, e questa
 non le decide.
 
@@ -26,9 +27,10 @@ Un PNG nel vault non esisteva: nessuna query lo nominava, nessun evento lo
 annunciava, e il controllo di salute — che pure sa dire quando un wikilink non
 risolve — su `![[foto.png]]` **taceva**, perché non aveva modo di sapere se quel
 file ci fosse. Dall'altro lato, `reindex` rileggeva e riparsava l'intero vault a
-ogni apertura, e lo faceva **prima** di chiedere agli indici se gli interessasse:
-«un indice persistente riconosce e salta gli immutati» era vero per l'indice e
-falso per il kernel, che pagava comunque lettura e parse di tutto.
+ogni apertura, e lo faceva **prima** di chiedere agli indici se gli
+interessasse: «un indice persistente riconosce e salta gli immutati» era vero
+per l'indice e falso per il kernel, che pagava comunque lettura e parse di
+tutto.
 
 ## La decisione: una tabella, e la domanda che le dà senso
 
@@ -143,10 +145,10 @@ versione di schema dal primo giorno (§15.3), scrittura atomica, e **illeggibile
 → si butta e si ricostruisce**, senza un avviso e senza bloccare niente.
 
 È l'opposto di [`organization`](../../crates/fub-kernel/src/organization.rs),
-che davanti a un file che non ha potuto leggere si **rifiuta di sovrascriverlo**:
-quello è autorevole — perso, non si ricostruisce da niente — e questo no.
-Buttare questa tabella costa una riapertura lenta, cioè esattamente il
-comportamento che c'era prima che esistesse.
+che davanti a un file che non ha potuto leggere si **rifiuta di
+sovrascriverlo**: quello è autorevole — perso, non si ricostruisce da niente — e
+questo no. Buttare questa tabella costa una riapertura lenta, cioè esattamente
+il comportamento che c'era prima che esistesse.
 
 La *classe* («derivato o autorevole») non è ancora dicibile nel contratto: è il
 §15.4, che questa voce non chiude. Ciò che evita è di far nascere il posto nuovo
@@ -183,11 +185,11 @@ Vive dentro lo stesso manifest, quindi eredita lo stesso guardiano: opstamp e
 versione di schema. Se il manifest è di un'altra epoca non se ne crede nessuna
 parte — dire «ce l'ho» a sproposito farebbe *saltare* un documento.
 
-Come la impara è la parte che non si indovina dal diff.
-`on_document_indexed` riceve un **modello**, e da un modello la revisione del
-sorgente non si ricalcola: l'unico posto in cui l'indice la vede è la domanda del
-kernel. Quindi `up_to_date` **dichiara** le revisioni che sta per ricevere, e
-ogni consegna **consuma** la propria. Con tre regole che tengono in piedi la cosa:
+Come la impara è la parte che non si indovina dal diff. `on_document_indexed`
+riceve un **modello**, e da un modello la revisione del sorgente non si
+ricalcola: l'unico posto in cui l'indice la vede è la domanda del kernel. Quindi
+`up_to_date` **dichiara** le revisioni che sta per ricevere, e ogni consegna
+**consuma** la propria. Con tre regole che tengono in piedi la cosa:
 
 - non si dichiara ciò che si è appena detto di avere (quel documento non
   arriverà, e la dichiarazione lasciata lì la raccoglierebbe la prima consegna
@@ -231,8 +233,8 @@ Tutte e tre vanno nella stessa direzione: sbagliare verso la rilettura.
   già** e non peggiora il §14.4 — la shell fa un giro solo dove prima ne faceva
   uno — ma non è ancora una lista per-cartella.
 - **L'albero della shell mostra ancora i soli documenti.** Cosa succeda
-  cliccando un allegato, e quindi se abbia senso disegnarlo lì, è del §14.3/§14.4.
-  Qui è cambiato *da dove arriva* l'elenco, non cosa contiene.
+  cliccando un allegato, e quindi se abbia senso disegnarlo lì, è del
+  §14.3/§14.4. Qui è cambiato *da dove arriva* l'elenco, non cosa contiene.
 - **Nessuno calcola l'impronta degli allegati.** Dedup, rilevamento duplicati e
   verifica d'integrità hanno adesso il campo in cui metterla e non il job che la
   riempie.
@@ -240,19 +242,19 @@ Tutte e tre vanno nella stessa direzione: sbagliare verso la rilettura.
   quattro) restano: la prima è una chiave di impostazione da dichiarare
   ([0036](0036-le-impostazioni-e-i-tre-stati.md)), la seconda un derivato in
   `.fub-data/` da far nascere quando ci sarà chi lo disegna.
-- **`.fub-data/entries.json` è il secondo file derivato che si scrive la
-  propria disciplina a mano** (dopo il manifest della ricerca). Il §15.3 e il
-  §15.4 sono esattamente questo, e questa voce li **nomina** senza chiuderli:
-  la versione di schema c'è, la classe è scritta in prosa in testa al modulo, e
-  finché la classe non è dicibile nel contratto ogni posto nuovo la ripete.
+- **`.fub-data/entries.json` è il secondo file derivato che si scrive la propria
+  disciplina a mano** (dopo il manifest della ricerca). Il §15.3 e il §15.4 sono
+  esattamente questo, e questa voce li **nomina** senza chiuderli: la versione
+  di schema c'è, la classe è scritta in prosa in testa al modulo, e finché la
+  classe non è dicibile nel contratto ogni posto nuovo la ripete.
 - **Il rename di un allegato è un giro sull'intero vault**, perché un allegato
   non è un nodo del grafo — non ha link uscenti e non partecipa alla risoluzione
   per nome — quindi le sorgenti da riscrivere si trovano camminando la cache dei
   metadati. Si paga quando qualcuno sposta un allegato: quanto costa già un
   rename di nota con molti backlink.
 - **Il mirror TS ha dovuto rinominare un tipo.** In Rust i due `VaultEntry` —
-  questo e quello del registro dei vault (`fub_host`) — stanno in crate
-  diversi; in TypeScript no, e due `interface` omonime **si fondono in
-  silenzio**. Il secondo è ora `KnownVault` di là dal confine. È il §16.5 (mirror
-  generati, non scritti) che si fa vedere: un generatore avrebbe dovuto decidere
-  la stessa cosa, ma non l'avrebbe scoperta per caso.
+  questo e quello del registro dei vault (`fub_host`) — stanno in crate diversi;
+  in TypeScript no, e due `interface` omonime **si fondono in silenzio**. Il
+  secondo è ora `KnownVault` di là dal confine. È il §16.5 (mirror generati, non
+  scritti) che si fa vedere: un generatore avrebbe dovuto decidere la stessa
+  cosa, ma non l'avrebbe scoperta per caso.

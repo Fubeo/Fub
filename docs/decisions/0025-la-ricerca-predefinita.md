@@ -6,7 +6,8 @@
 | **Origine** | una domanda su [FEATURES.md](../FEATURES.md) §9.1, non una voce di `todo.md` |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta che apre](../roadmap/21-la-ricerca-predefinita.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta che apre](../roadmap/21-la-ricerca-predefinita.md)
 
 ---
 
@@ -23,9 +24,9 @@ di ricerca è finita in una firma WIT invece che dentro un provider.
 FEATURES.md elenca settantatré voci di ricerca (§9.1) e non nomina mai
 **omnisearch** — l'estensione con cui, di fatto, gli utenti di Obsidian
 intendono «una ricerca che funziona»: tolleranza ai refusi, prefisso mentre si
-digita, estratti ordinati per rilevanza con i termini evidenziati, un modale solo
-che guarda titoli, corpo, heading e tag, e un secondo modale che cerca **dentro**
-la nota aperta.
+digita, estratti ordinati per rilevanza con i termini evidenziati, un modale
+solo che guarda titoli, corpo, heading e tag, e un secondo modale che cerca
+**dentro** la nota aperta.
 
 La domanda era se quel comportamento sia una feature che un giorno si potrà
 installare, o **la ricerca dell'app**.
@@ -58,10 +59,10 @@ peggiore.
   comportarsi, per sempre.
 - **Le parti che contano scadono col freeze di M4.** `TextQuery`, `TextMode`,
   `TextField` e `DocumentMatch` sono già nel contratto e già nel WIT
-  ([`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit)). Una variante aggiunta oggi
-  costa una variante; dopo il freeze costa una minor, e toglierla una major. La
-  decisione non poteva aspettare che qualcuno avesse voglia di scrivere il
-  motore: doveva arrivare prima che la firma si chiudesse.
+  ([`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit)).
+  Una variante aggiunta oggi costa una variante; dopo il freeze costa una minor,
+  e toglierla una major. La decisione non poteva aspettare che qualcuno avesse
+  voglia di scrivere il motore: doveva arrivare prima che la firma si chiudesse.
 - **Un motore che indovina, su un canale che scrive, è un difetto.** Lo stesso
   `IndexQuery::Documents` che serve la casella di ricerca serve `vault.replace`,
   le collezioni e i template. Se la tolleranza ai refusi è una **politica del
@@ -76,12 +77,12 @@ peggiore.
 Il comportamento, non l'implementazione. In ordine di quanto si nota usandolo:
 
 1. **Tolleranza ai refusi**, di default nella casella di ricerca (§21.1).
-2. **Prefisso mentre si digita**: `arch` trova *architettura* prima che la parola
-   sia finita (§21.2).
+2. **Prefisso mentre si digita**: `arch` trova *architettura* prima che la
+   parola sia finita (§21.2).
 3. **Estratti ancorati al documento**, più d'uno per nota, e un modo di portarci
    il cursore (§21.3).
-4. **Ricerca dentro la nota aperta**, che è il secondo modale di omnisearch e non
-   è il trova/sostituisci (§21.4).
+4. **Ricerca dentro la nota aperta**, che è il secondo modale di omnisearch e
+   non è il trova/sostituisci (§21.4).
 5. **Una porta sola**: casella, quick switcher e palette non hanno tre ranking
    diversi (§21.5).
 6. **Pesi per campo**, con un default sensato e non una costante di compilazione
@@ -101,8 +102,8 @@ riempiendo quella che c'è.
   modalità di questo, e la [0019](0019-il-canale-dati.md) ha già deciso come
   convive: si registra accanto, dichiara le proprie `QueryRoute`, e il
   pianificatore gli manda ciò che rivendica. Farla entrare qui vorrebbe dire
-  decidere adesso come si compongono due rilevanze — cosa che `DocumentMatch`
-  ha già scelto di **non** fare (`absorb` tiene la maggiore, non la somma).
+  decidere adesso come si compongono due rilevanze — cosa che `DocumentMatch` ha
+  già scelto di **non** fare (`absorb` tiene la maggiore, non la somma).
 - **OCR, PDF, audio trascritto** (13, 9.1). Non è una questione di ricerca ma di
   §14.1: finché un PNG **non esiste** per `Vault::list_documents`, non c'è
   nessun documento da indicizzare. La ricerca è il *cliente* di quel lavoro, non
@@ -124,8 +125,7 @@ riempiendo quella che c'è.
 **Non cambia nessun codice, oggi.** Questo verbale non ha un commit di
 implementazione dietro: cambia la documentazione, e mette nove voci in
 `todo.md`, tre delle quali **P0** perché sono firma — la §21.1, la §21.2 e la
-§21.3, chiuse poi dalla
-[0050](0050-cosa-si-chiede-a-una-ricerca.md) e dalla
+§21.3, chiuse poi dalla [0050](0050-cosa-si-chiede-a-una-ricerca.md) e dalla
 [0049](0049-una-posizione-dentro-un-documento.md) insieme alla §21.10.
 
 Quello che cambia è il **criterio**: da qui in poi una domanda sulla ricerca non
@@ -134,10 +134,10 @@ perché eventualmente da noi debba fare altro.
 
 ## Verifica
 
-- `node .github/scripts/check-doc-links.mjs` — verde: i rimandi nuovi (questo verbale, la
-  seduta 21, le righe di `todo.md`, `PIANO.md`, `strozzature.md`, `leva.md`,
-  `numerazione.md`, `FEATURES.md`, `M2`, `traits.md` e `README.md`) risolvono
-  tutti, ancore comprese.
+- `node .github/scripts/check-doc-links.mjs` — verde: i rimandi nuovi (questo
+  verbale, la seduta 21, le righe di `todo.md`, `PIANO.md`, `strozzature.md`,
+  `leva.md`, `numerazione.md`, `FEATURES.md`, `M2`, `traits.md` e `README.md`)
+  risolvono tutti, ancore comprese.
 - Nessuna modifica al codice, quindi nessun test coinvolto: `cargo test` è
   quello della [0024](0024-chi-legge-non-aspetta-chi-legge.md), 55 suite verdi.
   Il primo test di questa decisione nascerà con la §21.1, e sarà una query che

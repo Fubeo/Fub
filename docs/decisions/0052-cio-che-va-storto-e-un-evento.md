@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §20.2 + §20.3 (seduta 20) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/20-quando-qualcosa-va-storto.md) · [la gemella, che dà un esito a chi non l'aveva](0051-l-alimentazione-risponde.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/20-quando-qualcosa-va-storto.md) ·
+[la gemella, che dà un esito a chi non l'aveva](0051-l-alimentazione-risponde.md)
 
 ---
 
@@ -23,9 +25,9 @@ La voce diceva di aspettare **un cliente** e **un tipo**. Contate contro i
 sorgenti:
 
 - **Il cliente c'è**, e sono **ventisette** `eprintln!` nel codice di produzione
-  (non venticinque: il numero della voce era vecchio di due giri — vedi *I numeri
-  che erano sbagliati*), più i due commenti del kernel che nominavano questo
-  canale per nome («M4: notifica») e il doc di `flush_indexes`.
+  (non venticinque: il numero della voce era vecchio di due giri — vedi *I
+  numeri che erano sbagliati*), più i due commenti del kernel che nominavano
+  questo canale per nome («M4: notifica») e il doc di `flush_indexes`.
 - **Il tipo è arrivato**, e la riga che lo dichiarava mancante era **morta**: la
   §20.2 diceva *«qualunque variante porti "cosa è andato storto" porta un
   `PluginError`, che oggi è prosa italiana composta … §12.2 e questa voce hanno
@@ -77,22 +79,21 @@ successo. Sottostimare un guasto è peggio che sovrastimare un avviso.
 `subject` è `Option<DocId>` — assente per ciò che riguarda il vault intero (un
 flush fallito, il watcher che smette). Non c'è nessun campo `plugin`: quel fatto
 lo porta già `origin.actor` dalla [0012](0012-origine-degli-eventi.md), e il
-guasto di un handler si emette **a nome suo**. Un campo in più avrebbe
-duplicato ciò che il notice porta, con la certezza che prima o poi i due
-avrebbero detto cose diverse.
+guasto di un handler si emette **a nome suo**. Un campo in più avrebbe duplicato
+ciò che il notice porta, con la certezza che prima o poi i due avrebbero detto
+cose diverse.
 
 Sul filtro per soggetto vale la regola già scritta per `overflow` e
-`vault-closed`: un guasto che **non** nomina un documento passa da ogni
-maschera invece che da nessuna. Qui con più forza che altrove — un avviso
-filtrato via è precisamente la cosa che questa variante esiste per non far
-succedere.
+`vault-closed`: un guasto che **non** nomina un documento passa da ogni maschera
+invece che da nessuna. Qui con più forza che altrove — un avviso filtrato via è
+precisamente la cosa che questa variante esiste per non far succedere.
 
 ### Non è recuperabile, ed è l'unica classificazione possibile
 
 Un guasto non si riscopre guardando il vault: dopo un flush fallito il vault è
 **identico** a com'era prima, ed è esattamente questa la ragione per cui quel
-fallimento va detto. Il canale si riempie quando le cose vanno male, cioè
-quando serve.
+fallimento va detto. Il canale si riempie quando le cose vanno male, cioè quando
+serve.
 
 ### Il guasto della consegna di un guasto non si emette
 
@@ -114,14 +115,15 @@ qui:
 - **`deliver_to_handlers`** raccoglie l'errore di ogni handler e lo emette.
   L'operazione che ha emesso l'evento **non** fallisce — quella metà del vecchio
   commento era giusta ed è rimasta — ma «non far fallire» non vuol dire «non
-  dirlo». È il punto in cui il versioning, che è un `EventHandler` e nient'altro,
-  smetteva di fare snapshot in un modo indistinguibile dal funzionare.
+  dirlo». È il punto in cui il versioning, che è un `EventHandler` e
+  nient'altro, smetteva di fare snapshot in un modo indistinguibile dal
+  funzionare.
 - **`flush_indexes`** racconta da sé i propri errori e **continua a
   restituirli**: il valore di ritorno resta perché un chiamante deve *agire* e
-  non solo mostrare — la chiusura del vault ([0029](0029-chiudere-un-vault-e-chiuderli-tutti.md))
-  li risale fino a chi spegne l'app, e in quel momento l'event bus sta per
-  smettere di avere ascoltatori. Chi si limitava a guardare non deve più fare
-  niente.
+  non solo mostrare — la chiusura del vault
+  ([0029](0029-chiudere-un-vault-e-chiuderli-tutti.md)) li risale fino a chi
+  spegne l'app, e in quel momento l'event bus sta per smettere di avere
+  ascoltatori. Chi si limitava a guardare non deve più fare niente.
 - **`safety::notifying` non esiste più.** Al suo posto c'è `reporting`, che
   **restituisce** il panico invece di stamparlo, con un `#[must_use]` che rende
   visibile in review chi lo ignora. Un `Option` che si butta si vede; un

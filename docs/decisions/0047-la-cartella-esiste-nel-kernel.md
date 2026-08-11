@@ -6,7 +6,8 @@
 | **Origine** | `todo.md` §14.3 + §14.4 (seduta 14) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/14-entry-cartelle-lista.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/14-entry-cartelle-lista.md)
 
 ---
 
@@ -20,9 +21,9 @@ Le cartelle non esistevano: nascevano dai path delle note dentro
 `organizer.ts::buildTree`, quindi una cartella vuota non c'era, una rimasta
 vuota spariva da sola, e la [0013](0013-elenco-delle-capacita.md) aveva tenuto
 `create_folder` **fuori** dalle capacità perché avrebbe prodotto qualcosa che
-nessuna query vede. Dall'altro lato la lista si chiedeva intera: `list_documents`
-restituiva un `Vec<String>` con l'intero vault, e `VaultInfo` se lo portava
-dietro all'apertura — diecimila righe per disegnarne venti.
+nessuna query vede. Dall'altro lato la lista si chiedeva intera:
+`list_documents` restituiva un `Vec<String>` con l'intero vault, e `VaultInfo`
+se lo portava dietro all'apertura — diecimila righe per disegnarne venti.
 
 ## La decisione: una cartella è ciò che il disco ha, e si chiede un livello per volta
 

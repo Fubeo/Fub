@@ -1,30 +1,28 @@
 # 0123 — Lo slug di un titolo è un posto, non una parola
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: il difetto *«due heading con lo stesso testo danno lo stesso `id`:
-lo slug non si disambigua, e un link interno atterra in silenzio sul primo»* di
-[«I difetti da correggere»](../todo.md)
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: il difetto *«due heading con
+lo stesso testo danno lo stesso `id`: lo slug non si disambigua, e un link
+interno atterra in silenzio sul primo»* di
+[«I difetti da correggere»](../todo.md) **Commit**: *(questo commit)*
 
 ---
 
 ## La domanda
 
 Una nota con due `## Note` produceva due elementi con lo **stesso** `id`.
-`getElementById` restituisce il primo in ordine di documento; `outline.iter()
-.find(…)` pure. Quindi un `[[Nota#Note]]` apriva sempre la prima sezione, e la
-seconda non era nominabile da **nessuna** sintassi: non un errore, una
-destinazione sbagliata, che è il modo peggiore di sbagliare perché non lascia
-niente da leggere.
+`getElementById` restituisce il primo in ordine di documento;
+`outline.iter() .find(…)` pure. Quindi un `[[Nota#Note]]` apriva sempre la prima
+sezione, e la seconda non era nominabile da **nessuna** sintassi: non un errore,
+una destinazione sbagliata, che è il modo peggiore di sbagliare perché non
+lascia niente da leggere.
 
 La domanda dietro è più corta della riparazione: **lo slug è una funzione del
 testo di un titolo?** Finché la risposta era sì, la disambiguazione era
 inesprimibile — e non per modo di dire: il banco di conformità dei provider
-(`lo_slug_di_un_heading_e_quello_del_contratto`) asseriva `h.slug ==
-heading_slug(&h.text)` titolo per titolo, cioè **vietava** a chiunque scrivesse
-un provider di disambiguare. Il presidio che teneva ferma la regola teneva fermo
-anche il difetto.
+(`lo_slug_di_un_heading_e_quello_del_contratto`) asseriva
+`h.slug == heading_slug(&h.text)` titolo per titolo, cioè **vietava** a chiunque
+scrivesse un provider di disambiguare. Il presidio che teneva ferma la regola
+teneva fermo anche il difetto.
 
 La risposta è no. Uno slug è **un posto in un documento**, e la domanda «è già
 preso?» non è una domanda sul testo: è una domanda sul documento, e la sua
@@ -47,8 +45,8 @@ sarebbe una regressione silenziosa su ogni link già scritto dall'utente, ed è 
 verso che il presidio guarda per primo.
 
 Il numero è la prima forma **libera**, non un contatore per testo. Con un
-contatore, un documento che contiene davvero un `## Note 1` accanto a due `##
-Note` avrebbe prodotto due `note-1`: il difetto di partenza spostato di una
+contatore, un documento che contiene davvero un `## Note 1` accanto a due
+`## Note` avrebbe prodotto due `note-1`: il difetto di partenza spostato di una
 riga. Con la ricerca del libero, il terzo diventa `note-2` — e se `note-1` se
 l'è già preso un omonimo, il titolo che si chiama davvero «Note 1» prende
 `note-1-1` invece di rubarglielo. Non è bello; è **deterministico e unico**, che
@@ -72,11 +70,12 @@ prova, e lo prova rosso.
 
 ## Chi genera e chi cerca sono la stessa cosa in due versi
 
-È la forma della [0121](0121-l-id-del-contenuto-vive-in-un-altro-spazio-di-nomi.md),
-applicata a un'altra coppia. Là erano l'`id` che si scrive e il `#frammento` che
-lo cerca, e la risposta era una funzione sola. Qui sono l'allocatore che assegna
-e la regola che risolve, e la risposta è che vivono adiacenti nel contratto:
-`HeadingSlugs` e `heading_matches`.
+È la forma della
+[0121](0121-l-id-del-contenuto-vive-in-un-altro-spazio-di-nomi.md), applicata a
+un'altra coppia. Là erano l'`id` che si scrive e il `#frammento` che lo cerca, e
+la risposta era una funzione sola. Qui sono l'allocatore che assegna e la regola
+che risolve, e la risposta è che vivono adiacenti nel contratto: `HeadingSlugs`
+e `heading_matches`.
 
 Perché contava: i posti che risolvevano un `#Sezione` erano **due, e diversi**.
 

@@ -1,8 +1,6 @@
 # 0124 — Una fetta dell'apertura è un piano anche lei
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Commit**: *(questo commit)*
 
 ---
 
@@ -48,8 +46,8 @@ tengono il prestito esclusivo attraverso un'I/O o un giro su N file sono
    muro del punto 2 e 3 visto da un terzo lato.
 
 Il rapporto fra dichiarato e misurato è quindi 4:1, e tre quarti hanno **la
-stessa causa unica**: `HostApi` si ottiene solo da un `&mut Workspace`. Non è
-un difetto per volta, è una firma.
+stessa causa unica**: `HostApi` si ottiene solo da un `&mut Workspace`. Non è un
+difetto per volta, è una firma.
 
 ## La decisione
 
@@ -66,9 +64,9 @@ Nel kernel sono due funzioni e un tipo, e il nome dice la parentela:
   opaco per la stessa ragione: chi ne tiene uno in mano ha per forza già
   rilasciato il prestito condiviso.
 
-Il cursore avanza **nella fase che legge**, e si può perché
-l'`Indicizzazione` vive fuori dal `Workspace` (0070): prenderne la fetta
-successiva non chiede nessun prestito.
+Il cursore avanza **nella fase che legge**, e si può perché l'`Indicizzazione`
+vive fuori dal `Workspace` (0070): prenderne la fetta successiva non chiede
+nessun prestito.
 
 ## Cosa questa voce **estende**, e non ripete
 

@@ -6,7 +6,9 @@
 | **Origine** | `todo.md` §10.2 (seduta 10) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/10-gli-eventi.md) · la gemella: [0033](0033-la-grana-di-un-abbonamento.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/10-gli-eventi.md) · la gemella:
+[0033](0033-la-grana-di-un-abbonamento.md)
 
 ---
 
@@ -21,8 +23,8 @@ e i due difetti erano ai due capi:
   `recv()` e `emit` in un ciclo senza freno. La [0011](0011-il-lotto.md) aveva
   già tolto i *ridisegni* — dentro un lotto arriva un `batch-ended` solo — ma
   non i **messaggi**: una rinomina con 200 backlink li faceva attraversare tutti
-  e 200, uno per uno, e a ognuno la shell rifaceva `list_documents` e ridisegnava
-  ogni view iscritta.
+  e 200, uno per uno, e a ognuno la shell rifaceva `list_documents` e
+  ridisegnava ogni view iscritta.
 
 ## La risposta, in una frase
 
@@ -48,8 +50,8 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
   handler quando il budget del dispatch si esaurisce, e la shell lo sa già
   leggere. Non c'è nessun meccanismo nuovo: c'è un secondo posto da cui il
   troncamento che già esisteva può nascere.
-- **Ciò che non si riscopre passa comunque, anche sopra il tetto.** L'esito di un
-  job lo sta aspettando chi lo ha chiesto, il payload di un custom non lo
+- **Ciò che non si riscopre passa comunque, anche sopra il tetto.** L'esito di
+  un job lo sta aspettando chi lo ha chiesto, il payload di un custom non lo
   ricostruisce nessuno, `vault-opened` e `vault-closed` non si deducono da com'è
   fatto il vault, e un `overflow` buttato via è precisamente il messaggio che
   stava dicendo di aver buttato via qualcosa. Ne segue un **limite dichiarato**:
@@ -59,17 +61,17 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
   è tutto dall'altra parte.
 - **La classificazione sta nel contratto, non nei due freni.**
   `Event::is_recoverable()` è in `fub-abi` accanto agli eventi: i freni sono
-  **due** (il tetto del bus e il tetto della raffica), e una seconda idea di cosa
-  sia sacrificabile sarebbe un evento perso in silenzio da uno dei due. Ogni
-  variante nuova del contratto deve rispondere a quella domanda, e il `match`
-  senza `_` fa in modo che debba.
+  **due** (il tetto del bus e il tetto della raffica), e una seconda idea di
+  cosa sia sacrificabile sarebbe un evento perso in silenzio da uno dei due.
+  Ogni variante nuova del contratto deve rispondere a quella domanda, e il
+  `match` senza `_` fa in modo che debba.
 - **Il debito lo riscuote chi arriva primo, e una volta sola.** Il conto dei
   buttati è condiviso fra chi emette e chi ritira: lo trasforma in `Overflow`
   chi emette — mettendolo **davanti** al fatto nuovo, che è l'ordine in cui le
-  due cose sono successe — oppure chi ritira, trovando la coda vuota. Uno
-  `swap` atomico fa sì che a riscuoterlo sia uno solo. Solo dal lato di chi
-  emette non sarebbe bastato: in un vault che si ferma subito dopo, il conto
-  resterebbe da dire per sempre.
+  due cose sono successe — oppure chi ritira, trovando la coda vuota. Uno `swap`
+  atomico fa sì che a riscuoterlo sia uno solo. Solo dal lato di chi emette non
+  sarebbe bastato: in un vault che si ferma subito dopo, il conto resterebbe da
+  dire per sempre.
 - **`subscribe()` non rende più un `Receiver` nudo.** Il conto va **sottratto**
   quando un notice viene ritirato, e nessun `Receiver` lo farebbe da sé. La
   `Subscription` ha le tre porte di `std` (`recv`, `try_recv`, `recv_timeout`)
@@ -90,10 +92,10 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
 - **Si tiene l'ultima occorrenza, non la prima.** `changed(a)`, `removed(a)`,
   `changed(a)` è una nota riscritta, cancellata e ricreata: tenere la prima la
   racconterebbe al contrario — chi riceve rileggerebbe *prima* di sapere che il
-  file era sparito. Tenere l'ultima e conservare l'**ordine relativo** di ciò che
-  resta racconta la stessa storia con meno parole. Vale anche per l'origine: fra
-  l'eco di un salvataggio della shell e la scrittura di un plugin, l'ultima è
-  quella che dice com'è il documento adesso.
+  file era sparito. Tenere l'ultima e conservare l'**ordine relativo** di ciò
+  che resta racconta la stessa storia con meno parole. Vale anche per l'origine:
+  fra l'eco di un salvataggio della shell e la scrittura di un plugin, l'ultima
+  è quella che dice com'è il documento adesso.
 - **Solo tre specie si raggruppano**, e nessuna delle tre porta un fatto che le
   altre copie non portino: `index-updated` (che non ha payload affatto),
   `document-changed` (che dice «rileggi questo») e `view-invalidated` (che dice
@@ -122,8 +124,8 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
   **somma** invece di aggiungere un secondo invito.
 - **Il ponte è un modulo suo** (`fub-host/src/bridge.rs`), e la riga che decide
   *quando* accenderlo è rimasta in `Host::open`: quel momento — dopo la
-  scansione, prima che il rilevatore possa emettere — lo conosce solo chi apre, e
-  non è una politica del ponte. Il `EventSink` non è cambiato: resta un notice
+  scansione, prima che il rilevatore possa emettere — lo conosce solo chi apre,
+  e non è una politica del ponte. Il `EventSink` non è cambiato: resta un notice
   per chiamata, e chi lo implementa non sa che esiste un freno.
 
 ## Trovato per strada
@@ -135,8 +137,8 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
   costruisce invece con una **barriera a due tempi** (la stessa mossa della
   [0032](0032-il-runner-dei-job.md)): il sink si blocca sul primo evento, il
   test ne accoda mille sapendo che nessuno li ritira, e poi lo libera. Da quel
-  momento il ponte trova mille eventi in coda **per forza**, e ciò che consegna è
-  la politica, non la fortuna.
+  momento il ponte trova mille eventi in coda **per forza**, e ciò che consegna
+  è la politica, non la fortuna.
 - **La politica si prova due volte, e va bene così.** In `bridge.rs` è una
   funzione pura e si prova senza thread (che è dove stanno l'ordine, le
   assorbenze, i casi limite); in `tests/il_ponte.rs` si prova che il ponte
@@ -154,9 +156,9 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
   voce («va con il lavoro lungo, che emetterà progresso») e restava un rimando
   circolare: il §10.2 lo mandava al §10.3 e il §10.3 lo rimandava qui. La
   circolarità si taglia dalla parte del contratto, e qui c'è la scoperta che
-  serviva: **un job non conosce il proprio `JobId`**. `Plugin::run_job` riceve la
-  `JobSpec` e l'host, non l'identità — quindi non può emettere un evento che lo
-  nomini, e chi l'identità ce l'ha è il **suo host**. Per la regola della
+  serviva: **un job non conosce il proprio `JobId`**. `Plugin::run_job` riceve
+  la `JobSpec` e l'host, non l'identità — quindi non può emettere un evento che
+  lo nomini, e chi l'identità ce l'ha è il **suo host**. Per la regola della
   [0013](0013-elenco-delle-capacita.md) il progresso è un evento e non una
   capacità (si limita a informare); ma l'unico che può emetterlo con l'id giusto
   è l'host del job, cioè un `report_progress` che sarebbe una capacità. Quella
@@ -164,36 +166,39 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
   può fermare — e quello è il §10.3. Il ponte, che era l'altra metà del rimando
   («e questo ponte non avrebbe come reggerlo»), adesso lo regge: il progresso è
   il canale più caldo che ci sarà, e un canale più caldo di così è già frenato.
-- **Nessuna memoria fra una raffica e l'altra.** Il raggruppamento vive dentro un
-  giro del ciclo, e non tiene traccia di ciò che ha già consegnato. Ricordarlo
-  vorrebbe dire decidere per quanto — cioè scegliere quella finestra temporale
-  che questa decisione non ha voluto — e comprerebbe qualcosa solo per un
-  consumatore che è veloce e vorrebbe essere lento, che non è nessuno.
-- **I due tetti non sono misurati.** Sono default con una ragione, non risultati:
-  come i due thread del pool ([0032](0032-il-runner-dei-job.md)), il giorno che
-  una misura dirà un altro numero sarà **quella** a dirlo. Il banco che li
-  misurerebbe è `examples/contesa.rs` con un carico che tocchi molte note.
+- **Nessuna memoria fra una raffica e l'altra.** Il raggruppamento vive dentro
+  un giro del ciclo, e non tiene traccia di ciò che ha già consegnato.
+  Ricordarlo vorrebbe dire decidere per quanto — cioè scegliere quella finestra
+  temporale che questa decisione non ha voluto — e comprerebbe qualcosa solo per
+  un consumatore che è veloce e vorrebbe essere lento, che non è nessuno.
+- **I due tetti non sono misurati.** Sono default con una ragione, non
+  risultati: come i due thread del pool ([0032](0032-il-runner-dei-job.md)), il
+  giorno che una misura dirà un altro numero sarà **quella** a dirlo. Il banco
+  che li misurerebbe è `examples/contesa.rs` con un carico che tocchi molte
+  note.
 - **Il ponte non riordina e non ritarda niente**: consegna nell'ordine in cui le
   cose sono successe, tolto ciò che era detto due volte. Un ponte che
   riordinasse per priorità sarebbe un ponte che decide cosa è importante, e
   quello è di chi guarda.
-- **`EventSink` resta uno-per-notice.** Un `emit_batch` avrebbe fatto risparmiare
-  qualche attraversamento in più, e avrebbe chiesto a **ogni** implementazione —
-  webview, CLI, SSE — di sapere cosa fare di un lotto di eventi. Il risparmio
-  vero è già stato fatto prima, togliendo i messaggi.
+- **`EventSink` resta uno-per-notice.** Un `emit_batch` avrebbe fatto
+  risparmiare qualche attraversamento in più, e avrebbe chiesto a **ogni**
+  implementazione — webview, CLI, SSE — di sapere cosa fare di un lotto di
+  eventi. Il risparmio vero è già stato fatto prima, togliendo i messaggi.
 - **Il tetto del bus non è una maschera.** Chi si abbona prende tutto ciò che il
-  contratto emette: restringere per specie è della [0033](0033-la-grana-di-un-abbonamento.md),
-  e vale per gli handler e per la shell, non per il canale.
+  contratto emette: restringere per specie è della
+  [0033](0033-la-grana-di-un-abbonamento.md), e vale per gli handler e per la
+  shell, non per il canale.
 
 ## Verifica
 
 - `cargo build --workspace` e `cargo clippy --workspace --all-targets` — pulite,
   zero warning; anche `-p fub-host --no-default-features`.
-- `cargo test --workspace` — **64 suite, 0 fallimenti**. Le nuove di questa metà:
+- `cargo test --workspace` — **64 suite, 0 fallimenti**. Le nuove di questa
+  metà:
   - `fub-kernel/src/bus.rs` — quattro prove: la consegna con l'origine (c'era),
-    il subscriber che non ritira mai e **smette di crescere** col conto dei persi
-    che quadra col totale, l'esito di un job che passa il tetto comunque, e chi
-    si rimette in pari che torna a ricevere tutto;
+    il subscriber che non ritira mai e **smette di crescere** col conto dei
+    persi che quadra col totale, l'esito di un job che passa il tetto comunque,
+    e chi si rimette in pari che torna a ricevere tutto;
   - `fub-host/src/bridge.rs` — sei prove sulla politica pura: cento copie che
     diventano una, l'ultima occorrenza che vince, l'assorbenza delle istanze, i
     fatti distinti che non si fondono, il degrado col conto e la posizione
@@ -201,8 +206,8 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
   - `fub-host/tests/il_ponte.rs` — quattro prove sul ponte vero, con la
     barriera: mille `index-updated` che attraversano una volta sola, l'esito di
     un job e un custom che attraversano interi e al proprio posto, il tetto che
-    dice «riconcilia» col conto esatto, e il vault fermo in cui ogni fatto arriva
-    da solo.
+    dice «riconcilia» col conto esatto, e il vault fermo in cui ogni fatto
+    arriva da solo.
 - **Provate al contrario, tutte e cinque le righe che contano:**
   - togliendo il tetto del bus, il subscriber che non ritira accumula tutto e
     `a_subscriber_that_never_takes_stops_growing_and_is_told` fallisce;
@@ -210,11 +215,13 @@ ciò che si butta è solo ciò che si riscopre riguardando il vault.**
     fallisce e mostra la storia raccontata al contrario;
   - mettendo l'`Overflow` in coda invece che al posto di ciò che sostituisce,
     `over_the_ceiling…` fallisce sull'ordine;
-  - togliendo il raggruppamento, `una_raffica_attraversa_il_ponte_una_volta_sola`
-    fallisce sul ponte **vero** (mille consegne invece di due);
+  - togliendo il raggruppamento,
+    `una_raffica_attraversa_il_ponte_una_volta_sola` fallisce sul ponte **vero**
+    (mille consegne invece di due);
   - togliendo il tetto della raffica, `sopra_il_tetto_il_ponte_dice_riconcilia`
     fallisce. Nessuna delle cinque è decorativa.
 - **Contratto invariato da questa metà**: `is_recoverable` è un metodo, non un
   campo; `wit_conformance` e `wit_additivity` restano verdi (l'unica rottura
-  dichiarata del commit è quella della [0033](0033-la-grana-di-un-abbonamento.md)).
+  dichiarata del commit è quella della
+  [0033](0033-la-grana-di-un-abbonamento.md)).
 - `cargo fmt --all` — pulita.

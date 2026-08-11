@@ -5,9 +5,13 @@ voce è stata risolta, cosa si è scartato e perché, e cosa resta scoperto dopo
 Non stanno in `todo.md` perché quel file è l'elenco di ciò che **resta da
 fare**, e chi ci va dentro cerca il lavoro aperto, non l'archivio; ma buttarli
 via non si può, perché sono «il perché, che è ciò che fra sei mesi non si
-ricostruisce dal diff» (la frase è del §1.5, ora [decisione 0003](0003-modello-del-documento.md)).
-Un file per decisione, numerazione progressiva e immutabile, in ordine
-cronologico di chiusura.
+ricostruisce dal diff» (la frase è del §1.5, ora
+[decisione 0003](0003-modello-del-documento.md)). Un file per decisione,
+numerazione progressiva, in ordine cronologico di chiusura. Il numero e il nome
+del file non cambiano mai. Il **contenuto** — cosa si è deciso, cosa si è
+scartato, perché — è immutabile; la **forma** no: un verbale si può riscrivere
+per renderlo più chiaro, alle condizioni della
+[0143](0143-i-verbali-si-possono-riscrivere.md).
 
 | # | Decisione | § di provenienza | Data |
 |---|---|---|---|
@@ -155,8 +159,8 @@ cronologico di chiusura.
 | [0143](0143-i-verbali-si-possono-riscrivere.md) | I verbali si possono riscrivere nella forma | Modifica la convenzione della 0014: il contenuto dei verbali resta immutabile, ma la forma può essere riscritta per renderli più chiari, brevi e leggibili. Nome file e numeri non cambiano mai. | 2026-08-11 |
 
 Una decisione nuova prende il numero successivo — mai uno già usato, nemmeno se
-il verbale che lo portava è stato superato — e il verbale ci si sposta **intero**
-nel momento in cui la voce di `todo.md` si chiude.
+il verbale che lo portava è stato superato — e il verbale ci si sposta
+**intero** nel momento in cui la voce di `todo.md` si chiude.
 
 La [0046](0046-l-anagrafe-del-vault.md) chiude **due voci in un verbale solo**,
 ed è il caso opposto a quello della 0031/0032: là una voce era troppo grande per
@@ -169,8 +173,8 @@ La [0044](0044-lo-stato-per-documento.md) è il primo verbale che esiste **per
 via di un altro**: il §13.2 era una generalizzazione condizionale — «se
 l'identità resta il path…» — e la [0043](0043-il-path-e-la-chiave.md) ha reso
 vera la condizione. Le due si leggono in fila, come la 0031 e la 0032, ma per la
-ragione opposta: là una voce era troppo grande per un verbale solo, qui erano due
-voci e la prima ha deciso cosa fosse la seconda.
+ragione opposta: là una voce era troppo grande per un verbale solo, qui erano
+due voci e la prima ha deciso cosa fosse la seconda.
 
 La [0037](0037-lo-stato-di-vista.md) è il secondo caso di mezza voce, e
 diversamente dal primo la seconda metà **non ha ancora una data**: il layout del
@@ -188,10 +192,10 @@ lungo: il criterio è sempre quello, un ragionamento che fra sei mesi non si
 ricostruisce dal diff.
 
 La [0049](0049-una-posizione-dentro-un-documento.md) e la
-[0050](0050-cosa-si-chiede-a-una-ricerca.md) sono la prima **coppia decisa in una
-volta sola**, e il taglio non è per numero di voci: la 0049 chiude le due che
-chiedevano la stessa primitiva da due firme diverse (dove sta un risultato, dove
-punta un riferimento), la 0050 le due che toccavano lo stesso record
+[0050](0050-cosa-si-chiede-a-una-ricerca.md) sono la prima **coppia decisa in
+una volta sola**, e il taglio non è per numero di voci: la 0049 chiude le due
+che chiedevano la stessa primitiva da due firme diverse (dove sta un risultato,
+dove punta un riferimento), la 0050 le due che toccavano lo stesso record
 (`TextQuery`). Deciderle in quattro verbali avrebbe voluto dire aprire due volte
 la stessa firma; deciderle in uno avrebbe messo insieme due ragionamenti che non
 si sostengono a vicenda. Il criterio resta quello della 0031/0032: un verbale è
@@ -200,12 +204,12 @@ un ragionamento intero, non una quota di lavoro.
 La [0051](0051-l-alimentazione-risponde.md) e la
 [0052](0052-cio-che-va-storto-e-un-evento.md) sono la seconda **coppia decisa in
 una volta sola**, e la spartizione è di nuovo per ragionamento e non per numero
-di voci: la 0051 dà un esito a chi non l'aveva, la 0052 gli dà una destinazione e
-toglie di mezzo chi lo buttava. Ma c'è un precedente nuovo, ed è la 0052: chiude
-**due voci meno una casella**. Il §20.3 si chiude intero; il §20.2 chiude la
-forma — la variante, la severità, il soggetto, il primo consumatore — e lascia
-dietro l'**adozione**, cioè i ventisette punti che scrivono su `stderr` e vanno
-convertiti uno a uno. È il caso opposto alla mezza voce della
+di voci: la 0051 dà un esito a chi non l'aveva, la 0052 gli dà una destinazione
+e toglie di mezzo chi lo buttava. Ma c'è un precedente nuovo, ed è la 0052:
+chiude **due voci meno una casella**. Il §20.3 si chiude intero; il §20.2 chiude
+la forma — la variante, la severità, il soggetto, il primo consumatore — e
+lascia dietro l'**adozione**, cioè i ventisette punti che scrivono su `stderr` e
+vanno convertiti uno a uno. È il caso opposto alla mezza voce della
 [0031](0031-chi-possiede-i-bundle.md): là mancava metà del *ragionamento* e la
 voce è rimasta aperta, qui il ragionamento è intero e ciò che resta è lavoro che
 non decide niente. Il criterio per distinguerli è sempre lo stesso: una casella
@@ -213,63 +217,66 @@ residua è ciò che si può fare **senza aprire un verbale**.
 
 La [0053](0053-il-contratto-ha-una-sorgente.md) chiude due voci in un verbale
 solo per la ragione della [0046](0046-l-anagrafe-del-vault.md) — erano lo stesso
-lavoro visto da due lati — ma con una differenza che vale la pena: **lo diceva la
-seduta, non il verbale**. Il file della [seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md)
-portava scritto in testa che «la 16.5 non è una voce autonoma: è la gamba TS della
-domanda che pone la 16.4», e che deciderle separate avrebbe voluto dire decidere
-due volte la stessa cosa, la seconda contro la prima. È il primo caso in cui
-l'accorpamento è **dichiarato in anticipo** invece di essere scoperto scrivendo:
-un cappello di seduta può decidere la forma del verbale che la chiuderà, ed è una
-cosa che i cappelli fanno bene perché li si scrive guardando le voci insieme.
+lavoro visto da due lati — ma con una differenza che vale la pena: **lo diceva
+la seduta, non il verbale**. Il file della
+[seduta 16](../roadmap/16-crate-sdk-banchi-di-prova.md) portava scritto in testa
+che «la 16.5 non è una voce autonoma: è la gamba TS della domanda che pone la
+16.4», e che deciderle separate avrebbe voluto dire decidere due volte la stessa
+cosa, la seconda contro la prima. È il primo caso in cui l'accorpamento è
+**dichiarato in anticipo** invece di essere scoperto scrivendo: un cappello di
+seduta può decidere la forma del verbale che la chiuderà, ed è una cosa che i
+cappelli fanno bene perché li si scrive guardando le voci insieme.
 
 La [0054](0054-il-banco-del-lato-provider.md) e la
-[0055](0055-il-banco-del-lato-host.md) sono la **terza coppia decisa in una volta
-sola**, e portano il caso **opposto** a quello della 0053. Là il cappello della
-seduta dichiarava in anticipo che due voci andavano chiuse **insieme**; qui lo
-stesso cappello, con la stessa forma — una frase in testa che parla di entrambe
-le voci —, dichiarava fra loro un **confine**: *«sono due banchi diversi… che non
-possono stare nello stesso crate»*. E un confine fra due cose è precisamente ciò
-che le rende due. Da tenere, perché altrimenti il precedente della 0053 si legge
-storto: **un cappello va letto per cosa afferma, non per quante voci nomina** —
-«sono la stessa domanda vista da due lati» chiede un verbale, «fra loro c'è un
-confine» ne chiede due.
+[0055](0055-il-banco-del-lato-host.md) sono la **terza coppia decisa in una
+volta sola**, e portano il caso **opposto** a quello della 0053. Là il cappello
+della seduta dichiarava in anticipo che due voci andavano chiuse **insieme**;
+qui lo stesso cappello, con la stessa forma — una frase in testa che parla di
+entrambe le voci —, dichiarava fra loro un **confine**: *«sono due banchi
+diversi… che non possono stare nello stesso crate»*. E un confine fra due cose è
+precisamente ciò che le rende due. Da tenere, perché altrimenti il precedente
+della 0053 si legge storto: **un cappello va letto per cosa afferma, non per
+quante voci nomina** — «sono la stessa domanda vista da due lati» chiede un
+verbale, «fra loro c'è un confine» ne chiede due.
 
-E ne inaugurano un altro, che è di metodo e non di forma: la 0054 chiude una voce
-**smentendo un presidio che tutti credevano di avere**. Il cappello della seduta
-16 diceva che il kernel dentro l'SDK «violerebbe l'invariante che
-`dependency_invariant.rs` presidia»; quel file non nominava `fub-sdk` da
-nessuna parte. È la **sesta** specie della famiglia che il §16.7 elenca, e la
-peggiore: un conteggio invecchiato fa sopravvalutare una copertura, un *limite*
+E ne inaugurano un altro, che è di metodo e non di forma: la 0054 chiude una
+voce **smentendo un presidio che tutti credevano di avere**. Il cappello della
+seduta 16 diceva che il kernel dentro l'SDK «violerebbe l'invariante che
+`dependency_invariant.rs` presidia»; quel file non nominava `fub-sdk` da nessuna
+parte. È la **sesta** specie della famiglia che il §16.7 elenca, e la peggiore:
+un conteggio invecchiato fa sopravvalutare una copertura, un *limite*
 invecchiato la fa sottovalutare, ma una **garanzia dichiarata che non è mai
-esistita** fa entrambe le cose insieme — e nessuno va a controllare una garanzia,
-perché il motivo per cui la si scrive è smettere di doverci pensare.
+esistita** fa entrambe le cose insieme — e nessuno va a controllare una
+garanzia, perché il motivo per cui la si scrive è smettere di doverci pensare.
 
 La [0056](0056-un-elenco-che-e-la-sorgente.md) e la
 [0057](0057-la-dieta-dell-ipc.md) sono la **quarta coppia decisa in una volta
 sola**, e ripetono di proposito la forma che la 0054/0055 aveva prodotto per
 caso: il cappello ha guardato le due voci insieme, ha trovato che ponevano lo
-stesso difetto in due direzioni opposte — un elenco su cui si *itera* non nota le
-aggiunte, uno con cui si *asserisce un'uguaglianza* non può che notarle — e ha
-concluso che fra loro c'è un **confine**. Il confine è meccanico: *la produzione
-può leggere l'elenco?* Sulle view sì, e l'elenco diventa la sorgente da cui la
-cosa esiste; sui comandi Tauri no, perché una macro non itera, e l'elenco resta
-una copia da confrontare. Stessa tassonomia, due risposte, due verbali.
+stesso difetto in due direzioni opposte — un elenco su cui si *itera* non nota
+le aggiunte, uno con cui si *asserisce un'uguaglianza* non può che notarle — e
+ha concluso che fra loro c'è un **confine**. Il confine è meccanico: *la
+produzione può leggere l'elenco?* Sulle view sì, e l'elenco diventa la sorgente
+da cui la cosa esiste; sui comandi Tauri no, perché una macro non itera, e
+l'elenco resta una copia da confrontare. Stessa tassonomia, due risposte, due
+verbali.
 
 E la 0056 inaugura un caso che non c'era: chiude una voce **meno la sua seconda
-metà**, e quella metà non è una casella residua — è una **voce nuova**, la §16.8.
-È il rovescio esatto della [0053](0053-il-contratto-ha-una-sorgente.md): là due
-voci erano lo stesso ragionamento e sono diventate un verbale, qui una voce ne
-teneva due e ne è nata una in più. Il criterio per distinguere questo caso da
-quello della [0052](0052-cio-che-va-storto-e-un-evento.md) — la voce chiusa che
-lascia una casella — è sempre lo stesso: **una casella residua è ciò che si può
-fare senza aprire un verbale**. Presidiare la prosa che conta i sorgenti chiede
-di decidere che forma abbia l'annotazione, quindi non lo è.
+metà**, e quella metà non è una casella residua — è una **voce nuova**, la
+§16.8. È il rovescio esatto della [0053](0053-il-contratto-ha-una-sorgente.md):
+là due voci erano lo stesso ragionamento e sono diventate un verbale, qui una
+voce ne teneva due e ne è nata una in più. Il criterio per distinguere questo
+caso da quello della [0052](0052-cio-che-va-storto-e-un-evento.md) — la voce
+chiusa che lascia una casella — è sempre lo stesso: **una casella residua è ciò
+che si può fare senza aprire un verbale**. Presidiare la prosa che conta i
+sorgenti chiede di decidere che forma abbia l'annotazione, quindi non lo è.
 
 E c'è una seconda cosa che la [0053](0053-il-contratto-ha-una-sorgente.md)
-inaugura: chiude una voce **smentendone la premessa**. Il §16.4 escludeva i tipi Rust perché «la sorgente autorevole è il
-WIT, ed è già il repo a trattarlo così»; controllato contro `wit_conformance.rs`,
-il repo tratta come autorevole esattamente Rust — parsa il WIT perché è ciò che
-controlla. Le decisioni precedenti hanno corretto **numeri** di una voce (la
+inaugura: chiude una voce **smentendone la premessa**. Il §16.4 escludeva i tipi
+Rust perché «la sorgente autorevole è il WIT, ed è già il repo a trattarlo
+così»; controllato contro `wit_conformance.rs`, il repo tratta come autorevole
+esattamente Rust — parsa il WIT perché è ciò che controlla. Le decisioni
+precedenti hanno corretto **numeri** di una voce (la
 [0052](0052-cio-che-va-storto-e-un-evento.md) ne ha corretti quattro); questa
 corregge un **fatto sull'architettura** su cui la voce poggiava per intero, e la
 conclusione è cambiata di conseguenza: ha ragione il §16.5 sulla direzione, e
@@ -283,8 +290,8 @@ aprire un verbale, e resta attaccata alla voce chiusa; una **voce nuova**
 decisione sua. Qui invece due righe della voce — i symlink, e i dotfile da
 mostrare su richiesta — non erano né l'una né l'altra: erano **della voce
 sbagliata**. Un symlink non è una domanda su un *nome*, è «questa voce di
-directory partecipa», che è la domanda del §15.6; e sono state spostate là, dentro
-la sua lista di caselle, invece di restare un residuo del §15.5.
+directory partecipa», che è la domanda del §15.6; e sono state spostate là,
+dentro la sua lista di caselle, invece di restare un residuo del §15.5.
 
 Il criterio per riconoscere il caso è la stessa domanda che il §16.7 pone a un
 elenco: *chi lo legge, lo trova?* Una casella residua vive nel paragrafo di
@@ -301,10 +308,10 @@ poggia. Qui il ragionamento è intero e la metà che resta non aspetta una
 decisione: aspetta **un posto dove girare** — un carico che domini l'overhead e
 una macchina che non divida i core, che è ciò che la §8.4 ha già scoperto
 misurando ([0026](0026-due-query-insieme.md)). Da tenere perché precisa il
-confine con la casella residua della [0052](0052-cio-che-va-storto-e-un-evento.md):
-una casella è ciò che si può fare **senza aprire un verbale**, e qui la seconda
-metà lo sarebbe se ciò che le manca si comprasse scrivendo codice. Non si compra,
-quindi la voce resta aperta.
+confine con la casella residua della
+[0052](0052-cio-che-va-storto-e-un-evento.md): una casella è ciò che si può fare
+**senza aprire un verbale**, e qui la seconda metà lo sarebbe se ciò che le
+manca si comprasse scrivendo codice. Non si compra, quindi la voce resta aperta.
 
 E il taglio non l'ha scelto il verbale: l'ha scelto **il cappello della seduta**.
 Quel cappello giudica le sue voci su *se il costo cresce con l'attesa* — un
@@ -316,65 +323,71 @@ della [0053](0053-il-contratto-ha-una-sorgente.md) e il confine dichiarato della
 [0054](0054-il-banco-del-lato-provider.md)/[0055](0055-il-banco-del-lato-host.md).
 
 Le tre parti però si sono viste in due tempi, e per una ragione che vale un
-criterio: **un cappello di seduta ordina ciò che vede da fuori.** La 0060 aveva già
-scritto che delle cinque caselle del §17.1 «due sono chiuse, due aspettano la
-macchina, e la quinta […] non aspetta nessuna delle due cose» — quella quinta
-aspettava il corpus, cioè un pezzo della voce stessa, che un criterio scritto per
-mettere in fila delle voci non ha modo di vedere. L'ha chiusa la
+criterio: **un cappello di seduta ordina ciò che vede da fuori.** La 0060 aveva
+già scritto che delle cinque caselle del §17.1 «due sono chiuse, due aspettano
+la macchina, e la quinta […] non aspetta nessuna delle due cose» — quella quinta
+aspettava il corpus, cioè un pezzo della voce stessa, che un criterio scritto
+per mettere in fila delle voci non ha modo di vedere. L'ha chiusa la
 [0061](0061-un-giro-che-non-passa-dal-modello.md). Da tenere: **un taglio si
 dichiara per quante parti ha**, e quel numero è un'affermazione su oggi — si
 corregge dov'è scritto, come un conteggio e non come un ragionamento.
 
 La [0061](0061-un-giro-che-non-passa-dal-modello.md) porta poi un caso che i tre
 modi di lasciare qualcosa dietro non coprono, perché non è un modo di lasciare
-qualcosa dietro: è un modo di **sbagliare la classificazione** di ciò che si lascia.
-La 0060 aveva chiamato quella quinta casella «lavoro», che per il criterio di questa
-cartella vuol dire *casella residua*: ciò che si fa senza aprire un verbale. E un
-verbale è stato aperto. Il criterio non si emenda — **la previsione era sbagliata**:
-la riga sembrava lavoro perché il round-trip sembrava uno, e facendola si è visto che
-i versi del trasferimento sono due e non pretendono la stessa cosa, che è una
-decisione intera e non una quota di lavoro. Non è quindi una casella residua, né una
-voce nuova come nella [0056](0056-un-elenco-che-e-la-sorgente.md), né una riga
-consegnata altrove come nella [0058](0058-un-nome-che-nasce.md): la riga è rimasta
-dov'era e ci è stata spuntata. Ciò che vale la pena tenere è che classificare un
-residuo è **prevedere**, e la previsione si fa guardando la riga — che può mentire.
-La conseguenza è mite, ed è la ragione per cui il criterio resta com'è: sbagliarla
-costa un verbale in più, cioè costa che una decisione venga scritta invece che no.
+qualcosa dietro: è un modo di **sbagliare la classificazione** di ciò che si
+lascia. La 0060 aveva chiamato quella quinta casella «lavoro», che per il
+criterio di questa cartella vuol dire *casella residua*: ciò che si fa senza
+aprire un verbale. E un verbale è stato aperto. Il criterio non si emenda — **la
+previsione era sbagliata**: la riga sembrava lavoro perché il round-trip
+sembrava uno, e facendola si è visto che i versi del trasferimento sono due e
+non pretendono la stessa cosa, che è una decisione intera e non una quota di
+lavoro. Non è quindi una casella residua, né una voce nuova come nella
+[0056](0056-un-elenco-che-e-la-sorgente.md), né una riga consegnata altrove come
+nella [0058](0058-un-nome-che-nasce.md): la riga è rimasta dov'era e ci è stata
+spuntata. Ciò che vale la pena tenere è che classificare un residuo è
+**prevedere**, e la previsione si fa guardando la riga — che può mentire. La
+conseguenza è mite, ed è la ragione per cui il criterio resta com'è: sbagliarla
+costa un verbale in più, cioè costa che una decisione venga scritta invece che
+no.
 
 La [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md) inaugura un quarto
-modo di lasciare qualcosa dietro, ed è il primo in cui a chiudersi è una **casella
-residua di un'altra voce** — non per averla fatta a mano, ma per averne dato il
-criterio. La [0052](0052-cio-che-va-storto-e-un-evento.md) aveva lasciato come
-casella residua «portare dentro il canale i ventisette punti che scrivono su
-`stderr`», e la classificava *casella residua* perché era lavoro senza decisione.
-Facendola, si è visto che la domanda nascosta era un'altra: i ventisette non
-avevano una destinazione sola, ne avevano **due** — il log per chi sviluppa, il
-canale degli eventi per chi legge — e scegliere chi va dove era la decisione
-intera della 0062. Fatta quella, la casella è scesa a zero da sé: il mestiere lo
-ha svolto una voce che non era nata per lei. Vale la pena distinguerlo dalla riga
-consegnata altrove della [0058](0058-un-nome-che-nasce.md): là una riga cambiava
-indirizzo perché apparteneva a un'altra domanda; qui una casella si **chiude**
-perché la decisione che la risolve è la stessa di un'altra voce. Le caselle residue
-di `todo.md` scendono da nove a otto.
+modo di lasciare qualcosa dietro, ed è il primo in cui a chiudersi è una
+**casella residua di un'altra voce** — non per averla fatta a mano, ma per
+averne dato il criterio. La [0052](0052-cio-che-va-storto-e-un-evento.md) aveva
+lasciato come casella residua «portare dentro il canale i ventisette punti che
+scrivono su `stderr`», e la classificava *casella residua* perché era lavoro
+senza decisione. Facendola, si è visto che la domanda nascosta era un'altra: i
+ventisette non avevano una destinazione sola, ne avevano **due** — il log per
+chi sviluppa, il canale degli eventi per chi legge — e scegliere chi va dove era
+la decisione intera della 0062. Fatta quella, la casella è scesa a zero da sé:
+il mestiere lo ha svolto una voce che non era nata per lei. Vale la pena
+distinguerlo dalla riga consegnata altrove della
+[0058](0058-un-nome-che-nasce.md): là una riga cambiava indirizzo perché
+apparteneva a un'altra domanda; qui una casella si **chiude** perché la
+decisione che la risolve è la stessa di un'altra voce. Le caselle residue di
+`todo.md` scendono da nove a otto.
 
-E una cosa di metodo, che vale la pena scrivere qui perché
-[CONTRIBUTING.md](../CONTRIBUTING.md) dice che **i verbali sono immutabili**: la
-0060 corregge un numero dentro la [0054](0054-il-banco-del-lato-provider.md), che
-è già stata toccata una volta dopo la chiusura — quando il §16.7 ha mostrato che
-la specie che rivendicava era la sesta e non la quinta. Le due cose non sono in
-contrasto, perché ciò che non si riscrive è il **ragionamento**: cosa si è deciso,
-cosa si è scartato, perché. Un **conteggio dei sorgenti** dentro un verbale non è
-un ragionamento — è un'affermazione su oggi che invecchia da sola, e in quel caso
-invecchiava già nel commit che la scriveva. Si corregge dov'è, e il caso si
-consegna alla [§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), che è la voce
-che tiene quell'elenco.
+E una cosa di metodo, che vale la pena scrivere qui perché allora
+[CONTRIBUTING.md](../CONTRIBUTING.md) diceva che **i verbali sono immutabili**,
+senza distinguere fra contenuto e forma — la distinzione arriva dopo, con la
+[0143](0143-i-verbali-si-possono-riscrivere.md), e questo paragrafo è il primo
+posto in cui il repo se n'è accorto. La 0060 corregge un numero dentro la
+[0054](0054-il-banco-del-lato-provider.md), che è già stata toccata una volta
+dopo la chiusura — quando il §16.7 ha mostrato che la specie che rivendicava era
+la sesta e non la quinta. Le due cose non sono in contrasto, perché ciò che non
+si riscrive è il **ragionamento**: cosa si è deciso, cosa si è scartato, perché.
+Un **conteggio dei sorgenti** dentro un verbale non è un ragionamento — è
+un'affermazione su oggi che invecchia da sola, e in quel caso invecchiava già
+nel commit che la scriveva. Si corregge dov'è, e il caso si consegna alla
+[§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md), che è la voce che tiene
+quell'elenco.
 
 La [0064](0064-il-supporto-sta-sotto.md) lascia una **casella residua** — la
 terza specie, quella della [0052](0052-cio-che-va-storto-e-un-evento.md) — con
-una precisazione che le altre non avevano: sa **quale voce** le darà il criterio.
-Le tre righe di `.fub/` che scrivono con `write_atomic` hanno già la proprietà
-che il supporto non promette, quindi portarle sopra il trait adesso vorrebbe dire
-toglierla; il criterio lo dà il §15.2. È il rovescio della
+una precisazione che le altre non avevano: sa **quale voce** le darà il
+criterio. Le tre righe di `.fub/` che scrivono con `write_atomic` hanno già la
+proprietà che il supporto non promette, quindi portarle sopra il trait adesso
+vorrebbe dire toglierla; il criterio lo dà il §15.2. È il rovescio della
 [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md), dove una casella si è
 **chiusa** perché la decisione di un'altra voce la risolveva senza esserne nata
 per lei: qui una casella si **apre** già indirizzata. Il criterio per
@@ -385,10 +398,10 @@ E ne inaugura una che non è un modo di lasciare qualcosa dietro: un **buco
 dichiarato**. `plugin_data_dir` consegna a un provider nativo una vera cartella
 del filesystem, e su un supporto che cifra è il punto in cui la cifratura si
 ferma. Non è lavoro rimandato — è un fatto sulla forma dei provider nativi, la
-cui risposta è M5 — quindi non è una casella e non entra in nessun totale; ma sta
-scritto nel verbale perché chi implementerà quel supporto deve **trovarlo** prima
-di scoprirlo. La differenza con una casella è che una casella si spunta, un buco
-dichiarato si legge.
+cui risposta è M5 — quindi non è una casella e non entra in nessun totale; ma
+sta scritto nel verbale perché chi implementerà quel supporto deve **trovarlo**
+prima di scoprirlo. La differenza con una casella è che una casella si spunta,
+un buco dichiarato si legge.
 
 La [0065](0065-una-scrittura-o-c-e-o-non-c-e.md) chiude la casella che la
 [0064](0064-il-supporto-sta-sotto.md) aveva aperto **già indirizzata**, ed è il
@@ -396,8 +409,8 @@ secondo caso in cui una casella residua si chiude dentro un'altra voce dopo
 quello della [0062](0062-il-log-e-il-pavimento-l-evento-e-la-porta.md). La
 differenza fra i due è tutta nella previsione: la 0052 aveva lasciato i
 ventisette punti di `stderr` senza sapere chi li avrebbe presi, e a prenderli è
-stata una voce che non era nata per loro; la 0064 aveva scritto **quale voce**, e
-quella voce ha fatto esattamente ciò che c'era scritto. Vale la pena tenerlo
+stata una voce che non era nata per loro; la 0064 aveva scritto **quale voce**,
+e quella voce ha fatto esattamente ciò che c'era scritto. Vale la pena tenerlo
 perché di indirizzi scritti su una casella ce n'era uno solo, e adesso si sa che
 non era un auspicio: le caselle residue di [todo.md](../todo.md) scendono da
 dieci a nove, e i posti da sei a cinque.
@@ -406,32 +419,32 @@ Ed è la **quarta mezza voce**, dopo la [0031](0031-chi-possiede-i-bundle.md), l
 [0037](0037-lo-stato-di-vista.md) e la
 [0060](0060-il-modello-dice-il-vero-sui-byte.md), con una ragione che nessuna
 delle tre aveva. Nella 0031 mancava metà del ragionamento; nella 0037 il modello
-su cui la seconda metà poggia; nella 0060 una macchina su cui girare. Qui la metà
-che resta è **un'altra domanda**: la 0065 dice cosa promette una scrittura, e ciò
-che resta — il buffer di crash, il journal, i comandi di manutenzione — non è la
-scrittura ma il **recovery**, cioè cosa si fa dopo che è andata storta. Il titolo
-della voce le nominava entrambe («durabilità *e* recovery») e le teneva insieme
-perché sembravano lo stesso argomento; farne una ha mostrato che il taglio era
-già scritto nel titolo. Con una sola eccezione, e sta nella prima metà per una
-ragione tecnica e non concettuale: la *lost update* è durabilità, non recovery, e
-resta aperta perché la primitiva che la chiude — `std::fs::File::lock` — chiede
-di alzare l'MSRV, che è una decisione sua.
+su cui la seconda metà poggia; nella 0060 una macchina su cui girare. Qui la
+metà che resta è **un'altra domanda**: la 0065 dice cosa promette una scrittura,
+e ciò che resta — il buffer di crash, il journal, i comandi di manutenzione —
+non è la scrittura ma il **recovery**, cioè cosa si fa dopo che è andata storta.
+Il titolo della voce le nominava entrambe («durabilità *e* recovery») e le
+teneva insieme perché sembravano lo stesso argomento; farne una ha mostrato che
+il taglio era già scritto nel titolo. Con una sola eccezione, e sta nella prima
+metà per una ragione tecnica e non concettuale: la *lost update* è durabilità,
+non recovery, e resta aperta perché la primitiva che la chiude —
+`std::fs::File::lock` — chiede di alzare l'MSRV, che è una decisione sua.
 
-La [0066](0066-un-aggiornamento-non-e-una-scrittura.md) chiude quell'eccezione, e
-porta due cose che vale la pena tenere.
+La [0066](0066-un-aggiornamento-non-e-una-scrittura.md) chiude quell'eccezione,
+e porta due cose che vale la pena tenere.
 
-La prima è una **previsione confermata**, ed è il rovescio esatto del caso che la
-[0061](0061-un-giro-che-non-passa-dal-modello.md) aveva inaugurato. Là la 0060
-aveva classificato «lavoro» una riga che si è rivelata una decisione intera, e il
-criterio non si era emendato perché a sbagliare era stata la previsione. Qui la
-0065 aveva classificato **decisione** una riga che poteva sembrare lavoro — un
-lock è quattro righe di codice — e aveva ragione: la riga che è costata non è il
-lock, è l'**MSRV**. Le due insieme dicono cosa vale davvero il criterio di questa
-cartella: *una casella residua è ciò che si può fare senza aprire un verbale* si
-applica guardando la riga, e la riga si può leggere in entrambi i versi. Costa un
-verbale in più quando si sbaglia per difetto, e una decisione presa di straforo
-dentro un verbale su un altro argomento quando si sbaglia per eccesso — che è il
-verso caro.
+La prima è una **previsione confermata**, ed è il rovescio esatto del caso che
+la [0061](0061-un-giro-che-non-passa-dal-modello.md) aveva inaugurato. Là la
+0060 aveva classificato «lavoro» una riga che si è rivelata una decisione
+intera, e il criterio non si era emendato perché a sbagliare era stata la
+previsione. Qui la 0065 aveva classificato **decisione** una riga che poteva
+sembrare lavoro — un lock è quattro righe di codice — e aveva ragione: la riga
+che è costata non è il lock, è l'**MSRV**. Le due insieme dicono cosa vale
+davvero il criterio di questa cartella: *una casella residua è ciò che si può
+fare senza aprire un verbale* si applica guardando la riga, e la riga si può
+leggere in entrambi i versi. Costa un verbale in più quando si sbaglia per
+difetto, e una decisione presa di straforo dentro un verbale su un altro
+argomento quando si sbaglia per eccesso — che è il verso caro.
 
 La seconda è che è il primo verbale il cui costo non è codice ma una **promessa
 verso l'esterno**. Le decisioni di questa cartella si pagano quasi sempre in
@@ -439,70 +452,71 @@ lavoro nostro; questa si paga in `rust-version`, cioè in una riga che
 [versionamento.md](../versionamento.md) chiama parte del contratto e che qualcun
 altro legge per sapere se può compilare. La forma che ne segue è quella che il
 verbale ha: le due strade — alzare l'MSRV, o prendere una dipendenza — si sono
-guardate come **due promesse a due platee diverse**, non come due implementazioni,
-e ha deciso quale delle due platee può fare qualcosa in risposta. Chi ricompila
-oggi aggiorna la toolchain; chi installa una dipendenza in più se la tiene per
-sempre.
+guardate come **due promesse a due platee diverse**, non come due
+implementazioni, e ha deciso quale delle due platee può fare qualcosa in
+risposta. Chi ricompila oggi aggiorna la toolchain; chi installa una dipendenza
+in più se la tiene per sempre.
 
 La [0067](0067-il-registro-di-cio-che-e-successo.md) porta due precedenti, e
 nessuno dei due riguarda cosa ha deciso.
 
-Il primo è la terza specie di **premessa sbagliata** che una voce può contenere, e
-va distinta dalle due che ci sono. La [0053](0053-il-contratto-ha-una-sorgente.md)
-ha chiuso una voce smentendone un **fatto sull'architettura**; la
-[0052](0052-cio-che-va-storto-e-un-evento.md) ne ha corretti dei **numeri**. Qui
-la riga sbagliata era una **classificazione**: «append-only in `.fub/data/`», cioè
-un dato autorevole scritto sotto la radice di ciò che si butta e si rifà. Non è
-un fatto verificabile contro i sorgenti come quello della 0053 — nel momento in cui
-la riga è stata scritta il file non esisteva — ed è più insidioso di un numero,
-perché una classe sbagliata non diventa falsa col tempo: nasce falsa e ha l'aria di
-un'istruzione. La regola che la smentisce è la [0048](0048-una-radice-sola.md), che
-era già scritta e che nessuno aveva riletto scrivendo la riga. Da tenere come
-criterio: **una riga di `todo.md` che dice *dove* va un dato è una previsione, e si
-verifica contro la regola prima di eseguirla** — è il gemello, sull'asse della
-classe, di ciò che la §21.10 ha insegnato sull'asse delle affermazioni esterne.
+Il primo è la terza specie di **premessa sbagliata** che una voce può contenere,
+e va distinta dalle due che ci sono. La
+[0053](0053-il-contratto-ha-una-sorgente.md) ha chiuso una voce smentendone un
+**fatto sull'architettura**; la [0052](0052-cio-che-va-storto-e-un-evento.md) ne
+ha corretti dei **numeri**. Qui la riga sbagliata era una **classificazione**:
+«append-only in `.fub/data/`», cioè un dato autorevole scritto sotto la radice
+di ciò che si butta e si rifà. Non è un fatto verificabile contro i sorgenti
+come quello della 0053 — nel momento in cui la riga è stata scritta il file non
+esisteva — ed è più insidioso di un numero, perché una classe sbagliata non
+diventa falsa col tempo: nasce falsa e ha l'aria di un'istruzione. La regola che
+la smentisce è la [0048](0048-una-radice-sola.md), che era già scritta e che
+nessuno aveva riletto scrivendo la riga. Da tenere come criterio: **una riga di
+`todo.md` che dice *dove* va un dato è una previsione, e si verifica contro la
+regola prima di eseguirla** — è il gemello, sull'asse della classe, di ciò che
+la §21.10 ha insegnato sull'asse delle affermazioni esterne.
 
-Il secondo è di metodo, e riguarda le frasi che stanno in testa ai moduli. Quella
-di `storage.rs` diceva «sette operazioni, e chi ne aggiunge un'ottava sta chiedendo
-al supporto di sapere qualcosa sul contenuto», e l'ottava è arrivata. Non l'ha
-aggiunta chi non l'aveva letta: l'ha aggiunta il verbale che ci ha argomentato
-contro, e la frase è rimasta nel modulo — riscritta come **metro** e non come
-divieto — perché è quella che ha costretto a trovare il criterio vero, che stava
-poche righe sotto (*ciò che si compone dalle altre ha un default e non è una
-capacità in più*). È il rovescio della **garanzia dichiarata che non esisteva**
-della [0054](0054-il-banco-del-lato-provider.md): là una frase in prosa aveva fatto
-credere a una copertura che nessuno aveva, qui una frase in prosa ha impedito
-un'aggiunta finché non c'era la ragione per farla. Le due insieme dicono cosa vale
-una frase scritta in testa a un modulo: **non presidia niente e orienta tutto**, e
-si tocca scrivendo perché, non cancellandola.
+Il secondo è di metodo, e riguarda le frasi che stanno in testa ai moduli.
+Quella di `storage.rs` diceva «sette operazioni, e chi ne aggiunge un'ottava sta
+chiedendo al supporto di sapere qualcosa sul contenuto», e l'ottava è arrivata.
+Non l'ha aggiunta chi non l'aveva letta: l'ha aggiunta il verbale che ci ha
+argomentato contro, e la frase è rimasta nel modulo — riscritta come **metro** e
+non come divieto — perché è quella che ha costretto a trovare il criterio vero,
+che stava poche righe sotto (*ciò che si compone dalle altre ha un default e non
+è una capacità in più*). È il rovescio della **garanzia dichiarata che non
+esisteva** della [0054](0054-il-banco-del-lato-provider.md): là una frase in
+prosa aveva fatto credere a una copertura che nessuno aveva, qui una frase in
+prosa ha impedito un'aggiunta finché non c'era la ragione per farla. Le due
+insieme dicono cosa vale una frase scritta in testa a un modulo: **non presidia
+niente e orienta tutto**, e si tocca scrivendo perché, non cancellandola.
 
-La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata come
-tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il criterio
-di questa cartella è il *perché*, non la direzione: chi fra un anno troverà nel
-contratto congelato un modo di chiedere una ricerca tollerante ai refusi deve
-poter leggere perché quella scelta è finita in una firma WIT invece che dentro un
-provider.
+La [0025](0025-la-ricerca-predefinita.md) è l'altra eccezione, ed è dichiarata
+come tale: non chiude una voce, ne **apre** nove. Sta qui lo stesso perché il
+criterio di questa cartella è il *perché*, non la direzione: chi fra un anno
+troverà nel contratto congelato un modo di chiedere una ricerca tollerante ai
+refusi deve poter leggere perché quella scelta è finita in una firma WIT invece
+che dentro un provider.
 
 La [0068](0068-un-vault-si-apre-per-quel-che-si-legge.md) porta un precedente
 sul criterio di questa cartella, ed è il **terzo** modo in cui una voce si può
 dividere a metà.
 
-I due che c'erano dividevano per **proprietà**: la [0031](0031-chi-possiede-i-bundle.md)
-ha preso una domanda di possesso e lasciato l'esecuzione alla
-[0032](0032-il-runner-dei-job.md), che era un confine fra due argomenti. Qui il
-taglio è fra un **prerequisito** e ciò che lo richiede, e la differenza si vede
-nel fatto che le due metà non sono scambiabili: la seconda — l'apertura a fasi,
-col progresso e la cancellazione — non si sarebbe potuta prendere per prima,
-perché un'apertura osservabile che si interrompe al primo documento illeggibile
-mostra una barra di avanzamento che arriva al 40% e poi dice che non si apre
-niente. Da tenere come criterio: **quando una voce nomina due cose e una regge
-l'altra, il taglio è già dichiarato dalla voce**, e non serve un cappello che lo
-autorizzi.
+I due che c'erano dividevano per **proprietà**: la
+[0031](0031-chi-possiede-i-bundle.md) ha preso una domanda di possesso e
+lasciato l'esecuzione alla [0032](0032-il-runner-dei-job.md), che era un confine
+fra due argomenti. Qui il taglio è fra un **prerequisito** e ciò che lo
+richiede, e la differenza si vede nel fatto che le due metà non sono
+scambiabili: la seconda — l'apertura a fasi, col progresso e la cancellazione —
+non si sarebbe potuta prendere per prima, perché un'apertura osservabile che si
+interrompe al primo documento illeggibile mostra una barra di avanzamento che
+arriva al 40% e poi dice che non si apre niente. Da tenere come criterio:
+**quando una voce nomina due cose e una regge l'altra, il taglio è già
+dichiarato dalla voce**, e non serve un cappello che lo autorizzi.
 
 E una seconda nota, che riguarda i presidi e non il taglio. Dei suoi otto
 sabotaggi il più utile non ha **confermato** niente: togliere gli scarti
-dall'insieme che `reconcile` dichiara completo ha reso rosso un test scritto
-per un'altra ragione, e ha mostrato che l'insieme costruito dai soli documenti
+dall'insieme che `reconcile` dichiara completo ha reso rosso un test scritto per
+un'altra ragione, e ha mostrato che l'insieme costruito dai soli documenti
 indicizzati avrebbe detto agli indici che una nota illeggibile è sparita. Il
 difetto non esisteva prima di questa voce — non poteva, perché prima un
 documento non letto non lasciava aprire il vault — ed è nato e morto dentro lo
@@ -535,39 +549,38 @@ Il secondo è la **terza specie di premessa sbagliata**, e va distinta dalle due
 che la [0067](0067-il-registro-di-cio-che-e-successo.md) elenca. La
 [0053](0053-il-contratto-ha-una-sorgente.md) ha smentito un *fatto
 sull'architettura*, sbagliato nel momento in cui fu scritto; la 0067 una
-*classificazione*, nata falsa e con l'aria di un'istruzione. Qui la premessa della
-[0013](0013-elenco-delle-capacita.md) — «il kernel è sincrono e non possiede
-thread» — era **vera quando è stata scritta**, e l'ha resa falsa la
-[0032](0032-il-runner-dei-job.md), cioè un'altra voce, che non sapeva di toccarla.
-Non è un errore di nessuno: è la specie di riga che invecchia perché il repo si
-muove sotto di lei, ed è la più difficile da vedere, perché rileggerla contro i
-sorgenti *del suo tempo* non la smentisce. Il criterio che ne segue: **una voce
-che eredita la conclusione di un verbale eredita anche la sua premessa, e quella
-è un'affermazione su ieri** — si riverifica contro il repo di oggi prima di
-appoggiarcisi. Qui la conclusione ha retto lo stesso, ma per l'altra regola della
-stessa 0013, e il verbale dice quale.
+*classificazione*, nata falsa e con l'aria di un'istruzione. Qui la premessa
+della [0013](0013-elenco-delle-capacita.md) — «il kernel è sincrono e non
+possiede thread» — era **vera quando è stata scritta**, e l'ha resa falsa la
+[0032](0032-il-runner-dei-job.md), cioè un'altra voce, che non sapeva di
+toccarla. Non è un errore di nessuno: è la specie di riga che invecchia perché
+il repo si muove sotto di lei, ed è la più difficile da vedere, perché
+rileggerla contro i sorgenti *del suo tempo* non la smentisce. Il criterio che
+ne segue: **una voce che eredita la conclusione di un verbale eredita anche la
+sua premessa, e quella è un'affermazione su ieri** — si riverifica contro il
+repo di oggi prima di appoggiarcisi. Qui la conclusione ha retto lo stesso, ma
+per l'altra regola della stessa 0013, e il verbale dice quale.
 
 La [0070](0070-un-vault-si-apre-in-due-tempi.md) porta un precedente sui
-**sabotaggi**, e va nel verso scomodo. Il metodo delle 0066/0067/0068 è
-sabotare il codice e guardare quale presidio diventa rosso; la 0068 aveva già
-mostrato che un sabotaggio serve anche quando **non** conferma — là ne aveva
-trovato un difetto. Qui due dei sei non hanno confermato niente e non hanno
-trovato niente: sono rimasti **verdi**, e il verde diceva che le due promesse
-più centrali della voce — un'indicizzazione si ferma, chi la ferma riceve
-comunque un esito — non erano presidiate affatto. Nessuno se n'era accorto
-perché i presidi dell'host le attraversano tutte e due senza asserirle.
+**sabotaggi**, e va nel verso scomodo. Il metodo delle 0066/0067/0068 è sabotare
+il codice e guardare quale presidio diventa rosso; la 0068 aveva già mostrato
+che un sabotaggio serve anche quando **non** conferma — là ne aveva trovato un
+difetto. Qui due dei sei non hanno confermato niente e non hanno trovato niente:
+sono rimasti **verdi**, e il verde diceva che le due promesse più centrali della
+voce — un'indicizzazione si ferma, chi la ferma riceve comunque un esito — non
+erano presidiate affatto. Nessuno se n'era accorto perché i presidi dell'host le
+attraversano tutte e due senza asserirle.
 
-Da tenere come criterio: **un sabotaggio verde è un risultato, non un
-passaggio a vuoto**, e la sua risposta non è indebolire la frase del verbale
-finché diventa vera — è scrivere il presidio che manca. Il che porta con sé
-la ragione per cui mancava: entrambe le promesse, su un pool acceso, si
-osservano solo indovinando un istante. I due presidi nuovi mettono in scena
-quel momento — `avanza_apertura` chiamata a mano con la bandiera già alzata, un
-pool fermato **senza thread** — invece di aspettarlo, ed è la stessa regola con
-cui la [0032](0032-il-runner-dei-job.md) aveva provato le bandiere su `Flags` e
-non su dei thread veri. La regola vale anche al contrario: se un sabotaggio non
-si può rendere rosso in modo deterministico, il posto da cui provarlo non è
-quello.
+Da tenere come criterio: **un sabotaggio verde è un risultato, non un passaggio
+a vuoto**, e la sua risposta non è indebolire la frase del verbale finché
+diventa vera — è scrivere il presidio che manca. Il che porta con sé la ragione
+per cui mancava: entrambe le promesse, su un pool acceso, si osservano solo
+indovinando un istante. I due presidi nuovi mettono in scena quel momento —
+`avanza_apertura` chiamata a mano con la bandiera già alzata, un pool fermato
+**senza thread** — invece di aspettarlo, ed è la stessa regola con cui la
+[0032](0032-il-runner-dei-job.md) aveva provato le bandiere su `Flags` e non su
+dei thread veri. La regola vale anche al contrario: se un sabotaggio non si può
+rendere rosso in modo deterministico, il posto da cui provarlo non è quello.
 
 La [0071](0071-una-feature-si-spegne-dove-si-dichiara.md) porta un precedente
 che è il §16.8 visto **dal lato in cui la prosa falsa si crea**, e non da quello
@@ -580,6 +593,7 @@ parte del lavoro, non una pulizia successiva.
 E un secondo, sui presidi che diventano rossi per un caso nuovo e **legittimo**:
 non si indeboliscono, si circoscrivono. Il conto «zero view non è una suite»
 della [0056](0056-un-elenco-che-e-la-sorgente.md) è rimasto identico; è cambiata
-la condizione in cui gli si fa la domanda (`any(backlinks, outline, tags,
-stats)`). Abbassare la soglia avrebbe spento il presidio anche nel caso per cui
-era stato scritto — che è la differenza fra le due mosse, ed è l'unica che conta.
+la condizione in cui gli si fa la domanda
+(`any(backlinks, outline, tags, stats)`). Abbassare la soglia avrebbe spento il
+presidio anche nel caso per cui era stato scritto — che è la differenza fra le
+due mosse, ed è l'unica che conta.

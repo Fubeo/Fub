@@ -1,10 +1,9 @@
 # 0126 — Un bus che tace non lo scopre nessuno
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Estende**: la [0120](0120-un-lucchetto-avvelenato-si-dice-una-volta.md) al
-kernel, con la politica **opposta** e per la ragione che la 0120 aveva scritto
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Estende**: la
+[0120](0120-un-lucchetto-avvelenato-si-dice-una-volta.md) al kernel, con la
+politica **opposta** e per la ragione che la 0120 aveva scritto **Commit**:
+*(questo commit)*
 
 ---
 
@@ -32,8 +31,8 @@ Quindi «irrecuperabile, e da lì in poi rispondi di no» qui diventerebbe
 **«irrecuperabile, e da lì in poi taci»**. Cosa vede l'utente: l'app smette di
 consegnare eventi, la shell resta ferma sull'ultimo stato che aveva, i file sul
 disco cambiano e lo schermo no. Nessun errore, nessun dialogo, nessuna riga
-rossa in un pannello — perché non c'è nessuna chiamata che possa fallire.
-*Chi lo scopre, e come?* Con la politica dell'host: **nessuno**. È la prova che
+rossa in un pannello — perché non c'è nessuna chiamata che possa fallire. *Chi
+lo scopre, e come?* Con la politica dell'host: **nessuno**. È la prova che
 quella politica non si trapianta.
 
 Col vecchio `.unwrap()` andava anche peggio, ed è utile dirlo perché è il
@@ -74,9 +73,9 @@ sono simmetriche. Dire «hai perso un notice» a chi non ha perso niente costa u
 riconciliazione inutile; non dirlo a chi ha perso vuol dire uno schermo che
 resta indietro per sempre. Quindi si dice a tutti, e il conto che si usa è
 `dropped`, cioè lo stesso da cui nasce l'[`Event::Overflow`] del tetto della
-[0034](0034-il-freno-e-il-raggruppamento.md) — che la shell **già sa leggere** come
-«riconcilia da zero». Nessun evento nuovo, nessuna variante nuova nel contratto:
-il fatto nuovo aveva già la sua parola.
+[0034](0034-il-freno-e-il-raggruppamento.md) — che la shell **già sa leggere**
+come «riconcilia da zero». Nessun evento nuovo, nessuna variante nuova nel
+contratto: il fatto nuovo aveva già la sua parola.
 
 **Perché una volta per avvelenamento e non una per sempre.** Nell'host «una
 volta» vale per sempre perché la custodia non torna più utilizzabile. Qui la
@@ -89,9 +88,9 @@ dall'altra parte.
 ## La porta
 
 `mod roster` dentro `bus.rs`: il `Mutex<Vec<Subscriber>>` è **privato al
-modulo**, e `Roster::with(|subs| …)` è l'unico modo di tenere l'elenco. `.lock()`
-su un `Roster` non esiste, quindi non compila. È la forma del `mod intake` dello
-stesso file e della `Custodia` della 0120.
+modulo**, e `Roster::with(|subs| …)` è l'unico modo di tenere l'elenco.
+`.lock()` su un `Roster` non esiste, quindi non compila. È la forma del
+`mod intake` dello stesso file e della `Custodia` della 0120.
 
 `Custodia` non si è spostata, e la ragione va scritta perché è la prova che
 comanda («il secondo chiamante la eredita gratis?»). `Custodia` vive in
@@ -101,31 +100,32 @@ giù sarebbe stato possibile — ma non avrebbe fatto ereditare niente, perché
 chiamata) che è **esattamente ciò che qui non vale**. Un tipo comune fra i due
 crate avrebbe dovuto rendere la politica un parametro, cioè riaprire in ogni
 sito la domanda che la 0120 aveva chiuso. La cosa che si eredita fra i due non è
-il tipo: è la **regola** — un lucchetto sta dietro una porta, e la porta contiene
-la risposta a «e se è avvelenato?». Due porte, due risposte, una regola sola. La
-seduta 16 (i confini fra crate) resta come sta.
+il tipo: è la **regola** — un lucchetto sta dietro una porta, e la porta
+contiene la risposta a «e se è avvelenato?». Due porte, due risposte, una regola
+sola. La seduta 16 (i confini fra crate) resta come sta.
 
 ## La regola
 
 **Una politica del veleno non si trapianta: si riderivano da cosa il lucchetto
 protegge e da chi c'è ad ascoltare la risposta.** Dove non c'è nessuno a cui
-rispondere, «rispondi di no» è «taci», e tacere non è una politica — è il difetto
-con un nome più educato.
+rispondere, «rispondi di no» è «taci», e tacere non è una politica — è il
+difetto con un nome più educato.
 
 ## Il rosso
 
 Tre presidi, tre reversioni distinte, tutte viste rosse.
 
-**Comportamento.** `un_bus_avvelenato_continua_a_consegnare_e_mette_tutti_in_debito`:
-il veleno si produce come lo produce la vita — un thread che pania tenendo
-l'elenco, con l'hook dei panici messo a tacere per la durata del misfatto, o un
-panico voluto stamperebbe la sua traccia e farebbe sembrare rotto un banco
-verde. Poi si emette, e si pretendono tre cose: il fatto nuovo **arriva**, arriva
-anche un `Overflow`, e la denuncia vale uno anche dopo la seconda emissione.
-Rimesso `self.subs.lock().unwrap()`: rosso, `FAILED` sul `PoisonError`. Qui il
-rosso non è una morte del thread come nella 0120 — perché il panico avviene
-nel thread del banco, che è esattamente il punto: nell'app avverrebbe nel thread
-di chi emette, cioè in quello che tiene il workspace.
+**Comportamento.**
+`un_bus_avvelenato_continua_a_consegnare_e_mette_tutti_in_debito`: il veleno si
+produce come lo produce la vita — un thread che pania tenendo l'elenco, con
+l'hook dei panici messo a tacere per la durata del misfatto, o un panico voluto
+stamperebbe la sua traccia e farebbe sembrare rotto un banco verde. Poi si
+emette, e si pretendono tre cose: il fatto nuovo **arriva**, arriva anche un
+`Overflow`, e la denuncia vale uno anche dopo la seconda emissione. Rimesso
+`self.subs.lock().unwrap()`: rosso, `FAILED` sul `PoisonError`. Qui il rosso non
+è una morte del thread come nella 0120 — perché il panico avviene nel thread del
+banco, che è esattamente il punto: nell'app avverrebbe nel thread di chi emette,
+cioè in quello che tiene il workspace.
 
 **Struttura, e serve perché il verde non basta.** Una porta rende una forma
 inesprimibile solo per chi ci passa: niente impedisce di scrivere accanto un
@@ -134,18 +134,17 @@ perché non c'è niente di illegale da dire. È la zona cieca misurata **addosso
 alla 0120**, dove quattordici siti erano rimasti col codice vecchio a crate
 verde. Quindi due conti sul sorgente di `bus.rs`, che tagliano via i due moduli
 e i banchi e pretendono che fuori non compaia nessuna delle parole che
-appartengono alle porte:
-`il_lucchetto_dell_elenco_non_si_prende_da_fuori` (`Mutex`, `.lock()`,
-`PoisonError`, `clear_poison`, `into_inner`) e
+appartengono alle porte: `il_lucchetto_dell_elenco_non_si_prende_da_fuori`
+(`Mutex`, `.lock()`, `PoisonError`, `clear_poison`, `into_inner`) e
 `i_conti_dell_abbonamento_non_si_toccano_da_fuori` (vedi sotto). Aggiunto un
 `Arc<Mutex<u32>>` nudo a `EventBus`: rosso, con la parola colpevole nel
 messaggio.
 
 **Le zone cieche dei conti, dichiarate.** I banchi sono tagliati via apposta (un
 canale di prova è roba loro, e ne usano uno per sincronizzare i thread). Un
-lucchetto scritto in un **altro** file del kernel non lo vede nessuno: la porta è
-di `bus.rs` e il conto apre `bus.rs`. E un terzo modulo aggiunto qui dentro non
-verrebbe tagliato, quindi risulterebbe rosso — è il verso giusto in cui
+lucchetto scritto in un **altro** file del kernel non lo vede nessuno: la porta
+è di `bus.rs` e il conto apre `bus.rs`. E un terzo modulo aggiunto qui dentro
+non verrebbe tagliato, quindi risulterebbe rosso — è il verso giusto in cui
 sbagliare, perché costringe a dichiararlo invece di lasciarlo passare.
 
 ## L'altra metà del giro: il conto che aveva due padroni
@@ -163,12 +162,12 @@ l'avrebbe potuta dimenticare esattamente come i due rami avevano dimenticato la
 sottrazione. La forma è quella di `scriviContandoEco` lato shell: **un solo
 posto possiede tutte e due le metà.**
 
-Il modulo adesso possiede il canale intero e i suoi **due** conti: `abbonamento()`
-fabbrica i due capi, `Outbox::put` è l'unico posto da cui un notice entra,
-`Intake::take` l'unico da cui esce, e la funzione `debito` costruisce
-l'`Overflow` una volta sola invece delle due copie che stavano una in `deliver` e
-una in `Subscription::debt` — due frasi da tenere allineate a mano per dire la
-stessa cosa.
+Il modulo adesso possiede il canale intero e i suoi **due** conti:
+`abbonamento()` fabbrica i due capi, `Outbox::put` è l'unico posto da cui un
+notice entra, `Intake::take` l'unico da cui esce, e la funzione `debito`
+costruisce l'`Overflow` una volta sola invece delle due copie che stavano una in
+`deliver` e una in `Subscription::debt` — due frasi da tenere allineate a mano
+per dire la stessa cosa.
 
 ## Cosa resta scoperto
 
@@ -181,15 +180,15 @@ stessa cosa.
   restava com'era. Non era una svista: là il `Mutex` serve una `Condvar` — che è
   definita su `MutexGuard` e su niente altro — e ciò che protegge è un `u64`
   monotòno, cioè niente da rendere incredibile. È la ragione `Condizione`
-  dell'allowlist della 0120, e vale identica qui. Ma la frase non aveva una porta
-  che la tenesse: era un `expect` con una frase, cioè esattamente la forma che la
-  0120 ha chiamato «sembra una decisione presa, ed è solo una frase».
-  *(I punti erano **sei** e non quattro — questa riga li aveva contati sui soli
+  dell'allowlist della 0120, e vale identica qui. Ma la frase non aveva una
+  porta che la tenesse: era un `expect` con una frase, cioè esattamente la forma
+  che la 0120 ha chiamato «sembra una decisione presa, ed è solo una frase». *(I
+  punti erano **sei** e non quattro — questa riga li aveva contati sui soli
   `.lock()`, e due stanno sull'esito della `Condvar`. Chiuso da
   `crates/fub-kernel/src/veleno.rs`, che porta la politica di questa decisione
-  fuori da `bus.rs`: `Ricovero`, `RicoveroCondiviso` e `Condizione`, con il conto
-  di `crates/fub-kernel/tests/il_veleno_del_kernel.rs` a tenere che una terza
-  risposta non si improvvisi.)*
+  fuori da `bus.rs`: `Ricovero`, `RicoveroCondiviso` e `Condizione`, con il
+  conto di `crates/fub-kernel/tests/il_veleno_del_kernel.rs` a tenere che una
+  terza risposta non si improvvisi.)*
 - **La riga di diagnosi va nel log e non nel canale del §20.2**, come nella
   0120: emettere un `Event::Trouble` da qui vorrebbe dire rientrare nel bus da
   dentro il bus.

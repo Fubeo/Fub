@@ -6,22 +6,26 @@
 | **Origine** | `todo.md` §16.3 (seduta 16) — non la voce, ma **la condizione** che ne tiene fuori il secondo tempo |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) · [il primo tempo](0071-una-feature-si-spegne-dove-si-dichiara.md) · [un numero si scrive accanto a come si ricava](0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) · [un elenco che è la sorgente](0056-un-elenco-che-e-la-sorgente.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) ·
+[il primo tempo](0071-una-feature-si-spegne-dove-si-dichiara.md) ·
+[un numero si scrive accanto a come si ricava](0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)
+· [un elenco che è la sorgente](0056-un-elenco-che-e-la-sorgente.md)
 
 ---
 
 La [0071](0071-una-feature-si-spegne-dove-si-dichiara.md) ha chiuso il primo
-tempo del §16.3 e ha lasciato il secondo — lo split di `fub-features` in un crate
-per bundle — fuori con una condizione al posto di una scadenza: **il primo import
-fra due moduli di feature che non sia un link di documentazione**.
+tempo del §16.3 e ha lasciato il secondo — lo split di `fub-features` in un
+crate per bundle — fuori con una condizione al posto di una scadenza: **il primo
+import fra due moduli di feature che non sia un link di documentazione**.
 
 Era la mossa giusta, e questo verbale non la ridiscute. Riguarda ciò che le
 mancava: **chi si accorge che la condizione è scattata.** La risposta, fino a
 oggi, era nessuno. La condizione viveva in due paragrafi di italiano — uno nella
 roadmap, uno in un verbale — e la sola cosa che potesse farla notare era che
-qualcuno ripassasse di lì e rifacesse il grep a mano. Che è esattamente ciò che è
-successo per arrivare a questo verbale, ed è la dimostrazione del difetto e non
-della sua assenza.
+qualcuno ripassasse di lì e rifacesse il grep a mano. Che è esattamente ciò che
+è successo per arrivare a questo verbale, ed è la dimostrazione del difetto e
+non della sua assenza.
 
 ## La decisione
 
@@ -31,9 +35,10 @@ di feature nomini `crate::`, e quando è rosso dice che la voce si è sbloccata.
 
 Il presidio gira nel `cargo test --workspace` e ha un passo suo in CI, accanto a
 quelli che la 0071 aveva messo lì. La misura di partenza: i moduli di feature
-sono **otto** [conta: moduli-di-feature], e i riferimenti incrociati nei sorgenti
-sono **sei**, tutti doc-comment che linkano `backlinks::catalog`. Nessun `use`.
-La condizione non era scattata, e adesso non può scattare in silenzio.
+sono **otto** [conta: moduli-di-feature], e i riferimenti incrociati nei
+sorgenti sono **sei**, tutti doc-comment che linkano `backlinks::catalog`.
+Nessun `use`. La condizione non era scattata, e adesso non può scattare in
+silenzio.
 
 ## Le decisioni prese, da NON ridiscutere senza motivo
 
@@ -59,22 +64,22 @@ stesso `cfg`.
 
 Poi si guarda **cosa succede a chi legge quell'errore**, ed è lì che il confine
 si sfila. Chi voleva quell'import non rinuncia all'accoppiamento: gli mette
-davanti un `#[cfg(feature = "search")]`, perché è la riparazione che il messaggio
-suggerisce e perché senza le build parziali si rompono davvero. Verificato anche
-questo: con il `cfg` davanti, la build della sola `outline` passa, la build piena
-passa, `le_cargo_feature` passa — **tutto verde**, e l'accoppiamento
-feature↔feature c'è per intero.
+davanti un `#[cfg(feature = "search")]`, perché è la riparazione che il
+messaggio suggerisce e perché senza le build parziali si rompono davvero.
+Verificato anche questo: con il `cfg` davanti, la build della sola `outline`
+passa, la build piena passa, `le_cargo_feature` passa — **tutto verde**, e
+l'accoppiamento feature↔feature c'è per intero.
 
-È il punto che vale oltre questo caso. La forma che evade il confine non è quella
-distratta: è quella **attenta**, ed è il confine stesso ad averla insegnata.
-Misurare un presidio su chi lo ignora dice poco; misurarlo su chi lo rispetta
-diceva tutto, e quello che diceva è che qui non arriva.
+È il punto che vale oltre questo caso. La forma che evade il confine non è
+quella distratta: è quella **attenta**, ed è il confine stesso ad averla
+insegnata. Misurare un presidio su chi lo ignora dice poco; misurarlo su chi lo
+rispetta diceva tutto, e quello che diceva è che qui non arriva.
 
 Quindi il criterio della 0071 non è stato scartato: è stato applicato, e la
 risposta è che il confine del compilatore copre la metà distratta. La domanda va
-posta anche ai sorgenti, e va posta **prima del `cfg`**, dove un `#[cfg]` davanti
-non nasconde niente. I tre `build` restano dove sono — comprano un'altra cosa,
-che le feature si spengano davvero.
+posta anche ai sorgenti, e va posta **prima del `cfg`**, dove un `#[cfg]`
+davanti non nasconde niente. I tre `build` restano dove sono — comprano un'altra
+cosa, che le feature si spengano davvero.
 
 ### La regola è più larga della condizione, e questo è il disegno
 
@@ -126,25 +131,24 @@ sarebbe stato un buco che nessuno avrebbe più richiuso.
 È l'unica cosa che questo presidio ha di diverso da tutti gli altri del repo, e
 sta nel messaggio, non nel codice. Ogni altro banco che diventa rosso accusa chi
 ha appena scritto; questo gli **consegna una voce di roadmap**. Il messaggio
-apre dicendo che non è un errore, spiega cosa il §16.3 aspettava e perché, elenca
-i punti trovati, e dà tre strade in ordine: leggi la voce e la 0071; se è
+apre dicendo che non è un errore, spiega cosa il §16.3 aspettava e perché,
+elenca i punti trovati, e dà tre strade in ordine: leggi la voce e la 0071; se è
 accoppiamento vero, lo split è il lavoro; se è un helper condiviso, mettilo in
 `RADICE`.
 
-E chiude con la sola cosa che non va fatta — togliere l'assert per tornare
-verdi — perché è la reazione più probabile di chi incontra un test che non
-capisce, ed è quella che butterebbe via l'unica informazione che il presidio
-esiste per produrre. Il verde di prima diceva *i moduli non si parlano*: se non è
-più vero, il verde non si ricompra, si spende.
+E chiude con la sola cosa che non va fatta — togliere l'assert per tornare verdi
+— perché è la reazione più probabile di chi incontra un test che non capisce, ed
+è quella che butterebbe via l'unica informazione che il presidio esiste per
+produrre. Il verde di prima diceva *i moduli non si parlano*: se non è più vero,
+il verde non si ricompra, si spende.
 
 ### Lo scanner si prova su una trappola, e le due specie di errore non pesano uguale
 
 `solo_codice` toglie commenti di riga, commenti a blocco annidati e stringhe. I
 commenti perché la condizione li esclude alla lettera e perché i sei riferimenti
 che esistono oggi sono tutti doc-comment: un presidio che contasse la prosa
-sarebbe nato rosso — l'inciampo in cui la
-[0057](0057-la-dieta-dell-ipc.md) era già caduta contando `#[tauri::command]`
-dentro i commenti.
+sarebbe nato rosso — l'inciampo in cui la [0057](0057-la-dieta-dell-ipc.md) era
+già caduta contando `#[tauri::command]` dentro i commenti.
 
 Le stringhe per una ragione meno visibile e più cattiva: una `"https://…"` fa
 partire un finto commento di riga che si mangia il resto della riga, cioè
@@ -162,18 +166,19 @@ nessun altro presidio del repo prende.
 
 ## Cosa resta fuori, e perché
 
-**Lo split in crate resta fuori, e la sua ragione non è cambiata di una virgola.**
-Questo verbale non chiude né la voce né mezza voce: la §16.3 resta aperta con la
-stessa casella di prima. Ciò che cambia è che la casella adesso ha un guardiano,
-e che il giorno in cui si sblocca lo si saprà in CI invece che per fortuna.
+**Lo split in crate resta fuori, e la sua ragione non è cambiata di una
+virgola.** Questo verbale non chiude né la voce né mezza voce: la §16.3 resta
+aperta con la stessa casella di prima. Ciò che cambia è che la casella adesso ha
+un guardiano, e che il giorno in cui si sblocca lo si saprà in CI invece che per
+fortuna.
 
-Ed è la novità di processo, che vale la pena dire perché l'indice delle decisioni
-finora non aveva questa specie: **un verbale che non chiude niente.** La
-[0031](0031-chi-possiede-i-bundle.md) aveva inaugurato il verbale che chiude
-mezza voce; questo decide qualcosa *su* una voce aperta senza spostarne lo stato.
-Il criterio per quando ne serve uno è lo stesso di sempre — c'è una decisione che
-qualcuno rischia di ridiscutere, e la sua ragione non stava già scritta da
-nessuna parte.
+Ed è la novità di processo, che vale la pena dire perché l'indice delle
+decisioni finora non aveva questa specie: **un verbale che non chiude niente.**
+La [0031](0031-chi-possiede-i-bundle.md) aveva inaugurato il verbale che chiude
+mezza voce; questo decide qualcosa *su* una voce aperta senza spostarne lo
+stato. Il criterio per quando ne serve uno è lo stesso di sempre — c'è una
+decisione che qualcuno rischia di ridiscutere, e la sua ragione non stava già
+scritta da nessuna parte.
 
 **Non si è esteso il `build` a tutte e otto le feature.** Compilare ogni bundle
 da solo estenderebbe il confine del compilatore da una feature a otto, costa
@@ -186,20 +191,20 @@ split.
 
 **Il presidio non dice se l'accoppiamento sia grave.** Dice che c'è. Distinguere
 un helper di tre righe da una dipendenza vera è un giudizio, e il posto dove si
-esercita è la voce di roadmap che il messaggio consegna — non un'euristica dentro
-un test, che sarebbe un modo elaborato di decidere in anticipo la cosa che si
-vuole andare a guardare.
+esercita è la voce di roadmap che il messaggio consegna — non un'euristica
+dentro un test, che sarebbe un modo elaborato di decidere in anticipo la cosa
+che si vuole andare a guardare.
 
 ## I precedenti
 
 **Una condizione che nessuno valuta è una scadenza senza data.** La §16.3 aveva
-fatto la cosa giusta a rifiutare una scadenza — «lo split entro M5» sarebbe stato
-un numero inventato — ma una condizione che vive solo in italiano non è il suo
-contrario: è una scadenza che non arriva mai, perché il momento in cui scade è
-proprio il momento in cui nessuno la sta guardando. La
+fatto la cosa giusta a rifiutare una scadenza — «lo split entro M5» sarebbe
+stato un numero inventato — ma una condizione che vive solo in italiano non è il
+suo contrario: è una scadenza che non arriva mai, perché il momento in cui scade
+è proprio il momento in cui nessuno la sta guardando. La
 [0072](0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) ha censito questa
-famiglia per i **numeri**; questo verbale la estende alle **condizioni**, ed è la
-stessa forma: ciò che una frase promette, qualcuno lo deve rifare.
+famiglia per i **numeri**; questo verbale la estende alle **condizioni**, ed è
+la stessa forma: ciò che una frase promette, qualcuno lo deve rifare.
 
 **Il motivo per cui si scrive una condizione è smettere di doverci pensare.** Se
 per sapere se è scattata bisogna ricordarsene e rifare il grep a mano, la
@@ -207,10 +212,10 @@ condizione non ha comprato niente rispetto a «ogni tanto guarda se i moduli si
 parlano» — ha solo scritto meglio la cosa a cui bisogna pensare. Il presidio è
 ciò che rende vera la promessa che la condizione faceva.
 
-**Un confine si misura su chi lo rispetta, non su chi lo ignora.** È il precedente
-più esportabile di questo verbale. Il `#[cfg]` è un confine vero, prende la
-violazione distratta, e viene aggirato dalla riparazione che esso stesso
-suggerisce — non da un aggiramento deliberato. Prima di accettare un presidio
-perché «il compilatore lo prende», vale la pena scrivere la violazione, leggere
-l'errore, applicare la correzione che l'errore chiede, e guardare se a quel punto
-è ancora rosso. Qui non lo era.
+**Un confine si misura su chi lo rispetta, non su chi lo ignora.** È il
+precedente più esportabile di questo verbale. Il `#[cfg]` è un confine vero,
+prende la violazione distratta, e viene aggirato dalla riparazione che esso
+stesso suggerisce — non da un aggiramento deliberato. Prima di accettare un
+presidio perché «il compilatore lo prende», vale la pena scrivere la violazione,
+leggere l'errore, applicare la correzione che l'errore chiede, e guardare se a
+quel punto è ancora rosso. Qui non lo era.

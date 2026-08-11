@@ -6,7 +6,12 @@
 | **Origine** | `todo.md` §23.6 ([seduta 23](../roadmap/23-cosa-costano-le-decisioni-chiuse.md)) — **chiude la voce** |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/23-cosa-costano-le-decisioni-chiuse.md) · [import ed export sono trait, 0006](0006-import-export-come-trait.md) · [il lavoro lungo vede il vault, 0027](0027-il-lavoro-lungo-vede-il-vault.md) · [chi legge non aspetta chi legge, 0024](0024-chi-legge-non-aspetta-chi-legge.md) · [un tetto che si fa sentire, 0094](0094-un-tetto-che-si-fa-sentire.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/23-cosa-costano-le-decisioni-chiuse.md) ·
+[import ed export sono trait, 0006](0006-import-export-come-trait.md) ·
+[il lavoro lungo vede il vault, 0027](0027-il-lavoro-lungo-vede-il-vault.md) ·
+[chi legge non aspetta chi legge, 0024](0024-chi-legge-non-aspetta-chi-legge.md)
+· [un tetto che si fa sentire, 0094](0094-un-tetto-che-si-fa-sentire.md)
 
 ---
 
@@ -15,8 +20,8 @@ trasferimento è **di byte e non di path**, ed è la più protettiva delle prime
 dieci: il capitolo che in ogni altra applicazione tocca il filesystem più di
 tutti non chiede **nessuna** capacità filesystem, e a M5 la sandbox non deve
 concedere niente. Questa decisione non la riapre. Riapre il prezzo, che quel
-verbale dichiarava in una riga e mezza: *«sorgente e artefatti stanno in memoria,
-e uno `stream` al confine resta additivo»*.
+verbale dichiarava in una riga e mezza: *«sorgente e artefatti stanno in
+memoria, e uno `stream` al confine resta additivo»*.
 
 La decisione in una riga:
 
@@ -144,10 +149,10 @@ dell'intero vault in PDF non costruisce più un `Vec<ExportArtifact>` con dentro
 tutto il vault reso.
 
 Il guadagno che non si vede nella firma: **c'è una strada sola**. Il provider
-markdown scrive attraverso il sink sempre, e chi chiama sceglie il
-comportamento **scegliendo il sink** — `MemorySink` per un anteprima o un
-download, `DirectorySink` per una cartella scelta dall'utente. Non ci sono due
-rami da tenere allineati, quindi non c'è il ramo che si dimentica.
+markdown scrive attraverso il sink sempre, e chi chiama sceglie il comportamento
+**scegliendo il sink** — `MemorySink` per un anteprima o un download,
+`DirectorySink` per una cartella scelta dall'utente. Non ci sono due rami da
+tenere allineati, quindi non c'è il ramo che si dimentica.
 
 ### Una famiglia in più, e sta dalla parte di chi legge
 
@@ -162,14 +167,14 @@ sistema e nient'altro. Chiedere una spunta nel manifest per «leggere i byte che
 ti ho appena dato» insegnerebbe a spuntare, che è la lezione della
 [0100](0100-i-tasti-che-arrivano-da-fuori.md) letta al contrario.
 
-**Sta in `ReadApi` e non in `HostApi`**, ed è la correzione che il compilatore ha
-imposto per primo ma che il verbale avrebbe dovuto imporre comunque. Servire la
-lettura di una sorgente da 4 GiB sotto il prestito esclusivo vuol dire tenere il
-lock in scrittura per il tempo di una migrazione: è **letteralmente** il difetto
-che la [0024](0024-chi-legge-non-aspetta-chi-legge.md) ha misurato — la fame di
-chi scrive — riprodotto sull'operazione più lunga che l'applicazione conosca.
-`ReadOnly::denies` la lascia passare, perché un'anteprima *è* una simulazione e
-leggere la sorgente è ciò che la simulazione fa.
+**Sta in `ReadApi` e non in `HostApi`**, ed è la correzione che il compilatore
+ha imposto per primo ma che il verbale avrebbe dovuto imporre comunque. Servire
+la lettura di una sorgente da 4 GiB sotto il prestito esclusivo vuol dire tenere
+il lock in scrittura per il tempo di una migrazione: è **letteralmente** il
+difetto che la [0024](0024-chi-legge-non-aspetta-chi-legge.md) ha misurato — la
+fame di chi scrive — riprodotto sull'operazione più lunga che l'applicazione
+conosca. `ReadOnly::denies` la lascia passare, perché un'anteprima *è* una
+simulazione e leggere la sorgente è ciò che la simulazione fa.
 
 Il `READ_CHUNK` di 256 KiB **non** entra nel contratto. È la grana con cui
 `read_all` chiede, e l'host può sempre dare meno; un numero pubblicato sarebbe
@@ -179,30 +184,31 @@ una promessa congelata, che è la forma che la
 ### Chi apre e chi chiude, e perché il kernel non chiude
 
 `Workspace::open_source` timbra la chiave e `close_source` la ritira; le chiavi
-**salgono e non si riciclano**, così un handle chiuso non diventa mai per sbaglio
-un handle di qualcun altro — chiuderlo e riusarlo risponde `BadArgs`, e c'è un
-test che lo dice.
+**salgono e non si riciclano**, così un handle chiuso non diventa mai per
+sbaglio un handle di qualcun altro — chiuderlo e riusarlo risponde `BadArgs`, e
+c'è un test che lo dice.
 
 Il kernel **non** chiude alla fine di un `import`, di proposito: la coppia
 preview→apply della 0006 è due chiamate sulla stessa sorgente, e chiuderla in
-mezzo vorrebbe dire riaprirla, cioè rileggere tutto per rispondere due volte alla
-stessa domanda. Apre chi ha aperto il dialogo, e chiude lo stesso.
+mezzo vorrebbe dire riaprirla, cioè rileggere tutto per rispondere due volte
+alla stessa domanda. Apre chi ha aperto il dialogo, e chiude lo stesso.
 
 ### Il presidio, riparato
 
 `wit_additivity` adesso calcola le interfacce **esportate dal world** e tratta
-una funzione nuova su una di quelle come un'obbligazione, non come
-un'aggiunta — con il messaggio che dice cosa fare (una riga argomentata, e una
-riga nella tabella dei ritagli). Le due che erano già passate stanno in
+una funzione nuova su una di quelle come un'obbligazione, non come un'aggiunta —
+con il messaggio che dice cosa fare (una riga argomentata, e una riga nella
+tabella dei ritagli). Le due che erano già passate stanno in
 `OBBLIGAZIONI_NOTE`, ognuna col suo perché: **non è un condono**, è il modo di
-renderle visibili senza riscrivere la storia, ed è la stessa forma dell'allowlist
-di `serialize_non_riscrive` — il costo è reale e lo paga chi lo sceglie, invece
-di ereditarlo in silenzio. Una riga nuova lì dentro va argomentata.
+renderle visibili senza riscrivere la storia, ed è la stessa forma
+dell'allowlist di `serialize_non_riscrive` — il costo è reale e lo paga chi lo
+sceglie, invece di ereditarlo in silenzio. Una riga nuova lì dentro va
+argomentata.
 
 Accanto all'autotest verde che c'era («una funzione nuova» su un'importata, che
 resta additiva) ne sta adesso uno rosso sulla stessa parola: `format::describe`,
-cioè la stessa aggiunta su un'esportata. Le due caselle sono vicine di proposito:
-la regola non è «una funzione nuova», è «da che parte».
+cioè la stessa aggiunta su un'esportata. Le due caselle sono vicine di
+proposito: la regola non è «una funzione nuova», è «da che parte».
 
 E la tabella *Cosa conta come aggiunta* di `wit-congelato.md` non ha più una
 casella sola per la parola «funzione».
@@ -223,17 +229,17 @@ repo, dopo lo pagherebbe una major.
 
 Ciò che **non** si è pagato: nessuna capacità filesystem, di nessun tipo, in
 nessuno dei due versi. La conclusione della 0006 vale identica dopo questa
-decisione — un plugin WASM di M5 riceve una chiave e un prologo, e continua a non
-sapere dove sia il vault.
+decisione — un plugin WASM di M5 riceve una chiave e un prologo, e continua a
+non sapere dove sia il vault.
 
 ## Cosa resta fuori
 
 - **Sfogliare un archivio** non è qui dentro. Qui c'è la sola cosa che serviva
-  per poterlo fare: leggere a un `offset`. Chi aprirà `.docx` ed `.epub` scriverà
-  il proprio lettore di zip sopra `read_source`, senza chiedere niente all'host —
-  che è esattamente ciò che la voce voleva rendere possibile.
-- **Rollback e resume** (17.3) restano dove la 0006 li aveva lasciati:
-  l'inverso di un lotto sopra un journal, e nessuno dei due esiste.
-- **La scrittura di una sorgente** non esiste e non deve: `TransferRead` legge, e
-  basta. Chi posa byte fuori dal vault lo fa attraverso un sink che gli ha dato
-  l'host, o non lo fa.
+  per poterlo fare: leggere a un `offset`. Chi aprirà `.docx` ed `.epub`
+  scriverà il proprio lettore di zip sopra `read_source`, senza chiedere niente
+  all'host — che è esattamente ciò che la voce voleva rendere possibile.
+- **Rollback e resume** (17.3) restano dove la 0006 li aveva lasciati: l'inverso
+  di un lotto sopra un journal, e nessuno dei due esiste.
+- **La scrittura di una sorgente** non esiste e non deve: `TransferRead` legge,
+  e basta. Chi posa byte fuori dal vault lo fa attraverso un sink che gli ha
+  dato l'host, o non lo fa.

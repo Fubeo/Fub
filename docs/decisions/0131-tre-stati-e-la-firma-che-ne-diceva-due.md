@@ -1,12 +1,10 @@
 # 0131 — Tre stati, e la firma che ne diceva due: `enabled` diventa una proiezione
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: la [§24.2](../roadmap/24-tre-firme-che-il-freeze-rende-definitive.md)
-— *«`enabled()` risponde con un booleano a una domanda che ha tre risposte»*.
-Gli stati sono davvero tre, ma **non sono i due che la voce nominava**, e la
-firma non scade col freeze
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**: la
+[§24.2](../roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) —
+*«`enabled()` risponde con un booleano a una domanda che ha tre risposte»*. Gli
+stati sono davvero tre, ma **non sono i due che la voce nominava**, e la firma
+non scade col freeze **Commit**: *(questo commit)*
 
 ---
 
@@ -16,7 +14,8 @@ La [0017](0017-chi-disegna-cio-che-il-core-non-conosce.md) ha sostituito gli
 elenchi di booleani con `OptionMap` e ne ha scritto la regola: *presente =
 acceso, il valore è il dettaglio, un `false` esplicito spegne*. Tre stati. La
 firma che li legge — `OptionMap::enabled(&self, key: &str) -> bool` — ne dice
-due, e torna `false` sia per la chiave assente sia per la chiave messa a `false`.
+due, e torna `false` sia per la chiave assente sia per la chiave messa a
+`false`.
 
 ## Le premesse della voce, misurate
 
@@ -47,14 +46,15 @@ quella differenza viaggi.
 
 **«Uno solo, e torna `bool`»: sì, ma con tre facciate.** Il simbolo
 `OptionMap::enabled` è uno, e torna davvero `bool`. Sopra ci stanno tre
-*wrapper* che sono la stessa domanda con tre nomi — `FormatCapabilities::supports`,
-`ParseContext::enabled`, `RenderOptions::enabled`, più `PluginPermissions::has`
-— quindi riparare la base ripara tutti e quattro senza toccarne nessuno, che è
-il verso giusto. La **quinta** copia della regola è in TypeScript
-(`frontend/src/ui/permessi.ts`, `v !== false && v !== null`), e non è un
-doppione che possa marcire: la mappa attraversa l'IPC come JSON grezzo, la shell
-la regola la deve applicare per conto suo, e ce l'ha un presidio suo
-(`permessi.test.ts`, *«un permesso spento con `false` non è dichiarato»*).
+*wrapper* che sono la stessa domanda con tre nomi —
+`FormatCapabilities::supports`, `ParseContext::enabled`,
+`RenderOptions::enabled`, più `PluginPermissions::has` — quindi riparare la base
+ripara tutti e quattro senza toccarne nessuno, che è il verso giusto. La
+**quinta** copia della regola è in TypeScript (`frontend/src/ui/permessi.ts`,
+`v !== false && v !== null`), e non è un doppione che possa marcire: la mappa
+attraversa l'IPC come JSON grezzo, la shell la regola la deve applicare per
+conto suo, e ce l'ha un presidio suo (`permessi.test.ts`, *«un permesso spento
+con `false` non è dichiarato»*).
 
 ## Il verso opposto, che è ciò che ha deciso la forma
 
@@ -80,12 +80,13 @@ in tutti i posti dove il booleano è **la risposta giusta**, per servire i posti
 che oggi non chiedono ancora niente.
 
 Notare `Granted::new`, che è il chiamante più istruttivo di tutti: per
-l'allowlist di `fub:network` è già **sceso sotto** `enabled`, leggendo il `Value`
-grezzo, e il commento dice perché — *«`as_strings` appiattisce su un elenco vuoto
-tre cose diverse: assente, vuoto, malformato, e qui la terza deve fallire chiusa
-invece di confondersi con la prima»*. Cioè: quando la distinzione è servita, chi
-ne aveva bisogno se l'è presa a mano. Il difetto non è che `enabled` menta — è
-che **non c'era il nome** con cui chiedere la risposta intera.
+l'allowlist di `fub:network` è già **sceso sotto** `enabled`, leggendo il
+`Value` grezzo, e il commento dice perché — *«`as_strings` appiattisce su un
+elenco vuoto tre cose diverse: assente, vuoto, malformato, e qui la terza deve
+fallire chiusa invece di confondersi con la prima»*. Cioè: quando la distinzione
+è servita, chi ne aveva bisogno se l'è presa a mano. Il difetto non è che
+`enabled` menta — è che **non c'era il nome** con cui chiedere la risposta
+intera.
 
 ## La decisione
 
@@ -105,21 +106,22 @@ pub enum OptionStatus<'a> { Unset, Off, On(&'a serde_json::Value) }
 ```
 
 `On` porta il **parametro**, e non è un dettaglio: un `Option<bool>` avrebbe
-distinto i tre stati buttando via l'allowlist, il livello, l'elenco di varianti —
-cioè avrebbe riprodotto il difetto un gradino più su, che è esattamente la mossa
-che la [0094](0094-un-tetto-che-si-fa-sentire.md) evitò su `random-bytes` dando
-al risultato la forma che il dominio aveva già. Il tipo **non attraversa il
-confine** e non ha una `Serialize`: al confine c'è la mappa, e i tre stati la
+distinto i tre stati buttando via l'allowlist, il livello, l'elenco di varianti
+— cioè avrebbe riprodotto il difetto un gradino più su, che è esattamente la
+mossa che la [0094](0094-un-tetto-che-si-fa-sentire.md) evitò su `random-bytes`
+dando al risultato la forma che il dominio aveva già. Il tipo **non attraversa
+il confine** e non ha una `Serialize`: al confine c'è la mappa, e i tre stati la
 mappa li porta da sola. Alla radice del crate si vede, perché la
-[0130](0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md) di ieri lo pretende.
+[0130](0130-ogni-tipo-del-contratto-si-vede-dalla-radice.md) di ieri lo
+pretende.
 
 ## Il difetto fuori dalla voce, che vale più della voce
 
 Ventiduesimo giro di fila, e sta di nuovo un centimetro più in là.
 
 `DocumentStore::format_of` e `DocumentStore::syntax_forms` leggono la **stessa**
-`OptionMap` — le capacità del provider — e la leggevano in due modi: la prima con
-`enabled` (via `supports`), la seconda con `iter()`, che porta tutte le voci
+`OptionMap` — le capacità del provider — e la leggevano in due modi: la prima
+con `enabled` (via `supports`), la seconda con `iter()`, che porta tutte le voci
 **comprese le spente**. Sono i due accessori con cui la
 [0115](0115-la-verita-e-la-dichiarazione.md) risponde alla §4.4: *che sintassi
 capirebbe* e *a cosa somigliano*. Su un provider che scrive `.with(nome, false)`
@@ -153,8 +155,9 @@ Tre banchi, tutti verificati rossi **togliendo** qualcosa e non aggiungendola:
    `fub:math` ricompare fra le accese.
 3. `crates/fub-kernel/tests/le_capacita_effettive.rs` — due prove sul kernel
    vero, con un provider che dichiara e spegne. Rosse rimettendo `.iter()` al
-   posto di `.active()`: *«left: `["fub:callouts", "fub:tags", "fub:wikilinks"]`,
-   right: `["fub:callouts", "fub:tags"]`»*.
+   posto di `.active()`: *«left:
+   `["fub:callouts", "fub:tags", "fub:wikilinks"]`, right:
+   `["fub:callouts", "fub:tags"]`»*.
 
 E il presidio di ieri ha morso da solo: `OptionStatus` senza il suo `pub use`
 rende rosso `superficie_della_radice`, per nome. Non è stato aggirato.
@@ -162,9 +165,9 @@ rende rosso `superficie_della_radice`, per nome. Non è stato aggirato.
 L'attore è **il test** e non il compilatore, ed è una scelta misurata: se
 `enabled` fosse sparito, il compilatore avrebbe preso ogni chiamante — ma la
 tabella qui sopra dice che sei chiamanti su sei non avevano niente da cambiare,
-quindi il compilatore avrebbe preso sei falsi positivi e zero difetti. Il difetto
-vero — due funzioni che rispondono diverso sulla stessa mappa — un `match` non lo
-vede: è comportamento, e lo prende un test.
+quindi il compilatore avrebbe preso sei falsi positivi e zero difetti. Il
+difetto vero — due funzioni che rispondono diverso sulla stessa mappa — un
+`match` non lo vede: è comportamento, e lo prende un test.
 
 ## Zone cieche dichiarate
 
@@ -182,7 +185,7 @@ vede: è comportamento, e lo prende un test.
   dirlo sarebbe `permessi.test.ts` e non il compilatore.
 
 Nessuna firma WIT cambiata, nessuna fixture rigenerata (il tipo nuovo ha un
-payload, quindi non entra nel mirror degli enum; nessun provider reale scrive una
-sintassi spenta, quindi `sintassi.generated.ts` non si muove — verificato, non
-sperato). Un binario di test in più: da centoventi a centoventuno righe
+payload, quindi non entra nel mirror degli enum; nessun provider reale scrive
+una sintassi spenta, quindi `sintassi.generated.ts` non si muove — verificato,
+non sperato). Un binario di test in più: da centoventi a centoventuno righe
 `test result: ok`.

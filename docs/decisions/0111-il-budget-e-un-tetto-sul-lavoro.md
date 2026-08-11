@@ -11,9 +11,9 @@
 
 Un drenaggio della coda eventi ha un tetto: mille e ventiquattro consegne, e poi
 si tronca. Serve a fermare due handler che si rimbalzano eventi a vicenda senza
-convergere — cioè a mettere un limite al **lavoro**. Quando quel limite scattava,
-però, il dispatcher faceva `self.pending.clear()`: buttava la coda intera, senza
-chiedersi cosa ci fosse dentro.
+convergere — cioè a mettere un limite al **lavoro**. Quando quel limite
+scattava, però, il dispatcher faceva `self.pending.clear()`: buttava la coda
+intera, senza chiedersi cosa ci fosse dentro.
 
 La domanda che la voce poneva, e che va tenuta perché è quella giusta: *se un
 budget esiste per fermare una cascata, perché la ferma buttando via anche ciò
@@ -26,10 +26,11 @@ che la cascata non ha causato?*
 > è più forte di ognuno dei singoli eventi buttati — e ciò che porta l'unica copia
 > di un fatto si consegna lo stesso.
 
-E la regola che decide quale delle due cose sia un evento non si scrive una terza
-volta: si sposta nel contratto, accanto alla classificazione da cui dipende.
-`fub_abi::rules::events::degrade` era il fondo del ponte verso la shell; adesso
-è del contratto, e il budget del dispatch la chiama invece di rispondersi da sé.
+E la regola che decide quale delle due cose sia un evento non si scrive una
+terza volta: si sposta nel contratto, accanto alla classificazione da cui
+dipende. `fub_abi::rules::events::degrade` era il fondo del ponte verso la
+shell; adesso è del contratto, e il budget del dispatch la chiama invece di
+rispondersi da sé.
 
 ## La falsa alternativa, ed è il pezzo di progetto del giro
 
@@ -103,17 +104,17 @@ butta) e l'ultimissimo giro.
   quattro (sopra).
 - **FALSA come alternativa**: «cosa serve, ed è una scelta fra due» (sopra).
 - **Una riga di `is_recoverable` diceva il falso, e lo diceva contando invece
-  che guardando**: «*sta qui e non in chi frena perché i freni sono **due***».
-  I freni erano tre; il terzo non chiedeva niente a quella funzione, ed è
+  che guardando**: «*sta qui e non in chi frena perché i freni sono **due***». I
+  freni erano tre; il terzo non chiedeva niente a quella funzione, ed è
   esattamente il modo in cui una classificazione «in un posto solo» si ritrova
   ad avere un secondo lettore che non l'ha mai letta.
 
 ## Il ritaglio: zero
 
 Non tocca il WIT in nessun punto. `overflow` esiste già nel contratto con il suo
-campo `dropped`, e nessun tipo cambia forma: cambia **cosa** finisce dentro
-quel conto e **quando** l'evento nasce. È la voce «nessuna firma» per davvero,
-e il `frozen/0.1.0.wit` non è stato sfiorato.
+campo `dropped`, e nessun tipo cambia forma: cambia **cosa** finisce dentro quel
+conto e **quando** l'evento nasce. È la voce «nessuna firma» per davvero, e il
+`frozen/0.1.0.wit` non è stato sfiorato.
 
 ## Dove sta la regola, e perché non nel dispatcher
 
@@ -126,9 +127,9 @@ Sta in `fub_abi::rules::events` per la ragione scritta in cima a
 [`crate::rules`](../../crates/fub-abi/src/rules/mod.rs): **chi la applica non è
 uno solo**. Il modulo teneva già la maschera di un abbonamento — *chi riceve
 cosa* — e questa è la stessa domanda posta da un canale pieno: *chi riceve cosa,
-quando non può ricevere tutto*. Il bus non la chiama, e non è un'incoerenza:
-lui non ha una raffica sotto gli occhi, ha un evento per volta, e di quella
-regola gli serve la sola metà che è già nel contratto (`is_recoverable`).
+quando non può ricevere tutto*. Il bus non la chiama, e non è un'incoerenza: lui
+non ha una raffica sotto gli occhi, ha un evento per volta, e di quella regola
+gli serve la sola metà che è già nel contratto (`is_recoverable`).
 
 ## Il rosso, e la zona cieca che ha trovato
 
@@ -148,8 +149,8 @@ Quattro rami tolti, uno alla volta:
    che avevo scritto aveva l'ultimo buttato in fondo, cioè non distingueva le
    due posizioni. Il caso che le distingue è quello dell'argomento —
    `index-updated` seguito da `vault-closed`, dove un invito in coda direbbe a
-   chi ha appena ricevuto la chiusura di andare a rileggere un vault che non
-   c'è più — ed è stato aggiunto;
+   chi ha appena ricevuto la chiusura di andare a rileggere un vault che non c'è
+   più — ed è stato aggiunto;
 4. l'`Overflow` emesso anche quando non c'è niente da buttare →
    `nothing_to_drop_is_no_invitation` rosso. È il caso che il ponte non
    incontrava mai e il dispatch incontra subito.

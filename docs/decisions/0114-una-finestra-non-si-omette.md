@@ -1,9 +1,8 @@
 # 0114 — Una finestra non si omette, e ciò che resta fuori si dice
 
-**Stato**: accolta
-**Data**: 2026-08-06
-**Chiude**: [§2.9](../roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui)
-**Commit**: *(questo commit)*
+**Stato**: accolta **Data**: 2026-08-06 **Chiude**:
+[§2.9](../roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) **Commit**:
+*(questo commit)*
 
 ---
 
@@ -34,8 +33,8 @@ si chiude a metà, con la metà che resta **dichiarata** invece che finta.
 ## Il diff ereditato: tenuto, e perché
 
 L'idea sotto le centocinquantasei righe è giusta, e non per gusto: è la stessa
-forma della [0092](0092-una-base-si-dichiara.md), dove *scrivere ciechi
-ha smesso di succedere omettendo ed è diventato un caso da nominare*. Prima, la
+forma della [0092](0092-una-base-si-dichiara.md), dove *scrivere ciechi ha
+smesso di succedere omettendo ed è diventato un caso da nominare*. Prima, la
 finestra era un parametro opzionale in coda; ometterlo voleva dire «tutto il
 vault», e ometterlo è la cosa che si fa **senza deciderlo**. Le tre superfici
 che ne approfittavano non erano state scelte da nessuno: la palette dei comandi
@@ -55,22 +54,22 @@ prossimo lettore ci si appoggia. Renderlo vero è costato una voce in
 
 Un conto che legge il sorgente vale quanto vale il modo di aggirarlo (trappola
 0a della [0109](0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md), misurata
-dodici volte in un giro solo). Con `export const SENZA_FINESTRA =
-"senza-finestra"` il tipo della costante è il letterale `"senza-finestra"`,
-quindi **scrivere quel letterale al posto della costante compilava**: una
-domanda aperta in più senza una riga in più da contare. Adesso è un
-`unique symbol`, che non si scrive: si nomina. Il conto e il compilatore stanno
-d'accordo **per costruzione** invece che per attenzione, ed è la forma che il
-`6d35a1f` aveva già scelto per le code del dispatcher — *dal conto al
-compilatore*.
+dodici volte in un giro solo). Con
+`export const SENZA_FINESTRA = "senza-finestra"` il tipo della costante è il
+letterale `"senza-finestra"`, quindi **scrivere quel letterale al posto della
+costante compilava**: una domanda aperta in più senza una riga in più da
+contare. Adesso è un `unique symbol`, che non si scrive: si nomina. Il conto e
+il compilatore stanno d'accordo **per costruzione** invece che per attenzione,
+ed è la forma che il `6d35a1f` aveva già scelto per le code del dispatcher —
+*dal conto al compilatore*.
 
-Le domande aperte oggi sono **due**, e sono nominate: `documentiEsistenti`
-(dove la risposta è già limitata dall'ingresso — non può contenere più righe di
-quante ne chiede il chiamante) e i tag dell'autocompletamento (dove il vault
-risponde col proprio **vocabolario**, che cresce col numero di concetti e non
-col numero di note: troncare lì non taglierebbe una risposta grande,
-taglierebbe l'alfabeto, e i tag dopo la lettera del taglio smetterebbero di
-completarsi senza che nessuno lo dica).
+Le domande aperte oggi sono **due**, e sono nominate: `documentiEsistenti` (dove
+la risposta è già limitata dall'ingresso — non può contenere più righe di quante
+ne chiede il chiamante) e i tag dell'autocompletamento (dove il vault risponde
+col proprio **vocabolario**, che cresce col numero di concetti e non col numero
+di note: troncare lì non taglierebbe una risposta grande, taglierebbe
+l'alfabeto, e i tag dopo la lettera del taglio smetterebbero di completarsi
+senza che nessuno lo dica).
 
 ### `archiDelVault` è stata tolta, e questo è un giudizio
 
@@ -84,17 +83,17 @@ comodo da copiare per il prossimo pannello.
 ## La virtualizzazione non è quello che si è fatto, e va detto
 
 Virtualizzare vuol dire disegnare ciò che si **vede**, e *cosa si vede* è una
-domanda di layout. In `happy-dom` il layout non esiste — è il buco dichiarato
-n. 5 della [0112](0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md), e
-questo verbale ne **cita** uno invece di dichiararne uno suo — e
-scrivere qui una finestra scorrevole vorrebbe dire scrivere codice che nessun
-presidio di questo repo può guardare. Ciò che si è fatto è la metà che sta
-*prima* del layout, ed è la metà che la voce stessa nominava: **quanto
-attraversa il ponte e quanti elementi nascono**. Duecento voci per livello, e il
-numero è il costo di un ridisegno e non una stima di quanto sia grande una
-cartella — l'albero si ricostruisce intero a ogni cambiamento, e ogni voce costa
-tre elementi e sette ascoltatori, cioè novemila elementi creati e buttati per
-salvare una nota dentro una cartella da tremila.
+domanda di layout. In `happy-dom` il layout non esiste — è il buco dichiarato n.
+5 della [0112](0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md), e questo
+verbale ne **cita** uno invece di dichiararne uno suo — e scrivere qui una
+finestra scorrevole vorrebbe dire scrivere codice che nessun presidio di questo
+repo può guardare. Ciò che si è fatto è la metà che sta *prima* del layout, ed è
+la metà che la voce stessa nominava: **quanto attraversa il ponte e quanti
+elementi nascono**. Duecento voci per livello, e il numero è il costo di un
+ridisegno e non una stima di quanto sia grande una cartella — l'albero si
+ricostruisce intero a ogni cambiamento, e ogni voce costa tre elementi e sette
+ascoltatori, cioè novemila elementi creati e buttati per salvare una nota dentro
+una cartella da tremila.
 
 L'altra metà resta scoperta e **non si chiude di straforo**: è la casella
 residua della voce, insieme al gesto che manca — «mostra le altre». La riga che
@@ -192,9 +191,10 @@ solo era rosso e tre erano verdi**:
   sono zero: la riga che compare parla solo di `altreCartelle`, e forzarlo a
   zero adesso è rosso.
 - **Il menu «nuovo spazio»**: interamente scoperto, stringa
-  `explorer.altre_cartelle` compresa, con zero occorrenze in tutti i `*.test.ts`.
-  Il secondo cliente della finestra non attraversava nessun presidio. Adesso il
-  banco clicca il `+` della striscia degli spazi e conta le voci del menu.
+  `explorer.altre_cartelle` compresa, con zero occorrenze in tutti i
+  `*.test.ts`. Il secondo cliente della finestra non attraversava nessun
+  presidio. Adesso il banco clicca il `+` della striscia degli spazi e conta le
+  voci del menu.
 
 Le altre cinque prove di rosso, fatte una alla volta e ripristinate: togliere la
 riga «altre N» dall'albero (rosso, tre presidi); togliere gli attributi imposti
@@ -208,10 +208,10 @@ al posto della costante (non compila).
 
 **Il type-check della shell non ha un nome.** `vite build` traspila senza
 controllare i tipi, `vitest` nemmeno, e la coppia che tutto il repo cita per
-verificare un lavoro di shell — `npm run test && npm run build` — non lo
-esegue. Il comando esisteva solo dentro `ci.yml`, scritto come `npx tsc
---noEmit`: cioè in un file che chi lavora non apre, e sotto una forma che non
-compare in nessuno `script` di `package.json`.
+verificare un lavoro di shell — `npm run test && npm run build` — non lo esegue.
+Il comando esisteva solo dentro `ci.yml`, scritto come `npx tsc --noEmit`: cioè
+in un file che chi lavora non apre, e sotto una forma che non compare in nessuno
+`script` di `package.json`.
 
 Non è un sospetto: **è successo dentro questo giro**. Due errori di tipo miei —
 un memo tipizzato su `RenderedDocument` invece che su `EmbedContent`, e un
@@ -230,22 +230,22 @@ la gente salta.
 
 Zero firme nel contratto, zero tipi nuovi di là dal confine, WIT congelato
 intatto: `Finestra` è un alias TypeScript locale al modulo delle query, e
-`ContenutoDiCartella` un record della shell. Nessuna dipendenza nuova. Il
-kernel non è stato toccato — è una voce di strato shell e lo è rimasta, che è
-anche la ragione per cui la prima metà della seconda casella si è potuta fare e
-la seconda no.
+`ContenutoDiCartella` un record della shell. Nessuna dipendenza nuova. Il kernel
+non è stato toccato — è una voce di strato shell e lo è rimasta, che è anche la
+ragione per cui la prima metà della seconda casella si è potuta fare e la
+seconda no.
 
 ## Le zone cieche, dichiarate
 
 - Il conto `finestre-aperte` ancora l'argomento mandato a capo:
-  `f(\n  SENZA_FINESTRA,\n)` non ha la virgola sulla stessa riga. `prettier` non
+  `f(\n SENZA_FINESTRA,\n)` non ha la virgola sulla stessa riga. `prettier` non
   spezza una chiamata così corta, e se lo facesse il conto **scenderebbe**
   invece di salire — cioè si vedrebbe.
-- Il conto non vede un tetto travestito da finestra: `{ offset: 0, limit:
-  100000 }` è una finestra per il tipo e per il conto, e non lo è per nessun
-  altro. Sta scritto accanto alla costante che passare un limite grande è la
-  cosa sbagliata, ed è tutto ciò che si può fare senza inventare un secondo
-  tipo.
+- Il conto non vede un tetto travestito da finestra:
+  `{ offset: 0, limit: 100000 }` è una finestra per il tipo e per il conto, e
+  non lo è per nessun altro. Sta scritto accanto alla costante che passare un
+  limite grande è la cosa sbagliata, ed è tutto ciò che si può fare senza
+  inventare un secondo tipo.
 - Il banco guarda l'**avvio**: ciò che la shell chiede solo aprendo un pannello
   non ci passa. È esattamente il buco che il conto copre, e le due coperture
   sono complementari di proposito.

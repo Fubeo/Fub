@@ -6,13 +6,19 @@
 | **Origine** | `todo.md` §15.7 (seduta 15) — la **prima metà**: il lavoro deve poter fallire in parte |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/15-il-disco.md) · [il registro](0067-il-registro-di-cio-che-e-successo.md) · [l'alimentazione risponde](0051-l-alimentazione-risponde.md) · [ciò che va storto è un evento](0052-cio-che-va-storto-e-un-evento.md) · [chi legge non aspetta chi legge](0024-chi-legge-non-aspetta-chi-legge.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/15-il-disco.md) ·
+[il registro](0067-il-registro-di-cio-che-e-successo.md) ·
+[l'alimentazione risponde](0051-l-alimentazione-risponde.md) ·
+[ciò che va storto è un evento](0052-cio-che-va-storto-e-un-evento.md) ·
+[chi legge non aspetta chi legge](0024-chi-legge-non-aspetta-chi-legge.md)
 
 ---
 
-Il §15.7 dice due cose, e le dice come se fossero una: che l'apertura di un vault
-deve poter **fallire in parte**, e che deve cambiare **forma** — da funzione che
-ritorna un vault a operazione a fasi, con progresso e cancellazione.
+Il §15.7 dice due cose, e le dice come se fossero una: che l'apertura di un
+vault deve poter **fallire in parte**, e che deve cambiare **forma** — da
+funzione che ritorna un vault a operazione a fasi, con progresso e
+cancellazione.
 
 Questo verbale chiude la prima e lascia la seconda scritta, con il perché. Il
 criterio è quello della [0031](0031-chi-possiede-i-bundle.md): un verbale può
@@ -57,8 +63,9 @@ si adatta al suo soggetto no.
 
 ### Uno scarto non è un `IndexLoss`, e i due non si fondono
 
-La tentazione era riusare il tipo che c'è: la [0051](0051-l-alimentazione-risponde.md)
-ha già `IndexLoss { id, why }`, che è campo per campo la stessa cosa.
+La tentazione era riusare il tipo che c'è: la
+[0051](0051-l-alimentazione-risponde.md) ha già `IndexLoss { id, why }`, che è
+campo per campo la stessa cosa.
 
 Sono due specie diverse, e la prova non è estetica — è che la
 [0052](0052-cio-che-va-storto-e-un-evento.md) le manda a **due severità
@@ -82,15 +89,15 @@ tre.
 con `subject: Some(id)` nomina il documento, e ha un consumatore vero —
 `ascoltaIGuasti()` nel centro notifiche. Non serviva niente di nuovo.
 
-**`IndexQuery::VaultStatus`, no**, e la riga che lo dice era già scritta, nel doc
-di `store_entries`: *«allargarlo a "e poi non ho scritto una cache" renderebbe
-quel numero la somma di due incidenti diversi»*. `VaultStatus` risponde a *questo
-vault vede le scritture altrui*; «non ho letto tre note all'apertura» è un
-incidente di un'altra specie, e la riga che avvertiva di non allargarlo vale
-identica qui. Averla trovata scritta da un turno precedente, e averla applicata a
-un caso che il suo autore non aveva in mente, è il modo in cui una frase in
-prosa in testa a un modulo fa il suo lavoro — la stessa lezione che la 0067 ha
-tratto da `storage.rs`.
+**`IndexQuery::VaultStatus`, no**, e la riga che lo dice era già scritta, nel
+doc di `store_entries`: *«allargarlo a "e poi non ho scritto una cache"
+renderebbe quel numero la somma di due incidenti diversi»*. `VaultStatus`
+risponde a *questo vault vede le scritture altrui*; «non ho letto tre note
+all'apertura» è un incidente di un'altra specie, e la riga che avvertiva di non
+allargarlo vale identica qui. Averla trovata scritta da un turno precedente, e
+averla applicata a un caso che il suo autore non aveva in mente, è il modo in
+cui una frase in prosa in testa a un modulo fa il suo lavoro — la stessa lezione
+che la 0067 ha tratto da `storage.rs`.
 
 Se un giorno l'esito dell'apertura dovrà essere **interrogabile**, sarà una
 query sua, e la si scriverà quando ci sarà un cliente: aggiungerne una adesso
@@ -98,8 +105,8 @@ senza nessuno che la chiama è la firma disegnata da un lato solo che la
 [0063](0063-la-maschera-e-dell-esemplare.md) ha appena rifiutato di fare due
 volte.
 
-**Il valore di ritorno, sì**, e questa è la scelta che costa qualcosa, quindi
-va argomentata. `VaultInfo` guadagna un campo `unread`. La ragione non è la
+**Il valore di ritorno, sì**, e questa è la scelta che costa qualcosa, quindi va
+argomentata. `VaultInfo` guadagna un campo `unread`. La ragione non è la
 comodità: è che **la coda eventi è best-effort proprio sotto questo carico**. La
 0052 ha lasciato aperto il §20.5 — il budget del dispatch svuota la coda
 ignorando `is_recoverable`, quindi un `Trouble` si può perdere sotto pressione —
@@ -112,9 +119,9 @@ aperto intero» è una proprietà dell'**operazione**, e chi la chiama la deve
 poter leggere dal proprio esito invece di ricostruirla da una sequenza di
 incidenti a cui potrebbe non aver assistito.
 
-Il campo sta in `VaultInfo` e **non** nel contratto, ed è per questo che non è il
-caso che la 0063 ha rifiutato: `VaultInfo` è un record dell'host, non una firma
-WIT. Non scade col freeze, non impone una major a chi lo cambia, e i suoi
+Il campo sta in `VaultInfo` e **non** nel contratto, ed è per questo che non è
+il caso che la 0063 ha rifiutato: `VaultInfo` è un record dell'host, non una
+firma WIT. Non scade col freeze, non impone una major a chi lo cambia, e i suoi
 clienti sono nominati nel modulo che lo definisce — l'IPC di oggi, l'API locale
 del 27.2, la CLI del 27.1 che «stamperebbe i primi due» e stamperebbe anche
 questo. Il costo di sbagliarlo è una riga; il costo di sbagliare una variante di
@@ -131,21 +138,21 @@ l'opposto del principio di questa voce.
 Ne seguono due cose che scrivere i presidi ha trovato, e che il ragionamento a
 tavolino non aveva:
 
-**Anagrafe e documenti indicizzati adesso divergono.** `IndexQuery::Entries` dice
-cosa c'è nel vault, `Workspace::documents()` dice cosa è arrivato agli indici, e
-prima di questa voce non potevano dire due cose diverse: o un documento si
-leggeva e si parsava, o il vault non si apriva. Uno scarto è precisamente il caso
-in cui divergono, ed è una proprietà nuova del kernel — non un effetto
-collaterale. Chi scriverà un `vault_health` (§15.2) troverà lì la sua prima
-domanda.
+**Anagrafe e documenti indicizzati adesso divergono.** `IndexQuery::Entries`
+dice cosa c'è nel vault, `Workspace::documents()` dice cosa è arrivato agli
+indici, e prima di questa voce non potevano dire due cose diverse: o un
+documento si leggeva e si parsava, o il vault non si apriva. Uno scarto è
+precisamente il caso in cui divergono, ed è una proprietà nuova del kernel — non
+un effetto collaterale. Chi scriverà un `vault_health` (§15.2) troverà lì la sua
+prima domanda.
 
 **`reconcile` riceve anche gli scarti.** Era il difetto che stava per nascere e
 che il presidio ha reso visibile: `reconcile` dichiara agli indici l'insieme
 **completo** dei documenti che esistono, e ognuno cancella ciò che non c'è
 dentro. Costruirlo dai soli documenti indicizzati avrebbe detto agli indici che
 la nota illeggibile è sparita — e alla prima apertura andata storta quella nota
-sarebbe uscita dalla ricerca, in silenzio, senza che nessuno l'avesse toccata.
-È la famiglia della [0004](0004-il-grafo-e-i-link-non-wiki.md) vista prima di
+sarebbe uscita dalla ricerca, in silenzio, senza che nessuno l'avesse toccata. È
+la famiglia della [0004](0004-il-grafo-e-i-link-non-wiki.md) vista prima di
 farla.
 
 ### La scansione resta fatale, e non è una tolleranza dimenticata
@@ -163,15 +170,15 @@ così vorrebbe dire potare gli indici sulla base di una verità parziale, in
 silenzio, e lasciare all'utente un vault che sembra intero e ha una cartella in
 meno.
 
-Meglio non aprire. È il verso della [0065](0065-una-scrittura-o-c-e-o-non-c-e.md)
-fra un danno raro e rumoroso e uno certo e muto, e non è chiuso per sempre:
-renderla tollerante è possibile il giorno in cui `reconcile` saprà dire
-«completo **tranne** sotto questo ramo», che è una firma del contratto e quindi
-una decisione sua.
+Meglio non aprire. È il verso della
+[0065](0065-una-scrittura-o-c-e-o-non-c-e.md) fra un danno raro e rumoroso e uno
+certo e muto, e non è chiuso per sempre: renderla tollerante è possibile il
+giorno in cui `reconcile` saprà dire «completo **tranne** sotto questo ramo»,
+che è una firma del contratto e quindi una decisione sua.
 
-Questa metà ha un presidio più debole delle altre, e va detto: il caso vero — una
-directory illeggibile per i permessi — non si provoca in modo portatile, e i test
-girano anche su Windows e macOS. Il presidio che c'è
+Questa metà ha un presidio più debole delle altre, e va detto: il caso vero —
+una directory illeggibile per i permessi — non si provoca in modo portatile, e i
+test girano anche su Windows e macOS. Il presidio che c'è
 (`un_vault_che_non_si_scandisce_non_si_apre_a_meta`) usa una radice che non
 esiste, quindi fissa il confine — un fallimento di scansione non diventa
 un'apertura vuota — senza coprire il caso del sottoalbero.
@@ -186,24 +193,24 @@ La seconda metà della voce — l'operazione a fasi, il progresso, la cancellazi
 dentro il prestito **esclusivo** del workspace, cioè quando nessuno può
 disegnare — e ha anche scritto che il giorno in cui l'apertura diventerà
 incrementale «*quella sarà una domanda vera, e la porta c'è già*». La porta c'è;
-ciò che manca è togliere la scansione da sotto il `write()`, e quello è il lavoro
-vero.
+ciò che manca è togliere la scansione da sotto il `write()`, e quello è il
+lavoro vero.
 
 **La cancellazione** è dove il riuso sembra gratis e non lo è. Il runner
 ([0032](0032-il-runner-dei-job.md)) ha la cancellazione a bandiera, e se
 l'apertura diventasse un job la erediterebbe senza aggiungere niente al
-contratto. Ma la 0032 dichiara anche il proprio limite: la bandiera la scopre chi
-**chiama l'host**, perché un job non interroga niente — è `JobHost` a rifiutare
-di servirlo. Una scansione che cammina il disco senza toccare l'host arriverebbe
-in fondo lo stesso. Quindi anche a metà voce fatta, «annullare l'apertura di un
-vault enorme» resta da decidere, e non è la stessa decisione di «l'apertura è un
-job».
+contratto. Ma la 0032 dichiara anche il proprio limite: la bandiera la scopre
+chi **chiama l'host**, perché un job non interroga niente — è `JobHost` a
+rifiutare di servirlo. Una scansione che cammina il disco senza toccare l'host
+arriverebbe in fondo lo stesso. Quindi anche a metà voce fatta, «annullare
+l'apertura di un vault enorme» resta da decidere, e non è la stessa decisione di
+«l'apertura è un job».
 
-**La forma a fasi** è la decisione grossa, e ha un prezzo misurato che nessuno ha
-ancora deciso di pagare. La [0024](0024-chi-legge-non-aspetta-chi-legge.md) ha
-misurato che `reindex` tiene il workspace in esclusiva ~780 ms su 2000 note, e ha
-notato che oggi quel lock non affama nessuno **solo** perché `Host::open` lo
-chiama su un `Workspace` che possiede ancora, prima di avvolgerlo nell'`Arc`.
+**La forma a fasi** è la decisione grossa, e ha un prezzo misurato che nessuno
+ha ancora deciso di pagare. La [0024](0024-chi-legge-non-aspetta-chi-legge.md)
+ha misurato che `reindex` tiene il workspace in esclusiva ~780 ms su 2000 note,
+e ha notato che oggi quel lock non affama nessuno **solo** perché `Host::open`
+lo chiama su un `Workspace` che possiede ancora, prima di avvolgerlo nell'`Arc`.
 Quella proprietà è ciò che cade nel momento esatto in cui l'apertura diventa
 osservabile: se qualcuno può chiedere a che punto è, il workspace è già
 condiviso, e la scansione entra in contesa con chi legge — e un `RwLock` che si
@@ -239,14 +246,14 @@ lasciarlo era il minimo: era prosa che sarebbe diventata falsa senza che niente
 diventasse rosso.
 
 **I presidi si sono verificati rossi**, come la 0066 col lock e la 0067 con sei
-sabotaggi: **otto su otto**. Rimettere il `?` sulla lettura (quattro test rossi);
-rimetterlo sul parse; togliere l'emissione dei guasti; emettere `Warning` invece
-di `Failure`; emettere i guasti **dopo** `VaultOpened`; togliere gli scarti
-dall'insieme di `reconcile`; far tornare un'apertura vuota quando la scansione
-fallisce; far arrivare a `VaultInfo` una lista vuota. I due che contano di più
-sono il quinto e il sesto: il quinto perché l'ordine degli eventi è il genere di
-cosa che un test scritto male non guarda, e il sesto perché è il difetto che il
-presidio ha **trovato** invece che confermare.
+sabotaggi: **otto su otto**. Rimettere il `?` sulla lettura (quattro test
+rossi); rimetterlo sul parse; togliere l'emissione dei guasti; emettere
+`Warning` invece di `Failure`; emettere i guasti **dopo** `VaultOpened`;
+togliere gli scarti dall'insieme di `reconcile`; far tornare un'apertura vuota
+quando la scansione fallisce; far arrivare a `VaultInfo` una lista vuota. I due
+che contano di più sono il quinto e il sesto: il quinto perché l'ordine degli
+eventi è il genere di cosa che un test scritto male non guarda, e il sesto
+perché è il difetto che il presidio ha **trovato** invece che confermare.
 
 ## Cosa resta scoperto
 
@@ -263,11 +270,11 @@ kernel; mostrarli è di un'altra voce, che esiste e ha un numero.
 
 **`EventMask::all()` non nomina `EventKind::Trouble`**, e l'ha trovato il
 presidio: un `EventHandler` che chiede *tutto* non riceve i guasti. Il centro
-notifiche funziona perché il ponte verso la shell prende i `Notice` dal bus e non
-passa da una maschera, quindi non è un difetto vivo — ma è una promessa che vale
-a metà e in silenzio, e nel posto peggiore: la parola «all». Non si tocca qui —
-è `fub-abi`, è materia della 0052, e cambiare cosa riceve un handler che ha già
-scritto `all()` è una decisione con un verbale suo — e resta segnalata.
+notifiche funziona perché il ponte verso la shell prende i `Notice` dal bus e
+non passa da una maschera, quindi non è un difetto vivo — ma è una promessa che
+vale a metà e in silenzio, e nel posto peggiore: la parola «all». Non si tocca
+qui — è `fub-abi`, è materia della 0052, e cambiare cosa riceve un handler che
+ha già scritto `all()` è una decisione con un verbale suo — e resta segnalata.
 
 **Un documento illeggibile perde il `meta` che l'anagrafe ne ricordava**, cioè
 il frontmatter e l'outline. La sua voce resta, con dimensione e data; l'impronta

@@ -6,17 +6,18 @@
 | **Origine** | `todo.md` §5.1–§5.5 (seduta 5, *ex* §2.28, §2.18, §2.17, §2.26, §1.27) |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/05-il-canale-dati.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/05-il-canale-dati.md)
 
 ---
 
 Cinque voci, e una sola frase che le tiene insieme: **il canale dati prometteva
-di essere il canale di chiunque e non lo era**. La [decisione 0005](0005-canale-dati-verso-le-view.md)
-lo aveva chiamato «il canale dati verso le view» e in quel giro gli aveva
-aggiunto sei varianti — tutte dalla parte che nessun provider poteva servire.
-Un autore di plugin leggeva nove varianti e ne poteva servire due; le altre
-sette il kernel se le rispondeva da sé con un `return` prima del ciclo, e
-nessuno glielo diceva.
+di essere il canale di chiunque e non lo era**. La
+[decisione 0005](0005-canale-dati-verso-le-view.md) lo aveva chiamato «il canale
+dati verso le view» e in quel giro gli aveva aggiunto sei varianti — tutte dalla
+parte che nessun provider poteva servire. Un autore di plugin leggeva nove
+varianti e ne poteva servire due; le altre sette il kernel se le rispondeva da
+sé con un `return` prima del ciclo, e nessuno glielo diceva.
 
 Le cinque voci sono chiuse.
 
@@ -66,54 +67,55 @@ del kernel sono un indice come gli altri.**
   lì la risposta si *compone* — il conteggio dei tag, l'elenco dei backlink, il
   verdetto di un controllo di salute — e due autori per la stessa risposta vuol
   dire che vince l'ordine di montaggio. Una **foglia** può averne più d'uno,
-  perché `#rust` seleziona le stesse note per chiunque le conti: chi la rivendica
-  promette la stessa risposta degli altri, e a chi sia andata davvero risponde il
-  piano, che è ispezionabile. È ciò che permette a tantivy di dichiarare `Tag` e
-  `Folder` — che ha indicizzato apposta — e al pianificatore di consegnargli
-  `testo AND cartella` come una clausola sola invece di spezzarla: cioè il filtro
-  **dentro** il motore, che è ciò che la 0005 aveva costruito con l'ambito e che
-  una decomposizione ingenua avrebbe buttato via.
+  perché `#rust` seleziona le stesse note per chiunque le conti: chi la
+  rivendica promette la stessa risposta degli altri, e a chi sia andata davvero
+  risponde il piano, che è ispezionabile. È ciò che permette a tantivy di
+  dichiarare `Tag` e `Folder` — che ha indicizzato apposta — e al pianificatore
+  di consegnargli `testo AND cartella` come una clausola sola invece di
+  spezzarla: cioè il filtro **dentro** il motore, che è ciò che la 0005 aveva
+  costruito con l'ambito e che una decomposizione ingenua avrebbe buttato via.
 - **Il conflitto ha finalmente dove accadere, ed è la disciplina della
   [0017](0017-chi-disegna-cio-che-il-core-non-conosce.md).** Due indici che
   rivendicano `Tags` non si oscurano più a vicenda: il secondo riceve un
-  `RouteConflict` e **non si registra affatto** — nemmeno per le rotte libere che
-  portava con sé, perché un indice registrato a metà risponde ad alcune domande e
-  non ad altre senza che nessuno sappia quali. Sostituire resta possibile e si
-  chiede per nome (`Workspace::replace_index_provider`), ed è anche il modo in cui
-  l'indice del **kernel** si scavalca: `Backlinks`, `Tags` e gli altri non sono
-  più un ramo privilegiato, sono rotte come le altre.
-- **Il pianificatore è del kernel, e la struttura è del contratto.** Chi decide a
-  chi va una foglia è [`index::plan`](../../crates/fub-kernel/src/index/plan.rs);
-  cosa significhino OR, AND e la negazione è scritto **una volta**, in
-  `QueryEvaluator`, e lo usano il pianificatore, l'indice del kernel e chiunque
-  implementi un indice senza voler tradurre l'albero nel proprio motore. Due
-  implementazioni della stessa algebra divergerebbero sul caso che nessuno prova
-  — il `NOT` di un insieme vuoto, l'AND senza letterali — e la divergenza sarebbe
-  muta.
-- **Ciò che il destinatario non saprebbe valutare arriva già risolto**, dentro un
-  `QueryPredicate::Docs`. Vale per le domande che portano un'espressione ma le
-  serve un altro (i tag di un sottoinsieme, i vicini di una selezione): chi la
-  riceve non deve sapere da quale domanda venisse, e non deve saper valutare
+  `RouteConflict` e **non si registra affatto** — nemmeno per le rotte libere
+  che portava con sé, perché un indice registrato a metà risponde ad alcune
+  domande e non ad altre senza che nessuno sappia quali. Sostituire resta
+  possibile e si chiede per nome (`Workspace::replace_index_provider`), ed è
+  anche il modo in cui l'indice del **kernel** si scavalca: `Backlinks`, `Tags`
+  e gli altri non sono più un ramo privilegiato, sono rotte come le altre.
+- **Il pianificatore è del kernel, e la struttura è del contratto.** Chi decide
+  a chi va una foglia è
+  [`index::plan`](../../crates/fub-kernel/src/index/plan.rs); cosa significhino
+  OR, AND e la negazione è scritto **una volta**, in `QueryEvaluator`, e lo
+  usano il pianificatore, l'indice del kernel e chiunque implementi un indice
+  senza voler tradurre l'albero nel proprio motore. Due implementazioni della
+  stessa algebra divergerebbero sul caso che nessuno prova — il `NOT` di un
+  insieme vuoto, l'AND senza letterali — e la divergenza sarebbe muta.
+- **Ciò che il destinatario non saprebbe valutare arriva già risolto**, dentro
+  un `QueryPredicate::Docs`. Vale per le domande che portano un'espressione ma
+  le serve un altro (i tag di un sottoinsieme, i vicini di una selezione): chi
+  la riceve non deve sapere da quale domanda venisse, e non deve saper valutare
   foglie che non ha dichiarato.
 - **Le faccette che la 0005 aveva dichiarato fuori portata adesso ci sono, e non
   sono costate un campo.** Quel verbale diceva: «le faccette sul risultato
   full-text servono un campo facet in tantivy e la decisione di chi le calcola».
   Con un linguaggio non servono nessuna delle due cose — `Tags { matching }` è i
-  tag di *quel* sottoinsieme, il sottoinsieme è una query e i tag li conta chi li
-  ha in cache. È il primo caso in cui una voce chiusa qui **toglie** lavoro a una
-  voce futura invece di aggiungerne.
-- **I semi dei vicini sono un'espressione, non un documento.** `Neighbors { seeds
-  }` con i semi su tutto il vault, un passo, verso uscente **è** l'elenco degli
-  archi: il grafo intero in una domanda sola. Senza, il §5.4 non si poteva
-  chiudere — la 0005 aveva scritto che il grafo si ricostruisce «un documento
-  alla volta», che dentro il kernel è ragionevole e sull'IPC vuol dire mille
-  viaggi per disegnare un grafo, cioè un comando bespoke che resta.
-- **`Unserved` è un errore a sé.** «Nessuno serve questa domanda» e «chi la serve
-  ha fallito» arrivavano al chiamante nella stessa forma — un `BadArgs`, per
-  giunta quello dell'**ultimo** interpellato mentre ogni altro errore tornava dal
-  **primo** che lo dava — e chi disegna non poteva scegliere fra «installa un
-  indice» e «qualcosa è andato storto». È il §12.2 applicato al canale più usato
-  dopo la lista documenti, e arriva gratis col routing.
+  tag di *quel* sottoinsieme, il sottoinsieme è una query e i tag li conta chi
+  li ha in cache. È il primo caso in cui una voce chiusa qui **toglie** lavoro a
+  una voce futura invece di aggiungerne.
+- **I semi dei vicini sono un'espressione, non un documento.**
+  `Neighbors { seeds }` con i semi su tutto il vault, un passo, verso uscente
+  **è** l'elenco degli archi: il grafo intero in una domanda sola. Senza, il
+  §5.4 non si poteva chiudere — la 0005 aveva scritto che il grafo si
+  ricostruisce «un documento alla volta», che dentro il kernel è ragionevole e
+  sull'IPC vuol dire mille viaggi per disegnare un grafo, cioè un comando
+  bespoke che resta.
+- **`Unserved` è un errore a sé.** «Nessuno serve questa domanda» e «chi la
+  serve ha fallito» arrivavano al chiamante nella stessa forma — un `BadArgs`,
+  per giunta quello dell'**ultimo** interpellato mentre ogni altro errore
+  tornava dal **primo** che lo dava — e chi disegna non poteva scegliere fra
+  «installa un indice» e «qualcosa è andato storto». È il §12.2 applicato al
+  canale più usato dopo la lista documenti, e arriva gratis col routing.
 - **`BadArgs` è tornato a significare quello che dice.** Era il protocollo con
   cui un indice diceva «non è roba mia», quindi ogni provider doveva elencare in
   un `match` tutte le famiglie che *non* serviva. Adesso quel `match` è
@@ -122,25 +124,26 @@ del kernel sono un indice come gli altri.**
 - **`select` ha tre casi e non una convenzione.** Era un `Vec<String>` con
   «vuoto = tutte», e la convenzione si è rotta quando le due domande sono
   diventate una: un elenco di risultati di ricerca che si trascina l'intero
-  frontmatter di mille note è il default sbagliato, e «tutte» non si dice con una
-  lista di chiavi che non si conoscono. `PropertySelect { None, All, Keys }`.
+  frontmatter di mille note è il default sbagliato, e «tutte» non si dice con
+  una lista di chiavi che non si conoscono.
+  `PropertySelect { None, All, Keys }`.
 - **`list_documents` prende una finestra, e la cache dei metadati è ordinata per
   costruzione.** Le due cose vanno insieme: la finestra senza un ordine totale
   ripete e salta righe, e l'ordine imposto a ogni chiamata era un `sort` sul
   vault intero per rispondere a chi ne voleva venti. `HashMap` → `BTreeMap`: si
-  paga un `log n` per lettura, si smette di pagare un riordino per interrogazione
-  e una clonazione del vault per chiamata.
+  paga un `log n` per lettura, si smette di pagare un riordino per
+  interrogazione e una clonazione del vault per chiamata.
 - **Le spec di view e comandi sono dato di registrazione.** `view_owner`
   chiamava `views()` su *ogni* provider per risolvere un id, e `check_params` la
   richiamava sul vincitore per convalidare i parametri: due giri di allocazioni
   per azione, sul percorso caldo di ogni render — e con le istanze della
   [0016](0016-cosa-e-una-view.md) quel percorso è quello di ogni click. La
   domanda però non era di prestazioni ma di **forma**: chi possiede la verità su
-  cosa un provider offre. La risposta è il kernel, dal momento in cui il provider
-  gliel'ha detta; chi cambia idea lo dichiara (`Workspace::refresh_specs`) invece
-  di farlo scoprire a chi interroga. **I comandi avevano lo stesso difetto e si
-  chiudono con la stessa riga**: `command_owner` rifaceva `commands()` su ogni
-  provider a ogni invocazione.
+  cosa un provider offre. La risposta è il kernel, dal momento in cui il
+  provider gliel'ha detta; chi cambia idea lo dichiara
+  (`Workspace::refresh_specs`) invece di farlo scoprire a chi interroga. **I
+  comandi avevano lo stesso difetto e si chiudono con la stessa riga**:
+  `command_owner` rifaceva `commands()` su ogni provider a ogni invocazione.
 - **La shell ha le stesse capacità di un plugin.** Erano quattro comandi Tauri —
   `search`, `list_tags`, `graph_data` e `backlinks` — e i primi tre avvolgevano
   lo stesso `query_index` mentre il quarto lo **scavalcava**, chiamando il grafo
@@ -164,8 +167,8 @@ mirror TS↔Rust). Adesso il tag è adiacente (`kind` + `value`).
 
 ## Il dogfooding, che è dove si è scoperto se regge
 
-[`canale_dati_e2e.rs`](../../crates/fub-features/tests/canale_dati_e2e.rs):
-due indici veri — quello del kernel e tantivy — su un vault in cui testo e
+[`canale_dati_e2e.rs`](../../crates/fub-features/tests/canale_dati_e2e.rs): due
+indici veri — quello del kernel e tantivy — su un vault in cui testo e
 frontmatter dicono cose **diverse**, che è l'unico modo perché un join possa
 sbagliare in modo visibile.
 
@@ -182,25 +185,25 @@ Tre cose sono venute fuori solo scrivendolo:
 - **Il pushdown non è un'ottimizzazione ma una promessa da mantenere.** La 0005
   aveva costruito l'ambito *dentro* tantivy proprio perché il totale e le pagine
   restassero veri; con le cartelle diventate foglie, una decomposizione ingenua
-  le avrebbe valutate nel kernel e post-filtrate — cioè avrebbe rotto in silenzio
-  una proprietà decisa. È da lì che nasce la regola «una foglia può avere più
-  valutatori»: senza, tantivy non avrebbe potuto rivendicare `Folder` e il filtro
-  sarebbe uscito dal motore.
+  le avrebbe valutate nel kernel e post-filtrate — cioè avrebbe rotto in
+  silenzio una proprietà decisa. È da lì che nasce la regola «una foglia può
+  avere più valutatori»: senza, tantivy non avrebbe potuto rivendicare `Folder`
+  e il filtro sarebbe uscito dal motore.
 - **La frase esatta non aveva bisogno di una sintassi.** `TextMode::Phrase` è un
   campo della foglia, e le virgolette che l'utente digitava (interpretate dal
   parser di una dipendenza) diventano una scelta esplicita di chi compone la
   query.
-- **La negazione attraversa il confine fra due indici** senza che nessuno dei due
-  la sappia fare: `rust AND NOT in Archivio` è una clausola dove una foglia è di
-  tantivy e l'altra del kernel, e il complemento si prende sull'universo del
-  vault — che è una cosa che solo il kernel sa qual è.
+- **La negazione attraversa il confine fra due indici** senza che nessuno dei
+  due la sappia fare: `rust AND NOT in Archivio` è una clausola dove una foglia
+  è di tantivy e l'altra del kernel, e il complemento si prende sull'universo
+  del vault — che è una cosa che solo il kernel sa qual è.
 
 ## La linea di base ritagliata
 
 Il presidio dell'additività ha nominato le rotture, ed è il suo mestiere: sono
 deliberate, sono pre-freeze, e la baseline è stata ritagliata con la ragione
-scritta dentro `crates/fub-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella dei ritagli del
-suo README).
+scritta dentro `crates/fub-abi/wit/frozen/0.1.0.wit` (più la riga nella tabella
+dei ritagli del suo README).
 
 | cosa | perché |
 |---|---|
@@ -231,9 +234,9 @@ Tutto il resto è **additivo**: i tipi del linguaggio, `property-select`,
   prefissi riconosciuti *dalla shell* e tradotti in foglie, che è una scelta di
   UI e non di contratto.
 - **Il kernel non compone le rilevanze.** Quando due rami portano un punteggio
-  resta il **maggiore**: sommarli vorrebbe dire inventare uno scoring che nessuno
-  ha misurato. Comporle davvero è mestiere di chi indicizza, e ci arriva col
-  pushdown — cioè quando la clausola gli va intera.
+  resta il **maggiore**: sommarli vorrebbe dire inventare uno scoring che
+  nessuno ha misurato. Comporle davvero è mestiere di chi indicizza, e ci arriva
+  col pushdown — cioè quando la clausola gli va intera.
 - **Il pushdown non porta giù `sort` e `select` verso un indice registrato.**
   Ordinare per una proprietà del frontmatter e riempire le colonne li fa chi il
   frontmatter ce l'ha in cache; un indice che ricevesse un `sort` che non sa
@@ -245,8 +248,8 @@ Tutto il resto è **additivo**: i tipi del linguaggio, `property-select`,
 - **Il §5.1 doveva andare col §8.1, e ne ha fatta la metà.** Il canale dati è
   adesso un sottosistema con un confine (`kernel/src/index/`), che è ciò che la
   scomposizione del `Workspace` deve accogliere; ma il `Workspace` resta un
-  oggetto-dio con quindici campi, e la seconda metà — gli altri sottosistemi —
-  è ancora il §8.1. Farla adesso avrebbe voluto dire scomporre tutto in un giro
+  oggetto-dio con quindici campi, e la seconda metà — gli altri sottosistemi — è
+  ancora il §8.1. Farla adesso avrebbe voluto dire scomporre tutto in un giro
   che ha già cambiato il contratto in sei punti.
 - **`CoreIndex` copia i metadati invece di prenderli.** L'alimentazione è quella
   di ogni indice (`&DocumentModel`), quindi frontmatter, outline e link si
@@ -254,8 +257,8 @@ Tutto il resto è **additivo**: i tipi del linguaggio, `property-select`,
   piccolo di quanto sembri: il **corpo** in cache non ci va (è lo split
   metadata/body), quindi la copia è più piccola del modello che l'ha generata.
 - **Nessuna cache dei piani.** Il piano si ricalcola a ogni query: è una
-  camminata su una manciata di letterali e una lettura di due mappe. Metterci una
-  cache adesso vorrebbe dire inventarne l'invalidazione (le rotte cambiano a
+  camminata su una manciata di letterali e una lettura di due mappe. Metterci
+  una cache adesso vorrebbe dire inventarne l'invalidazione (le rotte cambiano a
   ogni registrazione) per un costo che nessuno ha misurato.
 
 ## Verifica
@@ -265,12 +268,12 @@ abi↔WIT coi tipi nuovi e la funzione `routes`, l'additività col ritaglio
 dichiarato, i nove end-to-end del canale con due indici veri, i tre della
 registrazione e della finestra, e i quattro del routing (nessuno interpella chi
 non ha dichiarato, il conflitto al montaggio, la sostituzione per nome,
-`Unserved`). `npx tsc` pulito, **165 test vitest** (erano 160: cinque li porta il
-mirror del canale dati), `vite build` ok.
+`Unserved`). `npx tsc` pulito, **165 test vitest** (erano 160: cinque li porta
+il mirror del canale dati), `vite build` ok.
 
 **Non verificato visivamente nell'app Tauri.** Tre cose meriterebbero un occhio
 quando qualcuno la aprirà, e sono le tre che i test di questa shell non possono
 vedere: la **ricerca** (la stringa dell'utente adesso è una foglia di termini, e
 `tags:` non è più sintassi), il **grafo** (due query invece di un comando, e i
-nodi arrivano da `documents`), e l'**autocompletamento dei tag**, che passa dallo
-stesso canale generico.
+nodi arrivano da `documents`), e l'**autocompletamento dei tag**, che passa
+dallo stesso canale generico.

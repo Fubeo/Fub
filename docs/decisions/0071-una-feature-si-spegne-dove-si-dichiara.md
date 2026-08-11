@@ -6,7 +6,11 @@
 | **Origine** | `todo.md` §16.3 (seduta 16) — il **primo tempo**: la cargo feature per bundle |
 | **Commit** | *(questo commit)* |
 
-Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) · [la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) · [l'inventario che è la sorgente](0056-un-elenco-che-e-la-sorgente.md) · [chi possiede i bundle](0031-chi-possiede-i-bundle.md) · [il banco del lato host](0055-il-banco-del-lato-host.md)
+Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
+[la seduta](../roadmap/16-crate-sdk-banchi-di-prova.md) ·
+[l'inventario che è la sorgente](0056-un-elenco-che-e-la-sorgente.md) ·
+[chi possiede i bundle](0031-chi-possiede-i-bundle.md) ·
+[il banco del lato host](0055-il-banco-del-lato-host.md)
 
 ---
 
@@ -24,27 +28,27 @@ indice.
 
 ## La decisione
 
-**Ogni feature ufficiale ha una cargo feature omonima, e il posto in cui si legge
-è l'inventario.**
+**Ogni feature ufficiale ha una cargo feature omonima, e il posto in cui si
+legge è l'inventario.**
 
 - `[features]` in `crates/fub-features/Cargo.toml`: `search`, `versioning`,
   `backlinks`, `outline`, `tags`, `stats`, `commands`, `blocks`. `default` le
   accende tutte. `tantivy` è `optional` e sta dietro `search`, che è l'unica
   dipendenza pesante del crate ed è di una feature sola.
-- Ogni riga di `src/inventario.rs` sta dietro un `#[cfg(feature = "…")]`, insieme
-  al suo `pub mod`. `UFFICIALI` smette di essere `[FeatureUfficiale; 8]` e
-  diventa `&[FeatureUfficiale]`: **il numero non è più una costante**, e non deve
-  esserlo.
+- Ogni riga di `src/inventario.rs` sta dietro un `#[cfg(feature = "…")]`,
+  insieme al suo `pub mod`. `UFFICIALI` smette di essere `[FeatureUfficiale; 8]`
+  e diventa `&[FeatureUfficiale]`: **il numero non è più una costante**, e non
+  deve esserlo.
 - `fub-host` inoltra, una feature per bundle, sotto l'ombrello
   `feature-ufficiali`; i tre siti irregolari di `mount.rs` — indice, versioning,
   blocchi — e la superficie versioning di `session.rs` seguono il `cfg`.
-- `fub-app` non ha cargo feature per bundle: l'app che spediamo è la build piena,
-  e chiede per nome la sola feature che usa direttamente (`versioning`, per
-  `VersionRef` che attraversa l'IPC).
+- `fub-app` non ha cargo feature per bundle: l'app che spediamo è la build
+  piena, e chiede per nome la sola feature che usa direttamente (`versioning`,
+  per `VersionRef` che attraversa l'IPC).
 
-**La misura**: il grafo delle dipendenze di `fub-features` passa da **120 crate a
-26** compilando la sola `outline`. È tutto ciò che il primo tempo prometteva, ed
-è arrivato intero.
+**La misura**: il grafo delle dipendenze di `fub-features` passa da **120 crate
+a 26** compilando la sola `outline`. È tutto ciò che il primo tempo prometteva,
+ed è arrivato intero.
 
 ## Le decisioni prese, da NON ridiscutere senza motivo
 
@@ -56,8 +60,8 @@ La voce lo diceva già, come cliente arrivato dalla
 lì».
 
 La ragione per cui è la scelta giusta si vede provando l'alternativa. Se il
-`#[cfg]` stesse solo sul `pub mod`, l'inventario resterebbe di otto righe in ogni
-build, e in quelle parziali nominerebbe moduli che non esistono — cioè non
+`#[cfg]` stesse solo sul `pub mod`, l'inventario resterebbe di otto righe in
+ogni build, e in quelle parziali nominerebbe moduli che non esistono — cioè non
 compilerebbe, e va bene. Ma la variante che compila è peggio: un inventario che
 elenca *tutti* i bundle e un `mount` che ne salta alcuni. Quello è precisamente
 il difetto che la 0056 ha chiuso — **un elenco che descrive invece di
@@ -75,11 +79,11 @@ e non compilata.
 l'id di un bundle è `fub.<nome del modulo>` e la cargo feature ha il nome del
 modulo, quindi la corrispondenza è togliere un prefisso.
 
-Non è un dettaglio di implementazione. Una tabella `("search", SEARCH_ID)` sarebbe
-stata un terzo elenco da tenere allineato agli altri due — il difetto di partenza
-scritto una volta di più, con nomi migliori. Che i nomi coincidessero già era una
-fortuna, e vale la pena dirlo: se un giorno non coincidessero, la risposta è
-rinominare, non aggiungere la tabella.
+Non è un dettaglio di implementazione. Una tabella `("search", SEARCH_ID)`
+sarebbe stata un terzo elenco da tenere allineato agli altri due — il difetto di
+partenza scritto una volta di più, con nomi migliori. Che i nomi coincidessero
+già era una fortuna, e vale la pena dirlo: se un giorno non coincidessero, la
+risposta è rinominare, non aggiungere la tabella.
 
 Il presidio prova tre cose, e le direzioni non sono simmetriche:
 
@@ -96,8 +100,8 @@ Le prime due sono state verificate al contrario. Togliere una riga
 dall'inventario lasciando la cargo feature rende rosso il terzo test con
 l'insieme stampato. Togliere una cargo feature lasciando la riga non arriva
 nemmeno al test: **cargo rifiuta il manifest**, perché `default` nomina una
-feature che non c'è. È un presidio migliore di quello che avevamo scritto, e
-non l'abbiamo scritto noi.
+feature che non c'è. È un presidio migliore di quello che avevamo scritto, e non
+l'abbiamo scritto noi.
 
 ### CI compila tre configurazioni parziali, e sono `build` e non `test`
 
@@ -105,8 +109,8 @@ Il `cargo test --workspace` compila sempre la build piena, quindi da solo non si
 accorgerebbe mai che lo scorporo è tornato a essere finto: basta un `use` senza
 `#[cfg]` e tutto resta verde, con tantivy dentro il pannello struttura. I tre
 comandi in CI — nessuna feature, la sola `outline`, `fub-host` con la sola
-`outline` — sono la misura al contrario, e la domanda che pongono è *se compila*,
-non *se funziona*. Da qui la scelta di `build`.
+`outline` — sono la misura al contrario, e la domanda che pongono è *se
+compila*, non *se funziona*. Da qui la scelta di `build`.
 
 ### Il banco di una feature vive con lei
 
@@ -114,14 +118,15 @@ Nove file di test di `fub-features` hanno preso un `#![cfg(feature = "…")]` in
 testa: senza il modulo non hanno un soggetto. Due presidi hanno preso un `cfg`
 **diverso**, e la differenza dice qualcosa.
 
-`conformita.rs` e `view_refresh_masks.rs` finiscono con `assert!(viste > 0,
-"l'inventario non ha nessuna view")` — il conto che la 0056 aveva messo lì con la
-ragione «una suite che gira su zero implementazioni non è una suite, è un test
-che passa». Quella ragione resta buona, ma da oggi *zero view* è anche una build
-legittima. Il `cfg` che hanno preso è quindi `any(backlinks, outline, tags,
-stats)`: **la domanda ha senso se c'è almeno una view**, e allora la risposta
-deve essere maggiore di zero. Indebolire l'assert a `>= 0` avrebbe spento il
-presidio per far passare un caso nuovo, che è il verso sbagliato.
+`conformita.rs` e `view_refresh_masks.rs` finiscono con
+`assert!(viste > 0, "l'inventario non ha nessuna view")` — il conto che la 0056
+aveva messo lì con la ragione «una suite che gira su zero implementazioni non è
+una suite, è un test che passa». Quella ragione resta buona, ma da oggi *zero
+view* è anche una build legittima. Il `cfg` che hanno preso è quindi
+`any(backlinks, outline, tags, stats)`: **la domanda ha senso se c'è almeno una
+view**, e allora la risposta deve essere maggiore di zero. Indebolire l'assert a
+`>= 0` avrebbe spento il presidio per far passare un caso nuovo, che è il verso
+sbagliato.
 
 ### L'app non si spegne a pezzi, e chi sta sotto sì
 
@@ -137,9 +142,9 @@ di qualcun altro — la feature unification di cargo è un fatto della build, no
 una promessa fra crate.
 
 Nota di attrito, per chi ci ripasserà: `default-features = false` va scritto
-nella riga di `[workspace.dependencies]`, non nel crate che consuma. Cargo ignora
-la seconda forma se la prima non c'è, e lo dice in un warning che diventerà un
-errore.
+nella riga di `[workspace.dependencies]`, non nel crate che consuma. Cargo
+ignora la seconda forma se la prima non c'è, e lo dice in un warning che
+diventerà un errore.
 
 ## Cosa resta fuori, e perché
 
@@ -178,8 +183,8 @@ scritto in italiano invecchia il giorno in cui il numero diventa condizionale**,
 e chi rende condizionale un numero è l'unico che sa dove sono le righe da
 riscrivere. Cercarle è parte del lavoro, non una pulizia da fare dopo.
 
-**Un presidio che diventa rosso per un caso nuovo e legittimo non si indebolisce:
-si circoscrive.** Il conto `viste > 0` è rimasto quello che era, ed è cambiata la
-condizione in cui gli si fa la domanda. La differenza fra le due mosse — abbassare
-la soglia, o dichiarare quando la soglia si applica — è che la prima spegne il
-presidio anche nel caso per cui era stato scritto.
+**Un presidio che diventa rosso per un caso nuovo e legittimo non si
+indebolisce: si circoscrive.** Il conto `viste > 0` è rimasto quello che era, ed
+è cambiata la condizione in cui gli si fa la domanda. La differenza fra le due
+mosse — abbassare la soglia, o dichiarare quando la soglia si applica — è che la
+prima spegne il presidio anche nel caso per cui era stato scritto.
