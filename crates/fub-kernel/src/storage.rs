@@ -1201,7 +1201,46 @@ pub fn update_atomic<T>(
 /// protetti sono un insieme fisso e piccolo — non cresce con le note, non
 /// cresce con l'uso, non cresce affatto. Ciò che va tolto è il fatto che si
 /// **veda**, e a toglierlo è [`e_lock_di_scrittura`].
+/// Quanto si aspetta il compagno prima di scrivere **senza** (difetto 0152).
+///
+/// Un `update_atomic` onesto tiene il lock per una lettura e una scrittura, cioè
+/// per millisecondi: due secondi sono mille volte tanto, e chi arriva mentre un
+/// altro sta davvero salvando lo aspetta senza accorgersene. Chi ci arriva
+/// contro è invece un lock che **non si libererà**: un processo morto male che
+/// il sistema non ha ripulito, una share di rete che tiene il lock di un client
+/// che non c'è più, un'altra installazione appesa dentro il proprio `update`.
+const ATTESA_DEL_LOCK: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Ogni quanto si riprova. Non è una misura di niente: è il passo con cui
+/// l'attesa si controlla, corto abbastanza da non aggiungere ritardo a un lock
+/// che si libera subito e lungo abbastanza da non essere un giro a vuoto.
+const RIPROVA_IL_LOCK: std::time::Duration = std::time::Duration::from_millis(10);
+
 fn lock_esclusivo(path: &Utf8Path) -> Option<std::fs::File> {
+    lock_esclusivo_entro(path, ATTESA_DEL_LOCK)
+}
+
+/// Il corpo di [`lock_esclusivo`] con l'attesa **detta**, perché è il solo modo
+/// di presidiare la rinuncia senza far durare un banco quanto dura la pazienza
+/// di un utente.
+///
+/// Il difetto che questa attesa toglie non è la lentezza: è che
+/// [`lock_esclusivo`] dichiarava **due** esiti — «o si ha il lock, o si procede
+/// senza» — e ne aveva un terzo che non aveva nome. `File::lock` è bloccante e
+/// non ha scadenza, quindi chi salvava un'impostazione dietro un lock che
+/// nessuno rilascia non riceveva né il lock né il permesso di procedere: restava
+/// lì, senza errore, senza messaggio e senza niente che dicesse **che cosa**
+/// stesse aspettando. E rinunciare è la risposta giusta per la ragione già
+/// scritta in [`update_atomic`]: il lock stringe una finestra, non la toglie —
+/// a togliere la perdita è la rilettura, che vale lo stesso — e rifiutarsi di
+/// salvare sarebbe un danno certo al posto di uno improbabile. Restare fermi
+/// per sempre è il danno certo scritto peggio: nemmeno l'utente sa che c'è.
+///
+/// La rinuncia **si dice**, e si dice col nome del file: un salvataggio andato
+/// a buon fine senza il lock è ciò che si voleva, ma il giorno che quella riga
+/// compare a ogni scrittura vuol dire che su quella macchina c'è un lock morto,
+/// e chi legge il log deve poterlo trovare.
+fn lock_esclusivo_entro(path: &Utf8Path, attesa: std::time::Duration) -> Option<std::fs::File> {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
     let lock_path = lock_path(path);
     std::fs::create_dir_all(dir).ok()?;
@@ -1211,10 +1250,29 @@ fn lock_esclusivo(path: &Utf8Path) -> Option<std::fs::File> {
         .write(true)
         .open(&lock_path)
         .ok()?;
-    // `File::lock` è bloccante e si rilascia alla chiusura del file, cioè
-    // quando il chiamante lascia cadere ciò che questa funzione ha restituito.
-    file.lock().ok()?;
-    Some(file)
+    // Il lock si rilascia alla chiusura del file, cioè quando il chiamante
+    // lascia cadere ciò che questa funzione ha restituito.
+    let scadenza = std::time::Instant::now() + attesa;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Some(file),
+            // Non è un guasto: è qualcun altro che sta salvando, ed è il caso
+            // per cui il lock esiste.
+            Err(std::fs::TryLockError::WouldBlock) => {}
+            // Un supporto che il lock non lo sa fare — una share di rete — è il
+            // caso «best-effort» di sempre: si procede senza, subito.
+            Err(std::fs::TryLockError::Error(_)) => return None,
+        }
+        if std::time::Instant::now() >= scadenza {
+            tracing::warn!(
+                target: "fub.kernel",
+                "{lock_path} è tenuto da qualcun altro da più di {attesa:?}: \
+                 si scrive senza il lock"
+            );
+            return None;
+        }
+        std::thread::sleep(RIPROVA_IL_LOCK);
+    }
 }
 
 // --- la copia in memoria di un file ----------------------------------------
@@ -1815,5 +1873,91 @@ mod tests {
         let a = tmp_path(Utf8Path::new("/vault/Nota.md"));
         let b = tmp_path(Utf8Path::new("/vault/Nota.md"));
         assert_ne!(a, b);
+    }
+
+    /// Una cartella vera e il file da proteggere dentro. I banchi del lock
+    /// stanno qui e non nel banco appaiato perché `lock_esclusivo_entro` è del
+    /// modulo: di là si vedrebbe solo `update_atomic`, che l'attesa non la sa
+    /// dire e quindi la farebbe durare quanto la pazienza di un utente.
+    fn cartella() -> (tempfile::TempDir, Utf8PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let radice = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let protetto = radice.join("impostazioni.json");
+        (dir, protetto)
+    }
+
+    /// Un lock libero **si prende**: l'attesa che questo modulo si è dato non
+    /// deve aver trasformato il lock in un ornamento.
+    #[test]
+    fn un_lock_libero_si_prende() {
+        let (_dir, protetto) = cartella();
+        assert!(
+            lock_esclusivo_entro(&protetto, std::time::Duration::from_millis(50)).is_some(),
+            "un lock che nessuno tiene non è stato preso: chi salva \
+             un'impostazione non è più solo mentre lo fa"
+        );
+    }
+
+    /// Chi salva un'impostazione dietro un lock che **nessuno rilascia** ci
+    /// rinuncia e scrive lo stesso (difetto 0152).
+    ///
+    /// Il banco tiene il lock e non lo lascia mai, che è il processo morto male
+    /// o la share di rete visti da dentro un solo processo. Il tentativo gira in
+    /// un thread a parte con un canale, perché il difetto che presidia non è un
+    /// esito sbagliato ma un esito che **non arriva**: senza il canale, un banco
+    /// che vede il difetto resterebbe appeso e il verde di tutti gli altri non
+    /// si vedrebbe mai. La soglia del canale è cinquanta volte l'attesa detta,
+    /// cioè non è una misura di quanto ci mette: è la riga che distingue
+    /// «rinuncia» da «per sempre».
+    #[test]
+    fn chi_aspetta_un_lock_morto_non_aspetta_per_sempre() {
+        let (_dir, protetto) = cartella();
+        let attesa = std::time::Duration::from_millis(100);
+        let tenuto = lock_esclusivo_entro(&protetto, attesa).expect("il primo lock si prende");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p = protetto.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(lock_esclusivo_entro(&p, attesa).is_some());
+        });
+
+        match rx.recv_timeout(attesa * 50) {
+            Ok(preso) => assert!(
+                !preso,
+                "il lock è stato dato a due insieme: la rinuncia si è mangiata \
+                 anche l'esclusione"
+            ),
+            Err(_) => panic!(
+                "chi salva un'impostazione aspetta per sempre un lock che \
+                 nessuno rilascia: nessun esito, nessun errore e niente che \
+                 dica che cosa sta aspettando"
+            ),
+        }
+        drop(tenuto);
+    }
+
+    /// Un lock tenuto **per un momento** si aspetta: la rinuncia è per chi non
+    /// rilascia mai, non per chiunque arrivi secondo.
+    ///
+    /// È la metà che impedisce alla riparazione di diventare «al primo occupato
+    /// si scrive senza», cioè di togliere il lock fingendo di tenerlo. Il banco
+    /// conta i tentativi e non i millisecondi: il lock si libera dopo un tempo
+    /// più corto dell'attesa detta, quindi o il giro riprova o non lo prende.
+    #[test]
+    fn un_lock_tenuto_per_un_momento_si_aspetta() {
+        let (_dir, protetto) = cartella();
+        let attesa = std::time::Duration::from_secs(2);
+        let tenuto = lock_esclusivo_entro(&protetto, attesa).expect("il primo lock si prende");
+
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            drop(tenuto);
+        });
+
+        assert!(
+            lock_esclusivo_entro(&protetto, attesa).is_some(),
+            "il lock non è stato aspettato: chi arriva mentre un altro sta \
+             davvero salvando scrive senza, e il lock non protegge più niente"
+        );
     }
 }
