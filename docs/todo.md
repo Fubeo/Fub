@@ -416,7 +416,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **ottantadue** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **ottantaquattro** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -461,6 +461,15 @@ compilatore.
 Il settimo blocco (`0225`–`0226`) identifica ventuno definizioni mancanti e il
 bisogno di file d'ingresso. Hanno corretto undici voci nel glossario in
 duecentodiciassette file il 2026-08-10.
+L'ottavo blocco (`0227`–`0228`) è **una riga sola di codice vista da due
+momenti**, e non arriva da una lettura: arriva da un cronometro. La domanda era
+se la gestione dei file fosse inutilmente complessa, e la risposta misurata è
+no — la stratificazione regge, l'apertura a caldo è lineare (96 ms su 5 000
+note, 306 ms su 20 000) e una lettura non contesa del workspace costa 68 ns.
+Quello che non regge è il versioning, che si aggancia a ogni scrittura e copia
+il vault intero per fotografarne una nota: si vede alla prima apertura
+(`0227`) e a ogni salvataggio (`0228`). Le due righe restano due perché i due
+momenti si misurano con due strumenti diversi e uno può guarire senza l'altro.
 
 **Il numero è quello di `issues.md` e non scala**, per la stessa regola dei `§`:
 è citato dai verbali e dai messaggi di commit. I buchi nella sequenza sono le
@@ -556,6 +565,8 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0221 | il kernel contraddice il proprio `not-found` in lettura: chiedere un documento che non c'è risponde `io` invece di `not-found`, cioè il codice che il contratto dichiara per quel caso, e chi distingue i due rami non può | `fub-kernel` · lettura di un documento assente | regole |
 | 0222 | la suite di conformità non copre le famiglie di **scrittura**: prova le letture e le query, mentre creazione, scrittura, rinomina, cestinazione e ripristino — cioè tutto ciò che tocca i byte dell'utente — non hanno nessun banco che verifichi che due host rispondano allo stesso modo, ed è esattamente lì che i due divergono | `fub-abi` · suite di conformità | regole |
 | 0224 | `expand` in Rust ed `espandi` in TypeScript sono lo stesso motore di sostituzione `{nome}` scritto due volte, e sono **l'unica coppia dichiarata gemella che nessuna fixture presidia**: `rules-samples.json` lega `mirrored.ts` alle regole di `fub-abi` e non nomina né l'una né l'altra, mentre `strings.test.ts` prova `espandi` solo contro attese scritte lì accanto. Le due divergono **già**: in Rust il nome è tutto ciò che precede la prima `}` (quindi `foo-bar` è un nome), in TypeScript solo `\w+`; ogni regola nuova — un escape, una graffa letterale — va portata identica in due motori senza niente che li confronti | `fub-abi` · `text.rs` `expand` (con `frontend` · `i18n/strings.ts` `espandi`) | regole |
+| 0227 | la prima apertura di un vault cresce **col quadrato** delle note, e la causa non è l'indicizzazione: `VersionStore::snapshot` copia l'intera `BTreeMap` che nomina ogni documento del vault (`let mut piano = inner.docs.clone()`) una volta per fotografia, e la passata di apertura ne fa una per nota. Misurato su vault sintetici in 200 cartelle: 5 000 note 3,5 s, 10 000 note 16,0 s, 20 000 note **79 s** — quattro volte i file, ventidue volte il tempo. L'attribuzione è netta: a 10 000 note, spegnendo `fub.search` restano 16,0 s e spegnendo `fub.stats` 15,8 s, mentre spegnendo `fub.versioning` scende a **0,73 s**; strumentando la sola riga del clone, **8,9 s dei 15,6 s** stanno lì, e i totali parziali ogni 2 000 fotografie sono 0,24 → 1,02 → 2,62 → 5,22 → 8,90 s, cioè differenze che crescono linearmente. Il `docs.clone()` della **serializzazione** era già stato tolto (`IndexDaScrivere`, `versioning.rs:312`) e l'indice già si scrive una volta sola per passata (`in_lotto`): è rimasto quello del piano | `fub-features` · `versioning.rs` `VersionStore::snapshot` | prestazioni |
+| 0228 | **ogni salvataggio costa quanto il vault intero**, sotto il prestito esclusivo, e per la stessa riga dello `0227`: il `docs.clone()` del piano gira anche fuori dalla passata di apertura, a ogni scrittura che l'handler del versioning fotografa. Mediana su trenta salvataggi dello stesso documento, col versioning acceso e spento: 2 000 note 1,20 ms contro 0,16 ms, 8 000 note 3,56 ms contro 0,09 ms, 16 000 note **8,50 ms contro 0,09 ms** — spento è costante, acceso è lineare nel numero di note. È il costo che lo `0113` misura da un'altra parte del giro, e si somma a quello. La disciplina «costruisci il piano, installalo solo se il disco ha accettato» non è in discussione, ma per garantirla basta ricordare le chiavi toccate — una sola per `snapshot`, due per il rename — invece di copiare la mappa | `fub-features` · `versioning.rs` `Inner::applica` | lock e I/O |
 
 ## Dove va una regola scritta due volte
 
