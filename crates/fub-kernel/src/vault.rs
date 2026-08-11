@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::rules::text_policy;
+use fub_abi::rules::{path_policy, text_policy};
 use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
@@ -275,9 +275,30 @@ impl Vault {
         Ok(DocId::new(rel.as_str().replace('\\', "/")))
     }
 
-    /// Path assoluto per un [`DocId`].
-    pub fn path_for(&self, id: &DocId) -> Utf8PathBuf {
-        self.root.join(id.as_str())
+    /// Path assoluto per un [`DocId`], **se quel `DocId` nomina un posto dentro
+    /// il vault**.
+    ///
+    /// È l'unico punto in cui questo vault compone un path assoluto, ed è per
+    /// questo che il recinto sta qui e non nei chiamanti: chiedere a ognuno di
+    /// validare prima di comporre è una disciplina che il tredicesimo sito
+    /// dimentica, e il tredicesimo sito è quello che scrive fuori. Il giudizio è
+    /// del contratto ([`path_policy::fenced`]) e non di questa funzione.
+    ///
+    /// Il recinto è quello **esterno** e non
+    /// [`check`](path_policy::check): un `DocId` che nomina lo spazio macchina
+    /// non è un documento, ma il vault ci lavora di mestiere — il cestino è
+    /// `.trash/`, i sidecar stanno sotto `.fub/`. Chi riceve un id **da fuori**
+    /// gli fa l'altra domanda al varco ([`valid_doc_id`], [`fenced_doc_id`]), e
+    /// le due si sommano invece di sostituirsi.
+    ///
+    /// [`valid_doc_id`]: crate::workspace::valid_doc_id
+    /// [`fenced_doc_id`]: fub_abi::rules::path_policy::fenced_doc_id
+    pub fn path_for(&self, id: &DocId) -> Result<Utf8PathBuf> {
+        path_policy::fenced(id.as_str()).map_err(|why| KernelError::BadName {
+            name: id.to_string(),
+            why: why.to_string(),
+        })?;
+        Ok(self.root.join(id.as_str()))
     }
 
     /// Il path assoluto cade in una parte del vault che non va guardata?
@@ -365,9 +386,10 @@ impl Vault {
     /// Dimensione e data di **un** file, per chi ne sincronizza uno solo (il
     /// rilevatore). `None` = non c'è più, o non si riesce a leggerne i
     /// metadati — che per chi chiama sono la stessa cosa: non c'è niente da
-    /// mettere in anagrafe.
+    /// mettere in anagrafe. Un id fuori dal recinto risponde `None` per la
+    /// stessa ragione: non c'è nessun file di cui parlare.
     pub fn stat(&self, id: &DocId) -> Option<(u64, u64)> {
-        let stat = self.storage.stat(&self.path_for(id)).ok()?;
+        let stat = self.storage.stat(&self.path_for(id).ok()?).ok()?;
         stat.is_file().then_some((stat.size, stat.mtime))
     }
 
@@ -389,7 +411,7 @@ impl Vault {
         match text_policy::decode(&bytes) {
             Ok(text) => Ok(text.to_string()),
             Err(at) => Err(KernelError::Io {
-                path: self.path_for(id),
+                path: self.path_for(id)?,
                 source: std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!(
@@ -412,27 +434,31 @@ impl Vault {
     /// decodifica opzionalmente, perché chi legge testo non deve poter
     /// dimenticare di decodificare.
     pub fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
-        let path = self.path_for(id);
+        let path = self.path_for(id)?;
         self.storage
             .read(&path)
             .map_err(|e| KernelError::Io { path, source: e })
     }
 
     pub fn write(&self, id: &DocId, source: &str) -> Result<()> {
-        let path = self.path_for(id);
+        let path = self.path_for(id)?;
         self.storage
             .write(&path, source.as_bytes())
             .map_err(|e| KernelError::Io { path, source: e })
     }
 
+    /// Un id fuori dal recinto **non esiste**, e non è una tolleranza: non
+    /// nomina un posto di questo vault, quindi non c'è niente che possa
+    /// esistere.
     pub fn exists(&self, id: &DocId) -> bool {
-        self.storage.exists(&self.path_for(id))
+        self.path_for(id)
+            .is_ok_and(|path| self.storage.exists(&path))
     }
 
     /// Sposta un documento (creando le cartelle di destinazione se mancano).
     pub fn rename(&self, from: &DocId, to: &DocId) -> Result<()> {
-        let from_path = self.path_for(from);
-        let to_path = self.path_for(to);
+        let from_path = self.path_for(from)?;
+        let to_path = self.path_for(to)?;
         self.storage
             .rename(&from_path, &to_path)
             .map_err(|e| KernelError::Io {
@@ -456,7 +482,7 @@ impl Vault {
     /// suffisso con l'istante della cancellazione (D2), e — se anche quello è
     /// occupato, cioè due cancellazioni nello stesso secondo — un contatore.
     pub fn trash(&self, id: &DocId) -> Result<(DocId, Option<KernelError>)> {
-        let from = self.path_for(id);
+        let from = self.path_for(id)?;
         // La cartella del cestino non si crea qui: `VaultStorage::rename` crea
         // le cartelle di destinazione che mancano, e farlo una seconda volta
         // vorrebbe dire avere due idee di quando una cartella esiste.
@@ -473,7 +499,7 @@ impl Vault {
             .expect("la sequenza dei candidati è infinita");
 
         self.storage
-            .rename(&from, &self.path_for(&target))
+            .rename(&from, &self.path_for(&target)?)
             .map_err(|e| KernelError::Io {
                 path: from,
                 source: e,
@@ -514,7 +540,7 @@ impl Vault {
             // valeva prima che il timbro esistesse, che è più di niente.
             file: self
                 .storage
-                .stat(&self.path_for(trashed))
+                .stat(&self.path_for(trashed)?)
                 .ok()
                 .map(|s| TrashStamp {
                     size: s.size,
@@ -678,13 +704,16 @@ impl Vault {
     /// Il recinto vale per entrambe: da qui non si tocca niente che non stia
     /// dentro `.trash/`.
     fn leave_trash(&self, id: &DocId, exit: TrashExit<'_>) -> Result<()> {
-        let path = self.path_for(id);
+        // Il recinto esterno l'ha già messo `path_for`, per la sorgente come
+        // per la destinazione: qui sotto `path` non contiene più `..`, quindi
+        // il confronto di prefisso che segue vuol dire quel che sembra dire.
+        let path = self.path_for(id)?;
         if !path.starts_with(self.root.join(TRASH_DIR)) {
             return Err(KernelError::OutsideVault(path));
         }
         match exit {
             TrashExit::Destroy => self.storage.remove(&path),
-            TrashExit::To(to) => self.storage.rename(&path, &self.path_for(to)),
+            TrashExit::To(to) => self.storage.rename(&path, &self.path_for(to)?),
         }
         .map_err(|e| KernelError::Io { path, source: e })?;
         // Il sidecar segue la voce, e il suo esito non risale: il file **è**

@@ -91,14 +91,14 @@ fn aprire_e_risalvare_non_cambia_un_byte() {
     let (_dir, vault) = tempvault();
     for (nome, bytes) in corpus() {
         let id = DocId::new("nota.md");
-        std::fs::write(vault.path_for(&id), &bytes).expect("scrive il file di partenza");
+        std::fs::write(vault.path_for(&id).unwrap(), &bytes).expect("scrive il file di partenza");
 
         let letto = vault.read(&id).unwrap_or_else(|e| panic!("{nome}: {e}"));
         vault
             .write(&id, &letto)
             .unwrap_or_else(|e| panic!("{nome}: {e}"));
 
-        let dopo = std::fs::read(vault.path_for(&id)).expect("rilegge");
+        let dopo = std::fs::read(vault.path_for(&id).unwrap()).expect("rilegge");
         assert_eq!(
             dopo,
             bytes,
@@ -118,7 +118,7 @@ fn la_lettura_non_toglie_il_bom_ne_converte_i_terminatori() {
     let id = DocId::new("nota.md");
 
     std::fs::write(
-        vault.path_for(&id),
+        vault.path_for(&id).unwrap(),
         b"\xef\xbb\xbf# Titolo\r\n\r\nCorpo.\r\n",
     )
     .unwrap();
@@ -141,7 +141,7 @@ fn un_file_che_non_e_utf8_dice_a_quale_byte_lo_smette() {
     let id = DocId::new("latin1.md");
     // `Città` in Latin-1: la `à` è un `0xE0` solo, che in UTF-8 apre una
     // sequenza a tre byte e non la chiude.
-    std::fs::write(vault.path_for(&id), b"Citt\xe0 vecchia\n").unwrap();
+    std::fs::write(vault.path_for(&id).unwrap(), b"Citt\xe0 vecchia\n").unwrap();
 
     let err = vault.read(&id).expect_err("non è UTF-8");
     let testo = err.to_string();
@@ -152,7 +152,7 @@ fn un_file_che_non_e_utf8_dice_a_quale_byte_lo_smette() {
     assert!(testo.contains("latin1.md"), "e su quale file: {testo}");
     // Non si indovina l'encoding e non si scrive niente: il file è ancora quello.
     assert_eq!(
-        std::fs::read(vault.path_for(&id)).unwrap(),
+        std::fs::read(vault.path_for(&id).unwrap()).unwrap(),
         b"Citt\xe0 vecchia\n"
     );
 }
@@ -165,7 +165,7 @@ fn i_byte_grezzi_restano_leggibili_anche_quando_il_testo_no() {
     let (_dir, vault) = tempvault();
     let id = DocId::new("roba.bin");
     let bytes = b"\x00\x01\xff\xfe non testo".to_vec();
-    std::fs::write(vault.path_for(&id), &bytes).unwrap();
+    std::fs::write(vault.path_for(&id).unwrap(), &bytes).unwrap();
 
     assert!(vault.read(&id).is_err());
     assert_eq!(vault.read_bytes(&id).unwrap(), bytes);

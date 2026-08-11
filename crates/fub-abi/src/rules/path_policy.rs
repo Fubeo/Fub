@@ -86,6 +86,8 @@
 //!   seconda politica che decide le stesse cose in modo diverso, e va deciso con
 //!   il suo cliente vero (17.x) invece che in anticipo e a vuoto.
 
+use crate::error::PluginError;
+use crate::model::DocId;
 use unicode_normalization::UnicodeNormalization;
 
 /// Quanti byte può avere **un segmento** di path.
@@ -341,11 +343,11 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
         return Err(NameFault::Empty);
     }
     for (i, segment) in path.split('/').enumerate() {
-        // Il recinto, sempre: un segmento vuoto, `.` o `..`.
-        if segment.is_empty() || segment == "." || segment == ".." {
-            return Err(NameFault::Traversal {
-                segment: segment.to_string(),
-            });
+        // Il recinto, sempre: un segmento vuoto, `.` o `..`. La riga sta in
+        // [`risalita`] e non qui perché è la stessa domanda che [`fenced`] fa
+        // da sola, e due copie divergono.
+        if let Some(fault) = risalita(segment) {
+            return Err(fault);
         }
         // E il recinto interno, sempre anche lui: lo spazio macchina non è
         // fuori dal vault, è **sotto** — e un documento non lo nomina. Vale per
@@ -377,10 +379,8 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
             // il prezzo è che su Linux un file chiamato davvero `C:` in radice
             // smette di essere apribile, e il verso è giusto — sul sistema per
             // cui la regola c'è un nome così non esiste, e la fuga sì.
-            if i == 0 && drive_prefix(segment) {
-                return Err(NameFault::Traversal {
-                    segment: segment.to_string(),
-                });
+            if let Some(fault) = unita_windows(i, segment) {
+                return Err(fault);
             }
             continue;
         }
@@ -423,6 +423,99 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
         }
     }
     Ok(())
+}
+
+/// Un segmento che risale, o che non nomina niente: vuoto, `.`, `..`.
+fn risalita(segment: &str) -> Option<NameFault> {
+    (segment.is_empty() || segment == "." || segment == "..").then(|| NameFault::Traversal {
+        segment: segment.to_string(),
+    })
+}
+
+/// Un primo segmento che comincia con una lettera di unità Windows.
+fn unita_windows(i: usize, segment: &str) -> Option<NameFault> {
+    (i == 0 && drive_prefix(segment)).then(|| NameFault::Traversal {
+        segment: segment.to_string(),
+    })
+}
+
+/// **Il recinto, e solo il recinto**: questo path relativo, composto sulla
+/// radice del vault, atterra ancora dentro il vault?
+///
+/// È la metà di [`check`] che non parla di documenti ma di **posti**. Un
+/// segmento vuoto, un `.`, un `..` o una lettera di unità Windows in testa
+/// nominano qualcosa che sta fuori dalla radice, e il fatto che stiano fuori non
+/// dipende da cosa ci si voglia fare.
+///
+/// Esiste separata da [`check`] perché `check` dice **anche** che lo spazio
+/// macchina ([`MACHINE_DIRS`]) non si nomina, e quella è vera per un documento e
+/// falsa per il vault stesso, che `.trash/Nota.md` lo compone di mestiere: un
+/// vault che chiamasse `check` per comporre i propri path non saprebbe più
+/// cestinare. Le due domande sono una **dentro** l'altra — `check` fa questa
+/// prima di tutte le sue —, quindi non sono due politiche che possono
+/// divergere, sono una sola letta a due profondità, e quale delle due si stia
+/// chiedendo si legge dal nome della funzione che si chiama.
+///
+/// # Perché il recinto non può stare solo a monte
+///
+/// Il recinto lessicale a valle — «il path composto comincia per la radice?» —
+/// **non è un recinto**: `<radice>/.trash/../../fuori.txt` comincia per la
+/// radice segmento per segmento, e il sistema operativo, che i `..` li risolve,
+/// lo apre fuori. Chi confronta prefissi deve avere già scartato i `..`, e
+/// l'unico posto in cui è garantito è il punto in cui il path si **compone**.
+/// Era il difetto 0158.
+pub fn fenced(path: &str) -> Result<(), NameFault> {
+    if path.trim().is_empty() {
+        return Err(NameFault::Empty);
+    }
+    for (i, segment) in path.split('/').enumerate() {
+        if let Some(fault) = risalita(segment) {
+            return Err(fault);
+        }
+        if let Some(fault) = unita_windows(i, segment) {
+            return Err(fault);
+        }
+    }
+    Ok(())
+}
+
+/// La **tolleranza del varco**: come si legge un path che arriva da fuori — da
+/// un plugin, dall'IPC, da un file di configurazione scritto a mano.
+///
+/// I separatori Windows diventano `/`, e spazi e barre in testa se ne vanno. Non
+/// è una regola sui nomi: è la conversione che ogni ingresso farebbe comunque, e
+/// sta qui perché farla in ogni ingresso vuol dire farla in modo diverso in uno
+/// di loro.
+pub fn from_outside(name: &str) -> String {
+    name.replace('\\', "/")
+        .trim()
+        .trim_start_matches('/')
+        .to_string()
+}
+
+/// Il [`DocId`] con cui **chi sta fuori** può nominare un documento, o
+/// `PermissionDenied`.
+///
+/// È [`from_outside`] più [`check`] con [`Naming::Existing`], cioè il recinto
+/// esterno e quello interno insieme: un plugin non nomina un posto fuori dal
+/// vault e non nomina lo spazio macchina. Sta nel **contratto** e non nel kernel
+/// perché il kernel non è l'unico host: il doppio dell'SDK
+/// (`fub_sdk::testing::MemoryHost`) risponde alle stesse firme, e finché il
+/// recinto viveva solo di là il doppio non ne applicava nessuno — chi provava
+/// una view contro il doppio vedeva passare i path che l'host vero rifiuta, e
+/// non aveva modo di accorgersene. Era il difetto 0220.
+///
+/// L'errore è `PermissionDenied` e non `BadArgs` perché è la stessa risposta che
+/// `data_*` dà a una risalita: per chi la riceve, i due recinti si comportano
+/// allo stesso modo.
+pub fn fenced_doc_id(id: &DocId) -> Result<DocId, PluginError> {
+    let pulito = from_outside(id.as_str());
+    check(&pulito, Naming::Existing).map_err(|_| {
+        PluginError::PermissionDenied(
+            format!("`{id}`: un documento si nomina con un path relativo dentro il vault").into(),
+        )
+    })?;
+    Ok(DocId::new(pulito))
 }
 
 /// La forma con cui un nome **nuovo** si scrive sul disco: ogni segmento senza

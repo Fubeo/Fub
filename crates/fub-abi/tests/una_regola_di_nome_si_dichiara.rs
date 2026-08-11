@@ -530,13 +530,16 @@ fn regole() -> BTreeMap<&'static str, (Famiglia, &'static str)> {
             ),
         ),
         (
-            "crates/fub-kernel/src/workspace.rs::valid_doc_id",
+            "crates/fub-abi/src/rules/path_policy.rs::from_outside",
             (
                 Famiglia::ConfineDiCartella,
-                "taglia il `/` **iniziale**, ed è l'unica della famiglia: è «la tolleranza del \
-                 varco … di questo ingresso e non della regola» (workspace.rs). Non risponde \
-                 alla domanda del contenimento, ma tocca lo stesso confine e la sua divergenza \
-                 dev'essere visibile accanto alle altre.",
+                "taglia il `/` **iniziale**, ed è l'unica della famiglia: è la tolleranza del \
+                 **varco**, non della regola — «i separatori Windows diventano `/`, e spazi e \
+                 barre in testa se ne vanno» (path_policy.rs). Non risponde alla domanda del \
+                 contenimento, ma tocca lo stesso confine e la sua divergenza dev'essere \
+                 visibile accanto alle altre. Stava in `workspace::valid_doc_id`, che adesso la \
+                 chiama: i varchi sono più d'uno (il sidecar dell'organizzazione, il doppio \
+                 dell'SDK) e nessuno di loro ha `fub-kernel` fra le mani.",
             ),
         ),
     ])
