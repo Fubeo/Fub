@@ -288,6 +288,27 @@ impl Sink for StderrSink {
 /// il collettore — è la sola strada che esce dal cerchio. Se il file non è
 /// aperto la riga si perde, e resta il conto di [`Ricovero::denunce`]: è meno,
 /// ma è osservabile da qualcuno.
+///
+/// # E se il file sparisce da sotto
+///
+/// Un descrittore aperto in append non segue il nome: segue il file. Chi
+/// cancella `fub.log` da fuori, o chi lo ruota — `logrotate`, uno script, o
+/// **un'altra installazione di Fub** che arriva a [`ROTATE_AT`] per prima e fa
+/// la sua [`FileSink::rotate`] — lascia questo sink ad appendere in un file che
+/// non ha più un nome, o che ne ha uno che nessuno guarderà mai più. E siccome
+/// scrivere lì dentro *riesce*, non c'è nessun errore che lo racconti: il log
+/// tace per il resto del processo, cioè proprio da quando servirebbe (0191).
+///
+/// Quindi prima di ogni riga si chiede **chi è** il file che sta al path, e se
+/// non è quello aperto lo si riapre. È uno `stat` accanto a una `write`, sulla
+/// strada di una riga di log che già paga una chiamata di sistema; il verso
+/// alternativo — controllare ogni N righe — è N righe perse nel vuoto e un
+/// numero da difendere.
+///
+/// La stessa domanda copre la rotazione **fra due installazioni**: chi arriva
+/// secondo si accorge che il file sotto di lui non è più il suo, adotta quello
+/// nuovo e non ruota una generazione appena nata sopra quella che l'altro ha
+/// appena messo via.
 #[derive(Debug)]
 pub struct FileSink {
     path: Utf8PathBuf,
@@ -302,6 +323,40 @@ pub const ROTATE_AT: u64 = 10 * 1024 * 1024;
 struct Open {
     file: std::fs::File,
     written: u64,
+    /// **Chi è** questo file per il sistema, se il sistema sa dirlo: è ciò con
+    /// cui si riconosce che il path porta ancora qui e non a un file nuovo di
+    /// qualcun altro. `None` vuol dire «questa piattaforma non risponde», e
+    /// allora ci si tiene ciò che si ha.
+    chi: Option<Chi>,
+}
+
+/// Il dispositivo e l'inode: la coppia con cui Unix dice che due nomi sono lo
+/// stesso file.
+type Chi = (u64, u64);
+
+#[cfg(unix)]
+fn chi_e(dati: &std::fs::Metadata) -> Option<Chi> {
+    use std::os::unix::fs::MetadataExt;
+    Some((dati.dev(), dati.ino()))
+}
+
+/// Senza una risposta della piattaforma non si inventa un criterio: `mtime` e
+/// dimensione direbbero «è cambiato» a ogni riga scritta da chiunque, e la cura
+/// sarebbe una riapertura continua. Su Windows, del resto, un file di log
+/// aperto non si lascia né cancellare né rinominare da sotto.
+#[cfg(not(unix))]
+fn chi_e(_: &std::fs::Metadata) -> Option<Chi> {
+    None
+}
+
+/// Il file che sta al path è ancora quello aperto?
+///
+/// Un path che non si legge affatto conta come «non è più lui»: se è sparito la
+/// riapertura lo ricrea, e se è illeggibile per un'altra ragione la riapertura
+/// fallisce e non si perde niente che non fosse già perso.
+fn e_ancora_lui(path: &Utf8Path, open: &Open) -> bool {
+    let Some(mio) = open.chi else { return true };
+    std::fs::metadata(path).ok().and_then(|d| chi_e(&d)) == Some(mio)
 }
 
 impl FileSink {
@@ -349,8 +404,10 @@ impl FileSink {
             .create(true)
             .append(true)
             .open(&self.path)?;
-        let written = file.metadata().map(|m| m.len()).unwrap_or(0);
-        Ok(Open { file, written })
+        let dati = file.metadata();
+        let written = dati.as_ref().map(|m| m.len()).unwrap_or(0);
+        let chi = dati.ok().as_ref().and_then(chi_e);
+        Ok(Open { file, written, chi })
     }
 
     fn rotate(&self) -> std::io::Result<Open> {
@@ -373,6 +430,18 @@ impl FileSink {
 impl Sink for FileSink {
     fn write_line(&self, line: &str) {
         let mut state = self.state.prendi();
+        // **Il file può non essere più lì**: vedi la testa del tipo. Si guarda
+        // prima di ogni riga, denuncia compresa, perché una denuncia scritta in
+        // un descrittore che non ha più un nome è persa come tutte le altre.
+        if state.as_ref().is_some_and(|open| !e_ancora_lui(&self.path, open)) {
+            // Se non si riapre **si tiene il descrittore che c'è** e si riprova
+            // alla riga dopo: buttarlo sarebbe spegnere il canale per sempre
+            // per un guasto che può durare un istante, ed è il pozzo che
+            // `FileSink::open` esiste per rendere irrappresentabile.
+            if let Ok(fresh) = self.reopen() {
+                *state = Some(fresh);
+            }
+        }
         // Il canale si denuncia **dentro sé stesso**, prima della riga che
         // qualcuno voleva scrivere: vedi la testa del tipo. `da_raccontare` è
         // ciò che rende «una volta per incidente» vero senza che la porta debba
@@ -718,6 +787,59 @@ mod tests {
             (corrente.len() as u64) < ROTATE_AT,
             "il file nuovo è nuovo: {}",
             corrente.len()
+        );
+    }
+
+    /// **Un file di log tolto da sotto torna ad avere un file**, invece di
+    /// scrivere per sempre in un descrittore che non ha più un nome.
+    ///
+    /// Le due prove stanno su Unix perché su Windows il caso non si costruisce:
+    /// un file aperto non si lascia cancellare né rinominare da sotto.
+    #[cfg(unix)]
+    #[test]
+    fn un_log_cancellato_da_fuori_torna_ad_avere_un_file() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("fub.log");
+        let sink = FileSink::open(&path).expect("il file si apre");
+        sink.write_line("prima");
+        std::fs::remove_file(&path).expect("qualcuno lo cancella da fuori");
+
+        sink.write_line("dopo");
+        let scritto = std::fs::read_to_string(&path).expect(
+            "dopo la cancellazione il log non ha più un file: ogni riga del \
+             processo, da qui alla fine, è scritta nel vuoto",
+        );
+        assert!(scritto.contains("dopo"), "{scritto:?}");
+    }
+
+    /// **Una rotazione fatta da fuori non lascia questo sink ad appendere nella
+    /// generazione di prima.**
+    ///
+    /// Quel `rename` è esattamente ciò che fa la [`FileSink::rotate`] di
+    /// un'altra installazione arrivata a [`ROTATE_AT`] per prima. Senza la
+    /// riapertura le righe nuove finiscono in `.1`, e la rotazione successiva
+    /// — di chiunque delle due — ci passa sopra: è così che «si perde il file
+    /// vecchio».
+    #[cfg(unix)]
+    #[test]
+    fn una_rotazione_di_qualcun_altro_non_si_porta_via_le_righe_di_questo() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("fub.log");
+        let sink = FileSink::open(&path).expect("il file si apre");
+        sink.write_line("prima");
+        std::fs::rename(&path, format!("{path}.1")).expect("la rotazione di qualcun altro");
+
+        sink.write_line("dopo");
+        let corrente = std::fs::read_to_string(&path)
+            .expect("dopo la rotazione altrui non c'è più nessun `fub.log`");
+        assert!(corrente.contains("dopo"), "{corrente:?}");
+        let vecchia =
+            std::fs::read_to_string(format!("{path}.1")).expect("la generazione di prima");
+        assert!(vecchia.contains("prima"), "{vecchia:?}");
+        assert!(
+            !vecchia.contains("dopo"),
+            "la riga nuova è finita nella generazione di prima, che la \
+             rotazione successiva sovrascrive: {vecchia:?}"
         );
     }
 
