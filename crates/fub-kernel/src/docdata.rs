@@ -122,16 +122,62 @@ pub(crate) fn migrate(
 /// senza cambiare — e al prossimo giro la toglie, che è l'unica cosa che resti
 /// da fare. È la stessa finestra che c'è già fra la rinomina del documento e
 /// questa migrazione.
+///
+/// # Cosa c'è sulla destinazione, e chi lo dice se non si toglie
+///
+/// Il ragionamento qui sopra dice perché una **cartella** già lì si può
+/// togliere; non dice niente di ciò che cartella non è, e il codice non
+/// guardava (difetto 0167). Un file con quel nome — messo lì da un plugin che
+/// scrive nel proprio spazio dati senza sapere che quel componente è nostro,
+/// o rimasto da una convenzione di prima — non è lo spazio orfano di nessuna
+/// nota: di quello non si sa niente, e ciò di cui non si sa niente non si
+/// toglie. La domanda è la stessa che [`collect`] pone già a ogni voce che
+/// visita, e per la stessa ragione scritta là: «`remove_dir_all` su un file
+/// fallirebbe in silenzio invece di dire che quel file non era da toccare».
+///
+/// Si pone **prima** di muovere la sorgente, perché la risposta decide se
+/// c'è una migrazione possibile: con un ostacolo che non si può togliere il
+/// secondo `rename` fallisce comunque, e averla spostata di lato per allora
+/// vuol dire lasciare i dati in `.in-corso`, cioè in un posto che la prossima
+/// raccolta spazza. Non muovendola restano dov'erano — che dopo la rinomina
+/// del documento è una chiave morta e la raccolta prenderà lo stesso, ma è la
+/// perdita che c'era già e non una in più, e nel frattempo chi legge
+/// l'avviso ha un path da andare a guardare.
+///
+/// E l'esito della rimozione **risale**, dov'era un `let _ =`. La cancellazione
+/// di una cartella non è atomica: può togliere tre file su quattro e fermarsi,
+/// e allora la destinazione è già mezza distrutta. Ingoiando l'errore la
+/// migrazione tirava dritto fino al `rename`, che falliva a sua volta, e
+/// l'avviso che arrivava all'utente nominava il `rename` — «esiste già» —
+/// mentre il fatto era che non si era riusciti a sgomberare, e che qualcosa
+/// nel frattempo era stato tolto.
+///
+/// [`collect`]: crate::docdata::collect
 fn sposta(
     storage: &dyn VaultStorage,
     sorgente: &Utf8Path,
     destinazione: &Utf8Path,
 ) -> std::io::Result<()> {
+    // Sul filesystem insensibile al caso questo `stat` può rispondere con la
+    // **sorgente**, che è una cartella e passa: è il caso di sopra, e a
+    // distinguerlo è l'`exists` dopo lo spostamento di lato, non questo.
+    let da_sgomberare = match storage.stat(destinazione) {
+        Ok(stat) if stat.is_dir() => true,
+        Ok(_) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{destinazione} c'è già e non è una cartella: non è lo spazio di una nota, e non si toglie"),
+            ))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(e) => return Err(e),
+    };
+
     let nome = sorgente.file_name().unwrap_or("spazio");
     let di_lato = sorgente.with_file_name(format!("{nome}.in-corso"));
     storage.rename(sorgente, &di_lato)?;
-    if storage.exists(destinazione) {
-        let _ = storage.remove_dir_all(destinazione);
+    if da_sgomberare && storage.exists(destinazione) {
+        storage.remove_dir_all(destinazione)?;
     }
     storage.rename(&di_lato, destinazione)
 }
