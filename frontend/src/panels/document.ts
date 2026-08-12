@@ -79,7 +79,7 @@ import {
   type LayoutNode,
   type Tab,
 } from "../state/layout";
-import { createNote } from "../state/vault";
+import { createNote, renameNote } from "../state/vault";
 import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
@@ -282,6 +282,10 @@ export function mountDocument(d: DocumentDeps): void {
     // L'identità è il path (0043): le tab che lo mostravano seguono, in tutti i
     // riquadri. Il buffer segue anche lui, o il salvataggio successivo
     // scriverebbe col nome vecchio.
+    // La finestra di migrazione finisce qui: chi rinomina ha tenuto fermi i due
+    // ritardi dal momento della richiesta (difetto 0210), e ciò che si è battuto
+    // nel frattempo riparte adesso, col nome nuovo.
+    sospesi.delete(e.from);
     const buf = buffers.get(e.from);
     if (buf) {
       buffers.delete(e.from);
@@ -1032,6 +1036,7 @@ function scritto(paneId: string, text: string): void {
 const DRAFT_MS = 1_000;
 
 function scheduleDraft(doc: string): void {
+  if (sospesi.has(doc)) return;
   const buf = buffers.get(doc);
   if (!buf) return;
   window.clearTimeout(buf.draftTimer);
@@ -1126,6 +1131,7 @@ const CHIAVE_STATO = {
 } as const;
 
 function scheduleSave(doc: string): void {
+  if (sospesi.has(doc)) return;
   const buf = buffers.get(doc);
   if (!buf) return;
   window.clearTimeout(buf.timer);
@@ -1185,8 +1191,13 @@ export async function mettiInSalvoPrimaDiChiudere(): Promise<void> {
   for (const doc of appesi) await writeDraft(doc);
 }
 
-/// Disinnesca **i due ritardi** in attesa su quel documento senza eseguirli, e
-/// dice se ce n'era qualcosa da fermare.
+/// Tiene fermi **i due ritardi** di quel documento — quelli già in attesa, che
+/// disinnesca senza eseguirli, e quelli che nascerebbero da una battuta mentre
+/// il fermo dura —, e dice se ce n'era uno da disinnescare.
+///
+/// Il fermo copre anche ciò che nasce dopo per il difetto 0210: fermare solo i
+/// timer già armati lascia scoperta la finestra intera, che è il tempo in cui
+/// l'utente può battere.
 ///
 /// Serve a chi sta per **chiedere conferma** di una cancellazione: senza,
 /// l'autosave scatterebbe durante la domanda e farebbe risorgere la nota
@@ -1216,24 +1227,55 @@ export async function mettiInSalvoPrimaDiChiudere(): Promise<void> {
 /// nome: una rinomina dentro una conversione, un'importazione mentre una
 /// modale è aperta. Un insieme costa una riga e li fa nascere giusti.
 export function suspendSave(id: string): boolean {
+  sospesi.add(id);
   const buf = buffers.get(id);
   if (!buf?.dirty) return false;
   window.clearTimeout(buf.timer);
   window.clearTimeout(buf.draftTimer);
-  sospesi.add(id);
   return true;
 }
 
 const sospesi = new Set<string>();
 
-/// Rimette in coda i due ritardi di quel documento, se erano stati sospesi.
+/// Scioglie il fermo e rimette in coda i due ritardi, se il buffer è ancora
+/// sporco.
 ///
-/// Non è un `if` di comodo: chiamarla su un documento che nessuno ha sospeso
-/// programmerebbe una scrittura che nessuno aveva in attesa.
+/// Nessuno dei due `if` è di comodo: su un documento che nessuno ha fermato si
+/// programmerebbe una scrittura che nessuno aveva in attesa, e su un buffer
+/// pulito si scriverebbe sul disco un testo che il disco ha già.
 export function resumeSave(id: string): void {
   if (!sospesi.delete(id)) return;
+  if (!buffers.get(id)?.dirty) return;
   scheduleSave(id);
   scheduleDraft(id);
+}
+
+/// Rinomina, e **tiene fermo il buffer per tutta la finestra di migrazione**
+/// (difetto 0210).
+///
+/// Chi rinomina mette in salvo prima di chiedere, e quello bastava finché la
+/// finestra era vuota. Non lo è: fra la richiesta e l'evento che migra
+/// l'identità c'è un giro IPC che riscrive anche i wikilink entranti di tutto
+/// il vault, e in quel tempo si può battere un tasto. La battuta programmava un
+/// salvataggio **col nome di prima**, che scadeva mentre il file si era già
+/// mosso: il kernel ricreava la nota al vecchio path, e la stessa nota si
+/// ritrovava in due posti con due contenuti diversi — quello vecchio con
+/// l'ultima battuta, quello nuovo senza.
+///
+/// Il fermo si scioglie dove finisce davvero la finestra: sull'evento
+/// `document_renamed`, che è il punto in cui il buffer prende il nome nuovo, e
+/// da lì la battuta trattenuta parte col nome giusto. Se la rinomina **fallisce**
+/// non arriverà nessun evento, e allora lo scioglie il `catch`: un buffer tenuto
+/// fermo per sempre sarebbe il testo dell'utente che non raggiunge più il disco,
+/// cioè un danno peggiore di quello che si sta togliendo.
+export async function rinominaTenendoFermoIlBuffer(from: string, to: string): Promise<void> {
+  suspendSave(from);
+  try {
+    await renameNote(from, to);
+  } catch (e) {
+    resumeSave(from);
+    throw e;
+  }
 }
 
 /// La bozza di quel documento non ha più un documento sotto: si butta.

@@ -36,6 +36,7 @@
 import { describe, expect, it } from "vitest";
 
 import sorgente from "./document.ts?raw";
+import esploratore from "./explorer.ts?raw";
 
 /// Il corpo dell'ascoltatore di `document_changed`, dalla sua apertura al
 /// prossimo `onEvent(`.
@@ -122,5 +123,84 @@ describe("sospendere e riprendere i ritardi", () => {
         "sbagliato lasciando l'altro fermo per sempre",
     ).toContain("const sospesi = new Set<string>()");
     expect(sorgente).not.toContain("let sospeso: string | null");
+  });
+});
+
+/// Il corpo di un ascoltatore, dalla sua apertura al prossimo `onEvent(`.
+/// Stesso ritaglio — e stessa zona cieca dichiarata — di `corpo()`.
+function corpoAscoltatore(evento: string): string {
+  const apre = sorgente.indexOf(`onEvent("${evento}"`);
+  expect(apre, `l'ascoltatore di \`${evento}\` non si chiama più così`).toBeGreaterThan(-1);
+  const dopo = sorgente.indexOf("onEvent(", apre + 1);
+  return sorgente.slice(apre, dopo === -1 ? sorgente.length : dopo);
+}
+
+/// Il corpo di una funzione **privata**, dalla sua firma alla prima riga che
+/// chiude in colonna zero.
+function corpoPrivatoDi(nome: string): string {
+  const apre = sorgente.indexOf(`function ${nome}(`);
+  expect(apre, `\`${nome}\` non si chiama più così`).toBeGreaterThan(-1);
+  const chiude = sorgente.indexOf("\n}\n", apre);
+  return sorgente.slice(apre, chiude === -1 ? sorgente.length : chiude);
+}
+
+// **La finestra di migrazione di una rinomina** (difetto 0210).
+//
+// Chi rinomina mette in salvo prima di chiedere, e quello basterebbe se fra la
+// richiesta e l'evento che migra l'identità non ci fosse niente. C'è un giro
+// IPC che riscrive i wikilink entranti di tutto il vault, e in quel tempo si
+// batte: la battuta programmava un salvataggio col nome di prima, che scadeva
+// mentre il file si era già mosso, e il kernel ricreava la nota al vecchio
+// path — la stessa nota in due posti, con due contenuti diversi.
+//
+// Le tre righe che tengono la proprietà stanno in tre punti che non si vedono
+// l'un l'altro: il cancello sui due ritardi (senza, si ferma solo ciò che era
+// già armato e la finestra resta scoperta), lo scioglimento sull'evento (senza,
+// il buffer resta fermo per sempre e il testo non raggiunge più il disco) e la
+// porta unica da cui si rinomina (senza, il secondo chiamante non eredita
+// niente).
+describe("la finestra di migrazione di una rinomina", () => {
+  it("il fermo copre anche i ritardi che nascono dopo", () => {
+    for (const nome of ["scheduleSave", "scheduleDraft"]) {
+      expect(
+        corpoPrivatoDi(nome),
+        `\`${nome}\` non guarda il fermo: una battuta dentro la finestra di ` +
+          "migrazione programma una scrittura col nome di prima, e la nota " +
+          "rinominata ricompare al vecchio path",
+      ).toContain("sospesi.has(doc)");
+    }
+  });
+
+  it("chi rinomina tiene fermo prima di chiedere, e scioglie se la richiesta fallisce", () => {
+    const testo = corpoPrivatoDi("rinominaTenendoFermoIlBuffer");
+    const ferma = testo.indexOf("suspendSave(from)");
+    const chiede = testo.indexOf("await renameNote(");
+    expect(ferma, "non tiene più fermo il buffer").toBeGreaterThan(-1);
+    expect(chiede, "non chiede più la rinomina").toBeGreaterThan(-1);
+    expect(ferma, "chiede la rinomina prima di tenere fermo il buffer").toBeLessThan(chiede);
+    expect(
+      testo,
+      "una rinomina che fallisce non scioglie il fermo: non arriverà nessun " +
+        "evento, e quel buffer non raggiunge più il disco",
+    ).toContain("resumeSave(from)");
+  });
+
+  it("il fermo si scioglie dove finisce la finestra", () => {
+    expect(
+      corpoAscoltatore("document_renamed"),
+      "l'evento che migra l'identità non scioglie il fermo preso da chi ha " +
+        "chiesto la rinomina",
+    ).toContain("sospesi.delete(e.from)");
+  });
+
+  // La porta è una: le tre rinomine dell'esploratore — dal campo di testo, dal
+  // trascinamento su una cartella, dal menù — ereditano la finestra chiusa
+  // senza saperlo, e la quarta pure.
+  it("si rinomina da una porta sola", () => {
+    expect(
+      esploratore,
+      "l'esploratore torna a chiamare `renameNote` da sé: quella strada non " +
+        "tiene fermo il buffer, e la finestra di migrazione si riapre",
+    ).not.toContain("renameNote(");
   });
 });
