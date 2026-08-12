@@ -125,6 +125,81 @@ fn una_rinomina_porta_dietro_lo_stato_per_documento_anche_di_chi_e_spento() {
     );
 }
 
+/// **Un allegato rinominato da fuori porta dietro il suo stato** (difetto
+/// 0184).
+///
+/// La rinomina di un allegato fatta **da dentro** lo porta con sé da sempre, e
+/// la stessa rinomina fatta dal Finder no: il rilevatore riconosceva l'identità
+/// solo di chi ha un modello, e per tutto il resto diceva «sparita e
+/// ricomparsa» — due voci d'anagrafe scollegate, con annotazioni, pin e
+/// miniatura fermi sotto la chiave vecchia, dove non li cerca più nessuno e
+/// dove la prima raccolta li spazza.
+///
+/// Il banco guarda dallo stesso posto degli altri di questo file — un plugin
+/// **spento** —, che qui pesa il doppio: un plugin acceso può ascoltare
+/// `EntryChanged`, ma non c'è nessun evento che dica «quell'immagine e questa
+/// sono la stessa», quindi ricostruirlo da fuori non è nemmeno possibile.
+#[test]
+fn un_allegato_rinominato_da_fuori_porta_dietro_lo_stato_per_documento() {
+    let (_g, root, mut ws) = vault();
+    // Un allegato è un file che nessun provider rivendica: qui i `.md` li
+    // parsa `NudoProvider`, i `.png` nessuno.
+    std::fs::write(root.join("foto.png"), b"\x89PNG").expect("scrittura");
+    ws.reindex().expect("reindex");
+
+    let vecchio = DocId::new("foto.png");
+    let prima = doc_data::path(&vecchio, "miniatura.bin");
+    scrivi_dato(&root, SPENTO, &prima, b"anteprima");
+
+    // La rinomina la fa qualcun altro: i byte sono già al nome nuovo quando il
+    // rilevatore ce lo dice.
+    std::fs::create_dir_all(root.join("img")).expect("cartelle");
+    std::fs::rename(root.join("foto.png"), root.join("img/foto.png")).expect("rinomina");
+    assert!(ws
+        .sync_renamed_path(&root.join("foto.png"), &root.join("img/foto.png"))
+        .expect("sync"));
+
+    let dopo = doc_data::path(&DocId::new("img/foto.png"), "miniatura.bin");
+    assert_eq!(
+        leggi_dato(&root, SPENTO, &dopo).as_deref(),
+        Some(&b"anteprima"[..]),
+        "lo stato dell'allegato non ha seguito la rinomina: resta sotto la \
+         chiave vecchia, che nessuno cerca più e che la prima raccolta spazza"
+    );
+    assert!(
+        leggi_dato(&root, SPENTO, &prima).is_none(),
+        "la chiave vecchia è rimasta viva accanto alla nuova"
+    );
+}
+
+/// L'altra metà, che impedisce alla riparazione di diventare «ogni coppia di
+/// path si migra»: se a destinazione c'è già un allegato **vivo**, la mossa non
+/// è una rinomina — `mv foto.png logo.png` sovrascrive un file che era di
+/// qualcun altro — e il suo stato non si tocca. Il prezzo è dichiarato dov'è
+/// dichiarato per i documenti: la storia di chi è partito si spezza.
+#[test]
+fn un_allegato_che_atterra_su_uno_vivo_non_ne_prende_lo_stato() {
+    let (_g, root, mut ws) = vault();
+    std::fs::write(root.join("foto.png"), b"\x89PNG").expect("scrittura");
+    std::fs::write(root.join("logo.png"), b"\x89PNGlogo").expect("scrittura");
+    ws.reindex().expect("reindex");
+
+    let partenza = doc_data::path(&DocId::new("foto.png"), "miniatura.bin");
+    let arrivo = doc_data::path(&DocId::new("logo.png"), "miniatura.bin");
+    scrivi_dato(&root, SPENTO, &partenza, b"quella-di-foto");
+    scrivi_dato(&root, SPENTO, &arrivo, b"quella-di-logo");
+
+    std::fs::rename(root.join("foto.png"), root.join("logo.png")).expect("rinomina");
+    let _ = ws.sync_renamed_path(&root.join("foto.png"), &root.join("logo.png"));
+
+    assert_eq!(
+        leggi_dato(&root, SPENTO, &arrivo).as_deref(),
+        Some(&b"quella-di-logo"[..]),
+        "lo stato di un allegato vivo è stato coperto da quello di chi gli è \
+         atterrato addosso"
+    );
+}
+
 #[test]
 fn anche_il_ripristino_su_un_altro_path_e_una_rinomina() {
     // Il cestino restituisce una nota al vault; se il path d'origine è di nuovo
