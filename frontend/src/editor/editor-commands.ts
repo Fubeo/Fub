@@ -412,7 +412,16 @@ const autoPair = EditorView.inputHandler.of((view, from, to, text) => {
 
 // ── Il pacchetto ─────────────────────────────────────────────────────────────
 
-const obsidianKeymap: KeyBinding[] = [
+/// Gli accordi che questa app monta **dentro** l'editor, in aggiunta a quelli
+/// che CodeMirror porta con sé.
+///
+/// È esportato per una ragione sola, ed è la stessa della
+/// [0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md): un
+/// elenco che nessuno può leggere non si può confrontare con gli altri, e
+/// questi accordi vivono accanto a due registri dichiarati senza che niente
+/// guardi i tre insiemi insieme. Il banco che lo fa è
+/// `ui/keybindings.test.ts`; a montarli resta `editingExtensions`, qui sotto.
+export const obsidianKeymap: KeyBinding[] = [
   { key: "Mod-b", run: toggleBold },
   { key: "Mod-i", run: toggleItalic },
   { key: "Mod-Shift-x", run: toggleStrikethrough },
