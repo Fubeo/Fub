@@ -161,9 +161,9 @@ impl OrganizationStore {
 
     /// L'emoji di un path (`None` la toglie).
     pub fn set_icon(&self, path: &str, icon: Option<String>) -> Result<(), String> {
-        self.update(|org| match icon {
+        self.update(|org| match &icon {
             Some(icon) => {
-                org.icons.insert(path.to_string(), icon);
+                org.icons.insert(path.to_string(), icon.clone());
             }
             None => {
                 org.icons.remove(path);
@@ -206,7 +206,7 @@ impl OrganizationStore {
                 org.order.remove(folder);
             }
             false => {
-                org.order.insert(folder.to_string(), names);
+                org.order.insert(folder.to_string(), names.clone());
             }
         })
     }
@@ -256,12 +256,19 @@ impl OrganizationStore {
     /// l'icona messa nell'una spariva al primo pin messo nell'altra. Il
     /// cambiamento va quindi messo sopra il file riletto sotto lucchetto
     /// ([`VaultStorage::update`]), e ciò che si tiene in memoria è la fusione.
-    fn update(&self, f: impl FnOnce(&mut Organization)) -> Result<(), String> {
+    /// `f` è una `FnMut` e non una `FnOnce` perché il supporto la può applicare
+    /// **due volte**, e il patto di [`Fusione`](crate::storage::Fusione) lo dice
+    /// da sempre: un supporto che riprova quando qualcun altro gli ha cambiato
+    /// il file sotto è un supporto lecito, e da quando la prima scrittura in un
+    /// vault nuovo rifà il giro sotto lucchetto (difetto 0171) è anche un
+    /// supporto che c'è. Ogni applicazione parte dai byte riletti in quel giro,
+    /// che è l'unica cosa che rende utile riprovare.
+    fn update(&self, mut f: impl FnMut(&mut Organization)) -> Result<(), String> {
         // Ogni mutazione passa di qui, e quindi ci passa anche l'invariante che
         // nessuna di loro deve poter rompere: vedi [`senza_doppioni`]. Metterla
         // dentro i mutatori vorrebbe dire ricordarsela al prossimo, e il
         // prossimo è chi scriverà il mutatore che ancora non c'è.
-        let f = |org: &mut Organization| {
+        let mut f = move |org: &mut Organization| {
             f(org);
             senza_doppioni(org);
         };
@@ -320,12 +327,8 @@ fn fondi(
     path: &Utf8Path,
     in_memoria: &Organization,
     scartate: &mut Vec<String>,
-    f: impl FnOnce(&mut Organization),
+    mut f: impl FnMut(&mut Organization),
 ) -> Result<Organization, String> {
-    // `f` si consuma dentro una `FnMut`, che per il tipo potrebbe girare più
-    // volte: la `take` è come si dice al compilatore ciò che il supporto
-    // garantisce, cioè una fusione sola.
-    let mut f = Some(f);
     let mut fuso = None;
     let mut guasto = None;
     let esito = storage.update(path, &mut |attuale| {
@@ -335,6 +338,10 @@ fn fondi(
         };
         let disco = match letto {
             Ok((disco, fuori)) => {
+                // Non si accumula fra un giro e l'altro: ciò che il recinto ha
+                // scartato è ciò che c'era nei byte di **questo** giro, e un
+                // secondo giro li ha riletti daccapo.
+                scartate.clear();
                 scartate.extend(fuori);
                 disco
             }
@@ -347,7 +354,7 @@ fn fondi(
             }
         };
         let mut next = disco.clone();
-        f.take().expect("il supporto fonde una volta sola")(&mut next);
+        f(&mut next);
         if next == disco {
             // Niente è cambiato: non si tocca il disco. Cliccare due volte lo
             // stesso interruttore non è una scrittura.
