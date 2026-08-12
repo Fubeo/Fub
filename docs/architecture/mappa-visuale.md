@@ -488,7 +488,7 @@ così non c'è nessun intervallo da indovinare.
 
 Il kernel **non sa che esiste un lock**. `Workspace` è un oggetto normale; a
 metterlo dietro un lucchetto è chi monta, dentro `Custodia`
-([custodia.rs:86](../../crates/fub-host/src/custodia.rs)). La `Custodia` ha
+([custodia.rs:122](../../crates/fub-host/src/custodia.rs)). La `Custodia` ha
 quattro porte e nient'altro: `read`, `write`, `try_read`, `try_write`.
 Chiamarci `.lock()` **non compila**.
 
