@@ -449,12 +449,23 @@ static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 /// [`e_temporaneo_di_scrittura`] qui accanto.
 fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
-    let name = path.file_name().unwrap_or("senza-nome");
-    dir.join(format!(
+    dir.join(nome_del_temporaneo(path.file_name().unwrap_or("senza-nome")))
+}
+
+/// Il **nome** del temporaneo di `name`, senza la cartella in cui va.
+///
+/// Sta scorporato perché la forma ha due scrittori e uno solo dei due lavora in
+/// UTF-8: l'esportazione posa i suoi artefatti in una cartella che l'utente ha
+/// scelto nel dialogo di sistema, cioè in un `Path` qualunque, e ha bisogno di
+/// questa forma senza poter passare da un [`Utf8Path`]. Il nome del file però è
+/// suo — glielo dà il provider — quindi ciò che attraversa è una `&str`, e la
+/// regola resta scritta una volta sola (difetto 0183).
+pub(crate) fn nome_del_temporaneo(name: &str) -> String {
+    format!(
         ".{name}.tmp{}-{}",
         std::process::id(),
         TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ))
+    )
 }
 
 /// Quanto vecchio dev'essere un temporaneo di scrittura perché nessuno lo stia
