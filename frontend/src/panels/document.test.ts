@@ -62,3 +62,65 @@ describe("l'ascoltatore di document_changed", () => {
     ).toBeLessThan(guardia);
   });
 });
+
+/// Il corpo di una funzione esportata, dalla sua firma alla prima riga che
+/// chiude in colonna zero. Stessa forma — e stessa zona cieca dichiarata — del
+/// ritaglio qui sopra: una riga scritta in una funzione chiamata da lì, invece
+/// che lì, non la si vedrebbe.
+function corpoDi(nome: string): string {
+  const apre = sorgente.indexOf(`export function ${nome}(`);
+  expect(apre, `\`${nome}\` non si chiama più così`).toBeGreaterThan(-1);
+  const chiude = sorgente.indexOf("\n}\n", apre);
+  return sorgente.slice(apre, chiude === -1 ? sorgente.length : chiude);
+}
+
+// **I due ritardi si fermano insieme** (difetto 0211).
+//
+// Chi chiede conferma di una cancellazione non ha deciso «non salvare»: ha
+// deciso che quel testo non tocchi il disco finché non c'è una risposta. La
+// domanda la disegna il sistema operativo e può restare aperta quanto vuole
+// l'utente; il ritardo della bozza è di un secondo. Fermando il solo
+// salvataggio, la rete si stendeva *dentro* la finestra in cui la shell aveva
+// deciso che non si scrive — e sulla strada del sì quella bozza sopravviveva
+// alla nota, per tornare al riavvio dopo come `orfana`.
+//
+// Il presidio guarda il sorgente per la ragione scritta in cima a questo file:
+// `document.ts` non si monta in un test senza DOM, editor, layout e IPC, e ciò
+// che è sbagliato qui è **quali righe ci sono**, non un valore che una
+// funzione pura potrebbe rendere.
+describe("sospendere e riprendere i ritardi", () => {
+  it("ne ferma due, non uno", () => {
+    const testo = corpoDi("suspendSave");
+    expect(testo).toContain("clearTimeout(buf.timer)");
+    expect(
+      testo,
+      "`suspendSave` ferma il salvataggio e lascia correre la bozza: la rete " +
+        "si stende dentro la finestra in cui la shell ha appena deciso che quel " +
+        "testo non tocca il disco, e su un sì sopravvive alla nota cestinata",
+    ).toContain("clearTimeout(buf.draftTimer)");
+  });
+
+  it("ne rimette in coda due, non uno", () => {
+    const testo = corpoDi("resumeSave");
+    expect(testo).toContain("scheduleSave(");
+    expect(
+      testo,
+      "la ripresa riaccende il salvataggio e non la bozza: dopo un ripensamento " +
+        "il buffer resta sporco senza la sua rete sotto",
+    ).toContain("scheduleDraft(");
+  });
+
+  // L'altra metà: il sospeso era **uno**, e la seconda sospensione copriva la
+  // prima. Oggi il chiamante è uno solo — ma i secondi chiamanti hanno già un
+  // nome (una rinomina dentro una conversione, un'importazione mentre una
+  // modale è aperta), e un insieme li fa nascere giusti invece di aspettarli.
+  it("tiene un posto per documento, non un posto solo", () => {
+    expect(
+      sorgente,
+      "il documento sospeso è tornato a essere una casella sola: due " +
+        "sospensioni annidate si pestano, e la prima ripresa riaccende quello " +
+        "sbagliato lasciando l'altro fermo per sempre",
+    ).toContain("const sospesi = new Set<string>()");
+    expect(sorgente).not.toContain("let sospeso: string | null");
+  });
+});
