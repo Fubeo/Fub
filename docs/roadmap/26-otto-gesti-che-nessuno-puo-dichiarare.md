@@ -5,7 +5,7 @@ un gesto funziona — l'app lo compie, per sé — e **non esiste il dato che lo
 dichiara**. Non sono funzionalità mancanti: sono porte mancanti fra un gesto e
 il contratto, e finché non ci sono, ogni gesto nuovo si paga per intero.
 
-**Tre delle otto sono chiuse.** La §26.6 con la
+**Quattro delle otto sono chiuse.** La §26.6 con la
 [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md), che ha spaccato
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` finché farlo
 costava sei righe e zero manifest da migrare — era la sola la cui finestra si
@@ -14,7 +14,16 @@ chiudesse prima del freeze. E la §26.3 con la
 stata decisa ma **raggiunta**: la forma che raccomandava è arrivata da sé
 mentre si riparava il difetto che questa voce stessa aveva depositato, e al
 verbale è restato il residuo — dire la grammatica dove la legge chi non
-compila il contratto.
+compila il contratto. La §26.4 con la
+[0150](../decisions/0150-il-piano-e-della-superficie.md), che ha detto **no** al
+campo `layer`: il piano è della superficie e non della view, e una superficie in
+più è additiva quanto il campo. E la §26.2 con la
+[0151](../decisions/0151-il-terzo-registro-si-guarda-anche-senza-salire.md),
+nella forma (b) che questa voce raccomandava: i 102 accordi montati sull'editor
+adesso un banco li confronta coi due registri dichiarati, e le tre collisioni
+che ne escono — `mod-f`, `mod-shift-\`, `mod-shift-l` — stanno scritte per nome,
+perché un presidio rosso a tempo indeterminato non è un presidio e a decidere
+chi tiene `Ctrl+F` è la §26.1.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -373,7 +382,8 @@ e sono le tre voci di questa seduta.
 
 ### 26.2 Cinque registri di tastiera, e il presidio ne guarda due
 
-*aperta · strato **shell** · **P1***
+*chiusa · strato **shell** · **P1** ·
+[0151](../decisions/0151-il-terzo-registro-si-guarda-anche-senza-salire.md)*
 
 **1. La domanda.** Un accordo montato **dentro l'editor** è un accordo? Cioè:
 deve stare in un registro che l'utente vede e che il presidio dei conflitti
@@ -530,7 +540,7 @@ parla dei chiamanti di `onLingua`: non è una fonte sul numero di trappole.
       È il costo unitario della forma (d) di questa stessa voce, moltiplicato
       per quattordici. In cambio l'utente rilega `Ctrl+B`, spegne l'auto-indent
       di `Tab`, e i conflitti diventano visibili al banco che li guarda.
-- [ ] **(b) Solo il presidio** — un mirror che emette `obsidianKeymap` e
+- [x] **(b) Solo il presidio** — un mirror che emette `obsidianKeymap` e
       `basicSetup` in una fixture, e la fa entrare in `tutti()`. È la forma già
       in casa: `shell_keys_mirror.rs` fa esattamente questo per il registro 1
       ([0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)). Paga **chi
