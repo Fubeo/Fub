@@ -150,12 +150,26 @@ impl VaultStorage for SupportoCheConta {
         }
         self.inner.write(path, bytes)
     }
+    /// L'anagrafe passa di qui e non dalla `write`, perché si **fonde** con ciò
+    /// che sul disco c'è adesso (difetto 0189): a contare è la fusione che
+    /// risponde con dei byte, cioè il file che cambia davvero — un
+    /// aggiornamento che risponde «non scrivo» non è una scrittura, ed è
+    /// esattamente ciò che questi banchi non vogliono contare.
     fn update(
         &self,
         path: &Utf8Path,
         fondi: fub_kernel::storage::Fusione<'_>,
     ) -> std::io::Result<()> {
-        self.inner.update(path, fondi)
+        let anagrafe = path.as_str().ends_with("entries.json");
+        let scritture = Arc::clone(&self.scritture_dell_anagrafe);
+        let mut contando = move |vecchio: Option<&[u8]>| {
+            let esito = fondi(vecchio);
+            if anagrafe && matches!(esito, Ok(Some(_))) {
+                scritture.fetch_add(1, Ordering::Relaxed);
+            }
+            esito
+        };
+        self.inner.update(path, &mut contando)
     }
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
         self.inner.append(path, bytes)

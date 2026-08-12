@@ -259,36 +259,110 @@ impl EntryStore {
     /// cose diverse, e nessuno le teneva d'occhio perché l'esito non risale.
     /// Con l'ordine giusto un guasto costa ciò che un dato derivato deve
     /// costare — una riapertura lenta — e niente altro.
+    ///
+    /// **Si adotta ciò che si è composto, non ciò che si portava**
+    /// ([`Durevole::aggiorna`]): la tabella che finisce nel file nasce mettendo
+    /// la propria fotografia sopra quella che sul disco c'è adesso — vedi
+    /// [`arricchisci`] — e la memoria dev'essere quella, o resterebbe l'unica
+    /// copia più povera del file che la porta.
     pub(crate) fn store(&mut self, entries: BTreeMap<DocId, StoredEntry>) -> Result<(), String> {
-        // **Una tabella che il disco ha già non si riscrive.** Da quando
-        // l'anagrafe si scrive anche alla chiusura del vault, chi apre e chiude
-        // senza toccare niente passa di qui due volte con lo stesso contenuto:
-        // senza questa riga la seconda volta serializzerebbe e riscriverebbe una
-        // riga per file del vault per non dire niente di nuovo.
-        //
-        // Il confronto è lecito **perché** `known` è un [`Durevole`]: dice ciò
-        // che il disco ha accettato, non ciò che qualcuno si è annotato. Con un
-        // campo normale questa riga sarebbe una scommessa — una scrittura
-        // fallita avrebbe lasciato in memoria una tabella mai scritta, e il
-        // confronto avrebbe saltato la scrittura che la ripara.
+        // **Il giro che non serve non si fa nemmeno cominciare.** Il confronto è
+        // lecito **perché** `known` è un [`Durevole`]: dice ciò che il disco ha
+        // accettato, non ciò che qualcuno si è annotato. Con un campo normale
+        // questa riga sarebbe una scommessa — una scrittura fallita avrebbe
+        // lasciato in memoria una tabella mai scritta, e il confronto avrebbe
+        // saltato la scrittura che la ripara. Non è però il solo cancello:
+        // quello che decide davvero se il file cambia sta dentro la fusione, e
+        // guarda il disco riletto.
         if entries == *self.known {
             return Ok(());
         }
         let (path, storage) = (&self.path, self.storage.as_ref());
-        self.known.scrivi(entries, |entries| {
-            let json = serde_json::to_vec(&EntriesFile {
-                version: SCHEMA_VERSION,
-                entries,
-            })
-            .map_err(|e| e.to_string())?;
-            // Le cartelle mancanti le crea il supporto, che è dove quella riga
-            // sta scritta una volta sola (§15.1).
+        // Ciò che la fusione ha composto, per adottarlo: la memoria è ciò che il
+        // disco ha accettato, e qui il disco accetta la tabella **fusa** e non
+        // quella che il chiamante aveva in mano.
+        let mut fusa = None;
+        self.known.aggiorna(|| {
             storage
-                .write(path, &json)
-                .map(|_| ())
-                .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
+                .update(path, &mut |vecchia: Option<&[u8]>| {
+                    let mut tabella = entries.clone();
+                    if let Some(vecchia) = vecchia.and_then(decodifica) {
+                        arricchisci(&mut tabella, &vecchia);
+                        // **Una tabella che il disco ha già non si riscrive.**
+                        // Da quando l'anagrafe si scrive anche alla chiusura del
+                        // vault, chi apre e chiude senza toccare niente passa di
+                        // qui due volte con lo stesso contenuto: senza questa
+                        // riga la seconda volta serializzerebbe e riscriverebbe
+                        // una riga per file del vault per non dire niente di
+                        // nuovo. La domanda si pone **al disco riletto** e non
+                        // alla memoria, perché è il disco che decide se c'è
+                        // qualcosa da cambiare — e perché la memoria, dopo una
+                        // fusione, è più ricca della tabella che il chiamante
+                        // porta.
+                        if tabella == vecchia {
+                            fusa = Some(tabella);
+                            return Ok(None);
+                        }
+                    }
+                    let json = serde_json::to_vec(&EntriesFile {
+                        version: SCHEMA_VERSION,
+                        entries: &tabella,
+                    })
+                    .map_err(std::io::Error::other)?;
+                    fusa = Some(tabella);
+                    Ok(Some(json))
+                })
+                // Le cartelle mancanti le crea il supporto, che è dove quella
+                // riga sta scritta una volta sola (§15.1).
+                .map_err(|e| format!("non riesco a scrivere {path}: {e}"))?;
+            // La fusione compone la tabella anche quando risponde «non scrivo»,
+            // perché è comunque ciò che il disco ha. Se un supporto scegliesse
+            // di non chiamarla affatto, la memoria resta quella che il chiamante
+            // voleva: la stessa tabella, senza l'arricchimento.
+            Ok(fusa.take().unwrap_or(entries))
         })
     }
+}
+
+/// Ciò che la tabella di chi ha chiuso prima sapeva **in più**, tenuto (difetto
+/// 0189).
+///
+/// Due installazioni sulla stessa cartella scrivono ciascuna la propria
+/// fotografia intera del vault, e l'ultima che finisce è quella che resta: fra
+/// due fotografie dello stesso disco è la risposta giusta, e non c'è niente da
+/// fondere sulla **presenza** — chi scrive ha appena camminato il vault, e un
+/// file che la sua fotografia non ha non c'è più. Ma le due non sono ugualmente
+/// ricche: l'impronta e i metadati ci sono solo per i file che *quella*
+/// installazione ha letto, e chi chiude per secondo senza aver letto niente
+/// buttava il lavoro di chi aveva letto tutto — cioè si tornava a rileggere e
+/// riparsare il vault alla prima riapertura, che è la cosa che questa tabella
+/// esiste per non fare.
+///
+/// Si arricchisce **solo ciò che c'è già** e solo quando la voce vecchia
+/// descrive ancora lo stesso file: `describes` è lo stesso criterio con cui
+/// `scan_vault` decide se crederle, quindi qui non entra niente che di là
+/// verrebbe rifiutato. Nessuna voce nasce da questa funzione, e nessuna
+/// risuscita.
+fn arricchisci(nuova: &mut BTreeMap<DocId, StoredEntry>, vecchia: &BTreeMap<DocId, StoredEntry>) {
+    for (id, voce) in nuova.iter_mut() {
+        let Some(prima) = vecchia.get(id) else { continue };
+        if !prima.describes(voce.size, voce.mtime) {
+            continue;
+        }
+        if voce.fingerprint.is_none() {
+            voce.fingerprint = prima.fingerprint.clone();
+        }
+        if voce.meta.is_none() {
+            voce.meta = prima.meta.clone();
+        }
+    }
+}
+
+/// I byte di una tabella, o niente. È la metà di [`load`] che non tocca il
+/// supporto, perché la fusione i byte ce li ha già in mano.
+fn decodifica(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
+    let file: EntriesFile = serde_json::from_slice(raw).ok()?;
+    (file.version == SCHEMA_VERSION).then_some(file.entries)
 }
 
 /// Legge la tabella.
@@ -301,12 +375,7 @@ impl EntryStore {
 /// caduta: è stata spostata dove si osserva, cioè al momento in cui una voce
 /// entra in anagrafe (difetto 0187). Ciò che è scritto qui è già passato di lì.
 fn load(path: &Utf8Path, storage: &dyn VaultStorage) -> Option<BTreeMap<DocId, StoredEntry>> {
-    let raw = storage.read(path).ok()?;
-    let file: EntriesFile = serde_json::from_slice(&raw).ok()?;
-    if file.version != SCHEMA_VERSION {
-        return None;
-    }
-    Some(file.entries)
+    decodifica(&storage.read(path).ok()?)
 }
 
 #[cfg(test)]
@@ -342,6 +411,102 @@ mod tests {
         assert!(voce.describes(3, 1_000));
         assert!(!voce.describes(3, 1_001), "la data fa parte del criterio");
         assert!(!voce.describes(4, 1_000), "e la dimensione anche");
+    }
+
+    /// **Chi chiude per secondo non butta ciò che chi ha chiuso per primo aveva
+    /// letto** (difetto 0189).
+    ///
+    /// La riga chiedeva per `store` «il lock che le altre riscritture integrali
+    /// prendono», e quel lock non esisteva da nessuna parte: in questo kernel il
+    /// lucchetto accompagna sempre una **rilettura** — `update_atomic` e
+    /// `VaultStorage::update`, gli unici due che lo prendono — e il perché sta
+    /// scritto lì accanto, «chi prende il lock e poi ricompone dalla copia
+    /// vecchia non ha risolto niente». Preso da solo non avrebbe curato niente
+    /// nemmeno qui: due fotografie intere dello stesso disco restano due, e
+    /// serializzarle lascia comunque vincere l'ultima.
+    ///
+    /// A vincere l'ultima va bene per la **presenza** — chi scrive ha appena
+    /// camminato il vault — e non per la ricchezza: l'impronta e i metadati ce
+    /// li ha solo chi ha letto i file. Qui la prima installazione ha letto, la
+    /// seconda no, e la seconda chiude dopo; senza la fusione la sua fotografia
+    /// povera copre quella ricca e la riapertura successiva rilegge e riparsa
+    /// l'intero vault — cioè la cosa che questa tabella esiste per non fare.
+    #[test]
+    fn chi_chiude_per_secondo_non_butta_le_impronte_di_chi_ha_letto() {
+        let (_tmp, root) = tempdir();
+        let fs = || Arc::new(crate::storage::FsStorage);
+        let impronta = Revision::new("0123456789abcdef");
+
+        // La seconda installazione apre **prima** che la prima abbia scritto:
+        // ciò che scriverà alla chiusura è tutto ciò che sa, e non sa niente.
+        let mut seconda = EntryStore::open(&root, fs());
+
+        let mut prima = EntryStore::open(&root, fs());
+        prima
+            .store(BTreeMap::from([
+                (
+                    DocId::new("letta.md"),
+                    StoredEntry {
+                        fingerprint: Some(impronta.clone()),
+                        ..voce(3, 1_000)
+                    },
+                ),
+                (
+                    DocId::new("cambiata.md"),
+                    StoredEntry {
+                        fingerprint: Some(impronta.clone()),
+                        ..voce(3, 1_000)
+                    },
+                ),
+                (DocId::new("sparita.md"), voce(9, 1_000)),
+            ]))
+            .expect("la prima chiude, e ha letto");
+
+        seconda
+            .store(BTreeMap::from([
+                // Stesso file, stessa dimensione, stessa data: l'impronta che
+                // non ha è ancora buona.
+                (DocId::new("letta.md"), voce(3, 1_000)),
+                // Lo stesso nome, ma il disco l'ha smentita: qui l'impronta
+                // vecchia sarebbe una bugia scritta su disco.
+                (DocId::new("cambiata.md"), voce(4, 1_100)),
+            ]))
+            .expect("la seconda chiude dopo, e non ha letto niente");
+
+        let riletta = EntryStore::open(&root, fs());
+        assert_eq!(
+            riletta
+                .known(&DocId::new("letta.md"))
+                .and_then(|v| v.fingerprint.clone()),
+            Some(impronta),
+            "l'impronta di chi aveva letto è stata coperta da chi non aveva \
+             letto: alla prossima apertura si rilegge e si riparsa un file che \
+             nessuno ha toccato"
+        );
+        assert_eq!(
+            riletta
+                .known(&DocId::new("cambiata.md"))
+                .and_then(|v| v.fingerprint.clone()),
+            None,
+            "un'impronta che il disco ha smentito non si tiene: sarebbe un \
+             indice fermo su un contenuto che non c'è più"
+        );
+        assert!(
+            riletta.known(&DocId::new("sparita.md")).is_none(),
+            "la fusione ha risuscitato un file che la fotografia più recente \
+             non ha: chi scrive ha appena camminato il vault, e sulla presenza \
+             è lui l'autorità"
+        );
+        assert_eq!(
+            seconda
+                .known(&DocId::new("letta.md"))
+                .and_then(|v| v.fingerprint.clone()),
+            riletta
+                .known(&DocId::new("letta.md"))
+                .and_then(|v| v.fingerprint.clone()),
+            "chi è rimasto aperto e chi riapre non vedono la stessa tabella: la \
+             memoria dev'essere ciò che il disco ha accettato"
+        );
     }
 
     #[test]
