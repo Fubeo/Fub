@@ -754,6 +754,22 @@ pub struct Identita {
 }
 
 impl FsStorage {
+    /// Il giro `read` → `fondi` di [`VaultStorage::update`], **senza** il
+    /// lucchetto: chi chiama decide se tenerlo, perché è la sola cosa che
+    /// distingue i due passaggi di [`FsStorage::update`].
+    fn rileggi_e_fondi(
+        &self,
+        path: &Utf8Path,
+        fondi: Fusione<'_>,
+    ) -> io::Result<Option<Vec<u8>>> {
+        let attuale = match self.read(path) {
+            Ok(bytes) => Some(bytes),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e),
+        };
+        fondi(attuale.as_deref())
+    }
+
     /// Il corpo di [`VaultStorage::write`], col **rilevatore passato** invece
     /// che nominato.
     ///
@@ -1017,19 +1033,51 @@ impl VaultStorage for FsStorage {
     /// aggiornamento che non trova niente da aggiornare non deve lasciare
     /// dietro di sé la cartella di un vault che nessuno ha ancora aperto — è la
     /// differenza fra una radice che non si legge, e che quindi non si apre, e
-    /// una radice che l'apertura stessa ha fatto esistere vuota. Senza cartella
-    /// non c'è nemmeno il file, quindi non c'è nessun contenuto che un altro
-    /// processo possa perdere: `fondi` riceve `None` e, se decide di scrivere,
-    /// è [`write`](VaultStorage::write) a creare l'albero.
+    /// una radice che l'apertura stessa ha fatto esistere vuota.
+    ///
+    /// # Quando la cartella non c'è, e si scrive lo stesso
+    ///
+    /// «Senza cartella non c'è nemmeno il file, quindi non c'è niente che un
+    /// altro processo possa perdere» è vero **nell'istante in cui si guarda**, e
+    /// la scrittura viene dopo (difetto 0171). È la prima scrittura in un vault
+    /// nuovo, cioè il momento in cui due installazioni che aprono la stessa
+    /// cartella partono davvero insieme: fra il `read` che risponde «non c'è» e
+    /// la `write` che crea l'albero ci sta l'intero giro dell'altra, e chi
+    /// arriva secondo posa il file che ha composto dal nulla sopra quello che il
+    /// primo aveva appena scritto — la *lost update* che la
+    /// [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)
+    /// ha tolto a ogni altra scrittura, lasciata dove il file è più povero e
+    /// quindi meno sospetta: si perde una configurazione di due righe, non un
+    /// vault di note.
+    ///
+    /// La riparazione non è prendere il lucchetto comunque, che rimetterebbe la
+    /// cartella dove non la si voleva. È **rimandarlo al momento in cui si sa
+    /// che serve**: il giro senza lucchetto vale come prima, e se `fondi`
+    /// risponde «non scrivo» finisce lì, senza aver toccato niente; se invece
+    /// risponde con dei byte, allora la cartella nascerà comunque — la crea la
+    /// `write` — e a quel punto crearla per il compagno di lock non aggiunge
+    /// nessun danno, mentre rifare il giro sotto lucchetto toglie la finestra.
+    /// La seconda rilettura è quella che conta: legge ciò che l'altro ha
+    /// scritto nel frattempo, e `fondi` fonde con quello invece di ignorarlo.
+    ///
+    /// Chiamare `fondi` due volte è dentro il patto — è una `FnMut` proprio
+    /// perché «un supporto che riprova quando qualcun altro gli ha cambiato il
+    /// file sotto» è un supporto lecito —, e si paga una volta sola nella vita
+    /// di un vault.
     fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
         let cartella_c_e = path.parent().map(Utf8Path::exists).unwrap_or(true);
-        let _lock = cartella_c_e.then(|| lock_esclusivo(path));
-        let attuale = match self.read(path) {
-            Ok(bytes) => Some(bytes),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-            Err(e) => return Err(e),
-        };
-        match fondi(attuale.as_deref())? {
+        if cartella_c_e {
+            let _lock = lock_esclusivo(path);
+            return match self.rileggi_e_fondi(path, &mut *fondi)? {
+                Some(bytes) => self.write(path, &bytes).map(|_| ()),
+                None => Ok(()),
+            };
+        }
+        if self.rileggi_e_fondi(path, &mut *fondi)?.is_none() {
+            return Ok(());
+        }
+        let _lock = lock_esclusivo(path);
+        match self.rileggi_e_fondi(path, &mut *fondi)? {
             Some(bytes) => self.write(path, &bytes).map(|_| ()),
             None => Ok(()),
         }
@@ -2002,6 +2050,77 @@ mod tests {
         let radice = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
         let protetto = radice.join("impostazioni.json");
         (dir, protetto)
+    }
+
+    /// **La prima scrittura in un vault nuovo non perde quella dell'altro**
+    /// (difetto 0171).
+    ///
+    /// La corsa vera dura microsecondi e non si presidia col cronometro: la si
+    /// mette dove sta, cioè **dentro** la finestra. La fusione, alla sua prima
+    /// chiamata, fa quello che farebbe l'altra installazione — crea la cartella
+    /// e posa il file — proprio fra il «non c'è niente» che abbiamo appena letto
+    /// e la scrittura che stiamo per fare. Da lì in poi non c'è più niente di
+    /// simulato: o il giro si rifà sotto lucchetto rileggendo ciò che l'altro ha
+    /// scritto, oppure lo si copre.
+    ///
+    /// Che la fusione venga chiamata due volte è dentro il patto di
+    /// [`Fusione`], ed è per questo che il contatore serve a distinguere i due
+    /// giri e non a pretendere che ce ne sia uno solo.
+    #[test]
+    fn la_prima_scrittura_in_un_vault_nuovo_non_perde_quella_dell_altro() {
+        let (_dir, dentro) = cartella();
+        // Il file sta sotto una cartella che **non c'è ancora**: è la prima
+        // scrittura in un vault mai aperto, che è il solo caso senza lucchetto.
+        let protetto = dentro.parent().unwrap().join(".fub/impostazioni.json");
+        assert!(!protetto.parent().unwrap().exists());
+
+        let mut giri = 0;
+        let altrove = protetto.clone();
+        FsStorage
+            .update(&protetto, &mut |attuale| {
+                giri += 1;
+                if giri == 1 {
+                    std::fs::create_dir_all(altrove.parent().unwrap())?;
+                    std::fs::write(&altrove, b"tema=scuro\n")?;
+                }
+                let mut fuso = attuale.map(<[u8]>::to_vec).unwrap_or_default();
+                fuso.extend_from_slice(b"lingua=it\n");
+                Ok(Some(fuso))
+            })
+            .expect("la scrittura riesce");
+
+        let finale = std::fs::read_to_string(&protetto).expect("il file c'è");
+        assert!(
+            finale.contains("tema=scuro"),
+            "la riga dell'altra installazione è stata coperta da una scrittura \
+             composta a partire da un file che, quando l'abbiamo letto, non \
+             c'era ancora: {finale:?}"
+        );
+        assert!(finale.contains("lingua=it"), "e la nostra c'è: {finale:?}");
+    }
+
+    /// L'altra metà, che impedisce alla riparazione di diventare «si prende il
+    /// lucchetto comunque»: un aggiornamento che non trova niente da aggiornare
+    /// e decide di non scrivere **non fa nascere la cartella del vault**. Una
+    /// radice che l'apertura stessa ha fatto esistere vuota è la differenza fra
+    /// un vault che non c'è e un vault che c'è ed è vuoto.
+    #[test]
+    fn un_aggiornamento_che_non_scrive_non_fa_nascere_la_cartella() {
+        let (_dir, dentro) = cartella();
+        let protetto = dentro.parent().unwrap().join(".fub/impostazioni.json");
+
+        FsStorage
+            .update(&protetto, &mut |attuale| {
+                assert!(attuale.is_none(), "non c'era niente da leggere");
+                Ok(None)
+            })
+            .expect("non scrivere non è un guasto");
+
+        assert!(
+            !protetto.parent().unwrap().exists(),
+            "la cartella del vault è nata da un aggiornamento che non ha \
+             scritto niente: {protetto}"
+        );
     }
 
     /// Un lock libero **si prende**: l'attesa che questo modulo si è dato non
