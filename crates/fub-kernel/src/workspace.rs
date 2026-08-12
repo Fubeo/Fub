@@ -3675,9 +3675,45 @@ impl Workspace {
             self.remove_document(&from_id);
             return Ok(true);
         }
-        let source = self.docs.vault.read(&to_id)?;
-        let model = self.docs.parse(&to_id, &source)?;
-        self.migrate_identity(&from_id, &to_id, model, Revision::of(&source));
+        // **Il disco è già avanti, quindi da qui in poi un `Err` secco è il
+        // difetto** (0181). Chi ha spostato il file è un'altra applicazione: a
+        // `to` i byte ci sono da prima che il rilevatore ce lo dicesse, e a
+        // `from` non c'è più niente. Rispondere `Err` perché la destinazione
+        // non si rilegge o non si parsa lasciava memoria, grafo, indici,
+        // registro ed eventi fermi al nome vecchio — cioè un vault che mostra
+        // una nota che sul disco non esiste, e che ad aprirla dà un errore,
+        // fino alla riapertura.
+        //
+        // È la regola che `restore_from_trash` enuncia dal verso in cui la si
+        // può ancora rispettare — «il parse è puro, e farlo dopo lascerebbe il
+        // disco avanti rispetto a modelli, grafo e indici davanti a un
+        // chiamante che riceve `Err`» —: là si legge **prima** di muovere,
+        // qui muovere non è stata una nostra mossa e l'ordine non si può più
+        // scegliere. Ciò che resta da rispettare è la seconda metà: non
+        // lasciare vivo il nome vecchio.
+        //
+        // Non serve inventare un ramo: sono le **due mezze verità** che questa
+        // funzione dice già in tre punti (§14.1) — da `from` è sparito
+        // qualcosa, in `to` è comparso qualcosa — col prezzo già dichiarato
+        // sopra, la storia di `from` che si spezza. Si paga solo quando
+        // l'alternativa è un vault che racconta un file che non c'è; e se
+        // anche la seconda metà non riesce, l'errore che risale arriva **dopo**
+        // che la prima è stata detta, non al posto suo.
+        let letto = match self.docs.vault.read(&to_id) {
+            Ok(source) => self
+                .docs
+                .parse(&to_id, &source)
+                .map(|model| (model, Revision::of(&source))),
+            Err(e) => Err(e),
+        };
+        let (model, revisione) = match letto {
+            Ok(fatto) => fatto,
+            Err(_) => {
+                let partito = self.sync_path_here(from)?;
+                return Ok(self.sync_path_here(to)? || partito);
+            }
+        };
+        self.migrate_identity(&from_id, &to_id, model, revisione);
         self.emit_event(Event::IndexUpdated);
         self.dispatch_pending();
         Ok(true)
