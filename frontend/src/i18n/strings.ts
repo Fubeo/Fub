@@ -217,7 +217,7 @@ const IT = {
   "settings.tab.shortcuts": "Scorciatoie",
   "settings.group.other": "Altro",
   "settings.shortcuts_hint":
-    "Una riga per comando: la combinazione che lo esegue. `Mod` è Ctrl (Cmd sul Mac); si scrive come `Mod-Shift-f`. Una combinazione senza modificatori non viene onorata, perché ruberebbe una lettera a chi sta scrivendo.",
+    "Una riga per comando: la combinazione che lo esegue. `Mod` è Ctrl (Cmd sul Mac); si scrive come `Mod-Shift-f`. I modificatori sono tre — `Mod`, `Shift`, `Alt` — e nessun altro: un `Ctrl-k` scritto a mano non viene onorato. Una combinazione senza modificatori non viene onorata, perché ruberebbe una lettera a chi sta scrivendo. Uno spazio separa due tasti premuti uno dopo l'altro: `Mod-k d` è una scorciatoia sola.",
   "settings.shortcuts.none": "Nessun comando dichiarato.",
   // --- i tasti che il vault propone (§23.13) -----------------------------
   //
@@ -606,7 +606,7 @@ const EN: Record<Chiave, string> = {
   "settings.tab.vaults": "Vaults",
   "settings.tab.shortcuts": "Shortcuts",
   "settings.shortcuts_hint":
-    "One row per command: the combination that runs it. `Mod` is Ctrl (Cmd on the Mac); you write it as `Mod-Shift-f`. A combination without modifiers is not honoured, because it would steal a letter from whoever is typing.",
+    "One row per command: the combination that runs it. `Mod` is Ctrl (Cmd on the Mac); you write it as `Mod-Shift-f`. There are three modifiers — `Mod`, `Shift`, `Alt` — and no others: a hand-written `Ctrl-k` is not honoured. A combination without modifiers is not honoured, because it would steal a letter from whoever is typing. A space separates two keys pressed one after the other: `Mod-k d` is a single shortcut.",
   "settings.shortcuts.none": "No command declared.",
   "settings.vault_keys.title": "This vault proposes {count} shortcuts",
   "settings.vault_keys.hint":

@@ -802,7 +802,7 @@ scorciatoia la invoca, un'automazione la chiamerà. La 0013 ha trasformato in
 comandi le azioni strutturali della shell, e sei comandi Tauri sono spariti.
 
 ### esito parziale
-`Partial` / `Failure` · [`abi/command.rs:605`](../crates/fub-abi/src/command.rs) · [0101](decisions/0101-una-voce-non-e-un-passo.md)
+`Partial` / `Failure` · [`abi/command.rs:613`](../crates/fub-abi/src/command.rs) · [0101](decisions/0101-una-voce-non-e-un-passo.md)
 
 *Di N cose, quante e quali non sono riuscite.* Non è una terza parola accanto a
 riuscito e fallito: un'operazione a metà **è riuscita** per la parte che ha
@@ -907,7 +907,7 @@ shell di oggi abbia un documento aperto e nessun modello di tab non è
 un'obiezione.
 
 ### undo a due pile
-`Undo` / `UndoStep` · [`abi/command.rs:712`](../crates/fub-abi/src/command.rs) · [0045](decisions/0045-l-undo-ha-due-pile.md)
+`Undo` / `UndoStep` · [`abi/command.rs:720`](../crates/fub-abi/src/command.rs) · [0045](decisions/0045-l-undo-ha-due-pile.md)
 
 Le due pile che **non si fondono**: quella dell'editor (il testo) e quella
 strutturale (rinomina, spostamento, cestino). L'inverso di un'operazione
