@@ -60,9 +60,9 @@ Sono uscite 152 voci:
   forma della compilazione invece del prodotto, e cerca **quanto costa a chi
   lavora sapere che niente si è rotto**.
 
-Centocinquantuno voci sono chiuse. I loro verbali stanno in
+Centocinquantadue voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **tre** [conta: voci-aperte]. Questo file è il
+Le voci ancora aperte sono **due** [conta: voci-aperte]. Questo file è il
 loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -185,15 +185,15 @@ Si cercano le voci ponendo domande in questo ordine:
 
 ## Le voci
 
-Le voci aperte sono **tre** [conta: voci-aperte], e stanno tutte in una
+Le voci aperte sono **due** [conta: voci-aperte], e stanno tutte in una
 seduta sola.
 
 Sono la [seduta
 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) (2026-08-10). La misura
 su 424 gesti in [microfeatures/](microfeatures/) ha rivelato omissioni non
-dichiarate nei dati. Sono tutte e tre di contratto: dopo la
+dichiarate nei dati. Sono tutt'e due di contratto: dopo la
 [0151](decisions/0151-il-terzo-registro-si-guarda-anche-senza-salire.md) non ne
-resta nessuna di shell. Delle cinque chiuse, la
+resta nessuna di shell. Delle sei chiuse, la
 §26.6 era la sola **P0** e la sola che scadesse prima del freeze: l'ha chiusa la
 [0144](decisions/0144-una-spunta-sola-diceva-due-cose.md), spaccando
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` prima che un
@@ -216,7 +216,11 @@ un lucchetto e non uno zero, perché chi tiene `Ctrl+F` lo decide la §26.1. La
 bersaglio del clic dentro il contesto di sessione: uno stato che dura non è il
 posto di un fatto vero per un istante, e la promessa che il contratto ne faceva
 sopra `context-menu` era falsa — adesso è riparata, e un banco pretende che i
-campi di `ViewContext` restino quattro. Le dichiarazioni richiedono semplici
+campi di `ViewContext` restino quattro. La §26.8 l'ha chiusa la
+[0153](decisions/0153-non-c-e-una-terza-pila.md) senza una terza pila: una view
+di terzi che vuole il proprio annulla compone comandi, e il prezzo di quella
+strada — `fub:run-command` per ognuna — è il metro che dirà quando vale la pena
+di cambiarla. Le dichiarazioni richiedono semplici
 spostamenti, poiché le mosse sono già risolte per problemi confinanti.
 
 La [seduta 27](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md)
@@ -486,7 +490,6 @@ nessuno è tornato a prendere la casella.
 | --- | --- | --- | --- | --- |
 | **§26.1** | [Un accordo ha un contesto, o non ce l'ha](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#261-un-accordo-ha-un-contesto-o-non-ce-lha) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 | **§26.7** | [Il trascinamento è un dato, il rilascio no](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#267-un-rilascio-si-consegna-un-bersaglio-non-si-dichiara) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
-| **§26.8** | [La terza pila l'annulla dentro una view che non è del core](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#268-la-terza-pila-lannulla-dentro-una-view-che-non-è-del-core) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P2** |
 
 ## I difetti misurati
 
@@ -655,7 +658,7 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centocinquantadue** [conta: verbali], uno per file. Diceva
+  **centocinquantatré** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo

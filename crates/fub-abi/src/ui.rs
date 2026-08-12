@@ -855,6 +855,19 @@ impl UiAction {
 }
 
 /// Aggiornamento restituito da un `ViewProvider` dopo un'azione.
+///
+/// # Nessuna variante porta un annulla, ed è una decisione
+///
+/// Le pile sono **due** — quella del testo e quella delle operazioni
+/// (decisione 0045) — e una view con stato proprio, un canvas o una griglia,
+/// non ne ha una terza. La strada che ha è comporre **comandi**: un comando
+/// dichiara il proprio inverso come tutti gli altri, e a profondità zero il
+/// workspace lo mette in pila da sé. Il prezzo è `fub:run-command`, e quel
+/// prezzo è anche il **metro** della decisione contraria: il giorno in cui tre
+/// view di terzi avranno dovuto chiedere il permesso che moltiplica solo per
+/// fare `Ctrl+Z`, un campo su `view-spec` che dichiari una pila propria si sarà
+/// pagato da sé — prima di allora sarebbe un campo per un cliente che non c'è
+/// (decisione 0153).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ViewUpdate {

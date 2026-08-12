@@ -898,6 +898,11 @@ interface ui {
         key: string,
         node: ui-tree,
     }
+    /// NESSUNA VARIANTE PORTA UN ANNULLA, ed è una decisione: le pile sono due
+    /// (decisione 0045) e una view con stato proprio non ne ha una terza. La
+    /// strada è comporre COMANDI, che dichiarano il proprio inverso e che a
+    /// profondità zero finiscono in pila da sé; il prezzo è `fub:run-command`,
+    /// ed è anche il metro che riaprirebbe la domanda (decisione 0153).
     variant view-update {
         replace(ui-tree),
         none,

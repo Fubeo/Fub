@@ -5,7 +5,7 @@ un gesto funziona — l'app lo compie, per sé — e **non esiste il dato che lo
 dichiara**. Non sono funzionalità mancanti: sono porte mancanti fra un gesto e
 il contratto, e finché non ci sono, ogni gesto nuovo si paga per intero.
 
-**Cinque delle otto sono chiuse.** La §26.6 con la
+**Sei delle otto sono chiuse.** La §26.6 con la
 [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md), che ha spaccato
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` finché farlo
 costava sei righe e zero manifest da migrare — era la sola la cui finestra si
@@ -28,7 +28,11 @@ chi tiene `Ctrl+F` è la §26.1. E la §26.5 con la
 detto **no** al bersaglio del clic dentro `view-context` e ha riparato la
 promessa che il contratto ne faceva: la specie è sbagliata, uno stato che dura
 non ospita un fatto vero per un istante, e il bersaglio viaggerà con
-l'invocazione il giorno che qualcuno lo chieda.
+l'invocazione il giorno che qualcuno lo chieda. E la §26.8 con la
+[0153](../decisions/0153-non-c-e-una-terza-pila.md), che non ha aggiunto una
+terza pila: una view di terzi che vuole il proprio annulla compone comandi, e il
+prezzo di quella strada — `fub:run-command` per ognuna — è il metro che dirà
+quando vale la pena di cambiarla.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -1280,7 +1284,8 @@ ridimensionamento o selezione col puntatore. Il numero da citare è **14**.
 
 ### 26.8 La terza pila: l'annulla dentro una view che non è del core
 
-*aperta · strato **contratto** · **P2***
+*chiusa · strato **contratto** · **P2** ·
+[0153](../decisions/0153-non-c-e-una-terza-pila.md)*
 
 **1. La domanda.** Una view di terzi con stato manipolabile — un canvas, una
 griglia — può avere il proprio annulla? E chi arbitra fra le pile, quando i
