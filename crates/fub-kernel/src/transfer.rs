@@ -29,6 +29,8 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+use camino::Utf8Path;
+
 use fub_abi::transfer::{
     ArtifactContent, ArtifactHandle, ArtifactSink, ExportArtifact, SourceHandle,
 };
@@ -249,10 +251,41 @@ impl ArtifactSink for MemorySink {
 /// sul disco è l'host» — e fino alla 0102 non aveva un'implementazione, perché
 /// i byte arrivavano tutti insieme e posarli era una riga di chi chiamava. Con
 /// un export che versa a pezzi non lo è più.
+///
+/// # Il destinatario si tocca alla fine, o non si tocca
+///
+/// I byte non vanno sul path finale mentre arrivano: un export si versa a
+/// pezzi, e un `File::create` sul destinatario **tronca subito** ciò che c'era
+/// prima — quindi un export interrotto a metà (il provider che fallisce, il
+/// processo che se ne va) aveva già distrutto l'esportazione precedente e ne
+/// certificava come consegnata una monca. Ogni artefatto si scrive quindi
+/// accanto, in un temporaneo con la forma che
+/// [`nome_del_temporaneo`](crate::storage::nome_del_temporaneo) detta, e la
+/// `rename` alla chiusura è ciò che lo rende visibile: chi guarda quella
+/// cartella vede il file di prima finché non c'è quello nuovo, intero
+/// (difetto 0183).
+///
+/// La ricevuta esce **dopo** un `sync_all`, e non dopo un `flush`: `File` non
+/// ha un buffer suo, quindi il `flush` che stava qui non prometteva niente a
+/// nessuno, mentre `ArtifactContent::Delivered` è un conto che dice «questi
+/// byte ci sono».
 pub struct DirectorySink {
     root: PathBuf,
-    aperti: BTreeMap<u64, (String, String, File, u64)>,
+    aperti: BTreeMap<u64, Artefatto>,
     prossima: u64,
+}
+
+/// Un artefatto a metà strada: dove sta adesso, dove andrà, e quanto ne è
+/// passato.
+struct Artefatto {
+    path: String,
+    media_type: String,
+    /// Il temporaneo accanto al destinatario. È il file che si sta scrivendo.
+    di_lato: PathBuf,
+    /// Dove la `rename` lo porterà alla chiusura.
+    dest: PathBuf,
+    file: File,
+    scritti: u64,
 }
 
 impl DirectorySink {
@@ -279,41 +312,90 @@ impl ArtifactSink for DirectorySink {
                 PluginError::Io(format!("`{}` non si crea: {e}", dir.display()).into())
             })?;
         }
-        let file = File::create(&dest).map_err(|e| {
+        // Il nome del file lo dà il provider ed è già passato da
+        // `controlla_path`, quindi è UTF-8 e non ha separatori: la cartella
+        // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
+        let nome = crate::storage::nome_del_temporaneo(
+            dest.file_name().and_then(|n| n.to_str()).unwrap_or("artefatto"),
+        );
+        let di_lato = dest.with_file_name(nome);
+        let file = File::create(&di_lato).map_err(|e| {
             PluginError::Io(format!("`{}` non si scrive: {e}", dest.display()).into())
         })?;
         self.prossima += 1;
         self.aperti.insert(
             self.prossima,
-            (path.to_string(), media_type.to_string(), file, 0),
+            Artefatto {
+                path: path.to_string(),
+                media_type: media_type.to_string(),
+                di_lato,
+                dest,
+                file,
+                scritti: 0,
+            },
         );
         Ok(ArtifactHandle(self.prossima))
     }
 
     fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError> {
-        let Some((path, _, file, scritti)) = self.aperti.get_mut(&handle.0) else {
+        let Some(a) = self.aperti.get_mut(&handle.0) else {
             return Err(handle_ignoto());
         };
-        file.write_all(bytes)
-            .map_err(|e| PluginError::Io(format!("`{path}`: {e}").into()))?;
-        *scritti += bytes.len() as u64;
+        a.file
+            .write_all(bytes)
+            .map_err(|e| PluginError::Io(format!("`{}`: {e}", a.path).into()))?;
+        a.scritti += bytes.len() as u64;
         Ok(())
     }
 
     fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError> {
-        let Some((path, media_type, mut file, scritti)) = self.aperti.remove(&handle.0) else {
+        let Some(a) = self.aperti.remove(&handle.0) else {
             return Err(handle_ignoto());
         };
-        // `flush` prima della ricevuta: un conto emesso su byte ancora nel
-        // buffer sarebbe esattamente il conto che mente, cioè la cosa che
-        // `ArtifactContent::Delivered` esiste per non essere.
-        file.flush()
-            .map_err(|e| PluginError::Io(format!("`{path}` non si chiude: {e}").into()))?;
+        // Ogni via che esce di qui senza aver consegnato porta via il
+        // temporaneo: un artefatto che non è arrivato non deve lasciare per
+        // terra un file nascosto in una cartella dell'utente, che non è il
+        // vault e non ha nessuna raccolta che ci passi.
+        let guasto = |di_lato: &Path, e: std::io::Error, cosa: &str| {
+            let _ = std::fs::remove_file(di_lato);
+            PluginError::Io(format!("`{}` {cosa}: {e}", a.path).into())
+        };
+        // Il conto esce dopo che i byte sono sul disco, non dopo un `flush` che
+        // su un `File` non fa niente.
+        if let Err(e) = a.file.sync_all() {
+            return Err(guasto(&a.di_lato, e, "non si conclude"));
+        }
+        drop(a.file);
+        let di_lato = a.di_lato;
+        if let Err(e) = std::fs::rename(&di_lato, &a.dest) {
+            return Err(guasto(&di_lato, e, "non arriva a destinazione"));
+        }
+        // La cartella per ultima, e solo se si può guardare in UTF-8: è un
+        // `fsync` best-effort come quello del vault, e la cartella la sceglie
+        // l'utente in un dialogo di sistema.
+        if let Some(dir) = a.dest.parent().and_then(Utf8Path::from_path) {
+            crate::storage::sincronizza_la_cartella(dir);
+        }
         Ok(ExportArtifact {
-            path,
-            media_type,
-            content: ArtifactContent::Delivered(scritti),
+            path: a.path,
+            media_type: a.media_type,
+            content: ArtifactContent::Delivered(a.scritti),
         })
+    }
+}
+
+/// Un sink che se ne va con degli artefatti ancora aperti non lascia i loro
+/// temporanei per terra.
+///
+/// È il caso vero e non quello di scuola: l'export si interrompe perché il
+/// provider ha fallito a metà, e chi lo teneva lascia cadere il sink senza
+/// chiudere niente. Nel vault ci penserebbe la raccolta dei temporanei rimasti
+/// indietro; qui siamo in una cartella dell'utente, dove non passa nessuno.
+impl Drop for DirectorySink {
+    fn drop(&mut self) {
+        for (_, a) in std::mem::take(&mut self.aperti) {
+            let _ = std::fs::remove_file(&a.di_lato);
+        }
     }
 }
 
@@ -399,6 +481,66 @@ mod tests {
             );
         }
         assert!(sink.open_artifact("sotto/dentro.md", "text/plain").is_ok());
+    }
+
+    /// **Un export interrotto non ha già distrutto quello di prima** (difetto
+    /// 0183).
+    ///
+    /// Il caso è quello vero: si riesporta sopra un'esportazione che c'è già —
+    /// stesso nome di file, è il modo normale di aggiornarla — e il provider si
+    /// ferma a metà. Prima di questa riga il destinatario era già troncato dal
+    /// `File::create` e ci stavano dentro i byte arrivati fin lì.
+    #[test]
+    fn un_export_a_meta_non_ha_gia_mangiato_quello_di_prima() {
+        let dir = tempfile::tempdir().expect("una cartella per l'esito");
+        let dest = dir.path().join("esito.md");
+        std::fs::write(&dest, b"l'esportazione di ieri").expect("c'era gia");
+
+        let mut sink = DirectorySink::new(dir.path());
+        let h = sink.open_artifact("esito.md", "text/markdown").unwrap();
+        sink.write_artifact(h, b"meta").unwrap();
+        // Il provider si ferma qui: nessuno chiude niente.
+        drop(sink);
+
+        assert_eq!(
+            std::fs::read(&dest).unwrap(),
+            b"l'esportazione di ieri",
+            "il destinatario era già stato troncato: un export che non è mai \
+             arrivato ha distrutto quello che c'era"
+        );
+        let rimasti: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name()))
+            .filter(|n| n != "esito.md")
+            .collect();
+        assert!(
+            rimasti.is_empty(),
+            "un temporaneo per terra in una cartella dell'utente, dove non \
+             passa nessuna raccolta a toglierlo: {rimasti:?}"
+        );
+    }
+
+    /// E quando invece arriva, arriva **intero e al suo nome**.
+    ///
+    /// La metà che impedisce alla riparazione di essere «non scrivere mai»: la
+    /// `rename` deve portarlo a destinazione, e la ricevuta contare i byte che
+    /// ci sono davvero.
+    #[test]
+    fn un_export_che_arriva_sostituisce_quello_di_prima_in_un_colpo() {
+        let dir = tempfile::tempdir().expect("una cartella per l'esito");
+        let dest = dir.path().join("esito.md");
+        std::fs::write(&dest, b"l'esportazione di ieri").expect("c'era gia");
+
+        let mut sink = DirectorySink::new(dir.path());
+        let h = sink.open_artifact("esito.md", "text/markdown").unwrap();
+        sink.write_artifact(h, b"quella ").unwrap();
+        sink.write_artifact(h, b"di oggi").unwrap();
+        let ricevuta = sink.close_artifact(h).unwrap();
+
+        assert_eq!(std::fs::read(&dest).unwrap(), b"quella di oggi");
+        assert_eq!(ricevuta.len(), 14, "il conto è dei byte consegnati");
+        let quanti = std::fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(quanti, 1, "il temporaneo non è rimasto accanto");
     }
 
     #[test]
