@@ -5,11 +5,16 @@ un gesto funziona — l'app lo compie, per sé — e **non esiste il dato che lo
 dichiara**. Non sono funzionalità mancanti: sono porte mancanti fra un gesto e
 il contratto, e finché non ci sono, ogni gesto nuovo si paga per intero.
 
-**Una delle otto è chiusa**, ed era la sola la cui finestra si chiudesse prima
-del freeze: la §26.6 con la
+**Due delle otto sono chiuse.** La §26.6 con la
 [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md), che ha spaccato
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` finché farlo
-costava sei righe e zero manifest da migrare.
+costava sei righe e zero manifest da migrare — era la sola la cui finestra si
+chiudesse prima del freeze. E la §26.3 con la
+[0149](../decisions/0149-la-grammatica-di-un-accordo-e-salita.md), che non è
+stata decisa ma **raggiunta**: la forma che raccomandava è arrivata da sé
+mentre si riparava il difetto che questa voce stessa aveva depositato, e al
+verbale è restato il residuo — dire la grammatica dove la legge chi non
+compila il contratto.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -619,7 +624,8 @@ gli altri. Le sezioni *Movimento cursore*, *Selezione*, *Tasti di modifica*,
 
 ### 26.3 La grammatica di un accordo non sta nel contratto
 
-*aperta · strato **contratto** · **P2***
+*chiusa · strato **contratto** · **P2** ·
+[0149](../decisions/0149-la-grammatica-di-un-accordo-e-salita.md)*
 
 **1. La domanda.** «`Mod-k Shift-d`» è un accordo valido? La risposta oggi la
 sanno **due funzioni**, in due linguaggi, e non è la stessa. Dove deve vivere la
@@ -673,7 +679,7 @@ grep -n 'MODIFICATORI\|fn leggiAccordi\|fn canonico' frontend/src/ui/commands.ts
 
 **3. Le forme, e chi paga.**
 
-- [ ] **(a) `fub_abi::rules::chord`** — `normalize(&str) -> Option<String>`, i
+- [x] **(a) `fub_abi::rules::chord`** — `normalize(&str) -> Option<String>`, i
       modificatori come dato, la gemella in `mirrored.ts` e la fixture che le
       lega. È la mossa della
       [0056](../decisions/0056-un-elenco-che-e-la-sorgente.md) e della
@@ -684,7 +690,7 @@ grep -n 'MODIFICATORI\|fn leggiAccordi\|fn canonico' frontend/src/ui/commands.ts
 - [ ] **(b) Solo il difetto** — riscrivere `command_keys.rs:normalizza` perché
       splitti prima sugli spazi. Paga **chi mantiene i presidi**: quattro righe.
       Il banco smette di poter mentire, e le copie restano due.
-- [ ] **(c) La grammatica in prosa** nel doc di `keybinding` dentro `abi.wit`,
+- [x] **(c) La grammatica in prosa** nel doc di `keybinding` dentro `abi.wit`,
       senza codice condiviso. Paga **chi mantiene il contratto**: una frase. Un
       terzo la può leggere; le due copie restano e possono ancora divergere.
 - [ ] **(d) Com'è oggi.** Paga **l'utente**, che l'accordo lo scrive **a mano**:

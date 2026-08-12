@@ -1514,6 +1514,12 @@ interface command {
     /// Un comando offerto da un provider. `description` è inutile alla palette
     /// (c'è il titolo) ed è l'unico ingrediente su cui un chiamante non umano
     /// sceglie.
+    ///
+    /// `keybinding` è un suggerimento e ha una **forma dichiarata**, che sta in
+    /// `fub_abi::rules::tasti`: i modificatori sono `mod`, `shift` e `alt`, il
+    /// primo accordo ne porta uno, e uno spazio separa gli accordi di una
+    /// sequenza (`"Mod-k d"`). Ciò che quella regola non legge la shell non lo
+    /// registra.
     record command-spec {
         id: string,
         title: text,

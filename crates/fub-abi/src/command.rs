@@ -111,6 +111,14 @@ pub struct CommandSpec {
     pub description: Text,
     /// Suggerimento di scorciatoia, es. `"Mod-p"` (non vincolante: chi assegna
     /// davvero i tasti è la shell, e l'utente li può cambiare).
+    ///
+    /// **La forma è una regola dichiarata e non un esempio da imitare**:
+    /// [`crate::rules::tasti`] dice quali modificatori esistono — `mod`,
+    /// `shift`, `alt`, e `Ctrl-k` si **rifiuta** —, che il primo accordo ne
+    /// porta uno (un tasto nudo ruberebbe una lettera a chi scrive), e che uno
+    /// spazio separa gli accordi di una **sequenza**: `"Mod-k d"` è due accordi
+    /// e una scorciatoia sola. Chi scrive una stringa che quella regola non
+    /// legge non riceve un tasto diverso: non ne riceve nessuno.
     pub keybinding: Option<String>,
     /// Gli argomenti, nell'ordine in cui ha senso chiederli.
     pub params: Vec<ParamSpec>,
