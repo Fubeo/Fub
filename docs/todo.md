@@ -460,7 +460,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **venti** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **diciannove** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -541,7 +541,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0167 | `docdata::migrate` rimuove la destinazione senza guardarne la forma e con l'errore ingoiato: se sotto la chiave nuova c'è già uno spazio-documento di un altro documento, quello viene tolto — annotazioni, pin, miniature — e se la rimozione fallisce nessuno lo segnala, così la migrazione prosegue su un posto che non è vuoto | `fub-kernel` · `docdata.rs` `migrate` | lock e I/O |
 | 0168 | fra la rinomina del documento e la migrazione del suo docdata c'è una finestra di crash non coperta da niente: il file è al nome nuovo e i suoi dati per-documento sono ancora sotto la chiave vecchia, dove la prima `collect` successiva li spazza perché non corrispondono a nessun documento vivo | `fub-kernel` · `workspace.rs` `rename_document_in_batch` (con `docdata.rs` `migrate`) | lock e I/O |
 | 0171 | la prima scrittura in un vault avviene senza lock: quando `.fub/` non esiste ancora, `lock_esclusivo` non ha dove creare il proprio file e il ramo di creazione procede senza protezione, cioè proprio nel momento in cui due installazioni che aprono lo stesso vault nuovo si pestano | `fub-kernel` · `settings.rs` `store_vault` | lock e I/O |
-| 0180 | se il documento esisteva o no lo decide l'anagrafe in memoria e non il disco: un file creato da un'altra applicazione e non ancora indicizzato fa registrare `Created` dove il fatto è `Written`, e il registro — che la 0067 dichiara autorevole — racconta un evento che non è successo | `fub-kernel` · `workspace.rs` `write_document` | regole |
 | 0184 | la rinomina **esterna** di un allegato ne perde i dati per-documento mentre quella interna li migra: il riconoscimento dell'identità filtra sui soli documenti, quindi un'immagine rinominata dal Finder degrada a «sparita e ricomparsa» e annotazioni, pin e miniatura vengono spazzate dalla prima `collect` successiva | `fub-kernel` · `workspace.rs` `sync_renamed_path_here` | regole |
 | 0187 | la finestra «pulito per caso» si calcola sul momento del **salvataggio** e non su quello della scansione: l'indice confronta con `written_at`, quindi un file cambiato fra la scansione e la scrittura dell'indice risulta già coperto e resta indicizzato con il contenuto vecchio fino a un evento che lo tocchi di nuovo | `fub-kernel` · `index` (uso di `written_at`) | regole |
 | 0188 | l'indice di ricerca scrive i propri segmenti direttamente sul filesystem invece che attraverso `VaultStorage`, che il repo dichiara **il supporto unico** dei byte: quei file non passano da temp+rename, non passano da lock, non li vede un doppio in memoria, e ogni banco che monta un supporto finto ha un pezzo di vault che gli sfugge | `fub-kernel` · `index` (segmenti tantivy) | regole |
