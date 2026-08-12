@@ -3646,6 +3646,62 @@ impl Workspace {
     /// vale, ciò che resta indietro si dice.
     ///
     /// [decisione 0044]: ../../../docs/decisions/0044-lo-stato-per-documento.md
+    /// Ciò che l'utente ha attaccato addosso a un **allegato** rinominato da
+    /// un'altra applicazione (difetto 0184).
+    ///
+    /// È la metà di [`migrate_side_data`](Workspace::migrate_side_data) che vale
+    /// per chi non ha un modello: l'organizzazione e lo stato per-documento di
+    /// chiunque altro. La bozza no, e non per dimenticanza — una bozza è il
+    /// buffer sporco di un editor di testo, e un allegato non si apre in un
+    /// editor di testo.
+    ///
+    /// Il resto della rinomina lo fanno le due mezze verità che seguono, che
+    /// l'anagrafe la sistemano già: qui non si sposta niente sul disco, si
+    /// sposta ciò che sta **accanto** al disco.
+    ///
+    /// I cancelli sono quelli dei documenti, letti per la stessa ragione: la
+    /// sorgente dev'essere qualcosa che il vault conosceva davvero, e la
+    /// destinazione dev'essere **libera** — una rinomina che atterra su
+    /// un'identità viva non è una rinomina (§25.1, decisione 0135), e qui
+    /// varrebbe scrivere il pin di `from` sopra quello di `to`.
+    fn migra_lo_stato_di_un_allegato(&mut self, from: &Utf8Path, to: &Utf8Path) {
+        let identita = |ws: &Self, p: &Utf8Path| {
+            (!ws.docs.vault.is_ignored(p))
+                .then(|| ws.docs.vault.doc_id_for_path(p).ok())
+                .flatten()
+        };
+        let (Some(from_id), Some(to_id)) = (identita(self, from), identita(self, to)) else {
+            return;
+        };
+        if from_id == to_id {
+            return;
+        }
+        // In anagrafe e non fra i documenti: chi ha un modello è già passato di
+        // sopra, e non arriva mai qui.
+        if !self.indexes.core.entries.contains_key(&from_id) {
+            return;
+        }
+        if self.indexes.core.entries.contains_key(&to_id)
+            || self.indexes.core.metas.contains_key(&to_id)
+        {
+            return;
+        }
+        // Se a destinazione non c'è niente questa non è una rinomina ma una
+        // sparizione, e portarci lo stato vorrebbe dire metterlo sotto una
+        // chiave che la prima raccolta spazza: sotto quella vecchia almeno
+        // resta finché il file può tornare.
+        if !self.docs.vault.exists(&to_id) {
+            return;
+        }
+        if let Err(e) = self.organization.migrate(from_id.as_str(), to_id.as_str()) {
+            self.organization.warn(format!(
+                "l'organizzazione di {from_id} non ha potuto seguire la rinomina \
+                 in {to_id}: {e}"
+            ));
+        }
+        self.migrate_doc_data(&from_id, &to_id);
+    }
+
     fn migrate_side_data(&mut self, from: &DocId, to: &DocId) {
         // **L'organizzazione segue l'identità** (§11.3): icona, pin e posto
         // nell'ordinamento sono attaccati alla nota, non al suo vecchio path.
@@ -3729,6 +3785,19 @@ impl Workspace {
             // lascerebbe in anagrafe un allegato che nessuno può più aprire,
             // fino alla riapertura del vault. Il corpo interno, non la porta:
             // chi ci ha chiamati registrerà l'esito una volta sola (§9.7).
+            //
+            // **Le due mezze verità dicono dov'è il file, non che cosa gli è
+            // attaccato addosso** (difetto 0184). Un allegato non ha un modello,
+            // e per questa funzione «non ha un modello» valeva «non ha
+            // un'identità»: la rinomina dal Finder di `foto.png` usciva come
+            // «sparita e ricomparsa», cioè due voci d'anagrafe scollegate, e
+            // pin, icona, annotazioni e miniatura restavano sotto la chiave
+            // vecchia — dove non li cerca più nessuno e dove la prima `collect`
+            // li spazza, perché non corrispondono a nessun file vivo. La stessa
+            // rinomina fatta **da dentro** li porta con sé da sempre
+            // (`rename_entry_in_batch`), quindi la differenza non era una
+            // regola: era il rilevatore che ne sapeva meno.
+            self.migra_lo_stato_di_un_allegato(from, to);
             let partito = self.sync_path_here(from)?;
             return Ok(self.sync_path_here(to)? || partito);
         };
