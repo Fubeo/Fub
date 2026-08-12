@@ -129,6 +129,18 @@ pub struct Draft {
     pub v: SchemaVersion,
     /// Di quale documento è la bozza. Per una nota che non è mai stata salvata è
     /// il nome che avrebbe: un documento che non esiste ancora sul disco.
+    ///
+    /// **Quale file, lo dice il nome del file; questo campo può solo
+    /// precisarlo** (difetto 0169). I due erano due sorgenti per lo stesso
+    /// fatto, e due sorgenti che si possono contraddire non sono un secondo
+    /// parere: sono una copia che può restare indietro, ed è ciò che restava
+    /// dopo una migrazione interrotta — un record che rivendica una nota che
+    /// non esiste più. Il nome è la codifica reversibile dell'id
+    /// ([`encode`]), quindi la risposta ce l'ha già; ciò che il nome **non**
+    /// ha è il caso, là dove il supporto non lo distingue (0165), ed è
+    /// esattamente ciò che questo campo aggiunge. [`Drafts::read`] tiene il
+    /// campo quando nomina lo **stesso file** in cui la bozza sta, e il nome
+    /// quando ne nomina un altro: precisare sì, contraddire no.
     pub doc: DocId,
     /// Millisecondi UNIX dell'ultima volta che questa bozza è stata scritta.
     pub at: u64,
@@ -245,15 +257,26 @@ impl Drafts {
             }
             // Il nome dice già di quale documento è: se non lo dice, il file non
             // è nostro e non lo si conta fra le bozze perdute.
-            if !entry.path.file_name().is_some_and(nome_di_bozza) {
+            let Some(di_chi) = entry.path.file_name().and_then(documento_del_nome) else {
                 continue;
-            }
+            };
             let letta = self
                 .storage
                 .read(&entry.path)
                 .ok()
                 .and_then(|bytes| serde_json::from_slice::<Draft>(&bytes).ok())
-                .filter(|d| d.v == SCHEMA_VERSION);
+                .filter(|d| d.v == SCHEMA_VERSION)
+                // Il record **precisa** il nome, non lo contraddice (vedi
+                // [`Draft::doc`]): se dice un id che è lo stesso file, vale lui
+                // — è il caso della maiuscola su un supporto che non la
+                // distingue —, se ne dice un altro vale dove la bozza sta.
+                .map(|d| {
+                    if self.storage.same_file(&self.path(&d.doc), &entry.path) {
+                        d
+                    } else {
+                        Draft { doc: di_chi, ..d }
+                    }
+                });
             match letta {
                 Some(draft) => bozze.drafts.push(draft),
                 None => bozze.scartate += 1,
@@ -312,55 +335,176 @@ impl Drafts {
     /// La domanda giusta la fa [`VaultStorage::same_file`], e chi la risponde è
     /// il supporto.
     ///
-    /// Sullo stesso file cambia anche il **come**: scrivere il record nuovo e
-    /// togliere il vecchio sono due nomi della stessa cosa, e la `remove`
-    /// cancellerebbe ciò che la `write` ha appena messo. Si sposta prima il nome
-    /// e si riscrive dopo.
+    /// # Due file: una mossa sola
+    ///
+    /// È la riga di `restore_from_trash`, e per la stessa ragione: *non è un
+    /// `write` seguito da un `remove`, quella forma ha un istante in cui la
+    /// nota sta in due posti, e un guasto lì dentro ce la lascia*. Qui la
+    /// migrazione aggiornava anche il campo `doc` del record, quindi erano due
+    /// mutazioni in fila e una `remove` fallita lasciava **due bozze per un
+    /// documento solo** — che nessuno riconcilia, perché questo modulo
+    /// dichiara di non raccogliere apposta (difetto 0169). La seconda
+    /// mutazione non serviva: di quale file è la bozza lo dice il nome del
+    /// file, e chi legge lo ricava da lì ([`Draft::doc`]). Resta una `rename`,
+    /// che o è avvenuta o non è avvenuta.
+    ///
+    /// # Lo stesso file: prima il record, poi il nome
+    ///
+    /// Il ramo della maiuscola non può ridursi a una mossa, e per una ragione
+    /// che è la stessa di sopra letta al contrario: lì il nome sul disco **non
+    /// cambia** — il supporto non distingue il caso — quindi il caso nuovo può
+    /// dirlo solo il record, ed è per questo che quel campo esiste ancora. Ciò
+    /// che si può scegliere è l'ordine, e l'ordine giusto è scrivere il record
+    /// dentro il file che c'è e spostare il nome dopo: una `write` fallita non
+    /// ha mosso niente, e una `rename` fallita lascia il record già giusto sul
+    /// file che c'è. Prima era il verso opposto, e in mezzo c'era il secondo
+    /// stato a metà della voce — la bozza al nome nuovo con dentro scritto
+    /// quello vecchio.
     pub(crate) fn migrate(&self, from: &DocId, to: &DocId) -> std::io::Result<()> {
         let vecchio = self.path(from);
         let nuovo = self.path(to);
         if !self.storage.exists(&vecchio) {
             return Ok(());
         }
-        let stesso_file = self.storage.same_file(&vecchio, &nuovo);
-        if !stesso_file && self.storage.exists(&nuovo) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                format!("{to} ha già una bozza non salvata, e non la si sovrascrive"),
-            ));
-        }
-        // Il documento sta **dentro** il record, non solo nel nome del file: un
-        // rename che spostasse il file lasciando il campo vecchio darebbe una
-        // bozza che dice di appartenere a una nota che non è la sua.
-        if let Some(mut draft) = self.get(from)? {
-            draft.doc = to.clone();
-            let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
-            if stesso_file {
-                // Il nome sul disco resterebbe quello di prima: si sposta, così
-                // che chi cammina la cartella legga il caso nuovo, e poi ci si
-                // scrive dentro il record aggiornato.
-                self.storage.rename(&vecchio, &nuovo)?;
-                return self.storage.write(&nuovo, &bytes).map(|_| ());
+        if !self.storage.same_file(&vecchio, &nuovo) {
+            if self.storage.exists(&nuovo) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!("{to} ha già una bozza non salvata, e non la si sovrascrive"),
+                ));
             }
-            self.storage.write(&nuovo, &bytes)?;
-            return self.storage.remove(&vecchio);
+            return self.storage.rename(&vecchio, &nuovo);
         }
+        let Some(mut draft) = self.get(from)? else {
+            return self.storage.rename(&vecchio, &nuovo);
+        };
+        draft.doc = to.clone();
+        let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
+        self.storage.write(&vecchio, &bytes)?;
         self.storage.rename(&vecchio, &nuovo)
     }
 }
 
-/// Il nome di un file è quello di una bozza?
-fn nome_di_bozza(name: &str) -> bool {
-    let Some(stem) = name.strip_suffix(&format!(".{EXT}")) else {
-        return false;
-    };
-    !stem.is_empty() && !decode(stem).is_empty()
+/// Di quale documento è la bozza che si chiama così — e `None` se quel nome non
+/// è il nome di una bozza.
+///
+/// Le due domande sono una sola perché hanno una sola risposta: il nome è la
+/// codifica del documento ([`encode`]), quindi «è una bozza» vuol dire
+/// esattamente «da qui esce un documento». Tenerle separate voleva dire
+/// decodificare due volte, e dare a chi legge la possibilità di fare la prima
+/// senza la seconda — che è come il campo dentro il record poteva restare
+/// indietro rispetto al nome del file (difetto 0169).
+fn documento_del_nome(name: &str) -> Option<DocId> {
+    let stem = name.strip_suffix(&format!(".{EXT}"))?;
+    if stem.is_empty() {
+        return None;
+    }
+    let doc = decode(stem);
+    (!doc.is_empty()).then(|| DocId::new(doc))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::MemStorage;
+    use crate::storage::{DirEntry, Fusione, MemStorage, Stat};
+    use std::io;
+
+    /// Un supporto che non lascia togliere niente: è il modo di fermare una
+    /// migrazione **fra** le sue mutazioni, se ne ha più di una.
+    struct SenzaCancellare(MemStorage);
+
+    impl VaultStorage for SenzaCancellare {
+        fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
+            self.0.read(path)
+        }
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
+            self.0.write(path, bytes)
+        }
+        fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
+            self.0.update(path, fondi)
+        }
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
+            self.0.append(path, bytes)
+        }
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+            self.0.rename(from, to)
+        }
+        fn remove(&self, _path: &Utf8Path) -> io::Result<()> {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "il supporto non fa cancellare",
+            ))
+        }
+        fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
+            self.0.list(dir)
+        }
+        fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
+            self.0.stat(path)
+        }
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
+            self.0.remove_empty_dir(dir)
+        }
+    }
+
+    /// 0169 — **una migrazione a metà lasciava due bozze per un documento
+    /// solo**, e nessuno le riconciliava: questo modulo dichiara di non
+    /// raccogliere, apposta.
+    ///
+    /// Il supporto rifiuta la `remove`, cioè ferma la migrazione dopo che il
+    /// record nuovo è già stato scritto — che è tutto ciò che serve quando le
+    /// mutazioni sono due. Con una sola non c'è un «dopo» in cui fermarsi.
+    #[test]
+    fn una_bozza_che_segue_la_rinomina_non_si_sdoppia_se_il_supporto_inciampa() {
+        let d = Drafts::open(
+            Utf8Path::new("/vault"),
+            Arc::new(SenzaCancellare(MemStorage::new())) as Arc<dyn VaultStorage>,
+        );
+        d.save(&doc("a.md"), "il mio testo", None, 10).unwrap();
+
+        let _ = d.migrate(&doc("a.md"), &doc("b.md"));
+
+        let bozze = d.read().unwrap();
+        assert_eq!(
+            bozze.drafts.len(),
+            1,
+            "una nota ha una bozza sola, e due copie dello stesso testo sotto \
+             due nomi sono un recupero che chiede all'utente quale delle due \
+             sia la sua: {:?}",
+            bozze.drafts.iter().map(|d| &d.doc).collect::<Vec<_>>()
+        );
+        assert_eq!(bozze.drafts[0].doc, doc("b.md"), "e sta al nome nuovo");
+        assert_eq!(bozze.drafts[0].text, "il mio testo");
+    }
+
+    /// 0169, l'altra metà — **di chi è una bozza lo dice dove sta**, non cosa
+    /// c'è scritto dentro il record.
+    ///
+    /// È la configurazione che restava dall'altro verso della migrazione
+    /// interrotta: il file al nome nuovo, il campo fermo a quello vecchio, cioè
+    /// una bozza che dice di appartenere a una nota che non esiste più.
+    #[test]
+    fn di_chi_e_una_bozza_lo_dice_dove_sta() {
+        let storage = Arc::new(MemStorage::new()) as Arc<dyn VaultStorage>;
+        let d = Drafts::open(Utf8Path::new("/vault"), storage.clone());
+        d.save(&doc("a.md"), "il mio testo", None, 10).unwrap();
+
+        let dir = drafts_dir(Utf8Path::new("/vault"));
+        storage
+            .rename(
+                &dir.join(format!("{}.{EXT}", encode("a.md"))),
+                &dir.join(format!("{}.{EXT}", encode("b.md"))),
+            )
+            .unwrap();
+
+        let bozze = d.read().unwrap();
+        assert_eq!(
+            bozze.drafts[0].doc,
+            doc("b.md"),
+            "il record direbbe `a.md`, che è una nota che non c'è: chi offre il \
+             recupero lo offrirebbe per il documento sbagliato"
+        );
+    }
+
 
     fn drafts() -> Drafts {
         Drafts::open(
@@ -465,13 +609,17 @@ mod tests {
         );
         let bozze = d.read().unwrap();
         assert_eq!(bozze.drafts.len(), 2, "nessuna delle due si è persa");
+        let testo = |id: &str| {
+            bozze
+                .drafts
+                .iter()
+                .find(|b| b.doc == doc(id))
+                .map(|b| b.text.as_str())
+        };
+        assert_eq!(testo("dopo.md"), Some("il testo che non esiste altrove"));
         assert_eq!(
-            d.get(&doc("dopo.md")).unwrap().unwrap().text,
-            "il testo che non esiste altrove"
-        );
-        assert_eq!(
-            d.get(&doc("prima.md")).unwrap().unwrap().text,
-            "il testo che si sposta",
+            testo("prima.md"),
+            Some("il testo che si sposta"),
             "e chi non si è potuto spostare resta dov'era, invece di sparire da \
              tutte e due le parti"
         );
