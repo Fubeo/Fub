@@ -1300,23 +1300,6 @@ impl Workspace {
             ws.dispatch_pending();
         });
 
-        // **L'anagrafe si scrive qui**, accanto al flush degli indici e per la
-        // sua stessa ragione: è l'ultimo momento in cui qualcuno sa che sta
-        // chiudendo (§9.5). Fra l'apertura e questa riga `touch_entry` ha
-        // aggiornato la sola memoria — cinque siti: un salvataggio, una
-        // scrittura vista dal rilevatore, il cestino, il ripristino, la rinomina
-        // — e senza questa riga tutto ciò che si è toccato dopo l'apertura
-        // veniva riletto e riparsato alla riapertura, cioè il lavoro che
-        // l'anagrafe esiste per evitare.
-        //
-        // **Non copre il processo ucciso**, e non deve: chi muore senza passare
-        // di qui ricade su ciò che c'era prima di questa riga — l'anagrafe di
-        // fine apertura, che rilegge i soli documenti toccati dopo. È il degrado
-        // di un derivato, non una perdita, quindi qui non si baratta niente:
-        // questa riga toglie del lavoro nel caso normale e non ne aggiunge in
-        // nessuno.
-        self.store_entries();
-
         let mut errors = self.flush_indexes();
 
         let plugins: Vec<String> = self
@@ -1336,6 +1319,46 @@ impl Workspace {
                 Err(e) => errors.push(PluginError::Internal(e.to_string().into())),
             }
         }
+
+        // **L'anagrafe si scrive qui**, ed è l'ultima riga della chiusura: è
+        // l'ultimo momento in cui qualcuno sa che sta chiudendo (§9.5). Fra
+        // l'apertura e questa riga `touch_entry` ha aggiornato la sola memoria
+        // — cinque siti: un salvataggio, una scrittura vista dal rilevatore, il
+        // cestino, il ripristino, la rinomina — e senza questa riga tutto ciò
+        // che si è toccato dopo l'apertura veniva riletto e riparsato alla
+        // riapertura, cioè il lavoro che l'anagrafe esiste per evitare.
+        //
+        // **Non copre il processo ucciso**, e non deve: chi muore senza passare
+        // di qui ricade su ciò che c'era prima — l'anagrafe di fine apertura,
+        // che rilegge i soli documenti toccati dopo. È il degrado di un
+        // derivato, non una perdita, quindi qui non si baratta niente: questa
+        // riga toglie del lavoro nel caso normale e non ne aggiunge in nessuno.
+        //
+        // **Ultima, e non a metà** (difetto 0190). Dove esattamente cada non è
+        // una preferenza, perché i due stati a metà che un'interruzione può
+        // lasciare non si equivalgono: l'anagrafe è ciò che alla riapertura
+        // *risparmia* il lavoro — una voce la cui impronta combacia col disco
+        // non si rilegge, non si riparsa e non torna agli indici, si riprende
+        // dalla cache —, quindi scriverla prima che gli indici abbiano finito
+        // vuol dire lasciare, per tutto il resto della chiusura, un disco che
+        // dichiara indicizzato ciò che nessun indice ha ancora scritto. Chi
+        // muore lì dentro riapre un vault in cui quelle note esistono, si
+        // aprono e si leggono, e dalla ricerca sono sparite in silenzio finché
+        // qualcuno non chiede una ricostruzione. Il verso opposto — indici
+        // scritti e anagrafe no — è il degrado del capoverso qui sopra: si
+        // rilegge, e non si perde niente. Fra i due si sceglie quello che costa
+        // lavoro invece di quello che costa verità.
+        //
+        // «Gli indici hanno finito» è più tardi di quanto sembri, ed è la parte
+        // che stava storta: non basta [`flush_indexes`](Workspace::flush_indexes),
+        // perché la disattivazione qui sopra dà a ogni indice un altro `flush` e
+        // poi il suo `close` — è il contratto (decisione 0028) —, e `stopping`
+        // in mezzo può far scrivere ancora. L'ordine che
+        // [`finish_index`](Workspace::finish_index) teneva già è lo stesso letto
+        // in una funzione più lunga: **l'anagrafe per ultima**, quando non c'è
+        // più nessuno che possa scrivere dopo di lei.
+        self.store_entries();
+
         errors
     }
 
