@@ -307,11 +307,14 @@ impl ArtifactSink for DirectorySink {
     ) -> Result<ArtifactHandle, PluginError> {
         controlla_path(path)?;
         let dest = self.root.join(path);
-        if let Some(dir) = dest.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| {
-                PluginError::Io(format!("`{}` non si crea: {e}", dir.display()).into())
-            })?;
-        }
+        let dir = dest.parent().unwrap_or(&self.root).to_path_buf();
+        // Prima di creare, non dopo: `create_dir_all` attraversa un
+        // collegamento senza chiedere, e le cartelle nate di là restano lì
+        // anche se poi l'artefatto lo rifiutiamo.
+        resta_dentro(&self.root, &dir)?;
+        std::fs::create_dir_all(&dir).map_err(|e| {
+            PluginError::Io(format!("`{}` non si crea: {e}", dir.display()).into())
+        })?;
         // Il nome del file lo dà il provider ed è già passato da
         // `controlla_path`, quindi è UTF-8 e non ha separatori: la cartella
         // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
@@ -409,6 +412,49 @@ fn handle_ignoto() -> PluginError {
 /// scrive chi ha scritto il provider, cioè qualcuno che non è l'utente. Un
 /// `../` qui non sarebbe un artefatto storto, sarebbe un file scritto fuori
 /// dalla cartella che l'utente ha scelto nel dialogo.
+/// **Un path lessicalmente pulito può uscire lo stesso dalla cartella scelta**,
+/// e basta che un componente sia un collegamento: `esiti/fuga/rapporto.html` non
+/// ha nessun `..` da rifiutare, ma se `fuga` è un symlink verso la home i byte
+/// atterrano nella home (difetto 0194).
+///
+/// La differenza con [`controlla_path`] è chi risponde. Là la domanda è sul
+/// *nome* — quello lo si può leggere — e la risposta è la stessa ovunque; qui la
+/// domanda è «dove si finisce davvero», e a quella risponde solo il disco. Le due
+/// stanno accanto perché la prima è la sola che il [`MemorySink`] può porre: in
+/// memoria non c'è nessun collegamento da risolvere.
+///
+/// Si risolve il **primo antenato che esiste**, perché `canonicalize` non
+/// risponde su un path che non c'è e i componenti mancanti li creerà questa
+/// scrittura — cartelle vere, che non portano da nessuna parte. Il file finale
+/// non entra nella domanda: i byte vanno in un temporaneo dal nome nuovo e la
+/// `rename` della chiusura **sostituisce** un eventuale collegamento invece di
+/// seguirlo, che è la stessa regola con cui il vault scrive (decisione 0065).
+fn resta_dentro(root: &Path, dir: &Path) -> Result<(), PluginError> {
+    let vera = root.canonicalize().map_err(|e| {
+        PluginError::Io(format!("`{}` non si risolve: {e}", root.display()).into())
+    })?;
+    let mut esistente = dir;
+    while !esistente.exists() {
+        match esistente.parent() {
+            Some(su) => esistente = su,
+            None => break,
+        }
+    }
+    let dentro = esistente
+        .canonicalize()
+        .is_ok_and(|risolto| risolto.starts_with(&vera));
+    if !dentro {
+        return Err(PluginError::PermissionDenied(
+            format!(
+                "`{}` porta fuori dalla cartella scelta per l'export",
+                dir.display()
+            )
+            .into(),
+        ));
+    }
+    Ok(())
+}
+
 fn controlla_path(path: &str) -> Result<(), PluginError> {
     let storto = path.is_empty()
         || path.starts_with('/')
@@ -428,6 +474,39 @@ fn controlla_path(path: &str) -> Result<(), PluginError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **Un collegamento dentro la cartella scelta non porta l'export fuori.**
+    ///
+    /// Il path dell'artefatto lo scrive chi ha scritto il provider, e qui non ha
+    /// nessun `..` da farsi rifiutare: `fuga` è un nome come un altro, e il
+    /// guardiano lessicale lo lasciava passare intero.
+    ///
+    /// Su Unix perché il caso si costruisce con un symlink, e su Windows crearne
+    /// uno vuole un privilegio che un banco non ha.
+    #[cfg(unix)]
+    #[test]
+    fn un_collegamento_nella_cartella_scelta_non_porta_l_export_fuori() {
+        let scelta = tempfile::tempdir().expect("la cartella scelta nel dialogo");
+        let altrove = tempfile::tempdir().expect("una cartella che nessuno ha scelto");
+        std::os::unix::fs::symlink(altrove.path(), scelta.path().join("fuga"))
+            .expect("il collegamento");
+
+        let mut sink = DirectorySink::new(scelta.path());
+        let e = sink
+            .open_artifact("fuga/uscito.txt", "text/plain")
+            .expect_err("un artefatto che atterra fuori dalla cartella scelta");
+        assert!(
+            matches!(e, PluginError::PermissionDenied(_)),
+            "un'uscita dalla cartella scelta non è un permesso negato: {e:?}"
+        );
+        assert_eq!(
+            std::fs::read_dir(altrove.path())
+                .expect("la cartella di fuori")
+                .count(),
+            0,
+            "l'export ha posato qualcosa fuori dalla cartella che l'utente ha scelto"
+        );
+    }
 
     #[test]
     fn una_lettura_oltre_la_fine_e_vuota_e_non_e_un_errore() {
