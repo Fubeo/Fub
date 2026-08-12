@@ -566,6 +566,59 @@ mod tests {
         );
     }
 
+    /// **Due installazioni che imparano un tasto nello stesso momento non se ne
+    /// perdono uno** (difetto 0204).
+    ///
+    /// Il promemoria delle scorciatoie già mostrate è un campo di una voce come
+    /// gli altri, e passa dalla stessa porta: chi scrive rilegge il file sotto
+    /// il lucchetto e riapplica lì la propria riga, invece di ricomporre
+    /// l'elenco dalla copia che ha in mano
+    /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+    /// La `seconda` apre **prima** che la `prima` scriva, che è la sola forma in
+    /// cui la sua copia è vecchia davvero: senza la rilettura il suo
+    /// promemoria si porta via quello dell'altra.
+    ///
+    /// Il gemello qui sopra prova la stessa strada sulle voci; questo la prova
+    /// sul campo che il difetto nominava, ed è per lui che porta un nome suo:
+    /// chi domani ricomponesse l'elenco qui dentro leggerebbe «i vault non si
+    /// cancellano» e non «i tasti visti non si perdono».
+    #[test]
+    fn due_installazioni_che_imparano_un_tasto_non_se_ne_perdono_uno() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
+
+        let (prima, _) = VaultRegistry::open(&path);
+        let (seconda, _) = VaultRegistry::open(&path);
+
+        let visto = |tasto: &str, comando: &str| {
+            BTreeMap::from([(tasto.to_string(), comando.to_string())])
+        };
+        prima
+            .note_keys_seen(Utf8Path::new("/diario"), visto("mod+k", "vault.cerca"))
+            .unwrap();
+        seconda
+            .note_keys_seen(Utf8Path::new("/lavoro"), visto("mod+j", "vault.salta"))
+            .unwrap();
+
+        let (terza, avviso) = VaultRegistry::open(&path);
+        assert!(avviso.is_none(), "{avviso:?}");
+        let visti: Vec<(String, Vec<String>)> = terza
+            .list()
+            .into_iter()
+            .map(|e| (e.root, e.keys_seen.into_keys().collect()))
+            .collect();
+        assert_eq!(
+            visti,
+            vec![
+                ("/diario".to_string(), vec!["mod+k".to_string()]),
+                ("/lavoro".to_string(), vec!["mod+j".to_string()]),
+            ],
+            "un tasto imparato da una delle due installazioni è sparito: alla \
+             riapertura Fub richiede di adottare una scorciatoia a cui l'utente \
+             ha già risposto"
+        );
+    }
+
     /// Togliere il nome scelto **torna al nome della cartella**, che è ciò che
     /// il vuoto vuol dire in [`VaultEntry::name`]. E togliere l'icona la toglie.
     ///
