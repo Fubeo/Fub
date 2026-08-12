@@ -1093,6 +1093,24 @@ l'invariante — *una feature ufficiale è ciò che scriverà un plugin di terzi
 dedurrebbe di poter scrivere un editor, e ci arriverebbe lontano prima di
 accorgersi che gli manca un tasto.
 
+**E la stessa domanda, posta all'annulla, ha già una risposta che non costa una
+porta.** Una view di terzi con stato manipolabile — un canvas, una griglia — non
+ha una **terza pila**: le pile sono due per la
+[0045](../decisions/0045-l-undo-ha-due-pile.md), quella del testo e quella delle
+operazioni, e nessuna delle sette varianti di `ViewUpdate` porta un annulla. La
+strada che c'è è comporre **comandi**, che dichiarano il proprio inverso come
+tutti gli altri e che a profondità zero il workspace mette in pila da sé
+(`workspace.rs`, `command_stack.is_empty()`). Il prezzo è `fub:run-command`, il
+permesso che la [0021](../decisions/0021-il-confine.md) chiama *«quello che
+moltiplica»* — e quel prezzo è anche il **metro**: il giorno in cui tre view di
+terzi l'avranno dovuto chiedere solo per fare `Ctrl+Z`, un campo su `view-spec`
+che dichiari una pila propria si sarà pagato da sé. Prima di allora è un campo
+aggiunto per un cliente che non c'è, che è ciò che la
+[0013](../decisions/0013-elenco-delle-capacita.md) vieta. Resta vero, e vale la
+pena saperlo prima: **il tasto, comunque, non arriva** — è la prima delle due
+porte di sopra, e senza di lei l'annulla di una view di terzi si invoca dalla
+palette e non da `Ctrl+Z` (decisione 0153).
+
 **L'invariante, misurato.** Quella frase resta vera dove è **provata**, e dove
 sia provata adesso si legge invece di dedursi. Le feature ufficiali di questo
 repo stanno su **quattro** delle **dieci** [conta: superfici-di-vista] superfici;
