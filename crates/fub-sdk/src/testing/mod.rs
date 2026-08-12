@@ -25,7 +25,7 @@ pub mod conformita;
 use fub_abi::command::CommandOutcome;
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::event::Event;
-use fub_abi::format::DocumentFormat;
+use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, Heading, Span};
 use fub_abi::net::{HttpRequest, HttpResponse};
@@ -649,12 +649,17 @@ impl VaultRead for MemoryHost {
             .ok_or_else(|| PluginError::Internal(format!("{id}: nessun modello seminato").into()))
     }
 
+    /// Il registro **seminato**, e sotto di esso il markdown che ogni vault di
+    /// Fub serve comunque: vedi [`formato_di_serie`].
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
         let ext = id
             .as_str()
             .rsplit_once('.')
             .map(|(_, e)| e.to_lowercase())?;
-        self.formats.lock().unwrap().get(&ext).cloned()
+        if let Some(seminato) = self.formats.lock().unwrap().get(&ext) {
+            return Some(seminato.clone());
+        }
+        formato_di_serie(&ext)
     }
 
     /// La convenzione D3 su ciò che questo host ha in memoria: `nome.md`,
@@ -698,6 +703,32 @@ impl VaultRead for MemoryHost {
     }
 }
 
+/// **Il markdown, che ogni vault di Fub serve.**
+///
+/// Il registro dei formati di questo doppio è ciò che gli si semina con
+/// [`MemoryHost::con_formato`], e finché era *soltanto* quello il doppio si
+/// comportava come un vault in cui non è registrato nessun provider: `format_of`
+/// rispondeva «non so» per ogni estensione, e la scrittura scriveva lo stesso —
+/// mentre il kernel, che un registro ce l'ha, risponde `unserved` a chi prova a
+/// scrivere un formato che nessuno parsa. Un plugin che crea `appunti.txt`
+/// passava di qua e si rompeva di là (difetto 0222).
+///
+/// Il markdown non si semina perché non è una scelta di chi scrive il banco: è
+/// ciò che il core registra in ogni vault, ed è la ragione per cui un doppio
+/// vuoto deve rispondere *come un vault vero* e non *come un vault vuoto*. Chi
+/// ne serve altri li dichiara, e chi vuole un markdown diverso lo sovrascrive —
+/// `con_formato` vince, perché il registro seminato si guarda per primo.
+///
+/// Le capacità sono vuote apposta: questo doppio non parsa niente (i modelli si
+/// seminano, vedi `read_model`), e dichiarare una sintassi che non sa leggere
+/// sarebbe la seconda bugia dopo quella che si sta togliendo.
+fn formato_di_serie(ext: &str) -> Option<DocumentFormat> {
+    matches!(ext, "md" | "markdown").then(|| DocumentFormat {
+        descriptor: FormatDescriptor::text("markdown", "Markdown", &["md", "markdown"]),
+        capabilities: FormatCapabilities::default(),
+    })
+}
+
 impl VaultWrite for MemoryHost {
     /// La scrittura intera come la fa l'host vero, **guardia compresa**: se chi
     /// scrive dice da cosa era partito e il testo non è più quello, `Conflict` e
@@ -711,6 +742,17 @@ impl VaultWrite for MemoryHost {
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
         let id = fenced_doc_id(id)?;
+        // **Nessuno serve questo formato.** Nel kernel è il primo modo in cui
+        // una scrittura può finire senza che il chiamante abbia sbagliato
+        // niente — il parse che precede il disco non trova un provider per
+        // quell'estensione (`KernelError::NoProvider`), e la faccia è
+        // `unserved` —, e qui non c'era: chi scriveva `appunti.txt` contro il
+        // doppio lo scriveva, e sul vault vero no (difetto 0222).
+        if self.format_of(&id).is_none() {
+            return Err(PluginError::Unserved(
+                format!("nessun provider serve il formato di `{id}`").into(),
+            ));
+        }
         let mut docs = self.docs.lock().unwrap();
         if let WriteBase::DescendsFrom(attesa) = base {
             let adesso = docs
@@ -765,15 +807,34 @@ impl VaultStructure for MemoryHost {
     /// riscrive i backlink entranti. Che la rinomina *li* riscriva è una
     /// proprietà del kernel e si prova contro il kernel (`tests/`); qui si
     /// prova che una feature sappia chiederla.
+    ///
+    /// La destinazione però è un nome che **nasce**, e va giudicata come tale:
+    /// rinominare *verso* `aux.md` è creare un file che su Windows non si apre,
+    /// e il kernel lo rifiuta con `bad-args` prima di guardare qualunque altra
+    /// cosa. Qui non lo faceva nessuno, e la stessa rinomina riusciva contro il
+    /// doppio e falliva sul vault vero (difetto 0222). Si giudica `to` e non
+    /// `from` per la ragione scritta là: rinominare *via da* `aux.md` è
+    /// precisamente il modo di sistemarlo.
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
         let from = &fenced_doc_id(from)?;
-        let to = &fenced_doc_id(to)?;
+        let to = &nato_qui(&fenced_doc_id(to)?)?;
         let mut docs = self.docs.lock().unwrap();
         if from == to {
             return Ok(());
         }
         if docs.contains_key(to.as_str()) {
             return Err(PluginError::AlreadyExists(to.to_string().into()));
+        }
+        // **Un documento resta un documento.** Rinominare `nota.md` in
+        // `nota.txt` nel kernel non riesce: la rinomina riparsa ciò che ha
+        // spostato, e per `.txt` non c'è nessun provider — `unserved`, la stessa
+        // faccia della scrittura. Un allegato invece si sposta senza che nessuno
+        // lo parsi, e qui la differenza fra i due si legge dove la legge il
+        // kernel: chi ha un formato deve atterrare su un formato (difetto 0222).
+        if self.format_of(from).is_some() && self.format_of(to).is_none() {
+            return Err(PluginError::Unserved(
+                format!("nessun provider serve il formato di `{to}`").into(),
+            ));
         }
         let source = docs
             .remove(from.as_str())
