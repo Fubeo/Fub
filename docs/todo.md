@@ -60,9 +60,9 @@ Sono uscite 152 voci:
   forma della compilazione invece del prodotto, e cerca **quanto costa a chi
   lavora sapere che niente si è rotto**.
 
-Centoquarantotto voci sono chiuse. I loro verbali stanno in
+Centoquarantanove voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **sei** [conta: voci-aperte]. Questo file è il
+Le voci ancora aperte sono **cinque** [conta: voci-aperte]. Questo file è il
 loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -185,13 +185,13 @@ Si cercano le voci ponendo domande in questo ordine:
 
 ## Le voci
 
-Le voci aperte sono **sei** [conta: voci-aperte], e stanno tutte in una
+Le voci aperte sono **cinque** [conta: voci-aperte], e stanno tutte in una
 seduta sola.
 
 Sono la [seduta
 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) (2026-08-10). La misura
 su 424 gesti in [microfeatures/](microfeatures/) ha rivelato omissioni non
-dichiarate nei dati. Cinque di contratto, una di shell. Delle due chiuse, la
+dichiarate nei dati. Quattro di contratto, una di shell. Delle tre chiuse, la
 §26.6 era la sola **P0** e la sola che scadesse prima del freeze: l'ha chiusa la
 [0144](decisions/0144-una-spunta-sola-diceva-due-cose.md), spaccando
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` prima che un
@@ -200,7 +200,11 @@ manifest scrivesse il nome unico. La §26.3 l'ha chiusa la
 fatta: la grammatica degli accordi era salita in `fub_abi::rules::tasti`
 riparando il difetto che la voce stessa aveva depositato, e al verbale è
 restato il residuo — dirla nel doc del tipo, nel WIT e nel campo dove
-l'utente l'accordo lo scrive a mano. Le dichiarazioni richiedono semplici
+l'utente l'accordo lo scrive a mano. La §26.4 l'ha chiusa la
+[0150](decisions/0150-il-piano-e-della-superficie.md) con un no al campo
+`layer`: il piano è della superficie e non della view, e volere un piano diverso
+è volere una superficie diversa — che si chiede aggiungendo un caso in fondo a
+`view-surface`, additivo quanto il campo. Le dichiarazioni richiedono semplici
 spostamenti, poiché le mosse sono già risolte per problemi confinanti.
 
 La [seduta 27](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md)
@@ -470,7 +474,6 @@ nessuno è tornato a prendere la casella.
 | --- | --- | --- | --- | --- |
 | **§26.1** | [Un accordo ha un contesto, o non ce l'ha](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#261-un-accordo-ha-un-contesto-o-non-ce-lha) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 | **§26.2** | [Cinque registri di tastiera, e il presidio ne guarda due](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#262-cinque-registri-di-tastiera-e-il-presidio-ne-guarda-due) | 26. Otto gesti che l'app fa e nessuno può dichiarare | shell | **P1** |
-| **§26.4** | [Il livello di una superficie non è un dato](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#264-il-livello-di-una-superficie-non-è-un-dato) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 | **§26.5** | [Il menu contestuale: la superficie c'è, il bersaglio del clic no](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#265-il-menu-contestuale-la-superficie-cè-il-bersaglio-del-clic-no) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 | **§26.7** | [Il trascinamento è un dato, il rilascio no](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#267-un-rilascio-si-consegna-un-bersaglio-non-si-dichiara) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 | **§26.8** | [La terza pila l'annulla dentro una view che non è del core](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#268-la-terza-pila-lannulla-dentro-una-view-che-non-è-del-core) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P2** |
@@ -642,7 +645,7 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centoquarantanove** [conta: verbali], uno per file. Diceva
+  **centocinquanta** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo

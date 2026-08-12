@@ -1515,6 +1515,23 @@ pub trait CommandProvider: Send + Sync {
 /// è una superficie della shell a cui ci si attacca. Le tre di prima restano
 /// dove erano, in testa e nello stesso ordine, perché sono lo stesso
 /// discriminante.
+///
+/// # Il piano è della superficie, e non della view
+///
+/// «Chi sta sopra» non è un campo di [`ViewSpec`] e non lo sarà: una view non
+/// porta una superficie, ci si **attacca**, e a dipingere è la shell. Il piano
+/// appartiene quindi alla superficie — è dichiarato una volta sola, accanto
+/// agli altri, in `frontend/src/theme/tokens.css` — e la regola che lo lega ai
+/// tasti è che fra due superfici che intrappolano il fuoco comanda **l'ultima
+/// aperta**, che sullo stesso piano è anche l'ultima dipinta. Un numero
+/// dichiarato da chi non dipinge sarebbe un secondo ordine accanto a questo, e
+/// due ordini che si contraddicono sono esattamente il difetto che quella
+/// regola ha tolto.
+///
+/// Volere un piano diverso, quindi, non è volere un campo: è volere una
+/// **superficie** diversa, e quella si chiede aggiungendo un caso in fondo a
+/// questo elenco — una mossa additiva, che il freeze non chiude (decisione
+/// 0150).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ViewSurface {

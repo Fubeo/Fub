@@ -541,7 +541,7 @@ Ogni sotto-sezione ha la stessa forma: **cosa c'è dentro**, **perché è così*
 
 **Cosa c'è dentro.** Ventitré moduli più tredici di regole, circa 23 600 righe
 di Rust, e lo stesso contratto una seconda volta in
-**4 043** [conta: wit-righe] righe di WIT. Solo tipi e trait: zero
+**4 050** [conta: wit-righe] righe di WIT. Solo tipi e trait: zero
 implementazioni vere, zero I/O.
 
 | Modulo | Cosa dichiara |
