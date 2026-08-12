@@ -460,7 +460,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **ventuno** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **venti** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -551,7 +551,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0197 | il watcher legge un file mentre qualcuno lo sta ancora scrivendo: non c'è nessuna prova di stabilità — né un secondo `stat` che confermi la stessa dimensione, né un'attesa — quindi un file grande scritto da un'applicazione esterna entra in anagrafe a metà e ci resta finché non arriva un altro evento | `fub-host` · `watcher` (ingestione dell'evento) | lock e I/O |
 | 0198 | una rinomina esterna lenta viene spezzata in due dal debounce: se l'evento di partenza e quello di arrivo cadono in due finestre diverse, il montaggio non li riconosce come la stessa mossa, l'identità del documento si perde e con essa la bozza non salvata che ci stava attaccata | `fub-host` · `watcher` (debounce delle rinomine) | regole |
 | 0199 | la parte «da» di una rinomina orfana non esce mai: quando l'evento di arrivo manca, quello di partenza resta appeso in attesa del gemello e nessuno lo emette come rimozione, quindi il documento sparito dal disco resta vivo in anagrafe finché non si riapre il vault | `fub-host` · `watcher` (accoppiamento delle rinomine) | regole |
-| 0200 | gli errori di sincronizzazione per-file vengono ingoiati dentro la battuta: un documento che non si riesce a sincronizzare non fa fallire il lotto e non produce nessun segnale, quindi resta indietro rispetto al disco senza che l'utente o il log lo sappiano | `fub-host` · `watcher` (battuta di sync) | lock e I/O |
 | 0204 | `ricorda_i_tasti_visti` legge l'insieme dei tasti già visti, lo modifica e lo riscrive senza tenerlo fermo in mezzo: due sessioni che imparano un tasto nello stesso momento se ne perdono uno | `fub-host` · `session.rs` `ricorda_i_tasti_visti` | lock e I/O |
 | 0210 | un tasto premuto dentro la finestra di migrazione di una rinomina ricrea il nome vecchio: il salvataggio parte con l'identità di prima mentre il file si è già mosso, e il risultato è la stessa nota in due posti con due contenuti diversi | `frontend` · rinomina (finestra di migrazione) | regole |
 | 0211 | `suspendSave` e `resumeSave` hanno un posto solo: due sospensioni annidate — una rinomina dentro una conversione, un'importazione mentre una modale è aperta — si pestano, e la seconda ripresa riaccende il salvataggio che la prima voleva ancora fermo; dalla stessa parte nasce la bozza transitoria marcata «superata» che compare e sparisce senza che nessuno l'abbia chiesta | `frontend` · `suspendSave` / `resumeSave` | regole |
