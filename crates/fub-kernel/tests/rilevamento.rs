@@ -18,6 +18,7 @@ use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
+use fub_abi::event::{Event, Severity};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{IndexQuery, IndexResult, VaultStatus};
 use fub_abi::FormatProvider;
@@ -201,5 +202,66 @@ fn un_rename_che_fallisce_conta_una_volta_sola() {
         stato(&ws).sync_failures,
         1,
         "la porta registra, il corpo interno no: un fallimento è un fallimento"
+    );
+}
+
+/// **Un fallimento di sincronizzazione esce anche dalla porta**, e non solo nel
+/// registro (difetto 0200).
+///
+/// La riga di todo diceva «non produce nessun segnale», e rimisurata è per metà
+/// falsa: il segnale c'è ed è il conto del banco qui sopra, messo lì dalla 0030
+/// proprio perché un chiamante distratto non potesse nasconderlo. Ma un fatto
+/// interrogabile è una risposta a chi chiede, e chi chiede deve prima
+/// sospettare: `VaultStatus` sta in un pannello che si apre quando ci si è già
+/// accorti che qualcosa non torna. Il documento intanto resta indietro rispetto
+/// al disco **per sempre** — non c'è riconciliazione periodica, `reindex` gira
+/// solo all'apertura — quindi chi apre quella nota legge il testo di ieri e chi
+/// la cerca la trova com'era ieri, senza che niente lo dica mentre succede.
+///
+/// Le tre uscite dicono tre cose diverse: il registro conta, il log resta dopo
+/// che l'app si è chiusa, l'evento arriva **adesso**. Questo banco tiene la
+/// terza, che è quella che mancava.
+#[test]
+fn un_fallimento_di_sincronizzazione_arriva_anche_a_chi_ascolta() {
+    let dir = TempDir::new("porta");
+    let mut ws = workspace(&dir.0);
+
+    let path = dir.0.join("Nota.txt");
+    std::fs::write(&path, [0x66, 0x75, 0xff, 0xfe, 0x62]).expect("scrive i byte");
+
+    let rx = ws.bus().subscribe();
+    // Come lo chiama il watcher: l'esito non lo guarda nessuno.
+    let _ = ws.sync_path(&path);
+
+    let eventi: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
+    let guasto = eventi.iter().find_map(|e| match e {
+        Event::Trouble {
+            severity,
+            subject,
+            error,
+        } => Some((*severity, subject.clone(), error.to_string())),
+        _ => None,
+    });
+    let (severity, subject, motivo) = guasto.unwrap_or_else(|| {
+        panic!(
+            "il documento è rimasto indietro rispetto al disco e nessuno lo ha \
+             saputo mentre succedeva: chi apre quella nota legge il testo di \
+             ieri, e sul canale non è passato niente ({eventi:?})"
+        )
+    });
+    assert_eq!(
+        severity,
+        Severity::Warning,
+        "il vault è la verità e riaprendo si recupera: è un avviso, non un \
+         guasto fatale"
+    );
+    assert_eq!(
+        subject,
+        Some(DocId::new("Nota.txt")),
+        "il soggetto di un guasto è ciò che l'utente ha in mano, cioè la nota"
+    );
+    assert!(
+        motivo.contains("Nota.txt"),
+        "e il motivo dice quale file: {motivo}"
     );
 }

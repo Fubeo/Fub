@@ -2679,7 +2679,7 @@ impl Workspace {
     /// [`IndexQuery::VaultStatus`].
     pub fn sync_path(&mut self, abs: &Utf8Path) -> Result<bool> {
         let outcome = self.sync_path_here(abs);
-        self.note_sync(&outcome);
+        self.note_sync(abs, &outcome);
         outcome
     }
 
@@ -2806,17 +2806,59 @@ impl Workspace {
             ws.dispatch_pending();
             Ok(true)
         });
-        self.note_sync(&outcome);
+        self.note_sync(abs, &outcome);
         outcome
     }
 
     /// Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
     /// del §9.7. Non cambia ciò che il chiamante riceve: aggiunge un secondo
     /// lettore, che è il vault stesso.
-    fn note_sync(&mut self, outcome: &Result<bool>) {
-        if let Err(e) = outcome {
-            self.indexes.core.note_sync_failure(e);
-        }
+    ///
+    /// **Pavimento e porta, non solo il registro** (0062, difetto 0200). Il
+    /// fatto interrogabile è una risposta a chi chiede, e chi chiede deve prima
+    /// sospettare: `VaultStatus` dice «è già andato storto qualcosa» a un
+    /// pannello che nessuno apre finché non si accorge che qualcosa non torna,
+    /// ed è la forma di notizia che arriva dopo il danno. Un documento che non
+    /// si sincronizza resta indietro rispetto al disco per sempre — non c'è una
+    /// riconciliazione periodica, `reindex` gira solo all'apertura —, quindi
+    /// chi apre quella nota vede il testo di ieri e chi la cerca la trova col
+    /// contenuto di ieri: è esattamente il caso per cui il canale esiste. Le
+    /// tre uscite dicono tre cose diverse e nessuna sostituisce le altre: il
+    /// registro **conta** (è già successo *n* volte), il log **resta** dopo che
+    /// l'app si è chiusa, l'evento **arriva** mentre succede.
+    ///
+    /// Sta qui e non nei chiamanti per la ragione che questa funzione aveva già
+    /// scritta accanto: i chiamanti veri scrivevano `let _ =`, e ciò che si
+    /// appoggia alla loro attenzione si perde. Le tre porte pubbliche —
+    /// [`sync_path`](Workspace::sync_path),
+    /// [`sync_path_prepared`](Workspace::sync_path_prepared),
+    /// [`sync_renamed_path`](Workspace::sync_renamed_path) — passano tutte di
+    /// qui, e la quarta che verrà la eredita senza che nessuno se ne debba
+    /// ricordare.
+    ///
+    /// [`Severity::Warning`], e per la regola di [`report_losses`]: il vault è
+    /// la verità e ciò che è rimasto indietro torna riaprendo. Non «non è
+    /// grave» — fino ad allora chi legge quella nota legge una versione vecchia
+    /// senza sapere che lo è.
+    ///
+    /// Il soggetto è il documento e non il path, perché il soggetto di un
+    /// guasto è ciò che l'utente ha in mano; se quel path un documento non lo
+    /// nomina — è fuori dal vault, o non è UTF-8 — il guasto resta senza
+    /// soggetto invece di inventarne uno.
+    ///
+    /// [`report_losses`]: Workspace::report_losses
+    fn note_sync(&mut self, abs: &Utf8Path, outcome: &Result<bool>) {
+        let Err(e) = outcome else {
+            return;
+        };
+        self.indexes.core.note_sync_failure(e);
+        tracing::warn!(target: "fub.kernel", "sincronizzazione di {abs}: {e}");
+        let soggetto = self.docs.vault.doc_id_for_path(abs).ok();
+        let motivo = PluginError::Internal(format!("sincronizzazione di {abs}: {e}").into());
+        self.as_actor(Actor::Watcher, |ws| {
+            ws.report_trouble(Severity::Warning, soggetto, motivo);
+            ws.dispatch_pending();
+        });
     }
 
     fn sync_path_here(&mut self, abs: &Utf8Path) -> Result<bool> {
@@ -3630,7 +3672,9 @@ impl Workspace {
     /// che registra.
     pub fn sync_renamed_path(&mut self, from: &Utf8Path, to: &Utf8Path) -> Result<bool> {
         let outcome = self.as_actor(Actor::Watcher, |ws| ws.sync_renamed_path_here(from, to));
-        self.note_sync(&outcome);
+        // Il soggetto è **dove il file è adesso**: una rinomina che fallisce
+        // lascia indietro la destinazione, ed è quella che l'utente ha in mano.
+        self.note_sync(to, &outcome);
         outcome
     }
 
