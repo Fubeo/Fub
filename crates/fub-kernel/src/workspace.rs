@@ -2213,12 +2213,22 @@ impl Workspace {
     /// cache» renderebbe quel numero la somma di due incidenti diversi. Va su
     /// `stderr` come il sidecar del cestino, ed è il §20.2 che gli darà una
     /// destinazione vera.
+    /// # Ciò che si è visto nel proprio istante non si scrive
+    ///
+    /// Una voce la cui data non era nel passato quando la si è letta non è
+    /// affidabile per la **prossima** apertura, e qui è dove quella risposta —
+    /// presa al momento dell'osservazione, che è l'unico in cui la domanda ha
+    /// senso — si spende (difetto 0187). Saltarla costa la rilettura di quel
+    /// file alla riapertura; scriverla costerebbe un indice fermo su un
+    /// contenuto vecchio fino al primo evento che tornasse a toccare quel file,
+    /// e se nessuno lo toccasse, per sempre.
     fn store_entries(&mut self) {
         let table = self
             .indexes
             .core
             .entries
             .values()
+            .filter(|entry| !self.indexes.core.osservata_nel_proprio_istante(&entry.id))
             .map(|entry| {
                 (
                     entry.id.clone(),

@@ -157,7 +157,7 @@ affatto: lo dice `HealthCheck::CollidingPaths`
 ## Il vault
 
 ### anagrafe
-`VaultEntry` (il tipo del contratto) reso durevole da `EntryStore` · [`kernel/entries.rs:177`](../crates/fub-kernel/src/entries.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
+`VaultEntry` (il tipo del contratto) reso durevole da `EntryStore` · [`kernel/entries.rs:201`](../crates/fub-kernel/src/entries.rs) · [0046](decisions/0046-l-anagrafe-del-vault.md)
 
 Ciò che il kernel si ricorda di ogni file per **non doverlo rileggere**:
 frontmatter, outline, e quanto basta a decidere se il file su disco è ancora
@@ -290,7 +290,7 @@ ha una [finestra di conservazione](#finestra-di-conservazione) che l'utente
 dichiara e un comando che lo svuota, `vault.clear-journal`.
 
 ### ricongiungimento
-`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6584`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
+`rejoin_renamed_while_closed` · [`kernel/workspace.rs:6594`](../crates/fub-kernel/src/workspace.rs) · [0099](decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md)
 
 Riconoscere all'apertura una nota **rinominata mentre Fub era chiuso**: sparita
 da un path e ricomparsa sotto un altro con la stessa impronta, quindi la stessa
