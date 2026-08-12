@@ -733,6 +733,41 @@ fn an_external_rename_migrates_identity_and_emits_renamed() {
     );
 }
 
+/// Il disco è già avanti: se la destinazione non si rilegge, il nome vecchio
+/// non resta vivo (difetto 0181).
+#[test]
+fn una_rinomina_esterna_che_non_si_rilegge_non_lascia_vivo_il_nome_vecchio() {
+    let dir = TempDir::new("extrename-illeggibile");
+    let mut ws = workspace(&dir.0);
+    ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
+        .unwrap();
+
+    // Qualcun altro sposta il file, e ciò che atterra al nome nuovo non è
+    // testo: la rilettura della destinazione fallirà. Il file però **c'è**, e
+    // il vecchio nome sul disco non c'è più.
+    std::fs::remove_file(dir.0.join("Nota.lnk")).unwrap();
+    std::fs::write(dir.0.join("Spostata.lnk"), [0xff, 0xfe, 0x00]).unwrap();
+
+    let rx = ws.bus().subscribe();
+    let _ = ws.sync_renamed_path(&dir.0.join("Nota.lnk"), &dir.0.join("Spostata.lnk"));
+
+    assert!(
+        !ws.documents().contains(&DocId::new("Nota.lnk")),
+        "il vault continuerebbe a mostrare una nota che sul disco non c'è \
+         più, e ad aprirla darebbe un errore, fino alla riapertura del \
+         vault: {:?}",
+        ws.documents()
+    );
+    let eventi: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
+    assert!(
+        eventi
+            .iter()
+            .any(|e| matches!(e, Event::DocumentRemoved { id, .. } if id.as_str() == "Nota.lnk")),
+        "e chi ascolta lo viene a sapere adesso, non alla prossima apertura: \
+         {eventi:?}"
+    );
+}
+
 #[test]
 fn an_external_rename_does_not_rewrite_incoming_links() {
     let dir = TempDir::new("extrename-links");
