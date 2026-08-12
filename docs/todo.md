@@ -460,7 +460,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **ventidue** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **ventuno** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -546,7 +546,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0187 | la finestra «pulito per caso» si calcola sul momento del **salvataggio** e non su quello della scansione: l'indice confronta con `written_at`, quindi un file cambiato fra la scansione e la scrittura dell'indice risulta già coperto e resta indicizzato con il contenuto vecchio fino a un evento che lo tocchi di nuovo | `fub-kernel` · `index` (uso di `written_at`) | regole |
 | 0188 | l'indice di ricerca scrive i propri segmenti direttamente sul filesystem invece che attraverso `VaultStorage`, che il repo dichiara **il supporto unico** dei byte: quei file non passano da temp+rename, non passano da lock, non li vede un doppio in memoria, e ogni banco che monta un supporto finto ha un pezzo di vault che gli sfugge | `fub-kernel` · `index` (segmenti tantivy) | regole |
 | 0189 | `EntryStore::store` riscrive l'anagrafe senza prendere il lock che le altre riscritture integrali prendono: due processi che chiudono insieme si sovrascrivono l'anagrafe a vicenda, e vince l'ultimo che finisce | `fub-kernel` · `entries.rs` `EntryStore::store` | lock e I/O |
-| 0190 | l'ordine fra anagrafe e indici è asimmetrico fra i due punti che li scrivono — `finish_index` li salva in un ordine e `close_with` nell'altro — quindi un'interruzione a metà lascia due stati incoerenti diversi a seconda di quale dei due percorsi stava correndo, e nessuno dei due è quello che la riapertura si aspetta | `fub-kernel` · `workspace.rs` `finish_index` / `close_with` | lock e I/O |
 | 0191 | il log del kernel non regge né due processi né il mondo esterno: la rotazione non è protetta fra installazioni e può far perdere il file vecchio, le scritture non sincronizzano mai, e se qualcuno elimina o ruota il file da fuori il `FileSink` non se ne accorge e continua a scrivere in un descrittore morto **per sempre**, cioè proprio quando il log servirebbe per capire cos'è successo | `fub-kernel` · `log.rs` `FileSink` | lock e I/O |
 | 0194 | `controlla_path` è solo lessicale: confronta i segmenti come sono scritti e non risolve i link, quindi un symlink piazzato dentro il vault porta una scrittura fuori dal vault passando una guardia che crede di aver controllato | `fub-kernel` · `path` `controlla_path` | regole |
 | 0197 | il watcher legge un file mentre qualcuno lo sta ancora scrivendo: non c'è nessuna prova di stabilità — né un secondo `stat` che confermi la stessa dimensione, né un'attesa — quindi un file grande scritto da un'applicazione esterna entra in anagrafe a metà e ci resta finché non arriva un altro evento | `fub-host` · `watcher` (ingestione dell'evento) | lock e I/O |

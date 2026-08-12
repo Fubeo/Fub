@@ -46,12 +46,15 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
-use fub_abi::error::FormatError;
+use fub_abi::error::{FormatError, PluginError};
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
 use fub_abi::options::syntax;
+use fub_abi::traits::{
+    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute,
+};
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, Stat, VaultStorage};
 use fub_kernel::{FormatRegistry, MachineSettings, MemStorage, Workspace};
@@ -174,6 +177,57 @@ impl VaultStorage for SupportoCheConta {
     }
 }
 
+/// Un indice che al `flush` **guarda l'orologio del disco**: si segna quante
+/// volte l'anagrafe è già stata scritta nel momento in cui tocca a lui.
+///
+/// È tutto ciò che serve a rendere osservabile un ordine. Un indice che non
+/// persiste niente non ha modo di accorgersi di essere stato chiuso dopo
+/// l'anagrafe, e quello vero — la ricerca — se ne accorgerebbe solo alla
+/// riapertura successiva a un processo ucciso in mezzo, che non è un fatto che
+/// un banco possa produrre.
+struct IndiceCheGuardaLAnagrafe {
+    scritture_dell_anagrafe: Arc<AtomicUsize>,
+    visto_ai_flush: Arc<std::sync::Mutex<Vec<usize>>>,
+}
+
+impl IndiceCheGuardaLAnagrafe {
+    fn guarda(&self) {
+        self.visto_ai_flush
+            .lock()
+            .unwrap()
+            .push(self.scritture_dell_anagrafe.load(Ordering::Relaxed));
+    }
+}
+
+impl IndexProvider for IndiceCheGuardaLAnagrafe {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+    fn on_documents_indexed(&mut self, _docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+    fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+    fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.guarda();
+        Ok(())
+    }
+    fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.guarda();
+        Ok(())
+    }
+    fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::Unserved("niente".into()))
+    }
+}
+
 const ROOT: &str = "/vault-anagrafe-alla-chiusura";
 /// Quanti documenti. Non tre: il numero sbagliato deve essere **grande**
 /// abbastanza da non sembrare un arrotondamento.
@@ -210,6 +264,28 @@ fn aperto(storage: Arc<SupportoCheConta>) -> Workspace {
         MachineSettings::in_memory(),
     )
     .expect("l'apertura del vault riesce");
+    ws.reindex().expect("apertura");
+    ws
+}
+
+/// [`aperto`], con **un indice registrato**: il terzo banco ne ha bisogno
+/// perché l'ordine fra l'anagrafe e il flush si vede solo da dentro un flush.
+fn aperto_con_indice(storage: Arc<SupportoCheConta>, index: IndiceCheGuardaLAnagrafe) -> Workspace {
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(Box::new(LinkListProvider))
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::on(
+        ROOT,
+        registry,
+        storage as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("l'apertura del vault riesce");
+    ws.register_core_feature("test.orologio", "test.orologio")
+        .expect("dichiarato");
+    ws.register_index_provider("test.orologio", Box::new(index))
+        .expect("registrato");
     ws.reindex().expect("apertura");
     ws
 }
@@ -330,5 +406,71 @@ fn l_anagrafe_scritta_alla_chiusura_racconta_le_scritture_e_non_l_apertura() {
     assert_eq!(
         dopo.outgoing(&DocId::new(nome(DOCUMENTI - 1))),
         vec![DocId::new(nome(0))]
+    );
+}
+
+/// **L'anagrafe si scrive per ultima, e non prima degli indici** (difetto
+/// 0190).
+///
+/// I due punti che scrivono l'una e gli altri erano due — la fine
+/// dell'apertura e la chiusura — e tenevano l'ordine opposto, quindi quale
+/// stato a metà restasse sul disco dopo un'interruzione lo decideva quale dei
+/// due percorsi stava correndo. Uno dei due ordini è però il solo che regga,
+/// perché i due stati a metà non si equivalgono: l'anagrafe è ciò che alla
+/// riapertura *risparmia* il lavoro — una voce che combacia col disco non si
+/// rilegge, non si riparsa e non torna agli indici —, quindi un'anagrafe
+/// scritta **prima** del flush è un disco che dichiara indicizzato ciò che
+/// nessun indice ha ancora ricevuto, e alla riapertura quelle note ci sono, si
+/// aprono, si leggono, e dalla ricerca sono sparite senza che nessuno lo dica.
+/// Il verso opposto — flush fatto, anagrafe no — è il degrado che questo file
+/// dichiara in testa: si rilegge, e non si perde niente.
+///
+/// Il conto non è un cronometro né un ordine di path: è l'indice stesso che, al
+/// proprio `flush`, si segna quante volte l'anagrafe è già passata dal
+/// supporto. Alla chiusura di una sessione che ha scritto, quel numero deve
+/// essere ancora quello di fine apertura — l'anagrafe della chiusura viene
+/// dopo.
+#[test]
+fn alla_chiusura_l_anagrafe_si_scrive_dopo_gli_indici() {
+    let (storage, _letture, scritture) = SupportoCheConta::nuovo();
+    semina(&storage);
+
+    let visto_ai_flush = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut ws = aperto_con_indice(
+        Arc::clone(&storage),
+        IndiceCheGuardaLAnagrafe {
+            scritture_dell_anagrafe: Arc::clone(&scritture),
+            visto_ai_flush: Arc::clone(&visto_ai_flush),
+        },
+    );
+
+    // Senza scritture la chiusura non ha niente da mettere in anagrafe, e il
+    // banco resterebbe verde per assenza di soggetto.
+    for i in 0..TOCCATI {
+        ws.write_document(&DocId::new(nome(i)), &corpo_nuovo(i), WriteBase::Dictated)
+            .expect("salva");
+    }
+    ws.close();
+
+    let visti = visto_ai_flush.lock().unwrap().clone();
+    let totale = scritture.load(Ordering::Relaxed);
+    let ultimo = *visti
+        .last()
+        .expect("l'indice dev'essere stato chiuso almeno una volta");
+    assert!(
+        visti.len() >= 2 && totale >= 2,
+        "il banco non ha soggetto: servono un giro d'indice e una scrittura \
+         d'anagrafe alla fine dell'apertura e altrettanti alla chiusura \
+         (viste: {visti:?}, anagrafi: {totale})"
+    );
+    assert_eq!(
+        ultimo,
+        totale - 1,
+        "l'ultima volta che un indice ha scritto, l'anagrafe della chiusura era \
+         già sul disco: da lì in avanti il disco dichiara indicizzato ciò che \
+         quell'indice non ha ancora finito di scrivere, e chi muore in quella \
+         finestra riapre un vault in cui le note ci sono, si aprono e si \
+         leggono, ma dalla ricerca sono sparite in silenzio (viste: {visti:?}, \
+         anagrafi in tutto: {totale})"
     );
 }
