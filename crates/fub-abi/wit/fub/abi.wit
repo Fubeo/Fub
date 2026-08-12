@@ -2869,6 +2869,13 @@ interface view {
     /// avere un posto dove stare: il grafo lo ha già fatto, con un comando
     /// bespoke e un renderer privato, non perché sia speciale ma perché non
     /// c'era un posto dove metterlo.
+    ///
+    /// **Il piano è della superficie, non della view.** «Chi sta sopra» non è
+    /// un campo di `view-spec`: una view non porta una superficie, ci si
+    /// attacca, e a dipingere è la shell — che tiene i piani in un posto solo e
+    /// dà il tasto all'ultima superficie aperta fra quelle che intrappolano il
+    /// fuoco. Volere un piano diverso è volere una **superficie** diversa, e
+    /// quella si chiede aggiungendo un caso in fondo a questo elenco.
     enum view-surface {
         left-sidebar,
         right-sidebar,

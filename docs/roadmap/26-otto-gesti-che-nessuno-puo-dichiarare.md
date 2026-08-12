@@ -5,7 +5,7 @@ un gesto funziona — l'app lo compie, per sé — e **non esiste il dato che lo
 dichiara**. Non sono funzionalità mancanti: sono porte mancanti fra un gesto e
 il contratto, e finché non ci sono, ogni gesto nuovo si paga per intero.
 
-**Due delle otto sono chiuse.** La §26.6 con la
+**Tre delle otto sono chiuse.** La §26.6 con la
 [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md), che ha spaccato
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` finché farlo
 costava sei righe e zero manifest da migrare — era la sola la cui finestra si
@@ -753,7 +753,8 @@ banco, con un commento che dichiara di essere la gemella, e che gemella non è.
 
 ### 26.4 Il livello di una superficie non è un dato
 
-*aperta · strato **contratto** · **P1***
+*chiusa · strato **contratto** · **P1** ·
+[0150](../decisions/0150-il-piano-e-della-superficie.md)*
 
 **1. La domanda.** Quando due superfici sono aperte insieme, chi sta sopra e chi
 prende il tasto? È un fatto **dichiarato** — un livello che ogni superficie
@@ -816,7 +817,7 @@ grep -n 'ViewSurface::ALL' -A 14 crates/fub-abi/src/traits.rs
       capita, dietro a chiunque abbia accodato prima. In cambio un terzo che
       porta una superficie propria — un viewer PDF, un lightbox, uno slash menu
       — dichiara dove sta invece di scoprirlo.
-- [ ] **(c) La shell deduce il livello da `view-surface`** (`modal` sopra
+- [x] **(c) La shell deduce il livello da `view-surface`** (`modal` sopra
       `settings-tab` sopra `context-menu`…). Paga **chi mantiene la shell**:
       zero firma. E paga **il terzo per sempre**: due plugin che vogliono due
       livelli diversi sulla stessa superficie non hanno modo di dirlo.
@@ -882,11 +883,15 @@ piano `--z-modal`, la regola che le lega sta scritta accanto ai piani in
 `theme/tokens.css`, e `--z-overlay` — il piano che zero regole citavano — non
 c'è più. La riparazione è la sostanza della **(a)** senza il parametro: l'ordine
 si deduce dall'apertura invece di farlo scegliere a ogni chiamante, che è la
-stessa ragione per cui la trappola sta in un posto solo. **Questa voce resta
-aperta**, e la domanda che le resta è quella che la (a) non tocca: se un livello
-sia un fatto che una superficie di terzi **dichiara** — la **(b)**, il campo in
-fondo a `view-spec` — o qualcosa che il terzo prende come gli capita. Chi la
-riprende rimisuri la §2 prima di usarla.
+stessa ragione per cui la trappola sta in un posto solo. La domanda che le
+restava è quella che la (a) non tocca — se un livello sia un fatto che una
+superficie di terzi **dichiara**, la **(b)** — e l'ha chiusa la
+[0150](../decisions/0150-il-piano-e-della-superficie.md) con un no: un terzo non
+porta una superficie, ci si attacca, e il piano è della superficie; volere un
+piano diverso è volere una superficie diversa, che si chiede aggiungendo un caso
+in fondo a `view-surface` — additivo quanto il campo, quindi la decisione non
+consuma nessuna occasione. Chi rilegge la §2 la rimisuri: il verbale ha trovato
+tre trappole ancora sotto `--z-modal`, e l'ha scritto.
 
 ---
 

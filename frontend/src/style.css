@@ -1566,9 +1566,12 @@ button:hover {
  *
  * Una **modale della shell**, non una superficie in più del layout: le
  * impostazioni si aprono, si guardano e si chiudono, e finché il modello di
- * layout (§1.2) non esiste una finestra vera non ha dove stare. Sta sopra
- * tutto (`z-index` maggiore delle due della barra di stato) perché è l'unica
- * cosa che, mentre è aperta, è quella che si sta facendo. */
+ * layout (§1.2) non esiste una finestra vera non ha dove stare. Sta sopra il
+ * corpo dell'app perché è l'unica cosa che, mentre è aperta, è quella che si
+ * sta facendo — ma **non** sopra le modali: la palette che si apre da qui
+ * dentro si dipinge sopra il pannello ed è lei a prendere i tasti, che è la
+ * stessa regola (l'ultima aperta comanda, difetto 0149). Prima qui c'era
+ * scritto «sta sopra tutto», e da quella riparazione non era più vero. */
 #settings-panel {
   position: fixed;
   inset: 48px 10% 48px 10%;

@@ -478,7 +478,7 @@ rottura deliberata prima del freeze si fa *ritagliandola*, con un commit che la
 tocca e dice perché — così si vede in review.
 
 ### manifest
-`PluginManifest` · [`abi/traits.rs:3793`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
+`PluginManifest` · [`abi/traits.rs:3810`](../crates/fub-abi/src/traits.rs) · [0013](decisions/0013-elenco-delle-capacita.md)
 
 La carta d'identità di un componente: id, nome, versione dell'ABI dichiarata, e
 i permessi che chiede. Anche una feature nativa ne ha uno, e non per simmetria:
@@ -567,7 +567,7 @@ un `match` senza `_`, quindi una porta nuova non compila finché non ha una fras
 e finché non è dichiarato dove è provata.
 
 ### provider
-`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1852`](../crates/fub-abi/src/traits.rs) · —
+`FormatProvider`, `ViewProvider`, … · [`abi/traits.rs:1869`](../crates/fub-abi/src/traits.rs) · —
 
 Chi implementa un trait del contratto e si registra: è **il** modo in cui Fub si
 estende. Il criterio di tutta la roadmap è che la stragrande maggioranza delle
@@ -612,7 +612,7 @@ accanto al crate che rispecchia, ed è verificato contro di lui a ogni push
 ## Il canale dati
 
 ### canale dati
-`IndexQuery` / `IndexResult` · [`abi/traits.rs:2563`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
+`IndexQuery` / `IndexResult` · [`abi/traits.rs:2580`](../crates/fub-abi/src/traits.rs) · [0005](decisions/0005-canale-dati-verso-le-view.md), [0019](decisions/0019-il-canale-dati.md)
 
 L'unico modo in cui chi disegna chiede dati al kernel: si costruisce una query,
 si ottiene un risultato. Esiste perché una view non deve poter chiamare il
@@ -627,14 +627,14 @@ outline, tag, statistiche — invece che per il testo. È il canale che ha reso 
 pannelli nativi dei `ViewProvider` veri invece che rami privilegiati del kernel.
 
 ### finestra
-`Page` / `Paged<T>` · [`abi/traits.rs:1960`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`Page` / `Paged<T>` · [`abi/traits.rs:1977`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Il modo di chiedere *venti* invece di tutto, con il totale nella risposta.
 `None` resta «tutto», perché chi ha davvero bisogno dell'insieme intero non deve
 inventarsi un tetto; ma senza finestra ogni giro clona il vault.
 
 ### indice
-`IndexProvider` · [`abi/traits.rs:3448`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`IndexProvider` · [`abi/traits.rs:3465`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Chi sa rispondere a una parte delle query. Ce n'è più di uno — il grafo e
 l'anagrafe stanno nel kernel, la ricerca full-text è un provider su tantivy — e
@@ -656,7 +656,7 @@ mandarne due **insieme**: non è una dichiarazione nel contratto, è una misura 
 la ricerca è passata da 1,0× a 6,8× su otto thread.
 
 ### risultato
-`DocumentMatch` · [`abi/traits.rs:2327`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
+`DocumentMatch` · [`abi/traits.rs:2344`](../crates/fub-abi/src/traits.rs) · [0019](decisions/0019-il-canale-dati.md)
 
 Un documento che risponde a una query, con quello che serve per mostrarlo: il
 punteggio, lo snippet, ciò che ha fatto scattare la corrispondenza. È il tipo su
@@ -827,7 +827,7 @@ sorgenti. Non è stile: è il prerequisito del PWA, del mobile e degli e2e
 headless.
 
 ### esemplare
-`ViewInstance` · [`abi/traits.rs:1594`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
+`ViewInstance` · [`abi/traits.rs:1611`](../crates/fub-abi/src/traits.rs) · [0037](decisions/0037-lo-stato-di-vista.md)
 
 Una particolare apparizione di una view: la stessa specie di pannello può essere
 aperta due volte, e le due hanno stato diverso. La chiave dello stato la compone
@@ -888,7 +888,7 @@ copiare un vault su un altro computer non deve portarsi dietro dove si era
 arrivati a leggere.
 
 ### superficie di scrittura
-`ViewSurface::Main` · [`abi/traits.rs:1520`](../crates/fub-abi/src/traits.rs) · [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md)
+`ViewSurface::Main` · [`abi/traits.rs:1537`](../crates/fub-abi/src/traits.rs) · [0104](decisions/0104-la-superficie-di-scrittura-si-presta.md)
 
 L'editor visto come una superficie che **si presta**: *«l'editor è della
 shell»* vuol dire questo editor, non l'editing, e un terzo che porti la propria
@@ -898,7 +898,7 @@ nel contratto e una via di disegno non riservata a `Trust::Core`, ed è un *buco
 dichiarato*, non un divieto.
 
 ### superficie di vista
-`ViewSurface` · [`abi/traits.rs:1520`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewSurface` · [`abi/traits.rs:1537`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 **Dove** una view può apparire: sidebar sinistra o destra, fondo, area
 principale, modale, barra di stato, ribbon, menu. Il contratto deve poter
@@ -921,7 +921,7 @@ fermato al passo caduto. Se non è cambiato niente resta un errore — è il *me
 che aveva bisogno di un nome, non il fallimento.
 
 ### view
-`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1646`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
+`ViewProvider` / `ViewSpec` · [`abi/traits.rs:1663`](../crates/fub-abi/src/traits.rs) · [0016](decisions/0016-cosa-e-una-view.md)
 
 Un pannello dichiarato dal core: cosa mostra, dove sta, cosa si può fare dentro.
 Backlink, outline, tag e statistiche sono view vere — non rami del kernel — ed è
