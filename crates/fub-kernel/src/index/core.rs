@@ -145,6 +145,16 @@ pub(crate) struct CoreIndex {
     /// [`remove_entry`](CoreIndex::remove_entry) — che è la ragione per cui un
     /// conto ricavato qui non può divergere da ciò da cui è ricavato.
     pub(crate) nomi: NomiDellAnagrafe,
+    /// Le voci di `entries` **che non si scrivono in anagrafe**: quelle la cui
+    /// data non era nel passato nel momento in cui la si è letta (difetto
+    /// 0187).
+    ///
+    /// Quasi sempre vuoto, e non è una terza anagrafe: è la stessa risposta
+    /// che la regola *racily clean* dava a `load` guardando un numero in testa
+    /// alla tabella, presa però dove la domanda ha senso — al momento
+    /// dell'osservazione — e tenuta da parte fino a quando serve, cioè quando
+    /// qualcuno scrive. Ci si passa dalle stesse due porte di `nomi`.
+    osservate_nel_proprio_istante: BTreeSet<DocId>,
     /// **Le cartelle** (§14.3), come la camminata le ha viste.
     ///
     /// Un insieme di path e non una mappa di record: ciò che si sa di una
@@ -605,6 +615,7 @@ impl CoreIndex {
             metas: BTreeMap::new(),
             entries: BTreeMap::new(),
             nomi: NomiDellAnagrafe::default(),
+            osservate_nel_proprio_istante: BTreeSet::new(),
             folders: BTreeSet::new(),
             tags: TagCounts::default(),
             graph: LinkGraph::default(),
@@ -746,8 +757,37 @@ impl CoreIndex {
     }
 
     pub(crate) fn set_entry(&mut self, entry: VaultEntry) {
+        // **La regola *racily clean*, posta dove si osserva** (difetto 0187).
+        //
+        // Una data che non è strettamente nel passato rispetto a adesso è una
+        // data che può ancora cambiare senza cambiare: il file può essere
+        // riscritto in questo stesso millisecondo, dopo che l'abbiamo guardato,
+        // e `mtime + size` direbbe lo stesso di prima. Quella voce si tiene in
+        // memoria — dove è vera, perché il contenuto lo si è appena letto — e
+        // **non si scrive** in anagrafe, così la prossima apertura la rilegge
+        // invece di crederle.
+        //
+        // Sta qui e non nei chiamanti perché qui ci passano tutti: la
+        // scansione, il rilevatore, la scrittura che sa cosa ha scritto. Ed è
+        // qui e non alla scrittura della tabella perché è *adesso* il momento
+        // dell'osservazione: fra questa riga e l'anagrafe scritta su disco ci
+        // sta una sessione intera, e una soglia presa là dichiarerebbe pulito
+        // tutto ciò che si è visto qui.
+        if entry.mtime < crate::time::now_unix_millis() {
+            self.osservate_nel_proprio_istante.remove(&entry.id);
+        } else {
+            self.osservate_nel_proprio_istante.insert(entry.id.clone());
+        }
         self.nomi.inserisci(&entry.id, entry.kind);
         self.entries.insert(entry.id.clone(), entry);
+    }
+
+    /// Se di questa voce **non ci si può fidare fino alla prossima apertura**:
+    /// la sua data non era nel passato quando la si è letta, quindi una
+    /// scrittura arrivata subito dopo sarebbe indistinguibile da nessuna
+    /// scrittura (difetto 0187). Chi scrive l'anagrafe la salta.
+    pub(crate) fn osservata_nel_proprio_istante(&self, id: &DocId) -> bool {
+        self.osservate_nel_proprio_istante.contains(id)
     }
 
     /// Mette una cartella fra quelle che ci sono (§14.3).
@@ -808,6 +848,7 @@ impl CoreIndex {
     /// sparizione deve portare con sé.
     pub(crate) fn remove_entry(&mut self, id: &DocId) -> Option<EntryKind> {
         self.nomi.togli(id);
+        self.osservate_nel_proprio_istante.remove(id);
         self.entries.remove(id).map(|e| e.kind)
     }
 

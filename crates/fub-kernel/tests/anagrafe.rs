@@ -16,7 +16,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Event, Notice};
 use fub_abi::format::{
@@ -28,7 +28,8 @@ use fub_abi::traits::{
     VaultEntry,
 };
 use fub_abi::FormatProvider;
-use fub_kernel::{FormatRegistry, Subscription, Workspace};
+use fub_kernel::storage::{DirEntry, Fusione, MemStorage, Stat, VaultStorage};
+use fub_kernel::{FormatRegistry, MachineSettings, Subscription, Workspace};
 
 /// Provider `.txt` che **conta quante volte gli è stato chiesto di parsare**.
 ///
@@ -248,10 +249,11 @@ impl Fixture {
     }
 }
 
-/// La regola *racily clean* dice di non credere a ciò che ha una data non
-/// anteriore alla scrittura dell'anagrafe. In un test tutto succede nello stesso
-/// millisecondo: senza questa pausa il primo giro scriverebbe una tabella a cui
-/// il secondo non crederebbe, e il salto non si vedrebbe mai.
+/// La regola *racily clean* dice di non credere a una data che non è anteriore
+/// al momento in cui la si è letta. In un test tutto succede nello stesso
+/// millisecondo: senza questa pausa la scansione guarderebbe file appena
+/// scritti, nessuna delle loro voci finirebbe in anagrafe, e il salto della
+/// rilettura non si vedrebbe mai.
 fn oltre_il_millisecondo() {
     std::thread::sleep(std::time::Duration::from_millis(5));
 }
@@ -641,4 +643,139 @@ fn un_allegato_spostato_da_fuori_non_resta_in_anagrafe_col_nome_vecchio() {
         .map(|e| e.id.to_string())
         .collect();
     assert_eq!(ids, ["img/foto.png"], "una voce sola, quella vera");
+}
+
+// --- la data che può ancora cambiare ---------------------------------------
+
+/// Un supporto che dà a **una** nota la data di un istante non ancora passato.
+///
+/// È il modo di rendere osservabile ciò che nella realtà dura un millisecondo:
+/// il file che qualcuno sta riscrivendo proprio mentre la scansione lo guarda.
+/// Cinque millisecondi avanti bastano perché la domanda «questa data è nel
+/// passato?» abbia una risposta ferma nel momento in cui la si pone, e non
+/// bastano a far passare per assurda una data che il filesystem potrebbe dare
+/// davvero: due macchine con l'orologio non perfettamente allineato su un vault
+/// condiviso fanno esattamente questo.
+#[derive(Default)]
+struct LaDataDiAdesso(MemStorage);
+
+impl LaDataDiAdesso {
+    const INSTABILE: &'static str = "appena-scritta.txt";
+
+    fn adesso() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("dopo il 1970")
+            .as_millis() as u64
+    }
+}
+
+impl VaultStorage for LaDataDiAdesso {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.0.read(path)
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        let mut stat = self.0.write(path, bytes)?;
+        if path.as_str().ends_with(Self::INSTABILE) {
+            stat.mtime = Self::adesso() + 5;
+        }
+        Ok(stat)
+    }
+    fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> std::io::Result<()> {
+        self.0.update(path, fondi)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.0.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.0.rename(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.0.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        let mut voci = self.0.list(dir)?;
+        for voce in &mut voci {
+            if voce.path.as_str().ends_with(Self::INSTABILE) {
+                voce.stat.mtime = Self::adesso() + 5;
+            }
+        }
+        Ok(voci)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        let mut stat = self.0.stat(path)?;
+        if path.as_str().ends_with(Self::INSTABILE) {
+            stat.mtime = Self::adesso() + 5;
+        }
+        Ok(stat)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.0.remove_empty_dir(dir)
+    }
+}
+
+/// **Una data che può ancora cambiare non finisce in anagrafe** (difetto 0187).
+///
+/// `mtime + size` riconosce l'immutato, e sbaglia in un verso solo che costa
+/// caro: un file riscritto *dentro lo stesso millisecondo* in cui la scansione
+/// l'ha guardato porta la stessa data e un contenuto diverso. La regola che git
+/// chiama *racily clean* è la risposta, e la domanda va posta dove si osserva —
+/// non dove si scrive la tabella, che viene dopo, a volte una sessione intera
+/// dopo.
+///
+/// Qui la distanza fra i due momenti è esplicita e si vede: la nota instabile è
+/// osservata alla scansione, e l'anagrafe si scrive alla **chiusura**, dieci
+/// millisecondi più tardi. Con la soglia sulla scrittura quella data risultava
+/// comodamente nel passato, la voce veniva creduta, e l'indice restava fermo sul
+/// contenuto vecchio fino al primo evento che tornasse a toccare quel file.
+#[test]
+fn una_data_che_puo_ancora_cambiare_non_finisce_in_anagrafe() {
+    let fixture = Fixture::new();
+    let storage = Arc::new(LaDataDiAdesso::default());
+
+    let apri = |storage: Arc<dyn VaultStorage>, canvas: bool| {
+        let mut ws = Workspace::on(
+            "/vault",
+            fixture.registry(canvas),
+            storage,
+            MachineSettings::in_memory(),
+        )
+        .expect("l'apertura del vault riesce");
+        ws.reindex().expect("reindex");
+        ws
+    };
+
+    storage
+        .write(Utf8Path::new("/vault/ferma.txt"), b"non cambio")
+        .expect("scrive");
+    storage
+        .write(
+            Utf8Path::new("/vault/appena-scritta.txt"),
+            b"qualcuno mi sta ancora scrivendo",
+        )
+        .expect("scrive");
+    // La nota ferma dev'essere ferma **davvero**: la sua data dev'essere nel
+    // passato nel momento in cui la scansione la guarda, o non varrebbe come
+    // metà di confronto.
+    oltre_il_millisecondo();
+
+    let mut ws = apri(storage.clone(), false);
+    let alla_scansione = fixture.parses();
+    assert_eq!(alla_scansione, 2, "la prima apertura legge tutte e due");
+
+    // Fra l'osservazione e la scrittura dell'anagrafe passa del tempo: è
+    // esattamente ciò che rendeva la vecchia soglia una risposta a un'altra
+    // domanda.
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    ws.close();
+    drop(ws);
+
+    let _ = apri(storage.clone() as Arc<dyn VaultStorage>, false);
+    assert_eq!(
+        fixture.parses() - alla_scansione,
+        1,
+        "la riapertura ha creduto a una data che quando l'abbiamo letta poteva \
+         ancora cambiare: quel file resta indicizzato col contenuto di prima \
+         finché non arriva un evento che lo tocchi, e se non arriva, per sempre"
+    );
 }

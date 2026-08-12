@@ -57,10 +57,31 @@
 //! tabella: un file salvato mentre la scansione lo guardava porterebbe una data
 //! che combacia e un contenuto che non combacia più.
 //!
-//! Da lì la regola che git chiama *racily clean*: la tabella ricorda **quando è
-//! stata scritta**, e ciò che ha una data maggiore o uguale a quella non si
-//! crede mai. Costa la rilettura dei pochi file toccati nell'ultimo millisecondo
-//! della scansione.
+//! Da lì la regola che git chiama *racily clean*: una data che non è
+//! **strettamente** nel passato rispetto al momento in cui la si è letta non si
+//! crede mai, perché quel file può essere cambiato ancora dentro lo stesso
+//! millisecondo, dopo che l'abbiamo guardato e senza che la data se ne accorga.
+//!
+//! Il *momento in cui la si è letta* è quello della **scansione**, e per un po'
+//! qui è stato quello della scrittura di questa tabella (difetto 0187). Sono
+//! due istanti diversi e in mezzo ci sta una sessione intera: l'anagrafe si
+//! scrive alla fine dell'indicizzazione e alla chiusura del vault, mentre le
+//! date che porta dentro sono state lette quando ognuno di quei file è passato
+//! sotto la `stat` — all'apertura per la scansione, o più tardi per mano del
+//! rilevatore. Con la soglia sulla scrittura, un file cambiato **nel proprio
+//! istante di osservazione** ricadeva sotto la soglia — la scrittura viene
+//! sempre dopo — e la tabella lo dichiarava pulito con dentro il contenuto di
+//! prima: l'indice restava fermo su una versione vecchia fino al primo evento
+//! che tornasse a toccare quel file, e se nessuno lo toccava, per sempre.
+//!
+//! La soglia quindi non è più una sola per tutta la tabella, e nemmeno un
+//! numero scritto sul disco: la domanda si pone **dove si osserva**, una voce
+//! per volta, e la risposta è un sì o un no che non ha bisogno di essere
+//! confrontato con niente più tardi. Una voce la cui data non è nel passato al
+//! momento in cui la si mette in anagrafe è *racily clean*, e non si scrive:
+//! chi riapre non la trova e la rilegge, che è il costo di sempre — la
+//! rilettura dei pochi file toccati nel proprio millisecondo — pagato però nel
+//! caso giusto invece che in nessuno.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -87,7 +108,14 @@ use fub_abi::schema::SchemaVersion;
 /// nota in cima — la §21.10 riaperta dalla cache dopo essere stata chiusa nella
 /// firma. Un derivato di una versione che non si conosce si rifà, e qui il
 /// costo è una riapertura lenta sola.
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
+///
+/// v3: via `written_at` (difetto 0187). La soglia *racily clean* non è più un
+/// numero in testa alla tabella ma una domanda posta a ogni voce nel momento in
+/// cui la si osserva, quindi il campo non ha più niente da dire — e leggerlo
+/// senza applicarlo sarebbe peggio che non averlo. Una tabella v2 non si
+/// converte: le sue voci sono state vagliate con la soglia sbagliata, e
+/// fidarsene vorrebbe dire portarsi dentro il difetto una riapertura più in là.
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
 
 /// Il nome del file dentro [`data_root`].
 const FILE: &str = "entries.json";
@@ -165,10 +193,6 @@ impl StoredEntry {
 #[derive(Default, Serialize, Deserialize)]
 struct EntriesFile<E = BTreeMap<DocId, StoredEntry>> {
     version: SchemaVersion,
-    /// Quando questa tabella è stata scritta, in millisecondi UNIX: è la soglia
-    /// della regola *racily clean* (vedi il § in testa al modulo).
-    #[serde(default)]
-    written_at: u64,
     #[serde(default)]
     entries: E,
 }
@@ -250,12 +274,10 @@ impl EntryStore {
         if entries == *self.known {
             return Ok(());
         }
-        let written_at = crate::time::now_unix_millis();
         let (path, storage) = (&self.path, self.storage.as_ref());
         self.known.scrivi(entries, |entries| {
             let json = serde_json::to_vec(&EntriesFile {
                 version: SCHEMA_VERSION,
-                written_at,
                 entries,
             })
             .map_err(|e| e.to_string())?;
@@ -269,23 +291,22 @@ impl EntryStore {
     }
 }
 
-/// Legge la tabella, applicando la regola *racily clean*.
+/// Legge la tabella.
 ///
 /// `None` per tutto ciò che non è «un file nostro, di questa versione, leggibile
 /// per intero»: un errore di I/O, un JSON rotto, una versione che non si
 /// conosce. Nessuno dei tre è un avviso — sono tutti «ricomincia dal vault».
+///
+/// Qui non c'è più nessun vaglio *racily clean*, e non perché la regola sia
+/// caduta: è stata spostata dove si osserva, cioè al momento in cui una voce
+/// entra in anagrafe (difetto 0187). Ciò che è scritto qui è già passato di lì.
 fn load(path: &Utf8Path, storage: &dyn VaultStorage) -> Option<BTreeMap<DocId, StoredEntry>> {
     let raw = storage.read(path).ok()?;
     let file: EntriesFile = serde_json::from_slice(&raw).ok()?;
     if file.version != SCHEMA_VERSION {
         return None;
     }
-    Some(
-        file.entries
-            .into_iter()
-            .filter(|(_, e)| e.mtime < file.written_at)
-            .collect(),
-    )
+    Some(file.entries)
 }
 
 #[cfg(test)]
@@ -427,26 +448,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn cio_che_e_stato_scritto_mentre_scrivevamo_non_si_crede() {
-        // La regola *racily clean*: un file salvato nello stesso istante in cui
-        // la tabella si scriveva porterebbe una data che combacia e un
-        // contenuto che non combacia più.
-        let (_tmp, root) = tempdir();
-        let mut store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
-        let futuro = crate::time::now_unix_millis() + 60_000;
-        store
-            .store(BTreeMap::from([
-                (DocId::new("vecchia.md"), voce(1, 1_000)),
-                (DocId::new("appena-scritta.md"), voce(1, futuro)),
-            ]))
-            .expect("scrive");
-
-        let riletta = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
-        assert!(riletta.known(&DocId::new("vecchia.md")).is_some());
-        assert!(
-            riletta.known(&DocId::new("appena-scritta.md")).is_none(),
-            "una data non anteriore alla scrittura della tabella non si crede"
-        );
-    }
+    // La regola *racily clean* aveva qui il suo banco, e presidiava la soglia
+    // sbagliata: «non anteriore alla **scrittura della tabella**». La soglia è
+    // il momento dell'osservazione (difetto 0187), che questo modulo non vede —
+    // fra l'una e l'altra ci sta una sessione intera —, e il banco è andato
+    // dove la regola sta adesso: `anagrafe.rs`,
+    // `una_data_che_puo_ancora_cambiare_non_finisce_in_anagrafe`.
 }
