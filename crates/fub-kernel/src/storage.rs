@@ -1267,6 +1267,32 @@ pub fn update_atomic<T>(
     Ok(stato)
 }
 
+/// Il rifiuto di sovrascrivere un file che **adesso** non si rilegge.
+///
+/// È la seconda metà della regola della
+/// [0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md),
+/// e senza di essa la prima non vale niente: leggere un file malformato e
+/// tenersi un livello vuoto salva ciò che l'utente aveva scritto per il tempo di
+/// **una** scrittura, perché la prima che arriva ricompone il file dalla mappa
+/// vuota.
+///
+/// Sta qui, accanto a [`update_atomic`], perché il momento in cui la domanda ha
+/// una risposta vera è **la rilettura sotto lucchetto** — la prima mossa di
+/// questa forma, e della fusione gemella che i sidecar fanno passare dal
+/// supporto. Prima stava in quattro copie *davanti* a quella rilettura, e la
+/// bandiera che interrogavano l'avevano letta **all'apertura**: chi correggeva a
+/// mano il file si sentiva rispondere di no finché non riapriva l'app, e chi lo
+/// rompeva dopo l'apertura passava il cancello per farsi fermare un istante
+/// dopo, dalla rilettura, cioè dall'unico che lo sapeva davvero. Un cancello che
+/// non ferma ciò che deve e ferma ciò che non deve non è un cancello: è una
+/// copia vecchia della risposta (difetto 0170).
+///
+/// `perche` è la frase di chi ha provato a rileggere, e ci va davanti: dice
+/// **cosa** non si è capito del file, che è ciò che serve per correggerlo.
+pub fn non_lo_sovrascrivo(perche: &str, perdita: &str) -> String {
+    format!("{perche}. Fub non lo sovrascrive, o {perdita}. Correggilo o spostalo, e riprova.")
+}
+
 /// Il lock esclusivo che accompagna un [`update_atomic`], finché il valore vive.
 ///
 /// Sta su un file **accanto** e non sul file stesso, e non è una preferenza:

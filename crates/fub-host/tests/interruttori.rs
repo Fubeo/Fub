@@ -378,9 +378,10 @@ fn spenti(host: &Host) -> Vec<String> {
 /// quindi delle due metà solo una ha un modo di andare storta, e sta prima.
 ///
 /// Il guasto è **iniettato, non aspettato**: al posto di `.fub/settings.json`
-/// c'è una cartella, e uno store che non ha potuto leggere il file del vault
-/// non lo sovrascrive (è il cancello `vault_readable`, §20.2). Ogni scrittura
-/// d'impostazione fallisce, sempre, senza corse e senza attese.
+/// c'è una cartella, e un file che non si rilegge non lo si sovrascrive (§20.2).
+/// La cartella resta lì per tutto il banco, quindi la rilettura sotto lucchetto
+/// dice di no a ogni giro: ogni scrittura d'impostazione fallisce, sempre, senza
+/// corse e senza attese.
 #[test]
 fn cio_che_il_file_non_ha_accettato_non_resta_spento_in_memoria() {
     let v = Vault::new();

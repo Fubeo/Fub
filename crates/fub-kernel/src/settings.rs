@@ -74,7 +74,7 @@ use fub_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingSpec, 
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{update_atomic, Durevole, VaultStorage};
+use crate::storage::{non_lo_sovrascrivo, update_atomic, Durevole, VaultStorage};
 use crate::veleno::Ricovero;
 use fub_abi::schema::SchemaVersion;
 
@@ -164,7 +164,9 @@ fn store(
 ) -> Result<BTreeMap<String, SettingValue>, String> {
     update_atomic(
         path,
-        || load(path),
+        // La rilettura è il cancello: ciò che non si capisce adesso non si
+        // sovrascrive adesso.
+        || load(path).map_err(|e| non_lo_sovrascrivo(&e, PERDITA)),
         |disco| {
             match value {
                 Some(v) => {
@@ -190,11 +192,11 @@ fn store(
 /// lo sincronizzano, ed è lì che «l'altra ha scritto dopo che io avevo letto»
 /// smette di essere teorico.
 ///
-/// **Il file riletto si giudica come all'apertura**: se adesso è malformato non
-/// lo si sovrascrive: è la stessa regola di [`non_lo_sovrascrivo`] applicata al
-/// momento in cui il danno si può ancora evitare — fra l'apertura e questa
-/// scrittura il file può essere stato rotto da un editor di testo o da una
-/// sincronizzazione a metà, e `vault_readable` racconta com'era ieri.
+/// **Il file riletto è anche il cancello**: se adesso è malformato non lo si
+/// sovrascrive ([`non_lo_sovrascrivo`]), e la domanda si fa qui perché qui c'è
+/// la risposta vera — fra l'apertura e questa scrittura il file può essere stato
+/// rotto da un editor di testo o da una sincronizzazione a metà, e può essere
+/// stato **rimesso a posto** dalla stessa mano (difetto 0170).
 fn store_vault(
     storage: &dyn VaultStorage,
     path: &Utf8Path,
@@ -225,7 +227,7 @@ fn store_vault(
         let mut disco = match letto {
             Ok(disco) => disco,
             Err(e) => {
-                guasto = Some(e);
+                guasto = Some(non_lo_sovrascrivo(&e, PERDITA));
                 return Err(std::io::Error::other("il file non si è potuto leggere"));
             }
         };
@@ -262,22 +264,10 @@ fn store_vault(
     }
 }
 
-/// Il rifiuto di sovrascrivere un file che all'apertura non si è potuto leggere.
-///
-/// È la seconda metà della regola di [`load`], e senza di essa la prima non vale
-/// niente: leggere un file malformato e tenersi un livello vuoto salva la
-/// configurazione dell'utente per il tempo di **una** scrittura, perché la prima
-/// che arriva riscrive il file intero dalla mappa vuota. Chi ha sbagliato una
-/// virgola perderebbe tutto al primo interruttore toccato — cioè il danno che
-/// «non sovrascriverlo col default in silenzio» esiste per evitare, arrivato per
-/// un'altra strada.
-fn non_lo_sovrascrivo(path: &Utf8Path) -> String {
-    format!(
-        "{path} non si è potuto leggere all'apertura: Fub non lo sovrascrive, o \
-         la configurazione che contiene andrebbe persa. Correggilo o spostalo, e \
-         riapri."
-    )
-}
+/// Ciò che si perderebbe sovrascrivendo un file di livello che non si rilegge:
+/// il testo che [`non_lo_sovrascrivo`] mette dopo la ragione, uguale per i due
+/// livelli perché la perdita è la stessa.
+const PERDITA: &str = "la configurazione che contiene andrebbe persa";
 
 /// Il rifiuto di chi non trova lo schema di una chiave, detto **una volta** per
 /// tutti e due gli store: il livello macchina e quello di un vault rispondono
@@ -316,9 +306,6 @@ fn non_dichiarata(key: &str) -> PluginError {
 /// risponderebbe per una chiave che non gli appartiene.
 pub struct MachineSettings {
     path: Option<Utf8PathBuf>,
-    /// Il file si è letto? Se no **non lo si riscrive**: vedi
-    /// [`non_lo_sovrascrivo`].
-    readable: bool,
     /// **Il turno di chi scrive.** Non protegge un dato — lo protegge
     /// [`values`](Self::values) — ma l'ordine di due scritture: vedi
     /// [`MachineSettings::write`], dove serve perché il lucchetto dei valori
@@ -349,7 +336,6 @@ impl MachineSettings {
         (
             Arc::new(MachineSettings {
                 path: Some(path.to_owned()),
-                readable: warning.is_none(),
                 scrittura: Ricovero::new(()),
                 values: RwLock::new(values),
                 specs: RwLock::new(BTreeMap::new()),
@@ -362,7 +348,6 @@ impl MachineSettings {
     pub fn in_memory() -> Arc<Self> {
         Arc::new(MachineSettings {
             path: None,
-            readable: true,
             scrittura: Ricovero::new(()),
             values: RwLock::new(BTreeMap::new()),
             specs: RwLock::new(BTreeMap::new()),
@@ -528,9 +513,6 @@ impl MachineSettings {
             }
             return Ok(());
         };
-        if !self.readable {
-            return Err(non_lo_sovrascrivo(path));
-        }
         let fuso = store(path, key, value)?;
         *self.values.write().expect("livello macchina") = fuso;
         Ok(())
@@ -565,9 +547,6 @@ pub struct SettingsStore {
     /// [`Durevole`] perché «su disco prima, in memoria dopo» smettesse di
     /// essere una frase in un commento e diventasse l'unico ordine scrivibile.
     vault: Durevole<BTreeMap<String, SettingValue>>,
-    /// Il file del vault si è letto? Se no **non lo si riscrive**: vedi
-    /// [`non_lo_sovrascrivo`].
-    vault_readable: bool,
     machine: Arc<MachineSettings>,
     /// Le chiavi il cui valore del vault **non si legge** finché qualcuno non
     /// lo guarda (§23.13): vedi [`SettingsStore::suspend`] e la nota in testa al
@@ -603,7 +582,6 @@ impl SettingsStore {
             vault_path,
             storage,
             vault: Durevole::letto(vault),
-            vault_readable: warnings.is_empty(),
             machine,
             sospese: BTreeSet::new(),
             warnings,
@@ -855,11 +833,6 @@ impl SettingsStore {
                 .write(&spec.key, value)
                 .map_err(|e| PluginError::Internal(e.into()))?,
             SettingScope::Vault => {
-                if !self.vault_readable {
-                    return Err(PluginError::Internal(
-                        non_lo_sovrascrivo(&self.vault_path).into(),
-                    ));
-                }
                 // Su disco prima, in memoria dopo: non più perché lo dica
                 // questo commento, ma perché `Durevole` non sa esprimere
                 // l'altro ordine — la ragione sta là sopra.
@@ -1473,6 +1446,83 @@ mod tests {
             std::fs::read_to_string(&path).unwrap(),
             rotto,
             "e il file è ancora quello che l'utente aveva scritto"
+        );
+    }
+
+    /// **E un file corretto a mano non aspetta una riapertura** (difetto 0170).
+    ///
+    /// La faccia opposta di quello di sopra, ed è la faccia che una bandiera
+    /// letta all'apertura sbagliava: chi ha dimenticato una virgola la rimette —
+    /// con l'editor che ha già aperto, mentre Fub è lì — e da quel momento il
+    /// file si legge. Un rifiuto che continua è un rifiuto che parla di ieri, e
+    /// lascia come unica via d'uscita da un file **già a posto** il riavvio
+    /// dell'app.
+    ///
+    /// Che poi la chiave scritta a mano si ritrovi non è un di più: dice che si
+    /// è ripartiti da quei byte, cioè che la fusione ha letto il file corretto e
+    /// non se n'è tenuto uno vuoto in tasca dall'apertura.
+    #[test]
+    fn un_file_corretto_a_mano_non_aspetta_una_riapertura() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join(".fub").join("settings.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{ \"version\": 1, \"values\": { \"a.b\": true,, } }").unwrap();
+
+        let mut store = store_su(&dir);
+        assert_eq!(store.take_warnings().len(), 1, "il file rotto si dice");
+        store
+            .declare(
+                "a",
+                &[
+                    SettingSpec::toggle("a.b", "B", false),
+                    SettingSpec::toggle("a.c", "C", false),
+                ],
+            )
+            .unwrap();
+
+        // La stessa mano che l'aveva rotto lo rimette a posto, e Fub non si è
+        // chiuso in mezzo.
+        std::fs::write(&path, "{ \"version\": 1, \"values\": { \"a.b\": true } }").unwrap();
+
+        store.set("a.c", SettingValue::Toggle(true)).expect(
+            "il file adesso si legge: rifiutare vorrebbe dire chiedere di \
+             riaprire l'app per un file che è già a posto",
+        );
+        assert_eq!(
+            store.effective("a.b").unwrap().0,
+            SettingValue::Toggle(true),
+            "e si è ripartiti dai byte corretti, non dalla mappa vuota \
+             dell'apertura"
+        );
+    }
+
+    /// Lo stesso dall'altro livello, e tutte e due le facce in un banco solo: il
+    /// file della macchina rotto **resta** rotto finché lo è, e smette di
+    /// esserlo nel momento in cui smette (difetto 0170).
+    #[test]
+    fn anche_il_livello_macchina_torna_a_leggere_da_se() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("settings.json");
+        std::fs::write(&path, "{ \"version\": 1, \"values\": {,} }").unwrap();
+
+        let (machine, avviso) = MachineSettings::open(&path);
+        assert!(avviso.is_some(), "il file rotto si dice");
+        machine
+            .declare(&[SettingSpec::toggle("log.verbose", "Verboso", false).per_machine()])
+            .unwrap();
+
+        let e = machine
+            .set("log.verbose", SettingValue::Toggle(true))
+            .expect_err("finché è rotto non lo si sovrascrive");
+        assert!(format!("{e:?}").contains("non lo sovrascrive"), "{e:?}");
+
+        std::fs::write(&path, "{ \"version\": 1, \"values\": {} }").unwrap();
+        machine
+            .set("log.verbose", SettingValue::Toggle(true))
+            .expect("corretto il file, la scrittura non aspetta un riavvio");
+        assert_eq!(
+            machine.effective("log.verbose").unwrap().0,
+            SettingValue::Toggle(true)
         );
     }
 
