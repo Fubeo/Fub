@@ -21,10 +21,28 @@
 //! dei due: prova **quale faccia** esce, e la chiede ai due host con la stessa
 //! funzione, perché una prova scritta una volta sola non può descrivere due
 //! comportamenti diversi senza accorgersene.
+//!
+//! # Le famiglie che toccano i byte dell'utente (0222)
+//!
+//! La 0219 aveva portato qui **le facce dei rifiuti**, e lì si era fermata: ciò
+//! che i due host fanno quando la scrittura *riesce* non lo confrontava nessuno.
+//! È la metà che conta di più, perché è quella su cui si scrive del codice — che
+//! il testo creato si rilegga com'è stato dato, che la revisione resa sia la
+//! base valida della scrittura dopo, che una base stantia non lasci dietro di sé
+//! nemmeno un byte, che una rinomina porti con sé il testo e liberi il nome
+//! vecchio, che il cestino tolga dall'elenco senza distruggere e che il
+//! ripristino riporti indietro lo stesso id con lo stesso contenuto.
+//!
+//! Confrontarle ha trovato tre punti in cui i due rispondevano diverso, e tutti
+//! e tre dalla stessa parte — il doppio era più permissivo del vault vero, che è
+//! il verso peggiore: il codice scritto contro il doppio passa e si rompe in
+//! produzione. Sono scritti dove sono stati riparati, in
+//! `fub-sdk/src/testing/mod.rs`.
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::edit::{EditRequest, TextEdit, WriteBase};
 use fub_abi::error::PluginError;
-use fub_abi::model::DocId;
+use fub_abi::model::{DocId, Span};
 use fub_abi::traits::{DataWrite, HostApi};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{
@@ -51,6 +69,15 @@ fn specie(e: &PluginError) -> String {
         PluginError::Io(_) => "io",
     }
     .to_string()
+}
+
+/// L'esito di un'operazione ridotto a ciò su cui chi chiama si dirama: `ok`,
+/// oppure la specie del rifiuto.
+fn faccia<T>(esito: &Result<T, PluginError>) -> String {
+    match esito {
+        Ok(_) => "ok".to_string(),
+        Err(e) => specie(e),
+    }
 }
 
 /// Un supporto che dice di no a certe scritture, e per il resto è il disco.
@@ -296,4 +323,307 @@ fn un_supporto_che_dice_di_no_e_un_io_di_qua_e_di_la() {
          scritto il codice»: chi lo sente ha ragione di riprovare, e con \
          `internal` non lo saprebbe"
     );
+}
+
+/// **Le cinque famiglie che toccano i byte dell'utente, quando riescono.**
+///
+/// Creazione, scrittura, rinomina, cestinazione, ripristino: il giro intero, e
+/// a ogni passo la domanda che chi ha scritto il plugin farebbe subito dopo —
+/// *cosa c'è adesso nel vault?*. Non si confrontano i due host fra loro a colpi
+/// di `assert` separati: si fa lo stesso giro con la stessa funzione e si
+/// pretende lo stesso diario, perché due giri scritti due volte descrivono due
+/// comportamenti diversi senza accorgersene.
+///
+/// Le revisioni non si confrontano fra i due — sono opache apposta, e nessuno
+/// promette che il kernel e il doppio le derivino allo stesso modo. Ciò che si
+/// confronta è la **relazione**: che quella resa dalla scrittura sia quella che
+/// il documento ha adesso, e che sia una base che la scrittura dopo accetta.
+#[test]
+fn le_scritture_lasciano_lo_stesso_vault_di_qua_e_di_la() {
+    sui_due_host(None, |host| {
+        let mut diario: Vec<(String, String)> = Vec::new();
+        let id = DocId::new("Nota.md");
+
+        // --- creazione ---
+        diario.push(("creare".into(), faccia(&host.create_document(&id, "uno"))));
+        diario.push((
+            "e il testo è quello dato".into(),
+            host.read_document(&id).unwrap_or_default(),
+        ));
+        diario.push((
+            "ed è in elenco".into(),
+            host.list_documents(None)
+                .map(|p| p.items.contains(&id))
+                .unwrap_or(false)
+                .to_string(),
+        ));
+        diario.push((
+            "e l'elenco ne conta uno".into(),
+            host.list_documents(None)
+                .map(|p| p.total)
+                .unwrap_or(0)
+                .to_string(),
+        ));
+
+        // --- scrittura intera, e la guardia della base ---
+        let resa = host.write_document(&id, "due", WriteBase::Dictated);
+        diario.push(("dettare una scrittura".into(), faccia(&resa)));
+        let resa = resa.expect("la scrittura dettata riesce");
+        diario.push((
+            "la revisione resa è quella di adesso".into(),
+            (host.document_revision(&id).ok().as_ref() == Some(&resa)).to_string(),
+        ));
+        diario.push((
+            "ed è la base che la prossima accetta".into(),
+            faccia(&host.write_document(&id, "tre", WriteBase::DescendsFrom(resa.clone()))),
+        ));
+        diario.push((
+            "una base stantia".into(),
+            faccia(&host.write_document(&id, "quattro", WriteBase::DescendsFrom(resa.clone()))),
+        ));
+        diario.push((
+            "e dopo il rifiuto i byte sono intatti".into(),
+            host.read_document(&id).unwrap_or_default(),
+        ));
+        diario.push((
+            "discendere da ciò che non c'è".into(),
+            faccia(&host.write_document(
+                &DocId::new("Mai.md"),
+                "x",
+                WriteBase::DescendsFrom(resa),
+            )),
+        ));
+        diario.push((
+            "dettare ciò che non c'è lo crea".into(),
+            faccia(&host.write_document(&DocId::new("Nata.md"), "n", WriteBase::Dictated)),
+        ));
+
+        // --- modifica chirurgica ---
+        let base = host.document_revision(&id).expect("la revisione c'è");
+        diario.push((
+            "un edit".into(),
+            faccia(&host.apply_edit(
+                &id,
+                EditRequest::new(
+                    base.clone(),
+                    vec![TextEdit::replace(Span { start: 0, end: 0 }, "A")],
+                ),
+            )),
+        ));
+        diario.push((
+            "e il testo dopo l'edit".into(),
+            host.read_document(&id).unwrap_or_default(),
+        ));
+        diario.push((
+            "un edit su una base stantia".into(),
+            faccia(&host.apply_edit(
+                &id,
+                EditRequest::new(
+                    base,
+                    vec![TextEdit::replace(Span { start: 0, end: 1 }, "X")],
+                ),
+            )),
+        ));
+        let base = host.document_revision(&id).expect("la revisione c'è");
+        diario.push((
+            "un edit fuori dal sorgente".into(),
+            faccia(&host.apply_edit(
+                &id,
+                EditRequest::new(
+                    base.clone(),
+                    vec![TextEdit::replace(Span { start: 900, end: 901 }, "X")],
+                ),
+            )),
+        ));
+        diario.push((
+            "due edit che si contendono lo stesso punto".into(),
+            faccia(&host.apply_edit(
+                &id,
+                EditRequest::new(
+                    base.clone(),
+                    vec![
+                        TextEdit::replace(Span { start: 0, end: 3 }, "X"),
+                        TextEdit::replace(Span { start: 1, end: 4 }, "Y"),
+                    ],
+                ),
+            )),
+        ));
+        diario.push((
+            "un edit vuoto".into(),
+            faccia(&host.apply_edit(&id, EditRequest::new(base, vec![]))),
+        ));
+        diario.push((
+            "e dopo i rifiuti i byte".into(),
+            host.read_document(&id).unwrap_or_default(),
+        ));
+
+        // --- rinomina, anche in una cartella che non c'è ---
+        let dentro = DocId::new("Cartella/Rinominata.md");
+        diario.push((
+            "rinominare in una cartella che non c'è".into(),
+            faccia(&host.rename_document(&id, &dentro)),
+        ));
+        diario.push((
+            "e il testo ha seguito".into(),
+            host.read_document(&dentro).unwrap_or_default(),
+        ));
+        diario.push((
+            "mentre il nome vecchio non legge più".into(),
+            faccia(&host.read_document(&id)),
+        ));
+        diario.push((
+            "rinominare su sé stessi".into(),
+            faccia(&host.rename_document(&dentro, &dentro)),
+        ));
+
+        // --- cestino e ripristino ---
+        let cestinato = host.trash_document(&dentro).expect("si cestina");
+        diario.push((
+            "cestinare toglie dall'elenco".into(),
+            host.list_documents(None)
+                .map(|p| p.items.contains(&dentro))
+                .unwrap_or(true)
+                .to_string(),
+        ));
+        let voci = host.list_trash().expect("il cestino si elenca");
+        diario.push(("e il cestino ha una voce".into(), voci.len().to_string()));
+        diario.push((
+            "che ricorda da dove veniva".into(),
+            voci.first()
+                .map(|v| v.original.to_string())
+                .unwrap_or_default(),
+        ));
+        diario.push((
+            "e quanto pesava".into(),
+            voci.first().map(|v| v.size.to_string()).unwrap_or_default(),
+        ));
+        diario.push((
+            "una voce cestinata non si legge come documento".into(),
+            faccia(&host.read_document(&cestinato)),
+        ));
+        diario.push((
+            "ripristinare senza dire dove".into(),
+            host.restore_document(&cestinato, None)
+                .map(|d| d.to_string())
+                .unwrap_or_else(|e| specie(&e)),
+        ));
+        diario.push((
+            "e il testo è tornato".into(),
+            host.read_document(&dentro).unwrap_or_default(),
+        ));
+        diario.push((
+            "e il cestino è vuoto".into(),
+            host.list_trash().map(|v| v.len()).unwrap_or(99).to_string(),
+        ));
+
+        let cestinato = host.trash_document(&dentro).expect("si cestina");
+        diario.push((
+            "ripristinare altrove".into(),
+            host.restore_document(&cestinato, Some(DocId::new("Altrove.md")))
+                .map(|d| d.to_string())
+                .unwrap_or_else(|e| specie(&e)),
+        ));
+        diario.push((
+            "e il testo è là".into(),
+            host.read_document(&DocId::new("Altrove.md"))
+                .unwrap_or_default(),
+        ));
+
+        host.trash_document(&DocId::new("Altrove.md"))
+            .expect("si cestina");
+        diario.push((
+            "svuotare il cestino conta".into(),
+            host.empty_trash().map(|n| n.to_string()).unwrap_or_default(),
+        ));
+        diario.push((
+            "e il cestino resta vuoto".into(),
+            host.list_trash().map(|v| v.len()).unwrap_or(99).to_string(),
+        ));
+        diario.push((
+            "svuotarlo di nuovo non distrugge niente".into(),
+            host.empty_trash().map(|n| n.to_string()).unwrap_or_default(),
+        ));
+
+        diario.push((
+            "un nome libero a partire da uno occupato".into(),
+            host.free_name(&DocId::new("Nata.md")).to_string(),
+        ));
+        diario.push((
+            "e a partire da uno libero".into(),
+            host.free_name(&DocId::new("Libera.md")).to_string(),
+        ));
+        diario
+    });
+}
+
+/// **Ogni nome, giudicato dalle cinque famiglie.**
+///
+/// Diciannove nomi per sei domande: crearlo, scriverlo, leggerlo, rinominarci
+/// sopra, guardare se chi è partito è ancora al suo posto, cestinarlo. È una
+/// tabella e non cinque banchi perché la cosa che si vuole vedere è proprio la
+/// **riga**: un nome che il kernel rifiuta e il doppio accetta si legge in un
+/// colpo d'occhio, e la differenza sta quasi sempre in una casella sola.
+///
+/// Ci sono i tre recinti del §15.5 — chi risale (`../`), chi non è portabile
+/// (`aux.md`, `con:due.md`), chi non nomina un file (`Cartella/`, `a//b.md`) —
+/// e accanto due nomi che *sembrano* buoni e non lo sono per un'altra ragione:
+/// `nota.txt` e `senzapunto` non hanno un provider che li parsi, e una scrittura
+/// che nessuno può rileggere non è una scrittura.
+#[test]
+fn ogni_nome_e_ogni_formato_si_giudicano_uguale_di_qua_e_di_la() {
+    sui_due_host(None, |host| {
+        let mut diario: Vec<(String, String)> = Vec::new();
+        let partenza = DocId::new("Nota.md");
+        host.create_document(&partenza, "uno due tre")
+            .expect("si scrive");
+
+        for nome in [
+            "../fuori.md",
+            "/assoluto.md",
+            "",
+            "aux.md",
+            "con:due.md",
+            "finisce.md ",
+            "finisce.md.",
+            "Cartella/",
+            "a//b.md",
+            "./qui.md",
+            "con\nnewline.md",
+            "con\\backslash.md",
+            "con*stella.md",
+            "con?punto.md",
+            "nota.txt",
+            "senzapunto",
+            "Nota.MD",
+            "spazio dentro.md",
+            "é-accento.md",
+        ] {
+            let id = DocId::new(nome);
+            diario.push((
+                format!("creare {nome:?}"),
+                faccia(&host.create_document(&id, "x")),
+            ));
+            diario.push((
+                format!("scrivere {nome:?}"),
+                faccia(&host.write_document(&id, "x", WriteBase::Dictated)),
+            ));
+            diario.push((
+                format!("leggere {nome:?}"),
+                faccia(&host.read_document(&id)),
+            ));
+            diario.push((
+                format!("rinominare Nota.md in {nome:?}"),
+                faccia(&host.rename_document(&partenza, &id)),
+            ));
+            diario.push((
+                format!("e Nota.md dopo il tentativo su {nome:?}"),
+                faccia(&host.read_document(&partenza)),
+            ));
+            diario.push((
+                format!("cestinare {nome:?}"),
+                faccia(&host.trash_document(&id)),
+            ));
+        }
+        diario
+    });
 }
