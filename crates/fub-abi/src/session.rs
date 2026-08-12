@@ -374,9 +374,15 @@ impl Default for SelectionSet {
 ///
 /// Lo **imposta la shell** e lo **legge** un provider via
 /// [`HostEnv::active_context`](crate::traits::HostEnv::active_context). Non ha
-/// un gemello che scrive: quale nota si guarda, dove si è cliccato e in che
-/// modalità si legge sono decisioni dell'utente sull'app, non capacità da
-/// concedere a un plugin.
+/// un gemello che scrive: quale nota si guarda e in che modalità si legge sono
+/// decisioni dell'utente sull'app, non capacità da concedere a un plugin.
+///
+/// **I campi sono quattro, e non un sottoinsieme da completare dopo**: la
+/// decisione 0007 li ha messi tutti qui perché un campo in più a un record è
+/// una migrazione di ogni provider che lo riceve. Il bersaglio di un clic
+/// destro non è fra loro e non lo diventerà (decisione 0152), né è un caso di
+/// [`ContextKind`], che nomina le parti al cui **cambio** una view invecchia:
+/// un clic non cambia il contesto, lo interroga.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ViewContext {
     /// Il pannello a cui questo contesto appartiene.
