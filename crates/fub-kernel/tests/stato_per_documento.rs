@@ -152,6 +152,67 @@ fn anche_il_ripristino_su_un_altro_path_e_una_rinomina() {
     );
 }
 
+/// **Sulla destinazione si guarda cosa c'è, prima di togliere** (difetto 0167).
+///
+/// La migrazione sgombera la destinazione perché una cartella già lì è lo
+/// spazio di una nota che non c'è più: il kernel rifiuta una rinomina verso un
+/// documento che esiste, quindi quel residuo la raccolta l'avrebbe tolto al
+/// prossimo giro comunque. Il ragionamento parla di **cartelle**, e di ciò che
+/// cartella non è non dice niente — ma il codice toglieva lo stesso, senza
+/// guardare e ingoiando l'esito.
+///
+/// Qui sulla destinazione c'è un file, che è il caso di un plugin che scrive
+/// nel proprio spazio dati un nome che per caso è il componente codificato di
+/// una nota: di quel file non si sa niente, e ciò di cui non si sa niente non
+/// si tocca. È la stessa domanda che la raccolta pone già a ogni voce che
+/// visita — «è una cartella, e il nome è il nostro `encode`?» — posta dal
+/// fratello che stava senza.
+///
+/// E il banco guarda anche **dove sono rimasti i dati**: sgomberare prima di
+/// spostare di lato è ciò che li tiene fuori da `.in-corso`, che è il posto
+/// che la prossima raccolta spazza senza appello.
+#[test]
+fn una_destinazione_che_non_e_una_cartella_non_si_toglie() {
+    let (_g, root, mut ws) = vault();
+    let vecchia = nota(&mut ws, "Vecchia.md", "corpo");
+    let nuova = DocId::new("Nuova.md");
+
+    let dato = doc_data::path(&vecchia, "annotazioni.json");
+    scrivi_dato(&root, SPENTO, &dato, b"le mie annotazioni");
+
+    // Un file dove la migrazione vorrebbe atterrare: non è lo spazio di
+    // nessuna nota, ed è di qualcuno.
+    let ostacolo = doc_data::space(&nuova);
+    let ostacolo = ostacolo.trim_end_matches('/');
+    scrivi_dato(&root, SPENTO, ostacolo, b"non e' mio");
+
+    ws.rename_document(&vecchia, &nuova).expect("rinomina");
+
+    let avvisi = ws.doc_data_warnings();
+    assert!(
+        avvisi.iter().any(|a| a.contains(ostacolo)),
+        "una migrazione che non è potuta avvenire dice **cosa** l'ha fermata, \
+         e dove andarlo a guardare: {avvisi:?}"
+    );
+    assert_eq!(
+        leggi_dato(&root, SPENTO, &dato).as_deref(),
+        Some(&b"le mie annotazioni"[..]),
+        "i dati sono finiti in `.in-corso`, che è il posto che la prossima \
+         raccolta spazza: la migrazione fallita ne ha fatta una perdita in più"
+    );
+    // Questa riga non è una misura, ed è giusto dirlo: su un filesystem vero
+    // `remove_dir_all` su un file fallisce da sé, quindi il file sopravvive
+    // anche alla forma di prima. Sta qui per il supporto che non lo facesse —
+    // un doppio in memoria, un supporto di rete — dove togliere senza guardare
+    // vuol dire togliere davvero.
+    assert_eq!(
+        leggi_dato(&root, SPENTO, ostacolo).as_deref(),
+        Some(&b"non e' mio"[..]),
+        "sulla destinazione c'era un file, di cui non si sa niente, e la \
+         migrazione l'ha tolto"
+    );
+}
+
 #[test]
 fn la_raccolta_toglie_solo_cio_che_nessuna_nota_nomina_piu() {
     let (_g, root, mut ws) = vault();
