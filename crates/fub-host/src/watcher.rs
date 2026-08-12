@@ -621,5 +621,82 @@ mod notify_watcher {
                 assert!(is_a_change_kind(&kind), "{kind:?} è un cambiamento");
             }
         }
+
+        /// **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
+        /// caduta).
+        ///
+        /// La riga temeva che la metà «da» di una rinomina restasse appesa in
+        /// attesa del gemello: chi porta una nota fuori dal vault dal Finder un
+        /// evento di arrivo non ce l'ha mai, e il documento sparito dal disco
+        /// sarebbe rimasto vivo in anagrafe fino alla riapertura del vault.
+        /// Rimisurata, la paura non regge, e il perché sta nel debouncer:
+        /// `handle_rename_from` l'evento lo tiene da parte **e** lo mette nella
+        /// coda del suo path, e a toglierlo di lì è solo il gemello che si
+        /// connette — `push_rename_event` fa `pop_back` sulla coda di partenza
+        /// proprio per non dire due volte la stessa mossa. Senza gemello non lo
+        /// toglie nessuno, e la coda lo consegna alla scadenza come qualunque
+        /// altro evento. Di qua `changes` lo vede a **un path solo** — il ramo
+        /// accoppiato pretende `paths.len() == 2` — e lo rende un path toccato,
+        /// che è la domanda giusta: il kernel guarda il disco, non trova più
+        /// niente e toglie il documento.
+        ///
+        /// Il banco pretende un ordine fra due fatti e non un tempo (§23.16):
+        /// prima la nascita della nota dev'essere stata consegnata, poi la sua
+        /// sparizione dev'essere un secondo lotto. Se la metà «da» non uscisse,
+        /// il secondo lotto non arriverebbe mai.
+        #[test]
+        fn una_rinomina_orfana_esce_come_un_path_toccato() {
+            let dentro = tempfile::tempdir().expect("la cartella guardata");
+            let fuori = tempfile::tempdir().expect("una cartella che nessuno guarda");
+            let (dice, lotti) = std::sync::mpsc::channel();
+            let mut debouncer = new_debouncer(
+                Duration::from_millis(20),
+                None,
+                move |result: DebounceEventResult| {
+                    let Ok(eventi) = result else { return };
+                    let eventi: Vec<_> = eventi.into_iter().filter(is_a_change).collect();
+                    if eventi.is_empty() {
+                        return;
+                    }
+                    let _ = dice.send(changes(eventi));
+                },
+            )
+            .expect("un rilevatore");
+            debouncer
+                .watch(dentro.path(), RecursiveMode::Recursive)
+                .expect("guardare la cartella");
+
+            let nota = dentro.path().join("nota.md");
+            let toccata = ExternalChange::Touched(
+                Utf8PathBuf::from_path_buf(nota.clone()).expect("un path utf-8"),
+            );
+            let arriva = || {
+                for _ in 0..50 {
+                    if let Ok(lotto) = lotti.recv_timeout(Duration::from_millis(100)) {
+                        if lotto.contains(&toccata) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            };
+
+            std::fs::write(&nota, b"ciao").expect("una nota");
+            assert!(
+                arriva(),
+                "la nascita della nota non è stata consegnata: senza questa \
+                 prima metà il banco non prova niente"
+            );
+
+            // Fuori dalla cartella guardata: una partenza che non avrà mai un
+            // arrivo da accoppiarci.
+            std::fs::rename(&nota, fuori.path().join("nota.md")).expect("la rinomina orfana");
+            assert!(
+                arriva(),
+                "la metà «da» di una rinomina orfana non è uscita: la nota è \
+                 sparita dal disco e resta viva in anagrafe finché qualcuno non \
+                 riapre il vault"
+            );
+        }
     }
 }
