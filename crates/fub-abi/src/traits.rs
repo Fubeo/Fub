@@ -1558,9 +1558,16 @@ pub enum ViewSurface {
     Ribbon,
     /// Una voce nel menu dell'app.
     Menu,
-    /// Una voce nel menu contestuale. Cosa fosse il bersaglio del clic lo dice
-    /// il contesto di sessione (decisione 0007), non un parametro di questa
-    /// superficie.
+    /// Una voce nel menu contestuale. Questa shell non ne ospita uno
+    /// estendibile, e lo dichiara a chi ci dichiara una view (`NON_OSPITATE`,
+    /// `frontend/src/ui/views.ts`).
+    ///
+    /// Il bersaglio del clic **non** lo dice il contesto di sessione:
+    /// [`ViewContext`](crate::session::ViewContext) non ha quel campo e non lo
+    /// avrà, perché un bersaglio è vero per un istante mentre quel record si
+    /// legge quando capita. Il giorno che un terzo contribuisca una voce, il
+    /// bersaglio viaggerà con l'**invocazione**, dove già viaggia ciò su cui un
+    /// comando agisce (decisione 0152).
     ContextMenu,
     /// Una scheda nelle impostazioni (28): è ciò che rende le impostazioni di un
     /// plugin indistinguibili da quelle del core, invece di una finestra a

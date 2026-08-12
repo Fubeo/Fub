@@ -5,7 +5,7 @@ un gesto funziona — l'app lo compie, per sé — e **non esiste il dato che lo
 dichiara**. Non sono funzionalità mancanti: sono porte mancanti fra un gesto e
 il contratto, e finché non ci sono, ogni gesto nuovo si paga per intero.
 
-**Quattro delle otto sono chiuse.** La §26.6 con la
+**Cinque delle otto sono chiuse.** La §26.6 con la
 [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md), che ha spaccato
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` finché farlo
 costava sei righe e zero manifest da migrare — era la sola la cui finestra si
@@ -23,7 +23,12 @@ nella forma (b) che questa voce raccomandava: i 102 accordi montati sull'editor
 adesso un banco li confronta coi due registri dichiarati, e le tre collisioni
 che ne escono — `mod-f`, `mod-shift-\`, `mod-shift-l` — stanno scritte per nome,
 perché un presidio rosso a tempo indeterminato non è un presidio e a decidere
-chi tiene `Ctrl+F` è la §26.1.
+chi tiene `Ctrl+F` è la §26.1. E la §26.5 con la
+[0152](../decisions/0152-il-bersaglio-di-un-clic-non-e-uno-stato.md), che ha
+detto **no** al bersaglio del clic dentro `view-context` e ha riparato la
+promessa che il contratto ne faceva: la specie è sbagliata, uno stato che dura
+non ospita un fatto vero per un istante, e il bersaglio viaggerà con
+l'invocazione il giorno che qualcuno lo chieda.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -907,7 +912,8 @@ tre trappole ancora sotto `--z-modal`, e l'ha scritto.
 
 ### 26.5 Il menu contestuale: la superficie c'è, il bersaglio del clic no
 
-*aperta · strato **contratto** · **P1***
+*chiusa · strato **contratto** · **P1** ·
+[0152](../decisions/0152-il-bersaglio-di-un-clic-non-e-uno-stato.md)*
 
 **1. La domanda.** Un terzo può aggiungere una voce a un menu contestuale? E,
 prima ancora: **su che cosa** sarebbe quella voce — chi dice al comando che il

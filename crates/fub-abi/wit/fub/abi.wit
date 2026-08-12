@@ -2613,8 +2613,16 @@ interface session {
     }
 
     /// Il contesto in cui una view sta girando. Nessun gemello che scrive:
-    /// quale nota si guarda e dove si è cliccato sono decisioni dell'utente
-    /// sull'app, non capacità concesse a un plugin.
+    /// quale nota si guarda e in che modalità la si legge sono decisioni
+    /// dell'utente sull'app, non capacità concesse a un plugin.
+    ///
+    /// **I campi sono quattro, e non un sottoinsieme da completare dopo.** La
+    /// decisione 0007 li ha messi tutti qui con la sua ragione scritta: un
+    /// campo in più a un record è una migrazione di ogni provider che lo
+    /// riceve. Il bersaglio di un clic destro non è fra loro e non lo
+    /// diventerà (decisione 0152), né è un caso di `context-kind`, che nomina
+    /// le parti al cui **cambio** una view invecchia: un clic non cambia il
+    /// contesto, lo interroga.
     record view-context {
         pane: pane-id,
         doc: option<doc-id>,
@@ -2888,8 +2896,17 @@ interface view {
         status-bar,
         ribbon,
         menu,
-        /// Cosa fosse il bersaglio del clic lo dice il contesto di sessione
-        /// (decisione 0007), non un parametro di questa superficie.
+        /// Questa shell non ospita un menu contestuale estendibile, e lo
+        /// dichiara a chi ci dichiara una view (`NON_OSPITATE`,
+        /// `frontend/src/ui/views.ts`).
+        ///
+        /// Il bersaglio del clic **non** lo dice il contesto di sessione, e
+        /// diceva il contrario proprio qui: `view-context` non ha quel campo e
+        /// non lo avrà, perché un bersaglio è vero per un istante mentre quel
+        /// record si legge quando capita. Il giorno che un terzo contribuisca
+        /// una voce, il bersaglio viaggerà con l'**invocazione** — dove già
+        /// viaggia ciò su cui un comando agisce, `command-spec.params` — e non
+        /// con lo stato della sessione (decisione 0152).
         context-menu,
         settings-tab,
     }
