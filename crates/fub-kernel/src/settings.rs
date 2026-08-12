@@ -87,8 +87,63 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 #[derive(Default, Serialize, Deserialize)]
 struct SettingsFile {
     version: SchemaVersion,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "valori_senza_doppioni")]
     values: BTreeMap<String, SettingValue>,
+}
+
+/// Le chiavi del file, **una per nome** (difetto 0174).
+///
+/// JSON non vieta di scrivere la stessa chiave due volte, e la libreria che lo
+/// legge la fa vincere all'ultima senza dire niente: un file scritto a mano — o
+/// da una versione che numerava le chiavi diversamente — perdeva una delle due
+/// righe al primo interruttore toccato, perché la scrittura ricompone il file
+/// dalla mappa e nella mappa ce n'è rimasta una. Il danno è quello della 0036
+/// arrivato per una porta più stretta: la configurazione dell'utente sparisce
+/// da un file che nessuno gli aveva detto di guardare.
+///
+/// La risposta è quella che questa casa dà già a un file che non si capisce:
+/// **non lo si capisce, e quindi non lo si sovrascrive**. Due valori per una
+/// chiave non sono un valore da scegliere — sceglierlo vorrebbe dire decidere
+/// per l'utente quale delle sue due righe buttare — quindi il file è
+/// malformato come lo è per una virgola di troppo, e da lì in poi eredita tutto
+/// ciò che c'è già: l'avviso all'apertura, il rifiuto di riscriverlo, e da oggi
+/// il fatto che correggerlo basti (difetto 0170).
+///
+/// Sta in [`load_from`] e non nei due livelli perché la domanda «cosa vuol dire
+/// illeggibile» ha un autore solo: il livello della macchina e quello del vault
+/// la ereditano insieme, e il nome della chiave ripetuta esce nel messaggio,
+/// che è l'unica cosa che serve per andare a togliere la riga di troppo.
+fn valori_senza_doppioni<'de, D>(d: D) -> Result<BTreeMap<String, SettingValue>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct Visitatore;
+
+    impl<'de> serde::de::Visitor<'de> for Visitatore {
+        type Value = BTreeMap<String, SettingValue>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("le impostazioni, una per chiave")
+        }
+
+        fn visit_map<A>(self, mut mappa: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::MapAccess<'de>,
+        {
+            let mut valori = BTreeMap::new();
+            while let Some((chiave, valore)) = mappa.next_entry::<String, SettingValue>()? {
+                if valori.insert(chiave.clone(), valore).is_some() {
+                    return Err(serde::de::Error::custom(format!(
+                        "la chiave `{chiave}` è scritta due volte, e quale delle \
+                         due valga non lo dice nessuno"
+                    )));
+                }
+            }
+            Ok(valori)
+        }
+    }
+
+    d.deserialize_map(Visitatore)
 }
 
 /// Legge un file di livello. **Assente = mai configurato**, che è un esito
@@ -1523,6 +1578,73 @@ mod tests {
         assert_eq!(
             machine.effective("log.verbose").unwrap().0,
             SettingValue::Toggle(true)
+        );
+    }
+
+    /// **La stessa chiave scritta due volte non è un valore da scegliere**
+    /// (difetto 0174).
+    ///
+    /// JSON permette di scriverla due volte e la libreria fa vincere l'ultima in
+    /// silenzio: il file arriva da una mano o da una versione che numerava le
+    /// chiavi in un altro modo, e la prima scrittura lo ricompone dalla mappa —
+    /// dove di righe ne è rimasta una. Sparisce una riga di configurazione da un
+    /// file che nessuno aveva detto all'utente di guardare, e non c'è un momento
+    /// in cui lo scopre.
+    #[test]
+    fn una_chiave_scritta_due_volte_non_si_risolve_da_se() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join(".fub").join("settings.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let a_mano = "{ \"version\": 1, \"values\": { \"a.b\": true, \"a.b\": false } }";
+        std::fs::write(&path, a_mano).unwrap();
+
+        let mut store = store_su(&dir);
+        let avvisi = store.take_warnings();
+        assert_eq!(avvisi.len(), 1, "il doppione si dice: {avvisi:?}");
+        assert!(
+            avvisi[0].contains("`a.b` è scritta due volte"),
+            "e dice **quale**, che è l'unica cosa che serve per andare a \
+             togliere la riga di troppo: {avvisi:?}"
+        );
+
+        store
+            .declare(
+                "a",
+                &[
+                    SettingSpec::toggle("a.b", "B", false),
+                    SettingSpec::toggle("a.c", "C", false),
+                ],
+            )
+            .unwrap();
+        store
+            .set("a.c", SettingValue::Toggle(true))
+            .expect_err("un file che non si capisce non lo si sovrascrive");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            a_mano,
+            "una delle due righe è sparita, e a dirlo non è stato nessuno"
+        );
+    }
+
+    /// E il livello della macchina la eredita senza che nessuno se ne ricordi:
+    /// la regola sta in `load_from`, che è il solo posto in cui è scritto cosa
+    /// vuol dire «illeggibile» (difetto 0174).
+    #[test]
+    fn anche_il_livello_macchina_non_sceglie_fra_due_chiavi_uguali() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("settings.json");
+        std::fs::write(
+            &path,
+            "{ \"version\": 1, \"values\": { \"log.verbose\": true, \"log.verbose\": false } }",
+        )
+        .unwrap();
+
+        let (_machine, avviso) = MachineSettings::open(&path);
+        assert!(
+            avviso
+                .expect("il doppione si dice anche qui")
+                .contains("`log.verbose` è scritta due volte"),
+            "e con il nome della chiave"
         );
     }
 

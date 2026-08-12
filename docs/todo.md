@@ -460,7 +460,7 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **venticinque** [conta: difetti-aperti] e non voci. Nessuno richiede una
+Sono **ventiquattro** [conta: difetti-aperti] e non voci. Nessuno richiede una
 decisione.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
@@ -542,7 +542,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 | 0168 | fra la rinomina del documento e la migrazione del suo docdata c'è una finestra di crash non coperta da niente: il file è al nome nuovo e i suoi dati per-documento sono ancora sotto la chiave vecchia, dove la prima `collect` successiva li spazza perché non corrispondono a nessun documento vivo | `fub-kernel` · `workspace.rs` `rename_document_in_batch` (con `docdata.rs` `migrate`) | lock e I/O |
 | 0169 | i rami di fallimento di `Drafts::migrate` lasciano lo stato a metà: a seconda di dove si ferma restano due bozze per un documento solo, oppure una bozza il cui campo `doc` nomina un documento che non esiste più, e nessuna delle due configurazioni viene riconciliata da qualcosa | `fub-kernel` · `drafts.rs` `Drafts::migrate` | regole |
 | 0171 | la prima scrittura in un vault avviene senza lock: quando `.fub/` non esiste ancora, `lock_esclusivo` non ha dove creare il proprio file e il ramo di creazione procede senza protezione, cioè proprio nel momento in cui due installazioni che aprono lo stesso vault nuovo si pestano | `fub-kernel` · `settings.rs` `store_vault` | lock e I/O |
-| 0174 | le chiavi JSON duplicate si perdono in silenzio: la fusione sotto lock rilegge il file e riscrive la mappa, quindi un file scritto a mano (o da un'altra versione) con due volte la stessa chiave ne conserva una sola e l'utente non sa quale delle due ha perso | `fub-kernel` · `settings.rs` `Durevole::aggiorna` | regole |
 | 0180 | se il documento esisteva o no lo decide l'anagrafe in memoria e non il disco: un file creato da un'altra applicazione e non ancora indicizzato fa registrare `Created` dove il fatto è `Written`, e il registro — che la 0067 dichiara autorevole — racconta un evento che non è successo | `fub-kernel` · `workspace.rs` `write_document` | regole |
 | 0181 | `sync_renamed_path_here` sposta prima di rileggere, cioè la forma che il codice stesso documenta come difetto in `restore_from_trash` e lì evita: se la rilettura o il parse della destinazione fallisce, la funzione risponde `Err` con il disco già spostato e memoria, grafo, indici, registro ed eventi fermi al nome vecchio | `fub-kernel` · `workspace.rs` `sync_renamed_path_here` | lock e I/O |
 | 0184 | la rinomina **esterna** di un allegato ne perde i dati per-documento mentre quella interna li migra: il riconoscimento dell'identità filtra sui soli documenti, quindi un'immagine rinominata dal Finder degrada a «sparita e ricomparsa» e annotazioni, pin e miniatura vengono spazzate dalla prima `collect` successiva | `fub-kernel` · `workspace.rs` `sync_renamed_path_here` | regole |
