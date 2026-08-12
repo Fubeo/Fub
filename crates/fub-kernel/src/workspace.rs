@@ -2329,8 +2329,36 @@ impl Workspace {
     ) -> Result<Revision> {
         // Cosa si sapeva **prima**: l'impronta che l'anagrafe teneva, e se il
         // documento esistesse affatto.
-        let esisteva = self.indexes.core.metas.contains_key(id);
-        let from = match base {
+        //
+        // **«C'era» lo dice il disco** (difetto 0180). L'anagrafe è una cache
+        // di ciò che si è indicizzato, quindi «non lo conosco» e «non c'è» ci
+        // si assomigliano solo finché nessuno scrive nel vault da fuori: un
+        // file creato da un'altra applicazione e non ancora visto dal
+        // rilevatore c'è sul disco e in anagrafe no, e sopra quel file il
+        // salvataggio scriveva `Created`. Non è una parola imprecisa in una
+        // lista: il registro è **autorevole** (0067) e di quella variante c'è
+        // scritto sopra che «l'inverso è cestinarlo», quindi chi ripercorre la
+        // riga porta nel cestino un file che non abbiamo creato noi, con dentro
+        // ciò che ci aveva messo qualcun altro.
+        //
+        // La domanda è la più povera che risponda — *c'è un file lì?* — e la
+        // paga un `stat`, non una lettura: la riga tre capoversi più su dice
+        // che «una riga di registro non vale una lettura a ogni salvataggio»,
+        // ed è vera e resta vera, perché una lettura porta i byte e li fa
+        // parsare per averne l'impronta mentre qui non serve niente di tutto
+        // ciò. Con [`WriteBase::DescendsFrom`] non si paga nemmeno quello: il
+        // disco è già stato letto qui sotto, e se non fosse esistito la base non
+        // combaciava e non si arrivava a scrivere.
+        //
+        // E non si paga **quasi mai**, perché l'anagrafe sbaglia in una
+        // direzione sola: conosce meno di quanto c'è, mai di più. Quando ha la
+        // voce il file c'era, e la domanda è già risposta senza toccare il
+        // disco; il `stat` resta al solo caso in cui l'anagrafe tace, che è
+        // esattamente la finestra del difetto. Il salvataggio di una nota che
+        // si sta scrivendo non ci passa mai, ed è ciò che tiene ferma la 0179 —
+        // «un salvataggio non torna a chiedere al disco cosa ha appena
+        // scritto», che ha un banco che conta gli `stat` e li vuole zero.
+        let (esisteva, from) = match base {
             WriteBase::DescendsFrom(attesa) => {
                 // Un file che **non c'è** non è un errore da propagare: è una
                 // base che non combacia — chi scrive credeva di riscrivere
@@ -2347,14 +2375,14 @@ impl Workspace {
                 if adesso.as_ref() != Some(&attesa) {
                     return Err(KernelError::Stale(id.to_string()));
                 }
-                adesso
+                (true, adesso)
             }
-            WriteBase::Dictated => self
-                .indexes
-                .core
-                .entries
-                .get(id)
-                .and_then(|e| e.fingerprint.clone()),
+            WriteBase::Dictated => {
+                let in_anagrafe = self.indexes.core.entries.get(id);
+                let impronta = in_anagrafe.and_then(|e| e.fingerprint.clone());
+                let esisteva = in_anagrafe.is_some() || self.docs.vault.stat(id).is_some();
+                (esisteva, impronta)
+            }
         };
         let to = self.write_source(id, source)?;
         self.record(if esisteva {

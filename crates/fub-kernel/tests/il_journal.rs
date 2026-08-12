@@ -81,6 +81,47 @@ fn ogni_mutazione_del_kernel_lascia_la_propria_riga() {
     assert_eq!(ops.len(), 5, "e nessuna riga in più: {ops:?}");
 }
 
+/// **«C'era» lo dice il disco, non l'anagrafe** (difetto 0180).
+///
+/// L'anagrafe è una cache di ciò che si è indicizzato, e finché il vault lo
+/// tocca solo il kernel «non lo conosco» e «non c'è» si assomigliano abbastanza
+/// da poterli confondere. Da fuori no: un file che un'altra applicazione ha
+/// appena creato — un `git checkout`, una sincronizzazione, un editor aperto
+/// sulla stessa cartella — c'è sul disco, e in anagrafe non c'è finché il
+/// rilevatore non passa. Chi salva sopra quel file in quella finestra scriveva
+/// `Created`.
+///
+/// Il danno non è la parola sbagliata in una lista. Il registro è
+/// **autorevole** (0067) e sopra quella variante c'è scritto che «l'inverso è
+/// cestinarlo»: un `Created` falso è un annullamento che porta nel cestino un
+/// file che non abbiamo creato noi, con dentro ciò che ci aveva messo qualcun
+/// altro. Il fatto vero è `Written`, che di inverso non ne ha nessuno, ed è
+/// esattamente la differenza fra «disfare» e «buttare via roba altrui».
+///
+/// L'impronta di partenza resta `None`, e va bene: quella l'anagrafe davvero
+/// non ce l'ha, e la variante lo dichiara già («oppure `None` se non la si
+/// sapeva»). Non sapere *da cosa* si è partiti è un'informazione mancante; dire
+/// che il file non c'era è un'informazione **falsa**.
+#[test]
+fn scrivere_sopra_un_file_arrivato_da_fuori_non_e_una_creazione() {
+    let mut banco = Banco::nuovo().monta();
+
+    // Un'altra applicazione posa un file nel vault. Il rilevatore non è ancora
+    // passato: sul disco c'è, in anagrafe no.
+    banco.scrivi("altrui.md", "roba che c'era già");
+
+    banco
+        .write_document(&doc("altrui.md"), "il mio salvataggio", WriteBase::Dictated)
+        .unwrap();
+
+    let ops = ops(&banco);
+    assert!(
+        matches!(ops[0], JournalOp::Written { .. }),
+        "quel file c'era, e chiamarlo nuovo dà al registro un inverso che \
+         cestina il lavoro di qualcun altro: {ops:?}"
+    );
+}
+
 /// Il rilevatore non scrive nel registro: quella mutazione non è nostra, e
 /// dell'inverso di una scrittura che non abbiamo fatto non dispone nessuno.
 #[test]
