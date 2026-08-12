@@ -17,7 +17,7 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
-import { createNote, refreshDocuments, renameNote } from "../state/vault";
+import { createNote, refreshDocuments } from "../state/vault";
 import {
   FINESTRA_DEL_LIVELLO,
   childName,
@@ -34,7 +34,12 @@ import { $ } from "../ui/dom";
 import { attivabile } from "../ui/a11y";
 import { pickIcon, showContextMenu } from "../ui/menu";
 import { refreshOn, registerPanel } from "../ui/panel-host";
-import { focusEditor, flushPendingSave, openDocument } from "./document";
+import {
+  flushPendingSave,
+  focusEditor,
+  openDocument,
+  rinominaTenendoFermoIlBuffer,
+} from "./document";
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
 import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
@@ -792,7 +797,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
     return;
   }
   try {
-    await renameNote(from, to);
+    await rinominaTenendoFermoIlBuffer(from, to);
   } catch (e) {
     notify(t("explorer.rename_failed", { doc: from, to, reason: errorText(e) }), "guasto");
     renderFileList();
@@ -835,7 +840,7 @@ async function convertToFolder(id: string): Promise<void> {
   const dir = parentOf(id);
   const folderPath = dir ? `${dir}/${stem}` : stem;
   try {
-    await renameNote(id, `${folderPath}/${childName(id)}`);
+    await rinominaTenendoFermoIlBuffer(id, `${folderPath}/${childName(id)}`);
   } catch (e) {
     notify(t("explorer.to_folder_failed", { doc: id, reason: errorText(e) }), "guasto");
     return;
@@ -931,7 +936,7 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
   if (to === id) return;
   try {
-    await renameNote(id, to);
+    await rinominaTenendoFermoIlBuffer(id, to);
   } catch (e) {
     notify(
       t("explorer.move_failed", {

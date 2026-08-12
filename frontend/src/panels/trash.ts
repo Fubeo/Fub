@@ -53,7 +53,7 @@ import { t } from "../i18n/strings";
 /// niente**: chiudere una nota in un riquadro che non si guarda non è un motivo
 /// per cambiare quello che si guarda.
 export async function trashWithConfirm(id: string): Promise<void> {
-  const salvataggioInAttesa = suspendSave(id);
+  suspendSave(id);
 
   const ok = await confirm(t("trash.confirm_delete", { doc: pageName(id) }), {
     title: t("trash.delete_title"),
@@ -61,7 +61,7 @@ export async function trashWithConfirm(id: string): Promise<void> {
     okLabel: t("explorer.delete"),
   });
   if (!ok) {
-    if (salvataggioInAttesa) resumeSave(id);
+    resumeSave(id);
     return;
   }
 
