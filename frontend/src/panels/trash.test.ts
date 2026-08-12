@@ -33,10 +33,11 @@ vi.mock("./document", () => ({
   openDocument: vi.fn(async () => {}),
   suspendSave: vi.fn(() => true),
   resumeSave: vi.fn(),
+  scartaLaBozzaDi: vi.fn(async () => {}),
 }));
 
 import { trashWithConfirm } from "./trash";
-import { closeDocument, openDocument, resumeSave } from "./document";
+import { closeDocument, openDocument, resumeSave, scartaLaBozzaDi } from "./document";
 
 describe("cestinare una nota", () => {
   beforeEach(() => {
@@ -64,8 +65,18 @@ describe("cestinare una nota", () => {
   it("non tocca niente se l'utente ci ripensa, e il salvataggio torna in coda", async () => {
     finto.conferma = false;
     await trashWithConfirm("vittima.md");
-    expect(resumeSave).toHaveBeenCalled();
+    expect(resumeSave).toHaveBeenCalledWith("vittima.md");
     expect(closeDocument).not.toHaveBeenCalled();
+    expect(scartaLaBozzaDi).not.toHaveBeenCalled();
+  });
+
+  // La bozza è il gemello su disco del buffer sporco, e `trashWithConfirm`
+  // dichiara che quel buffer «muore col documento». Sopravvivendogli, al
+  // prossimo avvio la nota buttata tornava come `orfana`: riofferta a chi
+  // aveva appena risposto di sì (difetto 0211).
+  it("la bozza muore col documento cestinato", async () => {
+    await trashWithConfirm("vittima.md");
+    expect(scartaLaBozzaDi).toHaveBeenCalledWith("vittima.md");
   });
 
   it("non cerca un rimpiazzo per una nota che non era aperta", async () => {

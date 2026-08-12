@@ -1185,25 +1185,65 @@ export async function mettiInSalvoPrimaDiChiudere(): Promise<void> {
   for (const doc of appesi) await writeDraft(doc);
 }
 
-/// Disinnesca un salvataggio in attesa senza eseguirlo, e dice se ce n'era uno.
+/// Disinnesca **i due ritardi** in attesa su quel documento senza eseguirli, e
+/// dice se ce n'era qualcosa da fermare.
 ///
 /// Serve a chi sta per **chiedere conferma** di una cancellazione: senza,
 /// l'autosave scatterebbe durante la domanda e farebbe risorgere la nota
-/// subito dopo. Chi lo chiama deve rimettere in coda con `resumeSave()` se
+/// subito dopo. Chi lo chiama deve rimettere in coda con `resumeSave(id)` se
 /// l'utente ci ripensa.
+///
+/// # Due ritardi, non uno (difetto 0211)
+///
+/// Prima si fermava il solo salvataggio, e la bozza no. Ma i due ritardi
+/// scrivono tutti e due, e chi chiede conferma di una cancellazione non ha
+/// deciso «non salvare»: ha deciso **che quel testo non tocchi il disco finché
+/// non c'è una risposta**. Una domanda modale la disegna il sistema operativo e
+/// può restare aperta quanto vuole l'utente, mentre il ritardo della bozza è di
+/// un secondo: la rete si stendeva *dentro* la finestra in cui la shell aveva
+/// appena deciso che non si scrive. Sulla strada del sì è peggio che rumore —
+/// `trash.ts` dichiara che «il buffer sporco di un documento cancellato muore
+/// col documento», e quella bozza è il gemello su disco di quel buffer: gli
+/// sopravviveva, e al riavvio dopo tornava come `orfana`, cioè la nota buttata
+/// riofferta a chi l'aveva appena buttata.
+///
+/// # Un posto per documento, non un posto solo
+///
+/// Il sospeso era **uno**, una stringa: la seconda sospensione copriva la prima,
+/// e la prima ripresa riaccendeva il documento sbagliato lasciando l'altro
+/// fermo per sempre. Oggi il chiamante è uno solo e il caso non si produce —
+/// ma è la prova del secondo chiamante, e i secondi chiamanti hanno già un
+/// nome: una rinomina dentro una conversione, un'importazione mentre una
+/// modale è aperta. Un insieme costa una riga e li fa nascere giusti.
 export function suspendSave(id: string): boolean {
   const buf = buffers.get(id);
   if (!buf?.dirty) return false;
   window.clearTimeout(buf.timer);
-  sospeso = id;
+  window.clearTimeout(buf.draftTimer);
+  sospesi.add(id);
   return true;
 }
 
-let sospeso: string | null = null;
+const sospesi = new Set<string>();
 
-export function resumeSave(): void {
-  if (sospeso) scheduleSave(sospeso);
-  sospeso = null;
+/// Rimette in coda i due ritardi di quel documento, se erano stati sospesi.
+///
+/// Non è un `if` di comodo: chiamarla su un documento che nessuno ha sospeso
+/// programmerebbe una scrittura che nessuno aveva in attesa.
+export function resumeSave(id: string): void {
+  if (!sospesi.delete(id)) return;
+  scheduleSave(id);
+  scheduleDraft(id);
+}
+
+/// La bozza di quel documento non ha più un documento sotto: si butta.
+///
+/// La chiama chi ha appena cestinato una nota **da qui**, e solo lui. Una nota
+/// che sparisce da **fuori** non passa di qua apposta: lì la bozza è la rete
+/// tesa per quel caso, e il recupero ha un caso suo che si chiama `orfana`.
+export async function scartaLaBozzaDi(doc: string): Promise<void> {
+  sospesi.delete(doc);
+  await dropDraft(doc);
 }
 
 /// Scrive il buffer su disco, e **dice com'è andata** (§20.4).
