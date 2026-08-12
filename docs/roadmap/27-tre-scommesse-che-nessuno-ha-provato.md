@@ -6,13 +6,26 @@ tirate fino in fondo — e in cui **la prova che la scelta regge non è ancora
 stata fatta**. Non sono difetti: un difetto si misura, e queste si misurano solo
 facendo la cosa. Sono scommesse, e il freeze le incassa.
 
-**Una delle tre è stata provata, e la prova è costata mezz'ora invece dei giorni
-che la voce prezzava**: la §27.1 è chiusa dalla
-[0146](../decisions/0146-il-contratto-attraversa-il-confine.md), che genera da
-`abi.wit` i binding guest del mondo intero e li compila a `wasm32` — nessun
-errore, e un modulo di 275 073 byte che è il pedaggio di un plugin che non fa
-niente. Ne resta un presidio in CI, non un crate usa-e-getta, e la lezione per le
-altre due: *si prova alla grana in cui il secondo chiamante eredita la prova*.
+**Le tre sono chiuse, e nessuna delle tre è finita come la voce la prezzava.**
+La §27.1 è chiusa dalla
+[0146](../decisions/0146-il-contratto-attraversa-il-confine.md): il confine si
+attraversa, costa mezz'ora invece dei giorni previsti, e ne resta un presidio in
+CI invece di un crate usa-e-getta. La §27.2 è chiusa dalla
+[0147](../decisions/0147-il-contratto-osserva-dopo-e-non-si-interpone.md) sulla
+forma che la voce stessa prezzava come «com'è oggi»: i tre clienti di un punto
+di interposizione hanno già una casa, e nessuna di quelle case è una firma del
+contratto. La §27.3 è chiusa dalla
+[0148](../decisions/0148-un-prestito-lungo-non-si-vieta-si-dice.md), che toglie
+alla forma più economica il pezzo di contratto che le era attribuito: un
+prestito lungo non si vieta, perché non si interrompe — si dice, e lo dice la
+porta.
+
+Due delle tre erano **P0** per la scadenza del freeze, e la terza **P1** per la
+stessa ragione. In tutte e tre la scadenza si è sciolta allo stesso modo: ciò
+che il freeze incassa è quello che il contratto **dichiara**, e in nessuna delle
+tre la cosa temuta era dichiarata lì. La lezione che la seduta lascia è la
+prima, ripetuta tre volte: *si prova alla grana in cui il secondo chiamante
+eredita la prova*.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -154,85 +167,59 @@ in cui uno inciampa mentre si chiede se può.
 
 ### 27.3 La grana del lucchetto è il vault, e chi muterà non sarà di casa
 
-*aperta · strato **kernel** · **P1***
+*chiusa dalla [0148](../decisions/0148-un-prestito-lungo-non-si-vieta-si-dice.md) · strato **kernel** · **P1***
 
-**1. La domanda.** Ogni chiamata a un provider che muta prende il prestito
-**esclusivo sull'intero vault**. Regge oggi perché chi muta è codice di casa e
-finisce in fretta. Regge anche quando chi muta è un plugin di terzi che non
-abbiamo scritto noi?
+## Com'è finita, e cosa lascia
 
-**2. Che cosa si osserva oggi, misurato.** Censimento a `69e25b0`.
+**La decisione è la forma (a), in una forma più stretta di come la voce la
+prezzava: nessun costo per il contratto.** La voce chiedeva un tetto dichiarato
+«e una riga di disciplina», e il tetto è la premessa caduta — un prestito
+esclusivo **non si interrompe**: chi lo tiene ha `&mut` su ciò che sta dentro, e
+strapparglielo darebbe esattamente lo stato a metà che la 0120 chiama
+irrecuperabile. Un errore che nessuno può costruire è una frase, non una firma.
+Resta la metà che vale, ed è quella che la voce chiamava «accorgersene e dirlo»:
+la `Presa` che `Custodia::write` restituisce guarda l'orologio, e sopra un
+quarto di secondo scrive quanto è durata e che cosa era fermo. La soglia non
+separa il corretto dallo scorretto — niente si rompe a 249 ms —, e dall'altra
+parte c'è il numero misurato che la voce citava: 0,12 ms per un salvataggio
+sotto contesa, dove sotto `Mutex` erano 6,4 s. Fra i due c'è un fattore
+duemila, e nessuna mutazione di casa ci arriva vicino per caso. Sta **nella
+porta**, quindi i cinquantacinque siti che prendono il prestito esclusivo la
+ereditano senza saperlo, e il cinquantaseiesimo pure.
 
-La `Custodia` (`crates/fub-host/src/custodia.rs:86`) ha quattro porte e
-nient'altro, e la classificazione la fa il compilatore: da un prestito condiviso
-non si chiama una funzione che vuole `&mut self`. Nel contratto i metodi che
-vogliono `&mut self` sono **25**, e nel montaggio i due prestiti si equivalgono
-per numero di siti: **54** `write()` contro **53** `read()` fra `fub-host` e
-`fub-app`.
+**Il censimento rimisurato a `ae369de` regge, e un numero diceva una cosa che
+non è.** I due prestiti si equivalgono ancora (55 contro 55, dove la voce
+contava 54 e 53), `workspace.rs` è cresciuto a 7141 righe invece delle 6685 —
+«la divisione ha estratto la proprietà e non la lunghezza» è più vero di quando
+è stato scritto — e i metodi `&mut self` del contratto sono 25 come diceva. Ma
+quei venticinque non sono venticinque porte di terzi: **quattordici** sono
+capacità che implementa l'host e chiama il plugin, e la loro durata è lavoro del
+kernel; **due** non sono metodi di confine; e solo **nove** girano davvero
+dentro il prestito perché le implementa il plugin e le chiama l'host — i sei di
+`IndexProvider`, `EventHandler::handle` e i due di `Plugin`. E i tre candidati
+lenti che la voce nomina per nome — un LLM, un sync, un database — girano già
+come **job**, dove `JobHost` prende e rilascia il prestito per capacità.
 
-Il guadagno della scelta è misurato e non è in discussione: da 7 a 25 volte più
-veloce sulle letture concorrenti, e chi salva non viene più affamato (6,4 s
-sotto `Mutex`, 0,12 ms adesso).
+**La P1 cade, e non per stanchezza.** La scadenza stava nel fatto che la grana
+sia «visibile a terzi» dopo il freeze: non lo è. In `abi.wit` e nel
+`frozen/0.1.0.wit` la parola non compare, il `plugin-world` non dichiara né
+lucchetti né ordini di acquisizione, e nessuna firma cambia se domani il
+`Workspace` sta dietro cinque lucchetti. Quel che resta vero è più debole —
+farlo dopo è più difficile, perché con più lucchetti nasce un ordine sbagliabile
+— ed è una difficoltà di chi lo farà, non una major imposta a chi ha già scritto
+un plugin.
 
-Quello che non è mai stato misurato è il caso opposto, perché non esiste ancora
-nessuno che lo produca: **una singola chiamata mutante lenta**. La regola
-dichiarata dei job — *un prestito per chiamata, mai per la durata del job* —
-limita per quanto si tiene il lucchetto **fra** le chiamate, non **dentro** una.
-E i candidati a essere lenti dentro una chiamata sono già scritti per nome nel
-piano: un LLM, un sync, un database.
+**La (b) resta sul tavolo e non diventa lavoro.** Non perché costi: perché non
+cura la malattia che la voce nomina. Un `EventHandler` che impiega tre secondi
+li impiega anche dietro cinque lucchetti. Ciò che comprerebbe — due mutazioni
+che non si toccano che smettono di mettersi in fila — è il seguito dello
+[`0113`](../todo.md#i-difetti-misurati), non della paura di un plugin lento, e
+oggi non passa la prova del secondo chiamante: il primo non esiste ancora.
 
-C'è un precedente in casa che dice che la forma del problema è reale: lo
-[`0113`](../todo.md#i-difetti-misurati) — il prestito esclusivo di
-`finish_index` copre cinque fasi in fila, tre delle quali toccano il disco, e un
-lettore concorrente aspetta la somma. Quello è codice di casa, misurato e
-correggibile. Un provider di terzi non lo si corregge: gli si dà una grana.
-
-E la grana giusta è **mezza già trovata**: il `Workspace` è stato diviso in
-cinque proprietari (`docs`, `indexes`, `providers`, `dispatch`, `session`), e la
-`mappa-visuale` scrive che è «la stessa linea lungo cui passa il lucchetto». La
-divisione ha estratto la proprietà e non la lunghezza — `workspace.rs` resta
-6685 righe — e i campi sono `pub(crate)`, cioè un raggruppamento e non un muro.
-
-**Come si rimisura.**
-
-```sh
-grep -n "pub struct Custodia" -B 4 crates/fub-host/src/custodia.rs
-grep -rc "\.write()" crates/fub-host/src crates/fub-app/src
-grep -c "fn .*(&mut self" crates/fub-abi/src/traits.rs
-wc -l crates/fub-kernel/src/workspace.rs
-```
-
-**3. Le forme, e chi paga.**
-
-- [ ] **(a) Un tetto dichiarato, e un modo di dirlo.** Non cambiare la grana:
-      dichiarare che una chiamata mutante di un provider ha un tempo massimo, e
-      dare all'host un modo di **accorgersene e dirlo** invece di restare fermo
-      in silenzio. Paga **il contratto**, poco: un errore in più e una riga di
-      disciplina. È la forma più economica, e non risolve — rende visibile.
-- [ ] **(b) La grana diventa il proprietario.** Portare il lucchetto sui cinque
-      componenti invece che sul `Workspace`, finendo la divisione che è a metà.
-      Paga **chi lo fa**: è il lavoro grosso, e va fatto **prima** che esistano
-      plugin, perché dopo cambia l'ordine di acquisizione visibile a terzi. In
-      cambio due mutazioni che non si toccano smettono di mettersi in fila.
-- [ ] **(c) Com'è oggi.** Paga **chi usa l'app** il giorno in cui monta il primo
-      plugin lento: l'interfaccia si ferma, e non c'è niente che gli dica
-      perché. È la specie di guasto che somiglia a un'app rotta e non a un
-      plugin lento.
-
-**4. Che cosa il repo ha già deciso qui vicino.**
-
-* La [0023](../decisions/0023-chi-monta-il-kernel.md): il lucchetto è di chi
-  monta, e il kernel non sa di essere condiviso. Questa voce non tocca quella
-  linea: chiede **di che dimensione** sia l'oggetto dietro il lucchetto.
-* La [0120](../decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md): il
-  veleno è irrecuperabile, si dice una volta, e il conto è della custodia e non
-  del processo. Cambiare la grana vuol dire moltiplicare le custodie, quindi
-  quella politica va riletta insieme alla forma (b).
-* La [0032](../decisions/0032-il-runner-dei-job.md): il pool è per vault e non
-  globale, e il parallelismo utile lo limita il lucchetto e non i core. È il
-  ragionamento di cui questa voce è il seguito: se la grana cambia, cambia anche
-  il numero che ha senso dare al pool.
-* Il difetto [`0113`](../todo.md#i-difetti-misurati): l'unico caso già misurato
-  di un prestito esclusivo troppo largo. Chiuderlo non chiude questa voce — è
-  codice di casa — ma la misura di quel caso è il modo più economico di stimare
-  il costo del caso di terzi.
+**Zero caselle.** Il difetto `0113` resta aperto e cambia di posto: da «l'unico
+caso misurato» a «il primo caso che la porta dirà da sola» — una `finish_index`
+che passa il quarto di secondo adesso scrive la propria riga, e nessuno deve
+andare a cercarla. Il consuntivo che questa voce lascia alla seduta è il gemello
+di quello della §27.1: *una scommessa si prova alla grana in cui il secondo
+chiamante eredita la prova* — e quando la prova non si può fare, si mette nella
+porta il modo di accorgersi che il caso è arrivato.

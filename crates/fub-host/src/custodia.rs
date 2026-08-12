@@ -70,13 +70,49 @@
 //! conto: ogni `Mutex`/`RwLock` nudo di `fub-host` e `fub-app` vuole una riga
 //! con la sua ragione.
 //!
+//! # E quanto a lungo lo si è tenuto
+//!
+//! La stessa porta risponde a una seconda domanda, che è quella della §27.3:
+//! *questo prestito esclusivo quanto è durato?*. La regola dichiarata dei job —
+//! un prestito per chiamata, mai per la durata del job — limita per quanto si
+//! tiene il lucchetto **fra** le chiamate, non **dentro** una, e ciò che gira
+//! dentro una non è tutto codice di casa: i venticinque metodi che il contratto
+//! dichiara `&mut self` sono il posto da cui un provider di terzi entra tenendo
+//! in mano il vault intero.
+//!
+//! Un prestito esclusivo lungo non si può interrompere — chi lo tiene ha `&mut`
+//! su ciò che sta dentro, e togliergli il tavolo da sotto vorrebbe dire
+//! esattamente lo stato a metà di cui sopra —, quindi ciò che si può fare non è
+//! impedirlo: è **accorgersene e dirlo**, invece di restare fermi in silenzio.
+//! Che è la differenza fra un'app rotta e un plugin lento, e oggi l'utente non
+//! ha modo di distinguerle.
+//!
+//! Vale sul prestito **esclusivo** e non su quello condiviso, e non per
+//! simmetria mancata: un condiviso non mette in fila gli altri condivisi, e
+//! l'unico lungo che questo repo ha per scelta — la raccolta degli spazi
+//! per-documento in fondo a un'apertura — è lungo *perché* è condiviso, cioè è
+//! la riparazione e non il difetto.
+//!
 //! [0024]: ../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md
 //! [0032]: ../../../docs/decisions/0032-il-runner-dei-job.md
 
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::time::{Duration, Instant};
 
 use fub_abi::PluginError;
+
+/// **Quanto può durare un prestito esclusivo prima che valga la pena dirlo.**
+///
+/// Non è una soglia di correttezza — niente si rompe a 249 ms e niente si
+/// ripara a 251 —: è la durata oltre la quale chi guarda lo schermo smette di
+/// leggere un'attesa come una risposta che sta arrivando e comincia a leggerla
+/// come qualcosa che si è inceppato. Il numero misurato che questo repo ha
+/// dall'altra parte è 0,12 ms per un salvataggio sotto contesa (decisione
+/// 0024): fra i due c'è un fattore duemila, e nessuna mutazione di casa ci
+/// arriva vicino per caso.
+const TROPPO_A_LUNGO: Duration = Duration::from_millis(250);
 
 /// **Un dato condiviso dietro un lucchetto, con la politica del veleno dentro.**
 ///
@@ -99,6 +135,16 @@ struct Interno<T> {
     /// Quante volte questa custodia ha **denunciato**, cioè scritto la riga.
     /// Zero o uno, per sempre. Vedi [`Custodia::denunce`].
     denunce: AtomicU32,
+    /// Oltre quanto un prestito esclusivo è **lungo**. È un campo e non la
+    /// costante letta a ogni giro perché un banco che prova la proprietà non
+    /// deve dormire un quarto di secondo per vederla: la soglia è ciò che si
+    /// muove, la proprietà no.
+    soglia: Duration,
+    /// Quanti prestiti esclusivi hanno passato la soglia. A differenza delle
+    /// denunce **cresce**: un veleno è uno stato e si dice una volta, una
+    /// lentezza è un fatto e ne può capitare un altro. Vedi
+    /// [`Custodia::lente`].
+    lente: AtomicU32,
 }
 
 impl<T> Clone for Custodia<T> {
@@ -123,11 +169,25 @@ impl<T> Custodia<T> {
     /// questa custodia risulterà avvelenata: va scritto per chi la legge sullo
     /// schermo, non per chi cerca il simbolo nel sorgente.
     pub fn new(nome: &'static str, valore: T) -> Self {
+        Custodia::con_soglia(nome, valore, TROPPO_A_LUNGO)
+    }
+
+    /// La stessa, con un'altra idea di **quanto è lungo**.
+    ///
+    /// Esiste perché la proprietà che [`TROPPO_A_LUNGO`] compra si possa
+    /// provare senza pagarla: un banco che la vuole vedere mette una soglia di
+    /// un millesimo e tiene il prestito per cinque, invece di dormire un quarto
+    /// di secondo per ogni riga che prova. È la stessa ragione per cui
+    /// [`denunce`](Custodia::denunce) è pubblica — una proprietà che nessuno
+    /// può chiedere è una promessa.
+    pub fn con_soglia(nome: &'static str, valore: T, soglia: Duration) -> Self {
         Custodia {
             dentro: Arc::new(Interno {
                 lucchetto: RwLock::new(valore),
                 nome,
                 denunce: AtomicU32::new(0),
+                soglia,
+                lente: AtomicU32::new(0),
             }),
         }
     }
@@ -143,9 +203,9 @@ impl<T> Custodia<T> {
 
     /// Il prestito **esclusivo**. Chi lo prende e pania è chi avvelena: è il
     /// caso che questa politica descrive.
-    pub fn write(&self) -> Result<RwLockWriteGuard<'_, T>, PluginError> {
+    pub fn write(&self) -> Result<Presa<'_, T>, PluginError> {
         match self.dentro.lucchetto.write() {
-            Ok(g) => Ok(g),
+            Ok(g) => Ok(Presa::nuova(g, &self.dentro)),
             Err(_) => Err(self.denuncia()),
         }
     }
@@ -164,8 +224,12 @@ impl<T> Custodia<T> {
 
     /// Il prestito esclusivo **senza mettersi in fila**. Vedi
     /// [`try_read`](Custodia::try_read) per perché il «no» è uno solo.
-    pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T>> {
-        self.dentro.lucchetto.try_write().ok()
+    pub fn try_write(&self) -> Option<Presa<'_, T>> {
+        self.dentro
+            .lucchetto
+            .try_write()
+            .ok()
+            .map(|g| Presa::nuova(g, &self.dentro))
     }
 
     /// Sono la **stessa** custodia? Serve a chi prova che riaprire un vault
@@ -183,6 +247,13 @@ impl<T> Custodia<T> {
     /// `crates/fub-host/tests/un_lucchetto_solo.rs`.
     pub fn denunce(&self) -> u32 {
         self.dentro.denunce.load(Ordering::Relaxed)
+    }
+
+    /// **Quanti prestiti esclusivi sono durati più della soglia.** È la
+    /// proprietà che la §27.3 compra, e per la ragione scritta accanto a
+    /// [`denunce`](Custodia::denunce) si può chiedere.
+    pub fn lente(&self) -> u32 {
+        self.dentro.lente.load(Ordering::Relaxed)
     }
 
     /// La frase, e — la prima volta soltanto — la riga nel log.
@@ -223,6 +294,84 @@ impl<T> Custodia<T> {
             )
             .into(),
         )
+    }
+}
+
+impl<T> Interno<T> {
+    /// La riga — la prima volta soltanto — e il conto, sempre.
+    ///
+    /// «La prima volta soltanto» è la stessa regola del veleno e per la stessa
+    /// ragione: una diagnosi ripetuta a ogni giro è rumore che copre la prima,
+    /// e chi vuole sapere se è successo ancora ha il conto, che invece cresce.
+    #[cold]
+    fn lentezza(&self, durata: Duration) {
+        if self.lente.fetch_add(1, Ordering::Relaxed) == 0 {
+            tracing::warn!(
+                target: "fub.host",
+                "{}: una modifica ha tenuto il prestito esclusivo per {} ms. Finché lo teneva, \
+                 ogni lettura e ogni salvataggio su questo vault erano fermi ad aspettarla: \
+                 sullo schermo è un'app che non risponde, e non lo è — è una singola operazione \
+                 lenta. Se si ripete, chi la fa va spostato in un job, che il prestito lo prende \
+                 e lo rilascia a ogni capacità invece di tenerlo per tutta la durata del lavoro.",
+                self.nome,
+                durata.as_millis(),
+            );
+        }
+    }
+}
+
+/// **Il prestito esclusivo, e per quanto lo si è tenuto.**
+///
+/// Si usa come la guardia che avvolge — `*presa`, `presa.metodo()` — e l'unica
+/// cosa che aggiunge la fa sciogliendosi: guarda l'orologio, e se il prestito è
+/// durato più della soglia della custodia lo dice.
+///
+/// Il lucchetto si **rilascia prima** di scrivere la riga, e non è un dettaglio
+/// di stile: il campo si scioglie dopo il corpo del [`Drop`], quindi lasciandolo
+/// dov'era la diagnosi di un prestito troppo lungo si sarebbe scritta tenendolo,
+/// cioè allungando esattamente ciò che sta misurando.
+pub struct Presa<'a, T> {
+    /// `Option` per poterlo sciogliere **prima** della riga: vedi sopra. Vale
+    /// `Some` per tutta la vita della presa e `None` solo dentro il [`Drop`].
+    guardia: Option<RwLockWriteGuard<'a, T>>,
+    dentro: &'a Interno<T>,
+    preso: Instant,
+}
+
+impl<'a, T> Presa<'a, T> {
+    fn nuova(guardia: RwLockWriteGuard<'a, T>, dentro: &'a Interno<T>) -> Self {
+        Presa {
+            guardia: Some(guardia),
+            dentro,
+            // Dopo l'acquisizione e non prima: ciò che si misura è per quanto
+            // **si tiene**, non per quanto si è aspettato di avere. Chi ha
+            // aspettato è la vittima, e il suo conto lo tiene la presa
+            // dell'altro.
+            preso: Instant::now(),
+        }
+    }
+}
+
+impl<T> Deref for Presa<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.guardia.as_ref().expect("la presa vive finché non si scioglie")
+    }
+}
+
+impl<T> DerefMut for Presa<'_, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        self.guardia.as_mut().expect("la presa vive finché non si scioglie")
+    }
+}
+
+impl<T> Drop for Presa<'_, T> {
+    fn drop(&mut self) {
+        let durata = self.preso.elapsed();
+        drop(self.guardia.take());
+        if durata >= self.dentro.soglia {
+            self.dentro.lentezza(durata);
+        }
     }
 }
 
@@ -303,6 +452,65 @@ mod prove {
             1,
             "cento chiamate e una riga: è la metà del difetto che la 0120 ripara"
         );
+    }
+
+    /// **Un prestito esclusivo troppo lungo si dice** (§27.3).
+    ///
+    /// La soglia si abbassa invece di dormirci sopra: ciò che si prova è che
+    /// la porta guarda l'orologio e parla, non quanto vale il quarto di secondo
+    /// di [`TROPPO_A_LUNGO`].
+    #[test]
+    fn una_modifica_che_tiene_il_vault_troppo_a_lungo_si_dice() {
+        let c = Custodia::con_soglia("il vault di prova", 1_u32, Duration::from_millis(1));
+        {
+            let mut g = c.write().expect("prestito esclusivo");
+            *g += 1;
+            std::thread::sleep(Duration::from_millis(8));
+        }
+        assert_eq!(
+            c.lente(),
+            1,
+            "il prestito è durato più della soglia e nessuno lo ha detto: è l'attesa che \
+             sullo schermo sembra un'app rotta"
+        );
+        assert_eq!(*c.read().expect("viva"), 2, "e la modifica è avvenuta");
+        assert_eq!(c.denunce(), 0, "lento non vuol dire morto");
+    }
+
+    /// L'altra metà, che impedisce alla riparazione di diventare «ogni prestito
+    /// è lento»: una mutazione normale non dice niente. Ed è anche la ragione
+    /// per cui la misura parte **dopo** l'acquisizione — qui il secondo
+    /// prestito ha aspettato il primo, e ad averlo tenuto non è lui.
+    #[test]
+    fn un_prestito_normale_non_dice_niente() {
+        let c = Custodia::con_soglia("il vault di prova", 1_u32, Duration::from_millis(50));
+        let barriera = std::sync::Barrier::new(2);
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                let _g = c.write().expect("prestito esclusivo");
+                barriera.wait();
+                std::thread::sleep(Duration::from_millis(2));
+            });
+            barriera.wait();
+            let _g = c.write().expect("il secondo aspetta il primo");
+        });
+        assert_eq!(
+            c.lente(),
+            0,
+            "chi ha aspettato non è chi ha tenuto: la misura parte dall'acquisizione"
+        );
+    }
+
+    /// E la riga è una, come quella del veleno — ma il conto no, perché una
+    /// lentezza è un fatto e non uno stato: ne può capitare un'altra.
+    #[test]
+    fn la_riga_e_una_e_il_conto_cresce() {
+        let c = Custodia::con_soglia("il vault di prova", 1_u32, Duration::from_millis(1));
+        for _ in 0..3 {
+            let _g = c.write().expect("prestito esclusivo");
+            std::thread::sleep(Duration::from_millis(4));
+        }
+        assert_eq!(c.lente(), 3, "tre fatti, tre nel conto");
     }
 
     #[test]
