@@ -186,7 +186,49 @@ pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules", "ta
 /// Riceve una chiave di [`resolution_key`] e non un nome di directory grezzo:
 /// le tre costanti che confronta sono già in quella forma, e su un filesystem
 /// insensibile al caso `.Fub` è la cartella di Fub.
+/// Questo nome è il temporaneo di **un altro attrezzo**?
+///
+/// Non è la gemella di [`e_temporaneo_di_scrittura`](crate::storage::e_temporaneo_di_scrittura)
+/// e non le sta accanto: quella riconosce una forma che il kernel **scrive**, e
+/// chi conosce una forma è chi la scrive; questa riconosce le forme che
+/// scrivono gli altri, che nessuno qui compone e che quindi sono una politica —
+/// una convenzione letta da fuori, non un contratto.
+///
+/// Ne vale la pena perché il costo è già misurato: da quando il vault dice cosa
+/// contiene invece di filtrare per estensione (§14.1) ogni file prende un
+/// [`DocId`](fub_abi::DocId), quindi il file d'appoggio che LibreOffice o Word
+/// scrivono accanto alla nota entra in anagrafe, compare nell'esploratore e
+/// sparisce da sé qualche secondo dopo — una voce che nasce e muore da sola, e
+/// un `DocId` bruciato ogni volta che si salva da un altro programma (difetto
+/// 0201).
+///
+/// Tre forme e non un elenco che cresce, scelte con lo stesso metro di
+/// [`DEFAULT_EXCLUDED`]: il contenuto lo rigenera l'attrezzo, dentro non ci si
+/// scrivono note, e il nome è una convenzione abbastanza vecchia che usarla per
+/// una nota propria sorprenderebbe chi la legge. Le altre forme che si
+/// incontrano — `.goutputstream-…` di GLib, `.nota.md.swp` di vim, `.~lock…#`
+/// di LibreOffice, `.#nota.md` di Emacs — cominciano già per punto, e chi le
+/// prende è la riga dei nascosti.
+///
+/// Sta **con i nascosti** e non con la struttura, che è senza appello: chi ha
+/// davvero un file che si chiama così lo rivede accendendo «mostra i file
+/// nascosti», che è la stessa via di uscita che ha già oggi per i `.qualcosa`.
+/// Una regola senza uscita toglierebbe un file davvero, e senza dirlo.
+pub(crate) fn e_temporaneo_altrui(key: &str) -> bool {
+    // `~$nota.docx`: il file di proprietà che Office scrive accanto a quello
+    // aperto, e che resta lì finché la finestra è aperta.
+    let office = key.strip_prefix("~$").is_some_and(|resto| !resto.is_empty());
+    // `nota.md~`: la copia di prima, che lasciano dietro Emacs, gedit, kate,
+    // joe e mezzo Unix.
+    let copia = key.strip_suffix('~').is_some_and(|base| !base.is_empty());
+    // `#nota.md#`: il salvataggio automatico di Emacs, che non comincia per
+    // punto e quindi non lo prende nessun'altra riga.
+    let autosalvataggio = key.len() > 2 && key.starts_with('#') && key.ends_with('#');
+    office || copia || autosalvataggio
+}
+
 pub(crate) fn e_struttura(key: &str) -> bool {
+
     key == FUB_DIR
         || key == TRASH_DIR
         || crate::storage::e_temporaneo_di_scrittura(key)
@@ -281,7 +323,10 @@ impl IgnorePolicy {
         if e_struttura(&name) {
             return true;
         }
-        if !self.mostra_i_nascosti && name.starts_with('.') {
+        // Il punto davanti e la convenzione dell'attrezzo che lo ha scritto
+        // sono la stessa domanda — «questo lo ha messo qui un programma per
+        // sé?» — e stanno sulla stessa riga perché abbiano la stessa uscita.
+        if !self.mostra_i_nascosti && (name.starts_with('.') || e_temporaneo_altrui(&name)) {
             return true;
         }
         specie == Specie::Cartella && self.folders.contains(&name)
@@ -438,6 +483,41 @@ mod tests {
         );
         assert!(!p.esclude("Idea.md", Specie::File));
         assert!(!p.esclude("progetti", Specie::Cartella));
+    }
+
+    /// **Il file d'appoggio di un altro programma non è una nota**, e non deve
+    /// nascere in anagrafe per morirci qualche secondo dopo (difetto 0201).
+    ///
+    /// Le forme che cominciano per punto le prendeva già la riga dei nascosti;
+    /// queste tre non cominciano per punto, e prima di questa riga passavano.
+    #[test]
+    fn i_temporanei_degli_altri_programmi_non_sono_note() {
+        let p = IgnorePolicy::default();
+        for name in ["~$Relazione.docx", "Nota.md~", "#Nota.md#"] {
+            assert!(
+                p.esclude(name, Specie::File),
+                "{name} prende un DocId, compare nell'esploratore e sparisce da \
+                 sé: una voce che nasce e muore da sola a ogni salvataggio"
+            );
+        }
+        // E non un carattere in più di così: il `~` e il `#` dentro un nome sono
+        // caratteri come gli altri, e una regola che li prendesse toglierebbe
+        // note vere.
+        for name in ["Nota~2.md", "#hashtag.md", "~.md", "Nota.md"] {
+            assert!(!p.esclude(name, Specie::File), "{name}");
+        }
+    }
+
+    /// La via d'uscita è quella che c'è già: sono nascosti per convenzione di
+    /// chi li scrive, non struttura, quindi chi vuole vederli accende
+    /// l'interruttore che accende anche i `.qualcosa`.
+    #[test]
+    fn chi_mostra_i_nascosti_vede_anche_quelli() {
+        let tutto = IgnorePolicy::declaring(Vec::new(), true);
+        assert!(!tutto.esclude("Nota.md~", Specie::File));
+        assert!(!tutto.esclude("~$Relazione.docx", Specie::File));
+        // La struttura invece resta senza appello, com'era.
+        assert!(tutto.esclude(FUB_DIR, Specie::Cartella));
     }
 
     /// **Il cuore della voce**: le due specie non sono la stessa lista. Un vault

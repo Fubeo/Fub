@@ -206,14 +206,17 @@ registrato adesso, e un file diventa una nota il giorno in cui qualcuno sa
 parsarlo.
 
 ### esclusione
-`IgnorePolicy` · [`kernel/ignore.rs:220`](../crates/fub-kernel/src/ignore.rs) · [0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
+`IgnorePolicy` · [`kernel/ignore.rs:262`](../crates/fub-kernel/src/ignore.rs) · [0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
 
 Cosa di una cartella **non** fa parte del vault, e sono **due** cose che non si
 somigliano:
 
 - La *preferenza* è dato di questo vault e si dichiara: le cartelle escluse
   (`files.excluded-folders`) e se i file nascosti siano documenti
-  (`files.show-hidden`).
+  (`files.show-hidden`) — e sotto quella seconda riga ci stanno anche i file
+  d'appoggio che gli altri programmi scrivono accanto alle note (`~$x`, `x~`,
+  `#x#`), che sono nascosti per convenzione di chi li scrive invece che per un
+  punto davanti, e si rivelano con lo stesso interruttore.
 - La *struttura* — `.fub/`, `.trash/`, il temporaneo di una scrittura — non la
   dichiara nessuno e nessuna impostazione la rivela: mostrarla vorrebbe dire
   indicizzare l'indice e riesumare il cestino.
