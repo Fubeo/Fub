@@ -173,7 +173,8 @@ che non si è potuto leggere resta in anagrafe e non arriva a nessun indice.
 
 Un dato che, perso, **non si ricostruisce da niente**: l'organizzazione della
 sidebar, le impostazioni del vault, gli snapshot del versioning. Chi lo tiene,
-se non riesce a leggerlo, **non lo sovrascrive**. Oggi la classe non è dicibile
+se **adesso** non riesce a rileggerlo, **non lo sovrascrive** — e la
+domanda si rifà a ogni scrittura, non una volta all'apertura. Oggi la classe non è dicibile
 nel contratto e si legge dal path — direttamente sotto `.fub/` — che è il §15.4
 ancora aperto per metà. Il suo opposto è [derivato](#derivato).
 

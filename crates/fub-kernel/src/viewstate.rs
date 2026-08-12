@@ -50,7 +50,7 @@ use std::sync::{Arc, RwLock};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 
-use crate::storage::update_atomic;
+use crate::storage::{non_lo_sovrascrivo, update_atomic};
 use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3).
@@ -79,10 +79,6 @@ struct ViewStateFile {
 /// scrivere nella cartella di configurazione di chi esegue la suite.
 pub struct ViewStates {
     path: Option<Utf8PathBuf>,
-    /// Il file si è letto? Se no **non lo si riscrive**: è la regola della
-    /// 0036, e qui il danno sarebbe più silenzioso che altrove — nessuno si
-    /// accorge di aver perso uno scroll finché non riapre.
-    readable: bool,
     vaults: RwLock<BTreeMap<String, Owners>>,
 }
 
@@ -98,7 +94,6 @@ impl ViewStates {
         (
             Arc::new(ViewStates {
                 path: Some(path.to_owned()),
-                readable: warning.is_none(),
                 vaults: RwLock::new(vaults),
             }),
             warning,
@@ -109,7 +104,6 @@ impl ViewStates {
     pub fn in_memory() -> Arc<Self> {
         Arc::new(ViewStates {
             path: None,
-            readable: true,
             vaults: RwLock::new(BTreeMap::new()),
         })
     }
@@ -231,16 +225,14 @@ impl ViewStates {
             f(&mut vaults);
             return Ok(());
         };
-        if !self.readable {
-            return Err(format!(
-                "{path} non si è potuto leggere all'apertura: Fub non lo \
-                 sovrascrive, o lo stato di vista che contiene andrebbe perso. \
-                 Correggilo o spostalo, e riapri."
-            ));
-        }
         *vaults = update_atomic(
             path,
-            || load(path),
+            // La rilettura è il cancello: vedi `non_lo_sovrascrivo`.
+            || {
+                load(path).map_err(|e| {
+                    non_lo_sovrascrivo(&e, "lo stato di vista che contiene andrebbe perso")
+                })
+            },
             |disco| {
                 f(disco);
                 encode(disco)
@@ -472,6 +464,37 @@ mod tests {
             .expect_err("non si scrive su ciò che non si è letto");
         assert!(e.contains("non lo sovrascrive"), "{e}");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), rotto);
+    }
+
+    /// **E un file corretto a mano non aspetta una riapertura** (difetto 0170).
+    ///
+    /// La faccia opposta del precedente, ed è la più silenziosa delle tre: qui
+    /// nessuno vede il rifiuto: uno scroll che non si deposita non lo dice a
+    /// nessuno, e si scopre riaprendo — cioè con l'unico gesto che rimetteva a
+    /// posto anche la bandiera.
+    #[test]
+    fn un_file_corretto_a_mano_non_aspetta_una_riapertura() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("view-state.json");
+        std::fs::write(&path, "{ \"version\": 1, \"vaults\": {,} }").unwrap();
+
+        let (states, warning) = ViewStates::open(&path);
+        assert!(warning.is_some(), "e lo dice");
+
+        std::fs::write(
+            &path,
+            "{ \"version\": 1, \"vaults\": { \"/v\": { \"p\": { \"i\": { \"k\": 1 } } } } }",
+        )
+        .unwrap();
+
+        states
+            .set("/v", "p", "i", "altra", Some(serde_json::json!(2)))
+            .expect("il file adesso si legge, e non c'è niente da riaprire");
+        assert_eq!(
+            states.get("/v", "p", "i", "k"),
+            Some(serde_json::json!(1)),
+            "e ciò che il file corretto diceva è la base della fusione"
+        );
     }
 
     #[test]

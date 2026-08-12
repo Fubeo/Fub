@@ -64,7 +64,7 @@ use fub_abi::rules::path_policy;
 use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{Durevole, VaultStorage};
+use crate::storage::{non_lo_sovrascrivo, Durevole, VaultStorage};
 use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3).
@@ -107,11 +107,6 @@ pub struct OrganizationStore {
     /// passa sopra come tutto il resto
     /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
     storage: Option<Arc<dyn VaultStorage>>,
-    /// Il file si è letto? Se no **non lo si riscrive**, ed è qui che questa
-    /// regola conta più che altrove: la configurazione al peggio si rifà
-    /// cliccando gli stessi interruttori, l'organizzazione di un vault di mille
-    /// note no.
-    readable: bool,
     /// L'organizzazione, che è **anche** ciò che sta nel sidecar: un
     /// [`Durevole`] perché «su disco prima, in memoria dopo» non dipendesse dal
     /// fatto che chi scrive la prossima mutazione legga il commento sotto.
@@ -137,7 +132,6 @@ impl OrganizationStore {
             Arc::new(OrganizationStore {
                 path: Some(path.clone()),
                 storage: Some(storage),
-                readable: warning.is_none(),
                 data: RwLock::new(Durevole::letto(data)),
                 // Le chiavi che il recinto ha scartato **non** rendono il file
                 // illeggibile: il resto dell'organizzazione vale, e la
@@ -154,7 +148,6 @@ impl OrganizationStore {
         Arc::new(OrganizationStore {
             path: None,
             storage: None,
-            readable: true,
             data: RwLock::new(Durevole::letto(Organization::default())),
             warnings: RwLock::new(Vec::new()),
         })
@@ -280,13 +273,6 @@ impl OrganizationStore {
             f(&mut next);
             return data.scrivi(next, |_| Ok(()));
         };
-        if !self.readable {
-            return Err(format!(
-                "{path} non si è potuto leggere all'apertura: Fub non lo \
-                 sovrascrive, o l'organizzazione che contiene andrebbe persa. \
-                 Correggilo o spostalo, e riapri."
-            ));
-        }
         // Ciò che si ha in memoria viaggia con la fusione, e serve **solo** se
         // il file non c'è: vedi il § in testa a `fondi`.
         let in_memoria = (**data).clone();
@@ -304,10 +290,11 @@ impl OrganizationStore {
 /// Rilegge il sidecar, ci mette sopra `f`, lo riscrive: torna ciò che è finito
 /// nel file.
 ///
-/// Un file che **adesso** non si legge non si sovrascrive, ed è la stessa regola
-/// dell'apertura applicata al momento giusto: `readable` racconta com'era il
-/// file ieri, e fra ieri e adesso ci può essere passato un editor di testo o una
-/// sincronizzazione a metà.
+/// Un file che **adesso** non si legge non si sovrascrive
+/// ([`non_lo_sovrascrivo`]), e la domanda si fa qui perché qui c'è la risposta
+/// vera: fra l'apertura e adesso ci può essere passato un editor di testo o una
+/// sincronizzazione a metà, e ci può essere ripassato a rimettere a posto
+/// (difetto 0170).
 ///
 /// # Un file che non c'è non è un file vuoto
 ///
@@ -352,7 +339,10 @@ fn fondi(
                 disco
             }
             Err(e) => {
-                guasto = Some(e);
+                guasto = Some(non_lo_sovrascrivo(
+                    &e,
+                    "l'organizzazione che contiene andrebbe persa",
+                ));
                 return Err(std::io::Error::other("il file non si è potuto leggere"));
             }
         };
@@ -787,6 +777,38 @@ mod tests {
             .expect_err("non si scrive su ciò che non si è letto");
         assert!(e.contains("non lo sovrascrive"), "{e}");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), rotto);
+    }
+
+    /// **E un sidecar corretto a mano non aspetta una riapertura** (difetto
+    /// 0170).
+    ///
+    /// La faccia opposta del precedente. Qui pesa più che per la
+    /// configurazione, che al peggio si rifà cliccando: chi ha rotto il sidecar
+    /// e lo rimette a posto si sentiva rispondere di no a ogni icona e ogni
+    /// preferito finché non riapriva Fub, perché la bandiera che rispondeva
+    /// l'aveva letta all'apertura e nessuno gliela rileggeva più.
+    #[test]
+    fn un_sidecar_corretto_a_mano_non_aspetta_una_riapertura() {
+        let (_tmp, root) = tempdir();
+        let path = organization_path(&root);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{ \"icons\": {,} }").unwrap();
+
+        let (store, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
+        assert!(warning.is_some(), "e lo dice");
+
+        std::fs::write(&path, "{ \"version\": 1, \"pinned\": [\"b.md\"] }").unwrap();
+
+        store.set_icon("a.md", Some("📌".into())).expect(
+            "il sidecar adesso si legge: rifiutare vorrebbe dire chiedere di \
+             riaprire l'app per un file che è già a posto",
+        );
+        assert_eq!(
+            store.snapshot().pinned,
+            vec!["b.md".to_string()],
+            "e si è fusi su ciò che il file corretto diceva, non sull'organizzazione \
+             vuota dell'apertura"
+        );
     }
 
     /// Il gemello del precedente sull'altro guasto: là il file **c'è e non si
