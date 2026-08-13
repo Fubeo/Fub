@@ -146,3 +146,4 @@
 - [ ] Segna tutte le notifiche come lette
 - [ ] Silenzia le notifiche
 - [ ] Preferenze di notifica per canale
+- [ ] Raggruppamento delle notifiche (per app, per data o per tipo)

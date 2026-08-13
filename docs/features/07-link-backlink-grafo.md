@@ -43,6 +43,7 @@
 - [ ] Titolo del link derivato dal titolo della nota
 - [ ] Evidenziazione dei link rotti nell'editor
 - [ ] Trascina una selezione di testo su una nota per creare un link (drag & drop)
+- [ ] Incolla un URL sul testo selezionato per trasformarlo in un link
 
 ## 7.2 Backlink
 

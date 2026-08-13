@@ -14,7 +14,6 @@
 - [ ] Template task
 - [ ] Template progetto
 - [ ] Template riunione
-- [ ] Template diario
 - [ ] Template flashcard
 - [ ] Template contatto
 - [ ] Variabili template
@@ -88,6 +87,7 @@
 - [ ] Pausa/ripresa di un'automazione
 - [ ] Duplica un'automazione
 - [ ] Rinomina un'automazione
+- [ ] Eliminazione di un'automazione
 - [ ] Etichetta/descrizione di un'automazione
 - [ ] Ordinamento delle automazioni salvate
 - [ ] Scorciatoia per eseguire un'automazione

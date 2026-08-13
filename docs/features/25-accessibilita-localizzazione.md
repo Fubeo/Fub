@@ -53,6 +53,7 @@
 - [ ] Informazione non veicolata solo dal colore
 - [ ] Attributo lang sul documento
 - [ ] Scorciatoie alternative per le azioni principali
+- [ ] Conformità WCAG AA come obiettivo dichiarato
 
 ## 25.2 Localizzazione
 

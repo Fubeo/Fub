@@ -34,6 +34,7 @@
 - [ ] Minimizza a tray
 - [ ] Riavvio automatico dopo l'aggiornamento
 - [ ] Badge di notifica su dock/taskbar
+- [ ] Disinstaller pulito (rimozione completa senza residui)
 
 ## 26.2 Mobile
 

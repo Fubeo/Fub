@@ -33,5 +33,6 @@
 - [ ] Guida introduttiva rapida
 - [ ] Canali di supporto
 - [ ] Changelog e release notes
+- [ ] Blog e annunci ufficiali
 - [ ] Documentazione versionata con la versione dell'app
 - [ ] Cheat sheet delle scorciatoie

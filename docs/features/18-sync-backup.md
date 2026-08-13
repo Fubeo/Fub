@@ -82,6 +82,7 @@
 - [ ] Retention policy
 - [ ] Pulizia vecchie versioni
 - [ ] Backup su disco esterno
+- [ ] Scelta della cartella di destinazione del backup
 - [ ] Backup su cloud personale
 - [ ] Ripristino completo vault
 - [ ] 3-2-1 backup strategy

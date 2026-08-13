@@ -116,6 +116,7 @@
 - [ ] Export di una singola nota
 - [ ] Export di una selezione di testo
 - [ ] Export testo semplice (.txt)
+- [ ] Scelta del formato di export
 - [ ] Scelta della cartella di destinazione all'export
 - [ ] Riepilogo dei file esportati
 - [ ] Export dei file in una sola volta
