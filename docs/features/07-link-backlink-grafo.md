@@ -1,0 +1,146 @@
+# 7. Link, backlink, transclusione e grafo
+
+*Microfeature essenziali: [vault-ed-esploratore.md](../microfeatures/vault-ed-esploratore.md).*
+
+## 7.1 Link
+
+- [ ] Wikilink
+- [ ] Markdown link
+- [ ] Link relativi
+- [ ] Link assoluti interni opzionali
+- [ ] Link esterni
+- [ ] Link con alias
+- [ ] Link a heading
+- [ ] Link a blocco
+- [ ] Link a riga
+- [ ] Link a ricerca
+- [ ] Link a tag
+- [ ] Link a proprietà
+- [ ] Link a canvas
+- [ ] Link a database
+- [ ] Link a file allegato
+- [ ] Link a block embed
+- [ ] Link a transclusione
+- [ ] Link automatici da alias
+- [ ] Suggerimento link durante digitazione
+- [ ] Creazione nota da link mancante
+- [ ] Auto-link termini da glossario
+- [ ] Redirect da note rinominate
+- [ ] Stable note ID
+- [ ] Stable block ID
+- [ ] Link preview
+- [ ] Hover popover
+- [ ] Apertura link in scheda
+- [ ] Apertura link in split
+- [ ] Apertura link in popup
+- [ ] Navigazione back/forward
+- [ ] Breadcrumb navigazione
+- [ ] Elimina link (rimuove il collegamento lasciando il testo)
+- [ ] Modifica link esistente dal menu contestuale (cambia URL/destinazione)
+- [ ] Copia il permalink della nota (link diretto indipendente dal percorso)
+
+## 7.2 Backlink
+
+- [ ] Pannello backlink
+- [ ] Backlink per nota
+- [ ] Backlink per blocco
+- [ ] Backlink per heading
+- [ ] Backlink contestuali
+- [ ] Conteggio backlink
+- [ ] Backlink in linea
+- [ ] Backlink raggruppati
+- [ ] Filtri backlink
+- [ ] Ordinamento backlink
+- [ ] Menzioni non collegate
+- [ ] Collegamento rapido da menzioni
+- [ ] Outgoing links
+- [ ] Link non risolti
+- [ ] Link rotti
+- [ ] Report link rotti
+- [ ] Fix automatico link rotti opzionale
+- [ ] Rinomina sicura
+- [ ] Spostamento sicuro
+- [ ] Alias multipli
+- [ ] Redirect manager
+- [ ] Broken links checker
+- [ ] Orphan notes detector
+- [ ] Unused attachments detector
+- [ ] Duplicate notes detector
+- [ ] Empty notes detector
+- [ ] Missing frontmatter detector
+- [ ] Missing tags detector
+- [ ] Missing aliases detector
+- [ ] Stale notes detector
+- [ ] Note con review scaduta
+- [ ] Note con metadata incompleti
+- [ ] Note con titolo duplicato
+- [ ] Note con nome file non conforme
+- [ ] Cleanup wizard
+- [ ] Bulk fix problemi
+- [ ] Health score vault
+- [ ] Health score nota
+- [ ] Suggerimenti archiviazione
+- [ ] Suggerimenti unione note duplicate
+- [ ] Suggerimenti split note troppo lunghe
+- [ ] Suggerimenti link interni mancanti
+- [ ] Suggerimenti tag mancanti
+- [ ] Suggerimenti proprietà mancanti
+
+## 7.3 Grafo della conoscenza
+
+- [ ] Grafo globale
+- [ ] Grafo locale
+- [ ] Grafo per nota
+- [ ] Grafo per tag
+- [ ] Grafo per cartella
+- [ ] Grafo per proprietà
+- [ ] Grafo per query
+- [ ] Profondità regolabile
+- [ ] Filtri nodi
+- [ ] Filtri link
+- [ ] Filtri tag
+- [ ] Filtri cartelle
+- [ ] Filtri tipo nota
+- [ ] Gruppi colore
+- [ ] Gruppi per proprietà
+- [ ] Dimensione nodi per backlink
+- [ ] Forza link regolabile
+- [ ] Fisica simulata
+- [ ] Layout statici
+- [ ] Layout radiali
+- [ ] Layout gerarchici
+- [ ] Layout force-directed
+- [ ] Ricerca nel grafo
+- [ ] Focus nodo
+- [ ] Espansione nodo
+- [ ] Collapse nodo
+- [ ] Hover preview
+- [ ] Click apertura nota
+- [ ] Multi-select
+- [ ] Selezione gruppo
+- [ ] Degree centrality
+- [ ] Note più collegate
+- [ ] Note orfane
+- [ ] Cluster
+- [ ] Comunità
+- [ ] Bridge notes
+- [ ] Dead ends
+- [ ] Mappa note isolate
+- [ ] Salvataggio viste grafo
+- [ ] Esportazione grafo PNG
+- [ ] Esportazione grafo SVG
+- [ ] Esportazione dati grafo JSON
+- [ ] Grafo 3D opzionale
+- [ ] Minimap
+- [ ] Zoom fluido
+- [ ] Pan fluido
+- [ ] Performance con vault grandi
+- [ ] Accessibilità grafo
+- [ ] Vista elenco alternativa al grafo
+- [ ] Pathfinding
+- [ ] Shortest path
+- [ ] Semantic graph
+- [ ] Concept graph
+- [ ] Entity graph
+- [ ] Timeline graph
+- [ ] Graph annotations

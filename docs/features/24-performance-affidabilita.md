@@ -1,0 +1,106 @@
+# 24. Performance, affidabilità e diagnostica
+
+## 24.1 Performance
+
+- [ ] Avvio rapido
+- [ ] Apertura nota istantanea
+- [ ] Ricerca rapida
+- [ ] Indicizzazione incrementale
+- [ ] Lazy loading
+- [ ] Virtualizzazione liste
+- [ ] Virtualizzazione tabelle
+- [ ] Rendering efficiente
+- [ ] Parsing efficiente
+- [ ] Basso uso RAM
+- [ ] Basso uso CPU idle
+- [ ] GPU acceleration opzionale
+- [ ] Supporto vault piccoli
+- [ ] Supporto vault medi
+- [ ] Supporto vault grandi
+- [ ] Supporto vault enormi
+- [ ] Gestione file grandi
+- [ ] Gestione allegati numerosi
+- [ ] Gestione canvas grandi
+- [ ] Gestione database grandi
+- [ ] Task manager interno
+- [ ] Indexing progress
+- [ ] Memory usage monitor
+- [ ] CPU usage monitor
+- [ ] Cache size monitor
+- [ ] Rebuild index
+- [ ] Low-power mode
+- [ ] Large file mode
+- [ ] Virtualization
+- [ ] GPU toggle
+- [ ] Background priority
+- [ ] Network throttling
+- [ ] Sync bandwidth limits
+- [ ] Incremental parsing
+- [ ] Incremental saving
+- [ ] Streaming large files
+- [ ] Cache eviction policies
+- [ ] Svuotamento manuale della cache
+- [ ] Avviso di spazio su disco basso per il vault
+- [ ] Index compression
+- [ ] Thumbnail cache management
+- [ ] Search index optimization
+- [ ] Database vacuum
+- [ ] Performance profiler
+- [ ] Startup time metrics
+- [ ] Note open time metrics
+- [ ] Search latency metrics
+- [ ] Render time metrics
+- [ ] Plugin performance metrics
+- [ ] Battery usage mobile
+- [ ] Data usage mobile
+
+## 24.2 Affidabilità
+
+- [ ] Crash recovery
+- [ ] Autosave
+- [ ] Atomic writes
+- [ ] File integrity checks
+- [ ] Corruption detection
+- [ ] Safe mode
+- [ ] Plugin safe mode
+- [ ] Rollback plugin
+- [ ] Rollback update
+- [ ] Beta channel
+- [ ] Stable channel
+- [ ] Verifica manuale degli aggiornamenti disponibili
+- [ ] Portable mode
+- [ ] Low resource mode
+- [ ] Offline resilience
+- [ ] Battery friendly mobile
+- [ ] Background sync efficiente
+- [ ] Error reporting chiaro
+- [ ] Diagnostic tools
+- [ ] Vault health check
+- [ ] Repair tools
+- [ ] Plugin isolation
+- [ ] Crash buffer
+- [ ] Autosave recovery
+- [ ] Vault repair
+- [ ] Index rebuild
+- [ ] File lock detection
+- [ ] Journaling
+- [ ] Diagnostic bundle
+- [ ] Health check
+- [ ] Repair wizard
+- [ ] Checksum verification
+- [ ] Backup verification
+- [ ] Restore test
+- [ ] Sync logs
+- [ ] Plugin logs
+- [ ] Error reporting opt-in
+- [ ] Crash reports opt-in
+- [ ] Offline diagnostics
+- [ ] Network diagnostics
+- [ ] Permission diagnostics
+- [ ] File system diagnostics
+- [ ] Vault size diagnostics
+- [ ] Attachment diagnostics
+- [ ] Database diagnostics
+- [ ] Search index diagnostics
+- [ ] AI diagnostics
+- [ ] Publishing diagnostics

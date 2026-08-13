@@ -1,0 +1,133 @@
+# 23. Sicurezza, privacy e compliance
+
+## 23.1 Sicurezza
+
+- [ ] Nessun malware
+- [ ] Nessun tracking nascosto
+- [ ] Aggiornamenti firmati
+- [ ] Verifica integrità aggiornamenti
+- [ ] Secure storage credenziali
+- [ ] Keychain OS
+- [ ] Generatore di password integrato
+- [ ] Crittografia at-rest opzionale
+- [ ] Vault password
+- [ ] Blocco dell'app all'avvio prima dell'accesso al vault
+- [ ] Blocco biometrico mobile
+- [ ] Auto-lock
+- [ ] Timeout blocco
+- [ ] Crittografia backup
+- [ ] Crittografia export
+- [ ] Crittografia sync E2EE
+- [ ] Zero-knowledge sync
+- [ ] Gestione chiavi
+- [ ] Recovery key
+- [ ] Rotazione chiavi
+- [ ] Audit sicurezza
+- [ ] Security disclosure policy
+- [ ] Per-note encryption
+- [ ] Per-folder encryption
+- [ ] Encrypted fields
+- [ ] Password-protected notes
+- [ ] Hidden vault
+- [ ] Secure delete
+- [ ] Secure trash
+- [ ] PII detection
+- [ ] Secrets detection
+- [ ] Redaction tool
+- [ ] Audit log
+- [ ] Session timeout
+- [ ] Hardware key support
+- [ ] Key rotation
+- [ ] CSP
+- [ ] Sandbox
+- [ ] Network permissions
+- [ ] File permissions
+- [ ] Clipboard permissions
+- [ ] Camera/mic permissions
+- [ ] Plugin permission prompts
+- [ ] Encrypted cache
+- [ ] Encrypted thumbnails
+- [ ] Encrypted search index opzionale
+- [ ] Duress mode opzionale
+- [ ] Security dashboard
+
+## 23.2 Privacy
+
+- [ ] Offline completo
+- [ ] Nessun account obbligatorio
+- [ ] Telemetria opt-in
+- [ ] Telemetria anonima
+- [ ] Telemetria disattivabile
+- [ ] Nessun crash report obbligatorio
+- [ ] Crash report opt-in
+- [ ] Nessun invio note
+- [ ] Nessun invio metadata
+- [ ] Nessun invio search query
+- [ ] Nessun advertising ID
+- [ ] Nessun fingerprinting
+- [ ] Privacy manifest
+- [ ] Elenco permessi
+- [ ] Cancellazione dati locali
+- [ ] Cancellazione indici
+- [ ] Cancellazione cache AI
+- [ ] Cancellazione thumbnail
+- [ ] Modalità privata
+- [ ] Vault nascosti opzionali
+- [ ] Remote content blocking
+- [ ] Block external images by default
+- [ ] Block external fonts by default
+- [ ] Local fonts only mode
+- [ ] Anonymized logs
+- [ ] Privacy dashboard
+- [ ] Data inventory
+- [ ] Export all data
+- [ ] Delete all data
+- [ ] Model cards for AI
+- [ ] AI opt-in esplicito
+- [ ] Offline OCR
+- [ ] Offline STT
+- [ ] Offline TTS
+- [ ] No fingerprinting
+- [ ] No advertising ID
+- [ ] Privacy report
+- [ ] Permission report
+- [ ] Network activity monitor
+- [ ] Telemetry transparency
+- [ ] Telemetry opt-in
+- [ ] Telemetry audit log
+- [ ] Local-only mode
+- [ ] Airplane mode friendly
+- [ ] No hidden endpoints
+
+## 23.3 Compliance e governance
+
+- [ ] SBOM
+- [ ] License compliance
+- [ ] SPDX identifiers
+- [ ] CVE/security advisories
+- [ ] GDPR compliance
+- [ ] CCPA compliance
+- [ ] DPA per servizi hosted
+- [ ] Retention policies
+- [ ] Legal hold
+- [ ] Audit logs
+- [ ] Data classification
+- [ ] Privacy impact assessment
+- [ ] Open governance
+- [ ] RFC process
+- [ ] Community voting
+- [ ] Security disclosure policy
+- [ ] Bug bounty opzionale
+- [ ] Transparency report
+- [ ] Algorithmic transparency
+- [ ] AI model cards
+- [ ] Data processing documentation
+- [ ] User data export
+- [ ] User data deletion
+- [ ] Consent management
+- [ ] Cookie-less analytics
+- [ ] Terms of service chiari
+- [ ] Privacy policy chiara
+- [ ] Plugin policy chiara
+- [ ] Marketplace policy chiara
+- [ ] DMCA/abuse policy opzionale

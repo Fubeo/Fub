@@ -1,0 +1,103 @@
+# 25. Accessibilità, inclusività e localizzazione
+
+## 25.1 Accessibilità
+
+- [ ] Screen reader support
+- [ ] ARIA labels
+- [ ] Navigazione tastiera
+- [ ] Focus visibile
+- [ ] Focus trap modali
+- [ ] Contrasto sufficiente
+- [ ] Alto contrasto
+- [ ] Text scaling
+- [ ] Zoom UI
+- [ ] Riduzione movimento
+- [ ] Animazioni disattivabili
+- [ ] Font leggibili
+- [ ] Font dyslexia-friendly opzionali
+- [ ] Spaziatura regolabile
+- [ ] Sottotitoli media
+- [ ] Trascrizioni
+- [ ] Alt text obbligatorio suggerito
+- [ ] Accessible canvas alternative
+- [ ] Accessible graph alternative
+- [ ] Accessible tables
+- [ ] Text-to-speech
+- [ ] Speech-to-text
+- [ ] Dettatura vocale
+- [ ] Voice control
+- [ ] Voice navigation
+- [ ] Screen reader ottimizzato
+- [ ] ARIA completo
+- [ ] Keyboard-only mode
+- [ ] Focus visible
+- [ ] Focus trap
+- [ ] Skip links
+- [ ] High contrast
+- [ ] Colorblind palettes
+- [ ] Dyslexia-friendly fonts
+- [ ] Text spacing regolabile
+- [ ] Line length regolabile
+- [ ] Reduced motion
+- [ ] Reduced transparency
+- [ ] Captions
+- [ ] Transcripts
+- [ ] Audio descriptions opzionali
+- [ ] Accessible charts
+- [ ] Accessible forms
+- [ ] Accessible notifications
+- [ ] Accessible drag & drop
+- [ ] Accessible command palette
+- [ ] Accessible settings
+- [ ] Focus order logico
+- [ ] Scroll da tastiera
+- [ ] Tastiera raggiunge tutte le azioni
+- [ ] Contrasto che segue il tema di sistema
+- [ ] Sotto-titoli nei code block per la sintassi
+- [ ] Annuncio aria sui cambi di stato
+
+## 25.2 Localizzazione
+
+- [ ] Multi-language UI
+- [ ] RTL support
+- [ ] CJK support
+- [ ] Unicode completo
+- [ ] Date/time localization
+- [ ] Number localization
+- [ ] Calendar localization
+- [ ] Spellcheck multilingua
+- [ ] Dizionari locali
+- [ ] Traduzioni community
+- [ ] Locale-aware sorting
+- [ ] Locale-aware collation
+- [ ] Pluralization
+- [ ] Bidi support
+- [ ] Timezone management
+- [ ] World clock
+- [ ] Date math
+- [ ] Currency formatting
+- [ ] Measurement units
+- [ ] Number formatting
+- [ ] Translation memory
+- [ ] Community translations
+- [ ] Pseudo-locale testing
+- [ ] RTL editor
+- [ ] CJK optimization
+- [ ] Unicode normalization
+- [ ] Locale-aware search
+- [ ] Locale-aware stemming
+- [ ] Locale-aware synonyms
+- [ ] Regional holidays
+- [ ] Workweek localization
+- [ ] Time format 12/24
+- [ ] First day of week
+- [ ] Date picker localization
+- [ ] Currency conversion opzionale
+- [ ] Unit conversion opzionale
+- [ ] Localized templates
+- [ ] Localized prompts
+- [ ] Localized AI responses opzionali
+- [ ] Lingua interfaccia selezionabile
+- [ ] Locale predefinito dal sistema
+- [ ] Fuso orario dal sistema
+- [ ] Formato data/ora personalizzabile

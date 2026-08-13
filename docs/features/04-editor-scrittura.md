@@ -1,0 +1,151 @@
+# 4. Editor, scrittura e assistenza
+
+*Microfeature essenziali: [editor-di-testo.md](../microfeatures/editor-di-testo.md) e [block-editor-parita.md](../microfeatures/block-editor-parita.md).*
+
+## 4.1 Modalità editor
+
+- [ ] Source mode
+- [ ] Live Preview
+- [ ] Reading mode
+- [ ] WYSIWYG opzionale
+- [ ] Block editor opzionale
+- [ ] Focus mode
+- [ ] Typewriter mode
+- [ ] Zen mode
+- [ ] Presentation mode
+- [ ] Split verticale
+- [ ] Split orizzontale
+- [ ] Editor a schede
+- [ ] Schede fissate
+- [ ] Schede raggruppate
+- [ ] Editor pop-out
+- [ ] Finestre multiple
+- [ ] Cambio modalità per nota
+- [ ] Cambio modalità globale
+- [ ] Fullscreen
+- [ ] Distraction-free mode
+- [ ] Reading mode immersivo
+- [ ] Scroll sync editor/preview
+- [ ] Jump to last edit position
+- [ ] Note history per pane
+
+## 4.2 Editing testo
+
+- [ ] Syntax highlighting Markdown
+- [ ] Autocompletamento link
+- [ ] Autocompletamento tag
+- [ ] Autocompletamento proprietà
+- [ ] Autocompletamento emoji
+- [ ] Autocompletamento snippet
+- [ ] Autocompletamento blocchi
+- [ ] Slash commands
+- [ ] Multi-cursore
+- [ ] Selezione multipla
+- [ ] Selezione rettangolare opzionale
+- [ ] Trova/sostituisci
+- [ ] Trova/sostituisci regex
+- [ ] Sostituzione in file corrente
+- [ ] Sostituzione in più file
+- [ ] Preview sostituzione multipla
+- [ ] Undo/redo illimitato
+- [ ] Cronologia undo per sessione
+- [ ] Copia/incolla ricco
+- [ ] Incolla HTML convertito in Markdown
+- [ ] Incolla immagini dagli appunti
+- [ ] Drag & drop immagini
+- [ ] Drag & drop file
+- [ ] Drag & drop blocchi
+- [ ] Riordino paragrafi
+- [ ] Indentazione intelligente
+- [ ] Continuazione automatica liste
+- [ ] Continuazione automatica task list
+- [ ] Continuazione automatica blockquote
+- [ ] Formattazione tabella assistita
+- [ ] Folding heading
+- [ ] Folding blocchi
+- [ ] Folding codice
+- [ ] Folding liste
+- [ ] Numeri riga opzionali
+- [ ] Guide indentazione
+- [ ] Evidenziazione riga attiva
+- [ ] Parentesi corrispondenti
+- [ ] Selezione parola
+- [ ] Selezione blocco
+- [ ] Selezione paragrafo
+- [ ] Scorciatoie personalizzabili
+- [ ] Hotkey chords
+- [ ] Mouse gestures opzionali
+- [ ] Touch gestures
+- [ ] Supporto trackpad
+- [ ] Autoclose parentesi, virgolette e backtick
+- [ ] Toggle maiuscole/minuscole
+- [ ] Seleziona riga corrente (Ctrl+L)
+- [ ] Promuovi/abbassa livello heading
+- [ ] Copia come testo semplice
+
+## 4.3 Assistenza alla scrittura
+
+- [ ] Controllo ortografico
+- [ ] Dizionari multipli
+- [ ] Dizionari personalizzati
+- [ ] Grammar checking opzionale
+- [ ] Suggerimenti stile
+- [ ] Linting Markdown
+- [ ] Formattazione automatica
+- [ ] Format on save
+- [ ] Smart punctuation
+- [ ] Conversione apici/pedici
+- [ ] Conversione trattini/en-dash
+- [ ] Conteggio parole
+- [ ] Conteggio caratteri
+- [ ] Tempo di lettura
+- [ ] Statistiche testo
+- [ ] Leggibilità
+- [ ] Modalità revisione
+- [ ] Commenti inline
+- [ ] Highlight annotabili
+- [ ] Note a margine
+- [ ] Suggerimenti link interni
+- [ ] Suggerimenti note correlate
+- [ ] Completamento AI opzionale
+- [ ] Riscrittura AI opzionale
+- [ ] Traduzione AI opzionale
+- [ ] Riassunto AI opzionale
+- [ ] Modalità senza distrazioni
+- [ ] Obiettivi di scrittura
+- [ ] Timer scrittura
+- [ ] Promemoria pause
+- [ ] Salvataggio automatico
+- [ ] Readability score
+- [ ] Style guide
+- [ ] Terminology consistency
+- [ ] Dialogue formatting
+- [ ] Footnotes narrative
+- [ ] Autocorrezione ortografica
+- [ ] Correzione automatica maiuscole
+- [ ] Completamento parole dal dizionario locale
+
+## 4.4 Scrittura estesa / manuscript
+
+- [ ] Word count goals
+- [ ] Session goals
+- [ ] Daily goals
+- [ ] Writing streaks
+- [ ] Writing statistics
+- [ ] Typewriter scroll
+- [ ] Manuscript compile
+- [ ] Scenes
+- [ ] Chapters
+- [ ] Acts
+- [ ] Character sheets
+- [ ] Worldbuilding notes
+- [ ] Timeline narrativa
+- [ ] Corkboard
+- [ ] Index cards
+- [ ] Outline mode
+- [ ] Name generator opzionale
+- [ ] Export manuscript
+- [ ] Export novel
+- [ ] Export screenplay opzionale
+- [ ] Export ebook
+- [ ] Print layout

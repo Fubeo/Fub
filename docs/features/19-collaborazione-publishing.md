@@ -1,0 +1,161 @@
+# 19. Collaborazione, team docs e publishing
+
+## 19.1 Condivisione
+
+- [ ] Condivisione nota via file
+- [ ] Condivisione cartella via file
+- [ ] Condivisione vault via file
+- [ ] Export per email
+- [ ] Link di condivisione opzionale
+- [ ] Link read-only
+- [ ] Link editabile opzionale
+- [ ] Password protezione link
+- [ ] Scadenza link
+- [ ] Revoca link
+- [ ] Condivisione LAN
+- [ ] Condivisione P2P opzionale
+- [ ] Condivisione self-hosted
+- [ ] Condivisione senza cloud proprietario
+- [ ] Permessi granulari
+- [ ] Ruoli utente
+- [ ] Lettore
+- [ ] Commentatore
+- [ ] Editor
+- [ ] Admin
+
+## 19.2 Collaborazione
+
+- [ ] Commenti
+- [ ] Commenti inline
+- [ ] Commenti risolti
+- [ ] Mention utenti
+- [ ] Suggestions mode
+- [ ] Track changes
+- [ ] Review mode
+- [ ] Presenza utenti opzionale
+- [ ] Real-time editing opzionale
+- [ ] CRDT sync opzionale
+- [ ] Merge automatico
+- [ ] Conflitti visivi
+- [ ] Cronologia collaborativa
+- [ ] Audit log
+- [ ] Notifiche collaborazione
+- [ ] Shared vault
+- [ ] Vault team
+- [ ] Permessi per cartella
+- [ ] Permessi per nota
+- [ ] Offline collaboration recovery
+- [ ] Approval workflow
+- [ ] Real-time cursors
+- [ ] Guest links
+- [ ] Shared templates
+- [ ] Team workspace
+- [ ] Admin dashboard
+- [ ] Shared inbox
+- [ ] Shared tasks
+- [ ] Shared databases
+- [ ] Shared canvas
+- [ ] Shared dashboards
+- [ ] Shared forms
+- [ ] Shared publishing
+- [ ] Shared sync server
+- [ ] Self-hosted collaboration
+- [ ] P2P collaboration
+- [ ] Conflict annotations
+- [ ] Review history
+- [ ] Ownership transfer
+
+## 19.3 Team docs / operations
+
+- [ ] SOP templates
+- [ ] Runbooks
+- [ ] Policies
+- [ ] Ownership
+- [ ] Review dates
+- [ ] Approval workflow
+- [ ] Style guide
+- [ ] Linting
+- [ ] Vale rules
+- [ ] Terminology glossary
+- [ ] Internal docs search
+- [ ] Onboarding checklists
+- [ ] Incident postmortems
+- [ ] ADRs
+- [ ] Decision logs
+- [ ] RACI
+- [ ] Org chart notes
+- [ ] Meeting cadence
+- [ ] OKRs
+- [ ] KPIs
+- [ ] Project dashboards
+- [ ] Team dashboards
+- [ ] Shared glossaries
+- [ ] Shared templates
+- [ ] Shared snippets
+- [ ] Shared forms
+- [ ] Shared databases
+- [ ] Shared publishing
+- [ ] Permissions
+- [ ] Audit logs
+
+## 19.4 Publishing
+
+- [ ] Pubblicazione note selezionate
+- [ ] Pubblicazione cartelle
+- [ ] Pubblicazione vault
+- [ ] Sito statico generato localmente
+- [ ] Hosting self-hosted
+- [ ] Hosting statico compatibile
+- [ ] Deploy manuale
+- [ ] Deploy automatico opzionale
+- [ ] Custom domain
+- [ ] HTTPS
+- [ ] Tema pubblicazione
+- [ ] CSS personalizzato
+- [ ] JS personalizzato opzionale
+- [ ] Navbar personalizzata
+- [ ] Sidebar personalizzata
+- [ ] Footer personalizzato
+- [ ] Homepage personalizzata
+- [ ] Blog mode
+- [ ] Docs mode
+- [ ] Wiki mode
+- [ ] Ricerca nel sito
+- [ ] Indice automatico
+- [ ] Breadcrumb
+- [ ] SEO metadata
+- [ ] Open Graph
+- [ ] Sitemap
+- [ ] RSS feed
+- [ ] Atom feed
+- [ ] Commenti opzionali
+- [ ] Analytics privacy-friendly
+- [ ] Nessun tracking invasivo
+- [ ] Password protezione sito
+- [ ] Accesso a pagamento opzionale
+- [ ] Accesso gratuito
+- [ ] Bozze non pubblicate
+- [ ] Pubblicazione programmata
+- [ ] Revisioni pubblicate
+- [ ] Redirect
+- [ ] Slug personalizzati
+- [ ] i18n publishing
+- [ ] Versioned docs
+- [ ] Multi-version publishing
+- [ ] Changelog publishing
+- [ ] Feedback widget
+- [ ] Comments moderation
+- [ ] Privacy-friendly analytics
+- [ ] Search index publishing
+- [ ] Custom components
+- [ ] MDX/interactive components opzionali
+- [ ] Code playground
+- [ ] Embed sicuri
+- [ ] Membership opzionale
+- [ ] Newsletters
+- [ ] Static export
+- [ ] Draft/preview mode
+- [ ] Publishing audit log
+- [ ] Publishing permissions
+- [ ] Publishing templates
+- [ ] Publishing themes

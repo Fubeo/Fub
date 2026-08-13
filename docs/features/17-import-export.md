@@ -1,0 +1,148 @@
+# 17. Import, export, migration e interoperabilità
+
+## 17.1 Import
+
+- [ ] Import Markdown
+- [ ] Import cartella Markdown
+- [ ] Import ZIP
+- [ ] Import Obsidian vault
+- [ ] Import Notion export
+- [ ] Import Evernote export
+- [ ] Import OneNote export
+- [ ] Import OneNote con l'inchiostro, non solo il testo
+- [ ] Import GoodNotes/Notability opzionale
+- [ ] Import Joplin export
+- [ ] Import Bear export
+- [ ] Import Roam export
+- [ ] Import Logseq export
+- [ ] Import HTML
+- [ ] Import EPUB
+- [ ] Import DOCX
+- [ ] Import ODT
+- [ ] Import PDF come allegato
+- [ ] Import PDF con estrazione testo opzionale
+- [ ] Import CSV
+- [ ] Import JSON
+- [ ] Import OPML
+- [ ] Import org-mode
+- [ ] Import reStructuredText
+- [ ] Import LaTeX opzionale
+- [ ] Import BibTeX
+- [ ] Import RSS/Atom opzionale
+- [ ] Import da URL
+- [ ] Import da clipboard
+- [ ] Import immagini con OCR
+- [ ] Import audio con trascrizione
+- [ ] Import video con trascrizione
+- [ ] Import da API esterne opzionale
+- [ ] Import EML
+- [ ] Import MBOX
+- [ ] Import SingleFile
+- [ ] Import Hypothesis
+- [ ] Import Readwise
+- [ ] Import Zotero
+- [ ] Import Anki .apkg
+- [ ] Import GPX
+- [ ] Import GeoJSON
+- [ ] Import KML
+- [ ] Import vCard
+- [ ] Import iCal
+- [ ] Import RIS
+- [ ] Import CSL JSON
+- [ ] Import XML
+- [ ] Import YAML
+- [ ] Import TOML
+- [ ] Import file singolo
+- [ ] Import di più file contemporaneamente
+- [ ] Import di una cartella
+- [ ] Drag & drop di file nel vault
+- [ ] Scelta della cartella di destinazione all'import
+- [ ] Mantieni la struttura delle sottocartelle all'import
+- [ ] Rilevamento dei file duplicati all'import
+- [ ] Anteprima dei file prima dell'import
+- [ ] Riepilogo dei file importati
+- [ ] Import testo semplice (.txt)
+
+## 17.2 Export
+
+- [ ] Export Markdown
+- [ ] Export vault completo
+- [ ] Export ZIP
+- [ ] Export HTML
+- [ ] Export PDF
+- [ ] Export DOCX
+- [ ] Export ODT
+- [ ] Export EPUB
+- [ ] Export LaTeX
+- [ ] Export CSV
+- [ ] Export JSON
+- [ ] Export OPML
+- [ ] Export PNG
+- [ ] Export SVG
+- [ ] Export canvas
+- [ ] Export database
+- [ ] Export query results
+- [ ] Export note selezionate
+- [ ] Export cartella
+- [ ] Export con allegati
+- [ ] Export senza allegati
+- [ ] Export con metadati
+- [ ] Export senza metadati
+- [ ] Export per pubblicazione
+- [ ] Export static site
+- [ ] Export Pandoc
+- [ ] Export print-friendly
+- [ ] Export note versionate
+- [ ] Export backup completo
+- [ ] Export portable vault
+- [ ] Export Typst
+- [ ] Export AsciiDoc
+- [ ] Export TEI opzionale
+- [ ] Export JATS opzionale
+- [ ] Export GeoJSON
+- [ ] Export GPX
+- [ ] Export KML
+- [ ] Export vCard
+- [ ] Export iCal
+- [ ] Export RIS
+- [ ] Export CSL JSON
+- [ ] Export XML
+- [ ] Export YAML
+- [ ] Export TOML
+- [ ] Export di una singola nota
+- [ ] Export di una selezione di testo
+- [ ] Export testo semplice (.txt)
+- [ ] Scelta della cartella di destinazione all'export
+- [ ] Riepilogo dei file esportati
+- [ ] Export dei file in una sola volta
+
+## 17.3 Migration assistant
+
+- [ ] Pre-migration report
+- [ ] Link conversion
+- [ ] Attachment mapping
+- [ ] Frontmatter mapping
+- [ ] Tag normalization
+- [ ] Duplicate handling
+- [ ] Rollback
+- [ ] Migration logs
+- [ ] Migration profiles
+- [ ] Migration preview
+- [ ] Migration validation
+- [ ] Migration retry
+- [ ] Migration resume
+- [ ] Migration audit
+- [ ] Migration templates
+- [ ] Migration da Obsidian
+- [ ] Migration da Notion
+- [ ] Migration da Evernote
+- [ ] Migration da Joplin
+- [ ] Migration da Bear
+- [ ] Migration da Roam
+- [ ] Migration da Logseq
+- [ ] Migration da HTML
+- [ ] Migration da DOCX
+- [ ] Migration da EPUB
+- [ ] Migration da PDF
+- [ ] Scelta della cartella di destinazione della migrazione
+- [ ] Messaggio di conferma al termine della migrazione
