@@ -20,7 +20,7 @@
 - [ ] Export verso Zotero
 - [ ] Collegamento PDF a riferimento
 - [ ] Annotazioni PDF collegate a reference
-- [ ] Letterature review matrix
+- [ ] Literature review matrix
 - [ ] Gestione fonti
 - [ ] DOI resolver
 - [ ] ISBN metadata fetch opzionale

@@ -57,7 +57,6 @@
 - [ ] Proprietà email
 - [ ] Proprietà file
 - [ ] Proprietà immagine
-- [ ] Proprietà calcolo
 - [ ] Proprietà rollup
 - [ ] Proprietà relazione
 - [ ] Proprietà formula
@@ -96,7 +95,6 @@
 - [ ] Regole auto-spostamento
 - [ ] Regole auto-tag
 - [ ] Smart folder
-- [ ] Saved search
 - [ ] Viste salvate
 - [ ] Dashboard personalizzate
 - [ ] Note giornaliere
@@ -169,7 +167,6 @@
 - [ ] Event entities
 - [ ] Concept entities
 - [ ] Work entities
-- [ ] Entity graph
 - [ ] Taxonomy browser
 - [ ] Ontology editor
 - [ ] Vocabulary import

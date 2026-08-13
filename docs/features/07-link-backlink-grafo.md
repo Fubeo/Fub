@@ -150,6 +150,7 @@
 - [ ] Shortest path
 - [ ] Semantic graph
 - [ ] Concept graph
+- [ ] Entity graph
 - [ ] Timeline graph
 - [ ] Graph annotations
 - [ ] Rotellina per zoomare il grafo

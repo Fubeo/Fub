@@ -91,7 +91,6 @@
 - [ ] Repair wizard
 - [ ] Checksum verification
 - [ ] Backup verification
-- [ ] Sync logs
 - [ ] Plugin logs
 - [ ] Error reporting opt-in
 - [ ] Crash reports opt-in

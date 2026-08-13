@@ -36,7 +36,6 @@
 - [ ] Audit log
 - [ ] Session timeout
 - [ ] Hardware key support
-- [ ] Key rotation
 - [ ] CSP
 - [ ] Sandbox
 - [ ] Network permissions
