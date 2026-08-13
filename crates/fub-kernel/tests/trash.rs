@@ -35,6 +35,20 @@ struct SupportoCheRifiuta {
     inner: FsStorage,
     /// Le `remove` di un path che contiene questo pezzo falliscono.
     rifiuta_remove_in: &'static str,
+    /// Alla prossima mossa un concorrente posa la destinazione dopo la guardia.
+    occupa_destinazione: std::sync::atomic::AtomicBool,
+}
+
+impl SupportoCheRifiuta {
+    fn occupa_se_richiesto(&self, to: &Utf8Path) -> std::io::Result<()> {
+        if self
+            .occupa_destinazione
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.inner.write(to, b"concorrente")?;
+        }
+        Ok(())
+    }
 }
 
 impl VaultStorage for SupportoCheRifiuta {
@@ -55,7 +69,12 @@ impl VaultStorage for SupportoCheRifiuta {
         self.inner.append(path, bytes)
     }
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.occupa_se_richiesto(to)?;
         self.inner.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.occupa_se_richiesto(to)?;
+        self.inner.rename_no_replace(from, to)
     }
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
         if path.as_str().contains(self.rifiuta_remove_in) {
@@ -102,6 +121,9 @@ impl VaultStorage for SupportoCheCestinaNelMezzo {
     }
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
         self.inner.rename(from, to)
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
     }
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
         if !self
@@ -767,6 +789,34 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
     assert_eq!(fx.read(tornata.as_str()), "la vecchia");
 }
 
+/// Una guardia applicativa non protegge ciò che arriva mentre il ripristino
+/// legge e parsa la voce. Il supporto posa un concorrente al momento esatto
+/// della mossa: deve restare intatto, e la voce deve restare nel cestino.
+#[test]
+fn chi_occupa_la_destinazione_dopo_la_guardia_non_viene_seppellito() {
+    let fx = Fixture::new();
+    fx.put("Idea.txt", "la nota cestinata");
+    let supporto = Arc::new(SupportoCheRifiuta {
+        inner: FsStorage,
+        rifiuta_remove_in: "mai",
+        occupa_destinazione: std::sync::atomic::AtomicBool::new(false),
+    });
+    let mut ws = fx.workspace_su(supporto.clone());
+    let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
+    supporto
+        .occupa_destinazione
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+
+    let esito = ws.restore_from_trash(&trashed, None);
+
+    assert!(
+        matches!(esito, Err(KernelError::AlreadyExists(_))),
+        "la collisione tardiva deve risalire come tale: {esito:?}"
+    );
+    assert_eq!(fx.read("Idea.txt"), "concorrente");
+    assert_eq!(fx.read(trashed.as_str()), "la nota cestinata");
+}
+
 /// 0058 — il ripristino è **una mossa sola**, e non c'è un istante in cui la
 /// nota sta in due posti.
 ///
@@ -782,6 +832,7 @@ fn a_restore_the_disk_interrupts_leaves_one_copy_not_two() {
     let mut ws = fx.workspace_su(Arc::new(SupportoCheRifiuta {
         inner: FsStorage,
         rifiuta_remove_in: "/.trash/",
+        occupa_destinazione: std::sync::atomic::AtomicBool::new(false),
     }));
 
     let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();

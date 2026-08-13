@@ -429,6 +429,9 @@ mod tests {
         fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
             self.0.rename(from, to)
         }
+        fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+            self.0.rename_no_replace(from, to)
+        }
         fn remove(&self, _path: &Utf8Path) -> io::Result<()> {
             Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
