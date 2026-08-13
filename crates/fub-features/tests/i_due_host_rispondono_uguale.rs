@@ -387,11 +387,7 @@ fn le_scritture_lasciano_lo_stesso_vault_di_qua_e_di_la() {
         ));
         diario.push((
             "discendere da ciò che non c'è".into(),
-            faccia(&host.write_document(
-                &DocId::new("Mai.md"),
-                "x",
-                WriteBase::DescendsFrom(resa),
-            )),
+            faccia(&host.write_document(&DocId::new("Mai.md"), "x", WriteBase::DescendsFrom(resa))),
         ));
         diario.push((
             "dettare ciò che non c'è lo crea".into(),
@@ -431,7 +427,13 @@ fn le_scritture_lasciano_lo_stesso_vault_di_qua_e_di_la() {
                 &id,
                 EditRequest::new(
                     base.clone(),
-                    vec![TextEdit::replace(Span { start: 900, end: 901 }, "X")],
+                    vec![TextEdit::replace(
+                        Span {
+                            start: 900,
+                            end: 901,
+                        },
+                        "X",
+                    )],
                 ),
             )),
         ));
@@ -533,7 +535,9 @@ fn le_scritture_lasciano_lo_stesso_vault_di_qua_e_di_la() {
             .expect("si cestina");
         diario.push((
             "svuotare il cestino conta".into(),
-            host.empty_trash().map(|n| n.to_string()).unwrap_or_default(),
+            host.empty_trash()
+                .map(|n| n.to_string())
+                .unwrap_or_default(),
         ));
         diario.push((
             "e il cestino resta vuoto".into(),
@@ -541,7 +545,9 @@ fn le_scritture_lasciano_lo_stesso_vault_di_qua_e_di_la() {
         ));
         diario.push((
             "svuotarlo di nuovo non distrugge niente".into(),
-            host.empty_trash().map(|n| n.to_string()).unwrap_or_default(),
+            host.empty_trash()
+                .map(|n| n.to_string())
+                .unwrap_or_default(),
         ));
 
         diario.push((

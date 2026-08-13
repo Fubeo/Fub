@@ -207,7 +207,7 @@ registrato adesso, e un file diventa una nota il giorno in cui qualcuno sa
 parsarlo.
 
 ### esclusione
-`IgnorePolicy` · [`kernel/ignore.rs:262`](../crates/fub-kernel/src/ignore.rs) · [0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
+`IgnorePolicy` · [`kernel/ignore.rs:263`](../crates/fub-kernel/src/ignore.rs) · [0110](decisions/0110-la-struttura-non-e-una-preferenza.md)
 
 Cosa di una cartella **non** fa parte del vault, e sono **due** cose che non si
 somigliano:

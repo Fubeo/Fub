@@ -740,7 +740,10 @@ impl Shared {
         // ordine inverso sveglierebbe chi spegne con una copia ancora in giro,
         // che è il difetto scritto al contrario.
         let Some(_dentro) = self.entra(&job.plugin, job.id, &flag) else {
-            return Err(rifiuto(job, "non parte: il suo componente si sta spegnendo"));
+            return Err(rifiuto(
+                job,
+                "non parte: il suo componente si sta spegnendo",
+            ));
         };
         // Il corpo lo tiene il registry, e lo si prende **senza tenere il suo
         // lock** per la durata del job: chi chiude deve poterci passare.
@@ -1493,7 +1496,10 @@ mod tests {
 
         let esito = shared.lotto(vec![un_job(1), un_job(2), un_job(3)]);
 
-        assert!(esito.is_err(), "il guasto che ferma il pool resta un guasto");
+        assert!(
+            esito.is_err(),
+            "il guasto che ferma il pool resta un guasto"
+        );
         assert_eq!(
             conclusi(&ascolto),
             vec![

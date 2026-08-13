@@ -433,7 +433,10 @@ impl Sink for FileSink {
         // **Il file può non essere più lì**: vedi la testa del tipo. Si guarda
         // prima di ogni riga, denuncia compresa, perché una denuncia scritta in
         // un descrittore che non ha più un nome è persa come tutte le altre.
-        if state.as_ref().is_some_and(|open| !e_ancora_lui(&self.path, open)) {
+        if state
+            .as_ref()
+            .is_some_and(|open| !e_ancora_lui(&self.path, open))
+        {
             // Se non si riapre **si tiene il descrittore che c'è** e si riprova
             // alla riga dopo: buttarlo sarebbe spegnere il canale per sempre
             // per un guasto che può durare un istante, ed è il pozzo che

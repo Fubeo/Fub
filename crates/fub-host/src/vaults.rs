@@ -590,9 +590,8 @@ mod tests {
         let (prima, _) = VaultRegistry::open(&path);
         let (seconda, _) = VaultRegistry::open(&path);
 
-        let visto = |tasto: &str, comando: &str| {
-            BTreeMap::from([(tasto.to_string(), comando.to_string())])
-        };
+        let visto =
+            |tasto: &str, comando: &str| BTreeMap::from([(tasto.to_string(), comando.to_string())]);
         prima
             .note_keys_seen(Utf8Path::new("/diario"), visto("mod+k", "vault.cerca"))
             .unwrap();

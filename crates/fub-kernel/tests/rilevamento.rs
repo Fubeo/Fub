@@ -15,10 +15,10 @@
 
 use camino::Utf8PathBuf;
 use fub_abi::error::FormatError;
+use fub_abi::event::{Event, Severity};
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
-use fub_abi::event::{Event, Severity};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{IndexQuery, IndexResult, VaultStatus};
 use fub_abi::FormatProvider;

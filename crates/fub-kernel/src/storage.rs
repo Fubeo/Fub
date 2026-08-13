@@ -449,7 +449,9 @@ static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 /// [`e_temporaneo_di_scrittura`] qui accanto.
 fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
-    dir.join(nome_del_temporaneo(path.file_name().unwrap_or("senza-nome")))
+    dir.join(nome_del_temporaneo(
+        path.file_name().unwrap_or("senza-nome"),
+    ))
 }
 
 /// Il **nome** del temporaneo di `name`, senza la cartella in cui va.
@@ -757,11 +759,7 @@ impl FsStorage {
     /// Il giro `read` → `fondi` di [`VaultStorage::update`], **senza** il
     /// lucchetto: chi chiama decide se tenerlo, perché è la sola cosa che
     /// distingue i due passaggi di [`FsStorage::update`].
-    fn rileggi_e_fondi(
-        &self,
-        path: &Utf8Path,
-        fondi: Fusione<'_>,
-    ) -> io::Result<Option<Vec<u8>>> {
+    fn rileggi_e_fondi(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<Option<Vec<u8>>> {
         let attuale = match self.read(path) {
             Ok(bytes) => Some(bytes),
             Err(e) if e.kind() == io::ErrorKind::NotFound => None,
