@@ -9,6 +9,7 @@
 // `ui/notify.ts`.
 
 import { isErrorKind } from "../host/errors";
+import type { Origin } from "../host/contract";
 
 /// L'esito dell'ultima scrittura di un buffer.
 ///
@@ -126,17 +127,38 @@ export type CambioSotto = "muto" | "eco" | "altra_app" | "riscrittura";
 /// primo evento non-watcher su quel documento lo consuma» — ed era il codice a
 /// non applicarla.
 ///
-/// `daFuori` risponde **prima** del contatore e non lo tocca mai, ed è
-/// l'invariante che resta intero: un watcher non è mai un eco nostro, quindi il
-/// caso grave — il lavoro di un'altra applicazione che stiamo per coprire — non
-/// si può zittire, e un evento non nostro non può consumare l'attesa di una
-/// nostra scrittura.
+/// `origine` risponde **prima** del contatore e non lo tocca mai, ed è
+/// l'invariante che resta intero: un evento che non ha l'identità del nostro
+/// eco non può consumare l'attesa di una nostra scrittura — né la watcher (il
+/// caso grave, il lavoro di un'altra applicazione che stiamo per coprire, che
+/// non si può zittire), né un comando dell'utente in lotto, né il kernel o un
+/// plugin.
+///
+/// **L'identità dell'eco** è l'origine di una scrittura diretta del ponte:
+/// attore `user` **fuori da un lotto** (`batch: null`). È così che viaggia
+/// `writeDocument`, ed è la sola origine che una nostra scrittura può avere —
+/// e l'unica che l'eco consuma. Un comando che l'utente lancia (rinomina,
+/// annulla, ripristino) riscrive dentro un lotto e arriva con lo stesso attore
+/// ma `batch` pieno: un cambio vero, non l'eco. Il kernel e i plugin riscrivono
+/// col loro attore, dentro o fuori da un lotto. Prima l'identità era «tutto ciò
+/// che non è watcher», e un evento diverso dall'eco in volo mentre la nostra
+/// scrittura era in corso veniva consumato come l'eco: l'avviso che doveva
+/// comparire non compariva, e alla scrittura fallita il conto scendeva sotto
+/// zero — la scrittura successiva veniva scambiata per un cambio vero (difetto
+/// 0010).
 export function consumaCambioSotto(
   buf: { dirty: boolean; echi: number } | undefined,
-  daFuori: boolean,
+  origine: Origin,
 ): CambioSotto {
   if (!buf) return "muto";
-  if (daFuori) return buf.dirty ? "altra_app" : "muto";
+  if (origine.actor.kind === "watcher") return buf.dirty ? "altra_app" : "muto";
+  // L'eco di una scrittura della shell arriva da attore `user` fuori da un
+  // lotto. Ogni altra origine — kernel, plugin, comando dell'utente in lotto —
+  // è un cambio vero: non consuma l'attesa (che aspetta il nostro evento) e a
+  // buffer sporco si dice.
+  if (origine.actor.kind !== "user" || origine.batch !== null) {
+    return buf.dirty ? "riscrittura" : "muto";
+  }
   const nostro = buf.echi > 0;
   if (nostro) buf.echi -= 1;
   if (!buf.dirty) return "muto";
@@ -157,9 +179,9 @@ export function consumaCambioSotto(
 /// E la scrittura che fallisce toglie il suo: se il kernel ha rifiutato — disco
 /// pieno, conflitto — non ha scritto niente, quindi nessun evento arriverà mai
 /// a consumare quell'eco. Lasciarlo appeso è il difetto **simmetrico e
-/// peggiore**: il prossimo cambio vero, quello di un kernel o di un plugin,
-/// verrebbe scambiato per l'eco di una scrittura che non c'è stata, e l'avviso
-/// che doveva comparire non comparirebbe.
+/// peggiore**: il prossimo cambio vero verrebbe scambiato per l'eco di una
+/// scrittura che non c'è stata, e l'avviso che doveva comparire non
+/// comparirebbe.
 ///
 /// Le due metà stanno qui, in un `try/catch` solo, invece che nei rami di chi
 /// salva: i rami di fallimento di `saveDoc` sono due oggi e chi ne aggiungesse
