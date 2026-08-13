@@ -770,7 +770,7 @@ fn convert_inlines<'a>(
                     }
                     continue;
                 };
-                push_text_features(source, slice, span.start, text_base, ctx, acc, &mut out);
+                push_text_features(source, slice, &s, span.start, text_base, ctx, acc, &mut out);
             }
             NodeValue::SoftBreak => {
                 // Un a-capo morbido: la riga continua, e nella resa è uno
@@ -988,6 +988,7 @@ fn convert_inlines<'a>(
 fn push_text_features(
     source: &str,
     slice: &str,
+    decoded: &str,
     base: usize,
     text_base: usize,
     ctx: &ParseContext,
@@ -1000,7 +1001,18 @@ fn push_text_features(
         Vec::new()
     };
     if embeds.is_empty() {
-        push_plain_or_tags(source, slice, base, ctx, acc, out);
+        // `sourcepos` di comrak può troncare la fetta su costrutti che ha già
+        // decodificato: in una cella `a \| b`, per esempio, la fine inclusiva
+        // conta i byte del testo `a | b` e la fetta sorgente termina prima di
+        // `b`. Senza feature da localizzare, il testo del parser è l'unica
+        // proiezione completa e ha già sciolto escape ed entità correttamente.
+        let slice_completo =
+            slice == decoded || decodifica_segmento(source, slice, base) == decoded;
+        if slice_completo {
+            push_plain_or_tags(source, slice, base, ctx, acc, out);
+        } else if !decoded.is_empty() {
+            out.push(Inline::Text(decoded.to_string()));
+        }
         return;
     }
     let mut cursor = 0;
