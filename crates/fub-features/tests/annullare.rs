@@ -331,9 +331,20 @@ fn chi_ha_scritto_nel_frattempo_non_si_vede_cancellare_il_lavoro() {
         "il cane dorme e russa\n",
         "il lavoro di chi ha scritto dopo è stato cancellato"
     );
-    // E la voce è **consumata**: riproporla vorrebbe dire riproporre di
-    // cancellare quel lavoro.
-    assert_eq!(annulla(&mut ws), "Niente da annullare");
+    // Niente è cambiato: il conflitto può essere transitorio, quindi una seconda
+    // pressione deve riprovare la stessa voce invece di dichiarare la pila vuota.
+    let e = ws
+        .invoke_command(
+            VAULT_UNDO,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect_err("la voce senza effetti deve restare annullabile");
+    assert!(
+        matches!(e, PluginError::Conflict(_)),
+        "il retry deve incontrare ancora il conflitto, arrivato {e:?}"
+    );
 }
 
 #[test]
