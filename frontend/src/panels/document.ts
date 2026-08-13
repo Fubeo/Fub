@@ -43,7 +43,7 @@ import { Coda } from "../ui/corsa";
 import type { Tema } from "../theme/theme";
 import { api } from "../host/ipc";
 import { SENZA_FINESTRA, noteDalNome, riferimentoRisolto, tagDelVault } from "../host/query";
-import type { PaneMode, SelectionSet, ViewContext, WriteBase } from "../host/contract";
+import type { Origin, PaneMode, SelectionSet, ViewContext, WriteBase } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { noteRecentiEsistenti } from "../state/recenti";
 import { emit, on, state } from "../state/store";
@@ -152,15 +152,18 @@ interface Buffer {
   /// Quanti `document_changed` **nostri** stiamo ancora aspettando.
   ///
   /// Ogni scrittura che va a buon fine torna indietro come evento: il documento
-  /// è cambiato su disco, ed è cambiato perché l'abbiamo cambiato noi. Il kernel
-  /// non ci dà modo di riconoscerlo — l'evento non porta una revisione, e
-  /// l'origine di una scrittura della shell è `user`, la stessa di un comando
-  /// che l'utente lancia — quindi lo si riconosce contando: una scrittura mette
-  /// un eco in attesa **prima di partire**, e il primo evento non-watcher su
-  /// quel documento lo consuma — **anche se non c'è niente da dire**, che è la
-  /// parte che per un po' questa riga ha promesso e il codice non ha fatto.
-  /// Prima di partire perché l'evento nasce dentro la scrittura e può arrivare
-  /// mentre la si aspetta.
+  /// è cambiato su disco, ed è cambiato perché l'abbiamo cambiato noi. L'evento
+  /// non porta una revisione, ma porta l'**origine** (decisione 0012), e l'eco
+  /// si appaia a quella: una scrittura della shell viaggia da attore `user`
+  /// **fuori da un lotto**, ed è l'unica origine che `consumaCambioSotto`
+  /// consuma. Prima l'identità era «il primo evento non-watcher su quel
+  /// documento», ed era troppo larga: un comando che l'utente lancia — una
+  /// rinomina, un annulla — riscrive dentro un lotto con lo stesso attore
+  /// `user`, e il `batch` è ciò che la distingue da una nostra scrittura. Una
+  /// scrittura mette un eco in attesa **prima di partire** — **anche se non
+  /// c'è niente da dire**, che è la parte che per un po' questa riga ha
+  /// promesso e il codice non ha fatto. Prima di partire perché l'evento nasce
+  /// dentro la scrittura e può arrivare mentre la si aspetta.
   ///
   /// Le due metà del conto stanno tutte e due in `state/salvataggio.ts`, e da
   /// qui non si tocca: `scriviContandoEco` lo mette e lo riprende se la
@@ -168,9 +171,10 @@ interface Buffer {
   ///
   /// Il modo in cui questo conto può sbagliare è uno solo ed è **limitato**: se
   /// un eco non arrivasse (coda troncata), il contatore resterebbe alto e si
-  /// mangerebbe un avviso vero **di origine kernel o plugin** — mai uno della
-  /// watcher, che è il caso grave, perché quello non lo consuma mai. Torna a
-  /// zero a ogni caricamento del documento.
+  /// mangerebbe un avviso vero **di origine `user` fuori da un lotto** — cioè
+  /// una scrittura diretta di un'altra finestra della shell — mai uno della
+  /// watcher o di un comando, che è il caso grave, perché quelli non li
+  /// consuma mai. Torna a zero a ogni caricamento del documento.
   echi: number;
   /// **Da cosa questo testo si è discostato** (§18.1): la revisione che il file
   /// aveva quando il buffer l'ha preso in mano, o che l'ultimo salvataggio ha
@@ -250,10 +254,10 @@ export function mountDocument(d: DocumentDeps): void {
     // `flush` che la congeda, ed è esattamente il momento in cui una scrittura
     // in volo produrrà il suo eco. Con la guardia davanti, quell'eco non veniva
     // consumato da nessuno — e il commento su `Buffer.echi` promette il
-    // contrario, «il primo evento non-watcher su quel documento lo consuma,
+    // contrario, «l'evento con l'identità di una nostra scrittura lo consuma,
     // anche se non c'è niente da dire». Un eco non consumato non si ripara più:
     // si mangia il prossimo avviso vero.
-    avvisaSeIlBufferCopre(e.id, origin.actor.kind === "watcher");
+    avvisaSeIlBufferCopre(e.id, origin);
     // Ciò che segue riguarda invece ogni riquadro che la sta mostrando, non
     // «il» riquadro — e se non ce n'è nessuno non c'è niente da rileggere né da
     // ridisegnare: la guardia sta davanti a ciò che disegna, che è ciò di cui
@@ -1447,14 +1451,14 @@ async function scriviBuffer(doc: string): Promise<void> {
 /// §20.4 l'ha portata sullo schermo tre volte di fila. Un avviso che compare
 /// quando non è successo niente non è un avviso in più: è ciò che insegna a
 /// ignorare gli altri tredici.
-function avvisaSeIlBufferCopre(id: string, daFuori: boolean): void {
+function avvisaSeIlBufferCopre(id: string, origine: Origin): void {
   const buf = buffers.get(id);
   // Il conto degli echi non si tocca da qui: `consumaCambioSotto` lo consuma
   // decidendo, perché la nascita e la morte di quell'eco sono due eventi dello
   // stesso conto e stanno da chi lo possiede. Questa funzione decide solo se e
   // come **parlare**, che è ciò che sa fare — e ciò che il modulo dello stato,
   // che non ha un DOM, non saprebbe.
-  switch (consumaCambioSotto(buf, daFuori)) {
+  switch (consumaCambioSotto(buf, origine)) {
     case "muto":
       return;
     case "eco":

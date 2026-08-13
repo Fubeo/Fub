@@ -1,13 +1,13 @@
 // Il presidio di **un ordine**, dentro l'ascoltatore di `document_changed`.
 //
 // Il conto degli echi (`state/salvataggio.ts`) ha due metà: una scrittura ne
-// mette uno prima di partire, e il primo `document_changed` non-watcher su quel
-// documento lo consuma — «anche se non c'è niente da dire», che è la frase
-// scritta sul campo `Buffer.echi`. Un eco che nessuno consuma **non si ripara
-// più**: resta appeso, e il prossimo cambio vero — una riscrittura del kernel o
-// di un plugin sotto le dita dell'utente — viene scambiato per il nostro. Cioè
-// l'avviso che doveva comparire non compare, ed è il difetto che
-// `consumaCambioSotto` esiste per non avere.
+// mette uno prima di partire, e l'evento con l'identità di una nostra
+// scrittura — attore `user` fuori da un lotto — lo consuma — «anche se non
+// c'è niente da dire», che è la frase scritta sul campo `Buffer.echi`. Un eco
+// che nessuno consuma **non si ripara più**: resta appeso, e il prossimo
+// evento con quella stessa identità — la scrittura diretta di un'altra
+// finestra — viene scambiato per il nostro. Cioè l'avviso che doveva comparire
+// non compare, ed è il difetto che `consumaCambioSotto` esiste per non avere.
 //
 // Per un po' quella promessa è stata falsa, e per un motivo che nessuna delle
 // due metà poteva vedere: nell'ascoltatore, **davanti** alla consumazione, c'era

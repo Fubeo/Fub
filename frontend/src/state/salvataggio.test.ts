@@ -10,6 +10,15 @@
 import { describe, expect, it } from "vitest";
 import { consumaCambioSotto, esitoDelFallimento, scriviContandoEco, statoDi } from "./salvataggio";
 
+// Le identità che un evento può portare (`Origin` di host/contract). Solo
+// quella di una scrittura diretta della shell — attore `user` fuori da un
+// lotto — può essere l'eco di una nostra scrittura; ogni altra origine è un
+// cambio vero, che non consuma l'attesa.
+const ecoDellaShell = { actor: { kind: "user" as const }, batch: null };
+const kernel = { actor: { kind: "kernel" as const }, batch: "12" };
+const plugin = { actor: { kind: "plugin" as const, id: "x" }, batch: "12" };
+const watcher = { actor: { kind: "watcher" as const }, batch: null };
+
 describe("lo stato del salvataggio", () => {
   it("non dice niente di un documento che non ha un buffer", () => {
     expect(statoDi(undefined)).toBeNull();
@@ -64,25 +73,25 @@ describe("lo stato del salvataggio", () => {
 
 describe("chi ha riscritto il file sotto un buffer sporco", () => {
   it("a buffer pulito non c'è niente da dire", () => {
-    expect(consumaCambioSotto({ dirty: false, echi: 0 }, false)).toBe("muto");
-    expect(consumaCambioSotto({ dirty: false, echi: 0 }, true)).toBe("muto");
-    expect(consumaCambioSotto(undefined, true)).toBe("muto");
+    expect(consumaCambioSotto({ dirty: false, echi: 0 }, ecoDellaShell)).toBe("muto");
+    expect(consumaCambioSotto({ dirty: false, echi: 0 }, watcher)).toBe("muto");
+    expect(consumaCambioSotto(undefined, watcher)).toBe("muto");
   });
 
   it("riconosce l'eco del proprio salvataggio", () => {
     // Il caso che si vedeva scrivendo: autosave, si continua a battere, il
     // buffer torna sporco, e l'evento della nostra scrittura arriva adesso.
-    expect(consumaCambioSotto({ dirty: true, echi: 1 }, false)).toBe("eco");
+    expect(consumaCambioSotto({ dirty: true, echi: 1 }, ecoDellaShell)).toBe("eco");
   });
 
   it("un'altra applicazione non è mai un eco, nemmeno con echi in attesa", () => {
     // L'invariante: se il contatore restasse alto per un evento perso, non deve
     // poter zittire il caso in cui il lavoro coperto non è nostro.
-    expect(consumaCambioSotto({ dirty: true, echi: 3 }, true)).toBe("altra_app");
+    expect(consumaCambioSotto({ dirty: true, echi: 3 }, watcher)).toBe("altra_app");
   });
 
   it("senza echi in attesa, un cambio non nostro è una riscrittura", () => {
-    expect(consumaCambioSotto({ dirty: true, echi: 0 }, false)).toBe("riscrittura");
+    expect(consumaCambioSotto({ dirty: true, echi: 0 }, kernel)).toBe("riscrittura");
   });
 });
 
@@ -92,11 +101,11 @@ describe("chi possiede il conto degli echi", () => {
   // scrive non ha modo di dimenticarsene — nessun chiamante tocca il campo.
   it("chi decide consuma: chi chiama non deve sottrarre niente", () => {
     const buf = { dirty: true, echi: 1 };
-    expect(consumaCambioSotto(buf, false)).toBe("eco");
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
     expect(buf.echi).toBe(0);
     // E la prova che serve davvero: il cambio vero che arriva subito dopo non
     // viene scambiato per il nostro.
-    expect(consumaCambioSotto(buf, false)).toBe("riscrittura");
+    expect(consumaCambioSotto(buf, kernel)).toBe("riscrittura");
   });
 
   // **Il caso che nessuna delle due metà copriva**, ed è la strada normale:
@@ -106,13 +115,13 @@ describe("chi possiede il conto degli echi", () => {
   // appeso per sempre.
   it("un eco che arriva a buffer pulito viene consumato lo stesso", () => {
     const buf = { dirty: false, echi: 1 };
-    expect(consumaCambioSotto(buf, false)).toBe("muto");
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("muto");
     expect(buf.echi).toBe(0);
     // La prova che conta: l'utente ricomincia a battere e un plugin riscrive il
     // file. Con l'eco appeso questo era `eco`, cioè silenzio — un avviso vero
     // che non compariva.
     buf.dirty = true;
-    expect(consumaCambioSotto(buf, false)).toBe("riscrittura");
+    expect(consumaCambioSotto(buf, plugin)).toBe("riscrittura");
   });
 
   it("un evento di un'altra applicazione non consuma niente", () => {
@@ -121,21 +130,72 @@ describe("chi possiede il conto degli echi", () => {
     // una «riscrittura», cioè un avviso a vuoto. E a buffer pulito il watcher
     // resta muto come prima: non c'è nessun lavoro da coprire.
     const buf = { dirty: true, echi: 1 };
-    expect(consumaCambioSotto(buf, true)).toBe("altra_app");
+    expect(consumaCambioSotto(buf, watcher)).toBe("altra_app");
     expect(buf.echi).toBe(1);
-    expect(consumaCambioSotto({ dirty: false, echi: 1 }, true)).toBe("muto");
+    expect(consumaCambioSotto({ dirty: false, echi: 1 }, watcher)).toBe("muto");
   });
 
   it("nessun eco in attesa non scende sotto zero", () => {
     const buf = { dirty: false, echi: 0 };
-    expect(consumaCambioSotto(buf, false)).toBe("muto");
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("muto");
     expect(buf.echi).toBe(0);
   });
 
   it("le due metà si chiudono a vicenda, dalla scrittura al suo evento", async () => {
     const buf = { dirty: true, echi: 0 };
     await scriviContandoEco(buf, () => Promise.resolve("rev-2"));
-    expect(consumaCambioSotto(buf, false)).toBe("eco");
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
+    expect(buf.echi).toBe(0);
+  });
+});
+
+// **Il difetto 0010** (issues.md): l'eco consumava anche riscritture vere. Il
+// conto diceva «nostro» a ogni evento non-watcher sul path, quindi una
+// riscrittura del kernel o di un plugin in volo mentre la nostra scrittura era
+// in corso veniva consumata come l'eco: l'avviso spariva, e alla scrittura
+// fallita il conto scendeva sotto zero. Il rimedio del todo.md — «appaiare
+// l'eco all'evento, non a un contatore nudo» — è qui: l'eco si consuma solo
+// con l'evento che porta l'identità di una scrittura diretta della shell.
+describe("un evento con identità diversa non è il nostro eco", () => {
+  it("una riscrittura del kernel non consuma l'eco e si dice", () => {
+    const buf = { dirty: true, echi: 1 };
+    expect(consumaCambioSotto(buf, kernel)).toBe("riscrittura");
+    expect(buf.echi).toBe(1);
+    // E l'eco vero, che arriva dopo, è ancora lì ad aspettarlo.
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
+    expect(buf.echi).toBe(0);
+  });
+
+  it("una riscrittura di un plugin non consuma l'eco", () => {
+    const buf = { dirty: true, echi: 1 };
+    expect(consumaCambioSotto(buf, plugin)).toBe("riscrittura");
+    expect(buf.echi).toBe(1);
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
+  });
+
+  it("una rinomina concorrente — comando utente in lotto — non consuma l'eco", () => {
+    // Lo stesso attore `user` di una nostra scrittura, ma dentro un lotto: è un
+    // comando che l'utente lancia (rinomina, annulla, ripristino) e che riscrive
+    // il documento. Il `batch` è ciò che lo distingue dall'eco.
+    const comando = { actor: { kind: "user" as const }, batch: "9" };
+    const buf = { dirty: true, echi: 1 };
+    expect(consumaCambioSotto(buf, comando)).toBe("riscrittura");
+    expect(buf.echi).toBe(1);
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
+  });
+
+  it("l'eco esatto — attore user fuori da un lotto — si consuma", () => {
+    const buf = { dirty: true, echi: 1 };
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
+    expect(buf.echi).toBe(0);
+  });
+
+  it("senza echi in attesa, anche l'identità della shell è un cambio vero", () => {
+    // Un evento `user` fuori da un lotto senza un'eco nostra in attesa non può
+    // essere una nostra scrittura: è un'altra finestra della shell (o un eco
+    // perso per coda troncata). Si dice, e il conto non scende sotto zero.
+    const buf = { dirty: true, echi: 0 };
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("riscrittura");
     expect(buf.echi).toBe(0);
   });
 });
@@ -178,7 +238,7 @@ describe("quando l'eco si conta", () => {
     const buf = { dirty: true, echi: 0 };
     let visto: string | undefined;
     await scriviContandoEco(buf, async () => {
-      visto = consumaCambioSotto(buf, false);
+      visto = consumaCambioSotto(buf, ecoDellaShell);
       return "rev-2";
     });
     // Contando l'eco dopo la scrittura qui si leggeva `riscrittura`, cioè «il
@@ -190,7 +250,7 @@ describe("quando l'eco si conta", () => {
     const buf = { dirty: true, echi: 0 };
     await scriviContandoEco(buf, () => Promise.resolve("rev-2"));
     expect(buf.echi).toBe(1);
-    expect(consumaCambioSotto(buf, false)).toBe("eco");
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
   });
 
   // L'altro verso, ed è il difetto simmetrico: un eco che resta appeso si
@@ -207,7 +267,7 @@ describe("quando l'eco si conta", () => {
       expect(buf.echi).toBe(0);
       // E la prova che serve davvero: il cambio vero che arriva dopo viene
       // ancora annunciato.
-      expect(consumaCambioSotto(buf, false)).toBe("riscrittura");
+      expect(consumaCambioSotto(buf, kernel)).toBe("riscrittura");
     });
   }
 
@@ -225,8 +285,8 @@ describe("quando l'eco si conta", () => {
     const buf = { dirty: true, echi: 0 };
     await scriviContandoEco(buf, () => Promise.resolve("rev-2"));
     await scriviContandoEco(buf, () => Promise.resolve("rev-3"));
-    expect(consumaCambioSotto(buf, false)).toBe("eco");
-    expect(consumaCambioSotto(buf, false)).toBe("eco");
-    expect(consumaCambioSotto(buf, false)).toBe("riscrittura");
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
+    expect(consumaCambioSotto(buf, ecoDellaShell)).toBe("eco");
+    expect(consumaCambioSotto(buf, kernel)).toBe("riscrittura");
   });
 });
