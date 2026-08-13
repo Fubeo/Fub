@@ -5310,11 +5310,14 @@ impl Workspace {
                 replay: None,
             }));
         };
-        // Niente è cambiato: è un errore come lo era prima, e chi lo invocava
-        // aspettandoselo continua a riceverlo. Il `Partial` non aggiungerebbe
-        // niente a «zero su N» che l'errore non dica già.
+        // Niente è cambiato: resta un errore, ma la voce torna in pila. Il
+        // conflitto può essere transitorio e chi riprova deve ritrovare lo stesso
+        // annullamento invece di una pila vuota. `replay` è già caduto, quindi
+        // `UndoStack::push` non scarta la voce come riproduzione ricorsiva.
         if fatti == 0 {
-            return Err(guasto.error);
+            let errore = guasto.error;
+            self.undo.push(voce.undo, voce.partial);
+            return Err(errore);
         }
         Ok(Some(Undone {
             label: voce.undo.label,
