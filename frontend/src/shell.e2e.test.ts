@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0015-la-forma-della-shell.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Dieci gesti, contati da fuori
+// # Diciannove gesti, contati da fuori
 //
-// I gesti sono **diciassette** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **diciannove** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -529,6 +529,101 @@ describe("le bozze di crash che smettono di arrivare sul disco", () => {
     ).toBe(2);
 
     riparaDisco();
+  });
+});
+
+describe("le bozze e il salvataggio vanno in fila", () => {
+  /// `writeDraft`/`dropDraft` chiamano gli IPC `save_draft`/`discard_draft`
+  /// dalla stessa `Coda` che serializza i salvataggi di quel buffer, e non per
+  /// conto loro: senza fila, un `discard_draft` può arrivare al kernel prima
+  /// di un `save_draft` già in volo, e la bozza stantia sopravvive al buffer
+  /// pulito — al riavvio la si ripropone sopra contenuto buono.
+  ///
+  /// La corsa la scrive il banco, non la spera: `frena` tiene lo `save_draft`
+  /// in volo finché non lo si libera, e si guarda cosa parte e in che ordine.
+  it("un discard non scavalca uno save_draft in volo", async () => {
+    const host = await avvia(VAULT);
+    // Metto in volo uno save_draft e lo tengo fermo. Parte subito, perché il
+    // salvataggio fallendo lo scrive senza aspettare il debounce di un secondo.
+    const riparaDisco = host.guasta("writeDocument", "disco pieno");
+    const sbloccaBozza = host.frena("saveDraft");
+    battiNellEditor("testo che il disco rifiuta");
+    await attendi(
+      "la bozza parte dopo il salvataggio fallito",
+      () => host.aPorta("saveDraft").length === 1,
+    );
+    // Lo save_draft è in volo, trattenuto dal freno.
+
+    // Riparo il disco e batto ancora: il salvataggio riuscirebbe e, pulendo
+    // il buffer, scatenerebbe il discard. Senza fila il discard partiva subito
+    // — mentre lo save_draft era ancora in volo.
+    riparaDisco();
+    battiNellEditor(" e adesso il disco lo prende");
+    // Sotto la fila il secondo salvataggio resta in coda dietro lo save_draft
+    // in volo, e il suo discard non parte; senza fila partiva subito — mentre
+    // lo save_draft era ancora in volo. `attendi` fallisce se la condizione non
+    // si avvera entro il debounce, ed è l'esito giusto: il discard non deve
+    // partire. Si ribalta l'eccezione in «non partito».
+    let discardInVolo = true;
+    try {
+      await attendi(
+        "il discard NON parte mentre save_draft è in volo",
+        () => host.aPorta("discardDraft").length > 0,
+        700,
+      );
+    } catch {
+      discardInVolo = false;
+    }
+    expect(
+      discardInVolo,
+      "il discard è partito mentre lo save_draft era ancora in volo: le bozze " +
+        "non vanno in fila col salvataggio",
+    ).toBe(false);
+
+    // Libero lo save_draft: il discard ha il suo turno, e gli arriva DOPO.
+    sbloccaBozza();
+    await attendi(
+      "il discard parte dopo lo save_draft",
+      () => host.aPorta("discardDraft").length === 1,
+    );
+    const primaBozza = host.chiamate.findIndex((c) => c.porta === "saveDraft");
+    const dopoScarto = host.chiamate.findIndex((c) => c.porta === "discardDraft");
+    expect(
+      dopoScarto,
+      "lo save_draft è arrivato al kernel dopo il discard: l'ordine non è FIFO",
+    ).toBeGreaterThan(primaBozza);
+  });
+
+  /// L'altra metà di una fila che non si avvelena: uno `save_draft` rifiutato
+  /// non deve fermare ciò che viene dopo. Il rigetto è inghiottito dentro
+  /// `writeDraft` (la singola bozza non racconta i propri inciampi), e la
+  /// `Coda` prosegue comunque — ma se così non fosse, il discard successivo
+  /// non partirebbe mai, ed è ciò che si guarda.
+  it("uno save_draft rifiutato non avvelena la fila", async () => {
+    const host = await avvia(VAULT);
+    // Anche la bozza viene rifiutata: save_draft rigetta.
+    const riparaDisco = host.guasta("writeDocument", "disco pieno");
+    const riparaBozza = host.guasta("saveDraft", "disco pieno");
+    battiNellEditor("testo che né il disco né la bozza accettano");
+    await attendi(
+      "il primo save_draft rifiutato parte",
+      () => host.aPorta("saveDraft").length === 1,
+    );
+
+    // Se il rigetto avvelenasse la coda, ciò che viene dopo non partirebbe mai.
+    riparaDisco();
+    riparaBozza();
+    battiNellEditor(" e invece tutto riparte");
+    // Il salvataggio riesce → pulisce il buffer → discard della bozza. Che la
+    // fila sia viva dopo il rifiuto lo dice il fatto che il discard arrivi.
+    await attendi(
+      "il discard parte dopo lo save_draft rifiutato",
+      () => host.aPorta("discardDraft").length === 1,
+    );
+    expect(
+      host.aPorta("discardDraft").length,
+      "il discard non è partito: la fila si è avvelenata al save_draft rifiutato",
+    ).toBe(1);
   });
 });
 

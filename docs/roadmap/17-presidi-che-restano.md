@@ -196,7 +196,7 @@ Un E2E attivo su un solo OS ripropone il difetto.
     *   **Gesti di controllo**: I gesti passano da cinque a **sette**. L'azione
         "rinomina" copre due casistiche (interfaccia ed evento esterno). La
         seconda casistica celava un bug. Il conteggio aggiornato segna
-        **diciassette** gesti [conta: gesti-della-shell]. La
+        **diciannove** gesti [conta: gesti-della-shell]. La
         [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
         include due interazioni per le scorciatoie. L'undicesimo simula il link
         **dentro** la nota. Il dodicesimo gestisce l'avviso di sessione della
@@ -206,7 +206,8 @@ Un E2E attivo su un solo OS ripropone il difetto.
         sedicesimo chiudono la finestra mentre il ritardo del salvataggio corre
         (difetto 0205). Il diciassettesimo spegne il buffer di crash sotto i
         piedi di chi scrive e chiede che la rete caduta lo dica — una volta, e
-        ogni volta che ricade (difetto 0209).
+        ogni volta che ricade (difetto 0209). Il diciottesimo e il diciannovesimo
+        ordinano salvataggio e scarto della bozza nella stessa coda FIFO.
     *   **Difetti isolati**: La simulazione ha rimosso Due difetti del
         cablaggio, sfuggiti alla
         [0015](../decisions/0015-la-forma-della-shell.md). L'invio della

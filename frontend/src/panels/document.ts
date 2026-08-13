@@ -1064,37 +1064,54 @@ let bozzaCieca = false;
 async function writeDraft(doc: string): Promise<void> {
   const buf = buffers.get(doc);
   if (!buf?.dirty) return;
-  try {
-    // La base c'è davvero, da questa voce: la 0088 aveva dovuto lasciarla a
-    // `null` perché la shell non aveva modo di dire da cosa il buffer si fosse
-    // discostato — e ricalcolarla di qua sarebbe stata una seconda
-    // implementazione dell'impronta, cioè una seconda verità. Adesso la porta
-    // il documento quando lo si apre.
-    await api.saveDraft(
-      doc,
-      buf.text,
-      buf.base.kind === "descends_from" ? buf.base.value : null,
-    );
-    // Tornata a scrivere: il silenzio riparte da capo, così una share che va e
-    // viene lo dice ogni volta che se ne va invece di dirlo la prima e basta.
-    bozzaCieca = false;
-  } catch {
-    if (!bozzaCieca) {
-      bozzaCieca = true;
-      notify(t("draft.blind"), "guasto");
+  // La stessa fila del salvataggio (`buf.coda`): `save_draft` e `discard_draft`
+  // competono per la stessa bozza sul disco, e senza ordine un discard può
+  // vincere su un `save_draft` in volo e lasciare una bozza stantia che al
+  // riavvio sopravvive al buffer pulito. Uno sbaglio non avvelena la fila: a
+  // tenerlo è la `Coda`, non questa funzione.
+  await buf.coda.accoda(async () => {
+    // Riletto dentro la coda: fra l'accodamento e il turno il documento può
+    // essere stato dimenticato, o pulito da un salvataggio riuscito.
+    const b = buffers.get(doc);
+    if (!b?.dirty) return;
+    try {
+      // La base c'è davvero, da questa voce: la 0088 aveva dovuto lasciarla a
+      // `null` perché la shell non aveva modo di dire da cosa il buffer si fosse
+      // discostato — e ricalcolarla di qua sarebbe stata una seconda
+      // implementazione dell'impronta, cioè una seconda verità. Adesso la porta
+      // il documento quando lo si apre.
+      await api.saveDraft(
+        doc,
+        b.text,
+        b.base.kind === "descends_from" ? b.base.value : null,
+      );
+      // Tornata a scrivere: il silenzio riparte da capo, così una share che va e
+      // viene lo dice ogni volta che se ne va invece di dirlo la prima e basta.
+      bozzaCieca = false;
+    } catch {
+      if (!bozzaCieca) {
+        bozzaCieca = true;
+        notify(t("draft.blind"), "guasto");
+      }
     }
-  }
+  });
 }
 
 /// La bozza non serve più: il disco è tornato a essere la verità.
 async function dropDraft(doc: string): Promise<void> {
   const buf = buffers.get(doc);
   if (buf) window.clearTimeout(buf.draftTimer);
-  try {
-    await api.discardDraft(doc);
-  } catch {
-    // Muto per la ragione di `writeDraft`.
-  }
+  const togli = async (): Promise<void> => {
+    try {
+      await api.discardDraft(doc);
+    } catch {
+      // Muto per la ragione di `writeDraft`.
+    }
+  };
+  // C'è un buffer → la stessa fila di `writeDraft` e del salvataggio: il
+  // discard va dietro un `save_draft` in volo, non davanti. Non c'è → niente
+  // coda, ma nemmeno un salvataggio in volo da ordinare: il discard va dritto.
+  await (buf ? buf.coda.accoda(togli) : togli());
 }
 
 /// Lo stato del salvataggio **del documento che si sta guardando**, nella barra
