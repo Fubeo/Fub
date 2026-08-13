@@ -88,13 +88,8 @@
 - [ ] Align
 - [ ] Distribute
 - [ ] Grid
-- [ ] Minimap
-- [ ] Zoom
-- [ ] Pan
 - [ ] Pen drawing
 - [ ] Eraser
-- [ ] Pressure sensitivity
-- [ ] Sticky notes
 - [ ] Text boxes
 - [ ] Image nodes
 - [ ] Note nodes
@@ -107,7 +102,6 @@
 - [ ] Canvas versioning
 - [ ] Canvas comments
 - [ ] Canvas presentation
-- [ ] Canvas accessibility alternatives
 
 ## 12.4 Presentazioni e slide
 

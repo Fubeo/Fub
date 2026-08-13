@@ -24,9 +24,6 @@
 - [ ] Pannello tag
 - [ ] Pannello outline
 - [ ] Pannello proprietà
-- [ ] Favorites
-- [ ] Pinned
-- [ ] Recent
 - [ ] Breadcrumbs
 - [ ] Workspaces
 - [ ] Rinomina tag (con aggiornamento delle occorrenze in tutto il vault)
@@ -72,9 +69,6 @@
 - [ ] Rollup properties
 - [ ] Note classes
 - [ ] Note schemas
-- [ ] Required properties
-- [ ] Suggested properties
-- [ ] Hidden properties
 - [ ] Property types personalizzati
 - [ ] Relation types personalizzati
 - [ ] Metadata audit
@@ -102,7 +96,6 @@
 - [ ] Note settimanali
 - [ ] Note mensili
 - [ ] Note annuali
-- [ ] Periodic notes
 - [ ] Naming automatico note periodiche
 - [ ] Template note periodiche
 - [ ] Zettelkasten ID

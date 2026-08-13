@@ -19,7 +19,7 @@
 - [ ] Lifecycle plugin
 - [ ] Sandbox plugin
 - [ ] Permessi plugin
-- [ ] Permissioni file
+- [ ] Permessi file
 - [ ] Permessi rete
 - [ ] Permessi clipboard
 - [ ] Plugin worker
@@ -94,8 +94,5 @@
 - [ ] Plugin permission revocation
 - [ ] Plugin install review
 - [ ] Plugin code inspection
-- [ ] Plugin open source badge
-- [ ] Plugin verified badge
-- [ ] Plugin report abuse
 - [ ] Plugin security advisories
 - [ ] Plugin deprecation policy

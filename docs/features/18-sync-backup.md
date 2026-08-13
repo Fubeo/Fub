@@ -40,7 +40,6 @@
 - [ ] Per-file status
 - [ ] Large files handling
 - [ ] Mobile background sync
-- [ ] Conflict copies
 - [ ] Sync logs
 - [ ] Sync health
 - [ ] Verifica integrità dei file dopo la sincronizzazione
@@ -135,7 +134,6 @@
 - [ ] Selective restore
 - [ ] Version labels
 - [ ] Named snapshots
-- [ ] Snapshot browser
 - [ ] Rollback a snapshot
 - [ ] Confronto vault
 - [ ] Confronto cartelle

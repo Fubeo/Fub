@@ -72,7 +72,6 @@
 - [ ] Policies
 - [ ] Ownership
 - [ ] Review dates
-- [ ] Approval workflow
 - [ ] Style guide
 - [ ] Linting
 - [ ] Vale rules
@@ -90,11 +89,7 @@
 - [ ] Project dashboards
 - [ ] Team dashboards
 - [ ] Shared glossaries
-- [ ] Shared templates
 - [ ] Shared snippets
-- [ ] Shared forms
-- [ ] Shared databases
-- [ ] Shared publishing
 - [ ] Permissions
 - [ ] Audit logs
 
