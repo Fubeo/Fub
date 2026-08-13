@@ -58,6 +58,24 @@ flowchart TB
     C <==>|"leggo · scrivo"| D
 ```
 
+I quattro riquadri, detti per esteso:
+
+1. **Quello che vedi** è la cartella `frontend/`: l'editor, i pannelli
+   laterali, la palette dei comandi. È TypeScript che gira dentro una webview —
+   di fatto una pagina web locale. Non tocca mai il disco da sola: tutto ciò
+   che mostra lo ha chiesto al riquadro sotto, e tutto ciò che l'utente fa
+   diventa una chiamata verso di lui.
+2. **Il passaggio** è `fub-app`: il ponte fra la pagina e il programma vero.
+   Riceve le chiamate della shell, le gira al backend, e riporta indietro
+   risposte ed eventi. È volutamente sottile: se una sua riga si spiega senza
+   nominare Tauri, sta nel posto sbagliato.
+3. **Quello che pensa** è il backend Rust: `fub-kernel` tiene lo stato del
+   vault e coordina ogni operazione, `fub-host` decide quali pezzi esistono e
+   li accende, i provider (ricerca, backlink, grafo…) fanno il lavoro di
+   dominio. Nessuno di loro sa cosa sia una finestra.
+4. **Quello che resta** sono i tuoi file: note `.md` più una cartella `.fub/`
+   di servizio. Chiuso il programma, sul disco c'è tutto — e non c'è altro.
+
 Le quattro cose da portarsi via, e nient'altro:
 
 1. **La verità sono i tuoi file.** Se Fub sparisse domani, le note restano:
@@ -213,6 +231,49 @@ flowchart TB
     WasmHost -.->|"ospiterà"| Suite
     Suite -.-> Est
 ```
+
+### I gruppi, in una frase l'uno
+
+- **frontend/** (la shell) disegna e raccoglie i gesti dell'utente.
+- **fub-app** traduce quei gesti in chiamate al backend, e gli eventi del
+  backend in aggiornamenti della pagina.
+- **fub-abi** (il contratto) non fa niente: dichiara i tipi e i trait con cui
+  tutti gli altri si parlano. È il vocabolario comune.
+- **fub-host** monta: costruisce il workspace, registra i provider, accende i
+  thread, e spegne tutto in ordine inverso.
+- **fub-kernel** tiene in memoria lo stato del vault aperto e coordina ogni
+  operazione su di esso.
+- **I provider nativi** portano le funzioni che l'utente vede: ricerca,
+  backlink, grafo, cestino, versioni…
+- **Il disco** è la persistenza: le note dell'utente più la cartella `.fub/`.
+- Il gruppo tratteggiato non esiste ancora: è il piano, non il repo.
+
+### Chi parla con chi, e su quale filo
+
+Le frecce **piene** del disegno sono chiamate o dati che si muovono davvero a
+runtime. I fili principali, nell'ordine in cui li attraversa un gesto
+dell'utente:
+
+| Filo | Da → a | Cosa ci passa |
+|---|---|---|
+| `invoke` | shell → `fub-app` | domanda e risposta. La shell chiama un comando IPC con argomenti serializzati; il comando risponde con un risultato o con un errore tipizzato. È l'unico modo che la shell ha di *chiedere* qualcosa. |
+| comando IPC | `fub-app` → `fub-host` → kernel | il comando prende la sessione del vault, prende il prestito giusto dalla `Custodia` (condiviso per leggere, esclusivo per scrivere) e chiama il kernel. |
+| trait del contratto | kernel → provider | chiamate dirette: «disegna questa view», «rispondi a questa query», «parsa questo file». Nessuna serializzazione oggi; a M5 la stessa firma attraverserà il confine WASM. |
+| `HostApi` | provider → kernel | il verso opposto: quando un provider ha bisogno del mondo — leggere un documento, scrivere un blob, emettere un evento — passa dal varco unico, ed è lì che i permessi si applicano. |
+| bus + ponte | kernel → `fub-app` | ciò che è successo. Il kernel pubblica gli eventi sul bus; il thread del ponte li ritira, li raggruppa, li frena, e li consegna al `WebviewEvents` — l'unico `EventSink` che sa di Tauri. |
+| `fub://event` | `fub-app` → shell | il push verso la pagina: gli eventi arrivano alla webview con questo nome, e il router della shell decide *per dato* quali pannelli ridisegnare. |
+| «scritture altrui» | rilevatore → bus | i file toccati da altri programmi — Obsidian, git, un editor qualunque — entrano in Fub da qui, come eventi. |
+| canale dati | shell o provider → indici | una `IndexQuery` (un albero di predicati, non una stringa) viene instradata dalla tabella delle rotte all'indice che ha dichiarato di servirla. |
+| verso il disco | kernel, host, provider → file | il kernel scrive i documenti e `.fub/`; l'host scrive la config di macchina; i provider scrivono i loro dati sotto `plugins/<id>/`, via `HostApi`. |
+
+Due cose che il disegno dice con lo stile delle frecce:
+
+- Le frecce **tratteggiate** che partono dal contratto non sono chiamate: dicono
+  «questo tipo è definito qui e usato là». `fub-abi` non chiama e non è
+  chiamato — viene importato.
+- La shell e il kernel **non si parlano mai direttamente**: ogni parola passa da
+  `fub-app`, nei due versi. È il collo di bottiglia voluto che rende contabile
+  la superficie IPC.
 
 ### Cosa dice questo disegno, in sei righe
 
@@ -534,10 +595,21 @@ I riquadri del disco, con contenuto, classe e regole di scrittura, stanno in
 
 **A chi serve:** a chi deve modificare quel riquadro lì.
 
-Ogni sotto-sezione ha la stessa forma: **cosa c'è dentro**, **perché è così**,
-**cosa costa**.
+Ogni sotto-sezione ha la stessa forma: **a cosa serve**, **come dialoga con
+gli altri**, **cosa c'è dentro**, **perché è così**, **cosa costa**.
 
 ### 📜 `fub-abi` — il contratto
+
+**A cosa serve.** È il vocabolario comune: i tipi e i trait che tutti gli altri
+crate usano per parlarsi. Da solo non fa niente — dichiara le forme, e basta.
+Se una struttura dati o una firma attraversa un confine fra due pezzi di Fub,
+è dichiarata qui.
+
+**Come dialoga.** Non chiama nessuno e nessuno lo chiama: viene **importato**,
+da tutti. Il confine che disegna ha due versi — il kernel chiama i provider
+attraverso i trait dichiarati qui; i provider chiamano il mondo attraverso
+`HostApi`, dichiarato qui. Chi vuole sapere cosa può attraversare quel confine
+legge questo crate, in Rust o nella copia WIT.
 
 **Cosa c'è dentro.** Ventitré moduli più tredici di regole, circa 23 600 righe
 di Rust, e lo stesso contratto una seconda volta in
@@ -633,6 +705,19 @@ la sidebar ordina con un collatore italiano. Non sono due copie della stessa
 regola: sono due requisiti che devono divergere.
 
 ### 🚀 `fub-kernel` — il core
+
+**A cosa serve.** Tiene in memoria lo stato di un vault aperto — i documenti
+parsati, gli indici, il grafo dei link, il registro dei provider — e coordina
+ogni operazione che lo tocca: aprire, scrivere, cercare, invocare un comando,
+disegnare una view. È il pezzo che *decide*, e non sa niente di finestre, di
+markdown o di Tauri.
+
+**Come dialoga.** Riceve le chiamate che `fub-app` gli gira (attraverso la
+sessione e il lucchetto di `fub-host`); chiama i provider attraverso i trait
+del contratto e riceve le loro richieste dal varco `HostApi`; racconta ciò che
+è successo su due canali — la coda verso gli handler registrati, dentro il giro
+sincrono, e il bus verso chi sta fuori (il ponte, il rilevatore). Sul disco
+scrive i file del vault e la radice `.fub/`.
 
 **Cosa c'è dentro.** Trentasette moduli più due cartelle (`host/`, `index/`).
 Il kernel fa una cosa: **orchestra un vault** senza sapere cosa ci sia scritto
@@ -791,6 +876,17 @@ si scopre premendolo ([0100](../decisions/0100-i-tasti-che-arrivano-da-fuori.md)
 
 ### 🔧 `fub-host` — chi monta
 
+**A cosa serve.** Fa esistere l'applicazione: costruisce il `Workspace`, lo
+mette dietro il lucchetto, registra i provider bundle per bundle, accende
+rilevatore, ponte e pool dei job — e alla chiusura spegne tutto in ordine
+inverso. Se il kernel è il motore, questo è chi lo monta sul telaio.
+
+**Come dialoga.** Verso l'alto offre a `fub-app` (o a una futura CLI) la
+`VaultSession` e la `Custodia` da cui passare per toccare il workspace; verso
+il basso chiama il kernel; verso il mondo passa dalle tre porte — il watcher
+che vede le scritture altrui, il sink dove escono gli eventi, chi decide
+quando si apre — più la rete e l'orologio di parete. Non nomina mai Tauri.
+
 **Cosa c'è dentro.** Sedici moduli. È il **composition root**: il posto unico
 dove si decide *quali pezzi esistono e in che ordine si accendono*.
 
@@ -899,6 +995,18 @@ arriva in fondo comunque.**
 
 ### 🧩 I provider nativi
 
+**A cosa servono.** Sono le funzioni che l'utente vede — ricerca, backlink,
+tag, cestino, grafo, statistiche, cronologia, comandi, blocchi — più il parser
+markdown. Ognuna è scritta come un plugin: implementa i trait del contratto,
+niente di più.
+
+**Come dialogano.** Solo attraverso il contratto, nei due versi: il kernel li
+chiama («disegna questa view», «rispondi a questa query», «è successo questo»),
+e loro chiamano `HostApi` quando hanno bisogno del mondo. Un modulo di feature
+non importa mai un altro modulo di feature — il presidio
+`i_moduli_non_si_parlano` diventa rosso se succede: chi vuole i servizi di un
+altro passa dal registro dei servizi, come farà un plugin di terzi.
+
 **Le dieci feature ufficiali.** Non è un numero scritto in un documento: è la
 lunghezza di un elenco Rust.
 
@@ -979,6 +1087,17 @@ mantenere.
 
 ### 🪟 `fub-app` — la colla
 
+**A cosa serve.** Traduce, e basta: i comandi `invoke` che arrivano dalla
+webview diventano chiamate al backend, gli eventi del backend diventano
+messaggi verso la webview. È l'unico crate che nomina Tauri, così tutto il
+resto può vivere senza.
+
+**Come dialoga.** La shell lo chiama via `invoke`; un comando IPC prende la
+sessione da `fub-host`, prende il prestito dalla `Custodia`, chiama il kernel,
+converte l'errore. Nel verso opposto `WebviewEvents` — l'unico `EventSink` che
+sa di Tauri — riceve gli eventi dal ponte e li emette alla pagina col nome
+`fub://event`.
+
 **Cosa c'è dentro.** Due file: 883 righe di libreria e 6 di eseguibile. La
 regola sta scritta in testa:
 
@@ -1027,6 +1146,17 @@ Il testo di un errore è **localizzabile**, non una stringa: un errore è testo
 che qualcuno legge ([0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)).
 
 ### 🖥️ `frontend/` — la shell
+
+**A cosa serve.** Tutto ciò che si vede e si tocca: l'editor CodeMirror, i
+pannelli, le tab, la palette dei comandi, le notifiche, il tema. Tiene anche lo
+stato di presentazione — quale nota è aperta dove, la coda dei salvataggi, il
+layout dei riquadri.
+
+**Come dialoga.** Col backend parla su due fili soltanto: `invoke` per
+chiedere (aprire, salvare, cercare) e `fub://event` per ascoltare — un router
+riceve gli eventi e decide *per dato* quali pannelli ridisegnare. Con nessun
+altro: la webview non tocca disco né rete, e non sa cosa sia un file `.md`
+finché il backend non glielo racconta.
 
 **Cosa c'è dentro.** 103 file TypeScript, di cui 43 di test; circa 19 200 righe
 di sorgente. Nove cartelle.
@@ -1105,10 +1235,9 @@ shell. Se potesse chiedere una finestra, ogni host che non ne ha una — una CLI
 un e2e headless, un domani mobile — dovrebbe dire di no a una richiesta
 legittima ([0075](../decisions/0075-una-view-non-chiede-con-una-finestra.md)).
 
-⚠️ Il documento [ui-protocol.md](ui-protocol.md) conta ancora le superfici
-ospitate come prima della [0079](../decisions/0079-il-grafo-esce-dall-overlay.md);
-è un difetto registrato. I numeri giusti sono quelli qui sopra, presi dal
-sorgente.
+Il conto torna con [ui-protocol.md](ui-protocol.md), che oggi dice le stesse
+otto — compreso il grafo nell'area principale, dove sta da quando è uscito
+dall'overlay ([0079](../decisions/0079-il-grafo-esce-dall-overlay.md)).
 
 **L'area principale è ospitata in modo diverso da tutte le altre.** Le altre
 hanno un contenitore fisso: c'è, è uno, e una view che le dichiara ci finisce
@@ -1146,6 +1275,17 @@ e **ciò che non sa fare lancia** — un host finto accomodante è il modo più
 rapido di scrivere un test che passa mentre la shell chiede la cosa sbagliata.
 
 ### 💾 Il disco
+
+**A cosa serve.** È tutta la persistenza che c'è: le note dell'utente, lo
+stato di Fub, i derivati ricostruibili. Non essendoci un database, il disco
+*è* il modello dei dati — e per questo ha le sue regole scritte.
+
+**Come dialoga.** Dentro il vault scrive quasi solo il kernel (documenti,
+journal, bozze, organizzazione); i provider scrivono i loro dati sotto
+`plugins/<id>/` passando da `HostApi`; l'host scrive la configurazione della
+macchina, fuori dal vault. E ci scrivono anche gli **altri programmi** —
+Obsidian, git, un editor qualunque: è il rilevatore a riportare quelle
+scritture dentro Fub, come eventi.
 
 **La regola in una riga:**
 
