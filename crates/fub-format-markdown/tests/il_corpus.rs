@@ -181,10 +181,14 @@ fn nome_dell_inline(i: &Inline) -> &'static str {
         Inline::Text(_) => "Text",
         Inline::Emph(_) => "Emph",
         Inline::Strong(_) => "Strong",
+        Inline::Superscript(_) => "Superscript",
+        Inline::Strikethrough(_) => "Strikethrough",
         Inline::Code(_) => "Code",
         Inline::Link { .. } => "Link",
         Inline::TagRef { .. } => "TagRef",
         Inline::Custom { .. } => "Custom",
+        Inline::HardBreak => "HardBreak",
+        Inline::SoftBreak => "SoftBreak",
     }
 }
 
@@ -269,8 +273,16 @@ fn osserva_inline(inlines: &[Inline], o: &mut Osservato) {
                     o.sintassi.insert(syntax::FOOTNOTES.to_string());
                 }
             }
-            Inline::Emph(dentro) | Inline::Strong(dentro) => osserva_inline(dentro, o),
-            Inline::Text(_) | Inline::Code(_) | Inline::Link { .. } | Inline::TagRef { .. } => {}
+            Inline::Emph(dentro)
+            | Inline::Strong(dentro)
+            | Inline::Superscript(dentro)
+            | Inline::Strikethrough(dentro) => osserva_inline(dentro, o),
+            Inline::Text(_)
+            | Inline::Code(_)
+            | Inline::Link { .. }
+            | Inline::TagRef { .. }
+            | Inline::HardBreak
+            | Inline::SoftBreak => {}
         }
     }
 }
@@ -520,9 +532,6 @@ fn l_estrattore_vede_il_contratto() {
 /// In che modo il modello e il file **non sono d'accordo**.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Perche {
-    /// Il parser accende l'estensione, il modello non ha dove metterla, e
-    /// mapparla è lavoro con una sua decisione (quale rappresentazione).
-    AccesaEnonMappata,
     /// Il modello la rappresenta, e chi la legge a valle non la trova dove la
     /// cerca.
     RappresentataEnonRaggiungibile,
@@ -566,16 +575,6 @@ enum Perche {
 #[allow(clippy::type_complexity)]
 fn divergenze_dichiarate() -> Vec<(&'static str, Perche, fn(&DocumentModel, &str) -> bool)> {
     vec![
-        (
-            "il barrato non arriva nel modello",
-            Perche::AccesaEnonMappata,
-            |d, _| testo_piatto(d) == "barrato" && !nomi_dei_kind(d).contains("strikethrough"),
-        ),
-        (
-            "l'apice non arriva nel modello",
-            Perche::AccesaEnonMappata,
-            |d, _| testo_piatto(d) == "testo apice qui" && nomi_dei_kind(d).is_empty(),
-        ),
         (
             "l'ancora esplicita di un heading non è raggiungibile dall'albero",
             Perche::RappresentataEnonRaggiungibile,
@@ -744,6 +743,66 @@ fn le_divergenze_sono_quelle_dichiarate() {
     }
 }
 
+/// La riparazione delle due divergenze dichiarate — «il barrato non arriva nel
+/// modello» e «l'apice non arriva nel modello» — che stavano qui sopra e ora
+/// stanno nel corpus curato, col nome «barrato» e «apice». L'apice e il barrato
+/// arrivano come **due varianti distinte** ([`Inline::Superscript`] e
+/// [`Inline::Strikethrough`]), non collassano in un unico stile né nel testo
+/// piatto, e fanno il giro intero: parsa, serializza, riparsa, rende.
+#[test]
+fn apice_e_barrato_sono_costrutti_distinti_e_fanno_il_giro_intero() {
+    let sorgente = "~~barrato~~ e testo ^apice^ qui\n";
+    let doc = parse(sorgente);
+    let inl: Vec<&Inline> = match &doc.body[0] {
+        Block::Paragraph { inlines, .. } => inlines.iter().collect(),
+        _ => panic!("atteso un paragrafo: {:?}", doc.body),
+    };
+    // Ognuno nel suo contenitore, con il suo testo: nessun collasso in uno
+    // stile unico, in `Custom` o nel solo testo.
+    assert!(
+        inl.iter().any(|i| matches!(
+            i,
+            Inline::Strikethrough(kids) if kids.as_slice() == [Inline::Text("barrato".into())]
+        )),
+        "il barrato non è arrivato come `Strikethrough`: {inl:?}"
+    );
+    assert!(
+        inl.iter().any(|i| matches!(
+            i,
+            Inline::Superscript(kids) if kids.as_slice() == [Inline::Text("apice".into())]
+        )),
+        "l'apice non è arrivato come `Superscript`: {inl:?}"
+    );
+    assert!(
+        !inl.iter().any(|i| matches!(
+            i,
+            Inline::Emph(_) | Inline::Strong(_) | Inline::Custom { .. }
+        )),
+        "il barrato e l'apice non sono enfasi, forza né Custom: {inl:?}"
+    );
+    // E nessuno dei due è passato dall'escape hatch: il registro dei
+    // `custom_kind` di questo documento è vuoto.
+    assert!(
+        nomi_dei_kind(&doc).is_empty(),
+        "i kind del documento: {:?}",
+        nomi_dei_kind(&doc)
+    );
+    // Il testo piatto conserva le parole — è quello che si legge.
+    assert_eq!(testo_piatto(&doc), "barrato e testo apice qui");
+    // La riscrittura riproduce la sintassi di partenza, costrutto per
+    // costrutto, e il giro riparte da lì identico.
+    let riscritto = provider().serialize(&doc).unwrap();
+    assert_eq!(riscritto, sorgente, "la riscrittura cambia il documento");
+    assert_eq!(parse(&riscritto), doc, "il giro non è stabile");
+    // La resa dà a ciascuno il suo elemento: `<del>` per il barrato, `<sup>`
+    // per l'apice — due elementi, non uno stile.
+    let html = provider()
+        .render_html(&doc, &fub_abi::format::RenderOptions::default())
+        .unwrap();
+    assert!(html.contains("<del>barrato</del>"), "html: {html}");
+    assert!(html.contains("<sup>apice</sup>"), "html: {html}");
+}
+
 /// I documenti di controllo: markdown senza niente di strano, più i due casi
 /// degeneri.
 ///
@@ -900,7 +959,10 @@ fn blocchi_di_inline(blocks: &[Block]) -> Vec<(Span, Span)> {
     fn inline(nodes: &[Inline], out: &mut Vec<Span>) {
         for n in nodes {
             match n {
-                Inline::Emph(dentro) | Inline::Strong(dentro) => inline(dentro, out),
+                Inline::Emph(dentro)
+                | Inline::Strong(dentro)
+                | Inline::Superscript(dentro)
+                | Inline::Strikethrough(dentro) => inline(dentro, out),
                 Inline::Link { label, span, .. } => {
                     out.push(*span);
                     inline(label.as_deref().unwrap_or(&[]), out);
@@ -908,7 +970,9 @@ fn blocchi_di_inline(blocks: &[Block]) -> Vec<(Span, Span)> {
                 Inline::Text(_)
                 | Inline::Code(_)
                 | Inline::TagRef { .. }
-                | Inline::Custom { .. } => {}
+                | Inline::Custom { .. }
+                | Inline::HardBreak
+                | Inline::SoftBreak => {}
             }
         }
     }
@@ -1008,12 +1072,19 @@ fn testo_piatto(d: &DocumentModel) -> String {
         for i in inlines {
             match i {
                 Inline::Text(t) | Inline::Code(t) => out.push_str(t),
-                Inline::Emph(dentro) | Inline::Strong(dentro) => giro(dentro, out),
+                Inline::Emph(dentro)
+                | Inline::Strong(dentro)
+                | Inline::Superscript(dentro)
+                | Inline::Strikethrough(dentro) => giro(dentro, out),
                 Inline::TagRef { name, .. } => {
                     out.push('#');
                     out.push_str(name);
                 }
                 Inline::Link { label, .. } => giro(label.as_deref().unwrap_or(&[]), out),
+                // Gli a-capo non portano testo, ma non sono niente: il duro
+                // cambia riga, il morbido è uno spazio.
+                Inline::HardBreak => out.push('\n'),
+                Inline::SoftBreak => out.push(' '),
                 Inline::Custom { .. } => {}
             }
         }
@@ -1203,7 +1274,10 @@ fn wikilink_del_modello(model: &DocumentModel, text: &str) -> Vec<Value> {
                     let (from, to) = span_in_code_unit(text, span);
                     out.push(json!({"page": page, "embed": embed, "from": from, "to": to}));
                 }
-                Inline::Emph(kids) | Inline::Strong(kids) => inline(kids, text, out),
+                Inline::Emph(kids)
+                | Inline::Strong(kids)
+                | Inline::Superscript(kids)
+                | Inline::Strikethrough(kids) => inline(kids, text, out),
                 Inline::Link {
                     label: Some(kids), ..
                 } => inline(kids, text, out),

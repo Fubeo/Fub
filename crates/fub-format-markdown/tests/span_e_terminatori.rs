@@ -73,6 +73,7 @@ fn testo_di(inlines: &[Inline]) -> String {
             Inline::Text(text) => text.clone(),
             Inline::Code(text) => text.clone(),
             Inline::Emph(dentro) | Inline::Strong(dentro) => testo_di(dentro),
+            Inline::Superscript(dentro) | Inline::Strikethrough(dentro) => testo_di(dentro),
             altro => format!("{altro:?}"),
         })
         .collect()

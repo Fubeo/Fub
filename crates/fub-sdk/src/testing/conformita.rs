@@ -981,11 +981,14 @@ fn inline_disgiunti_e_dentro(
                 *span
             }
             Inline::TagRef { span, .. } | Inline::Custom { span, .. } => *span,
-            Inline::Emph(dentro_) | Inline::Strong(dentro_) => {
+            Inline::Emph(dentro_)
+            | Inline::Strong(dentro_)
+            | Inline::Superscript(dentro_)
+            | Inline::Strikethrough(dentro_) => {
                 inline_disgiunti_e_dentro(dentro_, padre, source, dove, pretesa);
                 continue;
             }
-            Inline::Text(_) | Inline::Code(_) => continue,
+            Inline::Text(_) | Inline::Code(_) | Inline::HardBreak | Inline::SoftBreak => continue,
         };
         affetta(source, span, &format!("lo span di un inline in {dove}"));
         dentro(span, padre, source, "un inline", dove, pretesa);
@@ -1080,8 +1083,15 @@ fn raccogli_inline(inlines: &[Inline], link: &mut Vec<Link>, tag: &mut Vec<Tag>)
                 name: name.clone(),
                 span: *span,
             }),
-            Inline::Emph(dentro) | Inline::Strong(dentro) => raccogli_inline(dentro, link, tag),
-            Inline::Text(_) | Inline::Code(_) | Inline::Custom { .. } => {}
+            Inline::Emph(dentro)
+            | Inline::Strong(dentro)
+            | Inline::Superscript(dentro)
+            | Inline::Strikethrough(dentro) => raccogli_inline(dentro, link, tag),
+            Inline::Text(_)
+            | Inline::Code(_)
+            | Inline::Custom { .. }
+            | Inline::HardBreak
+            | Inline::SoftBreak => {}
         }
     }
 }
@@ -1153,7 +1163,10 @@ fn bom_negli_inline(i: &Inline, controlla: &impl Fn(&str, &str)) {
     match i {
         Inline::Text(t) => controlla("un inline di testo", t),
         Inline::Code(t) => controlla("un inline di codice", t),
-        Inline::Emph(dentro) | Inline::Strong(dentro) => {
+        Inline::Emph(dentro)
+        | Inline::Strong(dentro)
+        | Inline::Superscript(dentro)
+        | Inline::Strikethrough(dentro) => {
             for i in dentro {
                 bom_negli_inline(i, controlla);
             }
@@ -1164,6 +1177,7 @@ fn bom_negli_inline(i: &Inline, controlla: &impl Fn(&str, &str)) {
                 bom_negli_inline(i, controlla);
             }
         }
+        Inline::HardBreak | Inline::SoftBreak => {}
         Inline::Custom { .. } => {}
     }
 }
