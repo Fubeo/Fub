@@ -775,6 +775,21 @@ fn convert_inlines<'a>(
                     child, source, offsets, ctx, acc, text_out,
                 )));
             }
+            // L'apice (`^…^`) e il barrato (`~~…~~`) sono costrutti del
+            // dialetto con un nodo comrak loro: prima finivano nel catch-all e
+            // ne restava solo il testo — il costrutto spariva dal modello, e
+            // alla prima riscrittura anche dal file. Adesso hanno una variante
+            // loro, distinta l'una dall'altra e dall'enfasi.
+            NodeValue::Superscript => {
+                out.push(Inline::Superscript(convert_inlines(
+                    child, source, offsets, ctx, acc, text_out,
+                )));
+            }
+            NodeValue::Strikethrough => {
+                out.push(Inline::Strikethrough(convert_inlines(
+                    child, source, offsets, ctx, acc, text_out,
+                )));
+            }
             NodeValue::Code(code) => {
                 text_out.push_str(&code.literal);
                 out.push(Inline::Code(code.literal));

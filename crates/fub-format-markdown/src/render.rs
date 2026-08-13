@@ -241,6 +241,19 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             render_inlines(children, opts, out);
             out.push_str("</em>");
         }
+        // L'apice e il barrato hanno un elemento loro — `<sup>` e `<del>` —
+        // e non collassano in un unico stile: la resa distingue i due
+        // costrutti come li distingue il modello.
+        Inline::Superscript(children) => {
+            out.push_str("<sup>");
+            render_inlines(children, opts, out);
+            out.push_str("</sup>");
+        }
+        Inline::Strikethrough(children) => {
+            out.push_str("<del>");
+            render_inlines(children, opts, out);
+            out.push_str("</del>");
+        }
         Inline::Strong(children) => {
             out.push_str("<strong>");
             render_inlines(children, opts, out);

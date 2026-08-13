@@ -1463,6 +1463,8 @@ fn inline_case(i: &arena::Inline) -> Case {
                 ("span", wit(span)),
             ],
         ),
+        arena::Inline::Superscript(v) => case_ty("superscript", wit(v)),
+        arena::Inline::Strikethrough(v) => case_ty("strikethrough", wit(v)),
     }
 }
 
@@ -2453,6 +2455,8 @@ fn conform(source: &str) -> Result<(), String> {
                 attrs: serde_json::Value::Null,
                 span: sp,
             }),
+            inline_case(&arena::Inline::Superscript(vec![])),
+            inline_case(&arena::Inline::Strikethrough(vec![])),
         ],
     );
 

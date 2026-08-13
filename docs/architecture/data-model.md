@@ -188,9 +188,10 @@ classDiagram
         +Span span
     }
     class Inline {
-        <<enum · 7 varianti>>
+        <<enum · 9 varianti>>
         Text · Emph · Strong · Code
         Link · TagRef · Custom
+        Superscript · Strikethrough
     }
     class LinkTarget {
         <<enum · 3 varianti>>
@@ -240,7 +241,7 @@ classDiagram
     ListItem "1" *-- "*" Block
     TableRow "1" *-- "*" TableCell
     TableCell "1" *-- "*" Inline
-    Inline "1" *-- "*" Inline : Emph, Strong
+    Inline "1" *-- "*" Inline : Emph, Strong, Superscript, Strikethrough
     Inline ..> LinkTarget : Link
     Link ..> LinkTarget
     Block ..> Span
