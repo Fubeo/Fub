@@ -1,0 +1,113 @@
+# 16. Template, snippet, automazioni e scripting
+
+## 16.1 Template
+
+- [ ] Template nota
+- [ ] Template cartella
+- [ ] Template globale
+- [ ] Template giornaliero
+- [ ] Template settimanale
+- [ ] Template mensile
+- [ ] Template annuale
+- [ ] Template database
+- [ ] Template canvas
+- [ ] Template task
+- [ ] Template progetto
+- [ ] Template riunione
+- [ ] Template diario
+- [ ] Template flashcard
+- [ ] Template contatto
+- [ ] Variabili template
+- [ ] Variabili data
+- [ ] Variabili vault
+- [ ] Variabili clipboard
+- [ ] Variabili selezione
+- [ ] Prompt input
+- [ ] Cursor placement
+- [ ] Inclusione template
+- [ ] Template annidati
+- [ ] Template condizionali
+- [ ] Template con query
+- [ ] Template con script
+- [ ] Template da nota esistente
+- [ ] Template marketplace
+- [ ] Template utente condivisibili
+- [ ] Template localizzati
+- [ ] Nuova nota da template
+- [ ] Applica template a una nota esistente
+- [ ] Cartella template dedicata nel vault
+- [ ] Anteprima del template prima dell'applicazione
+- [ ] Rinomina/elimina un template
+- [ ] Template di default per le nuove note
+- [ ] Snippet di testo riutilizzabile
+- [ ] Inserimento snippet dal menu slash
+
+## 16.2 Automazioni
+
+- [ ] Comandi personalizzati
+- [ ] Macro
+- [ ] Catene di comandi
+- [ ] Hotkey personalizzate
+- [ ] Trigger su creazione nota
+- [ ] Trigger su modifica nota
+- [ ] Trigger su apertura nota
+- [ ] Trigger su chiusura nota
+- [ ] Trigger su salvataggio
+- [ ] Trigger su tag aggiunto
+- [ ] Trigger su proprietà cambiata
+- [ ] Trigger su task completato
+- [ ] Trigger su file importato
+- [ ] Trigger su orario
+- [ ] Trigger su data
+- [ ] Trigger su intervallo
+- [ ] Automazioni locali
+- [ ] Automazioni condizionali
+- [ ] Azioni automatiche
+- [ ] Log automazioni
+- [ ] Undo automazioni
+- [ ] Automazioni disattivabili
+- [ ] Automazioni per vault
+- [ ] Automazioni per cartella
+- [ ] Automazioni per tipo nota
+- [ ] Scripting plugin
+- [ ] URI actions
+- [ ] CLI actions
+- [ ] Webhook locali opzionali
+- [ ] Integrazione con strumenti esterni opzionale
+- [ ] Esecuzione manuale di un'automazione
+- [ ] Test rapido di un'automazione
+- [ ] Pausa/ripresa di un'automazione
+
+## 16.3 Automazione avanzata / no-code
+
+- [ ] Automation builder visuale
+- [ ] Trigger multipli
+- [ ] Condizioni
+- [ ] Azioni
+- [ ] Delay
+- [ ] Schedule
+- [ ] File watchers
+- [ ] Webhooks
+- [ ] Local API triggers
+- [ ] CLI triggers
+- [ ] URI triggers
+- [ ] Macro recorder
+- [ ] Script runner
+- [ ] JavaScript scripts
+- [ ] Python scripts opzionali
+- [ ] Lua scripts opzionali
+- [ ] Sandbox scripts
+- [ ] Automation logs
+- [ ] Automation undo
+- [ ] Automation disable
+- [ ] Automation templates
+- [ ] Automation marketplace
+- [ ] Automation permissions
+- [ ] Automation rate limits
+- [ ] Automation error handling
+- [ ] Automation retries
+- [ ] Automation notifications
+- [ ] Automation testing
+- [ ] Automation versioning
+- [ ] Automation export/import
+- [ ] Automation sharing

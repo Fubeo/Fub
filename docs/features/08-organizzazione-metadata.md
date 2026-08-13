@@ -1,0 +1,181 @@
+# 8. Organizzazione, metadata, tassonomia e collezioni
+
+*Microfeature essenziali: [vault-ed-esploratore.md](../microfeatures/vault-ed-esploratore.md).*
+
+## 8.1 Organizzazione base
+
+- [ ] Cartelle
+- [ ] Sottocartelle illimitate
+- [ ] Tag
+- [ ] Tag annidati
+- [ ] Alias
+- [ ] Preferiti
+- [ ] Note fissate
+- [ ] Archivio
+- [ ] Inbox
+- [ ] Cestino
+- [ ] Note recenti
+- [ ] Note modificate di recente
+- [ ] Note create di recente
+- [ ] Note aperte di recente
+- [ ] Quick switcher
+- [ ] Command palette
+- [ ] Sidebar personalizzabili
+- [ ] Pannello tag
+- [ ] Pannello outline
+- [ ] Pannello proprietà
+- [ ] Favorites
+- [ ] Pinned
+- [ ] Recent
+- [ ] Breadcrumbs
+- [ ] Workspaces
+- [ ] Rinomina tag (con aggiornamento delle occorrenze in tutto il vault)
+- [ ] Elimina tag (rimozione o ripulitura delle occorrenze)
+- [ ] Sposta nota in archivio (azione esplicita, oltre alle regole automatiche)
+- [ ] Vista "note recenti" raggruppata per giorno/settimana
+
+## 8.2 Metadata e proprietà
+
+- [ ] Frontmatter YAML
+- [ ] Proprietà typed
+- [ ] Proprietà testo
+- [ ] Proprietà numero
+- [ ] Proprietà checkbox
+- [ ] Proprietà data
+- [ ] Proprietà data/ora
+- [ ] Proprietà elenco
+- [ ] Proprietà tag
+- [ ] Proprietà alias
+- [ ] Proprietà link
+- [ ] Proprietà colore
+- [ ] Proprietà icona
+- [ ] Proprietà rating
+- [ ] Proprietà URL
+- [ ] Proprietà email
+- [ ] Proprietà file
+- [ ] Proprietà immagine
+- [ ] Proprietà calcolo
+- [ ] Proprietà rollup
+- [ ] Proprietà relazione
+- [ ] Proprietà formula
+- [ ] Validazione proprietà
+- [ ] Schema per tipo nota
+- [ ] Template proprietà
+- [ ] Proprietà obbligatorie
+- [ ] Proprietà suggerite
+- [ ] Proprietà nascoste
+- [ ] Proprietà calcolate
+- [ ] Metadata automatici
+- [ ] Folder-level metadata
+- [ ] Inherited metadata
+- [ ] Computed properties
+- [ ] Rollup properties
+- [ ] Note classes
+- [ ] Note schemas
+- [ ] Required properties
+- [ ] Suggested properties
+- [ ] Hidden properties
+- [ ] Property types personalizzati
+- [ ] Relation types personalizzati
+- [ ] Metadata audit
+- [ ] Metadata history
+- [ ] Metadata rollback
+- [ ] Rinomina proprietà (aggiorna l'uso nelle note)
+- [ ] Elimina proprietà da una nota e dal pannello proprietà
+- [ ] Aggiungi proprietà rapida dal pannello (campo libero, senza andare nel frontmatter)
+
+## 8.3 Note types e smart organization
+
+- [ ] Tipi nota
+- [ ] Icona per tipo nota
+- [ ] Colore per tipo nota
+- [ ] Template per tipo nota
+- [ ] Cartella default per tipo nota
+- [ ] Regole auto-archiviazione
+- [ ] Regole auto-spostamento
+- [ ] Regole auto-tag
+- [ ] Smart folder
+- [ ] Saved search
+- [ ] Viste salvate
+- [ ] Dashboard personalizzate
+- [ ] Note giornaliere
+- [ ] Note settimanali
+- [ ] Note mensili
+- [ ] Note annuali
+- [ ] Periodic notes
+- [ ] Naming automatico note periodiche
+- [ ] Template note periodiche
+- [ ] Zettelkasten ID
+- [ ] ID univoco nota
+- [ ] Numerazione progressiva opzionale
+- [ ] Naming file automatico
+- [ ] Slugify titoli
+- [ ] Prevenzione duplicati
+- [ ] Gestione note orfane
+- [ ] Gestione note vuote
+- [ ] Note in evidenza
+- [ ] Note correlate
+- [ ] Note simili
+- [ ] Map of Content
+- [ ] Hub notes
+- [ ] Index notes
+- [ ] Structure notes
+- [ ] Note sets
+- [ ] Note sequences
+- [ ] Learning paths
+
+## 8.4 Collezioni e smart collection
+
+- [ ] Collezioni manuali
+- [ ] Collezioni automatiche
+- [ ] Smart collections
+- [ ] Collezioni annidate
+- [ ] Collezioni temporanee
+- [ ] Collezioni condivise
+- [ ] Collezioni salvate
+- [ ] Collezioni dinamiche da query
+- [ ] Collezioni da tag
+- [ ] Collezioni da proprietà
+- [ ] Collezioni da ricerca
+- [ ] Collezioni da cartella
+- [ ] Collezioni da tipo nota
+- [ ] Collezioni da stato
+- [ ] Collezioni da review
+- [ ] Collezioni da progetto
+- [ ] Collezioni da archive
+- [ ] Collezioni da inbox
+- [ ] Collezioni da stale
+- [ ] Collezioni da orfane
+
+## 8.5 Tassonomia, ontologia e linked data
+
+- [ ] Controlled vocabularies
+- [ ] Tag manager
+- [ ] Alias manager
+- [ ] Thesaurus
+- [ ] Ontologie leggere
+- [ ] Relation types
+- [ ] Custom predicates
+- [ ] Schema.org mapping
+- [ ] JSON-LD export
+- [ ] RDF export opzionale
+- [ ] Dublin Core metadata
+- [ ] Linked data support
+- [ ] Entity resolution
+- [ ] Entity linking
+- [ ] Person entities
+- [ ] Organization entities
+- [ ] Place entities
+- [ ] Event entities
+- [ ] Concept entities
+- [ ] Work entities
+- [ ] Entity graph
+- [ ] Taxonomy browser
+- [ ] Ontology editor
+- [ ] Vocabulary import
+- [ ] SKOS support
+- [ ] Wikidata import opzionale
+- [ ] Authority control
+- [ ] Name disambiguation
+- [ ] Canonical entities
+- [ ] Entity aliases

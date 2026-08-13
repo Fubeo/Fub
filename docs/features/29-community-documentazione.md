@@ -1,0 +1,34 @@
+# 29. Community, documentazione e supporto
+
+- [ ] Repository pubblica
+- [ ] Issue tracker
+- [ ] Feature request
+- [ ] Bug reporting
+- [ ] Discussion forum
+- [ ] Community plugins
+- [ ] Community themes
+- [ ] Template gallery
+- [ ] Showcase
+- [ ] Contributor guidelines
+- [ ] Code of conduct
+- [ ] Security disclosure
+- [ ] Translation program
+- [ ] Plugin review process
+- [ ] Theme review process
+- [ ] Docs utente
+- [ ] Docs plugin
+- [ ] Docs API
+- [ ] Docs CLI
+- [ ] Docs sync
+- [ ] Docs publishing
+- [ ] Docs security
+- [ ] Docs privacy
+- [ ] FAQ
+- [ ] Troubleshooting
+- [ ] Migration guides
+- [ ] Video tutorial
+- [ ] Esempi vault
+- [ ] Template starter
+- [ ] Docs offline
+- [ ] Guida introduttiva rapida
+- [ ] Canali di supporto

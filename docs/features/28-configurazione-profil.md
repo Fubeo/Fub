@@ -1,0 +1,36 @@
+# 28. Configurazione, profili e portabilità
+
+- [ ] Impostazioni globali
+- [ ] Impostazioni vault
+- [ ] Impostazioni plugin
+- [ ] Impostazioni tema
+- [ ] Impostazioni editor
+- [ ] Impostazioni sync
+- [ ] Impostazioni AI
+- [ ] Impostazioni privacy
+- [ ] Impostazioni backup
+- [ ] Impostazioni publishing
+- [ ] Ricerca impostazioni
+- [ ] Reset impostazioni
+- [ ] Import impostazioni
+- [ ] Export impostazioni
+- [ ] Profili configurazione
+- [ ] Profili vault
+- [ ] Profili sincronizzazione
+- [ ] Profili pubblicazione
+- [ ] Profili AI
+- [ ] Profili hotkeys
+- [ ] Portable mode
+- [ ] Config nella cartella vault
+- [ ] Config esterna opzionale
+- [ ] Vault portabile su USB
+- [ ] Plugin portabili
+- [ ] Temi portabili
+- [ ] Backup portabile
+- [ ] Ripristino portabile
+- [ ] Migrazione facile tra OS
+- [ ] Nessun percorso hardcoded obbligatorio
+- [ ] Config di default funzionante
+- [ ] Config commentata
+- [ ] Percorso dati utente standard (XDG)
+- [ ] Ripristino configurazione da backup

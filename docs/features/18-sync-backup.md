@@ -1,0 +1,150 @@
+# 18. Sync, backup, versioning, diff/merge
+
+## 18.1 Sync
+
+- [ ] Sync opzionale
+- [ ] Sync non obbligatorio
+- [ ] Sync locale via file system
+- [ ] Sync con Syncthing
+- [ ] Sync con Git
+- [ ] Sync con WebDAV
+- [ ] Sync con S3 compatibile
+- [ ] Sync con Dropbox cartella
+- [ ] Sync con OneDrive cartella
+- [ ] Sync con iCloud cartella
+- [ ] Sync ufficiale opzionale
+- [ ] Sync E2EE
+- [ ] Sync self-hosted
+- [ ] Sync peer-to-peer opzionale
+- [ ] Sync LAN
+- [ ] Sync mobile
+- [ ] Sync selettivo
+- [ ] Esclusione cartelle
+- [ ] Risoluzione conflitti
+- [ ] Merge note conflittuali
+- [ ] Cronologia sync
+- [ ] Stato sync visibile
+- [ ] Errori sync dettagliati
+- [ ] Retry automatico
+- [ ] Sync offline-first
+- [ ] Sync differenziale
+- [ ] Compressione sync
+- [ ] Bandwidth limiting
+- [ ] Sync in background
+- [ ] Sync manuale
+- [ ] CRDT sync
+- [ ] Selective sync
+- [ ] Ignored files
+- [ ] Proxy support
+- [ ] Offline queue
+- [ ] Per-file status
+- [ ] Large files handling
+- [ ] Mobile background sync
+- [ ] Conflict copies
+- [ ] Sync logs
+- [ ] Sync health
+- [ ] Verifica integrità dei file dopo la sincronizzazione
+- [ ] Sync pause/resume
+- [ ] Sync scheduling
+- [ ] Sync on demand
+- [ ] Sync only on Wi-Fi
+- [ ] Sync metered network warning
+- [ ] Sync battery saver
+- [ ] Sync data saver
+- [ ] Sync encryption key management
+- [ ] Sync device revocation
+- [ ] Sync session management
+- [ ] Sync conflict UI
+- [ ] Sync merge preview
+- [ ] Sync history
+
+## 18.2 Backup e versioning
+
+- [ ] Backup automatico
+- [ ] Backup manuale
+- [ ] Snapshot vault
+- [ ] Snapshot programmati
+- [ ] Versioning note
+- [ ] Cronologia note
+- [ ] Diff versioni
+- [ ] Ripristino versione
+- [ ] Checkpoint manuali
+- [ ] Checkpoint automatici
+- [ ] Cestino versionato
+- [ ] Recupero file eliminati
+- [ ] Recupero dopo corruzione
+- [ ] Export backup cifrato
+- [ ] Verifica integrità backup
+- [ ] Retention policy
+- [ ] Pulizia vecchie versioni
+- [ ] Backup su disco esterno
+- [ ] Backup su cloud personale
+- [ ] Ripristino completo vault
+- [ ] 3-2-1 backup strategy
+- [ ] Incremental backups
+- [ ] Encrypted backups
+- [ ] Deduplication
+- [ ] Compression
+- [ ] Offsite backups
+- [ ] External drive backups
+- [ ] Cloud adapters
+- [ ] Retention policies
+- [ ] Verification
+- [ ] Restore test
+- [ ] Snapshot browser
+- [ ] Backup health
+- [ ] Backup logs
+- [ ] Backup notifications
+- [ ] Backup exclusions
+- [ ] Backup inclusions
+- [ ] Backup per vault
+- [ ] Backup per cartella
+- [ ] Backup di una singola nota
+- [ ] Backup automatico al collegamento di un'unità esterna
+- [ ] Backup attachments separately
+- [ ] Backup index optional
+- [ ] Backup settings
+- [ ] Backup encryption key management
+- [ ] Backup recovery key
+- [ ] Backup integrity checks
+- [ ] Backup versioning
+- [ ] Backup pruning
+- [ ] Backup resume after interruption
+- [ ] Backup bandwidth limits
+
+## 18.3 Diff / merge avanzato
+
+- [ ] Diff tra due note
+- [ ] Diff tra versioni nota
+- [ ] Diff side-by-side
+- [ ] Diff inline
+- [ ] Diff word-level
+- [ ] Diff block-level
+- [ ] Diff ignora gli spazi bianchi
+- [ ] Diff con confronto maiuscole/minuscole
+- [ ] Diff frontmatter
+- [ ] Diff proprietà
+- [ ] Diff tag
+- [ ] Diff allegati
+- [ ] Diff canvas
+- [ ] Diff database
+- [ ] Three-way merge
+- [ ] Merge manuale conflitti
+- [ ] Merge automatico sicuro
+- [ ] Conflict copies
+- [ ] Selective restore
+- [ ] Version labels
+- [ ] Named snapshots
+- [ ] Snapshot browser
+- [ ] Rollback a snapshot
+- [ ] Confronto vault
+- [ ] Confronto cartelle
+- [ ] Confronto backup
+- [ ] Restore puntuale
+- [ ] Restore massivo
+- [ ] Version history ricercabile
+- [ ] Version history filtrabile
+- [ ] Export diff
+- [ ] Commenti su diff
+- [ ] Review changes
+- [ ] Accept/reject changes
