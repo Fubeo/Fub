@@ -188,10 +188,11 @@ classDiagram
         +Span span
     }
     class Inline {
-        <<enum · 9 varianti>>
+        <<enum · 11 varianti>>
         Text · Emph · Strong · Code
         Link · TagRef · Custom
         Superscript · Strikethrough
+        HardBreak · SoftBreak
     }
     class LinkTarget {
         <<enum · 3 varianti>>
@@ -431,8 +432,15 @@ variante porta `anchor: Option<String>` e `span`, e i due accessori totali
 `Block::span()` / `Block::anchor()` evitano il `match` esaustivo ripetuto.
 
 `Inline` (tag serde `kind`): `Text`, `Emph`, `Strong`, `Code`,
-`Link { target, label, embed, span }`, `TagRef { name, span }`, e
-`Custom { custom_kind, attrs, span }`.
+`Link { target, label, embed, span }`, `TagRef { name, span }`,
+`Custom { custom_kind, attrs, span }`, i due costrutti del dialetto
+`Superscript` (`^…^`, l'apice) e `Strikethrough` (`~~…~~`, il barrato) —
+varianti distinte l'una dall'altra e dall'enfasi, ciascuna col suo delimitatore
+in scrittura (`^…^` e `~~…~~`) e il suo elemento in resa (`<sup>` e `<del>`) —
+e i due a-capo `HardBreak`/`SoftBreak` — il duro (`  ` o `\` a fine riga, nella
+resa cambia riga) e il morbido (la riga continua, nella resa è uno spazio).
+Prima entrambi si appiattivano su un `Text(" ")` e il salto spariva alla prima
+riscrittura.
 
 **L'escape hatch `Custom`** è la chiave dell'agnosticità: callout Obsidian,
 blocchi math, footnote, definition list **non sono hardcoded nell'enum**. Un

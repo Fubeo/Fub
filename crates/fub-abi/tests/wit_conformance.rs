@@ -1465,6 +1465,8 @@ fn inline_case(i: &arena::Inline) -> Case {
         ),
         arena::Inline::Superscript(v) => case_ty("superscript", wit(v)),
         arena::Inline::Strikethrough(v) => case_ty("strikethrough", wit(v)),
+        arena::Inline::HardBreak => case("hard-break"),
+        arena::Inline::SoftBreak => case("soft-break"),
     }
 }
 
@@ -2457,6 +2459,8 @@ fn conform(source: &str) -> Result<(), String> {
             }),
             inline_case(&arena::Inline::Superscript(vec![])),
             inline_case(&arena::Inline::Strikethrough(vec![])),
+            inline_case(&arena::Inline::HardBreak),
+            inline_case(&arena::Inline::SoftBreak),
         ],
     );
 

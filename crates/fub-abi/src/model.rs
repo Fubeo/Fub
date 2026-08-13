@@ -560,6 +560,16 @@ pub enum Inline {
     /// dall'apice e dall'enfasi — due costrutti diversi non finiscono nello
     /// stesso stile né nello stesso testo.
     Strikethrough(Vec<Inline>),
+    /// A-capo **duro** (`  ` o `\` a fine riga): nella resa cambia riga.
+    ///
+    /// È un nodo a sé perché il `Text(" ")` con cui prima si appiattiva faceva
+    /// sparire il salto alla prima riscrittura — e al giro dopo i due `Text`
+    /// diventavano un nodo solo, cioè una forma del modello che cambiava fra
+    /// round 1 e round 2. In coda all'enum perché l'ordine dei casi è il
+    /// discriminante dell'ABI (additivo = in fondo).
+    HardBreak,
+    /// A-capo **morbido**: la riga continua, e nella resa è uno spazio.
+    SoftBreak,
 }
 
 /// Intento di link **non risolto**. Il provider dice "questo è un wikilink alla
@@ -2265,6 +2275,8 @@ mod tests {
             },
             Inline::Superscript(vec![Inline::Text("s".into())]),
             Inline::Strikethrough(vec![Inline::Text("d".into())]),
+            Inline::HardBreak,
+            Inline::SoftBreak,
         ] {
             round_trip("Inline", i);
         }
