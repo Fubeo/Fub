@@ -27,8 +27,10 @@ Torna all'[indice delle decisioni](README.md) · [todo.md](../todo.md) ·
   `abi/rules/properties.rs`, dalla
   [decisione 0020](0020-le-regole-in-un-posto-solo.md)): specie diverse non si
   confrontano (falso, non errore), chi non ha la chiave ordina in fondo in
-  entrambi i versi, la parità la rompe il `DocId` — o una risposta paginata non
-  è stabile.
+  entrambi i versi, e fra specie diverse l'ordinamento segue un **rango fisso**
+  (come Excel: numero, data, bool, testo, link, elenco, unknown, vuoto) che
+  non si ribalta col decrescente — la parità la rompe il `DocId`, o una
+  risposta paginata non è stabile.
 - [x] **Full-text con ambito**: `FullText { query, scope, page }` con
   `SearchScope { folders, tags }` applicato **dentro tantivy** (nuovo campo
   `folder` con ogni cartella antenata, schema v3), non post-filtrato: il totale
