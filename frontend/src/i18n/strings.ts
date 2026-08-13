@@ -452,6 +452,8 @@ const IT = {
   "draft.case.nuova": "Questa nota non è mai stata salvata: la bozza è tutto ciò che c'è.",
   "draft.case.orfana":
     "La nota è stata cancellata mentre questo testo era ancora nell'editor: recuperarlo la farebbe tornare.",
+  "draft.case.intatta":
+    "Il file non è cambiato da quando hai iniziato questo testo: è la copia non salvata da recuperare.",
   "draft.case.divergente":
     "Il file è cambiato da quando questo testo se n'è discostato: tenendone uno si perde l'altro.",
   "draft.case.incerta":
@@ -775,6 +777,8 @@ const EN: Record<Chiave, string> = {
   "draft.case.nuova": "This note was never saved: the draft is all there is.",
   "draft.case.orfana":
     "The note was deleted while this text was still in the editor: recovering it would bring the note back.",
+  "draft.case.intatta":
+    "The file has not changed since you started this text: it is the unsaved copy to recover.",
   "draft.case.divergente":
     "The file changed after this text diverged from it: keeping one loses the other.",
   "draft.case.incerta":
