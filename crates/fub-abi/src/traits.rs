@@ -1014,6 +1014,13 @@ pub trait HostEvents: Send + Sync {
     /// il lanciatore *non* può dare — e resta la ragione per cui questa è una
     /// richiesta e non una chiamata — è il **tempo**: il job gira quando l'host
     /// lo esegue, non adesso.
+    ///
+    /// L'unico no a monte è la **chiusura**: su un vault che sta chiudendo la
+    /// richiesta non entra nemmeno in coda e risponde subito
+    /// [`Cancelled`](PluginError::Cancelled) — di quel lavoro non arriverà
+    /// nessun `JobDone`, perché non è mai partito. La guardia è per
+    /// generazione: chi riapre il vault è un workspace nuovo, e i job
+    /// ripartono.
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError>;
 
     /// **A che punto sono**: da chiamare dentro [`Plugin::run_job`], quanto
