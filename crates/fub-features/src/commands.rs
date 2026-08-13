@@ -2138,6 +2138,11 @@ fn settings_set(
     let entry = entry_of(host, key)?;
     nega_se_non_scrivibile(&entry)?;
     let value = parse_value(&entry.spec.kind, raw)?;
+    // Il piano deve attraversare lo stesso cancello dell'applicazione: il kernel
+    // lo ripeterà in `set_setting`, ma il dry-run non arriva fin lì.
+    if let Some(why) = entry.spec.kind.rejects(&value) {
+        return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
+    }
 
     // La simulazione dice cosa cambierebbe **e da cosa**: un piano senza
     // documenti sarebbe vuoto (un'impostazione non è una nota), quindi ciò che

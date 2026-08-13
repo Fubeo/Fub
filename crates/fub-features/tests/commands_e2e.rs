@@ -930,7 +930,7 @@ fn the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps() {
 // chiave), che una simulazione non sposta niente, e che l'export tira fuori ciò
 // che qualcuno ha deciso e non i default.
 
-/// Un vault coi comandi montati e due chiavi dichiarate: una che un programma
+/// Un vault coi comandi montati e tre chiavi dichiarate: due che un programma
 /// può scrivere, e una no.
 fn vault_con_impostazioni() -> (Vault, Workspace) {
     let vault = Vault::new();
@@ -940,6 +940,16 @@ fn vault_con_impostazioni() -> (Vault, Workspace) {
             fub_abi::settings::SettingSpec::toggle("versioning.enabled", "Versioning", true)
                 .grouped("Vault")
                 .program_writable(),
+            fub_abi::settings::SettingSpec::new(
+                "editor.font_size",
+                "Dimensione testo",
+                fub_abi::settings::SettingKind::Number {
+                    default: 12.0,
+                    min: Some(8.0),
+                    max: Some(72.0),
+                },
+            )
+            .program_writable(),
             fub_abi::settings::SettingSpec::toggle("privacy.telemetry", "Telemetria", false),
         ]),
         fub_kernel::Trust::Core,
@@ -1030,6 +1040,34 @@ fn simulating_a_setting_change_says_what_would_change_and_changes_nothing() {
         fub_abi::settings::SettingValue::Toggle(true),
         "una simulazione che spegnesse il versioning lo lascerebbe spento: è \
          l'effetto meno ritirabile di tutti, perché sopravvive alla sessione"
+    );
+}
+
+#[test]
+fn simulating_an_out_of_range_setting_refuses_the_same_value_as_apply() {
+    let (_vault, mut ws) = vault_con_impostazioni();
+    let invoke = |ws: &mut Workspace, mode| {
+        ws.invoke_command(
+            SETTINGS_SET,
+            serde_json::json!({ "key": "editor.font_size", "value": "100" }),
+            mode,
+            Actor::User,
+        )
+    };
+
+    let dry = invoke(&mut ws, InvokeMode::DryRun)
+        .expect_err("la simulazione non deve promettere un valore fuori intervallo");
+    let apply = invoke(&mut ws, InvokeMode::Apply)
+        .expect_err("l'applicazione deve rifiutare lo stesso valore");
+    assert_eq!(
+        format!("{dry:?}"),
+        format!("{apply:?}"),
+        "dry-run e apply devono attraversare la stessa validazione"
+    );
+    assert_eq!(
+        valore(&ws, "editor.font_size"),
+        fub_abi::settings::SettingValue::Number(12.0),
+        "nessuno dei due tentativi deve scrivere"
     );
 }
 
