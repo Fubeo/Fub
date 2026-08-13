@@ -4,6 +4,8 @@
 
 - [ ] CLI ufficiale
 - [ ] Apri vault
+- [ ] Lista vault
+- [ ] Crea vault
 - [ ] Crea nota
 - [ ] Modifica nota
 - [ ] Cerca note

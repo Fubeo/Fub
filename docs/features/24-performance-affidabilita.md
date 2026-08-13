@@ -61,6 +61,7 @@
 ## 24.2 Affidabilità
 
 - [ ] Crash recovery
+- [ ] Rilevamento di app non reattiva (watchdog)
 - [ ] Autosave
 - [ ] Atomic writes
 - [ ] File integrity checks
@@ -77,6 +78,7 @@
 - [ ] Background sync efficiente
 - [ ] Error reporting chiaro
 - [ ] Diagnostic tools
+- [ ] Log applicativo visualizzabile
 - [ ] Vault health check
 - [ ] Repair tools
 - [ ] Plugin isolation

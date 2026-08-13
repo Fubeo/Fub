@@ -42,6 +42,7 @@
 - [ ] Plugin AI providers
 - [ ] Plugin mobile compatibility
 - [ ] Plugin desktop compatibility
+- [ ] Cartella dei plugin
 
 ## 20.2 Marketplace
 
@@ -73,6 +74,7 @@
 - [ ] Log plugin
 - [ ] Installazione da file locale (.zip/.js)
 - [ ] Aggiornamento manuale di un singolo plugin
+- [ ] Aggiornamento automatico dei plugin
 - [ ] Pausa/ripresa del download di un plugin
 - [ ] Barra di avanzamento del download di un plugin
 - [ ] Data di pubblicazione del plugin nel marketplace

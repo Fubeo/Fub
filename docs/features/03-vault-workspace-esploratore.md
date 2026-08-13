@@ -28,6 +28,7 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Vault multipli simultanei
 - [ ] Switch rapido tra vault
 - [ ] Vault recenti
+- [ ] Schermata di benvenuto all'avvio con selezione dei vault recenti
 - [ ] Conferma prima della chiusura di un vault con modifiche non salvate
 - [ ] Vault preferiti
 - [ ] Icona vault personalizzata
@@ -63,6 +64,7 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Selezione multipla di file e cartelle
 - [ ] Operazioni in blocco su file selezionati
 - [ ] Spostamento drag & drop
+- [ ] Sposta in cartella dal menu contestuale
 - [ ] Aggiornamento link su rinomina
 - [ ] Aggiornamento link su spostamento
 - [ ] Cestino interno
@@ -97,6 +99,7 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Sidebar destra
 - [ ] Sidebar collassabili
 - [ ] Sidebar auto-hide
+- [ ] Scorciatoia per mostrare/nascondere la sidebar
 - [ ] Topbar opzionale
 - [ ] Status bar
 - [ ] Barra delle icone laterale (ribbon) opzionale

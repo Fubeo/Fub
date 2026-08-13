@@ -82,9 +82,13 @@
 - [ ] Dipendenze
 - [ ] Report progetto
 - [ ] Stati progetto
+- [ ] Priorità progetto
+- [ ] Assegnatari progetto
+- [ ] Date progetto
 
 ### FubJournal
 - [ ] Diario giornaliero
+- [ ] Template giornaliero
 - [ ] Journaling guidato
 - [ ] Prompt
 - [ ] Mood tracking
@@ -125,6 +129,7 @@
 - [ ] Note geolocalizzate
 - [ ] Proprietà lat/long
 - [ ] Mappa interattiva
+- [ ] Layer mappa
 - [ ] Mappe offline opzionali
 - [ ] Cluster marker
 - [ ] Filtri per luogo
