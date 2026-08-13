@@ -16,11 +16,13 @@ function bozza(p: Partial<DraftInfo> = {}): DraftInfo {
 }
 
 describe("che domanda fare su una bozza", () => {
-  it("non chiede niente se il disco ha già quel testo", () => {
-    // Il caso più comune di tutti: chiusura ordinata, il salvataggio è passato.
+  it("offre la bozza se il file è rimasto intatto", () => {
+    // `base` e `current` sono entrambe impronte del file, non del testo della
+    // bozza. Uguali significa che il file non si è mosso mentre il buffer era
+    // sporco: proprio per questo il testo della bozza è l'unica copia nuova.
     const d = bozza({ base: "abc", current: "abc" });
-    expect(casoDi(d)).toBe("superata");
-    expect(daRecuperare([d])).toEqual([]);
+    expect(casoDi(d)).toBe("intatta");
+    expect(daRecuperare([d])).toEqual([d]);
   });
 
   it("distingue una nota mai salvata da una cancellata sotto il buffer", () => {
