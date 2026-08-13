@@ -87,6 +87,7 @@
 - [ ] Database embed
 - [ ] Database sincronizzati
 - [ ] Database template
+- [ ] Aggiungi riga (dalla barra inferiore o dal menu contestuale)
 - [ ] Aggiungi colonna (dalla testata o dal menu proprietà)
 - [ ] Rinomina colonna in-place
 - [ ] Elimina colonna con conferma
