@@ -42,7 +42,8 @@ use std::collections::BTreeSet;
 use fub_abi::error::FormatError;
 use fub_abi::format::{DocumentSource, ParseContext, SourceKind};
 use fub_abi::model::{
-    heading_slugs, Block, DocId, DocumentModel, Inline, Link, LinkTarget, Span, Tag,
+    canonical_anchor, heading_slugs, Block, DocId, DocumentModel, Heading, Inline, Link,
+    LinkTarget, Span, Tag,
 };
 use fub_abi::traits::{IndexProvider, IndexQuery, ReadApi, ViewProvider};
 use fub_abi::FormatProvider;
@@ -654,19 +655,45 @@ pub fn le_tabelle_piatte_sono_la_proiezione_dell_albero(model: &DocumentModel) {
 /// non è una funzione del solo testo: due `## Note` non possono portare lo
 /// stesso `id`, e finché il confronto era `slug == heading_slug(text)` la
 /// disambiguazione era letteralmente **vietata** a chiunque volesse scriverla.
+///
+/// L'eccezione è un heading con **ancora esplicita** (`## Titolo ^Mio-ID`): chi
+/// ha scritto un id non lo disambigua il contratto, e il suo `slug` è la forma
+/// canonica di quell'id ([`canonical_anchor`]) — non un prodotto di
+/// [`heading_slugs`]. Gli id espliciti non consumano la numerazione, quindi la
+/// sequenza generata si calcola sui soli titoli senza ancora.
 pub fn lo_slug_di_un_heading_e_quello_del_contratto(model: &DocumentModel) {
-    let attesi = heading_slugs(model.outline.iter().map(|h| h.text.as_str()));
-    for (h, atteso) in model.outline.iter().zip(&attesi) {
-        assert_eq!(
-            &h.slug, atteso,
-            "l'heading `{}` porta lo slug `{}`, ma la regola del contratto\n\
-             (`heading_slugs` sull'outline in ordine di lettura) dà `{}`. Lo slug\n\
-             è la chiave con cui si risolve un `[[Nota#Titolo]]`: una seconda\n\
-             idea di come si genera è un link che funziona da un lato e non\n\
-             dall'altro, e due titoli omonimi con lo stesso slug sono un link\n\
-             che atterra sempre sul primo.",
-            h.text, h.slug, atteso
-        );
+    let senza_esplicita: Vec<&Heading> = model
+        .outline
+        .iter()
+        .filter(|h| h.explicit_anchor.is_none())
+        .collect();
+    let mut attesi = heading_slugs(senza_esplicita.iter().map(|h| h.text.as_str())).into_iter();
+    for h in &model.outline {
+        if let Some(scritto) = &h.explicit_anchor {
+            let atteso = canonical_anchor(scritto);
+            assert_eq!(
+                &h.slug, &atteso,
+                "l'heading `{}` porta l'ancora esplicita `^{}` e lo slug `{}`,\n\
+                 ma la regola del contratto dà `{}` (la forma canonica dell'id\n\
+                 scritto). Lo slug è la chiave con cui si risolve un\n\
+                 `[[Nota#Titolo]]` e un `[[Nota#^id]]` insieme: due idee della\n\
+                 stessa chiave sono un link che funziona da un lato e non\n\
+                 dall'altro.",
+                h.text, scritto, h.slug, atteso
+            );
+        } else {
+            let atteso = attesi.next().expect("il conto degli slug è allineato");
+            assert_eq!(
+                h.slug, atteso,
+                "l'heading `{}` porta lo slug `{}`, ma la regola del contratto\n\
+                 (`heading_slugs` sui titoli senza ancora esplicita, in ordine di\n\
+                 lettura) dà `{}`. Lo slug è la chiave con cui si risolve un\n\
+                 `[[Nota#Titolo]]`: una seconda idea di come si genera è un link\n\
+                 che funziona da un lato e non dall'altro, e due titoli omonimi\n\
+                 con lo stesso slug sono un link che atterra sempre sul primo.",
+                h.text, h.slug, atteso
+            );
+        }
     }
 }
 

@@ -1272,6 +1272,7 @@ fn block_case(b: &arena::Block) -> Case {
             inlines,
             anchor,
             span,
+            explicit_anchor,
         } => case_rec(
             "heading",
             "block-heading",
@@ -1280,6 +1281,7 @@ fn block_case(b: &arena::Block) -> Case {
                 ("inlines", wit(inlines)),
                 ("anchor", wit(anchor)),
                 ("span", wit(span)),
+                ("explicit-anchor", wit(explicit_anchor)),
             ],
         ),
         arena::Block::Paragraph {
@@ -2351,6 +2353,7 @@ fn conform(source: &str) -> Result<(), String> {
                 inlines: vec![],
                 anchor: None,
                 span: sp,
+                explicit_anchor: None,
             }),
             block_case(&arena::Block::Paragraph {
                 inlines: vec![],
@@ -3082,11 +3085,13 @@ fn conform(source: &str) -> Result<(), String> {
         text,
         slug,
         span,
+        explicit_anchor,
     } = Heading {
         level: 1,
         text: String::new(),
         slug: String::new(),
         span: Span::EMPTY,
+        explicit_anchor: None,
     };
     contract.record(
         "heading",
@@ -3095,6 +3100,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("text", wit(&text)),
             ("slug", wit(&slug)),
             ("span", wit(&span)),
+            ("explicit-anchor", wit(&explicit_anchor)),
         ],
     );
 

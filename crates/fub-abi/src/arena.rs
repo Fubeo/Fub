@@ -250,6 +250,9 @@ pub enum Block {
         inlines: Vec<InlineRef>,
         anchor: Option<String>,
         span: Span,
+        /// L'ancora esplicita del titolo, com'è scritta (in fondo al record
+        /// perché la posizione dei campi è ABI).
+        explicit_anchor: Option<String>,
     },
     Paragraph {
         inlines: Vec<InlineRef>,
@@ -528,11 +531,13 @@ impl DocumentTree {
                 inlines,
                 anchor,
                 span,
+                explicit_anchor,
             } => model::Block::Heading {
                 level: *level,
                 inlines: self.inlines(inlines, &mut Vec::new())?,
                 anchor: anchor.clone(),
                 span: (*span).try_into()?,
+                explicit_anchor: explicit_anchor.clone(),
             },
             Block::Paragraph {
                 inlines,
@@ -733,11 +738,13 @@ fn tree_push_block(tree: &mut DocumentTree, b: &model::Block) -> BlockRef {
             inlines,
             anchor,
             span,
+            explicit_anchor,
         } => Block::Heading {
             level: *level,
             inlines: tree_push_inlines(tree, inlines),
             anchor: anchor.clone(),
             span: (*span).into(),
+            explicit_anchor: explicit_anchor.clone(),
         },
         model::Block::Paragraph {
             inlines,
@@ -1472,6 +1479,7 @@ mod tests {
                 ],
                 anchor: Some("titolo-con-enfasi".into()),
                 span: S::new(0, 30),
+                explicit_anchor: None,
             },
             B::Paragraph {
                 inlines: vec![

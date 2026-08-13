@@ -151,6 +151,7 @@ fn il_ramo_dello_slug_aggancia_anche_lui() {
         text: testo.to_string(),
         slug: heading_slug(testo),
         span: Span::EMPTY,
+        explicit_anchor: None,
     };
     // `Café Nero` cercato come slug (`café-nero`) non è il testo del titolo:
     // il ramo di `resolution_key` dice no, e a rispondere resta solo lo slug.

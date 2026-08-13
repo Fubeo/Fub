@@ -3143,6 +3143,7 @@ mod tests {
             text: "Concorrenza".into(),
             slug: "concorrenza".into(),
             span: Span::new(0, 14),
+            explicit_anchor: None,
         }];
         let _ = idx.on_documents_indexed(std::slice::from_ref(&con_sezione));
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(

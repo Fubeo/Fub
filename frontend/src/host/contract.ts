@@ -1184,11 +1184,14 @@ export interface PropertyCount {
 }
 
 // Un heading dell'outline di un documento.
+// `explicit_anchor` è l'ancora `^id` scritta dall'utente in coda al titolo,
+// com'è scritta (`null` quando lo slug è generato dal testo).
 export interface Heading {
   level: number;
   text: string;
   slug: string;
   span: Span;
+  explicit_anchor: string | null;
 }
 
 // Se una risposta porta gli estratti (§21.9). Sta fra i tipi ri-esportati e non

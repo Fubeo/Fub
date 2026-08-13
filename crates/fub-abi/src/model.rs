@@ -303,8 +303,12 @@ impl DocumentModel {
 /// # L'ancora
 ///
 /// Ogni blocco porta un `anchor: Option<String>`, ed è la stessa cosa vista da
-/// due sintassi: per un [`Block::Heading`] è lo **slug generato** dal testo
-/// ([`heading_slug`]), per tutti gli altri è l'**id esplicito** che l'utente ha
+/// due sintassi: per un [`Block::Heading`] è lo **slug** del titolo — generato
+/// dal testo ([`heading_slug`]) o, quando l'utente ha scritto un id esplicito
+/// in coda al titolo (`## Titolo ^Mio-ID`), **quell'id com'è scritto** (vedi
+/// [`Block::Heading`] e [`Heading`]: lo slug dell'outline è la forma canonica
+/// dell'id, la chiave; l'`anchor` del blocco è l'id scritto, ciò che l'HTML
+/// porta verbatim) — per tutti gli altri è l'**id esplicito** che l'utente ha
 /// scritto in coda al blocco (`^abc123`, normalizzato da [`canonical_anchor`]).
 /// È ciò che rende indirizzabile un pezzo di documento — link a blocco (7.1),
 /// embed di blocchi (5.2), deep link a un'annotazione (13.3), diff a blocchi
@@ -319,6 +323,20 @@ pub enum Block {
         inlines: Vec<Inline>,
         anchor: Option<String>,
         span: Span,
+        /// L'ancora **scritta dall'utente** in coda al titolo (`## Titolo ^Mio-ID`),
+        /// **com'è scritta** — la maiuscola e i trattini non vengono
+        /// normalizzati: è ciò che `serialize` riscrive sul file e ciò che
+        /// l'HTML deve portare verbatim. Con un id scritto `anchor` vale questo
+        /// stesso id com'è scritto; la **chiave** — la forma canonica
+        /// ([`canonical_anchor`]), quella con cui la tabella piatta `anchors`
+        /// risolve `[[Nota#^mio-id]]` — sta nello `slug` dell'outline
+        /// ([`Heading`]), non qui. Uno slug non si può distinguere da un id
+        /// che per coincidenza gli somiglia, e senza questo campo «`## Testa`
+        /// torna `## Testa ^testa`» — un'ancora che nel file non c'era.
+        ///
+        /// Sta **in fondo** al record perché la posizione dei campi è ABI
+        /// (`wit_additivity`): ciò che c'era non si muove.
+        explicit_anchor: Option<String>,
     },
     Paragraph {
         inlines: Vec<Inline>,
@@ -794,8 +812,24 @@ pub struct Link {
 pub struct Heading {
     pub level: u8,
     pub text: String,
+    /// La chiave con cui si risolve `[[Nota#Titolo]]` e con cui si nomina
+    /// l'heading nell'outline. Quando l'utente ha scritto un id esplicito in
+    /// coda al titolo (`## Titolo ^Mio-ID`), **è la forma canonica di quell'id**
+    /// ([`canonical_anchor`]) — la generazione è bypassata, e la chiave è la
+    /// stessa con cui la tabella piatta `anchors` risolve `[[Nota#^mio-id]]`;
+    /// altrimenti è lo slug generato dal testo ([`heading_slug`], con
+    /// [`HeadingSlugs`] a separare gli omonimi).
     pub slug: String,
     pub span: Span,
+    /// L'id **esplicito** che l'utente ha scritto in coda al titolo
+    /// (`## Titolo ^Mio-ID`), **com'è scritto**: la maiuscola e i trattini non
+    /// si normalizzano, perché è ciò che `serialize` deve riscrivere sul file.
+    /// `None` quando l'heading non ne porta uno — e allora `slug` è generato,
+    /// come sempre.
+    ///
+    /// Sta **in fondo** al record perché la posizione dei campi è ABI
+    /// (`wit_additivity`): ciò che c'era non si muove.
+    pub explicit_anchor: Option<String>,
 }
 
 /// Un tag `#foo` o `#foo/bar` estratto.
@@ -1855,6 +1889,7 @@ mod tests {
                 text: (*text).to_string(),
                 slug,
                 span: Span::EMPTY,
+                explicit_anchor: None,
             })
             .collect();
         let trova = |q: &str| outline.iter().position(|h| heading_matches(q, h));
@@ -1908,6 +1943,7 @@ mod tests {
             text: testo.to_string(),
             slug: format!("{}-1", heading_slug(testo)),
             span: Span::EMPTY,
+            explicit_anchor: None,
         };
         let scritto_nfd = secondo(nfd);
         assert_ne!(

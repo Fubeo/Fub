@@ -28,6 +28,13 @@
     "task": []
   },
   {
+    "nome": "heading con ancora esplicita",
+    "source": "## Titolo ^Mio-ID\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
     "nome": "paragrafo",
     "source": "Un paragrafo qualunque.\n",
     "tag": [],
@@ -437,6 +444,41 @@
   {
     "nome": "link di riferimento",
     "source": "[a][rif]\n\n[rif]: nota.md\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "nome": "reference definition isolata",
+    "source": "[rif]: nota.md\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "nome": "reference definition con titolo",
+    "source": "[r]: nota.md \"titolo\"\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "nome": "reference definition e paragrafo misto",
+    "source": "[r]: nota.md\nparagrafo residuo sulla seconda riga\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "nome": "reference definition dentro una citazione",
+    "source": "> [r]: nota.md\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "nome": "reference definition adiacenti",
+    "source": "[uno]: a.md\n[due]: b.md \"due\"\n\nil testo che le segue\n",
     "tag": [],
     "wikilink": [],
     "task": []
