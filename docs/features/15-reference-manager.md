@@ -21,8 +21,6 @@
 - [ ] Collegamento PDF a riferimento
 - [ ] Annotazioni PDF collegate a reference
 - [ ] Letterature review matrix
-- [ ] Evidence table
-- [ ] Quote bank
 - [ ] Gestione fonti
 - [ ] DOI resolver
 - [ ] ISBN metadata fetch opzionale

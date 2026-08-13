@@ -126,7 +126,6 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Context menus completi
 - [ ] Quick actions
 - [ ] Background task manager
-- [ ] Lingua dell'interfaccia selezionabile (i18n)
 - [ ] Ripristino sessione all'avvio (ultime note aperte)
 - [ ] Indicatore di modifica non salvata sulla scheda
 - [ ] Storico delle note aperte di recente

@@ -18,7 +18,6 @@
 - [ ] DB ricostruibile dai file Markdown
 - [ ] Nessun dato essenziale solo nel DB
 - [ ] File system watcher
-- [ ] Rilevamento modifiche esterne
 - [ ] Gestione conflitti file
 - [ ] Scrittura atomica dei file
 - [ ] Recovery dopo crash

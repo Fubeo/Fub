@@ -108,7 +108,6 @@
 - [ ] Trascrizione audio locale
 - [ ] Trascrizione audio cloud opzionale
 - [ ] Trascrizione video
-- [ ] Sottotitoli
 - [ ] Speaker diarization
 - [ ] Riconoscimento parlanti
 - [ ] Riassunto automatico riunione
