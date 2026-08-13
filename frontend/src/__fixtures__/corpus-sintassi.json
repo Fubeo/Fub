@@ -421,6 +421,20 @@
     "task": []
   },
   {
+    "nome": "barrato",
+    "source": "~~barrato~~\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
+    "nome": "apice",
+    "source": "testo ^apice^ qui\n",
+    "tag": [],
+    "wikilink": [],
+    "task": []
+  },
+  {
     "nome": "link di riferimento",
     "source": "[a][rif]\n\n[rif]: nota.md\n",
     "tag": [],

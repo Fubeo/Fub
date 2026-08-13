@@ -404,6 +404,16 @@ fn split_inlines(
                 split_inlines(&mut children, r, open, close, ctx, span);
                 out.push(Inline::Strong(children));
             }
+            // L'apice e il barrato sono contenitori come l'enfasi: ciò che
+            // vale dentro un paragrafo vale dentro `^…^` e `~~…~~`.
+            Inline::Superscript(mut children) => {
+                split_inlines(&mut children, r, open, close, ctx, span);
+                out.push(Inline::Superscript(children));
+            }
+            Inline::Strikethrough(mut children) => {
+                split_inlines(&mut children, r, open, close, ctx, span);
+                out.push(Inline::Strikethrough(children));
+            }
             // L'etichetta di un link è testo che l'utente legge, e ciò che vale
             // in un paragrafo vale lì dentro: `[==qui==](url)` deve evidenziare
             // come `==qui==` fuori, o la stessa sintassi funzionerebbe a

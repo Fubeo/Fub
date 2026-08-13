@@ -943,8 +943,12 @@ fn sposta(d: &mut DocumentModel, delta: usize) {
                     }
                 }
                 Inline::TagRef { span, .. } | Inline::Custom { span, .. } => s(span, delta),
-                Inline::Emph(dentro) | Inline::Strong(dentro) => dentro_gli_inline(dentro, delta),
-                Inline::Text(_) | Inline::Code(_) => {}
+                Inline::Emph(dentro)
+                | Inline::Strong(dentro)
+                | Inline::Superscript(dentro)
+                | Inline::Strikethrough(dentro) => dentro_gli_inline(dentro, delta),
+                // I due a-capo non portano span: come Text e Code.
+                Inline::Text(_) | Inline::Code(_) | Inline::HardBreak | Inline::SoftBreak => {}
             }
         }
     }

@@ -140,6 +140,13 @@ pub fn corpus() -> Vec<Caso> {
         ),
         caso("softbreak", "una riga\nun'altra\n"),
         caso("linebreak", "una riga  \nun'altra\n"),
+        // L'apice e il barrato erano fra le [`divergenti`] («non arrivano nel
+        // modello»): il parser li accendeva (estensioni `superscript` e
+        // `strikethrough`) e il modello non aveva dove metterli — finivano nel
+        // catch-all e ne restava solo il testo. Adesso hanno una variante
+        // loro, e stanno qui come ogni altro costrutto.
+        caso("barrato", "~~barrato~~\n"),
+        caso("apice", "testo ^apice^ qui\n"),
         caso("link di riferimento", "[a][rif]\n\n[rif]: nota.md\n"),
         // Una reference definition non è un paragrafo: comrak la consuma senza
         // lasciare un nodo, e il parser la recupera dalla sorgente. Se non ci
@@ -247,8 +254,6 @@ pub fn corpus() -> Vec<Caso> {
 /// nome qui senza predicato là, o un predicato là senza nome qui, è rosso.
 pub fn divergenti() -> Vec<Caso> {
     vec![
-        caso("il barrato non arriva nel modello", "~~barrato~~\n"),
-        caso("l'apice non arriva nel modello", "testo ^apice^ qui\n"),
         caso(
             "l'ancora esplicita di un heading non è raggiungibile dall'albero",
             "## Titolo ^xyz\n",
