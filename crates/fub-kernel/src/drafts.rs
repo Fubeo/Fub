@@ -505,7 +505,6 @@ mod tests {
         );
     }
 
-
     fn drafts() -> Drafts {
         Drafts::open(
             Utf8Path::new("/vault"),

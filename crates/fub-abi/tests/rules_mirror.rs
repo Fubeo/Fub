@@ -37,12 +37,12 @@
 //!   rossa e resterebbe rossa. Vedi `fub_abi::rules`.
 
 use fub_abi::event::{BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Subject};
+use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::rules::path_policy::{check, normalized, Naming};
 use fub_abi::rules::tasti;
-use fub_abi::locale::Locale;
 use fub_abi::text::{ArgValue, Message, StringCatalog, Strings, Text};
 use fub_abi::Span;
 use serde_json::{json, Value};
@@ -639,8 +639,7 @@ fn espansione_cases() -> Vec<Value> {
         ("{constructor}", vec![]),
         ("niente", vec![]),
     ];
-    casi
-        .into_iter()
+    casi.into_iter()
         .map(|(template, args)| {
             let catalogo = StringCatalog::new("it").with("t", template);
             let cataloghi = [catalogo];

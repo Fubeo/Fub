@@ -217,7 +217,9 @@ pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules", "ta
 pub(crate) fn e_temporaneo_altrui(key: &str) -> bool {
     // `~$nota.docx`: il file di proprietà che Office scrive accanto a quello
     // aperto, e che resta lì finché la finestra è aperta.
-    let office = key.strip_prefix("~$").is_some_and(|resto| !resto.is_empty());
+    let office = key
+        .strip_prefix("~$")
+        .is_some_and(|resto| !resto.is_empty());
     // `nota.md~`: la copia di prima, che lasciano dietro Emacs, gedit, kate,
     // joe e mezzo Unix.
     let copia = key.strip_suffix('~').is_some_and(|base| !base.is_empty());
@@ -228,7 +230,6 @@ pub(crate) fn e_temporaneo_altrui(key: &str) -> bool {
 }
 
 pub(crate) fn e_struttura(key: &str) -> bool {
-
     key == FUB_DIR
         || key == TRASH_DIR
         || crate::storage::e_temporaneo_di_scrittura(key)

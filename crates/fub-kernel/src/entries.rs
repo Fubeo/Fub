@@ -345,7 +345,9 @@ impl EntryStore {
 /// risuscita.
 fn arricchisci(nuova: &mut BTreeMap<DocId, StoredEntry>, vecchia: &BTreeMap<DocId, StoredEntry>) {
     for (id, voce) in nuova.iter_mut() {
-        let Some(prima) = vecchia.get(id) else { continue };
+        let Some(prima) = vecchia.get(id) else {
+            continue;
+        };
         if !prima.describes(voce.size, voce.mtime) {
             continue;
         }

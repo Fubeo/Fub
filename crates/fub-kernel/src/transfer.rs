@@ -312,14 +312,15 @@ impl ArtifactSink for DirectorySink {
         // collegamento senza chiedere, e le cartelle nate di là restano lì
         // anche se poi l'artefatto lo rifiutiamo.
         resta_dentro(&self.root, &dir)?;
-        std::fs::create_dir_all(&dir).map_err(|e| {
-            PluginError::Io(format!("`{}` non si crea: {e}", dir.display()).into())
-        })?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| PluginError::Io(format!("`{}` non si crea: {e}", dir.display()).into()))?;
         // Il nome del file lo dà il provider ed è già passato da
         // `controlla_path`, quindi è UTF-8 e non ha separatori: la cartella
         // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
         let nome = crate::storage::nome_del_temporaneo(
-            dest.file_name().and_then(|n| n.to_str()).unwrap_or("artefatto"),
+            dest.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("artefatto"),
         );
         let di_lato = dest.with_file_name(nome);
         let file = File::create(&di_lato).map_err(|e| {
@@ -430,9 +431,9 @@ fn handle_ignoto() -> PluginError {
 /// `rename` della chiusura **sostituisce** un eventuale collegamento invece di
 /// seguirlo, che è la stessa regola con cui il vault scrive (decisione 0065).
 fn resta_dentro(root: &Path, dir: &Path) -> Result<(), PluginError> {
-    let vera = root.canonicalize().map_err(|e| {
-        PluginError::Io(format!("`{}` non si risolve: {e}", root.display()).into())
-    })?;
+    let vera = root
+        .canonicalize()
+        .map_err(|e| PluginError::Io(format!("`{}` non si risolve: {e}", root.display()).into()))?;
     let mut esistente = dir;
     while !esistente.exists() {
         match esistente.parent() {

@@ -996,7 +996,11 @@ fn una_nota_cestinata_non_lascia_la_sua_bozza() {
     let id = DocId::new("Idea.txt");
     ws.save_draft(&id, "l'idea che stavo ancora scrivendo", None)
         .unwrap();
-    assert_eq!(bozze(&ws), vec!["Idea.txt".to_string()], "il banco parte da una bozza che c'è");
+    assert_eq!(
+        bozze(&ws),
+        vec!["Idea.txt".to_string()],
+        "il banco parte da una bozza che c'è"
+    );
 
     ws.delete_document(&id).unwrap();
 

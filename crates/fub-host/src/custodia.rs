@@ -355,13 +355,17 @@ impl<'a, T> Presa<'a, T> {
 impl<T> Deref for Presa<'_, T> {
     type Target = T;
     fn deref(&self) -> &T {
-        self.guardia.as_ref().expect("la presa vive finché non si scioglie")
+        self.guardia
+            .as_ref()
+            .expect("la presa vive finché non si scioglie")
     }
 }
 
 impl<T> DerefMut for Presa<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        self.guardia.as_mut().expect("la presa vive finché non si scioglie")
+        self.guardia
+            .as_mut()
+            .expect("la presa vive finché non si scioglie")
     }
 }
 

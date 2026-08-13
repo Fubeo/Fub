@@ -47,7 +47,12 @@ fn il_contesto_di_sessione_ha_quattro_campi_e_nessun_bersaglio() {
         trovati = Some(
             s.fields
                 .iter()
-                .map(|f| f.ident.as_ref().expect("ViewContext è un record").to_string())
+                .map(|f| {
+                    f.ident
+                        .as_ref()
+                        .expect("ViewContext è un record")
+                        .to_string()
+                })
                 .collect(),
         );
     }

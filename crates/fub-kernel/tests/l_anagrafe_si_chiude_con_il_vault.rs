@@ -52,9 +52,7 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
 use fub_abi::options::syntax;
-use fub_abi::traits::{
-    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute,
-};
+use fub_abi::traits::{HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute};
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, Stat, VaultStorage};
 use fub_kernel::{FormatRegistry, MachineSettings, MemStorage, Workspace};
