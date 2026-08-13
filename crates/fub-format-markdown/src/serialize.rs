@@ -583,6 +583,20 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
             write_inlines(children, out)?;
             out.push('*');
         }
+        // L'apice e il barrato si riscrivono con il loro delimitatore: sono
+        // costrutti del dialetto (le estensioni `superscript` e `strikethrough`
+        // di comrak), e ciascuno ha la sua forma — un `^…^` non è un `~~…~~`,
+        // e nessuno dei due è enfasi.
+        Inline::Superscript(children) => {
+            out.push('^');
+            write_inlines(children, out)?;
+            out.push('^');
+        }
+        Inline::Strikethrough(children) => {
+            out.push_str("~~");
+            write_inlines(children, out)?;
+            out.push_str("~~");
+        }
         Inline::Strong(children) => {
             out.push_str("**");
             write_inlines(children, out)?;

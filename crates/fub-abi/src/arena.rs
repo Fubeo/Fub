@@ -187,6 +187,8 @@ pub enum Inline {
         attrs: serde_json::Value,
         span: Span,
     },
+    Superscript(Vec<InlineRef>),
+    Strikethrough(Vec<InlineRef>),
 }
 
 /// [`model::ListItem`] con i blocchi sostituiti da indici.
@@ -675,6 +677,8 @@ impl DocumentTree {
             Inline::Text(s) => model::Inline::Text(s.clone()),
             Inline::Emph(v) => model::Inline::Emph(self.inlines(v, path)?),
             Inline::Strong(v) => model::Inline::Strong(self.inlines(v, path)?),
+            Inline::Superscript(v) => model::Inline::Superscript(self.inlines(v, path)?),
+            Inline::Strikethrough(v) => model::Inline::Strikethrough(self.inlines(v, path)?),
             Inline::Code(s) => model::Inline::Code(s.clone()),
             Inline::Link {
                 target,
@@ -851,6 +855,8 @@ fn tree_push_inline(tree: &mut DocumentTree, i: &model::Inline) -> InlineRef {
         model::Inline::Text(s) => Inline::Text(s.clone()),
         model::Inline::Emph(v) => Inline::Emph(tree_push_inlines(tree, v)),
         model::Inline::Strong(v) => Inline::Strong(tree_push_inlines(tree, v)),
+        model::Inline::Superscript(v) => Inline::Superscript(tree_push_inlines(tree, v)),
+        model::Inline::Strikethrough(v) => Inline::Strikethrough(tree_push_inlines(tree, v)),
         model::Inline::Code(s) => Inline::Code(s.clone()),
         model::Inline::Link {
             target,

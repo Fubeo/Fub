@@ -551,6 +551,15 @@ pub enum Inline {
         attrs: serde_json::Value,
         span: Span,
     },
+    /// `^apice^`: un apice inline, variante a sé del dialetto (l'estensione
+    /// `superscript` di comrak). Non collassa in [`Inline::Custom`] né
+    /// nell'enfasi: è un costrutto che si legge in un modo e si riscrive in
+    /// quello stesso modo.
+    Superscript(Vec<Inline>),
+    /// `~~barrato~~`: un tratto di testo barrato. Variante a sé, distinta
+    /// dall'apice e dall'enfasi — due costrutti diversi non finiscono nello
+    /// stesso stile né nello stesso testo.
+    Strikethrough(Vec<Inline>),
 }
 
 /// Intento di link **non risolto**. Il provider dice "questo è un wikilink alla
@@ -2254,6 +2263,8 @@ mod tests {
                 attrs: serde_json::Value::Null,
                 span,
             },
+            Inline::Superscript(vec![Inline::Text("s".into())]),
+            Inline::Strikethrough(vec![Inline::Text("d".into())]),
         ] {
             round_trip("Inline", i);
         }
