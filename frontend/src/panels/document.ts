@@ -54,7 +54,7 @@ import {
   statoDi,
   type Esito,
 } from "../state/salvataggio";
-import { CHIAVE_CASO, casoDi, daRecuperare } from "../state/bozze";
+import { CHIAVE_CASO, casoDi, daRecuperare, ricongiungiBozze } from "../state/bozze";
 import { bozzeNonSalvate } from "../host/query";
 import type { DraftInfo } from "../host/contract";
 import {
@@ -99,9 +99,11 @@ export interface DocumentDeps {
 /// `WriteBase`, che non porta niente e quindi si può tenere in una costante.
 ///
 /// Sta qui e ha un nome perché nella shell i posti che la usano sono pochi e
-/// ognuno è una decisione — «vince il mio testo», una bozza vecchia che la sua
-/// base non la sapeva, un buffer nato da una battuta prima di aver letto il
-/// disco — e un nome li rende cercabili tutti insieme.
+/// ognuno è una decisione — «vince il mio testo», un buffer nato da una
+/// battuta prima di aver letto il disco — e un nome li rende cercabili tutti
+/// insieme. Il terzo posto, la bozza vecchia che la sua base non la sapeva, è
+/// passato con `ricongiungiBozze` a `state/bozze.ts`, dove il dettato si
+/// scrive dove la decisione si prende.
 const DETTA: WriteBase = { kind: "dictated" };
 
 /// Un riquadro **a schermo**: la sua parte di DOM, il suo editor, e quale
@@ -863,6 +865,20 @@ function aggiornaCommutatore(): void {
 /// Le bozze **superate** — il disco contiene già quel testo, cioè il caso
 /// normale dopo una chiusura ordinata — non arrivano fin qui: le toglie
 /// `daRecuperare`.
+///
+/// Il ricongiungimento ha una condizione di **identità**: la bozza torna nel
+/// suo documento solo se il buffer che c'è già non è sporco. Quando `recuperaBozze`
+/// corre, `sincronizza` ha appena letto dal disco le tab ripristinate dal layout —
+/// buffer **puliti**, cioè la copia più *vecchia* fra le due — e la bozza deve
+/// rientrare sopra di loro. Un buffer sporco invece è un testo battuto dopo, in
+/// questa sessione: un'identità diversa, e la bozza resta orfana sul disco.
+///
+/// Il rientro non si ferma al buffer: chi arrivava già a schermo leggeva il
+/// disco — la tab ripristinata dal layout, che `sincronizza` ha appena
+/// disegnato — e la bozza è più nuova di lui. L'editor, il pallino sulla tab,
+/// la barra di stato e la lettura si portano con lei, o la prima battuta,
+/// riscritta sopra il testo vecchio che si vede, coprirebbe il recupero senza
+/// che nessuno l'abbia mai visto.
 export async function recuperaBozze(): Promise<number> {
   let bozze: DraftInfo[];
   try {
@@ -873,27 +889,39 @@ export async function recuperaBozze(): Promise<number> {
     // rete. Ciò che non si è letto lo dice il rapporto diagnostico.
     return 0;
   }
-  for (const b of bozze) {
-    // Solo se nessuno tiene già quel buffer: chi ha già aperto quella nota in
-    // questa sessione ha un testo più recente di ciò che stava sul disco.
-    if (buffers.has(b.doc)) continue;
-    // `b.base` è la revisione da cui quel testo si era discostato, e da questa
-    // voce non è più `null` per forza: chi ha scritto la bozza la sapeva
-    // (§18.1). Una bozza vecchia, scritta da una sessione che non la sapeva,
-    // riparte **dettando**: è l'unica risposta possibile — non c'è nessuna
-    // revisione da esibire — ed è qui che si scrive, dove il fatto si scopre,
-    // invece che al salvataggio, dove sembrerebbe una scelta di chi salva.
-    buffers.set(b.doc, {
-      text: b.text,
-      dirty: true,
-      esito: "ok",
-      echi: 0,
-      coda: new Coda(),
-      base: b.base === null ? DETTA : { kind: "descends_from", value: b.base },
-    });
+  const rientrate = ricongiungiBozze(bozze, buffers);
+  // Chi arrivava già a schermo leggeva il disco **prima** del recupero — la
+  // tab ripristinata dal layout, che `sincronizza` ha appena disegnato — e la
+  // bozza è più nuova di lui: le superfici vanno portate con lei, o la prima
+  // battuta, riscritta sopra il testo vecchio che si vede, coprirebbe il
+  // recupero senza che nessuno l'abbia mai visto.
+  for (const b of rientrate) {
     notify(`${b.doc}: ${t(CHIAVE_CASO[casoDi(b)])}`, "info");
+    for (const paneId of paneConDoc(b.doc)) {
+      const r = riquadri.get(paneId);
+      if (r && r.mostrato?.k === "doc" && r.mostrato.doc === b.doc) {
+        r.editor.syncDoc(b.text);
+      }
+    }
   }
-  return bozze.length;
+  // Il pallino sulla tab diceva «pulito» — lo si è disegnato prima del
+  // recupero — e il buffer rientrato è sporco: si ridisegna, come fa `scritto`
+  // quando una battuta sporca un buffer.
+  for (const b of rientrate) {
+    for (const paneId of paneConDoc(b.doc)) {
+      const r = riquadri.get(paneId);
+      const p = pane(paneId);
+      if (r && p) disegnaTab(r, p.tabs, p.active);
+    }
+  }
+  disegnaSalvataggio();
+  // E la lettura, che mostrava il disco, mostra il testo rientrato.
+  await Promise.all(rientrate.map((b) => ridisegnaLettura(b.doc)));
+  // Il conto dice quante sono **rientrate davvero**, non quante erano in fila:
+  // la notifica dice «è stato ritrovato, aprile per decidere», e una bozza
+  // saltata — il buffer sporco che la precede — non è ritrovata e non ha
+  // nessun documento da aprire.
+  return rientrate.length;
 }
 
 // --- aprire e chiudere ------------------------------------------------------

@@ -321,9 +321,14 @@ impl Drafts {
     /// `idee.md` è una nota mai salvata e ancora sporca passava il controllo
     /// dell'anagrafe — il documento non c'è — e cancellava il testo.
     ///
-    /// Trovandola occupata non si sposta niente: la bozza di `from` resta dov'è,
-    /// quella di `to` pure, e l'errore diventa un avviso. Due bozze vive in due
-    /// posti sono un disordine; una sola, cancellata, non si ripara.
+    /// Trovandola occupata la bozza di `to` non si tocca — è il testo non
+    /// salvato di un'identità diversa — e quella di `from` non resta sotto
+    /// l'id morto, dove nessun recupero la cercherebbe: prende un **nome di
+    /// recupero** libero ([`Drafts::nome_di_recupero`]), che decodifica in un
+    /// documento che non esiste, e [`Drafts::read`] la elenca fra le bozze
+    /// **orfane** — l'unica forma che un recupero ritrova. Due bozze vive in
+    /// due posti sono un disordine; una sola, sotto una chiave che nessuno
+    /// visita, non si ripara e non si vede.
     ///
     /// # «Occupata» è una domanda sul file, non sul nome
     ///
@@ -345,8 +350,9 @@ impl Drafts {
     /// documento solo** — che nessuno riconcilia, perché questo modulo
     /// dichiara di non raccogliere apposta (difetto 0169). La seconda
     /// mutazione non serviva: di quale file è la bozza lo dice il nome del
-    /// file, e chi legge lo ricava da lì ([`Draft::doc`]). Resta una `rename`,
-    /// che o è avvenuta o non è avvenuta.
+    /// file, e chi legge lo ricava da lì ([`Draft::doc`]). Resta una mossa
+    /// sola — `rename_no_replace`, che o è avvenuta o non è avvenuta, e non
+    /// sovrascrive mai una destinazione comparsa nel frattempo.
     ///
     /// # Lo stesso file: prima il record, poi il nome
     ///
@@ -367,13 +373,21 @@ impl Drafts {
             return Ok(());
         }
         if !self.storage.same_file(&vecchio, &nuovo) {
-            if self.storage.exists(&nuovo) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::AlreadyExists,
-                    format!("{to} ha già una bozza non salvata, e non la si sovrascrive"),
-                ));
-            }
-            return self.storage.rename(&vecchio, &nuovo);
+            // La destinazione non si sovrascrive, mai: se ha già una bozza sua
+            // — o un concorrente gliene posa una fra qui e la mossa — quella
+            // di `from` prende un nome di recupero libero
+            // ([`Drafts::nome_di_recupero`]), e la lettura la elenca come
+            // bozza orfana. La verifica e la mossa sono una sola operazione:
+            // `rename_no_replace`, e non `exists` seguito da `rename` — fra i
+            // due non c'è un concorrente che possa farsi sovrascrivere.
+            return match self.storage.rename_no_replace(&vecchio, &nuovo) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    self.nome_di_recupero(from, &vecchio)?;
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            };
         }
         let Some(mut draft) = self.get(from)? else {
             return self.storage.rename(&vecchio, &nuovo);
@@ -382,6 +396,58 @@ impl Drafts {
         let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
         self.storage.write(&vecchio, &bytes)?;
         self.storage.rename(&vecchio, &nuovo)
+    }
+
+    /// Sposta il file di bozza sotto un **nome di recupero** libero, e torna
+    /// il percorso del nome nuovo.
+    ///
+    /// La destinazione ha già una bozza sua — o un concorrente gliene ha posata
+    /// una nel frattempo — e nessuna delle due si sovrascrive: il testo che non
+    /// può atterrare prende `{stelo}~recupero`, e se preso
+    /// `{stelo}~recupero-2`, e così via. Il nome decodifica in un documento che
+    /// non esiste, quindi [`Drafts::read`] lo elenca come bozza **orfana**,
+    /// l'unica forma che un recupero ritrova. Ogni candidato si prova con
+    /// [`VaultStorage::rename_no_replace`] — la creazione e il rifiuto sono una
+    /// sola operazione: non c'è un `exists` che guarda e una `rename` che
+    /// arriva dopo, e fra le due un concorrente non può occupare il nome.
+    ///
+    /// **L'estensione del documento si conserva**: `prima.md` diventa
+    /// `prima~recupero.md`, non `prima.md~recupero`. Il nome di recupero è un
+    /// documento che un domani si può salvare — e un documento senza
+    /// estensione riconosciuta il registro dei formati non sa né salvarlo né
+    /// renderlo — quindi l'estensione è la sua, l'ultima, e senza estensione
+    /// resta `prima~recupero`. Estensione e forma restano quelle di ogni
+    /// bozza: un nome che [`documento_del_nome`] non riconoscesse sarebbe
+    /// testo che nessuno sa leggere.
+    fn nome_di_recupero(&self, from: &DocId, vecchio: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
+        let cartella = vecchio.parent().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "il file di bozza non sta in una cartella",
+            )
+        })?;
+        // Lo stelo resta com'è, `~recupero` si attacca davanti all'estensione.
+        // Un nome senza doti — o con il punto in testa o in coda — non ha
+        // estensione da conservare, e il suffisso va in fondo al nome.
+        let (stelo, estensione) = match from.as_str().rsplit_once('.') {
+            Some((s, e)) if !s.is_empty() && !e.is_empty() => (s, Some(e)),
+            _ => (from.as_str(), None),
+        };
+        for n in 1u64.. {
+            let candidato = match estensione {
+                Some(ext) if n == 1 => format!("{stelo}~recupero.{ext}"),
+                Some(ext) => format!("{stelo}~recupero-{n}.{ext}"),
+                None if n == 1 => format!("{stelo}~recupero"),
+                None => format!("{stelo}~recupero-{n}"),
+            };
+            let percorso = cartella.join(format!("{}.{EXT}", encode(candidato.as_str())));
+            match self.storage.rename_no_replace(vecchio, &percorso) {
+                Ok(()) => return Ok(percorso),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        unreachable!("i nomi di recupero non finiscono: a ogni giro l'encode è diverso")
     }
 }
 
@@ -603,14 +669,15 @@ mod tests {
         d.save(&doc("dopo.md"), "il testo che non esiste altrove", None, 2)
             .unwrap();
 
-        let esito = d.migrate(&doc("prima.md"), &doc("dopo.md"));
-        assert_eq!(
-            esito.unwrap_err().kind(),
-            std::io::ErrorKind::AlreadyExists,
-            "la destinazione era occupata, e lo si dice"
-        );
+        d.migrate(&doc("prima.md"), &doc("dopo.md")).unwrap();
         let bozze = d.read().unwrap();
-        assert_eq!(bozze.drafts.len(), 2, "nessuna delle due si è persa");
+        assert_eq!(
+            bozze.drafts.len(),
+            2,
+            "nessuna delle due si è persa, e nessun testo esiste due volte: \
+             {:?}",
+            bozze.drafts.iter().map(|b| &b.doc).collect::<Vec<_>>()
+        );
         let testo = |id: &str| {
             bozze
                 .drafts
@@ -620,10 +687,68 @@ mod tests {
         };
         assert_eq!(testo("dopo.md"), Some("il testo che non esiste altrove"));
         assert_eq!(
-            testo("prima.md"),
+            testo("prima~recupero.md"),
             Some("il testo che si sposta"),
-            "e chi non si è potuto spostare resta dov'era, invece di sparire da \
-             tutte e due le parti"
+            "e chi non è potuto atterrare sulla destinazione prende un nome di \
+             recupero — l'estensione del documento conservata — che decodifica \
+             in un documento che non esiste: la bozza si rilegge come orfana, \
+             e un recupero la ritrova"
+        );
+        assert!(
+            testo("prima.md").is_none(),
+            "sotto l'id morto non resta niente"
+        );
+    }
+
+    #[test]
+    fn un_nome_di_recupero_gia_preso_non_ferma_la_migrazione() {
+        // Il primo nome di recupero può essere già occupato — da un'altra
+        // rinomina in collisione, o da una bozza orfana che c'era prima — e il
+        // giro dopo deve trovarne un altro, non fallire.
+        let d = drafts();
+        d.save(&doc("prima.md"), "il testo che si sposta", None, 1)
+            .unwrap();
+        d.save(
+            &doc("dopo.md"),
+            "la destinazione che ha già una bozza",
+            None,
+            2,
+        )
+        .unwrap();
+        d.save(
+            &doc("prima~recupero.md"),
+            "un recupero che c'era già",
+            None,
+            3,
+        )
+        .unwrap();
+
+        d.migrate(&doc("prima.md"), &doc("dopo.md")).unwrap();
+        let bozze = d.read().unwrap();
+        assert_eq!(
+            bozze.drafts.len(),
+            3,
+            "nessun testo si perde e nessuno si duplica"
+        );
+        let testo = |id: &str| {
+            bozze
+                .drafts
+                .iter()
+                .find(|b| b.doc == doc(id))
+                .map(|b| b.text.as_str())
+        };
+        assert_eq!(
+            testo("dopo.md"),
+            Some("la destinazione che ha già una bozza")
+        );
+        assert_eq!(
+            testo("prima~recupero.md"),
+            Some("un recupero che c'era già")
+        );
+        assert_eq!(
+            testo("prima~recupero-2.md"),
+            Some("il testo che si sposta"),
+            "il nome di recupero libero è il secondo della famiglia"
         );
     }
 

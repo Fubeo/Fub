@@ -38,6 +38,16 @@ import { describe, expect, it } from "vitest";
 import sorgente from "./document.ts?raw";
 import esploratore from "./explorer.ts?raw";
 
+// Il presidio del ricongiungimento (in fondo a questo file) importa la
+// decisione dal modulo puro `state/bozze.ts`, che non tocca né DOM, né
+// editor, né IPC: la metà di `recuperaBozze` che muta la mappa dei buffer si
+// prova come comportamento, senza montare la shell. Gli altri presidi di
+// questo file restano sul sorgente — vedi la nota in cima — perché guardano
+// ordini di righe che nessuna funzione pura potrebbe rendere.
+import { Coda } from "../ui/corsa";
+import type { DraftInfo } from "../host/contract";
+import { ricongiungiBozze, type BufferDellaBozza } from "../state/bozze";
+
 /// Il corpo dell'ascoltatore di `document_changed`, dalla sua apertura al
 /// prossimo `onEvent(`.
 function corpo(): string {
@@ -202,5 +212,140 @@ describe("la finestra di migrazione di una rinomina", () => {
       "l'esploratore torna a chiamare `renameNote` da sé: quella strada non " +
         "tiene fermo il buffer, e la finestra di migrazione si riapre",
     ).not.toContain("renameNote(");
+  });
+});
+
+// **Il ricongiungimento delle bozze orfane** (§15.2).
+//
+// Il recupero corre DOPO che `sincronizza` ha disegnato le tab ripristinate dal
+// layout, e disegnarle significa aver già letto il disco in un buffer **pulito**
+// (`leggiBuffer`). La guardia «se un buffer c'è già, salta» scambiava quella
+// copia del disco per il testo più recente della bozza: la bozza restava dov'era,
+// la notifica la contava come ritrovata, e il primo salvataggio (`dropDraft`)
+// la cancellava — il testo non salvato, l'unica copia, spariva senza che
+// nessuno l'avesse mai visto. È il caso in cui una bozza esiste per definizione:
+// un salvataggio rifiutato dal disco (pieno, sola lettura, share caduta) alla
+// chiusura della finestra, con la tab ancora nel layout al riavvio.
+//
+// La condizione giusta è lo **sporco**, non l'esistenza: un buffer sporco porta
+// un'identità diversa — un testo battuto dopo, in questa sessione — e la bozza
+// resta orfana sul disco; un buffer pulito è solo il disco riletto, e la bozza
+// rientra sopra di lui, sporcandolo, una volta sola (il buffer sporco che ne
+// nasce ferma la voce che nomina lo stesso documento). E il conto restituito
+// dice quante sono rientrate davvero: la notifica «è stato ritrovato» con
+// dentro una bozza saltata sarebbe una bugia.
+//
+// # Perché qui si prova il comportamento, non il sorgente
+//
+// Gli altri presidi di questo file guardano il sorgente perché ciò che è
+// sbagliato è l'**ordine delle righe** — una cosa che nessuna funzione pura
+// potrebbe rendere. Il ricongiungimento no: la decisione sta in
+// `ricongiungiBozze` (`state/bozze.ts`), la metà di `recuperaBozze` che non
+// tocca né DOM, né editor, né IPC — riceve la mappa dei buffer e la muta —
+// ed è un
+// comportamento osservabile: quale testo finisce nel buffer, con che stato, e
+// quante bozze il conto dice rientrate. Si prova quello, come si deve.
+describe("il ricongiungimento delle bozze orfane", () => {
+  /// Una bozza come la manda il kernel: il documento, il testo, e la base da
+  /// cui il buffer si era discostato — `null` quando chi l'ha scritta non la
+  /// sapeva, che è il caso di una nota mai salvata.
+  function bozza(doc: string, text: string, base: string | null = null): DraftInfo {
+    return { doc, at: 1, base, exists: true, current: base, text };
+  }
+
+  /// Un buffer come lo lascia `leggiBuffer`: il disco riletto da poco, pulito.
+  function pulito(text: string): BufferDellaBozza {
+    return {
+      text,
+      dirty: false,
+      esito: "ok",
+      echi: 0,
+      coda: new Coda(),
+      base: { kind: "descends_from", value: "la revisione del disco" },
+    };
+  }
+
+  it("fa rientrare la bozza sopra la copia pulita, e conta 1", () => {
+    // La tab ripristinata dal layout ha già letto il disco in un buffer pulito:
+    // la bozza è più nuova di lui, e il ricongiungimento la rimette sopra —
+    // testo, sporco e base sono i suoi, non quelli del disco.
+    const buffer = new Map<string, BufferDellaBozza>([
+      ["nota.md", pulito("il testo sul disco")],
+    ]);
+
+    const rientrate = ricongiungiBozze(
+      [bozza("nota.md", "il testo non salvato", "la base della bozza")],
+      buffer,
+    );
+
+    expect(rientrate, "una sola bozza in fila, una sola rientrata").toHaveLength(1);
+    expect(rientrate[0].doc).toBe("nota.md");
+    expect(buffer.get("nota.md")).toMatchObject({
+      text: "il testo non salvato",
+      dirty: true,
+      esito: "ok",
+      base: { kind: "descends_from", value: "la base della bozza" },
+    });
+  });
+
+  it("lascia intatto il buffer sporco, e conta 0", () => {
+    // Un buffer sporco è un'identità diversa — un testo battuto dopo, in
+    // questa sessione — e sovrascriverlo la farebbe sparire: la bozza resta
+    // orfana sul disco, e il conto dice che non è rientrata.
+    const buffer = new Map<string, BufferDellaBozza>([
+      [
+        "nota.md",
+        {
+          ...pulito("il testo sul disco"),
+          dirty: true,
+          text: "scritto dopo, in questa sessione",
+        },
+      ],
+    ]);
+
+    const rientrate = ricongiungiBozze(
+      [bozza("nota.md", "il testo non salvato", "la base della bozza")],
+      buffer,
+    );
+
+    expect(rientrate).toHaveLength(0);
+    expect(buffer.get("nota.md")).toMatchObject({
+      text: "scritto dopo, in questa sessione",
+      dirty: true,
+    });
+  });
+
+  it("senza buffer la bozza diventa il buffer, e chi non sapeva la base detta", () => {
+    // Una bozza per un documento che nessuno ha aperto: nasce il buffer, e la
+    // base resta quella che la bozza portava — o, se non la sapeva, «dettata»:
+    // non c'è nessuna revisione da esibire.
+    const buffer = new Map<string, BufferDellaBozza>();
+
+    const rientrate = ricongiungiBozze([bozza("nuova.md", "il testo non salvato")], buffer);
+
+    expect(rientrate).toHaveLength(1);
+    expect(buffer.get("nuova.md")).toMatchObject({
+      text: "il testo non salvato",
+      dirty: true,
+      base: { kind: "dictated" },
+    });
+  });
+
+  it("il rientro è uno solo per documento, anche se la fila lo nomina due volte", () => {
+    // Il buffer sporco che il rientro produce ferma la voce successiva che
+    // nomina lo stesso documento: il ricongiungimento è unico, e il testo che
+    // rientra è quello più recente (la fila arriva dalla più recente).
+    const buffer = new Map<string, BufferDellaBozza>();
+
+    const rientrate = ricongiungiBozze(
+      [
+        bozza("nota.md", "il testo più recente", "base-2"),
+        bozza("nota.md", "il testo più vecchio", "base-1"),
+      ],
+      buffer,
+    );
+
+    expect(rientrate).toHaveLength(1);
+    expect(buffer.get("nota.md")).toMatchObject({ text: "il testo più recente" });
   });
 });
