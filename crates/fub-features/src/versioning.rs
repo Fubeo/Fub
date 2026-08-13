@@ -1115,6 +1115,7 @@ fn trasloca(
     let mut versions: Vec<VersionRef> = Vec::with_capacity(candidate.len());
     let mut destinazioni: Vec<String> = Vec::with_capacity(candidate.len());
     let mut da_ripulire: Vec<String> = Vec::new();
+    let mut copie: Vec<(usize, Vec<u8>)> = Vec::new();
 
     for (origine, mut v) in candidate {
         match versions.last() {
@@ -1131,7 +1132,7 @@ fn trasloca(
             _ => {}
         }
         let destinazione = blob(&dir, &snapshot_name(v.ts, to.as_str()));
-        if destinazione != origine {
+        let copia = if destinazione != origine {
             let Some(bytes) = host.data_read(&origine)? else {
                 // L'indice nominava un contenuto che non c'è più: non lo si
                 // porta dietro, o continuerebbe a mentire sotto la chiave nuova.
@@ -1142,11 +1143,22 @@ fn trasloca(
                 );
                 continue;
             };
-            host.data_write(&destinazione, &bytes)?;
             da_ripulire.push(origine);
-        }
+            Some(bytes)
+        } else {
+            None
+        };
         destinazioni.push(destinazione);
         versions.push(v);
+        if let Some(bytes) = copia {
+            copie.push((destinazioni.len() - 1, bytes));
+        }
+    }
+
+    // Nessuna destinazione può più essere l'origine che un giro successivo deve
+    // ancora leggere: soltanto adesso, a letture finite, i blob si riscrivono.
+    for (indice, bytes) in copie {
+        host.data_write(&destinazioni[indice], &bytes)?;
     }
 
     // La cartella abbandonata smette di dire di chi è **qui**, prima che
@@ -2037,6 +2049,32 @@ mod tests {
             .collect();
         assert!(contenuti.contains(&"la storia che arriva".to_string()));
         assert!(contenuti.contains(&"la storia che c'era".to_string()));
+    }
+
+    #[test]
+    fn un_trasloco_legge_tutti_i_blob_prima_di_riscriverli() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+
+        store.snapshot(&id("a.md"), "a zero", &mut host).unwrap();
+        store.snapshot(&id("b.md"), "b zero", &mut host).unwrap();
+        host.avanza(1);
+        store.snapshot(&id("a.md"), "a uno", &mut host).unwrap();
+
+        store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
+
+        let versioni = store.list(&id("b.md"));
+        assert_eq!(versioni.len(), 3, "versioni: {versioni:?}");
+        let contenuti: Vec<String> = versioni
+            .iter()
+            .map(|v| store.read(&id("b.md"), v.ts, &host).unwrap())
+            .collect();
+        for atteso in ["a zero", "b zero", "a uno"] {
+            assert!(
+                contenuti.iter().any(|testo| testo == atteso),
+                "il blob {atteso:?} è stato sovrascritto prima di essere letto: {contenuti:?}"
+            );
+        }
     }
 
     /// Il nome di un blob porta l'estensione del documento: se il contenuto non
