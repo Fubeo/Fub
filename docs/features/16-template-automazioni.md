@@ -41,6 +41,15 @@
 - [ ] Template di default per le nuove note
 - [ ] Snippet di testo riutilizzabile
 - [ ] Inserimento snippet dal menu slash
+- [ ] Applica un template al testo selezionato
+- [ ] Variabili richieste obbligatorie
+- [ ] Sostituzione variabili con anteprima interattiva
+- [ ] Inserimento del template alla posizione del cursore
+- [ ] Template preferiti
+- [ ] Scorciatoia per applicare rapidamente un template
+- [ ] Ricerca tra i template salvati
+- [ ] Import di un template da un file
+- [ ] Duplica un template
 
 ## 16.2 Automazioni
 
@@ -77,6 +86,12 @@
 - [ ] Esecuzione manuale di un'automazione
 - [ ] Test rapido di un'automazione
 - [ ] Pausa/ripresa di un'automazione
+- [ ] Duplica un'automazione
+- [ ] Rinomina un'automazione
+- [ ] Etichetta/descrizione di un'automazione
+- [ ] Ordinamento delle automazioni salvate
+- [ ] Scorciatoia per eseguire un'automazione
+- [ ] Indicatore di stato attivo/pausa per automazione
 
 ## 16.3 Automazione avanzata / no-code
 
@@ -97,9 +112,6 @@
 - [ ] Python scripts opzionali
 - [ ] Lua scripts opzionali
 - [ ] Sandbox scripts
-- [ ] Automation logs
-- [ ] Automation undo
-- [ ] Automation disable
 - [ ] Automation templates
 - [ ] Automation marketplace
 - [ ] Automation permissions
@@ -107,7 +119,6 @@
 - [ ] Automation error handling
 - [ ] Automation retries
 - [ ] Automation notifications
-- [ ] Automation testing
 - [ ] Automation versioning
 - [ ] Automation export/import
 - [ ] Automation sharing

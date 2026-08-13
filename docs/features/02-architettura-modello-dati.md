@@ -45,11 +45,12 @@
 - [ ] Sidecar file opzionali
 - [ ] Sidecar non obbligatori
 - [ ] Vault come cartella semplice
-- [ ] Vault multipli
 - [ ] Impostazioni per-vault
 - [ ] Profili utente
 - [ ] Configurazione esportabile
 - [ ] Configurazione importabile
+- [ ] Versione dello schema dei dati di servizio (`.fub/`)
+- [ ] Compatibilità retroattiva del formato dati
 
 ## 2.3 File system edge cases
 
@@ -101,6 +102,9 @@ automatica.
 - [ ] Rilevamento cartelle spostate/rinominate esternamente
 - [ ] Prevenzione vault annidati
 - [ ] Vault integrity check
+- [ ] Gestione file speciali (FIFO, socket, device file)
+- [ ] Gestione file di dimensione zero
+- [ ] Gestione file inaccessibili per permessi di sistema
 
 ## 2.4 Fedeltà del file
 

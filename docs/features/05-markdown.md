@@ -10,6 +10,8 @@
 - [ ] Task list
 - [ ] Strike-through
 - [ ] Autolink
+- [ ] Autolink email
+- [ ] Link in stile riferimento (reference-style)
 - [ ] Code inline
 - [ ] Code block
 - [ ] Blockquote
@@ -26,6 +28,7 @@
 - [ ] Bold+italic
 - [ ] Escape caratteri speciali (backslash)
 - [ ] Interruzione di riga dura (due spazi)
+- [ ] Interruzione di riga dura con backslash
 - [ ] Commento HTML
 
 ## 5.2 Estensioni Markdown
@@ -54,6 +57,10 @@
 - [ ] Attributi blocco
 - [ ] ID blocco
 - [ ] ID heading
+- [ ] Anchor per heading (link a sezione della nota)
+- [ ] Permalink per heading
+- [ ] Task list annidate
+- [ ] Allineamento colonne tabella
 - [ ] TOC automatica
 - [ ] Indici personalizzati
 - [ ] Citazioni bibliografiche

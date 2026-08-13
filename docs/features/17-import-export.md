@@ -61,6 +61,10 @@
 - [ ] Rilevamento dei file duplicati all'import
 - [ ] Anteprima dei file prima dell'import
 - [ ] Riepilogo dei file importati
+- [ ] Undo di un import
+- [ ] Apri la cartella di destinazione dopo l'import
+- [ ] Nome file in conflitto gestito (rinomina automaticamente, non sovrascrive)
+- [ ] Apertura rapida del file appena importato
 - [ ] Import testo semplice (.txt)
 
 ## 17.2 Export
@@ -115,6 +119,10 @@
 - [ ] Scelta della cartella di destinazione all'export
 - [ ] Riepilogo dei file esportati
 - [ ] Export dei file in una sola volta
+- [ ] Nome del file generato dal titolo della nota
+- [ ] Aggiunta data/ora opzionale al nome del file
+- [ ] Export di più formati in una sola volta
+- [ ] Copia dell'export negli appunti
 
 ## 17.3 Migration assistant
 

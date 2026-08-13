@@ -30,6 +30,10 @@
 - [ ] Avvio all'accensione (login)
 - [ ] Apertura ultimo vault all'avvio
 - [ ] Riapertura schede/sessione precedente
+- [ ] Installazione via package manager (winget, brew, choco)
+- [ ] Minimizza a tray
+- [ ] Riavvio automatico dopo l'aggiornamento
+- [ ] Badge di notifica su dock/taskbar
 
 ## 26.2 Mobile
 
@@ -60,23 +64,17 @@
 - [ ] Widget task oggi
 - [ ] Widget nota rapida
 - [ ] Share extension avanzata
-- [ ] Document scanner
 - [ ] OCR da fotocamera
-- [ ] Voice recorder
 - [ ] Audio transcription offline
 - [ ] Offline vault completo
 - [ ] Selective vault download
 - [ ] Face unlock
 - [ ] Fingerprint unlock
-- [ ] Stylus support
 - [ ] Handwriting recognition opzionale
 - [ ] Keyboard shortcuts
-- [ ] External keyboard support
-- [ ] Split screen
 - [ ] Multi-window
 - [ ] Drag & drop cross-app
 - [ ] Mobile command palette
-- [ ] Mobile gestures
 - [ ] Offline AI models opzionali
 - [ ] Mobile performance mode
 - [ ] Battery saver mode
@@ -85,6 +83,9 @@
 - [ ] Incolla da appunti di sistema
 - [ ] Orientamento schermo
 - [ ] Feedback aptico
+- [ ] Supporto schermi pieghevoli (foldable)
+- [ ] Indicatore stato di rete
+- [ ] Media session (controlli da lock screen)
 
 ## 26.3 Web / PWA
 
@@ -109,6 +110,8 @@
 - [ ] Web clipboard permissions
 - [ ] Secure context only
 - [ ] URL di base configurabile
+- [ ] Web App Manifest
+- [ ] Web Share API (condivisione in uscita)
 
 ## 26.4 Integrazioni OS
 
@@ -125,3 +128,4 @@
 - [ ] Registrazione come gestore di default per Markdown
 - [ ] Apri cartella dati dal menu
 - [ ] Apri file con l'applicazione di sistema
+- [ ] Menu contestuale di sistema (estensione)

@@ -22,6 +22,9 @@
 - [ ] Desktop eccellente
 - [ ] Sync affidabile
 - [ ] Backup affidabile
+- [ ] Onboarding indolore (prima apertura funzionante senza configurare)
+- [ ] Scorciatoie consistenti in tutta l'app
+- [ ] Rispetto del tema chiaro/scuro di sistema per impostazione predefinita
 
 ## 30.2 Fiducia definitiva
 

@@ -34,3 +34,8 @@
 - [ ] Config commentata
 - [ ] Percorso dati utente standard (XDG)
 - [ ] Ripristino configurazione da backup
+- [ ] Ricarica delle impostazioni senza riavvio
+- [ ] Rilevamento della configurazione modificata esternamente
+- [ ] Validazione della configurazione con messaggi chiari se malformata
+- [ ] Ripristino di una singola impostazione al default
+- [ ] Percorso dati utente personalizzabile

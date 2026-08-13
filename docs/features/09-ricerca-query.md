@@ -79,7 +79,6 @@ ricerca peggiore.
 - [ ] Esclusione termini
 - [ ] Recent searches
 - [ ] Search suggestions
-- [ ] Search history opzionale
 - [ ] Crea la nota cercata dal risultato vuoto
 - [ ] Snippet contestuali
 - [ ] Ranking personalizzabile
@@ -107,6 +106,18 @@ ricerca peggiore.
 - [ ] Ordinamento dei risultati di ricerca (per data, per titolo, per percorso)
 - [ ] Esporta i risultati di ricerca in testo o Markdown
 - [ ] Filtro per cartella nella ricerca
+- [ ] Filtro per tipo di nota nei risultati
+- [ ] Evidenzia i termini cercati nel testo della nota aperta
+- [ ] Ricerca nella selezione
+- [ ] Azzera il campo di ricerca
+- [ ] Toggle case-sensitive nella ricerca
+- [ ] Snippet espandibile per mostrare più contesto
+- [ ] Apri un risultato di ricerca in una nuova scheda
+- [ ] Apri un risultato di ricerca in split
+- [ ] Copia link a un risultato di ricerca
+- [ ] Escludi la nota aperta dai risultati
+- [ ] Scorciatoia per aprire la ricerca
+- [ ] Mantieni la query attiva aprendo un risultato
 
 ## 9.2 Query engine
 

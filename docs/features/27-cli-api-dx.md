@@ -28,6 +28,12 @@
 - [ ] Uscita con codice di errore significativo
 - [ ] Autocompletamento shell
 - [ ] Uscita non colorata (NO_COLOR)
+- [ ] Output su stderr per errori e log
+- [ ] Flag `--output` per formato di output
+- [ ] Modalità verbosa (`--verbose`)
+- [ ] Gestione segnale di interruzione (SIGINT)
+- [ ] Comandi idempotenti
+- [ ] Paginazione dell'output
 
 ## 27.2 API
 
@@ -53,6 +59,8 @@
 - [ ] SDK plugin
 - [ ] Risposte di errore strutturate
 - [ ] Versioning API
+- [ ] Specifica OpenAPI
+- [ ] Esempi di chiamata (curl)
 
 ## 27.3 Developer experience
 
@@ -86,6 +94,8 @@
 - [ ] Custom exporters
 - [ ] Custom sync adapters
 - [ ] Custom AI adapters
+- [ ] Watch mode per lo sviluppo
+- [ ] Esempi di codice (snippet)
 
 ## 27.4 Testing e QA
 

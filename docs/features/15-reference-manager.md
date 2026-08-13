@@ -36,6 +36,17 @@
 - [ ] Riferimento duplicato
 - [ ] Modifica di un riferimento esistente
 - [ ] Copia citazione formattata negli appunti
+- [ ] Copia citation key negli appunti
+- [ ] Tag per i riferimenti
+- [ ] Filtro dei riferimenti salvati per autore, anno, tipo o tag
+- [ ] Eliminazione di un riferimento
+- [ ] Riferimento da URL
+- [ ] Riferimento da clipboard
+- [ ] Conversione di una nota esistente in un riferimento
+- [ ] Collegamento di una nota a un riferimento
+- [ ] Ordinamento personalizzato della bibliografia
+- [ ] Raggruppamento della bibliografia per tipo
+- [ ] Apertura del PDF allegato a un riferimento
 - [ ] Import PDF con estrazione metadata del riferimento
 
 ## 15.2 Scrittura accademica avanzata

@@ -36,8 +36,11 @@
 - [ ] Rendering responsive
 - [ ] Rendering mobile ottimizzato
 - [ ] Rendering accessibile
+- [ ] Zoom della preview
 - [ ] Font monospazio per i code block
 - [ ] Riga attiva evidenziata nella preview
+- [ ] Heading attivo evidenziato nella preview
+- [ ] Indicatore di avanzamento della lettura
 
 ## 6.2 Personalizzazione rendering
 
@@ -46,8 +49,12 @@
 - [ ] Anteprima del tema prima di applicarlo
 - [ ] Snippet CSS
 - [ ] Font personalizzati
+- [ ] Font separati per editor e preview
 - [ ] Dimensione font
 - [ ] Interlinea
+- [ ] Spaziatura tra lettere e parole
+- [ ] Margini del contenuto
+- [ ] Tema per nota
 - [ ] Larghezza contenuto
 - [ ] Modalità chiara/scura
 - [ ] Toggle rapido del tema (chiaro/scuro) con scorciatoia
@@ -73,6 +80,7 @@
 - [ ] Widow/orphan control
 - [ ] Print CSS
 - [ ] Print preview
+- [ ] Stampa con tema chiaro forzato
 - [ ] PDF via Pandoc
 - [ ] PDF via Typst
 - [ ] PDF via WeasyPrint

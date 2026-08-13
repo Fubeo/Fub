@@ -52,6 +52,11 @@
 - [ ] Plugin performance metrics
 - [ ] Battery usage mobile
 - [ ] Data usage mobile
+- [ ] Stima del tempo di indicizzazione mostrata durante l'avvio
+- [ ] Cold start ottimizzato per vault grandi
+- [ ] Indicatore di spazio occupato dalla cache
+- [ ] Pausa/ripresa manuale della reindicizzazione
+- [ ] Avviso di rallentamento rilevato con suggerimenti
 
 ## 24.2 Affidabilità
 
@@ -62,7 +67,6 @@
 - [ ] Corruption detection
 - [ ] Safe mode
 - [ ] Plugin safe mode
-- [ ] Rollback plugin
 - [ ] Rollback update
 - [ ] Beta channel
 - [ ] Stable channel
@@ -87,7 +91,6 @@
 - [ ] Repair wizard
 - [ ] Checksum verification
 - [ ] Backup verification
-- [ ] Restore test
 - [ ] Sync logs
 - [ ] Plugin logs
 - [ ] Error reporting opt-in
@@ -102,3 +105,8 @@
 - [ ] Search index diagnostics
 - [ ] AI diagnostics
 - [ ] Publishing diagnostics
+- [ ] Ripristino automatico delle schede aperte al riavvio dopo un crash
+- [ ] Notifica di crash con invito a segnalare
+- [ ] Import/export delle impostazioni di diagnostica
+- [ ] Pannello riepilogativo della salute del vault
+- [ ] Test automatico di ripristino (restore test periodico)

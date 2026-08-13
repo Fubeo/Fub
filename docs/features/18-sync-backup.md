@@ -33,7 +33,6 @@
 - [ ] Sync in background
 - [ ] Sync manuale
 - [ ] CRDT sync
-- [ ] Selective sync
 - [ ] Ignored files
 - [ ] Proxy support
 - [ ] Offline queue
@@ -56,6 +55,10 @@
 - [ ] Sync conflict UI
 - [ ] Sync merge preview
 - [ ] Sync history
+- [ ] Data e ora dell'ultima sincronizzazione visibile
+- [ ] Sync di un singolo file su richiesta
+- [ ] Barra di avanzamento della sincronizzazione
+- [ ] Notifica di sincronizzazione completata
 
 ## 18.2 Backup e versioning
 
@@ -81,14 +84,11 @@
 - [ ] Ripristino completo vault
 - [ ] 3-2-1 backup strategy
 - [ ] Incremental backups
-- [ ] Encrypted backups
 - [ ] Deduplication
 - [ ] Compression
 - [ ] Offsite backups
 - [ ] External drive backups
 - [ ] Cloud adapters
-- [ ] Retention policies
-- [ ] Verification
 - [ ] Restore test
 - [ ] Snapshot browser
 - [ ] Backup health
@@ -110,6 +110,11 @@
 - [ ] Backup pruning
 - [ ] Backup resume after interruption
 - [ ] Backup bandwidth limits
+- [ ] Eliminazione manuale di un backup
+- [ ] Stima dello spazio richiesto per un backup
+- [ ] Notifica di esito del backup (successo/fallimento)
+- [ ] Snapshot manuale con nome personalizzato
+- [ ] Confronto tra due snapshot
 
 ## 18.3 Diff / merge avanzato
 

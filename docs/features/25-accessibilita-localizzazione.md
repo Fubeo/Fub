@@ -30,18 +30,10 @@
 - [ ] Screen reader ottimizzato
 - [ ] ARIA completo
 - [ ] Keyboard-only mode
-- [ ] Focus visible
-- [ ] Focus trap
 - [ ] Skip links
-- [ ] High contrast
 - [ ] Colorblind palettes
-- [ ] Dyslexia-friendly fonts
-- [ ] Text spacing regolabile
 - [ ] Line length regolabile
-- [ ] Reduced motion
 - [ ] Reduced transparency
-- [ ] Captions
-- [ ] Transcripts
 - [ ] Audio descriptions opzionali
 - [ ] Accessible charts
 - [ ] Accessible forms
@@ -55,6 +47,12 @@
 - [ ] Contrasto che segue il tema di sistema
 - [ ] Sotto-titoli nei code block per la sintassi
 - [ ] Annuncio aria sui cambi di stato
+- [ ] Target di tocco minimo
+- [ ] Regioni landmark (header, nav, main, footer)
+- [ ] Errori dei form segnalati con testo e icona
+- [ ] Informazione non veicolata solo dal colore
+- [ ] Attributo lang sul documento
+- [ ] Scorciatoie alternative per le azioni principali
 
 ## 25.2 Localizzazione
 
@@ -79,7 +77,6 @@
 - [ ] Measurement units
 - [ ] Number formatting
 - [ ] Translation memory
-- [ ] Community translations
 - [ ] Pseudo-locale testing
 - [ ] RTL editor
 - [ ] CJK optimization
@@ -101,3 +98,7 @@
 - [ ] Locale predefinito dal sistema
 - [ ] Fuso orario dal sistema
 - [ ] Formato data/ora personalizzabile
+- [ ] Tempo relativo localizzato (es. "3 minuti fa")
+- [ ] Gestione ora legale (DST)
+- [ ] Calendari non gregoriani (hijri, ebraico)
+- [ ] Rilevamento lingua del documento

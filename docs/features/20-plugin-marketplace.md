@@ -71,11 +71,14 @@
 - [ ] Hot reload plugin
 - [ ] Debug plugin
 - [ ] Log plugin
+- [ ] Installazione da file locale (.zip/.js)
+- [ ] Aggiornamento manuale di un singolo plugin
+- [ ] Pausa/ripresa del download di un plugin
+- [ ] Barra di avanzamento del download di un plugin
+- [ ] Data di pubblicazione del plugin nel marketplace
 
 ## 20.3 Supply chain security
 
-- [ ] Plugin sandbox
-- [ ] Plugin permissions
 - [ ] Network allowlist
 - [ ] File allowlist
 - [ ] No eval policy
@@ -86,7 +89,6 @@
 - [ ] Dependency audit
 - [ ] Update channels
 - [ ] Rollback plugin
-- [ ] Conflict detection
 - [ ] Telemetry opt-in plugin
 - [ ] Plugin health monitor
 - [ ] Plugin crash isolation
