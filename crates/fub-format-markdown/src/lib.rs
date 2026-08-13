@@ -427,9 +427,11 @@ mod tests {
     /// peggiore di sbagliare destinazione.
     ///
     /// Qui si guarda il verso che l'utente vede (gli `id` dell'HTML sono
-    /// diversi) e quello che tiene fermo il resto (l'ancora del blocco È lo
-    /// slug dell'outline: sono la stessa assegnazione, non due chiamate che si
-    /// danno la stessa risposta per fortuna).
+    /// diversi) e quello che tiene fermo il resto (per gli heading **senza
+    /// ancora esplicita** l'ancora del blocco È lo slug dell'outline: sono la
+    /// stessa assegnazione, non due chiamate che si danno la stessa risposta
+    /// per fortuna — con un `^id` scritto l'ancora è quell'id com'è scritto, e
+    /// lo prova `l_id_esplicito_di_un_heading_si_conserva_esattamente`).
     #[test]
     fn two_headings_with_the_same_text_get_different_ids() {
         let doc = parse("## Note\n\ntesto\n\n## Note 1\n\naltro\n\n## Note\n");
@@ -460,6 +462,58 @@ mod tests {
         let doc = parse("# Titolo Uno\n\n## Sotto Sezione\n");
         assert_eq!(doc.outline[0].slug, "titolo-uno");
         assert_eq!(doc.outline[1].slug, "sotto-sezione");
+    }
+
+    /// **Un'ancora esplicita su un heading sopravvive al giro, esattamente
+    /// com'era scritta.**
+    ///
+    /// `## Titolo ^Mio-ID` è due cose insieme: una chiave (l'heading è
+    /// indirizzabile, e la chiave è la forma canonica dell'id — `mio-id`, la
+    /// stessa con cui `[[Nota#^Mio-ID]]` e `[[Nota#^mio-id]]` risolvono) e un
+    /// **testo da riscrivere verbatim** (la maiuscola e i trattini non sono un
+    /// ornamento: sono ciò che l'utente ha scritto). Prima di `explicit_anchor`
+    /// il giro perdeva l'id — `## Titolo ^Mio-ID` rileggeva come `## Titolo`,
+    /// con lo slug generato `titolo` — e una maiuscola è proprio ciò che
+    /// distingue «la forma canonica» dalla «forma scritta»: se il test usasse
+    /// `^abc`, il giro passerebbe anche su un'implementazione che confonde le
+    /// due, e la confusione tornerebbe a mordere sul primo id scritto con una
+    /// lettera maiuscola.
+    #[test]
+    fn l_id_esplicito_di_un_heading_si_conserva_esattamente() {
+        let doc = parse("## Titolo ^Mio-ID\n");
+        // La chiave: lo slug è la forma canonica dell'id scritto — la stessa
+        // che la tabella piatta `anchors` usa per `[[Nota#^mio-id]]` — e
+        // l'heading non ha consumato la generazione dello slug.
+        assert_eq!(doc.outline.len(), 1);
+        assert_eq!(doc.outline[0].slug, "mio-id");
+        assert_eq!(doc.outline[0].explicit_anchor.as_deref(), Some("Mio-ID"));
+        assert_eq!(
+            doc.anchors
+                .iter()
+                .map(|a| a.id.as_str())
+                .collect::<Vec<_>>(),
+            ["mio-id"],
+            "la tabella piatta risolve l'id esplicito con la sua forma canonica"
+        );
+        // Il blocco: l'`id` dell'HTML è quello scritto, non la forma canonica.
+        let Block::Heading { anchor, .. } = &doc.body[0] else {
+            panic!("atteso un heading");
+        };
+        assert_eq!(anchor.as_deref(), Some("Mio-ID"));
+
+        // La riscrittura riporta l'id **com'era scritto**, sulla riga del
+        // titolo — e il giro è stabile: rileggere ciò che si è scritto dà lo
+        // stesso modello.
+        let giro = MarkdownProvider::new().serialize(&doc).unwrap();
+        assert_eq!(giro, "## Titolo ^Mio-ID\n");
+        let riletto = parse(&giro);
+        assert_eq!(riletto, doc);
+
+        // La resa HTML porta l'id scritto: `id="Mio-ID"`, non `id="mio-id"`.
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &RenderOptions::preview())
+            .unwrap();
+        assert!(html.contains("<h2 id=\"Mio-ID\">"), "html: {html}");
     }
 
     /// **Le opzioni del chiamante valgono anche dentro l'etichetta di un link.**

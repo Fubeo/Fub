@@ -143,11 +143,11 @@ fn attr_richiesto<'a>(
 /// La forma è quella in coda alla riga, che è ciò che
 /// `parse::trailing_anchor` legge: il `^` preceduto da uno spazio.
 ///
-/// **Va bene per un paragrafo e per nient'altro**, ed è il difetto che
-/// [`write_anchor_a_capo`] chiude: un paragrafo ha una coda di testo dove
-/// scrivere l'ancora, gli altri sei blocchi hanno in coda un *delimitatore*, e
-/// appendere ` ^id` a un delimitatore lo rompe. Misurato sul giro completo,
-/// blocco per blocco:
+/// **Va bene per un paragrafo e per un heading, e per nient'altro**, ed è il
+/// difetto che [`write_anchor_a_capo`] chiude: un paragrafo e un heading hanno
+/// una coda di testo dove scrivere l'ancora, gli altri sei blocchi hanno in
+/// coda un *delimitatore*, e appendere ` ^id` a un delimitatore lo rompe.
+/// Misurato sul giro completo, blocco per blocco:
 ///
 /// | blocco | usciva | cosa succedeva al giro dopo |
 /// |---|---|---|
@@ -156,9 +156,12 @@ fn attr_richiesto<'a>(
 /// | riga | `--- ^hr` | non è più una riga orizzontale: diventa un paragrafo |
 /// | elenco, citazione, callout | `- b ^lis`, `> citata ^cit` | l'id resta, ma indirizza il **figlio** invece del contenitore |
 ///
-/// Gli heading non passano di qui: la loro `anchor` è lo **slug generato** dal
-/// testo, non un id che l'utente ha scritto, e riscriverlo lo trasformerebbe in
-/// un'ancora esplicita che nel file non c'era.
+/// L'heading ci passa con il suo **`explicit_anchor`**, non con `anchor`: la
+/// `anchor` di un heading senza id scritto è lo **slug generato** dal testo,
+/// e riscriverlo lo trasformerebbe in un'ancora esplicita che nel file non
+/// c'era (con un id scritto i due coincidono: `anchor` è quell'id com'è
+/// scritto). L'id che l'utente ha scritto — e solo quello — torna com'era,
+/// maiuscole comprese.
 fn write_anchor(anchor: &Option<String>, out: &mut String) {
     let Some(id) = anchor else {
         return;
@@ -237,11 +240,20 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             inlines,
             anchor: _,
             span: _,
+            explicit_anchor,
         } => {
             out.push_str(&"#".repeat((*level).clamp(1, 6) as usize));
             out.push(' ');
             write_inlines(inlines, out)?;
             out.push('\n');
+            // L'ancora esplicita torna **com'era scritta**, sulla stessa riga
+            // del titolo — `write_anchor` toglie il `\n` appena scritto e
+            // rimette ` ^id\n` — perché è la coda di testo che
+            // `parse::trailing_anchor` legge: su una riga propria diventerebbe
+            // un'ancora isolata, che si riaggancia al blocco col `set_anchor`
+            // sbagliato. Un id che l'utente ha scritto in coda al titolo non è
+            // ricostruibile da un'ancora su riga propria.
+            write_anchor(explicit_anchor, out);
         }
         Block::Paragraph {
             inlines,

@@ -39,14 +39,15 @@
 //!
 //! # Il limite, detto qui
 //!
-//! L'ancora esplicita di un **heading** (`# Titolo ^testa`) non torna indietro,
-//! e non è un difetto di questo modulo: nell'albero `Block::Heading::anchor`
-//! porta lo **slug generato** dal testo, non l'id che l'utente ha scritto, e
-//! quell'id è raggiungibile solo dalla tabella piatta `anchors`. È una
-//! divergenza già registrata, con la sua riga, in `il_corpus.rs` — «l'ancora
-//! esplicita di un heading non è raggiungibile dall'albero» — e va riparata di
-//! là, nel modello, non di qua. Le ancore che questo file controlla sono quindi
-//! quelle **dell'albero**.
+//! L'ancora esplicita di un **heading** (`# Titolo ^testa`) ci passa da quando
+//! `Block::Heading` porta `explicit_anchor` — l'id **com'è scritto**, che
+//! `serialize` riscrive sul file. L'heading generato (senza id scritto) non
+//! passa di qui per scelta: la sua `anchor` è lo **slug** derivato dal testo, e
+//! riscriverlo creerebbe un'ancora esplicita che nel file non c'era — ed è
+//! proprio ciò che `explicit_anchor` distingue: «un'ancora che l'utente ha
+//! scritto» da «una chiave che il modello si è dato». Le ancore di blocco
+//! (paragrafi, tabelle, …) passano dalla loro `anchor`, che per loro **è**
+//! l'id scritto.
 
 // L'`allow` sta **qui**, sulla dichiarazione, e non dentro `corpus/mod.rs` —
 // che dichiara di non volerlo, con la sua ragione. La ragione regge ancora: un
@@ -125,15 +126,16 @@ fn forma(b: &Block) -> String {
     format!("{nome}[{}]", figli.join(","))
 }
 
-/// Le ancore **raggiungibili dall'albero**, in ordine. Gli heading restano
-/// fuori: vedi il limite in testa al modulo.
+/// Le ancore **raggiungibili dall'albero**, in ordine. Per un heading
+/// `anchor()` è l'id esplicito **com'è scritto** (`^Mio-ID`) o, senza id
+/// scritto, lo slug generato — una funzione del testo, che torna identica al
+/// giro. La scrittura e la rilettura fanno lo stesso cammino all'indietro, e
+/// l'ancora torna — e quindi non si cancella.
 fn ancore(blocchi: &[Block]) -> Vec<String> {
     let mut out = Vec::new();
     for b in blocchi {
-        if !matches!(b, Block::Heading { .. }) {
-            if let Some(id) = b.anchor() {
-                out.push(id.to_string());
-            }
+        if let Some(id) = b.anchor() {
+            out.push(id.to_string());
         }
         match b {
             Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => {

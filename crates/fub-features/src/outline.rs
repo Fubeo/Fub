@@ -291,6 +291,7 @@ mod tests {
             text: text.to_string(),
             slug: text.to_lowercase(),
             span: Span::new(start, end),
+            explicit_anchor: None,
         }
     }
 

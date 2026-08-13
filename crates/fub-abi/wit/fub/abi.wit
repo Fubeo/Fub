@@ -126,6 +126,9 @@ interface model {
         text: string,
         slug: string,
         span: span,
+        /// L'ancora esplicita del titolo (`## Titolo ^Mio-ID`), com'è scritta;
+        /// `none` quando lo slug è generato dal testo.
+        explicit-anchor: option<string>,
     }
 
     /// Un tag `#foo` / `#foo/bar` estratto.
@@ -247,16 +250,22 @@ interface model {
         soft-break,
     }
 
-    // Ogni blocco porta un `anchor`: per un heading è lo slug generato dal
-    // testo (`heading-slug`), per gli altri l'id esplicito `^abc123` scritto in
-    // coda (`canonical-anchor`). È ciò che rende indirizzabile un pezzo di
-    // documento — link a blocco, embed di blocco, deep link, diff a blocchi.
+    // Ogni blocco porta un `anchor`: per un heading è lo slug del titolo
+    // (generato da `heading-slug`, o l'id esplicito che l'utente ha scritto in
+    // coda, **com'è scritto** — la chiave canonica sta nello `slug` dell'outline
+    // e nella tabella piatta `anchors`), per gli altri l'id esplicito `^abc123`
+    // scritto in coda (`canonical-anchor`). È ciò che rende indirizzabile un
+    // pezzo di documento — link a blocco, embed di blocco, deep link, diff a
+    // blocchi.
 
     record block-heading {
         level: u8,
         inlines: list<inline-ref>,
         anchor: option<string>,
         span: span,
+        /// L'ancora esplicita del titolo, com'è scritta; `none` quando lo slug
+        /// è generato dal testo.
+        explicit-anchor: option<string>,
     }
     record block-paragraph {
         inlines: list<inline-ref>,

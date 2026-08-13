@@ -139,8 +139,8 @@ fn ogni_voce_del_corpus_produce_un_modello_che_dice_il_vero() {
         verificati += 1;
     }
     assert!(
-        verificati >= 66,
-        "il corpus ha verificato {verificati} casi su sessantasei: un corpus che si\n\
+        verificati >= 80,
+        "il corpus ha verificato {verificati} casi su ottanta: un corpus che si\n\
          svuota passa sempre, quindi la soglia è il conteggio di oggi — cresce con\n\
          lui, e scende solo in un commit che dice perché."
     );
@@ -576,14 +576,6 @@ enum Perche {
 fn divergenze_dichiarate() -> Vec<(&'static str, Perche, fn(&DocumentModel, &str) -> bool)> {
     vec![
         (
-            "l'ancora esplicita di un heading non è raggiungibile dall'albero",
-            Perche::RappresentataEnonRaggiungibile,
-            |d, _| {
-                d.anchors.iter().any(|a| a.id == "xyz")
-                    && d.body.first().map(Block::anchor) == Some(Some("titolo"))
-            },
-        ),
-        (
             "uno slug vuoto è un'ancora che il contratto rifiuterebbe",
             Perche::RappresentataEnonRaggiungibile,
             |d, _| d.body.first().map(Block::anchor) == Some(Some("")),
@@ -673,16 +665,17 @@ fn le_divergenze_sono_quelle_dichiarate() {
     let dichiarate = divergenze_dichiarate();
     let sorgenti = divergenti();
     assert!(
-        dichiarate.len() >= 9,
-        "l'elenco delle divergenze si è svuotato: {} righe su nove. Se sono\n\
+        dichiarate.len() >= 6,
+        "l'elenco delle divergenze si è svuotato: {} righe. Se sono\n\
          state riparate è una bella notizia e va scritta dove la riparazione sta\n\
          — e allora si abbassa questo numero **nello stesso commit**, che è ciò\n\
          che lo tiene una soglia e non un desiderio; se è l'elenco che si è\n\
          rotto, questo file ha smesso di presidiare la cosa per cui esiste.\n\
-         L'ultima scesa: «lo slug di un heading dipende dalla normalizzazione\n\
-         unicode» — `heading_slug` compone in NFC come il resto delle regole di\n\
-         identità di un nome (difetto 0140), e l'NFD resta nel corpus curato\n\
-         col nome «nfd nel contenuto», dove le proprietà lo pretendono tutto.",
+         L'ultima scesa: l'ancora esplicita di un heading è diventata\n\
+         raggiungibile dall'albero — `Block::Heading.explicit_anchor` porta\n\
+         l'id scritto, com'è scritto, e `serialize` lo riscrive — e la sua\n\
+         sorgente («heading con ancora esplicita», `## Titolo ^Mio-ID`) sta\n\
+         adesso nel corpus curato, dove le proprietà la pretendono.",
         dichiarate.len()
     );
 

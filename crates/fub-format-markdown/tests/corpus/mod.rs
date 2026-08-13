@@ -64,6 +64,15 @@ pub fn corpus() -> Vec<Caso> {
         // un documento che ne abbia due uguali passerebbe senza aver provato
         // niente.
         caso("due heading omonimi", "## Note\n\nprima\n\n## Note\n\nseconda\n"),
+        // Un'ancora scritta in coda al titolo: era la divergenza
+        // «l'ancora esplicita di un heading non è raggiungibile dall'albero»
+        // (l'id finiva solo nella tabella piatta `anchors` e lo slug generato
+        // occupava il blocco), riparata col campo `explicit_anchor` — l'id
+        // scritto, com'è scritto, che `serialize` riscrive sul file. La
+        // maiuscola non è un ornamento: è ciò che distingue «la forma
+        // canonica» (la chiave di risoluzione) da «l'id esatto» (ciò che
+        // l'utente ha scritto e che il giro deve riportare).
+        caso("heading con ancora esplicita", "## Titolo ^Mio-ID\n"),
         caso("paragrafo", "Un paragrafo qualunque.\n"),
         caso("lista non ordinata", "- a\n- b\n"),
         caso("lista ordinata", "1. a\n2. b\n"),
@@ -254,10 +263,6 @@ pub fn corpus() -> Vec<Caso> {
 /// nome qui senza predicato là, o un predicato là senza nome qui, è rosso.
 pub fn divergenti() -> Vec<Caso> {
     vec![
-        caso(
-            "l'ancora esplicita di un heading non è raggiungibile dall'albero",
-            "## Titolo ^xyz\n",
-        ),
         caso(
             "uno slug vuoto è un'ancora che il contratto rifiuterebbe",
             "#\n",

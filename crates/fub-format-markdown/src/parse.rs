@@ -230,10 +230,12 @@ fn sourcepos_span(sp: comrak::nodes::Sourcepos, offsets: &Offsets<'_>) -> Span {
     Span::new(start, end.max(start))
 }
 
-/// L'ancora trovata in coda a un blocco: l'id canonico e **come era scritta**
-/// (che è ciò che si toglie da testo e inline).
+/// L'ancora trovata in coda a un blocco: l'id canonico, quello **come era
+/// scritto** (che è ciò che si toglie da testo e inline) e la forma cruda del
+/// solo id (che per un heading è l'ancora esplicita da riscrivere verbatim).
 struct FoundAnchor {
     id: String,
+    raw: String,
     written: String,
 }
 
@@ -248,8 +250,8 @@ fn trailing_anchor(source: &str, span: Span, acc: &mut Acc) -> Option<FoundAncho
     let trimmed = slice.trim_end();
     let at = trimmed.rfind('^')?;
     let written = &trimmed[at..];
-    let id = &written[1..];
-    if !valid_anchor(id) {
+    let id_raw = &written[1..];
+    if !valid_anchor(id_raw) {
         return None;
     }
     if trimmed[..at]
@@ -259,7 +261,7 @@ fn trailing_anchor(source: &str, span: Span, acc: &mut Acc) -> Option<FoundAncho
     {
         return None;
     }
-    let id = canonical_anchor(id);
+    let id = canonical_anchor(id_raw);
     acc.anchors.push(Anchor {
         id: id.clone(),
         span,
@@ -267,6 +269,7 @@ fn trailing_anchor(source: &str, span: Span, acc: &mut Acc) -> Option<FoundAncho
     });
     Some(FoundAnchor {
         id,
+        raw: id_raw.to_string(),
         written: written.to_string(),
     })
 }
@@ -306,25 +309,32 @@ fn convert_block<'a>(
                 inlines_del_blocco(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
             acc.text.push_str(&text);
             acc.text.push('\n');
-            // **Una** chiamata, due usi. Chiamare l'assegnatario due volte
-            // sullo stesso titolo darebbe `note` all'outline e `note-1` al
-            // blocco: uno stato letto due volte è due stati, ed è la forma in
-            // cui una disambiguazione si trasforma nel difetto che voleva
-            // chiudere.
-            let slug = acc.slugs.next_slug(text.trim());
+            // Un'ancora scritta dall'utente è un id dichiarato: la generazione
+            // dello slug viene **bypassata** (un id che qualcuno ha scritto non
+            // si disambiguà), e lo slug è la sua forma canonica — la stessa
+            // chiave con cui la tabella piatta `anchors` risolve
+            // `[[Nota#^mio-id]]`. `None` conserva il comportamento storico.
+            let explicit_anchor = anchor.as_ref().map(|a| a.raw.clone());
+            let slug = match &explicit_anchor {
+                Some(raw) => canonical_anchor(raw),
+                None => acc.slugs.next_slug(text.trim()),
+            };
             acc.outline.push(Heading {
                 level: h.level,
                 text: text.trim().to_string(),
                 slug: slug.clone(),
                 span,
+                explicit_anchor: explicit_anchor.clone(),
             });
             Some(Block::Heading {
                 level: h.level,
                 inlines,
-                // L'ancora di un heading è il suo slug: è ciò che risolve
-                // `[[Nota#Titolo]]`, ed è generato, non scritto dall'utente.
-                anchor: Some(slug),
+                // L'ancora del blocco è lo slug (la chiave di `[[Nota#Titolo]]`
+                // e l'`id` dell'HTML); con un id scritto è quell'id **com'è
+                // scritto**, e l'HTML lo porta verbatim.
+                anchor: Some(explicit_anchor.clone().unwrap_or(slug)),
                 span,
+                explicit_anchor,
             })
         }
         NodeValue::Paragraph => {

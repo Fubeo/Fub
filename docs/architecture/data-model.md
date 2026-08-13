@@ -208,6 +208,7 @@ classDiagram
     class Heading {
         +u8 level
         +String slug
+        +Option~String~ explicit_anchor
     }
     class Anchor {
         +String id
@@ -487,6 +488,16 @@ Un blocco è indirizzabile in due sintassi, che sono due spazi di nomi distinti:
   validato da `valid_anchor` (lettere, cifre, `-`, `_`). Il `^` deve essere
   preceduto da spazio, altrimenti `2^10` in fondo a un paragrafo diventerebbe
   un'ancora.
+
+Un heading può portare **anche** un id esplicito (`## Titolo ^Mio-ID`): la
+generazione dello slug è allora **bypassata** — un id che qualcuno ha scritto
+non si disambigua — e lo `slug` è la forma canonica di quell'id, la stessa
+chiave con cui la tabella piatta risolve `[[Nota#^mio-id]]`: le due sintassi
+indicano lo stesso punto con la stessa chiave. Il nuovo campo
+`explicit_anchor` tiene l'id **com'è scritto** (maiuscole e trattini compresi):
+è ciò che `serialize` riscrive sul file e che l'HTML porta verbatim
+(`id="Mio-ID"`), mentre lo slug resta la chiave di risoluzione. Senza quel
+campo, «`## Testa` torna `## Testa ^testa`» — un'ancora che nel file non c'era.
 
 La tabella piatta `DocumentModel.anchors` contiene **solo** le ancore esplicite,
 con lo span del blocco (è ciò che un embed di blocco ritaglia) e quello del solo
