@@ -28,6 +28,8 @@
 - [ ] Time tracking
 - [ ] Report produttività
 - [ ] Dashboard task
+- [ ] Date relative nelle task
+- [ ] Azioni batch sulle task
 
 ### FubDB
 - [ ] Database relazionale locale
@@ -40,6 +42,7 @@
 - [ ] Import/export CSV
 - [ ] Database embed
 - [ ] Query builder visuale
+- [ ] Ordinamento per più colonne
 
 ### FubCanvas
 - [ ] Whiteboard infinito
@@ -78,6 +81,7 @@
 - [ ] Risorse
 - [ ] Dipendenze
 - [ ] Report progetto
+- [ ] Stati progetto
 
 ### FubJournal
 - [ ] Diario giornaliero
@@ -102,6 +106,7 @@
 - [ ] Review giornaliera
 - [ ] Import Anki opzionale
 - [ ] Export flashcard
+- [ ] Mazzi multipli
 
 ### FubCharts
 - [ ] Chart da query
@@ -127,6 +132,7 @@
 - [ ] Import GPX
 - [ ] Export GPX
 - [ ] Mappe embed
+- [ ] Segnalibri luoghi
 
 ### FubAI
 - [ ] AI opzionale
@@ -185,6 +191,7 @@
 - [ ] Note meeting
 - [ ] Timeline contatti
 - [ ] Export contatti
+- [ ] Ricerca contatti
 
 ### FubFinance
 - [ ] Budget personale
@@ -199,6 +206,7 @@
 - [ ] Import CSV banca
 - [ ] Export CSV
 - [ ] Dati locali cifrabili
+- [ ] Limiti di budget
 
 ### FubCollab
 - [ ] Shared vault

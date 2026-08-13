@@ -65,6 +65,13 @@
 - [ ] Selezione multipla di nodi con Shift+click
 - [ ] Porta in primo piano / manda in secondo piano (z-order) sui nodi e sulle linee
 - [ ] Spostare un nodo mantenendo le connessioni agganciate
+- [ ] Zoom percentuale esplicito (indicatore e campo numerico, preset 50/100/200)
+- [ ] Proporzioni bloccate durante il ridimensionamento (Shift)
+- [ ] Routing automatico dei connettori attorno ai nodi
+- [ ] Guide intelligenti di allineamento (smart guides)
+- [ ] Auto-layout dei nodi (arrangiamento automatico)
+- [ ] Clone dei nodi con Alt+drag
+- [ ] Snap ai bordi e ai centri dei nodi vicini
 
 ## 12.3 Diagrammi e visual thinking
 

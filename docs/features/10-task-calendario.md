@@ -25,6 +25,8 @@
 - [ ] Ricorrenza annuale
 - [ ] Ricorrenza personalizzata
 - [ ] Filtro "task senza data" (senza scadenza e senza scheduled)
+- [ ] Crea task dalla selezione di testo
+- [ ] Date relative "oggi/domani" per scadenza e scheduled
 
 ## 10.2 Metadata task
 
@@ -48,6 +50,8 @@
 - [ ] Task con progress
 - [ ] Task completamento automatico
 - [ ] Task in blocco
+- [ ] Priorità con colori
+- [ ] Scadenze visuali (colore/icona per scadenza imminente o scaduta)
 
 ## 10.3 Viste task
 
@@ -73,6 +77,8 @@
 - [ ] Time tracking opzionale
 - [ ] Filtri per priorità e per scadenza nelle viste task
 - [ ] Contatore task aperti per nota nell'esploratore
+- [ ] Filtri combinati nelle viste task
+- [ ] Completa un task direttamente dalla preview
 
 ## 10.4 Calendario e agenda
 
@@ -100,6 +106,9 @@
 - [ ] Crea evento direttamente dal calendario
 - [ ] Eventi ricorrenti nel calendario
 - [ ] Sposta un evento trascinandolo
+- [ ] Vista settimana con fasce orarie
+- [ ] Eventi tutto il giorno
+- [ ] Mini-mese per la navigazione rapida
 
 ## 10.5 Notifiche e promemoria
 
@@ -134,3 +143,6 @@
 - [ ] Notification history
 - [ ] Segna una notifica come letta
 - [ ] Conteggio/badge delle notifiche non lette
+- [ ] Segna tutte le notifiche come lette
+- [ ] Silenzia le notifiche
+- [ ] Preferenze di notifica per canale

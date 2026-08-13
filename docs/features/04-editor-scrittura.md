@@ -80,6 +80,12 @@
 - [ ] Seleziona riga corrente (Ctrl+L)
 - [ ] Promuovi/abbassa livello heading
 - [ ] Copia come testo semplice
+- [ ] Dimensione tab configurabile
+- [ ] Incolla e adatta alla formattazione della destinazione
+- [ ] Sostituzione nella selezione
+- [ ] Statistiche della selezione (parole/caratteri della selezione)
+- [ ] Espandi/collassa tutti i fold
+- [ ] Storico clipboard multiplo
 
 ## 4.3 Assistenza alla scrittura
 
@@ -122,6 +128,7 @@
 - [ ] Autocorrezione ortografica
 - [ ] Correzione automatica maiuscole
 - [ ] Completamento parole dal dizionario locale
+- [ ] Toggle commento con scorciatoia
 
 ## 4.4 Scrittura estesa / manuscript
 

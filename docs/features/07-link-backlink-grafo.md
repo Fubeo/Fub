@@ -38,6 +38,11 @@
 - [ ] Elimina link (rimuove il collegamento lasciando il testo)
 - [ ] Modifica link esistente dal menu contestuale (cambia URL/destinazione)
 - [ ] Copia il permalink della nota (link diretto indipendente dal percorso)
+- [ ] Copia come Wikilink (copia il collegamento in formato wikilink)
+- [ ] Apri link in nuova finestra
+- [ ] Titolo del link derivato dal titolo della nota
+- [ ] Evidenziazione dei link rotti nell'editor
+- [ ] Trascina una selezione di testo su una nota per creare un link (drag & drop)
 
 ## 7.2 Backlink
 
@@ -85,6 +90,10 @@
 - [ ] Suggerimenti link interni mancanti
 - [ ] Suggerimenti tag mancanti
 - [ ] Suggerimenti proprietà mancanti
+- [ ] Espandi/collassa i singoli backlink
+- [ ] Contesto attorno alla menzione nel backlink
+- [ ] Apri il backlink in scheda, split o popup dal pannello
+- [ ] Aggiornamento live dei backlink
 
 ## 7.3 Grafo della conoscenza
 
@@ -141,6 +150,12 @@
 - [ ] Shortest path
 - [ ] Semantic graph
 - [ ] Concept graph
-- [ ] Entity graph
 - [ ] Timeline graph
 - [ ] Graph annotations
+- [ ] Rotellina per zoomare il grafo
+- [ ] Pan con trascinamento dello sfondo
+- [ ] Etichette dei nodi visibili
+- [ ] Legenda del grafo
+- [ ] Filtro per gruppo colore
+- [ ] Adatta la vista a tutto il grafo
+- [ ] Salvataggio della posizione manuale dei nodi

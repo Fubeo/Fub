@@ -27,7 +27,6 @@
 - [ ] Encrypted thumbnails
 - [ ] Attachment compression
 - [ ] Attachment conversion
-- [ ] Attachment rename references
 - [ ] Alt text
 - [ ] Caption
 - [ ] Media metadata
@@ -37,6 +36,11 @@
 - [ ] Copia il percorso dell'allegato
 - [ ] Scarica/salva l'allegato in una cartella scelta (esporta il file originale)
 - [ ] Salva con nome per duplicare l'allegato con un altro nome
+- [ ] Filtro/ricerca nella lista degli allegati
+- [ ] Ordinamento della lista degli allegati (nome, data, dimensione)
+- [ ] Contatore degli allegati nella lista
+- [ ] Raggruppamento della lista degli allegati per tipo o cartella
+- [ ] Trascina un allegato in una nota per allegarlo
 
 ## 13.2 Media
 
@@ -52,7 +56,6 @@
 - [ ] Trascrizione audio opzionale
 - [ ] PDF viewer
 - [ ] Annotazioni PDF
-- [ ] Highlight PDF
 - [ ] Note da selezione PDF
 - [ ] OCR immagini opzionale
 - [ ] OCR PDF opzionale
@@ -66,6 +69,9 @@
 - [ ] Slideshow a schermo intero delle immagini
 - [ ] Stampa di un PDF dal viewer
 - [ ] Copia del testo selezionabile da un PDF
+- [ ] Segnalibri PDF (salva e riapri una posizione)
+- [ ] Filmstrip di miniature per navigare tra le immagini del viewer
+- [ ] Riprendi la riproduzione audio/video da dove era stata interrotta
 
 ## 13.3 Annotazioni profonde
 

@@ -60,6 +60,10 @@
 - [ ] Ricerca a testo libero sopra la vista (quick filter)
 - [ ] Click sull'intestazione di una colonna per ordinare
 - [ ] Contatore delle righe visibili dopo filtro/ordinamento
+- [ ] Stato vuoto con guida per creare la prima riga
+- [ ] Reset rapido di filtri e ordinamento
+- [ ] Righe numerate opzionali
+- [ ] Evidenziazione della riga sotto il cursore
 
 ## 11.3 Editing database
 
@@ -87,6 +91,9 @@
 - [ ] Rinomina colonna in-place
 - [ ] Elimina colonna con conferma
 - [ ] Selezione multipla di righe con checkbox e azioni bulk coerenti
+- [ ] Menu contestuale della riga (apri, copia, duplica, elimina)
+- [ ] Espansione di una riga per vedere i dettagli senza aprirla
+- [ ] Form di modifica con widget per tipo di colonna
 
 ## 11.4 Data editor / ETL
 
@@ -101,12 +108,6 @@
 - [ ] CSV schema validation
 - [ ] Data validation rules
 - [ ] Data grid virtualizzata
-- [ ] Column types
-- [ ] Column resize
-- [ ] Column freeze
-- [ ] Column sort
-- [ ] Column filter
-- [ ] Column formulas
 - [ ] Data transforms
 - [ ] Import mapping
 - [ ] Import profiles

@@ -31,6 +31,9 @@
 - [ ] Longevità del progetto
 - [ ] Fiducia come requisito di prodotto
 - [ ] Funziona senza installazione di componenti esterni
+- [ ] Funziona su hardware modesto senza componenti opzionali
+- [ ] Nessuna configurazione obbligatoria all'avvio
+- [ ] L'interfaccia segue le convenzioni native del sistema operativo
 
 ## 1.2 Licenza e governance
 

@@ -32,3 +32,6 @@
 - [ ] Docs offline
 - [ ] Guida introduttiva rapida
 - [ ] Canali di supporto
+- [ ] Changelog e release notes
+- [ ] Documentazione versionata con la versione dell'app
+- [ ] Cheat sheet delle scorciatoie

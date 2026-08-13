@@ -30,6 +30,12 @@
 - [ ] Elimina tag (rimozione o ripulitura delle occorrenze)
 - [ ] Sposta nota in archivio (azione esplicita, oltre alle regole automatiche)
 - [ ] Vista "note recenti" raggruppata per giorno/settimana
+- [ ] Colore per tag
+- [ ] Unisci tag (merge con aggiornamento delle occorrenze)
+- [ ] Conteggio note per tag nel pannello tag
+- [ ] Riordina i preferiti con drag & drop
+- [ ] Quick switcher con anteprima della nota
+- [ ] Command palette con ricerca fuzzy
 
 ## 8.2 Metadata e proprietà
 
@@ -65,8 +71,6 @@
 - [ ] Metadata automatici
 - [ ] Folder-level metadata
 - [ ] Inherited metadata
-- [ ] Computed properties
-- [ ] Rollup properties
 - [ ] Note classes
 - [ ] Note schemas
 - [ ] Property types personalizzati
@@ -77,6 +81,9 @@
 - [ ] Rinomina proprietà (aggiorna l'uso nelle note)
 - [ ] Elimina proprietà da una nota e dal pannello proprietà
 - [ ] Aggiungi proprietà rapida dal pannello (campo libero, senza andare nel frontmatter)
+- [ ] Modifica proprietà dalla UI (senza toccare il frontmatter)
+- [ ] Valori suggeriti per le proprietà
+- [ ] Nascondi proprietà vuote nel pannello
 
 ## 8.3 Note types e smart organization
 

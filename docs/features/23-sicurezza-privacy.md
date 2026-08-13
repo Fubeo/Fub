@@ -49,6 +49,10 @@
 - [ ] Encrypted search index opzionale
 - [ ] Duress mode opzionale
 - [ ] Security dashboard
+- [ ] Autenticazione a due fattori (2FA) opzionale
+- [ ] Blocco biometrico desktop
+- [ ] Gestore di password integrato
+- [ ] Cancellazione sicura completa del vault (secure wipe)
 
 ## 23.2 Privacy
 
@@ -94,6 +98,8 @@
 - [ ] Local-only mode
 - [ ] Airplane mode friendly
 - [ ] No hidden endpoints
+- [ ] Sessione privata (modalità incognito)
+- [ ] Minimizzazione dei dati per impostazione predefinita
 
 ## 23.3 Compliance e governance
 
@@ -127,3 +133,5 @@
 - [ ] Plugin policy chiara
 - [ ] Marketplace policy chiara
 - [ ] DMCA/abuse policy opzionale
+- [ ] Notifica di violazione dei dati (data breach)
+- [ ] Incident response plan

@@ -29,6 +29,14 @@
 - [ ] Salvataggio automatico della cattura in corso
 - [ ] Contatore inbox delle catture non ancora smistate
 - [ ] Svuota inbox spostando le catture in una cartella scelta
+- [ ] Notifica di conferma dopo la cattura
+- [ ] Anteprima della cattura prima del salvataggio
+- [ ] Filtro/ricerca tra le catture dell'inbox
+- [ ] Catture raggruppate per data nell'inbox
+- [ ] Data e ora automatiche nella cattura veloce
+- [ ] Apri l'inbox con una scorciatoia dedicata
+- [ ] Riprendi una bozza di cattura interrotta
+- [ ] Badge nella tray con il numero di catture non smistate
 
 ## 14.2 Web clipper
 

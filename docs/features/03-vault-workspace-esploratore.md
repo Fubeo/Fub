@@ -28,6 +28,7 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Vault multipli simultanei
 - [ ] Switch rapido tra vault
 - [ ] Vault recenti
+- [ ] Conferma prima della chiusura di un vault con modifiche non salvate
 - [ ] Vault preferiti
 - [ ] Icona vault personalizzata
 - [ ] Colore vault personalizzato
@@ -73,6 +74,9 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Ordinamento manuale
 - [ ] Ordinamento per nome, data, tipo e dimensione
 - [ ] Mostra la data di modifica di ogni file
+- [ ] Colonna dimensione di ogni file
+- [ ] Copia il percorso di un file negli appunti dall'esploratore
+- [ ] Conteggio degli elementi di una cartella
 - [ ] Filtri file
 - [ ] Ricerca nella sidebar file
 - [ ] Aggiornamento manuale dell'elenco (refresh)
@@ -81,7 +85,6 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Apri la cartella contenente il file dalla vista anteprima
 - [ ] Gestione file orfani
 - [ ] Rilevamento duplicati
-- [ ] Gestione nomi case-sensitive
 - [ ] Unicode completo
 - [ ] Percorsi relativi
 - [ ] File lock opzionale
@@ -100,7 +103,6 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Pannello inferiore opzionale
 - [ ] Breadcrumb
 - [ ] Tab bar
-- [ ] Tab groups
 - [ ] Schede fissate
 - [ ] Schede raggruppate
 - [ ] Editor pop-out
@@ -123,6 +125,10 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Undo toast
 - [ ] Redo toast
 - [ ] Context menus completi
+- [ ] Menu applicativo (File, Modifica, Visualizza)
+- [ ] Menu contestuale estendibile dai plugin
+- [ ] Barra di stato con stato del vault e della sincronizzazione
+- [ ] Salvataggio automatico del layout alla chiusura
 - [ ] Quick actions
 - [ ] Background task manager
 - [ ] Alterna il focus tra editor e pannelli con un tasto solo
