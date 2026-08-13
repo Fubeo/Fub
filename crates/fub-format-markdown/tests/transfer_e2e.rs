@@ -522,6 +522,40 @@ fn in_un_documento_unico_il_frontmatter_resta_metadato_e_non_diventa_un_divisore
 }
 
 #[test]
+fn un_frontmatter_vuoto_non_diventa_sintassi_nel_documento_unico() {
+    let (_g, ws) = vault_con(&[
+        ("Prima.md".to_string(), "---\n\n---\n\nCorpo.\n".to_string()),
+        ("Seconda.md".to_string(), "Altro.\n".to_string()),
+    ]);
+    let report = ws
+        .export(
+            &ExportRequest::new(
+                TARGET_SINGLE,
+                ExportSelection::Documents(vec![DocId::new("Prima.md"), DocId::new("Seconda.md")]),
+            )
+            .with_options(serde_json::json!({ "frontmatter": false })),
+        )
+        .expect("export");
+    let out = text(
+        artifact(&report, "export.md")
+            .as_bytes()
+            .expect("in memoria"),
+    );
+
+    let model = modello(out, "export.md");
+    assert_eq!(
+        model
+            .body
+            .iter()
+            .filter(|b| matches!(b, Block::ThematicBreak { .. }))
+            .count(),
+        1,
+        "l'unico divisore ammesso separa i due documenti:\n{out}"
+    );
+    assert!(out.contains("Corpo."));
+}
+
+#[test]
 fn an_unknown_target_is_refused_by_the_kernel() {
     let (_g, ws) = vault();
     assert!(matches!(
