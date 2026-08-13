@@ -16,6 +16,10 @@
 //! - **Specie diverse non si confrontano**: `>` fra un numero e un testo è
 //!   *falso*, non un errore. Un vault vero ha frontmatter disomogeneo, e una
 //!   query che morisse sulla prima nota scritta a mano sarebbe inutilizzabile.
+//!   Nell'ordinamento, però, le specie si separano per **rango fisso** (come
+//!   Excel: numero, data, bool, testo, link, elenco, unknown, vuoto): il rango
+//!   non si ribalta col decrescente, e i valori non confrontabili finiscono in
+//!   fondo in entrambi i versi invece di spararsi a caso come «pari».
 //! - **Chi non ha la chiave finisce in fondo**, in entrambi i versi
 //!   dell'ordinamento: è assente, non minimo. A parità vale l'ordine dei
 //!   `DocId`, perché la risposta è paginata e senza un ordine totale la seconda
@@ -132,9 +136,38 @@ fn compare(a: &PropertyValue, b: &PropertyValue) -> Option<Ordering> {
     }
 }
 
+/// Il rango fisso delle specie, come fa Excel: le categorie hanno un ordine
+/// prestabilito che il decrescente **non ribalta** — solo dentro la stessa
+/// specie il verso si inverte. Così l'ordinamento fra specie diverse è
+/// totale e antisimmetrico, e i valori non confrontabili finiscono in fondo
+/// in entrambi i versi invece di spararsi a caso come «pari».
+///
+/// L'ordine — numero, data, bool, testo, link, elenco, unknown, vuoto —
+/// segue ciò che un utente si aspetta da un foglio: prima i numeri (che si
+/// sommano), poi le date (che si contano), poi i booleani (vero prima di
+/// falso), poi il testo, poi le relazioni, poi gli elenchi, e in fondo ciò
+/// che non si è riusciti a normalizzare. È una convenzione di prodotto, non
+/// una verità di natura: la [decisione 0005] dice «in fondo in entrambi i
+/// versi», e questo è il modo deterministico di farlo.
+///
+/// [decisione 0005]: ../../../docs/decisions/0005-canale-dati-verso-le-view.md
+fn species_rank(v: &PropertyValue) -> u8 {
+    match v {
+        PropertyValue::Number(_) => 0,
+        PropertyValue::Date(_) => 1,
+        PropertyValue::Bool(_) => 2,
+        PropertyValue::Text(_) => 3,
+        PropertyValue::Link(_) => 4,
+        PropertyValue::List(_) => 5,
+        PropertyValue::Unknown(_) => 6,
+        PropertyValue::Empty => 7,
+    }
+}
+
 /// L'ordine fra due documenti secondo la chiave di ordinamento: chi non ha la
 /// chiave, o ha un valore non confrontabile, finisce **in fondo** in entrambi i
-/// versi.
+/// versi. Fra specie diverse decide il [rango fisso](`species_rank`), che non
+/// si ribalta col decrescente.
 pub fn order_of(
     a: Option<&PropertyValue>,
     b: Option<&PropertyValue>,
@@ -147,8 +180,10 @@ pub fn order_of(
         (Some(a), Some(b)) => match compare(a, b) {
             Some(ord) if descending => ord.reverse(),
             Some(ord) => ord,
-            // Specie diverse: nessun ordine, e nessuna delle due "vince".
-            None => Ordering::Equal,
+            // Specie diverse: il rango fisso decide, e non si ribalta col
+            // decrescente — come Excel. Solo dentro la stessa specie il verso
+            // si inverte (gestito sopra da `ord.reverse()`).
+            None => species_rank(a).cmp(&species_rank(b)),
         },
     }
 }
@@ -445,6 +480,38 @@ mod tests {
     }
 
     #[test]
+    fn diverse_species_sort_by_fixed_rank_in_both_directions() {
+        // Come Excel: le specie hanno un rango fisso (numero < data < bool <
+        // testo < link < elenco < unknown < vuoto), e il rango **non si
+        // ribalta** col decrescente — solo dentro la stessa specie il verso
+        // si inverte. Così l'ordinamento è totale e antisimmetrico.
+        let num = PropertyValue::Number(3.0);
+        let txt = PropertyValue::Text("x".into());
+        // Crescente: il numero viene prima del testo.
+        assert_eq!(
+            order_of(Some(&num), Some(&txt), false),
+            Ordering::Less,
+            "numero prima di testo, crescente"
+        );
+        assert_eq!(
+            order_of(Some(&txt), Some(&num), false),
+            Ordering::Greater,
+            "testo dopo numero, crescente — antisimmetrico"
+        );
+        // Decrescente: il rango non si ribalta, il numero resta prima.
+        assert_eq!(
+            order_of(Some(&num), Some(&txt), true),
+            Ordering::Less,
+            "numero prima di testo anche al decrescente: il rango fisso non si ribalta"
+        );
+        assert_eq!(
+            order_of(Some(&txt), Some(&num), true),
+            Ordering::Greater,
+            "testo dopo numero anche al decrescente — antisimmetrico"
+        );
+    }
+
+    #[test]
     fn select_narrows_the_columns_and_absence_stays_absence() {
         let rows = run(
             &[filter("tipo", PropertyTest::Exists)],
@@ -539,9 +606,9 @@ mod tests {
     /// metà no, cioè lo stato normale di una migrazione — e le tre domande che
     /// 8.2 fa su una data. Senza dichiarazione tutte e tre rispondono male, e
     /// nessuna delle tre lo dice: il filtro non trova, la faccetta conta due
-    /// giorni dove ce n'è uno, l'ordinamento rende un ordine plausibile e
-    /// arbitrario perché fra due specie non c'è ordine e «nessun ordine»
-    /// diventa «pari».
+    /// giorni dove ce n'è uno, l'ordinamento separa le specie per rango fisso
+    /// (la data prima dei testi) ma dentro i testi l'ordine è lessicale, non
+    /// cronologico — plausibile, e sbagliato.
     #[test]
     fn a_mixed_vault_answers_wrong_and_says_nothing_until_the_format_is_declared() {
         let misto = vec![
@@ -589,8 +656,6 @@ mod tests {
             "col formato dichiarato `2026-07-05` e `5/7/2026` sono lo stesso              giorno, quindi la stessa faccetta"
         );
 
-        // L'ordinamento: senza dichiarazione le due specie sono «pari», quindi
-        // l'ordine è quello degli id — plausibile, e senza rapporto con le date.
         let per_data = PropertySort {
             key: "q".into(),
             descending: false,
@@ -618,13 +683,12 @@ mod tests {
             .map(|r| r.doc.as_str().to_string())
             .collect()
         };
-        // E non è nemmeno «l'ordine degli id»: le due `Text` si confrontano
-        // fra loro come stringhe (`1/1/2020` < `5/7/2026`) mentre ognuna delle
-        // due è **pari** alla `Date`. Il comparatore che ne esce non è un
-        // ordine — `a == b`, `a == c`, `b < c` — e un `sort_by` con un
-        // comparatore incoerente rende una permutazione che nessuno ha deciso.
-        // È la forma peggiore in cui questa famiglia può rompersi, perché
-        // l'ordine che si vede è plausibile.
+        // L'ordinamento: senza dichiarazione le due specie non si
+        // confrontano, ma il rango fisso le separa — la `Date` (rango 1)
+        // prima dei `Text` (rango 3), che a loro volta si ordinano fra loro
+        // come stringhe. È totale e deterministico, anche se la risposta è
+        // sbagliata (le date non dichiarate restano testo, e il 2020 finisce
+        // dopo il 2026 per via del rango, non del valore).
         assert_eq!(ordine(&DateFormats::ISO), vec!["a.md", "c.md", "b.md"]);
         assert_eq!(
             order_of(
@@ -637,9 +701,9 @@ mod tests {
                 })),
                 false
             ),
-            Ordering::Equal,
-            "una data e un testo sono «pari», ed è da qui che nasce l'ordine \
-             che non è un ordine"
+            Ordering::Greater,
+            "una data (rango 1) viene prima di un testo (rango 3): il rango \
+             fisso separa le specie invece di dirle «pari»"
         );
         assert_eq!(
             ordine(&dmy),
