@@ -5821,12 +5821,30 @@ impl Workspace {
     /// esce un [`Event::JobStarted`]. L'origine non la si tocca: è quella del
     /// giro in corso, cioè di **chi ha chiesto** il lavoro — che è la sola cosa
     /// che l'evento non porta nei propri campi.
-    pub(crate) fn enqueue_job(&mut self, plugin: &str, spec: JobSpec) -> JobId {
+    ///
+    /// **Su un vault che sta chiudendo non entra, e lo dice.** Da quando
+    /// `closed` è alzato nessuno può più eseguire un job — il runner del vault
+    /// è già fermo, e l'unico drenaggio è già girato — quindi accodarne uno
+    /// vorrebbe dire un chiamante che aspetta un `JobDone` che non arriva mai.
+    /// La guardia risponde subito con un
+    /// [`Cancelled`](PluginError::Cancelled) e la coda resta vuota. È **per
+    /// generazione**: chi riapre il vault è un workspace nuovo col suo `closed`
+    /// a posto, e la chiusura vecchia non lo lascia chiuso.
+    pub(crate) fn enqueue_job(
+        &mut self,
+        plugin: &str,
+        spec: JobSpec,
+    ) -> std::result::Result<JobId, PluginError> {
+        if self.closed {
+            return Err(PluginError::Cancelled(
+                format!("il vault si sta chiudendo: il job `{}` non parte", spec.job).into(),
+            ));
+        }
         let job = spec.job.clone();
         let id = self.dispatch.enqueue_job(plugin, spec);
         self.indexes.core.jobs.accepted(id, &job, plugin);
         self.emit_event(Event::JobStarted { id, job });
-        id
+        Ok(id)
     }
 
     /// **Dichiara viva la seconda fase dell'apertura**, e le dà un'identità

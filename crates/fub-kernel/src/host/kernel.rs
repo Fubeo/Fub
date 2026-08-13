@@ -364,7 +364,7 @@ impl HostEvents for KernelHost<'_> {
     }
 
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError> {
-        Ok(self.ws.enqueue_job(self.plugin, spec))
+        self.ws.enqueue_job(self.plugin, spec)
     }
 }
 

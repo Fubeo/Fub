@@ -595,3 +595,107 @@ fn chiudere_due_volte_non_chiude_due_volte() {
     assert_eq!(chiusure, 1, "un vault si chiude una volta sola");
     assert!(ws.is_closed());
 }
+
+// --- la guardia dei job in chiusura ----------------------------------------
+
+/// Un handler che, ricevendo l'ultimo giro, chiede un job — **due volte**, per
+/// provare che i due trigger non fanno un doppio effetto. È il gesto che il
+/// difetto del job in chiusura lasciava senza risposta: prima della guardia,
+/// quei job entravano in coda e nessuno li drenava più.
+struct ChiudeCheChiede(Arc<Mutex<Vec<PluginError>>>);
+
+impl EventHandler for ChiudeCheChiede {
+    fn subscribed(&self) -> EventMask {
+        EventMask::of([EventKind::VaultClosed])
+    }
+
+    fn handle(&mut self, _notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        for _ in 0..2 {
+            match host.spawn_job(JobSpec {
+                job: "tardi".into(),
+                payload: serde_json::Value::Null,
+            }) {
+                Ok(id) => {
+                    panic!("un job chiesto durante la chiusura non dovrebbe partire: {id:?}")
+                }
+                Err(esito) => self.0.lock().unwrap().push(esito),
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Un job chiesto quando il vault sta chiudendo non entra nemmeno in coda: chi
+/// lo chiede riceve il rifiuto subito, e due trigger non producono un doppio
+/// effetto — né due voci in coda, né un `JobStarted` per un lavoro che nessuno
+/// eseguirà.
+#[test]
+fn un_job_chiesto_durante_la_chiusura_e_rifiutato_subito() {
+    let banco = Banco::nuovo();
+    let mut ws = banco.workspace();
+    let esiti = Arc::new(Mutex::new(Vec::new()));
+    ws.register_event_handler("prova.uno", Box::new(ChiudeCheChiede(esiti.clone())))
+        .expect("handler");
+    let eventi = ws.bus().subscribe();
+
+    let errori = ws.close();
+    assert!(
+        errori.is_empty(),
+        "niente è andato storto chiudendo: {errori:?}"
+    );
+
+    let esiti = esiti.lock().unwrap();
+    assert_eq!(
+        esiti.len(),
+        2,
+        "entrambi i trigger hanno avuto la loro risposta"
+    );
+    for esito in esiti.iter() {
+        assert!(
+            matches!(esito, PluginError::Cancelled(msg) if msg.to_string().contains("si sta chiudendo")),
+            "il rifiuto è un annullamento che dice perché: {esito:?}"
+        );
+    }
+    drop(esiti);
+
+    assert!(
+        ws.take_pending_jobs().is_empty(),
+        "nessun job è entrato in coda: la guardia ha rifiutato prima"
+    );
+    let partiti = eventi
+        .try_iter()
+        .filter(|n| matches!(n.event, Event::JobStarted { .. }))
+        .count();
+    assert_eq!(partiti, 0, "un job che non parte non si annuncia");
+}
+
+/// La guardia è **della generazione del workspace**: chiudere e riaprire il
+/// vault crea un workspace nuovo col proprio `closed` a posto, e la chiusura
+/// vecchia non lascia chiuso lo stato corrente — la riapertura accoda di
+/// nuovo, e il job aspetta il runner come sempre.
+#[test]
+fn la_guardia_di_chiusura_non_sopravvive_alla_riapertura() {
+    let banco = Banco::nuovo();
+    let mut prima = banco.workspace();
+    prima.close();
+    drop(prima);
+
+    let mut dopo = banco.workspace();
+    dopo.with_host("prova.uno", |host| {
+        host.spawn_job(JobSpec {
+            job: "dopo".into(),
+            payload: serde_json::Value::Null,
+        })
+    })
+    .expect("la riapertura accetta di nuovo i job");
+    let in_coda = dopo.take_pending_jobs();
+    assert_eq!(
+        in_coda.len(),
+        1,
+        "il job della nuova generazione è in coda, in attesa del runner"
+    );
+    assert_eq!(
+        in_coda[0].spec.job, "dopo",
+        "ed è proprio il job chiesto dopo la riapertura"
+    );
+}

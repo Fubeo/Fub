@@ -3436,6 +3436,9 @@ interface host-events {
     emit: func(event: event);
     /// Chiede l'esecuzione in background di un job (`plugin.run-job`).
     /// Ritorna subito con l'identità; l'esito arriva come evento `job-done`.
+    /// L'unico no a monte è la chiusura: su un vault che sta chiudendo la
+    /// richiesta non entra nemmeno in coda e risponde subito `cancelled` — di
+    /// quel lavoro non arriverà nessun `job-done`, perché non è mai partito.
     spawn-job: func(spec: job-spec) -> result<job-id, plugin-error>;
     /// A CHE PUNTO SONO: da chiamare dentro `plugin.run-job`, quante volte si
     /// vuole (§10.3, decisione 0035).
