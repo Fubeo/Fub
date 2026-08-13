@@ -86,8 +86,6 @@
 - [ ] Custom exporters
 - [ ] Custom sync adapters
 - [ ] Custom AI adapters
-- [ ] Configurazione di default funzionante
-- [ ] Template commentati
 
 ## 27.4 Testing e QA
 

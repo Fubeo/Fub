@@ -29,19 +29,12 @@
 - [ ] Preview link al passaggio mouse
 - [ ] Preview immagini
 - [ ] Lightbox immagini
-- [ ] Zoom immagini
 - [ ] Caption immagini
 - [ ] Alt text immagini
 - [ ] Lazy loading immagini
 - [ ] PDF embed
-- [ ] Audio player
-- [ ] Video player
-- [ ] Sottotitoli
-- [ ] Trascrizioni
 - [ ] Rendering responsive
 - [ ] Rendering mobile ottimizzato
-- [ ] Rendering ad alto contrasto
-- [ ] Rendering ridotto per motion
 - [ ] Rendering accessibile
 - [ ] Font monospazio per i code block
 - [ ] Riga attiva evidenziata nella preview
@@ -50,12 +43,14 @@
 
 - [ ] CSS personalizzato
 - [ ] Temi
+- [ ] Anteprima del tema prima di applicarlo
 - [ ] Snippet CSS
 - [ ] Font personalizzati
 - [ ] Dimensione font
 - [ ] Interlinea
 - [ ] Larghezza contenuto
 - [ ] Modalità chiara/scura
+- [ ] Toggle rapido del tema (chiaro/scuro) con scorciatoia
 - [ ] Tema automatico da sistema
 - [ ] CSS per nota
 - [ ] CSS per cartella
@@ -64,14 +59,6 @@
 - [ ] Componenti UI personalizzati
 - [ ] Stili di stampa
 - [ ] Preview responsive
-- [ ] Modalità mobile ottimizzata
-- [ ] Alto contrasto
-- [ ] Reduced motion
-- [ ] Reduced transparency
-- [ ] Colorblind palettes
-- [ ] Dyslexia-friendly fonts
-- [ ] Text spacing regolabile
-- [ ] Line length regolabile
 - [ ] Densità della preview (compatta/rilassata)
 
 ## 6.3 Print / PDF avanzato
@@ -90,9 +77,6 @@
 - [ ] PDF via Typst
 - [ ] PDF via WeasyPrint
 - [ ] PDF via browser print
-- [ ] Export con allegati
-- [ ] Export senza allegati
-- [ ] Export note selezionate
 - [ ] Export collezione
 - [ ] Export progetto
 - [ ] Export book
@@ -104,5 +88,4 @@
 - [ ] Export con annotazioni
 - [ ] Export con commenti
 - [ ] Export con highlight
-- [ ] Export con metadata
 - [ ] Export con bibliografia

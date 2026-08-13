@@ -4,7 +4,6 @@
 
 - [ ] Avvio rapido
 - [ ] Apertura nota istantanea
-- [ ] Ricerca rapida
 - [ ] Indicizzazione incrementale
 - [ ] Lazy loading
 - [ ] Virtualizzazione liste
@@ -68,7 +67,6 @@
 - [ ] Beta channel
 - [ ] Stable channel
 - [ ] Verifica manuale degli aggiornamenti disponibili
-- [ ] Portable mode
 - [ ] Low resource mode
 - [ ] Offline resilience
 - [ ] Battery friendly mobile

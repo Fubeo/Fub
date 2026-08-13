@@ -10,16 +10,13 @@
 - [ ] WYSIWYG opzionale
 - [ ] Block editor opzionale
 - [ ] Focus mode
+- [ ] Indicatore di nota in sola lettura visibile nell'editor
 - [ ] Typewriter mode
 - [ ] Zen mode
 - [ ] Presentation mode
 - [ ] Split verticale
 - [ ] Split orizzontale
 - [ ] Editor a schede
-- [ ] Schede fissate
-- [ ] Schede raggruppate
-- [ ] Editor pop-out
-- [ ] Finestre multiple
 - [ ] Cambio modalità per nota
 - [ ] Cambio modalità globale
 - [ ] Fullscreen
@@ -73,6 +70,7 @@
 - [ ] Selezione blocco
 - [ ] Selezione paragrafo
 - [ ] Scorciatoie personalizzabili
+- [ ] Mostra la scorciatoia associata nelle voci di menu e palette
 - [ ] Hotkey chords
 - [ ] Mouse gestures opzionali
 - [ ] Touch gestures

@@ -43,7 +43,6 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Vault template
 - [ ] Creazione vault da template
 - [ ] Vault health dashboard
-- [ ] Vault size diagnostics
 - [ ] Vault repair wizard
 - [ ] Apri la cartella del vault nel file manager di sistema
 - [ ] Copia percorso del vault negli appunti
@@ -68,8 +67,7 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Cestino interno
 - [ ] Ripristino dal cestino
 - [ ] Eliminazione permanente
-- [ ] Secure delete
-- [ ] Preferiti
+- [ ] Conferma prima dell'eliminazione di un file o di una cartella
 - [ ] File fissati
 - [ ] Ordinamento personalizzato
 - [ ] Ordinamento manuale
@@ -80,15 +78,14 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Aggiornamento manuale dell'elenco (refresh)
 - [ ] Visualizzazione allegati
 - [ ] Anteprima file
+- [ ] Apri la cartella contenente il file dalla vista anteprima
 - [ ] Gestione file orfani
 - [ ] Rilevamento duplicati
 - [ ] Gestione nomi case-sensitive
 - [ ] Unicode completo
 - [ ] Percorsi relativi
-- [ ] Link assoluti interni opzionali
 - [ ] File lock opzionale
 - [ ] Rilevamento modifiche concorrenti
-- [ ] Merge manuale conflitti
 - [ ] Cronologia modifiche file
 
 ## 3.3 Workspace e layout
@@ -99,6 +96,8 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Sidebar auto-hide
 - [ ] Topbar opzionale
 - [ ] Status bar
+- [ ] Barra delle icone laterale (ribbon) opzionale
+- [ ] Pannello inferiore opzionale
 - [ ] Breadcrumb
 - [ ] Tab bar
 - [ ] Tab groups
@@ -126,6 +125,5 @@ un proprietario che non è Fub, e il posto dove atterrare adesso c'è.
 - [ ] Context menus completi
 - [ ] Quick actions
 - [ ] Background task manager
-- [ ] Ripristino sessione all'avvio (ultime note aperte)
+- [ ] Alterna il focus tra editor e pannelli con un tasto solo
 - [ ] Indicatore di modifica non salvata sulla scheda
-- [ ] Storico delle note aperte di recente
