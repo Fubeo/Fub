@@ -54,7 +54,6 @@
 - [ ] Sync session management
 - [ ] Sync conflict UI
 - [ ] Sync merge preview
-- [ ] Sync history
 - [ ] Data e ora dell'ultima sincronizzazione visibile
 - [ ] Sync di un singolo file su richiesta
 - [ ] Barra di avanzamento della sincronizzazione
@@ -87,7 +86,6 @@
 - [ ] Deduplication
 - [ ] Compression
 - [ ] Offsite backups
-- [ ] External drive backups
 - [ ] Cloud adapters
 - [ ] Restore test
 - [ ] Snapshot browser
@@ -105,9 +103,7 @@
 - [ ] Backup settings
 - [ ] Backup encryption key management
 - [ ] Backup recovery key
-- [ ] Backup integrity checks
 - [ ] Backup versioning
-- [ ] Backup pruning
 - [ ] Backup resume after interruption
 - [ ] Backup bandwidth limits
 - [ ] Eliminazione manuale di un backup

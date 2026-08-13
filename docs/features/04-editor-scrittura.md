@@ -104,7 +104,6 @@
 - [ ] Conteggio caratteri
 - [ ] Tempo di lettura
 - [ ] Statistiche testo
-- [ ] Leggibilità
 - [ ] Modalità revisione
 - [ ] Commenti inline
 - [ ] Highlight annotabili
@@ -115,7 +114,6 @@
 - [ ] Riscrittura AI opzionale
 - [ ] Traduzione AI opzionale
 - [ ] Riassunto AI opzionale
-- [ ] Modalità senza distrazioni
 - [ ] Obiettivi di scrittura
 - [ ] Timer scrittura
 - [ ] Promemoria pause

@@ -65,7 +65,6 @@
 - [ ] Classi CSS da frontmatter
 - [ ] Componenti UI personalizzati
 - [ ] Stili di stampa
-- [ ] Preview responsive
 - [ ] Densità della preview (compatta/rilassata)
 
 ## 6.3 Print / PDF avanzato

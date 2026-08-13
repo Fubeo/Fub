@@ -11,7 +11,6 @@
 - [ ] API pubbliche documentate
 - [ ] Worker/thread separati
 - [ ] Parsing incrementale
-- [ ] Indicizzazione incrementale
 - [ ] Rendering lazy
 - [ ] Cache intelligente
 - [ ] Database locale opzionale per indici
@@ -21,16 +20,7 @@
 - [ ] Gestione conflitti file
 - [ ] Scrittura atomica dei file
 - [ ] Recovery dopo crash
-- [ ] Safe mode
-- [ ] Plugin isolation
-- [ ] Crash buffer
 - [ ] Autosave buffer
-- [ ] Journaling
-- [ ] Checksum verification
-- [ ] Corruption detection
-- [ ] Vault repair
-- [ ] Index rebuild
-- [ ] Diagnostic bundle
 
 ## 2.2 Modello dati
 
