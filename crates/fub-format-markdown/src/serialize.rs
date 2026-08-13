@@ -602,6 +602,13 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
             write_inlines(children, out)?;
             out.push_str("**");
         }
+        // I due a-capo si riscrivono nella forma che rileggendola torna lo
+        // stesso nodo: il duro con due spazi + a-capo (la forma più portabile,
+        // valida anche dove `\` non è sintassi), il morbido con il solo
+        // a-capo. Prima erano entrambi un `Text(" ")` e il file si
+        // appiattiva a ogni salvataggio.
+        Inline::HardBreak => out.push_str("  \n"),
+        Inline::SoftBreak => out.push('\n'),
         Inline::Code(s) => {
             // Il delimitatore è più lungo della più lunga fila di backtick che
             // il codice contiene, e ci mette gli spazi di cortesia quando il

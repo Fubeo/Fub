@@ -259,6 +259,10 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             render_inlines(children, opts, out);
             out.push_str("</strong>");
         }
+        // Il duro cambia riga davvero; il morbido è uno spazio — la stessa
+        // resa che il browser dà a un a-capo singolo nel testo.
+        Inline::HardBreak => out.push_str("<br />"),
+        Inline::SoftBreak => out.push(' '),
         Inline::Code(s) => {
             out.push_str("<code>");
             out.push_str(&escape(s));

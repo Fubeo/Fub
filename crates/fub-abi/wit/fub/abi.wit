@@ -243,6 +243,8 @@ interface model {
         custom(inline-custom),
         superscript(list<inline-ref>),
         strikethrough(list<inline-ref>),
+        hard-break,
+        soft-break,
     }
 
     // Ogni blocco porta un `anchor`: per un heading è lo slug generato dal

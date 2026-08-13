@@ -189,6 +189,8 @@ pub enum Inline {
     },
     Superscript(Vec<InlineRef>),
     Strikethrough(Vec<InlineRef>),
+    HardBreak,
+    SoftBreak,
 }
 
 /// [`model::ListItem`] con i blocchi sostituiti da indici.
@@ -679,6 +681,8 @@ impl DocumentTree {
             Inline::Strong(v) => model::Inline::Strong(self.inlines(v, path)?),
             Inline::Superscript(v) => model::Inline::Superscript(self.inlines(v, path)?),
             Inline::Strikethrough(v) => model::Inline::Strikethrough(self.inlines(v, path)?),
+            Inline::HardBreak => model::Inline::HardBreak,
+            Inline::SoftBreak => model::Inline::SoftBreak,
             Inline::Code(s) => model::Inline::Code(s.clone()),
             Inline::Link {
                 target,
@@ -857,6 +861,8 @@ fn tree_push_inline(tree: &mut DocumentTree, i: &model::Inline) -> InlineRef {
         model::Inline::Strong(v) => Inline::Strong(tree_push_inlines(tree, v)),
         model::Inline::Superscript(v) => Inline::Superscript(tree_push_inlines(tree, v)),
         model::Inline::Strikethrough(v) => Inline::Strikethrough(tree_push_inlines(tree, v)),
+        model::Inline::HardBreak => Inline::HardBreak,
+        model::Inline::SoftBreak => Inline::SoftBreak,
         model::Inline::Code(s) => Inline::Code(s.clone()),
         model::Inline::Link {
             target,

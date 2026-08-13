@@ -761,9 +761,20 @@ fn convert_inlines<'a>(
                 };
                 push_text_features(source, slice, span.start, ctx, acc, &mut out);
             }
-            NodeValue::SoftBreak | NodeValue::LineBreak => {
+            NodeValue::SoftBreak => {
+                // Un a-capo morbido: la riga continua, e nella resa è uno
+                // spazio. Nel testo piatto è uno spazio come prima.
                 text_out.push(' ');
-                out.push(Inline::Text(" ".to_string()));
+                out.push(Inline::SoftBreak);
+            }
+            NodeValue::LineBreak => {
+                // Un a-capo duro (`  ` o `\` a fine riga): nella resa cambia
+                // riga. È un nodo a sé — prima produceva lo stesso `Text(" ")`
+                // del soft break, e il salto spariva alla prima riscrittura
+                // (due righe tornavano una). Nel testo piatto resta uno spazio,
+                // che è come si legge.
+                text_out.push(' ');
+                out.push(Inline::HardBreak);
             }
             NodeValue::Emph => {
                 out.push(Inline::Emph(convert_inlines(
