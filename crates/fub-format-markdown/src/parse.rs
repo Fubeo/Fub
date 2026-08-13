@@ -1,9 +1,12 @@
 //! Parsing: AST comrak → `DocumentModel` comune.
 
+use std::collections::HashMap;
 use std::ops::Range;
+use std::sync::OnceLock;
 
 use comrak::nodes::{AstNode, ListType, NodeValue, TableAlignment};
 use comrak::{Arena, Options};
+use entities::ENTITIES;
 use fub_abi::format::ParseContext;
 use fub_abi::model::{
     canonical_anchor, custom_kind, valid_anchor, Anchor, Block, ColumnAlign, DocId, DocumentModel,
@@ -17,7 +20,6 @@ use fub_abi::FormatError;
 use fub_sdk::scan;
 
 use crate::offsets::Offsets;
-use crate::util::disescapa;
 
 /// Costruisce le opzioni comrak per il dialetto Obsidian.
 pub fn build_options(ctx: &ParseContext) -> Options<'static> {
@@ -729,8 +731,20 @@ fn convert_inlines<'a>(
                 // carattere decodificato prima di lui. Sul sorgente, inoltre,
                 // gli escape sono ancora visibili: `\#nontag` non diventa un
                 // tag (Obsidian lo neutralizza).
-                let slice = source.get(span.start..span.end).unwrap_or(&s);
-                push_text_features(source, slice, &s, span.start, ctx, acc, &mut out);
+                //
+                // Se la fetta non è quella del sorgente (`sourcepos` fuori
+                // confine) il testo di comrak è **già** decodificato: si
+                // emette tale e quale, perché il decoder lineare applicato al
+                // già decodificato raddoppierebbe le entità (`&amp;lt;` →
+                // `&lt;` → `<`), e gli span delle feature vivono nel sorgente
+                // che qui non c'è.
+                let Some(slice) = source.get(span.start..span.end) else {
+                    if !s.is_empty() {
+                        out.push(Inline::Text(s));
+                    }
+                    continue;
+                };
+                push_text_features(source, slice, span.start, ctx, acc, &mut out);
             }
             NodeValue::SoftBreak | NodeValue::LineBreak => {
                 text_out.push(' ');
@@ -922,7 +936,6 @@ fn convert_inlines<'a>(
 fn push_text_features(
     source: &str,
     slice: &str,
-    decoded: &str,
     base: usize,
     ctx: &ParseContext,
     acc: &mut Acc,
@@ -934,7 +947,7 @@ fn push_text_features(
         Vec::new()
     };
     if embeds.is_empty() {
-        push_plain_or_tags(source, slice, decoded, base, ctx, acc, out);
+        push_plain_or_tags(source, slice, base, ctx, acc, out);
         return;
     }
     let mut cursor = 0;
@@ -949,7 +962,7 @@ fn push_text_features(
         let inizio = abs.start - base;
         if inizio > cursor {
             let seg = &slice[cursor..inizio];
-            push_plain_or_tags(source, seg, seg, base + cursor, ctx, acc, out);
+            push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
         }
         let parsed = scan::parse_wikilink_inner(&inner);
         // L'embed testuale sta DENTRO il testo pushato (comrak non l'ha
@@ -974,7 +987,7 @@ fn push_text_features(
     }
     if cursor < slice.len() {
         let seg = &slice[cursor..];
-        push_plain_or_tags(source, seg, seg, base + cursor, ctx, acc, out);
+        push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
     }
 }
 
@@ -1081,7 +1094,6 @@ fn is_entity_hash(text: &str, idx: usize) -> bool {
 fn push_plain_or_tags(
     source: &str,
     slice: &str,
-    decoded: &str,
     base: usize,
     ctx: &ParseContext,
     acc: &mut Acc,
@@ -1101,20 +1113,22 @@ fn push_plain_or_tags(
         Vec::new()
     };
     if tags.is_empty() {
-        if !decoded.is_empty() {
-            out.push(Inline::Text(decoded.to_string()));
+        if !slice.is_empty() {
+            out.push(Inline::Text(decodifica_segmento(source, slice, base)));
         }
         return;
     }
+    // I tag si misurano sul **sorgente** (gli `Span` sono offset di sorgente);
+    // il testo fra l'uno e l'altro si emette **decodificato**, dallo stesso
+    // decoder del ramo senza feature.
     let mut cursor = 0;
     for tag in tags {
         if tag.span.start > cursor {
-            // Il testo fra le feature viene dal **sorgente**, dove gli escape
-            // sono ancora scritti: `Inline::Text` porta il testo come si legge
-            // (è l'invariante da cui `serialize` decide cosa ri-escapare), e
-            // una barra rovescia di sintassi lì dentro sarebbe letta come testo
-            // e riscritta raddoppiata.
-            out.push(Inline::Text(disescapa(&slice[cursor..tag.span.start])));
+            out.push(Inline::Text(decodifica_segmento(
+                source,
+                &slice[cursor..tag.span.start],
+                base + cursor,
+            )));
         }
         let abs = Span::new(base + tag.span.start, base + tag.span.end);
         out.push(Inline::TagRef {
@@ -1128,8 +1142,166 @@ fn push_plain_or_tags(
         cursor = tag.span.end;
     }
     if cursor < slice.len() {
-        out.push(Inline::Text(disescapa(&slice[cursor..])));
+        out.push(Inline::Text(decodifica_segmento(
+            source,
+            &slice[cursor..],
+            base + cursor,
+        )));
     }
+}
+
+/// La tabella delle entità nominali per **nome interno** — `amp` per `&amp;`
+/// — come la `ENTITY_MAP` che comrak si genera in build: costruita **una
+/// volta sola** da [`ENTITIES`], tenendo le sole forme con `;` (comrak ignora
+/// le varianti legacy senza punto e virgola).
+static ENTITA: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+
+/// L'entità nominale `nome` (ciò che sta fra `&` e `;`), o `None`.
+fn entita_nominale(nome: &str) -> Option<&'static str> {
+    ENTITA
+        .get_or_init(|| {
+            ENTITIES
+                .iter()
+                .filter(|e| e.entity.starts_with('&') && e.entity.ends_with(';'))
+                .map(|e| (&e.entity[1..e.entity.len() - 1], e.characters))
+                .collect()
+        })
+        .get(nome)
+        .copied()
+}
+
+/// Decodifica lineare di una fetta di sorgente: escape `\X` ed entità `&…;`
+/// si sciolgono in **una passata sola**, con le regole di comrak.
+///
+/// Comrak consegna il testo già decodificato, ma qui si riparte dalla
+/// sorgente: i segmenti fra tag ed embed si misurano sul sorgente, e la
+/// decodifica è locale al segmento. Le regole replicano `comrak::entity`:
+///
+/// - `\` + punteggiatura ASCII → quel carattere; ogni altra barra è letterale;
+/// - riferimenti numerici decimali con 1..=7 cifre, esadecimali con 1..=6;
+/// - entità nominali dentro una finestra di 32 byte, con `;` obbligatorio e
+///   uno spazio nella finestra che uccide il candidato;
+/// - codepoint 0, surrogati e ≥ U+110000 → U+FFFD;
+/// - un `&` che non apre un'entità resta letterale.
+///
+/// Un backslash davanti a `&` ha la priorità dell'escape: `\&amp;` è `&amp;`
+/// letterale, non l'entità `&`.
+///
+/// Lo span di un nodo di testo di comrak comincia **dal carattere escapato**,
+/// non dalla barra (`\&amp;` arriva come `&amp;`, `\\&amp;` come `\&amp;`):
+/// quando la barra cade sul **primo byte** della fetta, il carattere davanti
+/// a `base` nel sorgente decide se era un escape. È la stessa regola di
+/// [`sotto_escape`], e vale solo lì: dentro la fetta gli escape tengono la
+/// loro barra e non c'è ambiguità.
+fn decodifica_segmento(source: &str, s: &str, base: usize) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < s.len() {
+        match bytes[i] {
+            b'\\' if i == 0 && is_escaped(source, base) => {
+                // Barra **decodificata** (`\\` nel sorgente): non apre un
+                // escape, il prossimo carattere è testo libero.
+                out.push('\\');
+                i += 1;
+            }
+            b'\\' => match s[i + 1..].chars().next() {
+                Some(c) if c.is_ascii_punctuation() => {
+                    out.push(c);
+                    i += 1 + c.len_utf8();
+                }
+                _ => {
+                    out.push('\\');
+                    i += 1;
+                }
+            },
+            b'&' if i == 0 && is_escaped(source, base) => {
+                // `\&…;` nel sorgente: l'escape ha sciolto la `&`, e quel che
+                // segue è letterale — `\&amp;` non è l'entità `&`.
+                out.push('&');
+                i += 1;
+            }
+            b'&' => match entita(s, i, &mut out) {
+                Some(fine) => i = fine,
+                None => {
+                    out.push('&');
+                    i += 1;
+                }
+            },
+            _ => {
+                let c = s[i..].chars().next().expect("confine di carattere");
+                out.push(c);
+                i += c.len_utf8();
+            }
+        }
+    }
+    out
+}
+
+/// L'entità che comincia a `si` (`s[si] == '&'`), scritta decodificata in
+/// `out`; restituisce la fine (esclusa) del consumo, o `None` se lì non c'è
+/// un'entità e la `&` resta letterale. Replica `comrak::entity::unescape`.
+fn entita(s: &str, si: usize, out: &mut String) -> Option<usize> {
+    let testo = &s[si + 1..];
+    let bytes = testo.as_bytes();
+    // Riferimento numerico: `&#cifre;` o `&#xcifre;`. Il numero si accumula
+    // cappato a U+110000 come fa comrak; il tetto delle cifre decide se è
+    // un'entità, i codepoint fuori intervallo diventano U+FFFD.
+    if testo.len() >= 3 && bytes[0] == b'#' {
+        let (cp, num_cifre, esadecimale, avanti) = if bytes[1].is_ascii_digit() {
+            let mut cp = 0u32;
+            let mut i = 1;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                cp = (cp * 10 + (bytes[i] - b'0') as u32).min(0x11_0000);
+                i += 1;
+            }
+            (cp, i - 1, false, i)
+        } else if bytes[1] == b'x' || bytes[1] == b'X' {
+            let mut cp = 0u32;
+            let mut i = 2;
+            while i < bytes.len() && bytes[i].is_ascii_hexdigit() {
+                cp = (cp * 16 + (bytes[i] as char).to_digit(16).expect("cifra esadecimale"))
+                    .min(0x11_0000);
+                i += 1;
+            }
+            (cp, i - 2, true, i)
+        } else {
+            (0, 0, false, 0)
+        };
+        if avanti < bytes.len()
+            && bytes[avanti] == b';'
+            && ((esadecimale && (1..=6).contains(&num_cifre))
+                || (!esadecimale && (1..=7).contains(&num_cifre)))
+        {
+            // La stessa soglia di comrak: 0, i surrogati (0xE000 compreso) e
+            // oltre U+10FFFF non sono caratteri, e un riferimento che li
+            // nomina non può restare senza risposta.
+            let cp = if cp == 0 || (0xD800..=0xE000).contains(&cp) || cp >= 0x110000 {
+                0xFFFD
+            } else {
+                cp
+            };
+            out.push(char::from_u32(cp).unwrap_or('\u{FFFD}'));
+            return Some(si + 1 + avanti + 1);
+        }
+    }
+    // Entità nominale: il primo `;` entro una finestra di 32 byte — uno
+    // spazio uccide il candidato — e il nome prima di lui nella tabella.
+    let limite = testo.len().min(32);
+    for j in 2..limite {
+        match bytes[j] {
+            b' ' => return None,
+            b';' => {
+                if let Some(chars) = entita_nominale(&testo[..j]) {
+                    out.push_str(chars);
+                    return Some(si + 1 + j + 1);
+                }
+                return None;
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Il carattere a `idx` è sotto escape, **anche quando la barra rovescia è

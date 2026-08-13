@@ -1221,6 +1221,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "comrak",
+ "entities",
  "fub-abi",
  "fub-kernel",
  "fub-sdk",

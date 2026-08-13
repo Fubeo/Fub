@@ -168,6 +168,182 @@ mod tests {
         assert!(doc.tags.is_empty(), "tags: {:?}", doc.tags);
     }
 
+    fn paragrafo_inlines(doc: &DocumentModel) -> Vec<&Inline> {
+        match &doc.body[0] {
+            Block::Paragraph { inlines, .. } => inlines.iter().collect(),
+            _ => panic!("atteso un paragrafo come primo blocco"),
+        }
+    }
+
+    #[test]
+    fn unentita_nominale_con_tag_si_scioglie_non_si_raddoppia() {
+        // `&amp;` col tag: il modello porta la `&` decodificata — come nel ramo
+        // senza tag — e il render la ri-escapa una volta sola, non `&amp;amp;`.
+        let doc = parse("A&amp;B #tag fine");
+        let inl = paragrafo_inlines(&doc);
+        match &inl[0] {
+            Inline::Text(t) => assert_eq!(t, "A&B "),
+            other => panic!("atteso testo, {:?}", other),
+        }
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &Default::default())
+            .unwrap();
+        assert!(html.contains("A&amp;B"), "render: {html}");
+        assert!(!html.contains("amp;amp"), "doppia codifica: {html}");
+    }
+
+    #[test]
+    fn unentita_numerica_con_tag_si_scioglie_nel_modello() {
+        let doc = parse("pre &#65; #tag fine");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "pre A "),
+            other => panic!("{:?}", other),
+        }
+        // `&#x27;` → `'`: prima la serializzazione ne ri-escapava il `#`.
+        let doc = parse("pre &#x27; #tag fine");
+        let ser = MarkdownProvider::new().serialize(&doc).unwrap();
+        assert!(ser.contains("pre ' "), "serialize: {ser}");
+        assert!(!ser.contains("#x27"), "l'entità resta scritta: {ser}");
+    }
+
+    #[test]
+    fn una_e_commerciale_nuda_con_tag_resta_una_e() {
+        let doc = parse("Tom & Jerry #tag");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "Tom & Jerry "),
+            other => panic!("{:?}", other),
+        }
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &Default::default())
+            .unwrap();
+        assert!(html.contains("Tom &amp; Jerry"), "render: {html}");
+    }
+
+    #[test]
+    fn il_ramo_con_tag_decodifica_come_quello_senza_per_le_entita() {
+        // Un'entità nominale fuori dai cinque caratteri HTML significativi:
+        // comrak la scioglie, e il ramo con il tag fa lo stesso — la `©`
+        // resta `©`, non `&amp;copy;`.
+        let con_tag = parse("&copy; #t");
+        let senza = parse("&copy; qui");
+        let con = match &paragrafo_inlines(&con_tag)[0] {
+            Inline::Text(t) => t.clone(),
+            _ => unreachable!(),
+        };
+        let sen = match &paragrafo_inlines(&senza)[0] {
+            Inline::Text(t) => t.clone(),
+            _ => unreachable!(),
+        };
+        assert_eq!(con, "© ");
+        assert_eq!(sen, "© qui");
+        let html = MarkdownProvider::new()
+            .render_html(&con_tag, &Default::default())
+            .unwrap();
+        assert!(html.contains("© <span"), "render: {html}");
+        assert!(!html.contains("amp;copy"), "render: {html}");
+    }
+
+    #[test]
+    fn gli_escape_nei_segmenti_con_tag_si_sciolgono_comprima() {
+        // Un escape (`\*` → `*`) nel segmento prima del tag: la traduzione
+        // degli offset non deve perderlo. Il modello porta `*testo*`, non
+        // `\*testo\*`.
+        let doc = parse("\\*testo\\* #tag");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "*testo* "),
+            other => panic!("{:?}", other),
+        }
+        // Escape + entità + tag insieme: `\#pseudo` si scioglie in `#pseudo`
+        // testuale (non è un tag), e resta nel segmento prima di `#vero`.
+        let doc = parse("\\* A&amp;B \\#pseudo #vero");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "* A&B #pseudo "),
+            other => panic!("{:?}", other),
+        }
+        assert_eq!(doc.tags.len(), 1, "solo #vero è un tag: {:?}", doc.tags);
+    }
+
+    #[test]
+    fn unentita_a_due_codepoint_seguita_da_un_altra_non_si_riallinea() {
+        // `&acE;` decodifica in DUE code point (U+223E U+0333): l'allineamento
+        // a ritroso provava 1 o 2 code point contro il token dopo — un'altra
+        // entità — e non aveva modo di decidere. La decodifica lineare usa la
+        // `characters` della tabella: i due code point escono insieme, e
+        // l'entità subito dopo si decodifica da sé, senza riallineare.
+        let doc = parse("pre &acE;&copy; #tag fine");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "pre \u{223E}\u{0333}\u{00A9} "),
+            other => panic!("{:?}", other),
+        }
+        assert_eq!(doc.tags.len(), 1, "il tag resta: {:?}", doc.tags);
+    }
+
+    #[test]
+    fn un_ampersand_escapato_non_apre_entita() {
+        // `\&amp;` è `&amp;` letterale: l'escape della `&` ha priorità, e la
+        // sequenza che da lì in poi sembrerebbe un'entità non si decodifica.
+        let doc = parse("\\&amp; #tag fine");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "&amp; "),
+            other => panic!("{:?}", other),
+        }
+        assert_eq!(doc.tags.len(), 1, "il tag resta: {:?}", doc.tags);
+        // `\\&amp;` invece è `\` + `&`: la coppia di barre ne escapa una, e la
+        // `&amp;` che segue è un'entità vera. I due escape stanno nello stesso
+        // nodo di comrak: la barra all'inizio dello span è **decodificata**, e
+        // il decoder la riconosce dal sorgente; l'`&` dopo la coppia è
+        // un'entità vera e si scioglie.
+        let doc = parse("\\&amp; vs \\\\&amp; #tag fine");
+        let par = paragrafo_inlines(&doc);
+        match &par[0] {
+            Inline::Text(t) => assert_eq!(t, "&amp; vs \\& "),
+            other => panic!("{:?}", other),
+        }
+        assert!(matches!(&par[1], Inline::TagRef { name, .. } if name == "tag"));
+        assert_eq!(par[2], &Inline::Text(" fine".into()));
+        assert_eq!(doc.tags.len(), 1, "il tag resta: {:?}", doc.tags);
+    }
+
+    #[test]
+    fn i_riferimenti_numerici_fuori_intervallo_diventano_ufffd() {
+        // Codepoint 0, surrogati e oltre U+10FFFF non sono caratteri: comrak
+        // li sostituisce con U+FFFD, e il decoder fa lo stesso.
+        let doc = parse("&#0; &#x110000; &#xD800; #tag");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "\u{FFFD} \u{FFFD} \u{FFFD} "),
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn le_cifre_oltre_il_tetto_non_sono_un_entita() {
+        // 8 cifre decimali o 7 esadecimali non sono un riferimento numerico
+        // (i tetti di comrak sono 7 e 6): la `&` resta letterale.
+        let doc = parse("&#12345678; &#x1234567; #tag");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "&#12345678; &#x1234567; "),
+            other => panic!("{:?}", other),
+        }
+        assert_eq!(doc.tags.len(), 1, "il tag resta: {:?}", doc.tags);
+        // 7 decimali e 6 esadecimali invece sì, fino al tetto di U+10FFFF.
+        let doc = parse("&#1114111; &#x10FFFF; #tag");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "\u{10FFFF} \u{10FFFF} "),
+            other => panic!("{:?}", other),
+        }
+    }
+
+    #[test]
+    fn un_entita_senza_punto_e_virgola_resta_testo() {
+        // Il `;` è obbligatorio: `&amp` e `&amp x;` (spazio nella finestra)
+        // restano letterali.
+        let doc = parse("&amp &amp x; #tag");
+        match &paragrafo_inlines(&doc)[0] {
+            Inline::Text(t) => assert_eq!(t, "&amp &amp x; "),
+            other => panic!("{:?}", other),
+        }
+    }
+
     /// **Il bersaglio di un wikilink non è prosa, l'alias sì.**
     ///
     /// Senza alias l'etichetta la sintetizza comrak copiando il bersaglio, e
