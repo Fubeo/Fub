@@ -1205,7 +1205,7 @@ fn selection_wikilink(
         let selected = source
             .get(selezione.span.start..selezione.span.end)
             .ok_or_else(|| stato(E_SELECTION_OUTSIDE))?;
-        if selected.contains("[[") || selected.contains(']') {
+        if selected.contains('[') || selected.contains(']') {
             return Err(stato(E_SELECTION_HAS_LINK));
         }
         avvolgere.push((selezione.span, selected));
@@ -2494,6 +2494,24 @@ mod tests {
             span,
             Span::new(9, 17),
             "le coordinate sono quelle del testo NUOVO: `[[Kant]]`"
+        );
+    }
+
+    #[test]
+    fn the_wikilink_command_refuses_a_single_left_bracket_in_the_selection() {
+        let mut host = MemoryHost::new().con_documento("nota.md", "parlo di [Kant e di altro");
+        host.set_active(Some("nota.md"));
+        host.set_selection(9, "[Kant");
+
+        let err = invoke(&mut host, SELECTION_WIKILINK, json!({}), InvokeMode::DryRun)
+            .expect_err("una parentesi sinistra singola non può diventare un wikilink valido");
+        assert!(
+            matches!(err, PluginError::BadArgs(_)),
+            "la selezione già simile a un link va rifiutata, arrivato {err:?}"
+        );
+        assert_eq!(
+            host.read_document(&DocId::new("nota.md")).unwrap(),
+            "parlo di [Kant e di altro"
         );
     }
 
