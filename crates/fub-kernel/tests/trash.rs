@@ -74,64 +74,6 @@ impl VaultStorage for SupportoCheRifiuta {
     }
 }
 
-/// Un supporto che fa tutto come il disco e, **la prima volta che qualcuno
-/// distrugge una cartella**, ci infila dentro il cestino una nota nuova.
-///
-/// È l'altra finestra che un crash non sa aprire: non un processo che muore, ma
-/// un secondo che cestina mentre il primo sta svuotando. Un'altra finestra di
-/// Fub, o Obsidian, che cancella una nota nell'istante fra «ho elencato ciò che
-/// c'è» e «lo distruggo».
-struct SupportoCheCestinaNelMezzo {
-    inner: FsStorage,
-    root: Utf8PathBuf,
-    gia_arrivata: std::sync::atomic::AtomicBool,
-}
-
-impl VaultStorage for SupportoCheCestinaNelMezzo {
-    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
-        self.inner.read(path)
-    }
-    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
-        self.inner.write(path, bytes)
-    }
-    fn update(
-        &self,
-        path: &Utf8Path,
-        fondi: fub_kernel::storage::Fusione<'_>,
-    ) -> std::io::Result<()> {
-        self.inner.update(path, fondi)
-    }
-    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
-        self.inner.append(path, bytes)
-    }
-    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
-        self.inner.rename(from, to)
-    }
-    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
-        self.inner.remove(path)
-    }
-    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
-        self.inner.list(dir)
-    }
-    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
-        self.inner.stat(path)
-    }
-    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
-        self.inner.remove_empty_dir(dir)
-    }
-    fn remove_dir_all(&self, dir: &Utf8Path) -> std::io::Result<()> {
-        if !self
-            .gia_arrivata
-            .swap(true, std::sync::atomic::Ordering::SeqCst)
-        {
-            self.inner
-                .write(&self.root.join(".trash/Arrivata.txt"), b"cestinata adesso")
-                .expect("l'altra finestra cestina");
-        }
-        self.inner.remove_dir_all(dir)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Call {
     Indexed(String),
@@ -865,79 +807,35 @@ fn emptying_the_trash_says_how_much_it_destroyed() {
     assert!(!fx.exists(".trash/Uno.txt"));
 }
 
-/// 0157 — **ciò che arriva nel cestino mentre lo si svuota non si distrugge.**
+/// 0157 (ripreso) — una voce senza sidecar al censimento non e ancora
+/// distruttibile.
 ///
-/// Prima, `empty_trash` elencava, toglieva una per una e poi camminava
-/// `.trash/` con un `remove_dir_all`: la nota che un'altra finestra cestinava
-/// dentro quella finestra spariva senza essere mai comparsa in nessun
-/// conteggio — cioè l'utente cancellava una nota e la ritrovava distrutta da
-/// un'operazione che aveva chiesto **prima** di averla cancellata.
-///
-/// Adesso il cestino si sposta da parte con una mossa sola e si distrugge
-/// quello: chi cestina un istante dopo lo fa in un `.trash/` che questo
-/// svuotamento non ha mai visto.
+/// `trash` rinomina prima il file e scrive il sidecar dopo. Questa banca prova
+/// ferma un'altra finestra esattamente fra le due operazioni: la vecchia
+/// `rename` dell'intero cestino la includeva e la distruggeva.
 #[test]
-fn cio_che_arriva_mentre_si_svuota_resta_nel_cestino() {
+fn una_voce_senza_sidecar_al_censimento_non_viene_distrutta() {
     let fx = Fixture::new();
     fx.put("Uno.txt", "primo");
     fx.put("Due.txt", "secondo");
-    let supporto = Arc::new(SupportoCheCestinaNelMezzo {
-        inner: FsStorage,
-        root: fx.root.clone(),
-        gia_arrivata: std::sync::atomic::AtomicBool::new(false),
-    });
-    let mut ws = fx.workspace_su(supporto);
+    let mut ws = fx.workspace();
 
     ws.delete_document(&DocId::new("Uno.txt")).unwrap();
     ws.delete_document(&DocId::new("Due.txt")).unwrap();
+    fx.put(
+        ".trash/Arrivata.txt",
+        "cestinata, sidecar non ancora scritto",
+    );
+    assert!(!fx.exists(".fub/data/trash/Arrivata.txt.json"));
 
     assert_eq!(
         ws.empty_trash().unwrap(),
         2,
-        "si contano le due voci che c'erano, non la terza arrivata dopo"
-    );
-    let rimaste: Vec<String> = ws
-        .list_trash()
-        .unwrap()
-        .iter()
-        .map(|e| e.id.to_string())
-        .collect();
-    assert_eq!(
-        rimaste,
-        vec![".trash/Arrivata.txt".to_string()],
-        "la nota cestinata mentre si svuotava è stata distrutta senza che \
-         nessuno l'avesse chiesto"
-    );
-}
-
-/// E ciò che uno svuotamento interrotto ha messo da parte non resta nel vault a
-/// occupare disco: se ne va al prossimo svuotamento, che è chi lo sta chiedendo
-/// di nuovo.
-///
-/// È il prezzo di mettere da parte invece di distruggere sul posto, ed è la
-/// metà che impedisce alla riparazione di lasciare un sedimento — la stessa
-/// riga del temporaneo di scrittura rimasto indietro, letta sul cestino.
-#[test]
-fn uno_svuotamento_interrotto_non_resta_nel_vault() {
-    let fx = Fixture::new();
-    let residuo = ".fub/trash-in-svuotamento-2026-01-01T00-00-00-0";
-    fx.put(
-        &format!("{residuo}/Vecchia.txt"),
-        "di uno svuotamento morto",
-    );
-    fx.put("Uno.txt", "primo");
-    let mut ws = fx.workspace();
-    ws.delete_document(&DocId::new("Uno.txt")).unwrap();
-
-    assert_eq!(
-        ws.empty_trash().unwrap(),
-        1,
-        "si conta il cestino di adesso"
+        "si contano solo le voci gia completate al censimento"
     );
     assert!(
-        !fx.exists(residuo),
-        "lo svuotamento interrotto è ancora nel vault: file che l'utente aveva \
-         chiesto di distruggere, che occupano disco e non compaiono in nessuna lista"
+        fx.exists(".trash/Arrivata.txt"),
+        "la voce con la rename completata ma senza sidecar e stata distrutta"
     );
 }
 

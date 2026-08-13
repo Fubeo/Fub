@@ -103,16 +103,6 @@ use fub_abi::rules::cestino::{self, file_name_of, strip_stamp};
 /// di prima (si ripristina in radice col nome de-timbrato).
 const TRASH_META_DIR: &str = "trash";
 
-/// Il prefisso della cartella in cui il cestino si mette **da parte** mentre lo
-/// si svuota, dentro `.fub/` (difetto 0157).
-///
-/// Sta in `.fub/` e non accanto al cestino per due ragioni che sono la stessa:
-/// `.fub/` è struttura — nessuna dichiarazione di vault la può accendere, quindi
-/// ciò che c'è dentro non diventa un documento nemmeno per un istante — ed è
-/// dentro la radice, quindi la `rename` che ci porta il cestino resta una mossa
-/// sola sullo stesso filesystem.
-const TRASH_IN_SVUOTAMENTO: &str = "trash-in-svuotamento-";
-
 /// La versione di schema del sidecar del cestino (§15.3).
 ///
 /// Ce l'ha anche un formato di due campi, e anche uno il cui degrado è già
@@ -849,137 +839,75 @@ impl Vault {
         Ok(())
     }
 
-    /// La cartella dove mettere da parte il cestino, con un nome che non è di
-    /// nessun altro: il timbro dell'istante e, se due svuotamenti cadessero
-    /// nello stesso secondo, un contatore — la stessa forma con cui
-    /// [`trash`](Vault::trash) evita di sovrascrivere un omonimo.
-    fn cartella_da_parte(&self) -> Utf8PathBuf {
-        let base = self.root.join(FUB_DIR);
-        let stamp = stamp_from_unix(now_unix());
-        (0..)
-            .map(|n| base.join(format!("{TRASH_IN_SVUOTAMENTO}{stamp}-{n}")))
-            .find(|p| !self.storage.exists(p))
-            .expect("un contatore senza fine trova sempre un nome libero")
-    }
-
-    /// Ciò che un crash a metà svuotamento ha lasciato da parte se ne va adesso.
+    /// Le voci del cestino che erano gia complete al censimento.
     ///
-    /// È il prezzo di mettere da parte invece di distruggere sul posto, e si
-    /// paga qui perché qui è dove il prezzo è nullo: sono file che l'utente
-    /// aveva già chiesto di distruggere, e chi arriva a questa riga lo sta
-    /// chiedendo di nuovo. Non risale niente — un residuo che non si toglie non
-    /// è una ragione per non svuotare il cestino di adesso — ma si dice, perché
-    /// una cartella che non se ne va è un posto che continua a occupare disco
-    /// senza comparire in nessuna lista.
-    fn spazza_gli_svuotamenti_interrotti(&self) {
-        let base = self.root.join(FUB_DIR);
-        let Ok(voci) = self.storage.list(&base) else {
+    /// `trash` sposta prima il file e scrive il sidecar dopo: un file senza un
+    /// sidecar valido puo quindi essere una cestinatura ancora in corso in
+    /// un'altra finestra. Quella voce resta dov'e; il sidecar e il marcatore che
+    /// rende distruttibile la sola fotografia gia completata.
+    fn voci_censite_del_cestino(&self, dir: &Utf8Path, out: &mut Vec<Utf8PathBuf>) {
+        let Ok(voci) = self.storage.list(dir) else {
             return;
         };
         for voce in voci {
-            let da_parte = voce.stat.is_dir()
-                && voce
-                    .path
-                    .file_name()
-                    .is_some_and(|n| n.starts_with(TRASH_IN_SVUOTAMENTO));
-            if !da_parte {
+            if voce.stat.is_dir() {
+                self.voci_censite_del_cestino(&voce.path, out);
                 continue;
             }
-            match self.storage.remove_dir_all(&voce.path) {
-                Ok(()) => tracing::info!(target: "fub.kernel",
-                    "svuotamento interrotto, ripreso: {} tolta", voce.path),
-                Err(e) => tracing::warn!(target: "fub.kernel",
-                    "svuotamento interrotto: {} non si è tolta ({e})", voce.path),
+            let Ok(id) = self.doc_id_for_path(&voce.path) else {
+                continue;
+            };
+            if self.trash_sidecar(&id, &voce.stat).is_some() {
+                out.push(voce.path);
             }
         }
     }
 
-    /// Quanti file ci sono là dentro, sottocartelle comprese.
+    /// Svuota il cestino e restituisce quante voci ha cancellato.
     ///
-    /// **Non risale**: si conta ciò che sta per essere distrutto, e una cartella
-    /// che non si lascia elencare toglie una cifra al conteggio, non lo
-    /// svuotamento. Rifiutarsi di svuotare perché non si è saputo *contare*
-    /// lascerebbe all'utente un cestino pieno per un guasto che non riguarda i
-    /// suoi file; il conteggio parziale però si dice, perché un numero più
-    /// piccolo del vero senza una riga accanto è un numero sbagliato.
-    fn conta_i_file(&self, dir: &Utf8Path) -> usize {
-        let voci = match self.storage.list(dir) {
-            Ok(voci) => voci,
-            Err(e) => {
-                tracing::warn!(target: "fub.kernel",
-                    "{dir} non si è lasciata elencare mentre si svuotava il cestino: \
-                     ciò che c'era dentro se ne va lo stesso, ma non è nel conto ({e})");
-                return 0;
-            }
-        };
-        voci.iter()
-            .map(|v| {
-                if v.stat.is_dir() {
-                    self.conta_i_file(&v.path)
-                } else {
-                    1
-                }
-            })
-            .sum()
-    }
-
-    /// Svuota il cestino e restituisce quante voci ha cancellato. Le
-    /// sottocartelle rimaste vuote se ne vanno con il loro contenuto.
+    /// Si distruggono solo le voci che avevano gia un sidecar valido al
+    /// censimento iniziale. Una `trash` concorrente che ha completato la rename
+    /// ma non ancora la scrittura del sidecar resta quindi reversibile.
     ///
-    /// # Il cestino si mette da parte, e si distrugge **quello** (difetto 0157)
-    ///
-    /// La forma di prima elencava le voci, le toglieva una per una e poi
-    /// camminava `.trash/` con un `remove_dir_all`: fra l'elenco e la camminata
-    /// c'è una finestra, e ciò che un'altra finestra di Fub — o Obsidian —
-    /// cestina lì dentro nel frattempo o veniva distrutto **in silenzio**, senza
-    /// essere mai comparso in nessun conteggio, o faceva fallire la camminata a
-    /// metà lasciando un cestino svuotato per finta. È la forma del bug noto
-    /// `il_vault_che_sparisce`: si cammina una cartella viva mentre qualcun
-    /// altro ci scrive.
-    ///
-    /// La finestra si chiude spostando la cartella intera con **una mossa
-    /// sola**: dopo la `rename` ciò che si distrugge non è più raggiungibile da
-    /// nessuno, e chi cestina un istante dopo lo fa in un `.trash/` nuovo che
-    /// questo svuotamento non ha mai visto — la sua nota è ancora nel cestino,
-    /// che è la sola risposta giusta, perché nessuno ha chiesto di distruggerla.
-    /// È la stessa ragione per cui [`restore_trashed`](Vault::restore_trashed) è
-    /// una mossa sola e non una copia più una cancellazione.
+    /// Resta una finestra multi-processo non coperta: senza un lock di vault, un
+    /// altro processo puo sostituire una voce gia censita fra la verifica del
+    /// sidecar e la `remove`. Questo metodo non introduce un lock
+    /// inter-processo che il kernel non possiede.
     pub fn empty_trash(&self) -> Result<usize> {
-        self.spazza_gli_svuotamenti_interrotti();
-
         let dir = self.root.join(TRASH_DIR);
-        let mut quante = 0;
+        let mut censite = Vec::new();
         if self.storage.exists(&dir) {
-            let da_parte = self.cartella_da_parte();
+            self.voci_censite_del_cestino(&dir, &mut censite);
+        }
+        let mut quante = 0;
+        for path in &censite {
+            // Si distrugge solo questa voce, e solo se c'è ancora: chi l'ha già
+            // tolta (un'altra finestra, un sync) non si conta — il risultato
+            // che si voleva c'è già. Un guasto vero del supporto risale, perché
+            // un cestino svuotato a metà non è un cestino svuotato (0193).
+            match crate::error::se_c_e(self.storage.remove(path)) {
+                Ok(Some(())) => {}
+                Ok(None) => continue,
+                Err(e) => {
+                    return Err(KernelError::Io {
+                        path: path.clone(),
+                        source: e,
+                    });
+                }
+            }
+            quante += 1;
+        }
+        // Il deposito dei sidecar conserva per ora lo sweep precedente: la sua
+        // selezione e una correzione distinta dalla perdita di contenuto.
+        let meta = self.trash_meta_dir();
+        if self.storage.exists(&meta) {
             self.storage
-                .rename(&dir, &da_parte)
+                .remove_dir_all(&meta)
                 .map_err(|e| KernelError::Io {
-                    path: dir.clone(),
-                    source: e,
-                })?;
-            // Il conteggio si prende **dopo** la mossa e prima della
-            // distruzione: è l'unico istante in cui quei file sono fermi.
-            quante = self.conta_i_file(&da_parte);
-            self.storage
-                .remove_dir_all(&da_parte)
-                .map_err(|e| KernelError::Io {
-                    path: da_parte,
+                    path: meta,
                     source: e,
                 })?;
         }
-        // Cestino vuoto = nessun sidecar da ricordare (inclusi eventuali
-        // orfani lasciati da chi ha svuotato il cestino da un'altra app).
-        //
-        // Che la cartella **non ci sia** è il caso normale — nessun sidecar è
-        // mai stato scritto — e non è un guasto. Che ci sia e non si tolga lo
-        // è: prima il `let _` lo raccontava come uno svuotamento riuscito, e i
-        // sidecar rimasti indietro nominano voci del cestino che non esistono
-        // più senza che nessuno lo dica.
-        let meta = self.trash_meta_dir();
-        crate::error::se_c_e(self.storage.remove_dir_all(&meta)).map_err(|e| KernelError::Io {
-            path: meta.clone(),
-            source: e,
-        })?;
         tracing::info!(target: "fub.kernel", "cestino svuotato: {quante} voci distrutte");
         Ok(quante)
     }
