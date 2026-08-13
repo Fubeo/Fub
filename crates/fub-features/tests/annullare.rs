@@ -622,6 +622,14 @@ impl VaultStorage for SupportoCheEsplode {
         self.forse_esplodi(to);
         self.inner.rename(from, to)
     }
+    fn rename_no_replace(
+        &self,
+        from: &camino::Utf8Path,
+        to: &camino::Utf8Path,
+    ) -> std::io::Result<()> {
+        self.forse_esplodi(to);
+        self.inner.rename_no_replace(from, to)
+    }
     fn remove(&self, path: &camino::Utf8Path) -> std::io::Result<()> {
         self.inner.remove(path)
     }

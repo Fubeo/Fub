@@ -80,6 +80,11 @@ impl VaultStorage for SupportoCheAnnota {
         self.annota(to);
         self.inner.rename(from, to)
     }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.annota(from);
+        self.annota(to);
+        self.inner.rename_no_replace(from, to)
+    }
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
         self.annota(path);
         self.inner.remove(path)

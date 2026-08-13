@@ -24,6 +24,7 @@
 //! *sul disco vero* — l'identità di inode e volume — ha il suo terzo banco qui
 //! sotto, su `FsStorage`.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -37,11 +38,18 @@ use fub_testkit::TestoDiProva;
 /// quando gli si chiede l'identità, che è l'unica riga per cui questo doppio
 /// esiste.
 #[derive(Default)]
-struct SenzaCaso(MemStorage);
+struct SenzaCaso(MemStorage, AtomicBool);
 
 impl SenzaCaso {
     fn giu(path: &Utf8Path) -> Utf8PathBuf {
         Utf8PathBuf::from(path.as_str().to_lowercase())
+    }
+
+    fn occupa_se_richiesto(&self, path: &Utf8Path) -> std::io::Result<()> {
+        if self.1.swap(false, Ordering::SeqCst) {
+            self.0.write(&Self::giu(path), b"concorrente")?;
+        }
+        Ok(())
     }
 }
 
@@ -59,7 +67,12 @@ impl VaultStorage for SenzaCaso {
         self.0.append(&Self::giu(path), bytes)
     }
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.occupa_se_richiesto(to)?;
         self.0.rename(&Self::giu(from), &Self::giu(to))
+    }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.occupa_se_richiesto(to)?;
+        self.0.rename_no_replace(&Self::giu(from), &Self::giu(to))
     }
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
         self.0.remove(&Self::giu(path))
@@ -151,6 +164,40 @@ fn su_un_fs_sensibile_un_omonimo_per_caso_non_si_seppellisce() {
         storage.read(Utf8Path::new("/vault/nota.md")).expect("c'è"),
         b"il testo che si sposta",
         "e chi non si è potuto spostare è rimasto dov'era"
+    );
+}
+
+/// Il controllo della destinazione e la mossa non sono due operazioni: fra le
+/// due un altro processo può creare proprio quel file. Il doppio posa la voce
+/// concorrente quando il kernel chiede di muovere, cioè dopo la guardia di
+/// `rename_document`; soltanto il protocollo no-replace può lasciarla intatta.
+#[test]
+fn chi_arriva_dopo_la_guardia_non_viene_sovrascritto() {
+    let storage = Arc::new(SenzaCaso::default());
+    storage
+        .write(
+            Utf8Path::new("/vault/vecchia.md"),
+            b"il testo che si sposta",
+        )
+        .expect("scritto");
+    let mut ws = workspace(storage.clone());
+    storage.1.store(true, Ordering::SeqCst);
+
+    let esito = ws.rename_document(&doc("vecchia.md"), &doc("nuova.md"));
+
+    assert!(
+        matches!(esito, Err(KernelError::AlreadyExists(_))),
+        "la corsa deve fermare la rinomina come ogni collisione: {esito:?}"
+    );
+    assert_eq!(
+        storage.read(Utf8Path::new("/vault/nuova.md")).unwrap(),
+        b"concorrente",
+        "chi ha occupato la destinazione dopo la guardia resta intatto"
+    );
+    assert_eq!(
+        storage.read(Utf8Path::new("/vault/vecchia.md")).unwrap(),
+        b"il testo che si sposta",
+        "il documento che non si è potuto muovere resta alla sorgente"
     );
 }
 

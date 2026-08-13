@@ -124,6 +124,9 @@ impl VaultStorage for SupportoCheNegaLeScritture {
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
         self.inner.rename(from, to)
     }
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
         self.inner.remove(path)
     }

@@ -134,7 +134,7 @@ pub struct DirEntry {
 
 /// Il supporto su cui vive un vault.
 ///
-/// Nove operazioni, e sono quelle che il kernel usa davvero. La regola con cui
+/// Dieci operazioni, e sono quelle che il kernel usa davvero. La regola con cui
 /// questo trait è nato era «sette, e chi ne aggiunge un'ottava sta chiedendo al
 /// supporto di sapere qualcosa sul contenuto»; l'ottava è arrivata
 /// ([`VaultStorage::append`], con la
@@ -152,6 +152,10 @@ pub struct DirEntry {
 /// compone e riscrive dall'esterno perde ciò che un altro ha scritto nel mezzo,
 /// e lo perde in silenzio
 /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+///
+/// La decima ([`VaultStorage::rename_no_replace`]) ha la stessa ragione:
+/// `exists` più `rename` lascia fra le due un concorrente, mentre il supporto
+/// può creare il nome nuovo e rifiutarsi se c'è già in una sola operazione.
 ///
 /// Il criterio vero per distinguere un'operazione da una comodità sta più sotto,
 /// in [`VaultStorage::remove_dir_all`]: ciò che si **compone** dalle altre ha un
@@ -265,6 +269,14 @@ pub trait VaultStorage: Send + Sync {
     /// Sposta, **creando le cartelle di destinazione che mancano**. Funziona
     /// per un file come per una cartella.
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()>;
+
+    /// Sposta un **file** soltanto se la destinazione non esiste.
+    ///
+    /// La verifica e la creazione della destinazione sono una sola operazione:
+    /// un `exists` seguito da [`rename`](VaultStorage::rename) lascia fra le due
+    /// una finestra in cui un altro processo può posare un file che verrebbe
+    /// sovrascritto.
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()>;
 
     /// Toglie un **file**. Per una cartella c'è [`VaultStorage::remove_dir_all`].
     fn remove(&self, path: &Utf8Path) -> io::Result<()>;
@@ -1120,6 +1132,21 @@ impl VaultStorage for FsStorage {
         Ok(())
     }
 
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::hard_link(from, to)?;
+        // Se togliere la sorgente fallisce restano due nomi dello stesso inode:
+        // è un errore, ma non si prova a cancellare `to`, perché un concorrente
+        // potrebbe averlo già sostituito e il ripiego cancellerebbe i suoi byte.
+        std::fs::remove_file(from)?;
+        for dir in cartelle_da_sincronizzare(from, Some(to)) {
+            sincronizza_la_cartella(&dir);
+        }
+        Ok(())
+    }
+
     /// Togliere è una mossa come le altre: la voce che sparisce sta in una
     /// cartella, e finché quella non è scesa il file può tornare.
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
@@ -1827,6 +1854,37 @@ impl VaultStorage for MemStorage {
         Ok(())
     }
 
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        let mut mem = self.lock();
+        if from == to {
+            return mem
+                .files
+                .contains_key(from)
+                .then_some(())
+                .ok_or_else(|| not_found(from));
+        }
+        if mem.files.contains_key(to) || mem.dirs.contains_key(to) {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("{to}: esiste già"),
+            ));
+        }
+        let Some(entry) = mem.files.remove(from) else {
+            return Err(not_found(from));
+        };
+        let ora = mem.ora();
+        if let Some(parent) = to.parent() {
+            if let Err(error) = mem.make_dirs(parent, ora) {
+                mem.files.insert(from.to_owned(), entry);
+                return Err(error);
+            }
+        }
+        mem.files.insert(to.to_owned(), entry);
+        mem.tocca_il_genitore(from, ora);
+        mem.tocca_il_genitore(to, ora);
+        Ok(())
+    }
+
     /// Qui il tempo è un contatore di operazioni e non un orologio (vedi la
     /// nota sul tempo di [`MemStorage`]), quindi la soglia si legge in
     /// operazioni: [`SCADENZA_DEL_TEMPORANEO_IN_MEMORIA`].
@@ -1965,6 +2023,29 @@ mod tests {
             quando_del_file,
             "una rename non riscrive il file"
         );
+    }
+
+    fn una_rinomina_senza_sovrascrittura(storage: &dyn VaultStorage, root: &Utf8Path) {
+        let from = root.join("sorgente.md");
+        let to = root.join("destinazione.md");
+        storage.write(&from, b"sorgente").unwrap();
+        storage.write(&to, b"concorrente").unwrap();
+
+        let errore = storage
+            .rename_no_replace(&from, &to)
+            .expect_err("la destinazione occupata deve fermare la rinomina");
+
+        assert_eq!(errore.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(storage.read(&from).unwrap(), b"sorgente");
+        assert_eq!(storage.read(&to).unwrap(), b"concorrente");
+    }
+
+    #[test]
+    fn la_rinomina_non_seppellisce_chi_occupa_la_destinazione_nel_mezzo() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(dir.path()).unwrap();
+        una_rinomina_senza_sovrascrittura(&FsStorage, root);
+        una_rinomina_senza_sovrascrittura(&MemStorage::new(), Utf8Path::new("/vault"));
     }
 
     /// Il temporaneo di una scrittura vive dentro il vault per una frazione di

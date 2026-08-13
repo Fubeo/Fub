@@ -586,6 +586,22 @@ impl Vault {
             })
     }
 
+    /// Sposta un documento soltanto se nessuno ha occupato la destinazione.
+    pub fn rename_no_replace(&self, from: &DocId, to: &DocId) -> Result<()> {
+        let from_path = self.path_for(from)?;
+        let to_path = self.path_for(to)?;
+        match self.storage.rename_no_replace(&from_path, &to_path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                Err(KernelError::AlreadyExists(to.to_string()))
+            }
+            Err(e) => Err(KernelError::Io {
+                path: from_path,
+                source: e,
+            }),
+        }
+    }
+
     // --- cestino ----------------------------------------------------------
 
     /// Sposta un documento nel cestino del vault e restituisce il [`DocId`] che
@@ -827,10 +843,24 @@ impl Vault {
             return Err(KernelError::OutsideVault(path));
         }
         match exit {
-            TrashExit::Destroy => self.storage.remove(&path),
-            TrashExit::To(to) => self.storage.rename(&path, &self.path_for(to)?),
+            TrashExit::Destroy => self
+                .storage
+                .remove(&path)
+                .map_err(|source| KernelError::Io {
+                    path: path.clone(),
+                    source,
+                })?,
+            TrashExit::To(to) => {
+                let target = self.path_for(to)?;
+                match self.storage.rename_no_replace(&path, &target) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                        return Err(KernelError::AlreadyExists(to.to_string()));
+                    }
+                    Err(source) => return Err(KernelError::Io { path, source }),
+                }
+            }
         }
-        .map_err(|e| KernelError::Io { path, source: e })?;
         // Il sidecar segue la voce, e il suo esito non risale: il file **è**
         // uscito dal cestino, e dirlo fallito perché un dato derivato è rimasto
         // indietro sarebbe raccontare al chiamante il contrario di quel che è

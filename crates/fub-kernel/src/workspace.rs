@@ -3353,7 +3353,7 @@ impl Workspace {
         // andare.
         let source = self.docs.vault.read(from)?;
         let model = self.docs.parse(to, &source)?;
-        self.docs.vault.rename(from, to)?;
+        self.docs.vault.rename_no_replace(from, to)?;
         self.migrate_identity(from, to, model, Revision::of(&source));
         // La riga del rename va **prima** di quelle delle sorgenti riscritte:
         // sono tutte dentro lo stesso lotto, e chi le ripercorre all'indietro le
@@ -3423,7 +3423,7 @@ impl Workspace {
         // Il piano PRIMA di spostare: si risolve con il vecchio path ancora in
         // vigore, come per i documenti.
         let plan = self.entry_rewrite_plan(from, to);
-        self.docs.vault.rename(from, to)?;
+        self.docs.vault.rename_no_replace(from, to)?;
 
         let fingerprint = self
             .indexes
