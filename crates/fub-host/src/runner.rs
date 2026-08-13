@@ -281,6 +281,14 @@ impl Drop for Fermo {
 struct Sveglie {
     /// Chiave: (componente, nome della sveglia).
     quadranti: HashMap<(String, String), Quadrante>,
+    /// I recuperi di parete accumulati da [`parete`](Sveglie::parete), da
+    /// drenare una volta sola in [`scadute`](Sveglie::scadute). Li accumula
+    /// `parete` e non chi la chiama perché [`riconcilia`](Sveglie::riconcilia)
+    /// e [`scadute`](Sveglie::scadute) la chiamano entrambe: se il risultato
+    /// tornasse al chiamante, `riconcilia` lo butterebbe via e il recupero si
+    /// perderebbe — [`dove`](Quadrante::dove) è già avanzato, e la chiamata
+    /// dopo non lo rivede.
+    recuperi: Vec<(String, String)>,
 }
 
 struct Quadrante {
@@ -327,6 +335,13 @@ impl Sveglie {
                 .iter()
                 .any(|(o, spec)| o == owner && &spec.id == timer)
         });
+        // I recuperi seguono il manifest come i quadranti: una sveglia rimossa
+        // non suona per un'occorrenza calcolata prima di sparire.
+        self.recuperi.retain(|(owner, timer)| {
+            dichiarate
+                .iter()
+                .any(|(o, spec)| o == owner && &spec.id == timer)
+        });
         for (owner, spec) in dichiarate {
             self.quadranti
                 .entry((owner.clone(), spec.id.clone()))
@@ -351,16 +366,17 @@ impl Sveglie {
     }
 
     /// Riporta i quadranti di parete a ciò che dice il calendario adesso, e
-    /// raccoglie chi va suonato **per recupero**.
+    /// accumula i recuperi in [`recuperi`](Sveglie::recuperi).
     ///
-    /// È l'unico punto in cui questo modulo tocca il tempo di sistema. Il fatto
-    /// che restituisca già le suonate invece di lasciarle a
-    /// [`scadute`](Sveglie::scadute) non è comodità: un recupero è per
-    /// definizione un'occorrenza già passata, e passarla per un `prossima` nel
-    /// passato l'avrebbe fatta suonare *anche* la volta dopo.
-    fn parete(&mut self, ora: Instant, fuso_macchina: &str) -> Vec<(String, String)> {
+    /// È l'unico punto in cui questo modulo tocca il tempo di sistema. I
+    /// recuperi si accumulano invece di tornare al chiamante perché
+    /// [`riconcilia`](Sveglie::riconcilia) e [`scadute`](Sveglie::scadute) la
+    /// chiamano entrambe, e l'effetto collaterale su [`dove`](Quadrante::dove)
+    /// fa sì che la chiamata dopo non rivedrebbe un recupero già visto: se il
+    /// risultato tornasse e `riconcilia` lo buttasse via — come faceva — il
+    /// recupero era perso per sempre.
+    fn parete(&mut self, ora: Instant, fuso_macchina: &str) {
         let adesso = Timestamp::now();
-        let mut recuperi = Vec::new();
         for (chiave, q) in self.quadranti.iter_mut() {
             let Some(sveglia) = q.schedule.wall_clock() else {
                 continue;
@@ -374,12 +390,10 @@ impl Sveglie {
             let v = verdetto(sveglia, &fuso, adesso, q.dove);
             q.dove = v.dove;
             q.prossima = v.fra.map(|d| ora + d);
-            if v.suona {
-                recuperi.push(chiave.clone());
+            if v.suona && !self.recuperi.contains(chiave) {
+                self.recuperi.push(chiave.clone());
             }
         }
-        recuperi.sort();
-        recuperi
     }
 
     /// Fra quanto suona la prima. `None` = nessuna sveglia viva, e chi aspetta
@@ -418,10 +432,15 @@ impl Sveglie {
                 .map(|s| q.ancora + Duration::from_secs(s));
         }
         suonano.sort();
+        // `parete` ricalcola i quadranti di parete e accumula i recuperi
+        // dell'occorrenza appena passata insieme a quelli delle riconciliazioni
+        // precedenti: si drenano qui, una volta sola.
+        self.parete(ora, fuso_macchina);
         // I due modi di essere scaduti si uniscono qui e non prima, perché sono
         // due domande diverse fatte allo stesso orologio: «è passato
         // l'intervallo?» e «è passata l'ora?».
-        suonano.extend(self.parete(ora, fuso_macchina));
+        self.recuperi.sort();
+        suonano.extend(self.recuperi.drain(..));
         suonano
     }
 }
@@ -827,7 +846,9 @@ impl Shared {
             // dorme senza scadenza. Vale la pena che sia un ramo e non un
             // `Duration::MAX`, perché è la promessa che chi non dichiara timer
             // non paga nemmeno un risveglio.
-            self.sveglie.write()?.quadranti.clear();
+            let mut sveglie = self.sveglie.write()?;
+            sveglie.quadranti.clear();
+            sveglie.recuperi.clear();
             return Ok(None);
         }
         let fuso = self.fuso_macchina()?;
@@ -1722,5 +1743,103 @@ mod tests {
         assert_eq!(sveglie.quadranti.len(), 1);
         sveglie.riconcilia(&[], ora, "");
         assert!(sveglie.quadranti.is_empty());
+    }
+
+    /// **Un recupero di parete calcolato in `riconcilia` non si perde**: viene
+    /// conservato e drenato una volta sola da `scadute`.
+    ///
+    /// È il difetto che aveva `riconcilia` a chiamare `parete` e a buttarne via
+    /// il risultato — [`dove`](Quadrante::dove) era già avanzato, e la `parete`
+    /// di `scadute` non l'avrebbe più visto. Qui lo si mette in scena senza
+    /// dormire: si torna indietro l'ultima occorrenza considerata di un giorno,
+    /// e la riconciliazione successiva la vede come un recupero dovuto.
+    #[test]
+    fn un_recupero_di_parete_si_conserva_e_si_drena_una_volta() {
+        let mut sveglie = Sveglie::default();
+        let ora = Instant::now();
+        let dichiarata = [dichiara(
+            "digest",
+            TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
+        )];
+        sveglie.riconcilia(&dichiarata, ora, "");
+
+        // Simula il passare di un'occorrenza mentre il pool dormiva: l'ultima
+        // occorrenza considerata torna indietro di un giorno, come se la
+        // sveglia fosse stata in letargo dall'occorrenza precedente.
+        {
+            let q = sveglie
+                .quadranti
+                .get_mut(&("test.sveglia".into(), "digest".into()))
+                .expect("la sveglia è dichiarata");
+            q.dove.ultima = q.dove.ultima.map(|u| u.prev_day());
+        }
+
+        sveglie.riconcilia(&dichiarata, ora, "");
+        let suonate = sveglie.scadute(ora, "");
+        assert_eq!(
+            suonate,
+            vec![("test.sveglia".to_string(), "digest".to_string())],
+            "il recupero accumulato in riconcilia non è arrivato a scadute"
+        );
+        // Drenato una volta sola: una seconda chiamata non lo ridà.
+        assert!(
+            sveglie.scadute(ora, "").is_empty(),
+            "il recupero drenato si è ripresentato"
+        );
+    }
+
+    /// Più riconciliazioni prima di un drenaggio non duplicano il recupero.
+    #[test]
+    fn piu_riconciliazioni_non_duplicano_un_recupero() {
+        let mut sveglie = Sveglie::default();
+        let ora = Instant::now();
+        let dichiarata = [dichiara(
+            "digest",
+            TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
+        )];
+        sveglie.riconcilia(&dichiarata, ora, "");
+        {
+            let q = sveglie
+                .quadranti
+                .get_mut(&("test.sveglia".into(), "digest".into()))
+                .expect("la sveglia è dichiarata");
+            q.dove.ultima = q.dove.ultima.map(|u| u.prev_day());
+        }
+        sveglie.riconcilia(&dichiarata, ora, "");
+        // Una seconda riconciliazione prima che `scadute` dreni.
+        sveglie.riconcilia(&dichiarata, ora, "");
+        assert_eq!(
+            sveglie.scadute(ora, "").len(),
+            1,
+            "due riconciliazioni hanno duplicato un recupero"
+        );
+    }
+
+    /// Una sveglia rimossa dal manifest non suona per un recupero accumulato
+    /// prima di sparire.
+    #[test]
+    fn una_sveglia_rimossa_non_recupera() {
+        let mut sveglie = Sveglie::default();
+        let ora = Instant::now();
+        let dichiarata = [dichiara(
+            "digest",
+            TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
+        )];
+        sveglie.riconcilia(&dichiarata, ora, "");
+        {
+            let q = sveglie
+                .quadranti
+                .get_mut(&("test.sveglia".into(), "digest".into()))
+                .expect("la sveglia è dichiarata");
+            q.dove.ultima = q.dove.ultima.map(|u| u.prev_day());
+        }
+        sveglie.riconcilia(&dichiarata, ora, "");
+        // La sveglia sparisce dal manifest: il suo recupero accumulato sparisce
+        // con lei.
+        sveglie.riconcilia(&[], ora, "");
+        assert!(
+            sveglie.scadute(ora, "").is_empty(),
+            "una sveglia rimossa suona per un recupero accumulato prima di sparire"
+        );
     }
 }
