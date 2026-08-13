@@ -106,6 +106,7 @@ fn forma(b: &Block) -> String {
             return format!("Code({})", lang.clone().unwrap_or_default())
         }
         Block::ThematicBreak { .. } => return "Hr".into(),
+        Block::ReferenceDefinition { .. } => return "Def".into(),
         Block::Table { .. } => return "Table".into(),
         Block::Quote { blocks, .. } => ("Q".into(), blocks.iter().map(forma).collect()),
         Block::Custom {
@@ -633,4 +634,128 @@ fn un_escape_non_si_perde_e_non_diventa_una_feature() {
     let m = parse("#vero e \\#finto\n");
     assert_eq!(m.tags.len(), 1);
     assert_eq!(serialize(&m), "#vero e \\#finto\n");
+}
+
+/// **Una reference definition è un blocco a sé, e fa il giro intero.**
+///
+/// `[etichetta]: destinazione "titolo"` è metadata — dichiara il bersaglio di
+/// un `[a][etichetta]` — e comrak la consuma durante il parsing senza lasciare
+/// un nodo nell'AST: senza il recupero del parser la riga spariva dal modello,
+/// e la prima riscrittura la cancellava dal file. Qui la misura è il giro
+/// completo, e in tre punti:
+///
+/// - il primo parse produce **un blocco `ReferenceDefinition`**, non un
+///   paragrafo: `label`, `url` e `title` sono gli scalari scritti, e il testo
+///   piatto del documento non li contiene — una definizione è indirizzo, non
+///   prosa, e se finisse in `text` sarebbe confusa col testo ordinario;
+/// - la riscrittura esce nella forma che il parser rilegge, e il re-parse
+///   produce lo **stesso** blocco con gli stessi scalari — niente
+///   `Paragraph` al suo posto, niente definizione degradata a testo;
+/// - la destinazione che nuda non sarebbe una destinazione (gli spazi) esce
+///   fra `<…>` e rientra come la stessa destinazione.
+#[test]
+fn una_reference_definition_resta_un_blocco_a_se_per_tutto_il_giro() {
+    for (nome, sorgente, label, url, title) in [
+        ("semplice", "[rif]: nota.md\n", "rif", "nota.md", None),
+        (
+            "con titolo",
+            "[r]: nota.md \"titolo\"\n",
+            "r",
+            "nota.md",
+            Some("titolo"),
+        ),
+        (
+            "destinazione fra angolari",
+            "[r]: <nota con spazi.md> \"due\"\n",
+            "r",
+            "nota con spazi.md",
+            Some("due"),
+        ),
+        (
+            "etichetta con spazi interni",
+            "[nota di riferimento]: a.md\n",
+            "nota di riferimento",
+            "a.md",
+            None,
+        ),
+        // Il titolo che comincia con un escape: l'inizio del suo contenuto è
+        // la base con cui `decodifica_segmento` decide la priorità del primo
+        // carattere. Una base sbagliata di un byte (`fine - t.len()` vale
+        // `p + 2` e non `p + 1`) legge il carattere sbagliato e l'escape in
+        // testa si scioglie o resta a seconda del vicino sbagliato.
+        (
+            "titolo che inizia con escape",
+            "[r]: a.md \"\\\"inizio\"\n",
+            "r",
+            "a.md",
+            Some("\"inizio"),
+        ),
+    ] {
+        let m1 = parse(sorgente);
+        match &m1.body[..] {
+            [Block::ReferenceDefinition {
+                label: l,
+                url: u,
+                title: t,
+                ..
+            }] => {
+                assert_eq!(l, label, "«{nome}»: etichetta");
+                assert_eq!(u, url, "«{nome}»: destinazione");
+                assert_eq!(t.as_deref(), title, "«{nome}»: titolo");
+            }
+            altri => panic!(
+                "«{nome}»: la definizione non è arrivata come blocco a sé, ma come {altri:?}\n\
+                 (un `Paragraph` qui è la definizione confusa con testo ordinario)"
+            ),
+        }
+        assert!(
+            !m1.body.iter().any(|b| matches!(b, Block::Paragraph { .. })),
+            "«{nome}»: accanto alla definizione c'è un paragrafo fantasma"
+        );
+        assert!(
+            !m1.text.contains(label) && !m1.text.contains(url),
+            "«{nome}»: la definizione è entrata nel testo piatto: {:?}",
+            m1.text,
+        );
+
+        // Il giro: riscrittura e rilettura conservano gli scalari, e al posto
+        // della definizione non compare un paragrafo.
+        let riscritto = serialize(&m1);
+        // Queste sorgenti sono già nella forma che il serializer produce, e
+        // per una definizione la forma È la riga: la riscrittura non cambia
+        // un byte, o un titolo con un escape in testa (o una destinazione
+        // fra angolari) sarebbe tornato con la priorità sbagliata.
+        assert_eq!(
+            riscritto, sorgente,
+            "«{nome}»: la riscrittura ha cambiato la riga di definizione."
+        );
+        let m2 = parse(&riscritto);
+        match &m2.body[..] {
+            [Block::ReferenceDefinition {
+                label: l,
+                url: u,
+                title: t,
+                ..
+            }] => {
+                assert_eq!(l, label, "«{nome}»: etichetta dopo il giro");
+                assert_eq!(u, url, "«{nome}»: destinazione dopo il giro");
+                assert_eq!(t.as_deref(), title, "«{nome}»: titolo dopo il giro");
+            }
+            altri => panic!(
+                "«{nome}»: al giro la definizione è diventata {altri:?}\n  \
+                 riscritto: {riscritto:?}"
+            ),
+        }
+        assert!(
+            !m2.body.iter().any(|b| matches!(b, Block::Paragraph { .. })),
+            "«{nome}»: al giro è comparso un paragrafo al posto della definizione.\n  \
+             riscritto: {riscritto:?}",
+        );
+    }
+    // La riscrittura è nella forma che il parser rilegge identica: la riga che
+    // l'utente ha scritto torna com'era, non come un paragrafo di testo.
+    assert_eq!(
+        serialize(&parse("[r]: nota.md \"titolo\"\n")),
+        "[r]: nota.md \"titolo\"\n"
+    );
 }

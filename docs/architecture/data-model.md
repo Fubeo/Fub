@@ -179,10 +179,11 @@ classDiagram
         +String text
     }
     class Block {
-        <<enum · 8 varianti>>
+        <<enum · 9 varianti>>
         Heading · Paragraph · List
         CodeBlock · Quote · Table
-        ThematicBreak · Custom
+        ThematicBreak · ReferenceDefinition
+        Custom
         +Option~String~ anchor
         +Span span
     }
@@ -418,7 +419,13 @@ nessuno dei due è una *seconda copia viva* del documento:
 
 `Block` (tag serde `kind`): `Heading`, `Paragraph`, `List { ordered, start, items }`,
 `CodeBlock { lang, code }`, `Quote`, `ThematicBreak`, l'escape hatch
-`Custom { custom_kind, attrs, blocks }`, e `Table { head, rows, align }`. **Ogni**
+`Custom { custom_kind, attrs, blocks }`, `Table { head, rows, align }`, e
+`ReferenceDefinition { label, url, title }` — la riga `[etichetta]: destinazione "titolo"`
+che dichiara il bersaglio di un `[a][etichetta]`: è **scalare** (etichetta, URL,
+titolo), non blocchi, quindi `Custom { blocks }` non la reggerebbe, e comrak la
+consuma senza lasciare un nodo nell'AST — senza la variante la riga spariva dal
+modello e la prima riscrittura la cancellava dal file. Non entra nel testo
+piatto: è indirizzo, non prosa. **Ogni**
 variante porta `anchor: Option<String>` e `span`, e i due accessori totali
 `Block::span()` / `Block::anchor()` evitano il `match` esaustivo ripetuto.
 

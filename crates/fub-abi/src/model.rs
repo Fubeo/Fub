@@ -396,12 +396,30 @@ pub enum Block {
         anchor: Option<String>,
         span: Span,
     },
+    /// Una reference definition CommonMark: `[etichetta]: destinazione "titolo"`.
+    /// È metadata — la riga che dichiara il bersaglio di un `[a][etichetta]` —
+    /// e la sua forma è **scalare** (etichetta, URL, titolo), non blocchi: è
+    /// per questo che `Custom { blocks }` non la regge, lo stesso criterio
+    /// che ha promosso la tabella a variante. `comrak` la consuma durante il
+    /// parsing senza lasciare un nodo nell'AST, quindi senza questa variante
+    /// la riga spariva dal modello e la prima riscrittura la cancellava dal
+    /// file (§4: `[a][rif]` + `[rif]: nota.md` → `[a](nota.md)`). Non entra
+    /// nel testo piatto del documento: è indirizzo, non prosa. `url` è la
+    /// destinazione **nuda** (le `<…>` che la racchiudono si normalizzano),
+    /// e `title` è il titolo senza i suoi delimitatatori.
+    ReferenceDefinition {
+        label: String,
+        url: String,
+        title: Option<String>,
+        anchor: Option<String>,
+        span: Span,
+    },
 }
 
 impl Block {
     /// Lo `Span` del blocco, qualunque variante sia.
     ///
-    /// Esiste perché il `match` esaustivo su sette varianti per estrarre un
+    /// Esiste perché il `match` esaustivo sulle varianti per estrarre un
     /// campo che c'è in tutte era già scritto due volte in posti diversi, e la
     /// terza copia sarebbe stata quella sbagliata.
     pub fn span(&self) -> Span {
@@ -413,7 +431,8 @@ impl Block {
             | Block::Quote { span, .. }
             | Block::ThematicBreak { span, .. }
             | Block::Custom { span, .. }
-            | Block::Table { span, .. } => *span,
+            | Block::Table { span, .. }
+            | Block::ReferenceDefinition { span, .. } => *span,
         }
     }
 
@@ -427,7 +446,8 @@ impl Block {
             | Block::Quote { anchor, .. }
             | Block::ThematicBreak { anchor, .. }
             | Block::Custom { anchor, .. }
-            | Block::Table { anchor, .. } => anchor.as_deref(),
+            | Block::Table { anchor, .. }
+            | Block::ReferenceDefinition { anchor, .. } => anchor.as_deref(),
         }
     }
 }

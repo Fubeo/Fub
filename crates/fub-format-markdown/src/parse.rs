@@ -75,6 +75,15 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     let options = build_options(ctx);
     let root = comrak::parse_document(&arena, text_policy::strip_bom(source), &options);
 
+    // comrak consuma le reference definitions durante il parsing senza lasciare
+    // un nodo nell'AST (§4: senza il recupero, `[a][rif]` + `[rif]: nota.md`
+    // riscritto diventava `[a](nota.md)` e la riga di definizione spariva dal
+    // file). Le si rilegge dalla sorgente, con la stessa grammatica di comrak
+    // (paragrafi che cominciano con `[etichetta]:`), e si ritagliano i
+    // sourcepos dei paragrafi che restano: il contenuto residuo non comincia
+    // più alla riga del primo `[`.
+    let defs = recupera_definizioni(root, source, &offsets, &options);
+
     let mut acc = Acc::default();
     let mut frontmatter = Frontmatter::default();
     // Il frontmatter c'era, anche quando non dichiarava niente: senza questo
@@ -121,6 +130,11 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
         body.push(block);
     }
 
+    // Le definizioni recuperate entrano nell'albero **dopo** la conversione, nel
+    // contenitore più profondo che contiene il loro span: il paragrafo che le
+    // portava è stato staccato dal pre-pass, e lo span dice dove abitavano.
+    inserisci_definizioni(defs, &mut body);
+
     Ok(DocumentModel {
         id: DocId::new(ctx.doc_id.clone()),
         frontmatter,
@@ -155,7 +169,8 @@ fn set_anchor(block: &mut Block, id: String) {
         | Block::Quote { anchor, .. }
         | Block::ThematicBreak { anchor, .. }
         | Block::Custom { anchor, .. }
-        | Block::Table { anchor, .. } => *anchor = Some(id),
+        | Block::Table { anchor, .. }
+        | Block::ReferenceDefinition { anchor, .. } => *anchor = Some(id),
     }
 }
 
@@ -1387,4 +1402,706 @@ fn frontmatter_non_letto(raw: &str, motivo: String, span: Span) -> Block {
         anchor: None,
         span,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Reference definitions
+// ---------------------------------------------------------------------------
+//
+// comrak non lascia un nodo per una reference definition: le consuma dentro il
+// paragrafo (`resolve_reference_link_definitions`) e stacca il paragrafo di
+// sola definizione (`finalize_borrowed`). Questo pre-pass le rilegge dalla
+// sorgente **prima** della conversione, con la stessa grammatica del parser
+// comrak: i paragrafi **misti** restano nell'albero e si riscontano i loro
+// sourcepos (per comrak il contenuto dopo lo sconto ricomincia dalla riga del
+// primo `[`, e i nodi inline che ne nascono portano riga e colonna di lì — la
+// verità è che la riga e la colonna sono quelle del sorgente, `n` righe più in
+// là); quelli di **sola** definizione — che nell'albero non ci sono più — si
+// rileggono da un'ombra della sorgente in cui comrak non le riconosce (vedi
+// [`ombra_sorgente`]).
+
+/// Un livello di contenitore: quanto di ogni riga di paragrafo appartiene al
+/// contenitore e non al testo. Serve a ricostruire il `line_offsets` di comrak
+/// (che è privato) per correggere le colonne degli inline residui.
+#[derive(Clone, Copy)]
+enum Marcatore {
+    /// Una citazione: `>` più uno spazio opzionale per riga.
+    Citazione,
+    /// Una voce di lista: la larghezza del suo marcatore in byte (`- ` → 2).
+    Voce(usize),
+}
+
+/// Una definizione letta dalla sorgente, già tradotta in byte e decodificata.
+struct Definizione {
+    span: Span,
+    label: String,
+    url: String,
+    title: Option<String>,
+}
+
+/// Il recupero: cammina l'albero, per ogni paragrafo legge le definizioni in
+/// testa e risconta i sourcepos del contenuto residuo; i paragrafi di **sola**
+/// definizione — che comrak ha già staccato — si rileggono dall'ombra della
+/// sorgente (vedi [`gira_ombra`]).
+fn recupera_definizioni<'a>(
+    root: &'a AstNode<'a>,
+    source: &str,
+    offsets: &Offsets<'_>,
+    options: &Options<'_>,
+) -> Vec<Definizione> {
+    let mut defs = Vec::new();
+    let mut contenitori: Vec<Marcatore> = Vec::new();
+    // Gli span dei paragrafi **prima** della correzione dei misti: è contro
+    // questi che l'ombra decide se un suo paragrafo è un paragrafo vero.
+    let mut reali = Vec::new();
+    span_dei_paragrafi(root, offsets, &mut reali);
+    gira_definizioni(root, source, offsets, &mut defs, &mut contenitori);
+    // I paragrafi di **sola** definizione comrak li stacca in
+    // `finalize_borrowed` (l'arm `Paragraph`): nell'albero vero non ci sono, e
+    // il giro sopra non li ha visti — senza un recupero, `[rif]: nota.md` da
+    // solo produceva `body: []`. Si rileggono da un'ombra della sorgente a
+    // lunghezza uguale in cui comrak non riconosce le definizioni: lì quei
+    // paragrafi restano, e la fetta si legge dal vero con lo stesso span.
+    let ombra = ombra_sorgente(source, options.extension.footnotes);
+    let arena = Arena::new();
+    let root_ombra = comrak::parse_document(&arena, text_policy::strip_bom(&ombra), options);
+    gira_ombra(root_ombra, source, offsets, &reali, &mut defs);
+    defs
+}
+
+fn gira_definizioni<'a>(
+    node: &'a AstNode<'a>,
+    source: &str,
+    offsets: &Offsets<'_>,
+    defs: &mut Vec<Definizione>,
+    contenitori: &mut Vec<Marcatore>,
+) {
+    let valore = node.data.borrow().value.clone();
+    let span = span_of(node, offsets);
+    match valore {
+        NodeValue::Paragraph => {
+            let Some(fetta) = source.get(span.start..span.end) else {
+                return;
+            };
+            // Definizioni in testa, come le consuma comrak: una dopo l'altra,
+            // finché la riga non comincia più con `[`.
+            let prima = defs.len();
+            let pos = definizioni_da_fetta(fetta, span.start, source, defs);
+            if defs.len() == prima {
+                return;
+            }
+            // Qui arrivano solo i paragrafi **misti**: quello di sola
+            // definizione comrak lo stacca in `finalize_borrowed`, e lo
+            // rilegge l'ombra (`gira_ombra`). Il contenuto residuo comincia
+            // alla riga `n`+1, alla colonna del primo byte di contenuto di lì.
+            let n = terminatori_nella(&fetta[..pos]);
+            let resto = &fetta[pos..];
+            if resto.is_empty() {
+                // Difensivo: comrak ha già staccato il paragrafo vuoto, e se
+                // un residuo vuoto arrivasse qui non ci sarebbe nulla da
+                // riscontare.
+                return;
+            }
+            let mut sp = node.data.borrow().sourcepos;
+            let riga_zero = sp.start.line;
+            sp.start.line += n;
+            let prefissi = prefissi_di_riga(source, span.start, &fetta, contenitori);
+            sp.start.column = 1 + prefissi[n];
+            node.data.borrow_mut().sourcepos = sp;
+            let delta = |riga: usize| -> isize {
+                // `riga` è la riga sorgente vera: il suo indice nella fetta
+                // è `riga - riga_zero`, e comrak ha contato le colonne come
+                // se quella riga fosse la prima del paragrafo — il vero
+                // prefisso di riga è `prefissi[k]`.
+                let k = riga.saturating_sub(riga_zero);
+                prefissi.get(k).copied().unwrap_or(0) as isize
+            };
+            sposta_figli(node, n, &delta);
+        }
+        NodeValue::BlockQuote => {
+            contenitori.push(Marcatore::Citazione);
+            for child in node.children() {
+                gira_definizioni(child, source, offsets, defs, contenitori);
+            }
+            contenitori.pop();
+        }
+        NodeValue::List(_) => {
+            for item in node.children() {
+                let larghezza = larghezza_marcatore(source, item);
+                contenitori.push(Marcatore::Voce(larghezza));
+                for child in item.children() {
+                    gira_definizioni(child, source, offsets, defs, contenitori);
+                }
+                contenitori.pop();
+            }
+        }
+        _ => {
+            // Gli altri contenitori (footnote, definition list, html…) non
+            // aggiungono marcatori di riga propri; i figli si visitano uguale.
+            for child in node.children() {
+                gira_definizioni(child, source, offsets, defs, contenitori);
+            }
+        }
+    }
+}
+
+/// Gli span dei paragrafi dell'albero vero, **prima** che la correzione dei
+/// misti li sposti: è contro questi che l'ombra decide se un suo paragrafo è
+/// un paragrafo vero (già letto dal giro principale) o uno staccato da comrak.
+fn span_dei_paragrafi<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>, spans: &mut Vec<Span>) {
+    let valore = node.data.borrow().value.clone();
+    if matches!(valore, NodeValue::Paragraph) {
+        spans.push(span_of(node, offsets));
+        return;
+    }
+    for child in node.children() {
+        span_dei_paragrafi(child, offsets, spans);
+    }
+}
+
+/// L'ombra a lunghezza uguale: ogni `[` diventa una `x`.
+///
+/// Le reference definition sono l'unico costrutto che comrak consuma dentro un
+/// paragrafo, e le riconosce dal primo carattere: senza `[` i paragrafi di
+/// sola definizione restano paragrafi, con gli **stessi** span — la lunghezza
+/// non cambia, quindi le posizioni dell'ombra sono quelle del vero.
+///
+/// `[^` resta intatto quando le footnote sono attive: lì non è una definizione
+/// da recuperare ma un blocco `FootnoteDefinition`, che l'ombra deve
+/// conservare come il vero — sennò una nota tornerebbe come reference
+/// definition.
+fn ombra_sorgente(source: &str, footnotes: bool) -> String {
+    let b = source.as_bytes();
+    let mut ombra = Vec::with_capacity(b.len());
+    for (i, &c) in b.iter().enumerate() {
+        if c == b'[' && !(footnotes && b.get(i + 1) == Some(&b'^')) {
+            ombra.push(b'x');
+        } else {
+            ombra.push(c);
+        }
+    }
+    // La sostituzione è byte-per-byte a lunghezza uguale, e l'unico byte
+    // cambiato è `[` (un byte): la stringa resta UTF-8 valida.
+    String::from_utf8(ombra).expect("l'ombra è una permutazione della sorgente")
+}
+
+/// Il giro sull'ombra: legge le definizioni dei paragrafi che nessun paragrafo
+/// vero copre — sono quelli che comrak ha staccato perché di **sola**
+/// definizione. La fetta si legge dal vero (l'ombra ha gli stessi span), e per
+/// loro non c'è alcun sourcepos da correggere: contenuto residuo non ce n'è.
+fn gira_ombra<'a>(
+    node: &'a AstNode<'a>,
+    source: &str,
+    offsets: &Offsets<'_>,
+    reali: &[Span],
+    defs: &mut Vec<Definizione>,
+) {
+    let valore = node.data.borrow().value.clone();
+    if matches!(valore, NodeValue::Paragraph) {
+        let span = span_of(node, offsets);
+        if reali.iter().any(|r| contiene(*r, span)) {
+            return;
+        }
+        if let Some(fetta) = source.get(span.start..span.end) {
+            definizioni_da_fetta(fetta, span.start, source, defs);
+        }
+        return;
+    }
+    for child in node.children() {
+        gira_ombra(child, source, offsets, reali, defs);
+    }
+}
+
+/// Quante righe hanno consumato le definizioni: il numero di terminatori nella
+/// fetta consumata (`\r\n` è **un** terminatore).
+fn terminatori_nella(fetta: &str) -> usize {
+    let b = fetta.as_bytes();
+    let mut n = 0;
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\n' => {
+                n += 1;
+                i += 1;
+            }
+            b'\r' => {
+                n += 1;
+                i += 1;
+                if b.get(i) == Some(&b'\n') {
+                    i += 1;
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    n
+}
+
+/// I prefissi di riga del paragrafo: per ogni riga della fetta, quanti byte di
+/// marcatore e indentazione comrak ha consumato (il suo `line_offsets`, che il
+/// crate tiene privato). `inizio_fetta` è il byte della prima riga nel sorgente.
+fn prefissi_di_riga(
+    source: &str,
+    inizio_fetta: usize,
+    fetta: &str,
+    contenitori: &[Marcatore],
+) -> Vec<usize> {
+    let mut prefissi = Vec::new();
+    let mut riga_inizio = inizio_fetta;
+    for riga in righe_di(fetta) {
+        let fine = riga_inizio + riga.len();
+        prefissi.push(prefisso_di_riga(&source[riga_inizio..fine], contenitori));
+        riga_inizio = fine;
+        // il terminatore sta fra le righe della fetta? la riga seguente
+        // comincia dopo; `righe_di` non lo include.
+        while riga_inizio < source.len() && matches!(source.as_bytes()[riga_inizio], b'\n' | b'\r')
+        {
+            riga_inizio += 1;
+            if source.as_bytes().get(riga_inizio) == Some(&b'\n') {
+                riga_inizio += 1;
+            }
+        }
+    }
+    prefissi
+}
+
+/// Le righe di una fetta, senza i terminatori.
+fn righe_di(fetta: &str) -> Vec<&str> {
+    let mut righe = Vec::new();
+    let mut i = 0;
+    let b = fetta.as_bytes();
+    for (j, &c) in b.iter().enumerate() {
+        if c == b'\n' || c == b'\r' {
+            righe.push(&fetta[i..j]);
+            i = j + 1;
+            if c == b'\r' && b.get(j + 1) == Some(&b'\n') {
+                i = j + 2;
+            }
+        }
+    }
+    if i < fetta.len() {
+        righe.push(&fetta[i..]);
+    }
+    righe
+}
+
+/// Quanti byte della riga appartengono ai contenitori (e all'indentazione del
+/// paragrafo): per una riga pigra (citazione che non si apre) il contenuto
+/// comincia al primo byte non bianco.
+fn prefisso_di_riga(riga: &str, contenitori: &[Marcatore]) -> usize {
+    let b = riga.as_bytes();
+    let mut i = 0;
+    let mut pigra = false;
+    for m in contenitori {
+        match m {
+            Marcatore::Citazione => {
+                if b.get(i) == Some(&b'>') {
+                    i += 1;
+                    if b.get(i) == Some(&b' ') {
+                        i += 1;
+                    }
+                } else {
+                    pigra = true;
+                    break;
+                }
+            }
+            Marcatore::Voce(larghezza) => {
+                if pigra {
+                    break;
+                }
+                i = (i + larghezza).min(b.len());
+            }
+        }
+    }
+    if pigra {
+        b.iter().take_while(|&&c| c == b' ' || c == b'\t').count()
+    } else {
+        i + b[i..]
+            .iter()
+            .take_while(|&&c| c == b' ' || c == b'\t')
+            .count()
+    }
+}
+
+/// La larghezza in byte del marcatore della voce: `- ` → 2, `1. ` → 3.
+fn larghezza_marcatore(source: &str, item: &AstNode<'_>) -> usize {
+    let sp = item.data.borrow().sourcepos.start;
+    let mut inizio = 0;
+    let b = source.as_bytes();
+    for _ in 1..sp.line {
+        while inizio < b.len() && !matches!(b[inizio], b'\n' | b'\r') {
+            inizio += 1;
+        }
+        if inizio < b.len() {
+            inizio += 1;
+            if b.get(inizio) == Some(&b'\n') {
+                inizio += 1;
+            }
+        }
+    }
+    let riga = &source[inizio..];
+    let rb = riga.as_bytes();
+    let mut i = sp.column.saturating_sub(1);
+    if matches!(rb.get(i), Some(b'-' | b'+' | b'*')) {
+        i += 1;
+    } else {
+        let mut cifre = 0;
+        while rb.get(i).is_some_and(|c| c.is_ascii_digit()) {
+            i += 1;
+            cifre += 1;
+        }
+        if cifre == 0 || !matches!(rb.get(i), Some(b'.' | b')')) {
+            return 2;
+        }
+        i += 1;
+    }
+    let spazi = rb[i..]
+        .iter()
+        .take_while(|&&c| c == b' ' || c == b'\t')
+        .take(4)
+        .count();
+    if spazi == 0 {
+        2
+    } else {
+        (i - sp.column.saturating_sub(1)) + spazi
+    }
+}
+
+/// Sposta i sourcepos dei discendenti di un paragrafo misto: righe di `n`,
+/// colonne secondo lo scarto di prefisso della loro riga.
+fn sposta_figli<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isize) {
+    for child in node.children() {
+        sposta_nodo(child, n, delta);
+    }
+}
+
+fn sposta_nodo<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isize) {
+    let mut sp = node.data.borrow().sourcepos;
+    let inizio = sp.start.line;
+    let fine = sp.end.line;
+    sp.start.line += n;
+    sp.end.line += n;
+    sp.start.column = (sp.start.column as isize + delta(inizio)).max(1) as usize;
+    sp.end.column = (sp.end.column as isize + delta(fine)).max(1) as usize;
+    node.data.borrow_mut().sourcepos = sp;
+    for child in node.children() {
+        sposta_nodo(child, n, delta);
+    }
+}
+
+/// Una definizione grezza, con la sua estensione consumata (incluso il
+/// terminatore di riga) e le posizioni di url e titolo nella fetta (per la
+/// base di `decodifica_segmento`).
+struct DefGrezz {
+    def: Definizione,
+    fine: usize,
+    url_inizio: usize,
+    titolo_inizio: usize,
+}
+
+/// Le definizioni in testa a una fetta di paragrafo, decodificate e in `defs`;
+/// restituisce quanti byte (nella fetta) hanno consumato, cioè dove comincia
+/// il contenuto residuo. È il lettore condiviso dal giro vero e dall'ombra.
+fn definizioni_da_fetta(
+    fetta: &str,
+    base: usize,
+    source: &str,
+    defs: &mut Vec<Definizione>,
+) -> usize {
+    let mut pos = 0;
+    while fetta.as_bytes().get(pos) == Some(&b'[') {
+        match definizione_in(fetta, pos, base) {
+            Some(d) => {
+                let DefGrezz {
+                    def,
+                    fine,
+                    url_inizio,
+                    titolo_inizio,
+                } = d;
+                pos += fine;
+                // La decodifica degli escape e delle entità, con la base nel
+                // sorgente: la stessa regola dei link.
+                let url = decodifica_segmento(source, &def.url, base + url_inizio);
+                let title = def
+                    .title
+                    .map(|t| decodifica_segmento(source, &t, base + titolo_inizio));
+                defs.push(Definizione {
+                    span: def.span,
+                    label: def.label,
+                    url,
+                    title,
+                });
+            }
+            None => break,
+        }
+    }
+    pos
+}
+
+/// La grammatica è quella di `Parser::parse_reference_inline` di comrak:
+/// `[etichetta]` + `:` + spnl + destinazione + spnl + titolo? + spnl + fine
+/// riga — con il ripiego senza titolo quando il titolo non chiude la riga.
+fn definizione_in(fetta: &str, pos: usize, base: usize) -> Option<DefGrezz> {
+    let b = fetta.as_bytes();
+    let (dopo, label) = etichetta_in(fetta, pos)?;
+    if b.get(dopo) != Some(&b':') {
+        return None;
+    }
+    let mut p = spnl_in(fetta, dopo + 1);
+    let (dopo_url, url, url_inizio) = destinazione_in(fetta, p)?;
+    p = dopo_url;
+    let prima_titolo = p;
+    p = spnl_in(fetta, p);
+    let (mut titolo, titolo_inizio) = if let Some((fine, t)) = titolo_in(fetta, p) {
+        // `titolo_in` restituisce la fine esclusa dopo la chiusura e la fetta
+        // senza i delimitatori: l'inizio del **contenuto** è il byte dopo
+        // l'apre — `p + 1` — non `fine - t.len()`, che per un contenuto lungo
+        // L vale `p + 2` (la fine esclusa è `i + 1`, la chiusura sta a `i`).
+        // `titolo_inizio` è la base da cui `decodifica_segmento` decide la
+        // priorità escape/entità del **primo** carattere del titolo:
+        // sbagliata di un byte, `"\"inizio"` legge il vicino sbagliato e
+        // l'escape in testa si scioglie o resta a seconda di quello.
+        let inizio = p + 1;
+        p = fine;
+        (Some(t), inizio)
+    } else {
+        (None, prima_titolo)
+    };
+    let senza_titolo = titolo.is_none();
+    if senza_titolo {
+        p = prima_titolo;
+    }
+    let mut fine = spazi_in(fetta, p);
+    if !fine_riga_in(fetta, fine) {
+        if senza_titolo {
+            return None;
+        }
+        // Il titolo c'era ma non chiudeva la riga: si ripiega alla
+        // definizione senza titolo, come comrak.
+        titolo = None;
+        p = prima_titolo;
+        fine = spazi_in(fetta, p);
+        if !fine_riga_in(fetta, fine) {
+            return None;
+        }
+    }
+    // `fine` è la posizione del terminatore di riga (o dell'EOF). Il consumo
+    // del pre-pass include il terminatore; lo span del blocco lo rifila.
+    let mut consumato = fine;
+    match b.get(consumato) {
+        Some(b'\n') => consumato += 1,
+        Some(b'\r') => {
+            consumato += 1;
+            if b.get(consumato) == Some(&b'\n') {
+                consumato += 1;
+            }
+        }
+        None => {}
+        _ => return None,
+    }
+    let mut fine_contenuto = fine;
+    if fine_contenuto > 0 && b[fine_contenuto - 1] == b'\n' {
+        fine_contenuto -= 1;
+    }
+    if fine_contenuto > 0 && b[fine_contenuto - 1] == b'\r' {
+        fine_contenuto -= 1;
+    }
+    Some(DefGrezz {
+        def: Definizione {
+            span: Span::new(base + pos, base + fine_contenuto),
+            label: label.to_string(),
+            url: url.to_string(),
+            title: titolo.map(str::to_string),
+        },
+        fine: consumato,
+        url_inizio,
+        titolo_inizio,
+    })
+}
+
+/// `[etichetta]` — il contenuto è rifilato, come in comrak.
+fn etichetta_in(fetta: &str, pos: usize) -> Option<(usize, &str)> {
+    let b = fetta.as_bytes();
+    if b.get(pos) != Some(&b'[') {
+        return None;
+    }
+    let mut i = pos + 1;
+    let mut lun = 0usize;
+    while i < b.len() {
+        match b[i] {
+            b']' => {
+                let label = fetta[pos + 1..i].trim();
+                if label.is_empty() {
+                    return None;
+                }
+                return Some((i + 1, label));
+            }
+            b'[' => return None,
+            b'\\' => {
+                i += 1;
+                lun += 1;
+                if b.get(i).is_some_and(|c| c.is_ascii_punctuation()) {
+                    i += 1;
+                    lun += 1;
+                }
+            }
+            _ => {
+                i += 1;
+                lun += 1;
+            }
+        }
+        if lun > 999 {
+            return None;
+        }
+    }
+    None
+}
+
+/// La destinazione, nuda o fra `<…>` — come `manual_scan_link_url`.
+fn destinazione_in(fetta: &str, pos: usize) -> Option<(usize, &str, usize)> {
+    let b = fetta.as_bytes();
+    if pos >= b.len() {
+        return None;
+    }
+    if b[pos] == b'<' {
+        let mut i = pos + 1;
+        while i < b.len() {
+            match b[i] {
+                b'>' => return Some((i + 1, &fetta[pos + 1..i], pos + 1)),
+                b'\\' => i += 2,
+                b'\n' | b'\r' | b'<' => return None,
+                _ => i += 1,
+            }
+        }
+        return None;
+    }
+    let mut i = pos;
+    let mut profondita = 0usize;
+    while i < b.len() {
+        match b[i] {
+            b'\\' if i + 1 < b.len() && b[i + 1].is_ascii_punctuation() => i += 2,
+            b'(' => {
+                profondita += 1;
+                i += 1;
+                if profondita > 32 {
+                    return None;
+                }
+            }
+            b')' => {
+                if profondita == 0 {
+                    break;
+                }
+                profondita -= 1;
+                i += 1;
+            }
+            c if c.is_ascii_whitespace() || (c.is_ascii_control() && c != 0) => {
+                if i == pos {
+                    return None;
+                }
+                break;
+            }
+            _ => i += 1,
+        }
+    }
+    if i == pos || profondita != 0 {
+        None
+    } else {
+        Some((i, &fetta[pos..i], pos))
+    }
+}
+
+/// Il titolo fra `"…"`, `'…'` o `(…)` — le parentesi non si annidano.
+fn titolo_in(fetta: &str, pos: usize) -> Option<(usize, &str)> {
+    let b = fetta.as_bytes();
+    let (aperta, chiusa) = match b.get(pos) {
+        Some(b'"') => (b'"', b'"'),
+        Some(b'\'') => (b'\'', b'\''),
+        Some(b'(') => (b'(', b')'),
+        _ => return None,
+    };
+    let _ = aperta;
+    let mut i = pos + 1;
+    while i < b.len() {
+        match b[i] {
+            b'\\' => {
+                i += 2;
+            }
+            c if c == chiusa => return Some((i + 1, &fetta[pos + 1..i])),
+            b'(' if chiusa == b')' => return None,
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+/// spnl: spazi/tab, poi al più una fine riga, poi spazi/tab.
+fn spnl_in(fetta: &str, mut pos: usize) -> usize {
+    pos = spazi_in(fetta, pos);
+    if fine_riga_in(fetta, pos) {
+        pos += 1;
+        if fetta.as_bytes().get(pos) == Some(&b'\n') {
+            pos += 1;
+        }
+        pos = spazi_in(fetta, pos);
+    }
+    pos
+}
+
+fn spazi_in(fetta: &str, mut pos: usize) -> usize {
+    while pos < fetta.len() && matches!(fetta.as_bytes()[pos], b' ' | b'\t') {
+        pos += 1;
+    }
+    pos
+}
+
+/// Fine riga o fine della fetta (l'EOF conta, come in comrak).
+fn fine_riga_in(fetta: &str, pos: usize) -> bool {
+    match fetta.as_bytes().get(pos) {
+        None | Some(b'\n') | Some(b'\r') => true,
+        _ => false,
+    }
+}
+
+/// Inserisce le definizioni nell'albero: il contenitore più profondo che
+/// contiene il loro span, in ordine di sorgente.
+fn inserisci_definizioni(defs: Vec<Definizione>, body: &mut Vec<Block>) {
+    for d in defs {
+        let blocco = Block::ReferenceDefinition {
+            label: d.label,
+            url: d.url,
+            title: d.title,
+            anchor: None,
+            span: d.span,
+        };
+        inserisci_una(&blocco, body);
+    }
+}
+
+fn inserisci_una(d: &Block, blocchi: &mut Vec<Block>) {
+    let Some(pos) = blocchi.iter().position(|b| contiene(b.span(), d.span())) else {
+        inserisci_in_ordine(d, blocchi);
+        return;
+    };
+    match &mut blocchi[pos] {
+        Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => inserisci_una(d, blocks),
+        Block::List { items, .. } => {
+            for it in items.iter_mut() {
+                if contiene(it.span, d.span()) {
+                    inserisci_una(d, &mut it.blocks);
+                    return;
+                }
+            }
+            inserisci_in_ordine(d, blocchi);
+        }
+        _ => inserisci_in_ordine(d, blocchi),
+    }
+}
+
+fn contiene(padre: Span, figlio: Span) -> bool {
+    padre.start <= figlio.start && figlio.end <= padre.end
+}
+
+fn inserisci_in_ordine(d: &Block, blocchi: &mut Vec<Block>) {
+    let pos = blocchi.partition_point(|b| b.span().start < d.span().start);
+    blocchi.insert(pos, d.clone());
 }

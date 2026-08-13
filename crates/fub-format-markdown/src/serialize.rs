@@ -415,6 +415,37 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             write_custom_block(custom_kind, attrs, blocks, out)?;
             write_anchor_a_capo(anchor, out);
         }
+        Block::ReferenceDefinition {
+            label,
+            url,
+            title,
+            anchor,
+            span: _,
+        } => {
+            // La forma normalizzata: `[etichetta]: url "titolo"`. La
+            // destinazione è quella **nuda** (parse toglie le `<…>`), il
+            // titolo si scrive fra doppi apici con gli escape di `"` e `\` —
+            // qualunque delimitatore l'utente avesse scelto, la riga resta
+            // una definizione valida per comrak.
+            out.push('[');
+            out.push_str(label);
+            out.push_str("]: ");
+            // La destinazione nuda con spazi o parentesi andrebbe in frantumi
+            // al ri-parse: la forma `<…>` resta la stessa destinazione.
+            scrivi_destinazione(url, out);
+            if let Some(t) = title {
+                out.push_str(" \"");
+                for c in t.chars() {
+                    if c == '"' || c == '\\' {
+                        out.push('\\');
+                    }
+                    out.push(c);
+                }
+                out.push('"');
+            }
+            out.push('\n');
+            write_anchor_a_capo(anchor, out);
+        }
     }
     Ok(())
 }

@@ -169,6 +169,7 @@ fn nome_del_blocco(b: &Block) -> &'static str {
         Block::CodeBlock { .. } => "CodeBlock",
         Block::Quote { .. } => "Quote",
         Block::ThematicBreak { .. } => "ThematicBreak",
+        Block::ReferenceDefinition { .. } => "ReferenceDefinition",
         Block::Custom { .. } => "Custom",
         Block::Table { .. } => "Table",
     }
@@ -251,7 +252,9 @@ fn osserva_blocchi(blocchi: &[Block], o: &mut Osservato) {
                     }
                 }
             }
-            Block::CodeBlock { .. } | Block::ThematicBreak { .. } => {}
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
+            | Block::ReferenceDefinition { .. } => {}
         }
     }
 }
@@ -933,7 +936,9 @@ fn blocchi_di_inline(blocks: &[Block]) -> Vec<(Span, Span)> {
                         }
                     }
                 }
-                Block::CodeBlock { .. } | Block::ThematicBreak { .. } => {}
+                Block::CodeBlock { .. }
+                | Block::ThematicBreak { .. }
+                | Block::ReferenceDefinition { .. } => {}
             }
         }
     }

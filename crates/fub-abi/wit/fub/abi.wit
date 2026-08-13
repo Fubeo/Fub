@@ -334,6 +334,19 @@ interface model {
         anchor: option<string>,
         span: span,
     }
+    /// Una reference definition CommonMark: `[etichetta]: destinazione "titolo"`.
+    /// È metadata — dichiara il bersaglio di un `[a][etichetta]` — e comrak la
+    /// consuma senza lasciare un nodo nell'AST: senza questo caso la riga
+    /// spariva dal modello e la prima riscrittura la cancellava dal file.
+    /// `url` è la destinazione nuda (le `<…>` si normalizzano) e `title` il
+    /// titolo senza i delimitatori; non entra nel testo piatto.
+    record block-reference-definition {
+        label: string,
+        url: string,
+        title: option<string>,
+        anchor: option<string>,
+        span: span,
+    }
     variant block {
         heading(block-heading),
         paragraph(block-paragraph),
@@ -343,6 +356,7 @@ interface model {
         thematic-break(block-thematic-break),
         custom(block-custom),
         table(block-table),
+        reference-definition(block-reference-definition),
     }
 
     /// Il corpo del documento: arena dei nodi + radici in ordine di lettura.
