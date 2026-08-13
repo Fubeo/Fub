@@ -1844,7 +1844,9 @@ fn definizioni_da_fetta(
                     url_inizio,
                     titolo_inizio,
                 } = d;
-                pos += fine;
+                // `fine` è già un offset assoluto nella fetta: sommarlo a
+                // `pos` raddoppia quanto consumato dalla seconda definizione.
+                pos = fine;
                 // La decodifica degli escape e delle entità, con la base nel
                 // sorgente: la stessa regola dei link.
                 let url = decodifica_segmento(source, &def.url, base + url_inizio);
