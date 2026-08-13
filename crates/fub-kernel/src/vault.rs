@@ -711,10 +711,31 @@ impl Vault {
     /// che l'ha cestinata; se un giorno il sidecar porterà qualcosa che il
     /// degrado non sa rifare, quel campo sarà da scrivere.
     fn trash_sidecar(&self, trashed: &DocId, stat: &Stat) -> Option<TrashSidecar> {
-        let raw = self.storage.read(&self.trash_sidecar_path(trashed)).ok()?;
-        let sidecar: TrashSidecar = serde_json::from_slice(&raw).ok()?;
+        self.read_trash_sidecar(trashed, stat).ok().flatten()
+    }
+
+    /// Legge un sidecar distinguendo la sua assenza da un guasto del supporto.
+    ///
+    /// L'elenco del cestino usa il degrado discreto di [`Self::trash_sidecar`];
+    /// un'operazione distruttiva deve invece far risalire il guasto, altrimenti
+    /// scambierebbe un censimento incompleto per un cestino vuoto.
+    fn read_trash_sidecar(&self, trashed: &DocId, stat: &Stat) -> Result<Option<TrashSidecar>> {
+        let path = self.trash_sidecar_path(trashed);
+        let raw = match crate::error::se_c_e(self.storage.read(&path)).map_err(|source| {
+            KernelError::Io {
+                path: path.clone(),
+                source,
+            }
+        })? {
+            Some(raw) => raw,
+            None => return Ok(None),
+        };
+        let sidecar = match serde_json::from_slice::<TrashSidecar>(&raw) {
+            Ok(sidecar) => sidecar,
+            Err(_) => return Ok(None),
+        };
         if sidecar.v != SCHEMA_VERSION {
-            return None;
+            return Ok(None);
         }
         // **Un sidecar che parla di un altro file vale come un sidecar che non
         // c'è**: stessa regola della versione che non si conosce, e stesso
@@ -725,9 +746,9 @@ impl Vault {
             mtime: stat.mtime,
         };
         if sidecar.file.is_some_and(|f| f != stamp) {
-            return None;
+            return Ok(None);
         }
-        Some(sidecar)
+        Ok(Some(sidecar))
     }
 
     /// Il contenuto del cestino, dal più recente al più vecchio.
@@ -875,23 +896,27 @@ impl Vault {
     /// sidecar valido può quindi essere una cestinatura ancora in corso in
     /// un'altra finestra. Quella voce resta dov'è; il sidecar è il marcatore che
     /// rende distruttibile la sola fotografia già completata.
-    fn voci_censite_del_cestino(&self, dir: &Utf8Path, out: &mut Vec<(Utf8PathBuf, Utf8PathBuf)>) {
-        let Ok(voci) = self.storage.list(dir) else {
-            return;
-        };
+    fn voci_censite_del_cestino(
+        &self,
+        dir: &Utf8Path,
+        out: &mut Vec<(Utf8PathBuf, Utf8PathBuf)>,
+    ) -> Result<()> {
+        let voci = self.storage.list(dir).map_err(|source| KernelError::Io {
+            path: dir.to_owned(),
+            source,
+        })?;
         for voce in voci {
             if voce.stat.is_dir() {
-                self.voci_censite_del_cestino(&voce.path, out);
+                self.voci_censite_del_cestino(&voce.path, out)?;
                 continue;
             }
-            let Ok(id) = self.doc_id_for_path(&voce.path) else {
-                continue;
-            };
-            if self.trash_sidecar(&id, &voce.stat).is_some() {
+            let id = self.doc_id_for_path(&voce.path)?;
+            if self.read_trash_sidecar(&id, &voce.stat)?.is_some() {
                 let sidecar = self.trash_sidecar_path(&id);
                 out.push((voce.path, sidecar));
             }
         }
+        Ok(())
     }
 
     /// Svuota il cestino e restituisce quante voci ha cancellato.
@@ -908,7 +933,7 @@ impl Vault {
         let dir = self.root.join(TRASH_DIR);
         let mut censite = Vec::new();
         if self.storage.exists(&dir) {
-            self.voci_censite_del_cestino(&dir, &mut censite);
+            self.voci_censite_del_cestino(&dir, &mut censite)?;
         }
         let mut quante = 0;
         for (path, sidecar) in &censite {
