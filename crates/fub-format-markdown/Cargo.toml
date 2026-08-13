@@ -8,6 +8,7 @@ description = "Il primo FormatProvider nativo: markdown in stile Obsidian (comra
 
 [dependencies]
 comrak = "0.54.0"
+entities = "1.0.1"
 fub-abi = { workspace = true }
 fub-sdk = { workspace = true }
 serde = { workspace = true }
