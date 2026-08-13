@@ -35,13 +35,11 @@
 ## 2.2 Modello dati
 
 - [ ] Note in `.md` UTF-8
-- [ ] Frontmatter YAML
 - [ ] Frontmatter TOML opzionale
 - [ ] Frontmatter JSON opzionale
 - [ ] Metadata inline opzionali
 - [ ] Block ID stabili
 - [ ] Heading ID stabili
-- [ ] Alias
 - [ ] UUID opzionale per nota
 - [ ] Timestamp creazione/modifica
 - [ ] Sidecar file opzionali
@@ -49,14 +47,9 @@
 - [ ] Vault come cartella semplice
 - [ ] Vault multipli
 - [ ] Impostazioni per-vault
-- [ ] Impostazioni globali
 - [ ] Profili utente
 - [ ] Configurazione esportabile
 - [ ] Configurazione importabile
-- [ ] Portable mode
-- [ ] Config nella cartella vault
-- [ ] Config esterna opzionale
-- [ ] Nessun percorso hardcoded obbligatorio
 
 ## 2.3 File system edge cases
 

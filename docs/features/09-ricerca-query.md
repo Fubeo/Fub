@@ -74,6 +74,7 @@ ricerca peggiore.
 - [ ] Ricerca fonetica opzionale
 - [ ] Ricerca senza connessione
 - [ ] Indice ricostruibile
+- [ ] Stato dell'indicizzazione visibile mentre si cerca
 - [ ] Esclusione cartelle dalla ricerca
 - [ ] Esclusione termini
 - [ ] Recent searches

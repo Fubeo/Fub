@@ -84,8 +84,6 @@
 - [ ] Eventi da note
 - [ ] Eventi da task
 - [ ] Eventi da proprietà data
-- [ ] Import iCal
-- [ ] Export iCal
 - [ ] Promemoria calendario
 - [ ] Timezone management
 - [ ] World clock
@@ -106,6 +104,7 @@
 ## 10.5 Notifiche e promemoria
 
 - [ ] Notification center
+- [ ] Click su una notifica apre il documento o il task collegato
 - [ ] Notifiche desktop
 - [ ] Notifiche mobile
 - [ ] Notifiche email opzionali

@@ -30,10 +30,7 @@
 
 ## 5.2 Estensioni Markdown
 
-- [ ] Wikilink
 - [ ] Wikilink con alias
-- [ ] Link a heading
-- [ ] Link a blocco
 - [ ] Embed di note
 - [ ] Embed di blocchi
 - [ ] Embed di heading
@@ -44,8 +41,6 @@
 - [ ] Embed canvas
 - [ ] Embed database
 - [ ] Embed query
-- [ ] Tag
-- [ ] Tag annidati
 - [ ] Footnotes
 - [ ] Definition list
 - [ ] Abbreviazioni
@@ -62,7 +57,6 @@
 - [ ] TOC automatica
 - [ ] Indici personalizzati
 - [ ] Citazioni bibliografiche
-- [ ] Supporto BibTeX
 - [ ] Supporto CSL
 - [ ] Variabili documento
 - [ ] Conditional content opzionale
