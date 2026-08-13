@@ -3796,9 +3796,9 @@ impl Workspace {
         self.migrate_doc_data(from, to);
         // **E la bozza non salvata** (§15.2), che sta accanto ai due di sopra
         // per la ragione dei due di sopra e con un motivo in più: una bozza è
-        // l'**unica** copia di ciò che l'utente ha scritto. Chi rinomina una
-        // nota mentre il suo buffer è sporco non deve poter perdere il testo
-        // per essere passato dal nome nuovo.
+        // l'**unica** copia di ciò che l'utente ha scritto. Se `to` ne ha già
+        // una sua, quella di `from` prende un nome di recupero e si elenca
+        // come orfana: niente si sovrascrive, e niente resta sotto l'id morto.
         if let Err(e) = self.drafts.migrate(from, to) {
             self.organization.warn(format!(
                 "la bozza non salvata di {from} non ha potuto seguire la \

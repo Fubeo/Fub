@@ -22,6 +22,7 @@
 //!    che `finish_index` applicava già al suo vicino di tre righe sopra.
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::Revision;
 use fub_abi::error::FormatError;
 use fub_abi::event::{Event, Notice};
 use fub_abi::format::{
@@ -29,6 +30,7 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
+use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_abi::FormatProvider;
 use fub_kernel::{FormatRegistry, Subscription, Workspace};
 
@@ -214,6 +216,81 @@ fn una_rinomina_fatta_ad_app_chiusa_si_riconosce_dallimpronta() {
         Some("📌"),
         "e l'organizzazione del kernel, che passa dalla stessa funzione"
     );
+}
+
+#[test]
+fn una_rinomina_che_trova_una_bozza_alla_destinazione_non_sotterra_la_sorgente() {
+    // La destinazione del ricongiungimento ha già una bozza sua: `b.txt` è una
+    // nota mai salvata, e la sua bozza è l'unica copia di quel testo — quindi
+    // quella di `a.txt` non può diventare la bozza di `b.txt` senza cancellare
+    // il testo di qualcun altro. Ma non deve nemmeno restare sotto `a.txt`,
+    // un nome che non esiste più e che nessun recupero ritrova: prende un
+    // **nome di recupero** libero, che decodifica in un documento che
+    // l'anagrafe non conosce — la bozza si elenca come orfana, una sola, e la
+    // destinazione resta intatta.
+    let f = Fixture::new();
+    f.write("a.txt", "il contenuto che si sposta");
+    let mut ws = f.apri();
+    ws.save_draft(
+        &DocId::new("a.txt"),
+        "il testo non salvato di a",
+        Some(Revision::of("l'impronta di quando il buffer è partito")),
+    )
+    .expect("bozza");
+    ws.save_draft(&DocId::new("b.txt"), "il testo non salvato di b", None)
+        .expect("bozza");
+    drop(ws);
+
+    // Il client di sync, o il Finder, mentre Fub è chiuso.
+    f.rename("a.txt", "b.txt");
+
+    let ws = f.apri();
+    assert!(
+        bozza_di(&ws, "a.txt").is_none(),
+        "sotto l'id morto non resta niente"
+    );
+    assert_eq!(
+        bozza_di(&ws, "b.txt").as_deref(),
+        Some("il testo non salvato di b"),
+        "la bozza che era già lì non si è sovrascritta"
+    );
+    assert_eq!(
+        bozza_di(&ws, "a~recupero.txt").as_deref(),
+        Some("il testo non salvato di a"),
+        "e quella che non è potuta atterrare è comparsa nel recupero — con \
+         l'estensione del documento conservata — col testo e la base intatti"
+    );
+    let bozze = ws.drafts().expect("bozze");
+    assert_eq!(
+        bozze.drafts.len(),
+        2,
+        "una bozza per identità: il testo si sposta una volta sola, e non si \
+         duplica"
+    );
+    // L'orfana: il nome di recupero decodifica in un documento che l'anagrafe
+    // non conosce — è la condizione che il pannello di recupero chiama
+    // «orfana» (esiste: falso), cioè la forma che offre.
+    match ws.query_index(IndexQuery::Drafts { page: None }) {
+        Ok(IndexResult::Drafts(page)) => {
+            let orfana = page
+                .items
+                .iter()
+                .find(|d| d.doc == DocId::new("a~recupero.txt"))
+                .expect("la bozza di recupero è nell'elenco");
+            assert!(
+                !orfana.exists,
+                "il documento `a~recupero.txt` non esiste: la bozza si offre \
+                 come orfana"
+            );
+            assert_eq!(
+                orfana.base,
+                Some(Revision::of("l'impronta di quando il buffer è partito")),
+                "e la base — ciò che permette di dire «il file è cambiato \
+                 sotto» — ha seguito il testo"
+            );
+        }
+        altro => panic!("la query delle bozze ha risposto {altro:?}"),
+    }
 }
 
 #[test]
