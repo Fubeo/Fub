@@ -759,3 +759,19 @@ fn una_reference_definition_resta_un_blocco_a_se_per_tutto_il_giro() {
         "[r]: nota.md \"titolo\"\n"
     );
 }
+
+#[test]
+fn due_reference_definition_consecutive_non_superano_la_fetta() {
+    let sorgente = "[a]: uno.md\n[b]: due.md\nresto\n";
+    let model = parse(sorgente);
+
+    assert!(matches!(
+        model.body.as_slice(),
+        [
+            Block::ReferenceDefinition { label: a, .. },
+            Block::ReferenceDefinition { label: b, .. },
+            Block::Paragraph { .. }
+        ] if a == "a" && b == "b"
+    ));
+    assert_eq!(serialize(&model), "[a]: uno.md\n\n[b]: due.md\n\nresto\n");
+}
