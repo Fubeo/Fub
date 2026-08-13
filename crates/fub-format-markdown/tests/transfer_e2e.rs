@@ -866,6 +866,11 @@ fn specie_dei_blocchi(bs: &[Block]) -> Vec<String> {
                 fuori.push(format!("blocco codice {lang:?} {code:?}"))
             }
             Block::ThematicBreak { .. } => fuori.push("blocco riga".to_string()),
+            Block::ReferenceDefinition {
+                label, url, title, ..
+            } => fuori.push(format!(
+                "blocco definizione riferimento {label:?} {url:?} {title:?}"
+            )),
             Block::List { ordered, items, .. } => {
                 fuori.push(format!("blocco lista ordinata={ordered}"));
                 for it in items {
@@ -960,7 +965,9 @@ fn sposta(d: &mut DocumentModel, delta: usize) {
                         dentro_i_blocchi(&mut it.blocks, delta);
                     }
                 }
-                Block::CodeBlock { span, .. } | Block::ThematicBreak { span, .. } => s(span, delta),
+                Block::CodeBlock { span, .. }
+                | Block::ThematicBreak { span, .. }
+                | Block::ReferenceDefinition { span, .. } => s(span, delta),
                 Block::Quote { blocks, span, .. } | Block::Custom { blocks, span, .. } => {
                     s(span, delta);
                     dentro_i_blocchi(blocks, delta);

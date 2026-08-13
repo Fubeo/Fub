@@ -1379,6 +1379,23 @@ fn block_case(b: &arena::Block) -> Case {
                 ("span", wit(span)),
             ],
         ),
+        arena::Block::ReferenceDefinition {
+            label,
+            url,
+            title,
+            anchor,
+            span,
+        } => case_rec(
+            "reference-definition",
+            "block-reference-definition",
+            vec![
+                ("label", wit(label)),
+                ("url", wit(url)),
+                ("title", wit(title)),
+                ("anchor", wit(anchor)),
+                ("span", wit(span)),
+            ],
+        ),
     }
 }
 
@@ -2369,6 +2386,13 @@ fn conform(source: &str) -> Result<(), String> {
                 head: None,
                 rows: vec![],
                 align: vec![],
+                anchor: None,
+                span: sp,
+            }),
+            block_case(&arena::Block::ReferenceDefinition {
+                label: String::new(),
+                url: String::new(),
+                title: None,
                 anchor: None,
                 span: sp,
             }),

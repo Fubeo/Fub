@@ -944,8 +944,12 @@ fn figli_del_blocco(b: &Block, span: Span, source: &str, pretesa: Pretesa) {
             }
             disgiunti(&mut spans, "celle", "una tabella", pretesa);
         }
-        // Non ha figli, e il campo `anchor` non è uno span.
-        Block::CodeBlock { .. } | Block::ThematicBreak { .. } => {}
+        // Non ha figli, e il campo `anchor` non è uno span. Una reference
+        // definition è scalare (etichetta, URL, titolo): non ha span figli da
+        // verificare — il suo span è già quello del blocco.
+        Block::CodeBlock { .. }
+        | Block::ThematicBreak { .. }
+        | Block::ReferenceDefinition { .. } => {}
     }
 }
 
@@ -1039,7 +1043,11 @@ fn raccogli_blocchi(
                     }
                 }
             }
-            Block::CodeBlock { .. } | Block::ThematicBreak { .. } => {}
+            // Una reference definition non porta né heading, né link, né tag:
+            // è indirizzo, non prosa — e non deve entrare nelle tabelle piatte.
+            Block::CodeBlock { .. }
+            | Block::ThematicBreak { .. }
+            | Block::ReferenceDefinition { .. } => {}
         }
     }
 }
@@ -1125,6 +1133,18 @@ fn bom_nei_blocchi(b: &Block, controlla: &impl Fn(&str, &str)) {
             }
         }
         Block::CodeBlock { code, .. } => controlla("un blocco di codice", code),
+        // Una definizione è tre stringhe: un BOM dentro etichetta, destinazione
+        // o titolo è un byte che il modello si porta dietro e che la scrittura
+        // riscriverebbe nel mezzo della sintassi.
+        Block::ReferenceDefinition {
+            label, url, title, ..
+        } => {
+            controlla("l'etichetta di una reference definition", label);
+            controlla("l'url di una reference definition", url);
+            if let Some(t) = title {
+                controlla("il titolo di una reference definition", t);
+            }
+        }
         Block::ThematicBreak { .. } => {}
     }
 }

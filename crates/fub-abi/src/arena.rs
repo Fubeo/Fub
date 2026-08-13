@@ -290,6 +290,13 @@ pub enum Block {
         anchor: Option<String>,
         span: Span,
     },
+    ReferenceDefinition {
+        label: String,
+        url: String,
+        title: Option<String>,
+        anchor: Option<String>,
+        span: Span,
+    },
 }
 
 /// [`ui::UiNode`] con i figli sostituiti da indici.
@@ -607,6 +614,19 @@ impl DocumentTree {
                 anchor: anchor.clone(),
                 span: (*span).try_into()?,
             },
+            Block::ReferenceDefinition {
+                label,
+                url,
+                title,
+                anchor,
+                span,
+            } => model::Block::ReferenceDefinition {
+                label: label.clone(),
+                url: url.clone(),
+                title: title.clone(),
+                anchor: anchor.clone(),
+                span: (*span).try_into()?,
+            },
         };
         path.pop();
         Ok(block)
@@ -787,6 +807,19 @@ fn tree_push_block(tree: &mut DocumentTree, b: &model::Block) -> BlockRef {
             head: head.as_ref().map(|r| tree_push_row(tree, r)),
             rows: rows.iter().map(|r| tree_push_row(tree, r)).collect(),
             align: align.clone(),
+            anchor: anchor.clone(),
+            span: (*span).into(),
+        },
+        model::Block::ReferenceDefinition {
+            label,
+            url,
+            title,
+            anchor,
+            span,
+        } => Block::ReferenceDefinition {
+            label: label.clone(),
+            url: url.clone(),
+            title: title.clone(),
             anchor: anchor.clone(),
             span: (*span).into(),
         },

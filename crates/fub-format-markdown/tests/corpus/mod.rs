@@ -141,6 +141,21 @@ pub fn corpus() -> Vec<Caso> {
         caso("softbreak", "una riga\nun'altra\n"),
         caso("linebreak", "una riga  \nun'altra\n"),
         caso("link di riferimento", "[a][rif]\n\n[rif]: nota.md\n"),
+        // Una reference definition non è un paragrafo: comrak la consuma senza
+        // lasciare un nodo, e il parser la recupera dalla sorgente. Se non ci
+        // fosse il recupero, la definizione sparirebbe dal documento alla
+        // prima riscrittura (il serializer non ha nulla da riscrivere).
+        caso("reference definition isolata", "[rif]: nota.md\n"),
+        caso("reference definition con titolo", "[r]: nota.md \"titolo\"\n"),
+        caso(
+            "reference definition e paragrafo misto",
+            "[r]: nota.md\nparagrafo residuo sulla seconda riga\n",
+        ),
+        caso("reference definition dentro una citazione", "> [r]: nota.md\n"),
+        caso(
+            "reference definition adiacenti",
+            "[uno]: a.md\n[due]: b.md \"due\"\n\nil testo che le segue\n",
+        ),
         // --- custom_kind ---
         caso("callout senza titolo", "> [!note]\n> corpo\n"),
         caso("callout con titolo", "> [!warning] Attenzione\n> corpo\n"),

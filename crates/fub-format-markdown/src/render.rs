@@ -114,6 +114,26 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             out.push_str("</blockquote>");
         }
         Block::ThematicBreak { .. } => out.push_str(&format!("<hr{id}>")),
+        Block::ReferenceDefinition {
+            label, url, title, ..
+        } => {
+            // La resa è **visibile** come quella del frontmatter illeggibile:
+            // una definizione è metadata, non prosa, ma un `<div>` vuoto
+            // sarebbe la sparizione muta di una riga che l'utente ha scritto.
+            // Non è un link (`<a>`) e non ha semantica di paragrafo: è un
+            // contenitore con l'etichetta come attributo, e il titolo accanto
+            // alla destinazione, entrambi escapati — dati, non markup.
+            let titolo = title
+                .as_deref()
+                .map(|t| format!(" {}", escape(t)))
+                .unwrap_or_default();
+            out.push_str(&format!(
+                "<div{id} class=\"reference-definition\"{}>{}{}</div>",
+                attr("data-label", label),
+                escape(url),
+                titolo
+            ));
+        }
         Block::Custom {
             custom_kind,
             attrs,
