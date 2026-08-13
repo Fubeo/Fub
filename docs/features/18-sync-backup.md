@@ -67,6 +67,9 @@
 - [ ] Snapshot programmati
 - [ ] Versioning note
 - [ ] Cronologia note
+- [ ] Albero delle versioni (ogni versione mostra le versioni figlie derivate da un ripristino)
+- [ ] Ramificazione della cronologia dopo un ripristino e una nuova modifica
+- [ ] Confronto tra versioni di rami diversi
 - [ ] Diff versioni
 - [ ] Ripristino versione
 - [ ] Checkpoint manuali
