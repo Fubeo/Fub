@@ -83,7 +83,12 @@ pub fn serialize(model: &DocumentModel) -> Result<String, FormatError> {
             })?;
             out.push_str(&yaml);
         }
-        out.push_str("---\n\n");
+        out.push_str("---\n");
+        // La riga vuota separa il frontmatter dal corpo, non è parte del
+        // frontmatter: senza corpo aggiungerebbe un byte a ogni generazione.
+        if !model.body.is_empty() {
+            out.push('\n');
+        }
     }
     for (i, block) in model.body.iter().enumerate() {
         if i > 0 {
