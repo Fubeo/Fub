@@ -187,10 +187,6 @@ impl Apertura {
             why: why.into(),
         });
     }
-
-    fn ha_scartato(&self, id: &DocId) -> bool {
-        self.indice.contains(id)
-    }
 }
 
 /// **La seconda fase dell'apertura, mentre è in corso** (§15.7): cosa resta da
@@ -322,6 +318,17 @@ pub struct ParsedBatch {
     /// salva *una* nota, e buttare le altre novecentonovantanove vorrebbe dire
     /// rileggerle dal disco per niente.
     seen: BTreeMap<DocId, Option<Revision>>,
+}
+
+/// Il risultato di un pezzo di fetta lavorato da un thread: gli stessi campi
+/// di [`ParsedBatch`], ma senza `seen` (che si calcola una volta per tutta la
+/// fetta). Si fondono in [`Workspace::plan_batch`].
+#[derive(Default)]
+struct PlanChunk {
+    letti: Vec<VaultEntry>,
+    ripresi: Vec<(DocId, StoredMeta)>,
+    models: Vec<DocumentModel>,
+    scartati: Vec<(DocId, KernelError)>,
 }
 
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
@@ -1893,10 +1900,73 @@ impl Workspace {
     /// nella 0119 lo diceva `ExternalSync::batch`.
     pub fn plan_batch(&self, work: &mut Indicizzazione) -> ParsedBatch {
         let fetta = work.prossima_fetta();
-        let mut prepared = ParsedBatch::default();
         if fetta.is_empty() {
-            return prepared;
+            return ParsedBatch::default();
         }
+
+        // L'impronta che l'anagrafe dà a ogni voce **adesso**: è ciò che il
+        // piano si porta dietro per accorgersi di essere invecchiato (0119).
+        // Si calcola una volta per tutta la fetta, prima del lavoro parallelo.
+        let seen: BTreeMap<DocId, Option<Revision>> = fetta
+            .iter()
+            .map(|e| (e.id.clone(), self.entry_fingerprint(&e.id)))
+            .collect();
+
+        // La fetta si lavora in parallelo quando ci sono abbastanza documenti
+        // da ripagare i thread: su un vault da 30k file la prima apertura
+        // legge e parsa ogni documento, e farlo in un thread solo la rende
+        // seriale. `thread::scope` presta `&self` ai figli — `docs`,
+        // `entry_store` e `indexes` sono `Sync` — e li aspetta prima di
+        // restituire.
+        let n = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .clamp(1, 8);
+        let docs = &self.docs;
+        let store = &self.entry_store;
+        let indexes = &self.indexes;
+
+        let chunks: Vec<PlanChunk> = if n > 1 && fetta.len() > n {
+            let size = (fetta.len() + n - 1) / n;
+            std::thread::scope(|s| {
+                fetta
+                    .chunks(size)
+                    .map(|c| {
+                        let c = c.to_vec();
+                        s.spawn(move || Self::plan_one_chunk(docs, store, indexes, c))
+                    })
+                    .map(|h| h.join().unwrap())
+                    .collect()
+            })
+        } else {
+            vec![Self::plan_one_chunk(docs, store, indexes, fetta)]
+        };
+
+        let mut prepared = ParsedBatch {
+            seen,
+            ..Default::default()
+        };
+        for c in chunks {
+            prepared.letti.extend(c.letti);
+            prepared.models.extend(c.models);
+            prepared.ripresi.extend(c.ripresi);
+            for (id, why) in c.scartati {
+                work.apertura.scarta(id, why);
+            }
+        }
+        prepared
+    }
+
+    /// Il lavoro di un pezzo di fetta: lettura, impronta, domanda agli indici,
+    /// parse. Ogni pezzo è indipendente e può girare in un `thread::scope`.
+    fn plan_one_chunk(
+        docs: &DocumentStore,
+        store: &EntryStore,
+        indexes: &Indexes,
+        entries: Vec<VaultEntry>,
+    ) -> PlanChunk {
+        let mut out = PlanChunk::default();
+        let mut scartati_idx = BTreeSet::new();
 
         // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
         // dopo un `git checkout` che ha ritimbrato mille file senza cambiarne
@@ -1909,15 +1979,9 @@ impl Workspace {
         // fallirebbe, e la sua impronta si prende sui byte — che per una
         // sorgente di testo è lo stesso numero di prima.
         let mut sources: BTreeMap<DocId, DocumentSource> = BTreeMap::new();
-        prepared.letti.reserve(fetta.len());
-        for mut entry in fetta {
-            // L'impronta che l'anagrafe dà a questa voce **adesso**: è ciò che
-            // il piano si porta dietro per accorgersi di essere invecchiato.
-            prepared
-                .seen
-                .insert(entry.id.clone(), self.entry_fingerprint(&entry.id));
+        for mut entry in entries {
             if entry.fingerprint.is_none() {
-                match self.docs.source_from_disk(&entry.id) {
+                match docs.source_from_disk(&entry.id) {
                     Ok(source) => {
                         entry.fingerprint = Some(Revision::of_bytes(source.bytes()));
                         sources.insert(entry.id.clone(), source);
@@ -1926,10 +1990,13 @@ impl Workspace {
                     // e non si solleva. I guasti si emettono in
                     // `finish_index`, perché `report_trouble` vuole `&mut
                     // self` e qui il prestito è già preso.
-                    Err(why) => work.apertura.scarta(entry.id.clone(), why),
+                    Err(why) => {
+                        scartati_idx.insert(entry.id.clone());
+                        out.scartati.push((entry.id.clone(), why));
+                    }
                 }
             }
-            prepared.letti.push(entry);
+            out.letti.push(entry);
         }
 
         // **La domanda agli indici è per fetta**, come lo è l'alimentazione. Un
@@ -1937,40 +2004,42 @@ impl Workspace {
         // risposta perché gliela si chiede in dieci volte; chiederla una volta
         // sola vorrebbe dire tenere in mano l'elenco intero prima di alimentare
         // il primo documento, che è esattamente ciò che questa voce toglie.
-        let already = self.indexes.up_to_date(&prepared.letti);
+        //
+        // Per fetta di chunk: ogni thread chiede per le proprie voci, e il
+        // risultato è lo stesso — la domanda è per documento.
+        let already = indexes.up_to_date(&out.letti);
 
-        for entry in &prepared.letti {
-            if work.apertura.ha_scartato(&entry.id) {
+        for entry in &out.letti {
+            if scartati_idx.contains(&entry.id) {
                 continue;
             }
-            let remembered = self
-                .entry_store
+            let remembered = store
                 .known(&entry.id)
                 .filter(|known| known.fingerprint == entry.fingerprint)
                 .and_then(|known| known.meta.clone());
             match remembered {
                 Some(meta) if already.contains(&entry.id) => {
-                    prepared.ripresi.push((entry.id.clone(), meta))
+                    out.ripresi.push((entry.id.clone(), meta))
                 }
                 _ => {
                     let source = match sources.remove(&entry.id) {
                         Some(source) => source,
-                        None => match self.docs.source_from_disk(&entry.id) {
+                        None => match docs.source_from_disk(&entry.id) {
                             Ok(source) => source,
                             Err(why) => {
-                                work.apertura.scarta(entry.id.clone(), why);
+                                out.scartati.push((entry.id.clone(), why));
                                 continue;
                             }
                         },
                     };
-                    match self.docs.parse_source(&entry.id, source) {
-                        Ok(model) => prepared.models.push(model),
-                        Err(why) => work.apertura.scarta(entry.id.clone(), why),
+                    match docs.parse_source(&entry.id, source) {
+                        Ok(model) => out.models.push(model),
+                        Err(why) => out.scartati.push((entry.id.clone(), why)),
                     }
                 }
             }
         }
-        prepared
+        out
     }
 
     /// L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
