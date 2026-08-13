@@ -737,6 +737,7 @@ fn convert_inlines<'a>(
         match value {
             NodeValue::Text(s) => {
                 let s: String = s.to_string();
+                let text_base = text_out.len();
                 text_out.push_str(&s);
                 // Tag ed embed si scandiscono sulla FETTA DI SORGENTE del
                 // nodo, non sul testo decodificato: comrak scioglie escape ed
@@ -759,7 +760,7 @@ fn convert_inlines<'a>(
                     }
                     continue;
                 };
-                push_text_features(source, slice, span.start, ctx, acc, &mut out);
+                push_text_features(source, slice, span.start, text_base, ctx, acc, &mut out);
             }
             NodeValue::SoftBreak => {
                 // Un a-capo morbido: la riga continua, e nella resa è uno
@@ -968,16 +969,17 @@ fn convert_inlines<'a>(
 ///
 /// `slice` è la fetta di **sorgente** del nodo, `base` il suo offset in byte:
 /// la scansione avviene lì, perché gli `Span` prodotti sono offset nel
-/// sorgente e lì gli escape sono ancora visibili. `decoded` è il testo come lo
-/// consegna comrak, ed è ciò che si emette come `Inline::Text` quando il
-/// frammento non contiene feature — così la resa mostra `#` e `&`, non `\#` e
-/// `&amp;`. (Nei rari segmenti misti — escape E tag nello stesso nodo — il
-/// testo fra le feature resta quello del sorgente: più fedele alla
-/// serializzazione, marginalmente più grezzo a schermo.)
+/// sorgente e lì gli escape sono ancora visibili. Il testo emesso è quello che
+/// comrak avrebbe consegnato — escape ed entità sciolti, così la resa mostra
+/// `#` e `&`, non `\#` e `&amp;` — e lo produce [`decodifica_segmento`]
+/// **dalla sorgente**, segmento per segmento: nessun allineamento fra i due
+/// testi, e un'entità resta sciolta in ogni ramo, non ri-codificata dal
+/// render.
 fn push_text_features(
     source: &str,
     slice: &str,
     base: usize,
+    text_base: usize,
     ctx: &ParseContext,
     acc: &mut Acc,
     out: &mut Vec<Inline>,
@@ -992,6 +994,7 @@ fn push_text_features(
         return;
     }
     let mut cursor = 0;
+    let mut nel_testo = text_base;
     for (parentesi, inner) in embeds {
         // Il `!` lo aggiunge allo span [`embed_before`], che è la stessa
         // funzione da cui passa il ramo comrak: qui `find_embeds` consegna le
@@ -1003,18 +1006,20 @@ fn push_text_features(
         let inizio = abs.start - base;
         if inizio > cursor {
             let seg = &slice[cursor..inizio];
+            nel_testo += decodifica_segmento(source, seg, base + cursor).len();
             push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
         }
         let parsed = scan::parse_wikilink_inner(&inner);
         // L'embed testuale sta DENTRO il testo pushato (comrak non l'ha
-        // riconosciuto, quindi i suoi byte sono testo): la posizione è quella
-        // della fetta di sorgente, che coincide col testo fintanto che non ci
-        // sono entità da decodificare davanti — e se ce ne sono, la finestra
-        // si centra male ma la regola normalizza i confini senza mai panicare.
+        // riconosciuto, quindi i suoi byte sono testo). La sua posizione vive
+        // nel testo del blocco, non nella fetta di sorgente: somma la base del
+        // nodo e le lunghezze già decodificate, perché markup precedente,
+        // escape ed entità rendono i due sistemi di coordinate diversi.
         // L'alias di un embed è dell'autore quanto quello di un link, e finché
         // questa strada passava `None` senza guardarlo un `![[Nota|Alias]]`
         // rientrava dal giro come `![[Nota]]`.
         let label = parsed.alias.map(|a| vec![Inline::Text(a)]);
+        let scritto = decodifica_segmento(source, &slice[inizio..abs.end - base], abs.start).len();
         push_link(
             acc,
             out,
@@ -1022,8 +1027,9 @@ fn push_text_features(
             label,
             embed,
             abs,
-            (abs.start - base)..(abs.end - base),
+            nel_testo..nel_testo + scritto,
         );
+        nel_testo += scritto;
         cursor = abs.end - base;
     }
     if cursor < slice.len() {
@@ -1131,7 +1137,11 @@ fn is_entity_hash(text: &str, idx: usize) -> bool {
 }
 
 /// Segmento senza embed: estrae i `#tag` (se abilitati) o emette testo piatto.
-/// `slice`/`decoded`/`base` come in [`push_text_features`].
+///
+/// `slice`/`base` come in [`push_text_features`]. Il testo fra i tag è
+/// **decodificato** — non il sorgente — e lo produce [`decodifica_segmento`]
+/// sulla fetta di sorgente: così un'entità non viene ri-codificata dal render,
+/// e il ramo con i tag fa lo stesso del ramo senza.
 fn push_plain_or_tags(
     source: &str,
     slice: &str,

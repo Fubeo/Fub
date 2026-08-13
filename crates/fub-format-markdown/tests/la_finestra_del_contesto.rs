@@ -60,3 +60,14 @@ fn il_contesto_di_un_blocco_corto_e_il_blocco() {
     assert_eq!(ctx, "Vedi Nota qui.");
     assert!(!ctx.contains('…'));
 }
+
+/// Il ripiego testuale degli embed misura la posizione sul testo decodificato:
+/// markup e caratteri multibyte precedenti non possono produrre un indice interno
+/// al carattere.
+#[test]
+fn un_embed_dopo_testo_multibyte_ha_un_contesto_valido() {
+    let source = "A🎉 [[Altra]], ![[Nota]] dopo";
+    let doc = parse(source);
+    let link = doc.links.iter().find(|link| link.embed).unwrap();
+    assert_eq!(link.context.as_deref(), Some("A🎉 Altra, ![[Nota]] dopo"));
+}
