@@ -79,6 +79,7 @@ fn casi() -> Vec<(&'static str, &'static str)> {
     vec![
         // --- 0213: il frontmatter presente e senza chiavi -------------------
         ("frontmatter vuoto", "---\n\n---\n\ncorpo\n"),
+        ("solo frontmatter vuoto", "---\n\n---\n"),
         ("frontmatter con chiavi", "---\na: 1\n---\n\ncorpo\n"),
         ("nessun frontmatter", "corpo\n"),
         // --- 0214: l'alias scritto a mano -----------------------------------
