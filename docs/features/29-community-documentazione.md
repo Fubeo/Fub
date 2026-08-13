@@ -30,6 +30,7 @@
 - [ ] Esempi vault
 - [ ] Template starter
 - [ ] Docs offline
+- [ ] Ricerca nella documentazione
 - [ ] Guida introduttiva rapida
 - [ ] Canali di supporto
 - [ ] Changelog e release notes
