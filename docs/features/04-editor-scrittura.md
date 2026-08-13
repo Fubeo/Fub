@@ -46,6 +46,9 @@
 - [ ] Preview sostituzione multipla
 - [ ] Undo/redo illimitato
 - [ ] Cronologia undo per sessione
+- [ ] Storia undo ramificata (dopo annulla e nuova modifica, il ramo precedente resta accessibile)
+- [ ] Navigazione tra i rami della storia undo
+- [ ] Vista ad albero della storia undo del documento
 - [ ] Copia/incolla ricco
 - [ ] Incolla HTML convertito in Markdown
 - [ ] Incolla immagini dagli appunti
