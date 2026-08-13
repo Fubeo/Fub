@@ -55,7 +55,7 @@ use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{BundleInfo, BundleRegistry};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
-use crate::watcher::{VaultWatcher, WatcherFactory};
+use crate::watcher::{ExternalSync, VaultWatcher, WatcherFactory};
 
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
 ///
@@ -661,6 +661,22 @@ impl Host {
             .watcher
             .start(&root, workspace.clone(), watching)
             .map_err(|e| PluginError::Io(e.into()))?;
+
+        // **La finestra fra la scansione e il rilevatore si chiude qui, e non
+        // prima.** La scansione ha fotografato il vault in un istante, e il
+        // rilevatore comincia a guardare adesso: un cambiamento esterno caduto
+        // in mezzo non è nella fotografia e non è ancora guardato, e senza
+        // questa riga nessun evento lo recupererebbe fino alla riapertura.
+        // È la riconciliazione del §15.7, e sta **dopo** `start` per non
+        // competere con la fabbrica sul lucchetto: ciò che vede è ciò che il
+        // rilevatore avrebbe visto se fosse stato acceso prima — il suo primo
+        // lotto, calcolato per differenza ([`ExternalSync::catch_up`]). Un
+        // evento della finestra esce **una volta sola**: chi è immutato non si
+        // legge, e un lotto vero su un path già allineato non trova niente da
+        // fare (l'impronta è la stessa, difetto 0196). Va anche per i vault
+        // senza rilevatore: la finestra c'è per ogni fabbrica.
+        let mut sync = ExternalSync::new(workspace.clone());
+        sync.catch_up();
 
         // Il pool parte **dopo** la scansione e dopo il ponte eventi: i job che
         // la scansione ha fatto accodare sono già in coda, e il primo giro del

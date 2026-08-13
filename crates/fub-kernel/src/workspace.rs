@@ -2848,6 +2848,70 @@ impl Workspace {
         outcome
     }
 
+    /// **I piani che chiudono la finestra di apertura** (§15.7): ciò che è
+    /// cambiato fra la scansione e l'accensione del rilevatore.
+    ///
+    /// La scansione fotografa il vault in un istante e il rilevatore comincia
+    /// a guardare in un altro; in mezzo — tutta la seconda fase dell'apertura —
+    /// un cambiamento esterno non è nella fotografia e non è ancora guardato,
+    /// e nessun evento lo recuperava fino alla riapertura. Questi piani sono
+    /// la differenza fra i due istanti: chi apre li applica con
+    /// [`sync_path_prepared`](Workspace::sync_path_prepared) appena il
+    /// rilevatore è acceso, e un cambiamento caduto nella finestra esce **una
+    /// volta sola** — con lo stesso attore e lo stesso diritto all'impronta di
+    /// un lotto vero, perché la porta è la stessa ([`plan_sync`]).
+    ///
+    /// L'insieme è **il disco adesso più l'anagrafe della scansione**: un file
+    /// nuovo c'è solo nel disco, uno sparito solo nell'anagrafe, uno riscritto
+    /// sta in entrambi con numeri diversi. Chi è rimasto com'era — stessi
+    /// `size` e `mtime` della camminata di scansione — non si legge: è il salto
+    /// che la cache dei metadati compra (§14.1), e senza di esso ogni apertura
+    /// rileggerebbe il vault intero per dire che non è cambiato niente. Un
+    /// lotto del rilevatore che arrivasse dopo su un path già allineato non
+    /// trova niente da fare: l'impronta in anagrafe è la stessa, e
+    /// `sync_path_prepared` risponde senza parsare (difetto 0196).
+    ///
+    /// I piani si fanno sotto prestito condiviso, come [`plan_sync`], e chi li
+    /// applica lo fa sotto quello esclusivo: è la regola della
+    /// [0119](../../../docs/decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)
+    /// sull'unico sito che le mancava.
+    pub fn plan_catch_up(&self) -> Vec<(Utf8PathBuf, Option<ParsedChange>)> {
+        // La camminata è quella della scansione — stessa politica di
+        // esclusione, stesse specie: elenca i file, non li apre.
+        let Ok(scanned) = self.docs.vault.scan() else {
+            return Vec::new();
+        };
+        let mut paths: BTreeSet<Utf8PathBuf> = BTreeSet::new();
+        let mut sul_disco: BTreeSet<DocId> = BTreeSet::new();
+        for file in scanned.files {
+            let immutato = self
+                .indexes
+                .core
+                .entries
+                .get(&file.id)
+                .is_some_and(|e| e.size == file.size && e.mtime == file.mtime);
+            sul_disco.insert(file.id.clone());
+            if !immutato {
+                paths.insert(self.root().join(file.id.as_str()));
+            }
+        }
+        // Ciò che l'anagrafe aveva e il disco non ha più: un file sparito
+        // nella finestra si toglie, e `plan_sync` risponde `None` per lui —
+        // chi applica rifà la strada intera, che è dove lo sparito si toglie.
+        for id in self.indexes.core.entries.keys() {
+            if !sul_disco.contains(id) {
+                paths.insert(self.root().join(id.as_str()));
+            }
+        }
+        paths
+            .into_iter()
+            .map(|path| {
+                let plan = self.plan_sync(&path);
+                (path, plan)
+            })
+            .collect()
+    }
+
     /// Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
     /// del §9.7. Non cambia ciò che il chiamante riceve: aggiunge un secondo
     /// lettore, che è il vault stesso.
