@@ -839,13 +839,13 @@ impl Vault {
         Ok(())
     }
 
-    /// Le voci del cestino che erano gia complete al censimento.
+    /// Le voci del cestino che erano già complete al censimento.
     ///
     /// `trash` sposta prima il file e scrive il sidecar dopo: un file senza un
-    /// sidecar valido puo quindi essere una cestinatura ancora in corso in
-    /// un'altra finestra. Quella voce resta dov'e; il sidecar e il marcatore che
-    /// rende distruttibile la sola fotografia gia completata.
-    fn voci_censite_del_cestino(&self, dir: &Utf8Path, out: &mut Vec<Utf8PathBuf>) {
+    /// sidecar valido può quindi essere una cestinatura ancora in corso in
+    /// un'altra finestra. Quella voce resta dov'è; il sidecar è il marcatore che
+    /// rende distruttibile la sola fotografia già completata.
+    fn voci_censite_del_cestino(&self, dir: &Utf8Path, out: &mut Vec<(Utf8PathBuf, Utf8PathBuf)>) {
         let Ok(voci) = self.storage.list(dir) else {
             return;
         };
@@ -858,16 +858,17 @@ impl Vault {
                 continue;
             };
             if self.trash_sidecar(&id, &voce.stat).is_some() {
-                out.push(voce.path);
+                let sidecar = self.trash_sidecar_path(&id);
+                out.push((voce.path, sidecar));
             }
         }
     }
 
     /// Svuota il cestino e restituisce quante voci ha cancellato.
     ///
-    /// Si distruggono solo le voci che avevano gia un sidecar valido al
-    /// censimento iniziale. Una `trash` concorrente che ha completato la rename
-    /// ma non ancora la scrittura del sidecar resta quindi reversibile.
+    /// Si distruggono solo le voci che avevano già un sidecar valido al
+    /// censimento iniziale, e si rimuovono solo quei sidecar. Una `trash`
+    /// concorrente resta quindi reversibile con il suo path d'origine intatto.
     ///
     /// Resta una finestra multi-processo non coperta: senza un lock di vault, un
     /// altro processo puo sostituire una voce gia censita fra la verifica del
@@ -880,7 +881,7 @@ impl Vault {
             self.voci_censite_del_cestino(&dir, &mut censite);
         }
         let mut quante = 0;
-        for path in &censite {
+        for (path, sidecar) in &censite {
             // Si distrugge solo questa voce, e solo se c'è ancora: chi l'ha già
             // tolta (un'altra finestra, un sync) non si conta — il risultato
             // che si voleva c'è già. Un guasto vero del supporto risale, perché
@@ -896,18 +897,15 @@ impl Vault {
                 }
             }
             quante += 1;
+            // Il sidecar segue esclusivamente la voce presente nel censimento.
+            crate::error::se_c_e(self.storage.remove(sidecar)).map_err(|e| KernelError::Io {
+                path: sidecar.clone(),
+                source: e,
+            })?;
         }
-        // Il deposito dei sidecar conserva per ora lo sweep precedente: la sua
-        // selezione e una correzione distinta dalla perdita di contenuto.
-        let meta = self.trash_meta_dir();
-        if self.storage.exists(&meta) {
-            self.storage
-                .remove_dir_all(&meta)
-                .map_err(|e| KernelError::Io {
-                    path: meta,
-                    source: e,
-                })?;
-        }
+        // Se nel frattempo è arrivato un sidecar, la cartella non è vuota e
+        // resta intatta; non si esegue più uno sweep globale del deposito.
+        let _ = self.storage.remove_empty_dir(&self.trash_meta_dir());
         tracing::info!(target: "fub.kernel", "cestino svuotato: {quante} voci distrutte");
         Ok(quante)
     }

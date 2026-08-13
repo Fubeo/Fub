@@ -74,6 +74,63 @@ impl VaultStorage for SupportoCheRifiuta {
     }
 }
 
+/// Scrive una nuova voce completa quando lo svuotamento rimuove la prima voce
+/// gia censita: simula un'altra finestra fra distruzione dei file e sweep dei
+/// sidecar.
+struct SupportoCheCestinaNelMezzo {
+    inner: FsStorage,
+    root: Utf8PathBuf,
+    gia_arrivata: std::sync::atomic::AtomicBool,
+}
+
+impl VaultStorage for SupportoCheCestinaNelMezzo {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.inner.read(path)
+    }
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+    fn update(
+        &self,
+        path: &Utf8Path,
+        fondi: fub_kernel::storage::Fusione<'_>,
+    ) -> std::io::Result<()> {
+        self.inner.update(path, fondi)
+    }
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        if !self
+            .gia_arrivata
+            .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.inner
+                .write(&self.root.join(".trash/Arrivata.txt"), b"cestinata adesso")
+                .expect("l'altra finestra cestina");
+            self.inner
+                .write(
+                    &self.root.join(".fub/data/trash/Arrivata.txt.json"),
+                    br#"{"v":1,"original":"progetti/Arrivata.txt"}"#,
+                )
+                .expect("l'altra finestra scrive il sidecar");
+        }
+        self.inner.remove(path)
+    }
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.inner.stat(path)
+    }
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Call {
     Indexed(String),
@@ -837,6 +894,31 @@ fn una_voce_senza_sidecar_al_censimento_non_viene_distrutta() {
         fx.exists(".trash/Arrivata.txt"),
         "la voce con la rename completata ma senza sidecar e stata distrutta"
     );
+}
+
+/// Uno sweep globale dei sidecar non deve cancellare il metadato di una voce
+/// arrivata dopo il censimento dei file da distruggere.
+#[test]
+fn il_sidecar_arrivato_durante_lo_svuotamento_resta() {
+    let fx = Fixture::new();
+    fx.put("Uno.txt", "primo");
+    fx.put("Due.txt", "secondo");
+    let supporto = Arc::new(SupportoCheCestinaNelMezzo {
+        inner: FsStorage,
+        root: fx.root.clone(),
+        gia_arrivata: std::sync::atomic::AtomicBool::new(false),
+    });
+    let mut ws = fx.workspace_su(supporto);
+
+    ws.delete_document(&DocId::new("Uno.txt")).unwrap();
+    ws.delete_document(&DocId::new("Due.txt")).unwrap();
+    assert_eq!(ws.empty_trash().unwrap(), 2);
+
+    let rimaste = ws.list_trash().unwrap();
+    assert_eq!(rimaste.len(), 1);
+    assert_eq!(rimaste[0].id, DocId::new(".trash/Arrivata.txt"));
+    assert_eq!(rimaste[0].original, DocId::new("progetti/Arrivata.txt"));
+    assert!(fx.exists(".fub/data/trash/Arrivata.txt.json"));
 }
 
 #[test]
