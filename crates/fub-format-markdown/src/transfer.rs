@@ -354,7 +354,7 @@ fn fine_del_frontmatter(source: &str, doc_id: &str) -> Option<usize> {
     let Ok(model) = crate::parse::parse_markdown(source, &ParseContext::obsidian(doc_id)) else {
         return None;
     };
-    if model.frontmatter.is_empty() {
+    if !model.frontmatter_present {
         return None;
     }
     match model.body.first() {
