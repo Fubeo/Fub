@@ -101,7 +101,7 @@ vault.
 **Cosa resta scoperto.** Il «caso peggiore» che la voce nominava non lascia un
 difetto aperto: la ritrattazione (`53972d4`) l'aveva già tolto come falso prima
 che questa voce si chiudesse — il prestito esclusivo di `set_setting_for_user`
-(`crates/fub-host/src/session.rs:1082` e `:1100`) non è lì per la scrittura su
+(`crates/fub-host/src/session.rs:1098` e `:1116`) non è lì per la scrittura su
 disco, ma perché scrivere un'impostazione rifà i recinti, pota il registro ed
 emette, e i quattro fratelli che prendono il condiviso non fanno niente di tutto
 questo. Resta il fatto, non il difetto: chi legge quella porta vede un prestito

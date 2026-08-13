@@ -22,7 +22,7 @@ Censimento rifatto a `8581cb0`:
 - l'unico trait che vede passare una mutazione è `EventHandler`
   (`crates/fub-abi/src/traits.rs:3708`), con `subscribed` e `handle`; il secondo
   torna un `Result` che **sembra** un veto e non lo è — il chiamante
-  (`crates/fub-kernel/src/workspace.rs:5501`) ne fa un guasto registrato, col
+  (`crates/fub-kernel/src/workspace.rs:5817`) ne fa un guasto registrato, col
   commento che dice esattamente la semantica: *«l'errore di un handler non deve
   far fallire l'operazione che ha emesso l'evento — ma "non far fallire" non
   vuol dire "non dirlo" (§20.3)»*;

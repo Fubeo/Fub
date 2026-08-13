@@ -613,7 +613,7 @@ legge questo crate, in Rust o nella copia WIT.
 
 **Cosa c'è dentro.** Ventitré moduli più tredici di regole, circa 23 600 righe
 di Rust, e lo stesso contratto una seconda volta in
-**4 072** [conta: wit-righe] righe di WIT. Solo tipi e trait: zero
+**4 102** [conta: wit-righe] righe di WIT. Solo tipi e trait: zero
 implementazioni vere, zero I/O.
 
 | Modulo | Cosa dichiara |
