@@ -234,6 +234,53 @@ impl ExternalSync {
         self.flush();
     }
 
+    /// **Il primo lotto del rilevatore, calcolato per differenza** (§15.7).
+    ///
+    /// Il rilevatore comincia a guardare quando chi apre lo avvia, e la
+    /// scansione ha fotografato il vault **prima**: in mezzo — tutta la seconda
+    /// fase dell'apertura — un cambiamento esterno non è nella fotografia e
+    /// non è ancora guardato, e nessun evento lo recuperava fino alla
+    /// riapertura. Chi apre chiama questo subito dopo `start`, e la finestra si
+    /// chiude: i piani sono la differenza fra il disco adesso e l'anagrafe
+    /// della scansione, e si applicano con la stessa porta dei lotti veri —
+    /// stesso attore, stesso diritto all'impronta. Un cambiamento caduto nella
+    /// finestra esce **una volta sola**: chi è rimasto com'era non si legge
+    /// (la cache dei metadati, §14.1), e un lotto del rilevatore che arrivasse
+    /// dopo su un path già allineato non trova niente da fare (l'impronta è la
+    /// stessa, difetto 0196).
+    ///
+    /// Le tre fasi sono quelle di [`batch`](ExternalSync::batch): leggere e
+    /// parsare sotto prestito condiviso, mutare sotto quello esclusivo, rendere
+    /// durevole da sé. Anche un vault senza rilevatore la chiama: la finestra
+    /// c'è per ogni fabbrica, e ciò che il rilevatore avrebbe visto se fosse
+    /// stato acceso lo vede il workspace stesso.
+    pub fn catch_up(&mut self) {
+        // Fase 1 — i piani, sotto prestito condiviso. Come in `batch`, un piano
+        // `None` sta per i rami che non leggono niente (un file sparito, un
+        // path di un'altra specie, una lettura fallita): la fase 2 li rifà per
+        // intero, dove stavano già.
+        let prepared = {
+            let Ok(ws) = self.workspace.read() else {
+                return;
+            };
+            ws.plan_catch_up()
+        };
+        if prepared.is_empty() {
+            return;
+        }
+        // Fase 2 — la memoria, sotto prestito esclusivo.
+        {
+            let Ok(mut ws) = self.workspace.write() else {
+                return;
+            };
+            for (path, plan) in prepared {
+                let _ = ws.sync_path_prepared(&path, plan);
+            }
+        }
+        // Fase 3 — la durevolezza.
+        self.flush();
+    }
+
     /// Fine del lotto: è il punto tranquillo in cui rendere durevoli gli indici.
     /// Il kernel non sa quando finisce un lotto — lo sa chi il lotto lo ha
     /// formato.

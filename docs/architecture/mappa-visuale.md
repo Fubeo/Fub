@@ -523,7 +523,7 @@ flowchart TB
 | Webview | Uno. Il core lo considera **privilegiato**: per questo `UiNode::Html` è negato al codice non fidato. | [ui-protocol.md](ui-protocol.md) |
 | `VaultSession` | Una per vault aperto, tenute in una mappa. Erano una `Option`, e aprire un vault chiudeva quello aperto. | [session.rs:106](../../crates/fub-host/src/session.rs) |
 | Thread del ponte | Uno per vault, **e solo se c'è un sink**. Dorme su `recv()`: a vault fermo non costa niente. | [bridge.rs:82](../../crates/fub-host/src/bridge.rs) |
-| Thread del rilevatore | Quelli che decide `notify`, dietro la cargo feature `notify-watcher` — che è **accesa di default**. | [watcher.rs:300](../../crates/fub-host/src/watcher.rs) |
+| Thread del rilevatore | Quelli che decide `notify`, dietro la cargo feature `notify-watcher` — che è **accesa di default**. | [watcher.rs:347](../../crates/fub-host/src/watcher.rs) |
 | Thread dei job | **Due** di default per vault, non globali: `DEFAULT_JOB_THREADS`. | [runner.rs:73](../../crates/fub-host/src/runner.rs) |
 | Database | **Nessuno**. | — |
 
