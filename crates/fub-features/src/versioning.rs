@@ -1446,11 +1446,11 @@ impl VersioningHandler {
     /// **Non la chiama più il runner all'apertura** (0154): la fotografia è
     /// diventata copy-on-first-write, e questo metodo resta come unità
     /// riusabile — i test la chiamano a mano per avere lo stato che il gancio
-    /// produce da solo, e la riconciliazione dopo un `Overflow` la riusa per
-    /// chi non ha ancora una storia. Il *quando* e il *cosa* sono policy della
-    /// feature — viveva in `fub-app::open_vault`, poi sull'evento
-    /// `VaultOpened`, poi qui, con la stessa firma di un `Plugin::activate` —
-    /// e il *chi* è il wiring.
+    /// produce da solo. La riconciliazione dopo un `Overflow` passa da
+    /// `sweep(Tutti)`, non da qui: `Tutti` fotografa anche chi non ha storia,
+    /// col dedup. Il *quando* e il *cosa* sono policy della feature — viveva
+    /// in `fub-app::open_vault`, poi sull'evento `VaultOpened`, poi qui, con
+    /// la stessa firma di un `Plugin::activate` — e il *chi* è il wiring.
     pub fn first_snapshot_of_the_vault<'h>(
         &self,
         host: &'h mut (dyn HostApi + 'h),
@@ -1557,10 +1557,8 @@ impl VersioningHandler {
 /// Chi fotografare in una passata sull'intero vault.
 enum Passata {
     /// Solo chi non ha ancora una storia: chi ce l'ha non paga nemmeno una
-    /// lettura. È la passata che la prima fotografia all'apertura usava
-    /// (0154): oggi il copy-on-first-write fotografa per nota, e questa
-    /// variante resta per chi riusa la passata a mano — i test, e la
-    /// riconciliazione dopo un `Overflow` per chi non ha ancora una storia.
+    /// lettura. Resta per chi riusa la passata a mano (i test). La
+    /// riconciliazione dopo un `Overflow` passa da [`Passata::Tutti`].
     SoloNuovi,
     /// Tutti (riconciliazione dopo un `Overflow`): il dedup per contenuto rende
     /// gratis gli immutati, e per gli altri nasce la versione persa.
