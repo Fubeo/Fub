@@ -198,13 +198,12 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     host.open(&v.root).expect("il vault si apre");
     let id = DocId::new("Nota.md");
 
-    // La prima fotografia non sta più dentro `Host::open` (§25.3): la chiama
-    // il runner, prima della prima fetta — l'ordine lo presidia
-    // `la_prima_fotografia_precede_la_prima_fetta`. Qui si aspetta il job, e
-    // la storia esiste già prima che qualcuno scriva.
+    // La prima fotografia non sta più dentro `Host::open` (0154): è
+    // copy-on-first-write, e l'apertura non fotografa niente. La storia
+    // nasce dalla prima scrittura, non dall'apertura.
     host.wait_indexed(None).expect("aspetta l'indicizzazione");
     let before = host.list_versions(None, &id).expect("versioning acceso");
-    assert_eq!(before.len(), 1, "la fotografia dell'apertura");
+    assert_eq!(before.len(), 0, "l'apertura non fotografa più");
 
     {
         let ws = host.workspace(None).unwrap();
@@ -214,12 +213,13 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     }
 
     let after = host.list_versions(None, &id).expect("versioning acceso");
-    assert_eq!(after.len(), 2, "la scrittura ha generato uno snapshot");
+    assert_eq!(after.len(), 2, "la prima scrittura fotografa l'originale");
 
     // Rileggere e ripristinare passano dall'`HostApi` intestato al versioning,
     // non da `std::fs`: è la composizione delle due metà che prima stava
-    // nell'app.
-    let ts = before[0].ts;
+    // nell'app. `list()` è in ordine inverso: la prima voce è il testo nuovo,
+    // la seconda l'originale fotografato prima della sovrascrittura.
+    let ts = after[1].ts;
     assert_eq!(
         host.read_version(None, &id, ts).unwrap(),
         "# Nota\n\nprima\n"
@@ -230,19 +230,18 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
 }
 
-/// **La prima fotografia sta nel runner, prima della prima fetta** (§25.3).
+/// **La prima fotografia è copy-on-first-write** (0154): l'apertura non
+/// fotografa più, e la storia di una nota nasce dalla sua prima scrittura.
 ///
-/// La passata è uscita dalla fase 1: `Host::open` non fotografa più, e la
-/// prima cosa dell'indicizzazione è la passata. Il testimone è il primo
-/// `JobProgress`: la fetta che lo emette sta nella stessa chiamata di
-/// `avanza_apertura` che ha appena consumato la fotografia, quindi quando la
-/// barra si annuncia ogni nota ha già la sua prima versione.
+/// Il testimone è il primo `JobProgress`: quando la barra si annuncia, dopo
+/// `open` e `wait_indexed`, le versioni sono ancora **zero** — la passata
+/// all'apertura non c'è più. Poi la prima scrittura fotografa l'originale, e
+/// la storia ha due voci: quella di prima e quella di adesso.
 ///
-/// Rosso se la chiamata manca, o tarda: finisse dopo le fette (per esempio
-/// accanto a `collect_doc_data`), al primo `JobProgress` le versioni
-/// sarebbero ancora zero.
+/// Rosso se la passata all'apertura tornasse: al primo `JobProgress` le
+/// versioni sarebbero già una.
 #[test]
-fn la_prima_fotografia_precede_la_prima_fetta() {
+fn la_prima_scrittura_fotografa_l_originale() {
     let v = Vault::new();
     for n in 0..50 {
         v.put(&format!("Nota{n:02}.md"), &format!("# Nota {n}\n"));
@@ -281,10 +280,33 @@ fn la_prima_fotografia_precede_la_prima_fetta() {
         let versioni = host.list_versions(None, &id).expect("versioning acceso");
         assert_eq!(
             versioni.len(),
-            1,
-            "{id}: alla prima fetta la fotografia non c'era ancora"
+            0,
+            "{id}: alla prima fetta la fotografia dell'apertura non c'è più"
         );
     }
+
+    // La prima scrittura fotografa l'originale: la storia nasce qui, e ha
+    // due voci — quella di prima e quella di adesso.
+    {
+        let ws = host.workspace(None).unwrap();
+        let mut ws = ws.write().unwrap();
+        ws.write_document(
+            &DocId::new("Nota00.md"),
+            "# Nota 0\n\ncambiata\n",
+            WriteBase::Dictated,
+        )
+        .expect("scrive");
+    }
+    let versioni = host
+        .list_versions(None, &DocId::new("Nota00.md"))
+        .expect("versioning acceso");
+    assert_eq!(versioni.len(), 2, "la prima scrittura fotografa l'originale");
+    assert_eq!(
+        host.read_version(None, &DocId::new("Nota00.md"), versioni[1].ts)
+            .unwrap(),
+        "# Nota 0\n",
+        "l'originale è in storia"
+    );
 }
 
 /// Un sink che accumula: il posto dell'`AppHandle` di Tauri, senza Tauri.

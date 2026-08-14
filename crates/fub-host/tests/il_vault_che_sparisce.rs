@@ -42,14 +42,14 @@ fn aperto_e_sparito(host: &Host) -> (tempfile::TempDir, Utf8PathBuf) {
     std::fs::write(root.join("Nota.md"), "# Nota\n").expect("scrive");
     let root = root.canonicalize_utf8().expect("esiste ancora");
     host.open(&root).expect("si apre");
-    // **Si aspetta il job prima di togliere la cartella** (§25.3). Da quando la
-    // prima fotografia è uscita dalla fase 1 e la chiama il runner, `open`
-    // ritorna mentre qualcuno sta ancora scrivendo dentro `.fub/`, e
-    // `remove_dir_all` che cammina l'albero trova una cartella che si è
-    // ripopolata sotto: `DirectoryNotEmpty`, sette corse su dieci. Non è il
-    // soggetto di questi banchi — il soggetto è cosa resta possibile su una
-    // radice **già** sparita — quindi la sparizione si fa quando il vault è
-    // fermo, non a metà apertura.
+    // **Si aspetta il job prima di togliere la cartella** (§25.3). Da quando
+    // l'indicizzazione è uscita dalla fase 1, `open` ritorna mentre qualcuno
+    // sta ancora scrivendo dentro `.fub/`, e `remove_dir_all` che cammina
+    // l'albero trova una cartella che si è ripopolata sotto:
+    // `DirectoryNotEmpty`, sette corse su dieci. Non è il soggetto di questi
+    // banchi — il soggetto è cosa resta possibile su una radice **già**
+    // sparita — quindi la sparizione si fa quando il vault è fermo, non a
+    // metà apertura.
     host.wait_indexed(None).expect("aspetta l'indicizzazione");
     // Il `TempDir` resta vivo — cancellarlo due volte non è un errore, e
     // tenerlo in mano rende esplicito che è la prova a togliere la cartella,

@@ -639,15 +639,6 @@ impl Host {
             work,
             unread: unread.clone(),
             fine: Arc::clone(&indicizzato),
-            #[cfg(feature = "versioning")]
-            fotografia: versions.as_ref().map(|store| {
-                let handler = fub_features::VersioningHandler::new(store.clone());
-                Box::new(move |ws: &mut Workspace| {
-                    ws.with_host(VERSIONING_ID, |host| {
-                        handler.first_snapshot_of_the_vault(host)
-                    })
-                }) as crate::runner::PrimaFotografia
-            }),
         };
 
         let workspace = Custodia::new("il vault aperto", ws);

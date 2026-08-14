@@ -34,8 +34,10 @@ impl Vault {
     /// esattamente la coppia che tiene l'app — una copia dentro l'handler, una
     /// in mano a chi deve elencare e rileggere le versioni.
     ///
-    /// La prima fotografia la chiama il runner (§25.3); qui, a livello
-    /// kernel, la si chiama a mano dopo `reindex` per avere lo stesso stato.
+    /// La prima fotografia è copy-on-first-write (0154): la chiama il gancio
+    /// del workspace, un istante prima della prima sovrascrittura. Qui, a
+    /// livello kernel, la si chiama a mano dopo `reindex` per avere lo stesso
+    /// stato.
     fn open(&self) -> (Workspace, VersionStore) {
         let mut registry = FormatRegistry::new();
         registry
@@ -58,9 +60,10 @@ impl Vault {
         )
         .expect("registrato");
         ws.reindex().expect("reindex");
-        // La prima fotografia la chiama il runner, prima della prima fetta
-        // (§25.3): qui, a livello kernel, la si chiama a mano dopo reindex per
-        // avere lo stesso stato.
+        // La prima fotografia è copy-on-first-write (0154): la chiama il
+        // gancio del workspace, un istante prima della prima sovrascrittura.
+        // Qui, a livello kernel, la si chiama a mano dopo reindex per avere
+        // lo stesso stato.
         ws.with_host(VERSIONING_ID, |host| {
             handler.first_snapshot_of_the_vault(host)
         })
@@ -289,7 +292,8 @@ fn the_state_a_note_was_found_in_is_recoverable_after_the_first_edit() {
         .unwrap();
 
     // L'handler gira *dopo* la scrittura e vede solo il testo nuovo: senza la
-    // prima fotografia all'apertura, lo stato originale sarebbe perso.
+    // prima fotografia — qui chiamata a mano, in produzione dal gancio del
+    // workspace (0154) — lo stato originale sarebbe perso.
     let versioni = store.list(&nota);
     assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
     assert_eq!(
