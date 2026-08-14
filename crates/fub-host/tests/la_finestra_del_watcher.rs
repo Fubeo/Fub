@@ -19,7 +19,7 @@
 //! riconciliazione, e nessun'altra riga dell'apertura ha un `DocumentChanged`
 //! per quella nota — la seconda fase alimenta gli indici in silenzio (§15.7).
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -27,12 +27,32 @@ use std::time::{Duration, Instant};
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::event::EventKind;
 use fub_abi::{Event, Notice};
-use fub_host::{Consegna, Custodia, EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
+use fub_host::{
+    Consegna, Custodia, EventSink, ExternalChange, ExternalSync, Host, VaultWatcher, WatcherFactory,
+};
 use fub_kernel::Workspace;
 
-/// La fabbrica che inietta l'evento **dentro la finestra**: il suo `start`
-/// viene chiamato a finestra aperta — la scansione è già finita, il rilevatore
-/// non è ancora acceso — e scrive la nota lì.
+struct FinestraWatcher {
+    handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl VaultWatcher for FinestraWatcher {
+    fn is_watching(&self) -> bool {
+        true
+    }
+}
+
+impl Drop for FinestraWatcher {
+    fn drop(&mut self) {
+        if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
+    }
+}
+
+/// La fabbrica che inietta un cambiamento esterno durante l'apertura:
+/// il rilevatore si avvia prima della scansione, e consegna l'evento
+/// attraverso [`ExternalSync::batch`].
 struct Finestra {
     nota: Utf8PathBuf,
 }
@@ -41,14 +61,20 @@ impl WatcherFactory for Finestra {
     fn start(
         &self,
         _root: &Utf8Path,
-        _workspace: Custodia<Workspace>,
-        _watching: Arc<AtomicBool>,
+        workspace: Custodia<Workspace>,
+        watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String> {
-        // L'evento nella finestra: dopo la scansione (che ha letto «prima»),
-        // prima che il rilevatore guardi. `NoWatcher` è il rilevatore onesto
-        // per chi non guarda: niente debouncer, niente tempi.
-        std::fs::write(&self.nota, "dopo\n").expect("l'evento nella finestra");
-        Ok(Box::new(NoWatcher))
+        watching.store(true, Ordering::Relaxed);
+        let nota = self.nota.clone();
+        let handle = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            std::fs::write(&nota, "dopo\n").expect("l'evento durante l'apertura");
+            let mut sync = ExternalSync::new(workspace);
+            sync.batch(&[ExternalChange::Touched(nota)]);
+        });
+        Ok(Box::new(FinestraWatcher {
+            handle: Some(handle),
+        }))
     }
 }
 
@@ -94,7 +120,9 @@ fn un_evento_nella_finestra_fra_scansione_e_rilevatore_esce_una_volta_sola() {
     let scaduto = Instant::now() + Duration::from_secs(5);
     while Instant::now() < scaduto {
         visti.extend(entrata.try_iter());
-        if visti.iter().any(|n| n.event.kind() == EventKind::JobDone) {
+        if visti.iter().any(|n| n.event.kind() == EventKind::JobDone)
+            && visti.iter().any(|n| matches!(&n.event, Event::DocumentChanged { id, .. } if id.as_str() == "nota.md"))
+        {
             break;
         }
         std::thread::sleep(Duration::from_millis(10));

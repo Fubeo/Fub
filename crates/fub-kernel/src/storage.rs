@@ -1260,7 +1260,7 @@ impl VaultStorage for FsStorage {
     }
 
     fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
-        let mut out = Vec::new();
+        let mut raw_entries = Vec::new();
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path =
@@ -1273,19 +1273,63 @@ impl VaultStorage for FsStorage {
             } else {
                 EntryKind::Other
             };
-            // I metadati si chiedono solo a ciò che si sa già cosa sia. Un
-            // symlink rotto non ne ha, e chiederglieli farebbe fallire
-            // l'elenco intero per una voce che chi cammina salta comunque.
-            let stat = match kind {
-                EntryKind::Other => Stat {
-                    kind,
-                    size: 0,
-                    mtime: 0,
-                },
-                _ => stat_con(kind, &entry.metadata()?),
-            };
-            out.push(DirEntry { path, stat });
+            raw_entries.push((entry, path, kind));
         }
+
+        let n = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .clamp(1, 8);
+
+        let mut out: Vec<DirEntry> = if n > 1 && raw_entries.len() > 256 {
+            let chunk_size = (raw_entries.len() + n - 1) / n;
+            std::thread::scope(|s| {
+                let handles: Vec<_> = raw_entries
+                    .chunks(chunk_size)
+                    .map(|chunk| {
+                        s.spawn(move || -> io::Result<Vec<DirEntry>> {
+                            let mut chunk_out = Vec::with_capacity(chunk.len());
+                            for (entry, path, kind) in chunk {
+                                let stat = match kind {
+                                    EntryKind::Other => Stat {
+                                        kind: *kind,
+                                        size: 0,
+                                        mtime: 0,
+                                    },
+                                    _ => stat_con(*kind, &entry.metadata()?),
+                                };
+                                chunk_out.push(DirEntry {
+                                    path: path.clone(),
+                                    stat,
+                                });
+                            }
+                            Ok(chunk_out)
+                        })
+                    })
+                    .collect();
+
+                let mut combined = Vec::with_capacity(raw_entries.len());
+                for handle in handles {
+                    combined.extend(handle.join().unwrap()?);
+                }
+                Ok::<Vec<DirEntry>, io::Error>(combined)
+            })?
+        } else {
+            let mut sequential_out = Vec::with_capacity(raw_entries.len());
+            for (entry, path, kind) in raw_entries {
+                let stat = match kind {
+                    EntryKind::Other => Stat {
+                        kind,
+                        size: 0,
+                        mtime: 0,
+                    },
+                    _ => stat_con(kind, &entry.metadata()?),
+                };
+                sequential_out.push(DirEntry { path, stat });
+            }
+            sequential_out
+        };
+
         out.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(out)
     }

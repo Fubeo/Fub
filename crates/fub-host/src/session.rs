@@ -55,7 +55,7 @@ use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{BundleInfo, BundleRegistry};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
-use crate::watcher::{ExternalSync, VaultWatcher, WatcherFactory};
+use crate::watcher::{VaultWatcher, WatcherFactory};
 
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
 ///
@@ -604,84 +604,50 @@ impl Host {
         );
         ws.suspend_settings(sospese);
 
-        // **La prima fase, e solo quella** (§15.7): si guarda cosa c'è, e da
-        // qui il vault è utilizzabile. Il `?` che resta riguarda il vault
-        // intero — la scansione — e non i suoi documenti: quelli che non si
-        // leggono diventano scarti, e li raccoglie la seconda fase.
-        //
-        // Ciò che questa riga **non** fa più è leggere, parsare e indicizzare:
-        // è il lavoro che teneva `open` — e con lei l'intera app all'avvio —
-        // ferma per tutto il tempo di camminare il vault.
-        let work = ws.scan_vault().map_err(PluginError::from)?;
-
-        // Ponte eventi kernel → sink (thread dedicato che vive quanto il bus).
-        //
-        // Acceso **dopo** la scansione: gli eventi che `reindex` emette sono il
-        // vault che si popola, non il vault che cambia, e la shell li leggerebbe
-        // come un temporale di modifiche. Il freno e il raggruppamento stanno
-        // dentro il ponte (§10.2, [`crate::bridge`]) e non qui: questa riga
-        // decide *quando* accendere, quella *cosa passa*.
-        if let Some(sink) = &self.sink {
-            crate::bridge::spawn(ws.bus().subscribe(), sink.clone());
-        }
-
-        // **La seconda fase nasce dopo il ponte**, e l'ordine è la sostanza:
-        // `begin_index_job` emette un `JobStarted`, cioè la prima riga del
-        // racconto dell'apertura. Nascendo prima, quella riga sarebbe finita
-        // nello stesso silenzio della scansione — e la shell avrebbe visto un
-        // lavoro progredire e finire senza averlo mai visto cominciare.
-        let index_job = ws.begin_index_job();
-        let unread: Custodia<Vec<UnreadDoc>> = Custodia::vuota("gli scarti dell'apertura");
-        let indicizzato = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
-        let in_corso = crate::runner::InCorso {
-            id: index_job,
-            totale: work.totale(),
-            work,
-            unread: unread.clone(),
-            fine: Arc::clone(&indicizzato),
-        };
-
         let workspace = Custodia::new("il vault aperto", ws);
-        // La bandiera del rilevamento è **del kernel** e la tiene chi guarda
-        // (§9.7): così `Host::is_watching` e `IndexQuery::VaultStatus`
-        // rispondono dallo stesso bit, e non da due idee di com'è andata.
+
+        // Il rilevatore si avvia **prima della scansione**: ogni cambiamento
+        // caduto prima è visto dalla scansione, e ogni cambiamento caduto durante
+        // o dopo entra nella coda del debouncer del rilevatore. La finestra fra
+        // scansione e watcher non esiste più per costruzione, eliminando la
+        // seconda camminata sincrona del disco (`catch_up`).
         let watching = workspace.read()?.watch_flag();
-        // La fabbrica del watcher resta a `String`: è una cucitura interna
-        // dell'host — chi la sostituisce sostituisce un modo di guardare una
-        // cartella, non parla col contratto — e il suo unico fallimento è il
-        // sistema che non concede di guardare. Si nomina qui, una volta.
         let watcher = self
             .watcher
             .start(&root, workspace.clone(), watching)
             .map_err(|e| PluginError::Io(e.into()))?;
 
-        // **La finestra fra la scansione e il rilevatore si chiude qui, e non
-        // prima.** La scansione ha fotografato il vault in un istante, e il
-        // rilevatore comincia a guardare adesso: un cambiamento esterno caduto
-        // in mezzo non è nella fotografia e non è ancora guardato, e senza
-        // questa riga nessun evento lo recupererebbe fino alla riapertura.
-        // È la riconciliazione del §15.7, e sta **dopo** `start` per non
-        // competere con la fabbrica sul lucchetto: ciò che vede è ciò che il
-        // rilevatore avrebbe visto se fosse stato acceso prima — il suo primo
-        // lotto, calcolato per differenza ([`ExternalSync::catch_up`]). Un
-        // evento della finestra esce **una volta sola**: chi è immutato non si
-        // legge, e un lotto vero su un path già allineato non trova niente da
-        // fare (l'impronta è la stessa, difetto 0196). Va anche per i vault
-        // senza rilevatore: la finestra c'è per ogni fabbrica.
-        let mut sync = ExternalSync::new(workspace.clone());
-        sync.catch_up();
+        // **La prima fase, e solo quella** (§15.7): si guarda cosa c'è, e da
+        // qui il vault è utilizzabile. Il `?` che resta riguarda il vault
+        // intero — la scansione — e non i suoi documenti: quelli che non si
+        // leggono diventano scarti, e li raccoglie la seconda fase.
+        let work = workspace.write()?.scan_vault().map_err(PluginError::from)?;
 
-        // Il pool parte **dopo** la scansione e dopo il ponte eventi: i job che
-        // la scansione ha fatto accodare sono già in coda, e il primo giro del
-        // pool li trova lì — drenare prima di aspettare è ciò che rende il
-        // campanello sufficiente. Dopo il ponte anche per un'altra ragione, che
-        // prima non c'era: il progresso dell'indicizzazione è un evento, e
-        // accendere il ponte dopo averla avviata vorrebbe dire perdere le prime
-        // fette proprio del lavoro che questa voce esiste per mostrare.
-        //
-        // E riceve la **seconda fase dell'apertura** insieme ai propri thread:
-        // da questa riga in poi il vault si indicizza da sé, con un progresso e
-        // un pulsante per fermarlo.
+        // Ponte eventi kernel → sink (thread dedicato che vive quanto il bus).
+        if let Some(sink) = &self.sink {
+            let ws = workspace.read()?;
+            crate::bridge::spawn(ws.bus().subscribe(), sink.clone());
+        }
+
+        // **La seconda fase nasce dopo il ponte**, e l'ordine è la sostanza:
+        // `begin_index_job` emette un `JobStarted`, cioè la prima riga del
+        // racconto dell'apertura.
+        let (index_job, work_totale) = {
+            let mut ws = workspace.write()?;
+            let job = ws.begin_index_job();
+            (job, work.totale())
+        };
+        let unread: Custodia<Vec<UnreadDoc>> = Custodia::vuota("gli scarti dell'apertura");
+        let indicizzato = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        let in_corso = crate::runner::InCorso {
+            id: index_job,
+            totale: work_totale,
+            work,
+            unread: unread.clone(),
+            fine: Arc::clone(&indicizzato),
+        };
+
+        // Il pool parte dopo la scansione e riceve la seconda fase dell'apertura.
         let runner = JobRunner::start(
             workspace.clone(),
             registry.clone(),
