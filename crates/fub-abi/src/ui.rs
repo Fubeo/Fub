@@ -234,6 +234,12 @@ impl Localize for TableColumn {
 /// sposta il focus, la selezione e lo scroll insieme alle righe. Deve essere
 /// **stabile** e **unica fra i fratelli**: l'id di un documento, non l'indice
 /// nella lista.
+///
+/// Un nodo **non** dichiara se accetta un rilascio (decisione 0157): il
+/// trascinamento del puntatore (`preferred-size`) non è un bersaglio di drop, e
+/// il drag & drop resta della shell finché non esiste una seconda superficie
+/// che trascina. Il giorno che ci sarà, la forma è un campo in fondo a questo
+/// record (additivo) e il carico nel `payload` di `UiAction`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UiNode {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -785,6 +791,11 @@ impl Localize for ViewUpdate {
 /// Le due metà hanno due proprietari (vedi il doc del modulo): `payload` è ciò
 /// che il provider ha attaccato al nodo, `fields` è ciò che l'utente ha
 /// digitato. Nessuno dei due sovrascrive l'altro.
+///
+/// Se un rilascio un giorno attraversa il confine, il carico sta in `payload`
+/// (decisione 0157): con l'invocazione, non con lo stato — lo stesso canale
+/// che la 0152 ha lasciato aperto per il bersaglio di un clic. Nessun campo
+/// nuovo.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UiAction {
     pub action: ActionId,

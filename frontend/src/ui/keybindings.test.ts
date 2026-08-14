@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+//
 // **La domanda sui conflitti, posta ai due registri insieme.**
 //
 // `commands.test.ts` la faceva già — `expect(conflitti(allCommands()))
@@ -12,7 +14,7 @@
 // quelli della shell da `SHELL_KEYS` — la tabella che esiste apposta perché i
 // pannelli che dichiarano i comandi non si possono importare in un banco senza
 // un `document`.
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { foldKeymap } from "@codemirror/language";
@@ -21,7 +23,9 @@ import { searchKeymap } from "@codemirror/search";
 import type { KeyBinding } from "@codemirror/view";
 import kernelKeys from "../__fixtures__/command-keys.json";
 import { obsidianKeymap } from "../editor/editor-commands";
-import { conflitti, normalizza, prefissiOscurati, type CommandEntry } from "./commands";
+import { conflitti, normalizza, prefissiOscurati, registerShellCommand, resetShellCommands, type CommandEntry } from "./commands";
+import { mountKeyboard } from "./keyboard";
+import { apriVita, type Vita } from "./vita";
 import { SHELL_KEYS } from "./shell-keys.generated";
 
 /// Una voce come la vedono `conflitti` e la tastiera. Titolo e descrizione sono
@@ -101,20 +105,27 @@ describe("gli accordi dei due registri, guardati insieme", () => {
 // finché nessuno li guardava insieme ai primi due, una collisione entrava senza
 // che niente diventasse rosso. Ce ne sono **tre**, misurate e vive: nessun
 // binding di CodeMirror dichiara `stopPropagation`, quindi il tasto risale a
-// `document`, dove `mountKeyboard` lo passa ad `avanza` senza guardare
-// `e.target` — `Ctrl+F` dentro una nota apre il pannello di ricerca dell'editor
-// **e** l'overlay della shell.
+// `document`, dove `mountKeyboard` lo legge. Un tempo lo passava ad `avanza`
+// senza guardare `e.target`, e `Ctrl+F` dentro una nota apriva il pannello di
+// ricerca dell'editor **e** l'overlay della shell. Da 0156 non è più così: il
+// fuoco decide, e dentro l'editor vince l'editor.
 //
 // # Perché questo banco è un lucchetto e non uno zero
 //
-// Le tre collisioni non si riparano qui, e non per pigrizia: ripararle vuol
-// dire rispondere a «quando l'editor ha il fuoco, l'accordo della shell scatta
-// ancora?», che è la §26.1 e non è decisa. Quindi si fa come col contrasto
+// Le tre collisioni non si riparano qui, e non per pigrizia: la domanda che le
+// risolveva — «quando l'editor ha il fuoco, l'accordo della shell scatta
+// ancora?» — era la §26.1, e adesso è decisa (0156): a runtime decide il fuoco,
+// dentro l'editor vince l'editor, fuori vince la shell. Ma il lucchetto resta,
+// perché la domanda di questo banco è un'altra — i **due registri dichiarano
+// ancora gli stessi tre accordi**, e finché li dichiarano insieme serve un
+// posto che ne nomini il litigio, perché una quarta collisione che entrasse
+// domani non ha una voce che la raccoglie. Quindi si fa come col contrasto
 // (`theme/contrast.test.ts`): l'elenco di ciò che è fuori regola sta scritto
 // **per nome**, con accanto chi litiga con chi, ed è rosso nei due versi — una
-// quarta collisione è rossa perché non è in elenco, e una delle tre che sparisce
-// è rossa perché in elenco c'è rimasta. La decisione 0151 dice perché il resto
-// aspetta.
+// quarta collisione è rossa perché non è in elenco, e una delle tre che
+// sparisce è rossa perché in elenco c'è rimasta. Il banco che presidia il
+// runtime sta più sotto: è «chi tiene i tre accordi quando l'editor ha il
+// fuoco», e prova `mountKeyboard`.
 //
 // # La forma letterale non è quella che si cerca
 //
@@ -150,9 +161,10 @@ type Scontro = readonly [canonico: string, dichiarato: string, editor: string];
 
 /// Le tre che ci sono, e nessun'altra. Chi ne aggiunge una quarta la vede qui.
 const SCONTRI_NOTI: readonly Scontro[] = [
-  // `Ctrl+F` è quella che scatta due volte davvero, ed è la prova vivente che
+  // `Ctrl+F` era quella che scattava due volte davvero, ed è la prova che
   // l'evento risale: il pannello di CodeMirror e l'overlay della shell si
-  // aprono insieme.
+  // aprivano insieme. Da 0156 a runtime non scattano più entrambi: decide il
+  // fuoco, e dentro l'editor vince l'editor.
   ["mod-f", "shell.doc.search", "openSearchPanel"],
   ["mod-shift-\\", "shell.pane.split.down", "cursorMatchingBracket"],
   ["mod-shift-l", "shell.mode.live", "selectSelectionMatches"],
@@ -231,5 +243,83 @@ describe("chi tiene `Mod-Shift-f`", () => {
   it("la shell, e `search.open` non ne ha", () => {
     expect(SHELL_KEYS["shell.panel.search"]).toBe("Mod-Shift-f");
     expect((kernelKeys as Record<string, string | null>)["search.open"]).toBeNull();
+  });
+});
+
+// **Chi tiene i tre accordi quando l'editor ha il fuoco** (0156).
+//
+// Il lucchetto di sopra dice che i due registri dichiarano gli stessi tre
+// accordi, e li dichiarano ancora: quello è un fatto di elenchi, e non è
+// cambiato. Questo banco prova il runtime — la decisione che la §26.1 ha
+// preso — e la domanda è una sola: quando il tasto nasce dentro l'editor,
+// `mountKeyboard` lo esegue o si ritira? Lo fa solo per i tre che l'editor
+// monta anche lui, e solo quando non c'è una sequenza in corso; per tutto il
+// resto la shell resta attiva, e con l'editor a fuoco come senza.
+describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
+  const vite: Vita[] = [];
+
+  beforeEach(() => {
+    resetShellCommands();
+    // I tre che l'editor monta anche lui, più uno che l'editor non ha, per
+    // presidiare la metà che resta attiva.
+    registerShellCommand({ id: "shell.doc.search", title: "commands.doc.search", description: "", run: () => {} });
+    registerShellCommand({ id: "shell.pane.split.down", title: "commands.pane.split.down", description: "", run: () => {} });
+    registerShellCommand({ id: "shell.mode.live", title: "commands.mode.live", description: "", run: () => {} });
+    registerShellCommand({ id: "shell.palette", title: "commands.palette", description: "", run: () => {} });
+  });
+
+  afterEach(() => {
+    for (const v of vite) v.chiudi();
+    vite.length = 0;
+    document.querySelectorAll(".cm-editor").forEach((el) => el.remove());
+  });
+
+  function monta(): string[] {
+    const eseguiti: string[] = [];
+    const vita = apriVita();
+    vite.push(vita);
+    mountKeyboard(vita, (entry) => eseguiti.push(entry.id));
+    return eseguiti;
+  }
+
+  function editorAFuoco(): Element {
+    const editor = document.createElement("div");
+    editor.className = "cm-editor";
+    // Un figlio, non l'editor stesso: `e.target` è il nodo più interno, e
+    // `closest` è la domanda che `dentroLEditor` fa.
+    const figlio = document.createElement("span");
+    editor.appendChild(figlio);
+    document.body.appendChild(editor);
+    return figlio;
+  }
+
+  function keydown(target: Element, key: string, modificatori: { shift?: boolean } = {}): void {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key,
+        ctrlKey: true,
+        shiftKey: modificatori.shift ?? false,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }
+
+  it("`Mod-f` nato dentro l'editor non esegue la ricerca della shell", () => {
+    const eseguiti = monta();
+    keydown(editorAFuoco(), "f");
+    expect(eseguiti).toEqual([]);
+  });
+
+  it("lo stesso `Mod-f` nato fuori dall'editor esegue la ricerca della shell", () => {
+    const eseguiti = monta();
+    keydown(document.body, "f");
+    expect(eseguiti).toEqual(["shell.doc.search"]);
+  });
+
+  it("un accordo che l'editor non monta resta attivo anche dentro l'editor", () => {
+    const eseguiti = monta();
+    keydown(editorAFuoco(), "p", { shift: true }); // Mod-Shift-p = shell.palette
+    expect(eseguiti).toEqual(["shell.palette"]);
   });
 });

@@ -894,6 +894,11 @@ async function convertToFolder(id: string): Promise<void> {
 // spostarcela dentro (che è un rename: il kernel sposta il file e riscrive i
 // wikilink). Le cartelle non si spostano: sarebbero N rename, un'operazione
 // che merita di più di un gesto ambiguo.
+//
+// Questo gesto è della shell (decisione 0157): il contratto non dichiara un
+// bersaglio di rilascio, e un terzo non ha una porta finché non esiste una
+// seconda superficie che trascina. Il giorno che ci sarà, la forma è un campo
+// in fondo a `ui-node` e il carico nel `payload` di `ui-action`.
 
 function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder"): void {
   row.draggable = true;

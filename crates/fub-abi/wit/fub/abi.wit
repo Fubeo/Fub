@@ -887,6 +887,13 @@ interface ui {
     /// posizione, e una lista che si riordina sposta il focus e la selezione
     /// insieme alle righe: con i nodi di input, un campo di testo che si svuota
     /// a ogni salvataggio.
+    ///
+    /// Un nodo NON dichiara se accetta un rilascio (decisione 0157): il
+    /// trascinamento del puntatore (`preferred-size`) non è un bersaglio di
+    /// drop, e il drag & drop resta della shell finché non esiste una seconda
+    /// superficie che trascina. Il giorno che ci sarà, la forma è un campo in
+    /// fondo a questo record (additivo) e il carico nel `payload` di
+    /// `ui-action`.
     record ui-node {
         key: option<string>,
         kind: ui-kind,
@@ -903,6 +910,11 @@ interface ui {
     /// il provider ha attaccato al nodo, `fields` ciò che l'utente ha digitato.
     /// Senza la seconda, i nodi di input nascerebbero sopra una convenzione che
     /// nessuno ha scritto.
+    ///
+    /// Se un rilascio un giorno attraversa il confine, il carico sta in
+    /// `payload` (decisione 0157): con l'invocazione, non con lo stato — lo
+    /// stesso canale che la 0152 ha lasciato aperto per il bersaglio di un
+    /// clic. Nessun campo nuovo.
     record ui-action {
         action: action-id,
         payload: json,
@@ -1552,6 +1564,13 @@ interface command {
     /// primo accordo ne porta uno, e uno spazio separa gli accordi di una
     /// sequenza (`"Mod-k d"`). Ciò che quella regola non legge la shell non lo
     /// registra.
+    ///
+    /// Un accordo **non porta un ambito**: nessun campo dice dove vale, perché
+    /// «dove» non è una proprietà del comando ma del fuoco di chi lo premerebbe.
+    /// A runtime lo decide chi ha il fuoco — dentro l'editor vince l'editor,
+    /// fuori vince la shell — e i tasti nudi restano ignorati dal registro
+    /// (0009). Aggiungere un ambito è una mossa additiva, e si farà quando un
+    /// secondo consumatore lo chiederà (0156).
     record command-spec {
         id: string,
         title: text,

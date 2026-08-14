@@ -5,7 +5,7 @@ un gesto funziona — l'app lo compie, per sé — e **non esiste il dato che lo
 dichiara**. Non sono funzionalità mancanti: sono porte mancanti fra un gesto e
 il contratto, e finché non ci sono, ogni gesto nuovo si paga per intero.
 
-**Sei delle otto sono chiuse.** La §26.6 con la
+**Otto delle otto sono chiuse.** La §26.6 con la
 [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md), che ha spaccato
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` finché farlo
 costava sei righe e zero manifest da migrare — era la sola la cui finestra si
@@ -22,8 +22,8 @@ più è additiva quanto il campo. E la §26.2 con la
 nella forma (b) che questa voce raccomandava: i 102 accordi montati sull'editor
 adesso un banco li confronta coi due registri dichiarati, e le tre collisioni
 che ne escono — `mod-f`, `mod-shift-\`, `mod-shift-l` — stanno scritte per nome,
-perché un presidio rosso a tempo indeterminato non è un presidio e a decidere
-chi tiene `Ctrl+F` è la §26.1. E la §26.5 con la
+perché un presidio rosso a tempo indeterminato non è un presidio, e chi tiene
+`Ctrl+F` lo decide il fuoco (0156). E la §26.5 con la
 [0152](../decisions/0152-il-bersaglio-di-un-clic-non-e-uno-stato.md), che ha
 detto **no** al bersaglio del clic dentro `view-context` e ha riparato la
 promessa che il contratto ne faceva: la specie è sbagliata, uno stato che dura
@@ -32,7 +32,18 @@ l'invocazione il giorno che qualcuno lo chieda. E la §26.8 con la
 [0153](../decisions/0153-non-c-e-una-terza-pila.md), che non ha aggiunto una
 terza pila: una view di terzi che vuole il proprio annulla compone comandi, e il
 prezzo di quella strada — `fub:run-command` per ognuna — è il metro che dirà
-quando vale la pena di cambiarla.
+quando vale la pena di cambiarla. E la §26.1 con la
+[0156](../decisions/0156-un-accordo-non-dichiara-un-ambito.md), che ha detto
+**no** al campo `context`: un accordo non dichiara un ambito, il contesto si
+deriva dal fuoco — dentro l'editor vince l'editor, fuori vince la shell — e i
+tasti nudi restano fuori dal registro. Le tre collisioni di 0151 a runtime le
+decide il fuoco, e `SCONTRI_NOTI` resta il lucchetto sugli elenchi. E la §26.7
+con la
+[0157](../decisions/0157-un-rilascio-aspetta-la-seconda-superficie.md), che ha
+detto **no** al campo bersaglio su `ui-node`: il drag & drop resta della shell
+finché non esiste una seconda superficie che trascina, e il vocabolario del
+bersaglio è già quello della 0152 — viaggia con l'invocazione
+(`ui-action.payload`), non con lo stato.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -214,13 +225,18 @@ giorno in cui la seconda arriva e trova la prima già scritta male.
    separabili, e possono restare separate; ciò che non può succedere è che
    arrivino **due vocabolari** per «questo nodo, quello lì». Chi decide la
    seconda usa il nome che ha scelto la prima. (La §26.5(b) chiede in più lo
-   stesso elenco di nomi pubblici del punto 1.)
+   stesso elenco di nomi pubblici del punto 1.) La [0152](../decisions/0152-il-bersaglio-di-un-clic-non-e-uno-stato.md)
+   ha scelto il nome — con l'invocazione, non con lo stato — e la
+   [0157](../decisions/0157-un-rilascio-aspetta-la-seconda-superficie.md) lo
+   riusa: il bersaglio del rilascio viaggerà nel `payload` di `ui-action`, e
+   un nodo non dichiara se accetta un rilascio finché non esiste una seconda
+   superficie che trascina.
 
 ---
 
 ### 26.1 Un accordo ha un contesto, o non ce l'ha
 
-*aperta · strato **contratto** · **P1***
+*chiusa · strato **contratto** · **P1** · [0156](../decisions/0156-un-accordo-non-dichiara-un-ambito.md)*
 
 **1. La domanda.** Una scorciatoia vale **dovunque**, o vale **dove qualcosa ha
 il fuoco**? E se vale in un contesto, chi lo dichiara — il contratto, la shell,
@@ -1112,7 +1128,8 @@ chiede in sette degli otto file:
 
 ### 26.7 Un rilascio si consegna, un bersaglio non si dichiara
 
-*aperta · strato **contratto** · **P1***
+*chiusa · strato **contratto** · **P1** ·
+[0157](../decisions/0157-un-rilascio-aspetta-la-seconda-superficie.md)*
 
 **1. La domanda.** Un nodo dell'albero di una view può dire *«qui si può lasciar
 cadere»*? E se sì, che cosa arriva insieme al rilascio — un `DocId`, un `json`

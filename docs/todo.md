@@ -62,7 +62,7 @@ Sono uscite 152 voci:
 
 Centocinquantadue voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **due** [conta: voci-aperte]. Questo file è il
+Le voci ancora aperte sono **zero** [conta: voci-aperte]. Questo file è il
 loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -179,21 +179,20 @@ Si cercano le voci ponendo domande in questo ordine:
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 3 |
 | **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | **chiusa** — tre voci aperte perché toccavano una firma, e su due delle tre quel criterio non reggeva | — | — |
 | **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | **chiusa** — sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta era già scritta altrove nel repo: [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md), [0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md), [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md), [0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) | — | 2 |
-| **26** | [Otto gesti che l'app fa e nessuno può dichiarare](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) | otto gesti che l'app compie e che **nessun dato dichiara**: in tutti e otto la mossa che li renderebbe dichiarabili il repo l'ha già fatta accanto, su un problema confinante | 7 | 1 |
+| **26** | [Otto gesti che l'app fa e nessuno può dichiarare](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) | otto gesti che l'app compie e che **nessun dato dichiara**: in tutti e otto la mossa che li renderebbe dichiarabili il repo l'ha già fatta accanto, su un problema confinante | 8 | 0 |
 | **27** | [Tre scommesse che nessuno ha ancora provato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md) | tre affermazioni che il freeze rende definitive e che **niente nel repo ha mai esercitato**: il confine WASM, il momento in cui un plugin può intervenire, la dimensione dell'oggetto dietro il lucchetto. Il confine l'ha attraversato la [0146](decisions/0146-il-contratto-attraversa-il-confine.md), e non serviva un motore: `abi.wit` genera i binding guest del mondo intero e compilano a `wasm32`; il momento in cui un plugin può intervenire l'ha deciso la [0147](decisions/0147-il-contratto-osserva-dopo-e-non-si-interpone.md), ed è sempre *dopo*; la dimensione dell'oggetto dietro il lucchetto l'ha decisa la [0148](decisions/0148-un-prestito-lungo-non-si-vieta-si-dice.md), che non la cambia e la fa **dire**: un prestito esclusivo lungo non si vieta perché non si interrompe, e la `Custodia` lo misura per tutti | — | — |
 | **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | **chiusa** — una voce sola, e il soggetto non era il prodotto ma **il ciclo di chi lo scrive**: la [0145](decisions/0145-gli-eseguibili-restano-a-calare-e-quanto-pesa-un-link.md) l'ha chiusa fuori dalle tre forme che proponeva, perché il costo non era il *numero* degli eseguibili ma il *peso* di ognuno | — | — |
 
 ## Le voci
 
-Le voci aperte sono **due** [conta: voci-aperte], e stanno tutte in una
-seduta sola.
+Le voci aperte sono **zero** [conta: voci-aperte].
 
-Sono la [seduta
+È la [seduta
 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) (2026-08-10). La misura
 su 424 gesti in [microfeatures/](microfeatures/) ha rivelato omissioni non
-dichiarate nei dati. Sono tutt'e due di contratto: dopo la
+dichiarate nei dati. È di contratto: dopo la
 [0151](decisions/0151-il-terzo-registro-si-guarda-anche-senza-salire.md) non ne
-resta nessuna di shell. Delle sei chiuse, la
+resta nessuna di shell. Delle otto chiuse, la
 §26.6 era la sola **P0** e la sola che scadesse prima del freeze: l'ha chiusa la
 [0144](decisions/0144-una-spunta-sola-diceva-due-cose.md), spaccando
 `fub:clipboard` in `fub:read-clipboard` e `fub:write-clipboard` prima che un
@@ -210,8 +209,8 @@ l'utente l'accordo lo scrive a mano. La §26.4 l'ha chiusa la
 [0151](decisions/0151-il-terzo-registro-si-guarda-anche-senza-salire.md) con la
 forma che la voce raccomandava: i 102 accordi montati sull'editor adesso un
 banco li guarda, e le tre collisioni che ne escono stanno scritte per nome —
-un lucchetto e non uno zero, perché chi tiene `Ctrl+F` lo decide la §26.1. La
-§26.5 l'ha chiusa la
+un lucchetto e non uno zero, perché chi tiene `Ctrl+F` lo decide il fuoco
+(0156). La §26.5 l'ha chiusa la
 [0152](decisions/0152-il-bersaglio-di-un-clic-non-e-uno-stato.md) con un no al
 bersaglio del clic dentro il contesto di sessione: uno stato che dura non è il
 posto di un fatto vero per un istante, e la promessa che il contratto ne faceva
@@ -220,7 +219,17 @@ campi di `ViewContext` restino quattro. La §26.8 l'ha chiusa la
 [0153](decisions/0153-non-c-e-una-terza-pila.md) senza una terza pila: una view
 di terzi che vuole il proprio annulla compone comandi, e il prezzo di quella
 strada — `fub:run-command` per ognuna — è il metro che dirà quando vale la pena
-di cambiarla. Le dichiarazioni richiedono semplici
+di cambiarla. E la §26.1 l'ha chiusa la
+[0156](decisions/0156-un-accordo-non-dichiara-un-ambito.md) con un no al campo
+`context`: un accordo non dichiara un ambito, il contesto si deriva dal fuoco —
+dentro l'editor vince l'editor, fuori vince la shell — e i tasti nudi restano
+fuori dal registro. Le tre collisioni di 0151 a runtime le decide il fuoco, e
+`SCONTRI_NOTI` resta il lucchetto sugli elenchi. E la §26.7 l'ha chiusa la
+[0157](decisions/0157-un-rilascio-aspetta-la-seconda-superficie.md) senza un
+campo bersaglio su `ui-node`: il drag & drop resta della shell finché non esiste
+una seconda superficie che trascina, e il vocabolario del bersaglio è già quello
+della 0152 — viaggia con l'invocazione (`ui-action.payload`), non con lo stato.
+Le dichiarazioni richiedono semplici
 spostamenti, poiché le mosse sono già risolte per problemi confinanti.
 
 La [seduta 27](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md)
@@ -488,8 +497,6 @@ nessuno è tornato a prendere la casella.
 
 | § | Voce | Seduta | Strato | |
 | --- | --- | --- | --- | --- |
-| **§26.1** | [Un accordo ha un contesto, o non ce l'ha](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#261-un-accordo-ha-un-contesto-o-non-ce-lha) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
-| **§26.7** | [Il trascinamento è un dato, il rilascio no](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#267-un-rilascio-si-consegna-un-bersaglio-non-si-dichiara) | 26. Otto gesti che l'app fa e nessuno può dichiarare | contratto | **P1** |
 
 ## I difetti misurati
 
@@ -526,9 +533,8 @@ decisione **sia** un difetto.
 Il quarto blocco (`0148`–`0150`) proviene dalla [seduta
 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md). Anche qui una riga era
 pronta e non è stata scritta: `Mod-f` è dichiarato due volte, da
-`shell.doc.search` e dalla ricerca di CodeMirror, ma *chi dei due debba tenerlo*
-è precisamente la
-[§26.1](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md#261-un-accordo-ha-un-contesto-o-non-ce-lha).
+`shell.doc.search` e dalla ricerca di CodeMirror, e chi dei due debba tenerlo lo
+decide il fuoco ([0156](decisions/0156-un-accordo-non-dichiara-un-ambito.md)).
 Il quinto blocco (`0151`–`0222`) arriva da una caccia su centodiciannove
 osservazioni. Esclude difetti la cui riparazione richiede decisioni (es.
 `renameat2(RENAME_NOREPLACE)` in `VaultStorage`, o la
@@ -658,7 +664,7 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centocinquantacinque** [conta: verbali], uno per file. Diceva
+  **centocinquantasette** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo

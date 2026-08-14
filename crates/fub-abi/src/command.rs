@@ -119,6 +119,13 @@ pub struct CommandSpec {
     /// spazio separa gli accordi di una **sequenza**: `"Mod-k d"` è due accordi
     /// e una scorciatoia sola. Chi scrive una stringa che quella regola non
     /// legge non riceve un tasto diverso: non ne riceve nessuno.
+    ///
+    /// Un accordo **non porta un ambito**: nessun campo dice dove vale, perché
+    /// «dove» è del fuoco di chi lo premerebbe, non del comando. A runtime lo
+    /// decide chi ha il fuoco — dentro l'editor vince l'editor, fuori vince la
+    /// shell — e i tasti nudi restano ignorati dal registro (0009). Aggiungere
+    /// un ambito è additivo, e si farà quando un secondo consumatore lo
+    /// chiederà (0156).
     pub keybinding: Option<String>,
     /// Gli argomenti, nell'ordine in cui ha senso chiederli.
     pub params: Vec<ParamSpec>,
