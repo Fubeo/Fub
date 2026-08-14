@@ -25,6 +25,15 @@
 //! riga sia rimasta identica il giorno in cui la durabilità è arrivata
 //! ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)) è il
 //! punto: la ragione per cui non stanno qui non è cambiata insieme a loro.
+//!
+//! Il terzo — `il_varco_del_filesystem_ha_solo_i_chiamanti_dichiarati` —
+//! presidia l'eccezione dichiarata della
+//! [0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md):
+//! `plugin_data_dir` consegna a un provider nativo una cartella vera del
+//! filesystem, e la cifratura si ferma lì. Il banco elenca chi la riceve, e un
+//! chiamante nuovo è un varco nuovo che si dichiara prima di esistere.
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use std::sync::Arc;
 
@@ -409,4 +418,183 @@ fn un_vault_intero_su_un_supporto_che_non_e_il_disco() {
         !storage.exists(Utf8Path::new("/vault/.fub/data/trash")),
         "i sidecar se ne vanno col cestino"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Il varco del filesystem (0064): chi riceve una cartella vera dal kernel
+// ---------------------------------------------------------------------------
+
+/// **`plugin_data_dir` ha solo i chiamanti dichiarati qui.**
+///
+/// La [0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md) ha
+/// dichiarato il buco: `plugin_data_dir` consegna a un provider nativo una
+/// vera cartella del filesystem, fuori da `VaultStorage` — lì la cifratura si
+/// ferma. È il varco che tantivy esige (mmappa i segmenti e li rilegge quando
+/// gli pare, anche dai thread di merge), e a M5 l'equivalente per un componente
+/// sarà un preopen WASI sulla stessa radice: un plugin WASM non riceverà mai
+/// una cartella dal kernel.
+///
+/// Un varco dichiarato in un doc non diventa rosso. Questo conto è la metà che
+/// lo diventa: elenca **chi** chiama `plugin_data_dir` in tutto il repo e
+/// pretende che ogni chiamante sia in questa lista, con la sua ragione. Un
+/// chiamante nuovo — un provider che vuole una cartella, un pezzo di kernel
+/// che la consegna — trova un banco che nomina la decisione che sta scavalcando,
+/// e se la decisione è cambiata questo è il file da cambiare per primo.
+///
+/// La lista è per (file, argomento): l'argomento è l'id del provider, cioè chi
+/// riceve la cartella. `SEARCH_ID` è la ricerca — l'unico provider nativo che
+/// mmappa, oggi. `"prova.uno"` è la spia del banco del ciclo di vita
+/// (`disattivazione.rs`), che verifica che `close` scriva davvero nello spazio
+/// dati. `PLUGIN` in `rinomina_lenta.rs` è il banco 0198/0168: non mmappa,
+/// chiede la cartella per posare un byte e vedere se la rinomina spezzata
+/// lo porta dietro. Tutti e tre sono chiamanti legittimi, e per questo
+/// dichiarati — non allargati in silenzio.
+///
+/// Il conto non salta i commenti: una prosa che scrivesse la chiamata per
+/// esteso diventerebbe rossa, ed è il verso innocuo — la si scrive senza
+/// parentesi, come in questo doc.
+const CHIAMANTI: &[(&str, &str, &str)] = &[
+    (
+        "crates/fub-host/src/mount.rs",
+        "SEARCH_ID",
+        "il montaggio della ricerca: l'unico provider nativo che mmappa (oggi)",
+    ),
+    (
+        "crates/fub-features/tests/canale_dati_e2e.rs",
+        "SEARCH_ID",
+        "il banco e2e della ricerca",
+    ),
+    (
+        "crates/fub-features/tests/search_e2e.rs",
+        "SEARCH_ID",
+        "il banco e2e della ricerca",
+    ),
+    (
+        "crates/fub-features/examples/una_ricerca.rs",
+        "SEARCH_ID",
+        "la seduta della ricerca",
+    ),
+    (
+        "crates/fub-kernel/tests/disattivazione.rs",
+        "\"prova.uno\"",
+        "il banco del ciclo di vita: `close` scrive nello spazio dati, e il banco lo verifica",
+    ),
+    (
+        "crates/fub-kernel/tests/rinomina_lenta.rs",
+        "PLUGIN",
+        "il banco 0198/0168: attacca e legge lo spazio per-documento della rinomina spezzata",
+    ),
+];
+
+/// Le cartelle in cui non si entra.
+const NON_SI_ENTRA: &[&str] = &["target", "node_modules", ".git", ".fub"];
+
+fn radice() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// Ogni `.rs` del repo, per percorso relativo alla radice.
+fn sorgenti() -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    cammina(&radice(), "", &mut out);
+    out
+}
+
+fn cammina(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
+    let voci = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("`{}` non si legge: {e}", dir.display()));
+    for voce in voci {
+        let voce = voce.unwrap_or_else(|e| panic!("dentro `{}`: {e}", dir.display()));
+        let nome = voce
+            .file_name()
+            .into_string()
+            .unwrap_or_else(|n| panic!("nome di file non UTF-8: {n:?}"));
+        let percorso = if rel.is_empty() {
+            nome.clone()
+        } else {
+            format!("{rel}/{nome}")
+        };
+        let tipo = voce
+            .file_type()
+            .unwrap_or_else(|e| panic!("`{percorso}`: {e}"));
+        if tipo.is_dir() {
+            if !NON_SI_ENTRA.contains(&nome.as_str()) {
+                cammina(&voce.path(), &percorso, out);
+            }
+        } else if nome.ends_with(".rs") {
+            let src = std::fs::read_to_string(voce.path())
+                .unwrap_or_else(|e| panic!("`{percorso}` non si legge: {e}"));
+            out.insert(percorso, src);
+        }
+    }
+}
+
+/// Chi chiama `plugin_data_dir`, e con quale argomento: `(file, argomento)`.
+fn chiamanti() -> Vec<(String, String)> {
+    // Il pattern è costruito a pezzi, non scritto per esteso: questo file è
+    // nella camminata, e una costante letterale qui dentro sarebbe contata.
+    let ago = [".plugin_data", "_dir("].concat();
+    let mut out = Vec::new();
+    for (file, sorgente) in sorgenti() {
+        for (n, riga) in sorgente.lines().enumerate() {
+            let mut da = 0;
+            while let Some(rel) = riga[da..].find(&ago) {
+                let inizio = da + rel + ago.len();
+                let resto = &riga[inizio..];
+                let fine = resto.find(')').unwrap_or_else(|| {
+                    panic!(
+                        "`{file}:{}` chiama `plugin_data_dir` su più righe: il conto non aggancia",
+                        n + 1
+                    )
+                });
+                let arg = resto[..fine].trim().to_string();
+                out.push((file.clone(), arg));
+                da = inizio + fine + 1;
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn il_varco_del_filesystem_ha_solo_i_chiamanti_dichiarati() {
+    let trovati = chiamanti();
+    let dichiarati: Vec<(String, String)> = CHIAMANTI
+        .iter()
+        .map(|(f, a, _)| (f.to_string(), a.to_string()))
+        .collect();
+    let non_dichiarati: Vec<_> = trovati
+        .iter()
+        .filter(|t| !dichiarati.contains(t))
+        .collect();
+    assert!(
+        non_dichiarati.is_empty(),
+        "{} chiamante/i di `plugin_data_dir` non dichiarato/i:\n  {}\n\n\
+         `plugin_data_dir` è l'UNICO varco del filesystem fuori da `VaultStorage` \
+         (decisione 0064): lì la cifratura si ferma, e chi lo apre deve essere un \
+         provider nativo che mmappa — oggi solo la ricerca. Un chiamante nuovo si \
+         dichiara qui, con la sua ragione, non si aggiunge in silenzio.",
+        non_dichiarati.len(),
+        non_dichiarati
+            .iter()
+            .map(|(f, a)| format!("{f}  ({a})"))
+            .collect::<Vec<_>>()
+            .join("\n  "),
+    );
+}
+
+/// Il test del test: `il_varco_del_filesystem_ha_solo_i_chiamanti_dichiarati`
+/// è verde anche se il cammino non trova niente. Questo banco aggancia: se un
+/// dichiarato sparisse, o se il cammino diventasse cieco, è questo che diventa
+/// rosso — perché un presidio che non aggancia è un presidio che non presidia.
+#[test]
+fn il_conto_aggancia_i_chiamanti_dichiarati() {
+    let trovati = chiamanti();
+    for (file, arg, ragione) in CHIAMANTI {
+        assert!(
+            trovati.contains(&(file.to_string(), arg.to_string())),
+            "il conto non trova `{file}` con argomento `{arg}` ({ragione}): o il \
+             chiamante è sparito, o il cammino non lo vede"
+        );
+    }
 }
