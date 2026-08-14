@@ -86,10 +86,10 @@ impl Subscriber for AperturaSub {
 
     fn new_span(&self, attrs: &Attributes<'_>) -> Id {
         let id = Id::from_u64(self.prossimo.fetch_add(1, Ordering::Relaxed) + 1);
-        self.aperti
-            .lock()
-            .unwrap()
-            .insert(id.clone(), (attrs.metadata().name().to_string(), Instant::now()));
+        self.aperti.lock().unwrap().insert(
+            id.clone(),
+            (attrs.metadata().name().to_string(), Instant::now()),
+        );
         id
     }
 
@@ -224,7 +224,11 @@ fn main() {
         .unwrap_or(1);
     println!(
         "N = {n}, available_parallelism = {parallelismo}, build = {}",
-        if cfg!(debug_assertions) { "debug" } else { "release" }
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        }
     );
 
     let host = Host::new().with_watcher(Box::new(NoWatcher));

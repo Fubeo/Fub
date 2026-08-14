@@ -126,7 +126,9 @@ fn un_file_con_piu_nomi_non_si_sostituisce_dovunque_giri_questo_test() {
     FsStorage.write(&nota, b"prima").unwrap();
 
     let (come, _) = FsStorage
-        .write_con(&nota, b"seconda", true, cosa_c_e, |_, _| NomiDelFile::PiuDiUno)
+        .write_con(&nota, b"seconda", true, cosa_c_e, |_, _| {
+            NomiDelFile::PiuDiUno
+        })
         .unwrap();
 
     assert_eq!(come, ComeScrivere::SulPosto, "l'inode ha altri titolari");
@@ -150,7 +152,9 @@ fn un_conteggio_che_non_si_sa_non_e_un_nome_solo() {
     FsStorage.write(&nota, b"prima").unwrap();
 
     let (come, _) = FsStorage
-        .write_con(&nota, b"seconda", true, cosa_c_e, |_, _| NomiDelFile::Ignoto)
+        .write_con(&nota, b"seconda", true, cosa_c_e, |_, _| {
+            NomiDelFile::Ignoto
+        })
         .unwrap();
 
     assert_eq!(
