@@ -351,7 +351,7 @@ fn set_active_context(
     vault: Option<String>,
 ) -> Result<Vec<String>, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write()?;
+    let ws = ws.read()?;
     Ok(ws.set_active_context(context))
 }
 

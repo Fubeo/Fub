@@ -646,7 +646,7 @@ fn rename_migrates_the_active_document_and_removal_clears_it() {
     // leggono `active_document` si svuotano fino al prossimo cambio nota.
     ws.rename_document(&DocId::new("Nota.lnk"), &DocId::new("Spostata.lnk"))
         .unwrap();
-    assert_eq!(ws.active_document(), Some(&DocId::new("Spostata.lnk")));
+    assert_eq!(ws.active_document(), Some(DocId::new("Spostata.lnk")));
 
     // E una nota rimossa non può restare "attiva".
     ws.remove_document(&DocId::new("Spostata.lnk"));
@@ -716,7 +716,7 @@ fn an_external_rename_migrates_identity_and_emits_renamed() {
     // non la coppia Removed+Changed che spezzerebbe versioning e meta.
     assert!(!ws.documents().contains(&DocId::new("Nota.lnk")));
     assert!(ws.documents().contains(&DocId::new("Spostata.lnk")));
-    assert_eq!(ws.active_document(), Some(&DocId::new("Spostata.lnk")));
+    assert_eq!(ws.active_document(), Some(DocId::new("Spostata.lnk")));
     let eventi: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
     assert!(
         eventi

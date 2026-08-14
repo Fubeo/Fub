@@ -892,6 +892,7 @@ impl Shared {
             // una fetta da fare questo thread non deve nemmeno considerare di
             // dormire.
             if self.avanza_apertura()? {
+                std::thread::yield_now();
                 continue;
             }
             // Il biglietto si prende **prima** di drenare: un job accodato fra

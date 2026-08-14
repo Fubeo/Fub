@@ -323,7 +323,7 @@ impl HostEnv for KernelHost<'_> {
     }
 
     fn active_context(&self) -> Option<ViewContext> {
-        self.ws.active_context().cloned()
+        self.ws.active_context()
     }
 }
 
