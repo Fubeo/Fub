@@ -177,7 +177,7 @@ fn contesto(doc: &str) -> ViewContext {
 #[test]
 fn only_the_views_that_follow_what_changed_are_redrawn() {
     let fx = Fixture::new();
-    let mut ws = fx.workspace();
+    let ws = fx.workspace();
 
     // Primo contesto: prima non ce n'era nessuno, quindi cambia tutto.
     assert_eq!(
@@ -248,7 +248,7 @@ fn deactivating_a_plugin_leaves_the_session_context_alone() {
 
     assert_eq!(
         ws.active_context(),
-        Some(&pubblicato),
+        Some(pubblicato),
         "il contesto è della shell: non se ne va con chi lo leggeva"
     );
 
@@ -263,7 +263,7 @@ fn deactivating_a_plugin_leaves_the_session_context_alone() {
 #[test]
 fn the_shortcut_for_a_single_pane_shell_clears_the_selection() {
     let fx = Fixture::new();
-    let mut ws = fx.workspace();
+    let ws = fx.workspace();
     ws.set_active_context(Some(
         contesto("Nota.md").with_selections(Some(SelectionSet::anchored(Span::new(0, 4), "ciao"))),
     ));
@@ -359,7 +359,7 @@ fn a_rewritten_source_drops_the_selection_under_it() {
     );
     assert_eq!(
         ws.active_document(),
-        Some(&DocId::new("Nota.md")),
+        Some(DocId::new("Nota.md")),
         "il documento resta aperto: a cadere è la posizione, non la nota"
     );
 

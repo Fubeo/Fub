@@ -263,13 +263,28 @@ function voce(path: string): HTMLElement | undefined {
 /// riporterebbe sempre in cima anche quando si sta lavorando su una nota in
 /// fondo.
 function roving(preferita?: string): void {
-  const voci = vociAlbero();
-  if (voci.length === 0) return;
-  const scelta =
-    (preferita !== undefined ? voci.find((v) => v.dataset.path === preferita) : undefined) ??
-    voci.find((v) => v.dataset.path === state.currentDoc) ??
-    voci[0]!;
-  for (const v of voci) v.tabIndex = v === scelta ? 0 : -1;
+  const targetPath = preferita ?? state.currentDoc;
+  let targetLi: HTMLElement | null = null;
+  if (targetPath) {
+    try {
+      targetLi = fileListEl.querySelector<HTMLElement>(
+        `li[role="treeitem"][data-path="${CSS.escape(targetPath)}"]`,
+      );
+    } catch {
+      targetLi = null;
+    }
+  }
+  if (!targetLi) {
+    targetLi = fileListEl.querySelector<HTMLElement>('li[role="treeitem"]');
+  }
+  if (!targetLi) return;
+
+  fileListEl
+    .querySelectorAll<HTMLElement>('li[role="treeitem"][tabindex="0"]')
+    .forEach((li) => {
+      if (li !== targetLi) li.tabIndex = -1;
+    });
+  targetLi.tabIndex = 0;
 }
 
 /// Le frecce dentro l'albero (§12.4).
@@ -546,16 +561,38 @@ function toggleFolder(path: string): void {
 }
 
 function markActive(): void {
+  // Rimuove la classe attiva dai nodi precedentemente selezionati (O(1))
   document
-    .querySelectorAll<HTMLElement>("#files-panel .row.note")
-    .forEach((row) => row.classList.toggle("active", row.title === state.currentDoc));
-  // Qual è la nota aperta è uno **stato**, e va detto anche a chi non vede lo
-  // sfondo cambiare. Sta qui e non in `renderChildren` perché cambiare nota non
-  // ridisegna l'albero: se stesse solo di là, l'annuncio resterebbe sulla nota
-  // di prima fino al primo ridisegno per un'altra ragione.
-  for (const li of vociAlbero()) {
-    if (li.dataset.path === state.currentDoc) li.setAttribute("aria-selected", "true");
-    else li.removeAttribute("aria-selected");
+    .querySelectorAll<HTMLElement>("#files-panel .row.note.active")
+    .forEach((row) => {
+      if (row.title !== state.currentDoc) row.classList.remove("active");
+    });
+  fileListEl
+    .querySelectorAll<HTMLElement>('li[role="treeitem"][aria-selected="true"]')
+    .forEach((li) => {
+      if (li.dataset.path !== state.currentDoc) li.removeAttribute("aria-selected");
+    });
+
+  // Accende il nodo corrispondente al documento attivo (O(1) lookup)
+  if (state.currentDoc) {
+    try {
+      const esc = CSS.escape(state.currentDoc);
+      document
+        .querySelectorAll<HTMLElement>(`#files-panel .row.note[title="${esc}"]`)
+        .forEach((row) => row.classList.add("active"));
+      const li = fileListEl.querySelector<HTMLElement>(
+        `li[role="treeitem"][data-path="${esc}"]`,
+      );
+      if (li) li.setAttribute("aria-selected", "true");
+    } catch {
+      document
+        .querySelectorAll<HTMLElement>("#files-panel .row.note")
+        .forEach((row) => row.classList.toggle("active", row.title === state.currentDoc));
+      for (const li of vociAlbero()) {
+        if (li.dataset.path === state.currentDoc) li.setAttribute("aria-selected", "true");
+        else li.removeAttribute("aria-selected");
+      }
+    }
   }
 }
 

@@ -88,7 +88,7 @@ fn the_view_reads_the_active_docs_outline_from_the_kernel() {
     let vault = Vault::new();
     vault.put("Nota.md", "# Titolo\n\ntesto\n\n## Sezione\n\naltro\n");
     vault.put("Altra.md", "# Estranea\n");
-    let mut ws = vault.open();
+    let ws = vault.open();
 
     // Nessun attivo → segnaposto.
     assert!(titles(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()).is_empty());
@@ -159,7 +159,7 @@ fn segnate(tree: &UiNode) -> Vec<bool> {
 fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
     let vault = Vault::new();
     vault.put("Nota.md", "# Titolo\n\ntesto\n\n## Sezione\n\naltro\n");
-    let mut ws = vault.open();
+    let ws = vault.open();
 
     let doc = DocId::new("Nota.md");
     let cursore = |byte: usize| {

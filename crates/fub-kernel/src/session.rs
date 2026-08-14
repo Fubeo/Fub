@@ -20,6 +20,8 @@
 //! il `Workspace` traduce la maschera in id di view. È deliberato che il
 //! componente non sappia che le view esistono.
 
+use std::sync::RwLock;
+
 use fub_abi::model::DocId;
 use fub_abi::session::{ContextMask, ViewContext};
 
@@ -39,7 +41,7 @@ pub struct Session {
     /// Lo imposta la shell; il kernel non lo deriva né lo inventa. Resta
     /// privato al modulo perché ogni scrittura passa da [`Session::publish`] o
     /// da [`Session::invalidate`], che sono le due sole ragioni per cui cambia.
-    context: Option<ViewContext>,
+    context: RwLock<Option<ViewContext>>,
 }
 
 impl Session {
@@ -49,27 +51,35 @@ impl Session {
     /// quali campi e può decidere cosa ridisegnare. La regola del confronto è
     /// una sola ([`ViewContext::changes`]) e sta nell'abi, perché a M5 un host
     /// diverso deve darne la stessa risposta.
-    pub fn publish(&mut self, context: Option<ViewContext>) -> ContextMask {
-        let changed = match (&self.context, &context) {
+    pub fn publish(&self, context: Option<ViewContext>) -> ContextMask {
+        let mut guard = self.context.write().expect("session context write lock");
+        let changed = match (&*guard, &context) {
             (Some(prima), Some(dopo)) => prima.changes(dopo),
             // Un contesto che appare o sparisce cambia tutto ciò che si può
             // seguire: non c'è un campo per volta da confrontare.
             (None, Some(_)) | (Some(_), None) => ContextMask::all(),
             (None, None) => ContextMask::default(),
         };
-        self.context = context;
+        *guard = context;
         changed
     }
 
     /// Il contesto del pannello con il focus, se la shell ne ha pubblicato uno.
-    pub fn context(&self) -> Option<&ViewContext> {
-        self.context.as_ref()
+    pub fn context(&self) -> Option<ViewContext> {
+        self.context
+            .read()
+            .expect("session context read lock")
+            .clone()
     }
 
     /// Il documento del contesto attivo: la lettura che il kernel usa dove il
     /// pannello non c'entra (rename, rimozione, comodità dei test).
-    pub fn document(&self) -> Option<&DocId> {
-        self.context.as_ref().and_then(|c| c.doc.as_ref())
+    pub fn document(&self) -> Option<DocId> {
+        self.context
+            .read()
+            .expect("session context read lock")
+            .as_ref()
+            .and_then(|c| c.doc.clone())
     }
 
     /// Rimette il contesto in accordo con il vault dopo che il documento che
@@ -81,8 +91,9 @@ impl Session {
     /// dov'era. Cadono **tutte insieme** anche quando sono N, ed è la stessa
     /// cosa che dice il tipo (decisione 0093): a cambiare non è una selezione,
     /// è il testo sotto tutte.
-    pub fn invalidate(&mut self, doc: &DocId, change: ContextChange) {
-        let Some(context) = self.context.as_mut() else {
+    pub fn invalidate(&self, doc: &DocId, change: ContextChange) {
+        let mut guard = self.context.write().expect("session context write lock");
+        let Some(context) = guard.as_mut() else {
             return;
         };
         if context.doc.as_ref() != Some(doc) {

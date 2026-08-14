@@ -170,7 +170,7 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
     // Il giro delle view, sullo stesso workspace: il pannello backlink vede il
     // wikilink di Cucina.md perché il grafo è stato costruito dal `reindex` del
     // montaggio.
-    let mut ws = ws.write().unwrap();
+    let ws = ws.read().unwrap();
     ws.set_active_context(None);
     ws.set_active_document(Some(DocId::new("Rust.md")));
     let tree = ws

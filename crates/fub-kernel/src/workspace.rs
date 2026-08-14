@@ -4607,7 +4607,7 @@ impl Workspace {
     /// ([`ViewContext::changes`]), e a M5 un host diverso avrà la stessa. La
     /// shell resta padrona del *quando* (è lei a pubblicare) e ignara del
     /// *chi* (non conosce gli id delle view).
-    pub fn set_active_context(&mut self, context: Option<ViewContext>) -> Vec<String> {
+    pub fn set_active_context(&self, context: Option<ViewContext>) -> Vec<String> {
         // Il taglio del §8.1 passa qui: la sessione dice *cosa* è cambiato, il
         // workspace traduce la maschera in id di view. È deliberato che il
         // componente non sappia che le view esistono.
@@ -4641,19 +4641,19 @@ impl Workspace {
     /// non tiene una mappa di riquadri e non deve, perché la domanda a cui
     /// risponde — cosa sta guardando l'utente adesso — è una sola per
     /// definizione (vedi la 0078).
-    pub fn set_active_document(&mut self, id: Option<DocId>) -> Vec<String> {
+    pub fn set_active_document(&self, id: Option<DocId>) -> Vec<String> {
         let context = id.map(|id| ViewContext::new(MAIN_PANE).with_doc(Some(id)));
         self.set_active_context(context)
     }
 
     /// Il contesto del pannello con il focus, se la shell ne ha pubblicato uno.
-    pub fn active_context(&self) -> Option<&ViewContext> {
+    pub fn active_context(&self) -> Option<ViewContext> {
         self.session.context()
     }
 
     /// Il documento del contesto attivo: la lettura che il kernel usa dove il
     /// pannello non c'entra (rename, rimozione, comodità dei test).
-    pub fn active_document(&self) -> Option<&DocId> {
+    pub fn active_document(&self) -> Option<DocId> {
         self.session.document()
     }
 
