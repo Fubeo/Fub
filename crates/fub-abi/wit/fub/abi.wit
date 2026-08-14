@@ -1918,8 +1918,10 @@ interface index {
         key: string,
         test: property-test,
     }
-    /// Chi non ha la chiave finisce in fondo in entrambi i versi; a parità vale
-    /// l'ordine dei doc-id, o una risposta paginata non è stabile.
+    /// Chi non ha la chiave finisce in fondo in entrambi i versi. Fra specie
+    /// diverse l'ordine è un rango fisso (numero, data, bool, testo, …) che
+    /// non si ribalta col decrescente. A parità vale l'ordine dei doc-id, o
+    /// una risposta paginata non è stabile.
     record property-sort {
         key: string,
         descending: bool,
