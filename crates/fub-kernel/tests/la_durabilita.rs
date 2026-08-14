@@ -28,7 +28,7 @@
 //! passano da `FsStorage::write_con`, che prende il rilevatore invece di
 //! nominarlo, e da `come_scrivere`, che è pura: i test di questo file che si
 //! compilano ed eseguono su ogni piattaforma sono
-//! **quattordici** [conta: durabilita-su-ogni-piattaforma].
+//! **sedici** [conta: durabilita-su-ogni-piattaforma].
 //! Quel numero è il presidio del presidio: se qualcuno riportasse
 //! questa metà sotto un `#[cfg(…)]` qualunque, il conto scenderebbe e
 //! `check-prosa` diventerebbe rosso — mentre `cargo test` su Windows resterebbe
@@ -126,7 +126,7 @@ fn un_file_con_piu_nomi_non_si_sostituisce_dovunque_giri_questo_test() {
     FsStorage.write(&nota, b"prima").unwrap();
 
     let (come, _) = FsStorage
-        .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::PiuDiUno)
+        .write_con(&nota, b"seconda", true, cosa_c_e, |_, _| NomiDelFile::PiuDiUno)
         .unwrap();
 
     assert_eq!(come, ComeScrivere::SulPosto, "l'inode ha altri titolari");
@@ -150,7 +150,7 @@ fn un_conteggio_che_non_si_sa_non_e_un_nome_solo() {
     FsStorage.write(&nota, b"prima").unwrap();
 
     let (come, _) = FsStorage
-        .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::Ignoto)
+        .write_con(&nota, b"seconda", true, cosa_c_e, |_, _| NomiDelFile::Ignoto)
         .unwrap();
 
     assert_eq!(
@@ -170,7 +170,7 @@ fn un_nome_solo_compra_l_atomicita() {
     FsStorage.write(&nota, b"prima").unwrap();
 
     let (come, _) = FsStorage
-        .write_con(&nota, b"seconda", cosa_c_e, |_, _| NomiDelFile::Uno)
+        .write_con(&nota, b"seconda", true, cosa_c_e, |_, _| NomiDelFile::Uno)
         .unwrap();
 
     assert_eq!(come, ComeScrivere::Sostituendo);
@@ -187,7 +187,7 @@ fn a_un_file_che_non_c_e_non_si_chiede_niente() {
     let chiesto = std::cell::Cell::new(false);
 
     let (come, _) = FsStorage
-        .write_con(&nota, b"prima", cosa_c_e, |_, _| {
+        .write_con(&nota, b"prima", true, cosa_c_e, |_, _| {
             chiesto.set(true);
             NomiDelFile::PiuDiUno
         })
@@ -225,7 +225,7 @@ fn su_un_collegamento_il_conteggio_non_si_chiede() {
     let chiesto = std::cell::Cell::new(false);
 
     let (come, _) = FsStorage
-        .write_con(&collegata, b"seconda", cosa_c_e, |_, _| {
+        .write_con(&collegata, b"seconda", true, cosa_c_e, |_, _| {
             chiesto.set(true);
             NomiDelFile::Uno
         })
@@ -405,6 +405,65 @@ fn i_file_di_fub_passano_dal_supporto() {
     assert!(
         !std::path::Path::new("/vault").exists(),
         "e nessuno dei due ha scritto sul filesystem vero"
+    );
+}
+
+/// Un derivato si scrive con la stessa strada dei documenti — temp+rename,
+/// permessi ereditati, temporaneo tolto — e si rilegge come loro.
+///
+/// È la metà osservabile di [`VaultStorage::write_derived`]: che il file ci sia
+/// e sia quello che si è scritto. Che manchi il `sync_all` — la metà che
+/// distingue la via dalla [`write`](VaultStorage::write) — non si presidia da
+/// qui, come non si presidia il `sync_all` della 0065: è una riga letta in
+/// review, e il suo posto è il commento accanto alla riga.
+#[test]
+fn un_derivato_si_scrive_e_si_rilegge() {
+    let (_tmp, root) = banco();
+    let derivato = root.join(".fub/data/entries.json");
+
+    FsStorage
+        .write_derived(&derivato, br#"{"version":3,"entries":{}}"#)
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read(&derivato).unwrap(),
+        br#"{"version":3,"entries":{}}"#,
+        "il derivato è leggibile come un documento"
+    );
+    assert!(
+        !root.join(".fub/data").read_dir().unwrap().any(|v| {
+            v.unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".entries.json.tmp")
+        }),
+        "e il temporaneo non è rimasto indietro"
+    );
+}
+
+/// La scrittura dei **documenti** paga ancora il prezzo intero: la via derivata
+/// esiste, e la 0065 non deve essersi spenta per farla esistere.
+///
+/// È il presidio che la
+/// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+/// chiedeva: la promessa «o c'è o non c'è» vale per i documenti, e chi li
+/// scrive non deve poter scegliere di non pagarla. Il `sync_all` in sé non si
+/// osserva da un test — è una riga letta in review — ma che la via derivata
+/// non sia finita **sotto** la scrittura dei documenti sì: se un giorno
+/// `write` passasse da `write_derived`, questo test lo dice.
+#[test]
+fn i_documenti_restano_sulla_scrittura_durevole() {
+    let (_tmp, root) = banco();
+    let nota = root.join("Nota.md");
+
+    FsStorage.write(&nota, b"prima").unwrap();
+    FsStorage.write_derived(&nota, b"derivata").unwrap();
+    FsStorage.write(&nota, b"seconda").unwrap();
+
+    assert_eq!(
+        std::fs::read(&nota).unwrap(),
+        b"seconda",
+        "la scrittura dei documenti è ancora la via durevole"
     );
 }
 

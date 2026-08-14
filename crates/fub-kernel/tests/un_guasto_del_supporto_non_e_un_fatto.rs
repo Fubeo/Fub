@@ -169,6 +169,7 @@ fn una_scrittura_non_sceglie_la_strada_da_una_lettura_fallita() {
     let esito = FsStorage.write_con(
         &nota,
         b"seconda",
+        true,
         |_| {
             Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,

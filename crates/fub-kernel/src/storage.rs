@@ -208,7 +208,7 @@ pub trait VaultStorage: Send + Sync {
     /// [`FsStorage::write`] per cosa costa darla e per i due casi in cui il
     /// prezzo si rifiuta di pagarlo.
     ///
-    /// # Perché torna uno [`Stat`] e non `()`
+    /// Perché torna uno [`Stat`] e non `()`
     ///
     /// Perché **chi ha appena scritto sa già cosa c'è a quel path**, e chi lo
     /// richiedesse con una [`stat`](VaultStorage::stat) non otterrebbe la stessa
@@ -219,6 +219,31 @@ pub trait VaultStorage: Send + Sync {
     /// byte; la **data** la sa solo il supporto, e solo mentre il file che ha
     /// scritto è ancora quello suo.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat>;
+
+    /// Scrive un **dato derivato**: la stessa [`write`](VaultStorage::write),
+    /// senza la promessa che i byte sopravvivano a un crash.
+    ///
+    /// Non è la seconda scrittura che la
+    /// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+    /// ha scartato. Quella era una seconda via per gli **stessi** file — un
+    /// modo di scrivere i documenti senza pagarne il prezzo — e offrirla a ogni
+    /// chiamante era il modo in cui un giorno qualcuno la sceglieva storta sul
+    /// file dell'utente. Questa è un'operazione **diversa**, come
+    /// [`append`](VaultStorage::append), per una classe di file che la 0065
+    /// non conosceva: i **derivati** (§15.4), che si ricostruiscono da ciò che
+    /// li genera. Per loro il `fsync` non compra niente — un derivato perso
+    /// costa una riapertura lenta, non una nota — e il suo prezzo si paga a
+    /// ogni scrittura, cioè a ogni chiusura del vault.
+    ///
+    /// La classe non sta nel path ma in **chi chiama**: il supporto non sa cosa
+    /// sta scrivendo, e non deve saperlo — è la stessa divisione della 0048.
+    /// Per questo il default è [`write`](VaultStorage::write): un supporto che
+    /// non sa distinguere le due classi scrive tutto durevole, che è il
+    /// comportamento di prima, e chi sa di avere un derivato in mano sceglie
+    /// di non pagare il prezzo.
+    fn write_derived(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
+        self.write(path, bytes)
+    }
 
     /// **Rilegge, fonde, riscrive** — sotto un lucchetto che tiene fuori chi sta
     /// aggiornando lo stesso file.
@@ -247,6 +272,23 @@ pub trait VaultStorage: Send + Sync {
     /// preso, e chiedergli qualcosa da dentro è come minimo un giro inutile e su
     /// [`MemStorage`] un blocco.
     fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()>;
+
+    /// L'[`update`](VaultStorage::update) di un **dato derivato**: la fusione
+    /// sotto lucchetto resta, la scrittura finale passa da
+    /// [`write_derived`](VaultStorage::write_derived) invece che da
+    /// [`write`](VaultStorage::write).
+    ///
+    /// È la stessa distinzione di [`write_derived`](VaultStorage::write_derived)
+    /// e per la stessa ragione: la fusione toglie la *lost update* — che è un
+    /// danno anche per un derivato, perché due installazioni che si
+    /// sovrascrivono le fotografie si rimettono a rileggere il vault — mentre
+    /// il `fsync` finale compra la sopravvivenza a un crash, che per un file
+    /// ricostruibile non vale il suo prezzo. Il default è
+    /// [`update`](VaultStorage::update), come per la scrittura: chi non sa di
+    /// avere un derivato in mano si comporta come prima.
+    fn update_derived(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
+        self.update(path, fondi)
+    }
 
     /// Aggiunge i byte **in coda** a ciò che c'è, creando il file e le cartelle
     /// se mancano.
@@ -780,6 +822,46 @@ impl FsStorage {
         fondi(attuale.as_deref())
     }
 
+    /// Il corpo di [`VaultStorage::update`], con la scrittura finale **scelta**:
+    /// [`write`](VaultStorage::write) per chi aggiorna un file autorevole,
+    /// [`write_derived`](VaultStorage::write_derived) per chi aggiorna un
+    /// derivato.
+    ///
+    /// Le due vie condividono tutto — la rilettura sotto lucchetto, la fusione,
+    /// il secondo giro quando la cartella non c'era — e differiscono solo
+    /// nell'ultima riga, che è il prezzo della durabilità. È la stessa
+    /// divisione di [`write_con`](FsStorage::write_con): il corpo sta qui una
+    /// volta sola, e chi non paga il prezzo non copia le sessanta righe per
+    /// dirlo.
+    fn update_con(&self, path: &Utf8Path, fondi: Fusione<'_>, derivato: bool) -> io::Result<()> {
+        let cartella_c_e = path.parent().map(Utf8Path::exists).unwrap_or(true);
+        if cartella_c_e {
+            let _lock = lock_esclusivo(path);
+            return match self.rileggi_e_fondi(path, &mut *fondi)? {
+                Some(bytes) => self.scrivi_aggiornato(path, &bytes, derivato),
+                None => Ok(()),
+            };
+        }
+        if self.rileggi_e_fondi(path, &mut *fondi)?.is_none() {
+            return Ok(());
+        }
+        let _lock = lock_esclusivo(path);
+        match self.rileggi_e_fondi(path, &mut *fondi)? {
+            Some(bytes) => self.scrivi_aggiornato(path, &bytes, derivato),
+            None => Ok(()),
+        }
+    }
+
+    /// La scrittura finale di un [`update_con`]: durevole o derivata, a seconda
+    /// di chi ha chiesto l'aggiornamento.
+    fn scrivi_aggiornato(&self, path: &Utf8Path, bytes: &[u8], derivato: bool) -> io::Result<()> {
+        if derivato {
+            self.write_derived(path, bytes).map(|_| ())
+        } else {
+            self.write(path, bytes).map(|_| ())
+        }
+    }
+
     /// Il corpo di [`VaultStorage::write`], col **rilevatore passato** invece
     /// che nominato.
     ///
@@ -808,10 +890,20 @@ impl FsStorage {
     /// banco senza rompere un disco. È esattamente il caso che contava: un
     /// errore letto come «non c'è niente lì» manda la scrittura sul ramo
     /// [`ComeScrivere::Sostituendo`], cioè stacca un nome che poteva esserci.
+    ///
+    /// **`fsync` è il prezzo della durabilità, e chi scrive un derivato non lo
+    /// paga**: `false` salta il `sync_all` del file e il `fsync` delle cartelle
+    /// dopo la rename, lasciando intatto il resto — temp+rename, permessi
+    /// ereditati, temporaneo tolto. È la metà che [`write_derived`] non paga, e
+    /// sta qui dentro e non in una seconda copia del corpo perché le due
+    /// scritture condividono tutto il resto: duplicare sessanta righe per
+    /// togliere due `fsync` sarebbe il modo in cui le due copie divergono un
+    /// giorno su una riga che conta.
     pub fn write_con(
         &self,
         path: &Utf8Path,
         bytes: &[u8],
+        fsync: bool,
         cosa_c_e: impl Fn(&Utf8Path) -> io::Result<std::fs::Metadata>,
         nomi: impl Fn(&Utf8Path, &std::fs::Metadata) -> NomiDelFile,
     ) -> io::Result<(ComeScrivere, Stat)> {
@@ -836,7 +928,9 @@ impl FsStorage {
         if come == ComeScrivere::SulPosto {
             let mut file = std::fs::File::create(path)?;
             file.write_all(bytes)?;
-            file.sync_all()?;
+            if fsync {
+                file.sync_all()?;
+            }
             return Ok((come, stat_con(EntryKind::File, &file.metadata()?)));
         }
 
@@ -849,7 +943,9 @@ impl FsStorage {
                 // chiavetta) non è una ragione per non salvare la nota.
                 let _ = std::fs::set_permissions(&tmp, meta.permissions());
             }
-            file.sync_all()?;
+            if fsync {
+                file.sync_all()?;
+            }
             // La data si chiede **al descrittore, prima della rename**: dopo, il
             // path può già essere di qualcun altro, e la rename non cambia
             // l'mtime del file che porta con sé.
@@ -866,8 +962,10 @@ impl FsStorage {
             let _ = std::fs::remove_file(&tmp);
             return Err(e);
         }
-        for dir in cartelle_da_sincronizzare(&tmp, Some(path)) {
-            sincronizza_la_cartella(&dir);
+        if fsync {
+            for dir in cartelle_da_sincronizzare(&tmp, Some(path)) {
+                sincronizza_la_cartella(&dir);
+            }
         }
         Ok((come, stat))
     }
@@ -1027,7 +1125,19 @@ impl VaultStorage for FsStorage {
     /// Il corpo sta in [`FsStorage::write_con`], che prende il rilevatore invece
     /// di nominarlo: qui si passa quello vero.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
-        self.write_con(path, bytes, cosa_c_e, nomi_del_file)
+        self.write_con(path, bytes, true, cosa_c_e, nomi_del_file)
+            .map(|(_, stat)| stat)
+    }
+
+    /// La stessa strada di [`write`](VaultStorage::write) — temp+rename,
+    /// permessi ereditati, temporaneo tolto — **senza il prezzo della
+    /// durabilità**: niente `sync_all` del file e niente `fsync` delle cartelle
+    /// dopo la rename. Un crash può lasciare il derivato illeggibile o
+    /// assente, e chi lo rilegge lo butta e lo ricostruisce: è la definizione
+    /// di dato derivato, e la 0065 non la conosceva — la sua promessa «o c'è o
+    /// non c'è» vale per i documenti, e per loro questa via non esiste.
+    fn write_derived(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
+        self.write_con(path, bytes, false, cosa_c_e, nomi_del_file)
             .map(|(_, stat)| stat)
     }
 
@@ -1075,22 +1185,14 @@ impl VaultStorage for FsStorage {
     /// file sotto» è un supporto lecito —, e si paga una volta sola nella vita
     /// di un vault.
     fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
-        let cartella_c_e = path.parent().map(Utf8Path::exists).unwrap_or(true);
-        if cartella_c_e {
-            let _lock = lock_esclusivo(path);
-            return match self.rileggi_e_fondi(path, &mut *fondi)? {
-                Some(bytes) => self.write(path, &bytes).map(|_| ()),
-                None => Ok(()),
-            };
-        }
-        if self.rileggi_e_fondi(path, &mut *fondi)?.is_none() {
-            return Ok(());
-        }
-        let _lock = lock_esclusivo(path);
-        match self.rileggi_e_fondi(path, &mut *fondi)? {
-            Some(bytes) => self.write(path, &bytes).map(|_| ()),
-            None => Ok(()),
-        }
+        self.update_con(path, fondi, false)
+    }
+
+    /// L'aggiornamento di un derivato: la fusione sotto lucchetto resta — la
+    /// *lost update* è un danno anche per una cache — e a non pagarsi è solo
+    /// il `fsync` finale, che per un file ricostruibile non compra niente.
+    fn update_derived(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
+        self.update_con(path, fondi, true)
     }
 
     /// `O_APPEND` e **nessun `fsync`**: la scelta è a verbale
