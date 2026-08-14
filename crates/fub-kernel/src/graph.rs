@@ -218,19 +218,91 @@ impl LinkGraph {
         S: GraphSource + 'a,
     {
         let docs: Vec<&S> = docs.into_iter().collect();
-        let mut graph = LinkGraph::default();
+        let mut graph = LinkGraph {
+            name_index: HashMap::with_capacity(docs.len()),
+            path_index: HashMap::with_capacity(docs.len()),
+            alias_index: HashMap::with_capacity(docs.len() / 4),
+            backlinks: HashMap::with_capacity(docs.len()),
+            outgoing: HashMap::with_capacity(docs.len()),
+            links: HashMap::with_capacity(docs.len()),
+            keys: HashMap::with_capacity(docs.len()),
+            watchers: HashMap::with_capacity(docs.len()),
+            refs_by_key: HashMap::with_capacity(docs.len()),
+        };
 
         // Fase 1: indici di nome/alias/path e registrazione dei link (serve
         // conoscere tutti i doc prima di poter risolvere qualsiasi link).
-        let mut touched = HashSet::new();
         for doc in &docs {
-            graph.attach_indexes(*doc, &mut touched);
+            graph.attach_indexes_internal(*doc, None);
             graph.register_links(*doc);
         }
 
         // Fase 2: risoluzione dei link e archi inversi.
-        for doc in &docs {
-            graph.link_document(doc.graph_id());
+        let doc_ids: Vec<DocId> = docs.iter().map(|d| d.graph_id().clone()).collect();
+        let n = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .clamp(1, 8);
+
+        if n > 1 && doc_ids.len() > 256 {
+            let chunk_size = (doc_ids.len() + n - 1) / n;
+            let graph_ref = &graph;
+            let resolved_chunks: Vec<Vec<(DocId, Vec<DocId>, Vec<(DocId, BacklinkRef)>)>> =
+                std::thread::scope(|s| {
+                    let handles: Vec<_> = doc_ids
+                        .chunks(chunk_size)
+                        .map(|chunk| {
+                            s.spawn(move || {
+                                let mut chunk_res = Vec::with_capacity(chunk.len());
+                                for id in chunk {
+                                    if let Some(refs) = graph_ref.links.get(id) {
+                                        let mut out = Vec::with_capacity(refs.len());
+                                        let mut backlinks = Vec::new();
+                                        for link in refs {
+                                            let resolved = match link.kind {
+                                                RefKind::Wiki => {
+                                                    graph_ref.resolve_key(&link.key, &link.exact)
+                                                }
+                                                RefKind::Path => graph_ref
+                                                    .resolve_path_key(&link.key, &link.exact),
+                                            };
+                                            if let Some(target) = resolved {
+                                                if &target != id {
+                                                    backlinks.push((
+                                                        target.clone(),
+                                                        BacklinkRef {
+                                                            source: id.clone(),
+                                                            context: link.context.clone(),
+                                                        },
+                                                    ));
+                                                }
+                                                out.push(target);
+                                            }
+                                        }
+                                        chunk_res.push((id.clone(), out, backlinks));
+                                    }
+                                }
+                                chunk_res
+                            })
+                        })
+                        .collect();
+                    handles.into_iter().map(|h| h.join().unwrap()).collect()
+                });
+
+            for chunk_res in resolved_chunks {
+                for (id, out, backlinks) in chunk_res {
+                    if !out.is_empty() {
+                        graph.outgoing.insert(id, out);
+                    }
+                    for (target, backlink) in backlinks {
+                        graph.backlinks.entry(target).or_default().push(backlink);
+                    }
+                }
+            }
+        } else {
+            for id in &doc_ids {
+                graph.link_document(id);
+            }
         }
         graph
     }
@@ -496,6 +568,14 @@ impl LinkGraph {
     // --- indici di nome/alias/path ----------------------------------------
 
     fn attach_indexes<S: GraphSource + ?Sized>(&mut self, doc: &S, touched: &mut HashSet<String>) {
+        self.attach_indexes_internal(doc, Some(touched));
+    }
+
+    fn attach_indexes_internal<S: GraphSource + ?Sized>(
+        &mut self,
+        doc: &S,
+        touched: Option<&mut HashSet<String>>,
+    ) {
         let id = doc.graph_id();
         let keys = DocKeys {
             name: resolution_key(id.page_name()),
@@ -511,9 +591,11 @@ impl LinkGraph {
         for alias in &keys.aliases {
             insert_sorted(&mut self.alias_index, alias, id);
         }
-        touched.insert(keys.name.clone());
-        touched.insert(keys.path.clone());
-        touched.extend(keys.aliases.iter().cloned());
+        if let Some(touched) = touched {
+            touched.insert(keys.name.clone());
+            touched.insert(keys.path.clone());
+            touched.extend(keys.aliases.iter().cloned());
+        }
         self.keys.insert(id.clone(), keys);
     }
 

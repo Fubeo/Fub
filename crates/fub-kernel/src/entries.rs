@@ -94,7 +94,7 @@
 //! caso giusto invece che in nessuno.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::Revision;
@@ -223,7 +223,7 @@ pub(crate) struct EntryStore {
     /// perché fossero la stessa cosa per costruzione e non per disciplina —
     /// questo campo si assegnava prima della scrittura, e una scrittura fallita
     /// lasciava in memoria una tabella che il disco non aveva.
-    known: Durevole<BTreeMap<DocId, StoredEntry>>,
+    known: RwLock<Durevole<BTreeMap<DocId, StoredEntry>>>,
 }
 
 impl EntryStore {
@@ -233,15 +233,17 @@ impl EntryStore {
     pub(crate) fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> Self {
         let path = data_root(root).join(FILE);
         EntryStore {
-            known: Durevole::letto(load(&path, storage.as_ref()).unwrap_or_default()),
+            known: RwLock::new(Durevole::letto(
+                load(&path, storage.as_ref()).unwrap_or_default(),
+            )),
             path,
             storage,
         }
     }
 
     /// Cosa si sapeva di questo file l'ultima volta.
-    pub(crate) fn known(&self, id: &DocId) -> Option<&StoredEntry> {
-        self.known.get(id)
+    pub(crate) fn known(&self, id: &DocId) -> Option<StoredEntry> {
+        self.known.read().ok()?.get(id).cloned()
     }
 
     /// **Tutto** ciò che si sapeva, per chi ha una domanda sull'insieme e non su
@@ -251,8 +253,8 @@ impl EntryStore {
     /// fatte ad app chiusa (§23.1): la sua domanda — *cosa c'era ieri e non c'è
     /// oggi?* — non si può fare un id alla volta, perché l'id di ciò che è
     /// sparito non ce l'ha nessuno da nominare.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&DocId, &StoredEntry)> {
-        self.known.iter()
+    pub(crate) fn snapshot(&self) -> BTreeMap<DocId, StoredEntry> {
+        self.known.read().map(|k| (*k).clone()).unwrap_or_default()
     }
 
     /// Scrive la tabella e la tiene come «ciò che si sa».
@@ -284,24 +286,17 @@ impl EntryStore {
     /// la propria fotografia sopra quella che sul disco c'è adesso — vedi
     /// [`arricchisci`] — e la memoria dev'essere quella, o resterebbe l'unica
     /// copia più povera del file che la porta.
-    pub(crate) fn store(&mut self, entries: BTreeMap<DocId, StoredEntry>) -> Result<(), String> {
-        // **Il giro che non serve non si fa nemmeno cominciare.** Il confronto è
-        // lecito **perché** `known` è un [`Durevole`]: dice ciò che il disco ha
-        // accettato, non ciò che qualcuno si è annotato. Con un campo normale
-        // questa riga sarebbe una scommessa — una scrittura fallita avrebbe
-        // lasciato in memoria una tabella mai scritta, e il confronto avrebbe
-        // saltato la scrittura che la ripara. Non è però il solo cancello:
-        // quello che decide davvero se il file cambia sta dentro la fusione, e
-        // guarda il disco riletto.
-        if entries == *self.known {
-            return Ok(());
+    pub(crate) fn store(&self, entries: BTreeMap<DocId, StoredEntry>) -> Result<(), String> {
+        {
+            let known = self.known.read().map_err(|e| e.to_string())?;
+            if entries == **known {
+                return Ok(());
+            }
         }
         let (path, storage) = (&self.path, self.storage.as_ref());
-        // Ciò che la fusione ha composto, per adottarlo: la memoria è ciò che il
-        // disco ha accettato, e qui il disco accetta la tabella **fusa** e non
-        // quella che il chiamante aveva in mano.
         let mut fusa = None;
-        self.known.aggiorna(|| {
+        let mut known = self.known.write().map_err(|e| e.to_string())?;
+        known.aggiorna(|| {
             storage
                 .update_derived(path, &mut |vecchia: Option<&[u8]>| {
                     let mut tabella = entries.clone();
@@ -421,7 +416,7 @@ mod tests {
     #[test]
     fn sopravvive_a_un_giro_su_disco() {
         let (_tmp, root) = tempdir();
-        let mut store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
+        let store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(store.known(&DocId::new("a.md")).is_none());
         store
             .store(BTreeMap::from([(DocId::new("a.md"), voce(3, 1_000))]))
@@ -460,9 +455,9 @@ mod tests {
 
         // La seconda installazione apre **prima** che la prima abbia scritto:
         // ciò che scriverà alla chiusura è tutto ciò che sa, e non sa niente.
-        let mut seconda = EntryStore::open(&root, fs());
+        let seconda = EntryStore::open(&root, fs());
 
-        let mut prima = EntryStore::open(&root, fs());
+        let prima = EntryStore::open(&root, fs());
         prima
             .store(BTreeMap::from([
                 (
@@ -539,7 +534,7 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{ non json").unwrap();
 
-        let mut store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
+        let store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(store.known(&DocId::new("a.md")).is_none());
         store
             .store(BTreeMap::from([(DocId::new("a.md"), voce(1, 10))]))
@@ -560,7 +555,7 @@ mod tests {
     ///
     /// Con l'ordine di prima — `self.known = entries` e *poi* la scrittura — il
     /// banco è rosso: la tabella resta in memoria, `known` risponde di sì, e
-    /// «ciò che si sa» e «ciò che si saprà riaprendo» diventano due cose
+    /// «ciò che si sa» e «ciò che si saprà riaprendo» diventavano due cose
     /// diverse per tutta la sessione. L'esito di `store` non risale a nessuno
     /// (è un derivato, apposta), quindi non c'era nemmeno chi potesse
     /// accorgersene.
@@ -570,7 +565,7 @@ mod tests {
         std::fs::create_dir_all(root.join(crate::vault::FUB_DIR)).unwrap();
         std::fs::write(data_root(&root), "non sono una cartella").unwrap();
 
-        let mut store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
+        let store = EntryStore::open(&root, Arc::new(crate::storage::FsStorage));
         let e = store
             .store(BTreeMap::from([(DocId::new("a.md"), voce(3, 1_000))]))
             .expect_err("la cartella non si può creare");
@@ -595,7 +590,7 @@ mod tests {
     fn passa_dal_supporto_e_non_dal_disco() {
         let storage = Arc::new(crate::storage::MemStorage::new());
         let root = Utf8Path::new("/vault-anagrafe");
-        let mut store = EntryStore::open(root, Arc::clone(&storage) as Arc<dyn VaultStorage>);
+        let store = EntryStore::open(root, Arc::clone(&storage) as Arc<dyn VaultStorage>);
         store
             .store(BTreeMap::from([(DocId::new("a.md"), voce(3, 1_000))]))
             .expect("scrive");
