@@ -31,7 +31,17 @@
 //!   dalla [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
 //!   la dà a tutti: un file mezzo scritto è un
 //!   file illeggibile, e un file illeggibile qui vuol dire una riapertura lenta
-//!   — ma solo se non ci si è convinti di averlo letto.
+//!   — ma solo se non ci si è convinti di averlo letto. L'atomicità però non è
+//!   la **durabilità**: questa tabella si scrive con
+//!   [`VaultStorage::update_derived`](crate::storage::VaultStorage::update_derived),
+//!   che fonde sotto lucchetto e poi scrive **senza `fsync`** — un crash può
+//!   lasciarla illeggibile o assente, e illeggibile o assente si ricostruisce,
+//!   che è la riga sopra. È la stessa distinzione della
+//!   [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+//!   portata alla classe che lei non conosceva: per i **documenti** la promessa
+//!   «o c'è o non c'è» vale e si paga, per un derivato il `fsync` comprerebbe
+//!   una riapertura lenta in meno a ogni chiusura del vault — e il suo prezzo
+//!   si paga a ogni chiusura del vault.
 //!
 //! La classe («derivato o autorevole») non è ancora dicibile nel contratto: è il
 //! §15.4, che è P0 come *scelta della forma* e che questa voce non chiude. Ciò
@@ -252,6 +262,15 @@ impl EntryStore {
     /// un file derivato non si è scritto sarebbe il verso sbagliato. Chi chiama
     /// lo annota dove si annotano gli altri esiti che nessuno leggerebbe.
     ///
+    /// La scrittura passa da
+    /// [`update_derived`](crate::storage::VaultStorage::update_derived): la
+    /// fusione sotto lucchetto resta — due installazioni che si sovrascrivono
+    /// le fotografie si rimettono a rileggere il vault — e a non pagarsi è il
+    /// `fsync` finale, che per un file ricostruibile non compra niente. Un
+    /// crash può lasciare la tabella illeggibile o assente, e la prossima
+    /// apertura la rifà camminando il vault: è il costo che un dato derivato
+    /// deve costare, e niente altro.
+    ///
     /// **Si scrive prima e si adotta dopo** ([`Durevole`]), e non è una
     /// preferenza sull'ordine: al contrario, una scrittura fallita lasciava
     /// `known` a raccontare una tabella che sul disco non c'è: dentro la
@@ -284,7 +303,7 @@ impl EntryStore {
         let mut fusa = None;
         self.known.aggiorna(|| {
             storage
-                .update(path, &mut |vecchia: Option<&[u8]>| {
+                .update_derived(path, &mut |vecchia: Option<&[u8]>| {
                     let mut tabella = entries.clone();
                     if let Some(vecchia) = vecchia.and_then(decodifica) {
                         arricchisci(&mut tabella, &vecchia);
