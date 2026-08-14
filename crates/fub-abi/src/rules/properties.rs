@@ -141,8 +141,7 @@ fn compare(a: &PropertyValue, b: &PropertyValue) -> Option<Ordering> {
 /// Il rango fisso delle specie, come fa Excel: le categorie hanno un ordine
 /// prestabilito che il decrescente **non ribalta** — solo dentro la stessa
 /// specie il verso si inverte. Così l'ordinamento fra specie diverse è
-/// totale e antisimmetrico, e i valori non confrontabili finiscono in fondo
-/// in entrambi i versi invece di spararsi a caso come «pari».
+/// totale e antisimmetrico, invece di spararsi a caso come «pari».
 ///
 /// L'ordine — numero, data, bool, testo, link, elenco, unknown, vuoto —
 /// segue ciò che un utente si aspetta da un foglio: prima i numeri (che si
