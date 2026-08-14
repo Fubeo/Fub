@@ -1923,7 +1923,8 @@ impl Workspace {
         // legge e parsa ogni documento, e farlo in un thread solo la rende
         // seriale. `thread::scope` presta `&self` ai figli — `docs`,
         // `entry_store` e `indexes` sono `Sync` — e li aspetta prima di
-        // restituire.
+        // restituire. Gli handle si raccolgono **tutti** prima di joinare:
+        // `map(spawn).map(join)` è pigro, e joinerebbe un thread alla volta.
         let n = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1)
@@ -1935,14 +1936,14 @@ impl Workspace {
         let chunks: Vec<PlanChunk> = if n > 1 && fetta.len() > n {
             let size = (fetta.len() + n - 1) / n;
             std::thread::scope(|s| {
-                fetta
+                let handles: Vec<_> = fetta
                     .chunks(size)
                     .map(|c| {
                         let c = c.to_vec();
                         s.spawn(move || Self::plan_one_chunk(docs, store, indexes, c))
                     })
-                    .map(|h| h.join().unwrap())
-                    .collect()
+                    .collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
             })
         } else {
             vec![Self::plan_one_chunk(docs, store, indexes, fetta)]
