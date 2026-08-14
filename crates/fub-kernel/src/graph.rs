@@ -81,6 +81,75 @@ impl GraphSource for DocumentModel {
     }
 }
 
+/// Fotografia di ciò che [`LinkGraph::build`] legge.
+///
+/// Si clona sotto prestito **condiviso** (id, alias, link: niente corpo, niente
+/// outline). La costruzione del grafo, che è CPU sull'insieme intero, gira
+/// **senza** lucchetto. L'epoca è la generazione dei metadati da cui è nata: se
+/// nel frattempo una scrittura li ha toccati, chi installa rifà il grafo dai
+/// metadati correnti invece di coprire la scrittura con una fotografia vecchia.
+pub struct GraphSources {
+    docs: Vec<GraphDoc>,
+    epoch: u64,
+}
+
+struct GraphDoc {
+    id: DocId,
+    aliases: Vec<String>,
+    links: Vec<Link>,
+}
+
+impl GraphSource for GraphDoc {
+    fn graph_id(&self) -> &DocId {
+        &self.id
+    }
+
+    fn graph_aliases(&self) -> Vec<String> {
+        self.aliases.clone()
+    }
+
+    fn graph_links(&self) -> &[Link] {
+        &self.links
+    }
+}
+
+/// Un [`LinkGraph`] costruito da una [`GraphSources`], con l'epoca di quella
+/// fotografia. Opaco: lo produce [`GraphSources::build`] e lo consuma
+/// [`crate::Workspace::finish_index_with_graph`].
+pub struct BuiltGraph {
+    pub(crate) graph: LinkGraph,
+    pub(crate) epoch: u64,
+}
+
+impl GraphSources {
+    pub(crate) fn from_docs<'a, S: GraphSource + 'a>(
+        docs: impl IntoIterator<Item = &'a S>,
+        epoch: u64,
+    ) -> Self {
+        GraphSources {
+            docs: docs
+                .into_iter()
+                .map(|d| GraphDoc {
+                    id: d.graph_id().clone(),
+                    aliases: d.graph_aliases(),
+                    links: d.graph_links().to_vec(),
+                })
+                .collect(),
+            epoch,
+        }
+    }
+
+    /// Ricostruisce il grafo. Costa O(documenti) di CPU e **non** tiene
+    /// nessun lucchetto: la fotografia è già in mano.
+    pub fn build(self) -> BuiltGraph {
+        let _fase = tracing::info_span!(target: "fub.apertura", "rebuild_graph").entered();
+        BuiltGraph {
+            graph: LinkGraph::build(self.docs.iter()),
+            epoch: self.epoch,
+        }
+    }
+}
+
 /// Un link di un documento, già normalizzato a chiave di risoluzione.
 #[derive(Clone, Debug)]
 struct LinkRef {

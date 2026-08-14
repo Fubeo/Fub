@@ -558,12 +558,20 @@ impl Shared {
             return Ok(true);
         }
 
-        // Finita, o smessa: si chiude comunque — `finish_index` fa il grafo e
-        // il flush di ciò che è stato alimentato, e **non riconcilia** se il
-        // giro non è arrivato in fondo.
+        // Finita, o smessa: si chiude comunque. Il grafo è CPU sull'insieme
+        // intero: si clona sotto prestito **condiviso**, si costruisce **senza**
+        // lucchetto, si installa sotto quello esclusivo. `finish_index` sotto
+        // esclusivo teneva l'UI ferma per tutto il vault (0024; a caldo è
+        // l'unica costruzione del grafo, `il_grafo_di_un_apertura_a_caldo`).
+        // Se in mezzo una scrittura ha toccato i metadati, `finish_index_with_graph`
+        // rifà il grafo dai correnti invece di coprire la scrittura.
+        let graph = {
+            let sources = self.workspace.read()?.graph_sources();
+            sources.build()
+        };
         let apertura = {
             let mut ws = self.workspace.write()?;
-            ws.finish_index(in_corso.work)
+            ws.finish_index_with_graph(in_corso.work, graph)
         };
         // **La raccolta dello spazio per-documento, sotto prestito condiviso.**
         // Cammina il disco degli spazi dati e il cestino, e non tocca il

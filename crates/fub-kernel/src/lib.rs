@@ -88,7 +88,7 @@ pub use bus::{EventBus, Subscription};
 pub use dispatcher::{Dispatcher, JobBell, PendingJob};
 pub use documents::DocumentStore;
 pub use error::{KernelError, Result};
-pub use graph::LinkGraph;
+pub use graph::{BuiltGraph, GraphSources, LinkGraph};
 pub use host::{Capability, CapabilitySet, Granted, Guard, Policy, ReadOnly};
 pub use index::plan::{PlanStep, QueryPlan};
 pub use index::{RouteConflict, CORE_ID};
