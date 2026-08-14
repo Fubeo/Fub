@@ -573,8 +573,11 @@ governare.
   **nominata** e l'ancoraggio **sopra l'insieme**, perché il buffer è uno
 * il multi-cursore era acceso nell'editor da sempre: fuori era la sola facoltà
   di dirlo
-* resta **una casella**: `note.task.toggle` su N cursori vuole un `at` che sia
-  una lista, cioè una decisione di firma sua
+* ~~resta **una casella**: `note.task.toggle` su N cursori vuole un `at` che sia
+  una lista, cioè una decisione di firma sua~~ — **chiusa** dalla
+  [0162](../decisions/0162-at-e-una-lista.md): `at` è un
+  `ParamKind::Numbers` (in fondo all'enum, additivo), lo scalare è rifiutato
+  al confine, e senza `at` si spuntano tutte le `placed()` del contesto
 
 La [0007](../decisions/0007-contesto-di-sessione.md) scrive il criterio, e lo
 scrive per prima e meglio di chiunque: *«un caso in fondo a un enum dopo il

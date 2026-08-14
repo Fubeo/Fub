@@ -307,6 +307,7 @@ impl ExternalSync {
                     severity: Severity::Warning,
                     subject: None,
                     error: PluginError::Internal(format!("flush indice: {e}").into()),
+                    gate: None,
                 });
             }
         });
@@ -339,6 +340,7 @@ impl ExternalSync {
                     severity: Severity::Failure,
                     subject: None,
                     error: PluginError::Internal(motivo.into()),
+                    gate: None,
                 });
             }
         });

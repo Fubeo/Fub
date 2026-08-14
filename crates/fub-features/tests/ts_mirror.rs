@@ -29,6 +29,7 @@ use fub_abi::command::{
 };
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
+use fub_abi::render::{EmbedContent, RenderedDocument};
 use fub_abi::event::{
     Actor, BatchId, DocChange, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
 };
@@ -417,11 +418,13 @@ fn event_samples() -> Vec<Value> {
             severity: Severity::Warning,
             subject: Some(DocId::new("a.md")),
             error: PluginError::Internal("indice non allineato".into()),
+            gate: None,
         },
         Event::Trouble {
             severity: Severity::Failure,
             subject: None,
             error: PluginError::Internal("flush fallito".into()),
+            gate: None,
         },
         Event::TimerFired {
             owner: "com.acme.tasks".into(),
@@ -503,6 +506,8 @@ fn command_spec_samples() -> Vec<Value> {
         ParamKind::Document,
         ParamKind::Documents,
         ParamKind::Choice(vec![Choice::new("uno", "Uno")]),
+        // `Numbers` (decisione 0162): `at` di `note.task.toggle` è una lista.
+        ParamKind::Numbers,
     ];
     for k in &all {
         match k {
@@ -511,7 +516,8 @@ fn command_spec_samples() -> Vec<Value> {
             | ParamKind::Bool
             | ParamKind::Document
             | ParamKind::Documents
-            | ParamKind::Choice(_) => {}
+            | ParamKind::Choice(_)
+            | ParamKind::Numbers => {}
         }
     }
     let spec = all.into_iter().enumerate().fold(
@@ -789,6 +795,15 @@ fn index_query_samples() -> Vec<Value> {
                 limit: 20,
             }),
         },
+        // La resa via canale dati (§1.6, decisione 0163): l'anteprima e
+        // l'embed. Prima erano due comandi Tauri bespoke; adesso sono
+        // `IndexQuery` come tutte le altre.
+        IndexQuery::RenderPreview { doc: DocId::new("a.md") },
+        IndexQuery::RenderEmbed {
+            page: "Nota".into(),
+            heading: Some("Sezione".into()),
+            block: None,
+        },
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -809,7 +824,9 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::Resolve { .. }
             | IndexQuery::Entries { .. }
             | IndexQuery::Folders { .. }
-            | IndexQuery::Drafts { .. } => {}
+            | IndexQuery::Drafts { .. }
+            | IndexQuery::RenderPreview { .. }
+            | IndexQuery::RenderEmbed { .. } => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -971,6 +988,14 @@ fn index_result_samples() -> Vec<Value> {
                 entries: 0,
             },
         ])),
+        // La resa via canale dati (§1.6, decisione 0163): l'anteprima e
+        // l'embed. Il `RenderedDocument` vuoto basta al mirror, che prova la
+        // forma del record e non l'HTML.
+        IndexResult::RenderPreview(RenderedDocument::default()),
+        IndexResult::RenderEmbed(EmbedContent {
+            doc_id: "note/a.md".into(),
+            content: RenderedDocument::default(),
+        }),
     ];
     for r in &all {
         match r {
@@ -989,7 +1014,9 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::Resolved(_)
             | IndexResult::Entries(_)
             | IndexResult::Folders(_)
-            | IndexResult::Drafts(_) => {}
+            | IndexResult::Drafts(_)
+            | IndexResult::RenderPreview(_)
+            | IndexResult::RenderEmbed(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()

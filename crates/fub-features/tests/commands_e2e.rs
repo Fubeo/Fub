@@ -698,7 +698,7 @@ fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
     let outcome = ws
         .invoke_command(
             fub_features::NOTE_TASK_TOGGLE,
-            serde_json::json!({ "doc": "spesa.md", "at": at }),
+            serde_json::json!({ "doc": "spesa.md", "at": [at] }),
             InvokeMode::Apply,
             Actor::User,
         )
@@ -722,7 +722,7 @@ fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
     // non quello di quando è stato indicizzato.
     ws.invoke_command(
         fub_features::NOTE_TASK_TOGGLE,
-        serde_json::json!({ "doc": "spesa.md", "at": at }),
+        serde_json::json!({ "doc": "spesa.md", "at": [at] }),
         InvokeMode::Apply,
         Actor::User,
     )
@@ -748,7 +748,7 @@ fn a_position_outside_every_task_is_refused_by_the_command_not_guessed() {
     let err = ws
         .invoke_command(
             fub_features::NOTE_TASK_TOGGLE,
-            serde_json::json!({ "doc": "spesa.md", "at": 2 }),
+            serde_json::json!({ "doc": "spesa.md", "at": [2] }),
             InvokeMode::Apply,
             Actor::User,
         )
@@ -757,6 +757,79 @@ fn a_position_outside_every_task_is_refused_by_the_command_not_guessed() {
     assert_eq!(
         ws.read_source(&DocId::new("spesa.md")).expect("rilegge"),
         "# Titolo\n\n- [ ] pane\n"
+    );
+}
+
+/// Multi-cursore: senza `at` esplicito, tutti i cursori placed vengono spuntati.
+/// Un cursore solo produce una lista di lunghezza uno — una `at` di uno — e
+/// due cursori producono due toggle. È la ragione per cui `at` è una lista
+/// (decisione 0162).
+#[test]
+fn two_cursors_toggle_two_tasks_without_naming_at() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    let sorgente = "- [ ] pane\n- [ ] latte\n";
+    ws.write_document(&DocId::new("spesa.md"), sorgente, WriteBase::Dictated)
+        .expect("scrive");
+
+    // Un cursore in ciascuna voce: pane sta a offset 6, latte a offset 17.
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE)
+            .with_doc(Some(DocId::new("spesa.md")))
+            .with_selections(Some(SelectionSet::Anchored(AnchoredSelections {
+                primary: AnchoredSelection::caret(6),
+                secondary: vec![AnchoredSelection::caret(17)],
+            }))),
+    ));
+
+    let outcome = ws
+        .invoke_command(
+            fub_features::NOTE_TASK_TOGGLE,
+            serde_json::json!({}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("spunta entrambi");
+
+    assert_eq!(
+        ws.read_source(&DocId::new("spesa.md")).expect("rilegge"),
+        "- [x] pane\n- [x] latte\n",
+        "due cursori, due toggle"
+    );
+    let CommandEffect::Reveal { span, .. } = outcome.effect else {
+        panic!("la shell deve sapere dove guardare")
+    };
+    assert_eq!(span.end - span.start, 1);
+}
+
+/// Un solo cursore, senza `at`: la lista implicita ha lunghezza uno, e si
+/// spunta un solo task — esattamente come prima di 0162.
+#[test]
+fn one_cursor_toggles_one_task_without_naming_at() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    let sorgente = "- [ ] pane\n- [ ] latte\n";
+    ws.write_document(&DocId::new("spesa.md"), sorgente, WriteBase::Dictated)
+        .expect("scrive");
+
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE)
+            .with_doc(Some(DocId::new("spesa.md")))
+            .with_selections(Some(SelectionSet::anchored(Span::new(6, 10), "pane"))),
+    ));
+
+    ws.invoke_command(
+        fub_features::NOTE_TASK_TOGGLE,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("spunta");
+
+    assert_eq!(
+        ws.read_source(&DocId::new("spesa.md")).expect("rilegge"),
+        "- [x] pane\n- [ ] latte\n",
+        "un cursore, un toggle"
     );
 }
 

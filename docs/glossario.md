@@ -600,7 +600,7 @@ quelle forme non cambieranno. Da non confondere con [superficie di
 vista](#superficie-di-vista), che sta nell'altra famiglia.
 
 ### WIT
-`fub:abi@0.1.0` · [`crates/fub-abi/wit/`](../crates/fub-abi/wit/README.md) · —
+`fub:abi@0.1.1` · [`crates/fub-abi/wit/`](../crates/fub-abi/wit/README.md) · —
 
 Lo stesso contratto detto nella lingua del component model di WebAssembly. Vive
 accanto al crate che rispecchia, ed è verificato contro di lui a ogni push

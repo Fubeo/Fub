@@ -38,8 +38,9 @@
 //! La cartella di **tantivy** invece resta un vero albero di file mmap-ati, e
 //! non può passare da `data_*`: un motore di ricerca legge i propri segmenti
 //! quando gli pare, anche dai thread di merge, e non ha un host da chiamare in
-//! quei momenti. Il path arriva dall'host (`Workspace::plugin_data_root`) ed è
-//! **dentro lo stesso recinto** del resto: quel varco è dichiarato, non
+//! quei momenti. Il path arriva dall'host (`Workspace::plugin_data_dir`) ed è
+//! **dentro lo stesso recinto** del resto: quel varco è dichiarato
+//! ([0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md)), non
 //! implicito, ed è ciò che a M5 diventerà un preopen WASI sulla stessa cartella
 //! per un componente che avvolga un motore analogo.
 
@@ -483,11 +484,17 @@ pub struct SearchIndex {
 
 impl SearchIndex {
     /// Apre (o crea) l'indice dentro lo spazio dati che l'host assegna a questo
-    /// provider (`Workspace::plugin_data_root(SEARCH_ID)`).
+    /// provider (`Workspace::plugin_data_dir(SEARCH_ID)`).
     ///
     /// Il path arriva da fuori e non si compone qui: la disposizione dello
     /// spazio dati di un plugin è una scelta del kernel, e una feature che se la
     /// ricalcolasse per conto proprio ne terrebbe una seconda copia.
+    ///
+    /// Quel path è **l'unico varco del filesystem fuori da `VaultStorage`**
+    /// ([0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md)): la
+    /// cifratura si ferma qui, ed è riservato ai provider nativi che mmappano —
+    /// oggi solo questo. Un plugin WASM (M5) non lo avrà: avrà un preopen WASI
+    /// sulla stessa cartella.
     pub fn open(plugin_data_root: &Utf8Path) -> Result<Self, PluginError> {
         Self::open_dir(&plugin_data_root.join(INDEX_DIR))
     }

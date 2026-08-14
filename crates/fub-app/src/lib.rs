@@ -30,14 +30,12 @@ use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::event::Actor;
 use fub_abi::locale::Locale;
-use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
 use fub_host::{doc_id, Consegna, EventSink, Host};
-use fub_kernel::RenderedDocument;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -295,37 +293,12 @@ fn discard_draft(host: State<Host>, id: String, vault: Option<String>) -> Result
 // mantiene: il modo giusto di reggerla è toglierla, e rimetterla il giorno che
 // qualcuno di qua abbia di nuovo quella domanda.
 
-/// Contenuto di un embed `![[page#heading]]` o `![[page#^blocco]]`: il frontend
-/// lo innesta nel placeholder emesso dal provider (profondità massima e cicli a
-/// suo carico).
-#[tauri::command]
-fn render_embed(
-    host: State<Host>,
-    page: String,
-    heading: Option<String>,
-    block: Option<String>,
-    vault: Option<String>,
-) -> Result<EmbedContent, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read()?;
-    let (doc_id, content) = ws.render_embed(&page, heading.as_deref(), block.as_deref())?;
-    Ok(EmbedContent {
-        doc_id: doc_id.0,
-        content,
-    })
-}
-
-#[tauri::command]
-fn render_preview(
-    host: State<Host>,
-    id: String,
-    vault: Option<String>,
-) -> Result<RenderedDocument, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read()?;
-    ws.render_preview(&DocId::new(id))
-        .map_err(PluginError::from)
-}
+// `render_preview` e `render_embed` (0163) non sono più qui: sono passati al
+// canale dati (`query_index` con `IndexQuery::RenderPreview` /
+// `IndexQuery::RenderEmbed`), come l'outline e ogni altra lettura. Un fatto
+// sul vault che solo la shell sapeva chiedere è adesso una domanda del canale
+// di tutti — un `ViewProvider` che volesse mostrare un documento reso ce l'ha,
+// e la shell non è più l'unica.
 
 // --- view dichiarative (protocollo generico) -------------------------------
 //
@@ -826,8 +799,6 @@ pub fn run() {
             write_document,
             save_draft,
             discard_draft,
-            render_preview,
-            render_embed,
             set_active_context,
             set_system_locale,
             list_views,

@@ -356,6 +356,7 @@ impl HostEvents for KernelHost<'_> {
                     Severity::Warning,
                     None,
                     PluginError::Internal(format!("evento non emesso: {fault}").into()),
+                    None,
                 );
                 return;
             }

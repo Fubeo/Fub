@@ -315,6 +315,7 @@ mod tests {
             severity: Severity::Failure,
             subject: Some(DocId::new("a.md")),
             error: PluginError::Io("disco pieno".into()),
+            gate: None,
         })
     }
 

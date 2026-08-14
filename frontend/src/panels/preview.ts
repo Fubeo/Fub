@@ -81,7 +81,12 @@ export function clearPreview(previewEl: HTMLElement): void {
 /// documento.
 export async function updatePreview(previewEl: HTMLElement, id: string): Promise<void> {
   await corsaDi(previewEl).ultimo(async (atteso) => {
-    const reso = await atteso(api.renderPreview(id));
+    const reso = await atteso(
+      api.queryIndex({ kind: "render_preview", doc: id }).then((r) => {
+        if (r.kind !== "render_preview") throw new Error("risposta inattesa");
+        return r.value;
+      }),
+    );
     innesta(previewEl, reso);
     // L'`atteso` scende nell'idratazione, e non è una comodità: gli embed sono
     // il **grosso** delle attese di un'anteprima — una nota che ne trascluda
@@ -201,7 +206,12 @@ async function hydrateEmbeds(
       const chiave = `${page} ${heading ?? ""} ${block ?? ""}`;
       let chiesto = memo.get(chiave);
       if (!chiesto) {
-        chiesto = api.renderEmbed(page, heading, block);
+        chiesto = api
+          .queryIndex({ kind: "render_embed", page, heading, block })
+          .then((r) => {
+            if (r.kind !== "render_embed") throw new Error("risposta inattesa");
+            return r.value;
+          });
         memo.set(chiave, chiesto);
       }
       // L'errore diventa un valore prima del cancello — un embed che non si

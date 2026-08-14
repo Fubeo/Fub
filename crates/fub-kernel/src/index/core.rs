@@ -1063,6 +1063,13 @@ impl IndexProvider for CoreIndex {
             // vedeva nessuno: le cartelle esistevano solo come prefissi dei
             // path delle note, dentro l'albero della shell.
             QueryRoute::Query(QueryKind::Folders),
+            // La resa di un documento (§1.6, decisione 0163): il kernel la
+            // instrada come Outline — è una domanda che ha un solo risponditore,
+            // e il risponditore è il kernel. La query arriva a
+            // `Workspace::query_index`, che intercetta prima di `indexes.query`
+            // perché `CoreIndex` non ha i documenti né i renderer.
+            QueryRoute::Query(QueryKind::RenderPreview),
+            QueryRoute::Query(QueryKind::RenderEmbed),
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
@@ -1321,6 +1328,15 @@ impl IndexProvider for CoreIndex {
             IndexQuery::Resolve { target, from } => {
                 Ok(IndexResult::Resolved(self.resolve(&target, from.as_ref())))
             }
+            // La resa è intercettata da `Workspace::query_index` prima di
+            // arrivare qui: `CoreIndex` non possiede i documenti né i renderer.
+            // Questi bracci non si raggiungono mai, ma il `match` è esaustivo e
+            // non accetta un `_` — vedi la 0104.
+            IndexQuery::RenderPreview { .. } | IndexQuery::RenderEmbed { .. } => Err(
+                PluginError::Internal(
+                    "la resa è di `Workspace::query_index`, non dell'indice del kernel".into(),
+                ),
+            ),
         }
     }
 }

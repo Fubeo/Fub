@@ -80,9 +80,11 @@ export const api = {
   // dati, e ciò che risponde con dei dati passa dal canale di lettura.
   // Il primo nome libero della famiglia «Nota», «Nota 1», … (D3). La
   // convenzione vive nel kernel: chiederla evita di averne due versioni.
-  renderPreview: (id: string) => invoke<RenderedDocument>("render_preview", { id }),
-  renderEmbed: (page: string, heading: string | null, block: string | null) =>
-    invoke<EmbedContent>("render_embed", { page, heading, block }),
+  //
+  // `render_preview` e `render_embed` (0163) non sono più qui: sono passati al
+  // canale dati (`queryIndex` con `render_preview` / `render_embed`), come
+  // l'outline e ogni altra lettura. Un fatto sul vault che solo la shell
+  // sapeva chiedere è adesso una domanda del canale di tutti.
   // View dichiarative (protocollo generico). La shell pubblica il contesto del
   // pannello, chiede l'albero di una view e rimanda le azioni al provider,
   // senza sapere cosa la view faccia — è il percorso di un plugin.

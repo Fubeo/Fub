@@ -39,6 +39,7 @@ import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
 import { mountTheme } from "./theme/theme";
 import {
+  flushPendingSave,
   mettiInSalvoPrimaDiChiudere,
   mountDocument,
   openDocument,
@@ -61,6 +62,7 @@ const vaultPathEl = $("#vault-path");
 const paletteHost = {
   onEffect: applyIntent,
   notify,
+  flushPendingSave,
   // Dal canale dati (§14.4), **con una finestra** (§2.9). Questi path
   // riempiono un `<datalist>`, cioè dei suggerimenti sopra un campo che resta
   // libero: chiedere l'anagrafe intera per proporne una manciata mandava

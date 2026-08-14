@@ -203,6 +203,25 @@ impl RenderedDocument {
     }
 }
 
+/// La resa del kernel è il [`RenderedDocument`] del contratto (decisione 0163):
+/// i due tipi sono identici campo per campo, e il `From` è la sola colla.
+impl From<RenderedDocument> for fub_abi::RenderedDocument {
+    fn from(doc: RenderedDocument) -> Self {
+        fub_abi::RenderedDocument {
+            html: doc.html,
+            parts: doc
+                .parts
+                .into_iter()
+                .map(|p| fub_abi::render::RenderedPart {
+                    slot: p.slot,
+                    kind: p.kind,
+                    node: p.node,
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Il segnaposto in cui la shell monta una parte dichiarativa.
 ///
 /// Lo scrive **il kernel**, non il provider: se lo scrivesse il provider, il suo

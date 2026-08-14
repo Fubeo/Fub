@@ -211,7 +211,7 @@ numero che un test presidia*
       è una credenziale*. Questa salva sei comandi da una migrazione sbagliata.
       I percorsi `set_setting` e `settings.set` sono due autorità e non due
       strade.
-- [ ] **Migrare i bespoke che restano — adesso sono due.** Le voci ~~cestino
+- [x] **Migrare i bespoke che restano — adesso sono due.** Le voci ~~cestino
       (4)~~, ~~organizzazione (2)~~ e ~~grafo (1)~~ sono concluse. La migrazione
       del grafo è avvenuta **da prima** con la
       [0019](../decisions/0019-il-canale-dati.md) (non segnalata). La voce
@@ -230,7 +230,11 @@ numero che un test presidia*
       l'esposizione sicura di output HTML su un canale per i plugin di comunità.
       **Il residuo si sposta in una variabile:** Il debito diventa la variabile
       `il_debito_dichiarato_e_un_numero_presidiato`. Migrare un elemento
-      costringe all'aggiornamento del numero.
+      costringe all'aggiornamento del numero. **Chiusa con la
+      [0163](../decisions/0163-render-via-index-query.md)**: `render_preview` e
+      `render_embed` sono passati al canale dati (`IndexQuery::RenderPreview` /
+      `RenderEmbed`, in fondo ai loro enum), i due comandi Tauri sono spariti, e
+      il debito è a zero.
 
 ### 16.8 La prosa che conta i sorgenti non ha nessun presidio
 

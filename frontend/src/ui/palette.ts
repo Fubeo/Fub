@@ -32,8 +32,9 @@ import { type Chiave, t } from "../i18n/strings";
 import { allCommands, loadKeyOverrides, type CommandEntry } from "./commands";
 import { state } from "../state/store";
 
-/// Ciò che la palette chiede alla shell: eseguire gli intenti e dire qualcosa
-/// all'utente. Il resto (invocare, disegnare, chiedere) è suo.
+/// Ciò che la palette chiede alla shell: eseguire gli intenti, dire qualcosa
+/// all'utente, e mettere in salvo i buffer prima di un comando che scrive. Il
+/// resto (invocare, disegnare, chiedere) è suo.
 export interface PaletteHost {
   onEffect(effect: CommandEffect): Promise<void> | void;
   // Il tono è **facoltativo e vuole essere passato**: un esito a metà non deve
@@ -42,6 +43,12 @@ export interface PaletteHost {
   // lunga che nessuno rilegge (§23.14).
   notify(message: string, tono?: Tono): void;
   listDocuments(): Promise<string[]>;
+  // **Flush-before-patch** (M3): salva i documenti ancora sporchi e dice
+  // quali non ce l'hanno fatta. È la stessa porta che l'esploratore usa per
+  // `nonInSalvo` — la palette la chiede alla shell invece di importare il
+  // pannello, perché il pannello trascina il DOM e la palette deve restare
+  // testabile come funzioni pure.
+  flushPendingSave(): Promise<string[]>;
 }
 
 // --- le decisioni, separate dal DOM ----------------------------------------
@@ -540,6 +547,20 @@ async function esegui(
   box: HTMLElement,
   host: PaletteHost,
 ) {
+  // **Flush-before-patch** (M3): un comando che scrive documenti riscrive
+  // file — il kernel muove i wikilink entranti, la rinomina sposta la nota — e
+  // un buffer rimasto sporco li ricoprirebbe col testo di prima al salvataggio
+  // successivo. È la stessa guardia di `nonInSalvo` dell'esploratore: si salva
+  // prima di calcolare le patch, e se qualcosa non ce l'ha fatta l'operazione
+  // si ferma qui, con la palette ancora aperta. I comandi di sola lettura non
+  // toccano il disco e non devono pagare il giro.
+  if (spec.scope.writes) {
+    const appesi = await host.flushPendingSave();
+    if (appesi.length > 0) {
+      host.notify(t("document.unsaved_blocks", { doc: appesi.join(", ") }), "guasto");
+      return;
+    }
+  }
   if (needsPlan(spec)) {
     try {
       const outcome = await api.invokeCommand(spec.id, args, "dry_run");

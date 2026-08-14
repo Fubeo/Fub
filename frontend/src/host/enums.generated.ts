@@ -53,6 +53,22 @@ export type EventKind =
 
 export type Excerpts = "attach" | "omit";
 
+export type Gate =
+  | "command"
+  | "view_render"
+  | "view_action"
+  | "service"
+  | "event"
+  | "index_feed"
+  | "index_forget"
+  | "index_up_to_date"
+  | "index_reconcile"
+  | "format_parse"
+  | "syntax_rule"
+  | "custom_render"
+  | "job"
+;
+
 export type HealthCheck =
   | "broken_links"
   | "orphan_documents"

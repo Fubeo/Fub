@@ -305,6 +305,7 @@ fn un_avviso_di_sessione_si_dice_una_volta_sola() {
         severity,
         subject,
         error,
+        ..
     } = event
     else {
         panic!("l'avviso non è un Trouble: {event:?}");

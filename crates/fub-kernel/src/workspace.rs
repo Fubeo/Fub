@@ -82,6 +82,7 @@ use serde::{Deserialize, Serialize};
 
 use fub_abi::rules::media;
 use fub_abi::rules::path as rules_path;
+use fub_abi::render::EmbedContent;
 use fub_abi::rules::path::{resolution_key, strip_ext};
 use fub_abi::rules::path_policy::{self, Naming};
 
@@ -625,6 +626,16 @@ pub struct Workspace {
     /// sovrascrivere senza che la fotografia sia riuscita sarebbe la finestra
     /// che questo meccanismo esiste per chiudere.
     before_write: Option<(String, BeforeWriteHook)>,
+    /// L'ultimo documento che il rilevatore ha visto sparire, con l'impronta
+    /// che aveva. Serve a ricongiungere una rinomina esterna spezzata dal
+    /// debounce (difetto 0198): partenza e arrivo in due finestre diverse
+    /// arrivano come remove+add, e senza questo accoppiamento la bozza e lo
+    /// stato per-documento restano sotto il nome morto.
+    ///
+    /// Uno solo, e per impronta: è la regola della 0099 vista dal rilevatore
+    /// aperto. Due sparizioni di fila tengono l'ultima; un arrivo con
+    /// impronta diversa non consuma il posto; nel dubbio non si accoppia.
+    ultimo_rimosso: Option<(DocId, Revision)>,
 }
 
 impl Workspace {
@@ -739,6 +750,7 @@ impl Workspace {
             doc_data_warnings: Vec::new(),
             sospesi_dal_dubbio: BTreeSet::new(),
             before_write: None,
+            ultimo_rimosso: None,
         })
     }
 
@@ -2299,6 +2311,7 @@ impl Workspace {
                     Severity::Failure,
                     Some(scarto.id.clone()),
                     scarto.why.clone(),
+                    None,
                 );
             }
             ws.emit_event(Event::IndexUpdated);
@@ -2647,11 +2660,11 @@ impl Workspace {
     fn record(&mut self, op: JournalOp) {
         let origin = self.dispatch.origin();
         if let Err(e) = self.journal.append(origin, op) {
-            tracing::warn!(target: "fub.kernel", "registro: {e}");
             self.report_trouble(
                 Severity::Failure,
                 None,
                 PluginError::Internal(format!("registro: {e}").into()),
+                None,
             );
         }
     }
@@ -2809,7 +2822,12 @@ impl Workspace {
     /// [`already_ingested`](Workspace::already_ingested) per il perché.
     pub fn refresh_from_disk(&mut self, id: &DocId) -> Result<bool> {
         self.as_actor(Actor::Watcher, |ws| {
-            let src = ws.docs.vault.read(id)?;
+            let Some(src) = ws.source_if_stable(id)? else {
+                // Il file sta ancora cambiando, o è sparito fra le due `stat`
+                // (difetto 0197). Non è un fallimento: il debounce del
+                // rilevatore riproverà, e ingerire la metà sarebbe il difetto.
+                return Ok(false);
+            };
             if ws.already_ingested(id, &Revision::of(&src)) {
                 return Ok(false);
             }
@@ -2841,6 +2859,20 @@ impl Workspace {
         fingerprint: Revision,
         posato: Option<(u64, u64)>,
     ) {
+        // Una rinomina esterna spezzata dal debounce arriva come «sparito» e
+        // poi «nato» (difetto 0198). Se il nato ha l'impronta di chi è appena
+        // sparito, è la stessa nota: lo stato attaccato la segue. Uno a uno e
+        // per impronta, come la 0099; se `id` è già in anagrafe non è una
+        // rinomina (0135).
+        if !self.indexes.core.metas.contains_key(id) {
+            if let Some((from, fp)) = self.ultimo_rimosso.take() {
+                if from != *id && fp == fingerprint {
+                    self.migrate_side_data(&from, id);
+                } else if from != *id {
+                    self.ultimo_rimosso = Some((from, fp));
+                }
+            }
+        }
         // L'anagrafe segue ogni scrittura (§14.1): dimensione, data e impronta
         // di un documento appena scritto sono cambiate, e una voce ferma a
         // prima direbbe che il file è quello di ieri — a chi la interroga
@@ -2929,10 +2961,12 @@ impl Workspace {
     ///
     /// `None` vuol dire «qui non c'è niente da preparare», e non è un
     /// fallimento: un path ignorato, un file di un'altra specie, un file
-    /// sparito, o una lettura che non è riuscita. In tutti e quattro i casi
+    /// sparito, una lettura che non è riuscita, o un file che sta ancora
+    /// cambiando sotto (difetto 0197: due `stat` discordi). In tutti i casi
     /// [`sync_path_prepared`] rifà la strada intera sotto il prestito
     /// esclusivo, che è dove quei rami stavano già — e dove un errore viene
-    /// registrato come sempre (§9.7).
+    /// registrato come sempre (§9.7). Un file instabile si rifiuta anche
+    /// là: ingerirlo a metà è il difetto, non una lettura da ritentare subito.
     pub fn plan_sync(&self, abs: &Utf8Path) -> Option<ParsedChange> {
         if self.docs.vault.is_ignored(abs) {
             return None;
@@ -2943,7 +2977,7 @@ impl Workspace {
         if !abs.exists() {
             return None;
         }
-        let source = self.docs.vault.read(&id).ok()?;
+        let source = self.source_if_stable(&id).ok().flatten()?;
         let fingerprint = Revision::of(&source);
         // L'eco della propria scrittura non si riparsa (§14.1, difetto 0196).
         let model = if self.already_ingested(&id, &fingerprint) {
@@ -2957,6 +2991,23 @@ impl Workspace {
             id,
             model,
         })
+    }
+
+    /// **I byte, se il file sta fermo.** Due `stat` attorno alla lettura: se
+    /// dimensione o data cambiano in mezzo, qualcun altro sta ancora scrivendo
+    /// e questi byte sono una metà (difetto 0197). `None` non è un fallimento
+    /// — il debounce del rilevatore riproverà — ed è per questo che non si
+    /// aspetta: un `sleep` in un banco non è un segnale, e qui non ce n'è
+    /// bisogno, perché la prova è sui due numeri, non sul tempo.
+    fn source_if_stable(&self, id: &DocId) -> Result<Option<String>> {
+        let Some(prima) = self.docs.vault.stat(id) else {
+            return Ok(None);
+        };
+        let source = self.docs.vault.read(id)?;
+        let Some(dopo) = self.docs.vault.stat(id) else {
+            return Ok(None);
+        };
+        Ok((prima == dopo).then_some(source))
     }
 
     /// **Questi byte sono già quelli che il kernel ha in memoria?**
@@ -3153,7 +3204,7 @@ impl Workspace {
         let soggetto = self.docs.vault.doc_id_for_path(abs).ok();
         let motivo = PluginError::Internal(format!("sincronizzazione di {abs}: {e}").into());
         self.as_actor(Actor::Watcher, |ws| {
-            ws.report_trouble(Severity::Warning, soggetto, motivo);
+            ws.report_trouble(Severity::Warning, soggetto, motivo, None);
             ws.dispatch_pending();
         });
     }
@@ -3175,6 +3226,11 @@ impl Workspace {
         } else {
             self.as_actor(Actor::Watcher, |ws| {
                 let existed = ws.indexes.core.metas.contains_key(&id);
+                if existed {
+                    if let Some(fp) = ws.entry_fingerprint(&id) {
+                        ws.ultimo_rimosso = Some((id.clone(), fp));
+                    }
+                }
                 ws.remove_document(&id);
                 Ok(existed)
             })
@@ -3403,6 +3459,7 @@ impl Workspace {
                 PluginError::Internal(
                     format!("cestino: sidecar di {trashed} non scritto: {fault}").into(),
                 ),
+                None,
             );
         }
         Ok(trashed)
@@ -3612,6 +3669,15 @@ impl Workspace {
         // andare.
         let source = self.docs.vault.read(from)?;
         let model = self.docs.parse(to, &source)?;
+        // I dati per-documento si spostano **prima** del file (difetto 0168),
+        // mentre `from` è ancora vivo: un crash fra le due lasciava il file al
+        // nome nuovo e i dati sotto la chiave vecchia, dove la prima `collect`
+        // li spazza. La seconda `migrate_side_data` dentro `migrate_identity`
+        // è un no-op — la bozza a `from` non c'è più (`drafts.migrate` torna
+        // `Ok(())`). `sync_renamed_path_here` resta migrate-dopo: là il file
+        // è già a `to`. Il registro `Renamed` resta dopo la mutazione del
+        // file (0067).
+        self.migrate_side_data(from, to);
         self.docs.vault.rename_no_replace(from, to)?;
         self.migrate_identity(from, to, model, Revision::of(&source));
         // La riga del rename va **prima** di quelle delle sorgenti riscritte:
@@ -4691,15 +4757,34 @@ impl Workspace {
     ///
     /// Chi ha già riempito `occurrences` non viene toccato: un indice che
     /// sappia dire *dove* — perché tiene i sorgenti, perché è un motore diverso
-    /// — resta la fonte, e questo passaggio è il ripiego di chi non lo sa dire.
     pub fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        let needles = occurrences::wanted(&query);
-        let result = self.indexes.query(query)?;
-        match result {
-            IndexResult::Documents(page) if !needles.is_empty() => {
-                Ok(IndexResult::Documents(self.locate(page, &needles)))
+        // La resa (§1.6, decisione 0163) è intercettata qui e non passa da
+        // `indexes.query`: `CoreIndex` non ha i documenti né i renderer, e la
+        // rotta che dichiara (`QueryRoute::Query`) serve solo a dire che il
+        // kernel è il risponditore — come Outline. La fast-path di prima era un
+        // comando Tauri bespoke; adesso è il canale dati di tutti.
+        match query {
+            IndexQuery::RenderPreview { doc } => {
+                Ok(IndexResult::RenderPreview(self.render_preview(&doc)?.into()))
             }
-            other => Ok(other),
+            IndexQuery::RenderEmbed { page, heading, block } => {
+                let (doc_id, content) =
+                    self.render_embed(&page, heading.as_deref(), block.as_deref())?;
+                Ok(IndexResult::RenderEmbed(EmbedContent {
+                    doc_id: doc_id.0,
+                    content: content.into(),
+                }))
+            }
+            other => {
+                let needles = occurrences::wanted(&other);
+                let result = self.indexes.query(other)?;
+                match result {
+                    IndexResult::Documents(page) if !needles.is_empty() => {
+                        Ok(IndexResult::Documents(self.locate(page, &needles)))
+                    }
+                    other => Ok(other),
+                }
+            }
         }
     }
 
@@ -4800,7 +4885,7 @@ impl Workspace {
         // nomina un documento — il flush è per indice, non per nota — ed è
         // esattamente il caso per cui il soggetto di un guasto è opzionale.
         for error in errors.iter().cloned() {
-            self.report_trouble(Severity::Warning, None, error);
+            self.report_trouble(Severity::Warning, None, error, None);
         }
         // Ciò che i flush hanno emesso si consegna a chiamate tornate, non
         // dentro il frame di un provider.
@@ -5818,11 +5903,13 @@ impl Workspace {
         severity: Severity,
         subject: Option<DocId>,
         error: PluginError,
+        gate: Option<Gate>,
     ) {
         self.emit_event(Event::Trouble {
             severity,
             subject,
             error,
+            gate,
         });
     }
 
@@ -5838,7 +5925,7 @@ impl Workspace {
     /// per questo che lo si dice.
     pub(crate) fn report_losses(&mut self, lost: Vec<IndexLoss>) {
         for loss in lost {
-            self.report_trouble(Severity::Warning, Some(loss.id), loss.why);
+            self.report_trouble(Severity::Warning, Some(loss.id), loss.why, None);
         }
     }
 
@@ -6060,7 +6147,7 @@ impl Workspace {
             // peggio che sovrastimare quella di un contatore.
             let subject = subject.clone();
             self.as_actor(Actor::Plugin { id }, |ws| {
-                ws.report_trouble(Severity::Failure, subject, error)
+                ws.report_trouble(Severity::Failure, subject, error, Some(Gate::Event))
             });
         }
     }
@@ -7050,14 +7137,21 @@ impl Workspace {
     /// La radice dello spazio dati di un plugin, **come cartella del
     /// filesystem**.
     ///
-    /// È un varco per il codice nativo, e per questo è un metodo del workspace
-    /// e non una capacità dell'[`HostApi`]: `data_*` nomina blob, non file, ed è
-    /// tutto ciò che un plugin WASM avrà. Un provider nativo che avvolge un
-    /// motore con un proprio formato su disco (tantivy mmappa i suoi segmenti e
-    /// li rilegge quando gli pare, anche dai thread di merge) ha bisogno di una
-    /// vera cartella: questa è quella cartella, **dentro lo stesso recinto** di
+    /// È **l'unico varco del filesystem fuori da `VaultStorage`**
+    /// ([0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md)): ogni
+    /// altro byte di un vault passa dal supporto, e lì la cifratura si ferma
+    /// qui. Per questo è un metodo del workspace e non una capacità
+    /// dell'[`HostApi`]: `data_*` nomina blob, non file, ed è tutto ciò che un
+    /// plugin WASM avrà. Un provider nativo che avvolge un motore con un
+    /// proprio formato su disco (tantivy mmappa i suoi segmenti e li rilegge
+    /// quando gli pare, anche dai thread di merge) ha bisogno di una vera
+    /// cartella: questa è quella cartella, **dentro lo stesso recinto** di
     /// tutto il resto. A M5 l'equivalente per un componente è un preopen WASI
-    /// sulla stessa radice.
+    /// sulla stessa radice — un plugin WASM non riceverà mai una cartella dal
+    /// kernel.
+    ///
+    /// Chi la chiama è elencato e presidiato in
+    /// `crates/fub-kernel/tests/il_supporto.rs`: oggi solo la ricerca.
     ///
     /// Rifiuta un id che non sia un nome semplice, con la stessa regola dei
     /// path di `data_*`: il recinto è uno.

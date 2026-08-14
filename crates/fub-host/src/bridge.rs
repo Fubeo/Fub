@@ -413,6 +413,7 @@ mod tests {
                 severity: fub_abi::Severity::Warning,
                 subject: Some(DocId::new("Alpha.md")),
                 error: fub_abi::PluginError::Internal(m.into()),
+                gate: None,
             })
         };
         let mut burst: Vec<Notice> = Vec::new();

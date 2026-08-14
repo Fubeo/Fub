@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0015-la-forma-della-shell.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Diciannove gesti, contati da fuori
+// # Ventuno gesti, contati da fuori
 //
-// I gesti sono **diciannove** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **ventuno** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -44,7 +44,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorView } from "@codemirror/view";
 import type { HostFinto } from "./host/finto";
-import type { KernelNotice, SettingEntry } from "./host/contract";
+import type { KernelNotice, SettingEntry, CommandSpec } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
 
 // L'host finto vive in una scatola che `vi.mock` possa vedere: i factory dei
@@ -111,6 +111,7 @@ async function monta(
   radice: string | null | undefined = undefined,
   freni: string[] = [],
   avviso: KernelNotice | null = null,
+  comandi: CommandSpec[] = [],
 ): Promise<{ host: HostFinto; avvio: Promise<void>; sblocca: Map<string, () => void> }> {
   vi.resetModules();
   scatola.conferma = true;
@@ -120,6 +121,7 @@ async function monta(
     impostazioni,
     radice,
     avvisoDiSessione: avviso,
+    comandi,
   });
   scatola.host = host;
   const sblocca = new Map(freni.map((p) => [p, host.frena(p)]));
@@ -134,8 +136,9 @@ async function avvia(
   impostazioni: SettingEntry[] = [],
   radice: string | null | undefined = undefined,
   avviso: KernelNotice | null = null,
+  comandi: CommandSpec[] = [],
 ): Promise<HostFinto> {
-  const { host, avvio } = await monta(file, impostazioni, radice, [], avviso);
+  const { host, avvio } = await monta(file, impostazioni, radice, [], avviso, comandi);
   await avvio;
   await riposa();
   return host;
@@ -911,5 +914,102 @@ describe("segui un link dentro la nota", () => {
     expect(chieste).toHaveLength(1);
     expect(chieste[0]!.target?.value.page).toBe("");
     expect(chieste[0]!.from).toBe("Benvenuto.md");
+  });
+});
+
+describe("la palette flussa prima di un comando che scrive", () => {
+  // Il flush-before-patch di M3: un comando che scrive documenti riscrive
+  // file — il kernel muove i wikilink entranti, la rinomina sposta la nota —
+  // e un buffer rimasto sporco li ricoprirebbe col testo di prima al
+  // salvataggio successivo. È la stessa guardia di `nonInSalvo`
+  // dell'esploratore, e si prova qui perché la palette è l'altro posto in cui
+  // un comando parte: la spec dichiara `writes`, e chi invoca deve salvare
+  // prima di calcolare le patch.
+  //
+  // La spec è quella vera di `note.create` (commands.rs): un parametro `name`
+  // facoltativo, raggio `document` — quindi niente piano, apply diretto.
+  const specNoteCreate: CommandSpec = {
+    id: "note.create",
+    title: "Nuova nota",
+    description: "",
+    keybinding: null,
+    params: [{ name: "name", title: "Nome", description: "", kind: { kind: "text" }, required: false }],
+    scope: { writes: true, reach: "document", reversible: true },
+  };
+
+  it("un buffer sporco si salva prima che note.create parta", async () => {
+    const host = await avvia(VAULT, [], undefined, null, [specNoteCreate]);
+    battiNellEditor("testo non ancora salvato");
+
+    // La palette si apre con la scorciatoia di default, come da un browser.
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
+    );
+    await riposa();
+    expect(document.getElementById("command-palette")).not.toBeNull();
+
+    const input = document.querySelector<HTMLInputElement>(".palette-input")!;
+    input.value = "Nuova nota";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+    await riposa();
+
+    // Il comando ha un parametro facoltativo: la palette mostra il form.
+    const campo = document.querySelector<HTMLInputElement>(".palette-form input")!;
+    campo.value = "Appunti.md";
+    const form = document.querySelector<HTMLFormElement>(".palette-form")!;
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await riposa();
+
+    const flush = host.chiamate.findIndex((c) => c.porta === "writeDocument");
+    const invocato = host.chiamate.findIndex(
+      (c) => c.porta === "invokeCommand" && c.args[0] === "note.create",
+    );
+    expect(invocato, "note.create non è arrivato al kernel").toBeGreaterThan(-1);
+    expect(flush, "il buffer sporco non è stato salvato affatto").toBeGreaterThan(-1);
+    // **Il momento che conta.** Senza il flush, `writeDocument` non c'è (il
+    // debounce di 400 ms non è scaduto) e il comando parte col testo solo in
+    // RAM: `flush` sarebbe -1 e questa riga rossa.
+    expect(flush, "il comando è partito prima del flush").toBeLessThan(invocato);
+  });
+
+  it("un comando di sola lettura non flussa", async () => {
+    // La spec è quella vera di `search.open` (commands.rs): nessuno scope
+    // dichiarato, quindi `read_only` per default. Un comando che non scrive
+    // non deve pagare il giro del flush — e il banco lo prova col buffer
+    // sporco: se la palette flussasse comunque, `writeDocument` avrebbe una
+    // chiamata.
+    const specSearchOpen: CommandSpec = {
+      id: "search.open",
+      title: "Cerca nel vault",
+      description: "",
+      keybinding: null,
+      params: [{ name: "query", title: "Query", description: "", kind: { kind: "text" }, required: true }],
+      scope: { writes: false, reach: "session", reversible: true },
+    };
+    const host = await avvia(VAULT, [], undefined, null, [specSearchOpen]);
+    battiNellEditor("testo non ancora salvato");
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
+    );
+    await riposa();
+    const input = document.querySelector<HTMLInputElement>(".palette-input")!;
+    input.value = "Cerca nel vault";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+    await riposa();
+
+    const campo = document.querySelector<HTMLInputElement>(".palette-form input")!;
+    campo.value = "rust";
+    const form = document.querySelector<HTMLFormElement>(".palette-form")!;
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await riposa();
+
+    expect(host.aPorta("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
+    expect(
+      host.aPorta("writeDocument"),
+      "un comando di sola lettura non deve salvare i buffer",
+    ).toHaveLength(0);
   });
 });

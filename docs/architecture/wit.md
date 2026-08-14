@@ -10,19 +10,19 @@ runtime WASM di [M5](../milestones/M5-wasm-runtime.md) è lavoro meccanico, e
 tutte le firme si serializzano da sole.
 
 - **Contratto attuale**: [`fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit) —
-  package `fub:abi@0.1.0`.
+  package `fub:abi@0.1.1`.
 - **Versioni storiche**: [`frozen/`](wit-congelato.md).
 - **Mapping tipo-abi → WIT**: [traits.md](traits.md).
 - **Modello dati**: [data-model.md](data-model.md).
 
 ## Ciclo di vita ("vivo da M2, freeze a M4")
 
-- **M2 (ora)**, la milestone corrente: il WIT evolve insieme a `fub-abi` e la
-  superficie cambia liberamente. Un test di conformità gira a ogni `cargo test`
-  e diventa rosso appena i due divergono.
-- **[M4](../milestones/M4-wit-hardening.md)**, la milestone di stabilizzazione:
-  la superficie si **congela**. Da lì in poi si cresce solo per aggiunta, e una
-  rottura vuole un bump di versione del package.
+- **M2**: il WIT nasce vivo accanto a `fub-abi` e la superficie cambia
+  liberamente. Un test di conformità gira a ogni `cargo test` e diventa rosso
+  appena i due divergono.
+- **[M4](../milestones/M4-wit-hardening.md) (ora)**: la superficie è
+  **congelata** a `fub:abi@0.1.1`. Da lì in poi si cresce solo per aggiunta, e
+  una rottura vuole un bump di versione del package.
 
 ## Conformità
 
