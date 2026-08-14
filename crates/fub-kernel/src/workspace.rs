@@ -91,6 +91,7 @@ use crate::documents::{extension_of, DocumentStore};
 use crate::drafts::{Bozze, Drafts};
 use crate::entries::{EntryStore, StoredEntry, StoredMeta};
 use crate::error::{KernelError, Result};
+use crate::graph::{BuiltGraph, GraphSources};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
 use crate::index::Indexes;
@@ -2189,6 +2190,21 @@ impl Workspace {
         self.report_losses(lost);
     }
 
+    /// Fotografia di ciò che il grafo legge. Costa O(documenti) di **copia**
+    /// (id, alias, link), e tiene il prestito condiviso solo per quella copia:
+    /// [`GraphSources::build`] gira dopo, senza lucchetto
+    /// ([0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+    ///
+    /// Chi ha i thread la chiama sotto prestito condiviso, poi costruisce, poi
+    /// consegna il risultato a [`finish_index_with_graph`].
+    pub fn graph_sources(&self) -> GraphSources {
+        let _fase = tracing::info_span!(target: "fub.apertura", "graph_sources").entered();
+        GraphSources::from_docs(
+            self.indexes.core.metas.values(),
+            self.indexes.core.graph_epoch,
+        )
+    }
+
     /// **La chiusura dell'apertura** (§15.7): il grafo, la riconciliazione, il
     /// flush, e i guasti di ciò che non si è letto.
     ///
@@ -2197,14 +2213,32 @@ impl Workspace {
     /// metà non riconcilia. Il resto si fa comunque: ciò che è stato
     /// alimentato è buono, e buttarlo perché non è tutto vorrebbe dire che
     /// annullare costa più che non aver cominciato.
+    ///
+    /// Il grafo si ricostruisce **qui** quando chi chiama ha già il prestito
+    /// esclusivo in mano (`reindex`, i test). Chi ha i thread usa
+    /// [`finish_index_with_graph`]: a caldo `restore` non tocca il grafo, e
+    /// rifarlo sotto esclusivo congelerebbe l'UI per tutto il vault
+    /// (`il_grafo_di_un_apertura_a_caldo`).
     pub fn finish_index(&mut self, work: Indicizzazione) -> Apertura {
         let _fase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
-        // L'apertura ricostruisce il grafo in blocco anche in modalità
-        // incrementale: gli `upsert` uno per uno l'hanno già costruito, ma la
-        // risoluzione dei wikilink dipende dall'insieme intero (un alias
-        // dichiarato dall'ultima nota vale anche per la prima).
         self.indexes.core.rebuild_graph();
+        self.chiudi_indicizzazione(work)
+    }
 
+    /// Come [`finish_index`], col grafo già costruito fuori dal prestito
+    /// esclusivo. Se l'epoca non coincide — una scrittura è arrivata in mezzo —
+    /// lo ricostruisce qui dai metadati correnti.
+    pub fn finish_index_with_graph(&mut self, work: Indicizzazione, graph: BuiltGraph) -> Apertura {
+        let _fase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
+        if graph.epoch == self.indexes.core.graph_epoch {
+            self.indexes.core.graph = graph.graph;
+        } else {
+            self.indexes.core.rebuild_graph();
+        }
+        self.chiudi_indicizzazione(work)
+    }
+
+    fn chiudi_indicizzazione(&mut self, work: Indicizzazione) -> Apertura {
         let mut apertura = work.apertura;
         if work.cursore >= work.da_fare.len() {
             // **Gli scarti entrano nell'insieme completo**, e non è un
@@ -2218,7 +2252,10 @@ impl Workspace {
             ids.extend(apertura.scartati.iter().map(|s| s.id.clone()));
             ids.sort();
             ids.dedup();
-            let lost = self.indexes.reconcile(&ids);
+            let lost = {
+                let _fase = tracing::info_span!(target: "fub.apertura", "reconcile").entered();
+                self.indexes.reconcile(&ids)
+            };
             self.report_losses(lost);
         } else {
             // **Un'indicizzazione interrotta non riconcilia**, ed è la stessa
@@ -2237,7 +2274,10 @@ impl Workspace {
         };
         // Gli errori di flush non fanno fallire l'apertura del vault: un
         // indice è stato derivato, il vault è la verità (M4: notifica).
-        let _ = self.flush_indexes();
+        {
+            let _fase = tracing::info_span!(target: "fub.apertura", "flush_indexes").entered();
+            let _ = self.flush_indexes();
+        }
 
         // **Prima si riconosce, poi si raccoglie** (§23.1), e l'ordine è tutto:
         // ciò che una rinomina fatta ad app chiusa ha lasciato sotto il nome
@@ -2366,6 +2406,7 @@ impl Workspace {
     /// contenuto vecchio fino al primo evento che tornasse a toccare quel file,
     /// e se nessuno lo toccasse, per sempre.
     fn store_entries(&mut self) {
+        let _fase = tracing::info_span!(target: "fub.apertura", "store_entries").entered();
         let table = self
             .indexes
             .core

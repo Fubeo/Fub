@@ -210,3 +210,39 @@ fn a_caldo_un_wikilink_risolve_ancora() {
         vec![DocId::new(nome(8))]
     );
 }
+
+/// La strada dell'host (`graph_sources` + `build` + `finish_index_with_graph`)
+/// deve dare lo stesso grafo di `reindex`, che ricostruisce sotto `&mut`.
+#[test]
+fn un_grafo_preparato_fuori_dall_esclusivo_e_lo_stesso_di_reindex() {
+    let storage = Arc::new(MemStorage::new());
+    vault(&storage);
+    let a_freddo = aperto(Arc::clone(&storage));
+    let atteso = grafo(&a_freddo);
+    drop(a_freddo);
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(Box::new(LinkListProvider))
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::on(
+        ROOT,
+        registry,
+        storage as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("l'apertura del vault riesce");
+    let work = ws.scan_vault().expect("scan");
+    let built = ws.graph_sources().build();
+    ws.finish_index_with_graph(work, built);
+    assert_eq!(
+        grafo(&ws),
+        atteso,
+        "il grafo costruito fuori dall'esclusivo diverge da quello di reindex"
+    );
+    assert_eq!(
+        ws.resolve_link("nota0007"),
+        Some(DocId::new(nome(7))),
+        "a caldo un wikilink non nomina più niente dopo finish_index_with_graph"
+    );
+}

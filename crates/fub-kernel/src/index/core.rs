@@ -173,6 +173,10 @@ pub(crate) struct CoreIndex {
     pub(crate) tags: TagCounts,
     pub(crate) graph: LinkGraph,
     pub(crate) graph_update: GraphUpdate,
+    /// Generazione dei metadati da cui il grafo si ricostruisce. Avanza a ogni
+    /// `restore` / alimentazione / rimozione: una fotografia presa prima non
+    /// si installa sopra una scrittura arrivata in mezzo.
+    pub(crate) graph_epoch: u64,
     /// Serve a un controllo solo — distinguere un link a una nota da un
     /// riferimento a un allegato — ed è **condiviso** col workspace invece che
     /// copiato: due elenchi di estensioni sarebbero due idee di cosa è un
@@ -620,6 +624,7 @@ impl CoreIndex {
             tags: TagCounts::default(),
             graph: LinkGraph::default(),
             graph_update: GraphUpdate::default(),
+            graph_epoch: 0,
             registry,
             watch: WatchState::default(),
             jobs: JobsState::default(),
@@ -654,6 +659,7 @@ impl CoreIndex {
         self.nomi.svuota();
         self.folders.clear();
         self.tags.clear();
+        self.graph_epoch = 0;
     }
 
     /// Rimette in cache i metadati di un documento **senza riaprirlo** (§14.2):
@@ -661,10 +667,12 @@ impl CoreIndex {
     /// [`on_documents_indexed`](IndexProvider::on_documents_indexed) è che qui il
     /// modello non c'è — non è stato parsato, perché il file non è stato letto.
     ///
-    /// Il grafo non si tocca: chi chiama è `reindex`, che lo ricostruisce in
-    /// blocco alla fine (la risoluzione dei wikilink dipende dall'insieme
-    /// intero, e un `upsert` per documento non lo saprebbe).
+    /// Il grafo non si tocca: chi chiama è `reindex` / `finish_index`, che lo
+    /// ricostruisce in blocco alla fine (un `upsert` per documento, a caldo,
+    /// vedrebbe un insieme ancora incompleto). L'epoca avanza lo stesso: i
+    /// metadati da cui il grafo si ricostruisce sono cambiati.
     pub(crate) fn restore(&mut self, id: &DocId, meta: StoredMeta) {
+        self.graph_epoch = self.graph_epoch.wrapping_add(1);
         self.tags
             .upsert_names(id, meta.tags.iter().map(String::as_str));
         self.metas.insert(
@@ -853,6 +861,7 @@ impl CoreIndex {
     }
 
     pub(crate) fn rebuild_graph(&mut self) {
+        let _fase = tracing::info_span!(target: "fub.apertura", "rebuild_graph").entered();
         self.graph = LinkGraph::build(self.metas.values());
     }
 
@@ -1076,6 +1085,9 @@ impl IndexProvider for CoreIndex {
     /// giorno che ne avesse uno — un tetto, una quota — sarebbe qui che lo
     /// direbbe.
     fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        if !docs.is_empty() {
+            self.graph_epoch = self.graph_epoch.wrapping_add(1);
+        }
         for doc in docs {
             self.tags.upsert(&doc.id, &doc.tags);
             let meta = DocMeta::from(doc);
@@ -1088,6 +1100,9 @@ impl IndexProvider for CoreIndex {
     }
 
     fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        if !ids.is_empty() {
+            self.graph_epoch = self.graph_epoch.wrapping_add(1);
+        }
         for id in ids {
             if self.metas.remove(id).is_none() {
                 continue;

@@ -187,6 +187,11 @@ fn stampa(nome: &str, sub: &AperturaSub, open_ms: Duration, index_ms: Duration) 
         "fetta",
         "plan_batch",
         "finish_index",
+        "graph_sources",
+        "rebuild_graph",
+        "reconcile",
+        "flush_indexes",
+        "store_entries",
         "collect_doc_data",
     ] {
         let (ms, n) = tempi
