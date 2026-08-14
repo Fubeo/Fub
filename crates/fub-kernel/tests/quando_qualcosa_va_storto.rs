@@ -121,6 +121,7 @@ fn guasti(rx: &fub_kernel::Subscription) -> Vec<(Severity, Option<String>, Strin
                 severity,
                 subject,
                 error,
+                ..
             } => Some((severity, subject.map(|s| s.to_string()), error.to_string())),
             _ => None,
         })
@@ -249,6 +250,7 @@ impl EventHandler for Cascata {
             severity: Severity::Failure,
             subject: None,
             error: PluginError::Io("il flush non è andato".into()),
+            gate: None,
         });
         Ok(())
     }

@@ -239,6 +239,7 @@ fn un_fallimento_di_sincronizzazione_arriva_anche_a_chi_ascolta() {
             severity,
             subject,
             error,
+            ..
         } => Some((*severity, subject.clone(), error.to_string())),
         _ => None,
     });

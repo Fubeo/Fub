@@ -367,16 +367,32 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
       }
       case "tags":
         return { kind: "tags", value: pagina([], q.page) };
+      case "render_preview":
+        return {
+          kind: "render_preview",
+          value: { html: docs.get(q.doc)?.testo ?? "", parts: [] },
+        };
+      case "render_embed":
+        return {
+          kind: "render_embed",
+          value: { doc_id: q.page, html: "", parts: [] },
+        };
       default:
         throw new Error(`host finto: non so rispondere alla query ${q.kind}`);
     }
   }
 
-  /// I cinque comandi strutturali, che sono del contratto (`COMANDI`) e non di
-  /// una feature: è la parte del registro che questa shell nomina per id, e
-  /// quindi la sola che un host finto debba saper eseguire.
+  /// I comandi strutturali, che sono del contratto (`COMANDI`) e non di una
+  /// feature: è la parte del registro che questa shell nomina per id, e
+  /// quindi la sola che un host finto debba saper eseguire. `search.open` è
+  /// lì accanto per un motivo solo: è il comando di sola lettura che i banchi
+  /// della palette usano per provare che un comando che non scrive non
+  /// flussa — e un host finto che non lo sapesse eseguire lancerebbe al posto
+  /// di rispondere.
   function comando(id: string, args: Record<string, unknown> | null) {
     switch (id) {
+      case "search.open":
+        return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       case "note.create": {
         const nome = typeof args?.name === "string" && args.name ? args.name : "Senza titolo";
         const doc = `${nome}.md`;
@@ -462,16 +478,6 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
         }
         return porta("writeDocument", [id, source, base], Promise.resolve(scrivi(id, source)));
       },
-      saveDraft: (id, text, base) => porta("saveDraft", [id, text, base], Promise.resolve()),
-      discardDraft: (id) => porta("discardDraft", [id], Promise.resolve()),
-      renderPreview: (id) =>
-        porta("renderPreview", [id], Promise.resolve({ html: docs.get(id)?.testo ?? "", parts: [] })),
-      renderEmbed: (page, heading, block) =>
-        porta(
-          "renderEmbed",
-          [page, heading, block],
-          Promise.resolve({ doc_id: page, html: "", parts: [] }),
-        ),
       setActiveContext: (context) => porta("setActiveContext", [context], Promise.resolve([])),
       setSystemLocale: (locale) => porta("setSystemLocale", [locale], Promise.resolve(false)),
       listViews: () => porta("listViews", [], Promise.resolve(view)),

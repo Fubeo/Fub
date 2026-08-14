@@ -196,7 +196,7 @@ Un E2E attivo su un solo OS ripropone il difetto.
     *   **Gesti di controllo**: I gesti passano da cinque a **sette**. L'azione
         "rinomina" copre due casistiche (interfaccia ed evento esterno). La
         seconda casistica celava un bug. Il conteggio aggiornato segna
-        **diciannove** gesti [conta: gesti-della-shell]. La
+        **ventuno** gesti [conta: gesti-della-shell]. La
         [0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
         include due interazioni per le scorciatoie. L'undicesimo simula il link
         **dentro** la nota. Il dodicesimo gestisce l'avviso di sessione della
@@ -207,7 +207,10 @@ Un E2E attivo su un solo OS ripropone il difetto.
         (difetto 0205). Il diciassettesimo spegne il buffer di crash sotto i
         piedi di chi scrive e chiede che la rete caduta lo dica — una volta, e
         ogni volta che ricade (difetto 0209). Il diciottesimo e il diciannovesimo
-        ordinano salvataggio e scarto della bozza nella stessa coda FIFO.
+        ordinano salvataggio e scarto della bozza nella stessa coda FIFO. Il
+        ventesimo e il ventunesimo presidiano il flush-before-patch della
+        palette: un comando che scrive (`note.create`) salva il buffer sporco
+        prima di partire, un comando di sola lettura (`search.open`) non flussa.
     *   **Difetti isolati**: La simulazione ha rimosso Due difetti del
         cablaggio, sfuggiti alla
         [0015](../decisions/0015-la-forma-della-shell.md). L'invio della
@@ -259,8 +262,9 @@ estensioni).*
         raggiunti i dieci mega. Risiede fuori dal vault, vicino alle
         configurazioni.
 
-- [ ] **Mancanza di contesto in `Event::Trouble`**: L'evento omette la porta
-      d'ingresso.
+- [x] **Mancanza di contesto in `Event::Trouble`**: L'evento omette la porta
+      d'ingresso. **Fatto** con la
+      [0161](../decisions/0161-la-porta-entra-nel-trouble.md).
     *   **Evoluzione dell'identificativo**: La
         [0105](../decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)
         codifica le chiamate dei plugin nel **dato** `Gate` (tredici varianti).
@@ -273,4 +277,8 @@ estensioni).*
     *   **Ragioni del rinvio**: La modifica impatta un tipo del **contratto**
         (una firma di sistema). La §23.15 escludeva la priorità per questo
         intervento. L'aggiornamento avverrà con la revisione delle firme,
-        scorporato dai presidi.
+        scorporato dai presidi. **Il rinvio è scaduto con la 0161**: il `Gate`
+        è salito nel contratto (`crates/fub-abi/src/gate.rs`) perché
+        `Event::Trouble` lo nomina, e il campo `gate: Option<Gate>` è in fondo
+        all'evento — additivo, e `None` è il guasto del vault, non di una porta
+        plugin. Il centro notifiche che raggruppa per porta resta UI.

@@ -1031,7 +1031,9 @@ impl<H, P: Policy> Guard<H, P> {
             | QueryKind::Organization
             | QueryKind::Resolve
             | QueryKind::Entries
-            | QueryKind::Folders => (Capability::Query, "interrogare l'indice"),
+            | QueryKind::Folders
+            | QueryKind::RenderPreview
+            | QueryKind::RenderEmbed => (Capability::Query, "interrogare l'indice"),
         }
     }
 }

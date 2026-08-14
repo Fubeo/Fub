@@ -72,6 +72,7 @@ use fub_abi::event::{
     Actor, BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Notice, Origin, Severity,
     Subject,
 };
+use fub_abi::gate::Gate;
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
     ParseContext, RenderOptions, RenderTarget, SourceKind,
@@ -88,6 +89,7 @@ use fub_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
     TextTolerance,
 };
+use fub_abi::render::{EmbedContent, RenderedDocument, RenderedPart};
 use fub_abi::session::{
     AnchoredSelection, AnchoredSelections, ContextKind, ContextMask, FloatingSelection,
     FloatingSelections, PaneId, PaneMode, SelectionSet, ViewContext,
@@ -437,6 +439,7 @@ wit_kebab! {
     JobProgress,
     IndexLoss,
     Severity,
+    Gate,
     JobStatus,
     TrashEntry,
     Page,
@@ -506,6 +509,11 @@ wit_kebab! {
 
     // L'organizzazione del vault (§11.3).
     Organization,
+
+    // La resa di un documento (§16.6): l'anteprima composta e l'embed.
+    RenderedDocument,
+    RenderedPart,
+    EmbedContent,
 }
 
 impl<T: WitType + ?Sized> WitType for &T {
@@ -1932,6 +1940,7 @@ fn event_case(e: &Event) -> Case {
             severity,
             subject,
             error,
+            gate,
         } => case_rec(
             "trouble",
             "event-trouble",
@@ -1939,6 +1948,7 @@ fn event_case(e: &Event) -> Case {
                 ("severity", wit(severity)),
                 ("subject", wit(subject)),
                 ("error", wit(error)),
+                ("gate", wit(gate)),
             ],
         ),
         Event::TimerFired { owner, timer } => case_rec(
@@ -2104,6 +2114,20 @@ fn index_query_case(q: &IndexQuery) -> Case {
         IndexQuery::Drafts { page } => {
             case_rec("drafts", "index-query-drafts", vec![("page", wit(page))])
         }
+        IndexQuery::RenderPreview { doc } => case_ty("render-preview", wit(doc)),
+        IndexQuery::RenderEmbed {
+            page,
+            heading,
+            block,
+        } => case_rec(
+            "render-embed",
+            "index-query-render-embed",
+            vec![
+                ("page", wit(page)),
+                ("heading", wit(heading)),
+                ("block", wit(block)),
+            ],
+        ),
     }
 }
 
@@ -2165,6 +2189,8 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::Entries => case("entries"),
         QueryKind::Folders => case("folders"),
         QueryKind::Drafts => case("drafts"),
+        QueryKind::RenderPreview => case("render-preview"),
+        QueryKind::RenderEmbed => case("render-embed"),
     }
 }
 
@@ -2204,6 +2230,8 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Entries(v) => case_ty("entries", wit(v)),
         IndexResult::Folders(v) => case_ty("folders", wit(v)),
         IndexResult::Drafts(v) => case_ty("drafts", wit(v)),
+        IndexResult::RenderPreview(v) => case_ty("render-preview", wit(v)),
+        IndexResult::RenderEmbed(v) => case_ty("render-embed", wit(v)),
     }
 }
 
@@ -2746,6 +2774,7 @@ fn conform(source: &str) -> Result<(), String> {
                 severity: Severity::Warning,
                 subject: Some(DocId::new("a")),
                 error: PluginError::Internal("x".into()),
+                gate: Some(Gate::Command),
             }),
             event_case(&Event::TimerFired {
                 owner: "com.acme.tasks".into(),
@@ -2833,6 +2862,14 @@ fn conform(source: &str) -> Result<(), String> {
                 page: None,
             }),
             index_query_case(&IndexQuery::Drafts { page: None }),
+            index_query_case(&IndexQuery::RenderPreview {
+                doc: DocId::new("a"),
+            }),
+            index_query_case(&IndexQuery::RenderEmbed {
+                page: String::new(),
+                heading: None,
+                block: None,
+            }),
         ],
     );
 
@@ -2856,6 +2893,11 @@ fn conform(source: &str) -> Result<(), String> {
             index_result_case(&IndexResult::Entries(Paged::all(vec![]))),
             index_result_case(&IndexResult::Folders(Paged::all(vec![]))),
             index_result_case(&IndexResult::Drafts(Paged::all(vec![]))),
+            index_result_case(&IndexResult::RenderPreview(RenderedDocument::default())),
+            index_result_case(&IndexResult::RenderEmbed(EmbedContent {
+                doc_id: String::new(),
+                content: RenderedDocument::default(),
+            })),
         ],
     );
 
@@ -2920,6 +2962,8 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::Entries),
             query_kind_case(&QueryKind::Folders),
             query_kind_case(&QueryKind::Drafts),
+            query_kind_case(&QueryKind::RenderPreview),
+            query_kind_case(&QueryKind::RenderEmbed),
         ],
     );
 
@@ -2968,6 +3012,7 @@ fn conform(source: &str) -> Result<(), String> {
     // Quanto pesa ciò che è andato storto (§20.2): due gradini, come i due toni
     // del centro notifiche.
     contract.enumeration_from("severity", ("event.rs", "Severity"));
+    contract.enumeration_from("gate", ("gate.rs", "Gate"));
 
     contract.enumeration_from("link-direction", ("traits.rs", "LinkDirection"));
 
@@ -3524,6 +3569,7 @@ fn conform(source: &str) -> Result<(), String> {
             case("document"),
             case("documents"),
             case_ty("choice", wit(&Vec::<Choice>::new())),
+            case("numbers"),
         ],
     );
 
@@ -4219,6 +4265,37 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record(
         "folders-page",
         &paged_fields(&Paged::all(Vec::<VaultFolder>::new())),
+    );
+
+    let RenderedDocument { html, parts } = RenderedDocument::default();
+    contract.record(
+        "rendered-document",
+        &[("html", wit(&html)), ("parts", wit(&parts))],
+    );
+    let RenderedPart { slot, kind, node } = RenderedPart {
+        slot: 0,
+        kind: String::new(),
+        node: UiNode::text(""),
+    };
+    contract.record(
+        "rendered-part",
+        &[
+            ("slot", wit(&slot)),
+            ("kind", wit(&kind)),
+            ("node", wit(&node)),
+        ],
+    );
+    let EmbedContent { doc_id, content } = EmbedContent {
+        doc_id: String::new(),
+        content: RenderedDocument::default(),
+    };
+    contract.record(
+        "embed-content",
+        &[
+            ("doc-id", wit(&doc_id)),
+            ("html", wit(&content.html)),
+            ("parts", wit(&content.parts)),
+        ],
     );
 
     let UiAction {

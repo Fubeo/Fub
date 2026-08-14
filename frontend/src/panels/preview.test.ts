@@ -15,7 +15,10 @@ const reso = vi.hoisted(() => ({ value: null as RenderedDocument | null }));
 
 vi.mock("../host/ipc", () => ({
   api: {
-    renderPreview: async () => reso.value,
+    queryIndex: async (q: { kind: string; doc?: string }) => {
+      if (q.kind === "render_preview") return { kind: "render_preview", value: reso.value };
+      throw new Error(`query inattesa: ${q.kind}`);
+    },
   },
 }));
 

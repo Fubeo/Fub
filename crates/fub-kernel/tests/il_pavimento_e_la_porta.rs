@@ -55,6 +55,7 @@ fn una_perdita_apre_la_porta_una_non_perdita_no() {
                 severity: Severity::Failure,
                 subject: None,
                 error: PluginError::Internal(Text::from("una versione non salvata")),
+                gate: None,
             });
         });
     });
@@ -108,6 +109,7 @@ fn il_pavimento_spento_non_chiude_la_porta() {
                 severity: Severity::Warning,
                 subject: None,
                 error: PluginError::Internal(Text::from("flush fallito")),
+                gate: None,
             });
         });
     });

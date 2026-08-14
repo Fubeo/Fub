@@ -350,36 +350,13 @@ const ALLOWLIST: &[(&str, Perche)] = &[
     // lo sposto*, è prima *chi lo chiama, e da che parte del confine dovrebbe
     // stare*. Un `IndexQuery::Versions` scritto a suo tempo sarebbe oggi una
     // rotta del contratto che nessuno percorre.
-    // Restano due, che il §16.6 **non** nominava, trovate applicando lo stesso metro.
-    //
-    // `render_preview` risponde con un `RenderedDocument` e `render_embed` con un
-    // `EmbedContent`: sono dati, e nessuna delle due è il ponte generico, una
-    // capacità dell'elenco chiuso o un fatto che solo la shell sappia. La
-    // conseguenza è quella di sempre — un `ViewProvider` che volesse mostrare un
-    // documento reso non ha nessuna porta, mentre la shell ce l'ha — ed è la
-    // stessa asimmetria che ha portato `search`, `list_tags`, `graph_data`,
-    // `backlinks` e `resolve_link` dentro `query_index`.
-    //
-    // Il precedente esatto è `IndexQuery::Outline`, che sta lì per essere «il
-    // modo con cui una view legge la struttura parsata senza avere un
-    // `FormatProvider`»: un documento reso è la stessa domanda un passo più in
-    // là, senza avere un `RendererProvider`. La
-    // [decisione 0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)
-    // ha confermato `render_preview` come «fast-path della lettura», ma
-    // rispondeva a un'altra domanda — *il modello attraversa l'IPC?*, e la
-    // risposta è no — non a *da quale porta passa la lettura*.
-    (
-        "render_preview",
-        Perche::DaMigrare {
-            verso: "IndexQuery",
-        },
-    ),
-    (
-        "render_embed",
-        Perche::DaMigrare {
-            verso: "IndexQuery",
-        },
-    ),
+    // `render_preview` e `render_embed` (0163) non sono più qui: sono passati
+    // al canale dati (`IndexQuery::RenderPreview` / `IndexQuery::RenderEmbed`),
+    // come l'outline e ogni altra lettura. Un fatto sul vault che solo la
+    // shell sapeva chiedere è adesso una domanda del canale di tutti — e un
+    // `ViewProvider` che volesse mostrare un documento reso ce l'ha. La
+    // [decisione 0163](../../../docs/decisions/0163-render-via-index-query.md)
+    // ha chiuso l'asimmetria.
 ];
 
 /// L'allowlist per nome, con il rifiuto dei doppioni: due righe con lo stesso
@@ -707,10 +684,10 @@ fn il_debito_dichiarato_e_un_numero_presidiato() {
 
     assert_eq!(
         da_migrare.len(),
-        2,
-        "i comandi ancora da migrare sono {} e non 2:\n  {}\n\
-         Aggiorna il numero in questo test. Se sei arrivato a zero, il §16.6 ha finito\n\
-         il suo debito e questa asserzione è la riga che te lo dice.",
+        0,
+        "i comandi ancora da migrare sono {} e non 0:\n  {}\n\
+         Il §16.6 ha finito il suo debito e questa asserzione è la riga che te \
+         lo dice.",
         da_migrare.len(),
         da_migrare.join("\n  ")
     );

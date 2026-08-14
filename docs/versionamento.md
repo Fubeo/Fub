@@ -2,14 +2,14 @@
 
 In Fub i numeri di versione sono **tre**, e non sono lo stesso numero scritto
 in tre posti: sono tre promesse, fatte a tre persone diverse, che si rompono in
-tre modi diversi. Oggi due di loro valgono `0.1.0` e sembrano uno solo — è una
-coincidenza di questo momento, non una regola, ed è la ragione per cui il
-documento esiste.
+tre modi diversi. Oggi i crate valgono `0.1.0` e il contratto `0.1.1` — due
+numeri diversi, ed è la ragione per cui il documento esiste. Sembravano uno
+solo finché il freeze di M4 non ha mosso il secondo.
 
 | Numero | Dove sta | A chi promette | Cosa succede se si sbaglia |
 |---|---|---|---|
 | **versione dei crate** | [`Cargo.toml:24`](../Cargo.toml), ereditata dagli otto crate [conta: crate-del-workspace]; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila Fub, o ci compila contro | la build rossa, subito |
-| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3821`) e `package fub:abi@0.1.0` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
+| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3821`) e `package fub:abi@0.1.1` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
 | **versione degli schemi su disco** | undici costanti `SchemaVersion` [conta: schemi-su-disco] indipendenti nei crate, una per formato (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
 
 ## 1. La versione dei crate
@@ -86,11 +86,11 @@ proposito — sta in
 qui. Il presidio è [`wit_additivity.rs`](../crates/fub-abi/tests/wit_additivity.rs),
 che gira a ogni push.
 
-**Prima del freeze (adesso)** la superficie è ancora libera di cambiare, e il
-test non lo impedisce: lo rende visibile in review. Il freeze è M4
-([milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md)), ed è da lì
-che la tabella qui sopra diventa una promessa invece che una regola di
-implementazione.
+**Dopo il freeze di M4** la superficie cresce solo per aggiunta, e
+`wit_additivity` confronta il contratto vivo con ogni snapshot in `wit/frozen/`
+della stessa major. Il freeze è M4
+([milestones/M4-wit-hardening.md](milestones/M4-wit-hardening.md)): da lì la
+tabella qui sopra è una promessa, non più una regola di implementazione.
 
 ## 3. Le versioni degli schemi su disco
 

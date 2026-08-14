@@ -1234,6 +1234,7 @@ impl Host {
                 severity: fub_abi::event::Severity::Warning,
                 subject: None,
                 error: PluginError::Io(avviso.into()),
+                gate: None,
             },
             fub_abi::event::Origin::by(fub_abi::event::Actor::Kernel),
         ))

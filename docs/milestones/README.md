@@ -9,10 +9,12 @@ una feature possa essere scritta come provider invece che come codice dell'app.
   incrementali, graph view, pannelli outline e tag, «crea nota».
 - [M3-editor-fidelity.md](M3-editor-fidelity.md) — live preview dentro
   l'editor, command palette, impostazioni dichiarative, rendering di callout,
-  embed e formule.
+  embed e formule. **Chiusa** il 14/08/2026, salvo la resa TeX rimandata
+  ([0158](../decisions/0158-la-matematica-e-sorgente-a-vista-per-ora.md)).
 - [M4-wit-hardening.md](M4-wit-hardening.md) — il **freeze del contratto**: WIT,
-  conformità abi↔WIT, primo plugin nativo. È lo spartiacque, perché da lì in poi
-  il contratto cresce solo per aggiunta.
+  conformità abi↔WIT, primo plugin nativo. **Chiusa** il 14/08/2026:
+  `fub:abi@0.1.1`, linea di base in `wit/frozen/`. Da lì il contratto cresce
+  solo per aggiunta.
 - [M5-wasm-runtime.md](M5-wasm-runtime.md) — `fub-wasm-host`, il proxy WASM,
   l'applicazione delle capacità, i plugin di esempio.
 

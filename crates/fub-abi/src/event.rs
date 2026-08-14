@@ -128,6 +128,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
+use crate::gate::Gate;
 use crate::model::DocId;
 use crate::settings::SettingScope;
 use crate::traits::{EntryKind, JobId, JobProgress};
@@ -618,6 +619,17 @@ pub enum Event {
         /// a chi disegna (decisione 0041): un `Text`, quindi traducibile da chi
         /// lo mostra invece che una frase già composta.
         error: PluginError,
+        /// **Da quale porta** è entrato il guasto (§17.3, decisione 0161): la
+        /// porta del panico da cui il kernel stava chiamando codice di un
+        /// provider quando qualcosa è andato storto.
+        ///
+        /// `None` per i guasti che non passano da una porta — un flush fallito,
+        /// il watcher che smette: non c'è un componente di terzi in mezzo, e
+        /// dire una porta sarebbe una bugia. È in fondo al record come ogni
+        /// campo nuovo, e chi lo legge per primo non deve saperlo: la 0105
+        /// diceva che il Gate non arriva nell'evento e restava una casella
+        /// della seduta 17, e questa è la finestra che la chiude.
+        gate: Option<Gate>,
     },
     /// Una **sveglia** dichiarata nel manifest è scaduta (§22.1, decisione 0069).
     ///

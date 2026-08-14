@@ -1057,7 +1057,7 @@ impl CoreCommands {
             // comando, un plugin.
             comando(NOTE_TASK_TOGGLE)
                 .with_param(parametro(NOTE_TASK_TOGGLE, "doc", ParamKind::Document))
-                .with_param(parametro(NOTE_TASK_TOGGLE, "at", ParamKind::Number))
+                .with_param(parametro(NOTE_TASK_TOGGLE, "at", ParamKind::Numbers))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             // --- le impostazioni (§11.1) --------------------------------
             //
@@ -1862,12 +1862,23 @@ fn note_task_toggle(
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| stato(Text::key(E_TASK_NO_NOTE)))?;
 
-    // La posizione: quella detta, o quella del cursore. Le due non si mescolano
-    // — un `doc` detto e un `at` no vorrebbe dire spuntare in una nota il task
-    // che sta sotto il cursore di **un'altra**, che è un modo silenzioso di
-    // scrivere nel posto sbagliato.
-    let at = match args.number("at") {
-        Some(n) => posizione(n)?,
+    // Le posizioni: quelle dette, o tutte quelle del contesto. Le due non si
+    // mescolano — un `doc` detto e un `at` no vorrebbe dire spuntare in una
+    // nota i task che stanno sotto i cursori di **un'altra**, che è un modo
+    // silenzioso di scrivere nel posto sbagliato.
+    //
+    // `at` è una lista (decisione 0162): uno scalare non è accettato — la
+    // convalida di `ParamKind::Numbers` lo rifiuta al confine. Se `at` è
+    // assente, si spuntano **tutte** le selezioni placed del contesto e non
+    // solo la primaria, che è il gesto per cui il multi-cursore esiste
+    // (FEATURES 4.2, §23.4).
+    let ats: Vec<usize> = match args.numbers("at") {
+        Some(ns) => {
+            let mut offsets: Vec<usize> = ns.iter().copied().map(posizione).collect::<Result<_, _>>()?;
+            offsets.sort_unstable();
+            offsets.dedup();
+            offsets
+        }
         None => {
             let context = context
                 .as_ref()
@@ -1882,39 +1893,58 @@ fn note_task_toggle(
             // La regola dello span della decisione 0007, per la stessa ragione di
             // `selection.wikilink`: a buffer sporco le coordinate valgono per il
             // buffer, e il modello che si sta per chiedere è quello del **file**.
-            //
-            // Con più cursori qui si legge la **primaria**, e non è la
-            // sottrazione che è per `selection.wikilink` (decisione 0093): la
-            // posizione di questo comando è un *argomento* — `at`, uno scalare
-            // in una `CommandSpec` pubblicata — e il comando è «spunta il task
-            // sotto il cursore», al singolare per costruzione. Spuntarne N
-            // vorrebbe dire un `at` che è una lista, cioè una seconda decisione
-            // di firma, e non la si prende di straforo dentro questa.
             selections
                 .placed()
                 .ok_or_else(|| stato(Text::key(E_TASK_DIRTY_BUFFER)))?
-                .primary
-                .span
-                .start
+                .all()
+                .into_iter()
+                .map(|s| s.span.start)
+                .collect()
         }
     };
 
     let model = host.read_model(&doc)?;
-    let marker = task_at(&model, at).ok_or_else(|| {
-        stato(Text::message(
-            E_TASK_NOT_FOUND,
-            vec![Arg::int(A_AT, at as i64), Arg::text(A_DOC, doc.as_str())],
-        ))
-    })?;
 
-    let (simbolo, fatto) = match marker.symbol {
-        None => ("x", true),
-        Some(_) => (" ", false),
-    };
-    let request = EditRequest::new(
-        host.document_revision(&doc)?,
-        vec![TextEdit::replace(marker.span, simbolo)],
-    );
+    // Per ogni offset, il task che lo contiene. Se un offset non ha un task,
+    // l'errore nomina **quello** — non l'insieme — perché chi legge sa quale
+    // cursore spostare.
+    let mut markers: Vec<TaskMarker> = Vec::with_capacity(ats.len());
+    for at in &ats {
+        let marker = task_at(&model, *at).ok_or_else(|| {
+            stato(Text::message(
+                E_TASK_NOT_FOUND,
+                vec![Arg::int(A_AT, *at as i64), Arg::text(A_DOC, doc.as_str())],
+            ))
+        })?;
+        markers.push(marker);
+    }
+
+    // Due cursori nello stesso task lo toggleerebbero due volte — un no-op
+    // silenzioso. Si deduplica per span, tenendo il primo (ordine stabile).
+    let mut seen: Vec<Span> = Vec::with_capacity(markers.len());
+    markers.retain(|m| {
+        if seen.contains(&m.span) {
+            false
+        } else {
+            seen.push(m.span);
+            true
+        }
+    });
+
+    let revision = host.document_revision(&doc)?;
+    let mut edits = Vec::with_capacity(markers.len());
+    let mut fatto = false;
+    for marker in &markers {
+        let (simbolo, f) = match marker.symbol {
+            None => ("x", true),
+            Some(_) => (" ", false),
+        };
+        if f {
+            fatto = true;
+        }
+        edits.push(TextEdit::replace(marker.span, simbolo));
+    }
+    let request = EditRequest::new(revision, edits);
     let summary = uno(
         if fatto { P_TASK_DONE } else { P_TASK_TODO },
         A_DOC,
@@ -2674,7 +2704,7 @@ mod tests {
         invoke(
             &mut host,
             NOTE_TASK_TOGGLE,
-            json!({ "doc": "nota.md", "at": 29 }),
+            json!({ "doc": "nota.md", "at": [29] }),
             InvokeMode::Apply,
         )
         .expect("spunta");
@@ -2717,7 +2747,7 @@ mod tests {
     #[test]
     fn a_position_that_is_not_a_byte_offset_is_refused_before_the_write() {
         let mut host = con_task(None);
-        for at in [json!(-1), json!(3.5), json!(9999)] {
+        for at in [json!([-1]), json!([3.5]), json!([9999])] {
             let err = invoke(
                 &mut host,
                 NOTE_TASK_TOGGLE,

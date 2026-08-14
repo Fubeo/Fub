@@ -20,6 +20,7 @@ use crate::model::{
 };
 use crate::organization::Organization;
 use crate::query::{QueryExpr, QueryPredicate};
+use crate::render::{EmbedContent, RenderedDocument};
 use crate::session::{ContextMask, ViewContext};
 use crate::settings::{SettingEntry, SettingSpec, SettingValue};
 use crate::text::{Localize, StringCatalog, Text};
@@ -2896,6 +2897,45 @@ pub enum IndexQuery {
         #[serde(default)]
         page: Option<Page>,
     },
+    // In **coda** come le altre varianti nuove: l'ordine dei casi è il
+    // discriminante dell'ABI, e additiva vuol dire in fondo (0163).
+    /// **Rendi un documento** (§16.6): l'anteprima intera, come la vede la
+    /// shell.
+    ///
+    /// È la metà che mancava al canale dati: prima della 0163 la resa era un
+    /// comando IPC bespoke (`render_preview`) che solo la shell sapeva
+    /// chiamare, e un `ViewProvider` che voleva mostrare un documento reso non
+    /// aveva una porta (difetto 0130). Passa di qui e non da un comando perché
+    /// è **una risposta con dei dati**, e quelle passano dal canale dati
+    /// (decisione 0019).
+    ///
+    /// La risposta è [`IndexResult::RenderPreview`], che porta un
+    /// [`RenderedDocument`](crate::render::RenderedDocument): l'HTML e le
+    /// parti dichiarative che la shell monta da sé.
+    RenderPreview {
+        /// Il documento da rendere.
+        doc: DocId,
+    },
+    /// **Rendi un ritaglio** (§16.6): la sezione o il blocco che una
+    /// transclusione nomina, dentro il documento che lo ospita.
+    ///
+    /// Come [`RenderPreview`](IndexQuery::RenderPreview), è la metà che
+    /// mancava al canale dati: prima della 0163 la transclusione passava da un
+    /// comando IPC bespoke (`render_embed`) che solo la shell sapeva chiamare.
+    ///
+    /// La risposta è [`IndexResult::RenderEmbed`], che porta un
+    /// [`EmbedContent`](crate::render::EmbedContent): il documento reso e il
+    /// suo id, perché chi monta un embed deve sapere da quale nota viene.
+    RenderEmbed {
+        /// La pagina che ospita il ritaglio.
+        page: String,
+        /// La sezione da rendere, se la transclusione ne nomina una.
+        #[serde(default)]
+        heading: Option<String>,
+        /// Il blocco da rendere, se la transclusione ne nomina uno.
+        #[serde(default)]
+        block: Option<String>,
+    },
 }
 
 impl IndexQuery {
@@ -2917,7 +2957,9 @@ impl IndexQuery {
             | IndexQuery::Jobs
             | IndexQuery::Settings { .. }
             | IndexQuery::Organization
-            | IndexQuery::Resolve { .. } => None,
+            | IndexQuery::Resolve { .. }
+            | IndexQuery::RenderPreview { .. }
+            | IndexQuery::RenderEmbed { .. } => None,
         }
     }
 
@@ -2945,7 +2987,11 @@ impl IndexQuery {
             // dire filtrare dei file con un linguaggio che parla di note. Vale
             // anche per le cartelle, che una nota non lo sono affatto.
             | IndexQuery::Entries { .. }
-            | IndexQuery::Folders { .. } => None,
+            | IndexQuery::Folders { .. }
+            // La resa non seleziona documenti: chiede un documento per nome,
+            // non quali documenti combaciano.
+            | IndexQuery::RenderPreview { .. }
+            | IndexQuery::RenderEmbed { .. } => None,
         }
     }
 
@@ -3009,6 +3055,8 @@ impl IndexQuery {
             IndexQuery::Resolve { .. } => QueryKind::Resolve,
             IndexQuery::Entries { .. } => QueryKind::Entries,
             IndexQuery::Folders { .. } => QueryKind::Folders,
+            IndexQuery::RenderPreview { .. } => QueryKind::RenderPreview,
+            IndexQuery::RenderEmbed { .. } => QueryKind::RenderEmbed,
         }
     }
 }
@@ -3082,6 +3130,15 @@ pub enum QueryKind {
     /// Ciò che è rimasto non salvato (§15.2). In coda come nell'[`IndexQuery`],
     /// e per la stessa ragione: l'ordine è il discriminante.
     Drafts,
+    /// Chi risponde a «rendi questo documento» (§16.6). Il proprietario è il
+    /// kernel, e stavolta per costruzione: la resa compone provider e renderer
+    /// registrati, e il registro è suo. In coda come nell'[`IndexQuery`].
+    RenderPreview,
+    /// Chi risponde a «rendi questo ritaglio» (§16.6). Il proprietario è il
+    /// kernel, per la ragione di [`RenderPreview`](QueryKind::RenderPreview):
+    /// un ritaglio si rende con gli stessi provider e renderer. In coda come
+    /// nell'[`IndexQuery`].
+    RenderEmbed,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -3332,6 +3389,14 @@ pub enum IndexResult {
     /// coda come la sua domanda, e per la stessa ragione: l'ordine dei casi è
     /// il discriminante dell'ABI.
     Drafts(Paged<DraftInfo>),
+    /// Il documento reso (risposta a [`IndexQuery::RenderPreview`]): l'HTML e
+    /// le parti dichiarative che la shell monta da sé. In coda come la sua
+    /// domanda.
+    RenderPreview(RenderedDocument),
+    /// Il ritaglio reso (risposta a [`IndexQuery::RenderEmbed`]): il documento
+    /// e il suo id, perché chi monta un embed deve sapere da quale nota viene.
+    /// In coda come la sua domanda.
+    RenderEmbed(EmbedContent),
 }
 
 impl IndexResult {
@@ -3373,6 +3438,8 @@ impl IndexResult {
             IndexResult::Entries(_) => "entries",
             IndexResult::Folders(_) => "folders",
             IndexResult::Drafts(_) => "drafts",
+            IndexResult::RenderPreview(_) => "render-preview",
+            IndexResult::RenderEmbed(_) => "render-embed",
         }
     }
 }
@@ -3818,7 +3885,7 @@ impl PluginPermissions {
 
 /// La versione del contratto che QUESTO abi definisce. È la stessa del
 /// `package fub:abi@…` nel WIT (il test di conformità le confronta).
-pub const ABI_VERSION: &str = "0.1.0";
+pub const ABI_VERSION: &str = "0.1.1";
 
 // Niente `Eq`: i permessi portano un parametro JSON, e `serde_json::Value` non
 // è `Eq` (contiene numeri in virgola mobile). È lo stesso motivo per cui

@@ -10,7 +10,7 @@ che lo verificano — [`wit_conformance.rs`](../tests/wit_conformance.rs) e
 stava in radice quei test risalivano due livelli fuori dal proprio crate per
 leggere un file che era comunque loro.
 
-- Il contratto vivo: [`fub/abi.wit`](fub/abi.wit) — package `fub:abi@0.1.0`.
+- Il contratto vivo: [`fub/abi.wit`](fub/abi.wit) — package `fub:abi@0.1.1`.
 - Il contratto **com'era**, versione per versione: [`frozen/`](frozen/).
 
 **La documentazione sta in `docs/`**, e non qui:

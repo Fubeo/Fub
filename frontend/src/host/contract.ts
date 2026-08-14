@@ -1281,7 +1281,16 @@ export type IndexQuery =
   //
   // In coda e non accanto a `vault_health`: l'ordine dei casi è il discriminante
   // dell'ABI, quindi additiva vuol dire in fondo.
-  | { kind: "drafts"; page?: Page | null };
+  | { kind: "drafts"; page?: Page | null }
+  // RENDI QUESTO DOCUMENTO (0163, §16.6). Prima della 0163 l'anteprima passava
+  // da un comando IPC bespoke (`render_preview`) che solo la shell sapeva
+  // chiamare — un fatto sul vault che questa shell conosceva e un provider no.
+  // Ora passa dal canale dati, come l'outline e ogni altra lettura.
+  | { kind: "render_preview"; doc: string }
+  // RENDI QUESTO RITAGLIO (0163, §16.6): la transclusione `![[page#heading]]` o
+  // `![[page#^blocco]]`. Come `render_preview`, prima era un comando IPC suo
+  // (`render_embed`) e ora passa dal canale dati.
+  | { kind: "render_embed"; page: string; heading?: string | null; block?: string | null };
 
 // La risposta (rispecchia fub_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -1306,7 +1315,13 @@ export type IndexResult =
   | { kind: "resolved"; value: ResolvedRef | null }
   | { kind: "entries"; value: Paged<VaultEntry> }
   | { kind: "folders"; value: Paged<VaultFolder> }
-  | { kind: "drafts"; value: Paged<DraftInfo> };
+  | { kind: "drafts"; value: Paged<DraftInfo> }
+  // Il documento reso (risposta a `render_preview`, 0163): l'HTML e le parti
+  // dichiarative che la shell monta da sé.
+  | { kind: "render_preview"; value: RenderedDocument }
+  // Il ritaglio reso (risposta a `render_embed`, 0163): il documento reso e il
+  // suo id, perché chi monta un embed deve sapere da quale nota viene.
+  | { kind: "render_embed"; value: EmbedContent };
 
 // CHE SPECIE DI FILE È (§14.1). Non è una proprietà del file: è una proprietà
 // del file dato chi è registrato adesso — un `.canvas` è `unknown` finché

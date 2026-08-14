@@ -89,10 +89,12 @@ export const CONTEGGI = [
     nome: "porte-verso-un-terzo",
     ragione:
       "Le porte da cui si entra in codice di un terzo: i casi di `Gate` in " +
-      "`safety.rs`. La decisione 0032 le aveva dichiarate «otto, e sono tutte» " +
-      "in un verbale immutabile, e quando la 0105 le ha contate erano tredici.",
+      "`gate.rs` (contratto). La decisione 0032 le aveva dichiarate «otto, e sono " +
+      "tutte» in un verbale immutabile, e quando la 0105 le ha contate erano " +
+      "tredici. Dal 0161 l'enum vive in `fub-abi` perché `Event::Trouble` lo " +
+      "nomina, e il kernel lo re-esporta da `safety.rs`.",
     comando:
-      "sed -n '/^pub enum Gate {/,/^}/p' crates/fub-kernel/src/safety.rs" +
+      "sed -n '/^pub enum Gate {/,/^}/p' crates/fub-abi/src/gate.rs" +
       " | grep -cE '^    [A-Z]'",
   },
   {

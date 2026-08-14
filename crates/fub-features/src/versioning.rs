@@ -1365,6 +1365,7 @@ impl VersioningHandler {
                                 severity: Severity::Failure,
                                 subject: Some(id.clone()),
                                 error: e,
+                                gate: None,
                             });
                         }
                     }
@@ -1374,6 +1375,7 @@ impl VersioningHandler {
                             severity: Severity::Failure,
                             subject: Some(id.clone()),
                             error: e,
+                            gate: None,
                         });
                     }
                 }
@@ -1395,6 +1397,7 @@ impl VersioningHandler {
                 severity: Severity::Failure,
                 subject: None,
                 error: e,
+                gate: None,
             });
         }
         Ok(())
@@ -1536,6 +1539,7 @@ impl VersioningHandler {
                         severity: Severity::Failure,
                         subject: Some(id.clone()),
                         error: e,
+                        gate: None,
                     });
                 }
             }

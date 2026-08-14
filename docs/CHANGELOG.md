@@ -50,8 +50,8 @@ pubblicato. Quello che segue diventerà il contenuto di `0.1.0`.
   di rispondere «nessun risultato». Un documento che non si legge o che non
   parsa non fa più fallire l'apertura: il vault si apre e dichiara cosa non ha
   letto.
-- **Contratto WIT** vivo accanto al crate che rispecchia, con la linea di base
-  congelata di [`0.1.0`](architecture/wit-congelato.md).
+- **Contratto WIT** vivo accanto al crate che rispecchia, con le linee di base
+  congelate [`0.1.0`](architecture/wit-congelato.md) e `0.1.1`.
 - **Presidi in CI** — invarianti di dipendenza, conformità `abi` ↔ WIT,
   additività del contratto, supply chain con SBOM, link interni dei documenti.
   L'elenco per esteso sta in [CONTRIBUTING.md](CONTRIBUTING.md).

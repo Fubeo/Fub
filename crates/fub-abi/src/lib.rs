@@ -50,6 +50,7 @@ pub mod edit;
 pub mod error;
 pub mod event;
 pub mod format;
+pub mod gate;
 pub mod html;
 pub mod ipc;
 pub mod locale;
@@ -58,6 +59,7 @@ pub mod net;
 pub mod options;
 pub mod organization;
 pub mod query;
+pub mod render;
 pub mod rules;
 pub mod schema;
 pub mod session;
@@ -90,6 +92,7 @@ pub use event::{
     Actor, BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Notice, Origin, Severity,
     Subject,
 };
+pub use gate::Gate;
 pub use format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
     ParseContext, RenderOptions, RenderTarget, SourceKind,
@@ -107,6 +110,7 @@ pub use query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TextField,
     TextMode, TextQuery, TextTolerance,
 };
+pub use render::{EmbedContent, RenderedDocument, RenderedPart};
 pub use schema::SchemaVersion;
 pub use session::{
     AnchoredSelection, AnchoredSelections, ContextKind, ContextMask, FloatingSelection,

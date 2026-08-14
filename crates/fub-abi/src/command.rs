@@ -330,6 +330,10 @@ pub enum ParamKind {
     /// Uno fra valori dichiarati. Le scelte stanno **nella spec** e non in una
     /// convalida del comando: chi non ha letto il codice deve poterle vedere.
     Choice(Vec<Choice>),
+    /// Più numeri: la forma con cui si chiede un'operazione su *queste*
+    /// posizioni (23.4). In fondo all'enum come ogni variante nuova: l'ordine
+    /// dei casi è il discriminante dell'ABI.
+    Numbers,
 }
 
 impl ParamKind {
@@ -348,6 +352,9 @@ impl ParamKind {
             ParamKind::Choice(choices) => value
                 .as_str()
                 .is_some_and(|s| choices.iter().any(|c| c.value == s)),
+            ParamKind::Numbers => value
+                .as_array()
+                .is_some_and(|v| v.iter().all(|n| n.is_number())),
         }
     }
 
@@ -367,6 +374,7 @@ impl ParamKind {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            ParamKind::Numbers => "un elenco di numeri".to_string(),
         }
     }
 }
@@ -1047,6 +1055,20 @@ impl<'a> Args<'a> {
                 .collect(),
         )
     }
+
+    /// Un elenco di numeri (la lettura di [`ParamKind::Numbers`]). Assente e
+    /// vuoto restano distinguibili come per [`Args::documents`]: per un comando
+    /// che opera "su queste posizioni, altrimenti su tutte" sono due cose
+    /// diverse.
+    pub fn numbers(&self, name: &str) -> Option<Vec<f64>> {
+        Some(
+            self.get(name)?
+                .as_array()?
+                .iter()
+                .filter_map(|v| v.as_f64())
+                .collect(),
+        )
+    }
 }
 
 /// La modifica che un comando propone per **un** documento.
@@ -1090,7 +1112,8 @@ impl Localize for ParamKind {
             | ParamKind::Number
             | ParamKind::Bool
             | ParamKind::Document
-            | ParamKind::Documents => {}
+            | ParamKind::Documents
+            | ParamKind::Numbers => {}
         }
     }
 }

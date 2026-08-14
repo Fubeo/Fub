@@ -1,42 +1,49 @@
 # 31. Roadmap consigliata
 
+Questo elenco è stato rimisurato sul codice il 2026-08-14; una casella spuntata è un fatto, non un piano.
+
 ## Fase 1 — Core essenziale
 
-- [ ] Vault e file explorer
-- [ ] Editor Markdown eccellente
-- [ ] Live preview
-- [ ] Wikilink
-- [ ] Backlink
-- [ ] Tag
+- [x] Vault e file explorer
+- [x] Editor Markdown eccellente
+- [x] Live preview
+- [x] Wikilink
+- [x] Backlink
+- [x] Tag
 - [ ] Proprietà base
-- [ ] Ricerca full-text
-- [ ] Quick switcher
-- [ ] Command palette
-- [ ] Temi chiaro/scuro
+  _Motore presente (crates/fub-abi/src/rules/properties.rs + frontmatter), manca una UI di editing delle proprietà._
+- [x] Ricerca full-text
+- [x] Quick switcher
+- [x] Command palette
+- [x] Temi chiaro/scuro
 - [ ] Import/export Markdown
-- [ ] Autosave
-- [ ] Recovery
-- [ ] Plugin API iniziale
-- [ ] Accessibilità di base
-- [ ] Avvio e chiusura puliti
-- [ ] Dati sempre in file aperti
+  _MarkdownImport/MarkdownExport esistono (crates/fub-format-markdown/src/transfer.rs) ma non sono montati in crates/fub-host/src/mount.rs né esposti in UI._
+- [x] Autosave
+- [x] Recovery
+- [x] Plugin API iniziale
+- [x] Accessibilità di base
+- [x] Avvio e chiusura puliti
+- [x] Dati sempre in file aperti
 
 ## Fase 2 — Potenza e organizzazione
 
-- [ ] Grafo
-- [ ] Outline
+- [x] Grafo
+- [x] Outline
 - [ ] Template
 - [ ] Daily notes
 - [ ] Query engine
+  _QueryExpr/IndexQuery ci sono (crates/fub-abi/src/query.rs, traits.rs), mancano query salvate e UI._
 - [ ] Task avanzati
+  _Solo NOTE_TASK_TOGGLE (crates/fub-features/src/commands.rs), niente task avanzati._
 - [ ] Canvas
 - [ ] Database
 - [ ] Allegati avanzati
 - [ ] PDF annotations
-- [ ] Versioning
+- [x] Versioning
 - [ ] Backup
-- [ ] Vault health
+- [x] Vault health
 - [ ] Bulk operations
+  _Solo VAULT_REPLACE (crates/fub-features/src/commands.rs), niente UI bulk._
 - [ ] Collezioni
 - [ ] Dashboard
 

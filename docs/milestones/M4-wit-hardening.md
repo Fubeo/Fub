@@ -322,21 +322,26 @@ dice che è finito ciò che qualcuno ha già trovato, non che non ci sia altro.
       un host che scegliesse la cartella per loro renderebbe inesprimibile metà
       del capitolo 16. La nota senza titolo la costruisce il *comando*
       (`note.create` compone `free_name` + `create_document`), non il contratto.
-- [ ] **Escape hatch `type json = string`**: confermare al freeze, uso per
-      uso (frontmatter, `attrs`, args dei comandi e di `run-command`, payload
-      dei job),
-      che l'opacità è accettabile — o promuovere a record WIT tipati dove non
-      lo è. Il costo di tenerla: nessun controllo di forma al confine; il
-      costo di toglierla: il contratto esplode a ogni formato nuovo.
-- [ ] **Canale progresso/streaming dei job**: decidere se `Event::JobDone`
-      basta. Aggiungere un canale dopo è breaking; l'alternativa ponte è un
-      `Event::Custom` con topic convenzionale (`<plugin>/job-progress`), che
-      il varco già permette senza toccare il contratto — se basta quella, la
-      decisione è "JobDone + convenzione documentata". La [decisione 0013](../decisions/0013-elenco-delle-capacita.md) ha già deciso la
-      **forma**: se un canale ci sarà, sarà un **evento** e non una capacità —
-      ciò che si limita a informare non è qualcosa di cui il chiamante aspetta
-      la risposta. Resta da decidere se serve una variante dedicata o basta
-      `Custom`.
+- [x] **Escape hatch `type json = string`** — **confermato, uso per uso**, con
+      la [decisione 0159](../decisions/0159-l-escape-hatch-json-resta.md):
+      frontmatter, `attrs`, args dei comandi e di `run-command`, payload dei
+      job, payload di `ui-action` e di `Event::Custom` sono tutti dati la cui
+      forma la decide chi li produce e li consuma, non il confine che li
+      trasporta. La convalida sta a monte (`validate_args`, `rejects`) e la
+      lettura sta a valle; tipizzarli vorrebbe dire un record WIT per formato,
+      cioè una major a ogni formato nuovo. Il costo di tenerla — nessun
+      controllo di forma al confine — resta dichiarato.
+- [x] **Canale progresso/streaming dei job** — **deciso: il canale c'è già**,
+      con la [decisione 0035](../decisions/0035-il-lavoro-lungo-si-racconta.md):
+      `Event::JobProgress { id, progress }` e `EventKind::JobProgress` sono nel
+      contratto e nel WIT da M2, e la porta è `HostEvents::report_progress`
+      (aggiunta dalla 0013, ventitreesimo metodo) — un job che non conosce il
+      proprio `JobId` non può raccontare il progresso di un altro. La frase
+      «oggi chi accoda aspetta il solo `JobDone`» è falsa: chi accoda può
+      ascoltare `JobProgress` fin dal primo giro. L'alternativa ponte —
+      `Event::Custom` con topic convenzionale — non serve: la variante dedicata
+      esiste, è additiva (in coda a `event` e a `event-kind`) e porta il
+      `JobProgress` tipizzato invece di un payload opaco.
 - [x] **Contesto di una view: `active_document()` o `ViewContext`?** — **deciso
       pre-freeze**: `HostApi::active_context() -> Option<ViewContext>`, con
       `ViewContext { pane, doc, selection, mode }` (interface `session` nel
@@ -350,18 +355,33 @@ dice che è finito ciò che qualcuno ha già trovato, non che non ci sia altro.
       attiva" diventerebbe "ridisegna a ogni battuta di tasto". Verbale in
       [decisione 0007](../decisions/0007-contesto-di-sessione.md); `crates/fub-abi/wit/frozen/0.1.0.wit` **ritagliato** (la
       firma di `active-document` era pubblicata).
-- [ ] **Identità del documento: il path è per sempre la chiave?**
-      ([todo.md §13.1](../todo.md)) FEATURES chiede uuid opzionale (2.2), stable
-      note ID e redirect da note rinominate (7.1), Zettelkasten ID (8.3), mentre
-      ogni firma prende `DocId` = path. O si dichiara che il path resta la chiave
-      e i redirect sono una feature sopra (tabella di alias persistente), o si
-      introduce ora un `DocRef` a due forme: la seconda strada, dopo, è una major.
-- [ ] **Forma dell'errore al confine** ([todo.md §12.2](../todo.md)):
-      `PluginError`/`KernelError` sono nel contratto e finiscono in `String` su
-      tutti i comandi IPC. Decidere se l'errore porta **codice + parametri** —
-      prerequisito della localizzazione (25.2, §12.1), delle notifiche (10.5) e
-      dei retry delle automazioni (16.3). Un messaggio già composto non si
-      traduce e non si discrimina: la shell oggi indovina.
+- [x] **Identità del documento: il path è per sempre la chiave?**
+      ([todo.md §13.1](../todo.md)) — **sì, il path resta la chiave**, con la
+      [decisione 0043](../decisions/0043-il-path-e-la-chiave.md): *«il path è la
+      chiave, e un id stabile è una proprietà»* — gli id stabili e i redirect
+      sono una feature **sopra** il kernel, non un `DocRef` nel contratto. La
+      feature sopra esiste già: `Event::DocumentRenamed { from, to }` è
+      l'evento su cui una tabella di alias ascolta, e
+      `IndexQuery::Resolve`/`IndexResult::Resolved` risolvono un riferimento
+      per nome di pagina — la risposta a «dove punta questo link» che la
+      [0049](../decisions/0049-una-posizione-dentro-un-documento.md) ha dato
+      forma. La seconda strada — un `DocRef` a due forme — resta scartata: dopo
+      il freeze sarebbe una major, e oggi non c'è un secondo chiamante che la
+      chieda.
+- [x] **Forma dell'errore al confine** ([todo.md §12.2](../todo.md)) — **deciso:
+      `kind` + `Text`, non un record di parametri**, con la
+      [decisione 0160](../decisions/0160-l-errore-al-confine-e-kind-piu-testo.md)
+      che rimisura la voce: `PluginError` ha dodici varianti con payload `Text`,
+      serde taggato `{kind, message}`, e l'IPC di `fub-app` torna
+      `Result<_, PluginError>` — non più `String` — dalla
+      [0041](../decisions/0041-un-errore-e-testo-che-qualcuno-legge.md), che ha
+      deciso la forma (*«un errore è testo che qualcuno legge ed è una domanda
+      su cui qualcuno rama»*), estesa dalla
+      [0132](../decisions/0132-un-rifiuto-non-e-una-frase.md) al caso che
+      portava prosa nuda. Il discrimine per retry e localizzazione è il `kind`
+      (`NotFound`/`AlreadyExists`/`Io`/`Conflict`/`Cancelled`/`PermissionDenied`),
+      e il `Text` si localizza col catalogo di chi ha prodotto la frase. Un
+      campo `params` strutturato ritiperebbe ogni variante = breaking.
 - [x] **Il lotto: serve una variante di evento?** — sì, fatto con la [decisione 0011](../decisions/0011-il-lotto.md) + [decisione 0012](../decisions/0012-origine-degli-eventi.md):
       `Event::BatchEnded { batch, changed }` e `EventKind::BatchEnded` (additivi,
       in coda), `Workspace::batch(|ws| …)` nel kernel, e tre clienti veri —
@@ -468,32 +488,48 @@ dice che è finito ciò che qualcuno ha già trovato, non che non ci sia altro.
       Tauri in meno) e i **comandi della shell** (toggle dei pannelli: il registro vive nel kernel e
       il frontend non può registrarvisi — §18.2).
 
-- [ ] **La forma di una ricerca tollerante** ([todo.md](../todo.md) §21.1–§21.3,
-      dalla [decisione 0025](../decisions/0025-la-ricerca-predefinita.md)):
-      `text-mode`, `text-field`, `text-query` e `document-match` sono già nel WIT,
-      e la 0025 ha stabilito che la ricerca predefinita di Fub è di classe
-      *omnisearch*. Le tre domande da chiudere qui:
-      1. **Dove sta la tolleranza ai refusi** → una terza variante di `TextMode`
-         è la più economica ma tratta modalità e tolleranza come esclusive,
-         mentre sono ortogonali (una *frase* cercata a meno di un refuso ha
-         senso); un campo a sé (`tolerance`, con `Exact` come default esplicito)
-         costa un campo su ogni mirror e le tiene indipendenti. Nel contratto
-         **non** deve entrare una distanza di edit: è un parametro di un motore, e
-         metterlo in una firma vorrebbe dire che cambiare motore cambia il
-         significato delle query salvate.
-      2. **Come si dice che l'ultimo termine è incompleto** — è la proprietà di
-         un'*invocazione*, non di una query salvata, e se la aggiunge la casella
-         di ricerca allora CLI, automazioni e centro di comando LLM interrogano
-         lo stesso indice in una lingua diversa da quella dell'utente.
-      3. **Se un estratto porta coordinate nel documento** e, in tal caso, di
-         quale revisione — `EditRequest` ha già la forma
-         ([decisione 0008](../decisions/0008-modifica-chirurgica.md)). Senza,
-         `ViewUpdate::Reveal` non ha niente da ricevere dalla ricerca e la ricerca
-         dentro la nota aperta resta *inesprimibile*, non stretta.
-      La ragione per cui tutto questo è contratto e non implementazione è una
-      sola, e va riletta prima di rispondere: la tolleranza deve poter essere
-      **spenta per singola query**, perché lo stesso `IndexQuery::Documents`
-      serve la casella di ricerca e `vault.replace`.
+- [x] **La forma di una ricerca tollerante** ([todo.md](../todo.md) §21.1–§21.3,
+      dalla [decisione 0025](../decisions/0025-la-ricerca-predefinita.md)) —
+      **stantia: chiusa dalla [0049](../decisions/0049-una-posizione-dentro-un-documento.md)
+      e dalla [0050](../decisions/0050-cosa-si-chiede-a-una-ricerca.md)**, e non
+      c'è più niente da decidere qui. La 0050 ha deciso le tre domande: la
+      tolleranza è un campo a sé (`TextTolerance { Exact, Typos }`, `Exact` il
+      default) e non una terza variante di `TextMode`; `partial_last_term` è una
+      proprietà dell'**invocazione**, non di una query salvata; e la 0049 ha
+      dato agli estratti le coordinate nel documento (`DocPosition` con
+      `revision`), che è ciò che `ViewUpdate::Reveal` riceve. Nel contratto non
+      entra una distanza di edit: è un parametro di un motore. Il fuzzy vero
+      resta lavoro di provider e non scade col freeze.
+- [x] **La porta nel `Trouble`** — fatto con la
+      [decisione 0161](../decisions/0161-la-porta-entra-nel-trouble.md), che
+      chiude la casella «Mancanza di contesto in `Event::Trouble`» della
+      [§17.3](../roadmap/17-presidi-che-restano.md): `Gate` sale nel contratto
+      (`crates/fub-abi/src/gate.rs`, tredici varianti) perché l'evento lo
+      nomina, e `Event::Trouble` guadagna `gate: Option<Gate>` **in fondo** al
+      record (`event.rs`, `event-trouble` nel WIT) — additivo, quindi non
+      scade col freeze. `report_trouble` prende `Option<Gate>`; la consegna a
+      un `EventHandler` emette `Some(Gate::Event)`, i guasti del vault —
+      flush, watcher, journal, versioning — `None`. Il conteggio
+      `porte-verso-un-terzo` conta i casi dal contratto.
+- [x] **`at` di `note.task.toggle` è una lista** — fatto con la
+      [decisione 0162](../decisions/0162-at-e-una-lista.md), che chiude la
+      casella residua della [§23.4](../roadmap/23-cosa-costano-le-decisioni-chiuse.md):
+      la spec dichiara `at` come `ParamKind::Numbers` — la variante era già in
+      fondo all'enum (`command.rs`), additiva — e la convalida rifiuta lo
+      scalare al confine. Se `at` è dato: tutti gli offset, dedup, ordine
+      stabile; se assente: tutte le `placed()` del contesto, non solo la
+      primaria. Un cursore = lista di 1, provato dai due e2e
+      `two_cursors_toggle_two_tasks_without_naming_at` e
+      `one_cursor_toggles_one_task_without_naming_at`.
+- [x] **La resa passa dal canale dati** — fatto con la
+      [decisione 0163](../decisions/0163-render-via-index-query.md), che chiude
+      la casella residua della [§16.6](../roadmap/16-crate-sdk-banchi-di-prova.md)
+      e il [difetto 0130](../todo.md): `IndexQuery::RenderPreview`/`RenderEmbed`
+      in fondo ai loro enum, `IndexResult` corrispondenti, e
+      `Workspace::query_index` instrada sulle fn kernel esistenti. I due
+      comandi Tauri `render_preview`/`render_embed` sono **spariti** — la dieta
+      dell'IPC non li elenca più — e il frontend chiede via `query_index`
+      (`preview.ts`). Un `ViewProvider` ha la stessa porta della shell.
 
 ## Trait/API coinvolti
 
