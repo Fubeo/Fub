@@ -443,6 +443,42 @@ fn le_fette_arrivano_dove_arriva_il_giro_intero() {
     );
 }
 
+/// **A caldo la seconda fase non ha niente da fare**: l'anagrafe porta già i
+/// metadati, e `scan_vault` li rimette in cache prima di `VaultOpened`.
+///
+/// È il taglio del passo 4: se restasse da fare un giro a fette, ogni
+/// riapertura immutata pagherebbe 59 lotti a vuoto. Un indice plugin che non
+/// dichiara `up_to_date` **non** prende questa strada — lo tiene
+/// `un_indice_che_non_dice_niente`.
+#[test]
+fn a_caldo_la_seconda_fase_non_ha_niente_da_fare() {
+    let mut banco = Banco::nuovo()
+        .con_formato(Box::new(FallibleProvider))
+        .senza_scansione()
+        .monta();
+    std::fs::write(banco.root().join("una.md"), "prima").expect("semina");
+    std::fs::write(banco.root().join("due.md"), "seconda").expect("semina");
+    banco.reindex().expect("primo giro");
+
+    let lavoro = banco.scan_vault().expect("riapre");
+    assert_eq!(lavoro.totale(), 0, "niente da leggere: l'anagrafe basta");
+    assert!(lavoro.finita(), "e quindi la seconda fase è già finita");
+    let mut ids: Vec<String> = banco
+        .documents()
+        .into_iter()
+        .map(|d| d.to_string())
+        .collect();
+    ids.sort();
+    assert_eq!(
+        ids,
+        ["due.md", "una.md"],
+        "i metadati sono in cache già dopo la scansione, prima di finish_index"
+    );
+
+    let apertura = banco.finish_index(lavoro);
+    assert!(apertura.intera(), "un vault immutato si chiude intero");
+}
+
 /// **Chi smette a metà non riconcilia**, ed è la riga che separa «ho smesso di
 /// indicizzare» da «cancella».
 ///

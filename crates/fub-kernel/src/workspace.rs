@@ -1873,6 +1873,33 @@ impl Workspace {
             self.indexes.core.set_entry(entry);
         }
 
+        // **Riapertura a caldo**: se ogni documento è descritto dall'anagrafe
+        // (size+mtime → impronta), porta i metadati, **e** tutti gli indici
+        // plugin lo dichiarano `up_to_date`, la seconda fase non ha niente da
+        // leggere. Stessa congiunzione di `plan_one_chunk`: un indice muto
+        // (default = lista vuota) non si salta — `un_indice_che_non_dice_niente`.
+        // `restore` non tocca il grafo, che resta a `finish_index`. I file
+        // spariti ad app chiusa non sono in `documents`: li toglie `reconcile`.
+        // Un documento nuovo o ritoccato ha l'impronta assente, e si cade
+        // nella strada a fette.
+        let da_riprendere: Option<Vec<(DocId, StoredMeta)>> = documents
+            .iter()
+            .map(|e| {
+                e.fingerprint.as_ref()?;
+                let meta = self.entry_store.known(&e.id)?.meta.clone()?;
+                Some((e.id.clone(), meta))
+            })
+            .collect();
+        let caldo = match da_riprendere {
+            Some(ripresi) if self.indexes.up_to_date(&documents).len() == documents.len() => {
+                for (id, meta) in ripresi {
+                    self.indexes.core.restore(&id, meta);
+                }
+                true
+            }
+            _ => false,
+        };
+
         // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
         // dichiara di esistere (decisione 0012).
         //
@@ -1892,7 +1919,11 @@ impl Workspace {
         // interroga deve poterlo distinguere da un vault vuoto (§15.7).
         self.indexes.core.watch.indexing = IndexingState::Running;
 
-        Ok(Indicizzazione::nuova(documents))
+        Ok(Indicizzazione::nuova(if caldo {
+            Vec::new()
+        } else {
+            documents
+        }))
     }
 
     /// **Una fetta della seconda fase** (§15.7): legge, parsa e alimenta fino a
@@ -2550,7 +2581,10 @@ impl Workspace {
             let mut host = self.host_for(&plugin, InvokeMode::Apply);
             if let Err(e) = hook(&mut host, id) {
                 return Err(match e {
-                    PluginError::Conflict(_) => KernelError::Stale(id.to_string()),
+                    PluginError::Io(why) => KernelError::Io {
+                        path: id.to_string().into(),
+                        source: std::io::Error::other(why.to_string()),
+                    },
                     other => KernelError::BadEdit {
                         doc: id.to_string(),
                         why: other.to_string(),

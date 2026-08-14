@@ -294,8 +294,10 @@ fn riaprire_un_vault_immutato_non_rilegge_niente() {
     drop(prima);
     let dopo_il_primo_giro = f.parses();
     assert!(dopo_il_primo_giro >= 5, "il primo giro legge tutto");
+    let nominati: std::collections::BTreeSet<_> =
+        chieste.lock().unwrap().iter().cloned().collect();
     assert_eq!(
-        chieste.lock().unwrap().len(),
+        nominati.len(),
         5,
         "la domanda nomina ogni documento, non solo quelli che l'indice conosce"
     );
