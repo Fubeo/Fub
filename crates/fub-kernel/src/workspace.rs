@@ -1874,32 +1874,28 @@ impl Workspace {
             self.indexes.core.set_entry(entry);
         }
 
-        // **Riapertura a caldo**: se ogni documento è descritto dall'anagrafe
-        // (size+mtime → impronta), porta i metadati, **e** tutti gli indici
-        // plugin lo dichiarano `up_to_date`, la seconda fase non ha niente da
-        // leggere. Stessa congiunzione di `plan_one_chunk`: un indice muto
-        // (default = lista vuota) non si salta — `un_indice_che_non_dice_niente`.
-        // `restore` non tocca il grafo, che resta a `finish_index`. I file
-        // spariti ad app chiusa non sono in `documents`: li toglie `reconcile`.
-        // Un documento nuovo o ritoccato ha l'impronta assente, e si cade
-        // nella strada a fette.
-        let da_riprendere: Option<Vec<(DocId, StoredMeta)>> = documents
-            .iter()
-            .map(|e| {
-                e.fingerprint.as_ref()?;
-                let meta = self.entry_store.known(&e.id)?.meta.clone()?;
-                Some((e.id.clone(), meta))
-            })
-            .collect();
-        let caldo = match da_riprendere {
-            Some(ripresi) if self.indexes.up_to_date(&documents).len() == documents.len() => {
-                for (id, meta) in ripresi {
-                    self.indexes.core.restore(&id, meta);
-                }
-                true
+        // **Riapertura incrementale**: per ogni documento descritto dall'anagrafe
+        // (size+mtime → impronta) che porta i metadati e per cui tutti gli indici
+        // plugin rispondono `up_to_date`, si ripristinano direttamente i metadati
+        // in memoria senza rileggerlo dal disco. A fette finiscono solo i documenti
+        // nuovi, modificati, o per cui un indice plugin deve essere allineato.
+        let up_to_date = self.indexes.up_to_date(&documents);
+        let mut da_indicizzare = Vec::new();
+        for entry in documents {
+            let meta = if entry.fingerprint.is_some() && up_to_date.contains(&entry.id) {
+                self.entry_store
+                    .known(&entry.id)
+                    .filter(|known| known.fingerprint == entry.fingerprint)
+                    .and_then(|known| known.meta.clone())
+            } else {
+                None
+            };
+            if let Some(meta) = meta {
+                self.indexes.core.restore(&entry.id, meta);
+            } else {
+                da_indicizzare.push(entry);
             }
-            _ => false,
-        };
+        }
 
         // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
         // dichiara di esistere (decisione 0012).
@@ -1920,11 +1916,7 @@ impl Workspace {
         // interroga deve poterlo distinguere da un vault vuoto (§15.7).
         self.indexes.core.watch.indexing = IndexingState::Running;
 
-        Ok(Indicizzazione::nuova(if caldo {
-            Vec::new()
-        } else {
-            documents
-        }))
+        Ok(Indicizzazione::nuova(da_indicizzare))
     }
 
     /// **Una fetta della seconda fase** (§15.7): legge, parsa e alimenta fino a
@@ -2222,7 +2214,9 @@ impl Workspace {
     pub fn finish_index(&mut self, work: Indicizzazione) -> Apertura {
         let _fase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
         self.indexes.core.rebuild_graph();
-        self.chiudi_indicizzazione(work)
+        let apertura = self.chiudi_indicizzazione(work);
+        self.store_entries();
+        apertura
     }
 
     /// Come [`finish_index`], col grafo già costruito fuori dal prestito
@@ -2290,14 +2284,6 @@ impl Workspace {
         if !apertura.interrotta {
             self.sospesi_dal_dubbio = self.rejoin_renamed_while_closed();
         }
-        // **La raccolta dello stato per-documento non è qui**, ed è l'unica riga
-        // di questa funzione che sta altrove apposta: la fa
-        // [`collect_doc_data`](Workspace::collect_doc_data), che prende `&self`,
-        // e chi ha i thread la chiama sotto il prestito **condiviso**. Il perché
-        // sta là sopra; qui resta il quando — subito dopo, e dopo il
-        // ricongiungimento, che è la riga con cui la raccolta non cancella ciò
-        // che è appena stato riconosciuto.
-        self.store_entries();
 
         self.as_actor(Actor::Kernel, |ws| {
             // I guasti erano nello stesso lotto di `VaultOpened`, perché chi si
@@ -2405,7 +2391,7 @@ impl Workspace {
     /// file alla riapertura; scriverla costerebbe un indice fermo su un
     /// contenuto vecchio fino al primo evento che tornasse a toccare quel file,
     /// e se nessuno lo toccasse, per sempre.
-    fn store_entries(&mut self) {
+    pub fn store_entries(&self) {
         let _fase = tracing::info_span!(target: "fub.apertura", "store_entries").entered();
         let table = self
             .indexes
@@ -6959,7 +6945,8 @@ impl Workspace {
         let cestinate = self.trashed_originals();
         // C'era ieri, oggi non c'è, e portava l'impronta di un contenuto.
         let mut spariti: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
-        for (id, voce) in self.entry_store.iter() {
+        let snapshot = self.entry_store.snapshot();
+        for (id, voce) in &snapshot {
             if voce.size == 0
                 || self.indexes.core.entries.contains_key(id)
                 || cestinate.contains(id)

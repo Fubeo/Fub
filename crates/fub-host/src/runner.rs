@@ -573,15 +573,11 @@ impl Shared {
             let mut ws = self.workspace.write()?;
             ws.finish_index_with_graph(in_corso.work, graph)
         };
-        // **La raccolta dello spazio per-documento, sotto prestito condiviso.**
-        // Cammina il disco degli spazi dati e il cestino, e non tocca il
-        // workspace: stava dentro `finish_index`, cioè dentro l'esclusivo, e in
-        // fondo a un'apertura è l'ultima cosa che chi guarda il vault aspetta
-        // senza motivo. Che il condiviso basti è la sua proprietà, non un
-        // rilassamento: chi potrebbe far tornare una nota fra il giudizio e la
-        // cancellazione vuole l'esclusivo, e da qui non lo ottiene.
-        // L'esito non ferma l'apertura — è la stessa regola di `reindex` — ma
-        // non si perde: ciò che non si è potuto raccogliere si registra.
+        // **La persistenza dell'anagrafe e la raccolta dello spazio per-documento,
+        // entrambe sotto prestito condiviso.**
+        // Non bloccano l'UI né il lock di scrittura esclusivo durante il calcolo
+        // e la scrittura su disco della fotografia del vault.
+        self.workspace.read()?.store_entries();
         if let Err(e) = self.workspace.read()?.collect_doc_data() {
             tracing::warn!(target: "fub.host", "spazi per-documento non raccolti: {e}");
         }
