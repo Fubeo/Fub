@@ -126,7 +126,7 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 | registro dei vault | [`crates/fub-host/src/vaults.rs:41`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
 | organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../crates/fub-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
-| anagrafe | [`crates/fub-kernel/src/entries.rs:118`](../crates/fub-kernel/src/entries.rs) | **3** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
+| anagrafe | [`crates/fub-kernel/src/entries.rs:128`](../crates/fub-kernel/src/entries.rs) | **3** | ciò che il kernel si ricorda di ogni file, per non rileggerlo |
 | impostazioni | [`crates/fub-kernel/src/settings.rs:84`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
 | versioning | [`crates/fub-features/src/versioning.rs:254`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
 | indice di ricerca | [`crates/fub-features/src/search.rs:92`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
@@ -147,9 +147,9 @@ L'indice di ricerca, l'anagrafe e il bundle diagnostico sono **derivati**: un
 manifest con versione diversa fa buttare via il file e ricostruirlo dal vault,
 che è la sorgente di verità. Uno schema che si rigenera può cambiare numero senza
 costare niente a nessuno — l'indice di ricerca l'ha fatto **cinque** volte,
-l'anagrafe una (la `v2` sono le ancore della
-[decisione 0049](decisions/0049-una-posizione-dentro-un-documento.md), e il costo
-è stata una riapertura lenta). Gli altri **sette** contengono cose che il vault
+l'anagrafe due (la `v2` sono le ancore della
+[decisione 0049](decisions/0049-una-posizione-dentro-un-documento.md), la `v3`
+toglie `written_at`; il costo è una riapertura lenta). Gli altri **sette** contengono cose che il vault
 non sa riprodurre (dove si era rimasti, come si era ordinata la sidebar, cosa
 c'era nel file prima), e lì un numero che sale è una **migrazione da scrivere**,
 o un rifiuto.
@@ -180,7 +180,7 @@ contrario di ciò che il rifiuto in avanti protegge.
 Il dettaglio conta anche nel verso opposto: l'anagrafe non legge un file **senza**
 campo `version` come «versione 0», perché quel formato è nato con il campo — un
 file che non ce l'ha non è vecchio, è di qualcun altro
-(`entries.rs:98-118`). Il sidecar dell'organizzazione, che è nato prima, sì.
+(`entries.rs:110-128`). Il sidecar dell'organizzazione, che è nato prima, sì.
 
 **SemVer non copre niente di tutto questo.** La versione dei crate può passare da
 `0.1.0` a `0.2.0` senza che un solo schema si muova, e uno schema può salire in
