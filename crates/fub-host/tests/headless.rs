@@ -300,7 +300,11 @@ fn la_prima_scrittura_fotografa_l_originale() {
     let versioni = host
         .list_versions(None, &DocId::new("Nota00.md"))
         .expect("versioning acceso");
-    assert_eq!(versioni.len(), 2, "la prima scrittura fotografa l'originale");
+    assert_eq!(
+        versioni.len(),
+        2,
+        "la prima scrittura fotografa l'originale"
+    );
     assert_eq!(
         host.read_version(None, &DocId::new("Nota00.md"), versioni[1].ts)
             .unwrap(),
