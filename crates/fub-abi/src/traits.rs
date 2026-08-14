@@ -2167,9 +2167,10 @@ pub struct PropertyFilter {
 }
 
 /// Come ordinare i documenti di una [`IndexQuery::Properties`]. Chi non ha la
-/// chiave finisce **in fondo** in entrambi i versi (è assente, non minimo), e a
-/// parità vale l'ordine dei `DocId`: una risposta paginata deve essere stabile,
-/// o la seconda pagina ripete la prima.
+/// chiave finisce **in fondo** in entrambi i versi (è assente, non minimo).
+/// Fra specie diverse l'ordine è un **rango fisso** che non si ribalta col
+/// decrescente (decisione 0155). A parità vale l'ordine dei `DocId`: una
+/// risposta paginata deve essere stabile, o la seconda pagina ripete la prima.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertySort {
     pub key: String,
@@ -2497,9 +2498,11 @@ pub enum HealthCheck {
     /// È il segnale che mancava a una famiglia intera: un testo che sembra una
     /// data non produce un errore da nessuna parte — produce un filtro che non
     /// trova, una faccetta per ogni scrittura diversa dello stesso giorno, e un
-    /// ordinamento *plausibile e arbitrario*, perché fra due specie diverse non
-    /// c'è ordine e «nessun ordine» diventa «pari». Il rilevatore è lo stesso
-    /// parser con tutti i formati insieme
+    /// ordinamento che separa le specie per rango (la data prima dei testi)
+    /// invece di confrontarle come giorni. Finché il formato non è dichiarato
+    /// i testi restano lessicali *dentro* il loro rango: plausibile, e sbagliato
+    /// come cronologia. Il rilevatore è lo stesso parser con tutti i formati
+    /// insieme
     /// ([`DateFormats::looks_like_a_date`](crate::model::DateFormats::looks_like_a_date)):
     /// ciò che due dichiarazioni leggerebbero in due modi è esattamente ciò su
     /// cui vale la pena chiedere a chi possiede il vault.

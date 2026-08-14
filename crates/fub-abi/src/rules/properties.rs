@@ -18,8 +18,9 @@
 //!   query che morisse sulla prima nota scritta a mano sarebbe inutilizzabile.
 //!   Nell'ordinamento, però, le specie si separano per **rango fisso** (come
 //!   Excel: numero, data, bool, testo, link, elenco, unknown, vuoto): il rango
-//!   non si ribalta col decrescente, e i valori non confrontabili finiscono in
-//!   fondo in entrambi i versi invece di spararsi a caso come «pari».
+//!   non si ribalta col decrescente ([decisione 0155]). Un numero in una
+//!   colonna di testi sta prima, non in fondo; un testo in una colonna di
+//!   numeri sta dopo. Non è un pareggio che il `DocId` intercalerebbe.
 //! - **Chi non ha la chiave finisce in fondo**, in entrambi i versi
 //!   dell'ordinamento: è assente, non minimo. A parità vale l'ordine dei
 //!   `DocId`, perché la risposta è paginata e senza un ordine totale la seconda
@@ -29,6 +30,7 @@
 //!   faccetta deve fare, ed è la stessa regola dei tag.
 //!
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
+//! [decisione 0155]: ../../../docs/decisions/0155-fra-specie-diverse-decide-un-rango-fisso.md
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -148,9 +150,12 @@ fn compare(a: &PropertyValue, b: &PropertyValue) -> Option<Ordering> {
 /// falso), poi il testo, poi le relazioni, poi gli elenchi, e in fondo ciò
 /// che non si è riusciti a normalizzare. È una convenzione di prodotto, non
 /// una verità di natura: la [decisione 0005] dice «in fondo in entrambi i
-/// versi», e questo è il modo deterministico di farlo.
+/// versi» per chi **non ha la chiave**, e la [decisione 0155] fissa il rango
+/// fra specie diverse perché `Equal` non era un ordine e `Greater` non era
+/// antisimmetrico.
 ///
 /// [decisione 0005]: ../../../docs/decisions/0005-canale-dati-verso-le-view.md
+/// [decisione 0155]: ../../../docs/decisions/0155-fra-specie-diverse-decide-un-rango-fisso.md
 fn species_rank(v: &PropertyValue) -> u8 {
     match v {
         PropertyValue::Number(_) => 0,
@@ -165,9 +170,11 @@ fn species_rank(v: &PropertyValue) -> u8 {
 }
 
 /// L'ordine fra due documenti secondo la chiave di ordinamento: chi non ha la
-/// chiave, o ha un valore non confrontabile, finisce **in fondo** in entrambi i
-/// versi. Fra specie diverse decide il [rango fisso](`species_rank`), che non
-/// si ribalta col decrescente.
+/// chiave finisce **in fondo** in entrambi i versi. Fra specie diverse decide
+/// il [rango fisso](`species_rank`), che non si ribalta col decrescente
+/// ([decisione 0155]).
+///
+/// [decisione 0155]: ../../../docs/decisions/0155-fra-specie-diverse-decide-un-rango-fisso.md
 pub fn order_of(
     a: Option<&PropertyValue>,
     b: Option<&PropertyValue>,
@@ -362,6 +369,36 @@ mod tests {
         .items
     }
 
+    /// Ordina un vault per una chiave, nei due versi. Serve ai banchi che
+    /// montano un vault loro invece di quello di [`run`].
+    fn ordine_di(vault: &[(DocId, Frontmatter)], key: &str, descending: bool) -> Vec<String> {
+        let sort = PropertySort {
+            key: key.to_string(),
+            descending,
+        };
+        let matches: Matches = vault
+            .iter()
+            .map(|(id, _)| DocumentMatch::of(id.clone()))
+            .collect();
+        finish(
+            matches,
+            Some(&sort),
+            &PropertySelect::None,
+            None,
+            &DateFormats::ISO,
+            |id| {
+                vault
+                    .iter()
+                    .find(|(other, _)| other == id)
+                    .map(|(_, fm)| fm)
+            },
+        )
+        .items
+        .iter()
+        .map(|r| r.doc.as_str().to_string())
+        .collect()
+    }
+
     fn filter(key: &str, test: PropertyTest) -> PropertyFilter {
         PropertyFilter {
             key: key.to_string(),
@@ -509,6 +546,87 @@ mod tests {
             Ordering::Greater,
             "testo dopo numero anche al decrescente — antisimmetrico"
         );
+    }
+
+    #[test]
+    fn a_text_in_a_number_column_sorts_last_in_both_directions() {
+        // Lo scenario di issues.md §12: un testo sporco in una colonna di
+        // numeri. Il rango mette il testo dopo i numeri in entrambi i versi,
+        // e l'assente ancora dopo — sul caso che il difetto misurava, Excel
+        // e «in fondo» coincidono.
+        let vault = vec![
+            (DocId::new("a.md"), fm(serde_json::json!({"peso": "tanto"}))),
+            (DocId::new("b.md"), fm(serde_json::json!({"peso": 3}))),
+            (DocId::new("c.md"), fm(serde_json::json!({"peso": 10}))),
+            (DocId::new("d.md"), fm(serde_json::json!({}))),
+        ];
+        assert_eq!(
+            ordine_di(&vault, "peso", false),
+            vec!["b.md", "c.md", "a.md", "d.md"],
+            "crescente: 3, 10, poi il testo, poi l'assente"
+        );
+        assert_eq!(
+            ordine_di(&vault, "peso", true),
+            vec!["c.md", "b.md", "a.md", "d.md"],
+            "decrescente: 10, 3, poi il testo, poi l'assente — il rango non si ribalta"
+        );
+    }
+
+    #[test]
+    fn a_number_in_a_text_column_sorts_first_not_last() {
+        // La differenza fra Excel e la specie di riferimento: un numero
+        // sporco in una colonna di testi sta *prima*, non in fondo. È la
+        // scelta che la 0155 ratifica.
+        let vault = vec![
+            (
+                DocId::new("a.md"),
+                fm(serde_json::json!({"titolo": "zeta"})),
+            ),
+            (DocId::new("b.md"), fm(serde_json::json!({"titolo": 1}))),
+        ];
+        assert_eq!(
+            ordine_di(&vault, "titolo", false),
+            vec!["b.md", "a.md"],
+            "il numero sta in testa anche se la colonna è di testi"
+        );
+        assert_eq!(
+            ordine_di(&vault, "titolo", true),
+            vec!["b.md", "a.md"],
+            "il rango non si ribalta: il numero resta in testa"
+        );
+    }
+
+    #[test]
+    fn order_of_is_antisymmetric_for_every_pair() {
+        let data = PropertyValue::Date(PropertyDate {
+            year: 2026,
+            month: 1,
+            day: 1,
+            time: None,
+        });
+        let samples: [Option<PropertyValue>; 8] = [
+            None,
+            Some(PropertyValue::Number(1.0)),
+            Some(data),
+            Some(PropertyValue::Bool(true)),
+            Some(PropertyValue::Text("x".into())),
+            Some(PropertyValue::List(vec![])),
+            Some(PropertyValue::Unknown(serde_json::json!({}))),
+            Some(PropertyValue::Empty),
+        ];
+        for descending in [false, true] {
+            for a in &samples {
+                for b in &samples {
+                    let ab = order_of(a.as_ref(), b.as_ref(), descending);
+                    let ba = order_of(b.as_ref(), a.as_ref(), descending);
+                    assert_eq!(
+                        ab,
+                        ba.reverse(),
+                        "antisimmetria rotta: {a:?} vs {b:?}, descending={descending}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
