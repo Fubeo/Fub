@@ -435,6 +435,17 @@ const FEED_BATCH: usize = 512;
 /// ramo per l'apertura.
 pub const INDEX_JOB: &str = "vault.index";
 
+/// Un gancio **prima della scrittura**: ciò che una feature vuole fare con
+/// l'originale un istante prima che venga sovrascritto (0154).
+///
+/// È generico — un id di plugin e una chiusura — perché il kernel non sa cosa
+/// sia una fotografia: sa solo che c'è un momento, fra il parse e il disco, in
+/// cui il contenuto che sta per sparire è ancora leggibile, e che qualcuno può
+/// volerlo guardare. `None` è il default e non è un difetto: la maggior parte
+/// dei montaggi non registra niente.
+pub type BeforeWriteHook =
+    Arc<dyn Fn(&mut dyn HostApi, &DocId) -> std::result::Result<(), PluginError> + Send + Sync>;
+
 pub struct Workspace {
     /// *Il disco, e come ciò che ci sta sopra diventa un modello* (§8.1): il
     /// vault, il registro dei formati, le sintassi innestate (§3.1) e i
@@ -601,6 +612,18 @@ pub struct Workspace {
     /// cancellerebbe con un clic esattamente ciò che l'apertura aveva deciso di
     /// non cancellare.
     sospesi_dal_dubbio: BTreeSet<DocId>,
+    /// Il gancio **prima della scrittura** (0154), se chi monta ne ha messo
+    /// uno: l'id del plugin a cui intestare l'host e la chiusura da chiamare
+    /// in [`write_source`](Workspace::write_source) fra il parse e il disco.
+    ///
+    /// `None` è il default e non è un difetto — è la forma di `network` e del
+    /// watcher: il kernel non sa cosa sia una fotografia, sa solo che c'è un
+    /// istante in cui l'originale è ancora leggibile, e chi lo vuole guardare
+    /// lo dichiara qui. Il gancio gira **dentro** la scrittura, sotto il
+    /// prestito esclusivo del workspace, e un suo errore ferma la scrittura:
+    /// sovrascrivere senza che la fotografia sia riuscita sarebbe la finestra
+    /// che questo meccanismo esiste per chiudere.
+    before_write: Option<(String, BeforeWriteHook)>,
 }
 
 impl Workspace {
@@ -714,6 +737,7 @@ impl Workspace {
             drafts,
             doc_data_warnings: Vec::new(),
             sospesi_dal_dubbio: BTreeSet::new(),
+            before_write: None,
         })
     }
 
@@ -1576,6 +1600,17 @@ impl Workspace {
             },
             granted,
         )
+    }
+
+    /// Mette il gancio **prima della scrittura** (0154): l'id del plugin a cui
+    /// intestare l'host e la chiusura da chiamare in
+    /// [`write_source`](Workspace::write_source) fra il parse e il disco.
+    ///
+    /// Un solo gancio, l'ultimo vince: chi monta la fotografia è il montaggio
+    /// del versioning, e non c'è un secondo candidato. `None` (il default)
+    /// disattiva.
+    pub fn set_before_write_hook(&mut self, hook: Option<(String, BeforeWriteHook)>) {
+        self.before_write = hook;
     }
 
     /// Registra un [`IndexProvider`] sotto un id. Va fatto **prima** di
@@ -2501,6 +2536,28 @@ impl Workspace {
         // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
         // pur avendo scritto.
         let model = self.docs.parse(id, source)?;
+        // Il gancio **prima della scrittura** (0154): fra il parse e il disco
+        // l'originale è ancora leggibile, e chi ha registrato una chiusura
+        // (la fotografia del versioning) la vuole guardare in questo istante.
+        // Un suo errore ferma la scrittura: sovrascrivere senza che la
+        // fotografia sia riuscita sarebbe la finestra che il meccanismo
+        // esiste per chiudere. L'host è intestato al plugin che ha registrato
+        // il gancio, in modalità `Apply` — e non è `with_host`, che in fondo
+        // drenerebbe la coda delle scritture mentre siamo dentro una scrittura.
+        if let Some((plugin, hook)) = &self.before_write {
+            let plugin = plugin.clone();
+            let hook = hook.clone();
+            let mut host = self.host_for(&plugin, InvokeMode::Apply);
+            if let Err(e) = hook(&mut host, id) {
+                return Err(match e {
+                    PluginError::Conflict(_) => KernelError::Stale(id.to_string()),
+                    other => KernelError::BadEdit {
+                        doc: id.to_string(),
+                        why: other.to_string(),
+                    },
+                });
+            }
+        }
         // Dimensione e data arrivano dalla scrittura stessa: sono ciò che i byte
         // appena posati dicono di sé, e ripeterle al disco con una `stat` era il
         // difetto 0179.

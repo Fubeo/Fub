@@ -503,9 +503,11 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
 /// Lo store si apre con le stesse capacità che avrà l'handler — un `HostApi`
 /// intestato a `VERSIONING_ID` — e non con `std::fs`: chi monta non ha un canale
 /// privilegiato che un plugin non avrebbe. La prima fotografia del vault non è
-/// qui: è policy della feature, e la chiama il runner, una volta per apertura,
-/// prima della prima fetta (§25.3), da una chiusura che il montaggio consegna
-/// nella sessione.
+/// più una passata all'apertura (0154): è **copy-on-first-write**, e il
+/// montaggio la registra come gancio prima della scrittura — la chiusura che
+/// il workspace chiama fra il parse e il disco, un istante prima che
+/// l'originale sparisca. L'handler resta per gli eventi (la versione di ogni
+/// scrittura successiva) e per la riconciliazione dopo un `Overflow`.
 #[cfg(feature = "versioning")]
 fn register_versioning(
     ws: &mut Workspace,
@@ -525,11 +527,24 @@ fn register_versioning(
         Err(e) => return vec![format!("versioning non composto: {e}")],
     }
     let mut guai = Vec::new();
+    // La prima fotografia, come gancio **prima della scrittura** (0154): la
+    // chiusura fotografa l'originale un istante prima che venga sovrascritto,
+    // e solo se non ha ancora una storia. Lo store è clonato (un `Arc` interno,
+    // clone economico) perché l'handler qui sotto se ne porta via `opened`; il
+    // gancio è generico — il kernel non sa cosa sia una fotografia, sa solo
+    // che c'è un istante in cui l'originale è ancora leggibile.
+    let store = opened.clone();
     if let Err(e) =
         ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(opened)))
     {
         guai.push(format!("versioning non registrato: {e}"));
     }
+    ws.set_before_write_hook(Some((
+        VERSIONING_ID.to_string(),
+        Arc::new(move |host, id| {
+            VersioningHandler::new(store.clone()).photograph_if_unversioned(host, id)
+        }),
+    )));
     // Il pannello cronologia e `version.restore` (§1.2). Stanno **dentro
     // l'interruttore**: versioning spento significa pannello assente e comando
     // assente, non un pannello vuoto e un comando che risponde «disattivato».

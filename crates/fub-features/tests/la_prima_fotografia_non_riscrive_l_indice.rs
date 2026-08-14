@@ -172,10 +172,10 @@ fn una_passata_interrotta_non_perde_niente_perche_l_indice_si_ricostruisce() {
     }
 }
 
-/// **`VaultOpened` non fotografa più** (§25.3): la passata la chiama il
-/// runner, e l'evento da solo non produce niente. È la metà che tiene fermo
-/// il taglio «fuori dalla fase 1»: se qualcuno rimette il ramo nell'handler,
-/// questo banco è rosso.
+/// **`VaultOpened` non fotografa più** (0154): la passata è diventata
+/// copy-on-first-write, e l'evento da solo non produce niente. È la metà che
+/// tiene fermo il taglio «fuori dall'apertura»: se qualcuno rimette il ramo
+/// nell'handler, questo banco è rosso.
 #[test]
 fn l_evento_vaultopened_non_fotografa_piu() {
     let mut host = MemoryHost::new().con_documento("a.md", "com'era");

@@ -293,12 +293,18 @@ fn rileggere_una_versione_non_ferma_chi_scrive() {
     host.wait_indexed(None).expect("l'indicizzazione finisce");
     let ws = host.workspace(None).expect("il vault è aperto");
     let id = DocId::new("Nota 0.md");
-    // La fotografia dell'apertura: la storia esiste prima che qualcuno scriva.
+    // La storia nasce dalla prima scrittura (0154): l'apertura non fotografa
+    // più, quindi una scrittura crea la versione da rileggere.
+    {
+        let mut ws = ws.write().expect("il vault non è avvelenato");
+        ws.write_document(&id, "# Nota 0\n\ncambiata\n", WriteBase::Dictated)
+            .expect("la prima scrittura riesce");
+    }
     let ts = host
         .list_versions(None, &id)
         .expect("versioning acceso")
         .first()
-        .expect("la fotografia dell'apertura")
+        .expect("la prima scrittura fotografa l'originale")
         .ts;
 
     // Il prestito condiviso, tenuto: da qui in poi chi legge è dentro.

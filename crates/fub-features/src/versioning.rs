@@ -1443,15 +1443,59 @@ impl VersioningHandler {
     /// versionata cancellerebbe per sempre lo stato in cui l'utente l'ha
     /// trovata — l'handler gira *dopo* la scrittura e vede solo il testo nuovo.
     ///
-    /// La chiama il runner, una volta per apertura, prima della prima fetta
-    /// (§25.3): il *quando* e il *cosa* sono policy della feature — viveva in
-    /// `fub-app::open_vault`, poi sull'evento `VaultOpened`, oggi qui, con la
-    /// stessa firma di un `Plugin::activate` — e il *chi* è il wiring.
+    /// **Non la chiama più il runner all'apertura** (0154): la fotografia è
+    /// diventata copy-on-first-write, e questo metodo resta come unità
+    /// riusabile — i test la chiamano a mano per avere lo stato che il gancio
+    /// produce da solo, e la riconciliazione dopo un `Overflow` la riusa per
+    /// chi non ha ancora una storia. Il *quando* e il *cosa* sono policy della
+    /// feature — viveva in `fub-app::open_vault`, poi sull'evento
+    /// `VaultOpened`, poi qui, con la stessa firma di un `Plugin::activate` —
+    /// e il *chi* è il wiring.
     pub fn first_snapshot_of_the_vault<'h>(
         &self,
         host: &'h mut (dyn HostApi + 'h),
     ) -> Result<(), PluginError> {
         self.sweep(host, Passata::SoloNuovi)
+    }
+
+    /// La fotografia **di una sola nota**, un istante prima che venga
+    /// sovrascritta (0154): è il corpo del gancio che il montaggio registra
+    /// sul workspace, e vive qui perché la logica sia testabile senza un
+    /// workspace intero.
+    ///
+    /// Tre esiti, e ognuno è una frase:
+    ///
+    /// - la nota ha **già** una storia → non si fa niente, e non si paga
+    ///   nemmeno una lettura: la prima scrittura ha già fotografato
+    ///   l'originale, e le successive trovano la versione di prima;
+    /// - la nota **non esiste** (la scrittura è una creazione) → non si fa
+    ///   niente: non c'è un originale da salvare, e la prima versione sarà
+    ///   quella del testo nuovo, che l'evento `DocumentChanged` fotografa da
+    ///   solo;
+    /// - la nota esiste e non ha storia → si fotografa **adesso**, prima che
+    ///   i byte vadano via: è l'unico istante in cui l'originale è ancora
+    ///   leggibile, e un errore qui ferma la scrittura (il kernel propaga
+    ///   l'errore del gancio) — sovrascrivere senza fotografia sarebbe la
+    ///   finestra che questo meccanismo esiste per chiudere.
+    pub fn photograph_if_unversioned(
+        &self,
+        host: &mut dyn HostApi,
+        id: &DocId,
+    ) -> Result<(), PluginError> {
+        if self.store.has_versions(id) {
+            return Ok(());
+        }
+        match host.read_document(id) {
+            Ok(source) => {
+                self.store.snapshot(id, &source, host)?;
+                Ok(())
+            }
+            // La nota non c'è: la scrittura è una creazione, e non c'è un
+            // originale da salvare. `NotFound` è l'unico errore di lettura che
+            // non è un guasto — ogni altro risale, e ferma la scrittura.
+            Err(PluginError::NotFound(_)) => Ok(()),
+            Err(e) => Err(e),
+        }
     }
 
     /// Riconciliazione dopo un [`Event::Overflow`]: la coda è stata troncata e
@@ -1512,8 +1556,11 @@ impl VersioningHandler {
 
 /// Chi fotografare in una passata sull'intero vault.
 enum Passata {
-    /// Solo chi non ha ancora una storia (apertura del vault): chi ce l'ha non
-    /// paga nemmeno una lettura.
+    /// Solo chi non ha ancora una storia: chi ce l'ha non paga nemmeno una
+    /// lettura. È la passata che la prima fotografia all'apertura usava
+    /// (0154): oggi il copy-on-first-write fotografa per nota, e questa
+    /// variante resta per chi riusa la passata a mano — i test, e la
+    /// riconciliazione dopo un `Overflow` per chi non ha ancora una storia.
     SoloNuovi,
     /// Tutti (riconciliazione dopo un `Overflow`): il dedup per contenuto rende
     /// gratis gli immutati, e per gli altri nasce la versione persa.
@@ -2799,5 +2846,96 @@ mod tests {
         );
         let ts = store.list(&id("a.md"))[0].ts;
         assert_eq!(store.read(&id("a.md"), ts, &host).unwrap(), "com'era");
+    }
+
+    #[test]
+    fn the_first_write_photographs_the_original() {
+        let mut host = MemoryHost::new().con_documento("a.md", "com'era");
+        let store = VersionStore::open(&mut host).unwrap();
+        let mut handler = VersioningHandler::new(store.clone());
+
+        // Il gancio gira prima della prima scrittura: l'originale entra in
+        // storia, e la scrittura che segue aggiunge la sua versione.
+        handler
+            .photograph_if_unversioned(&mut host, &id("a.md"))
+            .unwrap();
+        host.write_document(&id("a.md"), "adesso", WriteBase::Dictated)
+            .unwrap();
+        host.avanza(1_000);
+        // L'evento della scrittura lo consegna il kernel; qui lo si chiama a
+        // mano, come fanno gli altri test di questo modulo.
+        handler
+            .handle(
+                &Notice::of(Event::DocumentChanged {
+                    id: id("a.md"),
+                    changes: None,
+                }),
+                &mut host,
+            )
+            .unwrap();
+
+        let versioni = store.list(&id("a.md"));
+        assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
+        assert_eq!(
+            store.read(&id("a.md"), versioni[1].ts, &host).unwrap(),
+            "com'era",
+            "l'originale è in storia"
+        );
+        assert_eq!(
+            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            "adesso"
+        );
+
+        // Una seconda scrittura non fotografa più: la storia c'è già, e il
+        // gancio non paga nemmeno una lettura.
+        handler
+            .photograph_if_unversioned(&mut host, &id("a.md"))
+            .unwrap();
+        host.write_document(&id("a.md"), "poi", WriteBase::Dictated)
+            .unwrap();
+        host.avanza(1_000);
+        handler
+            .handle(
+                &Notice::of(Event::DocumentChanged {
+                    id: id("a.md"),
+                    changes: None,
+                }),
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(store.list(&id("a.md")).len(), 3);
+    }
+
+    #[test]
+    fn a_creation_is_not_photographed() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        let mut handler = VersioningHandler::new(store.clone());
+
+        // La nota non esiste: la scrittura è una creazione, non c'è un
+        // originale da salvare, e il gancio risponde `Ok` senza fotografare.
+        handler
+            .photograph_if_unversioned(&mut host, &id("c.md"))
+            .unwrap();
+        host.write_document(&id("c.md"), "nuova", WriteBase::Dictated)
+            .unwrap();
+        host.avanza(1_000);
+        handler
+            .handle(
+                &Notice::of(Event::DocumentChanged {
+                    id: id("c.md"),
+                    changes: None,
+                }),
+                &mut host,
+            )
+            .unwrap();
+
+        let versioni = store.list(&id("c.md"));
+        assert_eq!(versioni.len(), 1, "versioni: {versioni:?}");
+        assert_eq!(
+            store.read(&id("c.md"), versioni[0].ts, &host).unwrap(),
+            "nuova",
+            "la prima versione è il testo nuovo"
+        );
     }
 }
