@@ -255,6 +255,7 @@ impl ExternalSync {
     /// c'è per ogni fabbrica, e ciò che il rilevatore avrebbe visto se fosse
     /// stato acceso lo vede il workspace stesso.
     pub fn catch_up(&mut self) {
+        let _fase = tracing::info_span!(target: "fub.apertura", "catch_up").entered();
         // Fase 1 — i piani, sotto prestito condiviso. Come in `batch`, un piano
         // `None` sta per i rami che non leggono niente (un file sparito, un
         // path di un'altra specie, una lettura fallita): la fase 2 li rifà per

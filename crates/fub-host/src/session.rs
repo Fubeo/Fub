@@ -545,6 +545,8 @@ impl Host {
         }
         let root = canonical(root)?;
 
+        let _fase = tracing::info_span!(target: "fub.apertura", "open").entered();
+
         let gia_aperta = {
             let sessions = self.sessions.read()?;
             sessions.open.get(&root).map(info_of).transpose()?

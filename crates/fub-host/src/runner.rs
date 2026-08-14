@@ -535,6 +535,7 @@ impl Shared {
         // fermare il pool: la passata interrotta si riprende alla riapertura.
         #[cfg(feature = "versioning")]
         if let Some(foto) = in_corso.fotografia.take() {
+            let _fase = tracing::info_span!(target: "fub.apertura", "fotografia").entered();
             let mut ws = self.workspace.write()?;
             if let Err(e) = foto(&mut ws) {
                 tracing::warn!(target: "fub.host", "la prima fotografia non è riuscita: {e}");
@@ -549,6 +550,9 @@ impl Shared {
 
         if !smettere && !in_corso.work.finita() {
             let label = in_corso.work.prossimo().map(|id| id.to_string());
+            // La fetta intera — piano e applicazione — è ciò che il banco conta
+            // per dire quante iterazioni ha fatto l'apertura (§25.3).
+            let _fase = tracing::info_span!(target: "fub.apertura", "fetta").entered();
             // **Il disco sotto prestito condiviso** (0119, secondo sito): la
             // fetta si legge e si parsa qui, dove chi guarda il vault appena
             // aperto — la ricerca, l'albero, l'autocompletamento — entra

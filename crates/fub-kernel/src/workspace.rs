@@ -1778,6 +1778,7 @@ impl Workspace {
     /// quindi la fase che può fallire e la fase che dura sono due fasi diverse.
     /// Chi apre aspetta la prima e non la seconda.
     pub fn scan_vault(&mut self) -> Result<Indicizzazione> {
+        let _fase = tracing::info_span!(target: "fub.apertura", "scan_vault").entered();
         let scanned = self.docs.vault.scan()?;
         self.spazza_i_temporanei(&scanned.temporanei_rimasti_indietro);
         let doc_extensions = self.docs.registry.all_extensions();
@@ -1903,6 +1904,11 @@ impl Workspace {
         if fetta.is_empty() {
             return ParsedBatch::default();
         }
+
+        // Lo span copre tutto il lavoro parallelo della fetta, `thread::scope`
+        // compreso: è ciò che il banco dell'apertura legge per vedere se le
+        // fette scalano davvero (§25.3).
+        let _fase = tracing::info_span!(target: "fub.apertura", "plan_batch").entered();
 
         // L'impronta che l'anagrafe dà a ogni voce **adesso**: è ciò che il
         // piano si porta dietro per accorgersi di essere invecchiato (0119).
@@ -2125,6 +2131,7 @@ impl Workspace {
     /// alimentato è buono, e buttarlo perché non è tutto vorrebbe dire che
     /// annullare costa più che non aver cominciato.
     pub fn finish_index(&mut self, work: Indicizzazione) -> Apertura {
+        let _fase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
         // L'apertura ricostruisce il grafo in blocco anche in modalità
         // incrementale: gli `upsert` uno per uno l'hanno già costruito, ma la
         // risoluzione dei wikilink dipende dall'insieme intero (un alias
@@ -6722,6 +6729,7 @@ impl Workspace {
         if roots.is_empty() {
             return Ok(0);
         }
+        let _fase = tracing::info_span!(target: "fub.apertura", "collect_doc_data").entered();
         let cestinate = self.trashed_originals();
         let metas = &self.indexes.core.metas;
         // Ciò che il ricongiungimento ha messo in dubbio non si raccoglie: è la
