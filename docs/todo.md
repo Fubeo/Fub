@@ -500,8 +500,15 @@ nessuno è tornato a prendere la casella.
 
 ## I difetti misurati
 
-Sono **sette** [conta: difetti-aperti] e non voci. Nessuno richiede una
-decisione.
+Sono **zero** [conta: difetti-aperti] — e zero è il numero che questo conto è
+nato per poter dire, come il `|| true` della sua riga di comando dichiara. Le
+ultime sei righe sono uscite così: la `0130` l'ha riparata la
+[0163](decisions/0163-render-via-index-query.md), la `0168` e
+la `0197` un solo commit di riparazione con i suoi presidi, la `0188` si è
+chiusa come **varco dichiarato** (0064), e `0112`, `0113` e `0198` sono uscite
+il 2026-08-15 con l'anagrafe incrementale, il flush diventato fase sua e
+l'evento della rinomina ricongiunta. La tabella resta, perché il prossimo
+blocco di misure la riempie di nuovo.
 
 **Il primo blocco viene da un audit del 2026-07-31**, che aveva prodotto
 novantadue osservazioni in `docs/issues.md`. Nessuno aveva mai lavorato quel
@@ -574,13 +581,6 @@ fermava a `0099` e avrebbe dichiarato meno difetti di quanti ce ne sono.
 
 | # | Difetto | Dove | Famiglia |
 | --- | --- | --- | --- |
-| 0112 | l'anagrafe non ha forma incrementale: `EntryStore::open` deserializza l'intera `BTreeMap<DocId, StoredEntry>` e `EntryStore::store` la riserializza e la sostituisce tutta con una `VaultStorage::write`, così ogni apertura paga il vault intero anche quando non è cambiato un file | `fub-kernel` · `entries.rs` `EntryStore::store` | prestazioni |
-| 0113 | il prestito esclusivo di `finish_index` copre in fila cinque fasi, tre delle quali toccano il disco — ricostruzione integrale del grafo, riconciliazione degli indici, flush degli indici, ricongiungimento delle rinomine che cammina l'anagrafe persistita, riscrittura integrale di `entries.json` — così un lettore concorrente aspetta la somma di tutte e cinque e non la sola indicizzazione | `fub-kernel` · `workspace.rs` `Workspace::finish_index` | lock e I/O |
-| 0130 | due letture che rispondono con dei dati hanno un comando IPC proprio invece di una variante di `IndexQuery`, e siccome `IndexQuery` non ha una variante di resa e l'`HostApi` non ha una capacità di render, un `ViewProvider` non ha nessuna porta per mostrare un documento reso mentre la shell ne ha due | `fub-app` · `lib.rs` `render_preview` / `render_embed` | regole |
-| 0168 | fra la rinomina del documento e la migrazione del suo docdata c'è una finestra di crash non coperta da niente: il file è al nome nuovo e i suoi dati per-documento sono ancora sotto la chiave vecchia, dove la prima `collect` successiva li spazza perché non corrispondono a nessun documento vivo | `fub-kernel` · `workspace.rs` `rename_document_in_batch` (con `docdata.rs` `migrate`) | lock e I/O |
-| 0188 | l'indice di ricerca scrive i propri segmenti direttamente sul filesystem invece che attraverso `VaultStorage`, che il repo dichiara **il supporto unico** dei byte: quei file non passano da temp+rename, non passano da lock, non li vede un doppio in memoria, e ogni banco che monta un supporto finto ha un pezzo di vault che gli sfugge | `fub-kernel` · `index` (segmenti tantivy) | regole |
-| 0197 | il watcher legge un file mentre qualcuno lo sta ancora scrivendo: non c'è nessuna prova di stabilità — né un secondo `stat` che confermi la stessa dimensione, né un'attesa — quindi un file grande scritto da un'applicazione esterna entra in anagrafe a metà e ci resta finché non arriva un altro evento | `fub-host` · `watcher` (ingestione dell'evento) | lock e I/O |
-| 0198 | una rinomina esterna lenta viene spezzata in due dal debounce: se l'evento di partenza e quello di arrivo cadono in due finestre diverse, il montaggio non li riconosce come la stessa mossa, l'identità del documento si perde e con essa la bozza non salvata che ci stava attaccata | `fub-host` · `watcher` (debounce delle rinomine) | regole |
 
 ## Dove va una regola scritta due volte
 

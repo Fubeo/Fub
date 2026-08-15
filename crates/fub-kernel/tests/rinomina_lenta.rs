@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::error::FormatError;
+use fub_abi::event::{Event, Notice};
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
@@ -25,7 +26,7 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, FsStorage, Fusione, Stat, VaultStorage};
-use fub_kernel::{FormatRegistry, MachineSettings, Workspace};
+use fub_kernel::{FormatRegistry, MachineSettings, Subscription, Workspace};
 
 const PLUGIN: &str = "test.appiccicoso";
 
@@ -116,6 +117,15 @@ impl Banco {
     }
 }
 
+/// Gli avvisi arrivati sul bus da quando ci si è iscritti.
+fn eventi(rx: &Subscription) -> Vec<Notice> {
+    let mut visti = Vec::new();
+    while let Ok(n) = rx.try_recv() {
+        visti.push(n);
+    }
+    visti
+}
+
 /// Le due metà di una rinomina esterna, come due lotti del rilevatore.
 #[test]
 fn una_rinomina_spezzata_porta_dietro_bozza_e_dati() {
@@ -156,6 +166,147 @@ fn una_rinomina_spezzata_porta_dietro_bozza_e_dati() {
             .map(String::as_str),
         Some("📌"),
         "e l'icona, che passa dalla stessa funzione"
+    );
+}
+
+/// **La stessa rinomina, ma con partenza e arrivo in due finestre del
+/// debounce** (difetto 0198): il caso che il presidio qui sopra non copre.
+///
+/// Là le due metà si chiamano con `sync_path`, che è la porta del kernel; qui
+/// si chiamano con le **fasi di un lotto del rilevatore** — `plan_sync` sotto
+/// prestito condiviso e `sync_path_prepared` sotto quello esclusivo, che è
+/// ciò che `ExternalSync::batch` fa davvero. La differenza non è di forma: la
+/// partenza, che in un lotto vero è un `Touched` su un path sparito, esce da
+/// `plan_sync` come `None` — «non c'è niente da preparare» — e tocca a
+/// `sync_path_prepared` rifare la strada intera, che è il ramo in cui il
+/// documento si toglie e l'impronta si ricorda. Se l'accoppiamento vivesse
+/// solo nel ramo «piano pronto», la rinomina spezzata resterebbe spezzata
+/// proprio quando il debounce la spezza.
+///
+/// L'arrivo è il lotto **dopo**: un `Touched` su un path che è comparso, con
+/// un piano vero. L'impronta è la stessa di chi è appena sparito, e la bozza,
+/// i dati per-documento e l'icona seguono la nota — come nel presidio
+/// stessa-finestra, che è il come.
+#[test]
+fn una_rinomina_spezzata_in_due_finestre_porta_dietro_bozza_e_dati() {
+    let mut b = Banco::nuovo();
+    b.ws
+        .save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
+        .expect("bozza");
+    b.ws.set_icon("a.txt", Some("📌".into())).expect("icona");
+    b.attacca_dati("a.txt");
+    // Chi tiene stato per-documento fuori dallo spazio dichiarato — il
+    // versioning, che ha uno store suo — ascolta la rinomina: senza l'evento
+    // la storia si spezza in due chiavi.
+    let rx = b.ws.bus().subscribe();
+
+    std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
+
+    // Finestra 1: la partenza. Il path non esiste più, quindi `plan_sync` non
+    // ha niente da preparare — è il ramo che in `ExternalSync::batch` rifà la
+    // strada intera sotto il prestito esclusivo.
+    let piano = b.ws.plan_sync(&b.root.join("a.txt"));
+    assert!(
+        piano.is_none(),
+        "un path sparito non ha un piano: è il ramo che la fase 2 rifà per intero"
+    );
+    b.ws
+        .sync_path_prepared(&b.root.join("a.txt"), piano)
+        .expect("la partenza: il file non c'è più");
+
+    // Finestra 2: l'arrivo, con un piano vero.
+    let piano = b.ws.plan_sync(&b.root.join("b.txt")).expect("un piano");
+    b.ws
+        .sync_path_prepared(&b.root.join("b.txt"), Some(piano))
+        .expect("l'arrivo: è comparso un file con la stessa impronta");
+
+    assert_eq!(
+        b.bozza_di("b.txt").as_deref(),
+        Some("e questo non l'ho salvato"),
+        "la bozza ha seguito la nota anche attraverso due finestre"
+    );
+    assert!(
+        b.bozza_di("a.txt").is_none(),
+        "e non è rimasta anche sotto il nome vecchio"
+    );
+    assert_eq!(
+        b.dati_di("b.txt").as_deref(),
+        Some("i dati di a.txt"),
+        "e lo spazio per-documento"
+    );
+    assert!(b.dati_di("a.txt").is_none(), "che si è spostato, non copiato");
+    assert_eq!(
+        b.ws.organization()
+            .icons
+            .get("b.txt")
+            .map(String::as_str),
+        Some("📌"),
+        "e l'icona"
+    );
+    // E l'accoppiamento lo **dice**, con lo stesso evento della rinomina
+    // vista: il gemello a vault chiuso lo emette (workspace.rs, il precedente
+    // del rejoin), e chi ascolta non deve distinguere i due casi.
+    let visti = eventi(&rx);
+    assert!(
+        visti.iter().any(|n| matches!(
+            &n.event,
+            Event::DocumentRenamed { from, to }
+                if from.as_str() == "a.txt" && to.as_str() == "b.txt"
+        )),
+        "l'accoppiamento ha annunciato la rinomina: {visti:?}"
+    );
+}
+
+/// **Un remove seguito a distanza da un add non correlato non diventa una
+/// rinomina** (difetto 0198, il falso positivo).
+///
+/// L'accoppiamento per impronta è la regola della 0099 vista dal rilevatore
+/// aperto, e la 0099 ha un bound: **uno solo**. Due sparizioni di fila
+/// tengono l'ultima — la prima non ha più un arrivo da aspettare, e un
+/// arrivo che arrivasse dopo sarebbe di un'altra mossa. Qui la prima
+/// sparizione è di `a.txt`; poi sparisce anche `b.txt`; poi compare `c.txt`
+/// con l'impronta di **`a`**. Se il posto non si consumasse, `c` erediterebbe
+/// la bozza di `a` — un contenuto identico non è una prova di identità quando
+/// in mezzo c'è stata un'altra sparizione.
+#[test]
+fn un_remove_a_distanza_da_un_add_non_correlato_non_accoppia() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("a.txt"), "il contenuto di a\n").unwrap();
+    std::fs::write(root.join("b.txt"), "il contenuto di b\n").unwrap();
+    let mut ws = Workspace::new(&root, registry()).expect("apertura");
+    ws.reindex().expect("reindex");
+    ws.save_draft(&DocId::new("a.txt"), "bozza di a", None)
+        .expect("bozza a");
+
+    // Due sparizioni di fila: la prima non è più l'ultima.
+    std::fs::remove_file(root.join("a.txt")).unwrap();
+    ws.sync_path(&root.join("a.txt")).expect("a sparisce");
+    std::fs::remove_file(root.join("b.txt")).unwrap();
+    ws.sync_path(&root.join("b.txt")).expect("b sparisce");
+
+    // L'arrivo porta l'impronta di `a`, ma non è la stessa mossa: in mezzo
+    // c'è stata un'altra sparizione, e il posto di `a` si è consumato.
+    std::fs::write(root.join("c.txt"), "il contenuto di a\n").unwrap();
+    ws.sync_path(&root.join("c.txt")).expect("c compare");
+
+    assert!(
+        ws.drafts()
+            .expect("bozze")
+            .drafts
+            .iter()
+            .all(|d| d.doc.as_str() != "c.txt"),
+        "un contenuto identico a chi è sparito due mosse fa non eredita la bozza"
+    );
+    assert_eq!(
+        ws.drafts()
+            .expect("bozze")
+            .drafts
+            .iter()
+            .find(|d| d.doc.as_str() == "a.txt")
+            .map(|d| d.text.as_str()),
+        Some("bozza di a"),
+        "e la bozza resta sotto la chiave vecchia, dove il recupero la ritrova"
     );
 }
 

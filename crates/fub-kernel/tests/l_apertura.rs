@@ -458,6 +458,13 @@ fn a_caldo_la_seconda_fase_non_ha_niente_da_fare() {
         .monta();
     std::fs::write(banco.root().join("una.md"), "prima").expect("semina");
     std::fs::write(banco.root().join("due.md"), "seconda").expect("semina");
+    // La semina dev'essere **strettamente nel passato** quando il primo giro
+    // la osserva: una data nello stesso millisecondo dell'osservazione è
+    // *racily clean* (difetto 0187) e la voce non si scrive in anagrafe —
+    // senza questa pausa il banco litiga con l'orologio e perde quando è
+    // veloce, cioè quando gira da solo. La stessa pausa, con lo stesso nome,
+    // sta in `anagrafe.rs` e `ricongiungimento.rs`.
+    oltre_il_millisecondo();
     banco.reindex().expect("primo giro");
 
     let lavoro = banco.scan_vault().expect("riapre");
@@ -477,6 +484,13 @@ fn a_caldo_la_seconda_fase_non_ha_niente_da_fare() {
 
     let apertura = banco.finish_index(lavoro);
     assert!(apertura.intera(), "un vault immutato si chiude intero");
+}
+
+/// La pausa che porta la semina oltre il millisecondo corrente, perché la
+/// regola *racily clean* (difetto 0187) si fidi della data che ha visto. Il
+/// gemello sta in `anagrafe.rs` e `ricongiungimento.rs`.
+fn oltre_il_millisecondo() {
+    std::thread::sleep(std::time::Duration::from_millis(5));
 }
 
 /// **Chi smette a metà non riconcilia**, ed è la riga che separa «ho smesso di

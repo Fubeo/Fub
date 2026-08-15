@@ -2209,8 +2209,8 @@ impl Workspace {
         )
     }
 
-    /// **La chiusura dell'apertura** (§15.7): il grafo, la riconciliazione, il
-    /// flush, e i guasti di ciò che non si è letto.
+    /// **La chiusura dell'apertura** (§15.7): il grafo, la riconciliazione, e i
+    /// guasti di ciò che non si è letto.
     ///
     /// Si chiama sia su un'indicizzazione arrivata in fondo sia su una
     /// **interrotta**, e la differenza sta in una riga sola — chi ha smesso a
@@ -2223,10 +2223,24 @@ impl Workspace {
     /// [`finish_index_with_graph`]: a caldo `restore` non tocca il grafo, e
     /// rifarlo sotto esclusivo congelerebbe l'UI per tutto il vault
     /// (`il_grafo_di_un_apertura_a_caldo`).
+    ///
+    /// Il flush degli indici è una **fase sua** (difetto 0113): sta qui solo
+    /// perché questo percorso è sincrono e chi chiama tiene già il prestito
+    /// esclusivo — non c'è concorrenza da servire. Chi ha i thread la fa
+    /// seguire a [`finish_index_with_graph`] in un prestito esclusivo
+    /// separato, come la terza fase di `ExternalSync::batch`: fra la chiusura
+    /// dell'indicizzazione e la durevolezza il lucchetto si rilascia, e i
+    /// lettori in coda passano.
     pub fn finish_index(&mut self, work: Indicizzazione) -> Apertura {
         let _fase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
         self.indexes.core.rebuild_graph();
         let apertura = self.chiudi_indicizzazione(work);
+        // Gli errori di flush non fanno fallire l'apertura del vault: un
+        // indice è stato derivato, il vault è la verità (M4: notifica).
+        {
+            let _fase = tracing::info_span!(target: "fub.apertura", "flush_indexes").entered();
+            let _ = self.flush_indexes();
+        }
         self.store_entries();
         apertura
     }
@@ -2234,6 +2248,11 @@ impl Workspace {
     /// Come [`finish_index`], col grafo già costruito fuori dal prestito
     /// esclusivo. Se l'epoca non coincide — una scrittura è arrivata in mezzo —
     /// lo ricostruisce qui dai metadati correnti.
+    ///
+    /// Il flush degli indici non sta qui (difetto 0113): è una fase sua, con
+    /// un prestito esclusivo proprio, e chi ha i thread la fa seguire a questa
+    /// funzione — fra i due prestiti il lucchetto si rilascia e i lettori in
+    /// coda passano, come nella terza fase di `ExternalSync::batch`.
     pub fn finish_index_with_graph(&mut self, work: Indicizzazione, graph: BuiltGraph) -> Apertura {
         let _fase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
         if graph.epoch == self.indexes.core.graph_epoch {
@@ -2278,12 +2297,14 @@ impl Workspace {
         } else {
             IndexingState::Ready
         };
-        // Gli errori di flush non fanno fallire l'apertura del vault: un
-        // indice è stato derivato, il vault è la verità (M4: notifica).
-        {
-            let _fase = tracing::info_span!(target: "fub.apertura", "flush_indexes").entered();
-            let _ = self.flush_indexes();
-        }
+        // **Il flush non sta qui** (difetto 0113): è una fase sua, con un
+        // prestito esclusivo proprio, come la terza fase di `ExternalSync::batch`.
+        // Qui dentro restano le fasi che toccano lo stato condiviso — la
+        // riconciliazione delle tabelle degli indici, il ricongiungimento delle
+        // rinomine che cammina l'anagrafe, gli eventi — e chi chiama
+        // (`finish_index`, il runner) fa seguire il flush da sé, fra un prestito
+        // e l'altro: un lettore concorrente non aspetta la somma delle fasi ma
+        // la sola che sta correndo.
 
         // **Prima si riconosce, poi si raccoglie** (§23.1), e l'ordine è tutto:
         // ciò che una rinomina fatta ad app chiusa ha lasciato sotto il nome
@@ -2386,6 +2407,12 @@ impl Workspace {
     /// scriverla, la riapertura rilegge ciò che si è toccato da quando è stata
     /// scritta l'ultima volta — cioè si comporta come prima che questa voce
     /// esistesse, che è il degrado giusto per un dato derivato.
+    ///
+    /// Non tocca lo stato condiviso del workspace — legge le tabelle degli
+    /// indici e scrive su disco — e per questo (difetto 0113) chi ha i thread
+    /// la chiama sotto prestito **condiviso**, fuori dal prestito esclusivo
+    /// della chiusura dell'indicizzazione: un lettore concorrente non aspetta
+    /// la riscrittura dell'anagrafe insieme alle fasi in memoria.
     ///
     /// L'esito non risale, e non perché non interessi: un'apertura riuscita non
     /// deve fallire perché una cache non si è scritta. Non finisce nemmeno in
@@ -2868,6 +2895,21 @@ impl Workspace {
             if let Some((from, fp)) = self.ultimo_rimosso.take() {
                 if from != *id && fp == fingerprint {
                     self.migrate_side_data(&from, id);
+                    // **E poi si dice**, con lo stesso evento della rinomina
+                    // vista: chi tiene stato per-documento fuori dallo spazio
+                    // dichiarato — il versioning, che ha uno store suo perché
+                    // deve sopravvivere alla cancellazione (0044) — non ha
+                    // altro modo di saperlo, e senza l'evento la sua storia si
+                    // spezza in due chiavi. È il gemello del rejoin a vault
+                    // chiuso (il precedente qui sotto, ~7093-7106), che però
+                    // passa da `as_actor(Actor::Kernel, …)` perché lì non c'è
+                    // un rilevatore: qui l'attore è chi ha visto — il batch del
+                    // rilevatore — e l'evento esce dal suo frame, come ogni
+                    // altro di questo ingest.
+                    self.emit_event(Event::DocumentRenamed {
+                        from,
+                        to: id.clone(),
+                    });
                 } else if from != *id {
                     self.ultimo_rimosso = Some((from, fp));
                 }
@@ -4842,6 +4884,14 @@ impl Workspace {
     /// Porta gli indici a un punto di consistenza (vedi
     /// [`IndexProvider::flush`]). Da chiamare quando un lotto di modifiche è
     /// finito: il kernel non decide da solo *quando* è finito un lotto.
+    ///
+    /// È una **fase sua** (difetto 0113): chi ha i thread la chiama in un
+    /// prestito esclusivo separato da quello della chiusura dell'indicizzazione
+    /// ([`finish_index_with_graph`]), come la terza fase di
+    /// `ExternalSync::batch`. Fra i due prestiti il lucchetto si rilascia, e
+    /// un lettore concorrente non aspetta la somma delle fasi ma la sola che
+    /// sta correndo — il flush tocca solo gli indici e il disco, non lo stato
+    /// condiviso del workspace.
     ///
     /// L'errore di un indice non fa fallire il chiamante — un indice è stato
     /// *derivato*, la verità è il vault e si ricostruisce.
