@@ -263,15 +263,27 @@ svista.
   Conseguenza visibile: il quarto passo del montaggio, `Bundle::register`, oggi
   non registra nulla e torna una lista vuota. È il prossimo passo di M5, ed è
   scritto nel codice come una scelta invece che come un `todo!` che qualcuno
-  scopre in produzione.
+  scopre in produzione. *(Aggiornamento: `command` attraversa dalla
+  [0165](0165-un-comando-di-un-componente-e-un-comando.md), e `register` registra.
+  Gli altri nove export restano fuori.)*
 - **`host-events`.** Non linkata: dall'interno di un componente non si chiamano
   `spawn_job`, `report_progress`, `emit`. Un componente parla quando gli si parla.
+  *(Aggiornamento: linkata dalla
+  [0165](0165-un-comando-di-un-componente-e-un-comando.md). Un componente parla
+  anche mentre gli si parla, ed è l'unica famiglia in cui la chiamata torna
+  indietro sull'host che sta chiamando lui.)*
 - **`read-model`.** Risponde `unserved` **col proprio perché**: `document-model` è
   l'albero più grande del contratto — blocchi, intestazioni, link, proprietà — e
-  tradurlo è un passo suo, non una riga di questo.
+  tradurlo è un passo suo, non una riga di questo. *(Aggiornamento: la
+  [decisione 0165](0165-un-comando-di-un-componente-e-un-comando.md) l'ha fatto
+  quel passo. `read-model` risponde con l'albero, appiattito in due arene che si
+  camminano per indice, e con un tetto dichiarato all'annidamento.)*
 - **L'interruzione a epoche e i limiti di memoria.** M5 li descrive («deadline
   severa per chiamata», fuel, limiti); oggi non ci sono. Un componente lento o
-  ostile non viene ancora interrotto.
+  ostile non viene ancora interrotto. *(Aggiornamento: chiusa dalla
+  [0165](0165-un-comando-di-un-componente-e-un-comando.md), che porta il battito
+  a epoche, la scadenza per chiamata e il tetto alla memoria lineare — con i tre
+  numeri e la ragione di ciascuno.)*
 - **`UiNode::validate_untrusted`.** Il proxy non lo applica, perché nessun albero
   di UI attraversa ancora il confine — ma il giorno che `view` sarà fra gli
   export risolti, questa riga è il primo debito da saldare.
@@ -281,3 +293,6 @@ svista.
   aveva lasciato aperto il costo del **passaggio**, non della costruzione. Adesso
   esiste un host che esegue, quindi la misura si può fare — ma questo verbale non
   la porta, e dire un numero non misurato sarebbe peggio che non averlo.
+  *(Aggiornamento: misurato dalla
+  [0165](0165-un-comando-di-un-componente-e-un-comando.md). Il confine costa
+  440 ns in più per chiamata, e il ping compilato è il 56% del varco a vuoto.)*

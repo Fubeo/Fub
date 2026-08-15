@@ -7,6 +7,16 @@
 //! stessa cosa, «un trait, due backend» non è una frase del piano.
 //!
 //! Non dipende da `fub-abi`: ha in mano il WIT e basta, come un plugin di terzi.
+//!
+//! # Le due interfacce
+//!
+//! Esporta `fub:abi/plugin` e `fub:abi/command`, e la seconda non è un
+//! accessorio: è il punto in cui il componente smette di essere una cosa che
+//! l'host chiama quando gli pare e diventa una cosa che **la palette, la
+//! tastiera, una macro e la CLI** chiamano senza sapere cos'è. I due comandi
+//! qui sotto sono scelti per far attraversare le due metà del contratto dei
+//! comandi: uno che lavora davvero, e uno che restituisce l'esito nella sua
+//! forma più profonda.
 
 #[cfg(not(feature = "con-rete"))]
 wit_bindgen::generate!({
@@ -116,6 +126,218 @@ impl Guest for Componente {
     #[cfg(not(feature = "con-rete"))]
     fn run_job(job: String, _payload: String) -> Result<String, PluginError> {
         Self::ping(job)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// I comandi
+// ---------------------------------------------------------------------------
+//
+// Solo nel mondo `ping`: `ping-con-rete` esiste per farsi rifiutare al
+// caricamento, e non arriva mai a un comando.
+
+/// La nota su cui lavorano i due comandi. La stessa del job: un esempio con un
+/// documento solo è un esempio in cui si vede cosa attraversa.
+#[cfg(not(feature = "con-rete"))]
+const NOTA: &str = "Nota.md";
+
+#[cfg(not(feature = "con-rete"))]
+mod comandi {
+    use super::{Componente, NOTA};
+    use crate::exports::fub::abi::command::{
+        Choice, CommandEffect, CommandEffectReveal, CommandOutcome, CommandPlan, CommandReach,
+        CommandScope, CommandSpec, Failure, Guest, InvokeMode, ParamKind, ParamSpec, Partial,
+        PlannedEdit, Undo, UndoStep, UndoStepCommand,
+    };
+    use crate::fub::abi::edit::{EditRequest, TextEdit};
+    use crate::fub::abi::errors::PluginError;
+    use crate::fub::abi::model::Span;
+    use crate::fub::abi::text::Text;
+
+    /// Un letterale, che è l'unica specie di testo che un esempio può
+    /// permettersi: un `message` vuole un catalogo di stringhe, e questo
+    /// componente non ne dichiara.
+    fn t(s: &str) -> Text {
+        Text::Literal(s.to_string())
+    }
+
+    /// Il numero scritto sotto `chiave` in un oggetto JSON piatto.
+    ///
+    /// Scritto a mano per la stessa ragione per cui il ping scrive il proprio
+    /// JSON a mano: `serde_json` in un componente che deve restare piccolo è
+    /// una dipendenza che non paga. E può cavarsela con così poco perché **gli
+    /// argomenti arrivano già convalidati** contro la `param-spec` — è il
+    /// contratto di `invoke`, e qui si vede cosa vale: un comando non si difende
+    /// da un chiamante distratto, perché non ne incontra.
+    fn numero(args: &str, chiave: &str) -> Option<u32> {
+        let dopo = args.split_once(&format!("\"{chiave}\":"))?.1;
+        let cifre: String = dopo
+            .trim_start()
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+        cifre.parse().ok()
+    }
+
+    impl Guest for Componente {
+        fn commands() -> Vec<CommandSpec> {
+            vec![
+                CommandSpec {
+                    // Dentro il namespace del plugin (§7.4): il separatore è
+                    // `:`, e ciò che sta prima è l'id del manifest. Il kernel
+                    // rifiuta un id che esca dal proprio — e anche uno che non
+                    // ne dichiari nessuno — prima di registrare: `demo.ping.conta`
+                    // non è «conta di demo.ping», è un nome nudo.
+                    id: "demo.ping:conta".to_string(),
+                    title: t("Conta i caratteri della nota"),
+                    description: t("Legge Nota.md attraverso il confine e dice quanto è lunga."),
+                    keybinding: None,
+                    params: vec![],
+                    scope: CommandScope {
+                        writes: false,
+                        reach: CommandReach::Document,
+                        reversible: false,
+                    },
+                },
+                CommandSpec {
+                    id: "demo.ping:esito-ricco".to_string(),
+                    title: t("Restituisci un esito completo"),
+                    description: t(
+                        "Non fa niente al vault: fabbrica un esito con piano, annullamento e \
+                         parziale, perché la forma più profonda del contratto abbia un componente \
+                         che la pronuncia.",
+                    ),
+                    keybinding: None,
+                    params: vec![
+                        ParamSpec {
+                            name: "quante".to_string(),
+                            title: t("Quante cose"),
+                            description: t("Il numero che finisce in `partial.attempted`."),
+                            kind: ParamKind::Number,
+                            required: true,
+                        },
+                        // L'unica specie di argomento che porta un carico, cioè
+                        // l'unica che una traduzione può perdere per strada
+                        // lasciando un `param-kind` che sembra a posto. Il
+                        // comando non lo legge: sta qui perché **attraversi**.
+                        ParamSpec {
+                            name: "stile".to_string(),
+                            title: t("Stile"),
+                            description: t("Non cambia niente: serve a far viaggiare le scelte."),
+                            kind: ParamKind::Choice(vec![
+                                Choice {
+                                    value: "corto".to_string(),
+                                    title: t("Corto"),
+                                },
+                                Choice {
+                                    value: "lungo".to_string(),
+                                    title: t("Lungo"),
+                                },
+                            ]),
+                            required: false,
+                        },
+                    ],
+                    scope: CommandScope {
+                        writes: false,
+                        reach: CommandReach::Documents,
+                        reversible: true,
+                    },
+                },
+            ]
+        }
+
+        fn invoke(
+            command: String,
+            args: String,
+            mode: InvokeMode,
+        ) -> Result<CommandOutcome, PluginError> {
+            match command.as_str() {
+                "demo.ping:conta" => conta(),
+                "demo.ping:esito-ricco" => esito_ricco(&args, mode),
+                // Il kernel non ci arriva mai — sceglie il proprietario
+                // dall'elenco che questo stesso componente ha dichiarato — ma la
+                // risposta esiste lo stesso: un `match` senza ultimo ramo è un
+                // panico che aspetta il primo chiamante che non sia il kernel.
+                altro => Err(PluginError::UnknownCommand(t(altro))),
+            }
+        }
+    }
+
+    /// Legge la nota e dice dov'è. Prova che dentro `invoke` l'host prestato è
+    /// vivo: è la **seconda** porta sulla stessa istanza, e se il prestito
+    /// valesse solo per la prima questa lettura risponderebbe `internal`.
+    fn conta() -> Result<CommandOutcome, PluginError> {
+        let testo = crate::fub::abi::host_vault_read::read_document(NOTA)?;
+        let caratteri = testo.chars().count();
+        Ok(CommandOutcome {
+            notify: Some(t(&format!("{caratteri} caratteri"))),
+            // Uno `span` in byte, che è ciò che il contratto dichiara. È anche
+            // il primo numero che viaggia dal componente all'host in una misura
+            // che l'host deve **stringere** a `usize`: vedi `da_span`.
+            effect: CommandEffect::Reveal(CommandEffectReveal {
+                doc: NOTA.to_string(),
+                span: Span {
+                    start: 0,
+                    end: testo.len() as u64,
+                },
+            }),
+            undo: None,
+            partial: None,
+        })
+    }
+
+    /// L'esito nella sua forma più profonda, senza toccare niente.
+    ///
+    /// Non finge di aver fatto un lavoro: il suo titolo dice cos'è, ed è un
+    /// **banco di prova** del contratto — la sola cosa che questo componente
+    /// pretende sia vera è che ciò che scrive qui arrivi identico dall'altra
+    /// parte. Un piano con un edit vero, un annullamento con un passo, un
+    /// parziale con un guasto che nomina il suo documento: sono i tre rami che
+    /// una traduzione a metà lascerebbe cadere in silenzio.
+    fn esito_ricco(args: &str, mode: InvokeMode) -> Result<CommandOutcome, PluginError> {
+        let quante = numero(args, "quante").unwrap_or(0);
+        // La revisione vera del documento, chiesta all'host: un edit senza base
+        // è la corsa che quella firma esiste per rendere visibile, e un esempio
+        // che scrivesse una base inventata insegnerebbe a scriverla inventata.
+        let base = crate::fub::abi::host_vault_read::document_revision(NOTA)?;
+        Ok(CommandOutcome {
+            // Il modo torna indietro come parola: è l'unica cosa dei comandi che
+            // viaggia dall'host al componente, e senza un'eco nessuno saprebbe
+            // se è arrivata.
+            notify: Some(t(match mode {
+                InvokeMode::Apply => "apply",
+                InvokeMode::DryRun => "dry-run",
+            })),
+            effect: CommandEffect::Plan(CommandPlan {
+                summary: t(&format!("{quante} cose, nessuna toccata")),
+                docs: vec![NOTA.to_string()],
+                edits: vec![PlannedEdit {
+                    doc: NOTA.to_string(),
+                    edit: EditRequest {
+                        base,
+                        edits: vec![TextEdit {
+                            span: Span { start: 0, end: 0 },
+                            text: "<!-- proposta -->\n".to_string(),
+                        }],
+                    },
+                }],
+            }),
+            undo: Some(Undo {
+                label: t("Il banco di prova"),
+                steps: vec![UndoStep::Command(UndoStepCommand {
+                    command: "demo.ping:conta".to_string(),
+                    args: "{}".to_string(),
+                })],
+            }),
+            partial: Some(Partial {
+                attempted: quante,
+                done: quante.saturating_sub(1),
+                failures: vec![Failure {
+                    subject: Some(NOTA.to_string()),
+                    error: PluginError::Conflict(t("l'ultima non è andata")),
+                }],
+            }),
+        })
     }
 }
 

@@ -1,0 +1,38 @@
+# Il componente ostile: quello che non torna, e quello che non smette di
+# chiedere memoria.
+#
+# `esempi/ping-wasm` prova che il contratto si attraversa; questo prova che il
+# confine **regge anche quando di là non collabora nessuno**. È il componente
+# davanti a cui i limiti di `crates/fub-wasm-host/src/limiti.rs` si pronunciano:
+# senza un ciclo infinito vero, la scadenza a epoche sarebbe una riga di
+# configurazione che nessuno ha mai visto scattare.
+#
+# **Fuori dal workspace, come `ping-wasm` e `tools/varco-wasm`**: si compila per
+# `wasm32-wasip2`, che è un bersaglio che il workspace non ha e che
+# `cargo test --workspace` non deve pretendere. Chi lo compila è il test
+# `il_tempo_di_un_componente` di `fub-wasm-host`, che sa dire cosa installare se
+# manca.
+[package]
+name = "ciclo-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+# Nessuna dipendenza da `fub-abi`, per la stessa ragione di `ping-wasm`: un
+# plugin di terzi ha in mano il WIT e nient'altro. Vale doppio qui, dove il
+# plugin che stiamo scrivendo fa finta di essere scritto male o in malafede — e
+# uno ostile non lo si immagina con in mano le comodità di casa.
+
+[profile.release]
+# `opt-level = "s"` e non `0`: il ciclo dev'essere **ottimizzato** come lo
+# sarebbe quello vero, o si proverebbe che l'host interrompe il codice di
+# debug. La scrittura `volatile` dentro il ciclo è ciò che impedisce a LLVM di
+# accorgersi che il corpo non serve a niente e di buttarlo via (vedi `src/lib.rs`).
+strip = true
+opt-level = "s"

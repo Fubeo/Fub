@@ -1,0 +1,33 @@
+# Il componente che chiede **il modello di un documento**, non i suoi byte.
+#
+# `ping-wasm` prova che una capacità attraversa; questo prova che attraversa
+# l'albero — blocchi annidati, inline dentro gli inline, tabelle piatte,
+# frontmatter. È l'unico modo di verificare `read-model` dall'esterno: la
+# traduzione dell'host si può leggere, ma solo un guest vero dice se ciò che
+# arriva di là **si cammina**.
+#
+# **Fuori dal workspace, come `ping-wasm` e per la stessa ragione**: si compila
+# per `wasm32-wasip2`, che è un bersaglio che il workspace non ha e che
+# `cargo test --workspace` non deve pretendere. Chi lo compila è il test
+# `il_modello_attraversa` di `fub-wasm-host`, che sa dire cosa installare se
+# manca.
+[package]
+name = "modello-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+# Nessuna dipendenza da `fub-abi`, come nel ping: un plugin di terzi ha in mano
+# il WIT e nient'altro. Qui la cosa pesa il doppio — il modello è **il** tipo
+# grosso del contratto, e se questo esempio potesse importare i tipi Rust del
+# kernel non proverebbe che il WIT basta a descriverlo.
+
+[profile.release]
+strip = true
+opt-level = "s"

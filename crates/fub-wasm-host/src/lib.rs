@@ -32,11 +32,16 @@
 #![deny(missing_docs)]
 
 mod componente;
+mod eventi;
+mod limiti;
+mod modello;
 mod ospite;
 mod prestito;
 mod traduzione;
 
-pub use componente::{Componente, ErroreDiCaricamento, WasmBundle, WasmPlugin};
+pub use componente::{
+    Componente, ErroreDiCaricamento, WasmBundle, WasmCommandProvider, WasmPlugin,
+};
 
 /// I binding **lato host** di `plugin-world`, generati dal contratto.
 ///
