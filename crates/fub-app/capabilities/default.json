@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Capacità di base della finestra principale.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "core:window:allow-destroy"
+  ]
 }
