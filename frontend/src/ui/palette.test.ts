@@ -127,6 +127,7 @@ describe("gli argomenti che la palette costruisce", () => {
       param("replace", { kind: "text" }, true),
       param("whole_word", { kind: "bool" }),
       param("docs", { kind: "documents" }),
+      param("at", { kind: "numbers" }),
       param("limit", { kind: "number" }),
       param("nota", { kind: "document" }),
     ],
@@ -150,6 +151,21 @@ describe("gli argomenti che la palette costruisce", () => {
   it("un elenco di documenti si scrive una riga per volta", () => {
     const args = argsFromForm(s, { find: "x", replace: "y", docs: "a.md\n b.md , c.md\n\n" });
     expect(args.docs).toEqual(["a.md", "b.md", "c.md"]);
+  });
+
+  it("un elenco di numeri si scrive una riga per volta (§23.4)", () => {
+    // La specie di *queste* posizioni: stessa mano dei documenti, numeri
+    // invece di id — e i tipi che arrivano al comando sono quelli dichiarati.
+    const args = argsFromForm(s, { find: "x", replace: "y", at: "0\n 4 , 9\n" });
+    expect(args.at).toEqual([0, 4, 9]);
+  });
+
+  it("un elenco con un pezzo che non è un numero non viene mandato", () => {
+    // La regola del numero solo, allargata all'elenco: un pezzo rotto bocca
+    // tutto, perché un elenco quasi giusto al posto di uno mancante toglie al
+    // comando l'errore che dice cosa manca.
+    const args = argsFromForm(s, { find: "x", replace: "y", at: "1, molti" });
+    expect(args).not.toHaveProperty("at");
   });
 
   it("i tipi sono quelli dichiarati, non stringhe", () => {

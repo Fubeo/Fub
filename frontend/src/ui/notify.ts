@@ -37,8 +37,8 @@
 // [decisione 0052]: ../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md
 // [decisione 0080]: ../../../docs/decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md
 
-import { onLingua, t } from "../i18n/strings";
-import type { KernelEvent } from "../host/contract";
+import { onLingua, t, type Chiave } from "../i18n/strings";
+import type { Gate, KernelEvent } from "../host/contract";
 import { onEvent } from "../state/kernel";
 
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
@@ -134,18 +134,52 @@ export function ascoltaIGuasti(): void {
 /// di questo collegamento che possa essere sbagliata in un modo che guardando
 /// l'app non si vede — un `subject` assente che diventa la stringa `"null"`, o
 /// una severità che finisce tutta sullo stesso tono.
+///
+/// **La porta del panico si dice** (§17.3, decisione 0161): quando il kernel
+/// sa da dove è entrato il guasto, la frase lo racconta in coda — sapere da che
+/// parte guardare quando un componente di terzi esplode è metà della diagnosi.
 export function avvisoDiGuasto(e: Extract<KernelEvent, { type: "trouble" }>): {
   testo: string;
   tono: Tono;
 } {
   const reason = e.error.message;
+  const base = e.subject
+    ? t("trouble.about", { doc: e.subject, reason })
+    : t("trouble.vault", { reason });
   return {
-    testo: e.subject
-      ? t("trouble.about", { doc: e.subject, reason })
-      : t("trouble.vault", { reason }),
+    testo:
+      e.gate === null
+        ? base
+        : base + t("trouble.gate", { gate: t(GATE_LABELS[e.gate]) }),
     tono: e.severity === "failure" ? "guasto" : "info",
   };
 }
+
+/// La porta del panico, come **chiave** e non come parola.
+///
+/// Una tabella di stringhe a livello di modulo si sarebbe risolta all'import,
+/// cioè una volta sola e nella lingua di quel momento: cambiare lingua avrebbe
+/// lasciato l'avviso a parlare quella di prima, e non lo avrebbe detto nessuno.
+/// Le chiavi non invecchiano; le parole sì.
+///
+/// È un `Record` **esaustivo** di proposito, sul modello di `REACH_KEYS` in
+/// `palette.ts`: aggiungere un gate al contratto senza un'etichetta qui è un
+/// errore di compilazione, non una porta che l'avviso tace.
+const GATE_LABELS: Record<Gate, Chiave> = {
+  command: "gate.command",
+  view_render: "gate.view_render",
+  view_action: "gate.view_action",
+  service: "gate.service",
+  event: "gate.event",
+  index_feed: "gate.index_feed",
+  index_forget: "gate.index_forget",
+  index_up_to_date: "gate.index_up_to_date",
+  index_reconcile: "gate.index_reconcile",
+  format_parse: "gate.format_parse",
+  syntax_rule: "gate.syntax_rule",
+  custom_render: "gate.custom_render",
+  job: "gate.job",
+};
 
 /// Ciò che è stato detto, dal più recente. Serve a chi disegna lo storico, e ai
 /// test che guardano il canale invece del DOM.

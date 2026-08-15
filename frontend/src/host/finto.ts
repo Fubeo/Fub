@@ -478,6 +478,13 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
         }
         return porta("writeDocument", [id, source, base], Promise.resolve(scrivi(id, source)));
       },
+      // La rete di sicurezza del §15.2: il testo che non si è salvato. Il
+      // finto non ha un crash buffer — registra e basta — perché ciò che i
+      // banchi guardano è CHE la bozza parta, con quale testo e in che ordine
+      // rispetto al salvataggio; la tenuta del disco è del kernel, e ha i
+      // suoi banchi dall'altra parte.
+      saveDraft: (id, text, base) => porta("saveDraft", [id, text, base], Promise.resolve()),
+      discardDraft: (id) => porta("discardDraft", [id], Promise.resolve()),
       setActiveContext: (context) => porta("setActiveContext", [context], Promise.resolve([])),
       setSystemLocale: (locale) => porta("setSystemLocale", [locale], Promise.resolve(false)),
       listViews: () => porta("listViews", [], Promise.resolve(view)),

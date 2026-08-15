@@ -25,6 +25,7 @@ import type {
   DocChange,
   EntryKind,
   Excerpts,
+  Gate,
   HourCycle,
   IndexingState,
   Intent,
@@ -434,8 +435,17 @@ export type KernelEvent =
   //
   // `subject` è il documento di cui si parla, `null` per ciò che riguarda il
   // vault intero (un flush fallito, il watcher che smette). CHI ha causato il
-  // guasto non sta qui: lo dice `origin.actor`.
-  | { type: "trouble"; severity: Severity; subject: string | null; error: PluginError }
+  // guasto non sta qui: lo dice `origin.actor`. DA QUALE PORTA è entrato lo
+  // dice `gate` (§17.3, decisione 0161): la porta del panico da cui il kernel
+  // stava chiamando codice di un provider, `null` per i guasti che da una
+  // porta non passano. In fondo al record come ogni campo nuovo.
+  | {
+      type: "trouble";
+      severity: Severity;
+      subject: string | null;
+      error: PluginError;
+      gate: Gate | null;
+    }
   // UNA SVEGLIA DICHIARATA NEL MANIFEST È SCADUTA (§22.1, decisione 0069).
   // `owner` è il componente che l'ha dichiarata, `timer` il nome che le ha
   // dato: chi si sveglia riconosce i propri come chi ha lanciato un job
@@ -460,6 +470,13 @@ export interface DocChanges {
 // riaprendo il vault ed è un avviso; ciò che era autorevole non torna ed è un
 // guasto.
 export type { Severity } from "./enums.generated";
+
+// DA QUALE PORTA è entrato un guasto (rispecchia fub_abi::gate::Gate, §17.3):
+// l'elenco chiuso dei punti in cui il kernel entra nel codice di un provider.
+// Lo nomina `trouble.gate` — sapere da che parte guardare quando un componente
+// di terzi esplode è metà della diagnosi, e prima della 0161 non attraversava
+// il confine.
+export type { Gate } from "./enums.generated";
 
 // DOVE: il soggetto di un abbonamento (rispecchia fub_abi::event::Subject,
 // §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un
@@ -563,7 +580,11 @@ export type ParamKind =
   | { kind: "bool" }
   | { kind: "document" }
   | { kind: "documents" }
-  | { kind: "choice"; value: Choice[] };
+  | { kind: "choice"; value: Choice[] }
+  // Più numeri: la forma con cui si chiede un'operazione su *queste* posizioni
+  // (§23.4). In fondo come la sua variante Rust: l'ordine dei casi è il
+  // discriminante dell'ABI.
+  | { kind: "numbers" };
 
 export interface ParamSpec {
   name: string;

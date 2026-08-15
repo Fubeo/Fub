@@ -262,10 +262,30 @@ describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
     resetShellCommands();
     // I tre che l'editor monta anche lui, più uno che l'editor non ha, per
     // presidiare la metà che resta attiva.
-    registerShellCommand({ id: "shell.doc.search", title: "commands.doc.search", description: "", run: () => {} });
-    registerShellCommand({ id: "shell.pane.split.down", title: "commands.pane.split.down", description: "", run: () => {} });
-    registerShellCommand({ id: "shell.mode.live", title: "commands.mode.live", description: "", run: () => {} });
-    registerShellCommand({ id: "shell.palette", title: "commands.palette", description: "", run: () => {} });
+    registerShellCommand({
+      id: "shell.doc.search",
+      title: "commands.doc.search",
+      description: "commands.doc.search.desc",
+      run: () => {},
+    });
+    registerShellCommand({
+      id: "shell.pane.split.down",
+      title: "commands.pane.split.down",
+      description: "commands.pane.split.down.desc",
+      run: () => {},
+    });
+    registerShellCommand({
+      id: "shell.mode.live",
+      title: "commands.mode.live",
+      description: "commands.mode.live.desc",
+      run: () => {},
+    });
+    registerShellCommand({
+      id: "shell.palette",
+      title: "commands.palette",
+      description: "commands.palette.desc",
+      run: () => {},
+    });
   });
 
   afterEach(() => {

@@ -64,8 +64,20 @@ describe("lo storico degli avvisi", () => {
 });
 
 describe("un guasto del kernel (§20.2)", () => {
-  const guasto = (severity: "warning" | "failure", subject: string | null) =>
-    ({ type: "trouble", severity, subject, error: { kind: "internal", message: "disco pieno" } }) as const;
+  const guasto = (
+    severity: "warning" | "failure",
+    subject: string | null,
+    gate: "event" | null = null,
+  ) =>
+    (
+      {
+        type: "trouble",
+        severity,
+        subject,
+        error: { kind: "internal", message: "disco pieno" },
+        gate,
+      }
+    ) as const;
 
   it("nomina il documento quando l'evento ne nomina uno", () => {
     expect(avvisoDiGuasto(guasto("warning", "Progetti/Nota.md")).testo).toBe(
@@ -82,5 +94,28 @@ describe("un guasto del kernel (§20.2)", () => {
   it("un derivato perduto informa, ciò che non si ricostruisce è un guasto", () => {
     expect(avvisoDiGuasto(guasto("warning", null)).tono).toBe("info");
     expect(avvisoDiGuasto(guasto("failure", null)).tono).toBe("guasto");
+  });
+
+  it("dice da quale porta è entrato il guasto, dopo la frase del documento", () => {
+    // §17.3, decisione 0161: `gate` è l'unico che il kernel popola davvero
+    // oggi, e sapere da che parte guardare è metà della diagnosi.
+    expect(avvisoDiGuasto(guasto("warning", "Progetti/Nota.md", "event")).testo).toBe(
+      "Progetti/Nota.md: disco pieno · da ricevendo un evento",
+    );
+  });
+
+  it("dice la porta anche quando il guasto è del vault intero", () => {
+    expect(avvisoDiGuasto(guasto("warning", null, "event")).testo).toBe(
+      "disco pieno · da ricevendo un evento",
+    );
+  });
+
+  it("senza porta il testo resta com'era, senza suffisso", () => {
+    // Il presidio del contratto: `gate: null` non deve far comparire « · da …»
+    // in coda, né cambiare la frase di prima.
+    expect(avvisoDiGuasto(guasto("warning", "Progetti/Nota.md")).testo).not.toContain(
+      " · da ",
+    );
+    expect(avvisoDiGuasto(guasto("warning", null)).testo).not.toContain(" · da ");
   });
 });
