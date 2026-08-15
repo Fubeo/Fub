@@ -183,6 +183,23 @@ const IT = {
   // con un soggetto vuoto darebbe una frase che non finisce.
   "trouble.about": "{doc}: {reason}",
   "trouble.vault": "{reason}",
+  // La porta del panico (§17.3, decisione 0161): quando il kernel sa da dove è
+  // entrato il guasto, l'avviso lo dice in coda. Le frasi riadattano quelle di
+  // `Gate::what` in crates/fub-abi/src/gate.rs, senza il dettaglio del sito.
+  "trouble.gate": " · da {gate}",
+  "gate.command": "eseguendo un comando",
+  "gate.view_render": "disegnando una view",
+  "gate.view_action": "reagendo a un'azione di una view",
+  "gate.service": "servendo un servizio",
+  "gate.event": "ricevendo un evento",
+  "gate.index_feed": "indicizzando un lotto di documenti",
+  "gate.index_forget": "togliendo un lotto di documenti",
+  "gate.index_up_to_date": "dicendo cosa ha già",
+  "gate.index_reconcile": "riconciliando",
+  "gate.format_parse": "parsando un documento",
+  "gate.syntax_rule": "innestandosi sul documento",
+  "gate.custom_render": "disegnando con un renderer personalizzato",
+  "gate.job": "eseguendo un job",
 
   // --- il cestino --------------------------------------------------------
   "trash.confirm_delete": "Spostare «{doc}» nel cestino?",
@@ -383,6 +400,7 @@ const IT = {
   "palette.apply": "Applica",
   "palette.required": "{title} *",
   "palette.docs_placeholder": "un id per riga (vuoto = tutto il vault)",
+  "palette.numbers_placeholder": "un numero per riga",
   "palette.reach.session": "questa sessione",
   "palette.reach.document": "una nota",
   "palette.reach.documents": "più note",
@@ -579,6 +597,23 @@ const EN: Record<Chiave, string> = {
 
   "trouble.about": "{doc}: {reason}",
   "trouble.vault": "{reason}",
+  // The panic gate (§17.3, decision 0161): when the kernel knows where the
+  // fault came in, the notice says so at the end. The phrases adapt those of
+  // `Gate::what` in crates/fub-abi/src/gate.rs, without the site detail.
+  "trouble.gate": " · via {gate}",
+  "gate.command": "running a command",
+  "gate.view_render": "drawing a view",
+  "gate.view_action": "reacting to a view action",
+  "gate.service": "serving a service",
+  "gate.event": "receiving an event",
+  "gate.index_feed": "indexing a batch of documents",
+  "gate.index_forget": "removing a batch of documents",
+  "gate.index_up_to_date": "saying what it already has",
+  "gate.index_reconcile": "reconciling",
+  "gate.format_parse": "parsing a document",
+  "gate.syntax_rule": "grafting onto the document",
+  "gate.custom_render": "drawing with a custom renderer",
+  "gate.job": "running a job",
 
   "trash.confirm_delete": "Move «{doc}» to the trash?",
   "trash.delete_title": "Delete note",
@@ -731,6 +766,7 @@ const EN: Record<Chiave, string> = {
   "palette.apply": "Apply",
   "palette.required": "{title} *",
   "palette.docs_placeholder": "one id per line (empty = the whole vault)",
+  "palette.numbers_placeholder": "one number per line",
   "palette.reach.session": "this session",
   "palette.reach.document": "one note",
   "palette.reach.documents": "several notes",

@@ -227,6 +227,11 @@ function touchParamKind(k: CommandSpec["params"][number]["kind"]): void {
     case "choice":
       k.value.forEach((c) => c.title);
       return;
+    // Più numeri (§23.4): la forma con cui si chiede un'operazione su
+    // *queste* posizioni. Come i documenti, un elenco — e come i documenti lo
+    // disegna la shell.
+    case "numbers":
+      return;
     default:
       assertNever(k);
   }
@@ -318,6 +323,9 @@ function touchEvent(e: KernelEvent): void {
       touchSeverity(e.severity);
       e.subject;
       e.error.kind;
+      // La porta da cui è entrato il guasto (§17.3): `null` quando non passa
+      // da una porta di provider — un flush fallito, il watcher che smette.
+      e.gate;
       return;
     // Una sveglia dichiarata nel manifest è scaduta (§22.1): non nomina nessun
     // documento, e chi si riconosce lo fa da `owner`.
@@ -398,6 +406,11 @@ function touchIndexQuery(q: IndexQuery): void {
     // Le bozze (§15.2): la domanda non porta niente da nominare — chiede tutto
     // ciò che è rimasto non salvato, e la finestra la governa `page`.
     case "drafts":
+      return;
+    // Il rendering dal canale dati (0163, §16.6): un'anteprima e un ritaglio,
+    // chiesti come ogni altra lettura del vault e non da comandi bespoke.
+    case "render_preview":
+    case "render_embed":
       return;
     default:
       assertNever(q);
@@ -483,6 +496,11 @@ function touchIndexResult(r: IndexResult): void {
     case "folders":
       return;
     case "drafts":
+      return;
+    // Le risposte del rendering (0163): il documento reso e il ritaglio col
+    // suo id, perché chi monta un embed deve sapere da quale nota viene.
+    case "render_preview":
+    case "render_embed":
       return;
     default:
       assertNever(r);

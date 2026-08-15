@@ -850,6 +850,7 @@ describe("la finestra senza vault", () => {
         severity: "warning",
         subject: null,
         error: { kind: "io", message: "`/config` non si può scrivere" },
+        gate: null,
       },
       origin: { actor: { kind: "kernel" }, batch: null },
     };

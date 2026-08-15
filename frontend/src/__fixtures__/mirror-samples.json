@@ -400,7 +400,8 @@
       "error": {
         "kind": "internal",
         "message": "indice non allineato"
-      }
+      },
+      "gate": null
     },
     {
       "type": "trouble",
@@ -409,7 +410,18 @@
       "error": {
         "kind": "internal",
         "message": "flush fallito"
-      }
+      },
+      "gate": null
+    },
+    {
+      "type": "trouble",
+      "severity": "warning",
+      "subject": "b.md",
+      "error": {
+        "kind": "internal",
+        "message": "render esploso"
+      },
+      "gate": "command"
     },
     {
       "type": "timer_fired",
@@ -892,6 +904,16 @@
         "offset": 0,
         "limit": 20
       }
+    },
+    {
+      "kind": "render_preview",
+      "doc": "a.md"
+    },
+    {
+      "kind": "render_embed",
+      "page": "Nota",
+      "heading": "Sezione",
+      "block": null
     }
   ],
   "IndexResult": [
@@ -1140,6 +1162,21 @@
         ],
         "offset": 0,
         "total": 2
+      }
+    },
+    {
+      "kind": "render_preview",
+      "value": {
+        "html": "",
+        "parts": []
+      }
+    },
+    {
+      "kind": "render_embed",
+      "value": {
+        "doc_id": "note/a.md",
+        "html": "",
+        "parts": []
       }
     }
   ],
@@ -1569,6 +1606,15 @@
                 "title": "Uno"
               }
             ]
+          },
+          "required": false
+        },
+        {
+          "name": "p6",
+          "title": "P",
+          "description": "un parametro",
+          "kind": {
+            "kind": "numbers"
           },
           "required": false
         }

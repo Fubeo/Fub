@@ -217,6 +217,17 @@ function leggiParametro(
         .filter((s) => s.length > 0);
       return { value: ids, vuoto: ids.length === 0 };
     }
+    case "numbers": {
+      const pezzi = String(raw ?? "")
+        .split(/[\n,]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      // Un pezzo che non è un numero bocca tutto, come il numero solo di prima:
+      // un elenco quasi giusto al posto di uno mancante toglie al comando
+      // l'errore che dice cosa manca (§23.4).
+      if (pezzi.some((s) => Number.isNaN(Number(s)))) return null;
+      return { value: pezzi.map(Number), vuoto: pezzi.length === 0 };
+    }
     default: {
       // Un testo obbligatorio si manda com'è, anche vuoto: `replace: ""`
       // cancella le occorrenze, ed è una richiesta legittima. È il comando a
@@ -530,6 +541,14 @@ function campoPer(
       const area = document.createElement("textarea");
       area.rows = 3;
       area.placeholder = t("palette.docs_placeholder");
+      return area;
+    }
+    case "numbers": {
+      // Come i documenti, un elenco: la specie che chiede *queste* posizioni
+      // (§23.4) non è un numero solo, e un campo solo lo scriverebbe male.
+      const area = document.createElement("textarea");
+      area.rows = 3;
+      area.placeholder = t("palette.numbers_placeholder");
       return area;
     }
     default: {

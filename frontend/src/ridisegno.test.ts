@@ -236,7 +236,7 @@ describe("il prezzo di un'anteprima (§2.9)", () => {
     const el = document.createElement("div");
     document.body.appendChild(el);
     await updatePreview(el, "nota.md");
-    const embeds = host.aPorta("queryIndex").filter((c) => c.args[0]?.kind === "render_embed");
+    const embeds = domande(host).filter((q) => q.kind === "render_embed");
     expect(embeds).toHaveLength(1);
     expect(el.querySelectorAll(".embed-loaded")).toHaveLength(3);
   });
@@ -253,8 +253,9 @@ describe("il prezzo di un'anteprima (§2.9)", () => {
     const { updatePreview } = await import("./panels/preview");
     const el = document.createElement("div");
     document.body.appendChild(el);
-    const embeds = host.aPorta("queryIndex").filter((c) => c.args[0]?.kind === "render_embed");
-    expect(embeds.map((c) => c.args[0]?.heading)).toEqual(["A", "B"]);
+    await updatePreview(el, "nota.md");
+    const embeds = domande(host).filter((q) => q.kind === "render_embed");
+    expect(embeds.map((q) => q.heading)).toEqual(["A", "B"]);
   });
 
   it("l'ancora di blocco di un embed arriva al kernel, e distingue due domande", async () => {
@@ -272,9 +273,11 @@ describe("il prezzo di un'anteprima (§2.9)", () => {
     const { updatePreview } = await import("./panels/preview");
     const el = document.createElement("div");
     document.body.appendChild(el);
-    const embeds = host.aPorta("queryIndex").filter((c) => c.args[0]?.kind === "render_embed");
-    expect(embeds.map((c) => c.args[0]?.block)).toEqual(["b1", "b2"]);
-    expect(host.aPorta("renderEmbed").map((c) => c.args[2])).toEqual(["b1", "b2"]);
+    await updatePreview(el, "nota.md");
+    const embeds = domande(host).filter((q) => q.kind === "render_embed");
+    // La terza coordinata nella domanda, non in una porta bespoke: la 0163 ha
+    // portato il rendering al canale dati, e `renderEmbed` non esiste più.
+    expect(embeds.map((q) => q.block)).toEqual(["b1", "b2"]);
     expect(el.querySelectorAll(".embed-loaded")).toHaveLength(3);
   });
 });

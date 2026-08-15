@@ -29,6 +29,7 @@ use fub_abi::command::{
 };
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
+use fub_abi::gate::Gate;
 use fub_abi::render::{EmbedContent, RenderedDocument};
 use fub_abi::event::{
     Actor, BatchId, DocChange, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
@@ -425,6 +426,15 @@ fn event_samples() -> Vec<Value> {
             subject: None,
             error: PluginError::Internal("flush fallito".into()),
             gate: None,
+        },
+        // Il terzo campione è il lato pieno del campo (§17.3, decisione 0161):
+        // il mirror deve esercitare anche un guasto che dice da quale porta del
+        // panico è entrato, non solo i due con `gate: None`.
+        Event::Trouble {
+            severity: Severity::Warning,
+            subject: Some(DocId::new("b.md")),
+            error: PluginError::Internal("render esploso".into()),
+            gate: Some(Gate::Command),
         },
         Event::TimerFired {
             owner: "com.acme.tasks".into(),
