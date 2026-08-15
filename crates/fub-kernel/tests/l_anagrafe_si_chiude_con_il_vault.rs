@@ -170,6 +170,9 @@ impl VaultStorage for SupportoCheConta {
         self.inner.update(path, &mut contando)
     }
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        if path.as_str().ends_with("entries.json") {
+            self.scritture_dell_anagrafe.fetch_add(1, Ordering::Relaxed);
+        }
         self.inner.append(path, bytes)
     }
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {

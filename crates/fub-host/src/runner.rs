@@ -573,6 +573,17 @@ impl Shared {
             let mut ws = self.workspace.write()?;
             ws.finish_index_with_graph(in_corso.work, graph)
         };
+        // **Il flush degli indici è una fase sua** (difetto 0113), come la
+        // terza fase di `ExternalSync::batch`: un prestito esclusivo separato
+        // da quello della chiusura dell'indicizzazione. Fra i due prestiti il
+        // lucchetto si rilascia, e un lettore concorrente non aspetta la somma
+        // delle fasi — riconciliazione, ricongiungimento, flush, anagrafe —
+        // ma la sola che sta correndo. Il flush tocca solo gli indici e il
+        // disco, non lo stato condiviso del workspace.
+        {
+            let mut ws = self.workspace.write()?;
+            let _ = ws.flush_indexes();
+        }
         // **La persistenza dell'anagrafe e la raccolta dello spazio per-documento,
         // entrambe sotto prestito condiviso.**
         // Non bloccano l'UI né il lock di scrittura esclusivo durante il calcolo
