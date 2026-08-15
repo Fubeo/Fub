@@ -1,0 +1,41 @@
+# Il secondo backend del contratto: un componente WASM visto dal kernel come
+# qualunque altro provider (M5, `docs/milestones/M5-wasm-runtime.md`).
+#
+# **L'invariante di questo manifest è una riga sola, ed è la ragione per cui il
+# crate esiste separato**: wasmtime sta qui e in nessun altro posto del
+# workspace. `fub-kernel` e `fub-abi` non lo nominano — il kernel vede
+# `dyn Trait` e non deve sapere che di là dal confine c'è una macchina virtuale.
+# Presidiata da `.github/scripts/check-cargo-versioni.mjs` (le versioni) e dal
+# `deny.toml` (l'albero).
+[package]
+name = "fub-wasm-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Runtime WASM per i plugin di terzi: proxy dei trait del contratto."
+
+[dependencies]
+fub-abi.workspace = true
+fub-kernel.workspace = true
+# Per il `Bundle` del §9.3: un componente WASM si monta dalla **stessa** porta
+# di un bundle nativo, e la porta è di `fub-host`. Il verso della freccia è
+# questo e non il suo contrario — `fub-host` non nomina questo crate — perché
+# altrimenti wasmtime finirebbe nell'albero di chi monta le feature ufficiali,
+# che è esattamente ciò che l'invariante qui sopra vieta. Chi vuole tutt'e due
+# li prende tutt'e due: è `fub-app`.
+fub-host.workspace = true
+camino.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# Il runtime dei componenti. `default-features = false` più le tre che servono
+# davvero: `cranelift` (compilare), `runtime` (eseguire), `component-model` (il
+# modello dei componenti, che è ciò che il contratto parla). Restano fuori
+# `cache`, `parallel-compilation`, `wat`, `debug-builtins`, `addr2line` e
+# `gc`/`threads`: un componente di questo contratto non ne usa nessuna, e ogni
+# feature accesa è albero da compilare a ogni giro di prova del repo.
+wasmtime = { workspace = true }
+
+[dev-dependencies]
+fub-testkit.workspace = true
+tempfile.workspace = true

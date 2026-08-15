@@ -1,0 +1,36 @@
+// Il mondo di QUESTO componente, che non è `plugin-world`.
+//
+// `plugin-world` elenca tutto ciò che un plugin *può* fare: diciassette
+// famiglie importate e undici interfacce esportate. Un componente che lo
+// dichiarasse dovrebbe esportarle tutte e undici — anche `renderer`, anche
+// `importer`, anche `syntax` — perché un mondo si implementa per intero, e un
+// ping che esporta dieci stub per usarne uno non è un esempio: è il rumore che
+// nasconde l'esempio.
+//
+// Questo mondo dichiara invece ciò che il ping fa davvero: importa le due
+// famiglie che usa ed esporta la sola interfaccia che implementa. È il «mezzo
+// plugin» che il contratto nomina, e regge perché l'host risolve gli export
+// **una interfaccia alla volta** (`GuestIndices` per `fub:abi/plugin`) invece di
+// pretendere il mondo intero. Le due scelte sono la stessa scelta detta ai due
+// capi del confine, ed è il verbale 0164 a tenerle insieme.
+package esempio:ping@0.1.0;
+
+world ping {
+    import fub:abi/host-env@0.1.1;
+    import fub:abi/host-vault-read@0.1.1;
+
+    export fub:abi/plugin@0.1.1;
+}
+
+// Lo stesso ping, che in più chiede la rete. Non esiste per fare qualcosa:
+// esiste perché il rifiuto abbia un componente vero davanti a cui pronunciarsi.
+// L'host di oggi serve due famiglie, questo ne chiede una terza, e il test
+// `una_famiglia_non_servita_si_fa_nominare` pretende che il caricamento la
+// nomini invece di montare un plugin che cadrà a metà lavoro.
+world ping-con-rete {
+    import fub:abi/host-env@0.1.1;
+    import fub:abi/host-vault-read@0.1.1;
+    import fub:abi/host-network@0.1.1;
+
+    export fub:abi/plugin@0.1.1;
+}

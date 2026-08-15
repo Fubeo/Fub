@@ -181,9 +181,13 @@ flowchart TB
         MConf["config della macchina<br>settings, vaults, view-state, logs"]:::storage
     end
 
+    %% ========================= SECONDO BACKEND =========================
+    subgraph WASM ["🧩 fub-wasm-host (M5) — il secondo backend, primo passo"]
+        WasmHost["fub-wasm-host<br>componenti wasmtime, stessi trait per proxy<br>oggi: Plugin + due famiglie di capacità"]:::mount
+    end
+
     %% ============================= FUTURO ==============================
     subgraph FUTURO ["🕳️ Ancora da scrivere — nel repo non c'è una riga"]
-        WasmHost["fub-wasm-host (M5)<br>plugin di terzi via wasmtime<br>stessi trait, per proxy"]:::future
         Suite["FubSuite<br>FubTasks · FubDB · FubCanvas · FubJournal<br>FubAI · FubPublish · FubSync"]:::future
         Est["servizi esterni opt-in<br>LLM, sync, pubblicazione"]:::future
     end
@@ -227,7 +231,7 @@ flowchart TB
     Durata ==> Derived
     SessH ==> MConf
 
-    Traits -.-> WasmHost
+    Traits ==>|"la stessa firma, l'altro backend"| WasmHost
     WasmHost -.->|"ospiterà"| Suite
     Suite -.-> Est
 ```
@@ -246,6 +250,9 @@ flowchart TB
 - **I provider nativi** portano le funzioni che l'utente vede: ricerca,
   backlink, grafo, cestino, versioni…
 - **Il disco** è la persistenza: le note dell'utente più la cartella `.fub/`.
+- **fub-wasm-host** è il secondo backend: monta componenti wasmtime dalla stessa
+  porta da cui `fub-host` monta le feature native. Esiste dal 2026-08-15 e
+  copre il trait `Plugin`; i provider il confine non lo attraversano ancora.
 - Il gruppo tratteggiato non esiste ancora: è il piano, non il repo.
 
 ### Chi parla con chi, e su quale filo
@@ -258,7 +265,7 @@ dell'utente:
 |---|---|---|
 | `invoke` | shell → `fub-app` | domanda e risposta. La shell chiama un comando IPC con argomenti serializzati; il comando risponde con un risultato o con un errore tipizzato. È l'unico modo che la shell ha di *chiedere* qualcosa. |
 | comando IPC | `fub-app` → `fub-host` → kernel | il comando prende la sessione del vault, prende il prestito giusto dalla `Custodia` (condiviso per leggere, esclusivo per scrivere) e chiama il kernel. |
-| trait del contratto | kernel → provider | chiamate dirette: «disegna questa view», «rispondi a questa query», «parsa questo file». Nessuna serializzazione oggi; a M5 la stessa firma attraverserà il confine WASM. |
+| trait del contratto | kernel → provider | chiamate dirette: «disegna questa view», «rispondi a questa query», «parsa questo file». Nessuna serializzazione per un provider nativo; la stessa firma attraversa già il confine WASM per il trait `Plugin`, e per i provider è il prossimo passo di M5. |
 | `HostApi` | provider → kernel | il verso opposto: quando un provider ha bisogno del mondo — leggere un documento, scrivere un blob, emettere un evento — passa dal varco unico, ed è lì che i permessi si applicano. |
 | bus + ponte | kernel → `fub-app` | ciò che è successo. Il kernel pubblica gli eventi sul bus; il thread del ponte li ritira, li raggruppa, li frena, e li consegna al `WebviewEvents` — l'unico `EventSink` che sa di Tauri. |
 | `fub://event` | `fub-app` → shell | il push verso la pagina: gli eventi arrivano alla webview con questo nome, e il router della shell decide *per dato* quali pannelli ridisegnare. |
@@ -303,9 +310,11 @@ Due cose che il disegno dice con lo stile delle frecce:
    non sa di essere condiviso; a metterlo dietro un `RwLock` è chi monta, dentro
    una `Custodia`. È la ragione per cui il core si può usare anche da un
    processo che non ha thread da sincronizzare.
-6. **Il tratteggio è onesto; la freccia «ospiterà» no.** Il runtime WASM e
-   l'intera FubSuite sono documenti, non codice: la cartella `plugins/` nascerà
-   con il runtime che dovrà caricarli. Quella freccia però dice **tutta** la
+6. **Il tratteggio è onesto; la freccia «ospiterà» no.** L'intera FubSuite è
+   documenti, non codice; il runtime WASM invece è uscito dal tratteggio il
+   2026-08-15, e la cartella `plugins/` resta da scrivere — un runtime che
+   carica un componente non è ancora un percorso che va a cercarne uno
+   installato. Quella freccia però dice **tutta** la
    Suite, e almeno un riquadro non ci sta. Un sync deve decidere il merge
    *prima* che il file atterri; il contratto permette di osservare dopo
    (`EventHandler`), non di interporsi. Per gli altri plugin la domanda si
@@ -346,6 +355,7 @@ flowchart TD
     host["fub-host"]:::mount
     features["fub-features"]:::provider
     markdown["fub-format-markdown"]:::provider
+    wasmhost["fub-wasm-host"]:::provider
     sdk["fub-sdk"]:::provider
     testkit["fub-testkit"]:::banco
     kernel["fub-kernel"]:::core
@@ -361,6 +371,9 @@ flowchart TD
     features --> abi
     markdown --> abi
     markdown --> sdk
+    wasmhost --> abi
+    wasmhost --> host
+    wasmhost --> kernel
     kernel --> abi
     sdk --> abi
     testkit --> abi
@@ -373,9 +386,10 @@ flowchart TD
     markdown -.-> kernel
     kernel -.-> testkit
     host -.-> testkit
+    wasmhost -.-> testkit
 ```
 
-I crate del workspace sono **otto** [conta: crate-del-workspace]. La tabella
+I crate del workspace sono **nove** [conta: crate-del-workspace]. La tabella
 sotto legge il blocco qui sopra: nella colonna «dipende da» ci sono **gli stessi
 archi**, scritti a parole. Se una riga dicesse una cosa diversa dal blocco, il
 test si accorgerebbe del blocco e non della riga — quindi la riga si scrive
@@ -389,6 +403,7 @@ test si accorgerebbe del blocco e non della riga — quindi la riga si scrive
 | `fub-format-markdown` | [Cargo.toml](../../crates/fub-format-markdown/Cargo.toml) | `fub-abi`, `fub-sdk` (+ `fub-kernel` solo nei test) | `comrak`, `serde`, `serde_json`, `serde_yaml_ng` | Il primo `FormatProvider`. comrak si trova solo qui. |
 | `fub-features` | [Cargo.toml](../../crates/fub-features/Cargo.toml) | `fub-abi` (+ `fub-kernel`, `fub-sdk`, `fub-format-markdown`, `fub-testkit` solo nei test) | `camino`, `serde`, `serde_json`, `tracing`, `tantivy` (opzionale) | Le feature ufficiali. **Il kernel è dev-only: è l'invariante del dogfooding.** |
 | `fub-host` | [Cargo.toml](../../crates/fub-host/Cargo.toml) | `fub-abi`, `fub-kernel`, `fub-features`, `fub-format-markdown` (+ `fub-testkit` solo nei test) | `camino`, `serde`, `serde_json`, `tracing`, `jiff`; opzionali `notify`, `notify-debouncer-full`, `ureq` | Il composition root: monta i pezzi degli altri. **Niente Tauri.** |
+| `fub-wasm-host` | [Cargo.toml](../../crates/fub-wasm-host/Cargo.toml) | `fub-abi`, `fub-kernel`, `fub-host` (+ `fub-testkit` solo nei test) | `camino`, `serde_json`, `thiserror`, `wasmtime` | Il secondo backend del contratto (M5): un componente WASM visto dal kernel come qualunque altro provider. **`wasmtime` si trova solo qui.** |
 | `fub-app` | [Cargo.toml](../../crates/fub-app/Cargo.toml) | `fub-abi`, `fub-kernel`, `fub-host` | `tauri`, `tauri-plugin-dialog`, `serde`, `serde_json`, `camino`, `tracing` | La colla. `tauri` si trova solo qui. |
 | `fub-testkit` | [Cargo.toml](../../crates/fub-testkit/Cargo.toml) | `fub-abi`, `fub-kernel` | `camino`, `serde_json`, `tempfile` | Il banco del lato host. Per questo non è mai una dipendenza normale di nessuno. |
 
@@ -456,7 +471,9 @@ nell'SDK diventerebbe impossibile
 ha in più `fub-features`, che dall'SDK prende `MemoryHost`.
 
 L'elenco a indentazione in [PIANO.md](../PIANO.md#struttura-dei-crate) non è un
-grafo: dice la destinazione, e nomina anche il crate futuro `fub-wasm-host`.
+grafo: dice la destinazione. `fub-wasm-host`, che quell'elenco nominava come
+crate futuro, dal 2026-08-15 è nel workspace — dipende da `fub-host` e non il
+contrario, o wasmtime finirebbe nell'albero di chi monta le feature ufficiali.
 Questo diagramma fotografa l'oggi.
 
 ---
@@ -1038,7 +1055,7 @@ neanche loro.
 | PRO | CONTRO |
 |---|---|
 | Il contratto si scopre sbagliato **prima** di M5. Se una feature ufficiale ha bisogno di una scorciatoia, quella scorciatoia è un buco del contratto | **Il dogfooding non copre tutto, e adesso è contato**: le feature stanno su quattro superfici su dieci. Dove nessuno passa, il contratto non si scopre sbagliato |
-| Il giro è provato da dieci clienti veri, non da un esempio | **Nessuna sandbox oggi.** Il costo vero della sandbox WASM non l'ha ancora pagato nessuno |
+| Il giro è provato da dieci clienti veri, non da un esempio | **Nessuna sandbox sotto le feature ufficiali**, che restano native di proposito. La sandbox esiste dal 2026-08-15 e sta sotto un componente di terzi; il suo costo vero, però, non l'ha ancora misurato nessuno |
 | Un plugin di terzi non è cittadino di serie B: passa dalla stessa porta della sidebar di casa | **Le tre feature irregolari sono la misura di quanto il contratto non basti ancora.** Se il dogfooding fosse perfetto, il montaggio sarebbe un ciclo e basta |
 
 **Una feature = una cargo feature**, e il guadagno è misurato: compilare tutte
@@ -1512,13 +1529,20 @@ diversi alla stessa domanda.
 
 **Non esiste una riga di codice per:**
 
-- **`fub-wasm-host`** — il runtime che caricherà i plugin di terzi. È commentato
-  nel manifest del workspace. La cartella `plugins/` nascerà con lui.
 - **La FubSuite** — tasks, database, canvas, journal, AI, pubblicazione, sync.
   Sono documenti.
-- **La sandbox.** Le feature ufficiali girano in-process e fidate. Il costo vero
-  della serializzazione e della latenza al confine non l'ha ancora pagato
-  nessuno.
+- **La cartella `plugins/`** — il posto da cui un plugin installato si troverebbe
+  da sé. Il runtime che li carica adesso c'è; chi va a cercarli sul disco no.
+- **I provider dentro un componente.** `fub-wasm-host` esiste e fa attraversare
+  il confine al trait `Plugin`; `CommandProvider` e gli altri dieci no, e finché
+  è così un componente può fare un job ma non offrire un comando o una view.
+- **L'interruzione a scadenza.** Nessun epoch interruption, nessun limite di
+  memoria: un componente che gira in tondo dentro una chiamata sincrona oggi non
+  lo ferma nessuno. È la voce che tiene aperta M5 sul verso della
+  *disponibilità*.
+- **Il costo del confine.** Il test di parità dice che i due backend rispondono
+  la stessa cosa; nessuno ha ancora misurato quanto costi la seconda risposta.
+  Le feature ufficiali intanto girano in-process e fidate.
 
 **Esiste, ma è dichiarato incompleto:**
 

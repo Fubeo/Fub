@@ -2,8 +2,17 @@
 
 Tutti i trait di estensione sono definiti **una volta sola** in `fub-abi`
 (`src/format.rs` e `src/traits.rs`). Le feature ufficiali li implementano in modo
-nativo; i plugin di terzi (M5) li implementeranno via proxy WASM. **Il kernel vede
+nativo; i plugin di terzi li implementano via proxy WASM. **Il kernel vede
 sempre `dyn Trait`** e non sa quale backend c'è dietro.
+
+Dal 2026-08-15 la seconda metà non è più una promessa: `crates/fub-wasm-host`
+esiste e il secondo backend gira. Copre `Plugin` — un componente
+`wasm32-wasip2` si monta dalla porta `Bundle` del §9.3, attiva, esegue un job e
+si smonta, e il kernel non ha guadagnato un ramo per distinguerlo — mentre i
+trait di provider (`CommandProvider` in testa) il confine non lo attraversano
+ancora. Dove le righe qui sotto dicono «a M5», leggere «quando toccherà a quel
+pezzo»: la milestone è aperta, non chiusa
+([M5](../milestones/M5-wasm-runtime.md)).
 
 Torna a [../PIANO.md](../PIANO.md) · vedi [data-model.md](data-model.md),
 [ui-protocol.md](ui-protocol.md), [plugin-boundary.md](plugin-boundary.md).
@@ -159,7 +168,12 @@ Due semantiche fissate nel contratto:
 ### `HostApi` — `src/traits.rs`
 
 L'unico varco con cui un provider/plugin tocca il mondo esterno. Nativo → oggetto
-in-process; WASM (M5) → proxy che reinoltra come host function.
+in-process; WASM → host function che reinoltrano allo stesso oggetto. Il verbo è
+quello: le host function di `fub-wasm-host` **non decidono niente**, ricevono un
+`&mut dyn HostApi` già incappucciato dal `Guard` del kernel e gli passano la
+chiamata. Delle diciassette famiglie ne sono linkate due — `host-env` e
+`host-vault-read` — e chi ne importa una terza **non si istanzia**, con il nome
+della famiglia che manca nel rifiuto.
 
 **È una somma di sedici trait**, non un trait solo
 ([decisione 0021](../decisions/0021-il-confine.md), §7.1). Un trait solo si
@@ -929,7 +943,9 @@ no, e non potrebbe: un motore di ricerca mmappa i propri file e li rilegge quand
 gli pare, anche dai thread di merge, e in quei momenti non ha un host da
 chiamare. Il path arriva da `Workspace::plugin_data_dir(id)` — una vera cartella,
 **dentro lo stesso recinto** di `data_*`. È un varco per il codice nativo,
-dichiarato come tale; a M5 l'equivalente è un preopen WASI sulla stessa radice.
+dichiarato come tale; per un componente l'equivalente sarebbe un preopen WASI
+sulla stessa radice, e oggi non esiste perché **WASI non è linkato affatto**:
+un componente che chiamasse `wasi:filesystem` trova un trap, non una porta.
 
 **Anche le risposte del kernel sono un `IndexProvider`.** `CoreIndex`
 (`kernel/src/index/core.rs`) è registrato per primo e serve:
@@ -1384,6 +1400,16 @@ maggior parte dei plugin non ha job.
 `PluginManifest { id, name, version, permissions: PluginPermissions }` e il
 modello di permessi in [plugin-boundary.md](plugin-boundary.md).
 
+**È il primo trait con due backend vivi.** `WasmPlugin` lo implementa
+reinoltrando a un'istanza wasmtime, e il manifest lo dichiara **il componente
+stesso** — id, permessi, versione del contratto, impostazioni, stringhe e timer,
+tutti tradotti al confine — non un file accanto che parla di lui. Il `Mutex`
+attorno all'istanza non è concorrenza: `manifest` e `run_job` prendono `&self`,
+wasmtime vuole `&mut Store`, e un'istanza non è rientrante. Un `activate` che
+fallisce ritira la dichiarazione come per un nativo, e un componente che non
+riesce nemmeno a istanziarsi si presenta come un plugin che dice di no ad
+`activate` col proprio guasto scritto dentro, invece che come un plugin muto.
+
 ## Chi implementa cosa, e quando
 
 | Trait | Impl M1 | Prossima impl | Note |
@@ -1395,8 +1421,8 @@ modello di permessi in [plugin-boundary.md](plugin-boundary.md).
 | `EventHandler` | dispatch a coda nel kernel ✅ | **M4/M5** (plugin) | anti-rientranza, vedi sopra |
 | `ImportProvider` | — | `MarkdownImport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | dispatch `can_handle`; sorgente a byte; `Preview` non scrive |
 | `ExportProvider` | — | `MarkdownExport` ✅ **M2** ([0006](../decisions/0006-import-export-come-trait.md)) | `&self`: un export è una lettura, gira sotto prestito condiviso |
-| `Plugin` | firma definita | **M4** (primo plugin nativo) → **M5** (WASM) | confine di fiducia |
-| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) → **M5** (host function) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **40** [conta: hostapi-metodi], contando le funzioni delle diciassette [conta: wit-interfacce-host] interfacce `host-*` di `abi.wit`: le **diciotto** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)) `read_document_bytes` ([0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)) `fetch` ([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)) e le quattro del trasferimento — `read_source` più le tre dell'`ArtifactSink` ([0102](../decisions/0102-i-byte-non-stanno-nel-record.md)) —, che sono anche le sole a portare con sé **interfacce nuove** invece di aggiungersi a una che c'era: `host-network` la sua, il trasferimento due. Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
+| `Plugin` | firma definita | **M4** (primo plugin nativo) ✅ → **M5** (`WasmPlugin`, primo componente) ✅ | confine di fiducia; il proxy WASM è il **primo** trait ad attraversarlo, e il test di parità è il gemello di quello nativo |
+| `HostApi` | `KernelHost` nel `Workspace` ✅ | **M4** (permessi) ✅ → **M5** (host function: due famiglie su diciassette) | **elenco chiuso con la [0013](../decisions/0013-elenco-delle-capacita.md)**. Oggi i metodi sono **40** [conta: hostapi-metodi], contando le funzioni delle diciassette [conta: wit-interfacce-host] interfacce `host-*` di `abi.wit`: le **diciotto** arrivate dopo la chiusura sono `read_model` e `format_of` ([0018](../decisions/0018-chi-vede-il-modello-parsato.md)), `call_service` ([0021](../decisions/0021-il-confine.md)), `spawn_job` ([0032](../decisions/0032-il-runner-dei-job.md)), `report_progress` ([0035](../decisions/0035-il-lavoro-lungo-si-racconta.md)), le tre della configurazione ([0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)), le due dello stato di vista ([0037](../decisions/0037-lo-stato-di-vista.md)), `user_locale` ([0039](../decisions/0039-il-locale-e-il-caso.md)) `undo_last` ([0045](../decisions/0045-l-undo-ha-due-pile.md)) `read_document_bytes` ([0087](../decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)) `fetch` ([0097](../decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)) e le quattro del trasferimento — `read_source` più le tre dell'`ArtifactSink` ([0102](../decisions/0102-i-byte-non-stanno-nel-record.md)) —, che sono anche le sole a portare con sé **interfacce nuove** invece di aggiungersi a una che c'era: `host-network` la sua, il trasferimento due. Sono **aggiunte**, cioè minor: l'elenco è chiuso alla sottrazione, non alla crescita — e questo conteggio, tenuto a mano, ha detto ventitré e trentadue nello stesso documento prima che qualcuno lo rifacesse ([§16.8](../roadmap/16-crate-sdk-banchi-di-prova.md#168-la-prosa-che-conta-i-sorgenti-non-ha-nessun-presidio)) |
 
 A M1 backlink e anteprima passano dal grafo/registry del kernel, non ancora da
 `IndexProvider`/`ViewProvider`: la superficie è definita per intero (è il valore

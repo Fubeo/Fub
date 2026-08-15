@@ -36,10 +36,15 @@ errore, e un host intestato a un id sconosciuto nega tutto dicendo perché.
 - **Nativo (M4):** `HostApi` è un oggetto in-process che chiama direttamente il
   `Workspace` (`KernelHost` in `fub-kernel/src/host/kernel.rs`, usato dal
   dispatch degli eventi). Costo ≈ zero.
-- **WASM (M5):** il plugin riceve un *proxy*; ogni metodo è una **host function**
-  wasmtime che serializza gli argomenti, attraversa il confine, esegue nel core e
-  ritorna. La firma è identica: per questo la regola d'oro impone tipi
-  serializzabili.
+- **WASM (M5, in piedi dal 2026-08-15):** il plugin riceve un *proxy*; ogni
+  metodo è una **host function** wasmtime che serializza gli argomenti,
+  attraversa il confine, esegue nel core e ritorna. La firma è identica: per
+  questo la regola d'oro impone tipi serializzabili. L'host non è un secondo
+  `HostApi`: le host function di `fub-wasm-host` ricevono **lo stesso** oggetto
+  in-process, già incappucciato dal `Guard`, e gli girano la chiamata. Ne sono
+  linkate due famiglie su diciassette — `host-env` e `host-vault-read` — e
+  quelle non ancora servite si fanno **nominare** al caricamento invece di
+  mancare a metà lavoro ([M5](../milestones/M5-wasm-runtime.md)).
 
 ### Storage
 
@@ -694,8 +699,8 @@ cercare. Quel che manca davvero, ed è dichiarato:
 ## Onestà sul modello di minaccia: nativo = fidato
 
 Tre affermazioni, in ordine: **un plugin nativo è codice fidato**, il confine di
-fiducia vero arriva **a M5**, e l'unica cosa che si compra oggi è l'isolamento
-dagli *incidenti*.
+fiducia vero è quello di M5, e l'unica cosa che si compra con un nativo è
+l'isolamento dagli *incidenti*.
 
 L'enforcement in `HostApi` confina davvero **solo chi non può aggirarlo**, e un
 plugin nativo è codice Rust in-process: può fare qualunque cosa, permessi o no.
@@ -704,10 +709,16 @@ Quindi, esplicitamente:
 - **«plugin nativo» significa codice fidato** — feature ufficiali e plugin
   compilati dentro l'app. Il loro manifest è *descrittivo* (dogfooding del
   percorso di attivazione, UI di consenso), non una barriera di sicurezza;
-- il **confine di fiducia reale esiste solo a M5**, con la sandbox WASM;
-- lo scopo del primo plugin nativo (M4) è esercitare *il percorso* (manifest →
-  consenso → `HostApi` con permessi → attivazione), così M5 cambia il backend,
-  non inventa il confine.
+- il **confine di fiducia reale è quello WASM**, e dal 2026-08-15 non è più solo
+  un progetto: un componente ha la propria memoria, non ha WASI, e ogni capacità
+  che tocca gli passa da una host function. Resta a metà per il verso della
+  *disponibilità* — nessuna deadline lo interrompe ancora — e per la superficie:
+  attraversa `Plugin`, non ancora i provider;
+- lo scopo del primo plugin nativo (M4) era esercitare *il percorso* (manifest →
+  consenso → `HostApi` con permessi → attivazione), così M5 cambia il backend e
+  non inventa il confine. Ha funzionato alla lettera: il primo componente
+  percorre gli stessi quattro passi, e il test che lo prova è il gemello di
+  quello nativo a meno della riga che costruisce il bundle.
 
 **Un panico al confine costa la chiamata, non il vault.** Ogni porta da cui si
 entra in codice di un provider gira dentro una rete
@@ -943,6 +954,14 @@ non vede la memoria del core; tutto ciò che tocca il mondo — disco, rete, tem
 passa da una **host function**; chi è lento o ostile viene **interrotto** a
 scadenza. L'elenco dice poi, voce per voce, cosa gli si concede.
 
+**Delle tre righe, due valgono già.** `crates/fub-wasm-host` monta componenti
+`wasm32-wasip2` dal 2026-08-15: la memoria è separata dal component model, e il
+mondo passa dalle host function perché **WASI non è linkato** — un componente
+che chiami `wasi:cli` o `wasi:filesystem` trova un trap, non una porta. La
+terza no: nessuna deadline interrompe niente, e finché è così la sandbox è
+completa contro chi sbaglia e non contro chi insiste. Le voci qui sotto
+dicono, dove serve, quale delle due è.
+
 - **Runtime:** wasmtime, **component model**; plugin come componenti
   `wasm32-wasip2`, compilati a parte con `cargo component` (vedi
   [M5](../milestones/M5-wasm-runtime.md)).
@@ -995,9 +1014,14 @@ scadenza. L'elenco dice poi, voce per voce, cosa gli si concede.
   interruption** (deadline per chiamata) e limiti di risorse: chi sfora viene
   interrotto con `PluginError::Internal`. La deadline può essere severa perché il
   lavoro lento **legittimo** ha la sua strada: i **job**, eseguiti su un'istanza
-  separata con una deadline propria, più lasca.
+  separata con una deadline propria, più lasca. **Da fare**: è la voce che tiene
+  M5 aperta. Quel che c'è oggi è la traduzione del guasto — ogni trap diventa
+  `PluginError::Internal` invece di propagarsi — non ciò che lo provoca a
+  scadenza.
 - **UI:** il proxy applica `UiNode::validate_untrusted()` a ogni albero
   restituito da `render_view` (vedi [ui-protocol.md](ui-protocol.md)).
+  **Da fare**, e per ora senza urgenza per una ragione sola: `render_view` di
+  là dal confine non c'è, perché `ViewProvider` non lo attraversa ancora.
 
 ### Cosa non può essere **solo** un guest, e il metro per deciderlo
 
@@ -1184,8 +1208,10 @@ A percorrerlo è il **`BundleRegistry`** di `fub-host`
 Sta dalla parte dell'host per una ragione sola: l'`HostApi` non ha capacità di
 registrazione
 ([0013](../decisions/0013-elenco-delle-capacita.md)), quindi **un plugin non può
-registrarsi da sé**. A M5 il caricatore WASM percorre gli stessi passi; cambia
-come si costruisce il `Plugin`, non chi lo dichiara.
+registrarsi da sé**. Il caricatore WASM percorre gli stessi passi — è la stessa
+porta `Bundle`, non una seconda — e cambia come si costruisce il `Plugin`, non
+chi lo dichiara. Che sia vero lo si vede da cosa **non** è cambiato nel kernel
+il giorno in cui il secondo backend è arrivato: niente.
 
 1. Il registry legge il `PluginManifest` (nativo: dal codice; WASM: dai metadati
    del componente) e ne verifica la **versione del contratto**
@@ -1205,6 +1231,11 @@ come si costruisce il `Plugin`, non chi lo dichiara.
    né chiamare i propri comandi.
 
 Il **primo plugin nativo** (M4) esercita esattamente questo percorso senza WASM.
+Il **primo componente** (M5) lo esercita con, e i quattro passi si comportano
+uguali fino al terzo: il manifest lo dichiara il `.wasm` stesso, `abi_compatible`
+lo confronta come per un nativo, `activate` attraversa il confine. Il quarto è
+vuoto per ora — nessun provider di là dal confine — e lo dice invece di
+fingere.
 
 ### Dove sta questo percorso dentro l'apertura di un vault
 
@@ -1346,7 +1377,7 @@ Sono **dieci** [conta: buchi-dichiarati]:
 | 7 | il rapporto fra due tempi, che nessun conto di operazioni sa sostituire | [0113](../decisions/0113-il-banco-conta-le-operazioni.md) |
 | 8 | `SchemaVersion::new(1)` scritto al volo dentro il record, senza una costante che lo nomini: è del tipo giusto, quindi il compilatore è contento, e non lo conta nessuno | [0128](../decisions/0128-una-versione-di-schema-e-un-tipo.md) |
 | 9 | `fub:read-clipboard` e `fub:write-clipboard` non governano niente: chi li nega oggi non nega niente, perché non c'è ancora una famiglia da negare | [0144](../decisions/0144-una-spunta-sola-diceva-due-cose.md) |
-| 10 | che il passaggio al confine sia **economico**: il varco prova che il contratto è costruibile e compilabile a `wasm32`, non quanto costi serializzare un `Document` — quella metà vuole il motore, che è di M5 | [0146](../decisions/0146-il-contratto-attraversa-il-confine.md) |
+| 10 | che il passaggio al confine sia **economico**: il varco prova che il contratto è costruibile e compilabile a `wasm32`, non quanto costi serializzare un `Document` — quella metà vuole il motore. Il motore adesso c'è (M5, 2026-08-15) e la misura ancora no: il test di parità dice che i due backend rispondono la stessa cosa, non quanto costi la seconda risposta | [0146](../decisions/0146-il-contratto-attraversa-il-confine.md) |
 
 Il numero ha una storia sua, ed è la ragione per cui adesso porta un conto
 accanto. Questa riga ha detto «due» mentre erano tre, e poi «quattro» mentre

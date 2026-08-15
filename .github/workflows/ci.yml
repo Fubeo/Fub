@@ -212,6 +212,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf libgtk-3-dev
+      # Il bersaglio dei **componenti**, e sta qui e non fra le invarianti per
+      # una ragione sola: chi lo pretende è `cargo test --workspace`, due righe
+      # più sotto. Il test di `fub-wasm-host` non carica un `.wasm` messo nel
+      # repo — lo **costruisce**, invocando da sé `cargo build --target
+      # wasm32-wasip2` su `esempi/ping-wasm`, perché un binario committato è una
+      # promessa che nessuno ricompila e che smette di corrispondere al suo
+      # sorgente senza dirlo. Il prezzo è che il bersaglio dev'essere già
+      # installato quando i test partono: se manca, non fallisce l'host — fallisce
+      # l'esempio, con un errore di rustup dentro l'output di un test, che è il
+      # posto peggiore in cui leggerlo.
+      #
+      # `wasm32-wasip2` e non `wasm32-unknown-unknown` (quello del varco, nel job
+      # `invariants`): un componente ha bisogno del mondo di WASI 0.2, e dallo
+      # stesso `abi.wit` i due bersagli producono due cose diverse — un modulo
+      # core di là, un componente di qua. Sono due passi e non uno perché sono in
+      # due job diversi, non per simmetria.
+      #
+      # La build esplicita dell'esempio non è ridondante col test: separa «il
+      # componente non compila» da «l'host non lo sa caricare», che senza questa
+      # riga arriverebbero come lo stesso rosso. Ed è l'unico posto che compila
+      # `esempi/ping-wasm`, che sta fuori dal workspace apposta (vedi l'`exclude`
+      # della radice) proprio perché `--workspace` non deve pretendere quel
+      # bersaglio da chi non ce l'ha.
+      - name: il bersaglio dei componenti, prima dei test che lo pretendono
+        run: |
+          rustup target add wasm32-wasip2
+          cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
       - run: cargo build --workspace
       - run: cargo test --workspace
 
