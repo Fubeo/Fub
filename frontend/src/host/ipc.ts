@@ -260,6 +260,15 @@ export function onKernelEvent(handler: (n: KernelNotice) => void): Promise<() =>
 /// è l'unica finestra in cui lo è: il ponte è vivo, il gesto non è ancora
 /// avvenuto, e `onCloseRequested` aspetta la promessa prima di distruggere.
 ///
+/// Iscriversi qui **cambia il significato della X**: dal momento in cui esiste un
+/// ascoltatore JS di `tauri://close-requested`, il backend annulla la chiusura
+/// nativa (`api.prevent_close()`) e l'unica cosa che chiude davvero la finestra è
+/// la `destroy()` che `onCloseRequested` fa in coda al gestore. Quella `destroy()`
+/// è un comando come gli altri e vuole il suo permesso: `core:window:allow-destroy`
+/// nelle capacità di `fub-app`, che **non** è dentro `core:default`. Senza, la X
+/// smetteva di funzionare del tutto — il permesso mancante veniva rifiutato dentro
+/// il gestore di Tauri, dove nessuno lo legge, e la finestra restava aperta muta.
+///
 /// Il gestore **non può alzare**, e non è una cortesia: se rigetta, la chiusura
 /// non arriva mai e la finestra resta lì senza spiegazione. Un salvataggio che
 /// va storto è un fatto normale in questa riga — è precisamente il caso che
