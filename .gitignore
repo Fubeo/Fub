@@ -3,6 +3,11 @@
 # `tools/varco-wasm` è fuori dal workspace (radice `Cargo.toml`, `exclude`),
 # quindi ha un `target/` suo — il generato del contratto, che è 94 MB.
 /tools/varco-wasm/target
+# `esempi/ping-wasm` è fuori dal workspace per la stessa ragione e ha lo stesso
+# effetto: un `target/` suo, che qui riempie chi compila il componente a mano.
+# Il test di `fub-wasm-host` invece compila dentro `CARGO_TARGET_TMPDIR`, che
+# sta già sotto `/target`.
+/esempi/ping-wasm/target
 **/*.rs.bk
 
 # Node / frontend

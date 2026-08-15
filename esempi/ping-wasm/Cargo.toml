@@ -1,0 +1,47 @@
+# Il primo plugin di terzi: lo stesso ping del plugin nativo di M4, scritto
+# come componente WASM.
+#
+# **Fuori dal workspace, come `tools/varco-wasm` e per la stessa ragione**: si
+# compila per `wasm32-wasip2`, che è un bersaglio che il workspace non ha e che
+# `cargo test --workspace` non deve pretendere. Chi lo compila è il test di
+# `fub-wasm-host` (che sa dire cosa installare se manca) e il passo dedicato di
+# CI.
+#
+# `wasm32-wasip2` e non `wasm32-unknown-unknown` perché quel bersaglio produce
+# un COMPONENTE, e un componente è ciò che wasmtime istanzia; l'altro produce un
+# modulo core, che andrebbe poi convertito con `wasm-tools`, cioè un attrezzo in
+# più nella catena. L'ambiente WASI che il bersaglio si porta dietro non è
+# linkato dall'host (vedi `Componente::carica`): questo plugin non lo chiama, e
+# chi lo chiamasse troverebbe un trap.
+[package]
+name = "ping-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# **Lo stesso plugin, dichiarato in due modi.** Con questa feature il manifest
+# non chiede `fub:read-vault`, e nient'altro cambia: è il parametro `permessi`
+# del banco nativo (`il_primo_plugin.rs`) portato di qua dal confine, e serve a
+# provare che il cancello del §7.3 si chiude anche davanti a un componente.
+senza-permessi = []
+# Il mondo che chiede anche la rete (vedi `wit/ping.wit`): esiste perché il
+# rifiuto dell'host abbia davanti un componente vero.
+con-rete = []
+
+[dependencies]
+wit-bindgen = "0.60"
+
+# Nessuna dipendenza da `fub-abi`: **è il punto**. Un plugin di terzi ha in mano
+# il WIT e nient'altro, e se questo esempio potesse chiamare il crate Rust del
+# contratto non proverebbe niente di ciò che deve provare.
+
+[profile.release]
+# Un componente che si porta dietro i simboli di debug è un file grosso da
+# leggere a ogni test. Qui non si annida nessuno col debugger: se cade, cade
+# come lo vede l'host, cioè come un trap.
+strip = true
+opt-level = "s"

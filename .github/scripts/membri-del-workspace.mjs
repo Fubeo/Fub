@@ -20,10 +20,10 @@
 //      compila, quindi i suoi test non esistono, il suo codice non esiste, e la
 //      CI resta verde. È la forma su disco della stessa classe di difetto che
 //      `check-cargo-feature-default.mjs` presidia dentro un crate: *una suite
-//      che si svuota in silenzio è indistinguibile da una suite verde*. Oggi il
-//      caso è a un passo — `# "crates/fub-wasm-host"` sta commentato nella
-//      radice — e il giorno in cui quella cartella nasce prima che la riga si
-//      scommenti, questo è ciò che lo dice.
+//      che si svuota in silenzio è indistinguibile da una suite verde*. Il caso
+//      non è più ipotetico: `crates/fub-wasm-host` è la cartella che allora era
+//      solo una riga commentata nella radice, e adesso è un membro dichiarato.
+//      Il presidio resta per la prossima, che nascerà allo stesso modo.
 //
 // Da cui la forma: **una sola funzione, e risponde in tutt'e due i versi.** Non
 // rende solo l'elenco dei file: rende anche le violazioni, così il secondo
@@ -54,8 +54,10 @@ function nomeSezione(riga) {
  * questo lettore è vecchio, il secondo che il workspace è vuoto, e chiamarli
  * uguale renderebbe verde un presidio che ha smesso di leggere.
  *
- * Le righe commentate si saltano: `# "crates/fub-wasm-host"` nella radice **non**
- * è un membro, ed è precisamente la riga su cui un lettore ingenuo sbaglierebbe.
+ * Le righe commentate si saltano: una riga `# "crates/qualcosa"` dentro l'elenco
+ * **non** è un membro, ed è precisamente la riga su cui un lettore ingenuo
+ * sbaglierebbe. Nella radice ce n'era una — `fub-wasm-host`, prima che il crate
+ * nascesse —, e la prossima sarà scritta uguale.
  */
 function membriDichiarati(manifestRadice) {
   const righe = fs.readFileSync(manifestRadice, "utf8").split("\n");

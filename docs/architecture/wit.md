@@ -7,7 +7,10 @@ riscritto una seconda volta in un'altra lingua.
 Serve a validare una regola d'oro: **ogni tipo che compare in un trait deve
 essere esprimibile come record, variant o enum WIT**. Finché la regola tiene, il
 runtime WASM di [M5](../milestones/M5-wasm-runtime.md) è lavoro meccanico, e
-tutte le firme si serializzano da sole.
+tutte le firme si serializzano da sole. Dal 2026-08-15 la promessa ha un
+consumatore che la attraversa **in esecuzione** e non solo un validatore che la
+legge: `crates/fub-wasm-host` genera i binding lato host da **questo** file — il
+vivo, non la copia congelata — e ci monta sopra un componente.
 
 - **Contratto attuale**: [`fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit) —
   package `fub:abi@0.1.1`.

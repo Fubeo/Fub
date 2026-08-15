@@ -93,6 +93,14 @@ Un comando della CI non sta nel ciclo locale, e la ragione sta dopo il `—`:
   vuole installato il target `wasm32-unknown-unknown`. È il contratto portato di
   là dal confine e compilato (verbale 0146); il crate sta fuori dal workspace
   apposta, così `cargo test --workspace` non chiede quel target a nessuno.
+- `cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2` —
+  vuole installato il target `wasm32-wasip2`, che è quello dei **componenti**
+  (l'altro, `wasm32-unknown-unknown`, dà un modulo core). L'esempio sta fuori dal
+  workspace per la stessa ragione del varco. In CI la riga sta nel job `test` e
+  non fra le invarianti perché il target lo pretende `cargo test --workspace`: il
+  test di `fub-wasm-host` costruisce il componente da sé invece di caricare un
+  `.wasm` committato. Chi non ha il target lo scoprirà da quel test — con un
+  messaggio che dice cosa manca — e non da qui.
 
 Tutto il resto lo esegue anche la CI: se passa in locale, passa in CI. I test
 girano su Linux, macOS e Windows, e a rompersi sono quasi sempre i path e i lock
