@@ -17,16 +17,19 @@
 //! gira, e scopre a metà lavoro che una capacità non c'era: lo stesso guasto,
 //! più tardi e senza il nome.
 //!
-//! Le famiglie di oggi sono due: `host-env` (l'orologio, il locale, il caso, il
-//! fuoco) e `host-vault-read` (leggere il vault). Sono quelle che il ping del
-//! primo plugin nativo attraversa, cioè quelle su cui c'è una parità da provare.
+//! Le famiglie di oggi sono tre: `host-env` (l'orologio, il locale, il caso, il
+//! fuoco), `host-vault-read` (leggere il vault, modello del documento compreso)
+//! e `host-events` (pubblicare un evento, e sottoscrivere). Le prime due sono
+//! quelle che il ping del primo plugin nativo attraversa, cioè quelle su cui
+//! c'è una parità da provare; la terza è l'unica in cui il guest chiama l'host
+//! mentre l'host sta chiamando il guest, e per questo il suo `impl` sta in
+//! [`crate::eventi`] e non qui.
 
 use fub_abi::model::DocId;
-use fub_abi::PluginError;
 use wasmtime::component::{HasSelf, Linker};
 
 use crate::contratto::fub::abi::{
-    format as w_format, host_env, host_vault_read, index as w_index, intl as w_intl,
+    format as w_format, host_env, host_events, host_vault_read, index as w_index, intl as w_intl,
     model as w_model, session as w_session,
 };
 use crate::prestito::Stato;
@@ -36,6 +39,12 @@ use crate::traduzione as tr;
 pub(crate) fn aggiungi_al_linker(linker: &mut Linker<Stato>) -> wasmtime::Result<()> {
     host_env::add_to_linker::<Stato, HasSelf<Stato>>(linker, |s| s)?;
     host_vault_read::add_to_linker::<Stato, HasSelf<Stato>>(linker, |s| s)?;
+    // La terza è servita da `crate::eventi`: l'`impl` sta là perché la sua è
+    // l'unica famiglia in cui la chiamata va dal guest all'host mentre l'host
+    // sta chiamando il guest. La riga però sta qui, con le altre due, perché
+    // linkare è una cosa sola e un secondo posto da cui linkare sarebbe un
+    // secondo posto in cui dimenticarsene.
+    host_events::add_to_linker::<Stato, HasSelf<Stato>>(linker, |s| s)?;
     Ok(())
 }
 
@@ -144,22 +153,28 @@ impl host_vault_read::Host for Stato {
         }
     }
 
-    /// **Dichiaratamente non servita a questo giro.**
+    /// **L'albero più grande del contratto, di là dal confine.**
     ///
-    /// `document-model` è l'albero più grande del contratto — blocchi,
-    /// intestazioni, link, proprietà — e tradurlo è un passo suo, non una riga
-    /// di questo. Risponde `unserved` col proprio perché invece di un modello
-    /// vuoto: un modello vuoto è una risposta *sbagliata* a una domanda giusta,
-    /// e chi la ricevesse concluderebbe che la nota non ha niente dentro.
+    /// Fino al passo scorso rispondeva `unserved` col proprio perché: tradurre
+    /// `document-model` — blocchi, intestazioni, link, frontmatter — è un lavoro
+    /// suo, e un modello vuoto sarebbe stata una risposta *sbagliata* a una
+    /// domanda giusta. Quel lavoro adesso c'è, e sta in [`crate::modello`]: qui
+    /// resta ciò che fanno tutte le altre di questa famiglia — chiedere all'host
+    /// prestato e tradurre la risposta.
+    ///
+    /// I due errori possibili sono due cose diverse e restano distinguibili: il
+    /// primo `?` porta il no del vault (permesso, documento assente, I/O), il
+    /// secondo il no della traduzione (un albero più profondo di quanto l'host
+    /// scenda). Entrambi arrivano al componente come **valore**, non come trap.
     fn read_model(
         &mut self,
-        _id: w_model::DocId,
+        id: w_model::DocId,
     ) -> Result<w_model::DocumentModel, crate::contratto::fub::abi::errors::PluginError> {
-        Err(tr::in_errore(&PluginError::Unserved(
-            "read-model non attraversa ancora il confine WASM: il modello di documento \
-             è il prossimo passo di M5"
-                .into(),
-        )))
+        let ospite = ospite!(self);
+        let modello = ospite
+            .read_model(&DocId::new(id))
+            .map_err(|e| tr::in_errore(&e))?;
+        crate::modello::in_documento(&modello).map_err(|e| tr::in_errore(&e))
     }
 
     fn format_of(&mut self, id: w_model::DocId) -> Option<w_format::DocumentFormat> {

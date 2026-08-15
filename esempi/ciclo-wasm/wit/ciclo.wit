@@ -1,0 +1,20 @@
+// Il mondo del componente che non torna.
+//
+// È il mondo più povero che un plugin possa dichiarare: **nessun import di
+// capacità**, un export solo. Non è pigrizia, è la forma della prova. Ciò che
+// questo componente deve dimostrare è che l'host lo ferma **anche quando non
+// chiede niente a nessuno**: un ciclo che non chiama host function non passa
+// mai dal confine, e quindi nessun controllo dell'host lo vedrebbe. La sola
+// cosa che lo raggiunge lì dentro è l'interruzione a epoche, cioè un contatore
+// che il codice compilato guarda da sé a ogni giro di ciclo.
+//
+// Le interfacce di soli tipi del contratto — `errors`, `text`, `options`, e le
+// altre che `fub:abi/plugin` nomina nelle sue firme — entrano lo stesso fra gli
+// import, perché un export tira dentro i tipi che usa. Non sono capacità: non
+// hanno una funzione da chiamare, e l'host le tappa con un'istanza vuota
+// (`tappa_il_resto` in `componente.rs`).
+package esempio:ciclo@0.1.0;
+
+world ciclo {
+    export fub:abi/plugin@0.1.1;
+}

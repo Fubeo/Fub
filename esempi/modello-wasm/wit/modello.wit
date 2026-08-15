@@ -1,0 +1,19 @@
+// Il mondo di QUESTO componente, che non è `plugin-world`.
+//
+// Vale la stessa ragione scritta accanto al ping: un mondo si implementa per
+// intero, e un componente che esporta undici interfacce per usarne una non è un
+// esempio. Qui l'elenco è ancora più corto — una famiglia importata e una
+// interfaccia esportata — perché la domanda è una sola: `read-model` porta di là
+// l'albero del documento?
+//
+// `host-vault-read` è la famiglia che ospita `read-model`, ed è l'unica che
+// serve: il modello non chiede l'orologio, non chiede il locale, non chiede il
+// caso. Che il mondo lo dica per esteso è ciò che rende leggibile, dal file WIT
+// e senza aprire il codice, cosa questo `.wasm` può toccare.
+package esempio:modello@0.1.0;
+
+world modello {
+    import fub:abi/host-vault-read@0.1.1;
+
+    export fub:abi/plugin@0.1.1;
+}

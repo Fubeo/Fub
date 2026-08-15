@@ -1,0 +1,34 @@
+# Il componente che parla per primo: `host-events` visto dal lato del guest.
+#
+# **Fuori dal workspace, come `ping-wasm` e per la stessa ragione**: si compila
+# per `wasm32-wasip2`, che è un bersaglio che il workspace non ha e che
+# `cargo test --workspace` non deve pretendere. Chi lo compila è il test
+# `un_componente_che_parla` di `fub-wasm-host`, che sa dire cosa installare se
+# il bersaglio manca.
+#
+# Esiste separato dal ping perché fa vedere UNA cosa che il ping non può fare
+# vedere: il ping risponde, questo **dice qualcosa mentre lavora** — un
+# progresso, un evento, la richiesta di un altro job. È il verso della chiamata
+# rovesciato, e nel ping non c'è.
+[package]
+name = "eventi-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+# Nessuna dipendenza da `fub-abi`: **è il punto**. Un plugin di terzi ha in mano
+# il WIT e nient'altro, e un esempio che potesse chiamare il crate Rust del
+# contratto non proverebbe che il confine si attraversa — proverebbe che si può
+# non attraversarlo.
+
+[profile.release]
+# Come nel ping: qui non si annida nessuno col debugger, e un componente che si
+# porta dietro i simboli è un file grosso da leggere a ogni test.
+strip = true
+opt-level = "s"

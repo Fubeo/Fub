@@ -1,0 +1,21 @@
+// Il mondo di QUESTO componente, che non è `plugin-world`.
+//
+// La ragione è quella scritta accanto al ping: `plugin-world` elenca tutto ciò
+// che un plugin *può* fare, e un mondo si implementa per intero — un componente
+// che lo dichiarasse dovrebbe esportare anche `renderer`, anche `importer`,
+// anche `syntax`. Qui si dichiara ciò che questo componente fa davvero, e regge
+// perché l'host risolve gli export **una interfaccia alla volta**.
+//
+// L'import è UNO SOLO, e non per economia: è la prova. `host-events` è la
+// famiglia in cui la chiamata va dal guest all'host mentre l'host sta chiamando
+// il guest, e un componente che non importa nient'altro non può nemmeno
+// sbagliarsi su chi sta parlando — tutto ciò che dice, lo dice di propria
+// iniziativa. Non importa nemmeno `host-env`: le capacità di `host-events` non
+// hanno bisogno di sapere che ore sono.
+package esempio:eventi@0.1.0;
+
+world eventi {
+    import fub:abi/host-events@0.1.1;
+
+    export fub:abi/plugin@0.1.1;
+}

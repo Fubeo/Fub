@@ -7,7 +7,7 @@
 # effetto: un `target/` suo, che qui riempie chi compila il componente a mano.
 # Il test di `fub-wasm-host` invece compila dentro `CARGO_TARGET_TMPDIR`, che
 # sta già sotto `/target`.
-/esempi/ping-wasm/target
+/esempi/*/target
 **/*.rs.bk
 
 # Node / frontend

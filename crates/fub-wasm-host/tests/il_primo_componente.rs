@@ -15,6 +15,8 @@
 //! quando il file non c'è è un test che un giorno non gira più e nessuno se ne
 //! accorge. Se il bersaglio manca, il fallimento dice come installarlo.
 
+mod comune;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,73 +30,6 @@ use fub_kernel::{Subscription, Trust};
 use fub_wasm_host::WasmBundle;
 
 const ID: &str = "demo.ping";
-
-// --- il componente ----------------------------------------------------------
-
-/// Compila `esempi/ping-wasm` in una delle sue varianti e restituisce il
-/// `.wasm`.
-///
-/// La variante è una feature dell'esempio, cioè **una riga sola di differenza**
-/// nel componente: il manifest senza `read-vault`, o il mondo che chiede anche
-/// la rete.
-///
-/// # Una cartella sola, un `cargo` per volta
-///
-/// Le tre varianti condividono la stessa `--target-dir`, e questa è la ragione
-/// per cui esiste il lucchetto qui sotto. Misurato: con una cartella per
-/// variante il test compilava l'albero dell'esempio tre volte e ci metteva
-/// ~62s; con una cartella sola le dipendenze si compilano una volta e a
-/// cambiare è solo il `cdylib`. Il prezzo è che due `cargo` sulla stessa
-/// cartella con feature diverse si sovrascriverebbero il `.wasm` a vicenda —
-/// e i test girano su thread paralleli. Quindi: si serializza, e appena
-/// l'artefatto è pronto lo si **copia** in un file che porta il nome della
-/// variante, prima di lasciare il lucchetto.
-fn componente(variante: &str) -> Utf8PathBuf {
-    static LUCCHETTO: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    // Un panico dentro la parentesi avvelena il `Mutex`, e un test già rotto non
-    // è una ragione per farne fallire altri due con un messaggio che parla di
-    // avvelenamento invece che del guasto vero.
-    let _guardia = LUCCHETTO.lock().unwrap_or_else(|e| e.into_inner());
-
-    let radice = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join("esempi/ping-wasm");
-    let uscita = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ping-wasm");
-    let copia = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "ping_wasm-{}.wasm",
-        if variante.is_empty() {
-            "base"
-        } else {
-            variante
-        }
-    ));
-
-    let mut cargo = std::process::Command::new(env!("CARGO"));
-    cargo
-        .arg("build")
-        .arg("--release")
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .arg("--manifest-path")
-        .arg(radice.join("Cargo.toml"))
-        .arg("--target-dir")
-        .arg(&uscita);
-    if !variante.is_empty() {
-        cargo.arg("--features").arg(variante);
-    }
-    let esito = cargo.output().expect("cargo si esegue");
-    assert!(
-        esito.status.success(),
-        "il componente di esempio non si compila.\n\
-         Se manca il bersaglio: `rustup target add wasm32-wasip2`.\n{}",
-        String::from_utf8_lossy(&esito.stderr)
-    );
-
-    let wasm = uscita.join("wasm32-wasip2/release/ping_wasm.wasm");
-    assert!(wasm.exists(), "il componente compilato non è in {wasm}");
-    std::fs::copy(&wasm, &copia).expect("la copia della variante");
-    copia
-}
 
 // --- il banco ---------------------------------------------------------------
 
@@ -114,7 +49,7 @@ impl Vault {
 
 /// Un host headless col vault aperto e il componente montato.
 fn banco(v: &Vault, permessi: bool) -> (Host, Subscription) {
-    let wasm = componente(if permessi { "" } else { "senza-permessi" });
+    let wasm = comune::ping(if permessi { "" } else { "senza-permessi" });
     let bundle = WasmBundle::da_file(&wasm, Trust::Community).expect("il componente si carica");
 
     let host = Host::new()
@@ -265,13 +200,14 @@ fn un_componente_senza_il_permesso_vede_chiudersi_il_cancello() {
 /// messaggio la nomina.
 ///
 /// È il prezzo dichiarato del linker per interfaccia (vedi il modulo `ospite`):
-/// le famiglie che questo host serve oggi sono due, e chi ne importa una terza
+/// l'elenco delle famiglie servite è dichiarato (`FAMIGLIE_SERVITE`), e chi ne
+/// importa una che non ci sta
 /// lo scopre al caricamento invece che a metà lavoro. Il componente di prova è
 /// lo stesso ping, compilato contro un mondo che importa anche
 /// `fub:abi/host-network`.
 #[test]
 fn una_famiglia_non_servita_si_fa_nominare() {
-    let wasm = componente("con-rete");
+    let wasm = comune::ping("con-rete");
     let errore = WasmBundle::da_file(&wasm, Trust::Community)
         .expect_err("una famiglia non servita non si carica");
     let detto = errore.to_string();

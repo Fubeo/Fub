@@ -27,7 +27,18 @@ members = [
 # `esempi/ping-wasm` è fuori per la stessa ragione, un bersaglio più in là:
 # `wasm32-wasip2`, che è dove nasce un COMPONENTE. Chi lo compila è il test di
 # `fub-wasm-host`, che sa dire cosa manca se il bersaglio non c'è.
-exclude = ["tools/varco-wasm", "esempi/ping-wasm"]
+# Gli altri componenti di prova stanno fuori per la stessa ragione, e ognuno
+# esiste per far vedere UNA cosa che il ping non può far vedere: `ciclo-wasm`
+# non torna mai (serve a chi lo interrompe), `modello-wasm` chiede il modello
+# di un documento (serve a chi glielo traduce), `eventi-wasm` parla mentre gli
+# si parla (serve a chi regge la rientranza).
+exclude = [
+    "tools/varco-wasm",
+    "esempi/ping-wasm",
+    "esempi/ciclo-wasm",
+    "esempi/modello-wasm",
+    "esempi/eventi-wasm",
+]
 
 [workspace.package]
 version = "0.1.0"

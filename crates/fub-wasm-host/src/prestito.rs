@@ -31,7 +31,7 @@
 
 use fub_abi::traits::HostApi;
 use fub_abi::PluginError;
-use wasmtime::Store;
+use wasmtime::{Store, StoreLimits};
 
 /// L'host prestato. `'static` per finta: la vita vera è quella della parentesi
 /// di [`con_ospite`], e l'invariante che la sostituisce è scritta lì sopra.
@@ -40,15 +40,35 @@ type Ospite = *mut (dyn HostApi + 'static);
 /// Ciò che una host function ha davanti quando la chiamano.
 pub(crate) struct Stato {
     ospite: Option<Ospite>,
+    /// Il tetto di memoria di questa istanza (`crate::limiti`).
+    ///
+    /// Sta qui e non nel modulo che lo decide perché `Store::limiter` non vuole
+    /// un valore, vuole una **chiusura che peschi il limitatore dal dato dello
+    /// store**: è la forma con cui wasmtime permette a un limitatore di
+    /// ricordarsi di ciò che ha già concesso. Il dato dello store è questo
+    /// tipo, quindi il tetto abita qui — accanto al prestito dell'host, con cui
+    /// non ha niente da spartire se non l'indirizzo.
+    limiti: StoreLimits,
 }
 
-// SAFETY: vedi l'invariante del modulo — fuori da `con_ospite` il campo è
-// `None`, e `con_ospite` non attraversa thread.
+// SAFETY: vedi l'invariante del modulo — fuori da `con_ospite` il campo
+// `ospite` è `None`, e `con_ospite` non attraversa thread. `limiti` sono dati
+// semplici e attraversano da sé. Il `Send` scritto a mano copre però **tutto**
+// il tipo, compreso ciò che ci finirà domani: chi aggiunge un campo qui deve
+// poter aggiungere anche la riga che lo dichiara sicuro.
 unsafe impl Send for Stato {}
 
 impl Stato {
     pub(crate) fn vuoto() -> Self {
-        Stato { ospite: None }
+        Stato {
+            ospite: None,
+            limiti: crate::limiti::tetto(),
+        }
+    }
+
+    /// Il tetto di memoria, per la chiusura di `Store::limiter`.
+    pub(crate) fn limiti(&mut self) -> &mut StoreLimits {
+        &mut self.limiti
     }
 
     /// Le capacità di questa chiamata.
@@ -77,6 +97,18 @@ pub(crate) fn con_ospite<R>(
     host: &mut dyn HostApi,
     f: impl FnOnce(&mut Store<Stato>) -> R,
 ) -> R {
+    // La parentesi del prestito è anche la parentesi della **chiamata**, ed è
+    // l'unica che questo crate abbia per chi l'host se lo merita: `activate`,
+    // `deactivate`, `run_job` e `invoke` passano tutt'e quattro di qui e da
+    // nessun'altra parte. Le due che non ci passano — `manifest` e l'elenco dei
+    // comandi — sono le due che si fanno senza host, e rinnovano a mano la
+    // scadenza che qui si rinnova da sé. Quindi è qui che il
+    // cronometro del componente riparte. La scadenza a epoche è assoluta — vedi
+    // `crate::limiti::rinnova` — e armarla solo alla nascita dell'istanza
+    // vorrebbe dire che un plugin montato all'avvio è già scaduto al primo job
+    // del pomeriggio: il budget è per chiamata, e questa è la chiamata.
+    crate::limiti::rinnova(store);
+
     // La bugia sulla vita, in un punto solo e dichiarato: il puntatore vale
     // finché `host` vale, cioè finché questa funzione non è tornata.
     let ptr: *mut (dyn HostApi + '_) = host;

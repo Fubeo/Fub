@@ -4,15 +4,21 @@
 // famiglie importate e undici interfacce esportate. Un componente che lo
 // dichiarasse dovrebbe esportarle tutte e undici — anche `renderer`, anche
 // `importer`, anche `syntax` — perché un mondo si implementa per intero, e un
-// ping che esporta dieci stub per usarne uno non è un esempio: è il rumore che
+// ping che esporta nove stub per usarne due non è un esempio: è il rumore che
 // nasconde l'esempio.
 //
-// Questo mondo dichiara invece ciò che il ping fa davvero: importa le due
-// famiglie che usa ed esporta la sola interfaccia che implementa. È il «mezzo
-// plugin» che il contratto nomina, e regge perché l'host risolve gli export
-// **una interfaccia alla volta** (`GuestIndices` per `fub:abi/plugin`) invece di
-// pretendere il mondo intero. Le due scelte sono la stessa scelta detta ai due
-// capi del confine, ed è il verbale 0164 a tenerle insieme.
+// Questo mondo dichiara invece ciò che il ping fa davvero: importa le famiglie
+// che usa ed esporta le interfacce che implementa. È il «mezzo plugin» che il
+// contratto nomina, e regge perché l'host risolve gli export **una interfaccia
+// alla volta** (un `GuestIndices` per `fub:abi/plugin`, un altro per
+// `fub:abi/command`) invece di pretendere il mondo intero. Le due scelte sono la
+// stessa scelta detta ai due capi del confine, ed è il verbale 0164 a tenerle
+// insieme.
+//
+// Che gli export siano diventati due non è una crescita dell'esempio: è la
+// seconda metà della prova. Con uno solo, «una interfaccia alla volta» era una
+// frase che nessuno aveva mai messo alla prova — un componente con un export
+// solo si risolve uguale che si risolva per interfaccia o per mondo.
 package esempio:ping@0.1.0;
 
 world ping {
@@ -20,12 +26,15 @@ world ping {
     import fub:abi/host-vault-read@0.1.1;
 
     export fub:abi/plugin@0.1.1;
+    export fub:abi/command@0.1.1;
 }
 
 // Lo stesso ping, che in più chiede la rete. Non esiste per fare qualcosa:
 // esiste perché il rifiuto abbia un componente vero davanti a cui pronunciarsi.
-// L'host di oggi serve due famiglie, questo ne chiede una terza, e il test
-// `una_famiglia_non_servita_si_fa_nominare` pretende che il caricamento la
+// `fub:abi/host-network` è fuori dall'elenco che l'host serve, ed è la famiglia
+// che ne uscirà per ultima: è l'unica che apre una porta fuori dalla macchina, e
+// il permesso `fub:network` esiste da prima che ci sia qualcuno a servirlo. Il
+// test `una_famiglia_non_servita_si_fa_nominare` pretende che il caricamento la
 // nomini invece di montare un plugin che cadrà a metà lavoro.
 world ping-con-rete {
     import fub:abi/host-env@0.1.1;
