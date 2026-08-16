@@ -10,14 +10,14 @@ Questo elenco è stato rimisurato sul codice il 2026-08-14; una casella spuntata
 - [x] Wikilink
 - [x] Backlink
 - [x] Tag
-- [ ] Proprietà base
-  _Motore presente (crates/fub-abi/src/rules/properties.rs + frontmatter), manca una UI di editing delle proprietà._
+- [x] Proprietà base
+  _Pannello `fub.properties` (sidebar destra) e comandi `note.property.set` / `note.property.remove`. Motore in `crates/fub-abi/src/rules/properties.rs`._
 - [x] Ricerca full-text
 - [x] Quick switcher
 - [x] Command palette
 - [x] Temi chiaro/scuro
-- [ ] Import/export Markdown
-  _MarkdownImport/MarkdownExport esistono (crates/fub-format-markdown/src/transfer.rs) ma non sono montati in crates/fub-host/src/mount.rs né esposti in UI._
+- [x] Import/export Markdown
+  _MarkdownImport/MarkdownExport montati in `crates/fub-host/src/mount.rs` sotto `fub.markdown`._
 - [x] Autosave
 - [x] Recovery
 - [x] Plugin API iniziale
@@ -29,10 +29,10 @@ Questo elenco è stato rimisurato sul codice il 2026-08-14; una casella spuntata
 
 - [x] Grafo
 - [x] Outline
-- [ ] Template
-- [ ] Daily notes
-- [ ] Query engine
-  _QueryExpr/IndexQuery ci sono (crates/fub-abi/src/query.rs, traits.rs), mancano query salvate e UI._
+- [x] Template
+- [x] Daily notes
+- [x] Query engine
+  _QueryExpr/IndexQuery più query salvate (`fub.queries`) e view collezioni._
 - [ ] Task avanzati
   _Solo NOTE_TASK_TOGGLE (crates/fub-features/src/commands.rs), niente task avanzati._
 - [ ] Canvas
@@ -40,12 +40,15 @@ Questo elenco è stato rimisurato sul codice il 2026-08-14; una casella spuntata
 - [ ] Allegati avanzati
 - [ ] PDF annotations
 - [x] Versioning
-- [ ] Backup
+- [x] Backup
+  _Snapshot locale in `.fub/data/plugins/fub.backup/` (niente scrittura fuori dal vault)._
 - [x] Vault health
-- [ ] Bulk operations
-  _Solo VAULT_REPLACE (crates/fub-features/src/commands.rs), niente UI bulk._
-- [ ] Collezioni
-- [ ] Dashboard
+- [x] Bulk operations
+  _`vault.replace` più UI palette (form, dry_run, piano). Nessun pannello dedicato._
+- [x] Collezioni
+  _View `collections` su `fub.queries`: le query salvate come elenco da sfogliare._
+- [x] Dashboard
+  _Pannello `fub.dashboard`: note/tag/file e link rotti da `IndexQuery::{Entries,Tags,VaultHealth}`._
 
 ## Fase 3 — Suite e collaborazione
 

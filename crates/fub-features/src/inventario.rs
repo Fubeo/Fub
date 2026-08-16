@@ -89,20 +89,30 @@ use fub_abi::traits::{CommandProvider, ViewProvider};
 
 #[cfg(feature = "backlinks")]
 use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
+#[cfg(feature = "backup")]
+use crate::backup::{self, BackupCommands, BackupView, BACKUP_ID};
 #[cfg(feature = "blocks")]
 use crate::blocks::{self, BLOCKS_ID};
 #[cfg(feature = "commands")]
 use crate::commands::{self, CoreCommands, COMMANDS_ID};
+#[cfg(feature = "dashboard")]
+use crate::dashboard::{self, DashboardView, DASHBOARD_ID};
 #[cfg(feature = "graph")]
 use crate::graph::{self, GraphView, GRAPH_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineView, OUTLINE_ID};
+#[cfg(feature = "properties")]
+use crate::properties::{self, PropertiesCommands, PropertiesView, PROPERTIES_ID};
+#[cfg(feature = "queries")]
+use crate::queries::{self, QueriesCommands, QueriesView, QUERIES_ID};
 #[cfg(feature = "search")]
 use crate::search::{self, SEARCH_ID};
 #[cfg(feature = "stats")]
 use crate::stats::{self, StatsView, STATS_ID};
 #[cfg(feature = "tags")]
 use crate::tags::{self, TagPanelView, TAGS_ID};
+#[cfg(feature = "template")]
+use crate::template::{self, TemplateCommands, TemplateView, TEMPLATE_ID};
 #[cfg(feature = "trash")]
 use crate::trash::{self, TrashView, TRASH_ID};
 #[cfg(feature = "versioning")]
@@ -200,6 +210,46 @@ static UFFICIALI: &[FeatureUfficiale] = &[
         catalog: tags::catalog,
         view: Some(|| Box::new(TagPanelView)),
         commands: None,
+    },
+    #[cfg(feature = "properties")]
+    FeatureUfficiale {
+        id: PROPERTIES_ID,
+        nome: "Proprietà",
+        catalog: properties::catalog,
+        view: Some(|| Box::new(PropertiesView)),
+        commands: Some(|| Box::new(PropertiesCommands)),
+    },
+    #[cfg(feature = "template")]
+    FeatureUfficiale {
+        id: TEMPLATE_ID,
+        nome: "Template",
+        catalog: template::catalog,
+        view: Some(|| Box::new(TemplateView)),
+        commands: Some(|| Box::new(TemplateCommands)),
+    },
+    #[cfg(feature = "queries")]
+    FeatureUfficiale {
+        id: QUERIES_ID,
+        nome: "Query",
+        catalog: queries::catalog,
+        view: Some(|| Box::new(QueriesView)),
+        commands: Some(|| Box::new(QueriesCommands)),
+    },
+    #[cfg(feature = "dashboard")]
+    FeatureUfficiale {
+        id: DASHBOARD_ID,
+        nome: "Dashboard",
+        catalog: dashboard::catalog,
+        view: Some(|| Box::new(DashboardView)),
+        commands: None,
+    },
+    #[cfg(feature = "backup")]
+    FeatureUfficiale {
+        id: BACKUP_ID,
+        nome: "Backup",
+        catalog: backup::catalog,
+        view: Some(|| Box::new(BackupView)),
+        commands: Some(|| Box::new(BackupCommands)),
     },
     #[cfg(feature = "trash")]
     FeatureUfficiale {

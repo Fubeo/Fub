@@ -137,9 +137,10 @@ fn copertura(surface: ViewSurface) -> Copertura {
              le impostazioni del core passano dallo schema del manifest, che è \
              un'altra strada",
         ),
-        ViewSurface::Menu => {
-            Copertura::Scoperta("questa shell non ha un menu applicativo (`NON_OSPITATE`)")
-        }
+        ViewSurface::Menu => Copertura::Scoperta(
+            "la shell la ospita e nessuna feature ufficiale ci sta: i menu \
+             che apriamo noi sono cablati nella shell",
+        ),
         ViewSurface::ContextMenu => Copertura::Scoperta(
             "questa shell non ha un menu contestuale estendibile (`NON_OSPITATE`)",
         ),

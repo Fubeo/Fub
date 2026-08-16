@@ -23,6 +23,11 @@ default = [
     "backlinks",
     "outline",
     "tags",
+    "properties",
+    "template",
+    "queries",
+    "dashboard",
+    "backup",
     "stats",
     "trash",
     "graph",
@@ -34,6 +39,11 @@ versioning = []
 backlinks = []
 outline = []
 tags = []
+properties = ["dep:serde_yaml_ng"]
+template = []
+queries = []
+dashboard = []
+backup = []
 stats = []
 # Il cestino invoca `trash.restore` e `trash.empty`, che sono comandi del
 # registro e li dichiara `commands`. Non è una dipendenza di **compilazione** —
@@ -51,6 +61,9 @@ camino.workspace = true
 fub-abi = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Dietro `properties`: stessa crate/versione del provider markdown, usata solo
+# per riscrivere la mappa del frontmatter (mai `FormatProvider::serialize`).
+serde_yaml_ng = { version = "0.10.0", optional = true }
 # Opzionale, e dietro `search`: è l'unica dipendenza pesante del crate ed è di
 # una feature sola.
 tantivy = { version = "0.26", optional = true }

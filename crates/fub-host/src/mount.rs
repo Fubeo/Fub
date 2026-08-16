@@ -44,7 +44,7 @@ use fub_features::{
 use fub_features::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
-use fub_format_markdown::MarkdownProvider;
+use fub_format_markdown::{MarkdownExport, MarkdownImport, MarkdownProvider};
 use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
 // L'unico posto che distingue i modi di fallire di una registrazione è l'indice
 // di ricerca: gli altri hanno un esito solo.
@@ -245,7 +245,11 @@ pub fn mount(
         // meno strana dell'alternativa — appendere la configurazione dell'app a
         // una feature che si può spegnere.
         Arc::new(
-            CoreBundle::new(CORE_ID, "Fub", register_maintenance)
+            CoreBundle::new(CORE_ID, "Fub", |ws| {
+                let mut w = register_maintenance(ws);
+                w.extend(register_markdown_transfer(ws));
+                w
+            })
                 .configuring(core_settings())
                 // La somma dei due cataloghi — quello dell'host e quelli
                 // delle famiglie del kernel — è una funzione sola, e la
@@ -313,17 +317,23 @@ pub fn mount(
         // cronologia che disegna versioni che nessuno salva più.
         let bundle = if let Some(bundle) = irregolare {
             bundle
-        } else if let Some(costruisci) = feature.view {
-            // Le view sono tutte uguali, ed è questa uniformità che permette
-            // all'inventario di **essere** la registrazione invece di
-            // raccontarla: una riga in più là dentro è un pannello in più
-            // nell'app, senza toccare questo file.
-            CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
-                register_view(ws, feature.id, costruisci())
-            })
-        } else if let Some(costruisci) = feature.commands {
-            CoreBundle::new(feature.id, feature.nome, move |ws: &mut Workspace| {
-                register_commands(ws, feature.id, costruisci())
+        } else if feature.view.is_some() || feature.commands.is_some() {
+            // View e comandi della stessa riga si registrano insieme. Prima
+            // l'`else if view` droppava i comandi di chi offriva entrambi —
+            // versioning non ci cade perché è irregolare, una feature regolare
+            // con pannello *e* registro sì.
+            let view = feature.view;
+            let commands = feature.commands;
+            let id = feature.id;
+            CoreBundle::new(id, feature.nome, move |ws| {
+                let mut w = Vec::new();
+                if let Some(c) = view {
+                    w.extend(register_view(ws, id, c()));
+                }
+                if let Some(c) = commands {
+                    w.extend(register_commands(ws, id, c()));
+                }
+                w
             })
         } else {
             // Una feature nell'inventario che qui nessuno sa registrare. Non è
@@ -607,6 +617,25 @@ fn register_maintenance(ws: &mut Workspace) -> Vec<String> {
         fub_kernel::maintenance::MAINTENANCE_ID,
         Box::new(fub_kernel::maintenance::Maintenance),
     )
+}
+
+/// Import/export markdown: i provider vivono nel crate del formato, chi monta
+/// li registra. Senza questa riga il kernel ha le firme e nessun cliente, che
+/// è esattamente lo stato che la roadmap marca aperto.
+fn register_markdown_transfer(ws: &mut Workspace) -> Vec<String> {
+    const ID: &str = "fub.markdown";
+    let mut warnings = Vec::new();
+    if let Err(e) = ws.register_core_feature(ID, "Markdown") {
+        warnings.push(format!("markdown: {e}"));
+        return warnings;
+    }
+    if let Err(e) = ws.register_import_provider(ID, MarkdownImport::boxed()) {
+        warnings.push(format!("import markdown non registrato: {e}"));
+    }
+    if let Err(e) = ws.register_export_provider(ID, MarkdownExport::boxed()) {
+        warnings.push(format!("export markdown non registrato: {e}"));
+    }
+    warnings
 }
 
 fn register_commands(

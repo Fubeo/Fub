@@ -1413,6 +1413,7 @@ dependencies = [
  "fub-testkit",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "tantivy",
  "tempfile",
  "tracing",

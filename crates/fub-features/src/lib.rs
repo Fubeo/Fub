@@ -45,21 +45,31 @@
 
 #[cfg(feature = "backlinks")]
 pub mod backlinks;
+#[cfg(feature = "backup")]
+pub mod backup;
 #[cfg(feature = "blocks")]
 pub mod blocks;
 #[cfg(feature = "commands")]
 pub mod commands;
+#[cfg(feature = "dashboard")]
+pub mod dashboard;
 #[cfg(feature = "graph")]
 pub mod graph;
 pub mod inventario;
 #[cfg(feature = "outline")]
 pub mod outline;
+#[cfg(feature = "properties")]
+pub mod properties;
+#[cfg(feature = "queries")]
+pub mod queries;
 #[cfg(feature = "search")]
 pub mod search;
 #[cfg(feature = "stats")]
 pub mod stats;
 #[cfg(feature = "tags")]
 pub mod tags;
+#[cfg(feature = "template")]
+pub mod template;
 #[cfg(feature = "trash")]
 pub mod trash;
 #[cfg(feature = "versioning")]
@@ -67,6 +77,10 @@ pub mod versioning;
 
 #[cfg(feature = "backlinks")]
 pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
+#[cfg(feature = "backup")]
+pub use backup::{
+    BackupCommands, BackupView, BACKUP_ID, BACKUP_VIEW, VAULT_BACKUP, VAULT_BACKUP_RESTORE,
+};
 #[cfg(feature = "blocks")]
 pub use blocks::{
     DiagramRenderer, DiagramRule, HighlightRule, MathRenderer, MathRule, BLOCKS_ID, DIAGRAMS_RULE,
@@ -78,11 +92,23 @@ pub use commands::{
     SEARCH_OPEN, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
     SETTINGS_SET, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
+#[cfg(feature = "dashboard")]
+pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "graph")]
 pub use graph::{GraphView, GRAPH_ID, GRAPH_NS, GRAPH_VIEW};
 pub use inventario::{ogni_feature_ufficiale, ogni_view_ufficiale, FeatureUfficiale};
 #[cfg(feature = "outline")]
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
+#[cfg(feature = "properties")]
+pub use properties::{
+    PropertiesCommands, PropertiesView, NOTE_PROPERTY_REMOVE, NOTE_PROPERTY_SET, PROPERTIES_ID,
+    PROPERTIES_VIEW,
+};
+#[cfg(feature = "queries")]
+pub use queries::{
+    QueriesCommands, QueriesView, COLLECTIONS_VIEW, QUERIES_DELETE, QUERIES_ID, QUERIES_RUN,
+    QUERIES_SAVE, QUERIES_VIEW,
+};
 #[cfg(feature = "search")]
 pub use search::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "stats")]
@@ -91,6 +117,10 @@ pub use stats::{
 };
 #[cfg(feature = "tags")]
 pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
+#[cfg(feature = "template")]
+pub use template::{
+    TemplateCommands, TemplateView, NOTE_DAILY, NOTE_FROM_TEMPLATE, TEMPLATE_ID, TEMPLATE_VIEW,
+};
 #[cfg(feature = "trash")]
 pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};
 #[cfg(feature = "versioning")]
