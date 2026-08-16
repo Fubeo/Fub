@@ -13,68 +13,119 @@
          posto dove si scrive. -->
     <a href="#panes" class="skip-link" data-i18n="app.skip_to_editor">Vai all'editor</a>
     <div id="app">
-      <header id="topbar">
-        <span class="brand">Fub</span>
-        <button id="open-vault" data-i18n="app.open_vault">Apri vault…</button>
-        <button
-          id="show-graph"
-          data-i18n="app.graph"
-          data-i18n-title="app.graph.hint"
-          title="Il grafo dei collegamenti del vault"
-        >
-          Grafo
-        </button>
-        <button
-          id="open-settings"
-          data-i18n="app.settings"
-          data-i18n-title="app.settings.hint"
-          title="Le impostazioni di questo vault"
-        >
-          Impostazioni
-        </button>
-        <!-- Le tre modalità esclusive del pannello (FEATURES 4.1). Non sono
-             decorazione della shell: la modalità attraversa il confine dentro
-             `ViewContext`, e le view che la seguono cambiano di conseguenza.
-             `role="group"` + `aria-pressed` e non tre pulsanti sciolti: sono
-             esclusive, e chi le ascolta deve sentire *quale* è accesa, non tre
-             comandi che si somigliano. -->
-        <span
-          id="mode-switch"
-          role="group"
-          data-i18n-label="mode.group"
-          aria-label="Modalità del pannello"
-        >
+      <header id="topbar" class="titlebar" data-tauri-drag-region>
+        <!-- #titlebar-left: il marchio e la menubar applicativa. -->
+        <div id="titlebar-left" data-tauri-drag-region>
+          <span class="brand" data-tauri-drag-region>Fub</span>
+          <nav id="app-menu" role="menubar" aria-label="Menu applicazione" data-tauri-drag-region></nav>
+          <!-- `#open-vault` resta un bottone cliccabile con il suo id, perché
+               il comando `shell.vault.open` e `mountAppMenu` lo cercano. Non è
+               visibile: la voce del menu File che apre il vault chiama lo
+               stesso handler, e il bottone è il manico che l'handler trova. -->
+          <button id="open-vault" data-i18n="app.open_vault" hidden type="button">Apri vault…</button>
+          <!-- Il contenitore per le view che dichiarano ViewSurface::Menu
+               (§2.2). La shell le ospita qui, in fondo alla menubar. -->
+          <div id="app-menu-extra" data-tauri-drag-region></div>
+        </div>
+        <!-- #titlebar-center: il trigger di ricerca + il percorso del vault. -->
+        <div id="titlebar-center" data-tauri-drag-region>
+          <!-- Il trigger fa focus su #search-input — la ricerca onesta, già
+               lì — e il title dice che la palette è Mod-Shift-P. -->
           <button
-            data-mode="source"
-            data-i18n="mode.source"
-            data-i18n-title="mode.source.hint"
-            title="Solo sorgente, nessuna resa inline"
-            aria-pressed="false"
+            id="command-search"
+            type="button"
+            data-i18n="command-search.placeholder"
+            data-i18n-title="command-search.hint"
+            title="Cerca nel vault. Palette: Mod-Shift-P"
+            class="titlebar-btn"
           >
-            Sorgente
+            Cerca nel vault…
           </button>
+          <span id="vault-path" class="muted" data-tauri-drag-region></span>
+        </div>
+        <!-- #titlebar-right: mode switch, palette, impostazioni, controlli. -->
+        <div id="titlebar-right">
+          <!-- Le tre modalità esclusive del pannello (FEATURES 4.1). Non sono
+               decorazione della shell: la modalità attraversa il confine dentro
+               `ViewContext`, e le view che la seguono cambiano di conseguenza.
+               `role="group"` + `aria-pressed` e non tre pulsanti sciolti: sono
+               esclusive, e chi le ascolta deve sentire *quale* è accesa, non tre
+               comandi che si somigliano. -->
+          <span
+            id="mode-switch"
+            role="group"
+            data-i18n-label="mode.group"
+            aria-label="Modalità del pannello"
+          >
+            <button
+              data-mode="source"
+              data-i18n="mode.source"
+              data-i18n-title="mode.source.hint"
+              title="Solo sorgente, nessuna resa inline"
+              aria-pressed="false"
+            >
+              Sorgente
+            </button>
+            <button
+              data-mode="live_preview"
+              class="active"
+              data-i18n="mode.live"
+              data-i18n-title="mode.live.hint"
+              title="Sorgente con resa inline"
+              aria-pressed="true"
+            >
+              Live
+            </button>
+            <button
+              data-mode="reading"
+              data-i18n="mode.reading"
+              data-i18n-title="mode.reading.hint"
+              title="Sola lettura, senza editor"
+              aria-pressed="false"
+            >
+              Lettura
+            </button>
+          </span>
           <button
-            data-mode="live_preview"
-            class="active"
-            data-i18n="mode.live"
-            data-i18n-title="mode.live.hint"
-            title="Sorgente con resa inline"
-            aria-pressed="true"
-          >
-            Live
-          </button>
+            id="open-palette"
+            type="button"
+            data-i18n-title="commands.palette"
+            data-i18n-label="commands.palette"
+            title="Apri la palette dei comandi"
+            class="titlebar-btn"
+            aria-label="Apri la palette dei comandi"
+          ></button>
           <button
-            data-mode="reading"
-            data-i18n="mode.reading"
-            data-i18n-title="mode.reading.hint"
-            title="Sola lettura, senza editor"
-            aria-pressed="false"
-          >
-            Lettura
-          </button>
-        </span>
-        <span id="vault-path" class="muted"></span>
+            id="open-settings"
+            type="button"
+            data-i18n-title="app.settings.hint"
+            data-i18n-label="app.settings"
+            title="Le impostazioni di questo vault"
+            class="titlebar-btn"
+            aria-label="Impostazioni"
+          ></button>
+          <span id="window-controls" role="group" aria-label="Controlli finestra">
+            <button id="win-min" type="button" class="win-ctrl" aria-label="Minimizza"></button>
+            <button id="win-max" type="button" class="win-ctrl" aria-label="Ingrandisci"></button>
+            <button id="win-close" type="button" class="win-ctrl" aria-label="Chiudi"></button>
+          </span>
+        </div>
       </header>
+      <div id="workspace">
+        <!-- La rail: icone a sinistra, sempre visibile. Le icone shell
+             (Note, Cerca, Grafo) le monta `panels/rail.ts` dentro
+             `#rail-shell`; le view dichiarate con `left_sidebar` le appende
+             `ui/views.ts` nello stesso contenitore, dopo le shell. L'ordine
+             DOM è shell prima, declared dopo. -->
+        <div
+          id="views-ribbon"
+          class="rail"
+          role="toolbar"
+          data-i18n-label="region.rail"
+          aria-label="Navigazione"
+        >
+          <div id="rail-shell"></div>
+        </div>
       <main id="layout">
         <aside id="sidebar" data-i18n-label="region.notes" aria-label="Note e ricerca">
           <input
@@ -140,9 +191,11 @@
           data-i18n-label="region.document"
           aria-label="Documento"
         ></section>
-        <section id="right-pane" data-i18n-label="region.sidebars" aria-label="Pannelli laterali">
+        <section id="right-pane" class="inspector" data-i18n-label="inspector.region" aria-label="Ispettore">
           <!-- Le view dichiarative (Struttura, Tag, Backlink, …) si montano
-               qui per placement: gli id e i titoli li dichiara il backend. -->
+               qui per placement: gli id e i titoli li dichiara il backend.
+               L'inspector a tab — una view alla volta — lo costruisce
+               `ui/views.ts` sopra questo contenitore. -->
           <div id="views-right"></div>
         </section>
         <section
@@ -152,17 +205,7 @@
           hidden
         ></section>
       </main>
-      <!-- Le superfici che il §2.2 ha nominato e questa shell sa ospitare: la
-           barra di stato (ciò che informa senza interrompere), la ribbon (i
-           pulsanti che aprono qualcosa) e la modale (la view che chiede
-           qualcosa e se ne va). Vuote finché nessuna view le dichiara. -->
-      <div
-        id="views-ribbon"
-        role="toolbar"
-        data-i18n-label="region.ribbon"
-        aria-label="Azioni dei componenti"
-        hidden
-      ></div>
+      </div>
       <!-- Era un `<footer>`, ed erano due: questo e `#statusbar`. Un documento
            con due `contentinfo` è un documento in cui chi naviga per punti di
            riferimento ne trova due chiamati uguale e deve aprirli entrambi per

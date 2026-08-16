@@ -47,8 +47,6 @@ const IT = {
   // --- la scocca ---------------------------------------------------------
   "app.skip_to_editor": "Vai all'editor",
   "app.open_vault": "Apri vault…",
-  "app.graph": "Grafo",
-  "app.graph.hint": "Il grafo dei collegamenti del vault",
   "app.settings": "Impostazioni",
   "app.settings.hint": "Le impostazioni di questo vault",
   "app.close": "Chiudi",
@@ -67,11 +65,45 @@ const IT = {
   // --- le regioni, che si leggono solo navigando -------------------------
   "region.notes": "Note e ricerca",
   "region.document": "Documento",
-  "region.sidebars": "Pannelli laterali",
   "region.bottom": "Pannelli in basso",
-  "region.ribbon": "Azioni dei componenti",
   "region.status": "Stato dei componenti",
   "region.statusbar": "Barra di stato",
+
+  // --- la titlebar custom: controlli finestra e menubar ------------------
+  "window.min": "Minimizza",
+  "window.max": "Ingrandisci",
+  "window.restore": "Ripristina",
+  "window.close": "Chiudi",
+  "menu.file": "File",
+  "menu.edit": "Modifica",
+  "menu.view": "Vista",
+  "menu.go": "Vai",
+  "menu.tools": "Strumenti",
+  "menu.file.open_vault": "Apri vault…",
+  "menu.edit.palette": "Palette dei comandi",
+  "menu.edit.doc_search": "Cerca nella nota",
+  "menu.view.files": "Mostra i file",
+  "menu.view.search": "Mostra la ricerca",
+  "menu.view.graph": "Mostra il grafo",
+  "menu.view.mode_reading": "Modalità Lettura",
+  "menu.view.mode_live": "Modalità Modifica",
+  "menu.go.switcher": "Vai alla nota",
+  "menu.tools.settings": "Impostazioni",
+
+  // --- la rail: le icone a sinistra, sempre visibili ---------------------
+  "rail.notes": "Note",
+  "rail.notes.hint": "L'albero del vault",
+  "rail.search": "Cerca",
+  "rail.search.hint": "La ricerca nel vault",
+  "rail.graph": "Grafo",
+  "rail.graph.hint": "Il grafo dei collegamenti",
+
+  // --- l'inspector: i tab a destra --------------------------------------
+  "inspector.region": "Ispettore",
+
+  "command-search.placeholder": "Cerca nel vault…",
+  "command-search.hint": "Cerca nel vault. Palette: Mod-Shift-P",
+  "region.rail": "Navigazione",
 
   // --- le tre modalità del pannello --------------------------------------
   "mode.group": "Modalità del pannello",
@@ -501,8 +533,6 @@ export type Chiave = keyof typeof IT;
 const EN: Record<Chiave, string> = {
   "app.skip_to_editor": "Skip to the editor",
   "app.open_vault": "Open vault…",
-  "app.graph": "Graph",
-  "app.graph.hint": "The link graph of the vault",
   "app.settings": "Settings",
   "app.settings.hint": "The settings of this vault",
   "app.close": "Close",
@@ -518,11 +548,46 @@ const EN: Record<Chiave, string> = {
 
   "region.notes": "Notes and search",
   "region.document": "Document",
-  "region.sidebars": "Side panels",
   "region.bottom": "Bottom panels",
-  "region.ribbon": "Component actions",
   "region.status": "Component status",
   "region.statusbar": "Status bar",
+
+  // --- the custom titlebar: window controls and menubar ------------------
+  "window.min": "Minimize",
+  "window.max": "Maximize",
+  "window.restore": "Restore",
+  "window.close": "Close",
+  "menu.file": "File",
+  "menu.edit": "Edit",
+  "menu.view": "View",
+  "menu.go": "Go",
+  "menu.tools": "Tools",
+  "menu.file.open_vault": "Open vault…",
+  "menu.edit.palette": "Command palette",
+  "menu.edit.doc_search": "Search in note",
+  "menu.view.files": "Show files",
+  "menu.view.search": "Show search",
+  "menu.view.graph": "Show graph",
+  "menu.view.mode_reading": "Reading mode",
+  "menu.view.mode_live": "Editing mode",
+  "menu.go.switcher": "Go to note",
+  "menu.tools.settings": "Settings",
+
+  // --- the rail: the left icon strip, always visible --------------------
+  "rail.notes": "Notes",
+  "rail.notes.hint": "The vault tree",
+  "rail.search": "Search",
+  "rail.search.hint": "Search the vault",
+  "rail.graph": "Graph",
+  "rail.graph.hint": "The links graph",
+
+  // --- the inspector: the right tabs ------------------------------------
+  "inspector.region": "Inspector",
+
+  // --- the search trigger in the titlebar -------------------------------
+  "command-search.placeholder": "Search the vault…",
+  "command-search.hint": "Search the vault. Palette: Mod-Shift-P",
+  "region.rail": "Navigation",
 
   "mode.group": "Pane mode",
   "mode.source": "Source",

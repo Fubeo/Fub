@@ -81,6 +81,16 @@ vi.mock("./host/ipc", () => {
     onKernelEvent: (handler: (n: unknown) => void) =>
       adesso().onKernelEvent(handler as never),
     allaChiusura: (prima: () => Promise<void>) => adesso().allaChiusura(prima),
+    // `finestra` è il manico della titlebar custom (§Fase 1): in test non
+    // tocchiamo finestre vere, e i metodi sono tutti no-op o ritornano
+    // valori neutri.
+    finestra: {
+      minimizza: async () => {},
+      alternaMassimizza: async () => {},
+      chiudi: async () => {},
+      eMassimizzata: async () => false,
+      onCambio: async () => async () => {},
+    },
   };
 });
 

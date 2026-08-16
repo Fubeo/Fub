@@ -41,6 +41,8 @@ vi.mock("../host/ipc", () => ({
     get viewAction() {
       return viewAction;
     },
+    viewState: async () => null,
+    setViewState: async () => {},
   },
 }));
 // `panels/document` tira dentro CodeMirror e mezza shell: di lui qui serve la
@@ -158,6 +160,9 @@ describe("le superfici che questa shell ospita da sé", () => {
 
     expect(renderView).toHaveBeenCalledWith("tags", "tags", null);
     expect(document.getElementById("views-left")!.children).toHaveLength(1);
+    expect(
+      document.querySelector<HTMLElement>("#views-left .declared-view-panel")!.dataset.viewId,
+    ).toBe("tags");
   });
 });
 
@@ -193,7 +198,7 @@ describe("ogni superficie del contratto è classificata", () => {
     modal: "views-modal",
     settings_tab: "views-settings",
     main: "riquadro",
-    menu: null,
+    menu: "app-menu-extra",
     context_menu: null,
   };
 
@@ -226,7 +231,12 @@ describe("ogni superficie del contratto è classificata", () => {
         expect(renderView).not.toHaveBeenCalled();
         return;
       }
-      expect(document.getElementById(dove)!.children).toHaveLength(1);
+      // `#views-ribbon` ha un figlio permanente (`#rail-shell`, §Fase 2):
+      // la view si aggiunge dopo, non lo sostituisce. `#views-right` ha la
+      // tablist dell'inspector (§Fase 3) che va in cima.
+      const figliAttesi =
+        dove === "views-ribbon" || dove === "views-right" ? 2 : 1;
+      expect(document.getElementById(dove)!.children).toHaveLength(figliAttesi);
     });
   }
 });

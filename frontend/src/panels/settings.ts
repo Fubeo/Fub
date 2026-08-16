@@ -37,6 +37,7 @@ import { allCommands, keybindingKey } from "../ui/commands";
 import { FIDUCIA, isPermissionKey, righe, type RigaPermesso } from "../ui/permessi";
 import { errorText } from "../host/errors";
 import { t, type Chiave } from "../i18n/strings";
+import { CHIAVE_TEMA } from "../theme/theme";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
 /// una chiave che ha composto invece di leggerla da un elenco.
@@ -281,6 +282,12 @@ async function disegnaForm(): Promise<HTMLElement[]> {
 function disegnaRiga(entry: SettingEntry, nome?: string, descrizione?: string): HTMLElement {
   const el = document.createElement("div");
   el.className = "setting-row";
+  // Il tema è la riga più guardata del gruppo Appearance: la si alza di
+  // un gradino visivo, così l'occhio la trova prima delle altre impostazioni
+  // di aspetto che le stanno attorno.
+  if (entry.spec.key === CHIAVE_TEMA) {
+    el.classList.add("setting-row--theme");
+  }
 
   const testo = document.createElement("div");
   testo.className = "setting-text";
@@ -374,6 +381,14 @@ function campo(entry: SettingEntry): HTMLElement {
       return input;
     }
     case "choice": {
+      // Il tema non è una tendina: tre scelte si vedono meglio come tre
+      // segmenti affiancati, e la scelta corrente si riconosce senza aprire
+      // niente. È la sola chiave che si prende questa strada: qualunque altra
+      // `choice` ha più di tre opzioni, o meno, o le ha ma non è la prima cosa
+      // che si guarda, e per quelle la `<select>` resta giusta.
+      if (entry.spec.key === CHIAVE_TEMA) {
+        return interruttoreTema(entry, kind);
+      }
       const select = document.createElement("select");
       select.id = id;
       // Il valore corrente potrebbe **non essere fra le opzioni**: un
@@ -415,6 +430,52 @@ function campo(entry: SettingEntry): HTMLElement {
       return el;
     }
   }
+}
+
+/// Il tema come segmented control: tre bottoni — sistema, chiaro, scuro —
+/// invece di una tendina.
+///
+/// Le etichette sono quelle che lo schema della Choice porta già dal kernel:
+/// l'`option.label` è localizzata là (0040), e ricopiarla qui vorrebbe dire
+/// mantenere due traduzioni della stessa frase. Se l'opzione manca — un kernel
+/// che non la dichiarasse — si mostra il valore nudo: ripiego difensivo, non
+/// la strada.
+function interruttoreTema(
+  entry: SettingEntry,
+  kind: Extract<SettingEntry["spec"]["kind"], { kind: "choice" }>,
+): HTMLElement {
+  const corrente = String(entry.value);
+  // I tre valori che il tema conosce, nell'ordine in cui si leggono:
+  // «come il sistema» (stringa vuota), poi chiaro, poi scuro.
+  const attesi = ["", "light", "dark"] as const;
+  const group = document.createElement("div");
+  group.className = "theme-switch";
+  group.id = `setting-${entry.spec.key}`;
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", entry.spec.label);
+  for (const valore of attesi) {
+    // L'etichetta viene dall'`option` dello schema, che il kernel localizza
+    // già (0040): ricopiarla qui vorrebbe dire due traduzioni della stessa
+    // frase. Se l'opzione manca — un kernel che non la dichiarasse — si
+    // mostra il valore nudo: è un ripiego difensivo, non la strada.
+    const op = kind.options.find((o) => o.value === valore);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "theme-switch__segment";
+    btn.setAttribute("role", "radio");
+    btn.textContent = op ? op.label : valore || "system";
+    const scelto = valore === corrente;
+    btn.setAttribute("aria-checked", String(scelto));
+    if (scelto) btn.classList.add("theme-switch__segment--active");
+    // La scrittura è la stessa della `<select>`: `api.setSetting` con il
+    // valore dell'opzione, e `scrivi` che ridisegna. Il reset «azzera»
+    // continua a funzionare perché è fuori dal campo, sulla riga.
+    btn.addEventListener("click", () => {
+      void scrivi(() => api.setSetting(entry.spec.key, valore));
+    });
+    group.append(btn);
+  }
+  return group;
 }
 
 /// Scrive, e ridisegna: la provenienza di una riga cambia insieme al valore, e
