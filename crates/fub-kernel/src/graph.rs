@@ -501,6 +501,17 @@ impl LinkGraph {
             return None;
         }
         if key.contains('/') {
+            // Prima l'accoppiamento esatto — `[[sub/Nota.txt]]` è
+            // `sub/Nota.txt`, non `sub/Nota.md` che gli sta accanto — e solo
+            // in sua assenza la chiave senza estensione, che è quella dei
+            // wikilink nudi. È la stessa regola del lato markdown
+            // (`resolve_path_key`): l'estensione esplicita nomina un file e
+            // non va strippata via prima di guardare chi c'è.
+            if let Some(ids) = self.path_index.get(&strip_ext(key)) {
+                if let Some(id) = ids.iter().find(|id| exact_key(id.as_str()) == exact) {
+                    return Some(id.clone());
+                }
+            }
             if let Some(id) =
                 self.pick(&self.path_index, &strip_ext(key), &strip_ext(exact), |id| {
                     exact_key(&strip_ext(id.as_str()))
@@ -567,6 +578,21 @@ impl LinkGraph {
                 return Some(id.clone());
             }
         }
+        // Il ripiego, e non è decorativo: è il cammino che risolve le chiavi
+        // **senza** estensione — `[t](sub/nota)` — perché i due `find` sopra
+        // confrontano l'id *con* estensione contro una chiave *senza*, e non
+        // combaciano mai. Qui `key` è già la chiave d'indice (senza estensione,
+        // `strip_ext(key) == key`), e `pick` la trova. Non va «riparato» con
+        // `strip_ext(key)`: il caso con estensione inesistente
+        // (`[t](sub/nota.png)` senza `sub/nota.png`) deve **fallire** — un path
+        // nomina un file, e un file che non c'è non si raggiunge per prossimità
+        // (`an_explicit_extension_is_taken_seriously`). Con una chiave *con*
+        // estensione `index.get(key)` non trova la voce (l'indice è senza) e
+        // ritorna `None`, che è la risposta giusta. Lo stesso cammino copre i
+        // nomi con un punto interno — `note/v1.2.md` è indicizzato come
+        // `note/v1.2`, e `[t](note/v1.2)` lo raggiunge qui: `strip_ext` taglia
+        // `v1.2` in `v1`, il blocco sopra guarda la chiave sbagliata, e questo
+        // `pick` trova quella giusta.
         self.pick(&self.path_index, key, exact, |id| {
             exact_key(&strip_ext(id.as_str()))
         })
@@ -1033,6 +1059,77 @@ mod tests {
     }
 
     #[test]
+    fn a_wikilink_with_an_explicit_extension_wins_over_its_twin() {
+        // Bug 4-1: `[[sub/nota.txt]]` veniva ridotto a `[[sub/nota]]` prima di
+        // guardare i candidati, e l'estensione esplicita era resa inerte —
+        // poteva cadere sul gemello `sub/nota.md`. È la stessa domanda di
+        // `an_explicit_extension_is_taken_seriously`, ma per un **wikilink**:
+        // il lato markdown la risolveva già, il lato wiki no.
+        let md = DocumentModel::empty(DocId::new("sub/nota.md"));
+        let txt = DocumentModel::empty(DocId::new("sub/nota.txt"));
+        let wiki = doc_with_links("a.md", &["sub/nota.txt"]);
+        let graph = LinkGraph::build([&md, &txt, &wiki]);
+
+        assert_eq!(
+            graph.resolve_wiki("sub/nota.txt"),
+            Some(DocId::new("sub/nota.txt"))
+        );
+        assert_eq!(sources(&graph, "sub/nota.txt"), ["a.md"]);
+        assert!(sources(&graph, "sub/nota.md").is_empty());
+    }
+
+    #[test]
+    fn a_bare_wikilink_keeps_the_extensionless_resolution() {
+        // L'altra faccia del fix: `[[sub/nota]]` senza estensione continua a
+        // risolvere sulla chiave dei wikilink (primo candidato per priorità),
+        // non viene «agganciato» dall'exact-match nuovo — lì non c'è un path
+        // esatto da rispettare, e il comportamento dei test esistenti resta.
+        let md = DocumentModel::empty(DocId::new("sub/nota.md"));
+        let txt = DocumentModel::empty(DocId::new("sub/nota.txt"));
+        let wiki = doc_with_links("b.md", &["sub/nota"]);
+        let graph = LinkGraph::build([&md, &txt, &wiki]);
+
+        assert_eq!(
+            graph.resolve_wiki("sub/nota"),
+            Some(DocId::new("sub/nota.md"))
+        );
+        assert_eq!(sources(&graph, "sub/nota.md"), ["b.md"]);
+    }
+
+    #[test]
+    fn removing_the_extension_winner_falls_back_to_the_twin() {
+        // Togliere il file che l'estensione esplicita aveva eletto riapre la
+        // risoluzione: il wikilink ricade sulla chiave senza estensione e il
+        // gemello eredita il backlink, come nel caso nudo di
+        // `path_key_collision_across_extensions`.
+        let md = DocumentModel::empty(DocId::new("sub/nota.md"));
+        let txt = DocumentModel::empty(DocId::new("sub/nota.txt"));
+        let wiki = doc_with_links("a.md", &["sub/nota.txt"]);
+        let mut graph = LinkGraph::build([&md, &txt, &wiki]);
+        assert_eq!(sources(&graph, "sub/nota.txt"), ["a.md"]);
+
+        graph.remove(&DocId::new("sub/nota.txt"));
+
+        assert!(sources(&graph, "sub/nota.txt").is_empty());
+        assert_eq!(sources(&graph, "sub/nota.md"), ["a.md"]);
+    }
+
+    #[test]
+    fn a_dotted_name_resolves_via_the_extensionless_fallback() {
+        // Bug 4-2: `note/v1.2.md` è indicizzato come `note/v1.2` (il punto di
+        // `v1.2` sta nel nome, non è un'estensione). Un link senza estensione
+        // `[t](note/v1.2)` ha `strip_ext(key) == "note/v1"` — il blocco esatto
+        // guarda la chiave sbagliata e non trova nulla; è il ripiego di
+        // `resolve_path_key`, con `key` intero, a trovare la voce giusta. È il
+        // cammino che il report 4-2 credeva morto: vive esattamente qui, e per
+        // questo il ripiego resta.
+        let target = DocumentModel::empty(DocId::new("note/v1.2.md"));
+        let link = doc_with_paths("a.md", &["note/v1.2"]);
+        let graph = LinkGraph::build([&target, &link]);
+        assert_eq!(sources(&graph, "note/v1.2.md"), ["a.md"]);
+    }
+
+    #[test]
     fn due_file_che_differiscono_per_una_maiuscola_non_sono_lo_stesso_arco() {
         // Il caso che in tutto il repo non era esercitato da nessuno: due file
         // che il filesystem distingue e la chiave di risoluzione no.
@@ -1286,6 +1383,12 @@ mod tests {
         // nulla — `c.md` non è backlink di nessuno dei due.
         assert_eq!(sources(&graph, "sub/nota.txt"), ["a.md"]);
         assert_eq!(sources(&graph, "sub/nota.md"), ["b.md"]);
+        // L'estensione inesistente non ricade su nulla — `c.md` non è backlink
+        // di nessuno dei due. È la regola che tiene il ripiego di
+        // `resolve_path_key` con la chiave intera: indicizzarlo con
+        // `strip_ext(key)` farebbe ricadere `[t](sub/nota.png)` su `sub/nota.md`.
+        assert!(sources(&graph, "sub/nota.png").is_empty());
+        assert!(graph.outgoing(&DocId::new("c.md")).is_empty());
     }
 
     #[test]

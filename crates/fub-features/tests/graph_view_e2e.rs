@@ -90,6 +90,23 @@ fn archi(p: &serde_json::Value) -> Vec<(String, String)> {
     out
 }
 
+/// Gli archi **nell'ordine in cui il provider li manda** — senza `sort`, che è
+/// ciò che il test sull'ordine deterministico deve sorvegliare: gli altri helper
+/// ordinano perché presidian l'insieme, qui la proprietà è la sequenza.
+fn archi_in_ordine(p: &serde_json::Value) -> Vec<(String, String)> {
+    p["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            (
+                e["from"].as_str().unwrap().to_string(),
+                e["to"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect()
+}
+
 /// I nodi sono **tutte** le note, anche quelle che non nomina nessuno.
 ///
 /// È la differenza fra un grafo e un elenco di link: una nota isolata è
@@ -176,4 +193,88 @@ fn clicking_a_node_asks_the_core_to_open_that_note() {
             doc_id: "B.md".into()
         }
     );
+}
+
+/// Aprire un documento che non esiste chiede comunque al core di navigarci.
+///
+/// È il contratto, non una mancanza: `on_action` non interroga il vault — è il
+/// kernel, che conosce i documenti, a decidere cosa fare di un `Navigate` verso
+/// un id sconosciuto. Il provider si limita a inoltrare la richiesta, e il
+/// `Navigate` esce comunque. Se un giorno il core vorrà rifiutarlo, lo farà da
+/// sé e questo test dirà che cosa è cambiato.
+#[test]
+fn opening_a_nonexistent_doc_still_navigates() {
+    let vault = Vault::new();
+    vault.put("A.md", "niente\n");
+    let mut ws = vault.open();
+
+    let update = ws
+        .view_action(
+            &ViewInstance::only(GRAPH_VIEW),
+            UiAction::new("open").with_payload(serde_json::json!({ "doc": "Inesistente.md" })),
+        )
+        .unwrap();
+    assert_eq!(
+        update,
+        ViewUpdate::Navigate {
+            doc_id: "Inesistente.md".into()
+        }
+    );
+}
+
+/// Un `[[A]]` dentro `A.md` non è un arco: il kernel esclude il self-loop a
+/// monte (il seed di `neighbors` è già fra i visti), e il payload deve arrivare
+/// senza di esso — un grafo che disegnasse un nodo che punta a se stesso
+/// disegnerebbe un cappio che nessuno ha chiesto.
+#[test]
+fn a_self_link_is_not_an_edge() {
+    let vault = Vault::new();
+    vault.put("A.md", "vedi [[A]]\n");
+    let ws = vault.open();
+
+    let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
+    assert_eq!(nodi(&p), ["A.md"]);
+    assert!(archi(&p).is_empty());
+}
+
+/// L'ordine degli archi è parte del contratto, non un dettaglio: `Neighbors`
+/// risponde per seed in ordine di `DocId` e a parità di distanza per
+/// destinazione, e il dedup del provider tiene il primo occorrente — con questo
+/// ordine la paginazione di un grafo grande non ripete righe della prima.
+/// Gli altri test di questo file confrontano con `.sort()`, che è la tolleranza
+/// giusta quando la proprietà è l'insieme; qui la proprietà è l'ordine, e il
+/// confronto è senza sort apposta.
+#[test]
+fn edges_arrive_in_a_deterministic_order() {
+    let vault = Vault::new();
+    vault.put("A.md", "vedi [[B]] e anche [[C]]\n");
+    vault.put("B.md", "torno a [[A]]\n");
+    vault.put("C.md", "niente\n");
+    let ws = vault.open();
+
+    let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
+    assert_eq!(
+        archi_in_ordine(&p),
+        [
+            ("A.md".to_string(), "B.md".to_string()),
+            ("A.md".to_string(), "C.md".to_string()),
+            ("B.md".to_string(), "A.md".to_string()),
+        ]
+    );
+}
+
+/// Un documento linkato molte volte è **un nodo solo**: `nodes` elenca i
+/// documenti del vault, e un documento c'è una volta anche se lo si cita in dieci
+/// punti — il grafo non deve mostrare palline sovrapposte. È il pattugliamento
+/// del contratto che il report S3-3 segnalava scoperto: un payload con un
+/// documento duplicato non deve mai arrivare alla shell.
+#[test]
+fn a_document_is_one_node_however_many_times_it_is_linked() {
+    let vault = Vault::new();
+    vault.put("A.md", "[[B]] e ancora [[B]] e [[B]]\n");
+    vault.put("B.md", "niente\n");
+    let ws = vault.open();
+
+    let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
+    assert_eq!(nodi(&p), ["A.md", "B.md"]);
 }

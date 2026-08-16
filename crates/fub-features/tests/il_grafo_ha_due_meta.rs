@@ -69,3 +69,66 @@ fn il_namespace_non_e_scritto_due_volte_nel_provider() {
          essere l'unica"
     );
 }
+
+/// Il provider del grafo, letto come testo: le costanti di protocollo sono
+/// private (`OPEN`, `DOC`, `NODES`, `EDGES`, `FROM`, `TO`), quindi non si
+/// importano — si presidia che il letterale esista, come già per `GRAPH_NS`.
+fn meta_provider() -> String {
+    std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/graph.rs"))
+        .expect("il provider del grafo")
+}
+
+/// L'azione del click e la chiave del suo payload sono le due stringhe più
+/// sensibili del contratto: un click che non apre la nota giusta è un fallimento
+/// silenzioso. Sono letterali **quotati** da entrambi i lati — la shell ha
+/// `const APRI = "open"` e `const DOC = "doc"`, il provider ha le gemelle —
+/// quindi il presidio è lo stesso del `ns`: il letterale fra virgolette dritte.
+#[test]
+fn le_chiavi_dell_azione_si_accordano_tra_i_due_capi() {
+    let shell = meta_shell();
+    let provider = meta_provider();
+    for letterale in ["open", "doc"] {
+        let quoted = format!("\"{letterale}\"");
+        assert!(
+            shell.contains(&quoted),
+            "la shell non dichiara il letterale «{letterale}»: il click del grafo \
+             non parlerebbe la stessa lingua del provider"
+        );
+        assert!(
+            provider.contains(&quoted),
+            "il provider non dichiara il letterale «{letterale}»: la shell leggerebbe \
+             una chiave che nessuno manda"
+        );
+    }
+}
+
+/// Le quattro chiavi del payload (`nodes`, `edges`, `from`, `to`) non sono
+/// stringhe nella shell ma nomi di campo digitati: la shell legge `o.nodes`,
+/// `o.edges`, `e.from`, `e.to`. Il provider invece le scrive come letterali
+/// quotati (`const NODES: &str = "nodes"`). Il presidio è asimmetrico di
+/// proposito: da un lato il letterale del protocollo, dall'altro l'accesso che
+/// lo consuma — se uno dei due cambia e l'altro no, il grafo si disegna vuoto o
+/// legge `undefined`, e questo test lo dice.
+#[test]
+fn le_chiavi_del_payload_si_accordano_tra_i_due_capi() {
+    let shell = meta_shell();
+    let provider = meta_provider();
+    // (letterale nel provider, accesso nella shell)
+    for (letterale, accesso) in [
+        ("nodes", "o.nodes"),
+        ("edges", "o.edges"),
+        ("from", "e.from"),
+        ("to", "e.to"),
+    ] {
+        assert!(
+            provider.contains(&format!("\"{letterale}\"")),
+            "il provider non dichiara la chiave «{letterale}»: la shell non \
+             riceverebbe quel campo"
+        );
+        assert!(
+            shell.contains(accesso),
+            "la shell non legge «{accesso}»: il campo «{letterale}» che il provider \
+             manda resterebbe non letto"
+        );
+    }
+}
