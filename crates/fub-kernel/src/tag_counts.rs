@@ -5,7 +5,9 @@
 //! O(vault) a ogni interrogazione — e il pannello tag interroga a ogni
 //! `IndexUpdated`, cioè a ogni salvataggio: un O(N) caldo istituzionalizzato.
 //! Qui il costo si paga per-documento alla mutazione, come per il grafo, e la
-//! lettura è la copia di una struttura già pronta.
+//! lettura è la copia di una struttura già pronta. L'appartenenza di una nota
+//! a una chiave è servita da un indice inverso (`per_chiave`), così anche
+//! [`docs_with`](TagCounts::docs_with) non riscansiona il vault.
 //!
 //! La semantica è la stessa dell'aggregatore che rimpiazza (e l'oracolo nei
 //! test è la sua riscrittura): la chiave è la forma canonica
@@ -31,6 +33,10 @@ pub(crate) struct TagCounts {
     keys: BTreeMap<String, KeyEntry>,
     /// nota → il suo contributo, per poterlo sottrarre a update/remove.
     docs: HashMap<DocId, Contribution>,
+    /// chiave canonica → note che la portano: l'indice inverso che serve a
+    /// [`docs_with`](TagCounts::docs_with) per rispondere senza riscansare il
+    /// vault.
+    per_chiave: HashMap<String, BTreeSet<DocId>>,
 }
 
 #[derive(Default)]
@@ -73,6 +79,7 @@ impl TagCounts {
             for grafia in grafie {
                 *entry.grafie.entry(grafia.clone()).or_default() += 1;
             }
+            self.per_chiave.entry(key.clone()).or_default().insert(id.clone());
         }
         self.docs.insert(id.clone(), contribution);
     }
@@ -83,6 +90,12 @@ impl TagCounts {
             return;
         };
         for (key, grafie) in contribution {
+            if let Some(docs) = self.per_chiave.get_mut(&key) {
+                docs.remove(id);
+                if docs.is_empty() {
+                    self.per_chiave.remove(&key);
+                }
+            }
             let Some(entry) = self.keys.get_mut(&key) else {
                 continue;
             };
@@ -104,6 +117,7 @@ impl TagCounts {
     pub(crate) fn clear(&mut self) {
         self.keys.clear();
         self.docs.clear();
+        self.per_chiave.clear();
     }
 
     /// Le **grafie** con cui una nota scrive i propri tag, in ordine.
@@ -167,18 +181,19 @@ impl TagCounts {
     /// quelli che portano una sua sottochiave (`progetto` prende
     /// `progetto/casa`).
     pub(crate) fn docs_with(&self, canonical: &str, descendants: bool) -> Vec<DocId> {
-        let mut found: Vec<DocId> = self
-            .docs
-            .iter()
-            .filter(|(_, contribution)| {
-                contribution
-                    .keys()
-                    .any(|key| key == canonical || (descendants && is_sub_tag(key, canonical)))
-            })
-            .map(|(id, _)| id.clone())
-            .collect();
-        found.sort();
-        found
+        let mut found: BTreeSet<DocId> = self
+            .per_chiave
+            .get(canonical)
+            .cloned()
+            .unwrap_or_default();
+        if descendants {
+            for (key, docs) in &self.per_chiave {
+                if is_sub_tag(key, canonical) {
+                    found.extend(docs.iter().cloned());
+                }
+            }
+        }
+        found.into_iter().collect()
     }
 }
 

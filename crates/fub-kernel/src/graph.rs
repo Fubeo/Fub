@@ -381,6 +381,13 @@ impl LinkGraph {
     /// [`linked`](Self::linked): la sua firma è un `BTreeSet`, cioè dice da sé
     /// di essere un insieme. È lì che sta scritta quella domanda, e non in un
     /// `.map(|b| b.source).collect()` ripetuto a ogni sito.
+    /// C'è qualcuno che punta qui? È la domanda dell'orfano, e non ha bisogno
+    /// del vettore intero clonato che [`backlinks`](Self::backlinks) costa a
+    /// chi risponde solo sì o no.
+    pub fn has_backlinks(&self, target: &DocId) -> bool {
+        self.backlinks.get(target).is_some_and(|v| !v.is_empty())
+    }
+
     pub fn backlinks(&self, target: &DocId) -> Vec<BacklinkRef> {
         let mut refs = self.backlinks.get(target).cloned().unwrap_or_default();
         // Ordinamento *stabile*: fra riferimenti dallo stesso sorgente resta
@@ -769,7 +776,8 @@ fn first_of(index: &HashMap<String, Vec<DocId>>, key: &str) -> Option<DocId> {
 /// Inserisce mantenendo l'ordine di priorità (idempotente).
 fn insert_sorted(index: &mut HashMap<String, Vec<DocId>>, key: &str, id: &DocId) {
     let ids = index.entry(key.to_string()).or_default();
-    if let Err(pos) = ids.binary_search_by(|probe| priority(probe).cmp(&priority(id))) {
+    let p = priority(id);
+    if let Err(pos) = ids.binary_search_by(|probe| priority(probe).cmp(&p)) {
         ids.insert(pos, id.clone());
     }
 }
@@ -778,7 +786,8 @@ fn remove_sorted(index: &mut HashMap<String, Vec<DocId>>, key: &str, id: &DocId)
     let Some(ids) = index.get_mut(key) else {
         return;
     };
-    if let Ok(pos) = ids.binary_search_by(|probe| priority(probe).cmp(&priority(id))) {
+    let p = priority(id);
+    if let Ok(pos) = ids.binary_search_by(|probe| priority(probe).cmp(&p)) {
         ids.remove(pos);
     }
     if ids.is_empty() {

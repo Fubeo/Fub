@@ -1829,32 +1829,45 @@ impl Workspace {
         let _fase = tracing::info_span!(target: "fub.apertura", "scan_vault").entered();
         let scanned = self.docs.vault.scan()?;
         self.spazza_i_temporanei(&scanned.temporanei_rimasti_indietro);
-        let doc_extensions = self.docs.registry.all_extensions();
 
         // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
         // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
         // che qualcuno rivendica quell'estensione, senza essere cambiato.
-        let mut entries: Vec<VaultEntry> = scanned
+        let mut entries: Vec<(VaultEntry, Option<StoredEntry>)> = scanned
             .files
             .into_iter()
-            .map(|file| VaultEntry {
-                fingerprint: self
+            .map(|file| {
+                // Una domanda sola all'anagrafe: la risposta intera serve
+                // alla riapertura incrementale qui sotto, e rifarla là è un
+                // lock e una copia regalati per niente.
+                let known = self
                     .entry_store
                     .known(&file.id)
-                    .filter(|known| known.describes(file.size, file.mtime))
-                    .and_then(|known| known.fingerprint.clone()),
-                kind: media::kind_of(&file.id, &doc_extensions),
-                id: file.id,
-                size: file.size,
-                mtime: file.mtime,
+                    .filter(|known| known.describes(file.size, file.mtime));
+                let entry = VaultEntry {
+                    fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
+                    kind: media::kind_of_ext(&file.id, |ext| {
+                        self.docs.registry.has_doc_ext(ext)
+                    }),
+                    id: file.id,
+                    size: file.size,
+                    mtime: file.mtime,
+                };
+                (entry, known)
             })
             .collect();
 
-        let documents: Vec<VaultEntry> = entries
+        // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
+        // (che lo chiedono per valore), l'anagrafe per la riapertura.
+        let mut documents: Vec<VaultEntry> = Vec::new();
+        let mut conosciute: Vec<Option<StoredEntry>> = Vec::new();
+        for (entry, known) in entries
             .iter()
-            .filter(|e| e.kind == EntryKind::Document)
-            .cloned()
-            .collect();
+            .filter(|(e, _)| e.kind == EntryKind::Document)
+        {
+            documents.push(entry.clone());
+            conosciute.push(known.clone());
+        }
 
         // **Gli indici si svuotano qui**, cioè all'inizio della prima fase e
         // non a giro di lettura finito. Finché il parse era fatale, svuotare
@@ -1882,7 +1895,7 @@ impl Workspace {
         // cartelle e la specie di ogni voce non aspettano di aver letto niente.
         // Le impronte che mancano le riempirà la seconda fase, rimettendo in
         // anagrafe le voci che legge.
-        for entry in entries.drain(..) {
+        for (entry, _) in entries.drain(..) {
             self.indexes.core.set_entry(entry);
         }
 
@@ -1893,10 +1906,9 @@ impl Workspace {
         // nuovi, modificati, o per cui un indice plugin deve essere allineato.
         let up_to_date = self.indexes.up_to_date(&documents);
         let mut da_indicizzare = Vec::new();
-        for entry in documents {
+        for (entry, known) in documents.into_iter().zip(conosciute) {
             let meta = if entry.fingerprint.is_some() && up_to_date.contains(&entry.id) {
-                self.entry_store
-                    .known(&entry.id)
+                known
                     .filter(|known| known.fingerprint == entry.fingerprint)
                     .and_then(|known| known.meta.clone())
             } else {
@@ -2380,7 +2392,7 @@ impl Workspace {
         mtime: u64,
         fingerprint: Option<Revision>,
     ) -> EntryKind {
-        let kind = media::kind_of(id, &self.docs.registry.all_extensions());
+        let kind = media::kind_of_ext(id, |ext| self.docs.registry.has_doc_ext(ext));
         // Un file che c'è dice che le cartelle che attraversa ci sono (§14.3):
         // senza questa riga una nota creata in una cartella nuova comparirebbe
         // in un albero che quella cartella non conosce fino alla riapertura.
@@ -3025,7 +3037,7 @@ impl Workspace {
         let model = if self.already_ingested(&id, &fingerprint) {
             None
         } else {
-            Some(self.docs.parse(&id, &source).ok()?)
+            Some(self.docs.parse_owned(&id, source).ok()?)
         };
         Some(ParsedChange {
             seen: self.entry_fingerprint(&id),
@@ -3579,7 +3591,7 @@ impl Workspace {
             Some(_) => {
                 let source = self.docs.vault.read(trash_id)?;
                 let revision = Revision::of(&source);
-                Some((self.docs.parse(&target, &source)?, revision))
+                Some((self.docs.parse_owned(&target, source)?, revision))
             }
             None => None,
         };
@@ -3710,7 +3722,8 @@ impl Workspace {
         // link relativi, che devono essere quelli di dove il documento sta per
         // andare.
         let source = self.docs.vault.read(from)?;
-        let model = self.docs.parse(to, &source)?;
+        let revision = Revision::of(&source);
+        let model = self.docs.parse_owned(to, source)?;
         // I dati per-documento si spostano **prima** del file (difetto 0168),
         // mentre `from` è ancora vivo: un crash fra le due lasciava il file al
         // nome nuovo e i dati sotto la chiave vecchia, dove la prima `collect`
@@ -3721,7 +3734,7 @@ impl Workspace {
         // file (0067).
         self.migrate_side_data(from, to);
         self.docs.vault.rename_no_replace(from, to)?;
-        self.migrate_identity(from, to, model, Revision::of(&source));
+        self.migrate_identity(from, to, model, revision);
         // La riga del rename va **prima** di quelle delle sorgenti riscritte:
         // sono tutte dentro lo stesso lotto, e chi le ripercorre all'indietro le
         // trova nell'ordine in cui `UndoStep` le vuole (0045: i passi sono in
@@ -4241,10 +4254,12 @@ impl Workspace {
         // anche la seconda metà non riesce, l'errore che risale arriva **dopo**
         // che la prima è stata detta, non al posto suo.
         let letto = match self.docs.vault.read(&to_id) {
-            Ok(source) => self
-                .docs
-                .parse(&to_id, &source)
-                .map(|model| (model, Revision::of(&source))),
+            Ok(source) => {
+                let revisione = Revision::of(&source);
+                self.docs
+                    .parse_owned(&to_id, source)
+                    .map(|model| (model, revisione))
+            }
             Err(e) => Err(e),
         };
         let (model, revisione) = match letto {

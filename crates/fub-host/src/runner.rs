@@ -330,17 +330,19 @@ impl Sveglie {
         ora: Instant,
         fuso_macchina: &str,
     ) {
+        // Le coppie dichiarate, in un insieme: i due `retain` sotto le cercano
+        // per appartenenza invece di rifare un `any` annidato per ogni voce.
+        let dichiarate_set: HashSet<(&str, &str)> = dichiarate
+            .iter()
+            .map(|(o, spec)| (o.as_str(), spec.id.as_str()))
+            .collect();
         self.quadranti.retain(|(owner, timer), _| {
-            dichiarate
-                .iter()
-                .any(|(o, spec)| o == owner && &spec.id == timer)
+            dichiarate_set.contains(&(owner.as_str(), timer.as_str()))
         });
         // I recuperi seguono il manifest come i quadranti: una sveglia rimossa
         // non suona per un'occorrenza calcolata prima di sparire.
         self.recuperi.retain(|(owner, timer)| {
-            dichiarate
-                .iter()
-                .any(|(o, spec)| o == owner && &spec.id == timer)
+            dichiarate_set.contains(&(owner.as_str(), timer.as_str()))
         });
         for (owner, spec) in dichiarate {
             self.quadranti

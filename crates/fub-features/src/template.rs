@@ -338,6 +338,12 @@ fn piano(summary: Text, id: DocId) -> CommandOutcome {
 }
 
 pub(crate) fn espandi(src: &str, title: &str, date: &str) -> String {
+    // La via breve: nessun segnaposto, nessuna copia. Le `replace` a
+    // cascata restano per il caso pieno — una sostituzione può contenere
+    // un segnaposto successivo, e una passata sola non lo riprodurrebbe.
+    if !src.contains("{{title}}") && !src.contains("{{name}}") && !src.contains("{{date}}") {
+        return src.to_string();
+    }
     src.replace("{{title}}", title)
         .replace("{{name}}", title)
         .replace("{{date}}", date)

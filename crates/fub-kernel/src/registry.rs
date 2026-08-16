@@ -98,6 +98,14 @@ impl FormatRegistry {
         self.by_ext.keys().cloned().collect()
     }
 
+    /// La domanda che [`all_extensions`](Self::all_extensions) serviva, senza
+    /// costruire l'elenco per farla: quest'estensione è di un documento? Il
+    /// confronto resta disarmato sul caso, com'è in `kind_of` — le chiavi di
+    /// `by_ext` sono già minuscole, ma la risposta dev'essere quella di sempre.
+    pub fn has_doc_ext(&self, ext: &str) -> bool {
+        self.by_ext.keys().any(|e| e.eq_ignore_ascii_case(ext))
+    }
+
     /// L'estensione con cui nasce una nota nuova a cui nessuno ne ha data una:
     /// la prima del **primo provider registrato**.
     ///

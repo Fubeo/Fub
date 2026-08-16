@@ -147,7 +147,12 @@ pub fn oscura(corta: &str, lunga: &str) -> bool {
     let (Some(corta), Some(lunga)) = (canonica(corta), canonica(lunga)) else {
         return false;
     };
-    lunga.len() > corta.len() && lunga.starts_with(&format!("{corta} "))
+    // Prefisso fino al confine di accordo: la corta seguita da uno spazio.
+    // Niente `format!` intermedio: con `starts_with` regge, `corta.len()` è un
+    // confine di char, e l'ottetto successivo è uno spazio.
+    lunga.len() > corta.len()
+        && lunga.starts_with(&corta)
+        && lunga.as_bytes().get(corta.len()) == Some(&b' ')
 }
 
 #[cfg(test)]

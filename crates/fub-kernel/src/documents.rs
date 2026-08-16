@@ -24,6 +24,7 @@
 //! tiene i soli metadati. È un fatto che vale la pena scrivere perché il §8.1
 //! dava per scontato il contrario.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -147,6 +148,14 @@ impl DocumentStore {
         self.parse_source(id, DocumentSource::Text(source.to_string()))
     }
 
+    /// Come [`parse`](Self::parse), ma il testo lo possiede già chi chiama:
+    /// entra nel provider così com'è, senza la copia che la firma presa in
+    /// prestito pagherebbe. È la via delle risincronizzazioni, dove il
+    /// sorgente è appena uscito da una lettura e non serve a più nessuno.
+    pub(crate) fn parse_owned(&self, id: &DocId, source: String) -> Result<DocumentModel> {
+        self.parse_source(id, DocumentSource::Text(source))
+    }
+
     /// Legge un documento **nella forma che il suo provider chiede**: testo
     /// decodificato o byte grezzi (§3.4).
     ///
@@ -261,11 +270,14 @@ impl DocumentStore {
             return Vec::new();
         };
         let grafted = self.syntax.forms(&provider.descriptor().id);
+        // La domanda «è già innestato?» si fa una volta per nome che il
+        // provider dichiara: su un insieme, non rescandendo l'elenco.
+        let innestati: HashSet<&str> = grafted.iter().map(|g| g.name.as_str()).collect();
         let mut out: Vec<SyntaxForm> = provider
             .capabilities()
             .syntax
             .active()
-            .filter(|(name, _)| !grafted.iter().any(|g| g.name == *name))
+            .filter(|(name, _)| !innestati.contains(*name))
             .map(|(name, _)| SyntaxForm {
                 name: name.to_string(),
                 trigger: None,
