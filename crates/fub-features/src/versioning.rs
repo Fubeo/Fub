@@ -132,6 +132,11 @@ const CURRENT: &str = "current";
 const SIZE: &str = "size";
 const RESTORE_LABEL: &str = "restore";
 const CLOSE_PREVIEW: &str = "close_preview";
+/// Il titolo di una riga e dell'anteprima: **l'istante**, declinato. È una
+/// chiave e non un `Arg::timestamp` nudo perché un `Text::Message` senza
+/// template nel catalogo ricade sulla chiave nuda — e prima di questa chiave
+/// la riga diceva letteralmente «when» al posto della data.
+const WHEN_TITLE: &str = "when.title";
 const RESTORE_TITLE: &str = "version.restore.title";
 const RESTORE_DESC: &str = "version.restore.desc";
 const RESTORE_DOC_TITLE: &str = "version.restore.doc.title";
@@ -186,6 +191,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SIZE, "{size} byte")
             .with(RESTORE_LABEL, "Ripristina")
             .with(CLOSE_PREVIEW, "Chiudi l'anteprima")
+            .with(WHEN_TITLE, "Versione del {when}")
             .with(RESTORE_TITLE, "Ripristina una versione")
             .with(
                 RESTORE_DESC,
@@ -230,6 +236,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SIZE, "{size} bytes")
             .with(RESTORE_LABEL, "Restore")
             .with(CLOSE_PREVIEW, "Close the preview")
+            .with(WHEN_TITLE, "Version from {when}")
             .with(RESTORE_TITLE, "Restore a version")
             .with(
                 RESTORE_DESC,
@@ -1843,7 +1850,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         figli.push(UiNode::keyed(
             format!("preview:{ts}"),
             UiKind::Section {
-                title: Text::message(WHEN, vec![Arg::timestamp(WHEN, ts)]),
+                title: Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, ts)]),
                 collapsed: false,
                 children: vec![
                     UiNode::text(version_source_doc(entry, &doc, ts, host)?),
@@ -1869,7 +1876,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
 /// dire **su quale nota questa riga è stata disegnata**, che è l'unico modo di
 /// accorgersi che nel frattempo è cambiata. Vedi [`stessa_nota`].
 fn riga(v: &VersionRef, corrente: bool, doc: &str) -> UiNode {
-    let quando = Text::message(WHEN, vec![Arg::timestamp(WHEN, v.ts)]);
+    let quando = Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, v.ts)]);
     let quanto = if corrente {
         Text::key(CURRENT)
     } else {
@@ -2021,6 +2028,42 @@ mod tests {
             store.read(&id("a.md"), versioni[1].ts, &host).unwrap(),
             "prima"
         );
+    }
+
+    #[test]
+    fn ogni_chiave_che_il_pannello_scrive_sta_nei_cataloghi_delle_lingue() {
+        // Il difetto: le righe dello storico dicevano «when» — la chiave nuda
+        // — perché `Text::message` riceveva il nome dell'argomento come chiave
+        // e il risolutore, senza template, ricade sulla chiave stessa. Il
+        // sintomo a schermo: file di righe tutte uguali, senza date. Il
+        // presidio è generico e non «la chiave when esiste»: ogni chiave che
+        // l'albero del pannello scrive deve stare in **ogni** catalogo, così
+        // la prossima chiave dimenticata rossa qui e non a schermo.
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
+        host.avanza(1_000);
+        store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
+        host.set_active(Some("a.md"));
+
+        let mut albero = tree(&host).unwrap();
+        let mut chiavi = Vec::new();
+        use fub_abi::text::{Localize, Text};
+        albero.visit_texts(&mut |t| {
+            if let Text::Message(m) = t {
+                chiavi.push(m.key.clone());
+            }
+        });
+        assert!(!chiavi.is_empty(), "l'albero deve portare messaggi");
+        for catalogo in catalog() {
+            for chiave in &chiavi {
+                assert!(
+                    catalogo.entries.contains_key(chiave),
+                    "il catalogo {} non ha la chiave {chiave}",
+                    catalogo.locale
+                );
+            }
+        }
     }
 
     #[test]
