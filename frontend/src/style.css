@@ -948,16 +948,10 @@ select {
   display: flex;
 }
 
-/* Il grafo dentro il riquadro. Niente cornice, niente ombra, niente barra col
-   bottone di chiusura: quelle erano dell'overlay, e un overlay è una finestra
-   sopra le cose. Un riquadro **è** il posto — lo si chiude dalla sua tab, come
-   ogni altra cosa aperta. */
-.pane-view .graph-canvas {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-  display: block;
-}
+/* Il grafo dentro il riquadro: niente cornice, niente barra — è un riquadro
+   a essere il posto, lo si chiude dalla sua tab. I canvas li crea il pittore
+   (lotto B) con stile inline assoluto; qui resta solo ciò che il pittore non
+   conosce: il pannello delle impostazioni. */
 
 /* Il conto di nodi e archi: sopra il canvas e in un angolo, perché è
    un'annotazione su ciò che si sta guardando e non una testata. */
@@ -971,6 +965,129 @@ select {
   color: var(--text-muted, var(--text));
   font-size: var(--font-sm, 0.85em);
   pointer-events: none;
+}
+
+/* --- il pannello delle impostazioni del grafo ----------------------------- */
+/* Un ospite della superficie del grafo: in alto a sinistra, sopra i canvas.
+   Il bottone ingranaggio è sempre visibile; il popover si apre sotto e si
+   chiude con Esc. Token di `style.css`, niente colore hard-coded. */
+.graph-panel {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 3;
+}
+.graph-panel-toggle {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.graph-panel-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.graph-panel-toggle[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.graph-panel-popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  width: 264px;
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+}
+.graph-panel-popover[hidden] {
+  display: none;
+}
+.graph-panel-titolo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.graph-panel-sezione {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.graph-panel-sezione-titolo {
+  margin-bottom: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.graph-panel-preset {
+  margin-bottom: var(--space-2);
+}
+.graph-panel-select {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.graph-panel-campo {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1);
+  align-items: center;
+  margin-top: var(--space-2);
+  color: var(--text);
+}
+.graph-panel-campo input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+}
+.graph-panel-nome {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.graph-panel-valore {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+}
+.graph-panel-toggle {
+  grid-template-columns: 1fr auto;
+}
+.graph-panel-toggle input[type="checkbox"] {
+  grid-column: 2;
+}
+.graph-panel-azioni {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+.graph-panel-azioni button {
+  flex: 1;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.graph-panel-azioni button:hover {
+  border-color: var(--accent);
 }
 
 /* La tab di una view non è la tab di una nota: non si sporca mai e non nomina
