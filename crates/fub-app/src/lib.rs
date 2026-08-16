@@ -154,11 +154,12 @@ fn close_vault(host: State<Host>, path: String) -> Result<Vec<PluginError>, Plug
     host.close_vault(&Utf8PathBuf::from(path))
 }
 
-/// Path del vault da aprire all'avvio (comodo per sviluppo/screenshot):
-/// il frontend lo legge e apre il vault senza passare dal dialog.
+/// Path del vault da aprire all'avvio: l'override di ambiente (`FUB_VAULT`)
+/// se non vuoto, altrimenti l'ultimo vault aperto ancora sul disco. Il
+/// frontend lo legge e apre il vault senza passare dal dialogo.
 #[tauri::command]
-fn initial_vault() -> Option<String> {
-    fub_host::initial_vault()
+fn initial_vault(host: State<Host>) -> Option<String> {
+    fub_host::initial_vault().or_else(|| host.ultimo_vault())
 }
 
 /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di configurazione

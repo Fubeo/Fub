@@ -589,13 +589,18 @@ pub fn disabled_plugins(ws: &fub_kernel::Workspace) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Path del vault da aprire all'avvio (comodo per sviluppo/screenshot): chi
-/// monta lo legge e apre il vault senza passare dal dialogo.
+/// Path del vault da aprire all'avvio: **l'override di sviluppo/screenshot**.
 ///
-/// Resta una variabile d'ambiente **di proposito**: non è una preferenza che
-/// dura, è un argomento di avvio — il gemello del `fub <path>` che la CLI del
-/// 27.1 avrà. Metterlo fra le impostazioni vorrebbe dire far ricordare all'app
-/// una scelta che chi la scrive intende per una volta sola.
+/// È l'argomento `FUB <path>` della CLI del 27.1 reso variabile d'ambiente,
+/// per chi monta e vuole saltare il dialogo. Non è una preferenza che dura:
+/// chi lo scrive intende *apri questo*, per una volta sola.
+///
+/// L'**ultimo vault aperto** — quello che la shell riapre quando questo env
+/// non c'è — non lo risolve questa funzione: lo risolve l'host dal registro
+/// ([`Host::ultimo_vault`](crate::session::Host::ultimo_vault)), perché il
+/// registro vive nell'host e `settings` non lo deve importare (session importa
+/// settings, e il ciclo si chiude qui). La composizione delle due metà sta nel
+/// comando IPC `initial_vault`, che prova prima l'env e poi il registro.
 pub fn initial_vault() -> Option<String> {
     std::env::var("FUB_VAULT").ok().filter(|s| !s.is_empty())
 }

@@ -163,3 +163,92 @@ fn scegliere_un_vault_gia_aperto_e_un_uso_come_aprirlo() {
         "e i recenti lo dicono con lo stesso ordine del corrente"
     );
 }
+
+// --- l'ultimo vault all'avvio (§11.1) ----------------------------------------
+//
+// La shell, senza `FUB_VAULT`, chiede l'ultimo vault aperto: il registro lo
+// sa, e l'host lo sceglie scorrendo i candidati dal più recente e saltando chi
+// non è più sul disco. È la memoria fra un avvio e l'altro, ed è un'altra cosa
+// dai tre test sopra: quelli provano chi è corrente *adesso*, questi chi lo
+// sarà *al prossimo avvio*.
+
+/// All'avvio si riapre l'ultimo, non il primo: apri A poi B, e `ultimo_vault`
+/// restituisce B.
+#[test]
+fn l_avvio_riapre_l_ultimo_vault_non_il_primo() {
+    let (_dir, config) = config();
+    let host = installato(&config);
+    let a = Vault::new();
+    let b = Vault::new();
+
+    host.open(&a.root).expect("si apre");
+    // Una pausa per garantire che i timestamp non coincidano: `now_unix_millis`
+    // basta di solito, ma due aperture nello stesso millisecondo sono ancora
+    // possibili, e il tie-break sui path non deve mascherare la regola.
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    host.open(&b.root).expect("si apre");
+
+    let ultimo = host.ultimo_vault().expect("c'è un ultimo");
+    assert_eq!(ultimo, b.canonica().to_string(), "l'ultimo è B, non A");
+}
+
+/// Un preferito più vecchio non ruba lo slot dell'avvio: il registro è memoria
+/// di recency, e un appunto non è un uso. Apri A, preferiscilo, apri B — e
+/// l'avvio dice B.
+#[test]
+fn un_preferito_piu_vecchio_non_vince_sull_ultimo_aperto() {
+    let (_dir, config) = config();
+    let host = installato(&config);
+    let a = Vault::new();
+    let b = Vault::new();
+
+    host.open(&a.root).expect("si apre");
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    host.set_vault_favorite(&a.root, true).expect("preferito");
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    host.open(&b.root).expect("si apre");
+
+    let ultimo = host.ultimo_vault().expect("c'è un ultimo");
+    assert_eq!(ultimo, b.canonica().to_string(), "B è più recente di A anche se A è preferito");
+}
+
+/// Se l'ultimo vault non è più sul disco, l'avvio cade sul successivo che c'è
+/// ancora: un path sparito non fa fallire l'avvio, si passa al prossimo.
+#[test]
+fn l_avvio_cade_sul_successivo_se_l_ultimo_e_sparito() {
+    let (_dir, config) = config();
+    let host = installato(&config);
+    let a = Vault::new();
+    // B ha un nome noto: il suo tempdir va rimosso a mano, e la `root` che
+    // l'apertura registra è canonica, quindi si rimuove quella.
+    let b_dir = tempfile::tempdir().expect("tempdir");
+    let b_root = Utf8PathBuf::from_path_buf(b_dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(b_root.join("Nota.md"), "# Nota\n").unwrap();
+    let b_canonica = b_root.canonicalize_utf8().expect("esiste");
+
+    host.open(&a.root).expect("si apre");
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    host.open(&b_root).expect("si apre");
+    // L'host ha registrato B; adesso lo si chiude, così il suo watcher non
+    // reclama quando la cartella sparisce.
+    host.close_vault(&b_canonica).expect("si chiude");
+
+    // Cancella B dal disco e chiedi l'avvio: deve cadere su A.
+    std::fs::remove_dir_all(&b_canonica).unwrap();
+    let ultimo = host.ultimo_vault().expect("A esiste ancora");
+    assert_eq!(ultimo, a.canonica().to_string(), "sparito B, l'avvio cade su A");
+
+    // Lascia A aperto finché il test ha finito: close lo spegne senza reclami.
+    drop(host);
+    drop(a);
+    drop(b_dir);
+}
+
+/// Un registro vuoto non ha un ultimo, e l'avvio lo dice con `None` — non è un
+/// errore, è una installazione nuova.
+#[test]
+fn registro_vuoto_nessun_ultimo_vault() {
+    let (_dir, config) = config();
+    let host = installato(&config);
+    assert!(host.ultimo_vault().is_none(), "nessun vault conosciuto, nessun ultimo");
+}

@@ -810,6 +810,28 @@ impl Host {
         self.vaults.list()
     }
 
+    /// Il **vault da aprire all'avvio**, se la shell non ha ricevuto un
+    /// `FUB_VAULT`: scorre i candidati del registro dal più recente e
+    /// restituisce la radice del primo la cui cartella esiste ancora sul disco.
+    ///
+    /// Non lo apre — solo il path. Un preferito più vecchio non salta davanti
+    /// all'ultimo aperto: il registro è memoria di recency, e l'avvio chiede
+    /// *l'ultimo*, non il *preferito*. Un path sparito non fa fallire l'avvio:
+    /// si passa al successivo e la shell resta libera di aprirne uno dal
+    /// dialogo.
+    ///
+    /// Il `Utf8Path::is_dir` è l'unica domanda al disco, ed è intenzionale:
+    /// [`VaultEntry::root`] è canonica per contratto, quindi non si
+    /// ricanonicalizza (la cartella potrebbe essere sparita, e
+    /// `canonicalize` non risponde su ciò che non c'è).
+    pub fn ultimo_vault(&self) -> Option<String> {
+        self.vaults
+            .in_ordine_di_recenza()
+            .into_iter()
+            .find(|e| Utf8Path::new(&e.root).is_dir())
+            .map(|e| e.root)
+    }
+
     /// Appunta (o spunta) un vault. Il path **non** deve essere aperto: si
     /// preferisce un vault anche quando è chiuso, ed è quasi sempre allora.
     pub fn set_vault_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
