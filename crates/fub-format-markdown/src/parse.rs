@@ -746,7 +746,6 @@ fn convert_inlines<'a>(
         let value = child.data.borrow().value.clone();
         match value {
             NodeValue::Text(s) => {
-                let s: String = s.to_string();
                 let text_base = text_out.len();
                 text_out.push_str(&s);
                 // Tag ed embed si scandiscono sulla FETTA DI SORGENTE del
@@ -766,7 +765,7 @@ fn convert_inlines<'a>(
                 // che qui non c'è.
                 let Some(slice) = source.get(span.start..span.end) else {
                     if !s.is_empty() {
-                        out.push(Inline::Text(s));
+                        out.push(Inline::Text(s.into()));
                     }
                     continue;
                 };
@@ -1028,8 +1027,7 @@ fn push_text_features(
         let inizio = abs.start - base;
         if inizio > cursor {
             let seg = &slice[cursor..inizio];
-            nel_testo += decodifica_segmento(source, seg, base + cursor).len();
-            push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
+            nel_testo += push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
         }
         let parsed = scan::parse_wikilink_inner(&inner);
         // L'embed testuale sta DENTRO il testo pushato (comrak non l'ha
@@ -1171,7 +1169,7 @@ fn push_plain_or_tags(
     ctx: &ParseContext,
     acc: &mut Acc,
     out: &mut Vec<Inline>,
-) {
+) -> usize {
     let tags: Vec<Tag> = if ctx.enabled(syntax::TAGS) {
         scan::scan_tags(slice)
             .into_iter()
@@ -1187,21 +1185,30 @@ fn push_plain_or_tags(
     };
     if tags.is_empty() {
         if !slice.is_empty() {
-            out.push(Inline::Text(decodifica_segmento(source, slice, base)));
+            let testo = decodifica_segmento(source, slice, base);
+            let n = testo.len();
+            out.push(Inline::Text(testo));
+            return n;
         }
-        return;
+        return 0;
     }
     // I tag si misurano sul **sorgente** (gli `Span` sono offset di sorgente);
     // il testo fra l'uno e l'altro si emette **decodificato**, dallo stesso
-    // decoder del ramo senza feature.
+    // decoder del ramo senza feature. Il valore restituito è la lunghezza
+    // decodificata di tutto il segmento (testo + tag): è ciò che il chiamante
+    // somma a `nel_testo`, e il testo di un tag (`#nome`) si decodifica in sé
+    // stesso — i caratteri di un nome di tag non hanno escape né entità.
     let mut cursor = 0;
+    let mut scritti = 0;
     for tag in tags {
         if tag.span.start > cursor {
-            out.push(Inline::Text(decodifica_segmento(
+            let testo = decodifica_segmento(
                 source,
                 &slice[cursor..tag.span.start],
                 base + cursor,
-            )));
+            );
+            scritti += testo.len();
+            out.push(Inline::Text(testo));
         }
         let abs = Span::new(base + tag.span.start, base + tag.span.end);
         out.push(Inline::TagRef {
@@ -1212,15 +1219,15 @@ fn push_plain_or_tags(
             name: tag.name,
             span: abs,
         });
+        scritti += tag.span.end - tag.span.start;
         cursor = tag.span.end;
     }
     if cursor < slice.len() {
-        out.push(Inline::Text(decodifica_segmento(
-            source,
-            &slice[cursor..],
-            base + cursor,
-        )));
+        let testo = decodifica_segmento(source, &slice[cursor..], base + cursor);
+        scritti += testo.len();
+        out.push(Inline::Text(testo));
     }
+    scritti
 }
 
 /// La tabella delle entità nominali per **nome interno** — `amp` per `&amp;`
@@ -1657,7 +1664,11 @@ fn gira_ombra<'a>(
     let valore = node.data.borrow().value.clone();
     if matches!(valore, NodeValue::Paragraph) {
         let span = span_of(node, offsets);
-        if reali.iter().any(|r| contiene(*r, span)) {
+        // `reali` è ordinato per inizio e disgiunto (pre-order di
+        // `span_dei_paragrafi`): il solo candidato a contenere `span` è il
+        // primo che non finisce prima di lui.
+        let idx = reali.partition_point(|r| r.end <= span.start);
+        if reali.get(idx).is_some_and(|r| contiene(*r, span)) {
             return;
         }
         if let Some(fetta) = source.get(span.start..span.end) {
@@ -2133,11 +2144,11 @@ fn inserisci_definizioni(defs: Vec<Definizione>, body: &mut Vec<Block>) {
             anchor: None,
             span: d.span,
         };
-        inserisci_una(&blocco, body);
+        inserisci_una(blocco, body);
     }
 }
 
-fn inserisci_una(d: &Block, blocchi: &mut Vec<Block>) {
+fn inserisci_una(d: Block, blocchi: &mut Vec<Block>) {
     let Some(pos) = blocchi.iter().position(|b| contiene(b.span(), d.span())) else {
         inserisci_in_ordine(d, blocchi);
         return;
@@ -2145,13 +2156,11 @@ fn inserisci_una(d: &Block, blocchi: &mut Vec<Block>) {
     match &mut blocchi[pos] {
         Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => inserisci_una(d, blocks),
         Block::List { items, .. } => {
-            for it in items.iter_mut() {
-                if contiene(it.span, d.span()) {
-                    inserisci_una(d, &mut it.blocks);
-                    return;
-                }
+            if let Some(pos) = items.iter().position(|it| contiene(it.span, d.span())) {
+                inserisci_una(d, &mut items[pos].blocks);
+            } else {
+                inserisci_in_ordine(d, blocchi);
             }
-            inserisci_in_ordine(d, blocchi);
         }
         _ => inserisci_in_ordine(d, blocchi),
     }
@@ -2161,7 +2170,7 @@ fn contiene(padre: Span, figlio: Span) -> bool {
     padre.start <= figlio.start && figlio.end <= padre.end
 }
 
-fn inserisci_in_ordine(d: &Block, blocchi: &mut Vec<Block>) {
+fn inserisci_in_ordine(d: Block, blocchi: &mut Vec<Block>) {
     let pos = blocchi.partition_point(|b| b.span().start < d.span().start);
-    blocchi.insert(pos, d.clone());
+    blocchi.insert(pos, d);
 }

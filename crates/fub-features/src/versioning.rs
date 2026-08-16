@@ -70,7 +70,7 @@
 //! indice perso renderebbe le versioni irraggiungibili, visto che il nome della
 //! cartella è un'impronta e le impronte non si invertono.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use fub_abi::command::{
@@ -1033,10 +1033,11 @@ fn pota(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Vec<String> {
         return Vec::new();
     }
 
+    let tenuti: HashSet<u64> = tenute.iter().map(|t| t.ts).collect();
     let avanzati: Vec<String> = doc
         .versions
         .iter()
-        .filter(|v| !tenute.iter().any(|t| t.ts == v.ts))
+        .filter(|v| !tenuti.contains(&v.ts))
         .map(|v| blob(&doc.dir, &snapshot_name(v.ts, id.as_str())))
         .collect();
     doc.versions = tenute;
@@ -1642,11 +1643,14 @@ const TS: &str = "ts";
 const PREVIEW_STATE: &str = "preview";
 
 /// Le versioni di un documento secondo l'indice **su disco**, dalla più recente
-/// alla più vecchia.
 fn versions_of(host: &dyn ReadApi, id: &DocId) -> Vec<VersionRef> {
-    load_index(host)
-        .and_then(|docs| docs.get(id.as_str()).cloned())
-        .map(|d| d.versions.iter().rev().copied().collect())
+    let docs = load_index(host);
+    versions_of_docs(docs.as_ref().and_then(|docs| docs.get(id.as_str())))
+}
+
+/// Le versioni di un documento secondo la voce già caricata dell'indice.
+fn versions_of_docs(doc: Option<&DocVersions>) -> Vec<VersionRef> {
+    doc.map(|d| d.versions.iter().rev().copied().collect())
         .unwrap_or_default()
 }
 
@@ -1663,6 +1667,16 @@ fn version_source(host: &dyn ReadApi, id: &DocId, ts: u64) -> Result<String, Plu
             vec![Arg::text(DOC, id.as_str())],
         ))
     })?;
+    version_source_doc(doc, id, ts, host)
+}
+
+/// Il contenuto di una versione, data la voce già caricata dell'indice.
+fn version_source_doc(
+    doc: &DocVersions,
+    id: &DocId,
+    ts: u64,
+    host: &dyn ReadApi,
+) -> Result<String, PluginError> {
     if !doc.versions.iter().any(|v| v.ts == ts) {
         return Err(PluginError::NotFound(Text::message(
             NO_SUCH_VERSION,
@@ -1796,10 +1810,16 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     let Some(doc) = host.active_context().and_then(|c| c.doc) else {
         return Ok(UiNode::empty_state(Text::key(NO_ACTIVE_DOC)));
     };
-    let versions = versions_of(host, &doc);
+    // L'indice si carica una volta sola: la lista e l'anteprima lo leggono
+    // entrambe, e rileggerlo per ciascuna era un doppio parse.
+    let docs = load_index(host);
+    let entry = docs.as_ref().and_then(|docs| docs.get(doc.as_str()));
+    let versions = versions_of_docs(entry);
     if versions.is_empty() {
         return Ok(UiNode::empty_state(Text::key(EMPTY)));
     }
+    // `versions` non vuota implica una voce: l'anteprima la riusa.
+    let entry = entry.expect("versioni non vuote implicano una voce dell'indice");
 
     let mut figli = vec![UiNode::text(Text::message(
         COUNT,
@@ -1826,7 +1846,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
                 title: Text::message(WHEN, vec![Arg::timestamp(WHEN, ts)]),
                 collapsed: false,
                 children: vec![
-                    UiNode::text(version_source(host, &doc, ts)?),
+                    UiNode::text(version_source_doc(entry, &doc, ts, host)?),
                     UiNode::button(
                         Text::key(CLOSE_PREVIEW),
                         Intent::Neutral,

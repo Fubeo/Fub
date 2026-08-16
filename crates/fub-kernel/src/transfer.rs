@@ -271,6 +271,9 @@ impl ArtifactSink for MemorySink {
 /// byte ci sono».
 pub struct DirectorySink {
     root: PathBuf,
+    /// La radice risolta con `canonicalize`, calcolata una sola volta: è fissa
+    /// per la vita del sink, e `resta_dentro` la chiedeva a ogni artefatto.
+    root_vera: Option<PathBuf>,
     aperti: BTreeMap<u64, Artefatto>,
     prossima: u64,
 }
@@ -293,6 +296,7 @@ impl DirectorySink {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         DirectorySink {
             root: root.into(),
+            root_vera: None,
             aperti: BTreeMap::new(),
             prossima: 0,
         }
@@ -311,7 +315,13 @@ impl ArtifactSink for DirectorySink {
         // Prima di creare, non dopo: `create_dir_all` attraversa un
         // collegamento senza chiedere, e le cartelle nate di là restano lì
         // anche se poi l'artefatto lo rifiutiamo.
-        resta_dentro(&self.root, &dir)?;
+        if self.root_vera.is_none() {
+            self.root_vera = Some(self.root.canonicalize().map_err(|e| {
+                PluginError::Io(format!("`{}` non si risolve: {e}", self.root.display()).into())
+            })?);
+        }
+        let root_vera = self.root_vera.as_ref().expect("appena risolto");
+        resta_dentro(root_vera, &dir)?;
         std::fs::create_dir_all(&dir)
             .map_err(|e| PluginError::Io(format!("`{}` non si crea: {e}", dir.display()).into()))?;
         // Il nome del file lo dà il provider ed è già passato da
@@ -431,9 +441,6 @@ fn handle_ignoto() -> PluginError {
 /// `rename` della chiusura **sostituisce** un eventuale collegamento invece di
 /// seguirlo, che è la stessa regola con cui il vault scrive (decisione 0065).
 fn resta_dentro(root: &Path, dir: &Path) -> Result<(), PluginError> {
-    let vera = root
-        .canonicalize()
-        .map_err(|e| PluginError::Io(format!("`{}` non si risolve: {e}", root.display()).into()))?;
     let mut esistente = dir;
     while !esistente.exists() {
         match esistente.parent() {
@@ -443,7 +450,7 @@ fn resta_dentro(root: &Path, dir: &Path) -> Result<(), PluginError> {
     }
     let dentro = esistente
         .canonicalize()
-        .is_ok_and(|risolto| risolto.starts_with(&vera));
+        .is_ok_and(|risolto| risolto.starts_with(root));
     if !dentro {
         return Err(PluginError::PermissionDenied(
             format!(

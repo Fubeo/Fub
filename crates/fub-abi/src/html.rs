@@ -60,6 +60,12 @@ const TABELLA: &[(char, &str)] = &[
 /// Serve per il **contenuto** di un elemento. Per un attributo non si usa
 /// direttamente — si usa [`attr`], che le virgolette le mette da sé.
 pub fn escape(s: &str) -> String {
+    // Niente da escapare? Il giro carattere per carattere non serve. La prova
+    // nasce dalla TABELLA stessa, così non può divergere da ciò che il ciclo
+    // escaperebbe.
+    if !TABELLA.iter().any(|(k, _)| s.contains(*k)) {
+        return s.to_string();
+    }
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match TABELLA.iter().find(|(k, _)| *k == c) {

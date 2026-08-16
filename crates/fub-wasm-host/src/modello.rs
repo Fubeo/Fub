@@ -97,7 +97,7 @@ pub(crate) fn in_documento(m: &rm::DocumentModel) -> Result<wm::DocumentModel, P
 /// perché chi legge un modello vuole il documento com'è e chi vuole «questa
 /// proprietà è una data» lo chiede all'indice.
 fn in_frontmatter(f: &rm::Frontmatter) -> String {
-    tr::in_json(&serde_json::Value::Object(f.0.clone()))
+    serde_json::to_string(&f.0).expect("un frontmatter è sempre serializzabile")
 }
 
 // ---------------------------------------------------------------------------

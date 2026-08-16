@@ -1404,8 +1404,25 @@ impl SearchIndex {
 
         let mut per_field: Vec<(Occur, Box<dyn Query>)> = Vec::new();
         let mut per_term: Vec<Vec<(Occur, Box<dyn Query>)>> = Vec::new();
+        // I tre campi di prosa (`page_name`, `headings`, `body`) condividono
+        // il tokenizer `default` dello schema (vedi `build_schema`): il testo
+        // della query si tokenizza una volta sola, e i termini differiscono
+        // solo per il campo a cui sono legati. I tag restano un passaggio a
+        // parte — col tokenizer `raw` il termine è la stringa intera.
+        let parole = if wanted.iter().any(|(f, _)| *f != self.fields.tags) {
+            self.token_texts(&text.text)?
+        } else {
+            Vec::new()
+        };
         for (field, boost) in wanted {
-            let terms = self.terms_of(field, &text.text)?;
+            let terms = if field == self.fields.tags {
+                self.terms_of(field, &text.text)?
+            } else {
+                parole
+                    .iter()
+                    .map(|p| Term::from_field_text(field, p))
+                    .collect()
+            };
             if terms.is_empty() {
                 continue;
             }
@@ -1488,6 +1505,22 @@ impl SearchIndex {
         Ok(Box::new(query))
     }
 
+    /// Il testo della query tokenizzato una volta sola, col tokenizer che
+    /// i tre campi di prosa condividono: i `Term` differiscono solo per il
+    /// campo a cui si legano, non per come la stringa si spezza.
+    fn token_texts(&self, text: &str) -> Result<Vec<String>, PluginError> {
+        let mut analyzer = self
+            .index
+            .tokenizer_for_field(self.fields.page_name)
+            .map_err(|e| PluginError::Internal(motivo(TOKENIZER, e)))?;
+        let mut parole = Vec::new();
+        let mut stream = analyzer.token_stream(text);
+        while let Some(token) = stream.next() {
+            parole.push(token.text.to_string());
+        }
+        Ok(parole)
+    }
+
     /// I termini di un testo secondo il tokenizer del campo. Per un campo
     /// `STRING` (i tag) il tokenizer è `raw`, e il termine è la stringa intera —
     /// che è esattamente ciò che serve.
@@ -1539,14 +1572,11 @@ fn boosted(query: Box<dyn Query>, boost: f32) -> Box<dyn Query> {
 /// I primi `max` caratteri di `text`, troncati su un confine di carattere e
 /// senza spezzare l'ultima parola quando si può evitare.
 fn head_of(text: &str, max: usize) -> String {
-    if text.chars().count() <= max {
-        return text.to_string();
-    }
-    let cut = text
-        .char_indices()
-        .nth(max)
-        .map(|(i, _)| i)
-        .unwrap_or(text.len());
+    // Una passata sola: se `nth(max)` non c'è, il testo è già corto.
+    let cut = match text.char_indices().nth(max) {
+        None => return text.to_string(),
+        Some((i, _)) => i,
+    };
     let head = &text[..cut];
     let trimmed = match head.rfind(char::is_whitespace) {
         Some(sp) if sp > cut / 2 => &head[..sp],

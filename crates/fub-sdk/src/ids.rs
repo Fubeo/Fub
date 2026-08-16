@@ -129,15 +129,15 @@ pub fn short_id(host: &dyn HostEnv, len: usize) -> Result<String, PluginError> {
 
 /// I sedici byte nella forma canonica `8-4-4-4-12`.
 fn format_uuid(b: &[u8; 16]) -> String {
-    let hex = |s: &[u8]| s.iter().map(|x| format!("{x:02x}")).collect::<String>();
-    format!(
-        "{}-{}-{}-{}-{}",
-        hex(&b[0..4]),
-        hex(&b[4..6]),
-        hex(&b[6..8]),
-        hex(&b[8..10]),
-        hex(&b[10..16])
-    )
+    use std::fmt::Write;
+    let mut s = String::with_capacity(36);
+    for (i, byte) in b.iter().enumerate() {
+        write!(s, "{byte:02x}").expect("scrivere in una String non fallisce");
+        if matches!(i, 3 | 5 | 7 | 9) {
+            s.push('-');
+        }
+    }
+    s
 }
 
 #[cfg(test)]

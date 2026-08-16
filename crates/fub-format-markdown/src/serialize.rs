@@ -347,7 +347,17 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                     if let Some(c) = row.cells.get(i) {
                         write_inlines(&c.inlines, &mut cella)?;
                     }
-                    out.push_str(&cella.replace('|', "\\|"));
+                    // La barra si escapa mentre si copia, a segmenti: una
+                    // seconda stringa intera per il replace sarebbe una
+                    // copia in più per ogni cella di ogni riga.
+                    let mut pezzi = cella.split('|');
+                    if let Some(primo) = pezzi.next() {
+                        out.push_str(primo);
+                    }
+                    for resto in pezzi {
+                        out.push_str("\\|");
+                        out.push_str(resto);
+                    }
                     out.push_str(" |");
                 }
                 out.push('\n');
@@ -719,8 +729,15 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
 /// un'entità che il documento aveva (`&amp;` → `\&amp;`), che è la stessa
 /// specie di danno con il segno cambiato.
 fn scrivi_testo(s: &str, out: &mut String) {
-    let tag: std::collections::HashSet<usize> =
-        scan_tags(s).into_iter().map(|t| t.span.start).collect();
+    // L'insieme dei punti di tag, come vettore: `scan_tags` li torna in
+    // ordine di sorgente, e la membership di un indice crescente su un vettore
+    // ordinato è una ricerca binaria senza pagare l'hash di ogni domanda.
+    let mut tag: Vec<usize> = scan_tags(s).into_iter().map(|t| t.span.start).collect();
+    debug_assert!(
+        tag.windows(2).all(|w| w[0] <= w[1]),
+        "scan_tags torna i punti in ordine di sorgente"
+    );
+    tag.sort_unstable();
     // Nessuno ha ancora scritto su questa riga: un delimitatore di blocco qui
     // aprirebbe un blocco.
     let mut inizio_riga = out.is_empty() || out.ends_with('\n');
@@ -736,7 +753,7 @@ fn scrivi_testo(s: &str, out: &mut String) {
             '\\' | '[' | ']' | '*' | '`' => true,
             // In testa alla riga si escapa **sempre**: `#`, `##`, `###` sono
             // tutti heading, e la regola dei tag non prende `##` (nome vuoto).
-            '#' => inizio_riga || tag.contains(&i),
+            '#' => inizio_riga || tag.binary_search(&i).is_ok(),
             '_' => {
                 !(prima.is_some_and(char::is_alphanumeric)
                     && dopo.is_some_and(char::is_alphanumeric))

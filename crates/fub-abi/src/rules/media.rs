@@ -43,11 +43,19 @@ use crate::traits::EntryKind;
 /// `text/markdown` nella tabella dei MIME, perché il vault ha un provider che
 /// lo sa parsare — ed è quella la differenza che conta a valle.
 pub fn kind_of(id: &DocId, doc_extensions: &[String]) -> EntryKind {
+    kind_of_ext(id, |ext| {
+        doc_extensions.iter().any(|e| e.eq_ignore_ascii_case(ext))
+    })
+}
+
+/// [`kind_of`] con la domanda al posto dell'elenco: chi ha il registro dei
+/// formati sotto mano chiede «questa estensione è di un documento?» senza
+/// costruire l'elenco per ogni file che cambia. La risposta non può
+/// divergere da `kind_of`, perché il ramo che decide è uno solo — questo.
+pub fn kind_of_ext<F: Fn(&str) -> bool>(id: &DocId, is_doc_ext: F) -> EntryKind {
     let ext = extension_of(id.as_str());
     match ext {
-        Some(ext) if doc_extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)) => {
-            EntryKind::Document
-        }
+        Some(ext) if is_doc_ext(ext) => EntryKind::Document,
         Some(ext) if mime_for_ext(ext).is_some() => EntryKind::Asset,
         _ => EntryKind::Unknown,
     }

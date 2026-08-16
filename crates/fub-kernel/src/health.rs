@@ -18,7 +18,7 @@ use fub_abi::rules::health::{broken_target, unrecognized_dates, LinkResolver};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::traits::{HealthCheck, HealthIssue};
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use fub_abi::traits::VaultEntry;
 
@@ -116,7 +116,7 @@ fn broken_links<'a>(
 }
 
 fn orphans<'a>(docs: impl Iterator<Item = &'a DocId>, graph: &LinkGraph) -> Vec<HealthIssue> {
-    docs.filter(|id| graph.backlinks(id).is_empty())
+    docs.filter(|id| !graph.has_backlinks(id))
         .map(|id| HealthIssue {
             doc: id.clone(),
             check: HealthCheck::OrphanDocuments,
@@ -148,13 +148,19 @@ fn collisions(entries: &BTreeMap<DocId, VaultEntry>) -> Vec<HealthIssue> {
             .or_default()
             .push(id);
     }
+    // La chiave si calcola una volta sola per voce: la seconda passata guarda
+    // il gruppo per riferimento invece di rifare il calcolo che l'ha costruito.
+    let gruppo_di: HashMap<&DocId, &Vec<&DocId>> = per_chiave
+        .values()
+        .flat_map(|g| g.iter().map(move |id| (*id, g)))
+        .collect();
     // L'ordine è quello dell'anagrafe, come per gli altri controlli: la
     // risposta è paginata e un ordine per gruppo non sarebbe quello che il
     // chiamante si aspetta.
     entries
         .keys()
         .filter_map(|id| {
-            let gruppo = per_chiave.get(&resolution_key(id.as_str()))?;
+            let gruppo = gruppo_di.get(id)?;
             if gruppo.len() < 2 {
                 return None;
             }

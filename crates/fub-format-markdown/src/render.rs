@@ -10,9 +10,12 @@ use fub_abi::options::render_option;
 use fub_abi::rules::carichi;
 
 use fub_abi::html::{attr, escape};
+use std::fmt::Write;
 
 pub fn render_html(model: &DocumentModel, opts: &RenderOptions) -> String {
-    let mut out = String::new();
+    // La capacità si stima dal corpo: il numero di blocchi per una media
+    // grezza di byte resi. Non tocca i byte, solo le riallocazioni.
+    let mut out = String::with_capacity(model.body.len() * 128);
     render_blocks(&model.body, opts, &mut out);
     out
 }
@@ -38,12 +41,12 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
     match block {
         Block::Heading { level, inlines, .. } => {
             let l = (*level).clamp(1, 6);
-            out.push_str(&format!("<h{l}{id}>"));
+            write!(out, "<h{l}{id}>").unwrap();
             render_inlines(inlines, opts, out);
-            out.push_str(&format!("</h{l}>"));
+            write!(out, "</h{l}>").unwrap();
         }
         Block::Paragraph { inlines, .. } => {
-            out.push_str(&format!("<p{id}>"));
+            write!(out, "<p{id}>").unwrap();
             render_inlines(inlines, opts, out);
             out.push_str("</p>");
         }
@@ -61,7 +64,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 Some(n) if *ordered && *n != 1 => format!(" start=\"{n}\""),
                 _ => String::new(),
             };
-            out.push_str(&format!("<{tag}{id}{da}>"));
+            write!(out, "<{tag}{id}{da}>").unwrap();
             for item in items {
                 match &item.task {
                     Some(t) => {
@@ -70,22 +73,24 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                         // protocollo, non da uno stato del DOM che nessuno legge.
                         let checked = if t.checked() { " checked" } else { "" };
                         let symbol = t.symbol.map(String::from).unwrap_or_default();
-                        out.push_str(&format!(
+                        write!(
+                            out,
                             "<li class=\"task\"{}><input type=\"checkbox\" disabled{checked}>",
                             attr("data-task", &symbol)
-                        ));
+                        )
+                        .unwrap();
                     }
                     None => out.push_str("<li>"),
                 }
                 render_blocks(&item.blocks, opts, out);
                 out.push_str("</li>");
             }
-            out.push_str(&format!("</{tag}>"));
+            write!(out, "</{tag}>").unwrap();
         }
         Block::Table {
             head, rows, align, ..
         } => {
-            out.push_str(&format!("<table{id}>"));
+            write!(out, "<table{id}>").unwrap();
             if let Some(h) = head {
                 out.push_str("<thead>");
                 render_row(h, align, true, opts, out);
@@ -99,21 +104,23 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         }
         Block::CodeBlock { lang, code, .. } => {
             match lang {
-                Some(l) => out.push_str(&format!(
+                Some(l) => write!(
+                    out,
                     "<pre{id}><code{}>",
                     attr("class", &format!("language-{l}"))
-                )),
-                None => out.push_str(&format!("<pre{id}><code>")),
+                )
+                .unwrap(),
+                None => write!(out, "<pre{id}><code>").unwrap(),
             }
             out.push_str(&escape(code));
             out.push_str("</code></pre>");
         }
         Block::Quote { blocks, .. } => {
-            out.push_str(&format!("<blockquote{id}>"));
+            write!(out, "<blockquote{id}>").unwrap();
             render_blocks(blocks, opts, out);
             out.push_str("</blockquote>");
         }
-        Block::ThematicBreak { .. } => out.push_str(&format!("<hr{id}>")),
+        Block::ThematicBreak { .. } => write!(out, "<hr{id}>").unwrap(),
         Block::ReferenceDefinition {
             label, url, title, ..
         } => {
@@ -127,12 +134,14 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 .as_deref()
                 .map(|t| format!(" {}", escape(t)))
                 .unwrap_or_default();
-            out.push_str(&format!(
+            write!(
+                out,
                 "<div{id} class=\"reference-definition\"{}>{}{}</div>",
                 attr("data-label", label),
                 escape(url),
                 titolo
-            ));
+            )
+            .unwrap();
         }
         Block::Custom {
             custom_kind,
@@ -142,16 +151,10 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         } => {
             if custom_kind == custom_kind::CALLOUT {
                 let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
-                out.push_str(&format!(
-                    "<div{id} class=\"callout\"{}>",
-                    attr("data-callout", ty)
-                ));
+                write!(out, "<div{id} class=\"callout\"{}>", attr("data-callout", ty)).unwrap();
                 if let Some(title) = attrs.get("title").and_then(|v| v.as_str()) {
                     if !title.is_empty() {
-                        out.push_str(&format!(
-                            "<div class=\"callout-title\">{}</div>",
-                            escape(title)
-                        ));
+                        write!(out, "<div class=\"callout-title\">{}</div>", escape(title)).unwrap();
                     }
                 }
                 render_blocks(blocks, opts, out);
@@ -164,12 +167,14 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // (escapato), e il motivo si legge accanto.
                 let motivo = attrs.get("error").and_then(|v| v.as_str()).unwrap_or("");
                 let text = attrs.get("text").and_then(|v| v.as_str()).unwrap_or("");
-                out.push_str(&format!(
+                write!(
+                    out,
                     "<div{id} class=\"block-frontmatter-unparsed\">\
                      <div class=\"frontmatter-error\">{}</div><pre>{}</pre></div>",
                     escape(motivo),
                     escape(text)
-                ));
+                )
+                .unwrap();
             } else {
                 // Ogni altro kind — registrato o no — degrada a resa generica,
                 // col suo `custom_kind` come classe. L'HTML grezzo di
@@ -181,10 +186,12 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                     .and_then(|v| v.as_str())
                     .map(|l| attr("data-label", l))
                     .unwrap_or_default();
-                out.push_str(&format!(
+                write!(
+                    out,
                     "<div{id}{}{label}>",
                     attr("class", &classe("block", custom_kind))
-                ));
+                )
+                .unwrap();
                 // Un blocco **senza figli** non ha niente da rendere per questa
                 // strada, e finiva in un `<div>` vuoto: la frase qui sopra
                 // diceva che l'HTML grezzo «resta dato», e invece non restava
@@ -220,9 +227,9 @@ fn render_row(
             ColumnAlign::Center => " style=\"text-align:center\"".into(),
             ColumnAlign::Right => " style=\"text-align:right\"".into(),
         };
-        out.push_str(&format!("<{tag}{style}>"));
+        write!(out, "<{tag}{style}>").unwrap();
         render_inlines(&cell.inlines, opts, out);
-        out.push_str(&format!("</{tag}>"));
+        write!(out, "</{tag}>").unwrap();
     }
     out.push_str("</tr>");
 }
@@ -269,11 +276,13 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             out.push_str("</code>");
         }
         Inline::TagRef { name, .. } => {
-            out.push_str(&format!(
+            write!(
+                out,
                 "<span class=\"tag\"{}>#{}</span>",
                 attr("data-tag", name),
                 escape(name)
-            ));
+            )
+            .unwrap();
         }
         Inline::Link {
             target,
@@ -285,11 +294,13 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             custom_kind, attrs, ..
         } if custom_kind == custom_kind::FOOTNOTE_REFERENCE => {
             let label = attrs.get("label").and_then(|v| v.as_str()).unwrap_or("");
-            out.push_str(&format!(
+            write!(
+                out,
                 "<sup class=\"footnote-ref\"{}>{}</sup>",
                 attr("data-label", label),
                 escape(label)
-            ));
+            )
+            .unwrap();
         }
         // Il degrado generico degli inline. **Prima non c'era**: un
         // `Inline::Custom` che il provider non riconosceva spariva dalla
@@ -308,11 +319,13 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             // esattamente come sparivano i blocchi. Adesso la domanda la fa
             // `carichi::carico_testuale`, come per i blocchi.
             let text = contenuto_testuale(custom_kind, attrs).unwrap_or_default();
-            out.push_str(&format!(
+            write!(
+                out,
                 "<span{}>{}</span>",
                 attr("class", &classe("inline", custom_kind)),
                 escape(text)
-            ));
+            )
+            .unwrap();
         }
     }
 }
@@ -420,10 +433,12 @@ fn render_link(
                 // emette un placeholder; il frontend chiama `render_embed` del
                 // kernel e innesta il contenuto (profondità e cicli a suo
                 // carico). Vedi docs/architecture/ui-protocol.md.
-                out.push_str(&format!(
+                write!(
+                    out,
                     "<div class=\"embed\"{}>",
                     wiki_attrs("embed", page, heading, block)
-                ));
+                )
+                .unwrap();
                 render_link_label(label, &interno(target, page), opts, out);
                 out.push_str("</div>");
                 return;
@@ -434,10 +449,12 @@ fn render_link(
             // basta. Adesso c'è una risposta in cui metterlo
             // (`resolved-ref.at`), e questo è il primo centimetro del giro.
             // Wikilink come data-attribute: il frontend risolve la navigazione.
-            out.push_str(&format!(
+            write!(
+                out,
                 "<a class=\"wikilink\"{}",
                 wiki_attrs("wikilink", page, heading, block)
-            ));
+            )
+            .unwrap();
             if opts.enabled(render_option::WIKILINKS_AS_DATA_ATTRS) {
                 out.push_str(" href=\"#\"");
             }
@@ -452,31 +469,27 @@ fn render_link(
         // 5.3 e 23 per il contenuto remoto), non del provider che ha letto il
         // file. Chi disegna sa dove sta il vault; questo codice no.
         LinkTarget::Url(url) if embed => {
-            out.push_str(&format!(
-                "<div class=\"embed\"{}>",
-                attr("data-embed-url", url)
-            ));
+            write!(out, "<div class=\"embed\"{}>", attr("data-embed-url", url)).unwrap();
             render_link_label(label, url, opts, out);
             out.push_str("</div>");
         }
         LinkTarget::Path(p) if embed => {
-            out.push_str(&format!(
-                "<div class=\"embed\"{}>",
-                attr("data-embed-path", p)
-            ));
+            write!(out, "<div class=\"embed\"{}>", attr("data-embed-path", p)).unwrap();
             render_link_label(label, p, opts, out);
             out.push_str("</div>");
         }
         LinkTarget::Url(url) => {
-            out.push_str(&format!("<a{}>", attr("href", url)));
+            write!(out, "<a{}>", attr("href", url)).unwrap();
             render_link_label(label, url, opts, out);
             out.push_str("</a>");
         }
         LinkTarget::Path(p) => {
-            out.push_str(&format!(
+            write!(
+                out,
                 "<a class=\"internal-path\"{} href=\"#\">",
                 attr("data-path", p)
-            ));
+            )
+            .unwrap();
             render_link_label(label, p, opts, out);
             out.push_str("</a>");
         }

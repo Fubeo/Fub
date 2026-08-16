@@ -72,6 +72,11 @@ struct BatchState {
     /// vedrebbe se glielo si mostrasse — quindi l'ordine è quello in cui le cose
     /// sono successe, non quello di una `HashSet`.
     changed: Vec<DocId>,
+    /// La stessa conoscenza, vista come insieme: la domanda «è già dentro?»
+    /// si fa a ogni evento, e farla su un `Vec` è un giro del lotto per
+    /// evento. Il `Vec` resta l'elenco che esce; questo è solo come ci si
+    /// guarda dentro.
+    toccati: std::collections::HashSet<DocId>,
     /// Almeno un [`Event::IndexUpdated`] è stato soppresso: alla chiusura il
     /// lotto ha qualcosa da dire anche se non ha toccato documenti (una
     /// rimozione dal solo indice, un rebuild).
@@ -256,7 +261,7 @@ impl Dispatcher {
                 return;
             }
             if let Some(doc) = event.touched() {
-                if !state.changed.contains(doc) {
+                if state.toccati.insert(doc.clone()) {
                     state.changed.push(doc.clone());
                 }
             }
@@ -309,6 +314,7 @@ impl Dispatcher {
         self.batch = Some(BatchState {
             id,
             changed: Vec::new(),
+            toccati: std::collections::HashSet::new(),
             index_dirty: false,
         });
         true

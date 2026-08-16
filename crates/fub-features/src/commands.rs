@@ -42,6 +42,8 @@
 //! un messaggio e un effetto, non dati). Chi deve mostrare il cestino lo legge
 //! dal canale di lettura — la shell dal suo IPC, una view da `list_trash`.
 
+use std::collections::HashSet;
+
 use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
@@ -1784,10 +1786,13 @@ fn vault_archive(
         // l'ordine in cui le cose succederebbero, e `complete()` dell'host
         // ricontrolla comunque che nessun edit nomini una nota assente.
         let mut docs_toccati: Vec<DocId> = Vec::new();
+        // La membership sta nell'insieme; l'ordine di prima comparsa lo
+        // dà comunque il Vec, che è l'ordine in cui i passi succederebbero.
+        let mut visti: HashSet<DocId> = HashSet::new();
         let mut edits: Vec<PlannedEdit> = Vec::new();
         for plan in plans {
             for d in plan.docs {
-                if !docs_toccati.contains(&d) {
+                if visti.insert(d.clone()) {
                     docs_toccati.push(d);
                 }
             }
