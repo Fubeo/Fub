@@ -143,6 +143,11 @@ feature-ufficiali = [
     "backlinks",
     "outline",
     "tags",
+    "properties",
+    "template",
+    "queries",
+    "dashboard",
+    "backup",
     "trash",
     "stats",
     "graph",
@@ -154,6 +159,11 @@ versioning = ["fub-features/versioning"]
 backlinks = ["fub-features/backlinks"]
 outline = ["fub-features/outline"]
 tags = ["fub-features/tags"]
+properties = ["fub-features/properties"]
+template = ["fub-features/template"]
+queries = ["fub-features/queries"]
+dashboard = ["fub-features/dashboard"]
+backup = ["fub-features/backup"]
 trash = ["fub-features/trash"]
 stats = ["fub-features/stats"]
 graph = ["fub-features/graph"]
