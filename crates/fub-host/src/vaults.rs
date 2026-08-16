@@ -27,7 +27,10 @@
 //! *Quali vault sono aperti adesso*: quello è [`Host`](crate::Host), è stato di
 //! processo e muore con lui. Qui c'è la memoria fra un avvio e l'altro, che è
 //! un'altra cosa e va tenuta separata — o riaprire l'app riaprirebbe da sé
-//! tutto ciò che era aperto tre settimane fa.
+//! tutto ciò che era aperto tre settimane fa. La shell all'avvio non chiede
+//! l'insieme dei vault aperti tre settimane fa: chiede **un** path, l'ultimo
+//! `last_opened` ancora sul disco, e il registro è la memoria di recency che le
+//! lo dà.
 
 use crate::custodia::Custodia;
 use std::collections::BTreeMap;
@@ -169,6 +172,35 @@ impl VaultRegistry {
                 .then(a.root.cmp(&b.root))
         });
         entries
+    }
+
+    /// I vault conosciuti in **ordine di recenza** — dal più recente — senza
+    /// che i preferiti saltino davanti: l'avvio chiede *l'ultimo aperto*, e un
+    /// preferito più vecchio non lo è.
+    ///
+    /// A differenza di [`list`](Self::list), che mette i preferiti prima per
+    /// il dialogo di scelta, questa ordina solo per `last_opened` (a parità per
+    /// `root`, come là): la domanda è «quale è stato usato per ultimo», e un
+    /// appunto non è un uso.
+    pub fn in_ordine_di_recenza(&self) -> Vec<VaultEntry> {
+        let Ok(guardia) = self.entries.read() else {
+            return Vec::new();
+        };
+        let mut entries = guardia.clone();
+        entries.sort_by(|a, b| b.last_opened.cmp(&a.last_opened).then(a.root.cmp(&b.root)));
+        entries
+    }
+
+    /// L'ultimo vault aperto, secondo il registro: la voce con `last_opened`
+    /// massimo (a parità, `root` meno in ordine lessicografico). Non usa
+    /// [`list`](Self::list), che mette i preferiti davanti: un preferito più
+    /// vecchio non vince sull'ultimo aperto.
+    ///
+    /// La voce c'è anche se la cartella non esiste più: chi la guarda —
+    /// [`Host::ultimo_vault`](crate::Host::ultimo_vault) — scorre i candidati e
+    /// salta chi non è più sul disco.
+    pub fn ultimo_aperto(&self) -> Option<VaultEntry> {
+        self.in_ordine_di_recenza().into_iter().next()
     }
 
     /// Questa radice è in elenco **esattamente sotto questo nome**?
