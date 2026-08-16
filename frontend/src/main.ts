@@ -363,6 +363,13 @@ async function openVaultPath(dir: string): Promise<void> {
   // buono — un vault che si apre male tiene comunque i comandi e gli accordi —
   // e `Promise.all` rifiuta come rifiutava `mountDeclaredViews` da solo.
   await Promise.all([mountDeclaredViews(), loadCommandSpecs(), loadKeyOverrides()]);
+  // S5-1: `mountDeclaredViews` svuota i contenitori delle view dichiarate
+  // (views.ts) prima di rimontarle, e il grafo — view dichiarata anche lui —
+  // resta senza superficie. `sincronizza()` rifà il giro di `mostra` per ogni
+  // riquadro e rimonta le view dichiarate (`montaVistaInRiquadro` in
+  // document.ts è idempotente): è il passaggio che rimette a posto la tab del
+  // grafo dopo l'azzeramento di `mountDeclaredViews`.
+  await sincronizza();
   // Le view dichiarate `left_sidebar` sono state montate in `#views-left`:
   // la rail le scopre e aggiunge i bottoni dopo le icone shell.
   syncRail();
