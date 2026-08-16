@@ -139,7 +139,7 @@ const SINTASSI = [
 /// del testo, tema per tema. Un elenco, non un'esenzione — chi entra o esce da
 /// qui lo fa apposta, e il test lo dice.
 const SOTTO_AA: Record<Tema, readonly string[]> = {
-  dark: ["name", "comment", "heading"],
+  dark: [],
   light: ["name", "function", "type", "operator", "comment", "string", "heading"],
 };
 
@@ -211,11 +211,11 @@ describe("il conto è quello della WCAG", () => {
   // renderebbe verde qualunque tabella.
   it("bianco su nero è 21:1, e un colore con sé stesso è 1:1", () => {
     expect(contrasto("#ffffff", "#000000")).toBeCloseTo(21, 5);
-    expect(contrasto("#6d5efc", "#6d5efc")).toBeCloseTo(1, 5);
+    expect(contrasto("#a3e635", "#a3e635")).toBeCloseTo(1, 5);
   });
 
   it("e il verso non conta", () => {
-    expect(contrasto("#ffffff", "#6d5efc")).toBeCloseTo(contrasto("#6d5efc", "#ffffff"), 10);
+    expect(contrasto("#ffffff", "#a3e635")).toBeCloseTo(contrasto("#a3e635", "#ffffff"), 10);
   });
 
   it("il grigio a metà scala sopra il bianco sta poco sotto 4:1", () => {
@@ -232,7 +232,7 @@ describe("i token si leggono davvero dal foglio", () => {
   // presidiare senza dirlo — la stessa cautela del presidio della scocca.
   it("le due tavolozze sono piene, e il chiaro ne ridichiara una parte", () => {
     expect(Object.keys(TAVOLOZZE.dark).length).toBeGreaterThan(50);
-    expect(TAVOLOZZE.dark.bg).toBe("#1e1e24");
+    expect(TAVOLOZZE.dark.bg).toBe("#000000");
     expect(TAVOLOZZE.light.bg).toBe("#f7f7f9");
     // Il chiaro eredita le dimensioni invece di ricopiarle: se un giorno
     // ridichiarasse tutto, sarebbe la duplicazione che tokens.css evita.

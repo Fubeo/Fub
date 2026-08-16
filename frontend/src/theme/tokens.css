@@ -95,6 +95,18 @@
      `0.04em` in un altro, per la stessa riga). */
   --tracking-caps: 0.6px;
 
+  /* Il chrome della finestra: altezza della titlebar, larghezza della rail.
+     Non sono spaziatura — sono la scocca — e stanno qui perché il foglio e il
+     layout devono dire lo stesso numero. */
+  --titlebar-h: 38px;
+  --rail-w: 44px;
+
+  /* Il moto. Corto sui hover, medio su ciò che si apre. La curva è la stessa
+     da ogni parte, così un bottone e una tab non sembrano due prodotti. */
+  --duration-fast: 120ms;
+  --duration-med: 180ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
   /* I piani. Erano sei numeri sparsi fra 50 e 90, e l'ordine fra loro era
      leggibile solo confrontandoli a mano in file diversi. Qui l'ordine è la
      lista: chi ne aggiunge uno vede subito sopra e sotto cosa passa. */
@@ -125,10 +137,18 @@
      `--bg-input` usato per un'altra cosa in undici regole: due ruoli sullo
      stesso valore sono due ruoli che non si possono più cambiare separatamente,
      ed è proprio ciò che un tema chiaro chiede di fare. */
-  --bg: #1e1e24;
-  --bg-elev: #26262e;
-  --bg-input: #2d2d38;
-  --bg-hover: #2d2d38;
+  --bg: #000000;
+  --bg-elev: #0a0a0a;
+  --bg-input: #141414;
+  --bg-hover: #1a1a1a;
+  /* Titlebar, rail, statusbar: un filo più in fondo del contenuto, così il
+     documento è la superficie che si avvicina e il chrome quella che sta
+     ferma. Non è `--bg-elev` al contrario — quello solleva i pannelli — è
+     lo strato della scocca. */
+  --bg-chrome: #000000;
+  /* Wash da ghost button: un velo sul testo, non un secondo grigio. In alpha
+     perché deve restare un velo sopra qualunque superficie, chrome o no. */
+  --overlay-hover: rgb(255 255 255 / 8%);
 
   --border: #35353f;
 
@@ -141,22 +161,21 @@
      selezione): come segno gli basta il 3:1, come fondo porta con sé
      `--accent-contrast`. `--accent-soft` è un **inchiostro**: sta sopra le
      superfici, e gli tocca la soglia del testo — sopra `--bg-input`, che è la
-     peggiore delle quattro, era a 4,18:1 ed è salito qui. */
-  --accent: #6d5efc;
-  --accent-soft: #9286ff;
+     peggiore delle quattro, sta a 14,1:1. È lime: l'accento è un verde-giallo
+     chiaro, e su un fondo nero l'inchiostro deve essere luminoso per reggere. */
+  --accent: #a3e635;
+  --accent-soft: #bef264;
   /* Il testo **sopra** l'accento. Era `white` cablato in due regole, ed è la
      riga che un tema chiaro non può ereditare: su un accento chiaro il bianco
      sparisce.
 
-     Il bianco sopra `#6d5efc` sta a **4,51:1**, cioè passa AA per il secondo
-     decimale — ed è lo stesso numero che il tema chiaro ha rifiutato scurendo
-     il proprio accento. Qui non si può fare la stessa cosa: scurire l'accento
-     su un fondo scuro lo spegne contro il fondo, e `--accent` sopra `--bg` è
-     già a 3,68:1, cioè a un passo dal minimo dei segni. È un margine che non
-     c'è, non un margine che nessuno ha guardato: `theme/contrast.test.ts` lo
-     ricalcola a ogni giro, e la via d'uscita vera è la tavolozza ad alto
-     contrasto del 25.1. */
-  --accent-contrast: #ffffff;
+     Il nero sopra `#a3e635` sta a **13,93:1** — passa AA con margine largo.
+     Il bianco sopra il lime NON passa: `#ffffff` su `#a3e635` è sotto 1,6:1,
+     cioè il testo sparisce. È il verso opposto del vecchio viola, dove era il
+     bianco a reggere per il secondo decimale e il nero a cadere. Qui il nero è
+     l'unico che sta in piedi, e `theme/contrast.test.ts` lo ricalcola a ogni
+     giro sulle coppie che i token dichiarano di formare. */
+  --accent-contrast: #000000;
 
   /* Gli intenti della shell. Prima non esistevano e al loro posto si prendeva
      `--doc-danger` — cioè il rosso del **documento**, che è un'altra cosa: uno
@@ -169,12 +188,12 @@
      documento sopra `--doc-bg`, e le due soglie cadono in due punti diversi. */
   --danger: #e2747d;
   --danger-wash: rgb(224 108 117 / 18%);
-  --danger-contrast: #1a1a1a;
+  --danger-contrast: #000000;
 
   /* L'anello del fuoco (§12.4). Non è l'accento: deve reggere sopra l'accento
      stesso — un pulsante primario che prende il fuoco lo mostra su fondo
      accento — quindi è un colore a parte, non un alias. */
-  --focus-ring: #b9b0ff;
+  --focus-ring: #d9f99d;
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
 
@@ -191,7 +210,7 @@
      superficie, non essendo raggiungibile dal foglio di stile, è quella che si
      dimentica per prima quando si cambia tema. */
   --graph-node: #8a8a99;
-  --graph-node-active: #8a7dff;
+  --graph-node-active: #a3e635;
   --graph-node-hover: #98c379;
 
   /* --- la superficie del documento --------------------------------------- */
@@ -204,7 +223,7 @@
      dell'editor (`editor/theme.ts`), che prima portava i propri: finché quello
      era `oneDark`, questa promessa era vera solo perché i valori qui sotto erano
      stati **ricopiati** da lui a mano. */
-  --doc-bg: #282c34;
+  --doc-bg: #000000;
   --doc-fg: #abb2bf;
   --doc-link: #82aaff;
   /* I titoli hanno un colore, e ce l'hanno anche in scrittura: è il tema di
@@ -228,11 +247,11 @@
      riga corrente, il margine coi numeri. */
   --doc-caret: #528bff;
   --doc-selection: #3e4451;
-  --doc-active-line: #2c313a;
+  --doc-active-line: #111111;
   /* I numeri di riga sono testo che qualcuno legge, non decorazione: valevano
      `#7d8799` — lo stesso grigio dei commenti — e stavano a 3,86:1. */
   --doc-gutter-fg: #8b94a4;
-  --doc-tooltip-bg: #353a42;
+  --doc-tooltip-bg: #141414;
 
   /* --- i colori della sintassi ------------------------------------------- */
 
@@ -243,9 +262,10 @@
      tavolozze scelte da persone diverse.
 
      Ed è il motivo per cui questi dieci colori — soli, in tutto il file — non
-     reggono la soglia AA del testo: tre al buio e sette in luce stanno fra
-     3:1 e 4,5:1. Portarceli vorrebbe dire ritoccarli uno alla volta, e ciò che
-     resterebbe non sarebbe più né One Dark né One Light, ma una tavolozza
+     reggono tutti la soglia AA del testo: sul fondo nero del tema scuro ormai
+     li passano tutti (il nero alza ogni contrasto), ma sette in luce stanno
+     fra 3:1 e 4,5:1. Portarceli vorrebbe dire ritoccarli uno alla volta, e ciò
+     che resterebbe non sarebbe più né One Dark né One Light, ma una tavolozza
      scelta un colore per volta da chi passava di lì — cioè esattamente la cosa
      che prenderli in coppia serviva a evitare. Il debito è dichiarato per nome
      in `theme/contrast.test.ts`, che tiene fermo il pavimento dei segni (3:1)
@@ -279,39 +299,46 @@
    che questo file evita. */
 :root[data-theme="light"] {
   --bg: #f7f7f9;
-  /* Sollevato, in luce, vuol dire **più chiaro**: la topbar e i pannelli
-     galleggiano verso il bianco, non verso il nero. È la sola riga di questo
-     blocco che inverte una direzione invece di cambiare un valore. */
+  /* Sollevato, in luce, vuol dire **più chiaro**: i pannelli galleggiano
+     verso il bianco, non verso il nero. È la sola riga di questo blocco che
+     inverte una direzione invece di cambiare un valore. La titlebar non
+     galleggia: è chrome, e `--bg-chrome` sta un filo più freddo del
+     contenuto. */
   --bg-elev: #ffffff;
   --bg-input: #ececf1;
   --bg-hover: #e8e8ee;
+  --bg-chrome: #f4f5fa;
+  --overlay-hover: rgb(0 0 0 / 6%);
 
   --border: #d9d9e0;
 
   --text: #1c1c22;
   --muted: #5f5f6b;
 
-  /* L'accento scurisce. Il bianco sopra `#6d5efc` sta a 4,51:1 — cioè passa la
-     soglia AA per il quinto decimale, che vuol dire che non la passa: basta un
-     antialiasing o un pulsante disabilitato al 50% di opacità e sotto ci
-     finisce. Sopra `#4f3fd6` sta a 7,0:1. I due numeri non stanno qui per
-     fiducia: li ricalcola `theme/contrast.test.ts` a ogni giro, sulle coppie
-     che i token dichiarano di formare.
+  /* L'accento diventa lime. Il nero sopra `#5a8f00` sta a **5,36:1** — passa
+     AA, e passa con margine. Il bianco non andrebbe: sul lime medio il bianco
+     è sotto 3:1 come segno e sotto 4,5:1 come testo, cioè sparisce in entrambi
+     i ruoli. I due numeri non stanno qui per fiducia: li ricalcola
+     `theme/contrast.test.ts` a ogni giro, sulle coppie che i token dichiarano
+     di formare.
 
-     E `--accent-soft` scurisce con lui, per il verso opposto a quello del tema
-     scuro: là «tenue» vuol dire più chiaro dell'accento, qui più scuro, perché
-     da questa parte è il fondo a essere chiaro. Valeva `#6d5efc` — l'accento
-     del tema scuro, ricopiato — e come inchiostro stava a 4,21:1 sul fondo
-     dell'app. */
-  --accent: #4f3fd6;
-  --accent-soft: #5d4cfc;
-  --accent-contrast: #ffffff;
+     `--accent-soft` è l'inchiostro sulle superfici chiare: `#3f6212` su `--bg`
+     sta a 6,61:1. Il verso è l'opposto del tema scuro — là «tenue» vuol dire più
+     chiaro dell'accento, qui più scuro — perché da questa parte è il fondo a
+     essere chiaro, e un lime chiaro come segno non regge 3:1 sul bianco.
+
+     Come **segno**, `--accent` `#5a8f00` su `--bg` `#f7f7f9` sta a 3,66:1:
+     sopra la soglia dei segni (3:1), sotto quella del testo (4,5:1) — ed è
+     giusto così, perché un fondo di bottone non è testo. */
+  --accent: #5a8f00;
+  --accent-soft: #3f6212;
+  --accent-contrast: #000000;
 
   --danger: #c0392f;
   --danger-wash: rgb(192 57 47 / 12%);
   --danger-contrast: #ffffff;
 
-  --focus-ring: #3b2fbd;
+  --focus-ring: #3f6212;
 
   --scrim: rgb(20 20 30 / 35%);
   --shadow-sm: 0 4px 14px rgb(20 20 40 / 12%);
@@ -339,7 +366,7 @@
      vuoto: `#9a9aa8` sul fondo chiaro stava a 2,60:1, sotto il minimo dei
      segni. */
   --graph-node: #8b8b9b;
-  --graph-node-active: #4f3fd6;
+  --graph-node-active: #5a8f00;
   --graph-node-hover: #3f8c3e;
 
   --syn-keyword: #a626a4;
