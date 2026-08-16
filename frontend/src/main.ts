@@ -31,9 +31,12 @@ import {
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
 import { apriVita } from "./ui/vita";
-import { mountSidebarCommands } from "./panels/sidebar";
+import { mountSidebarCommands, showPanel } from "./panels/sidebar";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
+import { mountTitlebar } from "./ui/titlebar";
+import { mountAppMenu } from "./ui/app-menu";
+import { mountRail, syncRail } from "./panels/rail";
 import { mountStrings, t } from "./i18n/strings";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
@@ -114,6 +117,12 @@ async function init(): Promise<void> {
   // che si scopre incompleto solo cambiando lingua.
   mountStrings(() => void refreshAllPanels());
 
+  // La titlebar custom (§Fase 2): i controlli finestra e il doppio click.
+  // Va dopo `mountStrings` perché i suoi aria-label seguono la lingua, e
+  // prima dei pannelli perché è il chrome — la cornice che c'è prima del
+  // contenuto.
+  mountTitlebar(vitaFinestra);
+
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
   // documento mostra l'anteprima (in Lettura) e l'anteprima apre i documenti;
   // il pannello del documento manda a cercare un tag e la ricerca apre i
@@ -152,6 +161,11 @@ async function init(): Promise<void> {
   // pannello, quindi qui basta dichiararlo.
   mountDocSearch();
   mountQuickSwitcher();
+  // La rail (§Fase 2): le icone shell a sinistra — Note, Cerca, Grafo —
+  // sempre visibili. Le view dichiarate `left_sidebar` si aggiungono dopo,
+  // a ogni apertura di vault, con `syncRail()`. Va prima di `mountGraph`
+  // perché crea `#show-graph`, che `mountGraph` ascolta.
+  mountRail();
   mountGraph();
   // Le due superfici della barra di stato (§10.3): cosa sta girando, e cosa è
   // stato detto. Il centro attività si iscrive agli eventi del kernel, quindi
@@ -176,6 +190,7 @@ async function init(): Promise<void> {
       // non si leggono a vicenda, e chi accende un componente le aspetta
       // entrambe.
       await Promise.all([mountDeclaredViews(), loadCommandSpecs()]);
+      syncRail();
     },
   });
 
@@ -202,6 +217,29 @@ async function init(): Promise<void> {
     run: () => void openCommandPalette(paletteHost),
   });
   mountSidebarCommands();
+
+  // La menubar applicativa (§Fase 2): cinque voci che invocano i comandi
+  // di shell già registrati. Il menu non registra niente: legge il
+  // registro, e `main.ts` gli inietta `run(id)` che risolve l'entry e la
+  // esegue come farebbe la tastiera.
+  mountAppMenu({
+    run: (id) => {
+      const entry = allCommands().find((e) => e.id === id);
+      if (entry) startCommand(entry, paletteHost);
+    },
+  });
+
+  // Il trigger di ricerca nella titlebar: fa focus su `#search-input`, che è
+  // la ricerca onesta — già lì, già cablata — e non una palette travestita.
+  // Il title dice che la palette è Mod-Shift-P, per chi cerca un comando.
+  $("#command-search").addEventListener("click", () => {
+    showPanel("search");
+    $("#search-input").focus();
+  });
+  // Il bottone palette nella titlebar: apre la palette dei comandi.
+  $("#open-palette").addEventListener("click", () =>
+    void openCommandPalette(paletteHost),
+  );
 
   // La tastiera, in un punto solo, e su **un registro solo**: i comandi del
   // kernel e quelli della shell, con l'accordo efficace di ognuno — quello che
@@ -325,6 +363,9 @@ async function openVaultPath(dir: string): Promise<void> {
   // buono — un vault che si apre male tiene comunque i comandi e gli accordi —
   // e `Promise.all` rifiuta come rifiutava `mountDeclaredViews` da solo.
   await Promise.all([mountDeclaredViews(), loadCommandSpecs(), loadKeyOverrides()]);
+  // Le view dichiarate `left_sidebar` sono state montate in `#views-left`:
+  // la rail le scopre e aggiunge i bottoni dopo le icone shell.
+  syncRail();
   await avvisaSeDueComandiSiContendonoUnTasto();
   // **Dopo** i conflitti, e non è indifferente: una scorciatoia sospesa non è in
   // vigore, quindi non partecipa a nessun conflitto — e dire prima «questo vault

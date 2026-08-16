@@ -14,6 +14,8 @@
       {
         "label": "main",
         "title": "Fub",
+        "decorations": false,
+        "shadow": true,
         "width": 1280,
         "height": 840,
         "minWidth": 800,

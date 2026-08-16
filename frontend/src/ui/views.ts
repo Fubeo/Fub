@@ -16,16 +16,17 @@
 //
 // # Le superfici che questa shell ospita, e quelle che no
 //
-// Il contratto ne nomina dieci (§2.2). Questa shell ne ospita **otto** — le tre
+// Il contratto ne nomina dieci (§2.2). Questa shell ne ospita **nove** — le tre
 // sidebar/basso di prima, più barra di stato, ribbon, modale, la scheda di
-// impostazioni (§11.1) e, dalla §3.3, l'**area principale** — e le altre due le
-// dichiara **non ospitate** invece di lasciarle cadere in silenzio. Una view che
-// le chiede riceve un avviso che la nomina, e dal §20.4 quell'avviso arriva a
-// chi guarda lo schermo invece che a una console che nessuno apre.
+// impostazioni (§11.1), l'**area principale** e, dalla scocca custom, il
+// **menu applicativo** — e l'unica che dichiara **non ospitata** è il menu
+// contestuale estendibile. Una view che lo chiede riceve un avviso che lo
+// nomina, e dal §20.4 quell'avviso arriva a chi guarda lo schermo invece che a
+// una console che nessuno apre.
 //
 // # `main` è ospitata, e in un modo diverso da tutte le altre
 //
-// Le altre sette hanno un contenitore in `index.html`: c'è, è uno, e una view
+// Le altre otto hanno un contenitore in `index.html`: c'è, è uno, e una view
 // che le dichiara ci finisce dentro da sola all'avvio. L'area principale no —
 // di riquadri ce ne sono N, si dividono e si chiudono, e un riquadro non è un
 // posto che si riempie da solo: è un posto in cui **qualcuno mette qualcosa**.
@@ -47,6 +48,7 @@ import { flushPendingSave } from "../panels/document";
 import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
 import { notify } from "./notify";
 import { t } from "../i18n/strings";
+import { iconEl } from "./icons";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -55,6 +57,7 @@ const viewsStatusEl = $("#views-status");
 const viewsRibbonEl = $("#views-ribbon");
 const viewsModalEl = $("#views-modal");
 const viewsSettingsEl = $("#views-settings");
+const viewsMenuExtraEl = $("#app-menu-extra");
 
 /// Un esemplare montato: dove disegnarlo, e con che identità e parametri
 /// chiederlo al kernel.
@@ -178,7 +181,9 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
     // `viewPrincipali` più sotto — `null` qui significa «non all'avvio», non
     // «non si può».
     case "main":
+      return null;
     case "menu":
+      return viewsMenuExtraEl;
     case "context_menu":
       return null;
   }
@@ -188,7 +193,6 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
 /// perché è ciò che l'avviso dice a chi ha scritto la view: senza, il messaggio
 /// sarebbe «non supportato», che non aiuta nessuno a capire cosa aspettare.
 const NON_OSPITATE: Record<string, string> = {
-  menu: "questa shell non ha un menu applicativo",
   context_menu: "questa shell non ha un menu contestuale estendibile",
 };
 
@@ -232,11 +236,17 @@ export async function mountDeclaredViews(): Promise<void> {
     viewsRightEl,
     viewsBottomEl,
     viewsStatusEl,
-    viewsRibbonEl,
     viewsModalEl,
     viewsSettingsEl,
+    viewsMenuExtraEl,
   ]) {
     el.replaceChildren();
+  }
+  // La rail non si svuota tutta: `#rail-shell` (le icone della shell) resta,
+  // e si tolgono solo le view dichiarate che il giro precedente aveva
+  // appoggiato dopo di lui.
+  for (const viewBtn of viewsRibbonEl.querySelectorAll(".rail-btn-view")) {
+    viewBtn.remove();
   }
   // Il nome della superficie modale se ne va coi titoli che lo componevano: un
   // `aria-labelledby` che sopravvive a ciò a cui punta è la regola *riferimento
@@ -272,8 +282,10 @@ export async function mountDeclaredViews(): Promise<void> {
 
   viewsBottomEl.hidden = viewsBottomEl.childElementCount === 0;
   viewsStatusEl.hidden = viewsStatusEl.childElementCount === 0;
-  viewsRibbonEl.hidden = viewsRibbonEl.childElementCount === 0;
   viewsModalEl.hidden = viewsModalEl.childElementCount === 0;
+  // L'inspector a tab: per le view `right_sidebar` costruisce un tablist in
+  // cima. Va dopo il montaggio, perché legge i pannelli già nati.
+  costruisciInspector();
   trappolaModale();
   await Promise.all([...montate.keys()].map((id) => refreshPanel(id)));
 }
@@ -308,6 +320,11 @@ function trappolaModale(): void {
 function montaSpec(spec: ViewSpec, host: HTMLElement): void {
   const pannello = document.createElement("div");
   pannello.className = "declared-view-panel";
+  // L'id sta sul pannello, non solo sul contenitore interno: la rail e
+  // l'inspector a tab lo cercano da qui (`dataset.viewId`). Senza, i bottoni
+  // della rail non nascevano e i tab persistivano `view-0` invece dell'id vero.
+  pannello.dataset.viewId = spec.id;
+  pannello.id = `view-panel-${spec.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   // `open_by_default` decide come nasce; da lì in poi decide chi clicca — e
   // solo se la view si lascia chiudere.
   pannello.classList.toggle("collapsed", !spec.open_by_default);
@@ -462,6 +479,108 @@ function disegna(id: string, montata: Montata, albero: UiNode): void {
       return;
     }
     await applyIntent(update);
+  });
+}
+
+
+/// L'inspector a tab: per le view `right_sidebar`, una tab per view.
+///
+/// Le view dichiarate con `right_sidebar` si montano in `#views-right` come
+/// pannelli (`.declared-view-panel`), tutti visibili insieme fin qui. La
+/// shell vuole invece un inspector a tab — uno alla volta, come Obsidian —
+/// e questa funzione lo costruisce: un tablist in cima, un tab per view, e
+/// tutti i pannelli nascosti tranne quello attivo.
+///
+/// La scelta si persiste con `api.setViewState("inspector.tab", id)` e si
+/// ripristina al rimontaggio: chi aveva aperto Backlink ritrova Backlink.
+/// Il default è la prima view `open_by_default`, o la prima in assoluto.
+function costruisciInspector(): void {
+  const pannelli = [...viewsRightEl.querySelectorAll<HTMLElement>(".declared-view-panel")];
+  // Rimuove il tablist del giro precedente, se c'è.
+  viewsRightEl.querySelector(".inspector-tabs")?.remove();
+  if (pannelli.length === 0) return;
+
+  // Il tablist: un bottone per view, con ruolo `tab`. L'aria-selected segue
+  // quale è attivo, e le frecce lo spostano — la navigazione da tastiera
+  // che un tablist ARIA richiede.
+  const tablist = document.createElement("div");
+  tablist.className = "inspector-tabs";
+  tablist.setAttribute("role", "tablist");
+  tablist.setAttribute("aria-label", t("inspector.region"));
+
+  // Quale tab è attivo? La scelta persistita, o la prima open_by_default,
+  // o la prima in assoluto. La si scopre dopo aver costruito i tab, perché
+  // la persistenza è async e il default è sincrono.
+  let attivo = 0;
+  for (let i = 0; i < pannelli.length; i++) {
+    const pannello = pannelli[i]!;
+    const viewId = pannello.dataset.viewId ?? `view-${i}`;
+    const titolo = pannello.querySelector<HTMLElement>(".panel-title");
+    const nome = titolo?.textContent ?? viewId;
+    const icona = titolo?.dataset.icon ?? "outline";
+
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "inspector-tab";
+    tab.setAttribute("role", "tab");
+    tab.dataset.viewId = viewId;
+    tab.setAttribute("aria-selected", "false");
+    tab.setAttribute("aria-controls", pannello.id || viewId);
+    tab.title = nome;
+    // L'icona: se la view ne dichiara una la si usa, altrimenti il fallback.
+    const svg = iconEl(icona) ?? iconEl("outline");
+    if (svg) tab.append(svg);
+    // Il nome come tooltip e aria-label; il testo visibile è l'icona sola,
+    // per tenere l'inspector compatto come una barra laterale deve essere.
+    tab.setAttribute("aria-label", nome);
+
+    tab.addEventListener("click", () => attivaTab(i));
+    // Frecce sinistra/destra: navigazione del tablist, come ARIA chiede.
+    tab.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const prossimo = (i + 1) % pannelli.length;
+        attivaTab(prossimo);
+        (tablist.children[prossimo] as HTMLElement)?.focus();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const precedente = (i - 1 + pannelli.length) % pannelli.length;
+        attivaTab(precedente);
+        (tablist.children[precedente] as HTMLElement)?.focus();
+      }
+    });
+
+    tablist.append(tab);
+  }
+
+  // Mostra solo il pannello attivo, nasconde gli altri. `aria-selected` e
+  // `hidden` seguono la stessa scelta, ed è ciò che li tiene coerenti.
+  function attivaTab(indice: number): void {
+    attivo = indice;
+    for (let i = 0; i < pannelli.length; i++) {
+      const pannello = pannelli[i]!;
+      const tab = tablist.children[i] as HTMLElement;
+      const on = i === indice;
+      pannello.hidden = !on;
+      tab?.setAttribute("aria-selected", String(on));
+    }
+    const viewId = pannelli[indice]?.dataset.viewId;
+    if (viewId) void api.setViewState("inspector.tab", viewId);
+  }
+
+  // Il tablist va in cima, prima dei pannelli.
+  viewsRightEl.prepend(tablist);
+
+  // Ripristina la scelta persistita, o il default. La persistenza è async
+  // — arriva dal backend — e il default è la prima `open_by_default` o la
+  // prima in assoluto: la si sceglie ora, e se la persistenza arriva dopo
+  // la si applica sovrascrivendo.
+  const defaultIndex = pannelli.findIndex((p) => !p.classList.contains("collapsed"));
+  attivaTab(defaultIndex >= 0 ? defaultIndex : 0);
+  void api.viewState<string>("inspector.tab").then((salvato) => {
+    if (!salvato) return;
+    const idx = pannelli.findIndex((p) => p.dataset.viewId === salvato);
+    if (idx >= 0 && idx !== attivo) attivaTab(idx);
   });
 }
 

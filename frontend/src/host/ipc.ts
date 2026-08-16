@@ -280,3 +280,34 @@ export function allaChiusura(prima: () => Promise<void>): Promise<() => void> {
     }
   });
 }
+
+/// I controlli della finestra custom: la titlebar disegna i propri bottoni
+/// minimizza/massimizza/chiudi e ha bisogno di muovere la finestra vera.
+///
+/// Sta qui e non in un `#[tauri::command]` per due regole del piano:
+/// - **Cucitura (§1.3)**: questo modulo e `dialog.ts` sono gli unici che
+///   toccano `@tauri-apps`. I controlli finestra vivono sull'API JS di
+///   Tauri 2 (`getCurrentWindow()`), già importata per `allaChiusura`, e
+///   tenerli qui significa che la titlebar non deve importare niente di
+///   Tauri — le passa la `finestra` come qualsiasi altra porta.
+/// - **Dieta IPC (§16.6)**: la dieta dei comandi è chiusa, e queste sono
+///   chiamate all'API nativa del window manager, non comandi del kernel.
+///   Non c'è niente da invocare, niente `#[tauri::command]` da scrivere.
+///
+/// `chiudi` usa `close()` e non `destroy()`: `allaChiusura` intercetta
+/// `tauri://close-requested` e chiama `destroy()` in coda al gestore, e
+/// quella catena deve continuare a funzionare — un `destroy()` diretto
+/// qui la scavalcherebbe e saltarebbe il salvataggio della bozza.
+export const finestra = {
+  minimizza: (): Promise<void> => getCurrentWindow().minimize(),
+  alternaMassimizza: (): Promise<void> => getCurrentWindow().toggleMaximize(),
+  chiudi: (): Promise<void> => getCurrentWindow().close(),
+  eMassimizzata: (): Promise<boolean> => getCurrentWindow().isMaximized(),
+  /// La titlebar deve ridisegnare l'icona max/restore quando lo stato cambia.
+  /// Tauri 2 non espone un `onMaximize`/`onUnmaximize` separato: `onResized`
+  /// copre sia il resize manuale sia il maximize/unmaximize. Se l'ascolto non
+  /// fosse disponibile (PWA/mobile), si torna un unlisten vuoto — la titlebar
+  /// non si rompe, perde solo l'aggiornamento live dell'icona.
+  onCambio: (cb: () => void): Promise<() => void> =>
+    getCurrentWindow().onResized(() => cb()),
+};

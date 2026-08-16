@@ -22,6 +22,19 @@
   display: none !important;
 }
 
+/* Chi chiede meno moto lo ottiene: le durate vanno a zero, le curve restano
+   perché non c'è più niente da interpolare. Non `display` e non `visibility`:
+   è il moto che si spegne, non la superficie. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 /* Il fuoco si vede, ovunque e per costruzione (§12.4).
  *
  * Prima non si vedeva quasi mai, e non per una svista: tre regole
@@ -83,7 +96,7 @@ html, body, #app {
   align-items: center;
   gap: var(--space-6);
   padding: var(--space-4) var(--space-7);
-  background: var(--bg-elev);
+  background: var(--bg-chrome);
   border-bottom: 1px solid var(--border);
 }
 
@@ -98,16 +111,45 @@ html, body, #app {
   font-size: var(--text-sm);
 }
 
+/* Il default è ghost. Il pieno viola su ogni `<button>` era il difetto n.1:
+   titlebar, rail, tab, statusbar, tutto sembrava un CTA. Il pieno resta
+   `button.primary` (e gli intenti dichiarati che lo sono per contratto). */
 button {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: transparent;
+  color: var(--text);
   border: none;
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
   cursor: pointer;
+  font: inherit;
   font-size: var(--text-base);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
 }
 button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:disabled:hover {
+  background: transparent;
+}
+
+/* CTA: dialoghi, empty state, conferma. `#open-vault` in titlebar NON è
+   questo — è un comando di chrome, quindi resta ghost. */
+button.primary,
+.ui-button.intent-primary,
+#settings-body button[type="submit"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+button.primary:hover,
+.ui-button.intent-primary:hover,
+#settings-body button[type="submit"]:hover {
   background: var(--accent-soft);
   /* L'inchiostro cambia col fondo. `--accent-soft` è **più chiaro**
      dell'accento nel tema scuro e più scuro nel chiaro, e il bianco di
@@ -115,6 +157,14 @@ button:hover {
      3,4:1 al buio. `--bg` sì, in tutti e due — ed è la coppia che
      `theme/contrast.test.ts` presidia. */
   color: var(--bg);
+}
+
+.ui-button.intent-danger {
+  color: var(--danger);
+}
+.ui-button.intent-danger:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
 }
 
 #views-bottom {
@@ -165,9 +215,10 @@ button:hover {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  text-transform: uppercase;
+  text-transform: none;
   font-size: var(--text-xs);
-  letter-spacing: var(--tracking-caps);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.02em;
   color: var(--muted);
   margin: var(--space-3) var(--space-1);
 }
@@ -176,17 +227,19 @@ button:hover {
   margin-right: auto;
 }
 
-/* Azione testuale dentro un titolo di pannello: pesa quanto una parola. */
+/* Azione testuale dentro un titolo di pannello: pesa quanto una parola.
+   Il default è già ghost: qui si toglie il padding e si tiene il muted, così
+   non prende il wash dei bottoni. */
 .link-button {
-  background: none;
+  background: transparent;
   color: var(--muted);
   padding: 0;
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 .link-button:hover {
-  background: none;
+  background: transparent;
   color: var(--accent-soft);
   text-decoration: underline;
 }
@@ -344,9 +397,6 @@ button:hover {
   color: inherit;
   font: inherit;
 }
-#icon-picker input:focus {
-  border-color: var(--accent);
-}
 #icon-picker .icon-none {
   background: none;
   color: var(--muted);
@@ -358,6 +408,17 @@ button:hover {
   color: var(--accent-soft);
 }
 
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+textarea,
+select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
 #search-input {
   width: 100%;
   box-sizing: border-box;
@@ -367,9 +428,6 @@ button:hover {
   background: var(--bg-input);
   color: inherit;
   font: inherit;
-}
-#search-input:focus {
-  border-color: var(--accent);
 }
 
 #search-results {
@@ -429,24 +487,38 @@ button:hover {
 /* Le tre modalità del pannello (FEATURES 4.1). In lettura l'editor non c'è —
    la griglia lascia tutto lo spazio all'anteprima — e la modalità viaggia nel
    contesto di sessione, quindi le view che la seguono lo sanno. */
+/* Le tre modalità: un segmented control alto come la titlebar, non tre
+   pastiglie. L'attivo lo dice un indicatore d'accento, non il riempimento. */
 #mode-switch {
   display: inline-flex;
+  align-items: stretch;
+  height: calc(var(--titlebar-h) - var(--space-4));
   gap: 0;
+  padding: var(--space-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 #mode-switch button {
-  border-radius: 0;
-  font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  padding: 0 var(--space-3);
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
 }
-#mode-switch button:first-child {
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-}
+#mode-switch button:first-child,
 #mode-switch button:last-child {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: var(--radius-xs);
+}
+#mode-switch button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 #mode-switch button.active {
-  background: var(--accent-soft);
-  color: var(--bg);
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 /* L'area principale, che dal §1.2 è **l'albero dei riquadri** e non un editor.
@@ -514,14 +586,24 @@ button:hover {
   max-width: 16rem;
   border: none;
   border-right: 1px solid var(--border);
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+.tab:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 .tab.active {
-  background: var(--doc-bg);
-  color: var(--fg);
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .tab-name {
   overflow: hidden;
@@ -534,10 +616,15 @@ button:hover {
   color: var(--accent);
 }
 .tab-close {
-  opacity: 0.4;
+  opacity: 0.45;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  color: inherit;
 }
 .tab-close:hover {
   opacity: 1;
+  background: var(--overlay-hover);
+  color: inherit;
 }
 
 /* Quale riquadro ha il fuoco si deve **vedere**, o dividere lo schermo è un
@@ -796,23 +883,25 @@ button:hover {
   padding: var(--space-2);
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 #context-menu button {
   display: block;
   width: 100%;
   text-align: left;
-  background: none;
+  background: transparent;
   color: var(--text);
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-5);
 }
 #context-menu button:hover {
-  background: var(--accent);
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 #context-menu button.danger:hover {
-  background: var(--danger);
+  background: var(--danger-wash);
+  color: var(--danger);
 }
 
 /* Rinomina inline nella lista file */
@@ -935,7 +1024,7 @@ button:hover {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
   overflow: auto;
 }
 
@@ -953,12 +1042,6 @@ button:hover {
 
 .modale input[type="checkbox"] {
   width: auto;
-}
-
-.modale input:focus,
-.modale textarea:focus,
-.modale select:focus {
-  border-color: var(--accent);
 }
 
 .modale .palette-input {
@@ -1085,6 +1168,12 @@ button:hover {
 .modale .palette-actions button.primary {
   background: var(--accent);
   border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.modale .palette-actions button.primary:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--bg);
 }
 
 .modale .palette-actions button.danger {
@@ -1125,8 +1214,8 @@ button:hover {
   padding: var(--space-4) var(--space-6);
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   font-size: var(--text-base);
 }
 
@@ -1143,7 +1232,7 @@ button:hover {
   gap: var(--space-4);
   padding: var(--space-1) var(--space-5);
   border-top: 1px solid var(--border);
-  background: var(--bg-elev);
+  background: var(--bg-chrome);
   font-size: var(--text-sm);
   color: var(--muted);
 }
@@ -1175,7 +1264,7 @@ button:hover {
 }
 
 #statusbar button {
-  background: none;
+  background: transparent;
   border: none;
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-sm);
@@ -1185,7 +1274,7 @@ button:hover {
 }
 
 #statusbar button:hover {
-  background: var(--bg);
+  background: var(--overlay-hover);
   color: var(--text);
 }
 
@@ -1211,8 +1300,8 @@ button:hover {
   padding: var(--space-3) var(--space-5) var(--space-5);
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   font-size: var(--text-base);
 }
 
@@ -1297,7 +1386,7 @@ button:hover {
   gap: var(--space-7);
   padding: var(--space-2) var(--space-6);
   border-top: 1px solid var(--border);
-  background: var(--bg-elev);
+  background: var(--bg-chrome);
   font-size: var(--text-sm);
   color: var(--muted);
 }
@@ -1309,21 +1398,22 @@ button:hover {
 #views-status .panel-title {
   margin: 0;
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 #views-status .declared-view .ui-stack {
   gap: var(--space-6);
 }
 
-/* La ribbon: i pulsanti che aprono qualcosa. */
+/* La ribbon: i pulsanti che aprono qualcosa. Lo sposta a sinistra
+   ShellStructure; qui cambia solo la superficie, non la direzione. */
 #views-ribbon {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-6);
   border-bottom: 1px solid var(--border);
-  background: var(--bg-elev);
+  background: var(--bg-chrome);
 }
 
 /* La modale: la view che chiede qualcosa e se ne va. */
@@ -1430,13 +1520,22 @@ button:hover {
 }
 .ui-tab-button {
   border: none;
-  background: none;
+  background: transparent;
   padding: var(--space-2) var(--space-4);
   font-size: var(--text-sm);
   cursor: pointer;
+  color: var(--muted);
+  border-radius: var(--radius-xs);
+}
+.ui-tab-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 .ui-tab-button.selected {
+  background: transparent;
+  color: var(--text);
   border-bottom: 2px solid var(--accent);
+  border-radius: 0;
 }
 
 .ui-badge {
@@ -1480,6 +1579,10 @@ button:hover {
   padding: var(--space-5) var(--space-4);
   color: var(--muted);
   font-size: var(--text-sm);
+}
+.ui-empty-state .ui-button,
+.ui-empty-state button.primary {
+  margin-top: var(--space-4);
 }
 .ui-empty-title {
   font-weight: var(--weight-medium);
@@ -1580,30 +1683,42 @@ button:hover {
   padding: var(--space-3) var(--space-7) var(--space-7);
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   font-size: var(--text-base);
 }
 
 #settings-tabs {
   display: inline-flex;
-  gap: var(--space-2);
+  align-items: stretch;
+  gap: 0;
   margin-left: var(--space-6);
+  padding: var(--space-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 #settings-tabs button {
   padding: var(--space-1) var(--space-4);
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: var(--radius-xs);
   color: var(--muted);
   cursor: pointer;
   font: inherit;
+  font-size: var(--text-xs);
+}
+
+#settings-tabs button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 
 #settings-tabs button.active {
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 /* Una riga per impostazione: il testo che spiega a sinistra, il controllo a
@@ -1693,4 +1808,445 @@ button:hover {
   display: flex;
   gap: var(--space-3);
   margin-top: var(--space-4);
+}
+
+/* --- tema: segmented control (.theme-switch) -----------------------------
+   Tre opzioni (sistema/chiaro/scuro). L'attivo è un indicatore d'accento,
+   non un riempimento: è la stessa lingua di `#mode-switch` e `#settings-tabs`.
+   Il markup lo monta SettingsTheme; se i bottoni non ci sono, questi
+   selettori non fanno niente. */
+.theme-switch {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  padding: var(--space-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.theme-switch button,
+.theme-switch__segment {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-4);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+
+.theme-switch button:hover,
+.theme-switch__segment:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.theme-switch button.active,
+.theme-switch button[aria-checked="true"],
+.theme-switch button[aria-pressed="true"],
+.theme-switch__segment--active {
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* --- chrome pronto, senza muovere il layout ------------------------------
+   `#topbar` e `#views-ribbon` restano dove sono: lo scocca li sposta
+   ShellStructure. Qui ci sono le classi e gli id che, se il markup arriva,
+   si vestono da soli. */
+
+/* Titlebar: 38px, drag sulla barra, no-drag sui controlli. Innocuo se
+   `#window-controls` non c'è. Il layout a tre zone lo decide chi monta. */
+.titlebar {
+  height: var(--titlebar-h);
+  min-height: var(--titlebar-h);
+  background: var(--bg-chrome);
+  border-radius: 0;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar button,
+.titlebar a,
+.titlebar input,
+.titlebar select,
+.titlebar #mode-switch,
+.titlebar #window-controls,
+.titlebar [data-tauri-drag-region="false"] {
+  -webkit-app-region: no-drag;
+}
+
+#window-controls {
+  display: inline-flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+}
+
+.win-ctrl {
+  background: transparent;
+  border: none;
+  width: 40px;
+  height: var(--titlebar-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0;
+}
+
+.win-ctrl:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+#win-close:hover,
+#window-controls .close:hover,
+#window-controls [data-action="close"]:hover {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+/* Rail verticale 44px: classe pronta. `#views-ribbon` non cambia direzione
+   da qui — quando ShellStructure gli mette `.rail`, diventa colonna. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  width: var(--rail-w);
+  min-width: var(--rail-w);
+  flex: none;
+  padding: var(--space-2) 0;
+  border-right: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--bg-chrome);
+}
+
+.rail button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--rail-w) - var(--space-4));
+  height: calc(var(--rail-w) - var(--space-4));
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: transparent;
+}
+
+.rail button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.rail button.active,
+.rail button[aria-current="true"],
+.rail button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--overlay-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail button svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Inspector: tablist orizzontale compatta in cima a `#right-pane`. */
+.inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.inspector-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-chrome);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.inspector-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 0;
+}
+
+.inspector-tab:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.inspector-tab[aria-selected="true"],
+.inspector-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* La riga del tema è di primo piano nel gruppo Appearance: un gradino di
+ * bordo e sfondo in più, così l'occhio la trova prima delle altre impostazioni
+ * di aspetto che le stanno attorno. --bg-elev è la superficie sollevata in
+ * entrambi i temi. */
+.setting-row--theme {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+/* ===================================================================
+   ShellStructure — layout della scocca «fractal UI».
+   I componenti globali (`.titlebar`, `.rail`, `.inspector`, `.win-ctrl`,
+   `.inspector-tabs`) sono di VisualLanguage, più sopra. Qui ci sono solo le
+   regole di layout che quei componenti non possono decidere da soli: le tre
+   zone della titlebar, il workspace rail+layout, e la trasformazione della
+   ribbon in colonna verticale. Tutto in coda: niente riscrive sopra.
+   =================================================================== */
+
+/* --- titlebar: tre zone -----------------------------------------------
+   `#topbar` è già flex (VisualLanguage gli mette `.titlebar`). Lo
+   ridistribuiamo in tre zone: marchio+menu a sinistra, ricerca al centro,
+   controlli a destra. `justify-content: space-between` non basta: il centro
+   deve restare in mezzo, e le tre zone hanno pesi diversi. */
+#topbar {
+  justify-content: space-between;
+  padding: 0;
+  gap: 0;
+}
+
+#titlebar-left,
+#titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  flex: 0 0 auto;
+}
+
+#titlebar-center {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* La menubar applicativa: bottoni di menu in fila, ognuno con la sua etichetta
+   i18n. È `role="menubar"` nell'HTML, e qui è solo una fila orizzontale. */
+#app-menu {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+#app-menu button {
+  background: transparent;
+  border: none;
+ padding: 0 var(--space-3);
+ height: var(--titlebar-h);
+ font-size: var(--text-sm);
+ color: var(--muted);
+ cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+#app-menu button:hover,
+#app-menu button.menu-open {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+/* I bottoni della titlebar (ricerca, palette, impostazioni): uniformi a 32px,
+   senza bordo, con hover solo sull'overlay. */
+.titlebar-btn {
+  background: transparent;
+  border: none;
+  height: calc(var(--titlebar-h) - var(--space-4));
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+ color: var(--muted);
+ cursor: pointer;
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.titlebar-btn:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+/* #command-search: più largo, perché è il trigger di ricerca principale. */
+#command-search {
+  min-width: 200px;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+/* --- workspace: rail + layout in fila ---------------------------------
+   `#workspace` avvolge `#views-ribbon` (la rail, verticale) e `#layout`
+   (sidebar, riquadri, inspector) in una fila. La rail ha larghezza fissa
+   (`--rail-w`), il layout prende il resto. */
+#workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* La ribbon diventa la rail verticale. La classe `.rail` (VisualLanguage) le
+   dà flex-direction column e larghezza; qui togliamo il padding orizzontale
+   e il border-bottom che aveva come barra orizzontale, e le diamo un bordo
+   a destra. `#views-ribbon` è anche `role="toolbar"`: resta. */
+#views-ribbon {
+  flex-direction: column;
+  padding: var(--space-2) 0;
+  gap: var(--space-1);
+  border-bottom: none;
+  border-right: 1px solid var(--border);
+  flex: none;
+}
+
+/* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca,
+   Grafo). Le view dichiarate si appendono dopo, sempre in `#views-ribbon`. */
+#rail-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* `.rail-btn` è la classe dei bottoni rail shell e delle view dichiarate.
+   VisualLanguage sta i `.rail button` generici; questo è il nostro:
+   quadrato 36px, icona centrata. */
+.rail-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.rail-btn:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.rail-btn[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--overlay-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* I bottoni delle view dichiarate (`left_sidebar`) si distinguono dalle
+   shell per una sottile separazione. */
+.rail-btn-view {
+  margin-top: var(--space-1);
+}
+
+/* --- il layout dentro il workspace ------------------------------------
+   `#layout` era `flex: 1` dentro `#app`; adesso è dentro `#workspace`, e
+   prende il resto dopo la rail. La griglia non cambia: 240px 2fr 1fr. */
+#layout {
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- inspector: i tab in cima a #right-pane ---------------------------
+   VisualLanguage sta `.inspector` (flex column) e `.inspector-tabs`.
+   Qui assicuriamo che i pannelli dichiarati si stringano sotto i tab e che
+   solo il tab attivo sia visibile. */
+#views-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* I pannelli dell'inspector: uno visibile alla volta. `costruisciInspector`
+   mette `hidden` sui non attivi. */
+#views-right > .declared-view-panel {
+  flex: 1;
+  overflow-y: auto;
+}
+
+#views-right > .declared-view-panel[hidden] {
+  display: none !important;
+}
+
+/* --- scocca: rifiniture dopo il ridisegno --------------------------------
+   I controlli finestra su Darwin stanno in `#titlebar-left`; i titoli dei
+   pannelli dell'inspector li sostituiscono i tab; `#app-menu-extra` è la
+   superficie Menu, in fila con la menubar. */
+.titlebar--darwin #titlebar-left #window-controls {
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+.win-ctrl svg,
+#open-palette svg,
+#open-settings svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+#open-palette,
+#open-settings {
+  width: calc(var(--titlebar-h) - var(--space-4));
+  padding: 0;
+  justify-content: center;
+}
+
+#app-menu-extra {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+#app-menu-extra .declared-view-panel > .panel-title {
+  display: none;
+}
+
+/* I tab dell'inspector dicono già quale view è aperta: i titoli dei
+   pannelli, sotto, sono lo stesso nome due volte. */
+#views-right > .declared-view-panel > .panel-title {
+  display: none;
 }

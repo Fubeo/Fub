@@ -551,6 +551,13 @@ export function creaHostFinto(opzioni: Opzioni = {}): HostFinto {
         allaChiusura = null;
       });
     },
+    finestra: {
+      minimizza: () => porta("finestra.minimizza", [], Promise.resolve()),
+      alternaMassimizza: () => porta("finestra.alternaMassimizza", [], Promise.resolve()),
+      chiudi: () => porta("finestra.chiudi", [], Promise.resolve()),
+      eMassimizzata: () => porta("finestra.eMassimizzata", [], Promise.resolve(false)),
+      onCambio: (_cb) => porta("finestra.onCambio", [], Promise.resolve(() => {})),
+    },
   };
 
   /// L'albero che una view del finto disegna. Solo il cestino ne ha uno: è la
