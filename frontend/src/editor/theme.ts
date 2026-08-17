@@ -3,7 +3,7 @@
 // Prima qui c'era una riga sola — `import { oneDark }` — e sembrava la scelta
 // più economica possibile. Costava però una cosa che non si vedeva: i colori
 // della superficie del documento erano dichiarati **due volte**, una in
-// `theme/tokens.css` (dove li leggono la modalità Lettura e la live preview) e
+// `theme/serie/foglio-scuro.css` (dove li leggono la modalità Lettura e la live
 // una dentro il pacchetto `@codemirror/theme-one-dark` (dove li legge la
 // modalità Sorgente). Le due liste erano uguali perché qualcuno le aveva
 // ricopiate a mano, e il commento accanto ai token lo diceva: *«i valori
@@ -12,7 +12,7 @@
 // tocca un valore da un lato solo.
 //
 // Con un tema chiaro la cosa smetteva di essere teorica: `oneDark` è scuro per
-// definizione, e non c'è nessun valore da cambiare in `tokens.css` che possa
+// definizione, e non c'è nessun valore da cambiare in `theme/serie/foglio-scuro.css`
 // schiarirlo. O si montava un secondo pacchetto — e allora le liste diventavano
 // tre — o i colori venivano da dove già stanno.
 //
@@ -23,7 +23,7 @@
 // sulla radice e i colori seguono, documento e cronologia di undo intatti.
 //
 // Le due tavolozze sono One Dark e One Light, che sono la stessa tavolozza in
-// due luci (`theme/tokens.css`, `--syn-*`). Restare su quella famiglia invece
+// due luci (`theme/serie/foglio-scuro.css` e `theme/serie/foglio-chiaro.css`, `--syn-*`). Restare su quella famiglia invece
 // di sceglierne una nuova è ciò che rende «la stessa nota, in due luci»
 // un'affermazione vera e non due gusti affiancati.
 import { EditorView } from "@codemirror/view";
@@ -82,7 +82,7 @@ const sintassi = HighlightStyle.define([
 
 /// Le superfici dell'editor: il foglio, il cursore, la selezione, il margine.
 ///
-/// Quello che `style.css` faceva da fuori con due regole su `#editor .cm-editor`
+/// Quello che `theme/serie/pelle.css` faceva da fuori con due regole su `#editor .cm-editor`
 /// sta adesso qui, perché è **lo stesso lavoro**: un pezzo dei colori
 /// dell'editor scritto nel foglio della shell e un pezzo dentro il tema era la
 /// divisione che aveva prodotto il doppione di partenza.

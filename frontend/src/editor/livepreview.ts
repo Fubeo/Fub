@@ -506,7 +506,7 @@ function gestisciClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks
 
 // Il tema del modulo: solo classi cm-fub-*, dentro l'estensione. I **valori**
 // dei colori vengono però dalle variabili della superficie del documento
-// (`--doc-*` in `style.css`): sono gli stessi che usa la modalità Lettura, e
+// (`--doc-*` in `theme/serie/foglio-scuro.css`): sono gli stessi che usa la modalità Lettura, e
 // tenerne due copie significherebbe che passare da Live a Lettura cambia i
 // colori della stessa nota. Le variabili hanno un fallback, così l'estensione
 // resta montabile anche senza il CSS della shell.

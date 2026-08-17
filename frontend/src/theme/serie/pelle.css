@@ -1,0 +1,2060 @@
+/* La pelle del tema di serie: il chrome (§29.1).
+ *
+ * Qui è tutto ciò che del foglio visivo **si vede ma non è geometria né
+ * garanzia**: i fondi, i bordi, i riempimenti, il moto dei componenti. La
+ * geometria — dove sta cosa, quanto è larga la rail, come si dividono i
+ * riquadri — e le garanzie — `[hidden]` nascosto, moto ridotto, anello del
+ * fuoco, salto al contenuto — stanno nella struttura (`theme/struttura.css`),
+ * che è della shell e non si tematizza. I valori — la scala, i ruoli di
+ * colore, il moto — stanno nel foglio (`foglio-scuro.css` /
+ * `foglio-chiaro.css`): questa pelle li consuma e non li dichiara.
+ *
+ * Come i fogli, non è cablata nell'app: la monta il caricatore
+ * (`theme/loader.ts`), che **sostituisce** — una pelle sola alla volta. Una
+ * pelle di terze parti può rifare ogni superficie che qui si vede, usando gli
+ * stessi ruoli; non può muovere la scocca, che non legge da qui, né revocare
+ * le garanzie, che non stanno qui.
+ */
+/* La pagina e il suo fondo. Margini e altezza sono della struttura
+   (`theme/struttura.css`); qui è la luce. */
+html, body, #app {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Il chrome della barra: il fondo e il filetto. Le tre zone, il barattolo e
+   l'altezza (38px, da `.titlebar`, che `#topbar` porta nel markup) sono
+   della struttura. */
+#topbar {
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Il salto al contenuto, nella sua superficie: il meccanismo (fisso, fuori
+   dallo schermo, rivelato dal fuoco) è della struttura; gli offset sono la
+   distanza che tiene dall'angolo quando arriva. */
+.skip-link {
+  top: var(--space-1);
+  left: var(--space-1);
+  padding: var(--space-3) var(--space-6);
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.brand {
+  font-weight: var(--weight-bold);
+  color: var(--accent-soft);
+  letter-spacing: 0.5px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Il default è ghost. Il pieno viola su ogni `<button>` era il difetto n.1:
+   titlebar, rail, tab, statusbar, tutto sembrava un CTA. Il pieno resta
+   `button.primary` (e gli intenti dichiarati che lo sono per contratto). */
+button {
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-base);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:disabled:hover {
+  background: transparent;
+}
+
+/* CTA: dialoghi, empty state, conferma. `#open-vault` in titlebar NON è
+   questo — è un comando di chrome, quindi resta ghost. */
+button.primary,
+.ui-button.intent-primary,
+#settings-body button[type="submit"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+button.primary:hover,
+.ui-button.intent-primary:hover,
+#settings-body button[type="submit"]:hover {
+  background: var(--accent-soft);
+  /* L'inchiostro cambia col fondo. `--accent-soft` è **più chiaro**
+     dell'accento nel tema scuro e più scuro nel chiaro, e il bianco di
+     `--accent-contrast` non regge su entrambi: sopra `--accent-soft` sta a
+     3,4:1 al buio. `--bg` sì, in tutti e due — ed è la coppia che
+     `theme/contrast.test.ts` presidia. */
+  color: var(--bg);
+}
+
+.ui-button.intent-danger {
+  color: var(--danger);
+}
+.ui-button.intent-danger:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+#views-bottom {
+  padding: var(--space-2) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+#views-bottom .panel-title {
+  margin: 0 var(--space-4) 0 0;
+}
+
+#sidebar,
+#right-pane {
+  border-right: 1px solid var(--border);
+  padding: var(--space-5);
+}
+#right-pane {
+  border-right: none;
+  gap: var(--space-3);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  text-transform: none;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  margin: var(--space-3) var(--space-1);
+}
+/* Il primo figlio è il titolo: spinge le azioni a destra. */
+.panel-title > span:first-child {
+  margin-right: auto;
+}
+
+/* Azione testuale dentro un titolo di pannello: pesa quanto una parola.
+   Il default è già ghost: qui si toglie il padding e si tiene il muted, così
+   non prende il wash dei bottoni. */
+.link-button {
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  font-size: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.link-button:hover {
+  background: transparent;
+  color: var(--accent-soft);
+  text-decoration: underline;
+}
+.link-button.danger:hover {
+  color: var(--danger);
+}
+
+#file-list,
+#pinned-list,
+.tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* L'indentazione dell'albero: ogni livello rientra di poco. */
+.tree-children {
+  padding-left: var(--space-7);
+}
+
+/* Una riga della sidebar: nota o cartella, nell'albero o tra le appuntate. */
+#files-panel .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+#files-panel .row:hover {
+  background: var(--bg-hover);
+}
+#files-panel .row.active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-icon {
+  flex: none;
+  width: 1.3em;
+  text-align: center;
+}
+#files-panel .row.folder {
+  color: var(--muted);
+}
+#files-panel .row.folder.has-note {
+  color: var(--text);
+}
+.chevron {
+  flex: none;
+  width: 12px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.chevron:hover {
+  color: var(--accent-soft);
+}
+
+/* Bersagli del drag & drop: riga d'inserimento sopra/sotto, o cartella accesa. */
+#files-panel .row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent-soft);
+}
+#files-panel .row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent-soft);
+}
+.drop-into {
+  outline: 1px solid var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+
+/* La striscia degli spazi (stile make.md): home, uno chip per spazio, "+". */
+#space-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-4) var(--space-1) var(--space-1);
+}
+.space-chip {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: var(--text-xl);
+  background: none;
+  border-radius: var(--radius-lg);
+}
+.space-chip:hover {
+  background: var(--bg-hover);
+}
+.space-chip.active {
+  background: var(--bg-hover);
+  outline: 2px solid var(--accent);
+}
+.space-chip.add {
+  color: var(--muted);
+  font-size: var(--text-xl);
+}
+.space-chip.add:hover {
+  color: var(--accent-soft);
+}
+
+/* Il titolo del pannello quando è uno spazio: cliccarlo apre la folder note. */
+#space-title.clickable {
+  cursor: pointer;
+  text-transform: none;
+  font-size: var(--text-base);
+  color: var(--text);
+}
+#space-title.clickable:hover {
+  color: var(--accent-soft);
+}
+
+/* Selettore dell'icona (emoji) di una nota o cartella. */
+#icon-picker {
+  position: fixed;
+  z-index: var(--z-picker);
+  width: 232px;
+  padding: var(--space-4);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+#icon-picker .icon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-1);
+}
+#icon-picker .icon-grid button {
+  background: none;
+  padding: var(--space-2);
+  font-size: var(--text-xl);
+  border-radius: var(--radius-sm);
+}
+#icon-picker .icon-grid button:hover {
+  background: var(--bg-hover);
+}
+#icon-picker input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+#icon-picker .icon-none {
+  background: none;
+  color: var(--muted);
+  padding: var(--space-1);
+  font-size: var(--text-sm);
+}
+#icon-picker .icon-none:hover {
+  background: none;
+  color: var(--accent-soft);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+textarea,
+select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
+#search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+
+#search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#search-results li {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+#search-results li:hover {
+  background: var(--bg-hover);
+}
+.hit-title {
+  display: block;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Le occorrenze dopo la prima: righe della stessa nota, rientrate perché è ciò
+   che dicono — non un altro risultato, un altro punto dello stesso. */
+.hit-occurrence {
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+/* «Crea questa nota» (§21.7): l'unica riga di questa lista che **non** è un
+   risultato, e l'unica che scrive invece di aprire. Il filetto d'accento la
+   stacca senza farne un bottone: sta nella lista perché è lì che si guarda
+   quando non si è trovato niente, ma chi scorre deve vedere che è di un'altra
+   specie prima di premerla. */
+.hit-create {
+  border-left: 2px solid var(--accent);
+}
+.hit-create .hit-snippet {
+  color: var(--accent);
+}
+.hit-snippet {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: var(--leading-tight);
+  margin-top: var(--space-1);
+}
+.hit-snippet mark {
+  background: var(--accent-soft);
+  /* `inherit` qui voleva dire `--text` sopra l'accento: 2,6:1 al buio, cioè la
+     parola trovata era l'unica illeggibile della riga. */
+  color: var(--bg);
+  border-radius: var(--radius-xs);
+  padding: 0 var(--space-1);
+}
+
+/* Le tre modalità del pannello (FEATURES 4.1). In lettura l'editor non c'è —
+   la griglia lascia tutto lo spazio all'anteprima — e la modalità viaggia nel
+   contesto di sessione, quindi le view che la seguono lo sanno. */
+/* Le tre modalità: un segmented control alto come la titlebar, non tre
+   pastiglie. L'attivo lo dice un indicatore d'accento, non il riempimento. */
+#mode-switch {
+  display: inline-flex;
+  align-items: stretch;
+  height: calc(var(--titlebar-h) - var(--space-4));
+  gap: 0;
+  padding: var(--space-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+#mode-switch button {
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  padding: 0 var(--space-3);
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
+}
+#mode-switch button:first-child,
+#mode-switch button:last-child {
+  border-radius: var(--radius-xs);
+}
+#mode-switch button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+#mode-switch button.active {
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* L'area principale, che dal §1.2 è **l'albero dei riquadri** e non un editor.
+   La disposizione la disegna `panels/document.ts` da `state/layout.ts`: qui
+   ci sono solo le regole che valgono per qualunque albero, e infatti non c'è
+   nessuna misura — quanto è largo un riquadro lo decide quanti sono. */
+#panes {
+  border-right: 1px solid var(--border);
+}
+/* Il bordo lo porta il secondo figlio in poi, non il contenitore: così una
+   divisione a tre ha due righe di separazione e non tre, e nessun riquadro ha
+   un bordo che dà sul vuoto. */
+.pane-split.row > * + * {
+  border-left: 1px solid var(--border);
+}
+.pane-split.col > * + * {
+  border-top: 1px solid var(--border);
+}
+
+/* Le tab di un riquadro. La striscia sparisce quando non c'è niente aperto:
+   una fila di pulsanti vuota è rumore che occupa spazio. */
+.pane-tabs {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft, var(--bg));
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  max-width: 16rem;
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+.tab:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.tab.active {
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Il pallino del non salvato: dice, guardando una tab che non è quella
+   davanti, che lì dentro c'è del lavoro in coda. */
+.tab.dirty .tab-name::after {
+  content: " •";
+  color: var(--accent);
+}
+.tab-close {
+  opacity: 0.45;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  color: inherit;
+}
+.tab-close:hover {
+  opacity: 1;
+  background: var(--overlay-hover);
+  color: inherit;
+}
+
+/* Quale riquadro ha il fuoco si deve **vedere**, o dividere lo schermo è un
+   gesto che rende la finestra ambigua: due editor identici e nessun indizio su
+   dove finirà la prossima nota che si apre. */
+.pane.focus > .pane-tabs {
+  border-bottom-color: var(--accent);
+}
+
+/* Qui c'erano due regole che davano all'editor il fondo e l'inchiostro della
+   superficie del documento, scavalcando da fuori il tema di CodeMirror. Erano
+   la metà visibile di un doppione: l'altra metà stava dentro `oneDark`, che
+   portava i propri colori e li imponeva a tutto il resto (margine, cursore,
+   selezione, riga corrente). Adesso il tema dell'editor è scritto **con i
+   token** (`editor/theme.ts`) e non ha più niente da scavalcare — quindi non
+   c'è più niente da scrivere qui. Il foglio della shell si ferma dove finisce
+   la shell. */
+
+/* Lettura: la superficie del documento, con i colori della superficie del
+   documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
+   fare sulla nota, non di che colore è. */
+.pane-preview {
+  padding: var(--space-5) var(--space-7);
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+}
+
+/* Anteprima markdown */
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  color: var(--doc-heading);
+}
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+  border-bottom: 1px solid var(--doc-rule-soft);
+  padding-bottom: var(--space-2);
+}
+.markdown-preview a.wikilink {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.markdown-preview a.wikilink.unresolved {
+  color: var(--doc-danger);
+}
+.markdown-preview .tag {
+  background: var(--doc-fill);
+  border-radius: 1em;
+  padding: 0 0.45em;
+  color: var(--doc-link);
+  font-size: 0.95em;
+}
+.markdown-preview mark {
+  background: var(--doc-highlight);
+  color: inherit;
+}
+.markdown-preview code {
+  background: var(--doc-fill);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+}
+.markdown-preview pre {
+  background: var(--doc-fill-soft);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid var(--doc-rule);
+}
+.markdown-preview blockquote {
+  border-left: 3px solid var(--doc-rule);
+  margin: var(--space-3) 0;
+  padding-left: var(--space-5);
+}
+.markdown-preview .callout {
+  border: 1px solid var(--doc-rule-soft);
+  border-left: 3px solid var(--doc-rule);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  margin: var(--space-4) 0;
+  background: var(--doc-fill-soft);
+}
+.markdown-preview .callout-title {
+  font-weight: var(--weight-bold);
+  text-transform: capitalize;
+  margin-bottom: var(--space-2);
+}
+/* Task e tabelle: da quando il modello le sa dire, l'anteprima le disegna. */
+.markdown-preview li.task {
+  list-style: none;
+  margin-left: -18px;
+}
+.markdown-preview li.task > input {
+  margin-right: var(--space-3);
+}
+/* Uno stato personalizzato (`[/]`, `[-]`) non è "fatto" e non è "da fare":
+   al posto della casella si vede il simbolo che l'utente ha scritto. */
+.markdown-preview li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"]) > input {
+  display: none;
+}
+.markdown-preview li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"])::before {
+  content: "[" attr(data-task) "]";
+  color: var(--doc-link);
+  font-weight: var(--weight-bold);
+  margin-right: var(--space-3);
+}
+.markdown-preview table {
+  border-collapse: collapse;
+  margin: var(--space-4) 0;
+  display: block;
+  overflow-x: auto;
+}
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--doc-rule-soft);
+  padding: var(--space-2) var(--space-4);
+}
+.markdown-preview th {
+  background: var(--doc-fill-soft);
+  font-weight: var(--weight-bold);
+}
+
+/* UI dichiarativa (backlink) */
+.ui-heading {
+  margin: var(--space-2) 0;
+  font-size: var(--text-base);
+}
+.ui-list-item {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  margin-bottom: var(--space-3);
+}
+.ui-list-item.clickable {
+  cursor: pointer;
+}
+.ui-list-item.clickable:hover {
+  outline: 1px solid var(--accent);
+}
+.ui-list-item-title {
+  font-weight: var(--weight-medium);
+}
+.ui-list-item-subtitle {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ciò che il core non conosce (decisione 0017).
+
+   `.ui-slot` è il buco dove la shell monta una parte DICHIARATIVA: il blocco di
+   un plugin arriva come albero `UiNode` e si disegna con lo stesso renderer
+   delle view, quindi qui non c'è niente da vestire — solo il posto in cui sta.
+   `.block-*` resta il degrado di un `custom_kind` che nessuno rivendica, e ha un
+   bordo tratteggiato perché *si deve vedere* che è un blocco non disegnato: un
+   degrado invisibile è indistinguibile da una resa riuscita. */
+.markdown-preview .ui-slot {
+  display: block;
+  margin: var(--space-4) 0;
+}
+.markdown-preview [class^="block-"],
+.markdown-preview [class*=" block-"] {
+  border: 1px dashed var(--doc-rule-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-5);
+  margin: var(--space-4) 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+/* La formula: c'è il blocco, non c'è il compositore — e si vede. */
+.markdown-preview .math-block {
+  display: block;
+  margin: var(--space-4) 0;
+  padding: var(--space-4) var(--space-6);
+  text-align: center;
+  background: var(--doc-fill-soft);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+}
+.markdown-preview .inline-highlight {
+  background: var(--doc-fill-soft);
+  box-shadow: 0 0 0 2px var(--doc-fill-soft);
+  border-radius: var(--radius-xs);
+}
+
+/* Transclusion (embed idratati dal kernel): stanno dentro il documento, quindi
+   prendono i colori del documento. */
+.embed {
+  display: block;
+  margin: var(--space-4) 0;
+  padding: var(--space-4) var(--space-6);
+  border-left: 3px solid var(--doc-rule);
+  background: var(--doc-fill-soft);
+  border-radius: var(--radius-sm);
+}
+.embed-cycle::after,
+.embed-too-deep::after {
+  content: " (embed ricorsivo)";
+  opacity: 0.7;
+  font-size: var(--text-sm);
+}
+.embed.unresolved {
+  border-left-color: var(--doc-rule-soft);
+  opacity: 0.7;
+}
+
+/* Il cestino e la cronologia non hanno più regole proprie: sono due view
+   dichiarate (§1.2), e chi le disegna sono i componenti generici dell'albero —
+   `.declared-view`, le liste, i bottoni. Le loro dieci regole se ne sono andate
+   con i loro id, ed è il segnale che la migrazione è vera: uno stile
+   per-pannello è la traccia che quel pannello lo disegnava qualcuno di qua. */
+.empty-note {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-4);
+}
+
+/* Menu contestuale della lista file */
+#context-menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: 140px;
+  padding: var(--space-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+#context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-5);
+}
+#context-menu button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+#context-menu button.danger:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+/* Rinomina inline nella lista file */
+#files-panel .row input {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+
+/* --- la view in un riquadro, e il grafo che è la prima ------------------- */
+
+
+/* Il grafo dentro il riquadro: niente cornice, niente barra — è un riquadro
+   a essere il posto, lo si chiude dalla sua tab. I canvas li crea il pittore
+   (lotto B) con stile inline assoluto; qui resta solo ciò che il pittore non
+   conosce: il pannello delle impostazioni. */
+
+/* Il conto di nodi e archi: sopra il canvas e in un angolo, perché è
+   un'annotazione su ciò che si sta guardando e non una testata. */
+.graph-count {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-4);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--text-muted, var(--text));
+  font-size: var(--font-sm, 0.85em);
+  pointer-events: none;
+}
+
+/* --- il pannello delle impostazioni del grafo ----------------------------- */
+/* Un ospite della superficie del grafo: in alto a sinistra, sopra i canvas.
+   Il bottone ingranaggio è sempre visibile; il popover si apre sotto e si
+   chiude con Esc. Token, niente colore hard-coded. */
+.graph-panel {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 3;
+}
+.graph-panel-toggle {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.graph-panel-toggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.graph-panel-toggle[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.graph-panel-popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  width: 264px;
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+}
+.graph-panel-popover[hidden] {
+  display: none;
+}
+.graph-panel-titolo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.graph-panel-sezione {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.graph-panel-sezione-titolo {
+  margin-bottom: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.graph-panel-preset {
+  margin-bottom: var(--space-2);
+}
+.graph-panel-select {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.graph-panel-campo {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1);
+  align-items: center;
+  margin-top: var(--space-2);
+  color: var(--text);
+}
+.graph-panel-campo input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+}
+.graph-panel-nome {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.graph-panel-valore {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+}
+.graph-panel-toggle {
+  grid-template-columns: 1fr auto;
+}
+.graph-panel-toggle input[type="checkbox"] {
+  grid-column: 2;
+}
+.graph-panel-azioni {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+.graph-panel-azioni button {
+  flex: 1;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.graph-panel-azioni button:hover {
+  border-color: var(--accent);
+}
+
+/* La tab di una view non è la tab di una nota: non si sporca mai e non nomina
+   un file, quindi il corsivo dice che è un'altra specie senza aggiungere
+   un'icona a una striscia già fitta. */
+.tab-view .tab-name {
+  font-style: italic;
+}
+
+/* --- le modali ------------------------------------------------------------ */
+/*
+   La palette è la superficie del registro comandi (§1.1): la stessa lista che
+   leggerebbero una CLI o un chiamante programmatico, disegnata per un umano.
+   Le due righe che contano visivamente sono la **descrizione** (che il §1.36 ha
+   aggiunto per chi non ha letto il codice, e serve anche a chi cerca) e il
+   **raggio** dichiarato — perché è ciò su cui l'utente decide se fidarsi.
+
+   Queste regole stavano sotto `#command-palette`, cioè la forma di una modale
+   apparteneva all'unica che c'era. Con la ricerca dentro la nota (§21.4) le
+   modali sono due, e una seconda copia di trentacinque regole sarebbe divergita
+   al primo ritocco: adesso la classe è `.modale`, e i nomi `palette-*` che
+   restano sotto sono i pezzi *dentro* — la casella, la lista, il piano — che
+   una modale nuova riusa se le servono e ignora se non le servono. */
+
+/* Il piano è quello delle modali e non quello dei popover, che è dove stava:
+   questa superficie intrappola il fuoco, e una che intrappola il fuoco dipinta
+   *sotto* un'altra manda a scrivere alla cieca dentro qualcosa che non si vede
+   (difetto 0149). La regola sta scritta accanto ai piani, in `theme/struttura.css`.
+   Sullo stesso piano di `#views-modal`, e fra due dello stesso piano decide
+   l'ordine nel DOM: queste si appendono al `body` quando si aprono, quindi
+   l'ultima aperta è anche l'ultima dipinta — che è la stessa regola con cui
+   `intrappolaFuoco` sceglie chi comanda. */
+.modale {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: var(--scrim);
+}
+
+.modale .palette-box {
+  width: min(640px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: auto;
+}
+
+.modale input,
+.modale textarea,
+.modale select {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+  width: 100%;
+}
+
+.modale input[type="checkbox"] {
+  width: auto;
+}
+
+.modale .palette-input {
+  font-size: var(--text-lg);
+}
+
+.modale .palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+.modale .palette-list li {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.modale .palette-list li.selected,
+.modale .palette-list li:hover {
+  background: var(--bg-hover);
+}
+
+.modale .palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.modale .palette-title {
+  flex: 1;
+}
+
+.modale .palette-scope,
+.modale .palette-desc,
+.modale .palette-help {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.modale kbd {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  font-size: var(--text-xs);
+}
+
+.modale .palette-empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Quanti risultati ha la ricerca dentro la nota (§21.4). Sopra la lista e non
+   sotto: è la riga che dice «zero» quando non c'è lista da guardare. */
+.modale .docsearch-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.modale .palette-heading {
+  font-size: var(--text-lg);
+}
+
+.modale .palette-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.modale .palette-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modale .palette-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.modale .palette-summary {
+  color: var(--accent-soft);
+}
+
+.modale .palette-plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.modale .palette-plan li {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-base);
+  border-bottom: 1px solid var(--border);
+}
+
+.modale .palette-plan li:last-child {
+  border-bottom: none;
+}
+
+.modale .palette-actions {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: flex-end;
+}
+
+.modale .palette-actions button {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.modale .palette-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.modale .palette-actions button.primary:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--bg);
+}
+
+.modale .palette-actions button.danger {
+  background: var(--doc-danger);
+  border-color: var(--doc-danger);
+  color: var(--danger-contrast);
+}
+
+.modale .palette-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.modale .palette-error {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--danger-wash);
+  color: var(--doc-danger);
+  font-size: var(--text-base);
+}
+
+/* --------------------------------------------------------------------------
+   La barra di stato della shell, il centro attività, il centro notifiche (§10.3)
+   --------------------------------------------------------------------------
+   Tre pezzi di una cosa sola: il posto in cui l'utente guarda quando vuole
+   sapere cosa sta succedendo, senza essere interrotto. Il toast interrompe (ed
+   è il solo che lo fa); i due pannelli si aprono da un pulsante e si chiudono. */
+
+/* Il messaggio che non chiede niente: l'esito di un comando, un lavoro finito,
+   un errore che non blocca. Testo semplice, e via da solo — ciò che ha detto
+   resta negli avvisi. */
+#toast {
+  position: fixed;
+  right: 16px;
+  bottom: 40px;
+  z-index: var(--z-toast);
+  max-width: 420px;
+  padding: var(--space-4) var(--space-6);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-base);
+}
+
+/* Il tono è un bordo, non un fondo: un guasto deve saltare all'occhio senza
+   diventare illeggibile, e il colore lo decide il tema (un provider sceglie
+   intenti semantici, mai colori). */
+#toast[data-tono="guasto"] {
+  border-color: var(--doc-danger);
+}
+
+#statusbar {
+  gap: var(--space-4);
+  padding: var(--space-1) var(--space-5);
+  border-top: 1px solid var(--border);
+  background: var(--bg-chrome);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* Lo stato del salvataggio (§20.4). Sta col colore della barra finché non c'è
+   niente da dire: «Salvato» è la parola che si legge il 99% del tempo, e
+   accendere quella vorrebbe dire spegnere l'unica che deve farsi notare. */
+#save-state[data-stato="non_salvato"],
+#save-state[data-stato="in_corso"] {
+  color: var(--text);
+}
+
+/* L'attesa del secondo tasto di una sequenza (§18.2). Accesa, al contrario di
+   `#save-state`: qui non c'è nessuno stato che si legge il 99% del tempo — o
+   l'app sta aspettando, e allora è l'unica cosa che conta in quella barra, o la
+   riga non c'è proprio. */
+#key-pending {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
+#save-state[data-stato="fallito"] {
+  color: var(--doc-danger);
+  font-weight: var(--weight-medium);
+}
+
+#statusbar button {
+  background: transparent;
+  border: none;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+#statusbar button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+#statusbar button.ha-novita,
+#statusbar button.in-corso {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
+/* I due pannelli stanno **affiancati** e non sovrapposti: sono due toggle
+   indipendenti, e chi ne apre uno mentre l'altro è aperto non deve trovarsi un
+   rettangolo sopra l'altro. Il toast tiene l'angolo (`right: 16px`) e per
+   questo non compare mentre gli avvisi sono aperti — sotto ci sarebbe la loro
+   lista. */
+#activity-panel,
+#notify-panel {
+  position: fixed;
+  bottom: 30px;
+  z-index: var(--z-popover);
+  width: 340px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-base);
+}
+
+#notify-panel {
+  right: 10px;
+}
+
+#activity-panel {
+  right: 360px;
+}
+
+#activity-list,
+#notify-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#notify-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+#notify-list li:first-child {
+  border-top: none;
+}
+
+.notify-testo {
+  flex: 1;
+}
+
+#notify-list li[data-tono="guasto"] .notify-testo {
+  color: var(--doc-danger);
+}
+
+.notify-ora {
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+/* Una riga di lavoro: cosa sta facendo, a che punto è, e come si ferma. La
+   barra senza valore è l'attesa che non sa quanto dura (`total: null`), e la
+   disegna il browser da sé. */
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.activity-row:first-child {
+  border-top: none;
+}
+
+.activity-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-row progress {
+  width: 90px;
+  height: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Le superfici del §2.2, e i nodi del §2.1
+   --------------------------------------------------------------------------
+   Ciò che una view dichiara è dove si attacca e cosa disegna; il tema resta
+   interamente qui — un provider sceglie intenti semantici, mai colori. */
+
+/* La barra di stato: ciò che informa senza interrompere. Una striscia, non un
+   pannello: titolo e contenuto sulla stessa riga. */
+#views-status {
+  gap: var(--space-7);
+  padding: var(--space-2) var(--space-6);
+  border-top: 1px solid var(--border);
+  background: var(--bg-chrome);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+#views-status .declared-view-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+#views-status .panel-title {
+  margin: 0;
+  font-size: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+#views-status .declared-view .ui-stack {
+  gap: var(--space-6);
+}
+
+/* La ribbon: i pulsanti che aprono qualcosa. La colonna e la larghezza le
+   dà la struttura (`.rail`, che `#views-ribbon` porta nel markup); qui è
+   la superficie. */
+#views-ribbon {
+  padding: var(--space-2) 0;
+  gap: var(--space-1);
+  border-bottom: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg-chrome);
+}
+
+/* La modale: la view che chiede qualcosa e se ne va. */
+#views-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scrim);
+}
+#views-modal .declared-view-panel {
+  min-width: 380px;
+  max-width: 70vw;
+  max-height: 70vh;
+  overflow: auto;
+  padding: var(--space-6) var(--space-7);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* Una view dichiarata si può richiudere dal suo titolo, se dichiara di
+   lasciarsi chiudere (§2.6). */
+.declared-view-panel.collapsed > .declared-view {
+  display: none;
+}
+.panel-title.clickable {
+  cursor: pointer;
+}
+
+/* --- i nodi ------------------------------------------------------------- */
+
+.ui-section {
+  margin: var(--space-2) 0;
+}
+.ui-section > summary {
+  cursor: pointer;
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
+  padding: var(--space-1) 0;
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.ui-table th {
+  font-weight: var(--weight-medium);
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+}
+.ui-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.ui-row.clickable {
+  cursor: pointer;
+}
+.ui-row.clickable:hover {
+  background: var(--bg-hover);
+}
+
+.ui-tree-item > .ui-children {
+  margin-left: var(--space-6);
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-3);
+}
+.ui-tree-label {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ui-tree-label.clickable {
+  cursor: pointer;
+}
+.ui-tree-label.clickable:hover {
+  background: var(--bg-hover);
+}
+/* L'elemento corrente: è uno stato del nodo (§2.1), non un testo che il
+   provider si scrive nel titolo. */
+.ui-tree-label.selected,
+.ui-list-item.selected {
+  outline: 1px solid var(--accent);
+  /* Era un riempimento d'accento, e una riga non è un bottone: dentro ci
+     stanno un titolo (`--text`) e un sottotitolo (`--muted`), che sopra
+     l'accento stanno a 2,6:1 e a 1,5:1. Chi è selezionato lo dice il
+     contorno — che è un segno non testuale e gli basta il 3:1 — e il fondo
+     torna a essere quello che il token nomina. */
+  background: var(--bg-hover);
+}
+
+.ui-tab-bar {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-3);
+}
+.ui-tab-button {
+  border: none;
+  background: transparent;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  color: var(--muted);
+  border-radius: var(--radius-xs);
+}
+.ui-tab-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.ui-tab-button.selected {
+  background: transparent;
+  color: var(--text);
+  border-bottom: 2px solid var(--accent);
+  border-radius: 0;
+}
+
+.ui-badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+}
+.ui-badge.intent-primary {
+  border-color: var(--accent);
+  /* Il bordo è un segno, il testo è testo: `--accent` sopra `--bg-input` sta a
+     3,0:1 — abbastanza per una linea, non per undici pixel di parola. Il
+     testo prende `--accent-soft`, che è il ruolo scritto per questo. */
+  color: var(--accent-soft);
+}
+.ui-badge.intent-danger {
+  /* Era `--doc-danger`, cioè il rosso con cui un wikilink rotto si scrive
+     **dentro una nota**: la pastiglia è shell, e il rosso della shell è
+     `--danger`. È la confusione che i fogli del tema (`theme/serie/`)
+     raccontano di aver sciolto, rimasta in due righe. */
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ui-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.ui-progress progress {
+  width: 120px;
+}
+.ui-progress-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.ui-empty-state {
+  padding: var(--space-5) var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.ui-empty-state .ui-button,
+.ui-empty-state button.primary {
+  margin-top: var(--space-4);
+}
+.ui-empty-title {
+  font-weight: var(--weight-medium);
+}
+.ui-empty-detail {
+  margin-top: var(--space-1);
+}
+
+.ui-key-value {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-5);
+  margin: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+.ui-key-value dt {
+  color: var(--muted);
+}
+.ui-key-value dd {
+  margin: 0;
+}
+
+/* I campi: la parte del §2.1 che senza il riconciliatore del §2.8 non si
+   potrebbe usare. */
+.ui-field-label {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-bottom: var(--space-1);
+}
+.ui-text-input input,
+.ui-date-picker input,
+.ui-number input,
+.ui-text-area textarea,
+.ui-select select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.ui-checkbox,
+.ui-radio-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.ui-slider input {
+  width: 100%;
+}
+.ui-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.ui-form > .ui-children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* I due stati del §2.5: «non ancora» e «non ce l'ho fatta». */
+.ui-pending {
+  padding: var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+.ui-failed {
+  padding: var(--space-4);
+  border-left: 3px solid var(--doc-danger);
+  background: var(--danger-wash);
+  font-size: var(--text-sm);
+}
+.ui-failed-message {
+  margin-bottom: var(--space-2);
+}
+
+/* --- il pannello delle impostazioni (§11.1) -------------------------------
+ *
+ * Una **modale della shell**, non una superficie in più del layout: le
+ * impostazioni si aprono, si guardano e si chiudono, e finché il modello di
+ * layout (§1.2) non esiste una finestra vera non ha dove stare. Sta sopra il
+ * corpo dell'app perché è l'unica cosa che, mentre è aperta, è quella che si
+ * sta facendo — ma **non** sopra le modali: la palette che si apre da qui
+ * dentro si dipinge sopra il pannello ed è lei a prendere i tasti, che è la
+ * stessa regola (l'ultima aperta comanda, difetto 0149). Prima qui c'era
+ * scritto «sta sopra tutto», e da quella riparazione non era più vero. */
+#settings-panel {
+  position: fixed;
+  inset: 48px 10% 48px 10%;
+  z-index: var(--z-dialog);
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-7) var(--space-7);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-base);
+}
+
+#settings-tabs {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  margin-left: var(--space-6);
+  padding: var(--space-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+#settings-tabs button {
+  padding: var(--space-1) var(--space-4);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-xs);
+}
+
+#settings-tabs button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+#settings-tabs button.active {
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Una riga per impostazione: il testo che spiega a sinistra, il controllo a
+ * destra. La descrizione e la provenienza stanno **sotto l'etichetta** e non in
+ * un tooltip: quale livello vince è ciò che un utente non può dedurre, e un
+ * tooltip lo nasconde proprio a chi non sa di doverlo cercare. */
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+
+.setting-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-text label {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.setting-source {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.setting-row input[type="text"],
+.setting-row input[type="number"],
+.setting-row select {
+  min-width: 140px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+}
+
+/* I permessi di un componente (§23.17): righe di impostazione come le altre,
+   rientrate sotto chi le ha chieste.
+
+   Il rientro è l'unica cosa che dice a chi guarda che quelle righe sono DI quel
+   componente: senza, l'elenco dei componenti e l'elenco dei permessi sarebbero
+   la stessa colonna di caselle, e la casella che spegne un componente
+   sembrerebbe una delle sue. La riga sopra sparisce perché il bordo separa i
+   componenti fra loro, non un componente dai propri permessi. */
+.setting-sub {
+  padding-left: var(--space-6);
+  border-top: none;
+}
+
+.setting-row.setting-sub {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+.setting-sub.panel-title {
+  margin-top: var(--space-2);
+}
+
+/* **I tasti che un vault propone** (§23.13): un riquadro in cima alla scheda
+ * delle scorciatoie, con dentro le righe proposte e le due risposte.
+ *
+ * Il bordo colorato è l'unica cosa che lo separa dalle righe vere sotto, e
+ * serve: quelle sono le scorciatoie che valgono, queste sono quelle che
+ * *varrebbero*, e senza una cornice sarebbero la stessa colonna. Non è un
+ * colore d'allarme, ed è deliberato — non c'è niente da riparare, c'è una
+ * scelta da fare. */
+.settings-banner {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+}
+
+/* La prima riga proposta non porta il filo sopra: dentro il riquadro il bordo
+ * lo fa già il riquadro. */
+.settings-banner .setting-row:first-of-type {
+  border-top: none;
+}
+
+.settings-banner-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+/* --- tema: segmented control (.theme-switch) -----------------------------
+   Tre opzioni (sistema/chiaro/scuro). L'attivo è un indicatore d'accento,
+   non un riempimento: è la stessa lingua di `#mode-switch` e `#settings-tabs`.
+   Il markup lo monta SettingsTheme; se i bottoni non ci sono, questi
+   selettori non fanno niente. */
+.theme-switch {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  padding: var(--space-1);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.theme-switch button,
+.theme-switch__segment {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-4);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+
+.theme-switch button:hover,
+.theme-switch__segment:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.theme-switch button.active,
+.theme-switch button[aria-checked="true"],
+.theme-switch button[aria-pressed="true"],
+.theme-switch__segment--active {
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* --- chrome pronto, senza muovere il layout ------------------------------
+   `#topbar` e `#views-ribbon` restano dove sono: li sposta la struttura
+   (`theme/struttura.css`). Qui ci sono le classi e gli id che, se il markup
+   arriva, si vestono da soli. */
+
+/* Titlebar: il fondo è chrome. Altezza (38px), drag e no-drag sono della
+   struttura. */
+.titlebar {
+  background: var(--bg-chrome);
+  border-radius: 0;
+}
+
+.win-ctrl {
+  background: transparent;
+  border: none;
+  width: 40px;
+  height: var(--titlebar-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0;
+}
+
+.win-ctrl:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+#win-close:hover,
+#window-controls .close:hover,
+#window-controls [data-action="close"]:hover {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+/* Rail verticale: la superficie. Larghezza, colonna e allineamento sono
+   della struttura (`.rail`). */
+.rail {
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-right: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--bg-chrome);
+}
+
+.rail button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--rail-w) - var(--space-4));
+  height: calc(var(--rail-w) - var(--space-4));
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: transparent;
+}
+
+.rail button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.rail button.active,
+.rail button[aria-current="true"],
+.rail button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--overlay-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail button svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* I tab dell'inspector: la tablist compatta in cima a `#right-pane`
+   (la colonna è della struttura). */
+.inspector-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-chrome);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.inspector-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 0;
+}
+
+.inspector-tab:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.inspector-tab[aria-selected="true"],
+.inspector-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* La riga del tema è di primo piano nel gruppo Appearance: un gradino di
+ * bordo e sfondo in più, così l'occhio la trova prima delle altre impostazioni
+ * di aspetto che le stanno attorno. --bg-elev è la superficie sollevata in
+ * entrambi i temi. */
+.setting-row--theme {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+/* Le tre zone della titlebar e la menubar: la geometria (le ali che non si
+   stringono, il centro che resta in mezzo, l'altezza dei bottoni di menu)
+   è della struttura; qui è il respiro e il fondo. */
+#titlebar-left,
+#titlebar-right {
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+}
+
+#titlebar-center {
+  gap: var(--space-4);
+}
+
+#app-menu button {
+  background: transparent;
+  border: none;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+#app-menu button:hover,
+#app-menu button.menu-open {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+/* I bottoni della titlebar (ricerca, palette, impostazioni): uniformi a 32px,
+   senza bordo, con hover solo sull'overlay. */
+.titlebar-btn {
+  background: transparent;
+  border: none;
+  height: calc(var(--titlebar-h) - var(--space-4));
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+ color: var(--muted);
+ cursor: pointer;
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.titlebar-btn:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+/* #command-search: più largo, perché è il trigger di ricerca principale. */
+#command-search {
+  min-width: 200px;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+/* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca,
+   Grafo). Le view dichiarate si appendono dopo, sempre in `#views-ribbon`.
+   La colonna è della struttura; qui è il respiro e il filetto. */
+#rail-shell {
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* `.rail-btn` è la classe dei bottoni rail shell e delle view dichiarate.
+   VisualLanguage sta i `.rail button` generici; questo è il nostro:
+   quadrato 36px, icona centrata. */
+.rail-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.rail-btn:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.rail-btn[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--overlay-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* I bottoni delle view dichiarate (`left_sidebar`) si distinguono dalle
+   shell per una sottile separazione. */
+.rail-btn-view {
+  margin-top: var(--space-1);
+}
+
+/* --- rifiniture del chrome ------------------------------------------------
+   I controlli finestra su Darwin stanno in `#titlebar-left`; i titoli dei
+   pannelli dell'inspector li sostituiscono i tab. La geometria di
+   `#app-menu-extra` e dei pannelli dell'inspector è della struttura. */
+.titlebar--darwin #titlebar-left #window-controls {
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+.win-ctrl svg,
+#open-palette svg,
+#open-settings svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+#open-palette,
+#open-settings {
+  width: calc(var(--titlebar-h) - var(--space-4));
+  padding: 0;
+  justify-content: center;
+}
+
+

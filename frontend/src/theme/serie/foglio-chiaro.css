@@ -1,0 +1,240 @@
+/* Il foglio del tema di serie, nella luce chiara: il gemello di
+ * `foglio-scuro.css` (§29.1).
+ *
+ * È un foglio **completo**, non un override: dichiara tutti i ruoli, non
+ * solo quelli che qui cambiano. Quando il chiaro era un blocco di
+ * `tokens.css` sotto `:root[data-theme="light"]`, «solo ciò che cambia» era
+ * la scelta giusta — dichiarare il resto era duplicazione, e la cascata lo
+ * teneva vero. Con il caricatore a sostituzione la cascata non c'è più:
+ * questo file viene montato **al posto** dello scuro, quindi tutto ciò che
+ * non dichiara non vale. E due liste che devono restare uguali sono due
+ * liste che divergono: per questo il gemello è completo ma il presidio
+ * (`theme/struttura.test.ts`) riconta che il vocabolario dei due fogli sia
+ * identico e che i valori **non-colore** (la scala, il moto, le misure
+ * dell'anello del fuoco, e i quattro riempimenti in alpha scelti perché
+ * reggono su entrambi i fondi) restino identici. Il colore, e solo lui, è
+ * ciò che cambia.
+ *
+ * Il tema chiaro è **One Light**, il gemello ufficiale di One Dark — la
+ * stessa tavolozza vista nell'altra luce, non un'altra opinione. Dove One
+ * Light non regge le soglie, il valore è scurito quanto basta e il perché
+ * sta nel commento accanto; sette colori di sintassi restano sotto la soglia
+ * AA del testo, e il debito è dichiarato per nome in `theme/contrast.test.ts`.
+ *
+ * Come lo scuro, non è cablato nell'app: lo monta il caricatore
+ * (`theme/loader.ts`), che sostituisce — un foglio solo alla volta — e chi
+ * decide quale luce vale è la shell (`theme/theme.ts`). Nessuna `@media`,
+ * nessun `[data-theme]`: il foglio montato È il tema.
+ */
+:root {
+  /* --- la scala: ciò che i due fogli condividono -------------------------- */
+
+  /* Gli spazi. La scala è quella che la shell **già usava** (2, 4, 6, 8, 10,
+     12, 16), raccolta e chiusa: i valori dispari che erano rimasti in giro —
+     3px, 5px, 11px, 14px, 18px — erano differenze che nessuno aveva scelto, e
+     sono state tirate sul gradino accanto. I numeri che restano letterali nella
+     pelle sono quelli **strutturali** (la colonna da 240px, un bordo da 1px,
+     l'altezza massima di una lista): non sono spaziatura, e metterli in
+     questa scala vorrebbe dire che cambiarla li muove. */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 16px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+
+  /* I raggi. Erano sette valori distinti fra 2px e 10px per quattro intenzioni:
+     il segno appena smussato, il controllo, la superficie che galleggia, la
+     pastiglia. */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+
+  /* La tipografia. `--font-mono` esisteva già come `var(--mono, monospace)` in
+     due regole — cioè come token **mai definito**, che è il modo più silenzioso
+     di non avere un token: il ripiego funzionava, quindi nessuno se ne
+     accorgeva. */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+
+  --weight-medium: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.35;
+
+  /* Il maiuscoletto dei titoli di pannello: due proprietà che vanno sempre
+     insieme, e che separate si erano già disallineate (`0.6px` in un posto,
+     `0.04em` in un altro, per la stessa riga). */
+  --tracking-caps: 0.6px;
+
+  /* Il moto. Corto sui hover, medio su ciò che si apre. La curva è la stessa
+     da ogni parte, così un bottone e una tab non sembrano due prodotti. */
+  --duration-fast: 120ms;
+  --duration-med: 180ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* --- i colori semantici: la luce chiara --------------------------------- */
+
+  /* Le superfici, dalla più profonda alla più vicina. `--bg-hover` era
+     `--bg-input` usato per un'altra cosa in undici regole: due ruoli sullo
+     stesso valore sono due ruoli che non si possono più cambiare separatamente,
+     ed è proprio ciò che un tema chiaro chiede di fare. */
+  --bg: #f7f7f9;
+  /* Sollevato, in luce, vuol dire **più chiaro**: i pannelli galleggiano
+     verso il bianco, non verso il nero. È la sola riga di questo foglio che
+     inverte una direzione invece di cambiare un valore. La titlebar non
+     galleggia: è chrome, e `--bg-chrome` sta un filo più freddo del
+     contenuto. */
+  --bg-elev: #ffffff;
+  --bg-input: #ececf1;
+  --bg-hover: #e8e8ee;
+  --bg-chrome: #f4f5fa;
+  /* Wash da ghost button: un velo sul testo, non un secondo grigio. In alpha
+     perché deve restare un velo sopra qualunque superficie, chrome o no. */
+  --overlay-hover: rgb(0 0 0 / 6%);
+
+  --border: #d9d9e0;
+
+  --text: #1c1c22;
+  --muted: #5f5f6b;
+
+  /* L'accento diventa lime. Il nero sopra `#5a8f00` sta a **5,36:1** — passa
+     AA, e passa con margine. Il bianco non andrebbe: sul lime medio il bianco
+     è sotto 3:1 come segno e sotto 4,5:1 come testo, cioè sparisce in entrambi
+     i ruoli. I due numeri non stanno qui per fiducia: li ricalcola
+     `theme/contrast.test.ts` a ogni giro, sulle coppie che i token dichiarano
+     di formare.
+
+     `--accent-soft` è l'inchiostro sulle superfici chiare: `#3f6212` su `--bg`
+     sta a 6,61:1. Il verso è l'opposto del gemello scuro — là «tenue» vuol
+     dire più chiaro dell'accento, qui più scuro — perché da questa parte è il
+     fondo a essere chiaro, e un lime chiaro come segno non regge 3:1 sul
+     bianco.
+
+     Come **segno**, `--accent` `#5a8f00` su `--bg` `#f7f7f9` sta a 3,66:1:
+     sopra la soglia dei segni (3:1), sotto quella del testo (4,5:1) — ed è
+     giusto così, perché un fondo di bottone non è testo. */
+  --accent: #5a8f00;
+  --accent-soft: #3f6212;
+  --accent-contrast: #000000;
+
+  /* Gli intenti della shell: qui il rosso è più cupo che al buio (un rosso
+     medio su fondo bianco perde contrasto) e l'inchiostro sopra il wash
+     diventa bianco. */
+  --danger: #c0392f;
+  --danger-wash: rgb(192 57 47 / 12%);
+  --danger-contrast: #ffffff;
+
+  /* L'anello del fuoco (§12.4): il lime scuro dell'inchiostro, perché un
+     lime chiaro sopra un fondo bianco non si vedrebbe. Le misure viaggiano
+     col colore e sono parte della forma dell'anello: identiche al gemello,
+     e il presidio le tiene tali. La regola che le consuma sta nella
+     struttura, che qui le trova. */
+  --focus-ring: #3f6212;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* Il velo sotto una superficie modale, e le ombre. In luce pesano molto
+     meno: un'ombra fonda su un fondo chiaro è una macchia, non un
+     sollevamento. */
+  --scrim: rgb(20 20 30 / 35%);
+  --shadow-sm: 0 4px 14px rgb(20 20 40 / 12%);
+  --shadow-md: 0 6px 20px rgb(20 20 40 / 14%);
+  --shadow-lg: 0 10px 30px rgb(20 20 40 / 18%);
+
+  /* Il grafo dei collegamenti disegna su canvas, cioè fuori dalla portata di
+     qualunque regola CSS: i suoi colori li legge `panels/graph.ts` da qui con
+     `getComputedStyle`. Sono token come gli altri proprio perché quella
+     superficie, non essendo raggiungibile dal foglio di stile, è quella che si
+     dimentica per prima quando si cambia tema. */
+  --graph-node: #8b8b9b;
+  --graph-node-active: #5a8f00;
+  --graph-node-hover: #3f8c3e;
+
+  /* --- la superficie del documento --------------------------------------- */
+
+  /* La tavolozza della **superficie del documento**: i colori con cui la nota si
+     scrive e si legge, nell'altra luce della stessa coppia (One Light). Le tre
+     modalità di 4.1 devono essere la stessa nota vista in tre modi. */
+  --doc-bg: #fafafa;
+  --doc-fg: #383a42;
+  /* Il blu di One Light è `#4078f2` e sopra `#fafafa` sta a 3,88:1: un
+     wikilink è testo, e la soglia del testo è 4,5:1. Scurito quanto basta. */
+  --doc-link: #2b69f1;
+  /* I titoli hanno un colore, e ce l'hanno anche in scrittura: è il tema di
+     sintassi a darglielo. Stesso valore di `--syn-heading`, e non un alias,
+     perché sono due domande diverse: una è «di che colore è un `<h1>` reso»,
+     l'altra «di che colore è il testo che il parser ha marcato come titolo». */
+  --doc-heading: #e45649;
+  --doc-danger: #c0392f;
+  /* Riempimenti e righe in alpha su grigio: valgono identici al gemello
+     scuro — sono stati scelti perché reggono su entrambi i fondi, e il
+     presidio li tiene identici. È la sola famiglia di colori che i due
+     fogli dichiarano con lo stesso valore. */
+  --doc-fill: rgb(135 135 135 / 16%);
+  --doc-fill-soft: rgb(135 135 135 / 10%);
+  --doc-rule: rgb(135 135 135 / 45%);
+  --doc-rule-soft: rgb(135 135 135 / 28%);
+  --doc-highlight: rgb(255 205 0 / 45%);
+
+  /* Ciò che l'editor disegna e la resa non ha: il cursore, la selezione, la
+     riga corrente, il margine coi numeri. */
+  --doc-caret: #526fff;
+  --doc-selection: #dcdde0;
+  --doc-active-line: #f0f0f0;
+  /* Il grigio del margine di One Light (`#9d9d9f`) sul suo fondo sta a
+     2,59:1 — il numero più basso dell'intera tavolozza chiara. */
+  --doc-gutter-fg: #727275;
+  --doc-tooltip-bg: #f0f0f0;
+
+  /* --- i colori della sintassi ------------------------------------------- */
+
+  /* One Light, il gemello ufficiale di One Dark: la stessa tavolozza
+     nell'altra luce. Dove il gemello scuro passa le soglie senza toccare
+     niente, qui sette di questi dieci colori stanno fra 3:1 e 4,5:1: il
+     pavimento dei segni (3:1) è stato tirato su dove cadeva sotto
+     (`--syn-comment`, scurito), la soglia del testo no — perché portarcela
+     vorrebbe dire ritoccarli uno alla volta, e ciò che resterebbe non
+     sarebbe più né One Dark né One Light. Il debito è dichiarato per nome
+     in `theme/contrast.test.ts`, che verifica che l'elenco di chi sta sotto
+     AA sia **quello e non un altro**; la tavolozza che passa AA
+     dappertutto è il 25.1. */
+  --syn-keyword: #a626a4;
+  --syn-name: #e45649;
+  --syn-function: #4078f2;
+  --syn-literal: #986801;
+  --syn-type: #c18401;
+  --syn-operator: #0184bc;
+  /* L'unico colore di One Light spostato, e di quel tanto che serve a superare
+     il pavimento dei segni: `#a0a1a7` sul fondo del documento stava a 2,47:1,
+     cioè sotto la soglia che vale perfino per una linea. Resta sotto la soglia
+     del testo, come metà di questa tavolozza, ed è il debito che
+     `theme/contrast.test.ts` tiene in elenco. */
+  --syn-comment: #8d8e96;
+  --syn-string: #50a14f;
+  --syn-heading: #e45649;
+  --syn-invalid: #ca1243;
+
+  /* --- ciò che vale per tutta la pagina ---------------------------------- */
+
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  /* Dice al motore in che luce siamo: da qui prendono il verso le barre di
+     scorrimento, il cursore di testo e i controlli nativi (`<progress>`,
+     `<input type="checkbox">`), che nessuna nostra regola raggiunge. Senza,
+     un tema chiaro ha ancora le scrollbar scure. */
+  color-scheme: light;
+}

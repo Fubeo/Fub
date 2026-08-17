@@ -10,15 +10,16 @@
 // «Come il sistema» ha una forma nativa in CSS: `@media
 // (prefers-color-scheme: dark)`. Non la usiamo, e la ragione è che con quella
 // i valori del tema scuro andrebbero scritti **due volte** — una nella media
-// query, per chi non ha scelto, e una in `[data-theme="dark"]`, per chi ha
-// scelto scuro su un sistema chiaro. Due liste di venti colori che devono
-// restare uguali sono due liste che divergono, e diverge quella meno guardata:
-// la seconda.
+// query, per chi non ha scelto, e una per chi ha scelto scuro su un sistema
+// chiaro. Due liste che devono restare uguali sono due liste che divergono,
+// e diverge quella meno guardata: la seconda.
 //
-// Risolvendo qui, il CSS vede sempre un tema **concreto** e ne dichiara uno
-// solo in più rispetto al default (`theme/tokens.css`). Il guadagno secondario
-// è che «quale tema vale» diventa una funzione pura di due argomenti, e una
-// funzione pura si prova; una media query si prova solo aprendo l'app.
+// Risolvendo qui, il caricatore (`theme/loader.ts`) monta un foglio **solo**:
+// quello della luce che vale, e nessun altro — nel CSS non c'è più nessun
+// tema di default e nessun `[data-theme]` da battere in specificità. Il
+// guadagno secondario resta: «quale tema vale» è una funzione pura di due
+// argomenti, e una funzione pura si prova; una media query si prova solo
+// aprendo l'app.
 //
 // # Il primo disegno
 //
@@ -39,6 +40,10 @@ import { impostazioni } from "../host/query";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
 import type { Vita } from "../ui/vita";
+import foglioScuro from "./serie/foglio-scuro.css?raw";
+import foglioChiaro from "./serie/foglio-chiaro.css?raw";
+import pelle from "./serie/pelle.css?raw";
+import { monta } from "./loader";
 
 /// Le due luci. Non c'è un terzo valore: «come il sistema» è una **scelta**,
 /// non un tema, e tenerli nello stesso tipo è il modo in cui poi si finisce a
@@ -98,14 +103,18 @@ export function temaCorrente(): Tema {
   return document.documentElement.dataset.theme === "light" ? "light" : "dark";
 }
 
-/// Scrive il tema sulla radice, e avvisa chi non può leggerlo dal CSS.
+/// Scrive il tema sulla radice, monta il foglio della luce che vale, e
+/// avvisa chi non può leggerlo dal CSS.
 ///
-/// Sta sull'elemento **radice** e non sul `body` perché è lì che stanno i token
-/// (`:root`), e una custom property dichiarata su `<html>` non si ridefinisce
-/// da `<body>` senza ripetere l'intero blocco.
+/// `data-theme` non serve più al foglio — quello montato **è** il tema — ma
+/// resta un segnale vivo: il pittore del grafo lo osserva con un
+/// `MutationObserver` per ridipingere i canvas, e `temaCorrente()` lo legge.
+/// Per questo si scrive **dopo** aver montato il foglio: chi osserva e
+/// rilegge i colori con `getComputedStyle` deve trovare quelli nuovi.
 function applica(): void {
   const prossimo = temaEffettivo(scelta, sistemaScuro());
   if (prossimo === document.documentElement.dataset.theme) return;
+  monta(prossimo === "light" ? foglioChiaro : foglioScuro, "foglio");
   document.documentElement.dataset.theme = prossimo;
   avvisa(prossimo);
 }
@@ -138,6 +147,12 @@ export function mountTheme(vita: Vita, onChange: (tema: Tema) => void): void {
   } catch {
     scelta = "";
   }
+
+  // La pelle, una volta sola, prima del primo `applica()`: è la superficie
+  // che il foglio sta per vestire. La pelle di serie non cambia col cambio
+  // di luce — cambia quando cambia il tema **per intero**, e quel giorno è
+  // un altro file sotto `serie/` e un altro montaggio qui.
+  monta(pelle, "pelle");
   // Prima di registrare l'avviso: chi montiamo dopo (l'editor) legge il tema
   // corrente alla nascita, e avvisarlo di un cambiamento che non ha ancora
   // visto vorrebbe dire chiamarlo prima che esista.
@@ -147,8 +162,8 @@ export function mountTheme(vita: Vita, onChange: (tema: Tema) => void): void {
   // Il sistema che cambia luce mentre l'app è aperta. Riguarda solo chi ha
   // lasciato «come il sistema», e `applica()` lo sa già: se la scelta è
   // esplicita, ricalcola lo stesso valore e non fa niente.
-  // `matchMedia` non c'è in ogni motore (i banchi con `happy-dom` ne sono la
-  // prova): l'elenco delle sorgenti resta lo stesso, ne manca una.
+  // `matchMedia` può mancare (un motore senza media query): l'elenco delle
+  // sorgenti resta lo stesso, ne manca una.
   const media = window.matchMedia?.(QUERY_SCURO);
   if (media) vita.ascolta(media, "change", applica);
 

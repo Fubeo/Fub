@@ -1,0 +1,469 @@
+/* La struttura della shell: ciò che nessun tema sostituisce (§29.1).
+ *
+ * Il foglio visivo è spezzato in tre strati, e ciascuno ha un padre. La
+ * **struttura** sta alla shell e non si tematizza; il **foglio** (i ruoli,
+ * la tipografia, il moto) e la **pelle** (il chrome) stanno nel fascio del
+ * tema di serie, in `theme/serie/`, e li monta il caricatore a sostituzione
+ * (`theme/loader.ts`): un foglio solo e una pelle sola, alla volta. Questo
+ * file invece è della shell, è sempre montato (è l'unico CSS che `main.ts`
+ * importi), e un tema di terzi non lo vede nemmeno.
+ *
+ * Come si riconosce ciò che sta qui: risponde a «dove sta cosa». Le metriche
+ * della scocca, la scala dei piani, la geometria dei riquadri, e le garanzie
+ * che la shell dà per costruzione: `[hidden]` che resta nascosto, il moto che
+ * si spegne per chi lo chiede, il fuoco che si vede, il salto al contenuto.
+ * Il colore, il passo, la tipografia: mai qui. Questo file non dichiara
+ * nessun token del foglio e non ne consuma la scala (`--space-*`,
+ * `--radius-*`, `--font-*`, `--text-*`): la scocca non si muove col tema.
+ * È questo, il pavimento con cui la scala è andata al foglio: un tema può
+ * cambiare il passo del chrome — la densità compatta/rilassata di 6.2 farà
+ * proprio questo — ma non la geometria della finestra. Il presidio che lo
+ * tiene vero è `theme/struttura.test.ts`.
+ *
+ * L'unica regola che sta qui e legge il foglio è l'anello del fuoco: che il
+ * fuoco si veda è una garanzia della shell, la forma dell'anello è un ruolo
+ * (`--focus-ring`, con le sue misure), e il caricatore garantisce che un
+ * foglio è montato prima che questa regola possa valere.
+ */
+:root {
+  /* Il chrome della finestra: altezza della titlebar, larghezza della rail.
+     Non sono spaziatura — sono la scocca — e stanno qui perché il foglio e il
+     layout devono dire lo stesso numero. Un tema non li ridefinisce: chi
+     scrive una pelle li consuma (`height: var(--titlebar-h)`), chi scrive un
+     foglio non li vede. */
+  --titlebar-h: 38px;
+  --rail-w: 44px;
+
+  /* I piani. Erano sei numeri sparsi fra 50 e 90, e l'ordine fra loro era
+     leggibile solo confrontandoli a mano in file diversi. Qui l'ordine è la
+     lista: chi ne aggiunge uno vede subito sopra e sotto cosa passa. */
+  /* La regola che lega i piani a ciò che fanno: **una superficie che intrappola
+     il fuoco sta su `--z-modal`**, e sotto di lei non ci va nessun'altra che lo
+     intrappoli. Chi prende il fuoco deve essere chi si vede, o si scrive alla
+     cieca dentro qualcosa dipinto sotto; e a decidere chi comanda fra due
+     trappole aperte è `ui/a11y.ts`, che dà il tasto all'**ultima aperta** — sullo
+     stesso piano, l'ultima aperta è anche l'ultima dipinta (difetto 0149). */
+  /* `--z-overlay` non c'è più: valeva 50 come `--z-menu` per il grafo, che era
+     una finestra sopra le cose e adesso è un riquadro come gli altri (`.pane-view
+     .graph-canvas`). Zero regole lo citavano, e un piano che non tiene su niente
+     è una riga che il prossimo legge come se dicesse dov'è qualcosa. */
+  --z-menu: 50;
+  --z-picker: 60;
+  --z-popover: 70;
+  --z-dialog: 80;
+  /* Il toast stava a 80 come il pannello delle impostazioni, e vinceva **per
+     ordine nel DOM** — `ui/notify.ts` lo appende al `body`, quindi arriva
+     ultimo. Vinceva quindi per una ragione che nessuno aveva scritto e che un
+     riordino avrebbe rovesciato in silenzio. Qui è dichiarato. */
+  --z-toast: 85;
+  --z-modal: 90;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* `hidden` vuol dire nascosto, e qui è l'unico posto in cui `!important` è la
+   risposta giusta.
+   L'attributo `hidden` è nascosto da una regola dello **user-agent**
+   (`[hidden] { display: none }`), e qualunque regola d'autore che imposti
+   `display` su quell'elemento la revoca — in silenzio, perché l'autore non ha
+   scritto niente sulla visibilità: ha scritto `display: flex` per il layout.
+   È già successo, e in un modo che i test non vedevano: `#views-modal` è
+   `position: fixed; inset: 0` e la sua regola di layout lo teneva **acceso
+   sopra tutta la finestra** anche da vuoto, quindi la webview riceveva ogni
+   click al posto della UI sotto — l'app sembrava congelata pur essendo viva.
+   Con questa riga il modo con cui la shell nasconde le cose (`el.hidden = …`,
+   che è quello che usano `ui/views.ts` e i pannelli) torna a valere per
+   costruzione, anche per le superfici che verranno — ed è il motivo per cui
+   sta nella struttura e non nella pelle: una pelle di terzi che imposti
+   `display` non può revocarla. Il presidio è `ui/hidden.test.ts`. */
+[hidden] {
+  display: none !important;
+}
+
+/* Chi chiede meno moto lo ottiene: le durate vanno a zero, le curve restano
+   perché non c'è più niente da interpolare. Non `display` e non `visibility`:
+   è il moto che si spegne, non la superficie.
+   Sta nella struttura, e non nella pelle, perché è il pavimento del §25.1:
+   il moto ridotto lo fa rispettare **la shell**, non la cortesia dell'autore
+   del tema — qualunque foglio montato, comunque lo scriva, viene spento da
+   qui. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Il fuoco si vede, ovunque e per costruzione (§12.4).
+ *
+ * Prima non si vedeva quasi mai, e non per una svista: tre regole
+ * spegnevano l'anello del browser con `outline: none` per sostituirlo con un
+ * bordo colorato (i campi di ricerca, il selettore d'icona, la palette). È il
+ * baratto che sembra innocuo e non lo è — un bordo che cambia tinta è visibile a
+ * chi distingue quella tinta, l'anello di fuoco deve essere visibile a
+ * chiunque — e in tutto il **resto** della shell non c'era niente al suo posto:
+ * un pulsante della topbar raggiunto col tab non si distingueva da uno qualsiasi.
+ *
+ * `:focus-visible` e non `:focus`: è la pseudo-classe che il browser accende
+ * quando il fuoco arriva **da tastiera** e non da un click, che è precisamente
+ * la distinzione che serve. Con `:focus` ogni pulsante cliccato col mouse
+ * resterebbe cerchiato, e la prima cosa che qualcuno farebbe è togliere di
+ * nuovo la regola.
+ *
+ * Il selettore universale è deliberato: qualunque cosa diventi raggiungibile —
+ * anche una `<div>` a cui `ui/a11y.ts` ha appena dato un `tabindex` — è
+ * coperta senza che nessuno debba ricordarsene. Sta nella struttura per la
+ * stessa ragione del moto ridotto: una pelle che dimenticasse l'anello non
+ * può spegnere il fuoco. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Il salto al contenuto (§12.4), nel suo meccanismo: fuori dallo schermo
+   finché non prende il fuoco. Non `display: none` e non `visibility: hidden`
+   — entrambi lo toglierebbero anche al tab, che è l'unico che lo deve
+   trovare. La superficie (il velo, il bordo, gli offset) sta nella pelle. */
+.skip-link {
+  position: fixed;
+  z-index: var(--z-modal);
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* --- lo scheletro: dalla finestra ai riquadri -----------------------------
+ *
+ * Le regole che seguono sono la geometria: quale regione sta accanto a quale,
+   quanto è larga la rail, quante colonne ha il layout. Le misure da cui la
+   scocca dipende sono letterali o token di qui (`--titlebar-h`, `--rail-w`,
+   i piani): mai token del foglio. Il colore di queste stesse superfici sta
+   nella pelle, e spesso sono le stesse regole, con altre dichiarazioni: chi
+   legge le due facce confronta i due file. */
+
+html, body, #app {
+  margin: 0;
+  height: 100%;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+/* La titlebar, nelle sue tre zone: marchio+menu a sinistra, ricerca al
+   centro, controlli a destra. `justify-content: space-between` non basta: il
+   centro deve restare in mezzo, e le tre zone hanno pesi diversi — quindi il
+   centro è `flex: 1 1 auto` e le ali sono `flex: 0 0 auto`. Il barattolo
+   fra le zone lo fa la scocca: padding e gap qui sono zero, e se la pelle
+   vuole respiro lo dà alle zone, non alla barra. */
+#topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  gap: 0;
+}
+
+.titlebar {
+  height: var(--titlebar-h);
+  min-height: var(--titlebar-h);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar button,
+.titlebar a,
+.titlebar input,
+.titlebar select,
+.titlebar #mode-switch,
+.titlebar #window-controls,
+.titlebar [data-tauri-drag-region="false"] {
+  -webkit-app-region: no-drag;
+}
+
+#window-controls {
+  display: inline-flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+}
+
+#titlebar-left,
+#titlebar-right {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+#titlebar-center {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* La menubar applicativa: bottoni di menu in fila, ognuno con la sua etichetta
+   i18n. È `role="menubar"` nell'HTML, e qui è solo una fila orizzontale. */
+#app-menu {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+/* L'altezza dei bottoni di menu è la titlebar: un bottone che non la copre
+   in altezza lascia scoperto il trascinamento della finestra, e uno che la
+   supera la fa scattare. Il resto del bottone — il fondo, il muted — sta
+   nella pelle. */
+#app-menu button {
+  height: var(--titlebar-h);
+  -webkit-app-region: no-drag;
+}
+
+/* `#app-menu-extra` è la superficie Menu del §2.2, in fila con la menubar. */
+#app-menu-extra {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+/* Il titolo del pannello montato nella menubar non si vede: lo dice già la
+   voce di menu che l'ha aperto. */
+#app-menu-extra .declared-view-panel > .panel-title {
+  display: none;
+}
+
+/* Il workspace: rail e layout in fila. La rail ha larghezza fissa
+   (`--rail-w`), il layout prende il resto. */
+#workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* La rail: colonna verticale di icone. La direzione e la larghezza stanno
+   qui; la superficie (il velo, il filetto) nella pelle. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: var(--rail-w);
+  min-width: var(--rail-w);
+  flex: none;
+}
+
+/* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca,
+   Grafo). Le view dichiarate si appendono dopo, sempre in `#views-ribbon`. */
+#rail-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Il layout: sidebar, riquadri, inspector — e la striscia delle view in
+   basso, alta quanto il suo contenuto (senza `auto`, la griglia dividerebbe
+   lo spazio avanzato fra le due righe e la striscia di stato si mangerebbe
+   un quarto della finestra). */
+#layout {
+  flex: 1;
+  display: grid;
+  /* La colonna di destra ospita solo le view dichiarative (e la cronologia):
+     da quando l'anteprima è una modalità e non un pannello, lo spazio va a chi
+     scrive. */
+  grid-template-columns: 240px 2fr 1fr;
+  grid-template-rows: 1fr auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+#sidebar,
+#right-pane {
+  overflow-y: auto;
+}
+
+#right-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+/* `.inspector` è la faccia dichiarativa di `#right-pane`: la stessa colonna,
+   vista dal vocabolario dei componenti. */
+.inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#views-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* I pannelli dell'inspector: uno visibile alla volta, e solo il tab attivo
+   (`costruisciInspector` mette `hidden` sugli altri). */
+#views-right > .declared-view-panel {
+  flex: 1;
+  overflow-y: auto;
+}
+
+#views-right > .declared-view-panel[hidden] {
+  display: none !important;
+}
+
+/* I tab dell'inspector dicono già quale view è aperta: i titoli dei
+   pannelli, sotto, sono lo stesso nome due volte. */
+#views-right > .declared-view-panel > .panel-title {
+  display: none;
+}
+
+/* Le view in basso sono una striscia di stato: titolo e contenuto sulla
+   stessa riga, non un pannello con l'intestazione sopra. */
+#views-bottom {
+  grid-column: 1 / -1;
+  overflow: auto;
+  max-height: 30vh;
+}
+
+#views-bottom .panel-title,
+#views-bottom .declared-view {
+  display: inline-flex;
+}
+
+/* La barra di stato della shell (§10.3): una riga, il riempitivo al centro. */
+#statusbar {
+  display: flex;
+  align-items: center;
+}
+
+#statusbar-fill {
+  flex: 1;
+}
+
+/* La barra di stato delle view dichiarate (§2.2): stessa riga, altra
+   superficie. */
+#views-status {
+  display: flex;
+  align-items: center;
+}
+
+/* --- l'albero dei riquadri ------------------------------------------------
+ *
+    L'area principale, che dal §1.2 è **l'albero dei riquadri** e non un
+    editor. La disposizione la disegna `panels/document.ts` da
+    `state/layout.ts`: qui ci sono solo le regole che valgono per qualunque
+    albero, e infatti non c'è nessuna misura — quanto è largo un riquadro lo
+    decide quanti sono. */
+#panes {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+#panes > * {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane-split {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.pane-split.row {
+  flex-direction: row;
+}
+.pane-split.col {
+  flex-direction: column;
+}
+.pane-split > * {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* La striscia delle tab di un riquadro: una fila che non si stringa e che
+   scorre quando le tab non ci stanno. Il fondo e il filetto sono della
+   pelle; che sparisca quando non c'è niente di aperto lo decide chi le
+   monta (`panels/document.ts`). */
+.pane-tabs {
+  display: flex;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.pane-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Le tre modalità sono esclusive (4.1), ed è **del riquadro**: era
+   `body[data-mode]`, cioè una modalità per tutta la finestra, e con N
+   riquadri sarebbe la cosa sbagliata proprio nel caso per cui si divide (la
+   nota di lato in Lettura mentre si scrive). Sta nella struttura perché è
+   il modo in cui le tre superfici si alternano, non come sono fatte. */
+.pane[data-mode="reading"] .pane-editor {
+  display: none;
+}
+.pane:not([data-mode="reading"]) .pane-preview {
+  display: none;
+}
+
+.cm-editor {
+  height: 100%;
+}
+
+.pane-preview {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* La terza superficie di un riquadro (§3.3), accanto all'editor e alla
+   lettura. Le tre sono esclusive come le modalità: quando la tab davanti è
+   una view non c'è nessun documento da mostrare, e le altre due si tolgono
+   di mezzo invece di restare sotto a occupare spazio. */
+.pane-view {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+.pane.con-vista > .pane-view {
+  display: flex;
+}
+.pane.con-vista > .pane-editor,
+.pane.con-vista > .pane-preview {
+  display: none;
+}
+
+/* L'albero di una view dichiarata riempie il riquadro. Nella sidebar un
+   pannello è alto quanto il suo contenuto e scorre; qui è il contrario — il
+   contenuto è alto quanto il riquadro — e senza questa regola un nodo che si
+   dimensiona in percentuale (un canvas, una mappa) chiede il 100% di `auto` e
+   riceve zero. È il primo posto in cui `ui-custom` ha un'altezza da dare. */
+.pane-view > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}

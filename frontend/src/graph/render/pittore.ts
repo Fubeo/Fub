@@ -73,7 +73,7 @@ export function creaPittore(host: HTMLElement, conf: ConfGrafica): Pittore {
   principale.className = "graph-main";
   for (const c of [sfondo, principale]) {
     // Stile inline: i due canvas vivono sovrapposti dentro l'host, e questo
-    // non deve dipendere da style.css (che è di un altro lotto). Il main è
+    // non deve dipendere da `theme/serie/pelle.css` (che è di un altro lotto). Il main è
     // sopra e riceve i pointer event; lo sfondo è trasparente agli eventi.
     c.style.position = "absolute";
     c.style.inset = "0";

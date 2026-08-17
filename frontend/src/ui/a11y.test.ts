@@ -31,7 +31,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import html from "../../index.html?raw";
 import samples from "../__fixtures__/mirror-samples.json";
 import type { UiNode } from "../host/contract";
-import css from "../style.css?raw";
+import css from "../theme/serie/pelle.css?raw";
 import { nomeAccessibile, raccontaProblemi, verificaAccessibilita } from "./a11y-check";
 import { attivabile, intrappolaFuoco, nonAttivabile } from "./a11y";
 import { mountTree } from "./node";
