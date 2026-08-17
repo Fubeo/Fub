@@ -1,55 +1,52 @@
-/* I token della shell: i valori da cui tutto il resto deriva con `var(…)`.
+/* Il foglio del tema di serie, nella luce scura: ruoli, tipografia, moto.
+ * (§29.1)
  *
- * Il file esisteva già ed era dichiaratamente **metà** — il contenitore che il
- * §1.1 nominava, coi diciotto colori di allora spostati dentro senza toccarli.
- * Questa è l'altra metà: la **scala**, e i due temi.
+ * È uno dei due fogli con cui il tema di serie nasce — l'altro è
+ * `foglio-chiaro.css`, il suo gemello — e non è cablato nell'app: lo monta
+ * il caricatore (`theme/loader.ts`), che **sostituisce**: un foglio solo
+ * alla volta, niente cascata fra due temi, niente gara di specificità. Chi
+ * decide quale luce vale è la shell (`theme/theme.ts`), che risolve la
+ * scelta e monta il foglio corrispondente: per questo qui non c'è nessuna
+ * `@media (prefers-color-scheme)` e nessun selettore `[data-theme]` — il
+ * foglio montato È il tema, e `:root` basta.
  *
- * # I tre strati, e perché sono tre
+ * # Cosa sta qui, e cosa no
  *
- * 1. **Le dimensioni** — spazi, raggi, tipografia, pesi, ombre, piani. Non
- *    dipendono dal tema: un padding non cambia perché cambia la luce. Stanno in
- *    `:root` e basta.
+ * 1. **La scala** — spazi, raggi, tipografia, pesi, moto. Non dipende dalla
+ *    luce: un padding non cambia perché cambia la luce, e infatti i due
+ *    fogli la dichiarano uguale — e un presidio (`theme/struttura.test.ts`)
+ *    riconta che resti uguale, perché due liste che devono restare uguali
+ *    sono due liste che divergono. Sta nel foglio, e non nella struttura,
+ *    **con pavimento**: la densità compatta/rilassata (6.2) cambierà proprio
+ *    questi valori; ma la scocca non li consuma (`theme/struttura.css` non
+ *    ne cita nemmeno uno), quindi qualunque scala un tema porti, la
+ *    geometria della finestra non si muove.
  * 2. **I colori semantici** — `--bg`, `--text`, `--danger`, … Sono nomi di
- *    *ruolo*, mai di tinta: chi scrive una regola dice «questo è il fondo di una
- *    superficie sollevata», non «questo è grigio scuro». È la stessa regola che
- *    il §2.2 impone ai provider (*«un provider sceglie intenti semantici, mai
- *    colori»*), applicata alla shell che finora se la risparmiava.
- * 3. **I colori della sintassi** — `--syn-*`. Sono colori semantici anche loro,
- *    ma di un vocabolario diverso (una parola chiave, una stringa, un titolo), e
- *    hanno un cliente solo: il tema dell'editor.
+ *    *ruolo*, mai di tinta: chi scrive una regola dice «questo è il fondo di
+ *    una superficie sollevata», non «questo è grigio scuro». È la stessa
+ *    regola che il §2.2 impone ai provider (*«un provider sceglie intenti
+ *    semantici, mai colori»*).
+ * 3. **I colori della sintassi** — `--syn-*`. Sono colori semantici anche
+ *    loro, ma di un vocabolario diverso (una parola chiave, una stringa, un
+ *    titolo), e hanno un cliente solo: il tema dell'editor.
  *
- * # Dove stanno i due temi, e perché il chiaro è l'unico blocco in più
- *
- * Il tema scuro sta in `:root`, il chiaro in `:root[data-theme="light"]`. Non
- * c'è un blocco `[data-theme="dark"]`, e non c'è una `@media
- * (prefers-color-scheme)`: sono le due forme che **duplicherebbero** i valori
- * scuri — una volta nella media query e una volta nel selettore d'attributo — e
- * due liste di venti colori che devono restare uguali sono due liste che
- * divergono. La media query non serve perché a risolvere «come il sistema»
- * pensa la shell (`theme/theme.ts`), che guarda `matchMedia` e scrive sempre un
- * tema **concreto** sull'elemento radice. Il vantaggio non è solo di righe: la
- * scelta diventa una funzione pura di due argomenti, e una funzione pura si
- * prova (`theme/theme.test.ts`); una media query no.
- *
- * Conseguenza voluta: `data-theme="dark"` funziona per costruzione — non
- * trovando nessun blocco più specifico, restano i valori di `:root`.
- *
- * # Cosa NON sta qui
- *
- * Gli override per vault e per nota, gli snippet CSS dell'utente e l'alto
- * contrasto: sono 6.2 e 25.1, e atterreranno su questi nomi. È il motivo per cui
- * la scala è semantica e non una tavolozza: un tema di terze parti ridichiara
- * venticinque ruoli, non milleduecento regole.
+ * Le metriche della scocca e la scala dei piani stanno nella struttura
+ * (`theme/struttura.css`) e qui non si ripetono; il chrome dei componenti
+ * sta nella pelle (`pelle.css`). Ciò che NON sta da nessuna parte, ancora:
+ * gli override per vault e per nota, gli snippet CSS dell'utente e l'alto
+ * contrasto — sono 6.2 e 25.1, e atterreranno su questi nomi. È il motivo
+ * per cui la scala è semantica e non una tavolozza: un tema di terze parti
+ * ridichiara venticinque ruoli, non milleduecento regole.
  */
 :root {
-  /* --- le dimensioni ----------------------------------------------------- */
+  /* --- la scala: ciò che i due fogli condividono -------------------------- */
 
   /* Gli spazi. La scala è quella che la shell **già usava** (2, 4, 6, 8, 10,
      12, 16), raccolta e chiusa: i valori dispari che erano rimasti in giro —
      3px, 5px, 11px, 14px, 18px — erano differenze che nessuno aveva scelto, e
-     sono state tirate sul gradino accanto. I numeri che restano letterali in
-     `style.css` sono quelli **strutturali** (la colonna da 240px, un bordo da
-     1px, l'altezza massima di una lista): non sono spaziatura, e metterli in
+     sono state tirate sul gradino accanto. I numeri che restano letterali nella
+     pelle sono quelli **strutturali** (la colonna da 240px, un bordo da 1px,
+     l'altezza massima di una lista): non sono spaziatura, e metterli in
      questa scala vorrebbe dire che cambiarla li muove. */
   --space-1: 2px;
   --space-2: 4px;
@@ -95,43 +92,13 @@
      `0.04em` in un altro, per la stessa riga). */
   --tracking-caps: 0.6px;
 
-  /* Il chrome della finestra: altezza della titlebar, larghezza della rail.
-     Non sono spaziatura — sono la scocca — e stanno qui perché il foglio e il
-     layout devono dire lo stesso numero. */
-  --titlebar-h: 38px;
-  --rail-w: 44px;
-
   /* Il moto. Corto sui hover, medio su ciò che si apre. La curva è la stessa
      da ogni parte, così un bottone e una tab non sembrano due prodotti. */
   --duration-fast: 120ms;
   --duration-med: 180ms;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-  /* I piani. Erano sei numeri sparsi fra 50 e 90, e l'ordine fra loro era
-     leggibile solo confrontandoli a mano in file diversi. Qui l'ordine è la
-     lista: chi ne aggiunge uno vede subito sopra e sotto cosa passa. */
-  /* La regola che lega i piani a ciò che fanno: **una superficie che intrappola
-     il fuoco sta su `--z-modal`**, e sotto di lei non ci va nessun'altra che lo
-     intrappoli. Chi prende il fuoco deve essere chi si vede, o si scrive alla
-     cieca dentro qualcosa dipinto sotto; e a decidere chi comanda fra due
-     trappole aperte è `ui/a11y.ts`, che dà il tasto all'**ultima aperta** — sullo
-     stesso piano, l'ultima aperta è anche l'ultima dipinta (difetto 0149). */
-  /* `--z-overlay` non c'è più: valeva 50 come `--z-menu` per il grafo, che era
-     una finestra sopra le cose e adesso è un riquadro come gli altri (`.pane-view
-     .graph-canvas`). Zero regole lo citavano, e un piano che non tiene su niente
-     è una riga che il prossimo legge come se dicesse dov'è qualcosa. */
-  --z-menu: 50;
-  --z-picker: 60;
-  --z-popover: 70;
-  --z-dialog: 80;
-  /* Il toast stava a 80 come il pannello delle impostazioni, e vinceva **per
-     ordine nel DOM** — `ui/notify.ts` lo appende al `body`, quindi arriva
-     ultimo. Vinceva quindi per una ragione che nessuno aveva scritto e che un
-     riordino avrebbe rovesciato in silenzio. Qui è dichiarato. */
-  --z-toast: 85;
-  --z-modal: 90;
-
-  /* --- i colori semantici: il tema scuro --------------------------------- */
+  /* --- i colori semantici: la luce scura ---------------------------------- */
 
   /* Le superfici, dalla più profonda alla più vicina. `--bg-hover` era
      `--bg-input` usato per un'altra cosa in undici regole: due ruoli sullo
@@ -192,7 +159,9 @@
 
   /* L'anello del fuoco (§12.4). Non è l'accento: deve reggere sopra l'accento
      stesso — un pulsante primario che prende il fuoco lo mostra su fondo
-     accento — quindi è un colore a parte, non un alias. */
+     accento — quindi è un colore a parte, non un alias. Le misure viaggiano
+     col colore: sono parte della forma dell'anello, e la regola che le consuma
+     sta nella struttura, che qui le trova. */
   --focus-ring: #d9f99d;
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
@@ -219,9 +188,9 @@
      si scrive (il tema dell'editor) e con cui si legge. Stanno qui, in un posto
      solo, perché le tre modalità di 4.1 devono essere la stessa nota vista in
      tre modi — non tre note diverse. Li usano `.markdown-preview` (Lettura), il
-     tema della live preview (`livepreview.ts`) e adesso anche il tema
-     dell'editor (`editor/theme.ts`), che prima portava i propri: finché quello
-     era `oneDark`, questa promessa era vera solo perché i valori qui sotto erano
+     tema della live preview (`livepreview.ts`) e il tema dell'editor
+     (`editor/theme.ts`), che prima portava i propri: finché quello era
+     `oneDark`, questa promessa era vera solo perché i valori qui sotto erano
      stati **ricopiati** da lui a mano. */
   --doc-bg: #000000;
   --doc-fg: #abb2bf;
@@ -236,7 +205,7 @@
   --doc-danger: #e17179;
   /* Riempimenti e righe in alpha su grigio: reggono su qualunque fondo, ed è
      il motivo per cui la live preview li usava già così — e il motivo per cui
-     il tema chiaro ne ridichiara solo due. */
+     il foglio chiaro li ridichiara identici. */
   --doc-fill: rgb(135 135 135 / 16%);
   --doc-fill-soft: rgb(135 135 135 / 10%);
   --doc-rule: rgb(135 135 135 / 45%);
@@ -261,7 +230,7 @@
      rende «la stessa nota in due luci» un'affermazione vera invece di due
      tavolozze scelte da persone diverse.
 
-     Ed è il motivo per cui questi dieci colori — soli, in tutto il file — non
+     Ed è il motivo per cui questi dieci colori — soli, in tutto il foglio — non
      reggono tutti la soglia AA del testo: sul fondo nero del tema scuro ormai
      li passano tutti (il nero alza ogni contrasto), ma sette in luce stanno
      fra 3:1 e 4,5:1. Portarceli vorrebbe dire ritoccarli uno alla volta, e ciò
@@ -291,99 +260,4 @@
      `<input type="checkbox">`), che nessuna nostra regola raggiunge. Senza,
      un tema chiaro ha ancora le scrollbar scure. */
   color-scheme: dark;
-}
-
-/* Il tema chiaro: **solo** i colori che cambiano. Le dimensioni non si
-   ridichiarano, e i riempimenti in alpha su grigio nemmeno — sono stati scelti
-   perché reggono su entrambi i fondi, e ridichiararli sarebbe la duplicazione
-   che questo file evita. */
-:root[data-theme="light"] {
-  --bg: #f7f7f9;
-  /* Sollevato, in luce, vuol dire **più chiaro**: i pannelli galleggiano
-     verso il bianco, non verso il nero. È la sola riga di questo blocco che
-     inverte una direzione invece di cambiare un valore. La titlebar non
-     galleggia: è chrome, e `--bg-chrome` sta un filo più freddo del
-     contenuto. */
-  --bg-elev: #ffffff;
-  --bg-input: #ececf1;
-  --bg-hover: #e8e8ee;
-  --bg-chrome: #f4f5fa;
-  --overlay-hover: rgb(0 0 0 / 6%);
-
-  --border: #d9d9e0;
-
-  --text: #1c1c22;
-  --muted: #5f5f6b;
-
-  /* L'accento diventa lime. Il nero sopra `#5a8f00` sta a **5,36:1** — passa
-     AA, e passa con margine. Il bianco non andrebbe: sul lime medio il bianco
-     è sotto 3:1 come segno e sotto 4,5:1 come testo, cioè sparisce in entrambi
-     i ruoli. I due numeri non stanno qui per fiducia: li ricalcola
-     `theme/contrast.test.ts` a ogni giro, sulle coppie che i token dichiarano
-     di formare.
-
-     `--accent-soft` è l'inchiostro sulle superfici chiare: `#3f6212` su `--bg`
-     sta a 6,61:1. Il verso è l'opposto del tema scuro — là «tenue» vuol dire più
-     chiaro dell'accento, qui più scuro — perché da questa parte è il fondo a
-     essere chiaro, e un lime chiaro come segno non regge 3:1 sul bianco.
-
-     Come **segno**, `--accent` `#5a8f00` su `--bg` `#f7f7f9` sta a 3,66:1:
-     sopra la soglia dei segni (3:1), sotto quella del testo (4,5:1) — ed è
-     giusto così, perché un fondo di bottone non è testo. */
-  --accent: #5a8f00;
-  --accent-soft: #3f6212;
-  --accent-contrast: #000000;
-
-  --danger: #c0392f;
-  --danger-wash: rgb(192 57 47 / 12%);
-  --danger-contrast: #ffffff;
-
-  --focus-ring: #3f6212;
-
-  --scrim: rgb(20 20 30 / 35%);
-  --shadow-sm: 0 4px 14px rgb(20 20 40 / 12%);
-  --shadow-md: 0 6px 20px rgb(20 20 40 / 14%);
-  --shadow-lg: 0 10px 30px rgb(20 20 40 / 18%);
-
-  --doc-bg: #fafafa;
-  --doc-fg: #383a42;
-  /* Il blu di One Light è `#4078f2` e sopra `#fafafa` sta a 3,88:1: un
-     wikilink è testo, e la soglia del testo è 4,5:1. Scurito quanto basta. */
-  --doc-link: #2b69f1;
-  --doc-heading: #e45649;
-  --doc-danger: #c0392f;
-  --doc-highlight: rgb(255 205 0 / 45%);
-
-  --doc-caret: #526fff;
-  --doc-selection: #dcdde0;
-  --doc-active-line: #f0f0f0;
-  /* Il grigio del margine di One Light (`#9d9d9f`) sul suo fondo sta a
-     2,59:1 — il numero più basso dell'intera tavolozza chiara. */
-  --doc-gutter-fg: #727275;
-  --doc-tooltip-bg: #f0f0f0;
-
-  /* Un pallino del grafo non è testo, ma è ciò che distingue un nodo dal
-     vuoto: `#9a9aa8` sul fondo chiaro stava a 2,60:1, sotto il minimo dei
-     segni. */
-  --graph-node: #8b8b9b;
-  --graph-node-active: #5a8f00;
-  --graph-node-hover: #3f8c3e;
-
-  --syn-keyword: #a626a4;
-  --syn-name: #e45649;
-  --syn-function: #4078f2;
-  --syn-literal: #986801;
-  --syn-type: #c18401;
-  --syn-operator: #0184bc;
-  /* L'unico colore di One Light spostato, e di quel tanto che serve a superare
-     il pavimento dei segni: `#a0a1a7` sul fondo del documento stava a 2,47:1,
-     cioè sotto la soglia che vale perfino per una linea. Resta sotto la soglia
-     del testo, come metà di questa tavolozza, ed è il debito che
-     `theme/contrast.test.ts` tiene in elenco. */
-  --syn-comment: #8d8e96;
-  --syn-string: #50a14f;
-  --syn-heading: #e45649;
-  --syn-invalid: #ca1243;
-
-  color-scheme: light;
 }

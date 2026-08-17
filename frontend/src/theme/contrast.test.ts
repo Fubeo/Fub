@@ -13,8 +13,8 @@
 // `--accent-contrast` esiste per stare sopra `--accent` — è scritto nel suo
 // nome —, `--text` e `--muted` stanno sopra le quattro superfici, `--doc-fg`
 // sopra `--doc-bg`. La tabella qui sotto è quell'elenco, e non un campione: se
-// una coppia è nella tabella è perché una regola di `style.css` la mette
-// davvero insieme, e il commento accanto dice quale.
+// una coppia è nella tabella è perché una regola della **pelle** (`pelle.css`)
+// la mette davvero insieme, e il commento accanto dice quale.
 //
 // Il presidio non è il conto: il conto lo sapeva fare chiunque anche prima. Il
 // presidio è che le coppie sono **enumerate in un posto solo** e ricontate a
@@ -42,7 +42,7 @@
 //
 // I `--syn-*` sono l'unico gruppo che **non** regge la soglia del testo, ed è
 // una scelta dichiarata invece che un'omissione. Sono One Dark e One Light presi
-// **interi**: è la coppia a rendere vera l'affermazione di `tokens.css` — «la
+// **interi**: è la coppia a rendere vera l'affermazione dei due fogli — «la
 // stessa nota in due luci» — e ritoccarne i colori uno alla volta per portarli
 // a 4,5:1 lascerebbe una tavolozza che non è più nessuna delle due, scelta un
 // colore per volta da chi passava di lì.
@@ -56,7 +56,8 @@
 // tavolozza che questa soglia la passa tutta.
 import { describe, expect, it } from "vitest";
 
-import tokens from "./tokens.css?raw";
+import scuro from "./serie/foglio-scuro.css?raw";
+import chiaro from "./serie/foglio-chiaro.css?raw";
 
 /// La soglia del testo (WCAG 1.4.3).
 const AA = 4.5;
@@ -188,22 +189,30 @@ function blocco(css: string, selettore: string): string {
   if (!trovato) throw new Error(`«${selettore}» non è un blocco di tokens.css`);
   return trovato[1]!;
 }
-
-/// I due temi, come li vede il browser: lo scuro è `:root`, il chiaro è
-/// `:root` **più** ciò che ridichiara — che è esattamente la cascata, e il
-/// motivo per cui il chiaro può permettersi di ridichiarare solo i colori che
-/// cambiano.
-function tavolozze(css: string): Record<Tema, Record<string, string>> {
-  const senzaCommenti = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const token = (corpo: string): Record<string, string> =>
-    Object.fromEntries(
-      [...corpo.matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]),
+/// I due temi, come li vede il browser: due fogli completi, montati per
+/// **sostituzione**. Il chiaro non eredita più nulla dallo scuro — non è un
+/// blocco `:root[data-theme="light"]` che ridichiara solo ciò che cambia, è un
+/// gemello completo che il caricatore (`theme/loader.ts`) monta al posto del
+/// gemello scuro. La cascata non c'è più, e con lei il risparmio di non
+/// ricopiare i valori: il prezzo è due liste che devono restare uguali, e lo
+/// tiene `struttura.test.ts`. Qui ciascun file si legge da sé.
+function tavolozze(
+  scuro: string,
+  chiaro: string,
+): Record<Tema, Record<string, string>> {
+  const token = (css: string): Record<string, string> => {
+    const senzaCommenti = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    return Object.fromEntries(
+      [...blocco(senzaCommenti, ":root").matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map((m) => [
+        m[1]!,
+        m[2]!.trim(),
+      ]),
     );
-  const dark = token(blocco(senzaCommenti, ":root"));
-  return { dark, light: { ...dark, ...token(blocco(senzaCommenti, ':root[data-theme="light"]')) } };
+  };
+  return { dark: token(scuro), light: token(chiaro) };
 }
 
-const TAVOLOZZE = tavolozze(tokens);
+const TAVOLOZZE = tavolozze(scuro, chiaro);
 const TEMI = ["dark", "light"] as const;
 
 describe("il conto è quello della WCAG", () => {
@@ -230,13 +239,13 @@ describe("i token si leggono davvero dal foglio", () => {
   // La prova che le tabelle qui sotto non passano perché la tavolozza è vuota,
   // che è il modo in cui un presidio su un file letto come testo smette di
   // presidiare senza dirlo — la stessa cautela del presidio della scocca.
-  it("le due tavolozze sono piene, e il chiaro ne ridichiara una parte", () => {
+  it("le due tavolozze sono piene", () => {
     expect(Object.keys(TAVOLOZZE.dark).length).toBeGreaterThan(50);
     expect(TAVOLOZZE.dark.bg).toBe("#000000");
     expect(TAVOLOZZE.light.bg).toBe("#f7f7f9");
-    // Il chiaro eredita le dimensioni invece di ricopiarle: se un giorno
-    // ridichiarasse tutto, sarebbe la duplicazione che tokens.css evita.
-    expect(TAVOLOZZE.light["space-4"]).toBe(TAVOLOZZE.dark["space-4"]);
+    // I valori non-colore identici fra i due fogli (la scala, il moto, i quattro
+    // alpha) li presidia `struttura.test.ts`: qui conta il contrasto, non la
+    // gemellarità del vocabolario.
   });
 
   it("ogni coppia dichiarata nomina token che esistono", () => {

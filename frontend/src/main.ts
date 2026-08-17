@@ -7,7 +7,11 @@
 // questo pannello», non va qui — va nel pannello. È il file che, cresciuto per
 // somma di eccezioni a quella regola, era arrivato a 1622 righe con 81 funzioni
 // e 18 variabili globali (§1.1, §1.2).
-import "./style.css";
+// Il solo CSS importato staticamente: la struttura della shell, che non si
+// tematizza. Foglio e pelle del tema di serie li monta il caricatore
+// (`theme/loader.ts`) da `mountTheme`, qui sotto — e sono sostituiti, non
+// accatastati.
+import "./theme/struttura.css";
 import { pickFolder } from "./host/dialog";
 import { allaChiusura, api } from "./host/ipc";
 import { statoDelVault, vociDelVault } from "./host/query";

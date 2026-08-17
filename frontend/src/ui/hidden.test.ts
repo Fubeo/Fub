@@ -14,19 +14,29 @@
 // È successo con `#views-modal` (le superfici del §2.2, decisione 0016), e con
 // `#views-ribbon`/`#views-status` nella stessa forma ma senza conseguenze.
 //
-// La difesa sta in `style.css` ed è una riga — `[hidden] { display: none
-// !important }` — cioè l'unico posto in cui `!important` è la risposta giusta:
-// ristabilisce una garanzia dell'UA che una regola di layout revoca senza
-// dirlo. Questo test tiene ferma **quella riga** e, se qualcuno la togliesse,
-// nomina gli elementi che tornerebbero a essere visibili.
-// I due file si leggono col `?raw` di Vite e non con `node:fs`, per la stessa
+// La difesa sta nella **struttura** (`theme/struttura.css`) ed è una riga —
+// `[hidden] { display: none !important }` — cioè l'unico posto in cui
+// `!important` è la risposta giusta: ristabilisce una garanzia dell'UA che una
+// regola di layout revoca senza dirlo. Sta nella struttura, e non nella pelle,
+// perché una pelle di terzi che imposti `display` non può revocarla: la
+// struttura non si sostituisce col tema. Questo test tiene ferma **quella
+// riga** e, se qualcuno la togliesse, nomina gli elementi che tornerebbero a
+// essere visibili.
+// I tre file si leggono col `?raw` di Vite e non con `node:fs`, per la stessa
 // ragione del presidio del §1.3: `tsconfig.json` dichiara i soli tipi di Vite,
 // e un presidio della shell non deve essere il primo a usare un'API che nella
 // webview non esiste.
 import { describe, expect, it } from "vitest";
 
 import html from "../../index.html?raw";
-import css from "../style.css?raw";
+import struttura from "../theme/struttura.css?raw";
+import pelle from "../theme/serie/pelle.css?raw";
+
+/// Il CSS che il presidio attraversa: la struttura (dove sta la guardia) e la
+/// pelle (dove stanno le regole di layout che la possono revocare). La prima è
+/// della shell e non si sostituisce; la seconda sì, ma una pelle di terzi che
+/// imposti `display` non revoca la guardia — sta in un altro strato.
+const css = struttura + "\n" + pelle;
 
 /// La riga di difesa: `[hidden]` con `display: none` e `!important`. Senza
 /// `!important` non serve a niente — un selettore per id la batte comunque.
@@ -58,9 +68,9 @@ describe("l'attributo hidden", () => {
   it("è difeso da una regola che nessuna regola di layout può revocare", () => {
     expect(
       GUARDIA.test(css),
-      "manca `[hidden] { display: none !important }` in style.css: senza, " +
-        "qualunque regola d'autore che imposti `display` rende di nuovo " +
-        "visibile ciò che la shell crede nascosto",
+      "manca `[hidden] { display: none !important }` in struttura.css: " +
+        "senza, qualunque regola d'autore che imposti `display` rende di " +
+        "nuovo visibile ciò che la shell crede nascosto",
     ).toBe(true);
   });
 

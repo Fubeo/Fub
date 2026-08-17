@@ -134,7 +134,7 @@ export function fuocabili(root: HTMLElement): HTMLElement[] {
 ///
 /// Che l'ultima aperta sia anche quella dipinta sopra non è un caso da sperare:
 /// una superficie che intrappola il fuoco sta sul piano `--z-modal`, ed è scritto
-/// in `theme/tokens.css` accanto ai piani.
+/// in `theme/struttura.css` accanto ai piani.
 export function intrappolaFuoco(root: HTMLElement, chiudi: () => void): Smontaggio {
   const vita = apriVita();
   // Il segnaposto di *questa* trappola nella pila. Un oggetto vuoto basta: serve
