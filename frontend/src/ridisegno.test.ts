@@ -149,7 +149,7 @@ describe("il prezzo di un ridisegno (§2.9)", () => {
   it("un vault più piccolo della finestra si disegna intero, e senza dire niente", async () => {
     await avvia(vaultDa(30));
     expect(elementiDellAlbero()).toBe(30 * 3);
-    expect(document.querySelectorAll("#file-list .row.troncata")).toHaveLength(0);
+    expect(document.querySelectorAll("#file-list .tree-row.troncata")).toHaveLength(0);
   });
 
   it("ciò che la finestra lascia fuori l'albero lo dice, e dice quanto", async () => {
@@ -157,7 +157,7 @@ describe("il prezzo di un ridisegno (§2.9)", () => {
     // una cartella che sembra averne duecento quando ne ha seimila, e chi
     // guarda smette di cercare una nota che c'è.
     await avvia(vaultDa(6000));
-    const riga = document.querySelector("#file-list .row.troncata");
+    const riga = document.querySelector("#file-list .tree-row.troncata");
     expect(riga).not.toBeNull();
     expect(riga?.textContent).toContain(String(6000 - FINESTRA_DEL_LIVELLO.limit));
     // E non è una voce dell'albero: chi ci naviga con le frecce non ci si deve
@@ -171,7 +171,7 @@ describe("il prezzo di un ridisegno (§2.9)", () => {
     // quindi la riga che compare parla solo di `altreCartelle`. Senza questa
     // prova quel campo poteva valere zero fisso e la suite restava verde.
     await avvia(vaultDiCartelle(250));
-    const riga = document.querySelector("#file-list .row.troncata");
+    const riga = document.querySelector("#file-list .tree-row.troncata");
     expect(riga).not.toBeNull();
     expect(riga?.textContent).toContain(String(250 - FINESTRA_DEL_LIVELLO.limit));
   });

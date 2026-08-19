@@ -31,6 +31,7 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   vitaMenu = vita;
   const menu = document.createElement("div");
   menu.id = "context-menu";
+  menu.className = "context-menu";
   // Un menu è un menu: il ruolo è ciò che fa annunciare «menu, cinque voci» e
   // permette di uscirne sapendo di esserci entrati.
   menu.setAttribute("role", "menu");
@@ -89,6 +90,7 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   vitaIcone = vita;
   const pop = document.createElement("div");
   pop.id = "icon-picker";
+  pop.className = "icon-picker";
   pop.setAttribute("role", "dialog");
   pop.setAttribute("aria-label", t("icons.choose"));
   pop.tabIndex = -1;

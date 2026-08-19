@@ -360,11 +360,21 @@ fine M3 si congelano.
       una tabella che è **sorgente**: la guida della §31.9 e la scena del
       catalogo la leggono, non la ricopiano
       ([0056](../decisions/0056-un-elenco-che-e-la-sorgente.md)).
-- [ ] **Gli id escono dai selettori** e restano nel markup per chi li usa come
+- [x] **Gli id escono dai selettori** e restano nel markup per chi li usa come
       manico (i comandi, gli e2e, `ui/a11y.ts`). Lo stato si legge
       dall'attributo ARIA dove esiste — `aria-pressed`, `aria-selected`,
       `aria-current`, `aria-expanded` — così una classe non può dire il
-      contrario di ciò che un lettore di schermo annuncia.
+      contrario di ciò che un lettore di schermo annuncia. *Fatta: zero `#id`
+      nella pelle, con un presidio che lo tiene (`struttura.test.ts`). Il
+      cambio ha trovato tre difetti veri — il pannello aperto dalla costola
+      lasciava `aria-expanded="false"`, la palette e il quick switcher non
+      avevano **nessuna** selezione annunciata, i chip degli spazi nessuno
+      stato premuto — e due che gli id nascondevano: un default di campo con
+      quattro `:not()` in fila pesa (0,4,1) e scavalcava chiunque lo nominasse
+      per classe (ora `:where()`, ed è il solo cambiamento a pixel: due scene
+      della palette, dove `.modale input` applica finalmente il proprio
+      padding), e il presidio dei token leggeva `.win-ctrl--close:hover` come
+      una dichiarazione `--close:`. Il resto: 38 scene su 40 identiche.*
 - [ ] **La pelle si scrive a pezzi e si monta in un file**: il caricatore vuole
       una stringa e i presidi leggono un file, e tutti e due restano come sono;
       chi scrive lavora su un componente per volta invece che in duemilacento

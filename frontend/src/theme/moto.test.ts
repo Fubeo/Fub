@@ -142,7 +142,14 @@ describe("la pelle non dichiara token", () => {
     // assegnazione a un custom property citata in una spiegazione non conta.
     // È lo stesso divieto della pelle sui token di colore (`struttura.test.ts`),
     // e per la stessa ragione.
-    const dichiarazioni = [...PELLE.matchAll(/--([\w-]+)\s*:[^;]+;/g)].map((m) => m[1]!);
+    // `^\s*--` e non `--` in mezzo alla riga: un **modificatore BEM** e un
+    // custom property si scrivono con gli stessi due caratteri, e
+    // `.win-ctrl--close:hover {` letto come testo è indistinguibile da una
+    // dichiarazione `--close: …`. Un selettore comincia con `.`, `#`, `[` o un
+    // tag; una dichiarazione comincia con i due trattini. La differenza è dove
+    // stanno nella riga, e finché nessuno aveva scritto un modificatore seguito
+    // da una pseudo-classe il presidio passava per fortuna (§31.4).
+    const dichiarazioni = [...PELLE.matchAll(/^[ \t]*--([\w-]+)\s*:/gm)].map((m) => m[1]!);
     expect(
       dichiarazioni,
       "la pelle dichiara zero token, di moto come di colore: un `--nome:` " +

@@ -232,6 +232,7 @@ function mostra(avviso: Avviso): void {
   if (vecchio) vecchio.remove();
   const toast = document.createElement("div");
   toast.id = "toast";
+  toast.className = "toast";
   // Il toast è **l'unica** cosa che compare senza che l'utente l'abbia chiesta,
   // e sparisce da sola dopo qualche secondo: chi non guarda lo schermo non ha
   // nessun altro modo di saperlo. `status` e non `alert` per la stessa ragione

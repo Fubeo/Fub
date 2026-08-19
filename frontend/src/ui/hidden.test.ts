@@ -12,7 +12,10 @@
 // vede solo che l'app non risponde più ai click, perché c'è un velo sopra.
 //
 // È successo con `#views-modal` (le superfici del §2.2, decisione 0016), e con
-// `#views-ribbon`/`#views-status` nella stessa forma ma senza conseguenze.
+// `#views-ribbon`/`#views-status` nella stessa forma ma senza conseguenze. Dal
+// §31.4 quelle regole non nominano più un id ma una classe, e il presidio segue
+// i **manici** di un elemento — id e classi — invece del solo id: cercare ciò
+// che non si scrive più è il modo in cui un presidio diventa verde e vuoto.
 //
 // La difesa sta nella **struttura** (`theme/struttura.css`) ed è una riga —
 // `[hidden] { display: none !important }` — cioè l'unico posto in cui
@@ -42,23 +45,41 @@ const css = struttura + "\n" + pelle;
 /// `!important` non serve a niente — un selettore per id la batte comunque.
 const GUARDIA = /\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important[^}]*\}/;
 
-/// Gli id che l'HTML nasconde con l'attributo (`<div id="x" hidden>`).
-function idNascostiNellHtml(): string[] {
-  return [...html.matchAll(/id="([\w-]+)"[^>]*\shidden[\s>]/g)].map((m) => m[1]);
+/// Un elemento che l'HTML nasconde con l'attributo (`<div id="x" hidden>`), coi
+/// **manici** con cui il CSS lo può raggiungere: il suo id e le sue classi.
+///
+/// Le classi ci sono da quando la pelle ha smesso di vestire per id (§31.4):
+/// prima bastava l'id perché era l'unico modo che la pelle avesse di nominare
+/// una superficie, e cercare solo quello adesso vorrebbe dire un presidio che
+/// non trova più niente e passa perché non guarda.
+interface Nascosto {
+  id: string;
+  ganci: string[];
 }
 
-/// Gli id su cui il CSS impone un `display` con un selettore che nomina *solo*
-/// quell'id (`#views-modal { display: flex }`), cioè quelli su cui l'attributo
-/// `hidden` perderebbe senza la guardia. I selettori discendenti
-/// (`#views-bottom .panel-title`) non c'entrano: riguardano i figli.
-function idConDisplayImposto(): string[] {
+function nascostiNellHtml(): Nascosto[] {
+  const fuori: Nascosto[] = [];
+  for (const m of html.matchAll(/<[a-z]+\s([^>]*\shidden[\s>][^>]*)>/gi)) {
+    const attributi = m[1];
+    const id = /\sid="([\w-]+)"/.exec(attributi)?.[1] ?? /^id="([\w-]+)"/.exec(attributi)?.[1];
+    if (!id) continue;
+    const classi = (/\sclass="([^"]*)"/.exec(attributi)?.[1] ?? "").split(/\s+/).filter(Boolean);
+    fuori.push({ id, ganci: [`#${id}`, ...classi.map((c) => `.${c}`)] });
+  }
+  return fuori;
+}
+
+/// I selettori su cui il CSS impone un `display` nominando *solo* quel manico
+/// (`.views-modal { display: flex }`), cioè quelli su cui l'attributo `hidden`
+/// perderebbe senza la guardia. I selettori discendenti
+/// (`.views-bottom .panel-title`) non c'entrano: riguardano i figli.
+function ganciConDisplayImposto(): string[] {
   const colpiti: string[] = [];
   for (const blocco of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
     const selettori = blocco[1].split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim());
     if (!/(^|;|\s)display\s*:/.test(blocco[2])) continue;
     for (const selettore of selettori) {
-      const solo = /^#([\w-]+)$/.exec(selettore);
-      if (solo) colpiti.push(solo[1]);
+      if (/^[#.][\w-]+$/.test(selettore)) colpiti.push(selettore);
     }
   }
   return colpiti;
@@ -79,9 +100,11 @@ describe("l'attributo hidden", () => {
     // un presidio che non presidia niente è un presidio che si toglie senza
     // pensarci. Qui si nomina chi ci sta sotto: se un domani nessuno ci sta
     // più, questo test diventa rosso e la riga si può discutere sul serio.
-    const nascosti = idNascostiNellHtml();
-    const conDisplay = new Set(idConDisplayImposto());
-    const protetti = nascosti.filter((id) => conDisplay.has(id));
+    const nascosti = nascostiNellHtml();
+    const conDisplay = new Set(ganciConDisplayImposto());
+    const protetti = nascosti
+      .filter((n) => n.ganci.some((g) => conDisplay.has(g)))
+      .map((n) => n.id);
 
     expect(nascosti.length, "l'HTML non nasconde più niente: il glob legge ancora?").toBeGreaterThan(
       3,
@@ -92,6 +115,6 @@ describe("l'attributo hidden", () => {
   it("riconosce una regola che sovrascrive display quando c'è", () => {
     // La prova che il rilevatore non è sempre vuoto per una svista nella
     // regexp: `#app` ha un `display: flex` dichiarato, e va colto.
-    expect(idConDisplayImposto()).toContain("app");
+    expect(ganciConDisplayImposto()).toContain("#app");
   });
 });

@@ -325,10 +325,6 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
   // della rail non nascevano e i tab persistivano `view-0` invece dell'id vero.
   pannello.dataset.viewId = spec.id;
   pannello.id = `view-panel-${spec.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-  // `open_by_default` decide come nasce; da lì in poi decide chi clicca — e
-  // solo se la view si lascia chiudere.
-  pannello.classList.toggle("collapsed", !spec.open_by_default);
-
   const title = document.createElement("div");
   title.className = "panel-title";
   if (spec.icon) title.dataset.icon = spec.icon;
@@ -338,11 +334,27 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
   // sezione all'altra. Senza, un pannello si trova solo scorrendolo tutto.
   title.setAttribute("role", "heading");
   title.setAttribute("aria-level", "2");
+  const container = document.createElement("div");
+  container.className = "declared-view";
+  container.dataset.viewId = spec.id;
+  // `open_by_default` decide come nasce; da lì in poi decide chi clicca — e
+  // solo se la view si lascia chiudere.
+  //
+  // Chiuso è `hidden` sul contenuto, e non più una classe `collapsed` sul
+  // pannello con una regola della pelle che la traduce in `display: none`.
+  // Erano due scritture della stessa cosa e **divergevano**: aprire un
+  // pannello dalla rail (`panels/sidebar.ts`) toglieva la classe e lasciava
+  // `aria-expanded="false"` sul titolo, cioè la pelle lo mostrava aperto
+  // mentre chi lo ascoltava lo sentiva ancora chiuso. `hidden` è già il modo
+  // con cui questa shell nasconde le cose, ed è già accessibile: la pelle non
+  // ha più niente da dire in proposito.
+  container.hidden = !spec.open_by_default;
+
   if (spec.closable) {
     title.classList.add("clickable");
     title.addEventListener("click", () => {
-      const chiuso = pannello.classList.toggle("collapsed");
-      title.setAttribute("aria-expanded", String(!chiuso));
+      container.hidden = !container.hidden;
+      title.setAttribute("aria-expanded", String(!container.hidden));
     });
     // Un titolo cliccabile è un titolo **e** un comando. `aria-expanded` sta
     // sul titolo e non sul pannello perché è il titolo che si preme, ed è di
@@ -352,10 +364,6 @@ function montaSpec(spec: ViewSpec, host: HTMLElement): void {
     // c'è già ed è quello giusto, quindi resta titolo. Il tabindex sì.
     title.setAttribute("aria-expanded", String(spec.open_by_default));
   }
-
-  const container = document.createElement("div");
-  container.className = "declared-view";
-  container.dataset.viewId = spec.id;
   // La dimensione preferita vale alla prima apertura: da lì in poi comanda ciò
   // che l'utente ha trascinato — quando ci sarà qualcosa da trascinare.
   if (spec.preferred_size !== null) {
@@ -575,7 +583,12 @@ function costruisciInspector(): void {
   // — arriva dal backend — e il default è la prima `open_by_default` o la
   // prima in assoluto: la si sceglie ora, e se la persistenza arriva dopo
   // la si applica sovrascrivendo.
-  const defaultIndex = pannelli.findIndex((p) => !p.classList.contains("collapsed"));
+  // «Quella che nasce aperta» si legge dal contenuto che non è nascosto: era
+  // una classe `collapsed` sul pannello, ed era la stessa cosa scritta due
+  // volte (§31.4).
+  const defaultIndex = pannelli.findIndex(
+    (p) => !p.querySelector<HTMLElement>(":scope > .declared-view")?.hidden,
+  );
   attivaTab(defaultIndex >= 0 ? defaultIndex : 0);
   void api.viewState<string>("inspector.tab").then((salvato) => {
     if (!salvato) return;

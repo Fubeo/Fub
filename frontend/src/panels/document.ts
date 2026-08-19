@@ -701,8 +701,11 @@ function disegnaTab(r: Riquadro, tabs: Tab[], active: number): void {
   r.tabsEl.replaceChildren(
     ...tabs.map((t0, i) => {
       const tab = document.createElement("button");
-      tab.className = "tab" + (i === active ? " active" : "");
+      tab.className = "tab";
       tab.setAttribute("role", "tab");
+      // Quale tab è davanti lo dice **solo** `aria-selected`: la pelle lo
+      // legge da qui. Finché c'era anche una classe `.active`, la stessa
+      // cosa era scritta due volte e la seconda poteva restare indietro.
       tab.setAttribute("aria-selected", String(i === active));
       // Il `title` di una tab di documento è il **path intero**, perché due note
       // omonime in cartelle diverse sono il caso in cui il nome non basta. Una
@@ -840,10 +843,10 @@ function aggiornaCommutatore(): void {
   const mode = paneAttivo().mode;
   for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
     const scelta = b.dataset.mode === mode;
-    b.classList.toggle("active", scelta);
     // Quale modalità è accesa lo diceva solo lo sfondo. `aria-pressed` lo dice
     // a chi non lo vede — ed è l'informazione che serve *prima* di premere, non
-    // dopo: senza, i tre pulsanti sono tre comandi indistinguibili.
+    // dopo: senza, i tre pulsanti sono tre comandi indistinguibili. Da quando
+    // la pelle lo legge, è anche l'unico posto in cui la scelta sta scritta.
     b.setAttribute("aria-pressed", String(scelta));
   }
 }

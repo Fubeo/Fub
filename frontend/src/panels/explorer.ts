@@ -429,7 +429,7 @@ function renderChildren(path: string, ul: HTMLElement): void {
 /// La riga che dice quante voci di questo livello non sono disegnate.
 function rigaTroncata(quante: number): HTMLElement {
   const li = document.createElement("li");
-  li.className = "row troncata";
+  li.className = "tree-row troncata";
   li.setAttribute("role", "none");
   li.textContent = t("explorer.altre_voci", { n: quante });
   return li;
@@ -460,7 +460,7 @@ let contatoreVoci = 0;
 /// drag non ha senso: l'ordine delle appuntate è l'ordine in cui si appunta).
 function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   const row = document.createElement("div");
-  row.className = "row note" + (id === state.currentDoc ? " active" : "");
+  row.className = "tree-row note";
   row.title = id;
   const icon = state.meta.icons[id];
   if (icon) row.appendChild(rowIcon(icon));
@@ -499,7 +499,7 @@ function vuota(folder: VaultFolder): boolean {
 /// folder note se c'è (altrimenti apre/chiude, come la freccia).
 function folderRow(folder: VaultFolder): HTMLElement {
   const row = document.createElement("div");
-  row.className = "row folder";
+  row.className = "tree-row folder";
   row.title = folder.path;
 
   const chevron = document.createElement("span");
@@ -560,38 +560,38 @@ function toggleFolder(path: string): void {
   void refreshFromKernel(true);
 }
 
+/// Accende la nota aperta, nell'albero e fra le appuntate.
+///
+/// Prima qui si scriveva **due volte lo stesso fatto**: una classe `.active`
+/// sulla riga, per chi guarda, e `aria-selected` sul `<li>`, per chi ascolta.
+/// Due scritture della stessa cosa sono due cose che possono divergere, e la
+/// pelle leggeva la classe — cioè quella che uno screen reader non vede. Adesso
+/// c'è un solo segno per superficie, ed è quello che si annuncia: l'albero è un
+/// widget di selezione, quindi `aria-selected` sul `treeitem`; le appuntate sono
+/// una lista piatta, e in una lista «quello corrente» si dice `aria-current`
+/// (la stessa distinzione del §2.1, in `ui/node.ts`).
 function markActive(): void {
-  // Rimuove la classe attiva dai nodi precedentemente selezionati (O(1))
-  document
-    .querySelectorAll<HTMLElement>("#files-panel .row.note.active")
-    .forEach((row) => {
-      if (row.title !== state.currentDoc) row.classList.remove("active");
-    });
-  fileListEl
-    .querySelectorAll<HTMLElement>('li[role="treeitem"][aria-selected="true"]')
-    .forEach((li) => {
-      if (li.dataset.path !== state.currentDoc) li.removeAttribute("aria-selected");
-    });
+  for (const li of fileListEl.querySelectorAll<HTMLElement>(
+    'li[role="treeitem"][aria-selected="true"]',
+  )) {
+    if (li.dataset.path !== state.currentDoc) li.removeAttribute("aria-selected");
+  }
+  for (const riga of pinnedListEl.querySelectorAll<HTMLElement>(".tree-row.note")) {
+    if (riga.title === state.currentDoc) riga.setAttribute("aria-current", "true");
+    else riga.removeAttribute("aria-current");
+  }
 
-  // Accende il nodo corrispondente al documento attivo (O(1) lookup)
-  if (state.currentDoc) {
-    try {
-      const esc = CSS.escape(state.currentDoc);
-      document
-        .querySelectorAll<HTMLElement>(`#files-panel .row.note[title="${esc}"]`)
-        .forEach((row) => row.classList.add("active"));
-      const li = fileListEl.querySelector<HTMLElement>(
-        `li[role="treeitem"][data-path="${esc}"]`,
-      );
-      if (li) li.setAttribute("aria-selected", "true");
-    } catch {
-      document
-        .querySelectorAll<HTMLElement>("#files-panel .row.note")
-        .forEach((row) => row.classList.toggle("active", row.title === state.currentDoc));
-      for (const li of vociAlbero()) {
-        if (li.dataset.path === state.currentDoc) li.setAttribute("aria-selected", "true");
-        else li.removeAttribute("aria-selected");
-      }
+  if (!state.currentDoc) return;
+  try {
+    const esc = CSS.escape(state.currentDoc);
+    const li = fileListEl.querySelector<HTMLElement>(
+      `li[role="treeitem"][data-path="${esc}"]`,
+    );
+    if (li) li.setAttribute("aria-selected", "true");
+  } catch {
+    for (const li of vociAlbero()) {
+      if (li.dataset.path === state.currentDoc) li.setAttribute("aria-selected", "true");
+      else li.removeAttribute("aria-selected");
     }
   }
 }
@@ -612,6 +612,7 @@ function renderPinned(): void {
   for (const id of pinned) {
     const li = document.createElement("li");
     const riga = noteRow(id, { draggable: false });
+    if (id === state.currentDoc) riga.setAttribute("aria-current", "true");
     // Le appuntate sono una lista piatta e non un albero: qui il bersaglio del
     // tab è la riga stessa, che è anche ciò che si clicca. Sono poche per
     // costruzione — le appunta l'utente — quindi non serve il `roving` che
@@ -640,7 +641,8 @@ function renderSpaceStrip(): void {
   spaceStripEl.innerHTML = "";
 
   const home = document.createElement("button");
-  home.className = "space-chip" + (state.activeSpace === null ? " active" : "");
+  home.className = "space-chip";
+  home.setAttribute("aria-pressed", String(state.activeSpace === null));
   home.textContent = "🏠";
   home.title = t("explorer.whole_vault");
   home.addEventListener("click", () => selectSpace(null));
@@ -648,7 +650,8 @@ function renderSpaceStrip(): void {
 
   for (const path of state.meta.spaces) {
     const chip = document.createElement("button");
-    chip.className = "space-chip" + (state.activeSpace === path ? " active" : "");
+    chip.className = "space-chip";
+    chip.setAttribute("aria-pressed", String(state.activeSpace === path));
     chip.textContent = state.meta.icons[path] ?? "🗂️";
     chip.title = childName(path);
     chip.addEventListener("click", () => selectSpace(path));
@@ -664,6 +667,9 @@ function renderSpaceStrip(): void {
 
   const add = document.createElement("button");
   add.className = "space-chip add";
+  // «+» non è uno degli spazi: apre il gesto che ne crea uno. Senza
+  // `aria-pressed` non entra nel gruppo di quelli che si escludono a vicenda —
+  // che è ciò che è, e ciò che va detto.
   add.textContent = "+";
   add.title = t("explorer.new_space");
   add.addEventListener("click", (e) => void pickNewSpace(e));

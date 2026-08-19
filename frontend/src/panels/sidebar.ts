@@ -47,7 +47,16 @@ export function showPanel(panel: SidebarPanel): void {
   )) {
     const on = pannello.dataset.viewId === panel;
     pannello.hidden = !on;
-    if (on) pannello.classList.remove("collapsed");
+    // Aprire un pannello dalla rail vuol dire mostrarne il contenuto **e**
+    // dirlo: finché erano due scritture — una classe per la pelle, un
+    // `aria-expanded` per chi ascolta — questa riga aggiornava solo la prima,
+    // e il titolo continuava ad annunciare «chiuso» sopra un pannello aperto.
+    if (on) {
+      const contenuto = pannello.querySelector<HTMLElement>(":scope > .declared-view");
+      if (contenuto) contenuto.hidden = false;
+      const titolo = pannello.querySelector<HTMLElement>(":scope > .panel-title");
+      if (titolo?.hasAttribute("aria-expanded")) titolo.setAttribute("aria-expanded", "true");
+    }
   }
   // La rail riflette chi è acceso. Sta qui e non nei click dei bottoni
   // perché anche il menu Vista e il comando da tastiera devono aggiornare
