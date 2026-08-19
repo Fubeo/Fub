@@ -5,8 +5,9 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md). La [seduta
 [30](30-il-moto-e-del-tema.md) le ha dato il ritmo: l'architettura che porta un
 tema è in piedi, e regge. Questa seduta guarda **ciò che ci sta dentro** — il
 tema di serie, primo e unico esemplare — e pone una domanda sola: *da dove
-viene, ciascuna delle cose che si vedono?* Nove voci, tutte aperte. La prima non
-decide nessuna delle altre otto: costruisce l'occhio con cui si guardano.
+viene, ciascuna delle cose che si vedono?* Nove voci, due chiuse. La prima non
+decideva nessuna delle altre otto: ha costruito l'occhio con cui si guardano, e
+la seconda è la prima cosa che quell'occhio ha visto.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -197,13 +198,34 @@ cinque in luce chiara**, e tre di quelle cinque la tabella dei token non poteva
 vederle: un colore di sintassi sulla riga attiva invece che sul fondo, un titolo
 dal terzo livello in giù a cui la tabella chiede la soglia del testo grande, e un
 link sopra un **velo** con alpha, che la formula dei token si rifiuta di misurare
-— giustamente, perché non sa cosa c'è sotto. Sono nel debito dichiarato di
-`banco/a11y.mjs`, due a carico della 25.1 e tre della §31.7.
+— giustamente, perché non sa cosa c'è sotto. Sono finite nel debito dichiarato
+di `banco/a11y.mjs`, due a carico della 25.1 e tre della §31.7.
+
+**E cosa non ha visto.** Le ha pagate tutte e cinque la §31.2, che con la ricetta
+ha reso «sopra cosa sta» una cosa che si **dichiara**: `sopra: CARTA` sono tutti e
+tre i fondi del documento e non solo la pagina, la mira di `--doc-heading` è
+quella del testo, e un velo si **compone** sul fondo prima di misurarlo. Il
+debito dichiarato è vuoto, ed è stato lui a dirlo — è diventato rosso sulle
+cinque voci riparate, che è il verso del lucchetto che di solito non serve.
+
+Il confronto a pixel invece non ha visto niente, e la sua soglia era il difetto.
+Alla tavolozza nuova diceva **verde su venti scene su quaranta**, `catalogo-tavolozza`
+compresa. `SOGLIA_COLORE` era 0,1 — il default di `pixelmatch`, che internamente
+confronta `delta > 35215 · soglia²` su una distanza YIQ al quadrato: una
+tolleranza di 26 livelli di luminanza su 255, cioè più larga di un intero cambio
+di tavolozza. Misurato: due corse della stessa tavolozza differiscono per lo
+0,008% dei pixel, due tavolozze diverse per il 99,3% — e a 0,1 quel 99,3% diventa
+0,4%, sotto il cancello. La soglia adesso è 0,01, che sta trenta volte sopra il
+rumore misurato, e i due numeri stanno scritti in `banco/foto.mjs` con accanto la
+misura invece del ragionamento.
 
 
 ### 31.2 Un colore ha una ricetta
 
-*foglio · **P1***
+*foglio · **P1** — **chiusa** dalla
+[0167](../decisions/0167-un-colore-ha-una-ricetta.md); resta una casella: i due
+gradini nuovi (`--bg-panel`, `--bg-active`) sono dichiarati e nessuna regola
+della pelle li consuma ancora — li consuma la §31.4*
 
 Novanta valori di colore nei due fogli — quarantacinque per luce
 (`grep -E '^  --' frontend/src/theme/serie/foglio-scuro.css | grep -cE ':\s*(#[0-9a-fA-F]|rgb\()')`)
@@ -222,34 +244,39 @@ alla lettera: **il numero si scrive accanto a come si ricava**, e qui il «come�
 produce i due fogli in esadecimale, che restano ciò che sono oggi — testo che
 tre presidi sanno leggere.
 
-- [ ] **La sorgente è OKLCH, il foglio resta hex**: si tocca la ricetta e si
+- [x] **La sorgente è OKLCH, il foglio resta hex**: si tocca la ricetta e si
       rigenera, e un presidio verifica che rigenerare dia byte identici. È lo
       stesso schema di `*.generated.ts` e della
       [0020](../decisions/0020-le-regole-in-un-posto-solo.md): un posto in cui
-      scriverlo, due da cui leggerlo.
-- [ ] **La scala delle superfici è monotona per costruzione**, con una distanza
-      minima dichiarata fra due gradini adiacenti — e i gradini diventano sei,
-      perché oggi mancano il pannello e l'attivo e al loro posto si riusa il
-      campo. Il nero resta, e diventa la **carta**: la superficie più profonda,
-      quella del documento; il chrome sale.
-- [ ] **Gli intenti sono quattro** — guasto, avviso, riuscito, informazione —
-      ciascuno col proprio velo. Oggi esiste il solo rosso, e i toni delle
-      notifiche, lo stato del salvataggio e i callout del documento non hanno un
-      colore da chiedere: se lo prendono da dove capita, che è il difetto che i
-      fogli raccontano di aver già sciolto una volta fra `--danger` e
-      `--doc-danger`.
-- [ ] **La sintassi diventa propria**, con tinte fisse e luminosità speculare
-      fra le due luci: «la stessa nota in due luci» smette di essere una
-      parentela con One Dark e diventa una proprietà della ricetta. `SOTTO_AA`
-      va a zero senza ritoccare dieci colori uno alla volta — che era
-      precisamente l'operazione che prenderli in coppia serviva a evitare.
-- [ ] **I neutri sono tinti**, di poco e nella stessa direzione nelle due luci:
-      un grigio scelto si distingue da un grigio ereditato, e i due fogli
-      restano una tavolozza sola vista in due luci.
-- [ ] **Il vocabolario cresce solo in modo additivo**: nessun ruolo esistente
+      scriverlo, due da cui leggerlo. La bisezione che cerca la chiarezza fa un
+      numero **fisso** di giri, non «finché converge»: un derivato che cambia da
+      solo non è un derivato.
+- [x] **La scala delle superfici è monotona per costruzione**, con una distanza
+      minima dichiarata fra due gradini adiacenti — e i gradini sono **sette**
+      più la carta, non sei: contandoli sulla ricetta invece che sul foglio è
+      saltato fuori che `--bg` e la carta sono due cose diverse. Il nero resta ed
+      è la carta; il chrome sale. La distanza si misura in chiarezza percettiva e
+      non in rapporto di contrasto — con quel righello due superfici scure ben
+      distinte danno 1,03:1, che è vero e inutile.
+- [x] **Gli intenti sono quattro** — guasto, avviso, riuscito, informazione —
+      ciascuno col proprio velo e col proprio **controcolore**, che non si sceglie:
+      è il nero o il bianco, quello dei due che regge di più.
+- [x] **La sintassi diventa propria**: dieci specie in una **famiglia**, che è
+      la forma che mancava — la chiarezza è di tutte, presa da quella che serve
+      alla specie più difficile, e costa qualche punto a chi ne avrebbe avuto
+      bisogno di meno. `SOTTO_AA` non è andato a zero: è **sparito**, perché una
+      lista di esenzioni vuota non è un presidio, e al suo posto c'è la soglia
+      chiesta a tutte e dieci su tutti e tre i fondi della carta.
+- [x] **I neutri sono tinti**, di poco e nella stessa direzione nelle due luci —
+      285°, che non è inventato: è dove stavano già i neutri scelti a mano, tutti
+      e sei, fra 285,4° e 286,4°. Chi li ha scelti uno per uno ha scelto ogni
+      volta la stessa direzione senza avere un posto in cui dirlo.
+- [x] **Il vocabolario cresce solo in modo additivo**: nessun ruolo esistente
       cambia nome, o l'additività che la
       [0002](../decisions/0002-additivita-del-contratto.md) impone al contratto
-      varrebbe meno di quella che ci si impone da soli.
+      varrebbe meno di quella che ci si impone da soli. Il presidio è un
+      **lucchetto su un verso solo**: un ruolo nuovo passa, un ruolo sparito o
+      rinominato è rosso.
 
 | Via | Forma | Scartata perché |
 | --- | --- | --- |
@@ -424,8 +451,8 @@ per chi usa i colori forzati di Windows. Con la ricetta della §31.2 in piedi no
 è un tema in più da scrivere a mano: è la **stessa** ricetta con altre soglie.
 
 E c'è un secondo prodotto, che vale più del primo: la tabella delle coppie —
-trentadue oggi, ciascuna con scritto accanto quale regola della pelle le mette
-davvero insieme — esce dal banco e diventa una **fixture**. Da lì la leggono il
+trentaquattro oggi, ciascuna con scritto accanto quale regola della pelle le
+mette davvero insieme — esce dal banco e diventa una **fixture**. Da lì la leggono il
 presidio e la ricetta, e domani il caricatore dei temi di terzi: è
 letteralmente ciò che la [§29.3](29-chi-possiede-la-pelle.md) chiede — *«una
 tabella, due lettori»* — consegnato prima che il caricatore esista.
@@ -501,10 +528,12 @@ vocabolario resta a fine M3, l'inventario dei bundle e il disco restano kernel.
 
 ## Le tappe, e l'ordine che non si scambia
 
-1. **La §31.1 da sola.** Nessuna decisione di tavolozza, nessun contratto: il
-   banco, le scene, le baseline di **oggi**. Quelle baseline sono il «prima» di
-   tutte le tappe seguenti, e si possono fare solo adesso.
-2. **La §31.2, poi la §31.3.** In quest'ordine e non insieme: i caratteri
+1. ~~**La §31.1 da sola.**~~ Fatta: il banco, le scene, e le quaranta baseline
+   di **prima** della ricetta. Sono servite subito — la §31.2 le ha usate per
+   dimostrare che la tavolozza nuova è la stessa vista meglio, e per scoprire che
+   la soglia del confronto non la vedeva affatto.
+2. **La §31.2** ~~**, poi la §31.3.**~~ La prima è fatta; per la seconda vale
+   ancora l'ordine, e non insieme: i caratteri
    cambiano le misure verticali di ogni superficie, e cambiarle mentre si
    guarda una tavolozza nuova vuol dire non sapere quale delle due si sta
    giudicando. Le uniche due tappe che si chiudono guardando, e basta.

@@ -233,10 +233,46 @@ describe("i due fogli hanno i valori non-colore identici", () => {
 
   it("i due fogli differiscono davvero sui colori (non sono copie identiche)", () => {
     // La prova complementare: se i due fogli fossero identici per intero, il
-    // test sopra passerebbe ma il gemello sarebbe un falso. `--bg` è il
-    // discriminante dichiarato: nero al buio, quasi-bianco in luce.
-    expect(SCURO.bg, "lo scuro parte dal nero").toBe("#000000");
-    expect(CHIARO.bg, "il chiaro parte dal quasi-bianco").toBe("#f7f7f9");
+    // test sopra passerebbe ma il gemello sarebbe un falso.
+    //
+    // I due discriminanti sono quelli che i fogli **dichiarano**, non quelli che
+    // la ricetta ricava. Dalla §31.2 un `--bg` è il gradino `n` di una scala, e
+    // il suo esadecimale cambia se cambia il passo: scriverlo qui vorrebbe dire
+    // far diventare rosso il presidio della struttura per una ragione che con la
+    // struttura non c'entra. La carta invece è **l'estremo**, dichiarato tale
+    // nella ricetta (0 al buio, 1 in luce), e `color-scheme` è la riga con cui
+    // ciascun foglio dice in che luce sta. Nessuna delle due si ricava.
+    expect(SCURO["doc-bg"], "al buio la carta è il nero, e resta l'estremo").toBe("#000000");
+    expect(CHIARO["doc-bg"], "in luce la carta è il bianco").toBe("#ffffff");
+    expect(scuro, "il foglio scuro si dichiara scuro al motore").toContain("color-scheme: dark;");
+    expect(chiaro, "il foglio chiaro si dichiara chiaro").toContain("color-scheme: light;");
+  });
+
+  it("e fuori da quell'elenco, ciò che resta uguale nelle due luci è dichiarato", () => {
+    // Il verso complementare, ed è il più utile dei due: `NON_COLORE_IDENTICI`
+    // dice cosa **deve** coincidere, questo dice che non coincide nient'altro.
+    // Un colore uguale nei due fogli senza essere in elenco è il sintomo di una
+    // luce che si ricopia dall'altra invece di ricavarsi dalla propria carta —
+    // ed è esattamente il difetto che il gemello completo rischia di reintrodurre
+    // ogni volta che qualcuno aggiunge un ruolo.
+    //
+    // L'unica eccezione vera sono i **controcolori**: `--accent-contrast` è il
+    // nero in tutte e due le luci perché l'accento è un lime chiaro in tutte e
+    // due, e il nero ci regge sopra da entrambe le parti. Non è una copia: è due
+    // conti indipendenti che danno lo stesso risultato.
+    const COLORI_CHE_COINCIDONO = ["accent-contrast"];
+    const fuoriElenco = Object.keys(SCURO).filter(
+      (n) =>
+        SCURO[n] === CHIARO[n] &&
+        !NON_COLORE_IDENTICI.includes(n as never) &&
+        !COLORI_CHE_COINCIDONO.includes(n),
+    );
+    expect(
+      fuoriElenco.map((n) => `${n}: ${SCURO[n]}`),
+      "un colore identico nei due fogli e non dichiarato tale: o va in " +
+        "`NON_COLORE_IDENTICI` perché non è colore, o fra i controcolori perché " +
+        "il conto dà lo stesso esito, o è una luce che ha ricopiato l'altra",
+    ).toEqual([]);
   });
 });
 

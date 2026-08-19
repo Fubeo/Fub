@@ -135,6 +135,30 @@ Il foglio di contatto — le due luci affiancate, scena per scena — esce in
 umano di ogni tappa della seduta, ed è scritto qui perché non resti l'abitudine
 di una persona sola.
 
+### I due fogli del tema sono generati
+
+Dalla [§31.2](roadmap/31-da-dove-viene-cio-che-si-vede.md) i colori dei due
+fogli non si scelgono: si **ricavano**. La sorgente è
+`frontend/src/theme/serie/ricetta.ts` — dichiara di ogni ruolo la tinta, il
+croma, sopra cosa sta e quanto contrasto vuole reggere — e i due
+`foglio-*.css` sono un derivato, con scritto in testa che lo sono.
+
+```bash
+# dentro frontend/
+npm run tema:genera      # riscrive i due fogli dalla ricetta
+npm run tema:verifica    # dice se su disco c'è ciò che la ricetta produce
+```
+
+Nessuno dei due sta nel ciclo locale, e non è una dimenticanza: la verifica la
+fa già `npm test`, che confronta i due file **byte per byte** con ciò che la
+ricetta produce (`src/theme/ricetta.test.ts`). `tema:verifica` è la stessa
+domanda fatta senza avviare vitest, e serve a chi sta lavorando sulla ricetta;
+`tema:genera` è un gesto, non un verdetto.
+
+Un esadecimale ritoccato a mano in un foglio sparisce alla prima rigenerazione,
+e fino ad allora dice il falso sulla ricetta. È la ragione per cui il presidio
+esiste, ed è lo stesso schema dei `*.generated.ts`.
+
 
 I fuzzer del §17.1 girano **dentro** `cargo test --workspace`, con seme fisso.
 Alzare il conteggio serve a cercare bug a mano, non a presidiare:

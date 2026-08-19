@@ -57,6 +57,17 @@ import fs from "node:fs";
 /// ragione. Vuoto è lo stato giusto.
 const SECONDE_COPIE = new Map([
   // ["nome", "perché due copie qui non rompono niente"],
+  [
+    "fsevents",
+    "è la dipendenza **opzionale** che esiste solo su macOS (`os: darwin`), e su " +
+      "Linux e Windows npm non la installa affatto: la seconda copia è quella che " +
+      "playwright si porta dietro. Non tiene stato né identità — ogni copia è un " +
+      "involucro sottile attorno al proprio binario `.node`, e chi guarda una " +
+      "cartella riceve i propri eventi dal proprio watcher. È il caso opposto a " +
+      "quello per cui questo presidio esiste: `@codemirror/state` in due copie sono " +
+      "due insiemi di identità per i `Facet`, e le estensioni costruite con l'una " +
+      "non vedono la configurazione dell'altra.",
+  ],
 ]);
 
 const lock = process.argv[2] ?? "frontend/package-lock.json";

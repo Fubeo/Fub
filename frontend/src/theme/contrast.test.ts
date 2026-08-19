@@ -23,6 +23,31 @@
 // reggere sul nero finisce sopra il bianco senza che nessuno se ne accorga:
 // tutto si vede, niente diventa rosso. Otto coppie sono entrate qui già rosse.
 //
+// # Cosa resta da presidiare adesso che i colori si ricavano
+//
+// Dalla §31.2 i colori non sono più scelti: la ricetta (`serie/ricetta.ts`)
+// dichiara di ogni inchiostro la tinta, il croma, **sopra cosa sta** e quanto
+// vuole reggere, e la chiarezza la trova cercandola. La domanda legittima è se
+// questo banco non stia allora ricontando ciò che la generazione ha già contato.
+//
+// Non lo sta facendo, e per due ragioni che vale la pena tenere separate.
+//
+// - **Le soglie sono di un'altra autorità.** La ricetta insegue una *mira* — 5:1,
+//   6:1, 11:1 — che è il disegno; qui si verifica il **minimo di legge**, 4,5:1
+//   e 3:1, che è la WCAG. Sono due numeri diversi e uno solo dei due si può
+//   abbassare per gusto. Una mira scesa sotto AA passa la generazione senza un
+//   fiato e diventa rossa qui: è precisamente il caso che questo file esiste per
+//   prendere.
+// - **Le coppie sono di un'altra fonte.** La ricetta dice `sopra: SUPERFICI`
+//   perché è ciò che *vuole garantire*; la tabella qui sotto dice
+//   `["muted", "bg-chrome", …, "la barra di stato"]` perché è ciò che
+//   **`pelle.css` mette davvero insieme**. Le due liste si somigliano, e il
+//   giorno in cui non si somigliano più è il giorno che interessa: una regola
+//   nuova che accosta due ruoli che la ricetta non aveva messo in relazione.
+//
+// Il conto della chiarezza, quello sì, non si riconta: lo presidia
+// `ricetta.test.ts`, che è il posto in cui sta la generazione.
+//
 // # Le tre soglie, e perché non è una sola
 //
 // Le dà la WCAG 2.1, e sono le sue:
@@ -38,22 +63,27 @@
 // regola che non la riguarda, e accontentarsi di 3:1 dal testo vorrebbe dire
 // scrivere che si presidia il contrasto e presidiare qualcos'altro.
 //
-// # La tavolozza della sintassi, e il debito che porta con sé
+// # La tavolozza della sintassi, e il debito che aveva
 //
-// I `--syn-*` sono l'unico gruppo che **non** regge la soglia del testo, ed è
-// una scelta dichiarata invece che un'omissione. Sono One Dark e One Light presi
-// **interi**: è la coppia a rendere vera l'affermazione dei due fogli — «la
-// stessa nota in due luci» — e ritoccarne i colori uno alla volta per portarli
-// a 4,5:1 lascerebbe una tavolozza che non è più nessuna delle due, scelta un
-// colore per volta da chi passava di lì.
+// I `--syn-*` sono stati per un pezzo l'unico gruppo che **non** reggeva la
+// soglia del testo, e stava scritto qui: erano One Dark e One Light presi
+// **interi**, sette specie su dieci sotto AA in luce chiara, e l'elenco dei nomi
+// stava in questo file come lucchetto. La ragione per non ritoccarli era buona —
+// ritoccare una tavolozza famosa un colore alla volta lascia una tavolozza che
+// non è più nessuna delle due, scelta da chi passava di lì.
 //
-// Quindi: pavimento a 3:1 per tutti, e l'elenco di quelli che stanno **sotto**
-// la soglia del testo scritto qui dentro, per nome, e verificato uguale. Non è
-// un'esenzione — un'esenzione si scrive una volta e non si guarda più. È un
-// lucchetto: un colore che scende sotto AA senza essere in elenco è rosso, e
-// uno che sale e resta in elenco è rosso pure lui. Il debito ha già la sua
-// voce, ed è il **25.1** (alto contrasto), che esiste per dare a chi legge una
-// tavolozza che questa soglia la passa tutta.
+// La §31.2 ha sciolto il nodo togliendo la premessa invece di aggirarla. Le
+// specie non si prendono più da una tavolozza: si **dichiarano** — la tinta e il
+// croma di ciascuna, presi misurando dov'erano quelle di One Dark, e una mira di
+// contrasto sola per tutta la famiglia. La chiarezza la trova la ricetta, uguale
+// per tutte e dieci, scegliendo quella che serve alla specie più difficile. Non
+// è One Dark ritoccato: è una tavolozza che ha le sue tinte e la chiarezza di
+// una famiglia, che è ciò che dieci colori scelti uno per volta non hanno mai.
+//
+// Il debito è pagato: nessuna specie sta sotto AA, in nessuna delle due luci, su
+// nessuno dei tre fondi della carta. La **25.1** (alto contrasto) resta, perché
+// è un'altra cosa — una tavolozza per chi ha bisogno di molto più di AA, non il
+// recupero di un arretrato.
 import { describe, expect, it } from "vitest";
 
 // Il conto — WCAG 2.1, §1.4.3 e la definizione di rapporto di contrasto — stava
@@ -79,10 +109,12 @@ const COPPIE: readonly Coppia[] = [
   // Il testo della shell sulle quattro superfici. `--bg-hover` è una superficie
   // come le altre da quando le righe non si riempiono più d'accento.
   ["text", "bg", AA, "il corpo dell'app"],
+  ["text", "bg-chrome", AA, "la titlebar, la barra degli strumenti, le linguette"],
   ["text", "bg-elev", AA, "topbar, pannelli, modali"],
   ["text", "bg-input", AA, "campi, pastiglie"],
   ["text", "bg-hover", AA, "una riga sotto il puntatore, o selezionata"],
   ["muted", "bg", AA, ".muted, i sottotitoli"],
+  ["muted", "bg-chrome", AA, "#statusbar e #views-status, che sono tutte muted"],
   ["muted", "bg-elev", AA, "i sottotitoli dentro un pannello"],
   ["muted", "bg-input", AA, "i sottotitoli dentro una pastiglia"],
   ["muted", "bg-hover", AA, "il sottotitolo di una riga selezionata"],
@@ -142,13 +174,11 @@ const SINTASSI = [
   "invalid",
 ] as const;
 
-/// Il debito dichiarato: le specie di sintassi che stanno **sotto** la soglia
-/// del testo, tema per tema. Un elenco, non un'esenzione — chi entra o esce da
-/// qui lo fa apposta, e il test lo dice.
-const SOTTO_AA: Record<Tema, readonly string[]> = {
-  dark: [],
-  light: ["name", "function", "type", "operator", "comment", "string", "heading"],
-};
+/// I tre fondi su cui una specie di sintassi può finire: la pagina, la riga
+/// attiva, e la selezione. Sono tre e non uno perché il testo evidenziato è
+/// ancora testo — e il fondo della selezione è il più lontano dei tre dalla
+/// carta, cioè quello su cui un colore tarato solo sulla pagina cede per primo.
+const FONDI_CARTA = ["doc-bg", "doc-active-line", "doc-selection"] as const;
 
 type Tema = "dark" | "light";
 
@@ -215,10 +245,14 @@ describe("i token si leggono davvero dal foglio", () => {
   // La prova che le tabelle qui sotto non passano perché la tavolozza è vuota,
   // che è il modo in cui un presidio su un file letto come testo smette di
   // presidiare senza dirlo — la stessa cautela del presidio della scocca.
-  it("le due tavolozze sono piene", () => {
+  it("le due tavolozze sono piene, e sono due", () => {
     expect(Object.keys(TAVOLOZZE.dark).length).toBeGreaterThan(50);
-    expect(TAVOLOZZE.dark.bg).toBe("#000000");
-    expect(TAVOLOZZE.light.bg).toBe("#f7f7f9");
+    // Il riconoscimento passa dalla **carta**, che nella ricetta è l'estremo
+    // dichiarato (0 al buio, 1 in luce) e non un valore che si ricava: un `--bg`
+    // scritto qui farebbe diventare rosso il presidio del contrasto il giorno in
+    // cui cambia il passo della scala, che è un'altra cosa e ha un altro banco.
+    expect(TAVOLOZZE.dark["doc-bg"], "al buio la carta è il nero").toBe("#000000");
+    expect(TAVOLOZZE.light["doc-bg"], "in luce la carta è il bianco").toBe("#ffffff");
     // I valori non-colore identici fra i fogli (la scala, il moto, i quattro
     // alpha) li presidia `struttura.test.ts`: qui conta il contrasto, non la
     // gemellarità del vocabolario.
@@ -250,26 +284,39 @@ describe.each(TEMI)("il tema %s regge le soglie che dichiara", (tema) => {
     ).toBeGreaterThanOrEqual(soglia);
   });
 
-  it("nessun colore di sintassi scende sotto il pavimento dei segni", () => {
-    const sotto = SINTASSI.map((s) => [s, misura(`syn-${s}`, "doc-bg")] as const).filter(
-      ([, v]) => v < UI,
-    );
+  it("ogni specie di sintassi regge la soglia del testo, su tutti e tre i fondi", () => {
+    // Era il debito del file, ed era un elenco di sette nomi in luce chiara. La
+    // §31.2 l'ha pagato ricavando le dieci specie da una mira sola invece che
+    // prendendole da una tavolozza altrui, e qui non resta un elenco da tenere
+    // aggiornato: resta la soglia. Un nome che ricomparisse in questa lista
+    // sarebbe un debito **nuovo**, e andrebbe deciso — non ereditato.
+    //
+    // I fondi sono tre e non uno perché tre sono quelli su cui il codice finisce
+    // davvero: la selezione è il più lontano dalla carta, ed è là che un colore
+    // tarato solo sulla pagina cede.
+    const sotto = SINTASSI.flatMap((s) =>
+      FONDI_CARTA.map((f) => [`syn-${s}`, f, misura(`syn-${s}`, f)] as const),
+    ).filter(([, , v]) => v < AA);
     expect(
-      sotto.map(([s, v]) => `--syn-${s}: ${v.toFixed(2)}:1`),
-      "sotto 3:1 un colore di sintassi non si distingue più dal fondo: " +
-        "il pavimento vale anche per la tavolozza che il debito AA se lo tiene",
+      sotto.map(([s, f, v]) => `--${s} su --${f}: ${v.toFixed(2)}:1`),
+      "una specie di sintassi sotto 4,5:1 è testo che non si legge: si alza la " +
+        "mira della famiglia nella ricetta, non si scrive un'esenzione qui",
     ).toEqual([]);
   });
 
-  it("e il debito AA della tavolozza di sintassi è quello dichiarato, né uno di più né uno di meno", () => {
-    // Le due direzioni contano tutte e due. Uno di più è un colore peggiorato
-    // che nessuno ha deciso di peggiorare; uno di meno è un elenco che si porta
-    // dietro un debito già pagato, cioè la ragione per cui gli elenchi di
-    // esenzioni smettono di dire il vero.
-    const sotto = SINTASSI.filter((s) => misura(`syn-${s}`, "doc-bg") < AA);
+  it("e nemmeno l'inchiostro del documento cede sul fondo più lontano", () => {
+    // Le stesse tre superfici, per i ruoli non-sintassi che ci vivono sopra: il
+    // corpo della nota, i wikilink, i numeri di riga. La tabella delle coppie li
+    // conta sulla sola pagina perché è là che una regola di `pelle.css` li mette;
+    // la selezione invece non è una regola, è uno stato — e uno stato che
+    // peggiora la leggibilità del testo che evidenzia sarebbe un difetto muto.
+    const INCHIOSTRI_DEL_DOCUMENTO = ["doc-fg", "doc-link", "doc-danger", "doc-gutter-fg"];
+    const sotto = INCHIOSTRI_DEL_DOCUMENTO.flatMap((n) =>
+      FONDI_CARTA.map((f) => [n, f, misura(n, f)] as const),
+    ).filter(([, , v]) => v < AA);
     expect(
-      [...sotto].sort(),
-      "aggiorna SOTTO_AA in questo file: l'elenco è il lucchetto, non un'esenzione",
-    ).toEqual([...SOTTO_AA[tema]].sort());
+      sotto.map(([n, f, v]) => `--${n} su --${f}: ${v.toFixed(2)}:1`),
+      "selezionare una riga non deve renderla meno leggibile di prima",
+    ).toEqual([]);
   });
 });
