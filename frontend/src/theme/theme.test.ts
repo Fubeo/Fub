@@ -34,7 +34,10 @@ describe("quale luce vale", () => {
     // si apre senza colori perché una stringa non è stata riconosciuta è un
     // file di configurazione con il potere di renderla illeggibile, e la 0036
     // ha già deciso che non ce l'ha.
-    for (const strano of ["Dark", "auto", "sepia", "", null, undefined, 3, {}, []]) {
+    // `lime` è inclusa: è stata un fascio, ma `temaEffettivo` non l'ha mai
+    // saputo — e anche ora che il fascio non c'è più, il valore ignoto cade
+    // nel «come il sistema». La migrazione avviene prima, in `mountTheme`.
+    for (const strano of ["Dark", "auto", "sepia", "lime", "", null, undefined, 3, {}, []]) {
       expect(temaEffettivo(strano, true)).toBe("dark");
       expect(temaEffettivo(strano, false)).toBe("light");
     }

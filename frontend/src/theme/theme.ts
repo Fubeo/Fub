@@ -4,7 +4,7 @@
 // (`fub-host/src/settings.rs`) — e vale tre cose: `light`, `dark`, o la
 // stringa vuota, che nella convenzione delle impostazioni che delegano al
 // sistema (le `locale.*`) vuol dire *chiedilo a chi sta sotto*.
-//
+
 // # Perché la risolve la shell, e non il CSS
 //
 // «Come il sistema» ha una forma nativa in CSS: `@media
@@ -71,8 +71,12 @@ const CACHE = "fub.appearance.theme";
 /// La query che il browser risponde per la luce del sistema.
 const QUERY_SCURO = "(prefers-color-scheme: dark)";
 
-/// La scelta corrente, così com'è scritta nell'impostazione.
 let scelta = "";
+
+/// La luce montata, per il guard «cambio solo se serve» di `applica()`.
+/// Resta in sync con `dataset.theme`, ma la tiene qui il modulo e non il DOM,
+/// così il primo montaggio (dataset vuoto) non salta il foglio.
+let luceMontata: Tema | null = null;
 
 /// Chi va avvisato quando il tema effettivo cambia (l'editor: il suo flag
 /// `dark` non è un colore e il CSS non lo può cambiare da solo).
@@ -105,18 +109,21 @@ export function temaCorrente(): Tema {
 
 /// Scrive il tema sulla radice, monta il foglio della luce che vale, e
 /// avvisa chi non può leggerlo dal CSS.
-///
 /// `data-theme` non serve più al foglio — quello montato **è** il tema — ma
 /// resta un segnale vivo: il pittore del grafo lo osserva con un
 /// `MutationObserver` per ridipingere i canvas, e `temaCorrente()` lo legge.
 /// Per questo si scrive **dopo** aver montato il foglio: chi osserva e
 /// rilegge i colori con `getComputedStyle` deve trovare quelli nuovi.
 function applica(): void {
-  const prossimo = temaEffettivo(scelta, sistemaScuro());
-  if (prossimo === document.documentElement.dataset.theme) return;
-  monta(prossimo === "light" ? foglioChiaro : foglioScuro, "foglio");
-  document.documentElement.dataset.theme = prossimo;
-  avvisa(prossimo);
+  // La pelle di serie non cambia con la luce: la monta `mountTheme` una volta
+  // sola all'avvio. Qui si monta solo il foglio della luce che vale, che
+  // invece cambia — ed è per questo che il guard è sulla luce, non sulla pelle.
+  const luce: Tema = temaEffettivo(scelta, sistemaScuro());
+  if (luce === luceMontata) return;
+  monta(luce === "light" ? foglioChiaro : foglioScuro, "foglio");
+  luceMontata = luce;
+  document.documentElement.dataset.theme = luce;
+  avvisa(luce);
 }
 
 /// Rilegge la scelta dall'impostazione, se c'è un vault che possa rispondere.
@@ -129,7 +136,12 @@ async function rileggi(): Promise<void> {
     // già a ogni apertura.
     const entry = (await impostazioni()).find((e) => e.spec.key === CHIAVE_TEMA);
     if (!entry) return;
-    scelta = typeof entry.value === "string" ? entry.value : "";
+    let valore = typeof entry.value === "string" ? entry.value : "";
+    // Lime non è più un fascio: chi lo aveva scelto resta sul buio che aveva.
+    // `temaEffettivo` non lo sa e non deve saperlo — la migrazione avviene qui,
+    // prima di persistere e di applicare.
+    if (valore === "lime") valore = "dark";
+    scelta = valore;
     localStorage.setItem(CACHE, scelta);
     applica();
   } catch {
@@ -147,11 +159,28 @@ export function mountTheme(vita: Vita, onChange: (tema: Tema) => void): void {
   } catch {
     scelta = "";
   }
+  // Lime non è più un fascio: chi lo aveva scelto resta sul buio che aveva.
+  // `temaEffettivo` non lo sa e non deve saperlo — la migrazione avviene qui,
+  // prima di persistere e di applicare.
+  if (scelta === "lime") {
+    scelta = "dark";
+    try {
+      localStorage.setItem(CACHE, "dark");
+    } catch {
+      // localStorage può mancare (un motore senza storage): la migrazione
+      // vale in memoria, e la persistenza si rifarà al prossimo giro.
+    }
+  }
 
-  // La pelle, una volta sola, prima del primo `applica()`: è la superficie
-  // che il foglio sta per vestire. La pelle di serie non cambia col cambio
-  // di luce — cambia quando cambia il tema **per intero**, e quel giorno è
-  // un altro file sotto `serie/` e un altro montaggio qui.
+  // A un nuovo montaggio il banco è vuoto: `beforeEach` nei test ripulisce la
+  // testa, e lo stato montato va d'accordo con quel che c'è. Senza questo
+  // reset, la guardia di `applica()` salterebbe il primo montaggio perché
+  // `luceMontata` ricorda il test di prima — e il foglio non si monterebbe.
+  // Nell'app vera non conta: si monta una volta sola.
+  luceMontata = null;
+  // La pelle di serie non cambia con la luce, quindi si monta all'avvio;
+  // il foglio segue la luce. Montarla qui — prima di `applica()` — una volta
+  // sola è il ritorno al modello originario: due luci, una pelle.
   monta(pelle, "pelle");
   // Prima di registrare l'avviso: chi montiamo dopo (l'editor) legge il tema
   // corrente alla nascita, e avvisarlo di un cambiamento che non ha ancora

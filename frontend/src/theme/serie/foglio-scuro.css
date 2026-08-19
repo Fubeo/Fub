@@ -92,11 +92,20 @@
      `0.04em` in un altro, per la stessa riga). */
   --tracking-caps: 0.6px;
 
-  /* Il moto. Corto sui hover, medio su ciò che si apre. La curva è la stessa
-     da ogni parte, così un bottone e una tab non sembrano due prodotti. */
+  /* Il moto ha tre durate e tre curve, e sono le stesse in entrambe le
+     luci — un bottone e una modale non sono due prodotti, e un tema chiaro
+     non ha un altro orologio. `fast` è l'hover e il colore; `med` è lo
+     spaziale piccolo (un menu, un press); `slow` è l'ingresso di una
+     superficie che si apre. `ease` è lo standard; `ease-out` decade
+     sull'ingresso (parte veloce, atterra fermo); `ease-in` accelera sul
+     press. Non c'è una durata «live»: la scocca non respira. Ogni nome nuovo
+     lo spende la pelle, o è debito — la lezione di `--duration-med`. */
   --duration-fast: 120ms;
   --duration-med: 180ms;
+  --duration-slow: 240ms;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.3, 0, 1, 1);
 
   /* --- i colori semantici: la luce scura ---------------------------------- */
 
