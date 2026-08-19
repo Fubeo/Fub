@@ -43,6 +43,7 @@ import type { Vita } from "../ui/vita";
 import foglioScuro from "./serie/foglio-scuro.css?raw";
 import foglioChiaro from "./serie/foglio-chiaro.css?raw";
 import pelle from "./serie/pelle.css?raw";
+import caratteri from "./serie/caratteri.css?raw";
 import { monta } from "./loader";
 
 /// Le due luci. Non c'è un terzo valore: «come il sistema» è una **scelta**,
@@ -178,9 +179,12 @@ export function mountTheme(vita: Vita, onChange: (tema: Tema) => void): void {
   // `luceMontata` ricorda il test di prima — e il foglio non si monterebbe.
   // Nell'app vera non conta: si monta una volta sola.
   luceMontata = null;
-  // La pelle di serie non cambia con la luce, quindi si monta all'avvio;
-  // il foglio segue la luce. Montarla qui — prima di `applica()` — una volta
-  // sola è il ritorno al modello originario: due luci, una pelle.
+  // La pelle e i caratteri di serie non cambiano con la luce, quindi si
+  // montano all'avvio; il foglio segue la luce. Montarli qui — prima di
+  // `applica()` — una volta sola è il ritorno al modello originario: due
+  // luci, una pelle, tre caratteri (§31.3). L'ordine fra questi due `monta()`
+  // non conta più: lo dichiara `ORDINE` in `loader.ts`.
+  monta(caratteri, "caratteri");
   monta(pelle, "pelle");
   // Prima di registrare l'avviso: chi montiamo dopo (l'editor) legge il tema
   // corrente alla nascita, e avvisarlo di un cambiamento che non ha ancora

@@ -62,21 +62,48 @@
 
   /* `--font-mono` esisteva già come `var(--mono, monospace)` in due regole —
      cioè come token **mai definito**, che è il modo più silenzioso di non avere
-     un token: il ripiego funzionava, quindi nessuno se ne accorgeva. Le tre voci
-     in bundle e la scala che prende un passo sono la §31.3, e da qui non si
-     vedono: questa voce decide i colori. */
+     un token: il ripiego funzionava, quindi nessuno se ne accorgeva. La §31.3 ha
+     portato tre voci in bundle — Inter, Literata, JetBrains Mono, tutte e tre
+     OFL-1.1 — al posto di `system-ui`, cioè di tre prodotti diversi su tre
+     piattaforme. Il sistema resta raggiungibile: ogni pila ha il ripiego di
+     piattaforma in coda, e diventerà una preferenza vera con la §31.6.
 
-  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+     `text-xs`…`text-xl` non si muovono: sono i sei valori di prima, e restano
+     perché cambiarli è un ridisegno di ogni componente che li spende — cinquantanove
+     regole nella pelle (`grep -cF 'var(--text-' frontend/src/theme/serie/pelle.css`)
+     — e quello è lavoro della §31.4, non di questa voce. La
+     scala **si allarga**: due gradini nuovi in cima (`text-2xl`, `text-3xl`),
+     che seguono un passo dichiarato (×1,2 da `text-xl`, arrotondato al pixel) al
+     posto di essere il prossimo numero che serve; e una voce nuova per la
+     lettura (`text-reading`), perché Literata non è Inter con un altro nome —
+     è disegnata per un corpo diverso. `leading-tight` era l'unica interlinea:
+     resta per chi la usa già, e accanto arrivano `leading-normal` (il paragrafo
+     di un pannello) e `leading-relaxed` (la prosa lunga, dove Literata respira).
+     `content-width` è la misura di lettura — 70 caratteri, il punto in cui una
+     riga più lunga fa perdere il segno tornando a capo. Queste ultime cinque voci
+     sono dichiarate e non ancora consumate da nessuna regola: tocca alla §31.8
+     (*la stessa nota in tre modi*) metterle sulla superficie di lettura, editor e
+     anteprima insieme — la §31.3 poteva scriverle o lasciarle implicite in una
+     regola sola, e implicite è precisamente il difetto che questa seduta cerca. */
+
+  --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Literata Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
   --text-md: 14px;
   --text-lg: 15px;
   --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+  --text-reading: 16px;
   --weight-medium: 600;
   --weight-bold: 700;
   --leading-tight: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+  --content-width: 70ch;
   /* Il maiuscoletto dei titoli di pannello: due proprietà che vanno sempre
      insieme, e che separate si erano già disallineate (`0.6px` in un posto,
      `0.04em` in un altro, per la stessa riga). */

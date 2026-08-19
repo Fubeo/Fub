@@ -14,8 +14,8 @@
 //    colori — il contrasto **reso** sopra le quattro superfici. I nomi non sono
 //    scritti qui: si leggono dal foglio montato, quindi un token nuovo compare
 //    da solo e uno tolto sparisce da solo.
-//  - **campionario**: la scala tipografica per intero, coi due caratteri, i tre
-//    pesi e l'interlinea, su prosa vera.
+//  - **campionario**: la scala tipografica per intero, coi tre caratteri (§31.3),
+//    i tre pesi, l'interlinea e la misura di lettura, su prosa vera.
 //
 // Il tutto **senza la shell**: qui non gira `main.ts`. Ciò che è identico è ciò
 // che deve esserlo — i tre strati montati dallo stesso caricatore, e il renderer
@@ -24,6 +24,7 @@ import "../src/theme/struttura.css";
 import foglioScuro from "../src/theme/serie/foglio-scuro.css?raw";
 import foglioChiaro from "../src/theme/serie/foglio-chiaro.css?raw";
 import pelle from "../src/theme/serie/pelle.css?raw";
+import caratteri from "../src/theme/serie/caratteri.css?raw";
 import { monta } from "../src/theme/loader";
 import { contrasto } from "../src/theme/contrasto";
 import { mountTree } from "../src/ui/node";
@@ -33,9 +34,11 @@ const parametri = new URLSearchParams(window.location.search);
 const LUCE = parametri.get("luce") === "light" ? "light" : "dark";
 const QUALE = parametri.get("catalogo") ?? "componenti";
 
-// I tre strati, nell'ordine del §29: la struttura arriva dall'`import` qui
-// sopra, il foglio e la pelle dal caricatore — per **sostituzione**, come
-// nell'app.
+// I quattro strati, nell'ordine del §29 e del §31.3: la struttura arriva
+// dall'`import` qui sopra, i caratteri, il foglio e la pelle dal caricatore —
+// per **sostituzione**, come nell'app. Senza `monta(caratteri, …)` il
+// campionario mostrerebbe il ripiego di sistema e non ciò che vuole provare.
+monta(caratteri, "caratteri");
 monta(pelle, "pelle");
 monta(LUCE === "light" ? foglioChiaro : foglioScuro, "foglio");
 document.documentElement.dataset.theme = LUCE;
@@ -177,7 +180,16 @@ const PROSA =
 function campionario(): void {
   testata("Campionario");
 
-  const scala = ["--text-xs", "--text-sm", "--text-base", "--text-md", "--text-lg", "--text-xl"];
+  const scala = [
+    "--text-xs",
+    "--text-sm",
+    "--text-base",
+    "--text-md",
+    "--text-lg",
+    "--text-xl",
+    "--text-2xl",
+    "--text-3xl",
+  ];
   const pesi: [string, string][] = [
     ["normale", "400"],
     ["medium", "var(--weight-medium)"],
@@ -186,6 +198,7 @@ function campionario(): void {
 
   for (const [famiglia, token] of [
     ["Carattere dell'interfaccia", "--font-ui"],
+    ["Carattere di lettura", "--font-reading"],
     ["Carattere monospaziato", "--font-mono"],
   ] as const) {
     const s = el("section", "sezione");
@@ -213,6 +226,8 @@ function campionario(): void {
   for (const [nome, stile] of [
     ["normale", ""],
     ["leading-tight", "line-height: var(--leading-tight)"],
+    ["leading-normal", "line-height: var(--leading-normal)"],
+    ["leading-relaxed", "line-height: var(--leading-relaxed)"],
     ["tracking-caps", "letter-spacing: var(--tracking-caps); text-transform: uppercase"],
   ] as const) {
     const riga = el("div", "riga-scala");
@@ -224,6 +239,25 @@ function campionario(): void {
     s.append(riga);
   }
   radice.append(s);
+
+  // `--font-reading`, `--text-reading`, `--leading-relaxed` e
+  // `--content-width` insieme: nessuna riga della scala sopra li mostra
+  // combinati, ed è precisamente così che li userà una superficie di lettura
+  // (§31.8). `--content-width` non si vede su `.misura` (che ha già un
+  // `max-width` suo, per non far scappare le altre righe): qui lo sostituisce.
+  const lettura = el("section", "sezione");
+  lettura.append(el("h2", undefined, "Lettura"));
+  const rigaLettura = el("div", "riga-scala");
+  rigaLettura.append(el("span", "didascalia", "content-width · leading-relaxed"));
+  const pLettura = el("p", "misura", `${PROSA} ${PROSA} ${PROSA}`);
+  pLettura.setAttribute(
+    "style",
+    "margin: 0; max-width: var(--content-width); font-family: var(--font-reading); " +
+      "font-size: var(--text-reading); line-height: var(--leading-relaxed);",
+  );
+  rigaLettura.append(pLettura);
+  lettura.append(rigaLettura);
+  radice.append(lettura);
 }
 
 // ---------------------------------------------------------------------------

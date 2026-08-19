@@ -60,13 +60,22 @@
 //
 // # Perché solo Linux
 //
-// Un browser pinnato garantisce lo stesso motore, non gli stessi **caratteri**:
-// la scala che questa shell chiede (`--font-ui`) si risolve nel carattere di
-// sistema, e quello è diverso su tre sistemi operativi. Fotografare su macOS
-// vorrebbe dire un secondo insieme di baseline che nessuno confronta col primo.
-// Quando la §31.3 porterà i caratteri dentro l'applicazione, questa riga si
-// potrà togliere — e allora il confronto potrà anche girare in CI, che oggi non
-// gira per questa ragione e non per pigrizia.
+// Un browser pinnato garantisce lo stesso motore, non da solo gli stessi
+// **caratteri resi**. Fino alla §31.3 la scala che questa shell chiede
+// (`--font-ui`) si risolveva nel carattere di sistema, diverso su tre sistemi
+// operativi: fotografare su macOS avrebbe voluto dire un secondo insieme di
+// baseline che nessuno confronta col primo. La 0168 ha portato i tre
+// caratteri in bundle — la variabile che questo commento nominava non c'è
+// più — ma la riga resta locale lo stesso: le baseline che l'app porta oggi
+// sono state scattate su una macchina che Playwright stesso segnala come non
+// supportata (build di ripiego), non sul runner `ubuntu-latest` che userebbe
+// la CI. È probabile che un font incorporato renda identico sulle due
+// macchine — Chromium usa la propria pipeline di font shaping per un webfont,
+// non quella di sistema — ma questo file misura invece di argomentare
+// ([0167](../../docs/decisions/0167-un-colore-ha-una-ricetta.md)), e nessuno
+// l'ha ancora misurato da dentro `ubuntu-latest`. Il confronto entra in CI
+// quando qualcuno rigenera le baseline lì, o accetta che un primo tentativo
+// possa uscire rosso per drift ambientale e non per un difetto vero.
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
