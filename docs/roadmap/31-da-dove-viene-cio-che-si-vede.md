@@ -375,10 +375,30 @@ fine M3 si congelano.
       della palette, dove `.modale input` applica finalmente il proprio
       padding), e il presidio dei token leggeva `.win-ctrl--close:hover` come
       una dichiarazione `--close:`. Il resto: 38 scene su 40 identiche.*
-- [ ] **La pelle si scrive a pezzi e si monta in un file**: il caricatore vuole
+- [x] **La pelle si scrive a pezzi e si monta in un file**: il caricatore vuole
       una stringa e i presidi leggono un file, e tutti e due restano come sono;
       chi scrive lavora su un componente per volta invece che in duemilacento
-      righe.
+      righe. *Fatta: diciotto pezzi in `serie/pelle/`, e `pelle.css` è il file
+      che compongono — terzo derivato del tema accanto ai due fogli, stesso
+      comando (`npm run tema:genera`) e stessa promessa, «rigenerare dà gli
+      stessi byte», confrontata dentro `npm test`. L'ordine è **dichiarato** in
+      `pelle/ordine.ts` e non dedotto dalla cartella: in CSS l'ordine di due
+      regole della stessa specificità decide chi vince, e montare in ordine
+      alfabetico vorrebbe dire che rinominare un file cambia ciò che si vede —
+      la ragione per cui `loader.ts` dichiara `ORDINE` (§31.3), che con
+      diciotto pezzi smette di essere una comodità. Il presidio guarda i **due
+      versi** — ogni file un posto nell'ordine, ogni posto un file — perché il
+      verso che il montaggio non vede da solo è il peggiore: un pezzo scritto e
+      mai elencato non dà nessun errore, esce una pelle più corta, e a dirlo è
+      una superficie che non si è vestita (0109). Dentro il derivato un filetto
+      per pezzo dice da dove viene ciò che segue, perché i presidi e il browser
+      puntano lì. Nessuna regola cambiata: tolti i commenti, il file è riga per
+      riga quello di prima, e il banco dice 40/40. Spezzare ha fatto vedere due
+      cose che in duemilacento righe erano di passaggio — un commento sul
+      commutatore del tema rimasto orfano in cima al chrome, quando le sue
+      regole erano già finite nel segmented della casella prima, e due pezzi
+      (i pannelli, la ricerca) che non avevano una riga che dicesse cosa
+      fossero.*
 - [ ] **Le icone hanno un tratto solo**: ventuno disegnate a mano sono coerenti
       nel metodo e non nella mano. Restano SVG inline con `currentColor` — la
       forma è giusta — e diventano un insieme con una griglia e uno spessore

@@ -1,0 +1,64 @@
+/* **La ricerca nella sidebar**: il campo e i suoi esiti.
+   -------------------------------------------------------------------------
+   Una riga per nota, con sotto le occorrenze successive rientrate — la nota è
+   il risultato, le occorrenze sono dove sta dentro — e in fondo l'unica riga
+   che non è un esito ma un'offerta: creare la nota che si è cercata. */
+.search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+
+.search-results li {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.search-results li:hover {
+  background: var(--bg-hover);
+}
+.hit-title {
+  display: block;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Le occorrenze dopo la prima: righe della stessa nota, rientrate perché è ciò
+   che dicono — non un altro risultato, un altro punto dello stesso. */
+.hit-occurrence {
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+/* «Crea questa nota» (§21.7): l'unica riga di questa lista che **non** è un
+   risultato, e l'unica che scrive invece di aprire. Il filetto d'accento la
+   stacca senza farne un bottone: sta nella lista perché è lì che si guarda
+   quando non si è trovato niente, ma chi scorre deve vedere che è di un'altra
+   specie prima di premerla. */
+.hit-create {
+  border-left: 2px solid var(--accent);
+}
+.hit-create .hit-snippet {
+  color: var(--accent);
+}
+.hit-snippet {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: var(--leading-tight);
+  margin-top: var(--space-1);
+}
+.hit-snippet mark {
+  background: var(--accent-soft);
+  /* `inherit` qui voleva dire `--text` sopra l'accento: 2,6:1 al buio, cioè la
+     parola trovata era l'unica illeggibile della riga. */
+  color: var(--bg);
+  border-radius: var(--radius-xs);
+  padding: 0 var(--space-1);
+}

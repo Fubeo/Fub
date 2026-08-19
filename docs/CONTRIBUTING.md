@@ -138,7 +138,7 @@ Il foglio di contatto — le due luci affiancate, scena per scena — esce in
 umano di ogni tappa della seduta, ed è scritto qui perché non resti l'abitudine
 di una persona sola.
 
-### I due fogli del tema sono generati
+### Tre file del tema sono generati
 
 Dalla [§31.2](roadmap/31-da-dove-viene-cio-che-si-vede.md) i colori dei due
 fogli non si scelgono: si **ricavano**. La sorgente è
@@ -146,21 +146,31 @@ fogli non si scelgono: si **ricavano**. La sorgente è
 croma, sopra cosa sta e quanto contrasto vuole reggere — e i due
 `foglio-*.css` sono un derivato, con scritto in testa che lo sono.
 
+Dalla [§31.4](roadmap/31-da-dove-viene-cio-che-si-vede.md) la **pelle** è il
+terzo. Si scrive un componente per volta in `serie/pelle/`, e
+`serie/pelle.css` è il file che i pezzi compongono nell'ordine che
+`serie/pelle/ordine.ts` dichiara — perché in CSS l'ordine di due regole della
+stessa specificità decide chi vince, e montare per ordine alfabetico vorrebbe
+dire che rinominare un file cambia ciò che si vede. Dentro il derivato, un
+filetto per pezzo dice da dove viene ciò che segue: quando un presidio o il
+browser puntano dentro `pelle.css`, è così che si risale al pezzo da toccare.
+
 ```bash
 # dentro frontend/
-npm run tema:genera      # riscrive i due fogli dalla ricetta
-npm run tema:verifica    # dice se su disco c'è ciò che la ricetta produce
+npm run tema:genera      # riscrive i due fogli e la pelle dalle loro sorgenti
+npm run tema:verifica    # dice se su disco c'è ciò che le sorgenti producono
 ```
 
 Nessuno dei due sta nel ciclo locale, e non è una dimenticanza: la verifica la
-fa già `npm test`, che confronta i due file **byte per byte** con ciò che la
-ricetta produce (`src/theme/ricetta.test.ts`). `tema:verifica` è la stessa
-domanda fatta senza avviare vitest, e serve a chi sta lavorando sulla ricetta;
-`tema:genera` è un gesto, non un verdetto.
+fa già `npm test`, che confronta i tre file **byte per byte** con ciò che le
+sorgenti producono (`src/theme/ricetta.test.ts`, `src/theme/pelle.test.ts`).
+`tema:verifica` è la stessa domanda fatta senza avviare vitest, e serve a chi
+sta lavorando sulla sorgente; `tema:genera` è un gesto, non un verdetto.
 
-Un esadecimale ritoccato a mano in un foglio sparisce alla prima rigenerazione,
-e fino ad allora dice il falso sulla ricetta. È la ragione per cui il presidio
-esiste, ed è lo stesso schema dei `*.generated.ts`.
+Un esadecimale ritoccato a mano in un foglio — o una regola scritta dentro la
+pelle montata — sparisce alla prima rigenerazione, e fino ad allora dice il
+falso sulla sorgente. È la ragione per cui il presidio esiste, ed è lo stesso
+schema dei `*.generated.ts`.
 
 
 I fuzzer del §17.1 girano **dentro** `cargo test --workspace`, con seme fisso.

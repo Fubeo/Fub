@@ -1,0 +1,236 @@
+/* **La scocca della finestra**: titlebar, controlli finestra, rail, menubar,
+   i tab dell'inspector.
+   -------------------------------------------------------------------------
+   È ciò che si vede prima di tutto il resto e che non appartiene a nessun
+   documento. Dove sta e quanto è larga lo decide la struttura
+   (`theme/struttura.css`); qui c'è solo di che superficie è fatta — e le
+   regole valgono anche per il markup che ancora non c'è, così quando arriva
+   si veste da solo invece di arrivare nudo. */
+
+/* Titlebar: il fondo è chrome e il filetto che la stacca. Altezza (38px), drag
+   e no-drag sono della struttura. Erano due regole — questa e una `#topbar`
+   che ridiceva il fondo — perché l'id nominava l'unico esemplare e la classe
+   la specie: la specie basta. */
+.titlebar {
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.win-ctrl {
+  background: transparent;
+  border: none;
+  width: 40px;
+  height: var(--titlebar-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0;
+}
+
+.win-ctrl:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+/* Tre selettori per un bottone solo: l'id di quello che c'è, più due forme che
+   il markup non ha mai avuto. */
+.win-ctrl--close:hover {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+/* Rail verticale: la superficie. Larghezza, colonna e allineamento sono
+   della struttura (`.rail`). */
+.rail {
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-right: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--bg-chrome);
+}
+
+/* I tab dell'inspector: la tablist compatta in cima a `#right-pane`
+   (la colonna è della struttura). */
+.inspector-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-chrome);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.inspector-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 0;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
+}
+
+.inspector-tab:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.inspector-tab[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* La riga del tema è di primo piano nel gruppo Appearance: un gradino di
+ * bordo e sfondo in più, così l'occhio la trova prima delle altre impostazioni
+ * di aspetto che le stanno attorno. --bg-elev è la superficie sollevata in
+ * entrambi i temi. */
+.setting-row--theme {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+/* Le tre zone della titlebar e la menubar: la geometria (le ali che non si
+   stringono, il centro che resta in mezzo, l'altezza dei bottoni di menu)
+   è della struttura; qui è il respiro e il fondo. */
+.titlebar-side {
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+}
+
+.titlebar-center {
+  gap: var(--space-4);
+}
+
+.app-menu button {
+  background: transparent;
+  border: none;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.app-menu button:hover,
+.app-menu button[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+/* I bottoni della titlebar (ricerca, palette, impostazioni): uniformi a 32px,
+   senza bordo, con hover solo sull'overlay. */
+.titlebar-btn {
+  background: transparent;
+  border: none;
+  height: calc(var(--titlebar-h) - var(--space-4));
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+ color: var(--muted);
+ cursor: pointer;
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.titlebar-btn:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+/* Il trigger di ricerca principale: più largo, e il testo a sinistra come in
+   un campo. */
+.titlebar-btn--wide {
+  min-width: 200px;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+/* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca,
+   Grafo). Le view dichiarate si appendono dopo, sempre in `#views-ribbon`.
+   La colonna è della struttura; qui è il respiro e il filetto. */
+.rail-shell {
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* `.rail-btn` è la classe dei bottoni della rail: quelli shell e quelli delle
+   view dichiarate. Accanto ne esisteva una seconda copia scritta come
+   `.rail button`, con la misura detta in un altro modo — `calc(--rail-w -
+   --space-4)`, che fa gli stessi 36px — e con tre selettori per l'acceso di
+   cui due (`.active`, `[aria-current]`) il markup non ha mai usato. Un
+   bottone, un nome. */
+.rail-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.rail-btn:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.rail-btn[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--overlay-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* I bottoni delle view dichiarate (`left_sidebar`) si distinguono dalle
+   shell per una sottile separazione. */
+.rail-btn-view {
+  margin-top: var(--space-1);
+}
+
+/* --- rifiniture del chrome ------------------------------------------------
+   I controlli finestra su Darwin stanno in `#titlebar-left`; i titoli dei
+   pannelli dell'inspector li sostituiscono i tab. La geometria di
+   `#app-menu-extra` e dei pannelli dell'inspector è della struttura. */
+.titlebar--darwin .titlebar-side--left .window-controls {
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+.win-ctrl svg,
+.titlebar-btn--icon svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.titlebar-btn--icon {
+  width: calc(var(--titlebar-h) - var(--space-4));
+  padding: 0;
+  justify-content: center;
+}

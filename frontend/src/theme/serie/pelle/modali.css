@@ -1,0 +1,220 @@
+/* --- le modali ------------------------------------------------------------ */
+/*
+   La palette è la superficie del registro comandi (§1.1): la stessa lista che
+   leggerebbero una CLI o un chiamante programmatico, disegnata per un umano.
+   Le due righe che contano visivamente sono la **descrizione** (che il §1.36 ha
+   aggiunto per chi non ha letto il codice, e serve anche a chi cerca) e il
+   **raggio** dichiarato — perché è ciò su cui l'utente decide se fidarsi.
+
+   Queste regole stavano sotto `#command-palette`, cioè la forma di una modale
+   apparteneva all'unica che c'era. Con la ricerca dentro la nota (§21.4) le
+   modali sono due, e una seconda copia di trentacinque regole sarebbe divergita
+   al primo ritocco: adesso la classe è `.modale`, e i nomi `palette-*` che
+   restano sotto sono i pezzi *dentro* — la casella, la lista, il piano — che
+   una modale nuova riusa se le servono e ignora se non le servono. */
+
+/* Il piano è quello delle modali e non quello dei popover, che è dove stava:
+   questa superficie intrappola il fuoco, e una che intrappola il fuoco dipinta
+   *sotto* un'altra manda a scrivere alla cieca dentro qualcosa che non si vede
+   (difetto 0149). La regola sta scritta accanto ai piani, in `theme/struttura.css`.
+   Sullo stesso piano di `#views-modal`, e fra due dello stesso piano decide
+   l'ordine nel DOM: queste si appendono al `body` quando si aprono, quindi
+   l'ultima aperta è anche l'ultima dipinta — che è la stessa regola con cui
+   `intrappolaFuoco` sceglie chi comanda. */
+.modale {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: var(--scrim);
+  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
+}
+
+.modale .palette-box {
+  width: min(640px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: auto;
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+
+.modale input,
+.modale textarea,
+.modale select {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+  width: 100%;
+}
+
+.modale input[type="checkbox"] {
+  width: auto;
+}
+
+.modale .palette-input {
+  font-size: var(--text-lg);
+}
+
+.modale .palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+.modale .palette-list li {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* La riga su cui cadrà l'Invio. Era una classe `.selected` e basta: chi non
+   guarda lo sfondo non aveva modo di sapere su cosa stesse per premere, e la
+   lista non si dichiarava nemmeno una lista di scelta. Adesso è una `listbox`
+   con la sua opzione selezionata, e la pelle legge quella. */
+.modale .palette-list li[aria-selected="true"],
+.modale .palette-list li:hover {
+  background: var(--bg-hover);
+}
+
+.modale .palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.modale .palette-title {
+  flex: 1;
+}
+
+.modale .palette-scope,
+.modale .palette-desc,
+.modale .palette-help {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.modale kbd {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  font-size: var(--text-xs);
+}
+
+.modale .palette-empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Quanti risultati ha la ricerca dentro la nota (§21.4). Sopra la lista e non
+   sotto: è la riga che dice «zero» quando non c'è lista da guardare. */
+.modale .docsearch-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.modale .palette-heading {
+  font-size: var(--text-lg);
+}
+
+.modale .palette-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.modale .palette-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modale .palette-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.modale .palette-summary {
+  color: var(--accent-soft);
+}
+
+.modale .palette-plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.modale .palette-plan li {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-base);
+  border-bottom: 1px solid var(--border);
+}
+
+.modale .palette-plan li:last-child {
+  border-bottom: none;
+}
+
+.modale .palette-actions {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: flex-end;
+}
+
+.modale .palette-actions button {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.modale .palette-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.modale .palette-actions button.primary:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--bg);
+}
+
+.modale .palette-actions button.danger {
+  background: var(--doc-danger);
+  border-color: var(--doc-danger);
+  color: var(--danger-contrast);
+}
+
+.modale .palette-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.modale .palette-error {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--danger-wash);
+  color: var(--doc-danger);
+  font-size: var(--text-base);
+}

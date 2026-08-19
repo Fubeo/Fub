@@ -1,0 +1,79 @@
+/* Una lista che non è un elenco puntato. Erano cinque regole identiche sotto
+   cinque nomi diversi — la lista dei file, le appuntate, i risultati, gli
+   avvisi, la palette — perché ogni superficie nuova ricopiava le tre righe da
+   quella accanto. È il nome che chi scrive un tema cerca per primo. */
+.plain-list,
+.tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* L'indentazione dell'albero: ogni livello rientra di poco. */
+.tree-children {
+  padding-left: var(--space-7);
+}
+
+/* Una riga della sidebar: nota o cartella, nell'albero o tra le appuntate.
+   Si chiamava `.row` sotto `#files-panel`, cioè aveva bisogno dell'id per non
+   collidere con `.pane-split.row`, dove `row` vuol dire una direzione. */
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background var(--duration-fast) var(--ease);
+}
+.tree-row:hover {
+  background: var(--bg-hover);
+}
+/* La nota aperta. Lo stato si legge da dove è annunciato e non da una classe
+   scritta accanto: nell'albero è il `treeitem` a essere selezionato — è lui a
+   contenere il sottoalbero — fra le appuntate è la riga a essere «quella
+   corrente», che in una lista piatta si dice `aria-current`. */
+[role="treeitem"][aria-selected="true"] > .tree-row,
+.tree-row[aria-current="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-icon {
+  flex: none;
+  width: 1.3em;
+  text-align: center;
+}
+.tree-row.folder {
+  color: var(--muted);
+}
+.tree-row.folder.has-note {
+  color: var(--text);
+}
+.chevron {
+  flex: none;
+  width: 12px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.chevron:hover {
+  color: var(--accent-soft);
+}
+
+/* Bersagli del drag & drop: riga d'inserimento sopra/sotto, o cartella accesa. */
+.tree-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent-soft);
+}
+.tree-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent-soft);
+}
+.drop-into {
+  outline: 1px solid var(--accent-soft);
+  border-radius: var(--radius-sm);
+}

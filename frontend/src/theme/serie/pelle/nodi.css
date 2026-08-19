@@ -1,0 +1,227 @@
+/* **I nodi del §2.1**: il vocabolario con cui un provider disegna senza
+   conoscere il tema.
+   -------------------------------------------------------------------------
+   Un nodo dichiara *cosa* è — una sezione, una tabella, un campo, un badge —
+   e mai di che colore: gli intenti (`intent-primary`, `intent-danger`) sono
+   nomi, e il colore che portano è di chi scrive la pelle. È la ragione per cui
+   stanno qui e non in `views/`: un tema di terzi li rifà tutti, e nessun
+   provider se ne accorge. */
+
+.ui-section {
+  margin: var(--space-2) 0;
+}
+.ui-section > summary {
+  cursor: pointer;
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
+  padding: var(--space-1) 0;
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.ui-table th {
+  font-weight: var(--weight-medium);
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+}
+.ui-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.ui-row.clickable {
+  cursor: pointer;
+}
+.ui-row.clickable:hover {
+  background: var(--bg-hover);
+}
+
+.ui-tree-item > .ui-children {
+  margin-left: var(--space-6);
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-3);
+}
+.ui-tree-label {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ui-tree-label.clickable {
+  cursor: pointer;
+}
+.ui-tree-label.clickable:hover {
+  background: var(--bg-hover);
+}
+/* L'elemento corrente: è uno stato del nodo (§2.1), non un testo che il
+   provider si scrive nel titolo. */
+/* Lo stato del nodo (§2.1) letto da dove è annunciato: dentro un albero il
+   selezionato è il `treeitem`, e l'etichetta è sua figlia; in una lista è
+   `aria-current`, per la ragione scritta in `ui/node.ts`. */
+.ui-tree-item[aria-selected="true"] > .ui-tree-label,
+.ui-list-item[aria-current="true"] {
+  outline: 1px solid var(--accent);
+  /* Era un riempimento d'accento, e una riga non è un bottone: dentro ci
+     stanno un titolo (`--text`) e un sottotitolo (`--muted`), che sopra
+     l'accento stanno a 2,6:1 e a 1,5:1. Chi è selezionato lo dice il
+     contorno — che è un segno non testuale e gli basta il 3:1 — e il fondo
+     torna a essere quello che il token nomina. */
+  background: var(--bg-hover);
+}
+
+.ui-tab-bar {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-3);
+}
+.ui-tab-button {
+  border: none;
+  background: transparent;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  color: var(--muted);
+  border-radius: var(--radius-xs);
+}
+.ui-tab-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.ui-tab-button[aria-selected="true"] {
+  background: transparent;
+  color: var(--text);
+  border-bottom: 2px solid var(--accent);
+  border-radius: 0;
+}
+
+.ui-badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+}
+.ui-badge.intent-primary {
+  border-color: var(--accent);
+  /* Il bordo è un segno, il testo è testo: `--accent` sopra `--bg-input` sta a
+     3,0:1 — abbastanza per una linea, non per undici pixel di parola. Il
+     testo prende `--accent-soft`, che è il ruolo scritto per questo. */
+  color: var(--accent-soft);
+}
+.ui-badge.intent-danger {
+  /* Era `--doc-danger`, cioè il rosso con cui un wikilink rotto si scrive
+     **dentro una nota**: la pastiglia è shell, e il rosso della shell è
+     `--danger`. È la confusione che i fogli del tema (`theme/serie/`)
+     raccontano di aver sciolto, rimasta in due righe. */
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ui-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.ui-progress progress {
+  width: 120px;
+}
+.ui-progress-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.ui-empty-state {
+  padding: var(--space-5) var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.ui-empty-state .ui-button,
+.ui-empty-state button.primary {
+  margin-top: var(--space-4);
+}
+.ui-empty-title {
+  font-weight: var(--weight-medium);
+}
+.ui-empty-detail {
+  margin-top: var(--space-1);
+}
+
+.ui-key-value {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-5);
+  margin: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+.ui-key-value dt {
+  color: var(--muted);
+}
+.ui-key-value dd {
+  margin: 0;
+}
+
+/* I campi: la parte del §2.1 che senza il riconciliatore del §2.8 non si
+   potrebbe usare. */
+.ui-field-label {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-bottom: var(--space-1);
+}
+.ui-text-input input,
+.ui-date-picker input,
+.ui-number input,
+.ui-text-area textarea,
+.ui-select select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.ui-checkbox,
+.ui-radio-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.ui-slider input {
+  width: 100%;
+}
+.ui-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.ui-form > .ui-children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* I due stati del §2.5: «non ancora» e «non ce l'ho fatta». */
+.ui-pending {
+  padding: var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+.ui-failed {
+  padding: var(--space-4);
+  border-left: 3px solid var(--doc-danger);
+  background: var(--danger-wash);
+  font-size: var(--text-sm);
+}
+.ui-failed-message {
+  margin-bottom: var(--space-2);
+}

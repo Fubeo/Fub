@@ -1,0 +1,92 @@
+/* La striscia degli spazi (stile make.md): home, uno chip per spazio, "+". */
+.space-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-4) var(--space-1) var(--space-1);
+}
+.space-chip {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: var(--text-xl);
+  background: none;
+  border-radius: var(--radius-lg);
+}
+.space-chip:hover {
+  background: var(--bg-hover);
+}
+/* Quale spazio è acceso lo diceva solo il contorno, e a nessun altro. */
+.space-chip[aria-pressed="true"] {
+  background: var(--bg-hover);
+  outline: 2px solid var(--accent);
+}
+.space-chip.add {
+  color: var(--muted);
+  font-size: var(--text-xl);
+}
+.space-chip.add:hover {
+  color: var(--accent-soft);
+}
+
+/* Il titolo del pannello quando è uno spazio: cliccarlo apre la folder note. */
+.space-title.clickable {
+  cursor: pointer;
+  text-transform: none;
+  font-size: var(--text-base);
+  color: var(--text);
+}
+.space-title.clickable:hover {
+  color: var(--accent-soft);
+}
+
+/* Selettore dell'icona (emoji) di una nota o cartella. */
+.icon-picker {
+  position: fixed;
+  z-index: var(--z-picker);
+  width: 232px;
+  padding: var(--space-4);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.icon-picker .icon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-1);
+}
+.icon-picker .icon-grid button {
+  background: none;
+  padding: var(--space-2);
+  font-size: var(--text-xl);
+  border-radius: var(--radius-sm);
+}
+.icon-picker .icon-grid button:hover {
+  background: var(--bg-hover);
+}
+.icon-picker input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+.icon-picker .icon-none {
+  background: none;
+  color: var(--muted);
+  padding: var(--space-1);
+  font-size: var(--text-sm);
+}
+.icon-picker .icon-none:hover {
+  background: none;
+  color: var(--accent-soft);
+}

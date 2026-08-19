@@ -1,0 +1,200 @@
+/* Anteprima markdown */
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  color: var(--doc-heading);
+}
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+  border-bottom: 1px solid var(--doc-rule-soft);
+  padding-bottom: var(--space-2);
+}
+.markdown-preview a.wikilink {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.markdown-preview a.wikilink.unresolved {
+  color: var(--doc-danger);
+}
+.markdown-preview .tag {
+  background: var(--doc-fill);
+  border-radius: 1em;
+  padding: 0 0.45em;
+  color: var(--doc-link);
+  font-size: 0.95em;
+}
+.markdown-preview mark {
+  background: var(--doc-highlight);
+  color: inherit;
+}
+.markdown-preview code {
+  background: var(--doc-fill);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+}
+.markdown-preview pre {
+  background: var(--doc-fill-soft);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid var(--doc-rule);
+}
+.markdown-preview blockquote {
+  border-left: 3px solid var(--doc-rule);
+  margin: var(--space-3) 0;
+  padding-left: var(--space-5);
+}
+.markdown-preview .callout {
+  border: 1px solid var(--doc-rule-soft);
+  border-left: 3px solid var(--doc-rule);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  margin: var(--space-4) 0;
+  background: var(--doc-fill-soft);
+}
+.markdown-preview .callout-title {
+  font-weight: var(--weight-bold);
+  text-transform: capitalize;
+  margin-bottom: var(--space-2);
+}
+/* Task e tabelle: da quando il modello le sa dire, l'anteprima le disegna. */
+.markdown-preview li.task {
+  list-style: none;
+  margin-left: -18px;
+}
+.markdown-preview li.task > input {
+  margin-right: var(--space-3);
+}
+/* Uno stato personalizzato (`[/]`, `[-]`) non è "fatto" e non è "da fare":
+   al posto della casella si vede il simbolo che l'utente ha scritto. */
+.markdown-preview li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"]) > input {
+  display: none;
+}
+.markdown-preview li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"])::before {
+  content: "[" attr(data-task) "]";
+  color: var(--doc-link);
+  font-weight: var(--weight-bold);
+  margin-right: var(--space-3);
+}
+.markdown-preview table {
+  border-collapse: collapse;
+  margin: var(--space-4) 0;
+  display: block;
+  overflow-x: auto;
+}
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--doc-rule-soft);
+  padding: var(--space-2) var(--space-4);
+}
+.markdown-preview th {
+  background: var(--doc-fill-soft);
+  font-weight: var(--weight-bold);
+}
+
+/* UI dichiarativa (backlink) */
+.ui-heading {
+  margin: var(--space-2) 0;
+  font-size: var(--text-base);
+}
+.ui-list-item {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  margin-bottom: var(--space-3);
+}
+.ui-list-item.clickable {
+  cursor: pointer;
+}
+.ui-list-item.clickable:hover {
+  outline: 1px solid var(--accent);
+}
+.ui-list-item-title {
+  font-weight: var(--weight-medium);
+}
+.ui-list-item-subtitle {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ciò che il core non conosce (decisione 0017).
+
+   `.ui-slot` è il buco dove la shell monta una parte DICHIARATIVA: il blocco di
+   un plugin arriva come albero `UiNode` e si disegna con lo stesso renderer
+   delle view, quindi qui non c'è niente da vestire — solo il posto in cui sta.
+   `.block-*` resta il degrado di un `custom_kind` che nessuno rivendica, e ha un
+   bordo tratteggiato perché *si deve vedere* che è un blocco non disegnato: un
+   degrado invisibile è indistinguibile da una resa riuscita. */
+.markdown-preview .ui-slot {
+  display: block;
+  margin: var(--space-4) 0;
+}
+.markdown-preview [class^="block-"],
+.markdown-preview [class*=" block-"] {
+  border: 1px dashed var(--doc-rule-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-5);
+  margin: var(--space-4) 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+/* La formula: c'è il blocco, non c'è il compositore — e si vede. */
+.markdown-preview .math-block {
+  display: block;
+  margin: var(--space-4) 0;
+  padding: var(--space-4) var(--space-6);
+  text-align: center;
+  background: var(--doc-fill-soft);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+}
+.markdown-preview .inline-highlight {
+  background: var(--doc-fill-soft);
+  box-shadow: 0 0 0 2px var(--doc-fill-soft);
+  border-radius: var(--radius-xs);
+}
+
+/* Transclusion (embed idratati dal kernel): stanno dentro il documento, quindi
+   prendono i colori del documento. */
+.embed {
+  display: block;
+  margin: var(--space-4) 0;
+  padding: var(--space-4) var(--space-6);
+  border-left: 3px solid var(--doc-rule);
+  background: var(--doc-fill-soft);
+  border-radius: var(--radius-sm);
+}
+.embed-cycle::after,
+.embed-too-deep::after {
+  content: " (embed ricorsivo)";
+  opacity: 0.7;
+  font-size: var(--text-sm);
+}
+.embed.unresolved {
+  border-left-color: var(--doc-rule-soft);
+  opacity: 0.7;
+}
+
+/* Il cestino e la cronologia non hanno più regole proprie: sono due view
+   dichiarate (§1.2), e chi le disegna sono i componenti generici dell'albero —
+   `.declared-view`, le liste, i bottoni. Le loro dieci regole se ne sono andate
+   con i loro id, ed è il segnale che la migrazione è vera: uno stile
+   per-pannello è la traccia che quel pannello lo disegnava qualcuno di qua. */
+.empty-note {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-4);
+}

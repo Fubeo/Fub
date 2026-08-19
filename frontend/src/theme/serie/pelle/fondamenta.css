@@ -1,0 +1,98 @@
+/* La pagina e il suo fondo. Margini e altezza sono della struttura
+   (`theme/struttura.css`); qui è la luce. */
+html, body, .app {
+  background: var(--bg);
+  color: var(--text);
+}
+
+
+/* Il salto al contenuto, nella sua superficie: il meccanismo (fisso, fuori
+   dallo schermo, rivelato dal fuoco) è della struttura; gli offset sono la
+   distanza che tiene dall'angolo quando arriva. */
+.skip-link {
+  top: var(--space-1);
+  left: var(--space-1);
+  padding: var(--space-3) var(--space-6);
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: transform var(--duration-med) var(--ease-out);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.brand {
+  font-weight: var(--weight-bold);
+  color: var(--accent-soft);
+  letter-spacing: 0.5px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Il default è ghost. Il pieno viola su ogni `<button>` era il difetto n.1:
+   titlebar, rail, tab, statusbar, tutto sembrava un CTA. Il pieno resta
+   `button.primary` (e gli intenti dichiarati che lo sono per contratto). */
+button {
+  background: transparent;
+  color: var(--text);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-base);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:disabled:hover {
+  background: transparent;
+}
+
+/* CTA: dialoghi, empty state, conferma. `#open-vault` in titlebar NON è
+   questo — è un comando di chrome, quindi resta ghost. */
+button.primary,
+.ui-button.intent-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  transition:
+    transform var(--duration-fast) var(--ease-in),
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+button.primary:hover,
+.ui-button.intent-primary:hover {
+  background: var(--accent-soft);
+  /* L'inchiostro cambia col fondo. `--accent-soft` è **più chiaro**
+     dell'accento nel tema scuro e più scuro nel chiaro, e il bianco di
+     `--accent-contrast` non regge su entrambi: sopra `--accent-soft` sta a
+     3,4:1 al buio. `--bg` sì, in tutti e due — ed è la coppia che
+     `theme/contrast.test.ts` presidia. */
+  color: var(--bg);
+}
+button.primary:active,
+.ui-button.intent-primary:active {
+  transform: scale(0.98);
+}
+
+.ui-button.intent-danger {
+  color: var(--danger);
+}
+.ui-button.intent-danger:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
+}

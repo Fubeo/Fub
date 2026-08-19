@@ -1,0 +1,118 @@
+/* --- il pannello delle impostazioni (§11.1) -------------------------------
+ *
+ * Una **modale della shell**, non una superficie in più del layout: le
+ * impostazioni si aprono, si guardano e si chiudono, e finché il modello di
+ * layout (§1.2) non esiste una finestra vera non ha dove stare. Sta sopra il
+ * corpo dell'app perché è l'unica cosa che, mentre è aperta, è quella che si
+ * sta facendo — ma **non** sopra le modali: la palette che si apre da qui
+ * dentro si dipinge sopra il pannello ed è lei a prendere i tasti, che è la
+ * stessa regola (l'ultima aperta comanda, difetto 0149). Prima qui c'era
+ * scritto «sta sopra tutto», e da quella riparazione non era più vero. */
+.settings-panel {
+  position: fixed;
+  inset: 48px 10% 48px 10%;
+  z-index: var(--z-dialog);
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-7) var(--space-7);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-base);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+
+/* L'unica cosa che le schede hanno di proprio è quanto stanno lontane dal
+   titolo che le precede. */
+.settings-tabs {
+  margin-left: var(--space-6);
+}
+
+/* Una riga per impostazione: il testo che spiega a sinistra, il controllo a
+ * destra. La descrizione e la provenienza stanno **sotto l'etichetta** e non in
+ * un tooltip: quale livello vince è ciò che un utente non può dedurre, e un
+ * tooltip lo nasconde proprio a chi non sa di doverlo cercare. */
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+
+.setting-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-text label {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.setting-source {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.setting-row input[type="text"],
+.setting-row input[type="number"],
+.setting-row select {
+  min-width: 140px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+}
+
+/* I permessi di un componente (§23.17): righe di impostazione come le altre,
+   rientrate sotto chi le ha chieste.
+
+   Il rientro è l'unica cosa che dice a chi guarda che quelle righe sono DI quel
+   componente: senza, l'elenco dei componenti e l'elenco dei permessi sarebbero
+   la stessa colonna di caselle, e la casella che spegne un componente
+   sembrerebbe una delle sue. La riga sopra sparisce perché il bordo separa i
+   componenti fra loro, non un componente dai propri permessi. */
+.setting-sub {
+  padding-left: var(--space-6);
+  border-top: none;
+}
+
+.setting-row.setting-sub {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+.setting-sub.panel-title {
+  margin-top: var(--space-2);
+}
+
+/* **I tasti che un vault propone** (§23.13): un riquadro in cima alla scheda
+ * delle scorciatoie, con dentro le righe proposte e le due risposte.
+ *
+ * Il bordo colorato è l'unica cosa che lo separa dalle righe vere sotto, e
+ * serve: quelle sono le scorciatoie che valgono, queste sono quelle che
+ * *varrebbero*, e senza una cornice sarebbero la stessa colonna. Non è un
+ * colore d'allarme, ed è deliberato — non c'è niente da riparare, c'è una
+ * scelta da fare. */
+.settings-banner {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+}
+
+/* La prima riga proposta non porta il filo sopra: dentro il riquadro il bordo
+ * lo fa già il riquadro. */
+.settings-banner .setting-row:first-of-type {
+  border-top: none;
+}
+
+.settings-banner-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
