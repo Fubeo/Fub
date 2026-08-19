@@ -127,30 +127,12 @@ fn render_misto_ha_il_widget_giusto_per_chiave() {
     apri_nota(&ws, "a.md");
     let tree = ws.render_view(&istanza()).unwrap();
     let campi = campi(&tree);
-    assert!(
-        campi.contains(&("title".into(), "text")),
-        "{campi:?}"
-    );
-    assert!(
-        campi.contains(&("count".into(), "number")),
-        "{campi:?}"
-    );
-    assert!(
-        campi.contains(&("done".into(), "checkbox")),
-        "{campi:?}"
-    );
-    assert!(
-        campi.contains(&("when".into(), "date")),
-        "{campi:?}"
-    );
-    assert!(
-        campi.contains(&("tags".into(), "text")),
-        "{campi:?}"
-    );
-    assert!(
-        campi.contains(&("see".into(), "text")),
-        "{campi:?}"
-    );
+    assert!(campi.contains(&("title".into(), "text")), "{campi:?}");
+    assert!(campi.contains(&("count".into(), "number")), "{campi:?}");
+    assert!(campi.contains(&("done".into(), "checkbox")), "{campi:?}");
+    assert!(campi.contains(&("when".into(), "date")), "{campi:?}");
+    assert!(campi.contains(&("tags".into(), "text")), "{campi:?}");
+    assert!(campi.contains(&("see".into(), "text")), "{campi:?}");
 }
 
 #[test]
@@ -179,7 +161,10 @@ fn set_bool_scrive_yaml_e_lascia_il_corpo() {
     )
     .expect("view_action");
     let dopo = vault.read("a.md");
-    assert!(dopo.contains("done: true") || dopo.contains("done: true\n"), "{dopo}");
+    assert!(
+        dopo.contains("done: true") || dopo.contains("done: true\n"),
+        "{dopo}"
+    );
     assert!(dopo.contains("# Body stays"), "{dopo}");
     assert!(dopo.contains("paragraph\n"), "{dopo}");
     let corpo = dopo.split_once("\n# Body stays").expect("corpo").1;

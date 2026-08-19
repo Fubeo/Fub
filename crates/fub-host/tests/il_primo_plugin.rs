@@ -43,8 +43,7 @@ use fub_abi::event::{Actor, Event};
 use fub_abi::model::DocId;
 use fub_abi::options::permission;
 use fub_abi::traits::{
-    CommandProvider, HostApi, JobProgress, JobSpec, Plugin, PluginManifest,
-    PluginPermissions,
+    CommandProvider, HostApi, JobProgress, JobSpec, Plugin, PluginManifest, PluginPermissions,
 };
 use fub_abi::PluginError;
 use fub_host::registry::Bundle;
@@ -300,13 +299,16 @@ fn un_plugin_vivo_per_contratto_si_monta_vive_e_si_smonta() {
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();
         let esito = ws
-            .invoke_command(COMANDO, serde_json::json!(null), InvokeMode::Apply, Actor::User)
+            .invoke_command(
+                COMANDO,
+                serde_json::json!(null),
+                InvokeMode::Apply,
+                Actor::User,
+            )
             .expect("il ping risponde");
         let messaggio = esito.notify.expect("il ping dice qualcosa");
         assert!(
-            messaggio
-                .as_literal()
-                .is_some_and(|m| m.contains("pong")),
+            messaggio.as_literal().is_some_and(|m| m.contains("pong")),
             "il ping risponde pong: {messaggio:?}"
         );
     })
@@ -334,7 +336,12 @@ fn un_plugin_vivo_per_contratto_si_monta_vive_e_si_smonta() {
             "il comando non c'è più"
         );
         let errore = ws
-            .invoke_command(COMANDO, serde_json::json!(null), InvokeMode::Apply, Actor::User)
+            .invoke_command(
+                COMANDO,
+                serde_json::json!(null),
+                InvokeMode::Apply,
+                Actor::User,
+            )
             .expect_err("il comando non esiste più");
         assert!(
             matches!(errore, PluginError::UnknownCommand(_)),
@@ -367,7 +374,12 @@ fn un_plugin_senza_il_permesso_vede_chiudersi_il_cancello() {
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();
         let errore = ws
-            .invoke_command(COMANDO, serde_json::json!(null), InvokeMode::Apply, Actor::User)
+            .invoke_command(
+                COMANDO,
+                serde_json::json!(null),
+                InvokeMode::Apply,
+                Actor::User,
+            )
             .expect_err("senza `read-vault` il ping non legge");
         assert!(
             matches!(&errore, PluginError::PermissionDenied(t)

@@ -86,9 +86,15 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_REMOVE, "Annulla: togli «{key}» da {doc}")
             .with(FAILED, "Non ho aggiornato le proprietà: {reason}")
             .with("note.property.set.title", "Imposta proprietà")
-            .with("note.property.set.desc", "Scrive una chiave del frontmatter della nota.")
+            .with(
+                "note.property.set.desc",
+                "Scrive una chiave del frontmatter della nota.",
+            )
             .with("note.property.set.doc.title", "Nota")
-            .with("note.property.set.doc.desc", "La nota da modificare. Assente: quella aperta.")
+            .with(
+                "note.property.set.doc.desc",
+                "La nota da modificare. Assente: quella aperta.",
+            )
             .with("note.property.set.key.title", "Chiave")
             .with("note.property.set.key.desc", "Il nome della proprietà.")
             .with("note.property.set.value.title", "Valore")
@@ -97,11 +103,20 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Frammento YAML (testo, numero, true/false, lista, [[wikilink]]).",
             )
             .with("note.property.remove.title", "Togli proprietà")
-            .with("note.property.remove.desc", "Toglie una chiave dal frontmatter della nota.")
+            .with(
+                "note.property.remove.desc",
+                "Toglie una chiave dal frontmatter della nota.",
+            )
             .with("note.property.remove.doc.title", "Nota")
-            .with("note.property.remove.doc.desc", "La nota da modificare. Assente: quella aperta.")
+            .with(
+                "note.property.remove.doc.desc",
+                "La nota da modificare. Assente: quella aperta.",
+            )
             .with("note.property.remove.key.title", "Chiave")
-            .with("note.property.remove.key.desc", "Il nome della proprietà da togliere."),
+            .with(
+                "note.property.remove.key.desc",
+                "Il nome della proprietà da togliere.",
+            ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Properties")
             .with(EMPTY_NO_NOTE, "No note open.")
@@ -120,9 +135,15 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_REMOVE, "Undo: remove «{key}» from {doc}")
             .with(FAILED, "Could not update properties: {reason}")
             .with("note.property.set.title", "Set property")
-            .with("note.property.set.desc", "Writes a frontmatter key of the note.")
+            .with(
+                "note.property.set.desc",
+                "Writes a frontmatter key of the note.",
+            )
             .with("note.property.set.doc.title", "Note")
-            .with("note.property.set.doc.desc", "The note to change. Absent: the open one.")
+            .with(
+                "note.property.set.doc.desc",
+                "The note to change. Absent: the open one.",
+            )
             .with("note.property.set.key.title", "Key")
             .with("note.property.set.key.desc", "The property name.")
             .with("note.property.set.value.title", "Value")
@@ -131,11 +152,20 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "YAML fragment (text, number, true/false, list, [[wikilink]]).",
             )
             .with("note.property.remove.title", "Remove property")
-            .with("note.property.remove.desc", "Removes a key from the note's frontmatter.")
+            .with(
+                "note.property.remove.desc",
+                "Removes a key from the note's frontmatter.",
+            )
             .with("note.property.remove.doc.title", "Note")
-            .with("note.property.remove.doc.desc", "The note to change. Absent: the open one.")
+            .with(
+                "note.property.remove.doc.desc",
+                "The note to change. Absent: the open one.",
+            )
             .with("note.property.remove.key.title", "Key")
-            .with("note.property.remove.key.desc", "The property name to remove."),
+            .with(
+                "note.property.remove.key.desc",
+                "The property name to remove.",
+            ),
     ]
 }
 
@@ -225,7 +255,10 @@ fn comando_poi_albero(
         Err(e) => Ok(ViewUpdate::Replace {
             root: tree(
                 host,
-                Some(Text::message(FAILED, vec![Arg::text("reason", e.to_string())])),
+                Some(Text::message(
+                    FAILED,
+                    vec![Arg::text("reason", e.to_string())],
+                )),
             )?,
         }),
     }
@@ -393,10 +426,9 @@ fn scalare_json(s: &fub_abi::model::PropertyScalar) -> serde_json::Value {
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::String(n.to_string())),
         PropertyScalar::Bool(b) => serde_json::Value::Bool(*b),
-        PropertyScalar::Date(d) => serde_json::Value::String(format!(
-            "{:04}-{:02}-{:02}",
-            d.year, d.month, d.day
-        )),
+        PropertyScalar::Date(d) => {
+            serde_json::Value::String(format!("{:04}-{:02}-{:02}", d.year, d.month, d.day))
+        }
         PropertyScalar::Link(t) => serde_json::Value::String(mostra_link(t)),
         PropertyScalar::Unknown(v) => v.clone(),
     }
@@ -655,12 +687,13 @@ pub(crate) fn serializza_blocco(
     if mappa.is_empty() {
         return Ok("---\n\n---\n".to_string());
     }
-    let yaml = serde_yaml_ng::to_string(&serde_json::Value::Object(mappa.clone())).map_err(|e| {
-        PluginError::BadArgs(Text::message(
-            E_YAML,
-            vec![Arg::text("reason", e.to_string())],
-        ))
-    })?;
+    let yaml =
+        serde_yaml_ng::to_string(&serde_json::Value::Object(mappa.clone())).map_err(|e| {
+            PluginError::BadArgs(Text::message(
+                E_YAML,
+                vec![Arg::text("reason", e.to_string())],
+            ))
+        })?;
     let yaml = yaml
         .trim_start_matches("---")
         .trim_start_matches('\n')
@@ -695,18 +728,12 @@ mod tests {
     fn parse_yaml_fallback_a_stringa() {
         assert_eq!(parse_yaml_valore("true"), serde_json::json!(true));
         assert_eq!(parse_yaml_valore("3"), serde_json::json!(3));
-        assert_eq!(
-            parse_yaml_valore("[[page]]"),
-            serde_json::json!("[[page]]")
-        );
+        assert_eq!(parse_yaml_valore("[[page]]"), serde_json::json!("[[page]]"));
     }
 
     #[test]
     fn wikilink_a_mano() {
-        assert_eq!(
-            mostra_link(&LinkTarget::wiki("page")),
-            "[[page]]"
-        );
+        assert_eq!(mostra_link(&LinkTarget::wiki("page")), "[[page]]");
         assert_eq!(
             mostra_link(&LinkTarget::Wiki {
                 page: "page".into(),

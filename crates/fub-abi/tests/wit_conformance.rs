@@ -72,11 +72,11 @@ use fub_abi::event::{
     Actor, BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Notice, Origin, Severity,
     Subject,
 };
-use fub_abi::gate::Gate;
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
     ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
+use fub_abi::gate::Gate;
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,

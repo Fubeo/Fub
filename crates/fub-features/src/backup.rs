@@ -333,9 +333,7 @@ fn restore(
         .filter_map(|doc| {
             let path = format!("{id}/{}", doc.as_str());
             let bytes = host.data_read(&path).ok().flatten()?;
-            String::from_utf8(bytes)
-                .ok()
-                .map(|src| (doc, src))
+            String::from_utf8(bytes).ok().map(|src| (doc, src))
         })
         .collect();
     let n = da_creare.len() as i64;

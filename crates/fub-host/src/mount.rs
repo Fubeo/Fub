@@ -250,12 +250,12 @@ pub fn mount(
                 w.extend(register_markdown_transfer(ws));
                 w
             })
-                .configuring(core_settings())
-                // La somma dei due cataloghi — quello dell'host e quelli
-                // delle famiglie del kernel — è una funzione sola, e la
-                // chiama anche il banco che la giudica: qui c'era un elenco
-                // a mano, e il banco ne teneva una seconda copia.
-                .speaking("it", core_catalog_montato()),
+            .configuring(core_settings())
+            // La somma dei due cataloghi — quello dell'host e quelli
+            // delle famiglie del kernel — è una funzione sola, e la
+            // chiama anche il banco che la giudica: qui c'era un elenco
+            // a mano, e il banco ne teneva una seconda copia.
+            .speaking("it", core_catalog_montato()),
         ),
     ];
     for feature in fub_features::ogni_feature_ufficiale() {

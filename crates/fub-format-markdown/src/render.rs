@@ -151,10 +151,16 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         } => {
             if custom_kind == custom_kind::CALLOUT {
                 let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
-                write!(out, "<div{id} class=\"callout\"{}>", attr("data-callout", ty)).unwrap();
+                write!(
+                    out,
+                    "<div{id} class=\"callout\"{}>",
+                    attr("data-callout", ty)
+                )
+                .unwrap();
                 if let Some(title) = attrs.get("title").and_then(|v| v.as_str()) {
                     if !title.is_empty() {
-                        write!(out, "<div class=\"callout-title\">{}</div>", escape(title)).unwrap();
+                        write!(out, "<div class=\"callout-title\">{}</div>", escape(title))
+                            .unwrap();
                     }
                 }
                 render_blocks(blocks, opts, out);

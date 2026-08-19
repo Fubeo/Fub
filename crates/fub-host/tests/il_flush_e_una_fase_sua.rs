@@ -51,9 +51,9 @@ use camino::Utf8PathBuf;
 use fub_abi::error::PluginError;
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute};
+use fub_host::Custodia;
 use fub_kernel::storage::VaultStorage;
 use fub_kernel::{FormatRegistry, MachineSettings, MemStorage, Workspace};
-use fub_host::Custodia;
 use fub_testkit::TestoDiProva;
 
 const ROOT: &str = "/vault-flush-fase-sua";

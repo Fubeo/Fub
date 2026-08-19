@@ -71,10 +71,7 @@ fn voci(tree: &UiNode) -> Vec<String> {
 #[test]
 fn from_template_sostituisce_e_crea() {
     let vault = Vault::new();
-    vault.put(
-        "Templates/Meeting.md",
-        "# {{title}}\n\nData: {{date}}\n",
-    );
+    vault.put("Templates/Meeting.md", "# {{title}}\n\nData: {{date}}\n");
     let mut ws = vault.open();
     let esito = ws
         .invoke_command(
@@ -136,9 +133,7 @@ fn la_view_elenca_i_template() {
     vault.put("Templates/B.md", "b\n");
     vault.put("Altro.md", "no\n");
     let ws = vault.open();
-    let tree = ws
-        .render_view(&ViewInstance::only(TEMPLATE_VIEW))
-        .unwrap();
+    let tree = ws.render_view(&ViewInstance::only(TEMPLATE_VIEW)).unwrap();
     let voci = voci(&tree);
     assert_eq!(voci, vec!["A".to_string(), "B".to_string()]);
 }

@@ -29,14 +29,14 @@ use fub_abi::command::{
 };
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
-use fub_abi::gate::Gate;
-use fub_abi::render::{EmbedContent, RenderedDocument};
 use fub_abi::event::{
     Actor, BatchId, DocChange, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
 };
+use fub_abi::gate::Gate;
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{DocId, LinkTarget, Span};
 use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
+use fub_abi::render::{EmbedContent, RenderedDocument};
 use fub_abi::session::{
     AnchoredSelection, AnchoredSelections, ContextKind, ContextMask, FloatingSelection,
     FloatingSelections, PaneMode, SelectionSet, ViewContext,
@@ -808,7 +808,9 @@ fn index_query_samples() -> Vec<Value> {
         // La resa via canale dati (§1.6, decisione 0163): l'anteprima e
         // l'embed. Prima erano due comandi Tauri bespoke; adesso sono
         // `IndexQuery` come tutte le altre.
-        IndexQuery::RenderPreview { doc: DocId::new("a.md") },
+        IndexQuery::RenderPreview {
+            doc: DocId::new("a.md"),
+        },
         IndexQuery::RenderEmbed {
             page: "Nota".into(),
             heading: Some("Sezione".into()),

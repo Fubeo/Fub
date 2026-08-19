@@ -92,11 +92,11 @@ pub use event::{
     Actor, BatchId, DocChange, DocChanges, Event, EventKind, EventMask, Notice, Origin, Severity,
     Subject,
 };
-pub use gate::Gate;
 pub use format::{
     DocumentFormat, DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider,
     ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
+pub use gate::Gate;
 pub use locale::{HourCycle, Locale, Weekday};
 pub use model::{
     Anchor, Block, Carico, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter,

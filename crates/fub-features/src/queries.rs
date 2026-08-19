@@ -94,7 +94,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_RUN, "{n} note per «{name}»")
             .with(FAILED, "Query: {reason}")
             .with("queries.save.title", "Salva query")
-            .with("queries.save.desc", "Memorizza un'espressione da rilanciare.")
+            .with(
+                "queries.save.desc",
+                "Memorizza un'espressione da rilanciare.",
+            )
             .with("queries.save.id.title", "Id")
             .with("queries.save.id.desc", "Se c'è, sovrascrive quella query.")
             .with("queries.save.name.title", "Nome")
@@ -523,11 +526,8 @@ fn run(
 ) -> Result<CommandOutcome, PluginError> {
     let id = id_da(args)?;
     let store = leggi(host)?;
-    let q = store
-        .queries
-        .iter()
-        .find(|q| q.id == id)
-        .ok_or_else(|| {
+    let q =
+        store.queries.iter().find(|q| q.id == id).ok_or_else(|| {
             PluginError::BadArgs(Text::message(E_MISSING, vec![Arg::text(ID, &id)]))
         })?;
     if mode.is_dry_run() {
@@ -546,15 +546,13 @@ fn run(
         })?
         .documents()?;
     let n = paged.total as i64;
-    let notify = Text::message(
-        P_RUN,
-        vec![Arg::text(NAME, &q.name), Arg::int("n", n)],
-    );
+    let notify = Text::message(P_RUN, vec![Arg::text(NAME, &q.name), Arg::int("n", n)]);
     if paged.items.len() == 1 {
-        return Ok(CommandOutcome::notify(notify)
-            .with_effect(CommandEffect::Navigate {
+        return Ok(
+            CommandOutcome::notify(notify).with_effect(CommandEffect::Navigate {
                 doc: paged.items[0].doc.clone(),
-            }));
+            }),
+        );
     }
     Ok(CommandOutcome::notify(notify))
 }
@@ -681,9 +679,8 @@ fn leggi(host: &dyn ReadApi) -> Result<Store, PluginError> {
 }
 
 fn scrivi(host: &mut dyn HostApi, store: &Store) -> Result<(), PluginError> {
-    let bytes = serde_json::to_vec_pretty(store).map_err(|e| {
-        PluginError::Internal(format!("queries.json: {e}").into())
-    })?;
+    let bytes = serde_json::to_vec_pretty(store)
+        .map_err(|e| PluginError::Internal(format!("queries.json: {e}").into()))?;
     host.data_write(STORE, &bytes)
 }
 
