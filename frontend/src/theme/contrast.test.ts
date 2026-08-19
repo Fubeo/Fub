@@ -56,6 +56,12 @@
 // tavolozza che questa soglia la passa tutta.
 import { describe, expect, it } from "vitest";
 
+// Il conto — WCAG 2.1, §1.4.3 e la definizione di rapporto di contrasto — stava
+// qui dentro finché il lettore era uno solo. Adesso lo legge anche il catalogo
+// della tavolozza del banco, che i colori li prende **resi** invece che dal
+// foglio come testo: due misure della stessa promessa, e una formula sola
+// (`theme/contrasto.ts`).
+import { contrasto } from "./contrasto";
 import scuro from "./serie/foglio-scuro.css?raw";
 import chiaro from "./serie/foglio-chiaro.css?raw";
 
@@ -145,36 +151,6 @@ const SOTTO_AA: Record<Tema, readonly string[]> = {
 };
 
 type Tema = "dark" | "light";
-
-// ---------------------------------------------------------------------------
-// Il conto: WCAG 2.1, §1.4.3 e la definizione di rapporto di contrasto.
-// ---------------------------------------------------------------------------
-
-/// `#rrggbb` → i tre canali. Solo esadecimale: i token in `rgb(… / …)` sono
-/// veli e ombre, cioè colori che stanno **sopra** qualcosa di variabile, e il
-/// loro contrasto non è una funzione dei soli token.
-function canali(colore: string): [number, number, number] {
-  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(colore);
-  if (!m) throw new Error(`«${colore}» non è un colore esadecimale a sei cifre`);
-  return [parseInt(m[1]!, 16), parseInt(m[2]!, 16), parseInt(m[3]!, 16)];
-}
-
-/// La luminanza relativa (WCAG, *relative luminance*).
-function luminanza(colore: string): number {
-  const [r, g, b] = canali(colore).map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/// Il rapporto di contrasto fra due colori: `(L1 + 0,05) / (L2 + 0,05)`, col
-/// più chiaro sopra. È simmetrico — quale dei due sia l'inchiostro non cambia
-/// il numero, e infatti la tabella li ordina per leggibilità e non per conto.
-export function contrasto(a: string, b: string): number {
-  const [x, y] = [luminanza(a), luminanza(b)];
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-}
 
 // ---------------------------------------------------------------------------
 // I token, letti dal foglio vero.

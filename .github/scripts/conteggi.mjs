@@ -600,6 +600,19 @@ export const CONTEGGI = [
       " | cut -d: -f1 | sort -u | wc -l",
   },
   {
+    nome: "scene-del-banco",
+    ragione:
+      "Le scene del banco visivo (§31.1): le righe `id:` dell'elenco chiuso di " +
+      "`frontend/banco/scene.mjs`. È un numero che la prosa cita — la roadmap, " +
+      "il verbale, il ciclo locale — e che cresce ogni volta che qualcuno " +
+      "aggiunge una superficie da fotografare, cioè spesso e senza pensare a " +
+      "chi l'aveva scritto altrove. Si contano le scene e non le foto perché " +
+      "le foto sono il doppio per costruzione (due luci), e un conto che " +
+      "raddoppia è un conto che si legge male: `scene.test.ts` presidia già " +
+      "che siano esattamente due per scena.",
+    comando: "grep -c '^    id: ' frontend/banco/scene.mjs",
+  },
+  {
     nome: "verbali",
     ragione:
       "I verbali delle decisioni chiuse. È il conteggio che `todo.md` scriveva " +

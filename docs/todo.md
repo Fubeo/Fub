@@ -69,9 +69,9 @@ Sono uscite 169 voci:
   contro l'architettura che lo porta, e chiede da dove venga ciascuna delle cose
   che si vedono (nove).
 
-Centocinquantadue voci sono chiuse. I loro verbali stanno in
+Centocinquantatré voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **diciassette** [conta: voci-aperte]. Questo file è
+Le voci ancora aperte sono **sedici** [conta: voci-aperte]. Questo file è
 il loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -193,11 +193,11 @@ Si cercano le voci ponendo domande in questo ordine:
 | **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | **chiusa** — una voce sola, e il soggetto non era il prodotto ma **il ciclo di chi lo scrive**: la [0145](decisions/0145-gli-eseguibili-restano-a-calare-e-quanto-pesa-un-link.md) l'ha chiusa fuori dalle tre forme che proponeva, perché il costo non era il *numero* degli eseguibili ma il *peso* di ognuno | — | — |
 | **29** | [Chi possiede la pelle della shell](roadmap/29-chi-possiede-la-pelle.md) | la stessa domanda di proprietà vista da sei lati: che cosa si sostituisce, con quale contratto, attraverso quali cancelli, su quale strada di montaggio, con quale gesto dell'utente, e dove vive | 6 | 0 |
 | **30** | [Il moto è del tema](roadmap/30-il-moto-e-del-tema.md) | il collocamento della 29, cernito: scala del ritmo, montaggio con classi di coreografia, cambio di luce in dissolvenza, gesti per provenienza, grafo e moto ridotto, dove non si balla, presidi | 2 | 0 |
-| **31** | [Da dove viene ciò che si vede](roadmap/31-da-dove-viene-cio-che-si-vede.md) | la stessa domanda su nove cose che si vedono — un colore, una voce di carattere, un bottone, una distanza, una preferenza, una soglia, la superficie di scrittura, un nome di classe, una consegna — e nove volte la stessa risposta di oggi: *da una scelta fatta una volta e mai più derivabile* | 9 | 0 |
+| **31** | [Da dove viene ciò che si vede](roadmap/31-da-dove-viene-cio-che-si-vede.md) | la stessa domanda su nove cose che si vedono — un colore, una voce di carattere, un bottone, una distanza, una preferenza, una soglia, la superficie di scrittura, un nome di classe, una consegna — e nove volte la stessa risposta di oggi: *da una scelta fatta una volta e mai più derivabile* | 8 | 1 |
 
 ## Le voci
 
-Le voci aperte sono **diciassette** [conta: voci-aperte].
+Le voci aperte sono **sedici** [conta: voci-aperte].
 
 È la [seduta 31](roadmap/31-da-dove-viene-cio-che-si-vede.md) (2026-08-19), e
 la sua domanda cade **dentro** l'architettura che le due precedenti hanno
@@ -411,7 +411,7 @@ e lascia una casella che aspetta una **condizione**, valutata dal
 una voce: una voce aperta è lavoro ancora da **decidere**. Le due somme restano
 separate perché contano cose separate.
 
-Le caselle residue oggi sono **venticinque**, e stanno in venti posti:
+Le caselle residue oggi sono **ventisei**, e stanno in ventun posti:
 
 - [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) — una: i workspace salvati
   con un nome. La casa è decisa, il formato aspetta di vedere assetti veri.
@@ -535,6 +535,16 @@ Le caselle residue oggi sono **venticinque**, e stanno in venti posti:
   esiste, la (a) costerebbe un tipo additivo per sempre — il prezzo che la
   [0002](decisions/0002-additivita-del-contratto.md) rende caro — per un caso
   che nessuno esercita.
+- [§31.1](roadmap/31-da-dove-viene-cio-che-si-vede.md#311-il-banco-che-vede) —
+  una: il **confronto a pixel in CI**. La
+  [0166](decisions/0166-il-banco-che-vede.md) l'ha lasciato cancello locale
+  perché un browser pinnato garantisce lo stesso motore, non gli stessi
+  caratteri: la scala che la shell chiede si risolve nel carattere di sistema, e
+  quello è diverso su sistemi diversi e anche fra due Linux. Come la §16.3,
+  questa casella aspetta una **condizione** e non qualcuno: i caratteri in
+  bundle, che sono la §31.3. Quando ci saranno, la riga si sposta — e la
+  ragione sta scritta in tre posti (`banco/foto.mjs`, `ci.yml`, `CONTRIBUTING`)
+  perché è la stessa in tutti e tre.
 
 Queste non diventano voci: non reggerebbero il criterio in testa al file. Ma non
 devono nemmeno sparire senza essere state fatte.
@@ -556,7 +566,6 @@ nessuno è tornato a prendere la casella.
 | **§29.6** | Dove vive un tema, e come entra | 29 | kernel · P2 | |
 | **§30.8** | Arricchimento progressivo View Transitions | 30 | shell · P2 | |
 | **§30.9** | La lettura del moto ridotto nel loop del grafo | 30 | kernel · P1 | |
-| **§31.1** | Il banco che vede | 31 | presidi · P1 | |
 | **§31.2** | Un colore ha una ricetta | 31 | foglio · P1 | |
 | **§31.3** | La voce del tema: i caratteri | 31 | foglio · P1 | |
 | **§31.4** | Un componente, un'anatomia — e il vocabolario degli hook | 31 | pelle · shell · P1 | |
@@ -732,7 +741,7 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centosessantacinque** [conta: verbali], uno per file. Diceva
+  **centosessantasei** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo

@@ -54,6 +54,7 @@ cargo test --workspace
 npx tsc --noEmit      # `vite build` traspila senza controllare i tipi
 npm test
 npm run build
+npm run banco:a11y    # il contrasto della pagina vera, nelle due luci (§31.1)
 
 # shell (dalla radice, come la CI)
 node .github/scripts/check-ascoltatori.mjs
@@ -107,6 +108,34 @@ girano su Linux, macOS e Windows, e a rompersi sono quasi sempre i path e i lock
 file di `.fub/data/`. Se ciclo locale e CI divergono, `check-ciclo-locale.mjs`
 diventa rosso.
 
+### Il banco visivo, e la metà che resta fuori da qui
+
+Il banco del [§31.1](roadmap/31-da-dove-viene-cio-che-si-vede.md) fotografa la
+shell vera in tutte e due le luci e confronta con le baseline in repo. Del banco,
+qui sopra c'è solo il contrasto reso: il **confronto a pixel** non sta né nel
+ciclo né in CI, e non è una dimenticanza.
+
+Un browser pinnato garantisce lo stesso motore, non gli stessi caratteri: la
+scala che la shell chiede si risolve nel carattere di sistema, che è diverso su
+sistemi diversi e diverso anche fra due Linux. Le baseline sono quindi scattate
+su una macchina sola, e il confronto è un cancello **locale** — finché la §31.3
+non porta i caratteri dentro l'applicazione, e allora la riga si sposta.
+
+Chi tocca il tema lo lancia a mano, e guarda il foglio di contatto:
+
+```bash
+# dentro frontend/, la prima volta: npx playwright install chromium
+npm run banco:verifica   # rosso se una scena è cambiata
+npm run banco:aggiorna   # riscrive le baseline, quando il cambiamento è voluto
+npm run banco            # il banco a mano, su http://localhost:1431
+```
+
+Il foglio di contatto — le due luci affiancate, scena per scena — esce in
+`frontend/banco/.uscita/foglio-di-contatto.html` a ogni corsa. È il cancello
+umano di ogni tappa della seduta, ed è scritto qui perché non resti l'abitudine
+di una persona sola.
+
+
 I fuzzer del §17.1 girano **dentro** `cargo test --workspace`, con seme fisso.
 Alzare il conteggio serve a cercare bug a mano, non a presidiare:
 
@@ -134,7 +163,7 @@ che l'app legge davvero parla la [decisione
 | `fmt + clippy` | formattazione e lint (warning = errori) | push e PR |
 | `build + test` | il workspace su Linux, Windows e macOS | push, PR **e** settimanale |
 | `docs` | link interni e promessa del ciclo locale | push e PR |
-| `frontend` | type-check, test e build della shell | push, PR **e** settimanale |
+| `frontend` | type-check, test e build della shell, più il contrasto reso del banco visivo | push, PR **e** settimanale |
 
 I job pesanti girano anche di lunedì: le dipendenze e l'ambiente cambiano anche
 quando il repo sta fermo.

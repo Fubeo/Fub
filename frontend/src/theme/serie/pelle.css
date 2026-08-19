@@ -351,6 +351,47 @@ select {
   font: inherit;
 }
 
+/* La `<progress>` resta un widget del **sistema operativo** finché qualcuno non
+   dice il contrario, e un widget del sistema operativo dentro un'app tematizzata
+   è tre difetti in uno: non segue `--accent`, si dipinge diverso su ogni
+   macchina, e da indeterminata si anima anche con `prefers-reduced-motion:
+   reduce` — perché quell'animazione non è CSS, è il motore nativo, e una
+   preferenza CSS non lo raggiunge.
+
+   Il terzo è quello che l'ha fatta trovare: il banco visivo del §31.1 non
+   riusciva a fotografare il centro attività, dove un lavoro senza conteggio
+   mostra la barra indeterminata. Non era il banco che tremava. Gli altri due
+   c'erano da prima e non li vedeva nessuno, perché sulla macchina di chi
+   guardava il widget nativo era grigio e piccolo come il resto.
+
+   `appearance: none` fa due cose insieme: porta la barra dentro il tema e
+   spegne l'animazione, perché da indeterminata Chromium le dà valore zero
+   invece di far scorrere quella nativa. Le pseudo-classi sono due strade
+   diverse per lo stesso disegno — `::-webkit-*` su Chromium e WebKit,
+   `::-moz-progress-bar` su Firefox — e vanno scritte separate: un selettore
+   che ne unisse due farebbe cadere l'intera regola sul motore che non conosce
+   l'altra. */
+progress {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+progress::-webkit-progress-bar {
+  background: var(--bg-input);
+}
+progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
 #search-input {
   width: 100%;
   box-sizing: border-box;

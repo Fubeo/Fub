@@ -358,3 +358,28 @@ jobs:
       # guarderebbe.
       - name: nessun pacchetto npm in due copie
         run: node .github/scripts/check-npm-copie.mjs
+      # Il banco visivo del §31.1 entra in CI **per metà**, e la riga che separa
+      # le due metà è: cosa dipende dalla macchina.
+      #
+      # Il confronto a pixel no. Un browser pinnato garantisce lo stesso motore,
+      # non gli stessi caratteri: la scala che questa shell chiede si risolve nel
+      # carattere di sistema, e il runner di GitHub non ha quelli di chi ha
+      # scattato le baseline. Quel confronto è un cancello locale finché la §31.3
+      # non porta i caratteri dentro l'applicazione — e allora la riga si sposta.
+      #
+      # Il contrasto **reso** sì: `axe` legge i colori calcolati, che dai
+      # caratteri non dipendono. È la metà che vede ciò che la tabella delle
+      # coppie non può vedere — un inchiostro sopra un velo, un testo dentro un
+      # fondo che una regola ha cambiato — e le cinque coppie che oggi stanno
+      # sotto la soglia sono scritte nel debito dichiarato di `banco/a11y.mjs`,
+      # con accanto la voce che le paga.
+      #
+      # (Che ogni scena abbia la sua baseline in entrambe le luci lo verifica
+      # `banco/scene.test.ts`, che gira dentro `npm test` qui sopra: è una
+      # domanda sui file, e i file sono gli stessi ovunque.)
+      - name: il browser del banco visivo, alla revisione che il lock pinna
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: il contrasto della pagina vera, in tutte e due le luci (§31.1)
+        run: npm run banco:a11y
+        working-directory: frontend
