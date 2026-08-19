@@ -193,9 +193,9 @@ const corsa = new Corsa();
 async function disegna(): Promise<void> {
   for (const bottone of tabsEl.querySelectorAll<HTMLButtonElement>("button[data-scheda]")) {
     const scelta = bottone.dataset.scheda === scheda;
-    bottone.classList.toggle("active", scelta);
-    // La classe la vede chi guarda, `aria-selected` chi ascolta: erano la
-    // stessa informazione detta a metà delle persone.
+    // La classe la vedeva chi guarda, `aria-selected` chi ascolta: erano la
+    // stessa informazione detta a metà delle persone, e scritta due volte.
+    // Adesso è scritta una volta sola, e la pelle legge quella.
     bottone.setAttribute("aria-selected", String(scelta));
   }
   await corsa.ultimo(async (atteso) => {
@@ -448,7 +448,7 @@ function interruttoreTema(
 ): HTMLElement {
   const corrente = String(entry.value);
   const group = document.createElement("div");
-  group.className = "theme-switch";
+  group.className = "segmented segmented--wide theme-switch";
   group.id = `setting-${entry.spec.key}`;
   group.setAttribute("role", "radiogroup");
   group.setAttribute("aria-label", entry.spec.label);
@@ -456,12 +456,14 @@ function interruttoreTema(
     const valore = op.value;
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "theme-switch__segment";
+    btn.className = "segmented-option";
     btn.setAttribute("role", "radio");
     btn.textContent = op.label || valore || "system";
     const scelto = valore === corrente;
+    // `aria-checked` e basta: era accompagnato da una classe modificatrice, e
+    // la pelle finiva per elencare quattro selettori diversi per lo stesso
+    // acceso, perché nessuno sapeva quale dei quattro il markup usasse.
     btn.setAttribute("aria-checked", String(scelto));
-    if (scelto) btn.classList.add("theme-switch__segment--active");
     // La scrittura è la stessa della `<select>`: `api.setSetting` con il
     // valore dell'opzione, e `scrivi` che ridisegna. Il reset «azzera»
     // continua a funzionare perché è fuori dal campo, sulla riga.

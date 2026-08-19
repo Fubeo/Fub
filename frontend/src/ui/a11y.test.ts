@@ -360,7 +360,7 @@ describe("i piani di chi intrappola il fuoco", () => {
   /// all'ultima aperta, ma se quell'ultima è dipinta sotto un'altra superficie
   /// modale il tasto arriva dove l'occhio non è: le due superfici a tutto schermo
   /// che intrappolano il fuoco — `.modale` (palette, ricerca nella nota, quick
-  /// switcher) e `#views-modal` — stanno quindi sullo **stesso** piano, e fra
+  /// switcher) e `.views-modal` — stanno quindi sullo **stesso** piano, e fra
   /// due dello stesso piano decide l'ordine nel DOM, che è di nuovo l'ordine di
   /// apertura (difetto 0149).
   function pianoDi(selettore: string): string | null {
@@ -379,7 +379,7 @@ describe("i piani di chi intrappola il fuoco", () => {
 
   it("le superfici che intrappolano il fuoco stanno sul piano delle modali", () => {
     expect(
-      [pianoDi(".modale"), pianoDi("#views-modal")],
+      [pianoDi(".modale"), pianoDi(".views-modal")],
       "una superficie che intrappola il fuoco è dipinta sotto un'altra: chi " +
         "prende il tasto non è chi si vede, e chi naviga da tastiera scrive " +
         "dentro qualcosa che sullo schermo sta sotto",

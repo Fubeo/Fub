@@ -143,8 +143,9 @@ export function mountAppMenu(host: MenuHost): Smontaggio {
   function setExpanded(indice: number, aperto: boolean): void {
     const btn = menubar.children[indice] as HTMLElement | undefined;
     if (btn) {
+      // Aperto lo dice `aria-expanded`, e lo legge anche la pelle: la classe
+      // `menu-open` era la stessa cosa scritta una seconda volta.
       btn.setAttribute("aria-expanded", String(aperto));
-      btn.classList.toggle("menu-open", aperto);
     }
   }
 

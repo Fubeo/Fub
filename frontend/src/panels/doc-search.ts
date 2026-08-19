@@ -86,7 +86,10 @@ export function apriRicercaNellaNota(): void {
   const riassunto = document.createElement("p");
   riassunto.className = "docsearch-summary";
   const lista = document.createElement("ul");
-  lista.className = "palette-list";
+  // Niente `role="listbox"`: qui nessuna riga è «scelta» — si scorre e si
+  // clicca. Un ruolo di selezione senza selezione prometterebbe una freccia
+  // che non c'è.
+  lista.className = "plain-list palette-list";
   box.append(input, riassunto, lista);
 
   if (doc === null) {

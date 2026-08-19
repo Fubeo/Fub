@@ -286,11 +286,48 @@ describe("la pelle dichiara zero token", () => {
     // dichiarazioni fuori dai commenti: un `--token: valore;` citato in una
     // spiegazione non conta.
     const senzaCommenti = pelle.replace(/\/\*[\s\S]*?\*\//g, "");
-    const dichiarazioni = [...senzaCommenti.matchAll(/--([\w-]+)\s*:[^;]+;/g)].map((m) => m[1]!);
+    // `^\s*--` e non `--` in mezzo alla riga: un **modificatore BEM** e un
+    // custom property si scrivono con gli stessi due caratteri, e
+    // `.win-ctrl--close:hover {` letto come testo è indistinguibile da una
+    // dichiarazione `--close: …`. Un selettore comincia con `.`, `#`, `[` o un
+    // tag; una dichiarazione comincia con i due trattini. La differenza è dove
+    // stanno nella riga, e finché nessuno aveva scritto un modificatore seguito
+    // da una pseudo-classe il presidio passava per fortuna (§31.4).
+    const dichiarazioni = [...senzaCommenti.matchAll(/^[ \t]*--([\w-]+)\s*:/gm)].map(
+      (m) => m[1]!,
+    );
     expect(
       dichiarazioni,
       "la pelle dichiara zero token: un `--nome:` qui vorrebbe dire che il " +
         "chrome porta una scala propria, fuori dal foglio",
+    ).toEqual([]);
+  });
+});
+describe("la pelle non veste per id", () => {
+  it("nessun selettore di pelle.css nomina un `#id`", () => {
+    // Un id è **il manico di un elemento**, non il nome di un componente: chi
+    // lo scrive nella pelle sta vestendo *quell'esemplare* lì, e la regola non
+    // può valere per il secondo. Un tema di terzi che volesse rifare la stessa
+    // superficie dovrebbe indovinare gli id della shell, che sono un dettaglio
+    // del markup e non una promessa.
+    //
+    // C'è anche una ragione che non si vede: un id pesa (1,0,0) e batte
+    // qualunque classe. Finché la pelle vestiva per id, regole scritte male —
+    // un default con quattro `:not()` in fila, che vale (0,4,1) — venivano
+    // scavalcate senza che nessuno l'avesse deciso, e il difetto restava
+    // coperto. Toglierli lo ha fatto uscire (§31.4).
+    //
+    // Gli id restano nel markup, e restano il manico di chi *agisce*: i
+    // comandi, gli e2e, `ui/a11y.ts`. È il **vestire** per id che finisce qui.
+    const senzaCommenti = pelle.replace(/\/\*[\s\S]*?\*\//g, "");
+    const selettori = [...senzaCommenti.matchAll(/([^{}]+)\{[^{}]*\}/g)]
+      .flatMap((b) => b[1]!.split(","))
+      .map((s) => s.trim())
+      .filter((s) => /(^|[\s>+~([])#[a-zA-Z]/.test(s));
+    expect(
+      selettori,
+      "la pelle nomina componenti, non esemplari: un `#id` qui veste " +
+        "quell'elemento lì, e pesa più di qualunque classe che provi a dire il contrario",
     ).toEqual([]);
   });
 });

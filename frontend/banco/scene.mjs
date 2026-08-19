@@ -287,9 +287,11 @@ async function apriNota(page, path) {
   const cartella = path.slice(0, path.lastIndexOf("/"));
   const nome = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
   await apriCartella(page, cartella);
-  await page.click(`#file-list .row.note[title="${path}"]`);
+  await page.click(`#file-list .tree-row.note[title="${path}"]`);
   await page.waitForFunction(
-    (n) => document.querySelector(".tab.active .tab-name")?.textContent?.includes(n) ?? false,
+    (n) =>
+      document.querySelector('.tab[aria-selected="true"] .tab-name')?.textContent?.includes(n) ??
+      false,
     nome,
   );
 }
@@ -298,7 +300,7 @@ async function apriNota(page, path) {
 /// per il selettore, e l'idempotenza serve perché due scene aprono `Guida` e una
 /// terza apre anche ciò che ci sta dentro.
 async function apriCartella(page, path) {
-  const riga = `#file-list .row.folder[title="${path}"]`;
+  const riga = `#file-list .tree-row.folder[title="${path}"]`;
   await page.waitForSelector(riga);
   const aperta = await page.evaluate(
     (sel) => document.querySelector(sel)?.querySelector(".chevron")?.textContent === "▾",

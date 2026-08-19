@@ -12,12 +12,12 @@
          su un vault vero sono centinaia di fermate — prima di arrivare al
          posto dove si scrive. -->
     <a href="#panes" class="skip-link" data-i18n="app.skip_to_editor">Vai all'editor</a>
-    <div id="app">
+    <div id="app" class="app">
       <header id="topbar" class="titlebar" data-tauri-drag-region>
         <!-- #titlebar-left: il marchio e la menubar applicativa. -->
-        <div id="titlebar-left" data-tauri-drag-region>
+        <div id="titlebar-left" class="titlebar-side titlebar-side--left" data-tauri-drag-region>
           <span class="brand" data-tauri-drag-region>Fub</span>
-          <nav id="app-menu" role="menubar" aria-label="Menu applicazione" data-tauri-drag-region></nav>
+          <nav id="app-menu" class="app-menu" role="menubar" aria-label="Menu applicazione" data-tauri-drag-region></nav>
           <!-- `#open-vault` resta un bottone cliccabile con il suo id, perché
                il comando `shell.vault.open` e `mountAppMenu` lo cercano. Non è
                visibile: la voce del menu File che apre il vault chiama lo
@@ -28,7 +28,7 @@
           <div id="app-menu-extra" data-tauri-drag-region></div>
         </div>
         <!-- #titlebar-center: il trigger di ricerca + il percorso del vault. -->
-        <div id="titlebar-center" data-tauri-drag-region>
+        <div id="titlebar-center" class="titlebar-center" data-tauri-drag-region>
           <!-- Il trigger fa focus su #search-input — la ricerca onesta, già
                lì — e il title dice che la palette è Mod-Shift-P. -->
           <button
@@ -37,14 +37,14 @@
             data-i18n="command-search.placeholder"
             data-i18n-title="command-search.hint"
             title="Cerca nel vault. Palette: Mod-Shift-P"
-            class="titlebar-btn"
+            class="titlebar-btn titlebar-btn--wide"
           >
             Cerca nel vault…
           </button>
           <span id="vault-path" class="muted" data-tauri-drag-region></span>
         </div>
         <!-- #titlebar-right: mode switch, palette, impostazioni, controlli. -->
-        <div id="titlebar-right">
+        <div id="titlebar-right" class="titlebar-side">
           <!-- Le tre modalità esclusive del pannello (FEATURES 4.1). Non sono
                decorazione della shell: la modalità attraversa il confine dentro
                `ViewContext`, e le view che la seguono cambiano di conseguenza.
@@ -53,12 +53,14 @@
                comandi che si somigliano. -->
           <span
             id="mode-switch"
+            class="segmented segmented--titlebar"
             role="group"
             data-i18n-label="mode.group"
             aria-label="Modalità del pannello"
           >
             <button
               data-mode="source"
+              class="segmented-option"
               data-i18n="mode.source"
               data-i18n-title="mode.source.hint"
               title="Solo sorgente, nessuna resa inline"
@@ -68,7 +70,7 @@
             </button>
             <button
               data-mode="live_preview"
-              class="active"
+              class="segmented-option"
               data-i18n="mode.live"
               data-i18n-title="mode.live.hint"
               title="Sorgente con resa inline"
@@ -78,6 +80,7 @@
             </button>
             <button
               data-mode="reading"
+              class="segmented-option"
               data-i18n="mode.reading"
               data-i18n-title="mode.reading.hint"
               title="Sola lettura, senza editor"
@@ -92,7 +95,7 @@
             data-i18n-title="commands.palette"
             data-i18n-label="commands.palette"
             title="Apri la palette dei comandi"
-            class="titlebar-btn"
+            class="titlebar-btn titlebar-btn--icon"
             aria-label="Apri la palette dei comandi"
           ></button>
           <button
@@ -101,13 +104,13 @@
             data-i18n-title="app.settings.hint"
             data-i18n-label="app.settings"
             title="Le impostazioni di questo vault"
-            class="titlebar-btn"
+            class="titlebar-btn titlebar-btn--icon"
             aria-label="Impostazioni"
           ></button>
-          <span id="window-controls" role="group" aria-label="Controlli finestra">
+          <span id="window-controls" class="window-controls" role="group" aria-label="Controlli finestra">
             <button id="win-min" type="button" class="win-ctrl" aria-label="Minimizza"></button>
             <button id="win-max" type="button" class="win-ctrl" aria-label="Ingrandisci"></button>
-            <button id="win-close" type="button" class="win-ctrl" aria-label="Chiudi"></button>
+            <button id="win-close" type="button" class="win-ctrl win-ctrl--close" aria-label="Chiudi"></button>
           </span>
         </div>
       </header>
@@ -119,17 +122,18 @@
              DOM è shell prima, declared dopo. -->
         <div
           id="views-ribbon"
-          class="rail"
+          class="rail views-ribbon"
           role="toolbar"
           data-i18n-label="region.rail"
           aria-label="Navigazione"
         >
-          <div id="rail-shell"></div>
+          <div id="rail-shell" class="rail-shell"></div>
         </div>
       <main id="layout">
-        <aside id="sidebar" data-i18n-label="region.notes" aria-label="Note e ricerca">
+        <aside id="sidebar" class="sidebar" data-i18n-label="region.notes" aria-label="Note e ricerca">
           <input
             id="search-input"
+            class="search-input"
             type="search"
             data-i18n-placeholder="search.placeholder"
             placeholder="Cerca nel vault…"
@@ -148,12 +152,12 @@
             >
               Risultati
             </div>
-            <ul id="search-results" role="list"></ul>
+            <ul id="search-results" class="plain-list search-results" role="list"></ul>
           </div>
-          <div id="files-panel">
-            <div id="space-strip"></div>
+          <div id="files-panel" class="files-panel">
+            <div id="space-strip" class="space-strip"></div>
             <div class="panel-title" id="files-title" role="heading" aria-level="2">
-              <span id="space-title">Note</span>
+              <span id="space-title" class="space-title">Note</span>
               <button
                 id="new-note"
                 class="link-button"
@@ -167,9 +171,10 @@
             <div class="panel-title" id="pinned-title" role="heading" aria-level="2" hidden>
               <span data-i18n="explorer.pinned">Appuntate</span>
             </div>
-            <ul id="pinned-list" role="list" hidden></ul>
+            <ul id="pinned-list" class="plain-list" role="list" hidden></ul>
             <ul
               id="file-list"
+              class="plain-list"
               role="tree"
               data-i18n-label="explorer.notes.hint"
               aria-label="Note del vault"
@@ -187,11 +192,12 @@
              scrive nel markup. -->
         <section
           id="panes"
+          class="panes"
           tabindex="-1"
           data-i18n-label="region.document"
           aria-label="Documento"
         ></section>
-        <section id="right-pane" class="inspector" data-i18n-label="inspector.region" aria-label="Ispettore">
+        <section id="right-pane" class="inspector inspector-pane" data-i18n-label="inspector.region" aria-label="Ispettore">
           <!-- Le view dichiarative (Struttura, Tag, Backlink, …) si montano
                qui per placement: gli id e i titoli li dichiara il backend.
                L'inspector a tab — una view alla volta — lo costruisce
@@ -200,6 +206,7 @@
         </section>
         <section
           id="views-bottom"
+          class="views-bottom"
           data-i18n-label="region.bottom"
           aria-label="Pannelli in basso"
           hidden
@@ -214,6 +221,7 @@
            regione col suo nome. -->
       <div
         id="views-status"
+        class="views-status"
         role="region"
         data-i18n-label="region.status"
         aria-label="Stato dei componenti"
@@ -224,7 +232,7 @@
            **della shell** e c'è sempre. Ci stanno le due cose che l'utente deve
            poter guardare in qualunque momento senza che nulla lo interrompa:
            cosa sta girando, e cosa gli è stato detto. -->
-      <footer id="statusbar" data-i18n-label="region.statusbar" aria-label="Barra di stato">
+      <footer id="statusbar" class="statusbar" data-i18n-label="region.statusbar" aria-label="Barra di stato">
         <!-- Lo stato del salvataggio del documento che si sta guardando
              (§20.4). Senza `data-i18n`, per la ragione dei due pulsanti qui
              sotto: il testo lo scrive chi conosce lo stato — `panels/document.ts`
@@ -232,7 +240,7 @@
              lingua. `role="status"`: cambia da sé mentre si scrive, e chi legge
              con uno screen reader deve poterlo sapere senza che gli si tolga la
              parola di bocca. -->
-        <span id="save-state" role="status"></span>
+        <span id="save-state" class="save-state" role="status"></span>
         <!-- «Sto aspettando il tasto successivo» (§18.2). Vive due secondi ed è
              la differenza fra una sequenza e una tastiera che ogni tanto non
              risponde: chi ha premuto `Mod-k` deve poter vedere che l'app ha
@@ -240,7 +248,7 @@
              sé, e chi legge con uno screen reader deve saperlo senza che gli si
              tolga la parola di bocca. Lo riempie `ui/keyboard.ts`, che è
              l'unico a sapere quando l'attesa è aperta. -->
-        <span id="key-pending" role="status" hidden></span>
+        <span id="key-pending" class="key-pending" role="status" hidden></span>
         <span id="statusbar-fill"></span>
         <!-- Il **testo** di questi due pulsanti non porta un `data-i18n`, e non
              è una dimenticanza: ci sta un conteggio («Attività 3»), quindi lo
@@ -272,6 +280,7 @@
       </footer>
       <div
         id="activity-panel"
+        class="dock-panel dock-panel--activity"
         role="region"
         data-i18n-label="activity.title"
         aria-label="Attività"
@@ -289,7 +298,7 @@
             Chiudi
           </button>
         </div>
-        <ul id="activity-list" role="list"></ul>
+        <ul id="activity-list" class="plain-list" role="list"></ul>
       </div>
       <!-- Gli avvisi si **annunciano**: è l'unica superficie che dice qualcosa
            che l'utente non ha chiesto, e `aria-live="polite"` è ciò che la fa
@@ -297,6 +306,7 @@
            non sta leggendo altro, che è quello che «polite» significa. -->
       <div
         id="notify-panel"
+        class="dock-panel dock-panel--notify"
         role="region"
         data-i18n-label="notices.title"
         aria-label="Avvisi"
@@ -325,7 +335,7 @@
             Chiudi
           </button>
         </div>
-        <ul id="notify-list" role="list"></ul>
+        <ul id="notify-list" class="plain-list notify-list" role="list"></ul>
       </div>
       <!-- Il pannello delle impostazioni (§11.1). Le tre schede sono le tre
            cose che questa voce fa esistere: la configurazione (form generato
@@ -336,6 +346,7 @@
            fuoco ci resta dentro e Escape la chiude (`ui/a11y.ts`). -->
       <div
         id="settings-panel"
+        class="settings-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
@@ -346,13 +357,14 @@
           <span id="settings-title" data-i18n="settings.title">Impostazioni</span>
           <span
             id="settings-tabs"
+            class="segmented segmented--wide settings-tabs"
             role="tablist"
             data-i18n-label="settings.tabs"
             aria-label="Sezioni delle impostazioni"
           >
             <button
               data-scheda="impostazioni"
-              class="active"
+              class="segmented-option"
               role="tab"
               aria-selected="true"
               data-i18n="settings.tab.config"
@@ -361,6 +373,7 @@
             </button>
             <button
               data-scheda="componenti"
+              class="segmented-option"
               role="tab"
               aria-selected="false"
               data-i18n="settings.tab.components"
@@ -369,6 +382,7 @@
             </button>
             <button
               data-scheda="scorciatoie"
+              class="segmented-option"
               role="tab"
               aria-selected="false"
               data-i18n="settings.tab.shortcuts"
@@ -377,6 +391,7 @@
             </button>
             <button
               data-scheda="vault"
+              class="segmented-option"
               role="tab"
               aria-selected="false"
               data-i18n="settings.tab.vaults"
@@ -394,7 +409,7 @@
             Chiudi
           </button>
         </div>
-        <div id="settings-body"></div>
+        <div id="settings-body" class="settings-body"></div>
         <!-- La superficie `settings_tab` del contratto (§2.2), che questa shell
              dichiarava non ospitata: le view che la chiedono si montano qui,
              sotto il form. Una scheda per view vuole il modello di layout
@@ -411,6 +426,7 @@
            manca proprio nell'istante in cui qualcosa va storto. -->
       <div
         id="views-modal"
+        class="views-modal"
         role="dialog"
         aria-modal="true"
         data-i18n-label="app.dialog"

@@ -338,7 +338,11 @@ function scegli(specs: CommandEntry[], box: HTMLElement, host: PaletteHost) {
   input.className = "palette-input";
   input.placeholder = t("palette.placeholder");
   const list = document.createElement("ul");
-  list.className = "palette-list";
+  list.className = "plain-list palette-list";
+  // Una lista in cui una riga è «quella scelta» e le frecce la spostano è una
+  // **listbox**, e finché non lo diceva la scelta esisteva solo come colore di
+  // sfondo: chi non lo vede premeva Invio senza sapere su cosa.
+  list.setAttribute("role", "listbox");
   box.append(input, list);
 
   let visibili = specs;
@@ -350,7 +354,8 @@ function scegli(specs: CommandEntry[], box: HTMLElement, host: PaletteHost) {
     list.innerHTML = "";
     for (const [i, spec] of visibili.entries()) {
       const li = document.createElement("li");
-      li.classList.toggle("selected", i === scelto);
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", String(i === scelto));
 
       const riga = document.createElement("div");
       riga.className = "palette-row";
@@ -623,7 +628,7 @@ function mostraPiano(
   box.append(titolo, riassunto);
 
   const lista = document.createElement("ul");
-  lista.className = "palette-plan";
+  lista.className = "plain-list palette-plan";
   for (const riga of planLines(plan)) {
     const li = document.createElement("li");
     li.textContent = riga;

@@ -299,7 +299,6 @@ function aggiorna(
       const riga = el.querySelector<HTMLElement>(":scope > .ui-tree-label");
       if (riga) {
         riga.textContent = next.label;
-        riga.classList.toggle("selected", next.selected);
         collega(riga, next.action, onAction);
       }
       // Gli stati ARIA seguono il nodo anche quando l'elemento è riusato: una
@@ -526,7 +525,6 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
     case "list_item": {
       const el = div("ui-list-item");
       el.setAttribute("role", "listitem");
-      el.classList.toggle("selected", node.selected);
       // `selected` è uno stato del nodo (§2.1), e va detto anche a chi non
       // vede lo sfondo cambiato. `aria-current` e non `aria-selected`: il
       // secondo vale dentro un widget di selezione (una listbox), e questa è
@@ -631,7 +629,6 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       const el = div("ui-tree-item");
       const riga = div("ui-tree-label");
       riga.textContent = node.label;
-      riga.classList.toggle("selected", node.selected);
       collega(riga, node.action, onAction);
       // Il ruolo sta sul **contenitore** e non sull'etichetta, perché è il
       // contenitore ad avere i figli: un `treeitem` che non contiene il proprio
@@ -1428,7 +1425,6 @@ function segnaSchedaAttiva(el: HTMLElement): void {
   const corpo = el.querySelector<HTMLElement>(":scope > .ui-children");
   const bottoni = el.querySelectorAll<HTMLElement>(":scope > .ui-tab-bar > .ui-tab-button");
   bottoni.forEach((b, i) => {
-    b.classList.toggle("selected", i === attiva);
     b.setAttribute("aria-selected", String(i === attiva));
     // Il tab visita **il gruppo**, non ogni linguetta: dentro ci si muove con
     // le frecce. È la convenzione dei tab widget, ed è ciò che evita che una

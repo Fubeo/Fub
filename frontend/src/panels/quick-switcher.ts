@@ -135,7 +135,11 @@ export function apriQuickSwitcher(): void {
   input.placeholder = t("switcher.placeholder");
   input.setAttribute("aria-label", t("switcher.title"));
   const lista = document.createElement("ul");
-  lista.className = "palette-list";
+  lista.className = "plain-list palette-list";
+  // Come la palette dei comandi: una riga è «quella scelta» e le frecce la
+  // spostano, quindi è una listbox — e dirlo è ciò che permette di sapere su
+  // cosa si sta per premere Invio senza guardare lo sfondo.
+  lista.setAttribute("role", "listbox");
   box.append(input, lista);
 
   let visibili: Voce[] = [];
@@ -151,7 +155,8 @@ export function apriQuickSwitcher(): void {
     const nuove = document.createDocumentFragment();
     for (const [i, voce] of visibili.entries()) {
       const li = document.createElement("li");
-      li.classList.toggle("selected", i === scelto);
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", String(i === scelto));
       const titolo = document.createElement("span");
       titolo.className = "palette-title";
       const dove = document.createElement("span");

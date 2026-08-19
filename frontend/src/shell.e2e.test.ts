@@ -175,7 +175,7 @@ async function attendi(cosa: string, cond: () => boolean, entro = 2000): Promise
 }
 
 function righeDelleNote(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>("#file-list .row.note")];
+  return [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.note")];
 }
 
 function riga(nome: string): HTMLElement {
@@ -307,7 +307,7 @@ describe("apri un vault", () => {
     await avvia(VAULT);
     expect(righeDelleNote().map((r) => r.textContent?.trim())).toEqual(["Benvenuto"]);
 
-    const cartella = [...document.querySelectorAll<HTMLElement>("#file-list .row.folder")].find(
+    const cartella = [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.folder")].find(
       (r) => r.textContent?.includes("note"),
     );
     expect(cartella).toBeDefined();
@@ -365,7 +365,7 @@ describe("due salvataggi della stessa nota", () => {
     // Il gesto vero che flussa: si apre un'altra nota mentre la scrittura è
     // ancora in volo. Non si aspetta — `openDocument` è ferma dentro il flush,
     // che è ferma dentro la scrittura frenata, ed è esattamente il momento.
-    const cartella = document.querySelector<HTMLElement>("#file-list .row.folder");
+    const cartella = document.querySelector<HTMLElement>("#file-list .tree-row.folder");
     cartella?.click();
     await attendi("la cartella si apre", () => righeDelleNote().length === 3);
     void riga("Riunione").click();
