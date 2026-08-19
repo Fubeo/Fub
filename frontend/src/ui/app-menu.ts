@@ -25,7 +25,7 @@ import { $ } from "./dom";
 import { showContextMenu, closeContextMenu, type MenuItem } from "./menu";
 import { t } from "../i18n/strings";
 import type { ShellCommandId } from "./shell-keys.generated";
-import type { Smontaggio } from "./vita";
+import { apriVita, type Smontaggio } from "./vita";
 
 /// L'unica cosa che il menu chiede alla shell: esegui questo comando.
 ///
@@ -79,12 +79,22 @@ const MENU: { titolo: string; voci: VoceMenu[] }[] = [
   { titolo: "menu.tools", voci: [{ label: "menu.tools.settings", click: "#open-settings" }] },
 ];
 
-/// Monta la menubar. Torna gli smontaggi, perché gli ascoltori che attacca
+/// Monta la menubar. Torna gli smontaggi, perché gli ascoltatori che attacca
 /// sul `document` (chiusura con click/Escape) vivono quanto la menubar, non
 /// quanto la finestra: se un domani la menubar si smontasse, non restano.
+///
+/// La menubar apre una **`Vita` sua** invece di ricevere quella della finestra,
+/// ed è la riga precedente detta in un tipo: una vita ricevuta durerebbe quanto
+/// chi la presta, e questi due ascoltatori devono morire prima. La coppia
+/// `addEventListener`/`removeEventListener` scritta a mano diceva la stessa
+/// cosa e la diceva **a memoria** — la seconda metà si può dimenticare, e
+/// `check-ascoltatori.mjs` esiste perché è già successo (0133).
 export function mountAppMenu(host: MenuHost): Smontaggio {
   const menubar = $("#app-menu");
   const smontaggi: Smontaggio[] = [];
+  // La vita degli ascoltatori globali di questa menubar: si chiude nello
+  // smontaggio qui sotto, ed è l'unica cosa che li tiene.
+  const vita = apriVita();
   let menuAperto: number | null = null;
 
   MENU.forEach((menu, i) => {
@@ -126,12 +136,9 @@ export function mountAppMenu(host: MenuHost): Smontaggio {
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") chiudi();
   };
-  document.addEventListener("click", onDocClick);
-  document.addEventListener("keydown", onKey);
-  smontaggi.push(() => {
-    document.removeEventListener("click", onDocClick);
-    document.removeEventListener("keydown", onKey);
-  });
+  vita.ascolta(document, "click", onDocClick);
+  vita.ascolta(document, "keydown", onKey);
+  smontaggi.push(() => vita.chiudi());
 
   function setExpanded(indice: number, aperto: boolean): void {
     const btn = menubar.children[indice] as HTMLElement | undefined;

@@ -2015,7 +2015,7 @@ impl Workspace {
         let indexes = &self.indexes;
 
         let chunks: Vec<PlanChunk> = if n > 1 && fetta.len() > n {
-            let size = (fetta.len() + n - 1) / n;
+            let size = fetta.len().div_ceil(n);
             std::thread::scope(|s| {
                 let handles: Vec<_> = fetta
                     .chunks(size)

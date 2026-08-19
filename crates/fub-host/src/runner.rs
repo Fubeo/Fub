@@ -440,7 +440,7 @@ impl Sveglie {
         // due domande diverse fatte allo stesso orologio: «è passato
         // l'intervallo?» e «è passata l'ora?».
         self.recuperi.sort();
-        suonano.extend(self.recuperi.drain(..));
+        suonano.append(&mut self.recuperi);
         suonano
     }
 }

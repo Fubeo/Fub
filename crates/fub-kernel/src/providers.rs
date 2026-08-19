@@ -120,7 +120,6 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
 // Il registro dei provider (§8.1)
 // ---------------------------------------------------------------------------
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use fub_abi::command::CommandSpec;

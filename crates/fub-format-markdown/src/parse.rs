@@ -984,6 +984,13 @@ fn convert_inlines<'a>(
 /// **dalla sorgente**, segmento per segmento: nessun allineamento fra i due
 /// testi, e un'entità resta sciolta in ogni ramo, non ri-codificata dal
 /// render.
+// Otto argomenti, e il limite di clippy è sette. Raggrupparli in una struct
+// darebbe un tipo a cinque valori che non escono da qui — il chiamante è
+// **uno**, `convert_inline` poco sopra — e la scusa dichiarata è la stessa
+// che `convert_table` porta qualche riga più su: i cinque `&str`/`usize`
+// sono la fetta e i suoi offset, cioè un argomento solo spezzato in ciò che
+// il chiamante ha già in mano.
+#[allow(clippy::too_many_arguments)]
 fn push_text_features(
     source: &str,
     slice: &str,
@@ -1566,7 +1573,7 @@ fn gira_definizioni<'a>(
             let mut sp = node.data.borrow().sourcepos;
             let riga_zero = sp.start.line;
             sp.start.line += n;
-            let prefissi = prefissi_di_riga(source, span.start, &fetta, contenitori);
+            let prefissi = prefissi_di_riga(source, span.start, fetta, contenitori);
             sp.start.column = 1 + prefissi[n];
             node.data.borrow_mut().sourcepos = sp;
             let delta = |riga: usize| -> isize {
@@ -2123,10 +2130,7 @@ fn spazi_in(fetta: &str, mut pos: usize) -> usize {
 
 /// Fine riga o fine della fetta (l'EOF conta, come in comrak).
 fn fine_riga_in(fetta: &str, pos: usize) -> bool {
-    match fetta.as_bytes().get(pos) {
-        None | Some(b'\n') | Some(b'\r') => true,
-        _ => false,
-    }
+    matches!(fetta.as_bytes().get(pos), None | Some(b'\n') | Some(b'\r'))
 }
 
 /// Inserisce le definizioni nell'albero: il contenitore più profondo che

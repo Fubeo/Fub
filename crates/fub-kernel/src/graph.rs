@@ -54,6 +54,22 @@ use fub_abi::traits::{BacklinkRef, LinkDirection, NeighborRef};
 
 use fub_abi::rules::path::{exact_key, resolution_key, resolve_against, strip_ext};
 
+/// **Ciò che un thread riporta di un documento** quando la fase 2 gira a pezzi:
+/// chi è, dove punta, e i backlink che deposita sugli altri.
+///
+/// Il terzo campo è una lista di *coppie* e non una mappa perché chi lo produce
+/// non può scrivere sul grafo: i thread risolvono in sola lettura
+/// (`graph_ref: &LinkGraph`) e chi cuce gli archi inversi è il chiamante, dopo
+/// il `join` — con la mappa scritta da un solo lato, che è la ragione per cui
+/// la fase 2 si può spezzare.
+///
+/// È un alias e non una struct perché a leggerlo è un `Vec` locale in una
+/// funzione sola: dargli tre nomi di campo vorrebbe dire dichiarare un tipo
+/// pubblico per un valore che non esce da lì. Il nome esiste perché la firma
+/// scritta per esteso — tre livelli di tuple dentro due `Vec` — è quella che
+/// `clippy::type_complexity` rifiuta, e aveva ragione.
+type DocRisolto = (DocId, Vec<DocId>, Vec<(DocId, BacklinkRef)>);
+
 /// Ciò che il grafo legge di un documento: identità, alias, link.
 ///
 /// È l'interfaccia che rende il grafo **autosufficiente** rispetto a come il
@@ -245,49 +261,49 @@ impl LinkGraph {
             .clamp(1, 8);
 
         if n > 1 && doc_ids.len() > 256 {
-            let chunk_size = (doc_ids.len() + n - 1) / n;
+            let chunk_size = doc_ids.len().div_ceil(n);
             let graph_ref = &graph;
-            let resolved_chunks: Vec<Vec<(DocId, Vec<DocId>, Vec<(DocId, BacklinkRef)>)>> =
-                std::thread::scope(|s| {
-                    let handles: Vec<_> = doc_ids
-                        .chunks(chunk_size)
-                        .map(|chunk| {
-                            s.spawn(move || {
-                                let mut chunk_res = Vec::with_capacity(chunk.len());
-                                for id in chunk {
-                                    if let Some(refs) = graph_ref.links.get(id) {
-                                        let mut out = Vec::with_capacity(refs.len());
-                                        let mut backlinks = Vec::new();
-                                        for link in refs {
-                                            let resolved = match link.kind {
-                                                RefKind::Wiki => {
-                                                    graph_ref.resolve_key(&link.key, &link.exact)
-                                                }
-                                                RefKind::Path => graph_ref
-                                                    .resolve_path_key(&link.key, &link.exact),
-                                            };
-                                            if let Some(target) = resolved {
-                                                if &target != id {
-                                                    backlinks.push((
-                                                        target.clone(),
-                                                        BacklinkRef {
-                                                            source: id.clone(),
-                                                            context: link.context.clone(),
-                                                        },
-                                                    ));
-                                                }
-                                                out.push(target);
+            let resolved_chunks: Vec<Vec<DocRisolto>> = std::thread::scope(|s| {
+                let handles: Vec<_> = doc_ids
+                    .chunks(chunk_size)
+                    .map(|chunk| {
+                        s.spawn(move || {
+                            let mut chunk_res = Vec::with_capacity(chunk.len());
+                            for id in chunk {
+                                if let Some(refs) = graph_ref.links.get(id) {
+                                    let mut out = Vec::with_capacity(refs.len());
+                                    let mut backlinks = Vec::new();
+                                    for link in refs {
+                                        let resolved = match link.kind {
+                                            RefKind::Wiki => {
+                                                graph_ref.resolve_key(&link.key, &link.exact)
                                             }
+                                            RefKind::Path => {
+                                                graph_ref.resolve_path_key(&link.key, &link.exact)
+                                            }
+                                        };
+                                        if let Some(target) = resolved {
+                                            if &target != id {
+                                                backlinks.push((
+                                                    target.clone(),
+                                                    BacklinkRef {
+                                                        source: id.clone(),
+                                                        context: link.context.clone(),
+                                                    },
+                                                ));
+                                            }
+                                            out.push(target);
                                         }
-                                        chunk_res.push((id.clone(), out, backlinks));
                                     }
+                                    chunk_res.push((id.clone(), out, backlinks));
                                 }
-                                chunk_res
-                            })
+                            }
+                            chunk_res
                         })
-                        .collect();
-                    handles.into_iter().map(|h| h.join().unwrap()).collect()
-                });
+                    })
+                    .collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
+            });
 
             for chunk_res in resolved_chunks {
                 for (id, out, backlinks) in chunk_res {

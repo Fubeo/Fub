@@ -653,12 +653,12 @@ arriva in fondo.
 
 | Pezzo | Dove | Cosa tiene |
 |---|---|---|
-| la coda | [dispatcher.rs:566](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
+| la coda | [dispatcher.rs:572](../../crates/fub-kernel/src/dispatcher.rs) | `PendingJob`, con l'id assegnato dal kernel |
 | il campanello | [dispatcher.rs:589](../../crates/fub-kernel/src/dispatcher.rs) | un conto cumulativo, non un booleano: chi si sveglia sa se ha perso un giro |
 | i thread | [runner.rs:72](../../crates/fub-host/src/runner.rs) | **due** di default, un pool **per vault**, non uno globale |
 | l'host per chiamata | [jobs.rs:94](../../crates/fub-host/src/jobs.rs) | tiene la `Custodia<Workspace>` e prende un prestito **per capacità** |
 | la bandiera | [runner.rs:89](../../crates/fub-host/src/runner.rs) | `HashMap<JobId, Arc<AtomicBool>>`, più `seen`: il confine fra «deve ancora arrivare» e «è già finito» |
-| la riga viva | [core.rs:499](../../crates/fub-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
+| la riga viva | [core.rs:503](../../crates/fub-kernel/src/index/core.rs) | `JobsState`, ciò che `IndexQuery::Jobs` restituisce |
 
 **`JobStatus` è una struct, non un enum**
 ([traits.rs:114](../../crates/fub-abi/src/traits.rs)): cinque campi — `id`,
@@ -795,9 +795,9 @@ flowchart TD
 
 | Maglia | Dove | Cosa produce |
 |---|---|---|
-| `calling` | [safety.rs:220](../../crates/fub-kernel/src/safety.rs) | `PluginError::Internal("«X» è andato in panico …")` |
-| `caught` | [safety.rs:238](../../crates/fub-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
-| `reporting` | [safety.rs:273](../../crates/fub-kernel/src/safety.rs) | il `PluginError` **restituito** a chi chiama, perché non c'è nessuno a cui dire di no |
+| `calling` | [safety.rs:112](../../crates/fub-kernel/src/safety.rs) | `PluginError::Internal("«X» è andato in panico …")` |
+| `caught` | [safety.rs:130](../../crates/fub-kernel/src/safety.rs) | l'errore di casa del chiamante, passato come funzione |
+| `reporting` | [safety.rs:165](../../crates/fub-kernel/src/safety.rs) | il `PluginError` **restituito** a chi chiama, perché non c'è nessuno a cui dire di no |
 
 Nessuna delle tre disattiva niente, ed è ciò che dice il riquadro finale del
 disegno. Il meccanismo per smontare esiste (`BundleRegistry::unmount`), e dal
@@ -1283,9 +1283,9 @@ sequenceDiagram
 | `Host::open` | [session.rs:537](../../crates/fub-host/src/session.rs) | un vault già aperto non si rimonta: si torna la scheda e basta |
 | `mount` | [mount.rs:188](../../crates/fub-host/src/mount.rs) | la tabella di montaggio ha **nove** righe: `fub.core` più le otto feature |
 | `BundleRegistry::mount` | [registry.rs:269](../../crates/fub-host/src/registry.rs) | tutto-o-niente sui primi tre passi, avvisi sul quarto |
-| `reindex` | [workspace.rs:157](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
+| `reindex` | [workspace.rs:159](../../crates/fub-kernel/src/workspace.rs) | **dopo** il montaggio: un indice registrato dopo la scansione resterebbe vuoto. Restituisce un'`Apertura` e non un `()`: un documento che non si legge o non si parsa non fa fallire l'apertura ([0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)), la **scansione** sì |
 | `bridge::spawn` | [bridge.rs:73](../../crates/fub-host/src/bridge.rs) | fra `reindex` e il watcher |
-| `JobRunner::start` | [runner.rs:1017](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
+| `JobRunner::start` | [runner.rs:1011](../../crates/fub-host/src/runner.rs) | ultimo: prima che ci siano job, ci dev'essere un vault |
 
 La riga che è facile perdere è la prima: **`fub.core` è un bundle come gli
 altri** e si monta per primo. Non registra nulla: esiste per avere un'identità
@@ -1331,7 +1331,7 @@ L'ordine dello spegnimento è l'unica parte rigida, e ha tre regole:
 | Regola | Dove | Cosa costerebbe non averla |
 |---|---|---|
 | il watcher si lascia andare **per primo** | [session.rs:165](../../crates/fub-host/src/session.rs) | eventi dal disco su un workspace che si sta smontando |
-| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:809](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
+| il pool **aspetta** chi ha già cominciato, e rifiuta chi è in coda | [runner.rs:802](../../crates/fub-host/src/runner.rs) | un job senza il suo `JobDone`, che per la shell resta in corso per sempre |
 | `deactivate` gira **mentre il bundle è ancora intero** | [registry.rs:405](../../crates/fub-host/src/registry.rs) | un commiato che non può più né scrivere né chiamare i propri comandi |
 | i bundle si spengono in ordine **inverso** | [workspace.rs:1201](../../crates/fub-kernel/src/workspace.rs) | chi si è montato appoggiandosi a un altro lo troverebbe già via |
 

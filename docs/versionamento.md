@@ -9,13 +9,13 @@ solo finché il freeze di M4 non ha mosso il secondo.
 | Numero | Dove sta | A chi promette | Cosa succede se si sbaglia |
 |---|---|---|---|
 | **versione dei crate** | [`Cargo.toml:24`](../Cargo.toml), ereditata dai nove crate [conta: crate-del-workspace]; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila Fub, o ci compila contro | la build rossa, subito |
-| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3821`) e `package fub:abi@0.1.1` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
+| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3888`) e `package fub:abi@0.1.1` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
 | **versione degli schemi su disco** | undici costanti `SchemaVersion` [conta: schemi-su-disco] indipendenti nei crate, una per formato (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
 
 ## 1. La versione dei crate
 
 **Un numero solo per l'intero workspace.** `version = "0.1.0"` sta in
-[`Cargo.toml:24`](../Cargo.toml) sotto `[workspace.package]`, e tutti e otto i
+[`Cargo.toml:1`](../Cargo.toml) sotto `[workspace.package]`, e tutti e otto i
 crate lo ereditano con `version.workspace = true`. La shell porta lo stesso
 numero in `package.json`.
 
@@ -61,7 +61,7 @@ dei crate parla a chi **ricompila**; questa parla a un componente WASM
 accettare o rifiutare da solo, guardando la stringa che il plugin dichiara.
 
 **La regola di caricamento** è
-[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:4369`), e sta
+[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:4436`), e sta
 in quattro righe:
 
 | Caso | Esito | Perché |
@@ -123,12 +123,12 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 
 | Schema | Dove | Oggi | Cosa contiene |
 |---|---|---|---|
-| registro dei vault | [`crates/fub-host/src/vaults.rs:41`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
+| registro dei vault | [`crates/fub-host/src/vaults.rs:44`](../crates/fub-host/src/vaults.rs) | 1 | i vault conosciuti, sul file della macchina |
 | organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../crates/fub-kernel/src/organization.rs) | 1 | il sidecar della sidebar: albero, icone, spazi, appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../crates/fub-kernel/src/viewstate.rs) | 1 | dove si era rimasti, per esemplare di vista |
 | anagrafe | [`crates/fub-kernel/src/entries.rs:142`](../crates/fub-kernel/src/entries.rs) | **4** | ciò che il kernel si ricorda di ogni file, per non rileggerlo — in coda di record (0112) |
 | impostazioni | [`crates/fub-kernel/src/settings.rs:84`](../crates/fub-kernel/src/settings.rs) | 1 | i valori scritti, per vault e per macchina |
-| versioning | [`crates/fub-features/src/versioning.rs:254`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
+| versioning | [`crates/fub-features/src/versioning.rs:261`](../crates/fub-features/src/versioning.rs) | 1 | gli snapshot, cioè la memoria di com'erano i file |
 | indice di ricerca | [`crates/fub-features/src/search.rs:93`](../crates/fub-features/src/search.rs) | **5** | i campi, le opzioni e il tokenizer di tantivy |
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |

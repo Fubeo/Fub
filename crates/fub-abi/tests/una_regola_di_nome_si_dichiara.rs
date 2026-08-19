@@ -450,6 +450,32 @@ fn regole() -> BTreeMap<&'static str, (Famiglia, &'static str)> {
                  più non aggiungerebbe nessuna risposta.",
             ),
         ),
+        (
+            "crates/fub-kernel/src/registry.rs::has_doc_ext",
+            (
+                Famiglia::CasoAscii,
+                "è la domanda di `kind_of` fatta al registro invece che alla tabella dei \
+                 formati, e la sua ragione è già scritta sopra la funzione: «il confronto resta \
+                 disarmato sul caso, com'è in `kind_of` — le chiavi di `by_ext` sono già \
+                 minuscole, ma la risposta dev'essere quella di sempre». Non diverge da \
+                 `media.rs::kind_of`: **deve** coincidere con lei, o un `.MD` sarebbe un \
+                 documento per una delle due e non per l'altra. È il `registry.rs` che la voce \
+                 di `kind_of` nomina.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/queries.rs::id_libero",
+            (
+                Famiglia::CasoAscii,
+                "non confronta due nomi: ne **fabbrica** uno. Piega in ASCII perché l'alfabeto \
+                 di ciò che produce è ASCII per costruzione — tiene i soli \
+                 `is_ascii_alphanumeric` e manda tutto il resto a `-` — quindi una piegatura \
+                 full-Unicode agirebbe su caratteri che la riga dopo butta via. È l'unica di \
+                 questa famiglia che genera invece di decidere, e per questo non ha un gemello \
+                 con cui dover coincidere: l'id di una query nasce qui e non arriva da nessun \
+                 altro posto.",
+            ),
+        ),
         // -- SoloNfc: stessi caratteri, byte diversi ------------------------
         (
             "crates/fub-abi/src/rules/composition.rs::composed",
