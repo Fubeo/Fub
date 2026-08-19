@@ -12,7 +12,7 @@ Dal 2026-08-10 la domanda ha una nuova chiave di lettura. Otto file di
 domanda non cambia. Cambia la **grana** (la misura di precisione), da cui nasce
 la [seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md).
 
-Sono uscite 152 voci:
+Sono uscite 169 voci:
 
 - novantanove voci da sette giri sulla stessa domanda.
 - due voci da una **misura**. La §8.4 nasce dalla
@@ -59,11 +59,20 @@ Sono uscite 152 voci:
   28](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) misura la
   forma della compilazione invece del prodotto, e cerca **quanto costa a chi
   lavora sapere che niente si è rotto**.
+- **diciassette** voci da tre giri sulla **GUI**, aperti da due decisioni di
+  prodotto (2026-08-17 e 2026-08-19). La [seduta
+  29](roadmap/29-chi-possiede-la-pelle.md) chiede *chi possiede* la pelle e ne
+  fa un fascio sostituibile (sei). La [seduta
+  30](roadmap/30-il-moto-e-del-tema.md) cerne il collocamento del moto, che la
+  29 aveva deciso senza deciderlo (due). La [seduta
+  31](roadmap/31-da-dove-viene-cio-che-si-vede.md) misura il **primo esemplare**
+  contro l'architettura che lo porta, e chiede da dove venga ciascuna delle cose
+  che si vedono (nove).
 
 Centocinquantadue voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **zero** [conta: voci-aperte]. Questo file è il
-loro **indice** e consuntivo.
+Le voci ancora aperte sono **diciassette** [conta: voci-aperte]. Questo file è
+il loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
 Un difetto è un problema misurato nel codice che non richiede una decisione e
@@ -182,12 +191,54 @@ Si cercano le voci ponendo domande in questo ordine:
 | **26** | [Otto gesti che l'app fa e nessuno può dichiarare](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) | otto gesti che l'app compie e che **nessun dato dichiara**: in tutti e otto la mossa che li renderebbe dichiarabili il repo l'ha già fatta accanto, su un problema confinante | 8 | 0 |
 | **27** | [Tre scommesse che nessuno ha ancora provato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md) | tre affermazioni che il freeze rende definitive e che **niente nel repo ha mai esercitato**: il confine WASM, il momento in cui un plugin può intervenire, la dimensione dell'oggetto dietro il lucchetto. Il confine l'ha attraversato la [0146](decisions/0146-il-contratto-attraversa-il-confine.md), e non serviva un motore: `abi.wit` genera i binding guest del mondo intero e compilano a `wasm32`; il momento in cui un plugin può intervenire l'ha deciso la [0147](decisions/0147-il-contratto-osserva-dopo-e-non-si-interpone.md), ed è sempre *dopo*; la dimensione dell'oggetto dietro il lucchetto l'ha decisa la [0148](decisions/0148-un-prestito-lungo-non-si-vieta-si-dice.md), che non la cambia e la fa **dire**: un prestito esclusivo lungo non si vieta perché non si interrompe, e la `Custodia` lo misura per tutti | — | — |
 | **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | **chiusa** — una voce sola, e il soggetto non era il prodotto ma **il ciclo di chi lo scrive**: la [0145](decisions/0145-gli-eseguibili-restano-a-calare-e-quanto-pesa-un-link.md) l'ha chiusa fuori dalle tre forme che proponeva, perché il costo non era il *numero* degli eseguibili ma il *peso* di ognuno | — | — |
+| **29** | [Chi possiede la pelle della shell](roadmap/29-chi-possiede-la-pelle.md) | la stessa domanda di proprietà vista da sei lati: che cosa si sostituisce, con quale contratto, attraverso quali cancelli, su quale strada di montaggio, con quale gesto dell'utente, e dove vive | 6 | 0 |
+| **30** | [Il moto è del tema](roadmap/30-il-moto-e-del-tema.md) | il collocamento della 29, cernito: scala del ritmo, montaggio con classi di coreografia, cambio di luce in dissolvenza, gesti per provenienza, grafo e moto ridotto, dove non si balla, presidi | 2 | 0 |
+| **31** | [Da dove viene ciò che si vede](roadmap/31-da-dove-viene-cio-che-si-vede.md) | la stessa domanda su nove cose che si vedono — un colore, una voce di carattere, un bottone, una distanza, una preferenza, una soglia, la superficie di scrittura, un nome di classe, una consegna — e nove volte la stessa risposta di oggi: *da una scelta fatta una volta e mai più derivabile* | 9 | 0 |
 
 ## Le voci
 
-Le voci aperte sono **zero** [conta: voci-aperte].
+Le voci aperte sono **diciassette** [conta: voci-aperte].
 
-È la [seduta
+È la [seduta 31](roadmap/31-da-dove-viene-cio-che-si-vede.md) (2026-08-19), e
+la sua domanda cade **dentro** l'architettura che le due precedenti hanno
+costruito: *da dove viene ciò che si vede?* Il tema di serie è il primo e unico
+esemplare del fascio della 29, ed è cresciuto per accrezione — un colore scelto
+una volta e poi difeso da un presidio, sessantasei regole che vestono un
+bottone, quarantatré id al posto di un vocabolario, una tavolozza di sintassi
+nata per un altro fondo e sette dei suoi dieci colori sotto la soglia in luce.
+Nove voci, e in tutte e nove la mossa è la stessa: sostituire *scelto a mano*
+con *derivato da una regola* — la ricetta al posto dell'esadecimale scritto a
+mano ([0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)),
+un'anatomia al posto di sessantasei, una tabella di soglie al posto di una
+soglia. La prima non decide nessuna delle altre otto: costruisce **l'occhio**,
+perché dei quattro presidi del tema tre leggono i CSS come testo e il quarto
+conta gli elementi montati in un DOM finto — nessuno guarda, e
+`frontend/banco/` non esiste. Nessuna scade col freeze, perché nessuna sta nel
+WIT; tutte scadono con M3, perché il vocabolario degli hook si congela lì
+(§29.2) e oggi quel vocabolario non esiste.
+
+Prima di lei, la [seduta 30](roadmap/30-il-moto-e-del-tema.md) (2026-08-17): il
+moto della GUI, che la 29 aveva collocato — il ritmo nel foglio, le animazioni
+nella pelle, il cancello nella struttura — ma non deciso. Sette decisioni: la
+scala del vocabolario si allarga solo col consumatore in piedi (il `--duration-med`
+mai consumato è la lezione), le ~14 superfici che aprono con `hidden` si
+animano con classi di coreografia di shell — non `@starting-style`, non View
+Transitions come base —, il cambio di luce diventa dissolvenza con un solo
+foglio in volo, ogni gesto deve avere una frase di stato, il grafo scopre il
+moto ridotto e l'editor resta fermo — i 60 fps su 10.000 parole sono il
+pavimento, non l'obiettivo. Due voci aperte (§30.8, §30.9).
+
+Prima di lei, la [seduta 29](roadmap/29-chi-possiede-la-pelle.md)
+(2026-08-17): la pelle
+della shell — token, chrome, animazioni — smette di essere della shell e diventa
+un **fascio sostituibile**, di cui il tema di serie è il primo esemplare. Un
+tema di terzi **sostituisce** — un solo foglio caricato, mai sovrapposto — e i
+cancelli di coerenza (ruoli completi, contrasto, moto ridotto, sanificazione)
+girano al montaggio. Nessuna delle sei scade col freeze: il contratto del tema
+non sta nel WIT, e il vocabolario degli hook si congela a fine M3, quando la
+GUI si è assestata.
+
+Prima di lei, la [seduta
 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) (2026-08-10). La misura
 su 424 gesti in [microfeatures/](microfeatures/) ha rivelato omissioni non
 dichiarate nei dati. È di contratto: dopo la
@@ -497,6 +548,23 @@ nessuno è tornato a prendere la casella.
 
 | § | Voce | Seduta | Strato | |
 | --- | --- | --- | --- | --- |
+| **§29.1** | I tre strati, e il caricatore che sostituisce | 29 | shell · P1 | |
+| **§29.2** | Il contratto del tema: ruoli obbligatori e vocabolario degli hook | 29 | contratto · P1 | |
+| **§29.3** | I cancelli al montaggio: contrasto, moto, sanificazione | 29 | shell · P1 | |
+| **§29.4** | Un tema è un bundle senza provider | 29 | kernel · P1 | |
+| **§29.5** | La scheda, l'anteprima, e la via di fuga | 29 | shell · P1 | |
+| **§29.6** | Dove vive un tema, e come entra | 29 | kernel · P2 | |
+| **§30.8** | Arricchimento progressivo View Transitions | 30 | shell · P2 | |
+| **§30.9** | La lettura del moto ridotto nel loop del grafo | 30 | kernel · P1 | |
+| **§31.1** | Il banco che vede | 31 | presidi · P1 | |
+| **§31.2** | Un colore ha una ricetta | 31 | foglio · P1 | |
+| **§31.3** | La voce del tema: i caratteri | 31 | foglio · P1 | |
+| **§31.4** | Un componente, un'anatomia — e il vocabolario degli hook | 31 | pelle · shell · P1 | |
+| **§31.5** | Quanto è lontana una superficie | 31 | pelle · P1 | |
+| **§31.6** | Cosa è del tema e cosa della persona | 31 | shell · kernel · P1 | |
+| **§31.7** | Il contrasto ha più di una soglia | 31 | foglio · struttura · P1 | |
+| **§31.8** | La stessa nota in tre modi | 31 | pelle · editor · P1 | |
+| **§31.9** | Cosa si consegna a chi scriverà un tema | 31 | presidi · docs · P1 | |
 
 ## I difetti misurati
 
@@ -664,7 +732,7 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centocinquantasette** [conta: verbali], uno per file. Diceva
+  **centosessantacinque** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo

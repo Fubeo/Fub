@@ -1,7 +1,7 @@
 # roadmap/
 
 Una **seduta** (gruppo di voci correlate da decidere insieme) per file. I file
-sono numerati da `01` a `26`. Una seduta raggruppa voci (argomenti) sulla stessa
+sono numerati da `01` a `31`. Una seduta raggruppa voci (argomenti) sulla stessa
 domanda vista da lati diversi. Conviene decidere le voci in una volta sola.
 Decisioni separate diventano decisioni sbagliate. Ogni file spiega in testa la
 ragione del raggruppamento.
