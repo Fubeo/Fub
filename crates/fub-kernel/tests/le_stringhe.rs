@@ -29,8 +29,8 @@ use fub_abi::locale::Locale;
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::{Arg, Localize, StringCatalog, Text};
 use fub_abi::traits::{
-    CommandProvider, HostApi, PluginManifest, ReadApi, ViewInstance, ViewProvider, ViewSpec,
-    ViewSurface,
+    CommandProvider, HostApi, IndexQuery, IndexResult, PluginManifest, ReadApi, ViewInstance,
+    ViewProvider, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
 use fub_abi::PluginError;
@@ -396,6 +396,26 @@ fn settings_come_out_resolved_too() {
     assert!(tutto_risolto(&mut righe));
     assert_eq!(righe[0].spec.label, "il primo");
     assert_eq!(righe[0].spec.group, "il primo");
+
+    // La porta che usa il pannello è `query_index`, non `settings_entries`.
+    // Senza questa asserzione il canale dati può restituire `Text` nudi e
+    // la shell disegna `[object Object]` — etichetta, descrizione, gruppo.
+    let IndexResult::Settings(mut dal_canale) = ws
+        .query_index(IndexQuery::Settings {
+            plugin: Some("tre".into()),
+        })
+        .expect("servite")
+    else {
+        panic!("risposta fuori tema");
+    };
+    assert!(tutto_risolto(&mut dal_canale));
+    assert_eq!(dal_canale[0].spec.label, "il primo");
+    let json = serde_json::to_value(&dal_canale).expect("serializzato");
+    assert_eq!(json[0]["spec"]["label"], "il primo");
+    assert!(
+        json[0]["spec"]["label"].is_string(),
+        "una stringa nuda, non un oggetto con una chiave dentro"
+    );
 }
 
 /// **La riga che tiene fermo il mirror TypeScript**: risolto, un albero

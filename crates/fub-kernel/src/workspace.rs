@@ -4834,6 +4834,15 @@ impl Workspace {
                     content: content.into(),
                 }))
             }
+            // Le etichette, come la resa: `CoreIndex` ha lo store e non i
+            // cataloghi. `settings_entries` risolve per proprietario; senza
+            // questa porta un `Text::Message` uscirebbe nudo, e sul filo
+            // diventerebbe `{"key": …}` dove la shell si aspetta una stringa
+            // — `[object Object]` nel pannello. Presidiato da
+            // `settings_come_out_resolved_too`.
+            IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
+                self.settings_entries(plugin.as_deref()),
+            )),
             other => {
                 let needles = occurrences::wanted(&other);
                 let result = self.indexes.query(other)?;

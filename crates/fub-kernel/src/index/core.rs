@@ -1314,6 +1314,9 @@ impl IndexProvider for CoreIndex {
             IndexQuery::VaultStatus => Ok(IndexResult::VaultStatus(self.watch.status())),
             IndexQuery::Jobs => Ok(IndexResult::Jobs(self.jobs.live())),
             IndexQuery::Organization => Ok(IndexResult::Organization(self.organization.snapshot())),
+            // Arriva solo se qualcuno chiama `indexes.query` di qua, non dal
+            // canale dati: `Workspace::query_index` intercetta Settings prima,
+            // perché qui non ci sono i cataloghi con cui risolvere le etichette.
             IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
                 self.settings
                     .read()
