@@ -79,7 +79,10 @@ impl TagCounts {
             for grafia in grafie {
                 *entry.grafie.entry(grafia.clone()).or_default() += 1;
             }
-            self.per_chiave.entry(key.clone()).or_default().insert(id.clone());
+            self.per_chiave
+                .entry(key.clone())
+                .or_default()
+                .insert(id.clone());
         }
         self.docs.insert(id.clone(), contribution);
     }
@@ -181,11 +184,8 @@ impl TagCounts {
     /// quelli che portano una sua sottochiave (`progetto` prende
     /// `progetto/casa`).
     pub(crate) fn docs_with(&self, canonical: &str, descendants: bool) -> Vec<DocId> {
-        let mut found: BTreeSet<DocId> = self
-            .per_chiave
-            .get(canonical)
-            .cloned()
-            .unwrap_or_default();
+        let mut found: BTreeSet<DocId> =
+            self.per_chiave.get(canonical).cloned().unwrap_or_default();
         if descendants {
             for (key, docs) in &self.per_chiave {
                 if is_sub_tag(key, canonical) {

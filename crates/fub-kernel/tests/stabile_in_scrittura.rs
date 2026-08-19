@@ -152,8 +152,8 @@ fn un_file_instabile_non_si_ingerisce_neanche_in_esclusiva() {
     let nota = root.join("nota.txt");
     std::fs::write(&nota, "versione completa\n").expect("semina");
     let supporto = InCorso::nuovo(nota.clone(), 4, 18);
-    let mut ws = Workspace::on(&root, registry(), supporto, MachineSettings::in_memory())
-        .expect("apertura");
+    let mut ws =
+        Workspace::on(&root, registry(), supporto, MachineSettings::in_memory()).expect("apertura");
     let cambiato = ws.sync_path(&nota).expect("sync");
     assert!(
         !cambiato,

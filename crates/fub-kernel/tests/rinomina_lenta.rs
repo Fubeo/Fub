@@ -130,18 +130,15 @@ fn eventi(rx: &Subscription) -> Vec<Notice> {
 #[test]
 fn una_rinomina_spezzata_porta_dietro_bozza_e_dati() {
     let mut b = Banco::nuovo();
-    b.ws
-        .save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
+    b.ws.save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
         .expect("bozza");
     b.ws.set_icon("a.txt", Some("📌".into())).expect("icona");
     b.attacca_dati("a.txt");
 
     std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
-    b.ws
-        .sync_path(&b.root.join("a.txt"))
+    b.ws.sync_path(&b.root.join("a.txt"))
         .expect("la partenza: il file non c'è più");
-    b.ws
-        .sync_path(&b.root.join("b.txt"))
+    b.ws.sync_path(&b.root.join("b.txt"))
         .expect("l'arrivo: è comparso un file con la stessa impronta");
 
     assert_eq!(
@@ -158,12 +155,12 @@ fn una_rinomina_spezzata_porta_dietro_bozza_e_dati() {
         Some("i dati di a.txt"),
         "e lo spazio per-documento"
     );
-    assert!(b.dati_di("a.txt").is_none(), "che si è spostato, non copiato");
+    assert!(
+        b.dati_di("a.txt").is_none(),
+        "che si è spostato, non copiato"
+    );
     assert_eq!(
-        b.ws.organization()
-            .icons
-            .get("b.txt")
-            .map(String::as_str),
+        b.ws.organization().icons.get("b.txt").map(String::as_str),
         Some("📌"),
         "e l'icona, che passa dalla stessa funzione"
     );
@@ -190,8 +187,7 @@ fn una_rinomina_spezzata_porta_dietro_bozza_e_dati() {
 #[test]
 fn una_rinomina_spezzata_in_due_finestre_porta_dietro_bozza_e_dati() {
     let mut b = Banco::nuovo();
-    b.ws
-        .save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
+    b.ws.save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
         .expect("bozza");
     b.ws.set_icon("a.txt", Some("📌".into())).expect("icona");
     b.attacca_dati("a.txt");
@@ -210,14 +206,12 @@ fn una_rinomina_spezzata_in_due_finestre_porta_dietro_bozza_e_dati() {
         piano.is_none(),
         "un path sparito non ha un piano: è il ramo che la fase 2 rifà per intero"
     );
-    b.ws
-        .sync_path_prepared(&b.root.join("a.txt"), piano)
+    b.ws.sync_path_prepared(&b.root.join("a.txt"), piano)
         .expect("la partenza: il file non c'è più");
 
     // Finestra 2: l'arrivo, con un piano vero.
     let piano = b.ws.plan_sync(&b.root.join("b.txt")).expect("un piano");
-    b.ws
-        .sync_path_prepared(&b.root.join("b.txt"), Some(piano))
+    b.ws.sync_path_prepared(&b.root.join("b.txt"), Some(piano))
         .expect("l'arrivo: è comparso un file con la stessa impronta");
 
     assert_eq!(
@@ -234,12 +228,12 @@ fn una_rinomina_spezzata_in_due_finestre_porta_dietro_bozza_e_dati() {
         Some("i dati di a.txt"),
         "e lo spazio per-documento"
     );
-    assert!(b.dati_di("a.txt").is_none(), "che si è spostato, non copiato");
+    assert!(
+        b.dati_di("a.txt").is_none(),
+        "che si è spostato, non copiato"
+    );
     assert_eq!(
-        b.ws.organization()
-            .icons
-            .get("b.txt")
-            .map(String::as_str),
+        b.ws.organization().icons.get("b.txt").map(String::as_str),
         Some("📌"),
         "e l'icona"
     );
@@ -351,8 +345,7 @@ fn una_destinazione_viva_non_si_sovrascrive() {
 #[test]
 fn un_arrivo_con_unaltra_impronta_non_accoppia() {
     let mut b = Banco::nuovo();
-    b.ws
-        .save_draft(&DocId::new("a.txt"), "bozza di a", None)
+    b.ws.save_draft(&DocId::new("a.txt"), "bozza di a", None)
         .expect("bozza");
     b.attacca_dati("a.txt");
 
@@ -447,13 +440,8 @@ fn la_rinomina_interna_migra_i_dati_prima_di_muovere_il_file() {
         data_from: data_from.clone(),
         data_to: data_to.clone(),
     });
-    let mut ws = Workspace::on(
-        &root,
-        registry(),
-        supporto,
-        MachineSettings::in_memory(),
-    )
-    .expect("apertura");
+    let mut ws =
+        Workspace::on(&root, registry(), supporto, MachineSettings::in_memory()).expect("apertura");
     ws.reindex().expect("reindex");
     std::fs::create_dir_all(&data_from).unwrap();
     std::fs::write(data_from.join("annotazione"), "i dati di a.txt").unwrap();
@@ -462,7 +450,9 @@ fn la_rinomina_interna_migra_i_dati_prima_di_muovere_il_file() {
         .expect("rinomina");
 
     assert_eq!(
-        std::fs::read_to_string(data_to.join("annotazione")).ok().as_deref(),
+        std::fs::read_to_string(data_to.join("annotazione"))
+            .ok()
+            .as_deref(),
         Some("i dati di a.txt")
     );
     assert!(!data_from.exists(), "la chiave vecchia è vuota");

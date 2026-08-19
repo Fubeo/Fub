@@ -1332,11 +1332,11 @@ impl IndexProvider for CoreIndex {
             // arrivare qui: `CoreIndex` non possiede i documenti né i renderer.
             // Questi bracci non si raggiungono mai, ma il `match` è esaustivo e
             // non accetta un `_` — vedi la 0104.
-            IndexQuery::RenderPreview { .. } | IndexQuery::RenderEmbed { .. } => Err(
-                PluginError::Internal(
+            IndexQuery::RenderPreview { .. } | IndexQuery::RenderEmbed { .. } => {
+                Err(PluginError::Internal(
                     "la resa è di `Workspace::query_index`, non dell'indice del kernel".into(),
-                ),
-            ),
+                ))
+            }
         }
     }
 }

@@ -68,14 +68,20 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Crea una nota copiando un template, con {{date}} {{title}} {{name}} sostituiti.",
             )
             .with("note.from_template.template.title", "Template")
-            .with("note.from_template.template.desc", "Il path del template nel vault.")
+            .with(
+                "note.from_template.template.desc",
+                "Il path del template nel vault.",
+            )
             .with("note.from_template.name.title", "Nome")
             .with(
                 "note.from_template.name.desc",
                 "Nome della nota nuova. Assente: quello del template.",
             )
             .with("note.daily.title", "Nota di oggi")
-            .with("note.daily.desc", "Apre o crea la nota giornaliera di oggi.")
+            .with(
+                "note.daily.desc",
+                "Apre o crea la nota giornaliera di oggi.",
+            )
             .with("note.daily.date.title", "Data")
             .with("note.daily.date.desc", "YYYY-MM-DD. Assente: oggi."),
         StringCatalog::new("en")
@@ -96,7 +102,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Creates a note by copying a template, substituting {{date}} {{title}} {{name}}.",
             )
             .with("note.from_template.template.title", "Template")
-            .with("note.from_template.template.desc", "Vault path of the template.")
+            .with(
+                "note.from_template.template.desc",
+                "Vault path of the template.",
+            )
             .with("note.from_template.name.title", "Name")
             .with(
                 "note.from_template.name.desc",
@@ -185,7 +194,10 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
                 UiNode::list_item(
                     Text::from(titolo),
                     Some(Text::from(d.as_str())),
-                    Some(ActionRef::with(USE, serde_json::json!({ TEMPLATE: d.as_str() }))),
+                    Some(ActionRef::with(
+                        USE,
+                        serde_json::json!({ TEMPLATE: d.as_str() }),
+                    )),
                 )
                 .with_key(d.0.clone())
             })
@@ -257,10 +269,7 @@ fn from_template(
         )));
     }
     let id = host.free_name(&DocId::new(con_estensione(&titolo)));
-    let summary = Text::message(
-        P_FROM,
-        vec![Arg::text(TEMPLATE, tpl.as_str())],
-    );
+    let summary = Text::message(P_FROM, vec![Arg::text(TEMPLATE, tpl.as_str())]);
     if mode.is_dry_run() {
         return Ok(piano(summary, id));
     }
@@ -297,11 +306,7 @@ fn daily(
     if mode.is_dry_run() {
         return Ok(piano(summary, id));
     }
-    let esiste = host
-        .list_documents(None)?
-        .items
-        .iter()
-        .any(|d| d == &id);
+    let esiste = host.list_documents(None)?.items.iter().any(|d| d == &id);
     if esiste {
         return Ok(CommandOutcome::notify(Text::message(
             D_DAILY_OPEN,
@@ -377,7 +382,11 @@ mod tests {
 
     #[test]
     fn espande_le_tre_variabili() {
-        let s = espandi("ciao {{title}} il {{date}} ({{name}})", "Nota", "2026-08-15");
+        let s = espandi(
+            "ciao {{title}} il {{date}} ({{name}})",
+            "Nota",
+            "2026-08-15",
+        );
         assert_eq!(s, "ciao Nota il 2026-08-15 (Nota)");
     }
 }

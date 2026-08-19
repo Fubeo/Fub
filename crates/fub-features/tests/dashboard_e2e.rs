@@ -51,7 +51,9 @@ fn testi(tree: &UiNode) -> Vec<String> {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         match &node.kind {
             UiKind::Text { content } => out.push(format!("{content}")),
-            UiKind::ListItem { title, subtitle, .. } => {
+            UiKind::ListItem {
+                title, subtitle, ..
+            } => {
                 out.push(format!("{title}"));
                 if let Some(s) = subtitle {
                     out.push(format!("{s}"));
@@ -73,19 +75,14 @@ fn conta_note_tag_e_link_rotti() {
     vault.put("a.md", "# A\n\n#rust\n[[manca]]\n");
     vault.put("b.md", "# B\n");
     let ws = vault.open();
-    let tree = ws
-        .render_view(&ViewInstance::only(DASHBOARD_VIEW))
-        .unwrap();
+    let tree = ws.render_view(&ViewInstance::only(DASHBOARD_VIEW)).unwrap();
     let testi = testi(&tree);
     let blob = testi.join(" | ");
     assert!(
         testi.iter().any(|t| t.contains("2") && t.contains("note")),
         "note: {blob}"
     );
-    assert!(
-        testi.iter().any(|t| t.contains("tag")),
-        "tag: {blob}"
-    );
+    assert!(testi.iter().any(|t| t.contains("tag")), "tag: {blob}");
     assert!(
         testi.iter().any(|t| t.contains("link rotti")),
         "rotti: {blob}"
@@ -100,9 +97,7 @@ fn conta_note_tag_e_link_rotti() {
 fn vault_vuoto_zero_rotti() {
     let vault = Vault::new();
     let ws = vault.open();
-    let tree = ws
-        .render_view(&ViewInstance::only(DASHBOARD_VIEW))
-        .unwrap();
+    let tree = ws.render_view(&ViewInstance::only(DASHBOARD_VIEW)).unwrap();
     let testi = testi(&tree);
     let blob = testi.join(" | ");
     assert!(

@@ -1202,11 +1202,7 @@ fn push_plain_or_tags(
     let mut scritti = 0;
     for tag in tags {
         if tag.span.start > cursor {
-            let testo = decodifica_segmento(
-                source,
-                &slice[cursor..tag.span.start],
-                base + cursor,
-            );
+            let testo = decodifica_segmento(source, &slice[cursor..tag.span.start], base + cursor);
             scritti += testo.len();
             out.push(Inline::Text(testo));
         }

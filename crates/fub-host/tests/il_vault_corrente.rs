@@ -209,7 +209,11 @@ fn un_preferito_piu_vecchio_non_vince_sull_ultimo_aperto() {
     host.open(&b.root).expect("si apre");
 
     let ultimo = host.ultimo_vault().expect("c'è un ultimo");
-    assert_eq!(ultimo, b.canonica().to_string(), "B è più recente di A anche se A è preferito");
+    assert_eq!(
+        ultimo,
+        b.canonica().to_string(),
+        "B è più recente di A anche se A è preferito"
+    );
 }
 
 /// Se l'ultimo vault non è più sul disco, l'avvio cade sul successivo che c'è
@@ -236,7 +240,11 @@ fn l_avvio_cade_sul_successivo_se_l_ultimo_e_sparito() {
     // Cancella B dal disco e chiedi l'avvio: deve cadere su A.
     std::fs::remove_dir_all(&b_canonica).unwrap();
     let ultimo = host.ultimo_vault().expect("A esiste ancora");
-    assert_eq!(ultimo, a.canonica().to_string(), "sparito B, l'avvio cade su A");
+    assert_eq!(
+        ultimo,
+        a.canonica().to_string(),
+        "sparito B, l'avvio cade su A"
+    );
 
     // Lascia A aperto finché il test ha finito: close lo spegne senza reclami.
     drop(host);
@@ -250,5 +258,8 @@ fn l_avvio_cade_sul_successivo_se_l_ultimo_e_sparito() {
 fn registro_vuoto_nessun_ultimo_vault() {
     let (_dir, config) = config();
     let host = installato(&config);
-    assert!(host.ultimo_vault().is_none(), "nessun vault conosciuto, nessun ultimo");
+    assert!(
+        host.ultimo_vault().is_none(),
+        "nessun vault conosciuto, nessun ultimo"
+    );
 }

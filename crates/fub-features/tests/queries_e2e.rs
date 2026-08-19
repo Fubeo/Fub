@@ -155,23 +155,16 @@ fn la_view_elenca_e_lancia() {
     )
     .expect("save");
 
-    let tree = ws
-        .render_view(&ViewInstance::only(QUERIES_VIEW))
-        .unwrap();
+    let tree = ws.render_view(&ViewInstance::only(QUERIES_VIEW)).unwrap();
     let elenco = titoli(&tree);
-    assert!(
-        elenco.iter().any(|t| t.contains("Inbox")),
-        "{elenco:?}"
-    );
+    assert!(elenco.iter().any(|t| t.contains("Inbox")), "{elenco:?}");
 
     ws.view_action(
         &ViewInstance::only(QUERIES_VIEW),
         UiAction::new("run").with_payload(serde_json::json!({ "id": "inbox" })),
     )
     .expect("run");
-    let dopo = ws
-        .render_view(&ViewInstance::only(QUERIES_VIEW))
-        .unwrap();
+    let dopo = ws.render_view(&ViewInstance::only(QUERIES_VIEW)).unwrap();
     let elenco = titoli(&dopo);
     assert!(
         elenco.iter().any(|t| t.contains("Inbox/a.md")),
@@ -204,9 +197,7 @@ fn form_salva_da_testo() {
         )
         .expect("save");
     assert!(matches!(update, ViewUpdate::Replace { .. }));
-    let tree = ws
-        .render_view(&ViewInstance::only(QUERIES_VIEW))
-        .unwrap();
+    let tree = ws.render_view(&ViewInstance::only(QUERIES_VIEW)).unwrap();
     let titoli = titoli(&tree);
     assert!(titoli.iter().any(|t| t.contains("Rust")), "{titoli:?}");
 }
@@ -268,8 +259,5 @@ fn le_collezioni_elencano_le_query_salvate() {
         .render_view(&ViewInstance::only(COLLECTIONS_VIEW))
         .unwrap();
     let elenco = titoli(&tree);
-    assert!(
-        elenco.iter().any(|t| t.contains("Inbox")),
-        "{elenco:?}"
-    );
+    assert!(elenco.iter().any(|t| t.contains("Inbox")), "{elenco:?}");
 }

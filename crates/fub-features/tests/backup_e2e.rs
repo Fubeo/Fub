@@ -75,17 +75,17 @@ fn backup_e_restore_di_una_nota_cancellata() {
     vault.put("b.md", "# B\n");
     let mut ws = vault.open();
 
-    ws.invoke_command(VAULT_BACKUP, serde_json::json!({}), InvokeMode::Apply, Actor::User)
-        .expect("backup");
+    ws.invoke_command(
+        VAULT_BACKUP,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("backup");
 
-    let tree = ws
-        .render_view(&ViewInstance::only(BACKUP_VIEW))
-        .unwrap();
+    let tree = ws.render_view(&ViewInstance::only(BACKUP_VIEW)).unwrap();
     let titoli = titoli(&tree);
-    assert!(
-        titoli.iter().any(|t| t.contains("2 note")),
-        "{titoli:?}"
-    );
+    assert!(titoli.iter().any(|t| t.contains("2 note")), "{titoli:?}");
 
     ws.delete_document(&DocId::new("Inbox/a.md"))
         .expect("cestina");
@@ -124,9 +124,7 @@ fn dry_run_non_scrive() {
         Actor::User,
     )
     .expect("dry_run");
-    let tree = ws
-        .render_view(&ViewInstance::only(BACKUP_VIEW))
-        .unwrap();
+    let tree = ws.render_view(&ViewInstance::only(BACKUP_VIEW)).unwrap();
     let titoli = titoli(&tree);
     assert!(
         titoli.is_empty(),

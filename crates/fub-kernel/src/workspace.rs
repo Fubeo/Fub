@@ -80,9 +80,9 @@ use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Actor, Event, Notice, PluginError, Severity};
 use serde::{Deserialize, Serialize};
 
+use fub_abi::render::EmbedContent;
 use fub_abi::rules::media;
 use fub_abi::rules::path as rules_path;
-use fub_abi::render::EmbedContent;
 use fub_abi::rules::path::{resolution_key, strip_ext};
 use fub_abi::rules::path_policy::{self, Naming};
 
@@ -1846,9 +1846,7 @@ impl Workspace {
                     .filter(|known| known.describes(file.size, file.mtime));
                 let entry = VaultEntry {
                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
-                    kind: media::kind_of_ext(&file.id, |ext| {
-                        self.docs.registry.has_doc_ext(ext)
-                    }),
+                    kind: media::kind_of_ext(&file.id, |ext| self.docs.registry.has_doc_ext(ext)),
                     id: file.id,
                     size: file.size,
                     mtime: file.mtime,
@@ -4821,10 +4819,14 @@ impl Workspace {
         // kernel è il risponditore — come Outline. La fast-path di prima era un
         // comando Tauri bespoke; adesso è il canale dati di tutti.
         match query {
-            IndexQuery::RenderPreview { doc } => {
-                Ok(IndexResult::RenderPreview(self.render_preview(&doc)?.into()))
-            }
-            IndexQuery::RenderEmbed { page, heading, block } => {
+            IndexQuery::RenderPreview { doc } => Ok(IndexResult::RenderPreview(
+                self.render_preview(&doc)?.into(),
+            )),
+            IndexQuery::RenderEmbed {
+                page,
+                heading,
+                block,
+            } => {
                 let (doc_id, content) =
                     self.render_embed(&page, heading.as_deref(), block.as_deref())?;
                 Ok(IndexResult::RenderEmbed(EmbedContent {

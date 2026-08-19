@@ -1879,7 +1879,11 @@ fn note_task_toggle(
     // (FEATURES 4.2, §23.4).
     let ats: Vec<usize> = match args.numbers("at") {
         Some(ns) => {
-            let mut offsets: Vec<usize> = ns.iter().copied().map(posizione).collect::<Result<_, _>>()?;
+            let mut offsets: Vec<usize> = ns
+                .iter()
+                .copied()
+                .map(posizione)
+                .collect::<Result<_, _>>()?;
             offsets.sort_unstable();
             offsets.dedup();
             offsets

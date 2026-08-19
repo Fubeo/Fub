@@ -165,19 +165,12 @@ enum Mutazione<E = BTreeMap<DocId, StoredEntry>> {
     /// Il payload sta in un `Box` perché chi porta solo un `Remove` non deve
     /// pagare il posto di [`StoredEntry`] — e serde lo attraversa, quindi
     /// la riga su disco non cambia di un byte.
-    Upsert {
-        id: DocId,
-        entry: Box<StoredEntry>,
-    },
+    Upsert { id: DocId, entry: Box<StoredEntry> },
     /// Una voce sparita: si toglie, se c'è.
-    Remove {
-        id: DocId,
-    },
+    Remove { id: DocId },
     /// La fotografia intera: azzera la tabella e la sostituisce. È il record
     /// della compattazione, e il primo record di un file che nasce.
-    Snapshot {
-        entries: E,
-    },
+    Snapshot { entries: E },
 }
 
 /// Un record del file: la versione di schema e la mutazione.
@@ -393,7 +386,10 @@ impl EntryStore {
                     storage
                         .append(path, &righe)
                         .map_err(|e| format!("non riesco a scrivere {path}: {e}"))?;
-                    if raw.as_deref().is_some_and(|r| conta_record(r) + mutazioni.len() > TETTO) {
+                    if raw
+                        .as_deref()
+                        .is_some_and(|r| conta_record(r) + mutazioni.len() > TETTO)
+                    {
                         compatta(path, storage, &tabella, &mut scritta)?;
                     }
                 }
@@ -570,9 +566,7 @@ fn compatta(
             let tabella = vecchia.and_then(decodifica).unwrap_or_else(|| fusa.clone());
             let record = Record {
                 v: SCHEMA_VERSION,
-                mutazione: Mutazione::Snapshot {
-                    entries: &tabella,
-                },
+                mutazione: Mutazione::Snapshot { entries: &tabella },
             };
             let mut json = serde_json::to_vec(&record).map_err(std::io::Error::other)?;
             // Il record si delimita da sé, come ogni riga del file: il `\n` in
@@ -998,7 +992,9 @@ mod tests {
 
         let path = data_root(root).join(FILE);
         let mut raw = storage.inner.read(&path).expect("la coda");
-        raw.extend_from_slice(b"\n{\"v\":4,\"op\":\"upsert\",\"id\":\"b.md\",\"entry\":{\"size\":2,\"mtime\":20}");
+        raw.extend_from_slice(
+            b"\n{\"v\":4,\"op\":\"upsert\",\"id\":\"b.md\",\"entry\":{\"size\":2,\"mtime\":20}",
+        );
         storage.inner.write(&path, &raw).expect("il crash a metà");
 
         let riletta = EntryStore::open(root, storage as Arc<dyn VaultStorage>);

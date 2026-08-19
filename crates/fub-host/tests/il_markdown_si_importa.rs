@@ -41,7 +41,10 @@ fn dopo_il_montaggio_un_markdown_entra_nel_vault() {
     assert_eq!(report.documents.len(), 1);
     assert_eq!(report.documents[0].doc, DocId::new("Nuova.md"));
     assert!(
-        montato.workspace.documents().contains(&DocId::new("Nuova.md")),
+        montato
+            .workspace
+            .documents()
+            .contains(&DocId::new("Nuova.md")),
         "la nota è nel vault"
     );
     let testo = montato

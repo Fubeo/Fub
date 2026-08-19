@@ -336,14 +336,12 @@ impl Sveglie {
             .iter()
             .map(|(o, spec)| (o.as_str(), spec.id.as_str()))
             .collect();
-        self.quadranti.retain(|(owner, timer), _| {
-            dichiarate_set.contains(&(owner.as_str(), timer.as_str()))
-        });
+        self.quadranti
+            .retain(|(owner, timer), _| dichiarate_set.contains(&(owner.as_str(), timer.as_str())));
         // I recuperi seguono il manifest come i quadranti: una sveglia rimossa
         // non suona per un'occorrenza calcolata prima di sparire.
-        self.recuperi.retain(|(owner, timer)| {
-            dichiarate_set.contains(&(owner.as_str(), timer.as_str()))
-        });
+        self.recuperi
+            .retain(|(owner, timer)| dichiarate_set.contains(&(owner.as_str(), timer.as_str())));
         for (owner, spec) in dichiarate {
             self.quadranti
                 .entry((owner.clone(), spec.id.clone()))

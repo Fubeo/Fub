@@ -501,8 +501,8 @@ fn sorgenti() -> BTreeMap<String, String> {
 }
 
 fn cammina(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
-    let voci = std::fs::read_dir(dir)
-        .unwrap_or_else(|e| panic!("`{}` non si legge: {e}", dir.display()));
+    let voci =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("`{}` non si legge: {e}", dir.display()));
     for voce in voci {
         let voce = voce.unwrap_or_else(|e| panic!("dentro `{}`: {e}", dir.display()));
         let nome = voce
@@ -563,10 +563,7 @@ fn il_varco_del_filesystem_ha_solo_i_chiamanti_dichiarati() {
         .iter()
         .map(|(f, a, _)| (f.to_string(), a.to_string()))
         .collect();
-    let non_dichiarati: Vec<_> = trovati
-        .iter()
-        .filter(|t| !dichiarati.contains(t))
-        .collect();
+    let non_dichiarati: Vec<_> = trovati.iter().filter(|t| !dichiarati.contains(t)).collect();
     assert!(
         non_dichiarati.is_empty(),
         "{} chiamante/i di `plugin_data_dir` non dichiarato/i:\n  {}\n\n\
