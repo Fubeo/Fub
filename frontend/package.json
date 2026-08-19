@@ -12,7 +12,9 @@
     "banco": "vite --config vite.banco.config.ts",
     "banco:verifica": "node banco/foto.mjs",
     "banco:aggiorna": "node banco/foto.mjs --aggiorna",
-    "banco:a11y": "node banco/a11y.mjs"
+    "banco:a11y": "node banco/a11y.mjs",
+    "tema:genera": "node tema/genera.mjs",
+    "tema:verifica": "node tema/genera.mjs --verifica"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

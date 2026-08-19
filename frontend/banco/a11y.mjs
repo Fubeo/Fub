@@ -55,80 +55,62 @@ import { apriIlPalco, apriUnaPagina, preparaScena, USCITA } from "./palco.mjs";
 
 /// **Il debito dichiarato**: le coppie che oggi stanno sotto la soglia.
 ///
-/// È la stessa forma del `SOTTO_AA` di `src/theme/contrast.test.ts`, e per la
-/// stessa ragione: un elenco, non un'esenzione. Un'esenzione si scrive una volta
-/// e non si guarda più; un elenco è un lucchetto che si chiude in tutte e due i
-/// versi — una coppia che scende qui sotto senza essere scritta è rossa, e una
+/// Oggi è **vuoto**, e la storia di come si è svuotato è il motivo per cui
+/// questa lista resta qui invece di essere cancellata.
+///
+/// È un elenco, non un'esenzione. Un'esenzione si scrive una volta e non si
+/// guarda più; un elenco è un lucchetto che si chiude in tutte e due i versi —
+/// una coppia che scende sotto soglia senza essere scritta qui è rossa, e una
 /// scritta qui che nessuna scena produce più è rossa pure lei, perché è la foto
-/// di un difetto riparato che nessuno ha tolto dal muro.
+/// di un difetto riparato che nessuno ha tolto dal muro. È il secondo verso che
+/// ha fatto il lavoro: le cinque voci non le ha tolte qualcuno passando di qua,
+/// le ha tolte questo banco diventando rosso quando la §31.2 le ha riparate.
 ///
-/// La chiave è la **coppia di colori**, non il selettore: i selettori qui dentro
-/// sono le classi generate di CodeMirror (`.ͼz`, `.ͼq`), che cambiano a ogni
-/// ricostruzione, mentre la coppia è il difetto vero e non cambia finché non si
-/// tocca il foglio.
+/// La chiave, quando ce n'è una, è la **coppia di colori** e non il selettore: i
+/// selettori sono le classi generate di CodeMirror (`.ͼz`, `.ͼq`), che cambiano
+/// a ogni ricostruzione, mentre la coppia è il difetto vero e non cambia finché
+/// non si tocca il foglio.
 ///
-/// **Sono tutte e cinque nel chiaro.** Non è un caso ed è metà della ragione per
-/// cui questo banco fotografa in due luci: lo scuro è il tema in cui si lavora,
-/// quindi è quello che qualcuno guarda tutti i giorni.
-const DEBITO = [
-  // Le prime due sono debito **già dichiarato**: la tavolozza di sintassi è One
-  // Light presa intera, e `contrast.test.ts` ne elenca le specie sotto AA con la
-  // sua ragione (ritoccarle una alla volta lascerebbe una tavolozza che non è più
-  // nessuna delle due). Le paga la 25.1, l'alto contrasto.
-  {
-    luce: "light",
-    davanti: "#8d8e96",
-    dietro: "#fafafa",
-    cosa: "`--syn-comment` sul fondo del documento — 3,12:1",
-    voce: "25.1",
-  },
-  {
-    luce: "light",
-    davanti: "#4078f2",
-    dietro: "#fafafa",
-    cosa: "`--syn-function` sul fondo del documento — 3,87:1",
-    voce: "25.1",
-  },
-
-  // Le altre tre le vede **solo** la misura sul reso, e sono la ragione per cui
-  // questo file esiste accanto a `contrast.test.ts` invece che dentro.
-  {
-    luce: "light",
-    davanti: "#e45649",
-    dietro: "#f0f0f0",
-    cosa:
-      "`--syn-name` sulla **riga attiva** (`--doc-active-line`) invece che sul fondo" +
-      " — 3,21:1. La tabella dei token misura ogni specie di sintassi contro" +
-      " `--doc-bg`, che è l'unico fondo che sappia esistere; la riga sotto il" +
-      " cursore ne è un altro, e lo si scopre solo guardando dove il testo è finito.",
-    voce: "31.7",
-  },
-  {
-    luce: "light",
-    davanti: "#e45649",
-    dietro: "#fafafa",
-    cosa:
-      "`--doc-heading` su `h3`, `h4`, `h5` — 3,51:1. La tabella dei token chiede a" +
-      " questa coppia 3:1 e non 4,5:1, perché «un titolo è testo grande»: vero per" +
-      " un `h1`, falso dal terzo livello in giù, dove il corpo torna quello del" +
-      " testo. È un'assunzione che si può fare solo prima di rendere, ed è" +
-      " esattamente la specie di errore che il reso corregge.",
-    voce: "31.7",
-  },
-  {
-    luce: "light",
-    davanti: "#2b69f1",
-    dietro: "#e8e8e8",
-    cosa:
-      "`--doc-link` sopra `--doc-fill` — 3,9:1. `--doc-fill` è `rgb(135 135 135 /" +
-      " 16%)`: un **velo**, non un colore, e la formula dei token si rifiuta di" +
-      " misurare ciò che ha un alpha (giustamente: senza sapere cosa c'è sotto, il" +
-      " numero sarebbe inventato). Il browser invece lo sa, perché sotto ci ha già" +
-      " dipinto: questa coppia è strutturalmente **invisibile** al presidio dei" +
-      " token, e non lo sarebbe diventata cambiandolo.",
-    voce: "31.7",
-  },
-];
+/// # Le cinque che c'erano, e cosa le ha pagate
+///
+/// Erano **tutte e cinque nel chiaro** — non un caso, ed è metà della ragione
+/// per cui questo banco fotografa in due luci: lo scuro è il tema in cui si
+/// lavora, quindi è quello che qualcuno guarda tutti i giorni.
+///
+/// Due erano debito già dichiarato altrove: `--syn-comment` e `--syn-function`
+/// sul fondo del documento, sotto AA perché la tavolozza di sintassi era One
+/// Light presa intera. Le pagava la **25.1**, l'alto contrasto — cioè le pagava
+/// un domani. Le ha pagate invece la §31.2, che ha smesso di prendere una
+/// tavolozza intera: le dieci specie dichiarano tinta e croma, la chiarezza la
+/// trova la ricetta da una mira sola per tutta la famiglia, e la mira sta sopra
+/// AA.
+///
+/// Le altre tre le vedeva **solo** la misura sul reso, ed erano la ragione per
+/// cui questo file esiste accanto a `contrast.test.ts` invece che dentro:
+///
+/// - `--syn-name` sulla **riga attiva** invece che sul fondo (3,21:1). La
+///   tabella dei token misurava ogni specie contro `--doc-bg`, che era l'unico
+///   fondo che sapesse esistere.
+/// - `--doc-heading` su `h3`, `h4`, `h5` (3,51:1). Alla coppia si chiedeva 3:1 e
+///   non 4,5:1 perché «un titolo è testo grande»: vero per un `h1`, falso dal
+///   terzo livello in giù.
+/// - `--doc-link` sopra `--doc-fill` (3,9:1). `--doc-fill` è un **velo**
+///   (`rgb(135 135 135 / 16%)`), e la formula dei token si rifiuta di misurare
+///   ciò che ha un alpha — giustamente: senza sapere cosa c'è sotto, il numero
+///   sarebbe inventato.
+///
+/// Nessuna delle tre è stata riparata guardando questo referto. Le ha riparate
+/// la ricetta, perché la §31.2 ha reso «**sopra cosa sta**» una cosa che si
+/// dichiara: `sopra: CARTA` sono tutti e tre i fondi del documento e non solo la
+/// pagina, la mira di `--doc-heading` è quella del testo e non quella dei segni,
+/// e `sopra: [...CARTA, "doc-bg+doc-fill"]` è il velo **composto** sul fondo
+/// prima di misurarlo. Il velo non è più invisibile al presidio dei token
+/// perché adesso c'è un posto in cui dire su cosa poggia.
+///
+/// Il che è anche il limite di quel presidio detto per bene: non vedeva quelle
+/// tre coppie perché nessuno gliele aveva nominate. Questo banco le ha viste
+/// senza che nessuno gliele nominasse — ed è la sola ragione per cui esiste.
+const DEBITO = [];
 
 /// Le regole di `axe` che questo presidio accende. Sono i due gradini di WCAG
 /// per il contrasto del testo: 4,5:1 sul testo normale e 3:1 su quello grande,

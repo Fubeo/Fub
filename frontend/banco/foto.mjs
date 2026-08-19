@@ -13,18 +13,50 @@
 // dei PNG nel diff — ed è un prezzo che si paga volentieri, perché quei PNG
 // sono la parte del commit che si guarda.
 //
-// # La soglia, dichiarata
+// # La soglia, misurata
 //
-// Due numeri, e nessuno dei due è zero per caso.
+// Due numeri, e adesso nessuno dei due è **stimato**. Erano 0,1 e 0,001, presi
+// il primo dal default di `pixelmatch` e il secondo da un ragionamento
+// plausibile scritto qui sotto: «un colore cambiato muove decine di migliaia di
+// pixel». La §31.2 ha cambiato *tutti* i colori del tema, e questo banco ha
+// detto **verde su venti scene su quaranta** — fra cui `catalogo-tavolozza`, che
+// è la scena che i colori li mostra uno per uno.
 //
-// - `SOGLIA_COLORE` è quanto due pixel possono differire prima di contare come
-//   diversi. È la soglia di `pixelmatch`, e 0,1 è la sua: sotto, l'antialiasing
-//   di una lettera conta come una differenza.
-// - `SOGLIA_DIVERSI` è **quanti** pixel diversi si accettano: un millesimo, cioè
-//   circa mille pixel su 1280×800. Un bordo spostato di un pixel ne muove
-//   qualche migliaio; un colore cambiato ne muove decine di migliaia; un residuo
-//   di rasterizzazione ne muove qualche decina. La soglia sta in mezzo, e sta
-//   scritta qui invece che dedotta guardando i rossi.
+// La ragione è nella forma della soglia di `pixelmatch`, che non è quella che il
+// nome suggerisce: internamente il confronto è `delta > 35215 · soglia²`, con
+// `delta` la distanza YIQ **al quadrato**. A 0,1 la tolleranza è 352 su 35215,
+// cioè una differenza di luminanza di circa 26 livelli su 255 — un decimo della
+// scala. Sotto quel muro ci sta un intero cambio di tavolozza.
+//
+// I due numeri di adesso sono misurati, e le misure sono queste (venti scene in
+// due luci, 1280×800, questa macchina):
+//
+// - **Rumore** — due corse di fila della stessa tavolozza, scena peggiore:
+//   0,008% dei pixel a soglia colore 0, e 0,003% a 0,01. Il rumore di
+//   rasterizzazione che la vecchia prosa temeva è otto pixel su un milione, non
+//   qualche migliaio: `pixelmatch` l'antialiasing lo riconosce da sé
+//   (`includeAA: false`, che è il suo default) e non ha bisogno che glielo si
+//   copra alzando la soglia del colore.
+// - **Segnale** — la tavolozza vecchia contro quella della ricetta, scena
+//   peggiore: 99,3% dei pixel a soglia 0,01 e **0,4% a 0,1**. È lo stesso
+//   cambiamento visto da due righelli, e uno dei due non lo vede.
+//
+// Quindi:
+//
+// - `SOGLIA_COLORE` è 0,01. Sta trenta volte sopra il rumore misurato e
+//   quattromila volte sotto il segnale di un cambio di tavolozza. Non serve che
+//   sia zero: due corse identiche non danno immagini identiche al bit, e
+//   pretenderlo renderebbe rosso il banco per il motivo per cui i banchi visivi
+//   si spengono.
+// - `SOGLIA_DIVERSI` resta un millesimo dei pixel — circa mille su 1280×800.
+//   Adesso ha sotto di sé un rumore di trenta pixel invece di uno ignoto, ed è
+//   la prima volta che quel millesimo vuol dire qualcosa.
+//
+// Vale la pena dire cosa ha trovato il difetto, perché non è stato questo banco:
+// è stato il debito dichiarato di `a11y.mjs`, che alla stessa tavolozza nuova è
+// diventato rosso su cinque voci riparate. Un presidio che elenca i difetti che
+// si aspetta si accorge di essere migliorato; uno che confronta immagini con una
+// soglia troppo larga, no.
 //
 // # Perché solo Linux
 //
@@ -43,7 +75,7 @@ import pixelmatch from "pixelmatch";
 import { SCENE, LUCI, indirizzo, nomeFoto } from "./scene.mjs";
 import { apriIlPalco, apriUnaPagina, preparaScena, scattoFermo, BASELINE, USCITA } from "./palco.mjs";
 
-const SOGLIA_COLORE = 0.1;
+const SOGLIA_COLORE = 0.01;
 const SOGLIA_DIVERSI = 0.001;
 
 const aggiorna = process.argv.includes("--aggiorna");

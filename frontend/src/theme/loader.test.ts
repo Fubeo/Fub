@@ -115,8 +115,8 @@ describe("mountTheme monta il foglio della luce che vale", () => {
     expect(conta("pelle"), "la pelle si monta una volta, qualunque sia la luce").toBe(1);
     expect(
       stileMontato("foglio")?.textContent ?? "",
-      "«light» monta il gemello chiaro, il cui --bg è il bianco candido",
-    ).toContain("--bg: #f7f7f9");
+      "«light» monta il gemello chiaro, che dichiara color-scheme: light",
+    ).toContain("color-scheme: light;");
     expect(document.documentElement.dataset.theme, "il segnale sulla radice segue il foglio").toBe(
       "light",
     );
@@ -134,8 +134,8 @@ describe("mountTheme monta il foglio della luce che vale", () => {
     expect(conta("foglio")).toBe(1);
     expect(
       stileMontato("foglio")?.textContent ?? "",
-      "senza scelta e con sistema chiaro, si monta il chiaro: --bg è quasi-bianco",
-    ).toContain("--bg: #f7f7f9");
+      "senza scelta e con sistema chiaro, si monta il chiaro: color-scheme: light",
+    ).toContain("color-scheme: light;");
     expect(document.documentElement.dataset.theme).toBe("light");
   });
 
@@ -154,15 +154,22 @@ describe("mountTheme monta il foglio della luce che vale", () => {
     expect(conta("foglio"), "il cambio sostituisce: ancora un foglio solo").toBe(1);
     expect(
       stileMontato("foglio")?.textContent ?? "",
-      "il secondo mountTheme ha montato lo scuro, il cui --bg è nero",
-    ).toContain("--bg: #000000");
+      "il secondo mountTheme ha montato lo scuro, che dichiara color-scheme: dark",
+    ).toContain("color-scheme: dark;");
     expect(document.documentElement.dataset.theme, "il segnale segue l'ultimo foglio").toBe("dark");
   });
 
   it("il foglio montato è uno dei due veri, non un testo di prova", () => {
-    // I test sopra leggono `--bg` per riconoscere il foglio, ma la prova più
-    // forte è che il testo montato coincide col `?raw` del foglio di serie:
-    // `mountTheme` passa al caricatore esattamente ciò che importa.
+    // I test sopra leggono `color-scheme` per riconoscere il foglio — e non un
+    // colore, perché dalla §31.2 i colori li **ricava** la ricetta: un `--bg`
+    // scritto qui dentro farebbe diventare rosso il presidio del caricatore il
+    // giorno in cui qualcuno cambia il passo della scala, cioè per una ragione
+    // che col montare un foglio non c'entra niente. `color-scheme` è la riga con
+    // cui ciascun foglio **dichiara** in che luce sta, e quella non si ricava.
+    //
+    // La prova più forte è comunque questa: il testo montato coincide col `?raw`
+    // del foglio di serie, cioè `mountTheme` passa al caricatore esattamente ciò
+    // che importa.
     localStorage.setItem("fub.appearance.theme", "dark");
     mountTheme(apriVita(), () => {});
 

@@ -67,11 +67,11 @@ Sono uscite 169 voci:
   29 aveva deciso senza deciderlo (due). La [seduta
   31](roadmap/31-da-dove-viene-cio-che-si-vede.md) misura il **primo esemplare**
   contro l'architettura che lo porta, e chiede da dove venga ciascuna delle cose
-  che si vedono (nove).
+  che si vedono (nove, due chiuse).
 
-Centocinquantatré voci sono chiuse. I loro verbali stanno in
+Centocinquantaquattro voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **sedici** [conta: voci-aperte]. Questo file è
+Le voci ancora aperte sono **quindici** [conta: voci-aperte]. Questo file è
 il loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -197,7 +197,7 @@ Si cercano le voci ponendo domande in questo ordine:
 
 ## Le voci
 
-Le voci aperte sono **sedici** [conta: voci-aperte].
+Le voci aperte sono **quindici** [conta: voci-aperte].
 
 È la [seduta 31](roadmap/31-da-dove-viene-cio-che-si-vede.md) (2026-08-19), e
 la sua domanda cade **dentro** l'architettura che le due precedenti hanno
@@ -411,7 +411,7 @@ e lascia una casella che aspetta una **condizione**, valutata dal
 una voce: una voce aperta è lavoro ancora da **decidere**. Le due somme restano
 separate perché contano cose separate.
 
-Le caselle residue oggi sono **ventisei**, e stanno in ventun posti:
+Le caselle residue oggi sono **ventisette**, e stanno in ventidue posti:
 
 - [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) — una: i workspace salvati
   con un nome. La casa è decisa, il formato aspetta di vedere assetti veri.
@@ -566,7 +566,6 @@ nessuno è tornato a prendere la casella.
 | **§29.6** | Dove vive un tema, e come entra | 29 | kernel · P2 | |
 | **§30.8** | Arricchimento progressivo View Transitions | 30 | shell · P2 | |
 | **§30.9** | La lettura del moto ridotto nel loop del grafo | 30 | kernel · P1 | |
-| **§31.2** | Un colore ha una ricetta | 31 | foglio · P1 | |
 | **§31.3** | La voce del tema: i caratteri | 31 | foglio · P1 | |
 | **§31.4** | Un componente, un'anatomia — e il vocabolario degli hook | 31 | pelle · shell · P1 | |
 | **§31.5** | Quanto è lontana una superficie | 31 | pelle · P1 | |
@@ -737,11 +736,17 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 
 ## Gli allegati
 
+- [§31.2](roadmap/31-da-dove-viene-cio-che-si-vede.md#312-un-colore-ha-una-ricetta)
+  — una: i due gradini nuovi della scala delle superfici, `--bg-panel` e
+  `--bg-active`, sono dichiarati dalla ricetta e nessuna regola della pelle li
+  consuma ancora. Non è un difetto della ricetta: è che il pannello e l'attivo
+  esistono adesso, e chi li deve usare è il vocabolario dei componenti della
+  §31.4. Finché nessuno li legge, sono due colori giusti che non si vedono.
 - [Le voci a leva più alta](roadmap/leva.md)
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centosessantasei** [conta: verbali], uno per file. Diceva
+  **centosessantasette** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo
