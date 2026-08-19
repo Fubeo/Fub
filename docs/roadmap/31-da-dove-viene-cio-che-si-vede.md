@@ -139,7 +139,9 @@ non potrà mai farlo — quindi non lo fa nemmeno la serie.
 
 ### 31.1 Il banco che vede
 
-*presidi · **P1***
+*presidi · **P1** — **chiusa** dalla
+[0166](../decisions/0166-il-banco-che-vede.md); resta una casella: il confronto a
+pixel entra in CI quando i caratteri saranno in bundle (§31.3)*
 
 Non si migliora ciò che non si guarda, e i quattro presidi del tema — il
 contrasto, la struttura, il moto, il caricatore — non guardano: i primi tre
@@ -154,25 +156,25 @@ Il banco è un **secondo ingresso** della shell, non una seconda shell: monta
 solo, e fotografa. Nessuna riga di produzione cambia — è la stessa mossa con cui
 `shell.e2e.test.ts` prova il cablaggio, portata dove serve un motore vero.
 
-- [ ] **Le scene sono un elenco chiuso**, non uno screenshot che qualcuno
+- [x] **Le scene sono un elenco chiuso**, non uno screenshot che qualcuno
       ricorda di fare: ogni scena dichiara come si prepara (vault, azioni, fuoco
       da tastiera, hover) e un presidio verifica che ognuna abbia la sua
       baseline in **entrambe** le luci. Un elenco che si svuota in silenzio è
       indistinguibile da un elenco verde
       ([0109](../decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)).
-- [ ] **Tre scene non sono schermate ma cataloghi**: ogni componente in ogni
+- [x] **Tre scene non sono schermate ma cataloghi**: ogni componente in ogni
       stato, ogni token col suo nome e il suo contrasto, la scala tipografica
       per intero. Sono la superficie di revisione delle tappe successive, e
       diventeranno la pagina di prova di un tema di terzi.
-- [ ] **La stabilità è una decisione, non un'impostazione**: caratteri attesi,
+- [x] **La stabilità è una decisione, non un'impostazione**: caratteri attesi,
       ora congelata, moto ridotto acceso, corpus fisso, soglia del diff
       dichiarata, baseline solo Linux. Un banco visivo che sfarfalla si spegne
       da solo entro tre settimane.
-- [ ] **Il contrasto *reso* accanto a quello dei token**: `axe-core` sulla
+- [x] **Il contrasto *reso* accanto a quello dei token**: `axe-core` sulla
       pagina vera vede ciò che la tabella delle coppie non può vedere — un
       inchiostro sopra un velo, un testo dentro un fondo che una regola ha
       cambiato.
-- [ ] **Il cancello umano è il foglio di contatto**: le due luci affiancate,
+- [x] **Il cancello umano è il foglio di contatto**: le due luci affiancate,
       generate a ogni corsa. Ogni tappa di questa seduta si chiude guardandolo,
       e questo è scritto qui perché non diventi un'abitudine di una persona
       sola.
@@ -182,6 +184,22 @@ solo, e fotografa. Nessuna riga di produzione cambia — è la stessa mossa con 
 | (a) revisione a occhio, aprendo l'app | zero infrastruttura | non lascia un «prima», quindi non prova nessun miglioramento e non vede nessuna regressione |
 | (b) presidi di layout in `happy-dom` | niente motore da installare | non c'è CSS e non ci sono misure: il presidio passerebbe **a vuoto**, che è peggio di non averlo |
 | (c) foto senza baseline in repo | niente PNG versionati | un diff che non ha un termine di paragone non è un diff: è una foto |
+
+**Cosa ha visto, prima ancora di scattare.** Le scene del banco sono
+**venti** [conta: scene-del-banco], e in due luci fanno quaranta baseline; tre
+di quelle scene non stavano ferme. Due delle tre erano difetti veri: la `<progress>` era
+rimasta un widget del **sistema operativo** — non segue `--accent`, si dipinge
+diverso su ogni macchina, e da indeterminata si anima anche con
+`prefers-reduced-motion` perché l'animazione non è CSS ma il motore nativo — e il
+grafo ha un secondo inquadra che riparte proprio alla prima quiete. Poi
+`axe-core` sulla pagina vera ha trovato cinque coppie sotto la soglia, **tutte e
+cinque in luce chiara**, e tre di quelle cinque la tabella dei token non poteva
+vederle: un colore di sintassi sulla riga attiva invece che sul fondo, un titolo
+dal terzo livello in giù a cui la tabella chiede la soglia del testo grande, e un
+link sopra un **velo** con alpha, che la formula dei token si rifiuta di misurare
+— giustamente, perché non sa cosa c'è sotto. Sono nel debito dichiarato di
+`banco/a11y.mjs`, due a carico della 25.1 e tre della §31.7.
+
 
 ### 31.2 Un colore ha una ricetta
 

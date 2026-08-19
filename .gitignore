@@ -39,3 +39,10 @@ dist/
 
 # vault di prova locale (note usa-e-getta + indici tantivy)
 /VaultProva
+
+# Ciò che una corsa del banco visivo produce: le foto di adesso, le differenze e
+# il foglio di contatto. Il termine di paragone — `frontend/banco/baseline/` —
+# è versionato apposta e NON sta qui: un diff che non ha un termine di paragone
+# non è un diff, è una foto.
+frontend/banco/.uscita/
+frontend/dist-banco/

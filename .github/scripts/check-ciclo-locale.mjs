@@ -20,7 +20,8 @@
 // esito è un verdetto sul repo — test, build, check, lint, script del repo.
 // Non è un verdetto, e non entra, ciò la cui funzione è dichiarata dal suo
 // stesso testo: installare l'ambiente (vocabolario chiuso: `apt-get`, `npm
-// ci`/`npm install`, `cargo install`, `rustup`), produrre un file invece di
+// ci`/`npm install`, `cargo install`, `rustup`, `playwright install`), produrre
+// un file invece di
 // giudicare il repo (la ridirezione `>` nel comando — l'SBOM è un artefatto,
 // non un verdetto), o appartenere a un'azione di terzi (`uses:` non è un
 // comando scritto in questo repo) — con un'unica eccezione scritta:
@@ -257,6 +258,10 @@ export function classe(tok) {
   if (tok[0] === "rustup") return "provisioning";
   if (tok[0] === "npm" && (tok[1] === "ci" || tok[1] === "install" || tok[1] === "i")) return "provisioning";
   if (tok[0] === "cargo" && tok[1] === "install") return "provisioning";
+  // `playwright install` scarica il browser del banco visivo (§31.1). Sta qui e
+  // non fra le eccezioni perché è un'installazione, non una verifica: la sua
+  // funzione la dichiara il suo stesso testo, come per le altre quattro voci.
+  if (tok[0] === "playwright" && tok[1] === "install") return "provisioning";
   if (tok.includes(">")) return "artefatto";
   return "verdetto";
 }
@@ -441,6 +446,7 @@ function autoprova() {
 
   // Le classi e le direzioni.
   caso("apt-get e npm ci non entrano nel confronto", () => (classe(normalizza("sudo apt-get update", {})) === "provisioning" && classe(normalizza("npm ci", {})) === "provisioning" ? 0 : 1), 0);
+  caso("npx playwright install è un'installazione, non un verdetto", () => (classe(normalizza("npx playwright install --with-deps chromium", {})) === "provisioning" ? 0 : 1), 0);
   caso("un comando con > è una produzione, non un verdetto", () => (classe(normalizza("cargo sbom --x > fub-sbom.spdx.json", {})) === "artefatto" ? 0 : 1), 0);
   caso(
     "un comando della CI senza posto nel ciclo è rosso",

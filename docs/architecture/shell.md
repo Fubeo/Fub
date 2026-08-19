@@ -63,6 +63,15 @@ I vantaggi della struttura ad albero includono:
 - **`theme/`**: Token visivi (`tokens.css`).
 - **`__fixtures__/`**: Fixture generate da serde (il serializzatore automatico Rust).
 
+Accanto a `src/` sta `frontend/banco/`, che non è codice della shell ma la
+guarda: è il **banco visivo** del §31.1
+([0166](../decisions/0166-il-banco-che-vede.md)). Monta `index.html` e `main.ts`
+veri e sostituisce due moduli soli — quelli della regola 1 qui sotto — poi
+fotografa venti scene in due luci e le confronta con le baseline versionate.
+Il confronto a pixel è un cancello locale; il contrasto reso (`axe-core`) e il
+presidio delle scene girano in CI. Come si lanciano sta in
+[CONTRIBUTING.md](../CONTRIBUTING.md#il-banco-visivo-e-la-metà-che-resta-fuori-da-qui).
+
 Il file `enums.generated.ts` in `host/` è autogenerato. Deriva dagli `enum` senza payload del contratto (`crates/fub-abi/tests/ts_enums.rs`, [decisione 0053](../decisions/0053-il-contratto-ha-una-sorgente.md)). Il file `contract.ts` lo esporta includendo la documentazione testuale. Il confine di generazione automatica copre solo i casi di un `enum` nudo. Deriviamo a mano la forma di un record o di un variant con payload. La fixture presidia questi tipi manuali. La serializzazione delle stringhe applica le regole di serde al posto di quelle del WIT (WebAssembly Interface Type). Sull'IPC (Inter-Process Communication) un evento appare piatto come `{"type": "trouble", …}`. Il WIT lo struttura usando un `variant` accompagnato da un record di payload separato. Le due metodologie rimangono distinte.
 
 Un file fa eccezione rispetto alla cartella ospitante: `ui/intents.ts` importa i moduli da `panels/document` e `panels/search`. Il resto di `ui/` rimane agnostico ai domini. Questa importazione supporta due sorgenti distinte: un `ViewUpdate` di una view o un `CommandEffect` di un comando. Essi convergono in intenti centralizzati della shell. L'architettura evita cicli poiché i moduli di `panels/` omettono di importare `intents.ts`. Il file funge da pozzo finale al posto di chiudere un anello di dipendenze.
@@ -79,6 +88,13 @@ Due cartelle mancano volutamente dal codice sorgente:
 I moduli evitano di importare `@tauri-apps` esternamente a `host/ipc.ts` e `host/dialog.ts`. Questo principio vieta esplicitamente l'importazione di un tipo tramite `import type`.
 
 Il file `host/no-tauri-outside-host.test.ts` implementa un test di verifica. Legge i sorgenti tramite `import.meta.glob`. Segnala nominalmente il file colpevole in caso di violazione. Questo incapsulamento abilita la conformità PWA (26.3), il supporto mobile (26.2) e l'esecuzione degli e2e (end-to-end) della shell contro un host simulato. Storicamente, una riga in `main.ts` comprometteva questa architettura. I test e2e attuali ([0112](../decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md)) montano la shell intera contro `host/finto.ts`. Il compilatore interpreta quel file come un modulo intero (`typeof import("./ipc")`) ed evita la sua lettura come un pezzo parziale di modulo.
+
+Questa cucitura ha ora due clienti e non uno. Il secondo è il banco visivo, che
+sostituisce esattamente `host/ipc.ts` e `host/dialog.ts` con un plugin di Vite
+(`resolveId`, non `resolve.alias`: un alias è una regola sul testo di un import,
+e quei due moduli arrivano da path relativi a profondità diverse). Il valore
+della regola si misura qui: la superficie da sostituire per fotografare l'app
+vera è di due file, e nessuna riga di produzione cambia.
 
 Il file `host/ipc.ts` dichiara il ritorno del canale eventi come `() => void`. Elimina la referenza a `UnlistenFn`. Il `tsconfig.json` sopprime volontariamente i tipi di Node. La shell gira all'interno di una webview. La privazione di `process` e `fs` assicura la compatibilità del codice nell'app impacchettata.
 
