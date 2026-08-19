@@ -1,0 +1,28 @@
+/* --- il moto della scocca -------------------------------------------------
+   Si anima ciò che appare — una modale, un menu, un toast — non ciò che
+   sta. Solo l'ingresso: `[hidden]` in struttura spegne il display, e una
+   chiusura animata sarebbe una gara col `!important`. Transform e opacity,
+   mai geometria. `prefers-reduced-motion` lo fa la struttura, non si
+   duplica. Tre keyframe, tre durate, tre curve: tutto speso. */
+
+@keyframes fub-enter-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fub-enter-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fub-enter-rise-sm {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */
+.cm-editor,
+.cm-editor *,
+.pane-editor,
+.pane-editor * {
+  animation: none !important;
+  transition: none !important;
+}

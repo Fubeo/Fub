@@ -1,5 +1,10 @@
 /* La pelle del tema di serie: il chrome (§29.1).
  *
+ * GENERATO da `theme/serie/pelle/` — non si modifica qui: si tocca il pezzo e
+ * si rigenera con `npm run tema:genera`. Una regola scritta a mano in questo
+ * file sparisce alla prima rigenerazione, e fino ad allora dice il falso sul
+ * pezzo che avrebbe dovuto contenerla.
+ *
  * Qui è tutto ciò che del foglio visivo **si vede ma non è geometria né
  * garanzia**: i fondi, i bordi, i riempimenti, il moto dei componenti. La
  * geometria — dove sta cosa, quanto è larga la rail, come si dividono i
@@ -15,6 +20,9 @@
  * stessi ruoli; non può muovere la scocca, che non legge da qui, né revocare
  * le garanzie, che non stanno qui.
  */
+
+/* ── pelle/fondamenta.css ───────────────────────────────────────────────── */
+
 /* La pagina e il suo fondo. Margini e altezza sono della struttura
    (`theme/struttura.css`); qui è la luce. */
 html, body, .app {
@@ -114,6 +122,14 @@ button.primary:active,
   color: var(--danger);
 }
 
+/* ── pelle/pannelli.css ─────────────────────────────────────────────────── */
+
+/* **Le superfici che contengono**: la sidebar, l'inspector, il pannello in
+   basso, e il titolo che li intesta tutti e tre.
+   -------------------------------------------------------------------------
+   Sono tre posti diversi con la stessa forma — un fondo di pannello, un
+   filetto che li stacca dalla carta, un titolo in cima — e la forma sta qui
+   una volta sola perché è ciò che li fa leggere come la stessa app. */
 .views-bottom {
   padding: var(--space-2) var(--space-5);
   border-top: 1px solid var(--border);
@@ -167,6 +183,8 @@ button.primary:active,
 .link-button.danger:hover {
   color: var(--danger);
 }
+
+/* ── pelle/albero.css ───────────────────────────────────────────────────── */
 
 /* Una lista che non è un elenco puntato. Erano cinque regole identiche sotto
    cinque nomi diversi — la lista dei file, le appuntate, i risultati, gli
@@ -247,6 +265,8 @@ button.primary:active,
   outline: 1px solid var(--accent-soft);
   border-radius: var(--radius-sm);
 }
+
+/* ── pelle/spazi.css ────────────────────────────────────────────────────── */
 
 /* La striscia degli spazi (stile make.md): home, uno chip per spazio, "+". */
 .space-strip {
@@ -341,6 +361,8 @@ button.primary:active,
   color: var(--accent-soft);
 }
 
+/* ── pelle/campi.css ────────────────────────────────────────────────────── */
+
 /* **Il campo, come nasce.** Quattro `:not()` in fila valgono quattro classi di
    specificità (0,4,1): questa regola, che è il *default* di un campo, batteva
    qualunque cosa la nominasse per classe — `.search-input`, `.modale input` — e
@@ -404,6 +426,13 @@ progress::-moz-progress-bar {
   background: var(--accent);
 }
 
+/* ── pelle/ricerca.css ──────────────────────────────────────────────────── */
+
+/* **La ricerca nella sidebar**: il campo e i suoi esiti.
+   -------------------------------------------------------------------------
+   Una riga per nota, con sotto le occorrenze successive rientrate — la nota è
+   il risultato, le occorrenze sono dove sta dentro — e in fondo l'unica riga
+   che non è un esito ma un'offerta: creare la nota che si è cercata. */
 .search-input {
   width: 100%;
   box-sizing: border-box;
@@ -463,6 +492,8 @@ progress::-moz-progress-bar {
   border-radius: var(--radius-xs);
   padding: 0 var(--space-1);
 }
+
+/* ── pelle/segmented.css ────────────────────────────────────────────────── */
 
 /* Le tre modalità del pannello (FEATURES 4.1). In lettura l'editor non c'è —
    la griglia lascia tutto lo spazio all'anteprima — e la modalità viaggia nel
@@ -534,6 +565,8 @@ progress::-moz-progress-bar {
   color: var(--text);
   box-shadow: inset 0 -2px 0 var(--accent);
 }
+
+/* ── pelle/riquadri.css ─────────────────────────────────────────────────── */
 
 /* L'area principale, che dal §1.2 è **l'albero dei riquadri** e non un editor.
    La disposizione la disegna `panels/document.ts` da `state/layout.ts`: qui
@@ -631,6 +664,8 @@ progress::-moz-progress-bar {
   background: var(--doc-bg);
   color: var(--doc-fg);
 }
+
+/* ── pelle/anteprima.css ────────────────────────────────────────────────── */
 
 /* Anteprima markdown */
 .markdown-preview h1,
@@ -833,6 +868,8 @@ progress::-moz-progress-bar {
   padding: var(--space-2) var(--space-4);
 }
 
+/* ── pelle/menu-contestuale.css ─────────────────────────────────────────── */
+
 /* Menu contestuale della lista file */
 .context-menu {
   position: fixed;
@@ -874,8 +911,14 @@ progress::-moz-progress-bar {
   font: inherit;
 }
 
-/* --- la view in un riquadro, e il grafo che è la prima ------------------- */
+/* ── pelle/grafo.css ────────────────────────────────────────────────────── */
 
+/* **Il grafo**, che è la prima view a stare dentro un riquadro.
+   -------------------------------------------------------------------------
+   Non è una superficie della scocca: sta dove starebbe un documento, e si
+   chiude dalla sua tab come un documento. Del disegno vero — nodi, archi,
+   moto — qui non c'è niente: lo fa il pittore su canvas con stile inline.
+   Resta ciò che il pittore non conosce, cioè il chrome che gli sta sopra. */
 
 /* Il grafo dentro il riquadro: niente cornice, niente barra — è un riquadro
    a essere il posto, lo si chiude dalla sua tab. I canvas li crea il pittore
@@ -1026,6 +1069,8 @@ progress::-moz-progress-bar {
 .tab-view .tab-name {
   font-style: italic;
 }
+
+/* ── pelle/modali.css ───────────────────────────────────────────────────── */
 
 /* --- le modali ------------------------------------------------------------ */
 /*
@@ -1248,6 +1293,8 @@ progress::-moz-progress-bar {
   font-size: var(--text-base);
 }
 
+/* ── pelle/avvisi.css ───────────────────────────────────────────────────── */
+
 /* --------------------------------------------------------------------------
    La barra di stato della shell, il centro attività, il centro notifiche (§10.3)
    --------------------------------------------------------------------------
@@ -1413,6 +1460,8 @@ progress::-moz-progress-bar {
   height: 6px;
 }
 
+/* ── pelle/view-dichiarate.css ──────────────────────────────────────────── */
+
 /* --------------------------------------------------------------------------
    Le superfici del §2.2, e i nodi del §2.1
    --------------------------------------------------------------------------
@@ -1490,7 +1539,16 @@ progress::-moz-progress-bar {
   cursor: pointer;
 }
 
-/* --- i nodi ------------------------------------------------------------- */
+/* ── pelle/nodi.css ─────────────────────────────────────────────────────── */
+
+/* **I nodi del §2.1**: il vocabolario con cui un provider disegna senza
+   conoscere il tema.
+   -------------------------------------------------------------------------
+   Un nodo dichiara *cosa* è — una sezione, una tabella, un campo, un badge —
+   e mai di che colore: gli intenti (`intent-primary`, `intent-danger`) sono
+   nomi, e il colore che portano è di chi scrive la pelle. È la ragione per cui
+   stanno qui e non in `views/`: un tema di terzi li rifà tutti, e nessun
+   provider se ne accorge. */
 
 .ui-section {
   margin: var(--space-2) 0;
@@ -1711,6 +1769,8 @@ progress::-moz-progress-bar {
   margin-bottom: var(--space-2);
 }
 
+/* ── pelle/impostazioni.css ─────────────────────────────────────────────── */
+
 /* --- il pannello delle impostazioni (§11.1) -------------------------------
  *
  * Una **modale della shell**, non una superficie in più del layout: le
@@ -1830,16 +1890,16 @@ progress::-moz-progress-bar {
   margin-top: var(--space-4);
 }
 
-/* --- tema: il terzo segmented control ------------------------------------
-   Tre opzioni (sistema/chiaro/scuro) in un `radiogroup`. Era la terza copia
-   della cornice e la quarta dell'indicatore, e per giunta elencava quattro
-   selettori per l'acceso — `.active`, `[aria-checked]`, `[aria-pressed]`, un
-   modificatore BEM — perché scrivendola nessuno sapeva quale dei quattro il
-   markup mettesse davvero. Ne bastava uno, ed è quello che si annuncia. */
-/* --- chrome pronto, senza muovere il layout ------------------------------
-   `#topbar` e `#views-ribbon` restano dove sono: li sposta la struttura
-   (`theme/struttura.css`). Qui ci sono le classi e gli id che, se il markup
-   arriva, si vestono da soli. */
+/* ── pelle/chrome.css ───────────────────────────────────────────────────── */
+
+/* **La scocca della finestra**: titlebar, controlli finestra, rail, menubar,
+   i tab dell'inspector.
+   -------------------------------------------------------------------------
+   È ciò che si vede prima di tutto il resto e che non appartiene a nessun
+   documento. Dove sta e quanto è larga lo decide la struttura
+   (`theme/struttura.css`); qui c'è solo di che superficie è fatta — e le
+   regole valgono anche per il markup che ancora non c'è, così quando arriva
+   si veste da solo invece di arrivare nudo. */
 
 /* Titlebar: il fondo è chrome e il filetto che la stacca. Altezza (38px), drag
    e no-drag sono della struttura. Erano due regole — questa e una `#topbar`
@@ -2069,6 +2129,8 @@ progress::-moz-progress-bar {
   justify-content: center;
 }
 
+/* ── pelle/moto.css ─────────────────────────────────────────────────────── */
+
 /* --- il moto della scocca -------------------------------------------------
    Si anima ciò che appare — una modale, un menu, un toast — non ciò che
    sta. Solo l'ingresso: `[hidden]` in struttura spegne il display, e una
@@ -2097,5 +2159,3 @@ progress::-moz-progress-bar {
   animation: none !important;
   transition: none !important;
 }
-
-

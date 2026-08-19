@@ -1,0 +1,62 @@
+/* **Il campo, come nasce.** Quattro `:not()` in fila valgono quattro classi di
+   specificità (0,4,1): questa regola, che è il *default* di un campo, batteva
+   qualunque cosa la nominasse per classe — `.search-input`, `.modale input` — e
+   vinceva senza che nessuno l'avesse deciso. Finché la ricerca della sidebar si
+   vestiva per id la cosa non si vedeva, perché un id (1,0,0) batte anche
+   quello: togliere l'id l'ha fatta uscire, ed era lì da prima.
+
+   `:where()` porta a zero il peso di ciò che contiene, e dice quello che questa
+   regola è davvero: un punto di partenza, che chiunque nomini un campo per
+   nome scavalca. Le esclusioni restano le stesse — casella, radio, cursore e
+   file hanno una forma loro e non la si riscrive qui. */
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+textarea,
+select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
+/* La `<progress>` resta un widget del **sistema operativo** finché qualcuno non
+   dice il contrario, e un widget del sistema operativo dentro un'app tematizzata
+   è tre difetti in uno: non segue `--accent`, si dipinge diverso su ogni
+   macchina, e da indeterminata si anima anche con `prefers-reduced-motion:
+   reduce` — perché quell'animazione non è CSS, è il motore nativo, e una
+   preferenza CSS non lo raggiunge.
+
+   Il terzo è quello che l'ha fatta trovare: il banco visivo del §31.1 non
+   riusciva a fotografare il centro attività, dove un lavoro senza conteggio
+   mostra la barra indeterminata. Non era il banco che tremava. Gli altri due
+   c'erano da prima e non li vedeva nessuno, perché sulla macchina di chi
+   guardava il widget nativo era grigio e piccolo come il resto.
+
+   `appearance: none` fa due cose insieme: porta la barra dentro il tema e
+   spegne l'animazione, perché da indeterminata Chromium le dà valore zero
+   invece di far scorrere quella nativa. Le pseudo-classi sono due strade
+   diverse per lo stesso disegno — `::-webkit-*` su Chromium e WebKit,
+   `::-moz-progress-bar` su Firefox — e vanno scritte separate: un selettore
+   che ne unisse due farebbe cadere l'intera regola sul motore che non conosce
+   l'altra. */
+progress {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+progress::-webkit-progress-bar {
+  background: var(--bg-input);
+}
+progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}

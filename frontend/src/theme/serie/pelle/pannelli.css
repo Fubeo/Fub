@@ -1,0 +1,59 @@
+/* **Le superfici che contengono**: la sidebar, l'inspector, il pannello in
+   basso, e il titolo che li intesta tutti e tre.
+   -------------------------------------------------------------------------
+   Sono tre posti diversi con la stessa forma — un fondo di pannello, un
+   filetto che li stacca dalla carta, un titolo in cima — e la forma sta qui
+   una volta sola perché è ciò che li fa leggere come la stessa app. */
+.views-bottom {
+  padding: var(--space-2) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+.views-bottom .panel-title {
+  margin: 0 var(--space-4) 0 0;
+}
+
+.sidebar,
+.inspector-pane {
+  border-right: 1px solid var(--border);
+  padding: var(--space-5);
+}
+.inspector-pane {
+  border-right: none;
+  gap: var(--space-3);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  text-transform: none;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  margin: var(--space-3) var(--space-1);
+}
+/* Il primo figlio è il titolo: spinge le azioni a destra. */
+.panel-title > span:first-child {
+  margin-right: auto;
+}
+
+/* Azione testuale dentro un titolo di pannello: pesa quanto una parola.
+   Il default è già ghost: qui si toglie il padding e si tiene il muted, così
+   non prende il wash dei bottoni. */
+.link-button {
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  font-size: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.link-button:hover {
+  background: transparent;
+  color: var(--accent-soft);
+  text-decoration: underline;
+}
+.link-button.danger:hover {
+  color: var(--danger);
+}

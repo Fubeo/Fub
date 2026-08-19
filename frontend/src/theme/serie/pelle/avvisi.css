@@ -1,0 +1,164 @@
+/* --------------------------------------------------------------------------
+   La barra di stato della shell, il centro attività, il centro notifiche (§10.3)
+   --------------------------------------------------------------------------
+   Tre pezzi di una cosa sola: il posto in cui l'utente guarda quando vuole
+   sapere cosa sta succedendo, senza essere interrotto. Il toast interrompe (ed
+   è il solo che lo fa); i due pannelli si aprono da un pulsante e si chiudono. */
+
+/* Il messaggio che non chiede niente: l'esito di un comando, un lavoro finito,
+   un errore che non blocca. Testo semplice, e via da solo — ciò che ha detto
+   resta negli avvisi. */
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: 40px;
+  z-index: var(--z-toast);
+  max-width: 420px;
+  padding: var(--space-4) var(--space-6);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-base);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+
+/* Il tono è un bordo, non un fondo: un guasto deve saltare all'occhio senza
+   diventare illeggibile, e il colore lo decide il tema (un provider sceglie
+   intenti semantici, mai colori). */
+.toast[data-tono="guasto"] {
+  border-color: var(--doc-danger);
+}
+
+.statusbar {
+  gap: var(--space-4);
+  padding: var(--space-1) var(--space-5);
+  border-top: 1px solid var(--border);
+  background: var(--bg-chrome);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* Lo stato del salvataggio (§20.4). Sta col colore della barra finché non c'è
+   niente da dire: «Salvato» è la parola che si legge il 99% del tempo, e
+   accendere quella vorrebbe dire spegnere l'unica che deve farsi notare. */
+.save-state[data-stato="non_salvato"],
+.save-state[data-stato="in_corso"] {
+  color: var(--text);
+}
+
+/* L'attesa del secondo tasto di una sequenza (§18.2). Accesa, al contrario di
+   `.save-state`: qui non c'è nessuno stato che si legge il 99% del tempo — o
+   l'app sta aspettando, e allora è l'unica cosa che conta in quella barra, o la
+   riga non c'è proprio. */
+.key-pending {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
+.save-state[data-stato="fallito"] {
+  color: var(--doc-danger);
+  font-weight: var(--weight-medium);
+}
+
+.statusbar button {
+  background: transparent;
+  border: none;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.statusbar button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+.statusbar button.ha-novita,
+.statusbar button.in-corso {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
+/* I due pannelli stanno **affiancati** e non sovrapposti: sono due toggle
+   indipendenti, e chi ne apre uno mentre l'altro è aperto non deve trovarsi un
+   rettangolo sopra l'altro. Il toast tiene l'angolo (`right: 16px`) e per
+   questo non compare mentre gli avvisi sono aperti — sotto ci sarebbe la loro
+   lista. */
+.dock-panel {
+  position: fixed;
+  bottom: 30px;
+  z-index: var(--z-popover);
+  width: 340px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-base);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+
+.dock-panel--notify {
+  right: 10px;
+}
+
+.dock-panel--activity {
+  right: 360px;
+}
+
+.notify-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.notify-list li:first-child {
+  border-top: none;
+}
+
+.notify-testo {
+  flex: 1;
+}
+
+.notify-list li[data-tono="guasto"] .notify-testo {
+  color: var(--doc-danger);
+}
+
+.notify-ora {
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+/* Una riga di lavoro: cosa sta facendo, a che punto è, e come si ferma. La
+   barra senza valore è l'attesa che non sa quanto dura (`total: null`), e la
+   disegna il browser da sé. */
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.activity-row:first-child {
+  border-top: none;
+}
+
+.activity-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-row progress {
+  width: 90px;
+  height: 6px;
+}

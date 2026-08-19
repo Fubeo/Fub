@@ -1,0 +1,76 @@
+/* --------------------------------------------------------------------------
+   Le superfici del §2.2, e i nodi del §2.1
+   --------------------------------------------------------------------------
+   Ciò che una view dichiara è dove si attacca e cosa disegna; il tema resta
+   interamente qui — un provider sceglie intenti semantici, mai colori. */
+
+/* La barra di stato: ciò che informa senza interrompere. Una striscia, non un
+   pannello: titolo e contenuto sulla stessa riga. */
+.views-status {
+  gap: var(--space-7);
+  padding: var(--space-2) var(--space-6);
+  border-top: 1px solid var(--border);
+  background: var(--bg-chrome);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.views-status .declared-view-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.views-status .panel-title {
+  margin: 0;
+  font-size: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.views-status .declared-view .ui-stack {
+  gap: var(--space-6);
+}
+
+/* La ribbon: i pulsanti che aprono qualcosa. La colonna e la larghezza le
+   dà la struttura (`.rail`, che `#views-ribbon` porta nel markup); qui è
+   la superficie. */
+.views-ribbon {
+  padding: var(--space-2) 0;
+  gap: var(--space-1);
+  border-bottom: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg-chrome);
+}
+
+/* La modale: la view che chiede qualcosa e se ne va. */
+.views-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scrim);
+  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
+}
+.views-modal .declared-view-panel {
+  min-width: 380px;
+  max-width: 70vw;
+  max-height: 70vh;
+  overflow: auto;
+  padding: var(--space-6) var(--space-7);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+
+/* Una view dichiarata si può richiudere dal suo titolo, se dichiara di
+   lasciarsi chiudere (§2.6). Chiuso è `hidden` sul contenuto — che la
+   struttura già nasconde e chi ascolta già sente — e non una classe che la
+   pelle traduceva in `display: none`: erano due scritture della stessa cosa, e
+   aprire il pannello dalla rail ne aggiornava una sola. Qui non resta niente
+   da vestire, e restare senza regola è il segnale che la traduzione non serve
+   più. */
+.panel-title.clickable {
+  cursor: pointer;
+}

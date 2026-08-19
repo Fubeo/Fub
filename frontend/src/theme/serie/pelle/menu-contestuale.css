@@ -1,0 +1,40 @@
+/* Menu contestuale della lista file */
+.context-menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: 140px;
+  padding: var(--space-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
+}
+.context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-5);
+}
+.context-menu button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.context-menu button.danger:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+/* Rinomina inline nella lista file */
+.tree-row input {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}

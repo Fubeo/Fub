@@ -1,0 +1,96 @@
+/* L'area principale, che dal §1.2 è **l'albero dei riquadri** e non un editor.
+   La disposizione la disegna `panels/document.ts` da `state/layout.ts`: qui
+   ci sono solo le regole che valgono per qualunque albero, e infatti non c'è
+   nessuna misura — quanto è largo un riquadro lo decide quanti sono. */
+.panes {
+  border-right: 1px solid var(--border);
+}
+/* Il bordo lo porta il secondo figlio in poi, non il contenitore: così una
+   divisione a tre ha due righe di separazione e non tre, e nessun riquadro ha
+   un bordo che dà sul vuoto. */
+.pane-split.row > * + * {
+  border-left: 1px solid var(--border);
+}
+.pane-split.col > * + * {
+  border-top: 1px solid var(--border);
+}
+
+/* Le tab di un riquadro. La striscia sparisce quando non c'è niente aperto:
+   una fila di pulsanti vuota è rumore che occupa spazio. */
+.pane-tabs {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft, var(--bg));
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  max-width: 16rem;
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+.tab:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.tab[aria-selected="true"] {
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Il pallino del non salvato: dice, guardando una tab che non è quella
+   davanti, che lì dentro c'è del lavoro in coda. */
+.tab.dirty .tab-name::after {
+  content: " •";
+  color: var(--accent);
+}
+.tab-close {
+  opacity: 0.45;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  color: inherit;
+}
+.tab-close:hover {
+  opacity: 1;
+  background: var(--overlay-hover);
+  color: inherit;
+}
+
+/* Quale riquadro ha il fuoco si deve **vedere**, o dividere lo schermo è un
+   gesto che rende la finestra ambigua: due editor identici e nessun indizio su
+   dove finirà la prossima nota che si apre. */
+.pane.focus > .pane-tabs {
+  border-bottom-color: var(--accent);
+}
+
+/* Qui c'erano due regole che davano all'editor il fondo e l'inchiostro della
+   superficie del documento, scavalcando da fuori il tema di CodeMirror. Erano
+   la metà visibile di un doppione: l'altra metà stava dentro `oneDark`, che
+   portava i propri colori e li imponeva a tutto il resto (margine, cursore,
+   selezione, riga corrente). Adesso il tema dell'editor è scritto **con i
+   token** (`editor/theme.ts`) e non ha più niente da scavalcare — quindi non
+   c'è più niente da scrivere qui. Il foglio della shell si ferma dove finisce
+   la shell. */
+
+/* Lettura: la superficie del documento, con i colori della superficie del
+   documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
+   fare sulla nota, non di che colore è. */
+.pane-preview {
+  padding: var(--space-5) var(--space-7);
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+}
