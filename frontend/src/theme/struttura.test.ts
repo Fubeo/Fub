@@ -61,7 +61,7 @@ const TOKEN_STRUTTURA = [
 ] as const;
 
 /// I valori non-colore che i due fogli dichiarano identici: la scala (spazi,
-/// raggi, tipografia, pesi, interlinea, tracking), il moto (durate, curva), le
+/// raggi, tipografia, pesi, interlinea, tracking), il moto (durate e curve), le
 /// misure dell'annello del fuoco, e i quattro riempimenti/righe in alpha scelti
 /// perché reggono su entrambi i fondi. Un token di questo elenco che divergesse
 /// fra i due fogli è la duplicazione che diverge.
@@ -76,7 +76,8 @@ const NON_COLORE_IDENTICI = [
   "leading-tight",
   "tracking-caps",
   // Il moto.
-  "duration-fast", "duration-med", "ease",
+  "duration-fast", "duration-med", "duration-slow",
+  "ease", "ease-out", "ease-in",
   // Le misure dell'anello del fuoco: viaggiano col colore ma sono parte della
   // forma, e la forma non cambia col tema.
   "focus-ring-width", "focus-ring-offset",

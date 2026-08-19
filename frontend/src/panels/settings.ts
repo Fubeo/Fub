@@ -432,38 +432,33 @@ function campo(entry: SettingEntry): HTMLElement {
   }
 }
 
-/// Il tema come segmented control: tre bottoni — sistema, chiaro, scuro —
-/// invece di una tendina.
+/// Il tema come segmented control: i bottoni dello schema — sistema, chiaro,
+/// scuro, e quel che verrà — invece di una tendina.
 ///
 /// Le etichette sono quelle che lo schema della Choice porta già dal kernel:
 /// l'`option.label` è localizzata là (0040), e ricopiarla qui vorrebbe dire
 /// mantenere due traduzioni della stessa frase. Se l'opzione manca — un kernel
-/// che non la dichiarasse — si mostra il valore nudo: ripiego difensivo, non
-/// la strada.
+/// che non la dichiarasse — si mostra il valore nudo (o "system" se vuoto):
+/// ripiego difensivo, non la strada. L'elenco non è più cablato qui: scorre
+/// `kind.options` nell'ordine dello schema, così un'opzione nuova compare
+/// senza una seconda lista da tenere a mano.
 function interruttoreTema(
   entry: SettingEntry,
   kind: Extract<SettingEntry["spec"]["kind"], { kind: "choice" }>,
 ): HTMLElement {
   const corrente = String(entry.value);
-  // I tre valori che il tema conosce, nell'ordine in cui si leggono:
-  // «come il sistema» (stringa vuota), poi chiaro, poi scuro.
-  const attesi = ["", "light", "dark"] as const;
   const group = document.createElement("div");
   group.className = "theme-switch";
   group.id = `setting-${entry.spec.key}`;
   group.setAttribute("role", "radiogroup");
   group.setAttribute("aria-label", entry.spec.label);
-  for (const valore of attesi) {
-    // L'etichetta viene dall'`option` dello schema, che il kernel localizza
-    // già (0040): ricopiarla qui vorrebbe dire due traduzioni della stessa
-    // frase. Se l'opzione manca — un kernel che non la dichiarasse — si
-    // mostra il valore nudo: è un ripiego difensivo, non la strada.
-    const op = kind.options.find((o) => o.value === valore);
+  for (const op of kind.options) {
+    const valore = op.value;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "theme-switch__segment";
     btn.setAttribute("role", "radio");
-    btn.textContent = op ? op.label : valore || "system";
+    btn.textContent = op.label || valore || "system";
     const scelto = valore === corrente;
     btn.setAttribute("aria-checked", String(scelto));
     if (scelto) btn.classList.add("theme-switch__segment--active");

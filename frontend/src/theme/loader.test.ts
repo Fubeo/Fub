@@ -10,8 +10,8 @@
 // resta com'è: dopo ogni montaggio, per ogni strato, c'è **un elemento solo**.
 //
 // I due strati (`foglio` e `pelle`) viaggiano su canali separati (`data-fub`),
-// perché crescono separatamente: la pelle di un tema di terzi sarà un file suo,
-// e il foglio un altro. Il banco prova che i canali non si parlano: montare lo
+// perché crescono separatamente: la pelle di un domani sarà un file suo, e il
+// foglio un altro. Il banco prova che i canali non si parlano: montare lo
 // stesso testo su entrambi li conta 1+1, e montarne due diversi su uno solo li
 // conta 1 (il secondo sostituisce il primo, non si aggiunge).
 //
@@ -34,6 +34,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { apriVita } from "../ui/vita";
 import foglioScuro from "./serie/foglio-scuro.css?raw";
 import foglioChiaro from "./serie/foglio-chiaro.css?raw";
+import pelle from "./serie/pelle.css?raw";
 import { conta, monta } from "./loader";
 import { mountTheme } from "./theme";
 function stileMontato(strato: "foglio" | "pelle"): HTMLStyleElement | null {
@@ -194,5 +195,23 @@ describe("mountTheme monta il foglio della luce che vale", () => {
     mountTheme(vita, (tema) => ricevuti.push(tema));
 
     expect(ricevuti, "il cambio chiama onChange col tema nuovo").toEqual(["dark"]);
+  });
+  it("localStorage «lime» migra al foglio scuro di serie (non è un terzo tema)", () => {
+    // Lime non è più un fascio: chi lo aveva scelto resta sul buio che aveva.
+    // `mountTheme` riscrive la cache a `dark` prima di applicare, e la pelle
+    // di serie si monta una volta sola. È una migrazione, non un terzo tema:
+    // il foglio montato è il gemello scuro della serie, e il segnale sulla
+    // radice dice `dark`.
+    localStorage.setItem("fub.appearance.theme", "lime");
+    mountTheme(apriVita(), () => {});
+
+    expect(conta("foglio"), "la migrazione monta un foglio solo").toBe(1);
+    expect(conta("pelle"), "la pelle di serie si monta una volta sola").toBe(1);
+    expect(stileMontato("foglio")?.textContent, "il foglio è lo scuro di serie, non un terzo").toBe(
+      foglioScuro,
+    );
+    expect(stileMontato("pelle")?.textContent, "la pelle è quella di serie").toBe(pelle);
+    expect(document.documentElement.dataset.theme, "lime è scura: data-theme=dark").toBe("dark");
+    expect(localStorage.getItem("fub.appearance.theme"), "la cache è riscritta a dark").toBe("dark");
   });
 });

@@ -189,13 +189,13 @@ function blocco(css: string, selettore: string): string {
   if (!trovato) throw new Error(`«${selettore}» non è un blocco di tokens.css`);
   return trovato[1]!;
 }
-/// I due temi, come li vede il browser: due fogli completi, montati per
+/// I temi come li vede il browser: fogli completi, montati per
 /// **sostituzione**. Il chiaro non eredita più nulla dallo scuro — non è un
 /// blocco `:root[data-theme="light"]` che ridichiara solo ciò che cambia, è un
 /// gemello completo che il caricatore (`theme/loader.ts`) monta al posto del
 /// gemello scuro. La cascata non c'è più, e con lei il risparmio di non
-/// ricopiare i valori: il prezzo è due liste che devono restare uguali, e lo
-/// tiene `struttura.test.ts`. Qui ciascun file si legge da sé.
+/// ricopiare i valori: il prezzo è liste che devono restare uguali, e lo tiene
+/// `struttura.test.ts`. Qui ciascun file si legge da sé.
 function tavolozze(
   scuro: string,
   chiaro: string,
@@ -243,7 +243,7 @@ describe("i token si leggono davvero dal foglio", () => {
     expect(Object.keys(TAVOLOZZE.dark).length).toBeGreaterThan(50);
     expect(TAVOLOZZE.dark.bg).toBe("#000000");
     expect(TAVOLOZZE.light.bg).toBe("#f7f7f9");
-    // I valori non-colore identici fra i due fogli (la scala, il moto, i quattro
+    // I valori non-colore identici fra i fogli (la scala, il moto, i quattro
     // alpha) li presidia `struttura.test.ts`: qui conta il contrasto, non la
     // gemellarità del vocabolario.
   });

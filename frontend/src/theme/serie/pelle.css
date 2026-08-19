@@ -42,6 +42,7 @@ html, body, #app {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   text-decoration: none;
+  transition: transform var(--duration-med) var(--ease-out);
 }
 .skip-link:focus {
   transform: translateY(0);
@@ -93,6 +94,10 @@ button.primary,
 #settings-body button[type="submit"] {
   background: var(--accent);
   color: var(--accent-contrast);
+  transition:
+    transform var(--duration-fast) var(--ease-in),
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
 }
 button.primary:hover,
 .ui-button.intent-primary:hover,
@@ -104,6 +109,11 @@ button.primary:hover,
      3,4:1 al buio. `--bg` sì, in tutti e due — ed è la coppia che
      `theme/contrast.test.ts` presidia. */
   color: var(--bg);
+}
+button.primary:active,
+.ui-button.intent-primary:active,
+#settings-body button[type="submit"]:active {
+  transform: scale(0.98);
 }
 
 .ui-button.intent-danger {
@@ -190,6 +200,7 @@ button.primary:hover,
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
+  transition: background var(--duration-fast) var(--ease);
 }
 #files-panel .row:hover {
   background: var(--bg-hover);
@@ -750,6 +761,7 @@ select {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
 }
 #context-menu button {
   display: block;
@@ -844,6 +856,7 @@ select {
   box-shadow: var(--shadow-md);
   padding: var(--space-3);
   font-size: var(--text-sm);
+  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
 }
 .graph-panel-popover[hidden] {
   display: none;
@@ -964,6 +977,7 @@ select {
   align-items: flex-start;
   padding-top: 12vh;
   background: var(--scrim);
+  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
 }
 
 .modale .palette-box {
@@ -978,6 +992,7 @@ select {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   overflow: auto;
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 .modale input,
@@ -1169,6 +1184,7 @@ select {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   font-size: var(--text-base);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 /* Il tono è un bordo, non un fondo: un guasto deve saltare all'occhio senza
@@ -1249,6 +1265,7 @@ select {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   font-size: var(--text-base);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 #notify-panel {
@@ -1369,6 +1386,7 @@ select {
   align-items: center;
   justify-content: center;
   background: var(--scrim);
+  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
 }
 #views-modal .declared-view-panel {
   min-width: 380px;
@@ -1380,6 +1398,7 @@ select {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 /* Una view dichiarata si può richiudere dal suo titolo, se dichiara di
@@ -1630,6 +1649,7 @@ select {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   font-size: var(--text-base);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 #settings-tabs {
@@ -1858,6 +1878,10 @@ select {
   border-radius: var(--radius-sm);
   color: var(--muted);
   background: transparent;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
 }
 
 .rail button:hover {
@@ -1903,6 +1927,10 @@ select {
   min-width: 36px;
   min-height: 36px;
   border-radius: 0;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
 }
 
 .inspector-tab:hover {
@@ -2055,6 +2083,35 @@ select {
   width: calc(var(--titlebar-h) - var(--space-4));
   padding: 0;
   justify-content: center;
+}
+
+/* --- il moto della scocca -------------------------------------------------
+   Si anima ciò che appare — una modale, un menu, un toast — non ciò che
+   sta. Solo l'ingresso: `[hidden]` in struttura spegne il display, e una
+   chiusura animata sarebbe una gara col `!important`. Transform e opacity,
+   mai geometria. `prefers-reduced-motion` lo fa la struttura, non si
+   duplica. Tre keyframe, tre durate, tre curve: tutto speso. */
+
+@keyframes fub-enter-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fub-enter-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fub-enter-rise-sm {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */
+.cm-editor,
+.cm-editor *,
+.pane-editor,
+.pane-editor * {
+  animation: none !important;
+  transition: none !important;
 }
 
 
