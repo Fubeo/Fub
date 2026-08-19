@@ -259,7 +259,7 @@ classDiagram
 | `LinkTarget` | [model.rs:607](../../crates/fub-abi/src/model.rs) | è **intento non risolto**: risolverlo è del kernel, via `IndexQuery::Resolve` |
 | `Anchor` | [model.rs:443](../../crates/fub-abi/src/model.rs) | due span, per due mestieri: `span` è il blocco che un embed ritaglia, `marker` è il token che un export toglie |
 | `Span` | [model.rs:169](../../crates/fub-abi/src/model.rs) | byte UTF-8 nella **sorgente originale**, sempre, `[start, end)` — e la sorgente sono i byte del file, BOM e terminatori compresi ([0058](../decisions/0058-un-nome-che-nasce.md)) |
-| `VaultEntry` | [traits.rs:203](../../crates/fub-abi/src/traits.rs) | sta nei trait e non qui, perché è la risposta a `IndexQuery::Entries`; `kind` **non si persiste**, dipende da chi è registrato adesso |
+| `VaultEntry` | [traits.rs:204](../../crates/fub-abi/src/traits.rs) | sta nei trait e non qui, perché è la risposta a `IndexQuery::Entries`; `kind` **non si persiste**, dipende da chi è registrato adesso |
 
 Il disegno mostra la forma **ad albero**. Al confine WIT ce n'è una seconda, e
 non è una variante di comodo: WIT non ammette tipi ricorsivi, quindi `Block` e

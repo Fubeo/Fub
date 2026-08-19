@@ -133,7 +133,7 @@ crate **resta come casella**, tenuto fuori da una condizione che un banco valuta
       **confine contro l'accoppiamento feature↔feature**. Dentro un crate
       singolo, il modificatore `pub(crate)` aggira le protezioni. La divisione è
       giustificata dai venti moduli della 21.2 (oggi inesistenti). Attualmente i
-      moduli di feature sono dieci [conta: moduli-di-feature]. Non si citano fra
+      moduli di feature sono quindici [conta: moduli-di-feature]. Non si citano fra
       loro. L'unico riferimento incrociato nei sorgenti è un link di
       documentazione a `backlinks::catalog`. La divisione immediata costa venti
       `Cargo.toml` per dieci moduli indipendenti. Non dividerli mai costa venti

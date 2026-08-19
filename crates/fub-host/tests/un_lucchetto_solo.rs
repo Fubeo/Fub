@@ -31,7 +31,7 @@
 //!
 //! Ciò che questo banco **non** vede, dichiarato: i lucchetti degli altri
 //! crate. `fub-kernel`, `fub-features` e `fub-sdk` ne hanno di propri — sono
-//! **sette** file [conta: lucchetti-fuori-dal-conto] —, e la politica di questa
+//! **nove** file [conta: lucchetti-fuori-dal-conto] —, e la politica di questa
 //! decisione non li ha attraversati: il difetto misurato era il confine
 //! host↔app, e allargare un conto oltre ciò che si è deciso vorrebbe dire
 //! un'allowlist lunga come l'elenco che dovrebbe restringere. La

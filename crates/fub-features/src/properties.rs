@@ -758,8 +758,8 @@ mod tests {
 
     #[test]
     fn bom_non_entra_nello_span() {
-        let s = format!("\u{FEFF}# ciao\n");
-        assert_eq!(inizio_sorgente(&s), 3);
+        let s = "\u{FEFF}# ciao\n";
+        assert_eq!(inizio_sorgente(s), 3);
         assert_eq!(inizio_sorgente("# ciao\n"), 0);
     }
 

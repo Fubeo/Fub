@@ -637,12 +637,12 @@ sequenceDiagram
 | la pila del testo | [editor.ts:245](../../frontend/src/editor/editor.ts) | la history di CodeMirror: non è un tipo di questo repo, e `setDoc` la azzera rifacendo lo stato, perché CodeMirror non ha un «svuota» |
 | `UndoStack` | [undo.rs:75](../../crates/fub-kernel/src/undo.rs) | `VecDeque<Entry>` più una bandiera `replaying`; tetto a cento voci, perché una voce porta dentro il testo sostituito — e la coda a due teste è lì perché si spinge da un capo e si pota dall'altro |
 | `undo::Entry` | [undo.rs:68](../../crates/fub-kernel/src/undo.rs) | la voce **e il conto dell'operazione**: i due arrivano dallo stesso esito e si separano una riga dopo, quindi o si appaiano lì o non si appaiano più (§23.14) |
-| `Undo` / `UndoStep` | [command.rs:720](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
-| dove si spinge | [workspace.rs:1049](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
-| `undo_last` | [workspace.rs:5335](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
-| `Partial` / `Failure` | [command.rs:613](../../crates/fub-abi/src/command.rs) | di N cose quante e quali; i guasti uno per uno col `PluginError` intero, perché la specie dice se ha senso riprovare |
-| `Undone` | [command.rs:830](../../crates/fub-abi/src/command.rs) | l'etichetta e i **due** conti: `operation` (era già a metà) e `replay` (l'annullamento si è fermato) |
-| `vault.undo` | [commands.rs:88](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
+| `Undo` / `UndoStep` | [command.rs:735](../../crates/fub-abi/src/command.rs) | i passi **nell'ordine in cui vanno eseguiti**, che è il contrario di come sono successi |
+| dove si spinge | [workspace.rs:1093](../../crates/fub-kernel/src/workspace.rs) | due condizioni: modo `Apply`, e pila dei comandi vuota |
+| `undo_last` | [workspace.rs:5691](../../crates/fub-kernel/src/workspace.rs) | pop, replay, un lotto solo — e **quattro** risposte, non due: intero, a metà, per niente (che resta un `Err`), niente da annullare |
+| `Partial` / `Failure` | [command.rs:628](../../crates/fub-abi/src/command.rs) | di N cose quante e quali; i guasti uno per uno col `PluginError` intero, perché la specie dice se ha senso riprovare |
+| `Undone` | [command.rs:845](../../crates/fub-abi/src/command.rs) | l'etichetta e i **due** conti: `operation` (era già a metà) e `replay` (l'annullamento si è fermato) |
+| `vault.undo` | [commands.rs:17](../../crates/fub-features/src/commands.rs) | un comando come gli altri, su `Mod-Alt-z` perché `Mod-z` è dell'editor |
 
 Le due pile non si fondono perché non hanno lo stesso soggetto: ordinarle
 insieme vorrebbe dire mettere in fila «ho scritto tre lettere» e «ho rinominato
@@ -1016,14 +1016,14 @@ sequenceDiagram
 
 | Riquadro | Dove | Cosa fa qui |
 |---|---|---|
-| `Workspace::query_index` | [workspace.rs:431](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
+| `Workspace::query_index` | [workspace.rs:451](../../crates/fub-kernel/src/workspace.rs) | l'unico ingresso: una riga, che gira agli indici |
 | `plan::run` | [plan.rs:55](../../crates/fub-kernel/src/index/plan.rs) | proprietario → pushdown → ricomposizione, in quest'ordine |
 | `sole_evaluator` | [plan.rs:338](../../crates/fub-kernel/src/index/plan.rs) | l'intersezione dei valutatori di tutte le foglie: se è una sola, la clausola scende intera |
 | `RouteTable` | [routing.rs:57](../../crates/fub-kernel/src/index/routing.rs) | chi ha dichiarato cosa al montaggio; `declare` è tutto-o-niente |
 | `CoreIndex` | [core.rs:120](../../crates/fub-kernel/src/index/core.rs) | tredici famiglie e quattro foglie — e **non** `Text`, che è l'assenza da cui nasce questo caso |
 | `Matches::and` | [query.rs:389](../../crates/fub-abi/src/query.rs) | la fusione; `QueryEvaluator` ha una implementazione sola, quella del contratto |
-| `properties::finish` | [properties.rs:279](../../crates/fub-abi/src/rules/properties.rs) | ordine, colonne e finestra, in coda e per tutti: rompe la parità per `DocId` o la paginazione ripete righe |
-| `CoreIndex::finish_documents` | [core.rs:596](../../crates/fub-kernel/src/index/core.rs) | l'unico punto da cui il kernel chiama quella coda: ci mette i formati di data che il vault dichiara ([0108](../decisions/0108-una-data-la-dichiara-chi-possiede-il-vault.md)) e dove si legge il frontmatter. Erano due punti, e il secondo poteva ordinare le date come testo mentre il primo le ordinava per giorno, sulla **stessa** domanda |
+| `properties::finish` | [properties.rs:278](../../crates/fub-abi/src/rules/properties.rs) | ordine, colonne e finestra, in coda e per tutti: rompe la parità per `DocId` o la paginazione ripete righe |
+| `CoreIndex::finish_documents` | [core.rs:120](../../crates/fub-kernel/src/index/core.rs) | l'unico punto da cui il kernel chiama quella coda: ci mette i formati di data che il vault dichiara ([0108](../decisions/0108-una-data-la-dichiara-chi-possiede-il-vault.md)) e dove si legge il frontmatter. Erano due punti, e il secondo poteva ordinare le date come testo mentre il primo le ordinava per giorno, sulla **stessa** domanda |
 
 **Le due chiamate sono in fila, non insieme.** Il kernel non parallelizza una
 query per conto proprio, ed è una decisione e non un debito.

@@ -137,7 +137,7 @@ fn semina(root: &Utf8Path, n: usize) {
         .map(|x| x.get())
         .unwrap_or(1)
         .clamp(1, 8);
-    let size = (n + n_thread - 1) / n_thread;
+    let size = n.div_ceil(n_thread);
     std::thread::scope(|s| {
         for c in (0..n).collect::<Vec<_>>().chunks(size) {
             let c = c.to_vec();

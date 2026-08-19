@@ -13,8 +13,9 @@ fub-abi = { workspace = true }
 fub-sdk = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml_ng = "0.10.0"
-# comrak e il crate YAML vengono aggiunti con `cargo add` (versioni correnti).
+serde_yaml_ng = { workspace = true }
+# comrak si aggiunge con `cargo add`; la versione del crate YAML sta nella
+# radice, perché la dichiarano in due.
 
 [dev-dependencies]
 # solo per il test end-to-end sul vault di esempio: monta il core reale.

@@ -102,7 +102,7 @@ fn the_view_reads_active_doc_and_backlinks_from_the_kernel_host() {
     vault.put("Uno.md", "vedi [[Target]]\n");
     vault.put("sub/Due.md", "anche qui [[Target]]\n");
     vault.put("Estranea.md", "nessun link\n");
-    let mut ws = vault.open();
+    let ws = vault.open();
 
     // Nessun documento attivo: la view è un segnaposto, non un errore.
     let tree = ws

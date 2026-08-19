@@ -22,7 +22,7 @@
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use fub_kernel::storage::{FsStorage, MemStorage, VaultStorage};
+use fub_kernel::storage::{MemStorage, VaultStorage};
 use fub_kernel::{FormatRegistry, KernelError, Vault, Workspace};
 
 /// Il `kind` dell'errore che l'apertura ha rifiutato, e la radice che diceva.

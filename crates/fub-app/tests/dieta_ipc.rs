@@ -231,6 +231,22 @@ enum Perche {
     /// `verso` è la destinazione, e il conto di questi è presidiato da un test a
     /// parte: migrarne uno costringe a toccare un numero, e chiudere l'ultimo
     /// costringe ad accorgersene.
+    ///
+    /// **E l'ultimo è chiuso**: da `d3a59a5` nessuna riga dell'allowlist la
+    /// costruisce più, ed è precisamente il modo in cui il conto doveva farsi
+    /// notare. Il `dead_code` che ne segue è il segnale, non il difetto — ma un
+    /// segnale che ferma la CI a ogni corsa non lo legge nessuno, lo mette a
+    /// tacere il primo che passa.
+    ///
+    /// La variante **resta**, e non è nostalgia. Questo enum è il vocabolario
+    /// delle ragioni per cui un comando IPC può esistere, e senza questa il
+    /// prossimo che ne scrive uno che *dovrebbe* stare sul canale dati non
+    /// avrebbe come dirlo: sceglierebbe una delle cinque ragioni legittime, il
+    /// debito nascerebbe già dichiarato in regola, e il conto qui sotto
+    /// resterebbe zero mentendo. Il presidio che conta a zero è ancora
+    /// `il_debito_dichiarato_e_un_numero_presidiato`, ed è lui a tenere la
+    /// promessa: qui si tace un lint, non un'asserzione.
+    #[allow(dead_code)]
     DaMigrare { verso: &'static str },
 }
 

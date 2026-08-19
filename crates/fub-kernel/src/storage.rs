@@ -1282,7 +1282,7 @@ impl VaultStorage for FsStorage {
             .clamp(1, 8);
 
         let mut out: Vec<DirEntry> = if n > 1 && raw_entries.len() > 256 {
-            let chunk_size = (raw_entries.len() + n - 1) / n;
+            let chunk_size = raw_entries.len().div_ceil(n);
             std::thread::scope(|s| {
                 let handles: Vec<_> = raw_entries
                     .chunks(chunk_size)

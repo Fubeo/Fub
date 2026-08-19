@@ -296,7 +296,7 @@ Due cose che il disegno dice con lo stile delle frecce:
    `.fub/data/plugins/`, e tutto ciò che sta lì è derivato. Cancellarlo costa
    una ricostruzione, mai un dato dell'utente. La verità è nei file.
 4. **Le feature ufficiali sono già plugin.** Sono
-   **dieci** [conta: moduli-di-feature] e implementano gli stessi trait che
+   **quindici** [conta: moduli-di-feature] e implementano gli stessi trait che
    useranno i plugin di terzi, senza sandbox e senza serializzazione. Il
    dogfooding — usare il proprio prodotto mentre lo si scrive — è il modo in cui
    il contratto si scopre sbagliato prima di M5. **Fin dove arriva, però, adesso
@@ -540,7 +540,7 @@ flowchart TB
 | Webview | Uno. Il core lo considera **privilegiato**: per questo `UiNode::Html` è negato al codice non fidato. | [ui-protocol.md](ui-protocol.md) |
 | `VaultSession` | Una per vault aperto, tenute in una mappa. Erano una `Option`, e aprire un vault chiudeva quello aperto. | [session.rs:106](../../crates/fub-host/src/session.rs) |
 | Thread del ponte | Uno per vault, **e solo se c'è un sink**. Dorme su `recv()`: a vault fermo non costa niente. | [bridge.rs:82](../../crates/fub-host/src/bridge.rs) |
-| Thread del rilevatore | Quelli che decide `notify`, dietro la cargo feature `notify-watcher` — che è **accesa di default**. | [watcher.rs:347](../../crates/fub-host/src/watcher.rs) |
+| Thread del rilevatore | Quelli che decide `notify`, dietro la cargo feature `notify-watcher` — che è **accesa di default**. | [watcher.rs:3](../../crates/fub-host/src/watcher.rs) |
 | Thread dei job | **Due** di default per vault, non globali: `DEFAULT_JOB_THREADS`. | [runner.rs:73](../../crates/fub-host/src/runner.rs) |
 | Database | **Nessuno**. | — |
 
@@ -630,7 +630,7 @@ legge questo crate, in Rust o nella copia WIT.
 
 **Cosa c'è dentro.** Ventitré moduli più tredici di regole, circa 23 600 righe
 di Rust, e lo stesso contratto una seconda volta in
-**4 123** [conta: wit-righe] righe di WIT. Solo tipi e trait: zero
+**4 209** [conta: wit-righe] righe di WIT. Solo tipi e trait: zero
 implementazioni vere, zero I/O.
 
 | Modulo | Cosa dichiara |
@@ -926,7 +926,7 @@ costruzione*: prima un debouncer che moriva rispondeva «sto guardando» per
 sempre; adesso è una bandiera condivisa che il debouncer abbassa quando muore.
 **Un bit solo**, non due idee.
 
-**La tabella di montaggio.** Un core più **dieci** [conta: moduli-di-feature]
+**La tabella di montaggio.** Un core più **quindici** [conta: moduli-di-feature]
 feature ufficiali fa undici bundle. L'elenco delle feature **non sta più in
 questo file**: sta in un `static` di `fub-features`, e il montaggio lo *itera*.
 La ragione è misurata: finché quelle righe erano qui, l'inventario *era* questo
