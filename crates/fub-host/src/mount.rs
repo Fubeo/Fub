@@ -255,7 +255,7 @@ pub fn mount(
             // delle famiglie del kernel — è una funzione sola, e la
             // chiama anche il banco che la giudica: qui c'era un elenco
             // a mano, e il banco ne teneva una seconda copia.
-            .speaking("it", core_catalog_montato()),
+            .speaking(crate::settings::CORE_DEFAULT_LOCALE, core_catalog_montato()),
         ),
     ];
     for feature in fub_features::ogni_feature_ufficiale() {

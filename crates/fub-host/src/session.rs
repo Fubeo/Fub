@@ -1160,8 +1160,50 @@ impl Host {
     /// stesse chiavi arrivano di là con lo stesso valore — la mappa è una sola.
     ///
     /// [`IndexQuery::Settings`]: fub_abi::traits::IndexQuery::Settings
+    ///
+    /// # Perché risolve qui, e non nello store
+    ///
+    /// «Risolte» vuol dire due cose, e per un pezzo ne valeva una sola.
+    /// [`MachineSettings::entries`] risolve il **valore** — quale livello vince,
+    /// e da dove viene — e non può risolvere il **testo**: i cataloghi arrivano
+    /// coi bundle, i bundle stanno nel montaggio di un vault, e questa porta
+    /// esiste proprio per il caso in cui un vault non c'è. Lo store non ha
+    /// niente con cui tradurre, e chiederglielo vorrebbe dire fargli tenere una
+    /// copia dei cataloghi che il montaggio già tiene.
+    ///
+    /// Il risultato, finché ha risolto solo il valore, era un
+    /// [`Text::Message`](fub_abi::text::Text::Message) che usciva dal contratto
+    /// intatto: sul filo `{"key": "core.log.level"}` dove la shell aspetta una
+    /// stringa, cioè `[object Object]` scritto in ogni etichetta del pannello —
+    /// e per giunta nel momento peggiore, perché la porta senza vault è quella
+    /// che risponde a chi sta cercando l'interruttore del log per capire perché
+    /// un vault non si apre. È lo stesso difetto che il canale dati aveva dal
+    /// lato vault, riparato mandando `IndexQuery::Settings` a
+    /// `Workspace::query_index`: qui non c'è un `Workspace` a cui mandarlo, e
+    /// la riparazione è la stessa fatta con ciò che l'host ha in mano.
+    ///
+    /// Il catalogo è quello di **core** e non c'è da sceglierlo: al livello
+    /// macchina dichiara solo lui (`core_machine_settings()`, in `open`), e chi
+    /// aggiungesse un secondo dichiarante troverebbe qui una riga da cambiare
+    /// invece di un difetto da scoprire. La lingua è quella del **sistema** e
+    /// basta: le `locale.*` sono del vault
+    /// ([0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)),
+    /// quindi senza vault la scala di `Workspace::locale` collassa sull'unico
+    /// gradino che le resta.
+    ///
+    /// Presidiata da `tests/la_macchina_senza_vault.rs`, che guarda ogni `Text`
+    /// dell'albero e non le sole etichette: il difetto si era già nascosto una
+    /// volta nelle opzioni di una `Choice`, che nessuno guardava.
     pub fn machine_settings(&self) -> Vec<fub_abi::settings::SettingEntry> {
-        self.machine.entries()
+        let mut righe = self.machine.entries();
+        let cataloghi = crate::settings::core_catalog_montato();
+        let locale = self.system_locale.get();
+        let strings =
+            fub_abi::text::Strings::new(&cataloghi, crate::settings::CORE_DEFAULT_LOCALE, &locale);
+        for riga in &mut righe {
+            strings.localize(riga);
+        }
+        righe
     }
 
     /// **Il canale dati**, con la sola domanda che si può servire senza vault.

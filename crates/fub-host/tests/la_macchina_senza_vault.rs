@@ -162,6 +162,59 @@ fn il_canale_dati_serve_le_impostazioni_anche_senza_vault() {
     assert!(tutte.iter().any(|e| e.spec.key == CREA));
 }
 
+/// **Le etichette escono risolte anche da questa porta**, e non solo da quella
+/// del vault.
+///
+/// È la seconda metà di ciò che `settings_come_out_resolved_too` presidia dal
+/// lato kernel: là il canale dati passa da `Workspace::query_index`, che
+/// localizza ogni riga col catalogo di chi l'ha dichiarata; qui il vault non
+/// c'è, e a rispondere è il livello macchina — che i cataloghi non li ha mai
+/// visti. Un [`Text::Message`] che uscisse di qua arriverebbe alla shell come
+/// `{"key": …}` dove aspetta una stringa, cioè `[object Object]` in ogni
+/// etichetta del pannello. E sarebbe il caso peggiore in cui farlo: questa è la
+/// porta che risponde **quando un vault non si apre**, cioè quando qualcuno sta
+/// cercando l'interruttore del log per capire perché.
+///
+/// L'asserzione guarda ogni `Text` dell'albero — etichetta, descrizione,
+/// gruppo, e le etichette delle opzioni di una `Choice` — perché il difetto si
+/// è già nascosto una volta in un ramo che nessuno guardava.
+#[test]
+fn senza_vault_le_etichette_escono_risolte() {
+    use fub_abi::text::Localize;
+    use fub_abi::traits::{IndexQuery, IndexResult};
+
+    let (_c, config) = cartelle();
+    let host = installato(&config);
+    let IndexResult::Settings(mut righe) = host
+        .query_index(None, IndexQuery::Settings { plugin: None })
+        .expect("il canale risponde senza vault")
+    else {
+        panic!("il canale ha risposto con un'altra specie");
+    };
+    // Senza questa riga l'asserzione seguente passerebbe **a vuoto** il giorno
+    // in cui il livello macchina smettesse di dichiarare qualcosa.
+    assert!(
+        !righe.is_empty(),
+        "il livello macchina dichiara delle righe, o non c'è niente da risolvere"
+    );
+
+    let mut nude: Vec<String> = Vec::new();
+    for riga in &mut righe {
+        let chiave = riga.spec.key.clone();
+        riga.visit_texts(&mut |t| {
+            if !t.is_literal() {
+                nude.push(format!("{chiave}: {t:?}"));
+            }
+        });
+    }
+    assert!(
+        nude.is_empty(),
+        "queste escono con una chiave da risolvere invece che con una stringa, \
+         e la shell ci scrive `[object Object]`:\n  {}",
+        nude.join("\n  ")
+    );
+}
+
 /// Una chiave che **il vault** tiene, chiesta senza vault, dice cosa manca: il
 /// vault, non lo schema.
 #[test]

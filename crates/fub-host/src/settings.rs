@@ -388,6 +388,18 @@ pub fn core_catalog_montato() -> Vec<StringCatalog> {
     [core_catalog(), fub_kernel::famiglie::Famiglia::cataloghi()].concat()
 }
 
+/// **La lingua in cui il catalogo di core è scritto**: il gradino su cui la
+/// scala di ripiego atterra quando la lingua di chi guarda non ha una riga.
+///
+/// Stava scritta `"it"` dentro la riga `.speaking(…)` di [`crate::mount`], e
+/// finché il montaggio era l'unico a risolvere andava bene. Da quando risolve
+/// anche il livello macchina — che i bundle non li vede, perché risponde
+/// **prima** che un vault esista — i posti sono due, e due stringhe che devono
+/// restare uguali sono due stringhe che divergono: il giorno che il catalogo
+/// nascesse in inglese, chi apre il pannello senza vault leggerebbe le chiavi
+/// nude e nessun test lo direbbe.
+pub const CORE_DEFAULT_LOCALE: &str = "it";
+
 pub fn core_catalog() -> Vec<StringCatalog> {
     // Le etichette dei gradini si piegano sopra il catalogo invece che scritte
     // una a una: sono sei, nascono da [`Level::ALL`], e tenerle generate è ciò
