@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// Il banco del caricatore (§29.1): **un foglio montato e una pelle montata,
+// Il banco del caricatore (§29.1, §31.3): **un elemento montato per canale,
 // mai due**.
 //
 // Il caricatore (`theme/loader.ts`) monta per sostituzione: prima toglie ciò
@@ -9,11 +9,14 @@
 // faceva valere uno per una ragione che nessuno aveva scritto. Qui il banco
 // resta com'è: dopo ogni montaggio, per ogni strato, c'è **un elemento solo**.
 //
-// I due strati (`foglio` e `pelle`) viaggiano su canali separati (`data-fub`),
-// perché crescono separatamente: la pelle di un domani sarà un file suo, e il
-// foglio un altro. Il banco prova che i canali non si parlano: montare lo
-// stesso testo su entrambi li conta 1+1, e montarne due diversi su uno solo li
-// conta 1 (il secondo sostituisce il primo, non si aggiunge).
+// I tre strati (`caratteri`, `foglio`, `pelle`) viaggiano su canali separati
+// (`data-fub`), perché crescono separatamente: la pelle di un domani sarà un
+// file suo, il foglio un altro, i caratteri un terzo. Il banco prova che i
+// canali non si parlano: montare lo stesso testo su due di essi li conta 1+1,
+// e montarne due diversi su uno solo li conta 1 (il secondo sostituisce il
+// primo, non si aggiunge). Prova anche che l'ordine nel documento è quello
+// dichiarato da `ORDINE` e non l'ordine di chiamata: montare la pelle prima
+// dei caratteri deve comunque lasciare i caratteri prima nel DOM.
 //
 // Il testo arriva come stringa (`?raw`) e il caricatore lo scrive in
 // `textContent` verbatim: niente parsing nostro, niente normalizzazione. Se un
@@ -22,23 +25,33 @@
 // quello di partenza.
 //
 // La seconda metà del banco prova `mountTheme` (`theme/theme.ts`): la scelta in
-// `localStorage` decide quale foglio si monta, e la pelle si monta una volta
-// sola. Senza scelta, `mountTheme` segue il sistema: `sistemaScuro()` legge
-// `window.matchMedia`, che happy-dom implementa e risponde chiaro — quindi il
-// foglio montato è il gemello chiaro. La catena di import di `theme.ts`
-// (`host/query`, `state/kernel`, `state/store`, `ui/vita`) non chiama API Tauri
-// all'import time: `api` è un oggetto di wrapper che invocano `invoke` solo al
-// primo richiamo, quindi il banco la importa senza che la webview si accenda.
+// `localStorage` decide quale foglio si monta, e la pelle e i caratteri si
+// montano una volta sola. Senza scelta, `mountTheme` segue il sistema:
+// `sistemaScuro()` legge `window.matchMedia`, che happy-dom implementa e
+// risponde chiaro — quindi il foglio montato è il gemello chiaro. La catena di
+// import di `theme.ts` (`host/query`, `state/kernel`, `state/store`, `ui/vita`)
+// non chiama API Tauri all'import time: `api` è un oggetto di wrapper che
+// invocano `invoke` solo al primo richiamo, quindi il banco la importa senza
+// che la webview si accenda.
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { apriVita } from "../ui/vita";
 import foglioScuro from "./serie/foglio-scuro.css?raw";
 import foglioChiaro from "./serie/foglio-chiaro.css?raw";
 import pelle from "./serie/pelle.css?raw";
-import { conta, monta } from "./loader";
+import caratteri from "./serie/caratteri.css?raw";
+import { conta, monta, type Strato } from "./loader";
 import { mountTheme } from "./theme";
-function stileMontato(strato: "foglio" | "pelle"): HTMLStyleElement | null {
+function stileMontato(strato: Strato): HTMLStyleElement | null {
   return document.head.querySelector(`style[data-fub="${strato}"]`);
+}
+
+/// L'ordine dei canali nel DOM, letto da chi c'è montato — non da `loader.ts`,
+/// che è ciò che il banco vuole provare senza importarne l'interno.
+function ordineMontato(): string[] {
+  return [...document.head.querySelectorAll<HTMLStyleElement>("style[data-fub]")].map(
+    (el) => el.dataset.fub!,
+  );
 }
 
 beforeEach(() => {
@@ -90,6 +103,20 @@ describe("il caricatore monta per sostituzione", () => {
     expect(conta("pelle"), "la pelle non vede ciò che monta il foglio").toBe(1);
   });
 
+  it("i tre canali convivono, e il DOM li ordina come dichiara ORDINE", () => {
+    monta("la pelle", "pelle");
+    monta("il foglio", "foglio");
+    monta("i caratteri", "caratteri");
+
+    expect(conta("caratteri")).toBe(1);
+    expect(conta("foglio")).toBe(1);
+    expect(conta("pelle")).toBe(1);
+    expect(
+      ordineMontato(),
+      "l'ordine nel DOM è caratteri, foglio, pelle — non l'ordine con cui si è chiamato monta()",
+    ).toEqual(["caratteri", "foglio", "pelle"]);
+  });
+
   it("il testo montato resta verbatim in textContent: niente parsing", () => {
     // Un CSS con commenti, regole annidate e spazi capricciosi: se il
     // caricatore lo normalizzasse, il testo di ritorno non combacerebbe.
@@ -113,6 +140,14 @@ describe("mountTheme monta il foglio della luce che vale", () => {
 
     expect(conta("foglio"), "una scelta esplicita monta un foglio solo").toBe(1);
     expect(conta("pelle"), "la pelle si monta una volta, qualunque sia la luce").toBe(1);
+    expect(
+      conta("caratteri"),
+      "i caratteri si montano una volta, qualunque sia la luce",
+    ).toBe(1);
+    expect(
+      stileMontato("caratteri")?.textContent,
+      "mountTheme passa al caricatore esattamente il `?raw` dei caratteri di serie",
+    ).toBe(caratteri);
     expect(
       stileMontato("foglio")?.textContent ?? "",
       "«light» monta il gemello chiaro, che dichiara color-scheme: light",

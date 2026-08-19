@@ -361,11 +361,13 @@ jobs:
       # Il banco visivo del §31.1 entra in CI **per metà**, e la riga che separa
       # le due metà è: cosa dipende dalla macchina.
       #
-      # Il confronto a pixel no. Un browser pinnato garantisce lo stesso motore,
-      # non gli stessi caratteri: la scala che questa shell chiede si risolve nel
-      # carattere di sistema, e il runner di GitHub non ha quelli di chi ha
-      # scattato le baseline. Quel confronto è un cancello locale finché la §31.3
-      # non porta i caratteri dentro l'applicazione — e allora la riga si sposta.
+      # Il confronto a pixel no. La 0168 (§31.3) ha portato i tre caratteri
+      # dentro l'applicazione — un browser pinnato garantisce lo stesso motore,
+      # e ora anche gli stessi font — ma le baseline in repo sono state
+      # scattate su una macchina che Playwright stesso segnala come non
+      # supportata, non su questo runner: nessun modo di sapere da lì se il
+      # rendering coincide byte per byte. Resta un cancello locale finché
+      # qualcuno non rigenera le baseline da dentro `ubuntu-latest`.
       #
       # Il contrasto **reso** sì: `axe` legge i colori calcolati, che dai
       # caratteri non dipendono. È la metà che vede ciò che la tabella delle

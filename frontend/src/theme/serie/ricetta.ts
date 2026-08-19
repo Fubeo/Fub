@@ -242,19 +242,47 @@ const SCALA: readonly Gruppo[] = [
     prosa:
       "`--font-mono` esisteva già come `var(--mono, monospace)` in due regole —\n" +
       "cioè come token **mai definito**, che è il modo più silenzioso di non avere\n" +
-      "un token: il ripiego funzionava, quindi nessuno se ne accorgeva. Le tre voci\n" +
-      "in bundle e la scala che prende un passo sono la §31.3, e da qui non si\n" +
-      "vedono: questa voce decide i colori.",
+      "un token: il ripiego funzionava, quindi nessuno se ne accorgeva. La §31.3 ha\n" +
+      "portato tre voci in bundle — Inter, Literata, JetBrains Mono, tutte e tre\n" +
+      "OFL-1.1 — al posto di `system-ui`, cioè di tre prodotti diversi su tre\n" +
+      "piattaforme. Il sistema resta raggiungibile: ogni pila ha il ripiego di\n" +
+      "piattaforma in coda, e diventerà una preferenza vera con la §31.6.\n" +
+      "\n" +
+      "`text-xs`…`text-xl` non si muovono: sono i sei valori di prima, e restano\n" +
+      "perché cambiarli è un ridisegno di ogni componente che li spende — cinquantanove\n" +
+      "regole nella pelle (`grep -cF 'var(--text-' frontend/src/theme/serie/pelle.css`)\n" +
+      "— e quello è lavoro della §31.4, non di questa voce. La\n" +
+      "scala **si allarga**: due gradini nuovi in cima (`text-2xl`, `text-3xl`),\n" +
+      "che seguono un passo dichiarato (×1,2 da `text-xl`, arrotondato al pixel) al\n" +
+      "posto di essere il prossimo numero che serve; e una voce nuova per la\n" +
+      "lettura (`text-reading`), perché Literata non è Inter con un altro nome —\n" +
+      "è disegnata per un corpo diverso. `leading-tight` era l'unica interlinea:\n" +
+      "resta per chi la usa già, e accanto arrivano `leading-normal` (il paragrafo\n" +
+      "di un pannello) e `leading-relaxed` (la prosa lunga, dove Literata respira).\n" +
+      "`content-width` è la misura di lettura — 70 caratteri, il punto in cui una\n" +
+      "riga più lunga fa perdere il segno tornando a capo. Queste ultime cinque voci\n" +
+      "sono dichiarate e non ancora consumate da nessuna regola: tocca alla §31.8\n" +
+      "(*la stessa nota in tre modi*) metterle sulla superficie di lettura, editor e\n" +
+      "anteprima insieme — la §31.3 poteva scriverle o lasciarle implicite in una\n" +
+      "regola sola, e implicite è precisamente il difetto che questa seduta cerca.",
     voci: [
       {
         nome: "font-ui",
         tipo: "letterale",
-        valore: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+        valore:
+          '"Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+      },
+      {
+        nome: "font-reading",
+        tipo: "letterale",
+        valore: '"Literata Variable", Georgia, "Times New Roman", serif',
       },
       {
         nome: "font-mono",
         tipo: "letterale",
-        valore: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
+        valore:
+          '"JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, ' +
+          '"Liberation Mono", monospace',
       },
       { nome: "text-xs", tipo: "letterale", valore: "11px" },
       { nome: "text-sm", tipo: "letterale", valore: "12px" },
@@ -262,9 +290,15 @@ const SCALA: readonly Gruppo[] = [
       { nome: "text-md", tipo: "letterale", valore: "14px" },
       { nome: "text-lg", tipo: "letterale", valore: "15px" },
       { nome: "text-xl", tipo: "letterale", valore: "16px" },
+      { nome: "text-2xl", tipo: "letterale", valore: "19px" },
+      { nome: "text-3xl", tipo: "letterale", valore: "23px" },
+      { nome: "text-reading", tipo: "letterale", valore: "16px" },
       { nome: "weight-medium", tipo: "letterale", valore: "600" },
       { nome: "weight-bold", tipo: "letterale", valore: "700" },
       { nome: "leading-tight", tipo: "letterale", valore: "1.35" },
+      { nome: "leading-normal", tipo: "letterale", valore: "1.5" },
+      { nome: "leading-relaxed", tipo: "letterale", valore: "1.7" },
+      { nome: "content-width", tipo: "letterale", valore: "70ch" },
       {
         nome: "tracking-caps",
         tipo: "letterale",

@@ -1,0 +1,86 @@
+/* Le tre voci di carattere del tema di serie: interfaccia, lettura, codice
+ * (§31.3). Un terzo canale del caricatore (`theme/loader.ts`), accanto a
+ * foglio e pelle — non perché cambi con la luce (non cambia mai: le due luci
+ * portano gli stessi tre caratteri), ma per lo stesso motivo per cui la pelle
+ * è un canale a sé: un tema di terzi che porti le proprie voci sostituisce
+ * questo file intero, e non un `--font-ui` dentro il foglio.
+ *
+ * Prima di questa voce `--font-ui` era `system-ui`: tre prodotti diversi su
+ * tre piattaforme, metriche verticali che non coincidono, foto del banco che
+ * non si potevano confrontare fra loro. La CSP dell'app vieta di raggiungere
+ * un carattere in rete (`font-src 'self' asset:`, [0017]): un carattere o è
+ * in bundle, o non esiste. Sono qui perché la voce li porta in bundle come
+ * dipendenze — nell'SBOM, con la propria licenza — e non come richiesta a un
+ * server che sa chi li chiede.
+ *
+ * Le tre voci, e perché sono tre e non una:
+ * - **Inter** per l'interfaccia (`--font-ui`): x-height alta, disegnata per
+ *   corpi piccoli in un pannello, non per un titolo.
+ * - **Literata** per la lettura (`--font-reading`): grazie disegnate da
+ *   Google per la lettura a schermo lunga, non per un pulsante.
+ * - **JetBrains Mono** per il codice (`--font-mono`): disambigua 0/O e 1/l/I,
+ *   che un sans non deve e un mono sì.
+ *
+ * Ciascuna è un **file variabile** (un solo file copre tutto l'asse `wght`,
+ * da 100 a 900): tre file invece di dodici, e il peso lo sceglie chi
+ * consuma il token (`--weight-medium`, `--weight-bold`) senza scaricare un
+ * secondo file. Il sottoinsieme di glifi è `latin` (`U+0000-00FF` e
+ * un'manciata di punteggiatura): copre l'italiano e l'inglese, che sono le
+ * due lingue che questo repository scrive; un carattere accentuato fuori da
+ * quel range renderebbe col ripiego di sistema in coda alla pila, non con un
+ * quadratino. Licenza SIL Open Font License 1.1 su tutte e tre — compatibile,
+ * e distribuita coi file stessi (`node_modules/@fontsource-variable/<pacchetto>/LICENSE`).
+ *
+ * (Un asterisco seguito da una barra chiuderebbe questo commento in anticipo:
+ * per questo qui sopra c'è scritto «pacchetto» e non l'espressione con `*`
+ * che l'avrebbe fatto davvero — la prima volta è stato un `@font-face`
+ * corrotto in silenzio, e il banco visivo non se n'è accorto.)
+ *
+ * Il sistema resta raggiungibile: ogni pila ha il ripiego di piattaforma in
+ * coda, e non è ornamento — è il modo in cui un motore che non carica questi
+ * quattro file (una CSP diversa, un errore di rete impossibile ma non
+ * inconcepibile) mostra comunque del testo. La §31.6 (*cosa è del tema e
+ * cosa della persona*) è il posto dove «uso i caratteri del sistema» diventa
+ * una preferenza che si sceglie, invece che un ripiego che si subisce: da lì
+ * si arriverà scambiando questo canale, non il token dentro il foglio.
+ */
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Literata Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url("/fonts/literata-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Literata Variable";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url("/fonts/literata-latin-wght-italic.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url("/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

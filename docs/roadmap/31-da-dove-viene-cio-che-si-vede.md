@@ -5,7 +5,7 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md). La [seduta
 [30](30-il-moto-e-del-tema.md) le ha dato il ritmo: l'architettura che porta un
 tema è in piedi, e regge. Questa seduta guarda **ciò che ci sta dentro** — il
 tema di serie, primo e unico esemplare — e pone una domanda sola: *da dove
-viene, ciascuna delle cose che si vedono?* Nove voci, due chiuse. La prima non
+viene, ciascuna delle cose che si vedono?* Nove voci, tre chiuse. La prima non
 decideva nessuna delle altre otto: ha costruito l'occhio con cui si guardano, e
 la seconda è la prima cosa che quell'occhio ha visto.
 
@@ -142,7 +142,10 @@ non potrà mai farlo — quindi non lo fa nemmeno la serie.
 
 *presidi · **P1** — **chiusa** dalla
 [0166](../decisions/0166-il-banco-che-vede.md); resta una casella: il confronto a
-pixel entra in CI quando i caratteri saranno in bundle (§31.3)*
+pixel in CI aspettava i caratteri in bundle, e la
+[0168](../decisions/0168-tre-voci-in-bundle-un-canale-in-piu.md) (§31.3) l'ha
+portata — ma non basta da sola: le baseline restano scattate su una macchina
+che Playwright non riconosce come Ubuntu, non su `ubuntu-latest`*
 
 Non si migliora ciò che non si guarda, e i quattro presidi del tema — il
 contrasto, la struttura, il moto, il caricatore — non guardano: i primi tre
@@ -285,7 +288,12 @@ tre presidi sanno leggere.
 
 ### 31.3 La voce del tema: i caratteri
 
-*foglio · **P1***
+*foglio · **P1** — **chiusa** dalla
+[0168](../decisions/0168-tre-voci-in-bundle-un-canale-in-piu.md); resta una
+casella: `--font-reading`, `--text-2xl`, `--text-3xl`, `--text-reading`,
+`--leading-normal`, `--leading-relaxed` e `--content-width` sono dichiarati e
+visibili nel campionario del banco, ma nessuna regola vera li consuma
+ancora — li consuma la §31.8*
 
 `--font-ui` è `system-ui` con quattro ripieghi, e vuol dire tre prodotti
 diversi su tre piattaforme: metriche verticali che non coincidono, allineamenti
@@ -301,20 +309,24 @@ la serve che quella GUI è aperta
 ([0017](../decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md), e la
 §29.3 la riscrive per i fogli).
 
-- [ ] **Tre voci, in bundle, con licenza compatibile**: una per l'interfaccia,
-      una per la lettura, una per il codice. Entrano nell'SBOM come qualunque
-      altra dipendenza — sono file che l'app distribuisce.
-- [ ] **La scala si allarga e prende un passo**, con più di una interlinea e
+- [x] **Tre voci, in bundle, con licenza compatibile**: Inter per
+      l'interfaccia, Literata per la lettura, JetBrains Mono per il codice —
+      OFL-1.1, variabili (un file copre l'intero asse `wght`), sottoinsieme
+      `latin`. Entrano nell'SBOM come qualunque altra dipendenza — sono file che
+      l'app distribuisce.
+- [x] **La scala si allarga e prende un passo**, con più di una interlinea e
       con la misura di lettura come token: sono le caselle di
       [6.2](../features/06-rendering-preview-temi.md) (corpo, interlinea,
       larghezza del contenuto) e senza di esse la §31.8 non ha niente su cui
       appoggiarsi.
-- [ ] **Il caricatore impara l'ordine dei canali**: oggi `monta()` appende in
-      coda, e appendere basta finché i canali sono due. Con i caratteri e con lo
-      strato delle preferenze (§31.6) diventano quattro, e l'ordine smette di
-      essere una conseguenza dell'ordine in cui si è montato. Si dichiara.
-- [ ] **Il sistema resta raggiungibile**, come preferenza e non come difetto:
-      chi vuole le metriche della propria piattaforma le sceglie (§31.6).
+- [x] **Il caricatore impara l'ordine dei canali**: oggi `monta()` appendeva in
+      coda, e appendere bastava finché i canali erano due. Con i caratteri e con
+      lo strato delle preferenze (§31.6) diventano quattro, e l'ordine smette di
+      essere una conseguenza dell'ordine in cui si è montato: `loader.ts`
+      dichiara `ORDINE` e inserisce ogni canale al proprio posto nel DOM.
+- [x] **Il sistema resta raggiungibile**, come preferenza e non come difetto:
+      ogni pila porta il ripiego di piattaforma in coda; chi vuole le metriche
+      della propria piattaforma le sceglierà (§31.6).
 
 | Via | Forma | Scartata perché |
 | --- | --- | --- |
