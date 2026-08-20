@@ -33,10 +33,6 @@
 //! comando e dal job — riceve `PermissionDenied`. È la stessa porta che
 //! `every_structural_capability_is_refused_by_the_same_gate` presidia dal lato
 //! delle famiglie, qui provata dal lato del permesso dichiarato.
-//! command and from the job — receives `PermissionDenied`. It is the same
-//! gate that `every_structural_capability_is_refused_by_the_same_gate`
-//! guards on the capability side, here tested on the declared-permission
-//! side.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -374,7 +370,6 @@ fn a_plugin_without_the_permission_sees_close_the_gate() {
     let (host, events, _journal) = bench(&v, false);
 
     // Il comando c'è — il montaggio non dipende dal permesso — ma la lettura
-    // che fa è negata: il cancello è davanti all'host, non alla registrazione.
     // che fa è negata: il cancello è davanti all'host, non alla registrazione.
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();

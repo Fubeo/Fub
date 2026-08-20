@@ -139,7 +139,7 @@ fn walk_sources() -> Vec<(String, String)> {
 const CONTRACT: &str = include_str!("../../fub-abi/src/traits.rs");
 
 // ---------------------------------------------------------------------------
-// The reasons
+// Le ragioni
 // ---------------------------------------------------------------------------
 
 /// **Perché quel comando non poteva essere altro.**
@@ -251,7 +251,7 @@ enum Why {
 }
 
 // ---------------------------------------------------------------------------
-// The allowlist
+// L'allowlist
 // ---------------------------------------------------------------------------
 
 /// **I comandi Tauri di Fub, tutti e soli, con la loro ragione.**
@@ -561,7 +561,7 @@ fn list(names: &BTreeSet<&str>) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// The nets
+// Le reti
 // ---------------------------------------------------------------------------
 
 /// La rete che non costa niente e che va tesa lo stesso.

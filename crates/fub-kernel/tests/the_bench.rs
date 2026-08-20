@@ -41,8 +41,6 @@
 //! una sparizione, e per giunta in verde. Vale per qualunque risposta che un
 //! giorno venisse servita da un pool: il giorno che succede, questa misura va
 //! spostata dove il lavoro è andato, non allargata.
-//! response that might one day be served by a pool: the day it happens, this
-//! measurement must be moved where the work went, not widened.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;

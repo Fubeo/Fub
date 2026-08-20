@@ -1,17 +1,17 @@
-//! The conformance suite: **the properties the contract promises**, made
-//! executable by whoever implements the contract.
+//! La suite di conformità: **le proprietà che il contratto promette**, rese
+//! eseguibili da chi implementa il contratto.
 //!
-//! This is the difference between "the contract is documented" and "the
-//! contract is verifiable by its implementer". There are twenty-three functions
-//! [count: conformance-functions], and that is the number [decision 0054] once
-//! wrote as "eight" when it already had fourteen: from now on the §16.8 guard
-//! counts, not whoever writes the sentence.
+//! È la differenza fra «il contratto è documentato» e «il contratto è
+//! verificabile da chi lo implementa». Sono ventitré funzioni
+//! [count: conformance-functions], ed è quel numero che [decision 0054] una
+//! volta scrisse come «otto» quando erano già quattordici: d'ora in poi conta
+//! la guardia del §16.8, non chi scrive la frase.
 //!
 //! [decision 0054]: https://github.com/Fubeo/Fub/blob/main/docs/decisions/0054-the-provider-side-bench.md
 //!
-//! Every function here corresponds to a sentence in a trait's doc-comment in
-//! `fub-abi/src/traits.rs`, and is written to be called from a test by the
-//! *feature author* — not from a kernel test.
+//! Ogni funzione qui corrisponde a una frase del doc-comment di un trait in
+//! `fub-abi/src/traits.rs`, ed è scritta per essere chiamata da un test
+//! dell'*autore della feature* — non da un test del kernel.
 //!
 //! ```no_run
 //! # use fub_sdk::testing::conformance;
@@ -20,21 +20,22 @@
 //! # }
 //! ```
 //!
-//! # The properties were written for methods that no longer exist
+//! # Le proprietà erano state scritte per metodi che non esistono più
 //!
-//! §16.1 listed "an `IndexProvider` that does not lose documents between
-//! `on_document_*` and `flush`". Those methods have been called
-//! `on_documents_indexed`/`on_documents_removed` since [decision
-//! 0051](../../../../docs/decisions/0051-indexing-responds.md), take a
-//! **batch**, and — the point — return `Vec<IndexLoss>`.
+//! Il §16.1 elencava «un `IndexProvider` che non perde documenti fra
+//! `on_document_*` e `flush`». Quei metodi si chiamano
+//! `on_documents_indexed`/`on_documents_removed` dalla [decision
+//! 0051](../../../../docs/decisions/0051-indexing-responds.md), prendono un
+//! **lotto** e — ed è il punto — restituiscono `Vec<IndexLoss>`.
 //!
-//! The property changed in **nature**, not in name. When loss was silent, a
-//! suite could only deduce it: index, query, and if you find nothing conclude it
-//! was lost. Now loss is **speakable**, and what is verified is stronger and
-//! more precise — the *coherence between what the provider claims to have lost
-//! and what it actually lost*. An index that swallows a document and returns an
-//! empty list is no longer "an index that loses": it is an index that
-//! **lies**, and that is a condition that can be named.
+//! La proprietà è cambiata in **natura**, non nel nome. Quando la perdita era
+//! silenziosa, una suite poteva solo dedurla: indicizza, interroga, e se non
+//! trovi nulla concludi che si è perso. Ora la perdita è **dicibile**, e ciò
+//! che si verifica è più forte e più preciso — la *coerenza fra ciò che il
+//! provider dichiara di aver perso e ciò che ha davvero perso*. Un indice che
+//! ingoia un documento e restituisce un elenco vuoto non è più «un indice che
+//! perde»: è un indice che **mente**, ed è una condizione che si può
+//! nominare.
 
 use std::collections::BTreeSet;
 
@@ -53,13 +54,13 @@ use crate::testing::MemoryHost;
 // IndexProvider
 // ---------------------------------------------------------------------------
 
-/// All properties of an [`IndexProvider`] that can be verified without
-/// knowing what the index indexes. Panics with a message naming the
-/// violated property.
+/// Tutte le proprietà di un [`IndexProvider`] verificabili senza sapere
+/// cosa l'indice indicizza. Va in panico con un messaggio che nomina la
+/// proprietà violata.
 ///
-/// Calls in order:
+/// Chiama in ordine:
 /// [`routes_are_stable`], [`losses_name_only_what_was_given`],
-/// [`an_empty_batch_loses_nothing`], and
+/// [`an_empty_batch_loses_nothing`] e
 /// [`up_to_date_only_reported_what_it_saw`].
 pub fn an_index_respects_the_contract<I: IndexProvider + ?Sized>(index: &mut I) {
     routes_are_stable(index);
@@ -68,12 +69,12 @@ pub fn an_index_respects_the_contract<I: IndexProvider + ?Sized>(index: &mut I) 
     up_to_date_only_reported_what_it_saw(index);
 }
 
-/// *"What is served, declared once at registration."*
+/// *«Ciò che si serve, dichiarato una volta alla registrazione.»*
 ///
-/// The kernel reads `routes()` **once**, at mount, and builds a dispatch
-/// table. An index that responds differently on the second call has a table
-/// that does not match itself, and the symptom would be a query nobody
-/// serves — or served by someone who should not.
+/// Il kernel legge `routes()` **una volta**, al montaggio, e costruisce la
+/// tabella di dispatch. Un indice che risponde diversamente alla seconda
+/// chiamata ha una tabella che non corrisponde a sé stessa, e il sintomo
+/// sarebbe una query che nessuno serve — o che serve chi non dovrebbe.
 pub fn routes_are_stable<I: IndexProvider + ?Sized>(index: &I) {
     let first = index.routes();
     let then = index.routes();
@@ -85,13 +86,13 @@ pub fn routes_are_stable<I: IndexProvider + ?Sized>(index: &I) {
     );
 }
 
-/// *"What is listed is lost, what is not listed is taken."*
+/// *«Ciò che è elencato è perso, ciò che non è elencato è preso.»*
 ///
-/// There follows a property the contract does not write but every caller
-/// takes for granted: a loss may name **only** a document that was in the
-/// batch. A foreign id in the outcome is indistinguishable, for whoever reads
-/// it, from a document actually lost — and would send the kernel telling the
-/// user that a note they never touched is no longer searchable.
+/// Segue una proprietà che il contratto non scrive ma che ogni chiamante dà
+/// per scontata: una perdita può nominare **solo** un documento che era nel
+/// lotto. Un id estraneo nell'esito è indistinguibile, per chi lo legge, da
+/// un documento davvero perso — e manderebbe il kernel a dire all'utente che
+/// una nota che non ha mai toccato non è più ricercabile.
 pub fn losses_name_only_what_was_given<I: IndexProvider + ?Sized>(index: &mut I) {
     let docs = vec![
         model("conformita/uno.md", "il primo documento del banco"),
@@ -123,8 +124,8 @@ pub fn losses_name_only_what_was_given<I: IndexProvider + ?Sized>(index: &mut I)
     }
 }
 
-/// *"An empty list means everything went well."* Read in reverse: nothing
-/// can have gone wrong for someone to whom nothing was asked.
+/// *«Una lista vuota significa che è andato tutto bene.»* Letta al contrario:
+/// niente può essere andato male a chi non è stato chiesto nulla.
 pub fn an_empty_batch_loses_nothing<I: IndexProvider + ?Sized>(index: &mut I) {
     let losses = index.on_documents_indexed(&[]);
     assert!(
@@ -140,13 +141,13 @@ pub fn an_empty_batch_loses_nothing<I: IndexProvider + ?Sized>(index: &mut I) {
     );
 }
 
-/// [`IndexProvider::up_to_date`] responds with ids it does **not** need to
-/// re-read, and they can only be among those it has been shown.
+/// [`IndexProvider::up_to_date`] risponde con gli id che **non** deve
+/// rileggere, e possono essere solo fra quelli che gli sono stati mostrati.
 ///
-/// The contract default is "I know nothing, re-read them all", which is the
-/// safe response. Whoever overrides it promises the opposite, and this is
-/// where an index that makes a mistake causes a needed re-read to be skipped
-/// — meaning it does not go red, it goes stale.
+/// Il default del contratto è «non so niente, rileggili tutti», ed è la
+/// risposta sicura. Chi lo sovrascrive promette il contrario, ed è qui che un
+/// indice che sbaglia fa saltare una rilettura necessaria — cioè non diventa
+/// rosso: diventa stantio.
 pub fn up_to_date_only_reported_what_it_saw<I: IndexProvider + ?Sized>(index: &I) {
     let skippable = index.up_to_date(&[]);
     assert!(
@@ -158,17 +159,18 @@ pub fn up_to_date_only_reported_what_it_saw<I: IndexProvider + ?Sized>(index: &I
     );
 }
 
-/// The property §16.1 asked for, rewritten for today's contract:
-/// **what you claim not to have lost, you must actually have.**
+/// La proprietà che il §16.1 chiedeva, riscritta per il contratto di oggi:
+/// **ciò che dichiari di non aver perso, lo devi avere davvero.**
 ///
-/// It only applies to an index that declares serving a family of queries,
-/// and must be called giving it the query by which to find what was given
-/// to it. On an index that declares no routes there is nothing to verify —
-/// and saying so is the correct answer, because "this index does not
-/// respond to anything" is a legitimate declaration and not a defect.
+/// Vale solo per un indice che dichiara di servire una famiglia di query, e
+/// va chiamata passandole la query con cui ritrovare ciò che le è stato dato.
+/// Su un indice che non dichiara rotte non c'è nulla da verificare — e dirlo
+/// è la risposta corretta, perché «questo indice non risponde a niente» è una
+/// dichiarazione legittima e non un difetto.
 ///
-/// Returns `false` when there was nothing to verify, so the caller can
-/// notice its index was not tested instead of believing it passed.
+/// Restituisce `false` quando non c'era nulla da verificare, così il chiamante
+/// si accorge che il suo indice non è stato testato invece di credere che sia
+/// passato.
 pub fn what_is_not_lost_is_found_again<I: IndexProvider + ?Sized>(
     index: &mut I,
     docs: &[DocumentModel],
@@ -215,8 +217,8 @@ pub fn what_is_not_lost_is_found_again<I: IndexProvider + ?Sized>(
 // ViewProvider
 // ---------------------------------------------------------------------------
 
-/// All properties of a [`ViewProvider`] that can be verified without knowing
-/// what the view draws, against the host given to it.
+/// Tutte le proprietà di un [`ViewProvider`] verificabili senza sapere
+/// cosa la view disegna, contro l'host che le viene dato.
 pub fn a_view_respects_the_contract<V: ViewProvider + ?Sized>(view: &V, host: &dyn ReadApi) {
     view_ids_are_distinct(view);
     redrawing_on_index_updated_declares_batch_ended(view);
@@ -224,24 +226,26 @@ pub fn a_view_respects_the_contract<V: ViewProvider + ?Sized>(view: &V, host: &d
     render_view_has_no_memory(view, host);
 }
 
-/// *"A view that declares `IndexUpdated` must also declare `BatchEnded`:
-/// inside a batch the first does not arrive, and the second is what causes it
-/// to make **one** redraw where before it made N."*
+/// *«Una view che dichiara `IndexUpdated` deve dichiarare anche `BatchEnded`:
+/// dentro un lotto il primo non arriva, ed è il secondo a farle fare **un**
+/// ridisegno dove prima ne faceva N.»*
 ///
-/// This is [decision 0011](../../../../docs/decisions/0011-the-batch.md) read
-/// from the side of the view author, and it is the worst defect this suite can
-/// see: a view that gets this wrong **does not break**, it just stops updating
-/// inside a batch — which is exactly when the user has just done the biggest
-/// thing. No test sees it fail, because outside the batch it works.
+/// È la [decision 0011](../../../../docs/decisions/0011-the-batch.md) letta
+/// dal lato dell'autore della view, ed è il peggior difetto che questa suite
+/// possa vedere: una view che sbaglia questo **non si rompe**, smette solo di
+/// aggiornarsi dentro un lotto — cioè proprio quando l'utente ha appena fatto
+/// la cosa più grossa. Nessun test la vede fallire, perché fuori dal lotto
+/// funziona.
 pub fn redrawing_on_index_updated_declares_batch_ended<V: ViewProvider + ?Sized>(
     view: &V,
 ) {
     for spec in view.views() {
-        // The rule lives in **one place only** ([decision
+        // La regola vive in **un posto solo** ([decision
         // 0020](../../../../docs/decisions/0020-rules-in-one-place.md)):
-        // `misses_batches` is from the contract, and this function applies it
-        // instead of rewriting it. A second idea of the same rule, written in a
-        // test bench, is how two guards end up disagreeing.
+        // `misses_batches` viene dal contratto, e questa funzione la applica
+        // invece di riscriverla. Una seconda idea della stessa regola, scritta
+        // in un banco di test, è il modo in cui due guardie finiscono per
+        // non essere d'accordo.
         assert!(
             !spec.refresh.misses_batches(),
             "la view `{}` si ridisegna su `index-updated` ma non su\n\
@@ -254,9 +258,9 @@ pub fn redrawing_on_index_updated_declares_batch_ended<V: ViewProvider + ?Sized>
     }
 }
 
-/// Two `ViewSpec`s with the same id are two views the kernel cannot
-/// distinguish: the second registration wins or loses, and in neither case
-/// does the provider author notice.
+/// Due `ViewSpec` con lo stesso id sono due view che il kernel non sa
+/// distinguere: la seconda registrazione vince o perde, e in nessuno dei due
+/// casi l'autore del provider se ne accorge.
 pub fn view_ids_are_distinct<V: ViewProvider + ?Sized>(view: &V) {
     let specs = view.views();
     let mut seen = BTreeSet::new();
@@ -269,9 +273,9 @@ pub fn view_ids_are_distinct<V: ViewProvider + ?Sized>(view: &V) {
     }
 }
 
-/// Every **declared** view must know how to draw itself: `views()` is a
-/// promise, and a `ViewSpec` that `render_view` does not serve is a menu entry
-/// that opens to an error.
+/// Ogni view **dichiarata** deve saper disegnare sé stessa: `views()` è una
+/// promessa, e una `ViewSpec` che `render_view` non serve è una voce di menu
+/// che si apre su un errore.
 pub fn every_declared_view_draws<V: ViewProvider + ?Sized>(view: &V, host: &dyn ReadApi) {
     for spec in view.views() {
         let instance = fub_abi::traits::ViewInstance::only(spec.id.clone());
@@ -287,14 +291,14 @@ pub fn every_declared_view_draws<V: ViewProvider + ?Sized>(view: &V, host: &dyn 
     }
 }
 
-/// *"A `ViewProvider` that does not mutate during `render_view`."*
+/// *«Un `ViewProvider` che non muta durante `render_view`.»*
 ///
-/// The form §16.1 asked for is **already guaranteed by the type**:
-/// `render_view` takes `&self`, so mutating does not compile. What the type
-/// does not guarantee, and this function verifies, is that there is no hidden
-/// internal mutability — a cache behind a `Mutex`, a counter — that makes the
-/// second draw different from the first on a still host. This is the property
-/// the shell relies on to redraw when it wants.
+/// La forma che il §16.1 chiedeva è **già garantita dal tipo**:
+/// `render_view` prende `&self`, quindi mutare non compila. Ciò che il tipo
+/// non garantisce, e che questa funzione verifica, è che non ci sia
+/// mutabilità interna nascosta — una cache dietro un `Mutex`, un contatore —
+/// che renda il secondo disegno diverso dal primo su un host fermo. È la
+/// proprietà su cui la shell conta per ridisegnare quando vuole.
 pub fn render_view_has_no_memory<V: ViewProvider + ?Sized>(view: &V, host: &dyn ReadApi) {
     for spec in view.views() {
         let instance = fub_abi::traits::ViewInstance::only(spec.id.clone());
@@ -319,29 +323,30 @@ pub fn render_view_has_no_memory<V: ViewProvider + ?Sized>(view: &V, host: &dyn 
 // FormatProvider
 // ---------------------------------------------------------------------------
 
-/// Properties of a [`FormatProvider`] that can be verified **without an
-/// input**: those readable from the descriptor.
+/// Proprietà di un [`FormatProvider`] verificabili **senza un input**:
+/// quelle leggibili dal descrittore.
 ///
-/// Anyone who has an input to give — that is, anyone with a corpus — should
-/// also call [`a_model_tells_the_truth_about_the_source`], where the
-/// properties that matter live. The two are not merged because a source is not
-/// always available: a provider can be registered and guarded before having a
-/// corpus, and a signature requiring a `&str` would force inventing one —
-/// that is, testing the provider against an example chosen by the suite
-/// instead of by its author.
+/// Chi ha un input da dare — cioè chi ha un corpus — dovrebbe chiamare anche
+/// [`a_model_tells_the_truth_about_the_source`], dove stanno le proprietà che
+/// contano. Le due non sono fuse perché una sorgente non c'è sempre: un
+/// provider può essere registrato e presidiato prima di avere un corpus, e una
+/// firma che chiedesse una `&str` costringerebbe a inventarne una — cioè a
+/// testare il provider contro un esempio scelto dalla suite invece che dal suo
+/// autore.
 pub fn a_format_respects_the_contract<F: FormatProvider + ?Sized>(format: &F) {
     a_text_provider_refuses_bytes(format);
     the_descriptor_declares_at_least_one_extension(format);
 }
 
-/// *"A text provider that receives bytes responds
-/// [`FormatError::Unsupported`] instead of guessing the encoding."*
+/// *«Un provider di testo che riceve byte risponde
+/// [`FormatError::Unsupported`] invece di indovinare l'encoding.»*
 ///
 /// [`FormatError::Unsupported`]: fub_abi::error::FormatError::Unsupported
 ///
-/// This is the property that protects user files: guessing an encoding works
-/// almost always, and when it is wrong it produces a readable but wrong
-/// document — damage visible only after saving over the original.
+/// È la proprietà che protegge i file dell'utente: indovinare un encoding
+/// riesce quasi sempre, e quando sbaglia produce un documento leggibile ma
+/// **sbagliato** — un danno che si vede solo dopo aver salvato sopra
+/// l'originale.
 pub fn a_text_provider_refuses_bytes<F: FormatProvider + ?Sized>(format: &F) {
     let d = format.descriptor();
     if d.source != SourceKind::Text {
@@ -360,11 +365,11 @@ pub fn a_text_provider_refuses_bytes<F: FormatProvider + ?Sized>(format: &F) {
             d.id
         );
     };
-    // Refusing is not enough: `parse`/`render`/`serialize` end up in a log, and
-    // only `unsupported` reaches the eyes of whoever opened the file, where it
-    // means "nobody serves it" and the advice is to install a plugin. A provider
-    // that refused with `Parse` would tell a user their attachment is
-    // malformed, which is the wrong thing about the wrong file.
+    // Rifiutare non basta: `parse`/`render`/`serialize` finiscono in un log,
+    // e solo `unsupported` arriva agli occhi di chi ha aperto il file, dove
+    // significa «nessuno lo serve» e il consiglio è installare un plugin. Un
+    // provider che rifiutasse con `Parse` direbbe all'utente che il suo
+    // allegato è malformato, cioè la cosa sbagliata sul file sbagliato.
     let FormatError::Unsupported { format, got } = &and else {
         panic!(
             "`{}` refused raw bytes with `{and:?}` instead of with\n\
@@ -375,10 +380,10 @@ pub fn a_text_provider_refuses_bytes<F: FormatProvider + ?Sized>(format: &F) {
             d.id
         );
     };
-    // The two fields are what the sentence is composed from on the way out, and
-    // the compiler forces you to *carry them*, not carry them **correctly**: a
-    // provider that names itself with another's id sends the user looking for
-    // the wrong plugin.
+    // I due campi sono ciò con cui la frase è composta all'uscita, e il
+    // compilatore ti costringe a *portarli*, non a portarli **giusti**: un
+    // provider che si nomina con l'id di un altro manda l'utente a cercare il
+    // plugin sbagliato.
     assert_eq!(
         (format.as_str(), *got),
         (d.id.as_str(), SourceKind::Bytes),
@@ -389,9 +394,9 @@ pub fn a_text_provider_refuses_bytes<F: FormatProvider + ?Sized>(format: &F) {
     );
 }
 
-/// A format that declares no extensions will never receive a file: the registry
-/// routes by extension, and a successful registration that serves nothing is the
-/// most silent form in which a provider can be absent.
+/// Un formato che non dichiara estensioni non riceverà mai un file: il registro
+/// instrada per estensione, e una registrazione riuscita che non serve niente
+/// è la forma più silenziosa in cui un provider può essere assente.
 pub fn the_descriptor_declares_at_least_one_extension<F: FormatProvider + ?Sized>(format: &F) {
     let d = format.descriptor();
     assert!(
@@ -403,50 +408,52 @@ pub fn the_descriptor_declares_at_least_one_extension<F: FormatProvider + ?Sized
 }
 
 // ---------------------------------------------------------------------------
-// FormatProvider: properties that require an input
+// FormatProvider: proprietà che richiedono un input
 // ---------------------------------------------------------------------------
 
-/// How much is expected of spans, and the reason there are **two** levels
-/// and not one.
+/// Quanto ci si aspetta dagli span, e il motivo per cui i livelli sono **due**
+/// e non uno.
 ///
-/// The difference is not severity but **audience**. A curated input — the corpus
-/// of the provider author — is markdown someone chose, and on that everything is
-/// expected. A **generated** input from the fuzzer is not, and not out of mercy:
-/// on inputs built to be hostile a provider inherits from the parser beneath it
-/// sourcepos inconsistencies that are real defects, but *fixing them is a
-/// decision about what a node span is* — not something a guard can demand
-/// without having decided it first. Demanding it anyway would have one effect
-/// only: the fuzzer stays red, and whoever finds it red disables it.
+/// La differenza non è di gravità ma di **pubblico**. Un input curato — il
+/// corpus dell'autore del provider — è markdown scelto da qualcuno, e su
+/// quello ci si aspetta tutto. Un input **generato** dal fuzzer no, e non per
+/// pietà: su input costruiti per essere ostili un provider eredita dal parser
+/// che ha sotto le incongruenze di sourcepos che sono difetti veri, ma
+/// *ripararle è una decisione su cosa sia lo span di un nodo* — non qualcosa
+/// che una guardia può pretendere senza averlo deciso prima. Pretenderlo
+/// comunque avrebbe un effetto solo: il fuzzer resta rosso, e chi lo vede
+/// rosso lo disattiva.
 ///
-/// What is **always** expected, and what §17.1 asks of fuzzing ("a parser that
-/// panics is a vault that does not open"), is the other half: that no span
-/// panics its user, that the parse is deterministic, and that the model does
-/// not carry the BOM inside.
+/// Ciò che è **sempre** atteso, e ciò che il §17.1 chiede al fuzzing («un
+/// parser che va in panico è un vault che non si apre»), è l'altra metà: che
+/// nessuno span mandi in panico chi lo usa, che il parse sia deterministico,
+/// e che il modello non porti il BOM dentro.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Claim {
-    /// Every span slices the source. Applies to **any** input.
+    /// Ogni span affetta la sorgente. Vale per **qualsiasi** input.
     SliceOnly,
-    /// And additionally: every span lies inside that of its containing node,
-    /// and siblings do not overlap. Required on a curated corpus.
+    /// E in più: ogni span sta dentro quello del suo nodo contenitore,
+    /// e i fratelli non si sovrappongono. Richiesto su un corpus curato.
     Coherence,
 }
 
-/// **What the model says about the document is true relative to the file bytes.**
+/// **Ciò che il modello dice del documento è vero rispetto ai byte del file.**
 ///
-/// This is the group that wants a source, and must be called on every entry in
-/// a corpus. It calls in order: [`the_model_matches_the_given_id`],
-/// [`spans_slice_the_source`] with [`Claim::Coherence`],
+/// È il gruppo che vuole una sorgente, e va chiamato su ogni voce di un
+/// corpus. Chiama in ordine: [`the_model_matches_the_given_id`],
+/// [`spans_slice_the_source`] con [`Claim::Coherence`],
 /// [`flat_tables_are_the_tree_projection`],
 /// [`a_heading_slug_matches_the_contract`],
-/// [`leading_bom_is_not_content`], and [`parse_is_deterministic`].
+/// [`leading_bom_is_not_content`] e [`parse_is_deterministic`].
 ///
-/// Returns `false` if the provider **refused** the source, meaning there was
-/// no model to verify. This is not a failure: an `Err` is a legitimate
-/// response, and on a generated input it is the right one more often than
-/// not. It returns `false` instead of swallowing it because a corpus that
-/// ends with zero models verified is a corpus that passes without having
-/// tested anything, and its author must be able to count — the same reason
-/// [`what_is_not_lost_is_found_again`] returns `bool`.
+/// Restituisce `false` se il provider ha **rifiutato** la sorgente, cioè se
+/// non c'era un modello da verificare. Non è un fallimento: un `Err` è una
+/// risposta legittima, e su un input generato è quella giusta più spesso di
+/// quanto non lo sia il contrario. Restituisce `false` invece di ingoiarlo
+/// perché un corpus che finisce con zero modelli verificati è un corpus che
+/// passa senza aver testato niente, e il suo autore deve poter contare — la
+/// stessa ragione per cui [`what_is_not_lost_is_found_again`] restituisce
+/// `bool`.
 pub fn a_model_tells_the_truth_about_the_source<F: FormatProvider + ?Sized>(
     format: &F,
     source: &str,
@@ -464,18 +471,18 @@ pub fn a_model_tells_the_truth_about_the_source<F: FormatProvider + ?Sized>(
     true
 }
 
-/// What must hold on **any** source, including one nobody chose: this is the
-/// group to give to a fuzzer.
+/// Ciò che deve valere su **qualsiasi** sorgente, anche una che nessuno ha
+/// scelto: è il gruppo da dare a un fuzzer.
 ///
-/// It is not "the same properties, more permissive": it is the set of those
-/// whose violation does not produce a questionable model but produces a
-/// **panic or a blind write**. A span that does not slice panics the first
-/// person who uses it, and does so at note opening; a non-deterministic parse
-/// makes a document change by itself between one opening and the next; a BOM
-/// that becomes content makes a note unfindable. None of the three is an
-/// opinion on how a construct should be represented.
+/// Non è «le stesse proprietà, più permissive»: è l'insieme di quelle la cui
+/// violazione non produce un modello discutibile ma un **panico o una
+/// scrittura cieca**. Uno span che non affetta manda in panico il primo che
+/// lo usa, e lo fa all'apertura della nota; un parse non deterministico fa
+/// cambiare un documento da sé fra un'apertura e la successiva; un BOM che
+/// diventa contenuto rende una nota introvabile. Nessuna delle tre è
+/// un'opinione su come rappresentare una costruzione.
 ///
-/// Returns `false` if the source was refused: see
+/// Restituisce `false` se la sorgente è stata rifiutata: vedi
 /// [`a_model_tells_the_truth_about_the_source`].
 pub fn no_span_panics_its_user<F: FormatProvider + ?Sized>(
     format: &F,
@@ -492,13 +499,13 @@ pub fn no_span_panics_its_user<F: FormatProvider + ?Sized>(
     true
 }
 
-/// *"The id of the document we are parsing (to fill `DocumentModel.id`)."*
+/// *«L'id del documento che stiamo parsando (per riempire `DocumentModel.id`).»*
 ///
-/// The caller is the kernel, which already has that id and uses it as the key
-/// for everything: graph, index, per-document state. A provider that put a
-/// different one — the frontmatter title, the absolute path, the basename —
-/// would break nothing immediately: it would land backlinks and versions under
-/// a key nobody queries.
+/// Il chiamante è il kernel, che quell'id ce l'ha già e lo usa come chiave
+/// per tutto: grafo, indice, stato per documento. Un provider che ne mettesse
+/// uno diverso — il titolo del frontmatter, il percorso assoluto, il
+/// basename — non romperebbe nulla subito: farebbe atterrare backlink e
+/// versioni sotto una chiave che nessuno interroga.
 pub fn the_model_matches_the_given_id(model: &DocumentModel, ctx: &ParseContext) {
     assert_eq!(
         model.id.as_str(),
@@ -513,27 +520,27 @@ pub fn the_model_matches_the_given_id(model: &DocumentModel, ctx: &ParseContext)
     );
 }
 
-/// *"A [`Span`] is a **byte** range in the original source."*
+/// *«Uno [`Span`] è un intervallo in **byte** nella sorgente originale.»*
 ///
-/// The property, fully and recursively: every span in the model **slices** the
-/// source, lies **inside** that of the containing node, and does not overlap
-/// that of the preceding sibling.
+/// La proprietà, per intero e ricorsiva: ogni span del modello **affetta** la
+/// sorgente, sta **dentro** quello del nodo contenitore, e non si sovrappone
+/// a quello del fratello precedente.
 ///
-/// This is the most valuable property in the whole suite, and the reason is
-/// not the wrong panel: flat tables and spans are **the coordinates by which
-/// a file is rewritten**. A programmatic edit is a surgical patch guided by a
-/// span ([decision 0008](../../../../docs/decisions/0008-surgical-edit.md)):
-/// a span that lies by one byte does not draw badly, it **corrupts a
-/// document** — checks off the wrong task, renames inside the adjacent word,
-/// cuts a character in half. And it does so without going red, because the
-/// file remains valid UTF-8.
+/// È la proprietà più preziosa dell'intera suite, e il motivo non è il
+/// pannello sbagliato: le tabelle piatte e gli span sono **le coordinate con
+/// cui un file viene riscritto**. Una modifica programmatica è una patch
+/// chirurgica guidata da uno span ([decision
+/// 0008](../../../../docs/decisions/0008-surgical-edit.md)): uno span che
+/// mente di un byte non disegna male, **corrompe un documento** — spunta la
+/// task sbagliata, rinomina dentro la parola accanto, taglia un carattere a
+/// metà. E lo fa senza diventare rosso, perché il file resta UTF-8 valido.
 ///
-/// The two halves this function holds together that alone would not suffice:
-/// "slices" excludes the offset outside the source and the one in the middle
-/// of a character (`str::get` returns `None` for both); "lies inside, and
-/// after the sibling" excludes the case where all spans are sliceable and
-/// wrong at once — the row-to-byte table shifted by one, which slices the
-/// adjacent document piece perfectly.
+/// Le due metà che questa funzione tiene insieme e che da sole non
+/// basterebbero: «affetta» esclude l'offset fuori dalla sorgente e quello in
+/// mezzo a un carattere (`str::get` restituisce `None` per entrambi);
+/// «sta dentro, e dopo il fratello» esclude il caso in cui tutti gli span
+/// affettano e sono sbagliati insieme — la tabella riga→byte spostata di uno,
+/// che affetta perfettamente il pezzo di documento accanto.
 pub fn spans_slice_the_source(model: &DocumentModel, source: &str, claim: Claim) {
     let whole = Span::new(0, source.len());
     blocks_are_disjoint_and_contained(
@@ -558,11 +565,11 @@ pub fn spans_slice_the_source(model: &DocumentModel, source: &str, claim: Claim)
         slices(source, a.span, "lo span del blocco di un'ancora");
         let marker = slices(source, a.marker, "il `marker` di un'ancora");
         // Il `marker` **non** deve stare dentro `span`, e la prima stesura di
-        // this property demanded it: the form "anchor on its own line"
-        // (`A paragraph\n\n^abc123\n`), which is Obsidian's, puts the
-        // marker *outside* the block it marks — and rightly so, because that
-        // is what causes the block embed not to carry the id along. What can
-        // be demanded is that the marker actually names the anchor.
+        // questa proprietà lo pretendeva: la forma «ancora su riga propria»
+        // (`A paragraph\n\n^abc123\n`), che è quella di Obsidian, mette il
+        // marker *fuori* dal blocco che marca — e giustamente, perché è ciò
+        // che fa sì che l'embed del blocco non si porti l'id dietro. Ciò che
+        // si può pretendere è che il marker nomini davvero l'ancora.
         assert!(
             marker.to_lowercase().contains(&a.id.to_lowercase()),
             "l'ancora `{}` ha un `marker` ({:?}) che affetta `{marker}`, dove\n\
@@ -575,21 +582,22 @@ pub fn spans_slice_the_source(model: &DocumentModel, source: &str, claim: Claim)
     }
 }
 
-/// Flat tables are **a projection of the tree**, not a second read of the file.
+/// Le tabelle piatte sono **una proiezione dell'albero**, non una seconda
+/// lettura del file.
 ///
-/// `outline`, `links`, and `tags` are documented as "flat": *"Headings in
-/// order, flat (for outline panel and link to heading)"*, *"Flat links,
-/// resolved later by the kernel graph"*. Flat means **the same thing seen
-/// without walking the tree**, and this function verifies they really are the
-/// same: same count, same order, same spans.
+/// `outline`, `links` e `tags` sono documentati come «piatti»: *«Headings in
+/// order, flat (for outline panel and link to heading)»*, *«Flat links,
+/// resolved later by the kernel graph»*. Piatto significa **la stessa cosa
+/// vista senza camminare l'albero**, e questa funzione verifica che lo siano
+/// davvero: stesso numero, stesso ordine, stessi span.
 ///
-/// The defect this prevents is the most silent in this family, because it does
-/// not produce anything wrong — it produces **two documents**. The outline
-/// panel reads `outline`, the preview reads `body`, the graph reads `links`,
-/// and the renamer rewrites `links` spans: if the two reads diverge, every
-/// consumer is right and the vault has two truths. The concrete case is a
-/// link that is in the tree but not in the table — and then a rename does not
-/// update it, leaving a broken link nobody wrote.
+/// Il difetto che previene è il più silenzioso di questa famiglia, perché non
+/// produce niente di sbagliato — produce **due documenti**. Il pannello
+/// outline legge `outline`, l'anteprima legge `body`, il grafo legge `links`,
+/// e chi rinomina riscrive gli span di `links`: se le due letture divergono,
+/// ogni consumatore ha ragione e il vault ha due verità. Il caso concreto è
+/// un link che sta nell'albero ma non nella tabella — e allora una rinomina
+/// non lo aggiorna, lasciando un link rotto che nessuno ha scritto.
 pub fn flat_tables_are_the_tree_projection(model: &DocumentModel) {
     let mut heading_tree: Vec<(u8, Span)> = Vec::new();
     let mut link_tree: Vec<Link> = Vec::new();
@@ -636,25 +644,26 @@ pub fn flat_tables_are_the_tree_projection(model: &DocumentModel) {
     );
 }
 
-/// *"The anchor of a heading, **generated** from its text — and from whoever
-/// was there before it."*
+/// *«L'ancora di un heading, **generata** dal suo testo — e da chi c'era
+/// prima di lui.»*
 ///
-/// The rule lives in the contract ([`heading_slugs`]) and not in the provider,
-/// and the reason is written there: two providers writing it independently
-/// would give two different ids to the same title, and a `[[Note#Title]]`
-/// would resolve on one and not the other. This function verifies that whoever
-/// fills `slug` **applies** it instead of rewriting it.
+/// La regola sta nel contratto ([`heading_slugs`]) e non nel provider, e il
+/// motivo è scritto lì: due provider che la scrivessero per conto loro
+/// darebbero due id diversi allo stesso titolo, e un `[[Note#Title]]`
+/// risolverebbe sull'uno e non sull'altro. Questa funzione verifica che chi
+/// riempie `slug` la **applichi** invece di riscriverla.
 ///
-/// The **entire** outline is compared, not one title at a time, because the
-/// slug is not a function of the text alone: two `## Notes` cannot carry the
-/// same `id`, and as long as the comparison was `slug == heading_slug(text)`
-/// disambiguation was literally **forbidden** to anyone who wanted to write it.
+/// Si confronta l'**intero** outline, non un titolo alla volta, perché lo
+/// slug non è una funzione del solo testo: due `## Notes` non possono
+/// portare lo stesso `id`, e finché il confronto era `slug ==
+/// heading_slug(text)` la disambiguazione era letteralmente **vietata** a chi
+/// avesse voluto scriverla.
 ///
-/// The exception is a heading with an **explicit anchor** (`## Title ^My-ID`):
-/// whoever wrote an id is not disambiguated by the contract, and its `slug` is
-/// the canonical form of that id ([`canonical_anchor`]) — not a product of
-/// [`heading_slugs`]. Explicit ids do not consume the numbering, so the
-/// generated sequence is computed from titles without anchors only.
+/// L'eccezione è un heading con **ancora esplicita** (`## Title ^My-ID`):
+/// chi ha scritto un id non viene disambiguato dal contratto, e il suo `slug`
+/// è la forma canonica di quell'id ([`canonical_anchor`]) — non un prodotto
+/// di [`heading_slugs`]. Gli id espliciti non consumano la numerazione, quindi
+/// la sequenza generata è calcolata solo dai titoli senza ancora.
 pub fn a_heading_slug_matches_the_contract(model: &DocumentModel) {
     let without_explicit: Vec<&Heading> = model
         .outline
@@ -691,28 +700,28 @@ pub fn a_heading_slug_matches_the_contract(model: &DocumentModel) {
     }
 }
 
-/// *"A `Span { start: 0, end: 0 }` on a file with a BOM inserts **before** the
-/// BOM."* It follows that the BOM **at the head** is source, and is not
-/// content.
+/// *«Uno `Span { start: 0, end: 0 }` su un file col BOM inserisce **prima**
+/// del BOM.»* Ne segue che il BOM **in testa** è sorgente, e non è contenuto.
 ///
-/// The defect it closes is invisible by construction: a `U+FEFF` at the head
-/// of a block's text is invisible on screen, yet is present in the model, in
-/// HTML, and in indexed text. The symptom is a note found by searching its
-/// title and a title not found, and nobody knows why.
+/// Il difetto che chiude è invisibile per costruzione: un `U+FEFF` in testa
+/// al testo di un blocco è invisibile a schermo, eppure è nel modello, in
+/// HTML e nel testo indicizzato. Il sintomo è una nota trovata cercando il
+/// suo titolo e un titolo non trovato, e nessuno sa perché.
 ///
-/// # Only the one at the head, and the difference is not a detail
+/// # Solo quello in testa, e la differenza non è un dettaglio
 ///
-/// `U+FEFF` in the middle of a document **is content**: it is a zero-width
-/// space, a character a user may have pasted and the file declares. The first
-/// draft of this property banned every `U+FEFF`, and it was the first thing
-/// the fuzzer turned red — by sticking one in the middle of a title. A guard
-/// that had demanded its removal would have asked the provider to **modify the
-/// user's document**, which is the opposite of §2.4.
+/// `U+FEFF` in mezzo a un documento **è contenuto**: è uno spazio a
+/// larghezza zero, un carattere che l'utente può aver incollato e che il file
+/// dichiara. La prima stesura di questa proprietà bandiva ogni `U+FEFF`, ed è
+/// stata la prima cosa che il fuzzer ha reso rossa — infilandone uno in mezzo
+/// a un titolo. Una guardia che ne avesse preteso la rimozione avrebbe chiesto
+/// al provider di **modificare il documento dell'utente**, che è l'opposto
+/// del §2.4.
 ///
-/// So the form is a count: no string in the model may contain more than the
-/// source declares **net of** the one at the head. A BOM that leaks into
-/// content is still visible, because on a file that starts with a BOM the
-/// allowance is zero.
+/// Quindi la forma è un conteggio: nessuna stringa del modello può contenere
+/// più di quanto la sorgente dichiari **al netto di** quello in testa. Un BOM
+/// che trapela nel contenuto resta visibile, perché su un file che inizia
+/// col BOM la tolleranza è zero.
 pub fn leading_bom_is_not_content(model: &DocumentModel, source: &str) {
     let in_source = source.matches('\u{feff}').count();
     let allowance = in_source - usize::from(source.starts_with('\u{feff}'));
@@ -735,14 +744,15 @@ pub fn leading_bom_is_not_content(model: &DocumentModel, source: &str) {
     }
 }
 
-/// Two `parse` calls on the same source produce the same model.
+/// Due chiamate a `parse` sulla stessa sorgente producono lo stesso modello.
 ///
-/// The contract does not write this, and every caller takes it for granted: the
-/// host re-parses whenever it wants — at every opening, at every index feed,
-/// while walking the disk to gather per-document state — and does not keep the
-/// previous model aside to compare. It is the twin of
-/// [`render_view_has_no_memory`]: `&self` prevents mutating the provider, but
-/// not a cache behind a `Mutex` or a counter that enters a `custom_kind`.
+/// Il contratto non lo scrive, e ogni chiamante lo dà per scontato: l'host
+/// riparsa quando vuole — a ogni apertura, a ogni alimentazione dell'indice,
+/// camminando il disco per raccogliere lo stato per documento — e non tiene
+/// il modello di prima per confrontarlo. È il gemello di
+/// [`render_view_has_no_memory`]: `&self` impedisce di mutare il provider,
+/// ma non una cache dietro un `Mutex` o un contatore che entra in un
+/// `custom_kind`.
 pub fn parse_is_deterministic<F: FormatProvider + ?Sized>(
     format: &F,
     source: &str,
@@ -776,15 +786,16 @@ pub fn parse_is_deterministic<F: FormatProvider + ?Sized>(
     }
 }
 
-// --- helpers for the two recursive properties ----------------------------
+// --- aiuti per le due proprietà ricorsive --------------------------------
 
-/// The piece of source that a span names, or a panic that says **which** span
-/// and why it does not slice.
+/// Il pezzo di sorgente che uno span nomina, o un panico che dice **quale**
+/// span e perché non affetta.
 ///
-/// `str::get` returns `None` for two different defects — the offset outside the
-/// source and the offset in the middle of a character — and they are both the
-/// reason this function exists instead of `&source[a..b]`: that would panic
-/// with the message from `str`, which gives byte counts and not whose they are.
+/// `str::get` restituisce `None` per due difetti diversi — l'offset fuori
+/// dalla sorgente e l'offset in mezzo a un carattere — ed entrambi sono il
+/// motivo per cui questa funzione esiste invece di `&source[a..b]`: quello
+/// andrebbe in panico col messaggio di `str`, che dà i conteggi in byte e non
+/// di chi siano.
 fn slices<'a>(source: &'a str, span: Span, label: &str) -> &'a str {
     match source.get(span.start..span.end) {
         Some(s) => s,
@@ -799,21 +810,21 @@ fn slices<'a>(source: &'a str, span: Span, label: &str) -> &'a str {
     }
 }
 
-/// Siblings do not overlap, and lie inside the parent.
+/// I fratelli non si sovrappongono, e stanno dentro il padre.
 ///
-/// "Do not overlap" is what **writers** need: two surgical patches on
-/// overlapping spans have no defined result, and applying them in order lands
-/// the second on an offset the first has already shifted.
+/// «Non sovrapporsi» è ciò che serve a chi **scrive**: due patch chirurgiche
+/// su span che si intersecano non hanno un risultato definito, e applicarle in
+/// ordine fa atterrare la seconda su un offset che la prima ha già spostato.
 ///
-/// # Order, however, is not required — and the reason is a discovery
+/// # L'ordine invece non è richiesto — e il motivo è una scoperta
 ///
-/// The first draft also required siblings to be in **source order**, and that
-/// was wrong: `body` is documented as "the block tree (for rendering)", and
-/// the render order is not the file order. The true case that disproved it is
-/// **footnotes**, which end up at the tail of `body` with the span pointing
-/// into the middle of the document — where they are rendered, where they are
-/// needed. Requiring order would have meant asking every provider to give up
-/// that freedom to pass a guard.
+/// La prima stesura pretendeva anche che i fratelli fossero in **ordine di
+/// sorgente**, ed era sbagliato: `body` è documentato come «l'albero dei
+/// blocchi (per la resa)», e l'ordine di resa non è l'ordine del file. Il
+/// caso vero che lo smentì sono le **note a piè di pagina**, che finiscono in
+/// coda a `body` con lo span che punta in mezzo al documento — dove sono
+/// rese, dove servono. Pretendere l'ordine avrebbe significato chiedere a
+/// ogni provider di rinunciare a quella libertà per passare una guardia.
 fn blocks_are_disjoint_and_contained(
     blocks: &[Block],
     parent: Span,
@@ -825,17 +836,18 @@ fn blocks_are_disjoint_and_contained(
     for b in blocks {
         let span = b.span();
         slices(source, span, &format!("lo span di un blocco in {context}"));
-        // An **empty** span on a block that exists is how a broken
-        // row-to-byte table presents itself when the interrogator is robust to
-        // out-of-range values: not an error, a plausible number. That is how a
-        // file with `\r` terminators passed this guard with every span at the
-        // end of the file.
+        // Uno span **vuoto** su un blocco che esiste è il modo in cui una
+        // tabella riga→byte rotta si presenta quando l'interrogatore è robusto
+        // ai valori fuori intervallo: non un errore, un numero plausibile. È
+        // così che un file con terminatori `\r` passava questa guardia con
+        // ogni span in fondo al file.
         //
-        // It lives under the coherence claim and not the minimal one, and the
-        // dividing line is: an empty span **slices** (yields the empty string),
-        // so it does not panic anyone. Whoever writes into it inserts at the
-        // wrong place, which is damage — but it is the damage the `Claim`
-        // family describes, not what a fuzzer can demand be fixed.
+        // Sta sotto la pretesa di coerenza e non sotto quella minima, e la
+        // linea di divisione è: uno span vuoto **affetta** (restituisce la
+        // stringa vuota), quindi non manda in panico nessuno. Chi ci scrive
+        // dentro inserisce nel posto sbagliato, che è un danno — ma è il
+        // danno che la famiglia dei `Claim` descrive, non qualcosa che un
+        // fuzzer può pretendere venga riparato.
         if claim == Claim::Coherence {
             assert!(
                 span.start < span.end,
@@ -854,11 +866,11 @@ fn blocks_are_disjoint_and_contained(
     disjoint(&mut spans, "blocchi fratelli", context, claim);
 }
 
-/// The spans of a group of siblings are pairwise disjoint.
+/// Gli span di un gruppo di fratelli sono a due a due disgiunti.
 ///
-/// They are sorted by position and neighbors are checked: `n log n` instead of
-/// n squared, and more importantly a message that names the overlapping pair
-/// instead of the first one found.
+/// Sono ordinati per posizione e si controllano i vicini: `n log n` invece di
+/// n al quadrato, e soprattutto un messaggio che nomina la coppia che si
+/// sovrappone invece del primo che si trova.
 fn disjoint(spans: &mut [Span], label: &str, context: &str, claim: Claim) {
     if claim == Claim::SliceOnly {
         return;
@@ -878,10 +890,10 @@ fn disjoint(spans: &mut [Span], label: &str, context: &str, claim: Claim) {
     }
 }
 
-/// Descend into a block's children. The `match` is **exhaustive on purpose**:
-/// a new variant of [`Block`] will not compile until someone says where its
-/// children are, which is the only way not to add one this property does not
-/// cover.
+/// Scende nei figli di un blocco. Il `match` è **esaustivo apposta**: una
+/// nuova variante di [`Block`] non compila finché qualcuno non dice dove
+/// stanno i suoi figli, che è l'unico modo per non aggiungerne una che questa
+/// proprietà non copre.
 fn block_children(b: &Block, span: Span, source: &str, claim: Claim) {
     match b {
         Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
@@ -964,19 +976,19 @@ fn block_children(b: &Block, span: Span, source: &str, claim: Claim) {
             }
             disjoint(&mut spans, "celle", "una tabella", claim);
         }
-        // Has no children, and the `anchor` field is not a span. A reference
-        // definition is scalar (label, URL, title): it has no child spans to
-        // verify — its span is already the block's span.
+        // Non ha figli, e il campo `anchor` non è uno span. Una definizione
+        // di riferimento è scalare (etichetta, URL, titolo): non ha span
+        // figli da verificare — il suo span è già quello del blocco.
         Block::CodeBlock { .. }
         | Block::ThematicBreak { .. }
         | Block::ReferenceDefinition { .. } => {}
     }
 }
 
-/// Inlines that **carry** a span. `Text`, `Emph`, `Strong`, and `Code` do not
-/// have one in the contract, so there is nothing to verify on them here —
-/// and the `match` remains exhaustive because a new variant that carried one
-/// must not be able to enter silently.
+/// Gli inline che **portano** uno span. `Text`, `Emph`, `Strong` e `Code`
+/// non ce l'hanno nel contratto, quindi qui non c'è nulla da verificare su di
+/// loro — e il `match` resta esaustivo perché una nuova variante che ne
+/// portasse uno non deve poter entrare in silenzio.
 fn inlines_are_disjoint_and_contained(
     inlines: &[Inline],
     parent: Span,
@@ -987,9 +999,9 @@ fn inlines_are_disjoint_and_contained(
     let mut spans = Vec::new();
     for the in inlines {
         let span = match the {
-            // A link's label is re-parsed text, and what is inside it lies
-            // inside **the link**, not next to it: the parent of the descent
-            // is its span.
+            // L'etichetta di un link è testo riparsato, e ciò che c'è dentro
+            // sta dentro **il link**, non accanto: il padre della discesa è il
+            // suo span.
             Inline::Link { span, label, .. } => {
                 inlines_are_disjoint_and_contained(
                     label.as_deref().unwrap_or(&[]),
@@ -1066,8 +1078,9 @@ fn collect_blocks(
                     }
                 }
             }
-            // A reference definition carries no heading, link, or tag:
-            // it is an address, not prose — and must not enter the flat tables.
+            // Una definizione di riferimento non porta heading, link o tag:
+            // è un indirizzo, non prosa — e non deve entrare nelle tabelle
+            // piatte.
             Block::CodeBlock { .. }
             | Block::ThematicBreak { .. }
             | Block::ReferenceDefinition { .. } => {}
@@ -1090,13 +1103,14 @@ fn collect_inlines(inlines: &[Inline], link: &mut Vec<Link>, tag: &mut Vec<Tag>)
                     span: *span,
                     context: None,
                 });
-                // **Also inside the label.** This is not a recursion detail: a
-                // link's label is text the provider re-parses, and what it finds
-                // there ends up in the flat tables like anything else. The first
-                // draft of this function did not descend into it, and this
-                // property went red on a `[[#Section]]` — where inside the label
-                // there was a `TagRef` that the `tags` table declared and the
-                // tree, read wrong, did not.
+                // **Anche dentro l'etichetta.** Non è un dettaglio di
+                // ricorsione: l'etichetta di un link è testo che il provider
+                // riparsa, e ciò che ci trova finisce nelle tabelle piatte
+                // come tutto il resto. La prima stesura di questa funzione
+                // non ci scendeva, e questa proprietà diventò rossa su un
+                // `[[#Sezione]]` — dove dentro l'etichetta c'era un `TagRef`
+                // che la tabella `tags` dichiarava e l'albero, letto male,
+                // no.
                 collect_inlines(label.as_deref().unwrap_or(&[]), link, tag);
             }
             Inline::TagRef { name, span } => tag.push(Tag {
@@ -1163,9 +1177,9 @@ fn bom_in_blocks(b: &Block, check: &impl Fn(&str, &str)) {
             }
         }
         Block::CodeBlock { code, .. } => check("a code block", code),
-        // A definition is three strings: a BOM inside label, destination, or
-        // title is a byte the model carries along and that a rewrite would
-        // plant in the middle of the syntax.
+        // Una definizione è tre stringhe: un BOM dentro etichetta,
+        // destinazione o titolo è un byte che il modello si porta dietro e che
+        // una riscrittura pianterebbe in mezzo alla sintassi.
         Block::ReferenceDefinition {
             label, url, title, ..
         } => {
@@ -1204,24 +1218,25 @@ fn bom_in_inlines(the: &Inline, check: &impl Fn(&str, &str)) {
 
 // ---------------------------------------------------------------------------
 
-/// The set of link targets a model declares, in the form a corpus compares
-/// against expectations.
+/// L'insieme delle destinazioni dei link che un modello dichiara, nella forma
+/// in cui un corpus le confronta con le attese.
 ///
-/// It lives here and not in a provider's corpus because the question "what does
-/// this document name?" is the same for every format, and it is the one the
-/// kernel graph feeds on.
+/// Sta qui e non nel corpus di un provider perché la domanda «cosa nomina
+/// questo documento?» è la stessa per ogni formato, ed è quella su cui si
+/// nutre il grafo del kernel.
 ///
-/// It arrived with [0061](../../../../docs/decisions/0061-a-pass-not-through-the-model.md),
-/// on the condition that
+/// È arrivata con la
+/// [0061](../../../../docs/decisions/0061-a-pass-not-through-the-model.md),
+/// alla condizione che la
 /// [0060](../../../../docs/decisions/0060-the-model-tells-the-truth-about-bytes.md)
-/// had written it here instead of leaving it to be discovered — *the first
-/// corpus that verifies what a document names gives it a reason to exist, or it
-/// must be removed*. It is the metadata-free round-trip of
-/// `fub-format-markdown/tests/transfer_e2e.rs`: stripping frontmatter from a
-/// document must not change what that document names, and the comparison is
-/// between this set before and after. It is not a property, so it cannot pass
-/// green without having been tested: whoever calls it compares two of its own
-/// values, and one comes from a file the cut did not touch.
+/// l'avesse scritta qui invece di lasciarla scoprire — *il primo corpus che
+/// verifica ciò che un documento nomina le dà una ragione di esistere, o va
+/// tolta*. È il round-trip senza metadati di
+/// `fub-format-markdown/tests/transfer_e2e.rs`: togliere il frontmatter da un
+/// documento non deve cambiare ciò che quel documento nomina, e il confronto
+/// è fra questo insieme prima e dopo. Non è una proprietà, quindi non può
+/// passare verde senza essere stata testata: chi la chiama confronta due suoi
+/// valori, e uno viene da un file che il taglio non ha toccato.
 pub fn targets(model: &DocumentModel) -> BTreeSet<String> {
     model
         .links

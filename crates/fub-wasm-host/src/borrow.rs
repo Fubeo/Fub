@@ -28,7 +28,6 @@
 //! solo momento in cui questo campo non è nullo è dentro `with_guest`, che non
 //! attraversa nessun confine di thread. Lo `Store` invece i thread li
 //! attraversa — un job gira sul pool — e ci arriva sempre **vuoto**.
-//! job runs on the pool — and always arrives **empty**.
 
 use fub_abi::traits::HostApi;
 use fub_abi::PluginError;

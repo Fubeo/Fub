@@ -52,9 +52,6 @@
 //!
 //! Il secondo conto invece li attraversa tutti, perché la domanda è diversa: non
 //! «hai un lucchetto?» ma «ne hai improvvisato la politica?».
-//! The second count instead crosses them all, because the question is
-//! different: not "do you have a lock?" but "have you improvised its
-//! policy?".
 
 use std::collections::BTreeSet;
 
@@ -102,7 +99,6 @@ const BARE: &[&str] = &["Mutex<", "RwLock<", "Condvar", ".lock()", "PoisonError"
 /// va **nominata**: se domani `stderr()` sparisse da `log.rs` questa riga
 /// resterebbe a indicare qualcosa che non c'è, e [`the_files_the_counts_name_actually_exist`]
 /// non la vedrebbe — quindi la si controlla qui, dove si usa.
-/// non la vedrebbe — quindi la si controlla qui, dove si usa.
 const NOT_A_LOCK: &str = "std::io::stderr().lock()";
 
 #[test]
@@ -139,7 +135,6 @@ fn no_bare_lock_remains_in_the_repaired_files() {
 /// Il gemello del caso qui sopra, e serve perché il primo non basta: la porta
 /// toglie il lucchetto nudo, non l'`expect` con una frase. Un `expect` che
 /// *nomina* il veleno è la forma precisa che questo giro ha chiuso, e riscriverla
-/// altrove nel kernel sarebbe riaprire la domanda in un posto nuovo.
 /// altrove nel kernel sarebbe riaprire la domanda in un posto nuovo.
 #[test]
 fn nobody_rewrites_a_reason_instead_of_a_policy() {
@@ -216,7 +211,6 @@ fn the_files_the_counts_name_actually_exist() {
 /// È l'unico posto di questo file che usa `std::fs` invece di `include_str!`, e
 /// la ragione è il contrario di quella che vale per [`REPAIRED`]: `include_str!`
 /// lega il banco a un file **che qualcuno ha nominato**, e ciò che serve al
-/// secondo conto è vedere i file che nessuno ha nominato.
 /// secondo conto è vedere i file che nessuno ha nominato.
 fn sources() -> Vec<(String, String)> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");

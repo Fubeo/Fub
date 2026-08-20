@@ -63,7 +63,7 @@ fn entities() -> Vec<String> {
 /// qui — non aggiunta a un elenco che cresce senza che nessuno se ne accorga.
 const THE_TABLE: &str = "crates/fub-abi/src/html.rs";
 
-/// Folders we do not enter.
+/// Le cartelle in cui non si entra.
 const EXCLUDED: &[&str] = &["target", "node_modules", ".git", ".fub"];
 
 fn root() -> PathBuf {

@@ -30,9 +30,6 @@
 //! `FormatProvider` e restituisce il modello che ha parsato — servirà il `from_*`,
 //! e sarà un altro passo con le sue domande (gli indici fuori range, che di
 //! qua sono impossibili per costruzione e di là sono dato di un estraneo).
-//! `from_*` will be needed, and that will be another step with its own
-//! questions (out-of-range indices, which on this side are impossible by
-//! construction and on the other side are a stranger's data).
 
 use fub_abi::model as rm;
 use fub_abi::PluginError;

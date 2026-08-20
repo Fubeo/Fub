@@ -727,9 +727,10 @@ const EN: Record<Key, string> = {
 
   "trouble.about": "{doc}: {reason}",
   "trouble.vault": "{reason}",
-  // The panic gate (§17.3, decision 0161): when the kernel knows where the
-  // fault came in, the notice says so at the end. The frasi adapt those of
-  // `Gate::what` in crates/fub-abi/src/gate.rs, without the site detail.
+  // La porta del panico (§17.3, decisione 0161): quando il kernel sa dove è
+  // entrato il difetto, la notifica lo dice alla fine. Le frasi adattano
+  // quelle di `Gate::what` in crates/fub-abi/src/gate.rs, senza il dettaglio
+  // del punto.
   "trouble.gate": " · via {gate}",
   "gate.command": "running a command",
   "gate.view_render": "drawing a view",
