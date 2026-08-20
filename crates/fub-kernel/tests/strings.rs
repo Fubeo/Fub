@@ -211,7 +211,7 @@ fn keys_locale() -> Vec<SettingSpec> {
     fub_kernel::locale::locale_settings()
 }
 
-fn italiano() -> Locale {
+fn italian() -> Locale {
     Locale {
         language: "it-IT".into(),
         ..Locale::default()
@@ -247,7 +247,7 @@ fn all_resolved<T: Localize>(v: &mut T) -> bool {
 fn the_catalog_is_the_owners_one() {
     let fx = Fixture::new();
     let system = Arc::new(SystemLocale::default());
-    assert!(system.publish(italiano()));
+    assert!(system.publish(italian()));
     let ws = fx.workspace(system);
 
     let read = |view: &str| {
@@ -272,7 +272,7 @@ fn the_catalog_is_the_owners_one() {
 fn resolution_reaches_the_bottom_of_the_tree() {
     let fx = Fixture::new();
     let system = Arc::new(SystemLocale::default());
-    assert!(system.publish(italiano()));
+    assert!(system.publish(italian()));
     let ws = fx.workspace(system);
 
     let mut tree = ws
@@ -290,7 +290,7 @@ fn resolution_reaches_the_bottom_of_the_tree() {
 fn changing_the_language_changes_what_one_reads() {
     let fx = Fixture::new();
     let system = Arc::new(SystemLocale::default());
-    assert!(system.publish(italiano()));
+    assert!(system.publish(italian()));
     let mut ws = fx.workspace(system);
 
     let mut tree = ws
@@ -320,7 +320,7 @@ fn changing_the_language_changes_what_one_reads() {
 fn every_way_out_of_the_contract_passes_through_the_kernel() {
     let fx = Fixture::new();
     let system = Arc::new(SystemLocale::default());
-    assert!(system.publish(italiano()));
+    assert!(system.publish(italian()));
     let mut ws = fx.workspace(system);
 
     // Le spec di view: i titoli sono ciò che la shell mette su una scheda.
@@ -377,7 +377,7 @@ fn every_way_out_of_the_contract_passes_through_the_kernel() {
 fn settings_as_out_resolved_too() {
     let fx = Fixture::new();
     let system = Arc::new(SystemLocale::default());
-    assert!(system.publish(italiano()));
+    assert!(system.publish(italian()));
     let mut ws = fx.workspace(system);
     ws.register_plugin(
         PluginManifest::core("tre", "Tre")
@@ -427,7 +427,7 @@ fn settings_as_out_resolved_too() {
 fn on_the_wire_a_resolved_text_is_a_bare_string() {
     let fx = Fixture::new();
     let system = Arc::new(SystemLocale::default());
-    assert!(system.publish(italiano()));
+    assert!(system.publish(italian()));
     let ws = fx.workspace(system);
 
     let tree = ws
@@ -451,7 +451,7 @@ fn on_the_wire_a_resolved_text_is_a_bare_string() {
 fn nothing_is_resolved_on_the_way_in() {
     let fx = Fixture::new();
     let system = Arc::new(SystemLocale::default());
-    assert!(system.publish(italiano()));
+    assert!(system.publish(italian()));
     let mut ws = fx.workspace(system);
 
     // Un'azione il cui payload nomina una chiave del catalogo: torna al

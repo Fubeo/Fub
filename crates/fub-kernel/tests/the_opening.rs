@@ -4,7 +4,7 @@
 //! La proprietà sotto esame è una sola, e ha un confine che vale quanto lei:
 //!
 //! - un documento che non si **legge** o non si **parsa** non fa fallire
-//!   l'apertura: finisce fra gli scarti dell'`Apertura`, la sua voce resta in
+//!   l'apertura: finisce fra gli scarti dell'`Opening`, la sua voce resta in
 //!   anagrafe — il file c'è — e nessun indice lo riceve;
 //! - la **scansione** invece resta fatale, ed è deliberato: un vault che non sa
 //!   dire quali documenti esistono non può aprirsi «in parte», perché
@@ -449,7 +449,7 @@ fn the_slices_arrive_where_arrives_the_round_whole() {
 /// È il taglio del passo 4: se restasse da fare un giro a fette, ogni
 /// riapertura immutata pagherebbe 59 lotti a vuoto. Un indice plugin che non
 /// dichiara `up_to_date` **non** prende questa strada — lo tiene
-/// `un_indice_che_non_dice_niente`.
+/// `a_index_that_not_says_nothing_receives_all`.
 #[test]
 fn a_warm_the_second_phase_not_has_nothing_from_do() {
     let mut bench = Bench::new()

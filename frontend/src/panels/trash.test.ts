@@ -22,7 +22,7 @@ vi.mock("../host/dialog", () => ({ confirm: vi.fn(async () => fake.confirm) }));
 vi.mock("../state/vault", () => ({
   trashNote: vi.fn(async () => {}),
   refreshDocuments: vi.fn(),
-  beforeNota: vi.fn(async () => fake.first),
+  beforeNote: vi.fn(async () => fake.first),
 }));
 
 vi.mock("../state/layout", () => ({ activeDoc: vi.fn(() => fake.active) }));

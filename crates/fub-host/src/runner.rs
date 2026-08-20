@@ -268,26 +268,26 @@ impl Drop for ShutDown {
 /// la ragione per cui «ogni ora» vuol dire un'ora anche se qualcuno sposta
 /// l'orologio della macchina. Un orario di parete non si può misurare così — un
 /// `Instant` non ha un calendario — e ne vuole una seconda, che è
-/// [`crate::parete`].
+/// [`crate::wall`].
 ///
 /// Le due **non si sommano mai**: l'attesa resta sempre e solo monotona, perché
 /// aspettare è «per quanto» e non «fino a quando». Il tempo di parete entra in
 /// un punto solo — *fra quanti secondi accade quell'ora civile* — e da lì in poi
-/// il campo [`next`](Quadrante::prossima) è dello stesso tipo per tutte e
+/// il campo [`next`](Quadrant::next) è dello stesso tipo per tutte e
 /// tre le forme. Un orologio spostato allunga o accorcia una singola attesa e
 /// poi si ricalcola; che una sveglia di parete non suoni due volte non dipende
-/// dall'orologio ma dalla sua [`ultima`](Quadrante::ultima) occorrenza civile.
+/// dall'orologio ma dalla sua [`last`](Quadrant::last) occorrenza civile.
 #[derive(Default)]
 struct Alarms {
     /// Chiave: (componente, nome della sveglia).
     quadrants: HashMap<(String, String), Quadrant>,
-    /// I recuperi di parete accumulati da [`parete`](Sveglie::parete), da
-    /// drenare una volta sola in [`expired`](Sveglie::scadute). Li accumula
-    /// `parete` e non chi la chiama perché [`reconcile`](Sveglie::riconcilia)
-    /// e [`expired`](Sveglie::scadute) la chiamano entrambe: se il risultato
+    /// I recuperi di parete accumulati da [`wall`](Alarms::wall), da
+    /// drenare una volta sola in [`expired`](Alarms::expired). Li accumula
+    /// `wall` e non chi la chiama perché [`reconcile`](Alarms::reconcile)
+    /// e [`expired`](Alarms::expired) la chiamano entrambe: se il risultato
     /// tornasse al chiamante, `reconcile` lo butterebbe via e il recupero si
-    /// perderebbe — [`dove`](Quadrante::dove) è già avanzato, e la chiamata
-    /// dopo non lo rivede.
+    /// perderebbe — [`position`](Quadrant::position) è già avanzato, e la
+    /// chiamata dopo non lo rivede.
     recoveries: Vec<(String, String)>,
 }
 
@@ -366,12 +366,12 @@ impl Alarms {
     }
 
     /// Riporta i quadranti di parete a ciò che dice il calendario adesso, e
-    /// accumula i recuperi in [`recuperi`](Sveglie::recuperi).
+    /// accumula i recuperi in [`recoveries`](Alarms::recoveries).
     ///
     /// È l'unico punto in cui questo modulo tocca il tempo di sistema. I
     /// recuperi si accumulano invece di tornare al chiamante perché
-    /// [`reconcile`](Sveglie::riconcilia) e [`expired`](Sveglie::scadute) la
-    /// chiamano entrambe, e l'effetto collaterale su [`dove`](Quadrante::dove)
+    /// [`reconcile`](Alarms::reconcile) e [`expired`](Alarms::expired) la
+    /// chiamano entrambe, e l'effetto collaterale su [`position`](Quadrant::position)
     /// fa sì che la chiamata dopo non rivedrebbe un recupero già visto: se il
     /// risultato tornasse e `reconcile` lo buttasse via — come faceva — il
     /// recupero era perso per sempre.
@@ -412,7 +412,7 @@ impl Alarms {
         for (key, q) in self.quadrants.iter_mut() {
             // Un orario di parete non si avanza qui: la sua prossima non è una
             // funzione di quante volte ha suonato, e a ricalcolarla è
-            // [`parete`](Sveglie::parete), che gira subito sotto.
+            // [`wall`](Alarms::wall), che gira subito sotto.
             if q.schedule.wall_clock().is_some() {
                 continue;
             }
@@ -432,7 +432,7 @@ impl Alarms {
                 .map(|s| q.still + Duration::from_secs(s));
         }
         ringing.sort();
-        // `parete` ricalcola i quadranti di parete e accumula i recuperi
+        // `wall` ricalcola i quadranti di parete e accumula i recuperi
         // dell'occorrenza appena passata insieme a quelli delle riconciliazioni
         // precedenti: si drenano qui, una volta sola.
         self.wall(now, machine_zone);
@@ -1017,7 +1017,7 @@ impl JobRunner {
     /// Avvia il pool su un vault **scansionato**, e gli affida la seconda fase
     /// dell'apertura (§15.7).
     ///
-    /// `apertura` è ciò che [`Workspace::scan_vault`] ha consegnato, insieme
+    /// `opening` è ciò che [`Workspace::scan_vault`] ha consegnato, insieme
     /// all'identità di job che il kernel le ha dato e al posto dove
     /// depositare ciò che non si legge. Il pool parte *già con del lavoro in
     /// mano*, ed è la differenza fra un'apertura a fasi e un'apertura sincrona
@@ -1340,7 +1340,7 @@ mod tests {
 
     /// Il cancello che rende **osservabile** un parse lento senza dormire.
     ///
-    /// `dentro` dice al test che il parse è cominciato, `via` gli lascia
+    /// `within` dice al test che il parse è cominciato, `via` gli lascia
     /// decidere quando finisce. Finché non è armato il formato parsa come
     /// qualunque altro.
     #[derive(Default)]
@@ -1369,9 +1369,9 @@ mod tests {
     }
 
     /// Un formato di testo nudo che, a cancello armato, si ferma dentro `parse`.
-    struct Lento(Arc<Gate>);
+    struct Slow(Arc<Gate>);
 
-    impl fub_abi::FormatProvider for Lento {
+    impl fub_abi::FormatProvider for Slow {
         fn descriptor(&self) -> fub_abi::format::FormatDescriptor {
             fub_abi::format::FormatDescriptor::text("prova.lento", "Lento", &["md"])
         }
@@ -1423,7 +1423,7 @@ mod tests {
         let gate: Arc<Gate> = Arc::default();
         let mut formats = fub_kernel::FormatRegistry::new();
         formats
-            .register(Box::new(Lento(gate.clone())))
+            .register(Box::new(Slow(gate.clone())))
             .expect("un provider solo non va in conflitto");
         // Una nota sola: una fetta sola, quindi il cancello si attraversa una
         // volta e il test non deve indovinare quante.
@@ -1740,9 +1740,9 @@ mod tests {
     /// **Un recupero di parete calcolato in `reconcile` non si perde**: viene
     /// conservato e drenato una volta sola da `expired`.
     ///
-    /// È il difetto che aveva `reconcile` a chiamare `parete` e a buttarne via
-    /// il risultato — [`dove`](Quadrante::dove) era già avanzato, e la `parete`
-    /// di `expired` non l'avrebbe più visto. Qui lo si mette in scena senza
+    /// È il difetto che aveva `reconcile` a chiamare `wall` e a buttarne via
+    /// il risultato — [`position`](Quadrant::position) era già avanzato, e la
+    /// `wall` di `expired` non l'avrebbe più visto. Qui lo si mette in scena senza
     /// dormire: si torna indietro l'ultima occorrenza considerata di un giorno,
     /// e la riconciliazione successiva la vede come un recupero dovuto.
     #[test]

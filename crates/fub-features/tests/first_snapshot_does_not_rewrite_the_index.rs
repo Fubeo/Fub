@@ -17,7 +17,7 @@
 //! # Chi è stato rosso e chi no
 //!
 //! **Rosso**: `la__before_fotografia_scrive_l_indice__a_volta_sola`. Con la forma
-//! precedente — l'indice scritto dentro ogni `Inner::applica` — falliva con
+//! precedente — l'indice scritto dentro ogni `Inner::apply` — falliva con
 //! `volte = 200` invece di `1`, e i byte passati per `versions.json` erano
 //! 2 687 519 invece di 26 711 su un vault di 200 note.
 //!
@@ -42,7 +42,7 @@ const INDEX_FILE: &str = "versions.json";
 /// taglia serve a rendere il numero sbagliato **grande** invece che discutibile.
 const NOTE: usize = 200;
 
-fn vault_grande() -> MemoryHost {
+fn large_vault() -> MemoryHost {
     let mut host = MemoryHost::new();
     for the in 0..NOTE {
         host = host.with_document(
@@ -55,7 +55,7 @@ fn vault_grande() -> MemoryHost {
 
 #[test]
 fn the__before_snapshot_writes_the_index__a_time_single() {
-    let mut host = vault_grande();
+    let mut host = large_vault();
     let store = VersionStore::open(&mut host).expect("apertura");
     let handler = VersioningHandler::new(store.clone());
 
@@ -97,7 +97,7 @@ fn the__before_snapshot_writes_the_index__a_time_single() {
 /// note con tutte le loro versioni, leggibili.
 #[test]
 fn the_index_written_once_says_everything_it_used_to() {
-    let mut host = vault_grande();
+    let mut host = large_vault();
     let store = VersionStore::open(&mut host).expect("apertura");
     let handler = VersioningHandler::new(store.clone());
     handler
@@ -138,7 +138,7 @@ fn the_index_written_once_says_everything_it_used_to() {
 /// momento peggiore possibile.
 #[test]
 fn an_interrupted_pass_loses_nothing_because_the_index_is_rebuilt() {
-    let mut host = vault_grande();
+    let mut host = large_vault();
     let store = VersionStore::open(&mut host).expect("apertura");
     let handler = VersioningHandler::new(store.clone());
     host.denies_write(INDEX_FILE);

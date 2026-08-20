@@ -45,8 +45,8 @@ describe("atlasKey", () => {
     expect(atlasKey(t, RADIUS_BUCKETS)).not.toBe(atlasKey({ ...t, source: "xxx" }, RADIUS_BUCKETS));
   });
   it("cambia se cambiano i bucket", () => {
-    const altri = [{ min: 0, max: 10 }];
-    expect(atlasKey(t, RADIUS_BUCKETS)).not.toBe(atlasKey(t, altri));
+    const others = [{ min: 0, max: 10 }];
+    expect(atlasKey(t, RADIUS_BUCKETS)).not.toBe(atlasKey(t, others));
   });
 });
 
@@ -135,18 +135,18 @@ describe("generateAtlas e drawNode (degradazione no-op)", () => {
     // dell'atlas: un drawImage con coordinate sbagliate pescherebbe lo
     // sprite di un altro colore/raggio.
     const atlas: Atlas = { canvas: {}, bucket: RADIUS_BUCKETS, source: "f", cell: 64, cells: 3, rows: 3 } as unknown as Atlas;
-    const chiamate: unknown[] = [];
+    const calls: unknown[] = [];
     const fake = {
       globalAlpha: 1,
       drawImage(...args: unknown[]) {
-        chiamate.push(args);
+        calls.push(args);
       },
     } as unknown as CanvasRenderingContext2D;
     // raggio 7 → bucket 1, ruolo "hover" → riga 2: sx = 1·64, sy = 2·64
     drawNode(fake, atlas, 10, 20, 7, "hover");
-    expect(chiamate).toHaveLength(1);
+    expect(calls).toHaveLength(1);
     // drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) — 9 argomenti
-    const [src, sx, sy, sw, sh, dx, dy] = chiamate[0] as unknown[];
+    const [src, sx, sy, sw, sh, dx, dy] = calls[0] as unknown[];
     expect(src).toBe(atlas.canvas);
     expect(sx).toBe(64);
     expect(sy).toBe(128);
@@ -160,10 +160,10 @@ describe("generateAtlas e drawNode (degradazione no-op)", () => {
   it("drawNode con alone modula globalAlpha e rifà drawImage", () => {
     const atlas: Atlas = { canvas: {}, bucket: RADIUS_BUCKETS, source: "f", cell: 64, cells: 3, rows: 3 } as unknown as Atlas;
     const alphas: number[] = [];
-    let chiamate = 0;
+    let calls = 0;
     const fake = {
       drawImage() {
-        chiamate++;
+        calls++;
       },
     } as unknown as CanvasRenderingContext2D;
     // intercetta il setter di globalAlpha: registra ogni valore scritto
@@ -176,7 +176,7 @@ describe("generateAtlas e drawNode (degradazione no-op)", () => {
       },
     });
     drawNode(fake, atlas, 0, 0, 6, "node", 0.42);
-    expect(chiamate).toBe(2);
+    expect(calls).toBe(2);
     expect(alphas[0]).toBeCloseTo(0.42, 10);
     expect(alphas[1]).toBe(1);
   });

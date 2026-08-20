@@ -23,7 +23,7 @@ use fub_abi::{FormatProvider, OptionMap};
 ///
 /// ```
 /// use fub_testkit::SampleText;
-/// let p = SampleText::per_estensione("txt");
+/// let p = SampleText::by_extension("txt");
 /// ```
 pub struct SampleText {
     id: String,

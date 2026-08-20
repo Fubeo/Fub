@@ -24,10 +24,10 @@
 //!
 //! ## La mappa
 //!
-//! - [`cestino`] — **che nome prende una nota cestinata**: il cestino
+//! - [`trash`] — **che nome prende una nota cestinata**: il cestino
 //!   piatto, il timbro prima dell'estensione, e come si ritrova il nome di
 //!   prima senza nessun registro (D1, D2);
-//! - [`cartelle`] — **dove finisce una cartella**: gli slash di cortesia ai
+//! - [`folders`] — **dove finisce una cartella**: gli slash di cortesia ai
 //!   due capi, e il confine per segmento che distingue `Progetti-vecchi` da
 //!   una discendente di `Progetti` (§14.3);
 //! - [`composition`] — **la forma normalizzata** (NFC) su cui tutte le altre
@@ -51,12 +51,12 @@
 //! - [`snippet`] — **quanto testo porta una riga di risultato**: la finestra
 //!   di contesto attorno a un link e il tetto dello snippet di ricerca
 //!   (§25.4);
-//! - [`carichi`] — **dove stanno i byte di un `custom_kind`**: la chiave
+//! - [`loads`] — **dove stanno i byte di un `custom_kind`**: la chiave
 //!   convenzionale per i kind di terzi, accanto alla tabella del core
 //!   (§25.7);
 //! - [`properties`] — filtro, ordinamento e faccette sul frontmatter;
 //! - [`tag`] — la gerarchia dei tag, accanto alla forma canonica del nome;
-//! - [`tasti`] — **che forma ha una scorciatoia**: la sequenza di accordi, i
+//! - [`keys`] — **che forma ha una scorciatoia**: la sequenza di accordi, i
 //!   modificatori in ordine, e quali stringhe questa app non sa premere
 //!   (§1.36);
 //! - [`health`] — cosa conta come link rotto, e cosa no.

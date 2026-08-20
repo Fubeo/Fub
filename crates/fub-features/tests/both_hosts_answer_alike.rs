@@ -82,7 +82,7 @@ fn face<T>(outcome: &Result<T, PluginError>) -> String {
 
 /// Un supporto che dice di no a certe scritture, e per il resto è il disco.
 ///
-/// Serve al terzo banco: il doppio ha la sua manopola (`nega_scrittura`), il
+/// Serve al terzo banco: il doppio ha la sua manopola (`denies_write`), il
 /// kernel no — l'unico modo di fargli sentire un supporto che rifiuta è
 /// dargliene uno (§15.1).
 struct WriteRejectingStorage {
@@ -171,11 +171,11 @@ fn on_the_two_host(
     let mut from_the_kernel = Vec::new();
     ws.with_host("prova.plugin", |host| from_the_kernel = test(host));
 
-    let mut doppio = MemoryHost::new();
-    let from_the_doppio = test(&mut doppio);
+    let mut double = MemoryHost::new();
+    let from_the_double = test(&mut double);
 
     assert_eq!(
-        from_the_kernel, from_the_doppio,
+        from_the_kernel, from_the_double,
         "i due host devono dare la stessa faccia agli stessi fatti — a sinistra \
          il kernel, a destra il doppio"
     );
@@ -315,12 +315,12 @@ fn a_support_that__says__of_no__and__a_io__of_here__and__of_the() {
     });
 
     // Il doppio ha la manopola, che è la stessa frase detta in memoria.
-    let mut doppio = MemoryHost::new();
-    doppio.denies_write("blob");
-    let from_the_doppio = kind(&doppio.data_write("blob", b"i byte").unwrap_err());
+    let mut double = MemoryHost::new();
+    double.denies_write("blob");
+    let from_the_double = kind(&double.data_write("blob", b"i byte").unwrap_err());
 
     assert_eq!(
-        (from_the_kernel.as_str(), from_the_doppio.as_str()),
+        (from_the_kernel.as_str(), from_the_double.as_str()),
         ("io", "io"),
         "il supporto che dice di no è «il mondo», non «un difetto di chi ha \
          scritto il codice»: chi lo sente ha ragione di riprovare, e con \

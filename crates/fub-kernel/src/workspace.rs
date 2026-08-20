@@ -146,7 +146,7 @@ pub struct Rejected {
 
 /// L'esito di un'apertura: cosa **non** ha letto (§15.7).
 ///
-/// È la forma della [`Lettura`](crate::Lettura) del registro
+/// È la forma della [`JournalRead`](crate::journal::JournalRead) del registro
 /// ([decisione 0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md))
 /// applicata un piano più in su, e per lo stesso principio: un esito che porta
 /// ciò che ha scartato invece di un `Result` che si rifiuta. Là il conto
@@ -207,7 +207,7 @@ impl Opening {
 ///
 /// Un'indicizzazione **abbandonata** non lascia niente da ripulire: il vault
 /// resta con gli indici che ha, e ciò che manca lo dice
-/// [`Apertura::interrotta`].
+/// [`Opening::interrupted`].
 pub struct Indexing {
     /// I documenti da esaminare, in ordine di scansione.
     from_do: Vec<VaultEntry>,
@@ -517,7 +517,7 @@ pub struct Workspace {
     /// avanza un cursore. Fra i due era meglio l'interiore che una firma che
     /// mente su cosa tocca.
     ///
-    /// Un [`Ricovero`] e non un `Mutex` nudo, e qui la ragione non è di forma:
+    /// Un [`Shelter`](crate::poison::Shelter) e non un `Mutex` nudo, e qui la ragione non è di forma:
     /// `OpenSources::read` chiama `SourceBacking::read_at` — **codice di
     /// qualcun altro** — col prestito in mano. Un provider che pania là dentro
     /// avvelena questo lucchetto, e da lì ogni `open_source`, `close_source`,
@@ -993,7 +993,7 @@ impl Workspace {
             .iter()
             .any(|s| s.key == crate::journal::RETENTION_DAYS)
         {
-            self.pota_the_record();
+            self.prunes_the_record();
         }
         if !timers_declared {
             return Ok(());
@@ -1752,8 +1752,8 @@ impl Workspace {
     /// # Cosa può fallire, e cosa no (§15.7)
     ///
     /// **Un documento che non si legge o non si parsa non fa fallire
-    /// l'apertura**: finisce fra gli [`Scarto`] dell'[`Apertura`] che questa
-    /// funzione restituisce, e la sua voce resta nell'anagrafe — il file c'è, è
+    /// l'apertura**: finisce fra gli [`discarded`](Opening::discarded) dell'[`Opening`](Opening)
+    /// che questa funzione restituisce, e la sua voce resta nell'anagrafe — il file c'è, è
     /// il suo contenuto che non si è potuto vedere. Il `Result` che resta porta
     /// **solo** ciò che riguarda il vault intero, cioè la scansione: il confine
     /// non è lettura-contro-parse, è se il vault sappia ancora dire *quali*
@@ -2232,7 +2232,7 @@ impl Workspace {
     /// esclusivo in mano (`reindex`, i test). Chi ha i thread usa
     /// [`finish_index_with_graph`]: a caldo `restore` non tocca il grafo, e
     /// rifarlo sotto esclusivo congelerebbe l'UI per tutto il vault
-    /// (`il_grafo_di_un_apertura_a_caldo`).
+    /// (`a_reopening_a_warm_has_the_same_graph_of_a_a_cold`).
     ///
     /// Il flush degli indici è una **fase sua** (difetto 0113): sta qui solo
     /// perché questo percorso è sincrono e chi chiama tiene già il prestito
@@ -2715,7 +2715,7 @@ impl Workspace {
     /// righe.
     ///
     /// **Un registro che non si legge non è un registro vuoto** (§15.2): il
-    /// file assente resta una `Lettura` vuota, ogni altro guasto del supporto
+    /// file assente resta una `JournalRead` vuota, ogni altro guasto del supporto
     /// arriva qui come [`KernelError::Io`] col path che non si è potuto
     /// aprire.
     /// Pota il registro alla finestra dichiarata (§23.9).
@@ -2737,7 +2737,7 @@ impl Workspace {
     /// manca fa cadere nel default, non in un guasto — e per un registro
     /// autorevole il default che non perde niente è l'unico difendibile.
     // -----------------------------------------------------------------------
-    fn pota_the_record(&self) {
+    fn prunes_the_record(&self) {
         let days = match self.setting(crate::journal::RETENTION_DAYS) {
             Ok(SettingValue::Number(n)) if n > 0.0 => n as u64,
             _ => 0,
@@ -4838,8 +4838,8 @@ impl Workspace {
             // cataloghi. `settings_entries` risolve per proprietario; senza
             // questa porta un `Text::Message` uscirebbe nudo, e sul filo
             // diventerebbe `{"key": …}` dove la shell si aspetta una stringa
-            // — `[object Object]` nel pannello. Presidiato da
-            // `settings_come_out_resolved_too`.
+            // `[object Object]` nel pannello. Presidiato da
+            // `settings_as_out_resolved_too`.
     /// Apre i sorgenti della pagina e ci trova dentro i testi cercati.
             IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
                 self.settings_entries(plugin.as_deref()),
@@ -5069,7 +5069,7 @@ impl Workspace {
     ///
     /// Le due maschere che escono di qui sono quelle dell'**esemplare unico**
     /// (§22.3): le risolve
-    /// [`specs_dichiarate`](crate::providers::specs_dichiarate) al momento della
+    /// [`declared_specs`](crate::providers::declared_specs) al momento della
     /// registrazione, che è dove le spec si chiedono — una volta sola, come
     /// tutto il resto di ciò che un provider dichiara.
     /// Rende una view e restituisce il suo albero di UI.
@@ -6556,7 +6556,7 @@ impl Workspace {
         // riga del recinto qui sopra, stessa ragione (§23.9).
     /// Le scorciatoie che il file di questo vault dichiara (§23.13), come
         if key == crate::journal::RETENTION_DAYS {
-            self.pota_the_record();
+            self.prunes_the_record();
         }
         let key = key.to_string();
         self.emit_event(Event::SettingChanged { key, scope });

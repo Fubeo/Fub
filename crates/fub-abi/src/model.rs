@@ -1119,7 +1119,7 @@ pub mod custom_kind {
     ///
     /// Che sia una tabella e non un `match` è deliberato: un `match` sulle
     /// stringhe non si può contare, e il presidio
-    /// `ogni_kind_dichiara_cosa_porta` conta proprio le due metà — un `const`
+    /// `every_kind_declares_what_carries` conta proprio le due metà — un `const`
     /// nuovo senza una riga qui è rosso, e una riga qui che non nomina nessun
     /// `const` pure.
     pub const PAYLOADS: &[(&str, Payload)] = &[
@@ -1140,7 +1140,7 @@ pub mod custom_kind {
     /// Cosa porta un `custom_kind`, o `None` se il contratto non lo declare.
     ///
     /// **`None` non vuol dire «niente»: vuol dire «nessuno l'ha detto».** Un
-    /// kind di terzi non è in [`CARICHI`] per costruzione — l'elenco è del
+    /// kind di terzi non è in [`PAYLOADS`] per costruzione — l'elenco è del
     /// core, e questo modulo declare i significati *condivisi*, non tutti
     /// quelli possibili. Chi rende un kind non dichiarato degrada come sa; chi
     /// serializza si rifiuta, che è l'unica risposta che non inventa byte.
@@ -1166,8 +1166,8 @@ pub mod custom_kind {
 }
 
 /// I *nomi* dei kind si usano qualificati — `custom_kind::MATH` dice di chi è
-/// quella stringa —, ma [`custom_kind::Carico`] è un **tipo**, e compare nella
-/// firma di [`custom_kind::carico`]: chi la legge deve poterlo nominare senza
+/// quella stringa —, ma [`custom_kind::Payload`] è un **tipo**, e compare nella
+/// firma di [`custom_kind::payload`]: chi la legge deve poterlo nominare senza
 /// sapere in che modulo è stato scritto (`superficie_della_radice.rs`).
 /// Il valore di una proprietà del frontmatter, **normalizzato**.
 pub use custom_kind::Payload;
@@ -1563,7 +1563,7 @@ mod tests {
     /// presidierebbe se stesso. Si prendono le sole righe che **sono** una
     /// dichiarazione — `pub const NOME: &str = "…";` — e solo dentro il
     /// modulo, che comincia alla riga che lo apre.
-            // Un `pub const` di **un altro tipo** non è un kind: `CARICHI` è la
+            // Un `pub const` di **un altro tipo** non è un kind: `PAYLOADS` è la
     fn kind_declared() -> Vec<(String, String)> {
         let src = include_str!("model.rs");
         let within = src
@@ -1598,13 +1598,13 @@ mod tests {
     /// È il presidio del difetto 0095: *dove* stiano i byte di un `Custom` era
     /// scritto in tre posti che nessuno teneva allineati — la prosa qui sopra,
     /// tre stringhe a campione in `render.rs`, una catena di `if` in
-    /// `serialize.rs`. Adesso il posto è [`custom_kind::CARICHI`], e questo
+    /// `serialize.rs`. Adesso il posto è [`custom_kind::PAYLOADS`], e questo
     /// conto è ciò che impedisce al quarto kind di nascere senza una risposta:
     /// il compilatore un `const` in più non lo vede, e chi lo aggiunge non ha
     /// nessuna ragione di aprire `render.rs`.
     ///
     /// Il conto è nei **due versi** apposta, come l'allowlist di
-    /// `dependency_invariant.rs`: una riga di `CARICHI` che non nomina nessun
+    /// `dependency_invariant.rs`: una riga di `PAYLOADS` che non nomina nessun
     /// `const` è un kind rinominato di cui è rimasta l'ombra, e sarebbe una
     /// tabella che risponde a un nome che non esiste più.
     /// L'estrattore deve leggere ciò che dice di leggere: le dichiarazioni sì,
@@ -1648,7 +1648,7 @@ mod tests {
     }
 
     /// la prosa che le nomina no.
-        // `CARICHI` è un `pub const` dello stesso modulo, ed è la tabella, non
+        // `PAYLOADS` è un `pub const` dello stesso modulo, ed è la tabella, non
     #[test]
     fn the_extractor_of_the_kind_skips_the_prose() {
         let read = kind_declared();
@@ -1657,12 +1657,12 @@ mod tests {
             .iter()
             .any(|(n, v)| n == "FRONTMATTER_UNPARSED" && v == "frontmatter-unparsed"));
         // un kind: l'estrattore lo salta perché il suo tipo non è `&str`.
-        // Il doc di `CARICHI` nomina `Sorgente`, `Corpo` e `Figli`, e il doc di
+        // Il doc di `PAYLOADS` nomina `Source`, `Body` e `Children`, e il doc di
         assert!(
             !read.iter().any(|(n, _)| n == "PAYLOADS"),
             "the extractor mistook the table for a kind"
         );
-        // `carico` nomina `SyntaxRuleSpec::produces`: nessuno dei quattro è un
+        // `payload` nomina `SyntaxRuleSpec::produces`: nessuno dei quattro è un
         // kind, e nessuno dei quattro deve comparire.
     /// La regola che distingue "risorsa del vault" da "mondo esterno", con i
         for name in ["Source", "Body", "Children", "produces"] {

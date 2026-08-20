@@ -55,9 +55,9 @@ pub fn within(folder: &str, own: &str, descendants: bool) -> bool {
 
 /// Questo path sta dentro questa cartella, a qualunque profondità?
 ///
-/// È [`dentro`] posta su ciò che è contenuto invece che sulla sua cartella, ed
+/// È [`within`] posta su ciò che è contenuto invece che sulla sua cartella, ed
 /// è la forma che serve a chi ha in mano un `DocId`. Una cartella non sta
-/// dentro sé stessa: `contiene("Progetti", "Progetti")` è falso, perché la
+/// dentro sé stessa: `contains("Progetti", "Progetti")` è falso, perché la
 /// domanda è «questo *documento* sta lì», e la genitrice di `Progetti` è la
 /// radice.
 pub fn contains(folder: &str, path: &str) -> bool {

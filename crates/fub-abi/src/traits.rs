@@ -292,7 +292,7 @@ pub struct VaultFolder {
 pub struct FolderScope {
     /// La cartella. `""` è la radice del vault, e gli slash ai due capi sono
     /// cortesia: `Progetti`, `Progetti/` e `/Progetti/` sono la stessa cartella
-    /// ([`cartelle`](crate::rules::cartelle)).
+    /// ([`folders`](crate::rules::folders)).
     pub path: String,
     /// Anche ciò che sta nelle sue discendenti. `false` = i soli figli
     /// **diretti**, che è la domanda che disegna un livello di albero.
@@ -3720,7 +3720,7 @@ pub trait IndexProvider: Send + Sync {
     /// serializzare è permesso e sconsigliato, e chi vuole sapere se il proprio
     /// indice scala lo **misura**. Il primo indice nativo lo fa
     /// (`fub_features::SearchIndex`, presidio
-    /// `due_ricerche_stanno_nell_indice_insieme`), e lo fa perché per un anno
+    /// `two_searches_are_in_the_index_together`), e lo fa perché per un anno
     /// non lo faceva senza che si vedesse.
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
 
@@ -4319,7 +4319,7 @@ impl CivilTime {
         was * 146_097 + doe - 719_468
     }
 
-    /// L'inverso, tenendo l'ora di `ora_del_giorno`.
+    /// L'inverso, tenendo l'ora di `time_of_the_day`.
     fn from_days(days: i64, time_of_the_day: Self) -> Self {
         let z = days + 719_468;
         let was = if z >= 0 { z } else { z - 146_096 } / 146_097;
@@ -4532,7 +4532,7 @@ mod tests {
     /// capita davvero: aggiungo una variante in fondo all'enum e mi dimentico
     /// `ALL`. Un conto sa dire se un elenco è coerente **con sé stesso**; non sa
     /// quante varianti esistano fuori di lui. Quello lo sa solo il compilatore,
-    /// ed è il mestiere di `indice_dichiarato`.
+    /// ed è il mestiere di `index_declared`.
     fn index_declared(surface: ViewSurface) -> usize {
         // Esaustivo apposta e senza `_`: è tutto ciò che questa funzione fa. Una
         // variante nuova non compila finché non le si dà un posto qui, e a quel
@@ -4582,7 +4582,7 @@ mod tests {
         );
     }
 
-    /// Il gemello di `indice_dichiarato` per i controlli di salute, e per la
+    /// Il gemello di `index_declared` per i controlli di salute, e per la
     /// stessa ragione: `HealthCheck::ALL` ha un chiamante che li vuole **tutti**,
     /// e un controllo che sparisse da lì non renderebbe rosso niente — il
     /// rapporto diagnostico resterebbe un array valido con una riga in meno.

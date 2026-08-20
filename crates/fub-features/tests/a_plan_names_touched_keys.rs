@@ -22,7 +22,7 @@
 //! Dentro la passata l'indice si scrive **una volta sola**
 //! (`la__before_fotografia__does_not_riscrive_l_indice.rs`), e ciò che resta per ogni
 //! nota è esattamente il piano. Ma il piano è lo stesso codice —
-//! `Inner::applica` — su cui passa ogni salvataggio a vault aperto: la passata
+//! `Inner::apply` — su cui passa ogni salvataggio a vault aperto: la passata
 //! è il posto dove lo si vede da solo, non un caso a parte.
 //!
 //! # Chi è stato rosso e chi no
@@ -102,7 +102,7 @@ fn pass_on(count: usize) -> u64 {
     let mut host = vault(count);
     let store = VersionStore::open(&mut host).expect("apertura");
     let handler = VersioningHandler::new(store.clone());
-    let costo = allocations_of(|| {
+    let cost = allocations_of(|| {
         handler
             .first_snapshot_of_the_vault(&mut host)
             .expect("la prima fotografia")
@@ -112,7 +112,7 @@ fn pass_on(count: usize) -> u64 {
         count,
         "la passata non ha fotografato tutto il vault: il conto non misura il lavoro giusto"
     );
-    costo
+    cost
 }
 
 /// Il costo di una fotografia dipende da **quella nota**, non da quante note
@@ -126,15 +126,15 @@ fn pass_on(count: usize) -> u64 {
 /// 3,7 non c'è niente da discutere.
 #[test]
 fn a_pass__does_not_pays_the_vault_a_every_snapshot() {
-    let poche = pass_on(200);
-    let doppie = pass_on(400);
+    let few = pass_on(200);
+    let doubles = pass_on(400);
 
     assert!(
-        doppie <= poche * 5 / 2,
-        "duecento note in più sono costate {doppie} allocazioni contro {poche} \
+        doubles <= few * 5 / 2,
+        "duecento note in più sono costate {doubles} allocazioni contro {few} \
          ({:.2}x per il doppio delle note): il piano di ogni fotografia sta \
          ancora copiando l'anagrafe di tutto il vault",
-        doppie as f64 / poche as f64
+        doubles as f64 / few as f64
     );
 }
 

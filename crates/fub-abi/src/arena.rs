@@ -2003,11 +2003,11 @@ mod tests {
             assert_eq!(model::Span::try_from(wide).unwrap(), native);
         }
         // E il limite della piattaforma: su 64 bit ci sta tutto, su wasm32 no.
-        let enorme = Span {
+        let huge = Span {
             start: 0,
             end: u64::MAX,
         };
-        match model::Span::try_from(enorme) {
+        match model::Span::try_from(huge) {
             Ok(s) => assert_eq!(s.end, usize::MAX, "on 64-bit u64::MAX fits in usize"),
             Err(and) => assert_eq!(and, ArenaError::SpanTooWide { value: u64::MAX }),
         }

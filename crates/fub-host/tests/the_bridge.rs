@@ -58,7 +58,7 @@ const SEAL: &str = "test.bench:ready";
 ///
 /// Il sink fa due cose per ogni evento — lo registra, e decide se fermarsi — e
 /// il banco ne fa due sue: azzera il conto e arma la barriera. Quando erano due
-/// lucchetti (`visti` e `via`) le due coppie si potevano intrecciare, e una
+/// lucchetti (`seen` e `via`) le due coppie si potevano intrecciare, e una
 /// delle quattro trecce fermava il banco per sempre: il ponte registrava
 /// l'ultimo evento dell'apertura, il banco lo vedeva, azzerava e armava, e il
 /// ponte — ripreso — trovava la barriera armata e **si fermava su un evento che

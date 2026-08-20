@@ -72,7 +72,7 @@ pub struct MemoryHost {
     /// In memoria come tutto il resto, ma dietro un handle come quelle vere, ed
     /// è il punto: chi scrive un importer che legge a pezzi deve poterlo provare
     /// senza un kernel e senza un file. Si semina con
-    /// [`MemoryHost::con_sorgente`].
+    /// [`MemoryHost::with_source`].
     sources: Mutex<BTreeMap<u64, Vec<u8>>>,
     /// Contatore da cui nascono le chiavi delle sorgenti. Sale e non si ricicla,
     /// come nel kernel vero.
@@ -130,7 +130,7 @@ pub struct MemoryHost {
     /// interruttore che restasse acceso renderebbe ogni nome libero occupato, e
     /// il banco proverebbe «create_document rifiuta sempre» invece di «rifiuta
     /// chi ha perso la corsa».
-    ruba_the_name_free: AtomicBool,
+    steals_the_name_free: AtomicBool,
     /// Contatore per timbrare le voci del cestino con id distinti.
     trashed: AtomicU64,
     /// Le impostazioni **dichiarate** (§11.1) e ciò che è stato scritto: il
@@ -141,7 +141,7 @@ pub struct MemoryHost {
     /// L'esemplare di view per conto del quale questo doppio sta agendo (§11.2).
     /// `None` — il default — è «non si sta disegnando nessuna view», ed è la
     /// condizione in cui lo stato di vista non c'è: chi prova una view che
-    /// ricorda qualcosa lo dice con [`MemoryHost::con_esemplare`].
+    /// ricorda qualcosa lo dice con [`MemoryHost::with_instance`].
     view_instance: Mutex<Option<String>>,
     /// (esemplare, chiave) → valore. Il proprietario **non** è nella chiave
     /// perché questo doppio lo dà a un provider solo, e non ha un id da
@@ -175,7 +175,7 @@ pub struct MemoryHost {
     /// fatto.
     requests: Mutex<Vec<HttpRequest>>,
     /// I path dello spazio dati su cui `data_write` rifiuta. Vuoto è il
-    /// default. Si accende con [`MemoryHost::nega_scrittura`].
+    /// default. Si accende con [`MemoryHost::denies_write`].
     writes_negate: Mutex<std::collections::BTreeSet<String>>,
     /// Il **conto** delle `data_write`, per path: quante volte e quanti byte.
     ///
@@ -218,7 +218,7 @@ impl MemoryHost {
     /// che senza questa maniglia non si costruisce se non con dei thread — cioè
     /// con una speranza sulla schedulazione al posto di un fatto.
     pub fn the_next_run_of_the_name_is_loses(&self) -> &Self {
-        self.ruba_the_name_free.store(true, Ordering::SeqCst);
+        self.steals_the_name_free.store(true, Ordering::SeqCst);
         self
     }
 
@@ -348,7 +348,7 @@ impl MemoryHost {
     }
 
     /// Segna una lettura riuscita. Privato: il conto si legge, non si scrive.
-    fn annota_read(&self, key: &str, byte: usize) {
+    fn record_read(&self, key: &str, byte: usize) {
         let mut reads = self.reads.lock().unwrap();
         let count = reads.entry(key.to_string()).or_insert((0, 0));
         count.0 += 1;
@@ -619,7 +619,7 @@ impl VaultRead for MemoryHost {
             .ok_or_else(|| PluginError::NotFound(id.to_string().into()))?;
         // Solo le letture **riuscite**, come per le scritture: chiedere un
         // documento che non c'è non è lavoro fatto sul disco.
-        self.annota_read(id.as_str(), bytes.len());
+        self.record_read(id.as_str(), bytes.len());
         Ok(bytes)
     }
 
@@ -689,7 +689,7 @@ impl VaultRead for MemoryHost {
         // con i thread sarebbe una speranza sulla schedulazione invece di un
         // fatto: qui la finestra si apre dove è dichiarata, cioè dentro la
         // risposta, e chi legge il banco vede il momento esatto.
-        if self.ruba_the_name_free.swap(false, Ordering::SeqCst) {
+        if self.steals_the_name_free.swap(false, Ordering::SeqCst) {
             docs.insert(free.as_str().to_string(), b"di qualcun altro".to_vec());
         }
         free
@@ -913,7 +913,7 @@ impl DataRead for MemoryHost {
         fence_data(path)?;
         let blob = self.blobs.lock().unwrap().get(path).cloned();
         if let Some(bytes) = &blob {
-            self.annota_read(path, bytes.len());
+            self.record_read(path, bytes.len());
         }
         Ok(blob)
     }
@@ -1044,7 +1044,7 @@ impl ViewStateWrite for MemoryHost {
         let instance = self.view_instance.lock().unwrap().clone().ok_or_else(|| {
             PluginError::BadArgs(
                 "lo stato di vista è di un esemplare di view: dillo con \
-                 `MemoryHost::con_esemplare`"
+                 `MemoryHost::with_instance`"
                     .into(),
             )
         })?;

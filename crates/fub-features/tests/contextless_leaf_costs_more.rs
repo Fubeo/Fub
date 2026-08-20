@@ -118,7 +118,7 @@ fn costo_of<T>(f: impl FnOnce() -> T) -> (u64, u64) {
     (n1 - n0, b1 - b0)
 }
 
-const BERSAGLIO: &str = "bersaglio.md";
+const TARGET: &str = "bersaglio.md";
 /// Quante note nominano il bersaglio. Cinquecento è la nota-crocevia: quella
 /// che tutto il vault cita, cioè il caso in cui i contesti consegnati fanno i
 /// duecento chilobyte da cui la riga d'audit era partita.
@@ -159,9 +159,9 @@ impl Vault {
 
 /// Un vault in cui `BACKLINK` note nominano il bersaglio, ciascuna dentro un
 /// paragrafo lungo `CONTEXT_CHARS` caratteri.
-fn vault_that_linka(v: &Vault) -> Workspace {
+fn vault_that_links(v: &Vault) -> Workspace {
     let mut ws = v.open();
-    ws.write_document(&DocId::new(BERSAGLIO), "sono io\n", WriteBase::Dictated)
+    ws.write_document(&DocId::new(TARGET), "sono io\n", WriteBase::Dictated)
         .expect("scrive");
     let placeholder = "parola ".repeat(CONTEXT_CHARS / 2 / 7);
     for the in 0..BACKLINK {
@@ -180,7 +180,7 @@ fn plan(ws: &mut Workspace) -> Vec<DocId> {
     let outcome = ws
         .invoke_command(
             NOTES_RENAME,
-            serde_json::json!({ "doc": BERSAGLIO, "to": "nuovo.md" }),
+            serde_json::json!({ "doc": TARGET, "to": "nuovo.md" }),
             InvokeMode::DryRun,
             Actor::User,
         )
@@ -196,7 +196,7 @@ fn for_the_leaf(ws: &Workspace) -> Vec<DocId> {
     match ws
         .query_index(IndexQuery::Documents {
             matching: QueryExpr::of(QueryPredicate::Linked {
-                doc: DocId::new(BERSAGLIO),
+                doc: DocId::new(TARGET),
                 direction: LinkDirection::Inbound,
             }),
             sort: None,
@@ -216,7 +216,7 @@ fn for_the_leaf(ws: &Workspace) -> Vec<DocId> {
 fn for_the_backlink(ws: &Workspace) -> usize {
     match ws
         .query_index(IndexQuery::Backlinks {
-            target: DocId::new(BERSAGLIO),
+            target: DocId::new(TARGET),
             page: None,
         })
         .expect("i backlink")
@@ -237,7 +237,7 @@ fn for_the_backlink(ws: &Workspace) -> usize {
 #[test]
 fn the_leaf__without_context_costs_more__of_the_contexts() {
     let v = Vault::new();
-    let mut ws = vault_that_linka(&v);
+    let mut ws = vault_that_links(&v);
     // Un giro a vuoto: la prima invocazione paga le inizializzazioni pigre.
     let _ = plan(&mut ws);
     let _ = for_the_leaf(&ws);
@@ -265,7 +265,7 @@ fn the_leaf__without_context_costs_more__of_the_contexts() {
 #[test]
 fn the_dry_run_spends_on_the_question__does_not_around() {
     let v = Vault::new();
-    let mut ws = vault_that_linka(&v);
+    let mut ws = vault_that_links(&v);
     let _ = plan(&mut ws);
     let _ = for_the_backlink(&ws);
 
@@ -294,7 +294,7 @@ fn the_dry_run_spends_on_the_question__does_not_around() {
 #[test]
 fn the_two_forms_name_the_same_notes() {
     let v = Vault::new();
-    let mut ws = vault_that_linka(&v);
+    let mut ws = vault_that_links(&v);
     // Una nota che cita il bersaglio **due volte**: è il solo caso in cui
     // «riferimenti» e «documenti» potrebbero divergere, e senza di essa il
     // confronto proverebbe due elenchi che nessuno ha messo alla prova.
@@ -312,7 +312,7 @@ fn the_two_forms_name_the_same_notes() {
     // suoi, non dell'indice.
     assert_eq!(
         from_the_plan[..2],
-        [DocId::new(BERSAGLIO), DocId::new("nuovo.md")],
+        [DocId::new(TARGET), DocId::new("nuovo.md")],
         "il piano nomina per prime la nota e la sua destinazione"
     );
     assert_eq!(

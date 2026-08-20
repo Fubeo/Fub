@@ -583,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn the_fence_equals_in_the_two_versi() {
+    fn the_fence_equals_in_the_two_directions() {
         for naming in [Naming::Existing, Naming::New] {
             assert_eq!(faults("../fuori.md", naming), Some("traversal"));
             assert_eq!(faults("a/../../fuori.md", naming), Some("traversal"));
@@ -735,9 +735,9 @@ mod tests {
         );
         // È un limite **per segmento**: un path lungo con segmenti corti va bene,
         // perché il limite del path intero non è una proprietà del nome.
-        let profondo = (0..40).map(|_| "cartella").collect::<Vec<_>>().join("/");
-        assert!(profondo.len() > MAX_SEGMENT_BYTES);
-        assert_eq!(faults(&format!("{profondo}/nota.md"), Naming::New), None);
+        let deep = (0..40).map(|_| "cartella").collect::<Vec<_>>().join("/");
+        assert!(deep.len() > MAX_SEGMENT_BYTES);
+        assert_eq!(faults(&format!("{deep}/nota.md"), Naming::New), None);
     }
 
     #[test]

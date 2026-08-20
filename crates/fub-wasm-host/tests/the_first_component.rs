@@ -221,7 +221,7 @@ fn a_family_not_served_is_does_name() {
 /// Se un giorno smettesse, questo test non compilerebbe più.
 #[test]
 fn the_bundle_crosses_the_thread() {
-    fn pretende_send_sync<T: Send + Sync>() {}
-    pretende_send_sync::<WasmBundle>();
-    pretende_send_sync::<Arc<dyn fub_abi::traits::Plugin>>();
+    fn asserts_send_sync<T: Send + Sync>() {}
+    asserts_send_sync::<WasmBundle>();
+    asserts_send_sync::<Arc<dyn fub_abi::traits::Plugin>>();
 }

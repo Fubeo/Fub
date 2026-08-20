@@ -381,7 +381,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn espande_the_three_variabili() {
+    fn expands_the_three_variables() {
         let s = expand(
             "ciao {{title}} il {{date}} ({{name}})",
             "Nota",

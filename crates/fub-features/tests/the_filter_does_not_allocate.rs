@@ -89,18 +89,18 @@ const NONE: &str = "zqxjk";
 /// la differenza veniva 500, cioè esattamente una `String` per tag in più.
 #[test]
 fn a_keystroke__does_not_allocates__for_tag() {
-    let piccolo = tags(500, |the| format!("progetto/Rust-{the}"));
+    let small = tags(500, |the| format!("progetto/Rust-{the}"));
     let large = tags(1000, |the| format!("progetto/Rust-{the}"));
 
     // Un giro a vuoto: la prima chiamata paga le inizializzazioni pigre.
-    let _ = build_tags_view(&piccolo, NONE);
+    let _ = build_tags_view(&small, NONE);
     let _ = build_tags_view(&large, NONE);
 
-    let a = allocations_of(|| build_tags_view(&piccolo, NONE));
+    let a = allocations_of(|| build_tags_view(&small, NONE));
     let b = allocations_of(|| build_tags_view(&large, NONE));
 
     assert_eq!(
-        tree_entries(&build_tags_view(&piccolo, NONE)),
+        tree_entries(&build_tags_view(&small, NONE)),
         tree_entries(&build_tags_view(&large, NONE)),
         "il presidio regge solo se i due alberi sono lo stesso: nessun tag trovato, di qua e di là"
     );
@@ -118,13 +118,13 @@ fn a_keystroke__does_not_allocates__for_tag() {
 /// chi un giorno lo cambia (in meglio o in peggio) se ne accorge qui.
 #[test]
 fn outside_from_ascii_is_pays__still__a_string__for_tag() {
-    let piccolo = tags(500, |the| format!("progetto/Città-{the}"));
+    let small = tags(500, |the| format!("progetto/Città-{the}"));
     let large = tags(1000, |the| format!("progetto/Città-{the}"));
 
-    let _ = build_tags_view(&piccolo, NONE);
+    let _ = build_tags_view(&small, NONE);
     let _ = build_tags_view(&large, NONE);
 
-    let a = allocations_of(|| build_tags_view(&piccolo, NONE));
+    let a = allocations_of(|| build_tags_view(&small, NONE));
     let b = allocations_of(|| build_tags_view(&large, NONE));
 
     let difference = b as i64 - a as i64;

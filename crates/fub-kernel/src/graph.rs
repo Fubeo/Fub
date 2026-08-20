@@ -68,7 +68,7 @@ use fub_abi::rules::path::{exact_key, resolution_key, resolve_against, strip_ext
 /// pubblico per un valore che non esce da lì. Il nome esiste perché la firma
 /// scritta per esteso — tre livelli di tuple dentro due `Vec` — è quella che
 /// `clippy::type_complexity` rifiuta, e aveva ragione.
-type DocRisolto = (DocId, Vec<DocId>, Vec<(DocId, BacklinkRef)>);
+type ResolvedDoc = (DocId, Vec<DocId>, Vec<(DocId, BacklinkRef)>);
 
 /// Ciò che il grafo legge di un documento: identità, alias, link.
 ///
@@ -263,7 +263,7 @@ impl LinkGraph {
         if n > 1 && doc_ids.len() > 256 {
             let chunk_size = doc_ids.len().div_ceil(n);
             let graph_ref = &graph;
-            let resolved_chunks: Vec<Vec<DocRisolto>> = std::thread::scope(|s| {
+            let resolved_chunks: Vec<Vec<ResolvedDoc>> = std::thread::scope(|s| {
                 let handles: Vec<_> = doc_ids
                     .chunks(chunk_size)
                     .map(|chunk| {
@@ -1150,10 +1150,10 @@ mod tests {
         // Il caso che in tutto il repo non era esercitato da nessuno: due file
         // che il filesystem distingue e la chiave di risoluzione no.
         let large = doc_with_links("verso-grande.md", &["Nota"]);
-        let piccola = doc_with_links("verso-piccola.md", &["nota"]);
+        let small = doc_with_links("verso-piccola.md", &["nota"]);
         let a = DocumentModel::empty(DocId::new("Nota.md"));
         let b = DocumentModel::empty(DocId::new("nota.md"));
-        let graph = LinkGraph::build([&large, &piccola, &a, &b]);
+        let graph = LinkGraph::build([&large, &small, &a, &b]);
 
         // Ognuno dei due arriva dove l'utente l'ha scritto. Prima ci arrivavano
         // tutti e due su `Nota.md`, perché `N` precede `n` in ASCII.
@@ -1342,8 +1342,8 @@ mod tests {
         let a = doc_with_paths("sub/a.md", &["Nota.md"]);
         let b = doc_with_paths("sub/b.md", &["nota.md"]);
         let large = DocumentModel::empty(DocId::new("sub/Nota.md"));
-        let piccola = DocumentModel::empty(DocId::new("sub/nota.md"));
-        let graph = LinkGraph::build([&a, &b, &large, &piccola]);
+        let small = DocumentModel::empty(DocId::new("sub/nota.md"));
+        let graph = LinkGraph::build([&a, &b, &large, &small]);
 
         assert_eq!(sources(&graph, "sub/Nota.md"), ["sub/a.md"]);
         assert_eq!(sources(&graph, "sub/nota.md"), ["sub/b.md"]);

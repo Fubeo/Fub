@@ -91,7 +91,7 @@
 //! L'ultima riga senza terminatore si scarta, come si scarta qualunque riga che
 //! non si parsa; ciò che viene prima si legge tutto. È il principio del §15.7:
 //! la verità non si rifiuta di aprire, si apre dicendo cosa non ha letto — e
-//! infatti [`Lettura::scartate`] lo dice.
+//! infatti [`JournalRead::pruned`] lo dice.
 //!
 //! Scartare in lettura però non basta, e ciò che manca non è la riga rotta: è
 //! **quella dopo**. Se l'aggiunta seguente cominciasse dai byte del suo JSON si
@@ -481,10 +481,10 @@ impl Journal {
     /// disfare senza che nessuno dicesse perché: un file illeggibile per
     /// permessi o per I/O era indistinguibile da un vault a cui non è ancora
     /// successo niente. Il file assente resta l'unico caso che risponde
-    /// [`Lettura::default`]; ogni altro guasto risale con il suo tipo.
+    /// [`JournalRead::default`]; ogni altro guasto risale con il suo tipo.
     ///
     /// Ciò che sta *dentro* il file e non si capisce continua a contarsi in
-    /// [`Lettura::scartate`] invece di fermare la lettura: quella è una vista
+    /// [`JournalRead::pruned`] invece di fermare la lettura: quella è una vista
     /// parziale dichiarata, non un guasto del supporto.
     pub(crate) fn read(&self) -> std::io::Result<JournalRead> {
         let raw = crate::error::optional(self.storage.read(&self.path))?;
@@ -496,7 +496,7 @@ impl Journal {
         &self.path
     }
 
-    /// Appende una riga. L'esito non risale: vedi [`Journal::pota`].
+    /// Appende una riga. L'esito non risale: vedi [`Journal::prune`].
     pub(crate) fn append(&self, origin: Origin, op: JournalOp) -> Result<(), String> {
         let record = JournalRecord {
             v: SCHEMA_VERSION,
@@ -578,7 +578,7 @@ impl Journal {
 
 /// Il registro potato, o `None` se non c'è niente da togliere.
 ///
-/// È il corpo di [`Journal::pota`] senza il disco: prende i byte che ci sono
+/// È il corpo di [`Journal::prune`] senza il disco: prende i byte che ci sono
 /// adesso e torna quelli che ci devono essere. Sta fuori perché è ciò che gira
 /// **dentro** il lucchetto del supporto, e ciò che gira là dentro non deve poter
 /// toccare il supporto.
@@ -632,7 +632,7 @@ fn pruned(raw: &[u8], days: u64) -> Option<Vec<u8>> {
 /// scritta da una Fub più nuova non si sa leggere ma si sa **datare**, e
 /// trattarla come non datata la farebbe cadere fuori da una finestra che magari
 /// non ha passato. Potare non deve perdere ciò che non capisce (vedi
-/// [`Journal::pota`]) — svuotare sì, ma quello lo chiede l'utente.
+/// [`Journal::prune`]) — svuotare sì, ma quello lo chiede l'utente.
 ///
 /// Per la stessa ragione una riga che non porta nemmeno `at` **ferma** la
 /// scansione invece di cadere: il conto delle scadute è un prefisso, e ciò che
@@ -716,7 +716,7 @@ mod tests {
     /// salta e si conta, come la coda troncata. È la regola che permette a
     /// questo file di sopravvivere a un aggiornamento di Fub.
     #[test]
-    fn a_row_of_domani_is_skips_and_is_counts() {
+    fn a_row_of_tomorrow_is_skips_and_is_counts() {
         let raw = format!(
             "{}\n{{\"v\":99,\"at\":1,\"origin\":{{\"actor\":{{\"kind\":\"user\"}},\"batch\":null}},\"writer\":\"x\",\"op\":{{\"op\":\"created\",\"doc\":\"b.md\",\"to\":\"r\"}}}}\n",
             serde_json::to_string(&JournalRecord {

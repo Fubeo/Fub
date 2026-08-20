@@ -20,7 +20,7 @@
 //! Il verbale è la [0081](../../../docs/decisions/0081-un-accordo-ha-un-proprietario.md).
 //!
 //! La forma canonica di un accordo **non è scritta qui**: è una regola del
-//! contratto (`fub_abi::rules::tasti`), tenuta uguale alla copia della shell dal
+//! contratto (`fub_abi::rules::keys`), tenuta uguale alla copia della shell dal
 //! mirror delle regole. Prima era ricopiata qui e in `shell_keys_mirror.rs`, e
 //! le due copie si annunciavano «come lo normalizza la shell» senza esserlo
 //! (difetto 0148).
@@ -154,12 +154,12 @@ fn no_agreement_official_of_it_hides_a_other() {
         .collect();
     let hidden: Vec<String> = declared
         .iter()
-        .flat_map(|(id_corto, corto)| {
+        .flat_map(|(short_id, short)| {
             declared
                 .iter()
-                .filter(move |(_, long)| obscures(corto, long))
+                .filter(move |(_, long)| obscures(short, long))
                 .map(move |(id_long, long)| {
-                    format!("«{corto}» ({id_corto}) copre «{long}» ({id_long})")
+                    format!("«{short}» ({short_id}) copre «{long}» ({id_long})")
                 })
         })
         .collect();

@@ -157,7 +157,7 @@ describe("la struttura non consuma la scala del foglio", () => {
     // che legge il foglio è l'anello del fuoco. Un `--space-*` qui vorrebbe
     // dire che la scocca si muove col tema.
     const withoutComments = structure.replace(/\/\*[\s\S]*?\*\//g, "");
-    const citate = new Set(
+    const quoted = new Set(
       [...withoutComments.matchAll(/var\(--([\w-]+)\)/g)].map((m) => m[1]!),
     );
     // Le chiavi permesse sono tabelle statiche: `TOKEN_STRUTTURA` (array) e
@@ -165,7 +165,7 @@ describe("la struttura non consuma la scala del foglio", () => {
     // unificato, senza costruire un `Set` da letterali.
     const permission: Record<string, true> = { ...PERMISSIONS_SHEET_IN_STRUCTURE };
     for (const n of STRUCTURE_TOKEN) permission[n] = true;
-    const outside = [...citate].filter((n) => !permission[n]);
+    const outside = [...quoted].filter((n) => !permission[n]);
     expect(
       outside,
       "structure.css cita solo token di struttura o l'anello del fuoco: " +

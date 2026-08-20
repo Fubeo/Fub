@@ -30,8 +30,8 @@ describe("camera", () => {
     const base = { scale: 1.2, tx: 50, ty: -30 };
     const point = { x: 400, y: 300 };
     const first = screenToWorld(base, point);
-    const dopo = zoomAtPoint(base, 1.8, point);
-    const m = screenToWorld(dopo, point);
+    const after = zoomAtPoint(base, 1.8, point);
+    const m = screenToWorld(after, point);
     expect(m.x).toBeCloseTo(first.x, 10);
     expect(m.y).toBeCloseTo(first.y, 10);
   });
@@ -41,8 +41,8 @@ describe("camera", () => {
     expect(zoomAtPoint(c, 1e9, { x: 10, y: 10 }).scale).toBe(MAX_SCALE);
     expect(zoomAtPoint(c, 1e-9, { x: 10, y: 10 }).scale).toBe(MIN_SCALE);
     // anche con scala già al limite, il punto sotto il cursore resta fermo
-    const bloccato = zoomAtPoint({ scale: MAX_SCALE, tx: 5, ty: 5 }, 5, { x: 30, y: 40 });
-    expect(screenToWorld(bloccato, { x: 30, y: 40 })).toEqual({ x: (30 - 5) / MAX_SCALE, y: (40 - 5) / MAX_SCALE });
+    const blocked = zoomAtPoint({ scale: MAX_SCALE, tx: 5, ty: 5 }, 5, { x: 30, y: 40 });
+    expect(screenToWorld(blocked, { x: 30, y: 40 })).toEqual({ x: (30 - 5) / MAX_SCALE, y: (40 - 5) / MAX_SCALE });
   });
 
   it("fit contiene i bound nel viewport con margine", () => {

@@ -1227,11 +1227,11 @@ fn selection_wikilink(
     // Una selezione sola si racconta col testo che ha dentro; N si raccontano
     // col numero, perché elencarli non aiuterebbe nessuno a capire cosa sta per
     // succedere.
-    let message = |one: &str, molte: &str| {
+    let message = |one: &str, many: &str| {
         if count == 1 {
             Text::message(one, vec![Arg::text(A_TEXT, first_text)])
         } else {
-            Text::message(molte, vec![Arg::int(A_COUNT, count as i64)])
+            Text::message(many, vec![Arg::int(A_COUNT, count as i64)])
         }
     };
     if mode.is_dry_run() {
@@ -2021,9 +2021,9 @@ fn task_at(model: &DocumentModel, at: usize) -> Option<TaskMarker> {
                             continue;
                         }
                         if let Some(task) = item.task {
-                            let ampiezza = item.span.end - item.span.start;
-                            if best.is_none_or(|(a, _)| ampiezza < a) {
-                                *best = Some((ampiezza, task));
+                            let width = item.span.end - item.span.start;
+                            if best.is_none_or(|(a, _)| width < a) {
+                                *best = Some((width, task));
                             }
                         }
                         find(&item.blocks, at, best);
@@ -2111,18 +2111,18 @@ fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
 /// che è l'unico posto in cui quel tipo è scritto. È la stessa mossa dei
 /// `ParamSpec`, un livello più in là: qui la specie non la dichiara il comando,
 fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginError> {
-    let male = |key: &str| PluginError::BadArgs(one(key, A_VALUE, raw));
+    let bad = |key: &str| PluginError::BadArgs(one(key, A_VALUE, raw));
     match kind {
         SettingKind::Toggle { .. } => match raw.trim().to_ascii_lowercase().as_str() {
             "true" | "1" | "on" | "sì" | "si" => Ok(SettingValue::Toggle(true)),
             "false" | "0" | "off" | "no" => Ok(SettingValue::Toggle(false)),
-            _ => Err(male(AND_NOT_A_TOGGLE)),
+            _ => Err(bad(AND_NOT_A_TOGGLE)),
         },
         SettingKind::Number { .. } => raw
             .trim()
             .parse::<f64>()
             .map(SettingValue::Number)
-            .map_err(|_| male(AND_NOT_A_NUMBER)),
+            .map_err(|_| bad(AND_NOT_A_NUMBER)),
         SettingKind::Text { .. } | SettingKind::Choice { .. } => {
             Ok(SettingValue::Text(raw.to_string()))
         }
@@ -2418,7 +2418,7 @@ mod tests {
     /// componente, invece che stampato col suo `Display`.
     ///
     /// `Display` c'è ancora e serve — è la forma per il log della 0041 — ma per
-    fn reso(text: &Text) -> String {
+    fn rendered(text: &Text) -> String {
         let catalog = catalog();
         let locale = fub_abi::locale::Locale::default();
         Strings::new(&catalog, "it", &locale).render(text)
@@ -2490,7 +2490,7 @@ mod tests {
         let PluginError::BadArgs(msg) = err else {
             panic!("uno stato che non permette l'operazione si spiega")
         };
-        assert!(reso(&msg).contains("non salvate"), "{}", reso(&msg));
+        assert!(rendered(&msg).contains("non salvate"), "{}", rendered(&msg));
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
             "una nota di prova",
@@ -2573,7 +2573,7 @@ mod tests {
         );
         assert_eq!(plan.edit_count(), 3);
         assert_eq!(
-            reso(&plan.summary),
+            rendered(&plan.summary),
             "Sostituzioni: 3 · Note: 2",
             "il riassunto conta le sostituzioni e le note, e lo dice nella \
              lingua di chi legge"
@@ -2645,7 +2645,7 @@ mod tests {
     const TASK_SOURCE: &str = "- [ ] fare la spesa\n  - [x] pane\n";
 
     fn with_task(symbol_external: Option<char>) -> MemoryHost {
-        let interna = ListItem {
+        let inner = ListItem {
             blocks: Vec::new(),
             task: Some(TaskMarker {
                 symbol: Some('x'),
@@ -2657,7 +2657,7 @@ mod tests {
             blocks: vec![Block::List {
                 ordered: false,
                 start: None,
-                items: vec![interna],
+                items: vec![inner],
                 anchor: None,
                 span: Span::new(22, 32),
             }],
@@ -2742,7 +2742,7 @@ mod tests {
         let PluginError::BadArgs(msg) = err else {
             panic!("uno stato che non permette l'operazione si spiega")
         };
-        assert!(reso(&msg).contains("non salvate"), "{}", reso(&msg));
+        assert!(rendered(&msg).contains("non salvate"), "{}", rendered(&msg));
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
             TASK_SOURCE,
@@ -2823,13 +2823,13 @@ mod tests {
         );
         assert!(parse_value(&number, "grande").is_err());
 
-        let interruttore = SettingKind::Toggle { default: true };
+        let toggle = SettingKind::Toggle { default: true };
         assert_eq!(
-            parse_value(&interruttore, "off").unwrap(),
+            parse_value(&toggle, "off").unwrap(),
             SettingValue::Toggle(false)
         );
         assert!(
-            parse_value(&interruttore, "forse").is_err(),
+            parse_value(&toggle, "forse").is_err(),
             "un interruttore ha due stati, e «forse» non è uno di quelli"
         );
 

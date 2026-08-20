@@ -137,7 +137,7 @@ fn char_nth_byte(text: &str, k: usize) -> usize {
         .unwrap_or(text.len())
 }
 
-/// Il confine di carattere più vicino a `i` senza superarlo.
+/// Il confine di carattere più vicino a `the` senza superarlo.
 ///
 /// Sono i metodi `str::{floor,ceil}_char_boundary` (stabili da 1.91),
 /// implementati qui perché l'MSRV del workspace è 1.89 — e sono le stesse due
@@ -150,7 +150,7 @@ fn floor_char_boundary(text: &str, the: usize) -> usize {
     the
 }
 
-/// Il confine di carattere più vicino a `i` senza scenderci sotto.
+/// Il confine di carattere più vicino a `the` senza scenderci sotto.
 fn ceil_char_boundary(text: &str, the: usize) -> usize {
     let mut the = the.min(text.len());
     while !text.is_char_boundary(the) {

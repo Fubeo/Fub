@@ -206,7 +206,7 @@ impl VaultRegistry {
     /// Questa radice è in elenco **esattamente sotto questo nome**?
     ///
     /// È la domanda che permette di non richiedere al disco una chiave che si
-    /// conosce già ([`Host::chiave`](crate::Host)): una voce del registro è
+    /// conosce già ([`Host::key`](crate::Host)): una voce del registro è
     /// canonica per contratto — l'apertura l'ha scritta così — quindi un nome
     /// che combacia con una voce *è* la chiave, e non c'è niente da risolvere.
     /// La domanda è deliberatamente letterale e non «sono la stessa cartella»:

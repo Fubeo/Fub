@@ -238,8 +238,8 @@ const IT = {
   "trash.delete_title": "Elimina nota",
 
   // --- il grafo e la cronologia ------------------------------------------
-  "graph.count": "Grafo — Note: {note} · Collegamenti: {archi}",
-  "graph.a11y.superficie": "Grafo del vault: {note} note, {archi} collegamenti",
+  "graph.count": "Grafo — Note: {note} · Collegamenti: {edges}",
+  "graph.a11y.superficie": "Grafo del vault: {note} note, {edges} collegamenti",
   "graph.conf.titolo": "Fisica del grafo",
   "graph.conf.preset": "Personalità",
   "graph.conf.repulsione": "Repulsione",
@@ -684,8 +684,8 @@ const EN: Record<Key, string> = {
   "explorer.bad_name": "“{nome}” cannot be used: {motivo}",
   "name_fault.empty": "the name is missing",
   "name_fault.traversal": "“.” and “..” are not names",
-  "graph.count": "Graph — Notes: {note} · Links: {archi}",
-  "graph.a11y.superficie": "Vault graph: {note} notes, {archi} links",
+  "graph.count": "Graph — Notes: {note} · Links: {edges}",
+  "graph.a11y.superficie": "Vault graph: {note} notes, {edges} links",
   "graph.conf.titolo": "Graph physics",
   "graph.conf.preset": "Personality",
   "graph.conf.repulsione": "Repulsion",

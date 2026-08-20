@@ -24,7 +24,7 @@ use fub_sdk::testing::conformance;
 
 mod corpus;
 
-use crate::corpus::{corpus, divergent, muta, how_many_cases, seme, Case64};
+use crate::corpus::{corpus, divergent, mutate, how_many_cases, seed, Case64};
 
 /// Un `Workspace` sulla radice data, coi due provider di trasferimento
 /// registrati.
@@ -474,7 +474,7 @@ fn in_a_document_single_the_frontmatter_remains_metadata_and_not_becomes_a_separ
     // modello del documento uscito li vede come **codice**, non come un divisore
     // seguito da un'intestazione.
     let m = model(out, "export.md");
-    let recinti: Vec<&String> = m
+    let fences: Vec<&String> = m
         .body
         .iter()
         .filter_map(|b| match b {
@@ -483,11 +483,11 @@ fn in_a_document_single_the_frontmatter_remains_metadata_and_not_becomes_a_separ
         })
         .collect();
     assert_eq!(
-        recinti.len(),
+        fences.len(),
         2,
         "i due frontmatter non sono due blocchi yaml:\n{out}"
     );
-    for r in recinti {
+    for r in fences {
         assert!(r.contains("tipo: progetto"), "recinto: {r:?}");
     }
     assert_eq!(
@@ -587,7 +587,7 @@ fn a_document_that_vanishes_is_a_log_line_and_not_a_failed_export() {
 /// Il path dell'artefatto porta la cartella; il nome del documento è l'ultimo
 /// componente, e la cartella la dice la richiesta — che è il confine della
 /// decisione 0006: una sorgente ha un nome, non un path.
-fn reimporta(ws: &mut Workspace, a: &ExportArtifact) -> DocId {
+fn reimport(ws: &mut Workspace, a: &ExportArtifact) -> DocId {
     let (folder, name) = a.path.rsplit_once('/').unwrap_or(("", a.path.as_str()));
     let report = ws
         .import(
@@ -629,7 +629,7 @@ fn what_goes_out_comes_back_in_identical() {
 
     let (_g2, mut other) = vault_with(&[]);
     for a in &exported.artifacts {
-        reimporta(&mut other, a);
+        reimport(&mut other, a);
     }
 
     assert_eq!(other.documents(), ws.documents());
@@ -673,7 +673,7 @@ fn notes_of_the_corpus() -> Vec<(String, String)> {
 
 /// Il frontmatter che si mette davanti a una sorgente per farle attraversare il
 /// verso che passa dal modello.
-const CAPPELLO: &str = "---\na: 1\n---\n\n";
+const HAT: &str = "---\na: 1\n---\n\n";
 
 /// Le stesse sorgenti, **con un frontmatter davanti**.
 ///
@@ -694,12 +694,12 @@ const CAPPELLO: &str = "---\na: 1\n---\n\n";
 /// — il primo giro ne toglie uno e scopre l'altro. Farle entrare qui vorrebbe dire
 /// pretendere il punto fisso proprio dove è noto che non tiene.
 ///
-/// Restano fuori anche le tre di [`FUORI_DAL_CAPPELLO`], ciascuna con la sua
-/// ragione, e [`le_esclusioni_dal_cappello_servono_ancora`] pretende che ognuna
+/// Restano fuori anche le tre di [`OUTSIDE_FROM_THE_HAT`], ciascuna con la sua
+/// ragione, e [`the_exclusions_from_the_hat_serve_again`] pretende che ognuna
 /// diverga davvero: una scusa che non serve più è la cosa peggiore di un elenco a
 /// mano, perché sta lì a dire che qualcosa non si può fare e nessuno la
 /// ricontrolla.
-fn notes_col_hat() -> Vec<(String, String)> {
+fn notes_with_hat() -> Vec<(String, String)> {
     notes_of_the_corpus()
         .into_iter()
         .filter(|(path, source)| model(source, path).frontmatter.is_empty())
@@ -710,7 +710,7 @@ fn notes_col_hat() -> Vec<(String, String)> {
         .map(|(path, source)| {
             (
                 format!("cappello/{}.md", case_name(&path)),
-                format!("{CAPPELLO}{source}"),
+                format!("{HAT}{source}"),
             )
         })
         .collect()
@@ -765,8 +765,8 @@ fn the_exclusions_from_the_hat_serve_again() {
             })
             .source;
         let path = "Prova.md".to_string();
-        let col_hat = format!("{CAPPELLO}{source}");
-        let (_g, ws) = vault_with(&[(path.clone(), col_hat.clone())]);
+        let hatted = format!("{HAT}{source}");
+        let (_g, ws) = vault_with(&[(path.clone(), hatted.clone())]);
         let outside = ws.export(&without_metadata()).expect("export");
         let cut = text(outside.artifacts[0].as_bytes().expect("in memoria"));
         // Il confronto è quello del presidio: il documento **come sta nel vault**
@@ -775,11 +775,11 @@ fn the_exclusions_from_the_hat_serve_again() {
         // che erano — e sarebbe vero per costruzione.
         assert_eq!(
             structure(&model(cut, &path)),
-            structure(&model(&col_hat, &path)),
+            structure(&model(&hatted, &path)),
             "`{name}` è escluso dal cappello perché «{reason}», e adesso col \
              cappello davanti si comporta come tutti gli altri.\n\
              Se è stato riparato è una bella notizia e va scritta nel verbale: \
-             questa riga va tolta da `FUORI_DAL_CAPPELLO`, e il caso torna nella \
+             questa riga va tolta da `OUTSIDE_FROM_THE_HAT`, e il caso torna nella \
              famiglia dove le pretese sono tutte."
         );
     }
@@ -823,7 +823,7 @@ fn structure(d: &DocumentModel) -> Vec<String> {
         outside.push(format!("tag {:?}", t.name));
     }
     // I bersagli dei link li proietta l'SDK e non questo file:
-    // `conformance::bersagli` esiste dalla 0060 per «la forma in cui un corpus li
+    // `conformance::targets` esiste dalla 0060 per «la forma in cui un corpus li
     // confronta con ciò che si aspetta», e fino a qui era **senza un cliente** —
     // dichiarata tale nel suo doc, con la condizione che il primo corpus a
     // chiedersi *cosa un documento nomina* le desse una ragione o la togliesse.
@@ -853,7 +853,7 @@ fn structure(d: &DocumentModel) -> Vec<String> {
 /// blocco della stessa specie: lo stato di una task, il linguaggio di un code
 /// block, l'allineamento di una tabella.
 ///
-/// Senza questa, `struttura` non vedeva la differenza fra `- [x] fatta` e
+/// Senza questa, `structure` non vedeva la differenza fra `- [x] fatta` e
 /// `- [ ] fatta`, fra un code block recintato e uno indentato, fra una citazione e
 /// un paragrafo: tre coppie di sorgenti diverse con la stessa proiezione.
 fn kind_of_the_blocks(bs: &[Block]) -> Vec<String> {
@@ -1098,7 +1098,7 @@ fn the_whole_corpus_leaves_the_vault_and_comes_back_byte_for_byte() {
     // …e l'import nemmeno.
     let (_g2, mut other) = vault_with(&[]);
     for a in &exported.artifacts {
-        reimporta(&mut other, a);
+        reimport(&mut other, a);
     }
     assert_eq!(
         other.documents(),
@@ -1124,7 +1124,7 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
     // Senza il cappello il taglio avverrebbe su quattro note su settantacinque, e
     // sulle altre settantuno ogni assert qui sotto sarebbe `x == x`.
     let mut notes = notes_of_the_corpus();
-    notes.extend(notes_col_hat());
+    notes.extend(notes_with_hat());
     let (_g, ws) = vault_with(&notes);
 
     let first = ws.export(&without_metadata()).expect("export");
@@ -1214,7 +1214,7 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
         notes.len()
     );
 
-    // La seconda: se `struttura` proiettasse il vuoto, i due lati sarebbero uguali
+    // La seconda: se `structure` proiettasse il vuoto, i due lati sarebbero uguali
     // per ogni documento. È la stessa specie di rifiuto di `confronta` in
     // `il_corpus.rs` — «un confronto contro il vuoto passa sempre» — e nessun
     // sabotaggio della sola proiezione potrebbe farla diventare rossa.
@@ -1236,7 +1236,7 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
 
     let (_g2, mut other) = vault_with(&[]);
     for a in &first.artifacts {
-        reimporta(&mut other, a);
+        reimport(&mut other, a);
     }
     let second = other.export(&without_metadata()).expect("export");
 
@@ -1271,18 +1271,18 @@ fn and_that_fixed_point_is_a_fact_about_this_corpus_not_about_the_format() {
     // Sta qui nella forma delle divergenze dichiarate della 0060: se qualcuno lo
     // ripara — un export che taglia finché c'è da tagliare — questa prova diventa
     // rossa, e va tolta. È il solo modo di non lasciare la maglia silenziosa.
-    let doppio = "---\na: 1\n---\n\n---\nb: 2\n---\n\nx\n";
-    let (_g, ws) = vault_with(&[("Doppio.md".to_string(), doppio.to_string())]);
+    let double_frontmatter = "---\na: 1\n---\n\n---\nb: 2\n---\n\nx\n";
+    let (_g, ws) = vault_with(&[("Doppio.md".to_string(), double_frontmatter.to_string())]);
 
     let first = ws.export(&without_metadata()).expect("export");
     let exited = text(first.artifacts[0].as_bytes().expect("in memoria")).to_string();
     assert!(
-        doppio.ends_with(&exited),
+        double_frontmatter.ends_with(&exited),
         "anche qui l'export non inventa byte"
     );
 
     let (_g2, mut other) = vault_with(&[]);
-    reimporta(&mut other, &first.artifacts[0]);
+    reimport(&mut other, &first.artifacts[0]);
     let second = other.export(&without_metadata()).expect("export");
 
     assert_eq!(
@@ -1306,7 +1306,7 @@ fn and_that_fixed_point_is_a_fact_about_this_corpus_not_about_the_format() {
 // file con un numero che viene dal modello. Uno span fuori range, o in mezzo a un
 // carattere, non è un modello sbagliato — è un panico dentro l'export. La
 // proprietà che lo impedisce esiste dalla 0060
-// (`conformance::gli_span_affettano_la_sorgente`) e fino a oggi non aveva un
+// (`conformance::spans_slice_the_source`) e fino a oggi non aveva un
 // cliente di produzione di cui si potesse dire «protegge questo». Adesso ce l'ha.
 
 #[test]
@@ -1323,7 +1323,7 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
          alzarlo si passa `FUB_FUZZ_TRASFERIMENTO`; per abbassarlo sotto mille non \
          c'è ragione che valga il verde falso che si compra."
     );
-    let mut rng = Case64::new(seme());
+    let mut rng = Case64::new(seed());
 
     // I semi sono il corpus **e il corpus col cappello di frontmatter davanti**, e
     // la seconda metà è ciò che dà al fuzzer un bersaglio. Misurato senza:
@@ -1332,22 +1332,23 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
     // l'assert diventa `source.ends_with(source)`. Un fuzzer che nel 97% dei casi
     // non arriva al codice che dichiara di provare sta contando le sue corse, non
     // le sue prove.
-    let col_hat: Vec<String> = corpus()
+    let hatted: Vec<String> = corpus()
         .iter()
         .chain(divergent().iter())
-        .map(|c| format!("{CAPPELLO}{}", c.source))
+        .map(|c| format!("{HAT}{}", c.source))
         .collect();
-    let mut semi: Vec<&str> = corpus()
+    let mut seeds: Vec<&str> = corpus()
         .iter()
         .map(|c| c.source)
         .chain(divergent().iter().map(|c| c.source))
         .collect();
-    semi.extend(col_hat.iter().map(|s| s.as_str()));
+    seeds.extend(hatted.iter().map(|s| s.as_str()));
 
     // Le mutazioni entrano tutte in **un** vault: costruire un vault per caso
     // costerebbe ventimila tempdir e misurerebbe il filesystem, non l'export.
-    let mutate: Vec<(&'static str, String)> = (0..cases).map(|_| muta(&mut rng, &semi)).collect();
-    let notes: Vec<(String, String)> = mutate
+    let mutations: Vec<(&'static str, String)> =
+        (0..cases).map(|_| mutate(&mut rng, &seeds)).collect();
+    let notes: Vec<(String, String)> = mutations
         .iter()
         .enumerate()
         .map(|(n, (_, source))| (format!("fuzz/{n:05}.md"), source.clone()))
@@ -1363,7 +1364,7 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
     // **quale** mutazione, non solo che è successo.
     let mut cut = 0usize;
     let mut empty = 0usize;
-    for (n, (mutation, source)) in mutate.iter().enumerate() {
+    for (n, (mutation, source)) in mutations.iter().enumerate() {
         let doc = DocId::new(format!("fuzz/{n:05}.md"));
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             ws.export(
@@ -1381,11 +1382,11 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
                  \n\
                  Per rifarlo esattamente, con lo stesso conteggio: la sequenza è\n\
                  deterministica e si ferma di nuovo al caso {n}.\n\
-                 FUB_FUZZ_SEME={seme} FUB_FUZZ_TRASFERIMENTO={cases} cargo test -p \
+                 FUB_FUZZ_SEME={seed} FUB_FUZZ_TRASFERIMENTO={cases} cargo test -p \
                  fub-format-markdown --test transfer_e2e -- no_mutation_of\n\
                  \n\
                  La sorgente, byte per byte: {source:?}",
-                seme = seme(),
+                seed = seed(),
             ),
         };
 
@@ -1454,8 +1455,8 @@ fn no_mutated_name_walks_out_of_the_vault() {
         "{cases} nomi non sono un fuzzer: con zero il ciclo non gira e ogni assert \
          qui sotto viene saltato senza che niente diventi rosso."
     );
-    let mut rng = Case64::new(seme());
-    let semi: Vec<&'static str> = corpus().iter().map(|c| c.source).collect();
+    let mut rng = Case64::new(seed());
+    let seeds: Vec<&'static str> = corpus().iter().map(|c| c.source).collect();
 
     let (_g, mut ws) = vault_with(&[]);
     let root = Utf8PathBuf::from_path_buf(_g.path().to_path_buf()).expect("utf8");
@@ -1463,7 +1464,7 @@ fn no_mutated_name_walks_out_of_the_vault() {
     let mut nati = 0usize;
     let mut rejected = 0usize;
     for n in 0..cases {
-        let (mutation, name) = muta(&mut rng, &semi);
+        let (mutation, name) = mutate(&mut rng, &seeds);
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             ws.import(
                 &ImportSource::text_source(&name, "# corpo\n"),
@@ -1479,7 +1480,7 @@ fn no_mutated_name_walks_out_of_the_vault() {
                  FUB_FUZZ_SEME={} FUB_FUZZ_NOMI={cases} cargo test -p \
                  fub-format-markdown --test transfer_e2e -- no_mutated_name\n\
                  Il nome, byte per byte: {name:?}",
-                seme(),
+                seed(),
             )
         };
         // Un nome che non è markdown è un argomento sbagliato, non un documento

@@ -32,8 +32,8 @@ fn parse(source: &str) -> DocumentModel {
 /// l'ellissi deve dire che il contesto è tagliato.
 #[test]
 fn long_block_context_is_a_window_showing_the_link() {
-    let attorno = "parole ".repeat(60); // 420 caratteri
-    let src = format!("{attorno}[[Nota]]{attorno}");
+    let around = "parole ".repeat(60); // 420 caratteri
+    let src = format!("{around}[[Nota]]{around}");
     let doc = parse(&src);
     let link = doc.links.iter().find(|the| the.context.is_some()).unwrap();
     let ctx = link.context.as_deref().unwrap();

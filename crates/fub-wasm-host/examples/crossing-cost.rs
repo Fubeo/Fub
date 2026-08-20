@@ -4,14 +4,14 @@
 //! si chiude su un buco dichiarato: «il numero accanto ai 275 KB» non c'è, e
 //! «dire un numero non misurato sarebbe peggio che non averlo». Questo file è
 //! il modo di riempirlo. Misura lo **stesso** ping nelle sue due incarnazioni —
-//! la `struct` Rust di `crates/fub-host/tests/il_primo_plugin.rs` e il
+//! la `struct` Rust di `crates/fub-host/tests/the_first_plugin.rs` e il
 //! componente di `esempi/ping-wasm` — sullo stesso banco, con lo stesso id
 //! `demo.ping`, lo stesso job `ping` e lo stesso `read_document` di là dal
 //! confine, montati tutt'e due dalla stessa porta `Bundle`.
 //!
 //! Che il codice di misura sia **uno solo** per i due backend non è economia di
 //! righe: è la stessa cosa che il §16.1 promette, vista dal lato del
-//! cronometro. Da `misura()` in giù non c'è un ramo che sappia dire quale dei
+//! cronometro. Da `measure_backend()` in giù non c'è un ramo che sappia dire quale dei
 //! due ha in mano — riceve un `&dyn Bundle` e basta.
 //!
 //! # Perché un `example` e non un `#[test]`
@@ -242,12 +242,12 @@ fn status(events: &Subscription) -> Result<serde_json::Value, PluginError> {
 }
 
 // ---------------------------------------------------------------------------
-// Il ping nativo: lo stesso di `il_primo_plugin.rs`, riga per riga
+// Il ping nativo: lo stesso di `the_first_plugin.rs`, riga per riga
 // ---------------------------------------------------------------------------
 
 /// Il plugin nativo, **ridotto a ciò che il componente sa fare**.
 ///
-/// Una differenza sola rispetto a `il_primo_plugin.rs`, e va dichiarata perché
+/// Una differenza sola rispetto a `the_first_plugin.rs`, e va dichiarata perché
 /// altrimenti il confronto sarebbe truccato: qui `run_job` non chiama
 /// `report_progress`. La famiglia `host-events` non è linkata nel backend WASM
 /// (lo scrive la 0164 fra ciò che resta fuori), quindi il componente non ha
@@ -393,8 +393,8 @@ struct Measures {
 
 /// Il giro intero su un backend: apre un banco, monta, misura, chiude.
 ///
-/// `carica` è ciò che ricostruisce il bundle da zero — per il nativo è una
-/// `struct`, per il WASM è `WasmBundle::da_file`. Sta come chiusura e non come
+/// `load` è ciò che ricostruisce il bundle da zero — per il nativo è una
+/// `struct`, per il WASM è `WasmBundle::from_file`. Sta come chiusura e non come
 /// valore perché il caricamento è **una delle misure**, e va rifatto.
 fn measure_backend(bundle: &dyn Bundle, mut load: impl FnMut()) -> Measures {
     let v = Vault::new();
@@ -655,7 +655,7 @@ fn main() {
     println!();
 
     // Le due righe che dicono quale backend è sotto il cronometro stanno **qui**
-    // e non dentro `misura`: quella funzione non ha un nome da stampare, e
+    // e non dentro `measure_backend`: quella funzione non ha un nome da stampare, e
     // dargliene uno vorrebbe dire darle anche il primo ramo che distingue i due.
     // Vanno su `stderr`, che è dove sta ciò che non è il risultato.
     eprintln!("misuro il ping native…");
@@ -671,7 +671,7 @@ fn main() {
             black_box(b);
         },
     );
-    // La compilazione **da sola**, cioè senza l'istanza che `WasmBundle::da_file`
+    // La compilazione **da sola**, cioè senza l'istanza che `WasmBundle::from_file`
     // fabbrica e butta per chiedere al componente chi è. La differenza fra le
     // due righe è il prezzo di quella domanda, e vale la pena vederlo separato:
     // è l'unico pezzo del caricamento che si potrebbe evitare mettendo il

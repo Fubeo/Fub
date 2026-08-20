@@ -90,7 +90,7 @@ const DIFF_THRESHOLD = 0.001;
 const update = process.argv.includes("--update");
 
 const CURRENT = join(OUTPUT, "attuale");
-const DIFFERENZE = join(OUTPUT, "differenze");
+const DIFFERENCES = join(OUTPUT, "differenze");
 
 /// Cosa è successo a una foto. Sono cinque e sono tutte diverse fra loro: un
 /// «manca la baseline» che si confondesse con un «è cambiata» renderebbe
@@ -109,9 +109,9 @@ async function main() {
   // anche `a11y.mjs`, e chi pulisce la stanza degli altri decide senza saperlo
   // in quale ordine vanno lanciati due comandi.
   await rm(CURRENT, { recursive: true, force: true });
-  await rm(DIFFERENZE, { recursive: true, force: true });
+  await rm(DIFFERENCES, { recursive: true, force: true });
   await mkdir(CURRENT, { recursive: true });
-  await mkdir(DIFFERENZE, { recursive: true });
+  await mkdir(DIFFERENCES, { recursive: true });
   if (update) await mkdir(BASELINE, { recursive: true });
 
   const stage = await openStage();
@@ -185,7 +185,7 @@ async function aPhoto(page, scene, light, base) {
     return row;
   }
 
-  await writeFile(join(DIFFERENZE, name), PNG.sync.write(difference));
+  await writeFile(join(DIFFERENCES, name), PNG.sync.write(difference));
   row.outcome = OUTCOMES.changed;
   row.reason = `${different} pixel diversi su ${row.totale} (${(
     (different / row.totale) * 100
@@ -219,7 +219,7 @@ async function sideBySide(report) {
     .map(({ scene, rows }) => {
       const columns = rows
         .map((r) => {
-          const difference = r.outcome === OUTCOMES.changed && existsSync(join(DIFFERENZE, r.name));
+          const difference = r.outcome === OUTCOMES.changed && existsSync(join(DIFFERENCES, r.name));
           const image =
             r.outcome === OUTCOMES.unstable
               ? `<p class="guasto">${esc(r.reason ?? "non fotografata")}</p>`

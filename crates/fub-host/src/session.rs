@@ -1476,7 +1476,7 @@ impl Host {
         f: impl FnOnce(&VaultSession) -> R,
     ) -> Result<R, PluginError> {
         // La chiave si risolve **prima** del prestito, per la ragione di
-        // [`chiave`](Host::chiave): nel ramo che non conosce il nome dato c'è
+        // [`key`](Host::key): nel ramo che non conosce il nome dato c'è
         // una domanda al disco, e il prestito delle sessioni non la attraversa.
         let named = vault
             .map(|path| self.key(Utf8Path::new(path)))
@@ -1708,7 +1708,7 @@ fn info_of(session: &VaultSession) -> Result<VaultInfo, PluginError> {
 ///
 /// **Chi la chiama diretta è chi conia**: [`Host::open`], che una cartella l'ha
 /// già pretesa una riga sopra. Chi *usa* una radice coniata passa da
-/// [`Host::chiave`] e chi la dimentica da [`root_forms`], e in nessuno
+/// [`Host::key`] e chi la dimentica da [`root_forms`], e in nessuno
 /// dei due casi si torna a chiedere al disco una risposta che si ha già.
 fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
     let canonical = root
@@ -1727,7 +1727,7 @@ fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
 /// apre può quindi pretendere la canonica; chi dimentica no, e deve accettare
 /// che la stessa radice sia nominabile in due modi.
 ///
-/// Non è [`Host::chiave`], che risponde alla terza domanda: chi **usa** un
+/// Non è [`Host::key`], che risponde alla terza domanda: chi **usa** un
 /// vault deve arrivare a *una* chiave o dire perché no, e ci arriva guardando
 /// quelle che già conosce invece di cancellare per ogni nome possibile.
 fn root_forms(root: &Utf8Path) -> Vec<Utf8PathBuf> {

@@ -723,9 +723,9 @@ fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
     // L'esito **si consulta**, che è ciò che la voce chiedeva: finita
     host.wait_indexed(None).expect("waits for indexing");
     let info = host.open(&v.root).expect("reopens, that is re-reads the state");
-    let not_lette: Vec<&str> = info.unread.iter().map(|u| u.doc_id.as_str()).collect();
+    let unread: Vec<&str> = info.unread.iter().map(|u| u.doc_id.as_str()).collect();
     assert_eq!(
-        not_lette,
+        unread,
         ["Rotta.md"],
         "the outcome of the open is consultable when the open has finished"
     );

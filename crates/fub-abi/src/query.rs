@@ -345,7 +345,7 @@ pub fn in_folder(doc: &DocId, path: &str, descendants: bool) -> bool {
 /// file `own` è la cartella che lo contiene, per una **cartella** è la sua
 /// genitrice — e da lì in poi le regole sono le stesse, radice compresa.
 ///
-/// Il corpo sta in [`cartelle::dentro`] e non qui: la stessa domanda la fanno
+/// Il corpo sta in [`folders::within`] e non qui: la stessa domanda la fanno
 /// anche la maschera degli eventi e la selezione di un'esportazione, e finché
 /// se la scrivevano ognuna per conto proprio davano tre risposte diverse alla
 /// stessa cartella (difetto 0141).

@@ -112,8 +112,8 @@ fn computes_backlinks_with_context() {
 ///   `all` senza messaggio nemmeno;
 /// - **che il contesto sia quello giusto**, ed è la metà che compra qualcosa.
 ///   Che il contesto *esista* lo presidia già, e su ogni variante di `Block`
-///   invece che su quattro backlink, `ogni_link_del_corpus_porta_il_contesto_
-///   del_suo_blocco` in `il_corpus.rs`. Quello che né quel conto né `is_some()`
+///   invece che su quattro backlink, `every_corpus_link_carries_the_context_
+///   of_its_block` in `the_corpus.rs`. Quello che né quel conto né `is_some()`
 ///   vedono è un campo **pieno e sbagliato**: un `context` che porti un pezzo
 ///   qualunque del documento sorgente — la prima riga, il titolo — passa da
 ///   tutti e due, e il pannello dei backlink lo mostra sotto il nome della nota
@@ -205,7 +205,7 @@ fn edit_updates_graph_and_backlinks() {
 /// `fub-format-markdown/src/lib.rs`: il segnaposto non scriveva l'ancora. Questo
 /// banco presidia il resto della strada, che quell'ancora prima non aveva.
 #[test]
-fn a_embed_a_a_block_ritaglia_quel_block() {
+fn an_embed_carves_out_that_block() {
     let (_scratch, mut ws) = open_scratch();
     let notes = DocId::new("Nota B.md");
     ws.write_document(

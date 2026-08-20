@@ -203,12 +203,12 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   // Il conto di nodi e archi: sopra il canvas, annotazione non testata.
   const count = document.createElement("div");
   count.className = "graph-count";
-  count.textContent = t("graph.count", { note: data.nodes.length, archi: data.edges.length });
+  count.textContent = t("graph.count", { note: data.nodes.length, edges: data.edges.length });
 
   chart.mount(host);
   host.append(count, panel.element);
   chart.setOpenDocuments(openDocuments());
-  chart.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, archi: data.edges.length }));
+  chart.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, edges: data.edges.length }));
 
   let disposed = false;
 
@@ -222,8 +222,8 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
 
   const unsubscribeLanguage = onLanguage(() => {
     if (disposed) return;
-    count.textContent = t("graph.count", { note: data.nodes.length, archi: data.edges.length });
-    chart.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, archi: data.edges.length }));
+    count.textContent = t("graph.count", { note: data.nodes.length, edges: data.edges.length });
+    chart.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, edges: data.edges.length }));
     panel.updateLanguage();
   });
 

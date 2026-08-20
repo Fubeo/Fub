@@ -259,7 +259,7 @@ pub(crate) struct EntryStore {
     /// dentro il vault, e ci passa sopra come i documenti
     storage: Arc<dyn VaultStorage>,
     /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
-    /// Ciò che si sa, e che è **anche** ciò che c'è nel file: un [`Durevole`]
+    /// Ciò che si sa, e che è **anche** ciò che c'è nel file: un [`Durable`]
     /// perché fossero la stessa cosa per costruzione e non per disciplina —
     /// questo campo si assegnava prima della scrittura, e una scrittura fallita
     known: RwLock<Durable<BTreeMap<DocId, StoredEntry>>>,
@@ -323,7 +323,7 @@ impl EntryStore {
     /// la rifà camminando il vault: è il costo che un dato derivato deve
     /// costare, e niente altro.
     ///
-    /// **Si scrive prima e si adotta dopo** ([`Durevole`]), e non è una
+    /// **Si scrive prima e si adotta dopo** ([`Durable`]), e non è una
     /// preferenza sull'ordine: al contrario, una scrittura fallita lasciava
     /// `known` a raccontare una tabella che sul disco non c'è: dentro la
     /// sessione «ciò che si sa» e «ciò che si sa*rà* riaprendo» diventavano due
@@ -332,7 +332,7 @@ impl EntryStore {
     /// costare — una riapertura lenta — e niente altro.
     ///
     /// **Si adotta ciò che si è composto, non ciò che si portava**
-    /// ([`Durevole::aggiorna`]): la tabella che finisce nel file nasce mettendo
+    /// ([`Durable::update`]): la tabella che finisce nel file nasce mettendo
     /// la propria fotografia sopra quella che sul disco c'è adesso — vedi
     /// [`arricchisci`] — e la memoria dev'essere quella, o resterebbe l'unica
     /// copia più povera del file che la porta. Quando a scrivere è la
@@ -496,7 +496,7 @@ fn decode(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
 /// compattare. Una riga vuota è il delimitatore in testa di chi ha appeso dopo
 /// un'interruzione, e contarla farebbe tagliare al tetto sbagliato — la stessa
 /// ragione per cui il [`crate::journal`] non la conta.
-/// Le mutazioni che portano `vecchia` a `nuova`, in ordine di id: un `upsert`
+/// Le mutazioni che portano `old` a `new`, in ordine di id: un `upsert`
 fn count_records(raw: &[u8]) -> usize {
     raw.split(|b| *b == b'\n')
         .filter(|line| !line.is_empty())

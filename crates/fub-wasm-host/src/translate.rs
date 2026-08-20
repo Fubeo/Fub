@@ -541,7 +541,7 @@ fn from_command_scope(s: w_command::CommandScope) -> fub_abi::command::CommandSc
 ///
 /// Non c'è convalida qui, e non è una dimenticanza: l'id fuori dal proprio
 /// namespace lo rifiuta `Workspace::register_command_provider`, la forma di una
-/// scorciatoia la legge `fub_abi::rules::tasti`, e gli argomenti li convalida il
+/// scorciatoia la legge `fub_abi::rules::keys`, e gli argomenti li convalida il
 /// kernel prima di chiamare `invoke`. Un componente non è più sospetto di una
 /// feature nativa: passa dalla stessa porta, e la porta è già chiusa a chiave.
 /// feature nativa: passa dalla stessa porta, e la porta è già chiusa a chiave.

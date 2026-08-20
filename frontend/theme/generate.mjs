@@ -40,70 +40,70 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
-const QUI = dirname(fileURLToPath(import.meta.url));
-const SERIE = join(QUI, "..", "src", "theme", "serie");
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SERIES = join(HERE, "..", "src", "theme", "serie");
 
-const verifica = process.argv.includes("--verifica");
+const verify = process.argv.includes("--verify");
 
 const vite = await createServer({
-  root: join(QUI, ".."),
+  root: join(HERE, ".."),
   server: { middlewareMode: true },
   appType: "custom",
   logLevel: "warn",
 });
 
 /** @type {{ LUCI: readonly ("scuro"|"chiaro")[], FOGLI: Record<string,string>, foglio: (l: string) => string }} */
-const ricetta = await vite.ssrLoadModule("/src/theme/serie/recipe.ts");
+const recipe = await vite.ssrLoadModule("/src/theme/serie/recipe.ts");
 /** @type {{ ORDINE: readonly string[], SKIN: string, assembla: (c: Record<string,string>) => string }} */
-const pelle = await vite.ssrLoadModule("/src/theme/serie/skin/order.ts");
+const skin = await vite.ssrLoadModule("/src/theme/serie/skin/order.ts");
 
-let diversi = 0;
+let diffCount = 0;
 
 /// Scrive, o dice che è diverso. Il nome è quello che compare a video; `atteso`
 /// è ciò che la sorgente produce.
-async function derivato(nome, atteso, sorgente) {
-  const file = join(SERIE, nome);
-  const suDisco = await readFile(file, "utf8").catch(() => null);
+async function derived(name, expected, source) {
+  const file = join(SERIES, name);
+  const onDisk = await readFile(file, "utf8").catch(() => null);
 
-  if (suDisco === atteso) {
-    console.log(`· ${nome}: uguale ${sorgente}`);
+  if (onDisk === expected) {
+    console.log(`· ${name}: uguale ${source}`);
     return;
   }
 
-  diversi += 1;
-  if (verifica) {
-    console.error(`✗ ${nome}: ${suDisco === null ? "non c'è" : `non è quello che si genera ${sorgente}`}`);
+  diffCount += 1;
+  if (verify) {
+    console.error(`✗ ${name}: ${onDisk === null ? "non c'è" : `non è quello che si genera ${source}`}`);
     return;
   }
-  await writeFile(file, atteso);
-  console.log(`✎ ${nome}: riscritto (${atteso.length} byte)`);
+  await writeFile(file, expected);
+  console.log(`✎ ${name}: riscritto (${expected.length} byte)`);
 }
 
 try {
-  for (const luce of ricetta.LUCI) {
-    await derivato(ricetta.FOGLI[luce], ricetta.foglio(luce), "alla ricetta");
+  for (const light of recipe.LIGHTS) {
+    await derived(recipe.SHEETS[light], recipe.sheet(light), "alla ricetta");
   }
 
   // I pezzi si leggono **tutti**, non solo quelli elencati: `assembla` rifiuta
   // ciò che nessuno ha messo nell'ordine, e quel rifiuto è il punto — un pezzo
   // scritto e mai montato è la specie di silenzio che questo script esiste per
   // rompere.
-  const cartella = join(SERIE, "skin");
-  const contenuto = {};
-  for (const f of (await readdir(cartella)).sort()) {
+  const folder = join(SERIES, "skin");
+  const content = {};
+  for (const f of (await readdir(folder)).sort()) {
     if (!f.endsWith(".css")) continue;
-    contenuto[f.slice(0, -".css".length)] = await readFile(join(cartella, f), "utf8");
+    content[f.slice(0, -".css".length)] = await readFile(join(folder, f), "utf8");
   }
-  await derivato(pelle.SKIN, pelle.assembla(contenuto), "ai suoi pezzi");
+  await derived(skin.SKIN, skin.assemble(content), "ai suoi pezzi");
 } finally {
   await vite.close();
 }
 
-if (verifica && diversi > 0) {
+if (verify && diffCount > 0) {
   console.error(
     "\nI derivati si generano: «npm run tema:genera». Un esadecimale ritoccato a mano," +
       " o una regola scritta dentro la pelle montata, sparisce alla prima rigenerazione —" +
       " e fino ad allora dice il falso sulla sorgente.",
   );
 }
-process.exitCode = verifica && diversi > 0 ? 1 : 0;
+process.exitCode = verify && diffCount > 0 ? 1 : 0;

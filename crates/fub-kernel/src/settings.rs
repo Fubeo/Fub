@@ -117,9 +117,9 @@ fn values_without_duplicates<'de, D>(d: D) -> Result<BTreeMap<String, SettingVal
 where
     D: serde::Deserializer<'de>,
 {
-    struct Visitatore;
+    struct Visitor;
 
-    impl<'de> serde::de::Visitor<'de> for Visitatore {
+    impl<'de> serde::de::Visitor<'de> for Visitor {
         type Value = BTreeMap<String, SettingValue>;
 
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -143,7 +143,7 @@ where
         }
     }
 
-    d.deserialize_map(Visitatore)
+    d.deserialize_map(Visitor)
 }
 
 /// Legge un file di livello. **Assente = mai configurato**, che è un esito
@@ -248,7 +248,7 @@ fn store(
 /// smette di essere teorico.
 ///
 /// **Il file riletto è anche il cancello**: se adesso è malformato non lo si
-/// sovrascrive ([`non_lo_sovrascrivo`]), e la domanda si fa qui perché qui c'è
+/// sovrascrive ([`do_not_overwrite`]), e la domanda si fa qui perché qui c'è
 /// la risposta vera — fra l'apertura e questa scrittura il file può essere stato
 /// rotto da un editor di testo o da una sincronizzazione a metà, e può essere
 /// stato **rimesso a posto** dalla stessa mano (difetto 0170).
@@ -320,7 +320,7 @@ fn store_vault(
 }
 
 /// Ciò che si perderebbe sovrascrivendo un file di livello che non si rilegge:
-/// il testo che [`non_lo_sovrascrivo`] mette dopo la ragione, uguale per i due
+/// il testo che [`do_not_overwrite`] mette dopo la ragione, uguale per i due
 /// livelli perché la perdita è la stessa.
 const LOSS: &str = "la configurazione che contiene andrebbe persa";
 
@@ -366,7 +366,7 @@ pub struct MachineSettings {
     /// [`MachineSettings::write`], dove serve perché il lucchetto dei valori
     /// non copre più l'andata al disco.
     ///
-    /// Un [`Ricovero`] e non un `Mutex` nudo perché la domanda «e se è
+    /// Un [`Shelter`] e non un `Mutex` nudo perché la domanda «e se è
     /// avvelenato?» ha una porta sola nel kernel (0126): qui poi la risposta è
     /// la più facile di tutte — ciò che c'è dentro è `()`, e un ordine non si
     /// corrompe.
@@ -458,7 +458,7 @@ impl MachineSettings {
             .expect("schema della macchina")
             .values()
             .map(|spec| {
-                let (value, source) = self.risolvi(spec);
+                let (value, source) = self.resolve(spec);
                 SettingEntry {
                     spec: spec.clone(),
                     value,
@@ -472,7 +472,7 @@ impl MachineSettings {
     pub fn effective(&self, key: &str) -> Result<(SettingValue, SettingSource), PluginError> {
         let specs = self.specs.read().expect("schema della macchina");
         let spec = specs.get(key).ok_or_else(|| undeclared(key))?;
-        Ok(self.risolvi(spec))
+        Ok(self.resolve(spec))
     }
 
     /// Scrive una chiave di macchina, con lo stesso cancello dello store di un
@@ -506,7 +506,7 @@ impl MachineSettings {
     /// Il valore scritto se regge lo schema, altrimenti il default — la stessa
     /// regola di [`SettingsStore::resolve`], che per un livello solo si scrive
     /// in quattro righe.
-    fn risolvi(&self, spec: &SettingSpec) -> (SettingValue, SettingSource) {
+    fn resolve(&self, spec: &SettingSpec) -> (SettingValue, SettingSource) {
         if let Some(value) = self.get(&spec.key) {
             if spec.kind.rejects(&value).is_none() {
                 return (value, SettingSource::Machine);
@@ -545,7 +545,7 @@ impl MachineSettings {
     /// aspetta il disco per una cosa che non lo riguarda. Su un supporto lento
     /// quell'attesa è la shell ferma.
     ///
-    /// Il turno di [`scrittura`](Self::scrittura) è ciò che quel restringimento
+    /// Il turno di [`write`](Self::write) è ciò che quel restringimento
     /// costa, e non è un di più: **due scritture devono adottare nell'ordine in
     /// cui il disco le ha accettate**. Senza il turno, la fusione più vecchia
     /// può tornare per seconda e posarsi sopra la più recente, lasciando in
@@ -599,7 +599,7 @@ pub struct SettingsStore {
     /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
     storage: Arc<dyn VaultStorage>,
     /// Il livello del vault, che è **anche** ciò che sta nel file: un
-    /// [`Durevole`] perché «su disco prima, in memoria dopo» smettesse di
+    /// [`Durable`] perché «su disco prima, in memoria dopo» smettesse di
     /// essere una frase in un commento e diventasse l'unico ordine scrivibile.
     vault: Durable<BTreeMap<String, SettingValue>>,
     machine: Arc<MachineSettings>,
@@ -889,7 +889,7 @@ impl SettingsStore {
                 .map_err(|and| PluginError::Internal(and.into()))?,
             SettingScope::Vault => {
                 // Su disco prima, in memoria dopo: non più perché lo dica
-                // questo commento, ma perché `Durevole` non sa esprimere
+                // questo commento, ma perché `Durable` non sa esprimere
                 // l'altro ordine — la ragione sta là sopra.
                 //
                 // E **ciò che si adotta è la fusione, non la propria copia
@@ -1074,7 +1074,7 @@ mod tests {
         }
     }
 
-    fn store_col_support(dir: &Utf8Path, storage: Arc<dyn VaultStorage>) -> SettingsStore {
+    fn store_with_support(dir: &Utf8Path, storage: Arc<dyn VaultStorage>) -> SettingsStore {
         let mut store = SettingsStore::open(dir, storage, MachineSettings::in_memory());
         store
             .declare(
@@ -1101,7 +1101,7 @@ mod tests {
     #[test]
     fn a_support_that_not_and_the_disk_receives_a_error_and_not_a_panic() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_col_support(&dir, Arc::new(SupportThatMergesTwice(FsStorage)));
+        let mut store = store_with_support(&dir, Arc::new(SupportThatMergesTwice(FsStorage)));
         // Non pania (se paniasse il banco morirebbe qui), e ciò che resta è il
         // valore giusto: la seconda fusione ha rifatto il lavoro, non l'ha
         // raddoppiato.
@@ -1113,7 +1113,7 @@ mod tests {
             Some(&"Mod-j".to_string())
         );
 
-        let mut store = store_col_support(&dir, Arc::new(SupportThatDoesNotMerge(FsStorage)));
+        let mut store = store_with_support(&dir, Arc::new(SupportThatDoesNotMerge(FsStorage)));
         let outcome = store.set("keys.note.create", SettingValue::Text("Mod-k".into()));
         assert!(
             outcome.is_err(),
@@ -1402,7 +1402,7 @@ mod tests {
     }
 
     #[test]
-    fn a_value_outside_kind_written_a_hand_is_discards_col_default_under() {
+    fn a_value_outside_kind_written_a_hand_is_discards_with_default_under() {
         let (_tmp, dir) = tempdir();
         let vault_file = dir.join(".fub").join("settings.json");
         std::fs::create_dir_all(vault_file.parent().unwrap()).unwrap();
@@ -1457,7 +1457,7 @@ mod tests {
     /// qui sopra, e senza di essa a vincere sarebbe l'ultima delle due — cioè
     /// due default e due specie per una chiave, decisi dall'ordine di un `Vec`.
     #[test]
-    fn nemmeno_the_same_manifest_can_declare_two_times_a_key() {
+    fn not_even_the_same_manifest_can_declare_two_times_a_key() {
         let (_tmp, dir) = tempdir();
         let mut store = store_on(&dir);
         let and = store
@@ -1663,11 +1663,11 @@ mod tests {
         write_atomic(&path, b"{\"a\":1}").unwrap();
         write_atomic(&path, b"{\"a\":2}").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{\"a\":2}");
-        let residui: Vec<String> = std::fs::read_dir(&dir)
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
             .map(|and| and.unwrap().file_name().to_string_lossy().into_owned())
             .filter(|n| n != "stato.json")
             .collect();
-        assert!(residui.is_empty(), "temporanei rimasti: {residui:?}");
+        assert!(leftovers.is_empty(), "temporanei rimasti: {leftovers:?}");
     }
 }

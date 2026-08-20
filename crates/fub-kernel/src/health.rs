@@ -160,11 +160,11 @@ fn collisions(entries: &BTreeMap<DocId, VaultEntry>) -> Vec<HealthIssue> {
     entries
         .keys()
         .filter_map(|id| {
-            let gruppo = group_of.get(id)?;
-            if gruppo.len() < 2 {
+            let group = group_of.get(id)?;
+            if group.len() < 2 {
                 return None;
             }
-            let other: Vec<&str> = gruppo
+            let other: Vec<&str> = group
                 .iter()
                 .filter(|or| **or != id)
                 .map(|or| or.as_str())

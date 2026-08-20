@@ -260,7 +260,7 @@ impl ArtifactSink for MemorySink {
 /// processo che se ne va) aveva già distrutto l'esportazione precedente e ne
 /// certificava come consegnata una monca. Ogni artefatto si scrive quindi
 /// accanto, in un temporaneo con la forma che
-/// [`nome_del_temporaneo`](crate::storage::nome_del_temporaneo) detta, e la
+/// [`temp_name`](crate::storage::temp_name) detta, e la
 /// `rename` alla chiusura è ciò che lo rende visibile: chi guarda quella
 /// cartella vede il file di prima finché non c'è quello nuovo, intero
 /// (difetto 0183).
@@ -272,7 +272,7 @@ impl ArtifactSink for MemorySink {
 pub struct DirectorySink {
     root: PathBuf,
     /// La radice risolta con `canonicalize`, calcolata una sola volta: è fissa
-    /// per la vita del sink, e `resta_dentro` la chiedeva a ogni artefatto.
+    /// per la vita del sink, e `stays_inside` la chiedeva a ogni artefatto.
     root_real: Option<PathBuf>,
     open: BTreeMap<u64, Artifact>,
     next: u64,
@@ -325,7 +325,7 @@ impl ArtifactSink for DirectorySink {
         std::fs::create_dir_all(&dir)
             .map_err(|and| PluginError::Io(format!("cannot create `{}`: {and}", dir.display()).into()))?;
         // Il nome del file lo dà il provider ed è già passato da
-        // `controlla_path`, quindi è UTF-8 e non ha separatori: la cartella
+        // `check_path`, quindi è UTF-8 e non ha separatori: la cartella
         // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
         let name = crate::storage::temp_name(
             dest.file_name()
@@ -428,7 +428,7 @@ fn handle_unknown() -> PluginError {
 /// ha nessun `..` da rifiutare, ma se `fuga` è un symlink verso la home i byte
 /// atterrano nella home (difetto 0194).
 ///
-/// La differenza con [`controlla_path`] è chi risponde. Là la domanda è sul
+/// La differenza con [`check_path`] è chi risponde. Là la domanda è sul
 /// *nome* — quello lo si può leggere — e la risposta è la stessa ovunque; qui la
 /// domanda è «dove si finisce davvero», e a quella risponde solo il disco. Le due
 /// stanno accanto perché la prima è la sola che il [`MemorySink`] può porre: in

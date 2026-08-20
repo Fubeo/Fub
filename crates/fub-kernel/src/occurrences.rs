@@ -429,7 +429,7 @@ mod tests {
     /// L'altro verso della stessa riga: riparando la sovrapposizione **dentro**
     /// un termine non si deve perdere quella **fra** termini diversi, che è
     /// voluta. Sta accanto a
-    /// `un_prefisso_e_un_termine_intero_non_si_mangiano_a_vicenda` perché la
+    /// `a_prefix_and_a_whole_term_do_not_eat_each_other` perché la
     /// prova che conta è la coppia: un corpus può essere cieco a chi riconosce
     #[test]
     fn two_different_terms_still_overlap() {

@@ -131,7 +131,7 @@ describe("sospendere e riprendere i ritardi", () => {
       "il documento sospeso è tornato a essere una casella sola: due " +
         "sospensioni annidate si pestano, e la prima ripresa riaccende quello " +
         "sbagliato lasciando l'altro fermo per sempre",
-    ).toContain("const sospesi = new Set<string>()");
+    ).toContain("const suspended = new Set<string>()");
     expect(source).not.toContain("let sospeso: string | null");
   });
 });
@@ -177,7 +177,7 @@ describe("la finestra di migrazione di una rinomina", () => {
         `\`${name}\` non guarda il fermo: una battuta dentro la finestra di ` +
           "migrazione programma una scrittura col nome di prima, e la nota " +
           "rinominata ricompare al vecchio path",
-      ).toContain("sospesi.has(doc)");
+      ).toContain("suspended.has(doc)");
     }
   });
 
@@ -200,7 +200,7 @@ describe("la finestra di migrazione di una rinomina", () => {
       listenerBody("document_renamed"),
       "l'evento che migra l'identità non scioglie il fermo preso da chi ha " +
         "chiesto la rinomina",
-    ).toContain("sospesi.delete(e.from)");
+    ).toContain("suspended.delete(e.from)");
   });
 
   // La porta è una: le tre rinomine dell'esploratore — dal campo di testo, dal

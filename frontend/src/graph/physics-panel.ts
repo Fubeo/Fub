@@ -136,17 +136,17 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   const values: Record<string, HTMLElement> = {};
   // Riferimenti agli input per poterli risincronizzare sui valori della conf
   // quando un preset li cambia dall'esterno.
-  const inputFisici: Record<string, HTMLInputElement> = {};
-  const inputGraficiSlider: Record<string, HTMLInputElement> = {};
-  const toggleFisici: Record<string, HTMLInputElement> = {};
-  const toggleGrafici: Record<string, HTMLInputElement> = {};
+  const physicsInputs: Record<string, HTMLInputElement> = {};
+  const graphicsSliderInputs: Record<string, HTMLInputElement> = {};
+  const physicsToggles: Record<string, HTMLInputElement> = {};
+  const graphicsToggles: Record<string, HTMLInputElement> = {};
 
-  const sezioneFisica = document.createElement("div");
-  sezioneFisica.className = "graph-panel-sezione";
+  const physicsSection = document.createElement("div");
+  physicsSection.className = "graph-panel-sezione";
   const physicsLabel = document.createElement("div");
   physicsLabel.className = "graph-panel-sezione-titolo";
-  sezioneFisica.append(physicsLabel);
-  popover.append(sezioneFisica);
+  physicsSection.append(physicsLabel);
+  popover.append(physicsSection);
 
   for (const c of PHYSICS_SLIDERS) {
     const row = document.createElement("label");
@@ -164,9 +164,9 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     input.step = String(c.step);
     input.value = String((config.physics as unknown as Record<string, number>)[c.key]);
     row.append(input);
-    sezioneFisica.append(row);
+    physicsSection.append(row);
     values[c.key] = value;
-    inputFisici[c.key] = input;
+    physicsInputs[c.key] = input;
     name.textContent = c.key; // placeholder, sovrascritto da aggiornaLingua
     updateValue(c.key, input.value);
     input.addEventListener("input", () => {
@@ -186,16 +186,16 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
       config.preset = "custom";
       o.onChange(config);
     });
-    sezioneFisica.append(row.element);
-    toggleFisici[key] = row.input;
+    physicsSection.append(row.element);
+    physicsToggles[key] = row.input;
   }
 
-  const sezioneGrafica = document.createElement("div");
-  sezioneGrafica.className = "graph-panel-sezione";
+  const graphicsSection = document.createElement("div");
+  graphicsSection.className = "graph-panel-sezione";
   const graphicsLabel = document.createElement("div");
   graphicsLabel.className = "graph-panel-sezione-titolo";
-  sezioneGrafica.append(graphicsLabel);
-  popover.append(sezioneGrafica);
+  graphicsSection.append(graphicsLabel);
+  popover.append(graphicsSection);
 
   for (const key of GRAPHICS_TOGGLES) {
     const row = createToggle(key, config.graphics[key], (v) => {
@@ -204,8 +204,8 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
       Object.assign(config.graphics, { [key]: v } as Partial<GraphicsConfig>);
       o.onChange(config);
     });
-    sezioneGrafica.append(row.element);
-    toggleGrafici[key] = row.input;
+    graphicsSection.append(row.element);
+    graphicsToggles[key] = row.input;
   }
 
   for (const c of GRAPHICS_SLIDERS) {
@@ -224,9 +224,9 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     input.step = String(c.step);
     input.value = String((config.graphics as unknown as Record<string, number>)[c.key]);
     row.append(input);
-    sezioneGrafica.append(row);
+    graphicsSection.append(row);
     values[c.key] = value;
-    inputGraficiSlider[c.key] = input;
+    graphicsSliderInputs[c.key] = input;
     name.textContent = c.key;
     updateValue(c.key, input.value);
     input.addEventListener("input", () => {
@@ -239,21 +239,21 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
 
   const actions = document.createElement("div");
   actions.className = "graph-panel-azioni";
-  const btnRiscalda = document.createElement("button");
-  btnRiscalda.type = "button";
-  const btnSblocca = document.createElement("button");
-  btnSblocca.type = "button";
+  const warmButton = document.createElement("button");
+  warmButton.type = "button";
+  const unpinButton = document.createElement("button");
+  unpinButton.type = "button";
   const resetButton = document.createElement("button");
   resetButton.type = "button";
-  actions.append(btnRiscalda, btnSblocca, resetButton);
+  actions.append(warmButton, unpinButton, resetButton);
   popover.append(actions);
 
   function updateValue(key: string, v: string): void {
     const el = values[key];
-    if (el) el.textContent = formatta(v);
+    if (el) el.textContent = formatValue(v);
   }
 
-  function formatta(v: string): string {
+  function formatValue(v: string): string {
     const n = parseFloat(v);
     if (Number.isFinite(n)) {
       // I decimali contano per rigidità/attrito (0.12) e sono rumore per
@@ -286,29 +286,29 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   /// Aggiorna gli input fisici (slider + toggle) ai valori correnti della
   /// conf. Chiamata dopo un cambio preset e dopo «Reimposta», quando la
   /// conf cambia dall'esterno del gesto diretto dell'utente.
-  function sincronizzaInput(): void {
+  function syncInputs(): void {
     for (const c of PHYSICS_SLIDERS) {
       const v = (config.physics as unknown as Record<string, number>)[c.key];
-      const input = inputFisici[c.key];
+      const input = physicsInputs[c.key];
       if (input) {
         input.value = String(v);
         updateValue(c.key, input.value);
       }
     }
     for (const key of PHYSICS_TOGGLES) {
-      const input = toggleFisici[key];
+      const input = physicsToggles[key];
       if (input) input.checked = config.physics[key];
     }
     for (const c of GRAPHICS_SLIDERS) {
       const v = (config.graphics as unknown as Record<string, number>)[c.key];
-      const input = inputGraficiSlider[c.key];
+      const input = graphicsSliderInputs[c.key];
       if (input) {
         input.value = String(v);
         updateValue(c.key, input.value);
       }
     }
     for (const key of GRAPHICS_TOGGLES) {
-      const input = toggleGrafici[key];
+      const input = graphicsToggles[key];
       if (input) input.checked = config.graphics[key];
     }
   }
@@ -317,7 +317,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     if (name === "custom") return;
     config.physics = physicsPreset(name);
     config.preset = name;
-    sincronizzaInput();
+    syncInputs();
     o.onChange(config);
   }
 
@@ -326,17 +326,17 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     // La grafica va fusa in place: il pittore chiude sull'oggetto vivo.
     Object.assign(config.graphics, defaultGraphicsConfig());
     config.preset = "organica";
-    sincronizzaInput();
+    syncInputs();
     select.value = "organica";
     o.onChange(config);
   }
 
   // --- i listener -------------------------------------------------------
 
-  let aperto = false;
+  let isOpen = false;
 
   function openPopover(): void {
-    aperto = true;
+    isOpen = true;
     popover.hidden = false;
     gear.setAttribute("aria-expanded", "true");
     // Il focus dentro il popover: la select è il primo controllo, così la
@@ -347,7 +347,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   }
 
   function closePopover(): void {
-    aperto = false;
+    isOpen = false;
     popover.hidden = true;
     gear.setAttribute("aria-expanded", "false");
     gear.focus();
@@ -355,7 +355,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   }
 
   gear.addEventListener("click", () => {
-    if (aperto) closePopover();
+    if (isOpen) closePopover();
     else openPopover();
   });
 
@@ -367,14 +367,14 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   // pannello è un ospite della superficie, Esc lo congeda. Il listener è
   // sul popover (il focus è dentro quando aperto).
   popover.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape" && aperto) {
+    if (e.key === "Escape" && isOpen) {
       e.preventDefault();
       closePopover();
     }
   });
 
-  btnRiscalda.addEventListener("click", () => o.onWarm());
-  btnSblocca.addEventListener("click", () => o.onUnpinAll());
+  warmButton.addEventListener("click", () => o.onWarm());
+  unpinButton.addEventListener("click", () => o.onUnpinAll());
   resetButton.addEventListener("click", () => reset());
 
   function updateLanguage(): void {
@@ -383,8 +383,8 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     presetLabel.textContent = copy.preset;
     physicsLabel.textContent = copy.title;
     graphicsLabel.textContent = copy.title;
-    btnRiscalda.textContent = copy.warm;
-    btnSblocca.textContent = copy.unpin;
+    warmButton.textContent = copy.warm;
+    unpinButton.textContent = copy.unpin;
     resetButton.textContent = copy.reset;
     gear.setAttribute("aria-label", copy.open);
 
@@ -402,28 +402,28 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
 
     // Le etichette dei campi: ogni nome span riceve la sua chiave.
     for (const c of PHYSICS_SLIDERS) {
-      const label = sezioneFisica.querySelector<HTMLElement>(`input[type="range"][min="${c.min}"]`);
+      const label = physicsSection.querySelector<HTMLElement>(`input[type="range"][min="${c.min}"]`);
       if (label) {
         const name = label.parentElement?.querySelector<HTMLElement>(".graph-panel-nome");
         if (name) name.textContent = copy.fields[c.key] ?? c.key;
       }
     }
     for (const c of GRAPHICS_SLIDERS) {
-      const input = inputGraficiSlider[c.key];
+      const input = graphicsSliderInputs[c.key];
       if (input) {
         const name = input.parentElement?.querySelector<HTMLElement>(".graph-panel-nome");
         if (name) name.textContent = copy.fields[c.key] ?? c.key;
       }
     }
     for (const key of PHYSICS_TOGGLES) {
-      const input = toggleFisici[key];
+      const input = physicsToggles[key];
       if (input) {
         const name = input.parentElement?.querySelector<HTMLElement>(".graph-panel-nome");
         if (name) name.textContent = copy.fields[key] ?? key;
       }
     }
     for (const key of GRAPHICS_TOGGLES) {
-      const input = toggleGrafici[key];
+      const input = graphicsToggles[key];
       if (input) {
         const name = input.parentElement?.querySelector<HTMLElement>(".graph-panel-nome");
         if (name) name.textContent = copy.fields[key] ?? key;
@@ -431,11 +431,11 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     }
   }
 
-  let distrutto = false;
+  let destroyed = false;
 
   function destroy(): void {
-    if (distrutto) return;
-    distrutto = true;
+    if (destroyed) return;
+    destroyed = true;
     // I listener vivono sui nodi che rimuoviamo: il GC li porta via con loro.
     // Non c'è un `removeEventListener` esplicito perché il DOM se ne va tutto.
     root.remove();
@@ -443,7 +443,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
 
   // Primo popolamento: etichette e valori.
   updateLanguage();
-  sincronizzaInput();
+  syncInputs();
   select.value = config.preset;
 
   return { element: root, updateLanguage, destroy };

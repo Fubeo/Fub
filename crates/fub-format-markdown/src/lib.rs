@@ -193,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn entity_numerica_with_tag_is_resolves_in_the_model() {
+    fn entity_numeric_with_tag_is_resolves_in_the_model() {
         let doc = parse("pre &#65; #tag fine");
         match &paragrafo_inlines(&doc)[0] {
             Inline::Text(t) => assert_eq!(t, "pre A "),
@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn the_branch_with_tag_decodifica_as_that_without_for_the_entity() {
+    fn the_branch_with_tag_decodes_as_that_without_for_the_entity() {
         // Un'entità nominale fuori dai cinque caratteri HTML significativi:
         // comrak la scioglie, e il ramo con il tag fa lo stesso — la `©`
         // resta `©`, non `&amp;copy;`.
@@ -244,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    fn the_escape_in_the_segments_with_tag_is_dissolve_compress() {
+    fn the_escape_in_the_segments_with_tag_is_dissolved_compressed() {
         // Un escape (`\*` → `*`) nel segmento prima del tag: la traduzione
         // degli offset non deve perderlo. Il modello porta `*testo*`, non
         // `\*testo\*`.

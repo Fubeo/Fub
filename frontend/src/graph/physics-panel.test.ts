@@ -60,13 +60,13 @@ function initialConfig(): GraphConfig {
 
 describe("createPhysicsPanel", () => {
   let config: GraphConfig;
-  let cambi: GraphConfig[];
+  let changes: GraphConfig[];
   let warmCalled: boolean;
   let unpinCalled: boolean;
 
   beforeEach(() => {
     config = initialConfig();
-    cambi = [];
+    changes = [];
     warmCalled = false;
     unpinCalled = false;
   });
@@ -74,7 +74,7 @@ describe("createPhysicsPanel", () => {
   function create() {
     return createPhysicsPanel({
       config,
-      onChange: (c) => cambi.push(c),
+      onChange: (c) => changes.push(c),
       onWarm: () => {
         warmCalled = true;
       },
@@ -116,9 +116,9 @@ describe("createPhysicsPanel", () => {
     expect(slider).not.toBeNull();
     slider!.value = "5000";
     slider!.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(cambi.length).toBe(1);
-    expect(cambi[0].preset).toBe("custom");
-    expect(cambi[0].physics.repulsion).toBe(5000);
+    expect(changes.length).toBe(1);
+    expect(changes[0].preset).toBe("custom");
+    expect(changes[0].physics.repulsion).toBe(5000);
     p.destroy();
   });
 
@@ -128,9 +128,9 @@ describe("createPhysicsPanel", () => {
     expect(checkbox).not.toBeNull();
     checkbox!.checked = false;
     checkbox!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(cambi.length).toBe(1);
-    expect(cambi[0].preset).toBe("organica");
-    expect(cambi[0].graphics.glow).toBe(false);
+    expect(changes.length).toBe(1);
+    expect(changes[0].preset).toBe("organica");
+    expect(changes[0].graphics.glow).toBe(false);
     p.destroy();
   });
 
@@ -139,8 +139,8 @@ describe("createPhysicsPanel", () => {
     const select = p.element.querySelector<HTMLSelectElement>("select.graph-panel-select")!;
     select.value = "rigido";
     select.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(cambi.length).toBe(1);
-    expect(cambi[0].preset).toBe("rigido");
+    expect(changes.length).toBe(1);
+    expect(changes[0].preset).toBe("rigido");
     // La fisica del pannello è ora quella del preset rigido.
     expect(config.physics.repulsion).toBe(organicConfig().repulsion);
     expect(config.physics.springStiffness).toBe(0.35);
@@ -153,14 +153,14 @@ describe("createPhysicsPanel", () => {
     const select = p.element.querySelector<HTMLSelectElement>("select.graph-panel-select")!;
     select.value = "rigido";
     select.dispatchEvent(new Event("change", { bubbles: true }));
-    cambi.length = 0;
+    changes.length = 0;
     // Poi reimposta.
     const resetButton = Array.from(p.element.querySelectorAll<HTMLButtonElement>(".graph-panel-azioni button")).find(
       (b) => b.textContent === "Reimposta",
     )!;
     resetButton.click();
-    expect(cambi.length).toBe(1);
-    expect(cambi[0].preset).toBe("organica");
+    expect(changes.length).toBe(1);
+    expect(changes[0].preset).toBe("organica");
     expect(config.physics).toEqual(organicConfig());
     expect(config.graphics).toEqual(defaultGraphicsConfig());
     p.destroy();
@@ -190,7 +190,7 @@ describe("createPhysicsPanel", () => {
     let focusRestored = false;
     const p = createPhysicsPanel({
       config,
-      onChange: (c) => cambi.push(c),
+      onChange: (c) => changes.push(c),
       onWarm: () => {},
       onUnpinAll: () => {},
       copy,

@@ -574,7 +574,7 @@ impl fub_kernel::VaultStorage for CountingStorage {
 /// # Quello che questo banco non vede
 ///
 /// La **terza** lettura, che il kernel da solo non fa: la fa
-/// `Workspace::pota_il_registro` quando qualcuno dichiara
+/// `Workspace::prunes_the_record` quando qualcuno dichiara
 /// `journal.retention.days`, cioè a ogni apertura vera passata da `fub-host`.
 /// Sta fuori da questo tetto perché ha un'altra causa — una chiave dichiarata,
 /// non l'apertura — e metterla dentro renderebbe il numero dipendente da chi è

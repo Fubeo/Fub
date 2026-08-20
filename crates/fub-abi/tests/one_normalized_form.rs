@@ -32,7 +32,7 @@
 //! `prefix_len_ci` è la quinta di questa famiglia ed è privata del kernel,
 //! perché produce offset dentro il sorgente e non una chiave. La sua coppia
 //! NFC/NFD sta accanto a lei, in `crates/fub-kernel/src/occurrences.rs`
-//! (`la_codifica_di_un_accento_non_nasconde_una_parola`): un banco di `fub-abi`
+//! (`accent_encoding_does_not_hide_a_word`): un banco di `fub-abi`
 //! non la può chiamare, e renderla pubblica per provarla vorrebbe dire
 //! allargare una superficie per la comodità di un test.
 

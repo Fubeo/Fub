@@ -636,10 +636,10 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // dall'etichetta e non dal contenitore, o sarebbe l'etichetta *più tutto
       // il sottoalbero* — che su una cartella con cento note è un nome lungo
       // cento note.
-      const idEtichetta = identifier("albero");
-      row.id = idEtichetta;
+      const labelId = identifier("albero");
+      row.id = labelId;
       el.setAttribute("role", "treeitem");
-      el.setAttribute("aria-labelledby", idEtichetta);
+      el.setAttribute("aria-labelledby", labelId);
       if (node.selected) el.setAttribute("aria-selected", "true");
       el.appendChild(row);
       const children = div("ui-children");
@@ -996,7 +996,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
   // divergono, che è il difetto di cui questa sezione è la cura.
   el.dataset.field = node.field;
   label(el, node.label);
-  legaEtichetta(el, node.field);
+  bindLabel(el, node.field);
   return true;
 }
 
@@ -1130,7 +1130,7 @@ function label(el: HTMLElement, label: string | null): void {
 /// onesto e soprattutto cercabile» —, per la stessa ragione: un ripiego che
 /// inventasse un'etichetta plausibile («Testo») renderebbe un campo senza nome
 /// indistinguibile da uno nominato male.
-function legaEtichetta(el: HTMLElement, field: string): void {
+function bindLabel(el: HTMLElement, field: string): void {
   // Un gruppo di radio si nomina **in blocco** anche qui: mettere il nome del
   // campo su ogni bottone coprirebbe l'etichetta della singola opzione, che è
   // l'unica cosa buona che quel bottone abbia già.

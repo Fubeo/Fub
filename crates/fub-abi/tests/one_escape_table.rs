@@ -172,7 +172,7 @@ fn html_entities_live_in_a_single_file() {
     );
 }
 
-/// Il test del test. `le_entita_html_stanno_in_un_file_solo` è verde anche se il
+/// Il test del test. `html_entities_live_in_a_single_file` è verde anche se il
 /// cammino non trova niente e se l'estrattore salta tutto, e le due avarie sono
 /// indistinguibili da un repo pulito.
 #[test]

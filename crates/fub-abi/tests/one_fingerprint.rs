@@ -15,7 +15,7 @@
 //! # Perché un conto e non solo il compilatore
 //!
 //! Il compilatore la metà sua l'ha fatta: le due copie sono sparite e i loro
-//! chiamanti passano da [`Fnv1a::nuova`]/[`Fnv1a::di`]. Ma non può accorgersi
+//! chiamanti passano da [`Fnv1a::new`]/[`Fnv1a::hash`]. Ma non può accorgersi
 //! del **gesto che ricomincia** — un quarto posto che vuole un `u64` stabile e
 //! si riscrive le sue due `const`, perché in quel momento sono due righe e
 //! sembra più breve che importare un tipo. È la variante che nessuno elenca, e
@@ -138,14 +138,14 @@ fn the_fnv_constants_live_in_a_single_file() {
          An extra fingerprint is a fingerprint that diverges, and diverges silently: these \
          numbers end up on disk, and whoever wrote them re-reads them with their own copy, \
          so it stays green until two archives need to talk to each other. Anyone wanting \
-         the raw number should go through `fub_abi::Fnv1a` — `di` for a single block, \
-         `nuova`/`mangia`/`valore` for a sequence of fields to separate.",
+         the raw number should go through `fub_abi::Fnv1a` — `hash` for a single block, \
+         `new`/`update`/`value` for a sequence of fields to separate.",
         found.len(),
         found.join("\n  ")
     );
 }
 
-/// Il test del test. `le_costanti_di_fnv_stanno_in_un_file_solo` è verde anche
+/// Il test del test. `the_fnv_constants_live_in_a_single_file` è verde anche
 /// se il cammino non trova niente e se il conto non aggancia, e le due avarie
 /// sono indistinguibili da un repo pulito.
 #[test]

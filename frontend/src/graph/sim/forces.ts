@@ -19,21 +19,21 @@ import type { PhysicsConfig, Structure, Tier } from "./types";
 // senza allocare una closure per ogni nodo. Invece usa questi slot di
 // modulo, impostati prima di ogni `visit`: `step` è sincrono e
 // single-threaded, quindi non c'è rischio di reentrancy.
-let sForze: Structure | null = null;
-let indiceForze = -1;
+let forceStructure: Structure | null = null;
+let forceIndex = -1;
 let forceRepulsion = 0;
 
 /// Il dt del passo corrente: la molla del puntatore ne ha bisogno per
 /// tarare i guadagni (deadbeat: k = 1/dt², c = 1/dt). Il motore la imposta
 /// prima di `accumulateForces`; il default 1/60 basta per i test che chiamano
 /// `accumulateForces` direttamente senza drag.
-let dtForze = 1 / 60;
+let forceDt = 1 / 60;
 
 /// Imposta il dt del passo corrente. Chiamata dal motore prima di
 /// `accumulateForces`; esportata perché il contratto di `accumulateForces` non
 /// porta il dt (lo gestisce il motore, non la forza).
 export function setDt(dt: number): void {
-  dtForze = dt;
+  forceDt = dt;
 }
 
 /// Callback per la repulsione Barnes-Hut: riceve (dx, dy, d2, massa) dal
@@ -43,13 +43,13 @@ export function setDt(dt: number): void {
 /// coincidenti vengono separati dalla griglia di collisione.
 function bhRepulsion(dx: number, dy: number, d2: number, mass: number): void {
   if (d2 < 1e-4) return;
-  const s = sForze!;
+  const s = forceStructure!;
   // dx,dy puntano dal nodo di query (i) al nodo j (x_j − x_i). La repulsione
   // spinge i LONTANO da j: lungo −(dx,dy), cioè verso (x_i − x_j).
   const f = (forceRepulsion * mass) / (d2 + 64);
   const inv = 1 / Math.sqrt(d2);
-  s.fx[indiceForze] -= f * dx * inv;
-  s.fy[indiceForze] -= f * dy * inv;
+  s.fx[forceIndex] -= f * dx * inv;
+  s.fy[forceIndex] -= f * dy * inv;
 }
 
 /// Azzera `fx`/`fy` e le riempie con repulsione + molle + gravità + molla
@@ -72,10 +72,10 @@ export function accumulateForces(
 
   // ── Repulsione ────────────────────────────────────────────────────────
   if (q !== null && tier >= 2) {
-    sForze = s;
+    forceStructure = s;
     forceRepulsion = config.repulsion;
     for (let i = 0; i < n; i++) {
-      indiceForze = i;
+      forceIndex = i;
       visit(q, config.theta, s.x[i], s.y[i], bhRepulsion);
     }
   } else {
@@ -174,8 +174,8 @@ export function accumulateForces(
   // mouse esattamente, e le collisioni spingono gli altri fuori strada.
   const t = s.dragged;
   if (t >= 0) {
-    const kp = 1 / (dtForze * dtForze);
-    const cp = 1 / dtForze;
+    const kp = 1 / (forceDt * forceDt);
+    const cp = 1 / forceDt;
     fx[t] = kp * (s.px[t] - s.x[t]) - cp * s.vx[t];
     fy[t] = kp * (s.py[t] - s.y[t]) - cp * s.vy[t];
   }

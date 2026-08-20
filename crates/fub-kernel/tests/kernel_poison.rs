@@ -40,7 +40,7 @@
 //! una frase, e la frase era falsa**. Diceva «sono nove» e li nominava:
 //! `journal.rs`, `drafts.rs` e `ignore.rs` erano nell'elenco e non hanno mai
 //! avuto un lucchetto, mentre `vault.rs` ne ha uno — di banco, quindi fuori dal
-//! taglio di [`codice`] e giustamente fuori dal conto — e nell'elenco non
+//! taglio di [`code`] e giustamente fuori dal conto — e nell'elenco non
 //! c'era. Nessuno se n'era accorto per la ragione che rende questa specie
 //! peggiore delle altre: **il motivo per cui si scrive un elenco è smettere di
 //! doverlo rifare**. Un elenco a mano dentro una zona dichiarata cieca non ha
@@ -71,7 +71,7 @@ const THE_GATES: &[&str] = &["bus.rs", "poison.rs"];
 
 /// Le righe di **codice** di un sorgente: la prosa si salta sempre.
 ///
-/// Che un commento non sia codice è la trappola misurata da `dieta_ipc.rs` — in
+/// Che un commento non sia codice è la trappola misurata da `lean_ipc.rs` — in
 /// un repo in cui i file spiegano sé stessi, un `grep` ingenuo conta le
 /// spiegazioni, e questo file ne è pieno: la testa di `JobBell` *nomina* i sei
 /// `expect` che non ci sono più.

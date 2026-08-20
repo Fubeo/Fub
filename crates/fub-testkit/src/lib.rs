@@ -23,11 +23,11 @@
 //! nessun file, già scandito.
 //!
 //! ```no_run
-//! use fub_testkit::Banco;
+//! use fub_testkit::Bench;
 //!
-//! let mut banco = Banco::nuovo().con_plugin("prova.plugin").monta();
-//! banco.scrivi("nota.md", "corpo");
-//! banco.reindex().expect("scansione");
+//! let mut bench = Bench::new().with_plugin("prova.plugin").mounts();
+//! bench.write("nota.md", "corpo");
+//! bench.reindex().expect("scansione");
 //! ```
 //!
 //! # Cosa questo crate non è
@@ -54,7 +54,7 @@ pub mod format;
 
 pub use format::{SampleExtractor, SampleText};
 
-/// Il registro degli eventi visti da [`Banco::eventi`], condiviso con la spia.
+/// Il registro degli eventi visti da [`Mounted::events`], condiviso con la spia.
 type Record = Arc<Mutex<Vec<Event>>>;
 
 // ---------------------------------------------------------------------------
@@ -68,8 +68,8 @@ type Record = Arc<Mutex<Vec<Event>>>;
 pub struct Bench {
     root: Root,
     formats: FormatRegistry,
-    /// `true` finché nessuno ha chiamato [`Banco::con_formato`] o
-    /// [`Banco::senza_formato`]: serve a distinguere «va bene il default» da
+    /// `true` finché nessuno ha chiamato [`Bench::with_format`] o
+    /// [`Bench::without_format`]: serve a distinguere «va bene il default» da
     /// «lo voglio vuoto», che sono due richieste diverse e finora si scrivevano
     /// uguali.
     format_default: bool,
@@ -176,7 +176,7 @@ impl Bench {
     }
 
     /// Registra una spia che prende **ogni** evento, leggibile da
-    /// [`Banco::eventi`]. È la seconda metà di ciò che il §16.2 chiede al banco
+    /// [`Mounted::events`]. È la seconda metà di ciò che il §16.2 chiede al banco
     /// del lato host: non solo costruire, ma «asserire su cosa è stato emesso».
     pub fn with_spy(mut self) -> Self {
         self.probe = true;
@@ -239,7 +239,7 @@ impl Bench {
         }
         // Ciò che è stato emesso *montando* non è ciò che il test guarda: chi
         // chiede la spia vuole vedere gli eventi delle proprie mosse, non quelli
-        // della semina. Chi vuole anche quelli usa `senza_scansione`.
+        // della semina. Chi vuole anche quelli usa `without_scan`.
         journal.lock().unwrap().clear();
 
         Mounted {
@@ -254,7 +254,7 @@ impl Bench {
 /// L'id sotto cui il banco registra la propria spia. È riservato: un test che
 /// dichiarasse lo stesso id troverebbe un errore di registrazione al montaggio,
 /// invece di due gestori che si contendono lo stesso nome.
-pub const SPY: &str = "fub.testkit.spia";
+pub const SPY: &str = "fub.testkit.spy";
 
 // ---------------------------------------------------------------------------
 // Il banco montato
@@ -307,7 +307,7 @@ impl Mounted {
 
     /// Gli eventi emessi da quando il banco è stato montato, in ordine.
     ///
-    /// Vuoto se nessuno ha chiesto [`Banco::con_spia`] — e lo dice invece di
+    /// Vuoto se nessuno ha chiesto [`Bench::with_spy`] — e lo dice invece di
     /// far credere che non sia successo niente.
     pub fn events(&self) -> Vec<Event> {
         self.journal.lock().unwrap().clone()
@@ -344,11 +344,11 @@ impl Mounted {
     /// si è arrivati a trentacinque copie.
     ///
     /// ```no_run
-    /// # use fub_testkit::Banco;
+    /// # use fub_testkit::Bench;
     /// # use std::sync::Arc;
     /// # fn esempio(states: Arc<fub_kernel::ViewStates>) {
-    /// let banco = Banco::nuovo()
-    ///     .monta()
+    /// let bench = Bench::new()
+    ///     .mounts()
     ///     .adapt(|ws| ws.with_view_states(states));
     /// # }
     /// ```

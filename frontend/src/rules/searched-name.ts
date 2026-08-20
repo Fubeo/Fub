@@ -43,7 +43,7 @@
 /// I caratteri di controllo ci stanno per una terza ragione ancora: non si
 /// vedono, e chi incolla da un PDF o da un terminale se li porta dietro senza
 /// sapere di averlo fatto.
-const VIETATI = /[\\/:*?"<>|\u0000-\u001f]/g;
+const FORBIDDEN = /[\\/:*?"<>|\u0000-\u001f]/g;
 
 /// Quanto può essere lungo il nome proposto.
 ///
@@ -63,7 +63,7 @@ const MAXIMUM = 80;
 /// stringa.
 export function searchedName(text: string): string | null {
   const clean = text
-    .replace(VIETATI, " ")
+    .replace(FORBIDDEN, " ")
     // Gli spazi si accorpano **dopo** la sostituzione, non prima: è la
     // sostituzione a crearne di nuovi, e `a / b` deve dare `a b` e non `a  b`.
     .replace(/\s+/g, " ")
