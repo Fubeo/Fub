@@ -330,7 +330,7 @@ fn the_health_of_the_vault_is_a_query_like_the_others() {
     let reported: Vec<(String, Option<String>)> = broken
         .items
         .iter()
-        .map(|i| (i.doc.to_string(), i.detail.clone()))
+        .map(|the| (the.doc.to_string(), the.detail.clone()))
         .collect();
     assert_eq!(
         reported,
@@ -362,7 +362,7 @@ fn the_health_of_the_vault_is_a_query_like_the_others() {
     ) else {
         panic!("atteso un rapporto");
     };
-    let ids: Vec<String> = orphans.items.iter().map(|i| i.doc.to_string()).collect();
+    let ids: Vec<String> = orphans.items.iter().map(|the| the.doc.to_string()).collect();
     assert_eq!(
         ids,
         ["Archivio/Gamma.md", "Diario.md"],
@@ -410,14 +410,14 @@ fn backlinks_and_tags_keep_their_answer_and_gain_a_window() {
 /// Un vault di sole scadenze — una nota per riga, col valore di `scadenza`
 /// scritto **come lo scriverebbe chi possiede il vault** — e la chiave
 /// `properties.date-format` dichiarata come la dichiara il core.
-fn vault_di_scadenze(note: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
+fn vault_of_expiries(notes: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
     std::fs::create_dir_all(&root).unwrap();
-    for (nome, scadenza) in note {
+    for (name, expiration) in notes {
         std::fs::write(
-            root.join(nome),
-            format!("---\nscadenza: {scadenza}\n---\nCome l'ha scritta chi l'ha scritta.\n"),
+            root.join(name),
+            format!("---\nscadenza: {expiration}\n---\nCome l'ha scritta chi l'ha scritta.\n"),
         )
         .unwrap();
     }
@@ -438,20 +438,20 @@ fn vault_di_scadenze(note: &[(&str, &str)]) -> (tempfile::TempDir, Workspace) {
 }
 
 /// Lo stesso giorno scritto nei due modi in cui lo si trova in un vault vero.
-fn vault_con_date() -> (tempfile::TempDir, Workspace) {
-    vault_di_scadenze(&[("Iso.md", "2026-07-05"), ("Vecchia.md", "5/7/2026")])
+fn vault_with_date() -> (tempfile::TempDir, Workspace) {
+    vault_of_expiries(&[("Iso.md", "2026-07-05"), ("Vecchia.md", "5/7/2026")])
 }
 
 /// L'utente dichiara com'è scritto il **suo** vault.
-fn dichiara(ws: &mut Workspace, ordine: &str) {
+fn declare(ws: &mut Workspace, order: &str) {
     ws.set_setting(
         fub_kernel::properties::DATE_FORMAT,
-        fub_abi::settings::SettingValue::Text(ordine.into()),
+        fub_abi::settings::SettingValue::Text(order.into()),
     )
     .expect("scritta");
 }
 
-fn scadenze_dopo(ws: &Workspace) -> Vec<String> {
+fn expiries_after(ws: &Workspace) -> Vec<String> {
     let IndexResult::Documents(page) = query(
         ws,
         IndexQuery::Documents {
@@ -486,11 +486,11 @@ fn scadenze_dopo(ws: &Workspace) -> Vec<String> {
 /// ogni domanda e quattro funzioni di regola. Un banco che provasse solo il
 /// parser passerebbe verde con l'impostazione scollegata.
 #[test]
-fn il_formato_dichiarato_arriva_fino_al_filtro_e_zittisce_il_controllo() {
-    let (_g, mut ws) = vault_con_date();
+fn the_format_declared_arrives_until_to_the_filter_and_silences_the_check() {
+    let (_g, mut ws) = vault_with_date();
 
     assert_eq!(
-        scadenze_dopo(&ws),
+        expiries_after(&ws),
         ["Iso.md"],
         "senza dichiarazione `5/7/2026` è un testo, e il filtro non la trova"
     );
@@ -506,7 +506,7 @@ fn il_formato_dichiarato_arriva_fino_al_filtro_e_zittisce_il_controllo() {
     assert_eq!(
         page.items
             .iter()
-            .map(|i| (i.doc.to_string(), i.detail.clone()))
+            .map(|the| (the.doc.to_string(), the.detail.clone()))
             .collect::<Vec<_>>(),
         [(
             "Vecchia.md".to_string(),
@@ -515,10 +515,10 @@ fn il_formato_dichiarato_arriva_fino_al_filtro_e_zittisce_il_controllo() {
         "e chi non trova ha il diritto di sapere perché"
     );
 
-    dichiara(&mut ws, "dmy");
+    declare(&mut ws, "dmy");
 
     assert_eq!(
-        scadenze_dopo(&ws),
+        expiries_after(&ws),
         ["Iso.md", "Vecchia.md"],
         "l'indice rilegge la dichiarazione a ogni domanda: senza reindicizzare, \
          e senza toccare un file"
@@ -540,7 +540,7 @@ fn il_formato_dichiarato_arriva_fino_al_filtro_e_zittisce_il_controllo() {
 }
 
 /// Le faccette di `scadenza`: il valore e quante note lo portano.
-fn faccette_di_scadenza(ws: &Workspace) -> Vec<(PropertyValue, u32)> {
+fn facets_of_expiry(ws: &Workspace) -> Vec<(PropertyValue, u32)> {
     let IndexResult::PropertyValues(page) = query(
         ws,
         IndexQuery::PropertyValues {
@@ -566,11 +566,11 @@ fn faccette_di_scadenza(ws: &Workspace) -> Vec<(PropertyValue, u32)> {
 /// raggruppamento no, e ci si arriva da una rotta sua
 /// (`IndexQuery::PropertyValues`), non dalla coda dei documenti.
 #[test]
-fn lo_stesso_giorno_scritto_in_due_modi_e_una_faccetta_sola() {
-    let (_g, mut ws) = vault_con_date();
+fn the_same_day_written_in_two_modes_and_a_facet_single() {
+    let (_g, mut ws) = vault_with_date();
 
     assert_eq!(
-        faccette_di_scadenza(&ws),
+        facets_of_expiry(&ws),
         [
             (
                 PropertyValue::Date(fub_abi::model::PropertyDate {
@@ -587,10 +587,10 @@ fn lo_stesso_giorno_scritto_in_due_modi_e_una_faccetta_sola() {
          testo che le somiglia"
     );
 
-    dichiara(&mut ws, "dmy");
+    declare(&mut ws, "dmy");
 
     assert_eq!(
-        faccette_di_scadenza(&ws),
+        facets_of_expiry(&ws),
         [(
             PropertyValue::Date(fub_abi::model::PropertyDate {
                 year: 2026,
@@ -617,13 +617,13 @@ fn lo_stesso_giorno_scritto_in_due_modi_e_una_faccetta_sola() {
 /// incoerente non è il rovescio di sé stesso: è lì che la permutazione «che
 /// nessuno ha deciso» si vede.
 #[test]
-fn due_scadenze_si_ordinano_per_istante_e_non_per_stringa() {
-    let (_g, mut ws) = vault_di_scadenze(&[
+fn two_expiries_is_order_for_instant_and_not_for_string() {
+    let (_g, mut ws) = vault_of_expiries(&[
         ("Duemilaventi.md", "2/1/2020"),
         ("Gennaio.md", "1/1/2026"),
         ("Giugno.md", "2026-06-30"),
     ]);
-    let per_scadenza = |ws: &Workspace, descending: bool| -> Vec<String> {
+    let for_expiry = |ws: &Workspace, descending: bool| -> Vec<String> {
         rows(
             ws,
             IndexQuery::Documents {
@@ -640,16 +640,16 @@ fn due_scadenze_si_ordinano_per_istante_e_non_per_stringa() {
         .0
     };
 
-    dichiara(&mut ws, "dmy");
+    declare(&mut ws, "dmy");
 
     assert_eq!(
-        per_scadenza(&ws, false),
+        for_expiry(&ws, false),
         ["Duemilaventi.md", "Gennaio.md", "Giugno.md"],
         "due gennaio 2020, primo gennaio 2026, trenta giugno 2026: l'ordine \
          dei giorni. Per stringa `1/1/2026` verrebbe per primo"
     );
     assert_eq!(
-        per_scadenza(&ws, true),
+        for_expiry(&ws, true),
         ["Giugno.md", "Gennaio.md", "Duemilaventi.md"],
         "e il verso discendente è il rovescio, che è ciò che un ordine è: con \
          un comparatore che rende `Equal` fra specie diverse i due versi non \

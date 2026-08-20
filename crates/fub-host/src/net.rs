@@ -105,7 +105,7 @@ impl UreqNetwork {
 
 impl HostNetwork for UreqNetwork {
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
-        let io = |e: ureq::Error| PluginError::Io(format!("{}: {e}", request.url).into());
+        let io = |and: ureq::Error| PluginError::Io(format!("{}: {and}", request.url).into());
 
         let mut builder = ureq::http::Request::builder()
             .method(request.method.as_str())
@@ -119,13 +119,13 @@ impl HostNetwork for UreqNetwork {
             Some(body) => {
                 let req = builder
                     .body(&body[..])
-                    .map_err(|e| PluginError::BadArgs(format!("{}: {e}", request.url).into()))?;
+                    .map_err(|and| PluginError::BadArgs(format!("{}: {and}", request.url).into()))?;
                 self.agent.run(req).map_err(io)?
             }
             None => {
                 let req = builder
                     .body(())
-                    .map_err(|e| PluginError::BadArgs(format!("{}: {e}", request.url).into()))?;
+                    .map_err(|and| PluginError::BadArgs(format!("{}: {and}", request.url).into()))?;
                 self.agent.run(req).map_err(io)?
             }
         };
@@ -151,11 +151,11 @@ impl HostNetwork for UreqNetwork {
             .with_config()
             .limit(MAX_BODY)
             .read_to_vec()
-            .map_err(|e| {
+            .map_err(|and| {
                 PluginError::Io(
                     format!(
-                        "{}: il corpo della risposta non si è potuto leggere \
-                         (il tetto dell'host è {MAX_BODY} byte): {e}",
+                        "{}: the response body could not be read \
+                         (host ceiling is {MAX_BODY} bytes): {and}",
                         request.url
                     )
                     .into(),
@@ -178,17 +178,17 @@ mod tests {
     /// scritta: un agent con i redirect accesi passerebbe di qui verde, e i
     /// redirect sono la metà del recinto.
     #[test]
-    fn il_client_nasce_senza_seguire_i_redirect() {
+    fn client_is_built_without_following_redirects() {
         let net = UreqNetwork::new();
         assert_eq!(
             net.agent.config().max_redirects(),
             0,
-            "seguire un redirect è uscire dall'allowlist senza deciderlo"
+            "following a redirect leaves the allowlist without deciding"
         );
         assert!(
             !net.agent.config().max_redirects_will_error(),
-            "un `3xx` deve tornare a chi ha chiesto, non diventare un errore: \
-             è chi ha chiesto a decidere se seguirlo"
+            "a `3xx` must return to whoever asked, not become an error: it \
+             is the caller who decides whether to follow it"
         );
     }
 
@@ -201,15 +201,15 @@ mod tests {
     /// diventa rosso invece di diventare un utente in rete aziendale che non
     /// si connette e non sa perché.
     #[test]
-    fn ci_si_fida_di_chi_si_fida_la_macchina() {
+    fn we_trust_what_the_platform_trusts() {
         let net = UreqNetwork::new();
         assert!(
             matches!(
                 net.agent.config().tls_config().root_certs(),
                 ureq::tls::RootCerts::PlatformVerifier
             ),
-            "con le radici imbarcate la CA aziendale non vale, e dall'app non \
-             c'è modo di rimediare (decisione 0097)"
+            "with embedded roots the corporate CA is not valid, and from the \
+             app there is no way to fix it (decision 0097)"
         );
     }
 
@@ -217,17 +217,17 @@ mod tests {
     /// chiama, ed è la distinzione che permette a chi disegna di dire «la rete
     /// non risponde» invece di «errore interno del plugin».
     #[test]
-    fn un_guasto_del_trasporto_e_io() {
+    fn transport_fault_is_io() {
         let net = UreqNetwork::new();
         // La porta 1 dell'anello locale non ascolta: la connessione fallisce
         // senza uscire dalla macchina, quindi questo test non ha bisogno di
         // rete e non diventa rosso su una macchina scollegata.
         let err = net
-            .fetch(HttpRequest::get("http://127.0.0.1:1/niente"))
-            .expect_err("nessuno ascolta lì");
+            .fetch(HttpRequest::get("http://127.0.0.1:1/nothing"))
+            .expect_err("nobody listens there");
         assert!(
             matches!(err, PluginError::Io(_)),
-            "un guasto del trasporto è I/O, non un difetto di chi chiama: {err}"
+            "a transport fault is I/O, not a caller defect: {err}"
         );
     }
 }

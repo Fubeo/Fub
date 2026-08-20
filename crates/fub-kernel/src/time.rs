@@ -110,7 +110,7 @@ mod tests {
     /// anni e bisestili si incastrino senza buchi né sovrapposizioni.
     #[test]
     fn the_calendar_advances_one_day_at_a_time() {
-        let giorni_del_mese = |y: i64, m: u64| -> u64 {
+        let days_of_the_mese = |y: i64, m: u64| -> u64 {
             match m {
                 1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
                 4 | 6 | 9 | 11 => 30,
@@ -119,11 +119,11 @@ mod tests {
             }
         };
         let (mut y, mut m, mut d) = (1970i64, 1u64, 1u64);
-        for giorno in 0..(30 * 365 + 8) {
-            let atteso = format!("{y:04}-{m:02}-{d:02}T00-00-00");
-            assert_eq!(stamp_from_unix(giorno * 86_400), atteso);
+        for day in 0..(30 * 365 + 8) {
+            let expected = format!("{y:04}-{m:02}-{d:02}T00-00-00");
+            assert_eq!(stamp_from_unix(day * 86_400), expected);
             d += 1;
-            if d > giorni_del_mese(y, m) {
+            if d > days_of_the_mese(y, m) {
                 d = 1;
                 m += 1;
             }

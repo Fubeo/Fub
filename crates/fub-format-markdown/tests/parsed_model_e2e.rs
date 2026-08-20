@@ -26,9 +26,9 @@ use fub_kernel::{FormatRegistry, Trust, Workspace};
 
 /// L'estensione di un terzo: un delimitatore che comrak non conosce, innestato
 /// sul provider markdown come lo innesterebbe un plugin.
-struct RegolaDiTerzi;
+struct ThirdPartyRule;
 
-impl SyntaxRule for RegolaDiTerzi {
+impl SyntaxRule for ThirdPartyRule {
     fn spec(&self) -> SyntaxRuleSpec {
         SyntaxRuleSpec {
             id: "terzi:sottolineato".into(),
@@ -88,15 +88,15 @@ fn vault() -> (tempfile::TempDir, Workspace) {
 }
 
 /// Presta l'host come lo riceve un provider e fai la domanda da lì.
-fn chiedendo<R>(ws: &mut Workspace, f: impl FnOnce(&dyn HostApi) -> R) -> R {
+fn asking<R>(ws: &mut Workspace, f: impl FnOnce(&dyn HostApi) -> R) -> R {
     ws.with_host("test", |host| f(host))
 }
 
 #[test]
-fn dal_canale_esce_il_corpo_che_la_cache_non_ha() {
+fn from_the_channel_exits_the_body_that_the_cache_not_has() {
     let (_dir, mut ws) = vault();
 
-    let model = chiedendo(&mut ws, |host| host.read_model(&DocId::new("Nota.md")))
+    let model = asking(&mut ws, |host| host.read_model(&DocId::new("Nota.md")))
         .expect("il modello di una nota che esiste");
 
     assert_eq!(model.id, DocId::new("Nota.md"));
@@ -122,7 +122,7 @@ fn dal_canale_esce_il_corpo_che_la_cache_non_ha() {
             _ => None,
         })
         .flatten()
-        .filter_map(|i| i.task)
+        .filter_map(|the| the.task)
         .collect();
     assert_eq!(tasks.len(), 2, "due voci di task");
     assert!(!tasks[0].checked() && tasks[1].checked());
@@ -137,13 +137,13 @@ fn dal_canale_esce_il_corpo_che_la_cache_non_ha() {
 }
 
 #[test]
-fn il_modello_e_quello_del_disco_adesso_non_quello_di_quando_e_stato_indicizzato() {
+fn the_model_and_disk_state_now_are_not_the_indexed_one() {
     let (_dir, mut ws) = vault();
 
     ws.write_document(&DocId::new("Altra.md"), "# Cambiata\n", WriteBase::Dictated)
         .expect("scrittura");
 
-    let model = chiedendo(&mut ws, |host| host.read_model(&DocId::new("Altra.md")))
+    let model = asking(&mut ws, |host| host.read_model(&DocId::new("Altra.md")))
         .expect("il modello dopo la scrittura");
     assert!(
         matches!(&model.body[0], Block::Heading { .. }),
@@ -153,30 +153,30 @@ fn il_modello_e_quello_del_disco_adesso_non_quello_di_quando_e_stato_indicizzato
 }
 
 #[test]
-fn un_documento_che_il_vault_non_conosce_e_un_errore_non_un_modello_vuoto() {
+fn a_document_that_the_vault_not_knows_and_a_error_not_a_model_empty() {
     let (_dir, mut ws) = vault();
 
-    let esito = chiedendo(&mut ws, |host| host.read_model(&DocId::new("Fantasma.md")));
+    let outcome = asking(&mut ws, |host| host.read_model(&DocId::new("Fantasma.md")));
     // `NotFound` e non `Internal` (§12.2): la frase qui sotto dice «ciò che non
     // c'è», e fino alla 0041 il contratto non sapeva dirlo — lo diceva soltanto
     // la prosa del messaggio, che nessuno può leggere per decidere un ramo.
     assert!(
-        matches!(esito, Err(PluginError::NotFound(msg)) if msg.to_string().contains("Fantasma.md")),
+        matches!(outcome, Err(PluginError::NotFound(msg)) if msg.to_string().contains("Fantasma.md")),
         "una domanda su ciò che non c'è si dice, non si risponde con un modello \
          vuoto che il chiamante scambierebbe per una nota vuota"
     );
 }
 
 #[test]
-fn le_capacita_di_un_formato_comprendono_le_sintassi_innestate() {
+fn the_capabilities_of_a_format_include_the_nested_syntax() {
     let (_dir, mut ws) = vault();
 
-    let prima = chiedendo(&mut ws, |host| host.format_of(&DocId::new("Nota.md")))
+    let before = asking(&mut ws, |host| host.format_of(&DocId::new("Nota.md")))
         .expect("il markdown rivendica .md");
-    assert_eq!(prima.descriptor.id, "markdown");
-    assert!(prima.capabilities.supports(syntax::WIKILINKS));
+    assert_eq!(before.descriptor.id, "markdown");
+    assert!(before.capabilities.supports(syntax::WIKILINKS));
     assert!(
-        !prima.capabilities.supports("terzi:sottolineato"),
+        !before.capabilities.supports("terzi:sottolineato"),
         "nessuno l'ha ancora innestata"
     );
 
@@ -185,33 +185,33 @@ fn le_capacita_di_un_formato_comprendono_le_sintassi_innestate() {
     // nessun altro.
     ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
         .expect("dichiarato");
-    ws.register_syntax_rule("terzi", Box::new(RegolaDiTerzi))
+    ws.register_syntax_rule("terzi", Box::new(ThirdPartyRule))
         .expect("nessun conflitto");
 
-    let dopo = chiedendo(&mut ws, |host| host.format_of(&DocId::new("Nota.md")))
+    let after = asking(&mut ws, |host| host.format_of(&DocId::new("Nota.md")))
         .expect("il markdown rivendica .md");
     assert!(
-        dopo.capabilities.supports("terzi:sottolineato"),
+        after.capabilities.supports("terzi:sottolineato"),
         "le capacità sono quelle EFFETTIVE: rispondere le sole capacità del \
          provider sarebbe una verità di laboratorio, perché la sintassi funziona"
     );
     assert!(
-        dopo.capabilities.supports(syntax::WIKILINKS),
+        after.capabilities.supports(syntax::WIKILINKS),
         "e l'innesto non toglie niente a ciò che il provider sa già fare"
     );
 }
 
 #[test]
-fn di_che_formato_e_un_documento_e_una_domanda_sul_nome() {
+fn of_that_format_and_a_document_and_a_question_on_the_name() {
     let (_dir, mut ws) = vault();
 
     assert!(
-        chiedendo(&mut ws, |host| host.format_of(&DocId::new("allegato.pdf"))).is_none(),
+        asking(&mut ws, |host| host.format_of(&DocId::new("allegato.pdf"))).is_none(),
         "nessun provider rivendica .pdf: `none` è la risposta che serve a chi \
          deve sapere che quel nome non è roba sua"
     );
     assert!(
-        chiedendo(&mut ws, |host| host
+        asking(&mut ws, |host| host
             .format_of(&DocId::new("Diario/2026-07-26.md")))
         .is_some(),
         "vale anche per un documento che non esiste ancora: chi sta per crearlo \

@@ -74,8 +74,8 @@ use fub_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingSpec, 
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{non_lo_sovrascrivo, update_atomic, Durevole, VaultStorage};
-use crate::veleno::Ricovero;
+use crate::storage::{do_not_overwrite, update_atomic, Durable, VaultStorage};
+use crate::poison::Shelter;
 use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
@@ -87,7 +87,7 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 #[derive(Default, Serialize, Deserialize)]
 struct SettingsFile {
     version: SchemaVersion,
-    #[serde(default, deserialize_with = "valori_senza_doppioni")]
+    #[serde(default, deserialize_with = "values_without_duplicates")]
     values: BTreeMap<String, SettingValue>,
 }
 
@@ -113,7 +113,7 @@ struct SettingsFile {
 /// illeggibile» ha un autore solo: il livello della macchina e quello del vault
 /// la ereditano insieme, e il nome della chiave ripetuta esce nel messaggio,
 /// che è l'unica cosa che serve per andare a togliere la riga di troppo.
-fn valori_senza_doppioni<'de, D>(d: D) -> Result<BTreeMap<String, SettingValue>, D::Error>
+fn values_without_duplicates<'de, D>(d: D) -> Result<BTreeMap<String, SettingValue>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -126,20 +126,20 @@ where
             f.write_str("le impostazioni, una per chiave")
         }
 
-        fn visit_map<A>(self, mut mappa: A) -> Result<Self::Value, A::Error>
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
         where
             A: serde::de::MapAccess<'de>,
         {
-            let mut valori = BTreeMap::new();
-            while let Some((chiave, valore)) = mappa.next_entry::<String, SettingValue>()? {
-                if valori.insert(chiave.clone(), valore).is_some() {
+            let mut values = BTreeMap::new();
+            while let Some((key, value)) = map.next_entry::<String, SettingValue>()? {
+                if values.insert(key.clone(), value).is_some() {
                     return Err(serde::de::Error::custom(format!(
-                        "la chiave `{chiave}` è scritta due volte, e quale delle \
+                        "la chiave `{key}` è scritta due volte, e quale delle \
                          due valga non lo dice nessuno"
                     )));
                 }
             }
-            Ok(valori)
+            Ok(values)
         }
     }
 
@@ -164,7 +164,7 @@ fn load_from(
     match read(path) {
         Ok(raw) => {
             let file: SettingsFile = serde_json::from_slice(&raw)
-                .map_err(|e| format!("{path} non è un settings.json valido: {e}"))?;
+                .map_err(|and| format!("{path} non è un settings.json valido: {and}"))?;
             if file.version > SCHEMA_VERSION {
                 return Err(format!(
                     "{path} è scritto nella versione {} di questo formato, e questa \
@@ -174,8 +174,8 @@ fn load_from(
             }
             Ok(file.values)
         }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
-        Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
+        Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(and) => Err(format!("non riesco a leggere {path}: {and}")),
     }
 }
 
@@ -199,7 +199,7 @@ fn encode(values: &BTreeMap<String, SettingValue>) -> Result<Vec<u8>, String> {
         version: SCHEMA_VERSION,
         values: values.clone(),
     };
-    serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())
+    serde_json::to_vec_pretty(&file).map_err(|and| and.to_string())
 }
 
 /// Scrive **una chiave** del livello della macchina, fondendola con ciò che sul
@@ -221,17 +221,17 @@ fn store(
         path,
         // La rilettura è il cancello: ciò che non si capisce adesso non si
         // sovrascrive adesso.
-        || load(path).map_err(|e| non_lo_sovrascrivo(&e, PERDITA)),
-        |disco| {
+        || load(path).map_err(|and| do_not_overwrite(&and, LOSS)),
+        |disk| {
             match value {
                 Some(v) => {
-                    disco.insert(key.to_string(), v);
+                    disk.insert(key.to_string(), v);
                 }
                 None => {
-                    disco.remove(key);
+                    disk.remove(key);
                 }
             }
-            encode(disco)
+            encode(disk)
         },
     )
 }
@@ -266,54 +266,54 @@ fn store_vault(
     // avesse montato un supporto suo l'avrebbe scoperta con un panico, e un
     // panico uccide il processo (0032). Rileggerlo a ogni giro è anche l'unica
     // cosa *giusta* da fare: la seconda fusione parte da byte diversi.
-    let mut fuso = None;
+    let mut zone = None;
     // Il guasto di *dominio* viaggia di fianco invece che dentro l'`io::Error`,
     // o la sua frase uscirebbe da qui avvolta in un «non riesco a scrivere» che
     // dice la cosa sbagliata: il file non si è potuto **leggere**.
-    let mut guasto = None;
-    let esito = storage.update(path, &mut |attuale| {
-        let letto = load_from(path, |_| match attuale {
+    let mut failure = None;
+    let outcome = storage.update(path, &mut |current| {
+        let new = load_from(path, |_| match current {
             Some(bytes) => Ok(bytes.to_vec()),
             None => Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "mai configurato",
             )),
         });
-        let mut disco = match letto {
-            Ok(disco) => disco,
-            Err(e) => {
-                guasto = Some(non_lo_sovrascrivo(&e, PERDITA));
+        let mut disk = match new {
+            Ok(disk) => disk,
+            Err(and) => {
+                failure = Some(do_not_overwrite(&and, LOSS));
                 return Err(std::io::Error::other("il file non si è potuto leggere"));
             }
         };
         match &value {
             Some(v) => {
-                disco.insert(key.to_string(), v.clone());
+                disk.insert(key.to_string(), v.clone());
             }
             None => {
-                disco.remove(key);
+                disk.remove(key);
             }
         }
-        let bytes = match encode(&disco) {
+        let bytes = match encode(&disk) {
             Ok(bytes) => bytes,
-            Err(e) => {
-                guasto = Some(e);
+            Err(and) => {
+                failure = Some(and);
                 return Err(std::io::Error::other("il file non si è potuto comporre"));
             }
         };
-        fuso = Some(disco);
+        zone = Some(disk);
         Ok(Some(bytes))
     });
-    match (esito, guasto) {
-        (_, Some(guasto)) => Err(guasto),
-        (Err(e), None) => Err(format!("non riesco a scrivere {path}: {e}")),
+    match (outcome, failure) {
+        (_, Some(failure)) => Err(failure),
+        (Err(and), None) => Err(format!("non riesco a scrivere {path}: {and}")),
         // Un supporto che dice di aver scritto senza aver fuso niente non
         // lascia una mappa da adottare, e qui c'era un `expect`: la stessa
         // promessa non scritta di sopra, dall'altro lato. Adesso è un errore
         // come tutti gli altri — chi ha montato quel supporto legge una frase e
         // la sua configurazione in memoria resta quella di prima, invece di
         // perdere il processo.
-        (Ok(()), None) => fuso.ok_or_else(|| {
+        (Ok(()), None) => zone.ok_or_else(|| {
             format!("{path}: il supporto ha detto di aver scritto senza fondere niente")
         }),
     }
@@ -322,13 +322,13 @@ fn store_vault(
 /// Ciò che si perderebbe sovrascrivendo un file di livello che non si rilegge:
 /// il testo che [`non_lo_sovrascrivo`] mette dopo la ragione, uguale per i due
 /// livelli perché la perdita è la stessa.
-const PERDITA: &str = "la configurazione che contiene andrebbe persa";
+const LOSS: &str = "la configurazione che contiene andrebbe persa";
 
 /// Il rifiuto di chi non trova lo schema di una chiave, detto **una volta** per
 /// tutti e due gli store: il livello macchina e quello di un vault rispondono
 /// alla stessa domanda, e due frasi diverse per lo stesso guasto manderebbero a
 /// cercare la differenza dove non c'è.
-fn non_dichiarata(key: &str) -> PluginError {
+fn undeclared(key: &str) -> PluginError {
     PluginError::BadArgs(format!("nessuno ha dichiarato l'impostazione `{key}`").into())
 }
 
@@ -370,7 +370,7 @@ pub struct MachineSettings {
     /// avvelenato?» ha una porta sola nel kernel (0126): qui poi la risposta è
     /// la più facile di tutte — ciò che c'è dentro è `()`, e un ordine non si
     /// corrompe.
-    scrittura: Ricovero<()>,
+    write: Shelter<()>,
     values: RwLock<BTreeMap<String, SettingValue>>,
     /// Lo schema delle chiavi di macchina. Dietro un lock come i valori, e per
     /// la stessa ragione: l'`Arc` è condiviso da ogni vault aperto, e chi
@@ -386,12 +386,12 @@ impl MachineSettings {
     pub fn open(path: &Utf8Path) -> (Arc<Self>, Option<String>) {
         let (values, warning) = match load(path) {
             Ok(values) => (values, None),
-            Err(e) => (BTreeMap::new(), Some(e)),
+            Err(and) => (BTreeMap::new(), Some(and)),
         };
         (
             Arc::new(MachineSettings {
                 path: Some(path.to_owned()),
-                scrittura: Ricovero::new(()),
+                write: Shelter::new(()),
                 values: RwLock::new(values),
                 specs: RwLock::new(BTreeMap::new()),
             }),
@@ -403,7 +403,7 @@ impl MachineSettings {
     pub fn in_memory() -> Arc<Self> {
         Arc::new(MachineSettings {
             path: None,
-            scrittura: Ricovero::new(()),
+            write: Shelter::new(()),
             values: RwLock::new(BTreeMap::new()),
             specs: RwLock::new(BTreeMap::new()),
         })
@@ -419,7 +419,7 @@ impl MachineSettings {
     /// [`SettingsStore::declare`]: due schemi sulla stessa chiave sono due
     /// default, e a vincere sarebbe l'ordine di montaggio.
     pub fn declare(&self, specs: &[SettingSpec]) -> Result<(), String> {
-        let mut mie = self.specs.write().expect("schema della macchina");
+        let mut declared = self.specs.write().expect("schema della macchina");
         for spec in specs {
             if spec.scope != SettingScope::Machine {
                 return Err(format!(
@@ -427,13 +427,13 @@ impl MachineSettings {
                     spec.key
                 ));
             }
-            if mie.contains_key(&spec.key) {
+            if declared.contains_key(&spec.key) {
                 return Err(format!(
                     "l'impostazione `{}` è già dichiarata nel livello macchina",
                     spec.key
                 ));
             }
-            mie.insert(spec.key.clone(), spec.clone());
+            declared.insert(spec.key.clone(), spec.clone());
         }
         Ok(())
     }
@@ -471,36 +471,36 @@ impl MachineSettings {
     /// Il valore che vale adesso per una chiave di macchina, e da dove viene.
     pub fn effective(&self, key: &str) -> Result<(SettingValue, SettingSource), PluginError> {
         let specs = self.specs.read().expect("schema della macchina");
-        let spec = specs.get(key).ok_or_else(|| non_dichiarata(key))?;
+        let spec = specs.get(key).ok_or_else(|| undeclared(key))?;
         Ok(self.risolvi(spec))
     }
 
     /// Scrive una chiave di macchina, con lo stesso cancello dello store di un
     /// vault: dichiarata, e di una forma che lo schema accetta.
     pub fn set(&self, key: &str, value: SettingValue) -> Result<(), PluginError> {
-        let spec = self.spec_di(key)?;
+        let spec = self.spec_of(key)?;
         if let Some(why) = spec.kind.rejects(&value) {
             return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
         }
         self.write(key, Some(value))
-            .map_err(|e| PluginError::Internal(e.into()))
+            .map_err(|and| PluginError::Internal(and.into()))
     }
 
     /// Dimentica ciò che era stato deciso: la chiave ricade sul default dello
     /// schema, che per una chiave di macchina è l'unico livello sotto.
     pub fn reset(&self, key: &str) -> Result<(), PluginError> {
-        self.spec_di(key)?;
+        self.spec_of(key)?;
         self.write(key, None)
-            .map_err(|e| PluginError::Internal(e.into()))
+            .map_err(|and| PluginError::Internal(and.into()))
     }
 
-    fn spec_di(&self, key: &str) -> Result<SettingSpec, PluginError> {
+    fn spec_of(&self, key: &str) -> Result<SettingSpec, PluginError> {
         self.specs
             .read()
             .expect("schema della macchina")
             .get(key)
             .cloned()
-            .ok_or_else(|| non_dichiarata(key))
+            .ok_or_else(|| undeclared(key))
     }
 
     /// Il valore scritto se regge lo schema, altrimenti il default — la stessa
@@ -555,7 +555,7 @@ impl MachineSettings {
     /// file serializza le installazioni; questo serializza i thread, che quel
     /// lock non li vede nemmeno.
     fn write(&self, key: &str, value: Option<SettingValue>) -> Result<(), String> {
-        let _turno = self.scrittura.prendi();
+        let _turn = self.write.acquire();
         let Some(path) = &self.path else {
             let mut values = self.values.write().expect("livello macchina");
             match value {
@@ -568,8 +568,8 @@ impl MachineSettings {
             }
             return Ok(());
         };
-        let fuso = store(path, key, value)?;
-        *self.values.write().expect("livello macchina") = fuso;
+        let zone = store(path, key, value)?;
+        *self.values.write().expect("livello macchina") = zone;
         Ok(())
     }
 }
@@ -601,13 +601,13 @@ pub struct SettingsStore {
     /// Il livello del vault, che è **anche** ciò che sta nel file: un
     /// [`Durevole`] perché «su disco prima, in memoria dopo» smettesse di
     /// essere una frase in un commento e diventasse l'unico ordine scrivibile.
-    vault: Durevole<BTreeMap<String, SettingValue>>,
+    vault: Durable<BTreeMap<String, SettingValue>>,
     machine: Arc<MachineSettings>,
     /// Le chiavi il cui valore del vault **non si legge** finché qualcuno non
     /// lo guarda (§23.13): vedi [`SettingsStore::suspend`] e la nota in testa al
     /// modulo. Vuoto per quasi ogni vault, ed è la forma giusta — una
     /// sospensione è un'eccezione con un elenco, non uno stato.
-    sospese: BTreeSet<String>,
+    suspended: BTreeSet<String>,
     /// Cosa è andato storto **leggendo**: un file malformato, una chiave di
     /// macchina scritta dentro un vault. Chi monta le stampa; il canale vero è
     /// il §20.2.
@@ -630,15 +630,15 @@ impl SettingsStore {
             // configurazione **autorevole** — e per questo l'avviso resta a
             // disposizione di chi lo sa mostrare invece di finire su stderr e
             // basta.
-            Err(e) => (BTreeMap::new(), vec![e]),
+            Err(and) => (BTreeMap::new(), vec![and]),
         };
         SettingsStore {
             specs: BTreeMap::new(),
             vault_path,
             storage,
-            vault: Durevole::letto(vault),
+            vault: Durable::new(vault),
             machine,
-            sospese: BTreeSet::new(),
+            suspended: BTreeSet::new(),
             warnings,
         }
     }
@@ -684,12 +684,12 @@ impl SettingsStore {
     ///
     /// [`resolve`]: SettingsStore::resolve
     pub fn suspend(&mut self, keys: BTreeSet<String>) {
-        self.sospese = keys;
+        self.suspended = keys;
     }
 
     /// Le chiavi sospese adesso.
     pub fn suspended(&self) -> &BTreeSet<String> {
-        &self.sospese
+        &self.suspended
     }
 
     /// Gli avvisi raccolti finora, e li **svuota**: chi li legge se ne fa
@@ -709,7 +709,7 @@ impl SettingsStore {
         // manifest che nomina due volte la stessa chiave, e a vincere sarebbe
         // l'ultima — che è la forma peggiore dello stesso errore, perché non la
         // vede nemmeno chi ha scritto il plugin.
-        let mut viste = std::collections::BTreeSet::new();
+        let mut seen = std::collections::BTreeSet::new();
         for spec in specs {
             if let Some(incumbent) = self.specs.get(&spec.key) {
                 return Err(format!(
@@ -717,7 +717,7 @@ impl SettingsStore {
                     spec.key, incumbent.plugin
                 ));
             }
-            if !viste.insert(spec.key.as_str()) {
+            if !seen.insert(spec.key.as_str()) {
                 return Err(format!(
                     "`{plugin}` dichiara due volte l'impostazione `{}`",
                     spec.key
@@ -775,7 +775,7 @@ impl SettingsStore {
     }
 
     fn declared(&self, key: &str) -> Result<&Declared, PluginError> {
-        self.specs.get(key).ok_or_else(|| non_dichiarata(key))
+        self.specs.get(key).ok_or_else(|| undeclared(key))
     }
 
     /// Il valore che vale adesso, e da dove viene.
@@ -808,14 +808,14 @@ impl SettingsStore {
     /// [`declare`]: SettingsStore::declare
     fn resolve(&self, declared: &Declared) -> (SettingValue, SettingSource) {
         let spec = &declared.spec;
-        let (trovato, source) = match spec.scope {
-            SettingScope::Vault if self.sospese.contains(&spec.key) => {
+        let (found, source) = match spec.scope {
+            SettingScope::Vault if self.suspended.contains(&spec.key) => {
                 (None, SettingSource::Default)
             }
             SettingScope::Vault => (self.vault.get(&spec.key).cloned(), SettingSource::Vault),
             SettingScope::Machine => (self.machine.get(&spec.key), SettingSource::Machine),
         };
-        if let Some(value) = trovato {
+        if let Some(value) = found {
             if spec.kind.rejects(&value).is_none() {
                 return (value, source);
             }
@@ -832,7 +832,7 @@ impl SettingsStore {
     pub fn entries(&self, plugin: Option<&str>) -> Vec<SettingEntry> {
         self.entries_by_owner(plugin)
             .into_iter()
-            .map(|(_, e)| e)
+            .map(|(_, and)| and)
             .collect()
     }
 
@@ -886,7 +886,7 @@ impl SettingsStore {
             SettingScope::Machine => self
                 .machine
                 .write(&spec.key, value)
-                .map_err(|e| PluginError::Internal(e.into()))?,
+                .map_err(|and| PluginError::Internal(and.into()))?,
             SettingScope::Vault => {
                 // Su disco prima, in memoria dopo: non più perché lo dica
                 // questo commento, ma perché `Durevole` non sa esprimere
@@ -900,8 +900,8 @@ impl SettingsStore {
                 let (path, storage) = (&self.vault_path, self.storage.as_ref());
                 let key = spec.key.clone();
                 self.vault
-                    .aggiorna(|| store_vault(storage, path, &key, value))
-                    .map_err(|e| PluginError::Internal(e.into()))?;
+                    .update(|| store_vault(storage, path, &key, value))
+                    .map_err(|and| PluginError::Internal(and.into()))?;
                 // **Scrivere risveglia**, e sta qui perché qui passano tutti e
                 // due i modi di scrivere — il valore e l'azzeramento. A scrivere
                 // un'impostazione è una persona davanti al pannello (la via dei
@@ -916,7 +916,7 @@ impl SettingsStore {
                 // portava, e adottargliele tutte al primo gesto sarebbe
                 // esattamente il sì che questa voce esiste per non far dare per
                 // sbaglio.
-                self.sospese.remove(&spec.key);
+                self.suspended.remove(&spec.key);
             }
         }
         Ok(spec.scope)
@@ -945,7 +945,7 @@ mod tests {
     use crate::storage::{write_atomic, FsStorage, Stat};
     use fub_abi::settings::SettingKind;
 
-    fn store_su(dir: &Utf8Path) -> SettingsStore {
+    fn store_on(dir: &Utf8Path) -> SettingsStore {
         SettingsStore::open(
             dir,
             Arc::new(crate::storage::FsStorage),
@@ -963,8 +963,8 @@ mod tests {
     }
 
     /// Uno store con una scorciatoia già scritta nel file del vault.
-    fn store_con_un_tasto(dir: &Utf8Path, chord: &str) -> SettingsStore {
-        let mut store = store_su(dir);
+    fn store_with_key(dir: &Utf8Path, chord: &str) -> SettingsStore {
+        let mut store = store_on(dir);
         store
             .declare(
                 "fub.core",
@@ -985,13 +985,13 @@ mod tests {
 
     /// **Un supporto che fonde due volte non è un panico**, è un supporto.
     ///
-    /// `Fusione` è una `FnMut`: il protocollo permette di chiamarla più di una
+    /// `Merge` è una `FnMut`: il protocollo permette di chiamarla più di una
     /// volta, ed è ciò che fa un supporto che riprova quando qualcun altro gli
     /// ha cambiato il file sotto. Il `FsStorage` non lo fa, quindi il secondo
     /// giro non lo vedeva nessuno finché il solo supporto montabile era lui.
-    struct SupportoCheFondeDueVolte(crate::storage::FsStorage);
+    struct SupportThatMergesTwice(crate::storage::FsStorage);
 
-    impl VaultStorage for SupportoCheFondeDueVolte {
+    impl VaultStorage for SupportThatMergesTwice {
         fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
             self.0.read(path)
         }
@@ -1001,14 +1001,14 @@ mod tests {
         fn update(
             &self,
             path: &Utf8Path,
-            fondi: crate::storage::Fusione<'_>,
+            merge: crate::storage::Merge<'_>,
         ) -> std::io::Result<()> {
             // Il primo giro si butta via, come lo butterebbe via chi riprova
             // dopo essersi accorto che il file è cambiato: ciò che conta è che
             // il secondo parta dai byte di adesso e dia lo stesso risultato.
-            let prima = self.0.read(path).ok();
-            let _ = fondi(prima.as_deref())?;
-            self.0.update(path, fondi)
+            let before = self.0.read(path).ok();
+            let _ = merge(before.as_deref())?;
+            self.0.update(path, merge)
         }
         fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
             self.0.append(path, bytes)
@@ -1035,9 +1035,9 @@ mod tests {
 
     /// Un supporto che dice di sì **senza fondere niente**: il caso limite
     /// dell'altro lato, e l'altro `expect` che stava qui.
-    struct SupportoCheNonFonde(crate::storage::FsStorage);
+    struct SupportThatDoesNotMerge(crate::storage::FsStorage);
 
-    impl VaultStorage for SupportoCheNonFonde {
+    impl VaultStorage for SupportThatDoesNotMerge {
         fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
             self.0.read(path)
         }
@@ -1047,7 +1047,7 @@ mod tests {
         fn update(
             &self,
             _path: &Utf8Path,
-            _fondi: crate::storage::Fusione<'_>,
+            _merge: crate::storage::Merge<'_>,
         ) -> std::io::Result<()> {
             Ok(())
         }
@@ -1074,7 +1074,7 @@ mod tests {
         }
     }
 
-    fn store_col_supporto(dir: &Utf8Path, storage: Arc<dyn VaultStorage>) -> SettingsStore {
+    fn store_col_support(dir: &Utf8Path, storage: Arc<dyn VaultStorage>) -> SettingsStore {
         let mut store = SettingsStore::open(dir, storage, MachineSettings::in_memory());
         store
             .declare(
@@ -1099,9 +1099,9 @@ mod tests {
     /// costa scoprirlo: un panico uccide il processo, cioè il vault di chi stava
     /// scrivendo.
     #[test]
-    fn un_supporto_che_non_e_il_disco_riceve_un_errore_e_non_un_panico() {
+    fn a_support_that_not_and_the_disk_receives_a_error_and_not_a_panic() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_col_supporto(&dir, Arc::new(SupportoCheFondeDueVolte(FsStorage)));
+        let mut store = store_col_support(&dir, Arc::new(SupportThatMergesTwice(FsStorage)));
         // Non pania (se paniasse il banco morirebbe qui), e ciò che resta è il
         // valore giusto: la seconda fusione ha rifatto il lavoro, non l'ha
         // raddoppiato.
@@ -1113,10 +1113,10 @@ mod tests {
             Some(&"Mod-j".to_string())
         );
 
-        let mut store = store_col_supporto(&dir, Arc::new(SupportoCheNonFonde(FsStorage)));
-        let esito = store.set("keys.note.create", SettingValue::Text("Mod-k".into()));
+        let mut store = store_col_support(&dir, Arc::new(SupportThatDoesNotMerge(FsStorage)));
+        let outcome = store.set("keys.note.create", SettingValue::Text("Mod-k".into()));
         assert!(
-            esito.is_err(),
+            outcome.is_err(),
             "un supporto che dice di aver scritto senza fondere non lascia \
              niente da adottare: la risposta è una frase, non un processo morto"
         );
@@ -1126,9 +1126,9 @@ mod tests {
     /// la provenienza dice il vero: `Default`, perché nessuna decisione che
     /// valga è stata presa.
     #[test]
-    fn una_chiave_sospesa_vale_il_default_e_il_file_non_si_tocca() {
+    fn a_key_suspended_equals_the_default_and_the_file_not_is_touches() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_con_un_tasto(&dir, "Mod-Alt-k");
+        let mut store = store_with_key(&dir, "Mod-Alt-k");
         assert_eq!(
             store.effective("keys.note.create").unwrap(),
             (SettingValue::Text("Mod-Alt-k".into()), SettingSource::Vault)
@@ -1153,9 +1153,9 @@ mod tests {
     /// chi scrive un'impostazione è una persona, e un valore che ha appena
     /// battuto non può restare fra quelli che nessuno leggerà mai.
     #[test]
-    fn scrivere_una_chiave_sospesa_la_risveglia() {
+    fn write_a_key_suspended_the_wakes() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_con_un_tasto(&dir, "Mod-Alt-k");
+        let mut store = store_with_key(&dir, "Mod-Alt-k");
         store.suspend(BTreeSet::from(["keys.note.create".to_string()]));
 
         store
@@ -1172,9 +1172,9 @@ mod tests {
     /// mie», e se non risvegliasse resterebbe una sospensione appesa a una
     /// chiave che nel file non c'è più.
     #[test]
-    fn azzerare_una_chiave_sospesa_la_risveglia() {
+    fn clear_a_key_suspended_the_wakes() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_con_un_tasto(&dir, "Mod-Alt-k");
+        let mut store = store_with_key(&dir, "Mod-Alt-k");
         store.suspend(BTreeSet::from(["keys.note.create".to_string()]));
 
         store.reset("keys.note.create").unwrap();
@@ -1188,33 +1188,33 @@ mod tests {
     /// giorno che quel componente si accende il suo accordo diventerebbe attivo
     /// senza che nessuno l'abbia mai visto.
     #[test]
-    fn i_tasti_del_file_si_leggono_anche_senza_nessuno_che_li_dichiari() {
+    fn the_keys_of_the_file_is_read_also_without_no_one_that_them_declare() {
         let (_tmp, dir) = tempdir();
         write_atomic(
             &dir.join(crate::vault::FUB_DIR).join("settings.json"),
             br#"{"version":1,"values":{
-                "keys.note.create":"Mod-Alt-k",
+                "keys.notes.create":"Mod-Alt-k",
                 "com.acme:keys.tasks.add":"Mod-t",
                 "appearance.theme":"dark",
-                "keys.rotto": 12
+                "keys.broken": 12
             }}"#,
         )
         .unwrap();
-        let store = store_su(&dir);
-        let tasti = store.vault_keybindings();
+        let store = store_on(&dir);
+        let keys = store.vault_keybindings();
 
-        assert_eq!(tasti.len(), 2, "{tasti:?}");
-        assert_eq!(tasti.get("com.acme:keys.tasks.add").unwrap(), "Mod-t");
+        assert_eq!(keys.len(), 2, "{keys:?}");
+        assert_eq!(keys.get("com.acme:keys.tasks.add").unwrap(), "Mod-t");
         // Il tema non è una scorciatoia, e un accordo che non è testo è un file
         // scritto male — che `declare` diagnostica e `resolve` scarta già.
-        assert!(!tasti.contains_key("appearance.theme"));
-        assert!(!tasti.contains_key("keys.rotto"));
+        assert!(!keys.contains_key("appearance.theme"));
+        assert!(!keys.contains_key("keys.rotto"));
     }
 
     #[test]
-    fn senza_nessun_valore_vale_il_default_dello_schema() {
+    fn without_no_value_equals_the_default_of_the_schema() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_su(&dir);
+        let mut store = store_on(&dir);
         store
             .declare(
                 "fub.versioning",
@@ -1230,7 +1230,7 @@ mod tests {
     /// macchina non è più il gradino sotto di lei, ed è la prova che la
     /// precedenza è sparita davvero e non solo dalla prosa.
     #[test]
-    fn una_chiave_del_vault_non_guarda_il_file_della_macchina() {
+    fn a_vault_key_does_not_watch_the_machine_file() {
         let (_tmp, dir) = tempdir();
         let machine = MachineSettings::in_memory();
         let mut store =
@@ -1277,7 +1277,7 @@ mod tests {
     /// La diagnostica è l'eccezione dichiarata, e continua a vivere nel file
     /// della macchina: è ciò che deve valere anche quando un vault non si apre.
     #[test]
-    fn il_log_resta_della_macchina() {
+    fn the_log_remains_of_the_machine() {
         let (_tmp, dir) = tempdir();
         let machine = MachineSettings::in_memory();
         let mut store =
@@ -1285,7 +1285,7 @@ mod tests {
         store
             .declare(
                 "fub.core",
-                &[SettingSpec::toggle("log.verbose", "Verboso", false).per_machine()],
+                &[SettingSpec::toggle("log.verbose", "Verboso", false).for_machine()],
             )
             .unwrap();
         store
@@ -1316,27 +1316,27 @@ mod tests {
     /// Il cronometro qui non misura niente: è solo il modo di far fallire
     /// un'attesa infinita con una frase invece che con un test appeso.
     #[test]
-    fn chi_legge_non_aspetta_il_disco() {
+    fn who_reads_not_waits_the_disk() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("settings.json");
-        let (machine, avviso) = MachineSettings::open(&path);
-        assert!(avviso.is_none(), "un file che non c'è non è un guasto");
+        let (machine, warning) = MachineSettings::open(&path);
+        assert!(warning.is_none(), "un file che non c'è non è un guasto");
         machine
-            .declare(&[SettingSpec::toggle("log.verbose", "Verboso", false).per_machine()])
+            .declare(&[SettingSpec::toggle("log.verbose", "Verboso", false).for_machine()])
             .unwrap();
 
         // Un lettore fermo in mezzo alla sua lettura.
-        let lettore = machine.values.read().expect("livello macchina");
+        let reader = machine.values.read().expect("livello macchina");
 
-        let scrittore = {
+        let writer = {
             let machine = Arc::clone(&machine);
             std::thread::spawn(move || machine.set("log.verbose", SettingValue::Toggle(true)))
         };
 
-        let scadenza = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let expiration = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while load(&path).expect("leggibile").is_empty() {
             assert!(
-                std::time::Instant::now() < scadenza,
+                std::time::Instant::now() < expiration,
                 "la scrittura non è arrivata al disco finché un lettore teneva il \
                  lucchetto: la sezione critica copre l'I/O invece della sola \
                  sostituzione in memoria"
@@ -1347,11 +1347,11 @@ mod tests {
         // E l'ordine resta quello di sempre: sul disco c'è già, in memoria non
         // ancora, perché adottare è l'unica cosa che aspetta questo lettore.
         assert!(
-            lettore.get("log.verbose").is_none(),
+            reader.get("log.verbose").is_none(),
             "la memoria non si muove prima del disco"
         );
-        drop(lettore);
-        scrittore.join().expect("il thread di scrittura").unwrap();
+        drop(reader);
+        writer.join().expect("il thread di scrittura").unwrap();
         assert_eq!(
             machine.get("log.verbose"),
             Some(SettingValue::Toggle(true)),
@@ -1361,7 +1361,7 @@ mod tests {
 
     /// La riga di sicurezza: un vault non decide della macchina.
     #[test]
-    fn una_chiave_di_macchina_scritta_nel_vault_non_si_applica() {
+    fn a_key_of_machine_written_in_the_vault_not_is_apply() {
         let (_tmp, dir) = tempdir();
         let vault_file = dir.join(".fub").join("settings.json");
         std::fs::create_dir_all(vault_file.parent().unwrap()).unwrap();
@@ -1371,11 +1371,11 @@ mod tests {
         )
         .unwrap();
 
-        let mut store = store_su(&dir);
+        let mut store = store_on(&dir);
         store
             .declare(
                 "fub.privacy",
-                &[SettingSpec::toggle("privacy.telemetry", "Telemetria", false).per_machine()],
+                &[SettingSpec::toggle("privacy.telemetry", "Telemetria", false).for_machine()],
             )
             .unwrap();
 
@@ -1394,21 +1394,21 @@ mod tests {
     }
 
     #[test]
-    fn una_chiave_non_dichiarata_non_si_legge_e_non_si_scrive() {
+    fn a_key_not_declared_not_is_reads_and_not_is_writes() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_su(&dir);
+        let mut store = store_on(&dir);
         assert!(store.effective("boh").is_err());
         assert!(store.set("boh", SettingValue::Toggle(true)).is_err());
     }
 
     #[test]
-    fn un_valore_fuori_specie_scritto_a_mano_si_scarta_col_default_sotto() {
+    fn a_value_outside_kind_written_a_hand_is_discards_col_default_under() {
         let (_tmp, dir) = tempdir();
         let vault_file = dir.join(".fub").join("settings.json");
         std::fs::create_dir_all(vault_file.parent().unwrap()).unwrap();
-        std::fs::write(&vault_file, r#"{"version":1,"values":{"a.b":"acceso"}}"#).unwrap();
+        std::fs::write(&vault_file, r#"{"version":1,"values":{"a.b":"on"}}"#).unwrap();
 
-        let mut store = store_su(&dir);
+        let mut store = store_on(&dir);
         store
             .declare("a", &[SettingSpec::toggle("a.b", "B", false)])
             .unwrap();
@@ -1420,9 +1420,9 @@ mod tests {
     }
 
     #[test]
-    fn ritirare_uno_schema_non_cancella_il_valore() {
+    fn withdraw_a_schema_not_deletes_the_value() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_su(&dir);
+        let mut store = store_on(&dir);
         store
             .declare("a", &[SettingSpec::toggle("a.b", "B", false)])
             .unwrap();
@@ -1441,26 +1441,26 @@ mod tests {
     }
 
     #[test]
-    fn due_schemi_sulla_stessa_chiave_non_convivono() {
+    fn two_schemas_on_the_same_key_not_coexist() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_su(&dir);
+        let mut store = store_on(&dir);
         store
             .declare("a", &[SettingSpec::toggle("x.y", "Y", false)])
             .unwrap();
-        let e = store
+        let and = store
             .declare("b", &[SettingSpec::toggle("x.y", "Y", true)])
             .expect_err("la seconda dichiarazione non passa");
-        assert!(e.contains("`a`"), "{e}");
+        assert!(and.contains("`a`"), "{and}");
     }
 
     /// Il doppione **dentro lo stesso manifest**: è l'altra metà della prova
     /// qui sopra, e senza di essa a vincere sarebbe l'ultima delle due — cioè
     /// due default e due specie per una chiave, decisi dall'ordine di un `Vec`.
     #[test]
-    fn nemmeno_lo_stesso_manifest_puo_dichiarare_due_volte_una_chiave() {
+    fn nemmeno_the_same_manifest_can_declare_two_times_a_key() {
         let (_tmp, dir) = tempdir();
-        let mut store = store_su(&dir);
-        let e = store
+        let mut store = store_on(&dir);
+        let and = store
             .declare(
                 "a",
                 &[
@@ -1469,7 +1469,7 @@ mod tests {
                 ],
             )
             .expect_err("un manifest che si contraddice non si dichiara");
-        assert!(e.contains("due volte") && e.contains("`x.y`"), "{e}");
+        assert!(and.contains("due volte") && and.contains("`x.y`"), "{and}");
         assert!(
             store.spec("x.y").is_none(),
             "e non ne resta metà: il rifiuto è del manifest, non della seconda riga"
@@ -1483,14 +1483,14 @@ mod tests {
     /// mappa vuota. Chi ha sbagliato una virgola perderebbe tutto al primo
     /// interruttore toccato.
     #[test]
-    fn un_file_malformato_non_lo_sovrascrive_la_prima_scrittura() {
+    fn a_malformed_file_does_not_overwrite_the_first_write() {
         let (_tmp, dir) = tempdir();
         let path = dir.join(".fub").join("settings.json");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        let rotto = "{ \"version\": 1, \"values\": { \"a.b\": true,, } }";
-        std::fs::write(&path, rotto).unwrap();
+        let broken = "{ \"version\": 1, \"values\": { \"a.b\": true,, } }";
+        std::fs::write(&path, broken).unwrap();
 
-        let mut store = store_su(&dir);
+        let mut store = store_on(&dir);
         assert_eq!(
             store.take_warnings().len(),
             1,
@@ -1499,13 +1499,13 @@ mod tests {
         store
             .declare("a", &[SettingSpec::toggle("a.b", "B", false)])
             .unwrap();
-        let e = store
+        let and = store
             .set("a.b", SettingValue::Toggle(true))
             .expect_err("scrivere su un livello che non si è letto è un rifiuto");
-        assert!(format!("{e:?}").contains("non lo sovrascrive"), "{e:?}");
+        assert!(format!("{and:?}").contains("non lo sovrascrive"), "{and:?}");
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
-            rotto,
+            broken,
             "e il file è ancora quello che l'utente aveva scritto"
         );
     }
@@ -1523,13 +1523,13 @@ mod tests {
     /// è ripartiti da quei byte, cioè che la fusione ha letto il file corretto e
     /// non se n'è tenuto uno vuoto in tasca dall'apertura.
     #[test]
-    fn un_file_corretto_a_mano_non_aspetta_una_riapertura() {
+    fn a_file_correct_a_hand_not_waits_a_reopening() {
         let (_tmp, dir) = tempdir();
         let path = dir.join(".fub").join("settings.json");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{ \"version\": 1, \"values\": { \"a.b\": true,, } }").unwrap();
 
-        let mut store = store_su(&dir);
+        let mut store = store_on(&dir);
         assert_eq!(store.take_warnings().len(), 1, "il file rotto si dice");
         store
             .declare(
@@ -1561,21 +1561,21 @@ mod tests {
     /// file della macchina rotto **resta** rotto finché lo è, e smette di
     /// esserlo nel momento in cui smette (difetto 0170).
     #[test]
-    fn anche_il_livello_macchina_torna_a_leggere_da_se() {
+    fn also_the_level_machine_returns_a_read_from_if() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("settings.json");
         std::fs::write(&path, "{ \"version\": 1, \"values\": {,} }").unwrap();
 
-        let (machine, avviso) = MachineSettings::open(&path);
-        assert!(avviso.is_some(), "il file rotto si dice");
+        let (machine, warning) = MachineSettings::open(&path);
+        assert!(warning.is_some(), "il file rotto si dice");
         machine
-            .declare(&[SettingSpec::toggle("log.verbose", "Verboso", false).per_machine()])
+            .declare(&[SettingSpec::toggle("log.verbose", "Verboso", false).for_machine()])
             .unwrap();
 
-        let e = machine
+        let and = machine
             .set("log.verbose", SettingValue::Toggle(true))
             .expect_err("finché è rotto non lo si sovrascrive");
-        assert!(format!("{e:?}").contains("non lo sovrascrive"), "{e:?}");
+        assert!(format!("{and:?}").contains("non lo sovrascrive"), "{and:?}");
 
         std::fs::write(&path, "{ \"version\": 1, \"values\": {} }").unwrap();
         machine
@@ -1597,20 +1597,20 @@ mod tests {
     /// file che nessuno aveva detto all'utente di guardare, e non c'è un momento
     /// in cui lo scopre.
     #[test]
-    fn una_chiave_scritta_due_volte_non_si_risolve_da_se() {
+    fn a_key_written_two_times_not_is_resolves_from_if() {
         let (_tmp, dir) = tempdir();
         let path = dir.join(".fub").join("settings.json");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        let a_mano = "{ \"version\": 1, \"values\": { \"a.b\": true, \"a.b\": false } }";
-        std::fs::write(&path, a_mano).unwrap();
+        let a_hand = "{ \"version\": 1, \"values\": { \"a.b\": true, \"a.b\": false } }";
+        std::fs::write(&path, a_hand).unwrap();
 
-        let mut store = store_su(&dir);
-        let avvisi = store.take_warnings();
-        assert_eq!(avvisi.len(), 1, "il doppione si dice: {avvisi:?}");
+        let mut store = store_on(&dir);
+        let warnings = store.take_warnings();
+        assert_eq!(warnings.len(), 1, "il doppione si dice: {warnings:?}");
         assert!(
-            avvisi[0].contains("`a.b` è scritta due volte"),
+            warnings[0].contains("`a.b` è scritta due volte"),
             "e dice **quale**, che è l'unica cosa che serve per andare a \
-             togliere la riga di troppo: {avvisi:?}"
+             togliere la riga di troppo: {warnings:?}"
         );
 
         store
@@ -1627,7 +1627,7 @@ mod tests {
             .expect_err("un file che non si capisce non lo si sovrascrive");
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
-            a_mano,
+            a_hand,
             "una delle due righe è sparita, e a dirlo non è stato nessuno"
         );
     }
@@ -1636,7 +1636,7 @@ mod tests {
     /// la regola sta in `load_from`, che è il solo posto in cui è scritto cosa
     /// vuol dire «illeggibile» (difetto 0174).
     #[test]
-    fn anche_il_livello_macchina_non_sceglie_fra_due_chiavi_uguali() {
+    fn also_the_level_machine_not_chooses_between_two_keys_equal() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("settings.json");
         std::fs::write(
@@ -1645,9 +1645,9 @@ mod tests {
         )
         .unwrap();
 
-        let (_machine, avviso) = MachineSettings::open(&path);
+        let (_machine, warning) = MachineSettings::open(&path);
         assert!(
-            avviso
+            warning
                 .expect("il doppione si dice anche qui")
                 .contains("`log.verbose` è scritta due volte"),
             "e con il nome della chiave"
@@ -1657,7 +1657,7 @@ mod tests {
     /// `write_atomic` non lascia dietro di sé il temporaneo, e il nome che usa
     /// è unico: due scritture di fila non si contendono lo stesso `.tmp`.
     #[test]
-    fn la_scrittura_atomica_non_lascia_scorie() {
+    fn the_write_atomic_not_leaves_residue() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("stato.json");
         write_atomic(&path, b"{\"a\":1}").unwrap();
@@ -1665,7 +1665,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{\"a\":2}");
         let residui: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
-            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .map(|and| and.unwrap().file_name().to_string_lossy().into_owned())
             .filter(|n| n != "stato.json")
             .collect();
         assert!(residui.is_empty(), "temporanei rimasti: {residui:?}");

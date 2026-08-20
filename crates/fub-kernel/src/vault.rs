@@ -11,7 +11,7 @@ use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{KernelError, Result};
-use crate::ignore::{IgnorePolicy, Specie};
+use crate::ignore::{IgnorePolicy, Kind};
 use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
@@ -72,7 +72,7 @@ pub fn data_root(root: &Utf8Path) -> Utf8PathBuf {
 ///
 /// Se la cartella di lavoro non è leggibile — o non è UTF-8 — non c'è niente di
 /// meglio del path dato: si tiene quello, che è ciò che si faceva sempre.
-pub(crate) fn radice_assoluta(root: &Utf8Path) -> Utf8PathBuf {
+pub(crate) fn root_absolute(root: &Utf8Path) -> Utf8PathBuf {
     if root.is_absolute() {
         return root.to_owned();
     }
@@ -83,14 +83,14 @@ pub(crate) fn radice_assoluta(root: &Utf8Path) -> Utf8PathBuf {
         .unwrap_or_else(|| root.to_owned())
 }
 
-pub use fub_abi::rules::cestino::TRASH_DIR;
+pub use fub_abi::rules::trash::TRASH_DIR;
 /// Nome della cartella cestino dentro il vault.
 ///
 /// È la stessa che usa Obsidian per "Move to Obsidian trash": un vault
 /// condiviso fra le due app ha **un solo** cestino (vedi
 /// `docs/PIANO.md`, "Decisioni (con il perché)", e
 /// `docs/architecture/data-model.md`, "Il cestino").
-use fub_abi::rules::cestino::{self, file_name_of, strip_stamp};
+use fub_abi::rules::trash::{self, file_name_of, strip_stamp};
 
 /// Cartella (dentro [`data_root`]) dei sidecar del cestino: per ogni voce
 /// cestinata **da Fub**, un `<nome-cestinato>.json` con il path d'origine.
@@ -101,7 +101,7 @@ use fub_abi::rules::cestino::{self, file_name_of, strip_stamp};
 /// radice — storia del versioning orfana, link per path irrisolti. Obsidian
 /// non scrive sidecar: una voce senza è il degrado garbato al comportamento
 /// di prima (si ripristina in radice col nome de-timbrato).
-const TRASH_META_DIR: &str = "trash";
+const TRASH_METADATA_DIR: &str = "trash";
 
 /// La versione di schema del sidecar del cestino (§15.3).
 ///
@@ -212,7 +212,7 @@ pub struct Scan {
     /// compaiono in nessun elenco, in nessun evento e in nessuna anagrafe — ma
     /// chi decide di togliere qualcosa dal vault di qualcuno è chi ha chiesto
     /// la scansione, non chi cammina.
-    pub temporanei_rimasti_indietro: Vec<Utf8PathBuf>,
+    pub temporary_remaining_back: Vec<Utf8PathBuf>,
 }
 
 pub struct Vault {
@@ -253,10 +253,10 @@ impl Vault {
     /// tardi — alla prima operazione che tocca il disco — sarebbe un vault già
     /// mostrato come aperto, con eventi già emessi (0160).
     pub fn on(root: impl AsRef<Utf8Path>, storage: Arc<dyn VaultStorage>) -> Result<Self> {
-        let root = radice_assoluta(root.as_ref());
+        let root = root_absolute(root.as_ref());
         storage
-            .radice_valida(&root)
-            .map_err(|source| KernelError::RadiceInvalida {
+            .root_validates(&root)
+            .map_err(|source| KernelError::InvalidRoot {
                 path: root.clone(),
                 source,
             })?;
@@ -344,13 +344,13 @@ impl Vault {
             return false;
         };
         let policy = self.ignore_policy();
-        let mut componenti = rel.components().peekable();
-        while let Some(c) = componenti.next() {
-            let nome = c.as_str();
-            if componenti.peek().is_some() {
+        let mut components = rel.components().peekable();
+        while let Some(c) = components.next() {
+            let name = c.as_str();
+            if components.peek().is_some() {
                 // Chi sta in mezzo a un path contiene ciò che segue, quindi è
                 // una cartella: non c'è niente da chiedere a nessuno.
-                if policy.esclude(nome, Specie::Cartella) {
+                if policy.excludes(name, Kind::Folder) {
                     return true;
                 }
             } else {
@@ -359,9 +359,9 @@ impl Vault {
                 // cartelle escluse: è l'unico ramo in cui le due risposte
                 // differiscono, ed è lì — e solo lì — che si chiede al
                 // supporto di cosa si tratti.
-                let escluso = policy.esclude(nome, Specie::File)
-                    || (policy.esclude(nome, Specie::Cartella) && self.e_una_cartella(abs));
-                if escluso {
+                let excluded = policy.excludes(name, Kind::File)
+                    || (policy.excludes(name, Kind::Folder) && self.is_folder(abs));
+                if excluded {
                     return true;
                 }
             }
@@ -385,7 +385,7 @@ impl Vault {
     /// esiste.
     ///
     /// [`is_ignored`]: Vault::is_ignored
-    fn e_una_cartella(&self, abs: &Utf8Path) -> bool {
+    fn is_folder(&self, abs: &Utf8Path) -> bool {
         self.storage
             .stat(abs)
             .map(|stat| stat.kind == EntryKind::Dir)
@@ -410,7 +410,7 @@ impl Vault {
         let mut out = Scan {
             files: Vec::new(),
             folders: Vec::new(),
-            temporanei_rimasti_indietro: Vec::new(),
+            temporary_remaining_back: Vec::new(),
         };
         // La politica si risolve **una volta per scansione** e non per voce di
         // directory: leggerla è prendere un lock e costruire un elenco, e una
@@ -422,24 +422,24 @@ impl Vault {
         self.walk(&self.root, &policy, &mut out)?;
         out.files.sort_by(|a, b| a.id.cmp(&b.id));
         out.folders.sort();
-        out.temporanei_rimasti_indietro.sort();
+        out.temporary_remaining_back.sort();
         Ok(out)
     }
 
     fn walk(&self, dir: &Utf8Path, policy: &IgnorePolicy, out: &mut Scan) -> Result<()> {
-        let entries = self.storage.list(dir).map_err(|e| KernelError::Io {
+        let entries = self.storage.list(dir).map_err(|and| KernelError::Io {
             path: dir.to_owned(),
-            source: e,
+            source: and,
         })?;
         for entry in entries {
             let name = entry.path.file_name().unwrap_or_default();
             // La specie qui è già in mano: la porta la voce di directory, e
             // l'elenco delle cartelle escluse parla di cartelle (difetto 0176).
-            let specie = match entry.stat.kind {
-                EntryKind::Dir => Specie::Cartella,
-                _ => Specie::File,
+            let kind = match entry.stat.kind {
+                EntryKind::Dir => Kind::Folder,
+                _ => Kind::File,
             };
-            if policy.esclude(name, specie) {
+            if policy.excludes(name, kind) {
                 // Un temporaneo di scrittura è escluso, ed è la §15.6: quel
                 // file esiste per una frazione di secondo e chi guarda il vault
                 // in quella frazione non lo deve vedere. Ma un crash fra la
@@ -447,11 +447,11 @@ impl Vault {
                 // e da lì in poi la stessa riga che lo nascondeva lo rende
                 // invisibile anche a chi potrebbe toglierlo: la camminata è il
                 // solo posto da cui si vede (difetto 0155).
-                if specie == Specie::File
-                    && crate::storage::e_temporaneo_di_scrittura(name)
-                    && self.storage.e_rimasto_indietro(&entry.stat)
+                if kind == Kind::File
+                    && crate::storage::is_write_temporary(name)
+                    && self.storage.is_left_behind(&entry.stat)
                 {
-                    out.temporanei_rimasti_indietro.push(entry.path.clone());
+                    out.temporary_remaining_back.push(entry.path.clone());
                 }
                 continue;
             }
@@ -509,8 +509,8 @@ impl Vault {
                 source: std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!(
-                        "il file non è UTF-8: il primo byte non valido è a {at} \
-                         (0x{:02X}), su {} byte in tutto",
+                        "the file is not UTF-8: the first invalid byte is at {at} \
+                         (0x{:02X}), out of {} bytes total",
                         bytes.get(at).copied().unwrap_or(0),
                         bytes.len()
                     ),
@@ -531,7 +531,7 @@ impl Vault {
         let path = self.path_for(id)?;
         self.storage
             .read(&path)
-            .map_err(|e| KernelError::Io { path, source: e })
+            .map_err(|and| KernelError::Io { path, source: and })
     }
 
     /// Scrive il sorgente, e rende **dimensione e data di ciò che ha scritto**.
@@ -545,7 +545,7 @@ impl Vault {
         self.storage
             .write(&path, source.as_bytes())
             .map(|stat| (stat.size, stat.mtime))
-            .map_err(|e| KernelError::Io { path, source: e })
+            .map_err(|and| KernelError::Io { path, source: and })
     }
 
     /// Un id fuori dal recinto **non esiste**, e non è una tolleranza: non
@@ -580,9 +580,9 @@ impl Vault {
         let to_path = self.path_for(to)?;
         self.storage
             .rename(&from_path, &to_path)
-            .map_err(|e| KernelError::Io {
+            .map_err(|and| KernelError::Io {
                 path: from_path,
-                source: e,
+                source: and,
             })
     }
 
@@ -592,12 +592,12 @@ impl Vault {
         let to_path = self.path_for(to)?;
         match self.storage.rename_no_replace(&from_path, &to_path) {
             Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists => {
                 Err(KernelError::AlreadyExists(to.to_string()))
             }
-            Err(e) => Err(KernelError::Io {
+            Err(and) => Err(KernelError::Io {
                 path: from_path,
-                source: e,
+                source: and,
             }),
         }
     }
@@ -624,15 +624,15 @@ impl Vault {
         let stamp = stamp_from_unix(now_unix());
         // Il nome nel cestino non se lo costruisce chi cestina: è una regola
         // del contratto, e chi cestina è più di uno (0219).
-        let target = DocId::new(cestino::trashed_id(id.as_str(), &stamp, &mut |c| {
+        let target = DocId::new(trash::trashed_id(id.as_str(), &stamp, &mut |c| {
             self.exists(&DocId::new(c))
         }));
 
         self.storage
             .rename(&from, &self.path_for(&target)?)
-            .map_err(|e| KernelError::Io {
+            .map_err(|and| KernelError::Io {
                 path: from,
-                source: e,
+                source: and,
             })?;
         // Il sidecar col path d'origine è best-effort: se non si scrive, la
         // voce degrada al comportamento senza sidecar (ripristino in radice),
@@ -647,8 +647,8 @@ impl Vault {
     }
 
     /// La cartella dei sidecar del cestino.
-    fn trash_meta_dir(&self) -> Utf8PathBuf {
-        data_root(&self.root).join(TRASH_META_DIR)
+    fn trash_metadata_dir(&self) -> Utf8PathBuf {
+        data_root(&self.root).join(TRASH_METADATA_DIR)
     }
 
     /// Il path del sidecar di una voce cestinata. La chiave è il **nome** del
@@ -656,7 +656,7 @@ impl Vault {
     /// timbrate) e ricostruibile senza stato.
     fn trash_sidecar_path(&self, trashed: &DocId) -> Utf8PathBuf {
         let name = file_name_of(trashed.as_str());
-        self.trash_meta_dir().join(format!("{name}.json"))
+        self.trash_metadata_dir().join(format!("{name}.json"))
     }
 
     fn write_trash_sidecar(&self, trashed: &DocId, original: &DocId) -> Result<()> {
@@ -682,11 +682,11 @@ impl Vault {
             // successo (vedi [`TrashSidecar::deleted_at`]).
             deleted_at: Some(crate::time::now_unix_millis()),
         })
-        .expect("un path è sempre serializzabile");
+        .expect("a path is always serializable");
         self.storage
             .write(&path, json.as_bytes())
             .map(|_| ())
-            .map_err(|e| KernelError::Io { path, source: e })
+            .map_err(|and| KernelError::Io { path, source: and })
     }
 
     /// Ciò che questo vault sa di una voce cestinata, se è stata Fub a
@@ -721,7 +721,7 @@ impl Vault {
     /// scambierebbe un censimento incompleto per un cestino vuoto.
     fn read_trash_sidecar(&self, trashed: &DocId, stat: &Stat) -> Result<Option<TrashSidecar>> {
         let path = self.trash_sidecar_path(trashed);
-        let raw = match crate::error::se_c_e(self.storage.read(&path)).map_err(|source| {
+        let raw = match crate::error::optional(self.storage.read(&path)).map_err(|source| {
             KernelError::Io {
                 path: path.clone(),
                 source,
@@ -776,11 +776,11 @@ impl Vault {
     }
 
     fn walk_trash(&self, dir: &Utf8Path, out: &mut Vec<TrashEntry>) -> Result<()> {
-        let io = |path: &Utf8Path, e: std::io::Error| KernelError::Io {
+        let io = |path: &Utf8Path, and: std::io::Error| KernelError::Io {
             path: path.to_owned(),
-            source: e,
+            source: and,
         };
-        for entry in self.storage.list(dir).map_err(|e| io(dir, e))? {
+        for entry in self.storage.list(dir).map_err(|and| io(dir, and))? {
             let path = entry.path;
             if entry.stat.is_dir() {
                 self.walk_trash(&path, out)?;
@@ -875,7 +875,7 @@ impl Vault {
                 let target = self.path_for(to)?;
                 match self.storage.rename_no_replace(&path, &target) {
                     Ok(()) => {}
-                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists => {
                         return Err(KernelError::AlreadyExists(to.to_string()));
                     }
                     Err(source) => return Err(KernelError::Io { path, source }),
@@ -896,24 +896,24 @@ impl Vault {
     /// sidecar valido può quindi essere una cestinatura ancora in corso in
     /// un'altra finestra. Quella voce resta dov'è; il sidecar è il marcatore che
     /// rende distruttibile la sola fotografia già completata.
-    fn voci_censite_del_cestino(
+    fn trash_entries_with_sidecars(
         &self,
         dir: &Utf8Path,
         out: &mut Vec<(Utf8PathBuf, Utf8PathBuf)>,
     ) -> Result<()> {
-        let voci = self.storage.list(dir).map_err(|source| KernelError::Io {
+        let entries = self.storage.list(dir).map_err(|source| KernelError::Io {
             path: dir.to_owned(),
             source,
         })?;
-        for voce in voci {
-            if voce.stat.is_dir() {
-                self.voci_censite_del_cestino(&voce.path, out)?;
+        for entry in entries {
+            if entry.stat.is_dir() {
+                self.trash_entries_with_sidecars(&entry.path, out)?;
                 continue;
             }
-            let id = self.doc_id_for_path(&voce.path)?;
-            if self.read_trash_sidecar(&id, &voce.stat)?.is_some() {
+            let id = self.doc_id_for_path(&entry.path)?;
+            if self.read_trash_sidecar(&id, &entry.stat)?.is_some() {
                 let sidecar = self.trash_sidecar_path(&id);
-                out.push((voce.path, sidecar));
+                out.push((entry.path, sidecar));
             }
         }
         Ok(())
@@ -931,50 +931,51 @@ impl Vault {
     /// inter-processo che il kernel non possiede.
     pub fn empty_trash(&self) -> Result<usize> {
         let dir = self.root.join(TRASH_DIR);
-        let mut censite = Vec::new();
+        let mut cataloged = Vec::new();
         if self.storage.exists(&dir) {
-            self.voci_censite_del_cestino(&dir, &mut censite)?;
+            self.trash_entries_with_sidecars(&dir, &mut cataloged)?;
         }
-        let mut quante = 0;
-        for (path, sidecar) in &censite {
+        let mut count = 0;
+        for (path, sidecar) in &cataloged {
             // Si distrugge solo questa voce, e solo se c'è ancora: chi l'ha già
             // tolta (un'altra finestra, un sync) non si conta — il risultato
             // che si voleva c'è già. Un guasto vero del supporto risale, perché
             // un cestino svuotato a metà non è un cestino svuotato (0193).
-            match crate::error::se_c_e(self.storage.remove(path)) {
+            // Il sidecar segue esclusivamente la voce presente nel censimento.
+            match crate::error::optional(self.storage.remove(path)) {
                 Ok(Some(())) => {}
                 Ok(None) => continue,
-                Err(e) => {
+                Err(and) => {
                     return Err(KernelError::Io {
                         path: path.clone(),
-                        source: e,
+                        source: and,
                     });
                 }
             }
-            quante += 1;
-            // Il sidecar segue esclusivamente la voce presente nel censimento.
-            crate::error::se_c_e(self.storage.remove(sidecar)).map_err(|e| KernelError::Io {
+            count += 1;
+        // Se nel frattempo è arrivato un sidecar, la cartella non è vuota e
+            crate::error::optional(self.storage.remove(sidecar)).map_err(|and| KernelError::Io {
                 path: sidecar.clone(),
-                source: e,
+                source: and,
             })?;
         }
-        // Se nel frattempo è arrivato un sidecar, la cartella non è vuota e
         // resta intatta; non si esegue più uno sweep globale del deposito.
-        let _ = self.storage.remove_empty_dir(&self.trash_meta_dir());
-        tracing::info!(target: "fub.kernel", "cestino svuotato: {quante} voci distrutte");
-        Ok(quante)
+/// Come una voce lascia il cestino: distrutta, o restituita al vault.
+        let _ = self.storage.remove_empty_dir(&self.trash_metadata_dir());
+        tracing::info!(target: "fub.kernel", "trash emptied: {count} entries destroyed");
+        Ok(count)
     }
 }
 
-/// Come una voce lascia il cestino: distrutta, o restituita al vault.
+/// Una voce del cestino. Vive nel **contratto** dalla decisione 0013, da quando
 enum TrashExit<'a> {
     Destroy,
     To(&'a DocId),
 }
 
-/// Una voce del cestino. Vive nel **contratto** dalla decisione 0013, da quando
 /// `VaultRead::list_trash` la restituisce: qui resta il nome con cui il vault la
 /// costruisce.
+        // La politica d'esclusione non guarda il disco: il vault si apre in
 pub use fub_abi::traits::TrashEntry;
 
 #[cfg(test)]
@@ -983,22 +984,21 @@ mod tests {
 
     #[test]
     fn what_is_ignored_is_ignored_at_any_depth() {
-        // La politica d'esclusione non guarda il disco: il vault si apre in
         // memoria, dove una radice che sta per nascere è legittima (0160).
+        // Un file nascosto è nascosto anche in fondo a un path pulito.
         let v = Vault::on("/vault", Arc::new(crate::storage::MemStorage::new()))
-            .expect("un vault in memoria si apre");
+            .expect("an in-memory vault opens");
         assert!(!v.is_ignored("/vault/note/Idea.md".into()));
         assert!(v.is_ignored("/vault/.trash/Idea.md".into()));
         assert!(v.is_ignored("/vault/.obsidian/plugins/x/main.js".into()));
         assert!(v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
-        // Un file nascosto è nascosto anche in fondo a un path pulito.
-        assert!(v.is_ignored("/vault/note/.bozza.md".into()));
         // Fuori dal vault non è "ignorato": è di qualcun altro, e a dirlo è
+        assert!(v.is_ignored("/vault/note/.bozza.md".into()));
         // `doc_id_for_path`.
+    /// **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
         assert!(!v.is_ignored("/altrove/.trash/Idea.md".into()));
     }
 
-    /// **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
     /// scrive Cargo, e da quando il vault dice *cosa contiene* invece di
     /// filtrare per estensione (§14.1) ogni file lì dentro prendeva un
     /// [`DocId`] ed entrava in anagrafe — decine di migliaia di voci, un indice
@@ -1006,28 +1006,29 @@ mod tests {
     ///
     /// Il banco sta qui e non solo sulla costante perché è un difetto che si
     /// vede **dal vault**, non dalla lista: la lista si legge e sembra a posto.
+    /// Un vault con le impostazioni di un vero montaggio, con la politica di
     #[test]
-    fn un_vault_che_e_anche_un_repo_non_indicizza_cio_che_scrive_cargo() {
+    fn a_vault_that_is_also_a_repo_does_not_index_what_cargo_writes() {
         let v = Vault::on("/vault", Arc::new(crate::storage::MemStorage::new()))
-            .expect("un vault in memoria si apre");
+            .expect("an in-memory vault opens");
         for rel in ["target/debug/appunti.md", "Idea.md"] {
             let path = Utf8Path::new("/vault").join(rel);
-            v.storage().write(&path, b"x").expect("scrittura");
+            v.storage().write(&path, b"x").expect("write");
         }
-        let visti: Vec<String> = v
+        let seen: Vec<String> = v
             .scan()
-            .expect("scansione")
+            .expect("scan")
             .files
             .into_iter()
             .map(|f| f.id.0)
             .collect();
-        assert_eq!(visti, vec!["Idea.md"], "«target/» entrava in anagrafe");
+        assert_eq!(seen, vec!["Idea.md"], "\"target/\" was entering the entry store");
         assert!(v.is_ignored("/vault/target/debug/appunti.md".into()));
     }
 
-    /// Un vault con le impostazioni di un vero montaggio, con la politica di
     /// esclusione già dichiarata.
-    fn vault_che_dichiara(valori: &[(&str, fub_abi::settings::SettingValue)]) -> Vault {
+    /// **La casella dei nascosti** (§3.2 del catalogo): mostrarli è una
+    fn declaring_vault(values: &[(&str, fub_abi::settings::SettingValue)]) -> Vault {
         let storage: Arc<dyn VaultStorage> = Arc::new(crate::storage::MemStorage::new());
         let mut store = crate::settings::SettingsStore::open(
             "/vault".into(),
@@ -1036,103 +1037,102 @@ mod tests {
         );
         store
             .declare("fub", &crate::ignore::ignore_settings())
-            .expect("le due chiavi dell'esclusione");
-        for (key, value) in valori {
-            store.set(key, value.clone()).expect("chiave dichiarata");
+            .expect("the two exclusion keys");
+        for (key, value) in values {
+            store.set(key, value.clone()).expect("declared key");
         }
         Vault::on("/vault", storage)
             .expect("un vault in memoria si apre")
             .watching(Arc::new(std::sync::RwLock::new(store)))
     }
 
-    /// **La casella dei nascosti** (§3.2 del catalogo): mostrarli è una
     /// preferenza, e vale davvero — ma non è un grimaldello sulla struttura.
     /// Con l'interruttore acceso la bozza è un documento, e la cartella di Fub,
     /// il cestino e il temporaneo di una scrittura restano fuori.
+        // Il compagno di lock è l'unico dei quattro che non se ne va mai — non
     #[test]
-    fn mostrare_i_nascosti_non_apre_la_struttura() {
+    fn showing_hidden_files_does_not_open_the_structure() {
         use fub_abi::settings::SettingValue;
-        let v = vault_che_dichiara(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
+        let v = declaring_vault(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
         assert!(!v.is_ignored("/vault/note/.bozza.md".into()));
         assert!(v.is_ignored("/vault/.fub/data/anagrafe.json".into()));
         assert!(v.is_ignored("/vault/.trash/Idea.2026-07-24T15-30-00.md".into()));
         assert!(v.is_ignored("/vault/note/.Idea.md.tmp1234-5".into()));
-        // Il compagno di lock è l'unico dei quattro che non se ne va mai — non
         // si può togliere senza rompere il lock (difetto 0151) — quindi è
         // l'unico per cui «non si vede» deve essere una regola e non un
         // istante. Sta nella radice apposta: oggi ogni file protetto sta dentro
         // `.fub/`, e un banco che lo mettesse lì proverebbe `.fub`.
+        // E l'elenco delle cartelle escluse è l'altra metà, che questa non tocca.
         assert!(
             v.is_ignored("/vault/.Idea.md.lock".into()),
-            "il compagno di lock di un file della radice era un documento, \
-             e non se ne va mai"
+            "the lock companion of a root-level file was a document, \
+             and it never goes away"
         );
-        // E l'elenco delle cartelle escluse è l'altra metà, che questa non tocca.
+    /// La metà che impedisce alla riparazione di diventare «tutto ciò che
         assert!(v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
     }
 
-    /// La metà che impedisce alla riparazione di diventare «tutto ciò che
     /// finisce per `.lock`»: un `Cargo.lock` o un `flake.lock` non sono note di
     /// nessuno, ma sono file che uno può tenersi nel vault, e non cominciano
     /// per punto.
+    /// **La casella della costante** (§15.6): l'elenco è dato, e dichiararne uno
     #[test]
-    fn un_file_di_lock_che_non_e_nostro_resta_nel_vault() {
+    fn a_lock_file_that_is_not_ours_stays_in_the_vault() {
         use fub_abi::settings::SettingValue;
-        let v = vault_che_dichiara(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
+        let v = declaring_vault(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
         for lock in ["/vault/Cargo.lock", "/vault/note/flake.lock"] {
             assert!(
                 !v.is_ignored(lock.into()),
-                "{lock} è sparito dal vault: la regola del compagno di lock \
-                 si è allargata a chiunque finisca per «.lock»"
+                "{lock} disappeared from the vault: the lock companion rule \
+                 expanded to anyone ending with \".lock\""
             );
         }
     }
 
-    /// **La casella della costante** (§15.6): l'elenco è dato, e dichiararne uno
     /// diverso cambia cosa il vault contiene senza ricompilare niente.
+        // La struttura non è nell'elenco e non ci entra: toglierla dalla lista
     #[test]
-    fn le_cartelle_escluse_le_dichiara_il_vault() {
+    fn the_excluded_folders_are_declared_by_the_vault() {
         use fub_abi::settings::SettingValue;
-        let v = vault_che_dichiara(&[(
+        let v = declaring_vault(&[(
             crate::ignore::EXCLUDED_FOLDERS,
             SettingValue::List(vec!["build".into()]),
         )]);
         assert!(v.is_ignored("/vault/build/out.md".into()));
         assert!(!v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
-        // La struttura non è nell'elenco e non ci entra: toglierla dalla lista
         // non la rivela.
+    /// **La prima metà della 0176, dalle due porte.** `build/` è la forma che
         assert!(v.is_ignored("/vault/.fub/settings.json".into()));
     }
 
-    /// **La prima metà della 0176, dalle due porte.** `build/` è la forma che
     /// scrive per prima chi arriva da un `.gitignore`, e confrontata per
     /// uguaglianza con il nome che il disco restituisce non combaciava con
     /// niente: quella riga non escludeva un bel niente, e a dirlo non c'era
     /// nessuno — un'esclusione che non scatta non dà errore, dà un vault che
     /// indicizza `build/`.
+    /// **La seconda metà della 0176, dalle due porte.** L'elenco si chiama
     #[test]
-    fn una_cartella_dichiarata_con_lo_slash_resta_fuori_dal_vault() {
+    fn a_folder_declared_with_a_slash_stays_out_of_the_vault() {
         use fub_abi::settings::SettingValue;
-        let v = vault_che_dichiara(&[(
+        let v = declaring_vault(&[(
             crate::ignore::EXCLUDED_FOLDERS,
             SettingValue::List(vec!["build/".into()]),
         )]);
         for rel in ["build/out.md", "note/Idea.md"] {
             let path = Utf8Path::new("/vault").join(rel);
-            v.storage().write(&path, b"x").expect("scrittura");
+            v.storage().write(&path, b"x").expect("write");
         }
-        let visti: Vec<String> = v
+        let seen: Vec<String> = v
             .scan()
-            .expect("scansione")
+            .expect("scan")
             .files
             .into_iter()
             .map(|f| f.id.0)
             .collect();
-        assert_eq!(visti, vec!["note/Idea.md"], "«build/» non escludeva niente");
+        assert_eq!(seen, vec!["note/Idea.md"], "\"build/\" did not exclude anything");
         assert!(v.is_ignored("/vault/build/out.md".into()));
     }
 
-    /// **La seconda metà della 0176, dalle due porte.** L'elenco si chiama
     /// «cartelle escluse»: un file che si chiama come una di loro è un file di
     /// questo vault, e toglierlo è toglierlo davvero — niente [`DocId`],
     /// niente voce d'anagrafe, nessun evento che lo dica.
@@ -1141,64 +1141,65 @@ mod tests {
     /// l'ha in mano dalla voce di directory, il watcher ha in mano un path e
     /// basta, e se le due rispondessero diverso il file rientrerebbe al primo
     /// salvataggio o sparirebbe al primo evento.
+        // E la cartella che si chiama come lui resta fuori, dai due versi: il
     #[test]
-    fn un_file_che_si_chiama_come_una_cartella_esclusa_resta_nel_vault() {
+    fn a_file_named_like_an_excluded_folder_stays_in_the_vault() {
         use fub_abi::settings::SettingValue;
-        let v = vault_che_dichiara(&[(
+        let v = declaring_vault(&[(
             crate::ignore::EXCLUDED_FOLDERS,
             SettingValue::List(vec!["archivio".into()]),
         )]);
         for rel in ["archivio", "note/archivio/vecchia.md", "note/Idea.md"] {
             let path = Utf8Path::new("/vault").join(rel);
-            v.storage().write(&path, b"x").expect("scrittura");
+            v.storage().write(&path, b"x").expect("write");
         }
-        let visti: Vec<String> = v
+        let seen: Vec<String> = v
             .scan()
-            .expect("scansione")
+            .expect("scan")
             .files
             .into_iter()
             .map(|f| f.id.0)
             .collect();
         assert_eq!(
-            visti,
+            seen,
             vec!["archivio", "note/Idea.md"],
-            "il file «archivio» spariva dal vault insieme alla cartella"
+            "the file \"archivio\" disappeared from the vault along with the folder"
         );
         assert!(!v.is_ignored("/vault/archivio".into()));
-        // E la cartella che si chiama come lui resta fuori, dai due versi: il
         // path del file dentro, e il path della cartella stessa.
+    /// **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
         assert!(v.is_ignored("/vault/note/archivio/vecchia.md".into()));
         assert!(v.is_ignored("/vault/note/archivio".into()));
     }
 
-    /// **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
     /// `is_ignored`, la scansione cammina: se le due politiche non fossero la
     /// stessa, un file che la scansione non elenca rientrerebbe al primo
     /// salvataggio — che è il difetto per cui `is_ignored` esiste.
+    /// **La casella dei collegamenti** (§15.6, consegnata dalla 0058): non si
     #[test]
-    fn il_watcher_e_la_scansione_hanno_la_stessa_politica() {
+    fn the_watcher_and_the_scan_share_the_same_policy() {
         use fub_abi::settings::SettingValue;
-        let v = vault_che_dichiara(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
-        for (rel, contenuto) in [
-            ("note/Idea.md", "una nota"),
-            ("note/.bozza.md", "una bozza"),
+        let v = declaring_vault(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
+        for (rel, content) in [
+            ("note/Idea.md", "a note"),
+            ("note/.bozza.md", "a draft"),
             (".fub/data/anagrafe.json", "{}"),
-            (".trash/Vecchia.md", "cestinata"),
-            ("node_modules/pacchetto/readme.md", "roba di npm"),
+            (".trash/Vecchia.md", "trashed"),
+            ("node_modules/pacchetto/readme.md", "npm stuff"),
         ] {
             let path = Utf8Path::new("/vault").join(rel);
             v.storage()
-                .write(&path, contenuto.as_bytes())
-                .expect("scrittura");
+                .write(&path, content.as_bytes())
+                .expect("write");
         }
-        let visti: Vec<String> = v
+        let seen: Vec<String> = v
             .scan()
-            .expect("scansione")
+            .expect("scan")
             .files
             .into_iter()
             .map(|f| f.id.0)
             .collect();
-        assert_eq!(visti, vec!["note/.bozza.md", "note/Idea.md"]);
+        assert_eq!(seen, vec!["note/.bozza.md", "note/Idea.md"]);
         for rel in [
             "note/Idea.md",
             "note/.bozza.md",
@@ -1209,29 +1210,29 @@ mod tests {
             let path = Utf8Path::new("/vault").join(rel);
             assert_eq!(
                 v.is_ignored(&path),
-                !visti.contains(&rel.to_string()),
-                "{rel}: le due porte non dicono la stessa cosa"
+                !seen.contains(&rel.to_string()),
+                "{rel}: the two gates do not say the same thing"
             );
         }
     }
 
-    /// **La casella dei collegamenti** (§15.6, consegnata dalla 0058): non si
     /// seguono, e il caso che lo rende una decisione invece che una preferenza è
     /// questo — una cartella che contiene un collegamento a se stessa. Se la
     /// camminata li seguisse senza saper riconoscere un nodo già visitato,
     /// questo banco non fallirebbe: non tornerebbe affatto.
+    /// questo banco non fallirebbe: non tornerebbe affatto.
     #[cfg(unix)]
     #[test]
-    fn un_anello_di_collegamenti_non_ferma_la_scansione() {
+    fn a_ring_of_links_does_not_stop_the_scan() {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-        std::fs::create_dir(root.join("note")).expect("cartella");
-        std::fs::write(root.join("note/Idea.md"), "una nota").expect("nota");
-        std::os::unix::fs::symlink(root.join("note"), root.join("note/anello")).expect("anello");
+        std::fs::create_dir(root.join("note")).expect("folder");
+        std::fs::write(root.join("note/Idea.md"), "a note").expect("note");
+        std::os::unix::fs::symlink(root.join("note"), root.join("note/anello")).expect("symlink");
         let scan = Vault::open(&root)
-            .expect("la radice appena creata si apre")
+            .expect("the just-created root opens")
             .scan()
-            .expect("scansione");
+            .expect("scan");
         assert_eq!(scan.files.len(), 1, "{:?}", scan.files[0].id);
         assert_eq!(scan.folders, vec!["note".to_string()]);
     }

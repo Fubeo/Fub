@@ -67,15 +67,15 @@ impl RegistrationKind {
     /// Come si chiama in un messaggio d'errore.
     pub fn what(self) -> &'static str {
         match self {
-            RegistrationKind::View => "la view",
-            RegistrationKind::Command => "il comando",
-            RegistrationKind::Index => "la rotta",
-            RegistrationKind::EventHandler => "l'handler",
-            RegistrationKind::Import => "l'importer",
-            RegistrationKind::Export => "la destinazione di export",
-            RegistrationKind::Syntax => "la regola sintattica",
-            RegistrationKind::Renderer => "il renderer",
-            RegistrationKind::Service => "il servizio",
+            RegistrationKind::View => "view",
+            RegistrationKind::Command => "command",
+            RegistrationKind::Index => "route",
+            RegistrationKind::EventHandler => "handler",
+            RegistrationKind::Import => "importer",
+            RegistrationKind::Export => "export destination",
+            RegistrationKind::Syntax => "syntax rule",
+            RegistrationKind::Renderer => "renderer",
+            RegistrationKind::Service => "service",
         }
     }
 
@@ -195,27 +195,27 @@ impl std::fmt::Display for RegistryError {
         match self {
             RegistryError::UnknownPlugin(id) => write!(
                 f,
-                "`{id}` non è un plugin dichiarato: chi registra qualcosa si dichiara prima \
-                 (register_plugin), o le sue capacità non hanno un proprietario"
+                "`{id}` is not a declared plugin: anything that registers must first \
+                 declare itself (register_plugin), or its capabilities have no owner"
             ),
             RegistryError::DuplicatePlugin(id) => {
-                write!(f, "un plugin con id `{id}` è già dichiarato")
+                write!(f, "a plugin with id `{id}` is already declared")
             }
             RegistryError::Revoked(id) => write!(
                 f,
-                "`{id}` è revocato e non registra niente: la revoca non è un permesso \
-                 in meno, è l'assenza del permesso di essere eseguito"
+                "`{id}` is revoked and registers nothing: revocation is not one fewer \
+                 permission, it is the absence of the permission to be executed"
             ),
             RegistryError::Namespace(fault) => write!(f, "{fault}"),
             RegistryError::Timer { plugin, timer } if timer.is_empty() => write!(
                 f,
-                "`{plugin}` dichiara una sveglia senza nome: chi la riceve non ha \
-                 modo di sapere quale è suonata"
+                "`{plugin}` declares a timer without a name: the receiver has no \
+                 way to know which one rang"
             ),
             RegistryError::Timer { plugin, timer } => write!(
                 f,
-                "`{plugin}` dichiara due sveglie di nome `{timer}`: sarebbero due \
-                 eventi indistinguibili da chi li riceve"
+                "`{plugin}` declares two timers named `{timer}`: they would be two \
+                 events indistinguishable by the receiver"
             ),
             RegistryError::Claimed {
                 kind,
@@ -224,14 +224,14 @@ impl std::fmt::Display for RegistryError {
                 challenger,
             } => write!(
                 f,
-                "{} `{id}` è già di `{incumbent}`: `{challenger}` non la registra \
-                 (per sostituirla si chiede per nome)",
+                "{} `{id}` already belongs to `{incumbent}`: `{challenger}` cannot register it \
+                 (to replace it, ask by name)",
                 kind.what()
             ),
             RegistryError::MissingRequirement { plugin, requires } => write!(
                 f,
-                "`{plugin}` ha bisogno di {} e nessuno li offre: non è dichiarato \
-                 (chi lo monta li monti prima)",
+                "`{plugin}` requires {} that nobody offers: it is not declared \
+                 (whoever mounts it must mount them first)",
                 requires
                     .iter()
                     .map(|r| format!("`{r}`"))
@@ -240,18 +240,18 @@ impl std::fmt::Display for RegistryError {
             ),
             RegistryError::NothingProvided(plugin) => write!(
                 f,
-                "`{plugin}` registra un ServiceProvider e il suo manifest non dichiara \
-                 nessun `provides`: è il manifest a dire cosa offre"
+                "`{plugin}` registers a ServiceProvider but its manifest declares no \
+                 `provides`: it is the manifest that says what it offers"
             ),
             RegistryError::Route(c) => write!(f, "{c}"),
             RegistryError::Syntax(c) => write!(f, "{c}"),
             RegistryError::Renderer(c) => write!(f, "{c}"),
-            RegistryError::Activate(e) => write!(f, "{e}"),
+            RegistryError::Activate(and) => write!(f, "{and}"),
             RegistryError::Busy(id) => write!(
                 f,
-                "`{id}` non si disattiva da dentro la chiamata di un provider: \
-                 lì i provider sono in prestito, e ciò che non c'è nella tabella \
-                 non si può togliere (si richiede a chiamata tornata)"
+                "`{id}` cannot be deactivated from inside a provider call: \
+                 providers are on loan there, and what is not in the table \
+                 cannot be removed (ask again after the call returns)"
             ),
             RegistryError::Setting(why) => write!(f, "{why}"),
         }
@@ -273,7 +273,7 @@ impl PluginRegistry {
 
     /// Dichiara un plugin. Id già dichiarato → conflitto.
     pub fn declare(&mut self, manifest: PluginManifest, trust: Trust) -> Result<(), RegistryError> {
-        if self.entries.iter().any(|e| e.manifest.id == manifest.id) {
+        if self.entries.iter().any(|and| and.manifest.id == manifest.id) {
             return Err(RegistryError::DuplicatePlugin(manifest.id));
         }
         let granted = Granted::new(&manifest.id, &manifest.permissions, trust);
@@ -312,7 +312,7 @@ impl PluginRegistry {
     /// chiave di un componente spento, e non è un errore — la chiave resta nel
     /// file e tornerà a valere quando il componente si riaccende.
     pub(crate) fn restrict(&mut self, plugin: &str, denied: &[String]) -> bool {
-        let Some(entry) = self.entries.iter_mut().find(|e| e.manifest.id == plugin) else {
+        let Some(entry) = self.entries.iter_mut().find(|and| and.manifest.id == plugin) else {
             return false;
         };
         let mut permissions = entry.manifest.permissions.clone();
@@ -324,7 +324,7 @@ impl PluginRegistry {
     }
 
     pub fn get(&self, id: &str) -> Option<&PluginEntry> {
-        self.entries.iter().find(|e| e.manifest.id == id)
+        self.entries.iter().find(|and| and.manifest.id == id)
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, PluginEntry> {
@@ -353,13 +353,13 @@ impl PluginRegistry {
     pub fn owner_of(&self, kind: RegistrationKind, id: &str) -> Option<&str> {
         self.entries
             .iter()
-            .find(|e| e.registrations.iter().any(|r| r.kind == kind && r.id == id))
-            .map(|e| e.manifest.id.as_str())
+            .find(|and| and.registrations.iter().any(|r| r.kind == kind && r.id == id))
+            .map(|and| and.manifest.id.as_str())
     }
 
     /// Il grado di fiducia di un plugin dichiarato.
     pub fn trust_of(&self, plugin: &str) -> Option<Trust> {
-        self.get(plugin).map(|e| e.trust)
+        self.get(plugin).map(|and| and.trust)
     }
 
     /// I cataloghi di stringhe di un plugin dichiarato, con la lingua in cui è
@@ -367,7 +367,7 @@ impl PluginRegistry {
     /// da segnalare: è l'ultimo gradino della scala, la chiave nuda.
     pub fn strings_of(&self, plugin: &str) -> (&[StringCatalog], &str) {
         match self.get(plugin) {
-            Some(e) => (&e.manifest.strings, e.manifest.default_locale.as_str()),
+            Some(and) => (&and.manifest.strings, and.manifest.default_locale.as_str()),
             None => (&[], ""),
         }
     }
@@ -381,11 +381,11 @@ impl PluginRegistry {
     /// un componente che se n'è andato.
     pub fn timers(&self) -> Vec<(&str, &TimerSpec)> {
         self.iter()
-            .flat_map(|e| {
-                e.manifest
+            .flat_map(|and| {
+                and.manifest
                     .timers
                     .iter()
-                    .map(move |t| (e.manifest.id.as_str(), t))
+                    .map(move |t| (and.manifest.id.as_str(), t))
             })
             .collect()
     }
@@ -546,7 +546,7 @@ impl PluginRegistry {
     /// Segna ciò che un plugin ha registrato. Da chiamare **dopo** che
     /// [`admit`](PluginRegistry::admit) è passata.
     pub fn record(&mut self, plugin: &str, kind: RegistrationKind, ids: &[String]) {
-        let Some(entry) = self.entries.iter_mut().find(|e| e.manifest.id == plugin) else {
+        let Some(entry) = self.entries.iter_mut().find(|and| and.manifest.id == plugin) else {
             return;
         };
         if ids.is_empty() {
@@ -572,7 +572,7 @@ impl PluginRegistry {
     /// elenco vuoto è una risposta — un provider che non offre più niente non
     /// lascia una riga di ricordo.
     pub fn resettle(&mut self, plugin: &str, kind: RegistrationKind, ids: &[String]) {
-        let Some(entry) = self.entries.iter_mut().find(|e| e.manifest.id == plugin) else {
+        let Some(entry) = self.entries.iter_mut().find(|and| and.manifest.id == plugin) else {
             return;
         };
         entry.registrations.retain(|r| r.kind != kind);
@@ -593,8 +593,8 @@ impl PluginRegistry {
     /// non quello di chi l'ha registrata.
     pub fn ids_of(&self, plugin: &str, kind: RegistrationKind) -> Vec<String> {
         self.get(plugin)
-            .map(|e| {
-                e.registrations
+            .map(|and| {
+                and.registrations
                     .iter()
                     .filter(|r| r.kind == kind)
                     .map(|r| r.id.clone())
@@ -613,7 +613,7 @@ impl PluginRegistry {
     /// nel posto in cui si va a leggere cosa è attivo. Riaccendere passa dalla
     /// stessa porta della prima volta: `register_plugin`, e poi i `register_*`.
     pub fn retire(&mut self, plugin: &str) -> Option<PluginEntry> {
-        let at = self.entries.iter().position(|e| e.manifest.id == plugin)?;
+        let at = self.entries.iter().position(|and| and.manifest.id == plugin)?;
         Some(self.entries.remove(at))
     }
 
@@ -695,8 +695,8 @@ impl PluginRegistry {
     /// permesso di essere eseguiti.
     pub fn provider_of(&self, service: &str) -> Option<&str> {
         self.iter()
-            .find(|e| e.trust.runs() && e.manifest.provides.iter().any(|s| s == service))
-            .map(|e| e.manifest.id.as_str())
+            .find(|and| and.trust.runs() && and.manifest.provides.iter().any(|s| s == service))
+            .map(|and| and.manifest.id.as_str())
     }
 
     /// I requisiti di un manifest che nessuno offre.

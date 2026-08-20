@@ -31,15 +31,15 @@ use fub_abi::traits::{
     EventHandler, HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fub_testkit::{Banco, Montato};
+use fub_testkit::{Bench, Mounted};
 
 type Log = Arc<Mutex<Vec<String>>>;
 
 /// Una view che, finito ciò che stava facendo, chiede di essere ridisegnata.
 /// È il gesto che il §2.5 esiste per rendere possibile.
-struct LavoroLungo(Log);
+struct LongRunning(Log);
 
-impl ViewProvider for LavoroLungo {
+impl ViewProvider for LongRunning {
     /// La maschera è dell'**esemplare** (§22.3): si prende da *quella* spec,
     /// non dalla prima dell'elenco — un provider che ne dichiara due darebbe a
     /// tutte e due la maschera della prima.
@@ -90,9 +90,9 @@ impl ViewProvider for LavoroLungo {
 }
 
 /// Chi ascolta gli inviti, e con essi l'origine.
-struct Ascoltatore(Log);
+struct Listener(Log);
 
-impl EventHandler for Ascoltatore {
+impl EventHandler for Listener {
     fn subscribed(&self) -> EventMask {
         EventMask::of([EventKind::ViewInvalidated])
     }
@@ -103,7 +103,7 @@ impl EventHandler for Ascoltatore {
         };
         let attore = match &notice.origin.actor {
             Actor::Plugin { id } => format!("plugin:{id}"),
-            altro => format!("{altro:?}"),
+            other => format!("{other:?}"),
         };
         self.0
             .lock()
@@ -113,30 +113,30 @@ impl EventHandler for Ascoltatore {
     }
 }
 
-fn vault() -> Montato {
-    Banco::nuovo()
-        .senza_formato()
-        .senza_scansione()
-        .con_plugins(["ascoltatore", "test.lenta"])
-        .monta()
+fn vault() -> Mounted {
+    Bench::new()
+        .without_format()
+        .without_scan()
+        .with_plugins(["ascoltatore", "test.lenta"])
+        .mounts()
 }
 
 #[test]
 fn a_provider_can_ask_for_a_redraw_and_the_invitation_carries_its_origin() {
     let mut ws = vault();
     let log: Log = Arc::default();
-    ws.register_event_handler("ascoltatore", Box::new(Ascoltatore(log.clone())))
+    ws.register_event_handler("ascoltatore", Box::new(Listener(log.clone())))
         .expect("registrato");
-    ws.register_view_provider("test.lenta", Box::new(LavoroLungo(log.clone())))
+    ws.register_view_provider("test.lenta", Box::new(LongRunning(log.clone())))
         .expect("registrato");
 
-    let istanza = ViewInstance::only("lenta");
-    ws.view_action(&istanza, UiAction::new("vai"))
+    let instance = ViewInstance::only("lenta");
+    ws.view_action(&instance, UiAction::new("vai"))
         .expect("l'azione va a buon fine");
 
-    let righe = log.lock().unwrap().clone();
+    let rows = log.lock().unwrap().clone();
     assert_eq!(
-        righe,
+        rows,
         vec![
             "provider:inizio".to_string(),
             "provider:fine".to_string(),
@@ -159,9 +159,9 @@ fn a_provider_can_ask_for_a_redraw_and_the_invitation_carries_its_origin() {
 fn an_invitation_without_an_instance_means_all_of_them() {
     let mut ws = vault();
     let log: Log = Arc::default();
-    ws.register_event_handler("ascoltatore", Box::new(Ascoltatore(log.clone())))
+    ws.register_event_handler("ascoltatore", Box::new(Listener(log.clone())))
         .expect("registrato");
-    ws.register_view_provider("test.lenta", Box::new(LavoroLungo(log.clone())))
+    ws.register_view_provider("test.lenta", Box::new(LongRunning(log.clone())))
         .expect("registrato");
 
     ws.view_action(&ViewInstance::only("lenta"), UiAction::new("tutte"))

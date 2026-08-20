@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Il banco di prova del lato host: monta un vault vero sul kernel vero, registra, fa girare un giro di eventi e dice cosa è stato emesso. Dev-dependency, mai dipendenza normale."
+description = "The host-side test bench: mounts a real vault on the real kernel, registers, runs an event cycle, and reports what was emitted. Dev-dependency only, never a normal dependency."
 
 # INVARIANTE: questo crate NON è mai una dipendenza normale di nessuno. È il
 # banco del lato *host* (§16.2), quindi ha `fub-kernel` fra le mani — e chi lo

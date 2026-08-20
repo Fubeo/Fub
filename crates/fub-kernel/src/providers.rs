@@ -172,7 +172,7 @@ pub(crate) struct RegisteredView {
 /// Chi apre un esemplare **con parametri** non passa di qui: la sua maschera
 /// gliela risponde `Workspace::view_interests`, ed è il verso in cui il §22.3
 /// continua.
-pub(crate) fn specs_dichiarate(provider: &dyn ViewProvider) -> Vec<ViewSpec> {
+pub(crate) fn declared_specs(provider: &dyn ViewProvider) -> Vec<ViewSpec> {
     provider
         .views()
         .into_iter()
@@ -380,7 +380,7 @@ impl ProviderRegistry {
             .iter()
             .enumerate()
             .filter(|(_, v)| v.id == id)
-            .map(|(at, v)| (at, specs_dichiarate(v.provider.as_ref())))
+            .map(|(at, v)| (at, declared_specs(v.provider.as_ref())))
             .collect();
         let commands: Vec<(usize, Vec<CommandSpec>)> = self
             .commands

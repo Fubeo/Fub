@@ -32,7 +32,7 @@ use fub_abi::options::syntax;
 use fub_abi::traits::{CommandProvider, HostApi};
 use fub_abi::FormatProvider;
 use fub_kernel::{FormatRegistry, Workspace};
-use fub_testkit::TestoDiProva;
+use fub_testkit::SampleText;
 
 /// Come [`TestoDiProva`], ma ogni riga non vuota è un wikilink: basta a far
 /// esistere dei backlink da riscrivere, e non tira dentro il provider markdown
@@ -88,11 +88,11 @@ impl FormatProvider for LinkLineProvider {
 }
 
 fn vault_plain() -> (tempfile::TempDir, Workspace) {
-    vault(TestoDiProva::per_estensione("md").boxed())
+    vault(SampleText::by_extension("md").boxed())
 }
 
 /// Il vault dove i link esistono: serve dove il test guarda la riscrittura.
-fn vault_con_link() -> (tempfile::TempDir, Workspace) {
+fn vault_with_link() -> (tempfile::TempDir, Workspace) {
     vault(Box::new(LinkLineProvider))
 }
 
@@ -119,7 +119,7 @@ fn vault(provider: Box<dyn FormatProvider>) -> (tempfile::TempDir, Workspace) {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn creating_over_an_existing_note_is_refused_and_writing_over_it_is_not() {
+fn creating_over_an_existing_notes_is_refused_and_writing_over_it_is_not() {
     let (_dir, mut ws) = vault_plain();
     let id = DocId::new("nota.md");
 
@@ -127,15 +127,15 @@ fn creating_over_an_existing_note_is_refused_and_writing_over_it_is_not() {
         host.create_document(&id, "primo")
             .expect("il path è libero");
 
-        let e = host
+        let and = host
             .create_document(&id, "secondo")
             .expect_err("il path è occupato");
         // Il `kind` dice già di che rifiuto si tratta (§12.2): chi chiama
         // sceglie fra «lo salvo con un altro nome» e «riprova» senza leggere
         // la frase. Il messaggio nomina comunque il documento.
         assert!(
-            matches!(e, PluginError::AlreadyExists(ref m) if m.to_string().contains("nota.md")),
-            "l'errore dice che il path è occupato, e nomina il documento: {e}"
+            matches!(and, PluginError::AlreadyExists(ref m) if m.to_string().contains("nota.md")),
+            "l'errore dice che il path è occupato, e nomina il documento: {and}"
         );
 
         assert_eq!(
@@ -157,10 +157,10 @@ fn creating_over_an_existing_note_is_refused_and_writing_over_it_is_not() {
 fn a_created_document_cannot_escape_the_vault() {
     let (_dir, mut ws) = vault_plain();
     ws.with_host("prova.plugin", |host| {
-        let e = host
+        let and = host
             .create_document(&DocId::new("../fuori.md"), "no")
             .expect_err("il recinto vale anche per la creazione");
-        assert!(matches!(e, PluginError::PermissionDenied(_)), "{e}");
+        assert!(matches!(and, PluginError::PermissionDenied(_)), "{and}");
     });
     assert!(ws.documents().is_empty(), "niente è stato creato");
 }
@@ -174,14 +174,14 @@ fn a_created_document_cannot_escape_the_vault() {
 /// Vale per ogni verso, non solo per la scrittura: `read_document(".fub/…")`
 /// sarebbe la stessa fuga dall'altra parte.
 #[test]
-fn lo_spazio_macchina_non_si_nomina_da_un_plugin() {
+fn the_space_machine_not_is_names_from_a_plugin() {
     let (_dir, mut ws) = vault_plain();
     let root = ws.root().to_path_buf();
     // Un file dentro lo spazio macchina, messo lì alle spalle del kernel: è ciò
     // che la scrittura di un plugin coprirebbe.
-    let bersaglio = root.join(".fub").join("data").join("nota.md");
-    std::fs::create_dir_all(bersaglio.parent().expect("padre")).expect("cartella");
-    std::fs::write(&bersaglio, "roba di Fub").expect("scritto");
+    let target = root.join(".fub").join("data").join("nota.md");
+    std::fs::create_dir_all(target.parent().expect("padre")).expect("cartella");
+    std::fs::write(&target, "roba di Fub").expect("scritto");
 
     ws.with_host("prova.plugin", |host| {
         for id in [
@@ -191,7 +191,7 @@ fn lo_spazio_macchina_non_si_nomina_da_un_plugin() {
             "Progetti/.fub/nota.md",
         ] {
             let id = DocId::new(id);
-            for esito in [
+            for outcome in [
                 host.write_document(&id, "non dovrei essere qui", WriteBase::Dictated)
                     .map(|_| ()),
                 host.create_document(&id, "nemmeno"),
@@ -200,29 +200,29 @@ fn lo_spazio_macchina_non_si_nomina_da_un_plugin() {
                 host.trash_document(&id).map(|_| ()),
             ] {
                 assert!(
-                    matches!(esito, Err(PluginError::PermissionDenied(_))),
-                    "`{id}` doveva essere rifiutato, invece: {esito:?}"
+                    matches!(outcome, Err(PluginError::PermissionDenied(_))),
+                    "`{id}` doveva essere rifiutato, invece: {outcome:?}"
                 );
             }
         }
     });
 
     assert_eq!(
-        std::fs::read_to_string(&bersaglio).expect("c'è ancora"),
+        std::fs::read_to_string(&target).expect("c'è ancora"),
         "roba di Fub",
         "niente ha toccato lo spazio macchina"
     );
 }
 
 #[test]
-fn free_name_and_create_compose_into_what_create_note_did() {
+fn free_name_and_create_compose_into_what_create_notes_did() {
     let (_dir, mut ws) = vault_plain();
     ws.with_host("prova.plugin", |host| {
         // Il flusso che il kernel faceva da sé in `create_note(None)`: due
         // capacità che si compongono invece di una che rinomina in silenzio.
-        for atteso in ["Senza titolo.md", "Senza titolo 1.md", "Senza titolo 2.md"] {
+        for expected in ["Senza titolo.md", "Senza titolo 1.md", "Senza titolo 2.md"] {
             let id = host.free_name(&DocId::new("Senza titolo.md"));
-            assert_eq!(id.as_str(), atteso);
+            assert_eq!(id.as_str(), expected);
             host.create_document(&id, "").expect("crea");
         }
     });
@@ -234,7 +234,7 @@ fn free_name_and_create_compose_into_what_create_note_did() {
 
 #[test]
 fn the_rename_a_plugin_gets_is_the_one_that_rewrites_backlinks() {
-    let (_dir, mut ws) = vault_con_link();
+    let (_dir, mut ws) = vault_with_link();
     ws.write_document(&DocId::new("bersaglio.md"), "", WriteBase::Dictated)
         .expect("scrive");
     ws.write_document(
@@ -252,23 +252,23 @@ fn the_rename_a_plugin_gets_is_the_one_that_rewrites_backlinks() {
         .expect("rinomina");
     });
 
-    let sorgente = ws
+    let source = ws
         .read_source(&DocId::new("chi-linka.md"))
         .expect("il sorgente di terzi");
     assert_eq!(
-        sorgente.trim(),
+        source.trim(),
         "nuovo",
         "il rename del contratto è quello del kernel: il backlink è stato riscritto"
     );
 }
 
 #[test]
-fn a_rename_through_the_boundary_is_one_batch_not_one_per_backlink() {
-    let (_dir, mut ws) = vault_con_link();
+fn a_rename_through_the_boundary_is_one_batch_not_one_for_backlink() {
+    let (_dir, mut ws) = vault_with_link();
     ws.write_document(&DocId::new("bersaglio.md"), "", WriteBase::Dictated)
         .expect("scrive");
-    for nome in ["uno.md", "due.md", "tre.md"] {
-        ws.write_document(&DocId::new(nome), "bersaglio", WriteBase::Dictated)
+    for name in ["uno.md", "due.md", "tre.md"] {
+        ws.write_document(&DocId::new(name), "bersaglio", WriteBase::Dictated)
             .expect("scrive");
     }
     let rx = ws.bus().subscribe();
@@ -308,13 +308,13 @@ fn the_trash_round_trip_closes_without_touching_the_workspace() {
     ws.write_document(&DocId::new("nota.md"), "contenuto", WriteBase::Dictated)
         .expect("scrive");
 
-    let ripristinata = ws.with_host("prova.plugin", |host| {
-        let dove = host
+    let restored = ws.with_host("prova.plugin", |host| {
+        let destination = host
             .trash_document(&DocId::new("nota.md"))
             .expect("cestina");
         assert!(
-            dove.as_str().starts_with(".trash/"),
-            "il ritorno dice DOVE è finita: {dove}"
+            destination.as_str().starts_with(".trash/"),
+            "il ritorno dice DOVE è finita: {destination}"
         );
         assert!(
             !host
@@ -325,16 +325,16 @@ fn the_trash_round_trip_closes_without_touching_the_workspace() {
             "una nota cestinata non è più un documento del vault"
         );
 
-        let voci = host.list_trash().expect("elenca il cestino");
-        assert_eq!(voci.len(), 1);
-        assert_eq!(voci[0].id, dove, "l'id con cui si ripristina");
-        assert_eq!(voci[0].original.as_str(), "nota.md", "dove tornerebbe");
+        let entries = host.list_trash().expect("elenca il cestino");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, destination, "l'id con cui si ripristina");
+        assert_eq!(entries[0].original.as_str(), "nota.md", "dove tornerebbe");
 
-        let entry = voci[0].id.clone();
+        let entry = entries[0].id.clone();
         host.restore_document(&entry, None).expect("ripristina")
     });
 
-    assert_eq!(ripristinata.as_str(), "nota.md");
+    assert_eq!(restored.as_str(), "nota.md");
     assert_eq!(
         ws.read_source(&DocId::new("nota.md")).expect("rileggibile"),
         "contenuto"
@@ -352,14 +352,14 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
         .expect("scrive");
 
     ws.with_host("prova.plugin", |host| {
-        let voce = host
+        let entry = host
             .trash_document(&DocId::new("nota.md"))
             .expect("cestina");
         // Qualcuno rioccupa il path mentre la nota è nel cestino.
         host.create_document(&DocId::new("nota.md"), "nuova")
             .expect("crea");
 
-        host.restore_document(&voce, None)
+        host.restore_document(&entry, None)
             .expect_err("il path d'origine è occupato: si rifiuta, non si sovrascrive");
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).expect("legge"),
@@ -368,19 +368,19 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
 
         // Chi chiama ha `free_name` e decide: è la stessa composizione di
         // `create_document`, e il motivo per cui l'host non sceglie da sé.
-        let alternativa = host.free_name(&DocId::new("nota.md"));
-        let dove = host
-            .restore_document(&voce, Some(alternativa.clone()))
+        let alternative = host.free_name(&DocId::new("nota.md"));
+        let destination = host
+            .restore_document(&entry, Some(alternative.clone()))
             .expect("ripristina sotto un altro nome");
-        assert_eq!(dove, alternativa);
+        assert_eq!(destination, alternative);
     });
 }
 
 #[test]
 fn emptying_the_trash_says_how_much_it_destroyed() {
     let (_dir, mut ws) = vault_plain();
-    for nome in ["a.md", "b.md"] {
-        ws.write_document(&DocId::new(nome), "x", WriteBase::Dictated)
+    for name in ["a.md", "b.md"] {
+        ws.write_document(&DocId::new(name), "x", WriteBase::Dictated)
             .expect("scrive");
     }
 
@@ -441,11 +441,11 @@ impl CommandProvider for Macro {
         match command {
             MACRO => {
                 for id in ["macro-a.md", "macro-b.md"] {
-                    let esito = host.run_command(PASSO, serde_json::json!({ "id": id }))?;
+                    let outcome = host.run_command(PASSO, serde_json::json!({ "id": id }))?;
                     self.0
                         .lock()
                         .unwrap()
-                        .push(format!("{id}:{:?}", esito.effect));
+                        .push(format!("{id}:{:?}", outcome.effect));
                 }
                 Ok(CommandOutcome::notify("macro fatta"))
             }
@@ -468,7 +468,7 @@ impl CommandProvider for Macro {
     }
 }
 
-fn con_macro() -> (tempfile::TempDir, Workspace, Log) {
+fn with_macro() -> (tempfile::TempDir, Workspace, Log) {
     let (dir, mut ws) = vault_plain();
     let log: Log = Arc::new(Mutex::new(Vec::new()));
     ws.register_command_provider("test.macro", Box::new(Macro(log.clone())))
@@ -478,7 +478,7 @@ fn con_macro() -> (tempfile::TempDir, Workspace, Log) {
 
 #[test]
 fn a_macro_of_two_commands_is_one_batch_and_one_actor() {
-    let (_dir, mut ws, _log) = con_macro();
+    let (_dir, mut ws, _log) = with_macro();
     let rx = ws.bus().subscribe();
 
     ws.invoke_command(
@@ -518,9 +518,9 @@ fn a_macro_of_two_commands_is_one_batch_and_one_actor() {
 
 #[test]
 fn simulating_a_macro_simulates_its_steps_and_writes_nothing() {
-    let (_dir, mut ws, log) = con_macro();
+    let (_dir, mut ws, log) = with_macro();
 
-    let esito = ws
+    let outcome = ws
         .invoke_command(
             MACRO,
             serde_json::Value::Null,
@@ -534,25 +534,25 @@ fn simulating_a_macro_simulates_its_steps_and_writes_nothing() {
         "una simulazione non scrive, nemmeno attraverso un comando che invoca"
     );
     assert!(
-        matches!(esito.effect, CommandEffect::Done),
+        matches!(outcome.effect, CommandEffect::Done),
         "l'esito della macro è il suo; ciò che conta è cosa hanno risposto i passi"
     );
-    let visto = log.lock().unwrap().clone();
-    assert_eq!(visto.len(), 2);
-    for riga in visto {
+    let seen = log.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2);
+    for row in seen {
         assert!(
-            riga.contains("Plan"),
+            row.contains("Plan"),
             "il passo ha risposto col piano perché l'host in cui girava era \
-             già quello di una simulazione: {riga}"
+             già quello di una simulazione: {row}"
         );
     }
 }
 
 #[test]
 fn a_command_that_invokes_itself_is_refused_by_name() {
-    let (_dir, mut ws, _log) = con_macro();
+    let (_dir, mut ws, _log) = with_macro();
 
-    let e = ws
+    let and = ws
         .invoke_command(
             OUROBOROS,
             serde_json::Value::Null,
@@ -561,23 +561,23 @@ fn a_command_that_invokes_itself_is_refused_by_name() {
         )
         .expect_err("il giro è rifiutato");
 
-    let messaggio = e.to_string();
+    let message = and.to_string();
     assert!(
-        messaggio.contains(OUROBOROS) && messaggio.contains('→'),
-        "l'errore NOMINA il giro invece di essere uno stack overflow: {messaggio}"
+        message.contains(OUROBOROS) && message.contains('→'),
+        "l'errore NOMINA il giro invece di essere uno stack overflow: {message}"
     );
 }
 
 #[test]
 fn a_read_only_command_cannot_launder_a_write_through_run_command() {
-    let (_dir, mut ws, _log) = con_macro();
+    let (_dir, mut ws, _log) = with_macro();
 
     // La macro si è dichiarata `writes`, quindi in `Apply` scrive. Ma il passo
     // che invoca, se la macro fosse simulata, non può scrivere: è ciò che il
     // test qui sopra prova. Qui si prova l'altra metà — un `Apply` di un
     // comando *di sola lettura* non esiste come varco: l'host che riceve è
     // read-only e `run_command` di lì forza la simulazione.
-    let esito = ws
+    let outcome = ws
         .invoke_command(
             MACRO,
             serde_json::Value::Null,
@@ -585,6 +585,6 @@ fn a_read_only_command_cannot_launder_a_write_through_run_command() {
             Actor::User,
         )
         .expect("gira");
-    assert!(matches!(esito.effect, CommandEffect::Done));
+    assert!(matches!(outcome.effect, CommandEffect::Done));
     assert!(ws.documents().is_empty());
 }

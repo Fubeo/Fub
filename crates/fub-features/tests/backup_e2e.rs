@@ -54,7 +54,7 @@ impl Vault {
     }
 }
 
-fn titoli(tree: &UiNode) -> Vec<String> {
+fn titles(tree: &UiNode) -> Vec<String> {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         match &node.kind {
             UiKind::ListItem { title, .. } => out.push(format!("{title}")),
@@ -69,7 +69,7 @@ fn titoli(tree: &UiNode) -> Vec<String> {
 }
 
 #[test]
-fn backup_e_restore_di_una_nota_cancellata() {
+fn backup_and_restore_deleted_notes() {
     let vault = Vault::new();
     vault.put("Inbox/a.md", "# A\n");
     vault.put("b.md", "# B\n");
@@ -84,8 +84,8 @@ fn backup_e_restore_di_una_nota_cancellata() {
     .expect("backup");
 
     let tree = ws.render_view(&ViewInstance::only(BACKUP_VIEW)).unwrap();
-    let titoli = titoli(&tree);
-    assert!(titoli.iter().any(|t| t.contains("2 note")), "{titoli:?}");
+    let titles = titles(&tree);
+    assert!(titles.iter().any(|t| t.contains("2 note")), "{titles:?}");
 
     ws.delete_document(&DocId::new("Inbox/a.md"))
         .expect("cestina");
@@ -94,7 +94,7 @@ fn backup_e_restore_di_una_nota_cancellata() {
         "cestinata"
     );
 
-    let id = titoli
+    let id = titles
         .iter()
         .find_map(|t| t.split_whitespace().next().map(str::to_string))
         .expect("id snapshot");
@@ -113,7 +113,7 @@ fn backup_e_restore_di_una_nota_cancellata() {
 }
 
 #[test]
-fn dry_run_non_scrive() {
+fn dry_run_not_writes() {
     let vault = Vault::new();
     vault.put("a.md", "# A\n");
     let mut ws = vault.open();
@@ -125,15 +125,15 @@ fn dry_run_non_scrive() {
     )
     .expect("dry_run");
     let tree = ws.render_view(&ViewInstance::only(BACKUP_VIEW)).unwrap();
-    let titoli = titoli(&tree);
+    let titles = titles(&tree);
     assert!(
-        titoli.is_empty(),
-        "dry-run non deve lasciare snapshot: {titoli:?}"
+        titles.is_empty(),
+        "dry-run non deve lasciare snapshot: {titles:?}"
     );
 }
 
 #[test]
-fn i_comandi_sono_nel_registro() {
+fn the_commands_are_in_the_record() {
     let vault = Vault::new();
     let ws = vault.open();
     let ids: Vec<String> = ws.commands().into_iter().map(|c| c.id).collect();

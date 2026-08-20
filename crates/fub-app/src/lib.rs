@@ -35,7 +35,7 @@ use fub_abi::settings::SettingValue;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
-use fub_host::{doc_id, Consegna, EventSink, Host};
+use fub_host::{doc_id, Delivery, EventSink, Host};
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -80,19 +80,19 @@ pub struct OpenVaults {
 struct WebviewEvents(std::sync::OnceLock<AppHandle>);
 
 impl EventSink for WebviewEvents {
-    fn emit(&self, notice: &Notice) -> Consegna {
+    fn emit(&self, notice: &Notice) -> Delivery {
         let Some(app) = self.0.get() else {
             tracing::warn!(
                 target: "fub.app",
-                evento = ?notice.kind(),
-                "un evento è nato prima che il webview esistesse: nessuno lo vedrà, \
-                 e chi si abbona riceverà un Overflow appena l'uscita si apre"
+                event = ?notice.kind(),
+                "an event was born before the webview existed: nobody will see it, \
+                 and subscribers will get an Overflow as soon as the exit opens"
             );
-            return Consegna::Persa;
+            return Delivery::Dropped;
         };
         match app.emit("fub://event", notice) {
-            Ok(()) => Consegna::Fatta,
-            Err(e) => {
+            Ok(()) => Delivery::Done,
+            Err(and) => {
                 // Un notice che non attraversa l'IPC è un **bug del programma**,
                 // non un guasto d'ambiente: la forma è nostra, e `Event::Custom`
                 // porta un `serde_json::Value`, che si serializza sempre. Per
@@ -102,12 +102,12 @@ impl EventSink for WebviewEvents {
                 // conta.
                 tracing::error!(
                     target: "fub.app",
-                    evento = ?notice.kind(),
-                    errore = %e,
-                    "un evento non ha attraversato l'IPC: chi riceve resta indietro \
-                     di questo fatto e riconcilierà alla prossima consegna riuscita"
+                    event = ?notice.kind(),
+                    error = %and,
+                    "an event did not cross the IPC: the receiver falls behind by \
+                     this fact and will reconcile on the next successful delivery"
                 );
-                Consegna::Persa
+                Delivery::Dropped
             }
         }
     }
@@ -159,7 +159,7 @@ fn close_vault(host: State<Host>, path: String) -> Result<Vec<PluginError>, Plug
 /// frontend lo legge e apre il vault senza passare dal dialogo.
 #[tauri::command]
 fn initial_vault(host: State<Host>) -> Option<String> {
-    fub_host::initial_vault().or_else(|| host.ultimo_vault())
+    fub_host::initial_vault().or_else(|| host.last_vault())
 }
 
 /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di configurazione
@@ -174,8 +174,8 @@ fn initial_vault(host: State<Host>) -> Option<String> {
 /// consegna è garantita dall'ordine dell'IPC. Il secondo chiamante (un test, un
 /// altro frontend) trova la risposta già consumata: `None`.
 #[tauri::command]
-fn avviso_di_sessione(host: State<Host>) -> Option<fub_abi::Notice> {
-    host.avviso_di_sessione()
+fn session_notice(host: State<Host>) -> Option<fub_abi::Notice> {
+    host.session_notice()
 }
 
 // `list_documents` **non è più un comando** (§14.4). Era l'ultimo dato che la
@@ -263,7 +263,7 @@ fn save_draft(
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write()?;
     ws.save_draft(&doc_id(&id)?, &text, base.map(Revision::new))
-        .map_err(|e| PluginError::Internal(format!("bozza non scritta: {e}").into()))
+        .map_err(|and| PluginError::Internal(format!("draft not written: {and}").into()))
 }
 
 /// **Butta la bozza di un documento**: il buffer è tornato pulito, o l'utente ha
@@ -273,7 +273,7 @@ fn discard_draft(host: State<Host>, id: String, vault: Option<String>) -> Result
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write()?;
     ws.discard_draft(&doc_id(&id)?)
-        .map_err(|e| PluginError::Internal(format!("bozza non buttata: {e}").into()))
+        .map_err(|and| PluginError::Internal(format!("draft not discarded: {and}").into()))
 }
 
 // Le cinque azioni STRUTTURALI — crea, rinomina, cestina, ripristina, svuota —
@@ -374,7 +374,7 @@ fn render_view(
 ) -> Result<UiNode, PluginError> {
     let ws = host.workspace(vault.as_deref())?;
     let ws = ws.read()?;
-    ws.render_view(&istanza(view, instance, params))
+    ws.render_view(&view_instance(view, instance, params))
 }
 
 /// Consegna un'azione della UI al provider della view e restituisce il suo
@@ -400,7 +400,7 @@ fn view_action(
     let ws = host.workspace(vault.as_deref())?;
     let mut ws = ws.write()?;
     ws.view_action(
-        &istanza(view, instance, params),
+        &view_instance(view, instance, params),
         UiAction {
             action: ActionId(action),
             payload: payload.unwrap_or(serde_json::Value::Null),
@@ -410,7 +410,7 @@ fn view_action(
 }
 
 /// L'istanza che la shell nomina, con i due default dell'esemplare unico.
-fn istanza(
+fn view_instance(
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
@@ -515,7 +515,7 @@ fn query_index(
 fn cancel_job(host: State<Host>, id: String, vault: Option<String>) -> Result<(), PluginError> {
     let id = id
         .parse::<u64>()
-        .map_err(|_| PluginError::BadArgs(format!("identità di job non valida: `{id}`").into()))?;
+        .map_err(|_| PluginError::BadArgs(format!("invalid job id: `{id}`").into()))?;
     host.cancel_job(vault.as_deref(), JobId(id))
 }
 
@@ -679,7 +679,7 @@ fn set_view_state(
     // una scrittura su disco — per salvare uno scroll.
     let ws = ws.read()?;
     ws.set_view_state(SHELL_OWNER, SHELL_INSTANCE, &key, value)
-        .map_err(|e| PluginError::Io(e.into()))
+        .map_err(|and| PluginError::Io(and.into()))
 }
 
 /// Chi questo host sa montare, e chi è acceso in questo vault. Non è
@@ -763,7 +763,7 @@ pub fn run() {
     // posto dove andare (§17.3, decisione 0062). L'`Arc` torna qui e passa
     // all'host, perché è lo stesso su cui il montaggio cambierà il livello
     // leggendo le impostazioni.
-    let (levels, avviso) = fub_host::install_logging();
+    let (levels, warning) = fub_host::install_logging();
     // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
     // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
     // `WebviewEvents`).
@@ -781,7 +781,7 @@ pub fn run() {
         // della shell (§25.5).
         .manage(
             Host::installed()
-                .with_avviso_di_sessione(avviso)
+                .with_session_notice(warning)
                 .with_levels(levels)
                 .with_sink(sink),
         )
@@ -795,7 +795,7 @@ pub fn run() {
             list_vaults,
             set_current_vault,
             initial_vault,
-            avviso_di_sessione,
+            session_notice,
             read_document,
             write_document,
             save_draft,
@@ -828,7 +828,7 @@ pub fn run() {
             discard_keybindings,
         ])
         .build(tauri::generate_context!())
-        .expect("errore durante l'avvio di Fub")
+        .expect("error during Fub startup")
         // **Chi chiude sa che sta chiudendo** (§9.5). Il kernel non può saperlo:
         // non sa quando finisce un lotto, e finché l'unico chiamante di
         // `flush_indexes` era il callback del watcher, la durabilità di un
@@ -841,14 +841,14 @@ pub fn run() {
         // chiuderli.
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                for e in app.state::<Host>().close() {
+                for and in app.state::<Host>().close() {
                     // L'app sta uscendo: il ponte verso la shell sta morendo e
                     // non c'è nessuno che disegna un evento. Resta il log, che è
                     // ciò che il bundle diagnostico (§15.2) raccoglierà — e il
                     // fatto che un indice non si sia chiuso pulito è una
                     // diagnosi per chi sviluppa, non una cosa che l'utente può
                     // ancora riparare a schermo spento (0062).
-                    tracing::warn!(target: "fub.app", "chiusura del vault: {e}");
+                    tracing::warn!(target: "fub.app", "vault closure: {and}");
                 }
             }
         });

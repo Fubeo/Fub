@@ -110,7 +110,7 @@ fn documents(
     // È un costo di **selezione**, e resta; quello che non resta è che chi
     // seleziona debba anche *raccontare* ogni riga che sta per essere buttata —
     // vedi `Router::ask` e [`rehydrate`] (§21.9).
-    if sole_evaluator(indexes, matching.predicates()) == Some(Target::Core) {
+    if only_evaluator(indexes, matching.predicates()) == Some(Target::Core) {
         let index = indexes
             .at(Target::Core)
             .expect("il bersaglio viene dalla tabella delle rotte");
@@ -249,7 +249,7 @@ impl Router<'_> {
     /// Li richiede [`rehydrate`], quando le righe sono quelle vere.
     fn ask(&self, target: Target, matching: QueryExpr) -> Result<Matches, PluginError> {
         let index = self.indexes.at(target).ok_or_else(|| {
-            PluginError::Unserved("indice sparito dalla tabella".to_string().into())
+            PluginError::Unserved("index disappeared from the route table".to_string().into())
         })?;
         if matching
             .predicates()
@@ -284,7 +284,7 @@ impl QueryEvaluator for Router<'_> {
             .evaluators(&kind)
             .first()
             .ok_or_else(|| {
-                PluginError::Unserved(format!("nessuno sa valutare questa foglia: {kind:?}").into())
+                PluginError::Unserved(format!("nobody knows how to evaluate this leaf: {kind:?}").into())
             })?;
         self.ask(target, QueryExpr::of(predicate.clone()))
     }
@@ -293,7 +293,7 @@ impl QueryEvaluator for Router<'_> {
     /// questa clausola, gliela si consegna intera invece di ricomporla qui.
     fn clause(&self, clause: &QueryClause) -> Result<Matches, PluginError> {
         if clause.all.len() > 1 {
-            if let Some(target) = sole_evaluator(self.indexes, clause.predicates()) {
+            if let Some(target) = only_evaluator(self.indexes, clause.predicates()) {
                 return self.ask(
                     target,
                     QueryExpr {
@@ -335,7 +335,7 @@ fn default_clause<E: QueryEvaluator + ?Sized>(
 /// L'ordine è quello di registrazione, e l'indice del kernel è il primo: fra due
 /// che sanno rispondere la stessa cosa vince chi c'era prima, che è l'unica
 /// regola che non dipende da quale plugin è stato installato per ultimo.
-fn sole_evaluator<'a>(
+fn only_evaluator<'a>(
     indexes: &Indexes,
     predicates: impl Iterator<Item = &'a QueryPredicate>,
 ) -> Option<Target> {
@@ -418,7 +418,7 @@ fn can_evaluate(indexes: &Indexes, target: Target, predicate: &QueryPredicate) -
 
 fn describe(query: &IndexQuery) -> String {
     match query {
-        IndexQuery::Custom { ns, .. } => format!("estensione `{ns}` del canale dati"),
+        IndexQuery::Custom { ns, .. } => format!("`{ns}` extension of the data channel"),
         other => format!("{:?}", other.kind()),
     }
 }
@@ -458,7 +458,7 @@ pub(crate) fn explain(indexes: &Indexes, query: &IndexQuery) -> QueryPlan {
     if let Some(expr) = query.expression() {
         for clause in &expr.any {
             if clause.all.len() > 1 {
-                if let Some(target) = sole_evaluator(indexes, clause.predicates()) {
+                if let Some(target) = only_evaluator(indexes, clause.predicates()) {
                     steps.push(PlanStep {
                         what: clause
                             .predicates()

@@ -23,13 +23,13 @@ use fub_abi::ui::{ActionRef, UiAction, UiNode, ViewUpdate};
 
 pub const TEMPLATE_ID: &str = "fub.template";
 pub const TEMPLATE_VIEW: &str = "templates";
-pub const NOTE_FROM_TEMPLATE: &str = "note.from_template";
-pub const NOTE_DAILY: &str = "note.daily";
+pub const NOTES_FROM_TEMPLATE: &str = "note.from_template";
+pub const NOTES_DAILY: &str = "note.daily";
 
 const FOLDER_TEMPLATES: &str = "Templates";
 const FOLDER_DAILY: &str = "Daily";
 const DAILY_TEMPLATE: &str = "Templates/Daily.md";
-const ESTENSIONE: &str = "md";
+const EXTENSION: &str = "md";
 const TRASH: &str = "note.trash";
 
 const USE: &str = "use";
@@ -159,29 +159,29 @@ impl ViewProvider for TemplateView {
             return Ok(ViewUpdate::None);
         };
         match host.run_command(
-            NOTE_FROM_TEMPLATE,
+            NOTES_FROM_TEMPLATE,
             serde_json::json!({ TEMPLATE: template }),
         ) {
-            Ok(esito) => match esito.effect {
+            Ok(outcome) => match outcome.effect {
                 CommandEffect::Navigate { doc } => Ok(ViewUpdate::Navigate {
                     doc_id: doc.as_str().to_string(),
                 }),
                 _ => Ok(ViewUpdate::Replace { root: tree(host)? }),
             },
-            Err(e) => Ok(ViewUpdate::Replace {
-                root: UiNode::failed(Text::from(e.to_string()), None),
+            Err(and) => Ok(ViewUpdate::Replace {
+                root: UiNode::failed(Text::from(and.to_string()), None),
             }),
         }
     }
 }
 
 fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
-    let prefisso = format!("{FOLDER_TEMPLATES}/");
+    let prefix = format!("{FOLDER_TEMPLATES}/");
     let mut docs: Vec<DocId> = host
         .list_documents(None)?
         .items
         .into_iter()
-        .filter(|d| d.as_str().starts_with(&prefisso) && d.as_str().ends_with(".md"))
+        .filter(|d| d.as_str().starts_with(&prefix) && d.as_str().ends_with(".md"))
         .collect();
     docs.sort_by(|a, b| a.as_str().cmp(b.as_str()));
     if docs.is_empty() {
@@ -190,9 +190,9 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     Ok(UiNode::list(
         docs.into_iter()
             .map(|d| {
-                let titolo = nome_file(&d);
+                let title = file_name(&d);
                 UiNode::list_item(
-                    Text::from(titolo),
+                    Text::from(title),
                     Some(Text::from(d.as_str())),
                     Some(ActionRef::with(
                         USE,
@@ -210,12 +210,12 @@ pub struct TemplateCommands;
 impl CommandProvider for TemplateCommands {
     fn commands(&self) -> Vec<CommandSpec> {
         vec![
-            comando(NOTE_FROM_TEMPLATE)
-                .with_param(parametro(NOTE_FROM_TEMPLATE, TEMPLATE, ParamKind::Text).required())
-                .with_param(parametro(NOTE_FROM_TEMPLATE, NAME, ParamKind::Text))
+            command(NOTES_FROM_TEMPLATE)
+                .with_param(parameter(NOTES_FROM_TEMPLATE, TEMPLATE, ParamKind::Text).required())
+                .with_param(parameter(NOTES_FROM_TEMPLATE, NAME, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
-            comando(NOTE_DAILY)
-                .with_param(parametro(NOTE_DAILY, "date", ParamKind::Text))
+            command(NOTES_DAILY)
+                .with_param(parameter(NOTES_DAILY, "date", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
         ]
     }
@@ -228,21 +228,21 @@ impl CommandProvider for TemplateCommands {
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         match command {
-            NOTE_FROM_TEMPLATE => from_template(Args::new(&args), mode, host),
-            NOTE_DAILY => daily(Args::new(&args), mode, host),
+            NOTES_FROM_TEMPLATE => from_template(Args::new(&args), mode, host),
+            NOTES_DAILY => daily(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
 }
 
-fn comando(id: &str) -> CommandSpec {
+fn command(id: &str) -> CommandSpec {
     CommandSpec::new(id, Text::key(format!("{id}.title")))
         .describing(Text::key(format!("{id}.desc")))
 }
 
-fn parametro(comando: &str, name: &str, kind: ParamKind) -> ParamSpec {
-    ParamSpec::new(name, Text::key(format!("{comando}.{name}.title")), kind)
-        .describing(Text::key(format!("{comando}.{name}.desc")))
+fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
+    ParamSpec::new(name, Text::key(format!("{command}.{name}.title")), kind)
+        .describing(Text::key(format!("{command}.{name}.desc")))
 }
 
 fn from_template(
@@ -255,29 +255,29 @@ fn from_template(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_TEMPLATE)))?;
-    let tpl = DocId::new(con_estensione(template));
-    let titolo = args
+    let tpl = DocId::new(with_extension(template));
+    let title = args
         .text(NAME)
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .unwrap_or_else(|| nome_file(&tpl));
-    if titolo.is_empty() {
+        .unwrap_or_else(|| file_name(&tpl));
+    if title.is_empty() {
         return Err(PluginError::BadArgs(Text::message(
             E_EMPTY_TEMPLATE,
             vec![Arg::text("doc", tpl.as_str())],
         )));
     }
-    let id = host.free_name(&DocId::new(con_estensione(&titolo)));
+    let id = host.free_name(&DocId::new(with_extension(&title)));
     let summary = Text::message(P_FROM, vec![Arg::text(TEMPLATE, tpl.as_str())]);
     if mode.is_dry_run() {
-        return Ok(piano(summary, id));
+        return Ok(plan(summary, id));
     }
     let grezzo = host.read_document(&tpl)?;
-    let data = oggi(host);
-    let corpo = espandi(&grezzo, &nome_file(&id), &data);
-    host.create_document(&id, &corpo)?;
-    Ok(creata(
+    let data = today(host);
+    let body = expand(&grezzo, &file_name(&id), &data);
+    host.create_document(&id, &body)?;
+    Ok(created(
         Text::message(
             D_FROM,
             vec![
@@ -300,33 +300,33 @@ fn daily(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .unwrap_or_else(|| oggi(host));
-    let id = DocId::new(format!("{FOLDER_DAILY}/{data}.{ESTENSIONE}"));
+        .unwrap_or_else(|| today(host));
+    let id = DocId::new(format!("{FOLDER_DAILY}/{data}.{EXTENSION}"));
     let summary = Text::message(P_DAILY, vec![Arg::text("date", &data)]);
     if mode.is_dry_run() {
-        return Ok(piano(summary, id));
+        return Ok(plan(summary, id));
     }
-    let esiste = host.list_documents(None)?.items.iter().any(|d| d == &id);
-    if esiste {
+    let exists = host.list_documents(None)?.items.iter().any(|d| d == &id);
+    if exists {
         return Ok(CommandOutcome::notify(Text::message(
             D_DAILY_OPEN,
             vec![Arg::text("date", &data)],
         ))
         .with_effect(CommandEffect::Navigate { doc: id }));
     }
-    let corpo = match host.read_document(&DocId::new(DAILY_TEMPLATE)) {
-        Ok(grezzo) => espandi(&grezzo, &data, &data),
+    let body = match host.read_document(&DocId::new(DAILY_TEMPLATE)) {
+        Ok(grezzo) => expand(&grezzo, &data, &data),
         Err(_) => String::new(),
     };
-    host.create_document(&id, &corpo)?;
-    Ok(creata(
+    host.create_document(&id, &body)?;
+    Ok(created(
         Text::message(D_DAILY, vec![Arg::text("date", &data)]),
         Text::message(U_DAILY, vec![Arg::text("date", &data)]),
         id,
     ))
 }
 
-fn creata(notify: Text, undo: Text, id: DocId) -> CommandOutcome {
+fn created(notify: Text, undo: Text, id: DocId) -> CommandOutcome {
     CommandOutcome::notify(notify)
         .undoable(Undo::by_command(
             undo,
@@ -336,13 +336,13 @@ fn creata(notify: Text, undo: Text, id: DocId) -> CommandOutcome {
         .with_effect(CommandEffect::Navigate { doc: id })
 }
 
-fn piano(summary: Text, id: DocId) -> CommandOutcome {
+fn plan(summary: Text, id: DocId) -> CommandOutcome {
     CommandOutcome::done().with_effect(CommandEffect::Plan(
         CommandPlan::of_edits(summary, Vec::new()).with_doc(id),
     ))
 }
 
-pub(crate) fn espandi(src: &str, title: &str, date: &str) -> String {
+pub(crate) fn expand(src: &str, title: &str, date: &str) -> String {
     // La via breve: nessun segnaposto, nessuna copia. Le `replace` a
     // cascata restano per il caso pieno — una sostituzione può contenere
     // un segnaposto successivo, e una passata sola non lo riprodurrebbe.
@@ -354,7 +354,7 @@ pub(crate) fn espandi(src: &str, title: &str, date: &str) -> String {
         .replace("{{date}}", date)
 }
 
-fn oggi(host: &dyn ReadApi) -> String {
+fn today(host: &dyn ReadApi) -> String {
     let locale = host.user_locale();
     let civil = locale.to_civil_millis(host.now_unix_millis());
     let days = civil.div_euclid(86_400_000);
@@ -362,17 +362,17 @@ fn oggi(host: &dyn ReadApi) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-fn nome_file(id: &DocId) -> String {
+fn file_name(id: &DocId) -> String {
     let file = id.0.rsplit('/').next().unwrap_or(&id.0);
     file.strip_suffix(".md").unwrap_or(file).to_string()
 }
 
-fn con_estensione(name: &str) -> String {
-    let ultimo = name.rsplit('/').next().unwrap_or(name);
-    if ultimo.contains('.') {
+fn with_extension(name: &str) -> String {
+    let last = name.rsplit('/').next().unwrap_or(name);
+    if last.contains('.') {
         name.to_string()
     } else {
-        format!("{name}.{ESTENSIONE}")
+        format!("{name}.{EXTENSION}")
     }
 }
 
@@ -381,8 +381,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn espande_le_tre_variabili() {
-        let s = espandi(
+    fn espande_the_three_variabili() {
+        let s = expand(
             "ciao {{title}} il {{date}} ({{name}})",
             "Nota",
             "2026-08-15",

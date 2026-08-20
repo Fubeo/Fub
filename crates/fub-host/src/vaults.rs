@@ -32,7 +32,7 @@
 //! `last_opened` ancora sul disco, e il registro è la memoria di recency che le
 //! lo dà.
 
-use crate::custodia::Custodia;
+use crate::custody::Custody;
 use std::collections::BTreeMap;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -49,7 +49,7 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 /// Il tetto è dichiarato e non silenzioso: chi cade fuori esce dall'elenco, e
 /// l'unica cosa che si perde è la comodità di ritrovarlo in un click — il vault
 /// è sul disco dov'era.
-const RECENTI: usize = 20;
+const RECENT: usize = 20;
 
 /// Un vault che questa macchina conosce.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -123,7 +123,7 @@ pub struct VaultRegistry {
     /// riscriverebbe il file intero da un elenco vuoto, e i preferiti di chi ha
     /// sbagliato una virgola sparirebbero senza che nessuno glielo dica.
     readable: bool,
-    entries: Custodia<Vec<VaultEntry>>,
+    entries: Custody<Vec<VaultEntry>>,
 }
 
 impl VaultRegistry {
@@ -133,13 +133,13 @@ impl VaultRegistry {
     pub fn open(path: &Utf8Path) -> (Self, Option<String>) {
         let (entries, warning) = match load(path) {
             Ok(entries) => (entries, None),
-            Err(e) => (Vec::new(), Some(e)),
+            Err(and) => (Vec::new(), Some(and)),
         };
         (
             VaultRegistry {
                 path: Some(path.to_owned()),
                 readable: warning.is_none(),
-                entries: Custodia::new("il registro dei vault", entries),
+                entries: Custody::new("il registro dei vault", entries),
             },
             warning,
         )
@@ -150,7 +150,7 @@ impl VaultRegistry {
         VaultRegistry {
             path: None,
             readable: true,
-            entries: Custodia::vuota("il registro dei vault"),
+            entries: Custody::empty("il registro dei vault"),
         }
     }
 
@@ -161,10 +161,10 @@ impl VaultRegistry {
         // Nessun canale d'errore in questa firma (decisione 0120): un registro
         // avvelenato risponde «non ne conosco», e la porta ha già scritto la
         // riga che dice perché. È un elenco di comodità, non un dato del vault.
-        let Ok(guardia) = self.entries.read() else {
+        let Ok(guard) = self.entries.read() else {
             return Vec::new();
         };
-        let mut entries = guardia.clone();
+        let mut entries = guard.clone();
         entries.sort_by(|a, b| {
             b.favorite
                 .cmp(&a.favorite)
@@ -182,11 +182,11 @@ impl VaultRegistry {
     /// il dialogo di scelta, questa ordina solo per `last_opened` (a parità per
     /// `root`, come là): la domanda è «quale è stato usato per ultimo», e un
     /// appunto non è un uso.
-    pub fn in_ordine_di_recenza(&self) -> Vec<VaultEntry> {
-        let Ok(guardia) = self.entries.read() else {
+    pub fn in_recency_order(&self) -> Vec<VaultEntry> {
+        let Ok(guard) = self.entries.read() else {
             return Vec::new();
         };
-        let mut entries = guardia.clone();
+        let mut entries = guard.clone();
         entries.sort_by(|a, b| b.last_opened.cmp(&a.last_opened).then(a.root.cmp(&b.root)));
         entries
     }
@@ -199,8 +199,8 @@ impl VaultRegistry {
     /// La voce c'è anche se la cartella non esiste più: chi la guarda —
     /// [`Host::ultimo_vault`](crate::Host::ultimo_vault) — scorre i candidati e
     /// salta chi non è più sul disco.
-    pub fn ultimo_aperto(&self) -> Option<VaultEntry> {
-        self.in_ordine_di_recenza().into_iter().next()
+    pub fn last_opened(&self) -> Option<VaultEntry> {
+        self.in_recency_order().into_iter().next()
     }
 
     /// Questa radice è in elenco **esattamente sotto questo nome**?
@@ -212,14 +212,14 @@ impl VaultRegistry {
     /// La domanda è deliberatamente letterale e non «sono la stessa cartella»:
     /// per rispondere a quella servirebbe il disco, cioè la cosa che qui non
     /// c'è.
-    pub fn conosce(&self, root: &Utf8Path) -> bool {
+    pub fn knows(&self, root: &Utf8Path) -> bool {
         self.entries
             .read()
-            .is_ok_and(|entries| entries.iter().any(|e| e.root == root.as_str()))
+            .is_ok_and(|entries| entries.iter().any(|and| and.root == root.as_str()))
     }
 
     /// Un vault è stato aperto: entra nell'elenco, o risale in cima.
-    pub fn note_opened(&self, root: &Utf8Path, now: u64) -> Result<(), PluginError> {
+    pub fn notes_opened(&self, root: &Utf8Path, now: u64) -> Result<(), PluginError> {
         self.update(root, |entry| entry.last_opened = now)
     }
 
@@ -237,8 +237,8 @@ impl VaultRegistry {
         };
         entries
             .iter()
-            .find(|e| e.root == root.as_str())
-            .map(|e| e.keys_seen.clone())
+            .find(|and| and.root == root.as_str())
+            .map(|and| and.keys_seen.clone())
             .unwrap_or_default()
     }
 
@@ -248,7 +248,7 @@ impl VaultRegistry {
     /// conta: una scorciatoia tolta dal file del vault deve uscire anche da qui,
     /// o il giorno che qualcuno ne rimette una uguale la troverebbe già
     /// approvata da una decisione presa su un altro valore.
-    pub fn note_keys_seen(
+    pub fn notes_keys_seen(
         &self,
         root: &Utf8Path,
         keys: BTreeMap<String, String>,
@@ -299,8 +299,8 @@ impl VaultRegistry {
     ///
     /// Chi passa una forma sola non paga niente: `retain` guarda una stringa in
     /// più per voce.
-    pub fn forget(&self, forme: &[Utf8PathBuf]) -> Result<(), PluginError> {
-        self.muta(|next| next.retain(|e| !forme.iter().any(|f| f.as_str() == e.root)))
+    pub fn forget(&self, forms: &[Utf8PathBuf]) -> Result<(), PluginError> {
+        self.mutate(|next| next.retain(|and| !forms.iter().any(|f| f.as_str() == and.root)))
     }
 
     /// Come per lo store di configurazione: **su disco prima, in memoria dopo**.
@@ -309,8 +309,8 @@ impl VaultRegistry {
     /// avrebbe modo di saperlo.
     fn update(&self, root: &Utf8Path, f: impl FnOnce(&mut VaultEntry)) -> Result<(), PluginError> {
         let root = root.as_str();
-        self.muta(|next| {
-            match next.iter_mut().find(|e| e.root == root) {
+        self.mutate(|next| {
+            match next.iter_mut().find(|and| and.root == root) {
                 Some(entry) => f(entry),
                 None => {
                     let mut entry = VaultEntry {
@@ -338,21 +338,21 @@ impl VaultRegistry {
             // Il tetto si applica **dopo** l'aggiornamento e ai soli non
             // preferiti, così l'ultimo aperto non può mai essere quello che
             // esce.
-            let mut recenti: Vec<usize> = next
+            let mut recent: Vec<usize> = next
                 .iter()
                 .enumerate()
-                .filter(|(_, e)| !e.favorite)
-                .map(|(i, _)| i)
+                .filter(|(_, and)| !and.favorite)
+                .map(|(the, _)| the)
                 .collect();
-            if recenti.len() > RECENTI {
-                recenti.sort_by_key(|&i| std::cmp::Reverse(next[i].last_opened));
-                let da_togliere: std::collections::BTreeSet<usize> =
-                    recenti.into_iter().skip(RECENTI).collect();
-                let mut i = 0;
+            if recent.len() > RECENT {
+                recent.sort_by_key(|&the| std::cmp::Reverse(next[the].last_opened));
+                let to_remove: std::collections::BTreeSet<usize> =
+                    recent.into_iter().skip(RECENT).collect();
+                let mut the = 0;
                 next.retain(|_| {
-                    let tenere = !da_togliere.contains(&i);
-                    i += 1;
-                    tenere
+                    let keep = !to_remove.contains(&the);
+                    the += 1;
+                    keep
                 });
             }
         })
@@ -364,40 +364,40 @@ impl VaultRegistry {
     /// installazioni che ricompongono l'elenco dalla propria copia non si
     /// cancellano solo l'ultimo vault aperto dall'altra — si cancellano i
     /// **preferiti**, che sono una scelta e non una traccia. Quindi la
-    /// mutazione si applica all'elenco riletto sotto lock
+    /// mutazione si applica all'elenco reopened sotto lock
     /// ([`fub_kernel::update_atomic`],
     /// [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)),
     /// e il tetto si applica dopo la fusione: se l'altra installazione ha
     /// aperto dei vault, quelli sono nell'elenco e il tetto li conta.
-    fn muta(&self, f: impl FnOnce(&mut Vec<VaultEntry>)) -> Result<(), PluginError> {
+    fn mutate(&self, f: impl FnOnce(&mut Vec<VaultEntry>)) -> Result<(), PluginError> {
         let mut entries = self.entries.write()?;
         let Some(path) = &self.path else {
             f(&mut entries);
             return Ok(());
         };
-        self.rifiuto(path)?;
+        self.refusal(path)?;
         // L'aggiornamento parla una lingua sola (`String`) e qui gli esiti sono
         // due: il mondo — un disco pieno, un file che non si rilegge — e un
         // difetto nostro, cioè una struttura che non si serializza. La seconda
         // si riconosce da dove nasce, e resta un `Internal` come prima.
-        let mut difetto = None;
+        let mut defect = None;
         *entries = fub_kernel::update_atomic(
             path,
             || load(path),
-            |disco| {
-                f(disco);
-                encode(disco).inspect_err(|e| difetto = Some(e.clone()))
+            |disk| {
+                f(disk);
+                encode(disk).inspect_err(|and| defect = Some(and.clone()))
             },
         )
-        .map_err(|e| match difetto {
+        .map_err(|and| match defect {
             Some(d) => PluginError::Internal(d.into()),
-            None => PluginError::Io(e.into()),
+            None => PluginError::Io(and.into()),
         })?;
         Ok(())
     }
 
     /// Il rifiuto di riscrivere un file che all'apertura non si è letto.
-    fn rifiuto(&self, path: &Utf8Path) -> Result<(), PluginError> {
+    fn refusal(&self, path: &Utf8Path) -> Result<(), PluginError> {
         if !self.readable {
             // `Io` e non `PermissionDenied`: nessuno ha negato un permesso, è un
             // file che non si può usare — e il verbo che chi legge deve leggere
@@ -426,10 +426,10 @@ fn load(path: &Utf8Path) -> Result<Vec<VaultEntry>, String> {
                  copia di Fub legge fino alla {SCHEMA_VERSION}",
                 file.version
             )),
-            Err(e) => Err(format!("{path} non è un vaults.json valido: {e}")),
+            Err(and) => Err(format!("{path} non è un vaults.json valido: {and}")),
         },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
-        Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
+        Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(and) => Err(format!("non riesco a leggere {path}: {and}")),
     }
 }
 
@@ -438,7 +438,7 @@ fn encode(entries: &[VaultEntry]) -> Result<Vec<u8>, String> {
         version: SCHEMA_VERSION,
         vaults: entries.to_vec(),
     };
-    serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())
+    serde_json::to_vec_pretty(&file).map_err(|and| and.to_string())
 }
 
 #[cfg(test)]
@@ -446,35 +446,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn un_vault_riaperto_risale_in_cima_senza_duplicarsi() {
+    fn a_vault_reopened_goes_back_in_top_without_duplicates() {
         let reg = VaultRegistry::in_memory();
-        reg.note_opened(Utf8Path::new("/a"), 100).unwrap();
-        reg.note_opened(Utf8Path::new("/b"), 200).unwrap();
-        reg.note_opened(Utf8Path::new("/a"), 300).unwrap();
+        reg.notes_opened(Utf8Path::new("/a"), 100).unwrap();
+        reg.notes_opened(Utf8Path::new("/b"), 200).unwrap();
+        reg.notes_opened(Utf8Path::new("/a"), 300).unwrap();
         let list = reg.list();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].root, "/a");
     }
 
     #[test]
-    fn i_preferiti_stanno_in_cima_e_non_scadono() {
+    fn the_favorites_are_in_top_and_not_expire() {
         let reg = VaultRegistry::in_memory();
-        reg.note_opened(Utf8Path::new("/vecchio"), 1).unwrap();
+        reg.notes_opened(Utf8Path::new("/vecchio"), 1).unwrap();
         reg.set_favorite(Utf8Path::new("/vecchio"), true).unwrap();
-        for i in 0..(RECENTI + 5) {
-            reg.note_opened(Utf8Path::new(&format!("/v{i}")), 100 + i as u64)
+        for the in 0..(RECENT + 5) {
+            reg.notes_opened(Utf8Path::new(&format!("/v{the}")), 100 + the as u64)
                 .unwrap();
         }
         let list = reg.list();
         assert_eq!(list[0].root, "/vecchio", "il preferito è in cima");
         assert_eq!(
             list.len(),
-            RECENTI + 1,
+            RECENT + 1,
             "il tetto vale per i recenti, non per i preferiti"
         );
         // E chi esce è il più vecchio fra i recenti, mai l'ultimo aperto.
-        assert!(list.iter().any(|e| e.root == format!("/v{}", RECENTI + 4)));
-        assert!(!list.iter().any(|e| e.root == "/v0"));
+        assert!(list.iter().any(|and| and.root == format!("/v{}", RECENT + 4)));
+        assert!(!list.iter().any(|and| and.root == "/v0"));
     }
 
     /// **Ciò che l'utente ha appena scelto non nasce già il più vecchio di
@@ -488,10 +488,10 @@ mod tests {
     /// dall'elenco, e finché ci restava stava in fondo, sotto quelli aperti
     /// l'ultima volta un anno fa.
     #[test]
-    fn una_voce_nata_da_un_gesto_non_e_gia_la_piu_vecchia() {
+    fn a_entry_born_from_a_gesture_not_and_already_the_more_old() {
         let reg = VaultRegistry::in_memory();
-        for i in 0..RECENTI {
-            reg.note_opened(Utf8Path::new(&format!("/v{i}")), 100 + i as u64)
+        for the in 0..RECENT {
+            reg.notes_opened(Utf8Path::new(&format!("/v{the}")), 100 + the as u64)
                 .unwrap();
         }
 
@@ -503,33 +503,33 @@ mod tests {
         .unwrap();
 
         let list = reg.list();
-        assert_eq!(list.len(), RECENTI, "il tetto vale come prima");
+        assert_eq!(list.len(), RECENT, "il tetto vale come prima");
         assert_eq!(
             list[0].root, "/chiavetta",
             "e chi è appena stato scelto è il più recente, non il più vecchio"
         );
         assert!(
-            !list.iter().any(|e| e.root == "/v0"),
+            !list.iter().any(|and| and.root == "/v0"),
             "chi esce è il recente più vecchio davvero"
         );
 
         // Il secondo gesto lo eredita: la data non sta nel corpo di `set_look`
         // ma nel punto in cui una voce nasce.
-        let mut chiavi = BTreeMap::new();
-        chiavi.insert("mod+k".to_string(), "vault.cerca".to_string());
-        reg.note_keys_seen(Utf8Path::new("/terza"), chiavi).unwrap();
-        let terza = reg
+        let mut keys = BTreeMap::new();
+        keys.insert("mod+k".to_string(), "vault.cerca".to_string());
+        reg.notes_keys_seen(Utf8Path::new("/terza"), keys).unwrap();
+        let third = reg
             .list()
             .into_iter()
-            .find(|e| e.root == "/terza")
+            .find(|and| and.root == "/terza")
             .expect("la voce c'è");
-        assert!(terza.last_opened > 0, "e nemmeno questa nasce all'epoca");
+        assert!(third.last_opened > 0, "e nemmeno questa nasce all'epoca");
     }
 
     #[test]
-    fn dimenticare_toglie_dall_elenco_e_basta() {
+    fn forget_removes_from_the_list_and_enough() {
         let reg = VaultRegistry::in_memory();
-        reg.note_opened(Utf8Path::new("/a"), 1).unwrap();
+        reg.notes_opened(Utf8Path::new("/a"), 1).unwrap();
         reg.forget(&[Utf8PathBuf::from("/a")]).unwrap();
         assert!(reg.list().is_empty());
     }
@@ -538,29 +538,29 @@ mod tests {
     /// dimentica ne conosce due della stessa cartella e non sa quale sia
     /// scritta, e nessuna delle due deve poter mancare il bersaglio.
     #[test]
-    fn dimenticare_prende_la_radice_in_ogni_forma_in_cui_e_scritta() {
+    fn forget_takes_the_root_in_every_form_in_which_and_written() {
         let reg = VaultRegistry::in_memory();
-        reg.note_opened(Utf8Path::new("/private/a"), 1).unwrap();
-        reg.note_opened(Utf8Path::new("/b"), 2).unwrap();
+        reg.notes_opened(Utf8Path::new("/private/a"), 1).unwrap();
+        reg.notes_opened(Utf8Path::new("/b"), 2).unwrap();
         reg.forget(&[Utf8PathBuf::from("/a"), Utf8PathBuf::from("/private/a")])
             .unwrap();
-        let restano: Vec<String> = reg.list().into_iter().map(|e| e.root).collect();
-        assert_eq!(restano, vec!["/b".to_string()], "e solo quella radice");
+        let remain: Vec<String> = reg.list().into_iter().map(|and| and.root).collect();
+        assert_eq!(remain, vec!["/b".to_string()], "e solo quella radice");
     }
 
     #[test]
-    fn il_registro_sopravvive_a_un_giro_su_disco() {
+    fn the_record_survives_a_a_round_on_disk() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
         let (reg, warning) = VaultRegistry::open(&path);
         assert!(warning.is_none(), "un file che non c'è non è un errore");
-        reg.note_opened(Utf8Path::new("/a"), 42).unwrap();
+        reg.notes_opened(Utf8Path::new("/a"), 42).unwrap();
         reg.set_look(Utf8Path::new("/a"), Some("📓".into()), "Diario".into())
             .unwrap();
 
-        let (riletto, warning) = VaultRegistry::open(&path);
+        let (reopened, warning) = VaultRegistry::open(&path);
         assert!(warning.is_none());
-        let list = riletto.list();
+        let list = reopened.list();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].icon.as_deref(), Some("📓"));
         assert_eq!(list[0].name, "Diario");
@@ -577,23 +577,23 @@ mod tests {
     /// letto una volta e da lì tiene la sua copia
     /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
     #[test]
-    fn due_installazioni_non_si_cancellano_i_vault() {
+    fn two_installations_not_is_delete_the_vault() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
 
-        let (prima, _) = VaultRegistry::open(&path);
-        let (seconda, _) = VaultRegistry::open(&path);
+        let (before, _) = VaultRegistry::open(&path);
+        let (second, _) = VaultRegistry::open(&path);
 
-        prima.note_opened(Utf8Path::new("/diario"), 1).unwrap();
-        prima.set_favorite(Utf8Path::new("/diario"), true).unwrap();
-        seconda.note_opened(Utf8Path::new("/lavoro"), 2).unwrap();
+        before.notes_opened(Utf8Path::new("/diario"), 1).unwrap();
+        before.set_favorite(Utf8Path::new("/diario"), true).unwrap();
+        second.notes_opened(Utf8Path::new("/lavoro"), 2).unwrap();
 
-        let (terza, avviso) = VaultRegistry::open(&path);
-        assert!(avviso.is_none(), "{avviso:?}");
-        let roots: Vec<String> = terza.list().into_iter().map(|e| e.root).collect();
+        let (third, warning) = VaultRegistry::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        let roots: Vec<String> = third.list().into_iter().map(|and| and.root).collect();
         assert_eq!(roots, vec!["/diario".to_string(), "/lavoro".to_string()]);
         assert!(
-            terza.list()[0].favorite,
+            third.list()[0].favorite,
             "e il preferito della prima è ancora un preferito"
         );
     }
@@ -615,31 +615,31 @@ mod tests {
     /// chi domani ricomponesse l'elenco qui dentro leggerebbe «i vault non si
     /// cancellano» e non «i tasti visti non si perdono».
     #[test]
-    fn due_installazioni_che_imparano_un_tasto_non_se_ne_perdono_uno() {
+    fn two_installations_that_learn_a_key_not_if_of_it_lose_a() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
 
-        let (prima, _) = VaultRegistry::open(&path);
-        let (seconda, _) = VaultRegistry::open(&path);
+        let (before, _) = VaultRegistry::open(&path);
+        let (second, _) = VaultRegistry::open(&path);
 
-        let visto =
-            |tasto: &str, comando: &str| BTreeMap::from([(tasto.to_string(), comando.to_string())]);
-        prima
-            .note_keys_seen(Utf8Path::new("/diario"), visto("mod+k", "vault.cerca"))
+        let seen =
+            |key: &str, command: &str| BTreeMap::from([(key.to_string(), command.to_string())]);
+        before
+            .notes_keys_seen(Utf8Path::new("/diario"), seen("mod+k", "vault.cerca"))
             .unwrap();
-        seconda
-            .note_keys_seen(Utf8Path::new("/lavoro"), visto("mod+j", "vault.salta"))
+        second
+            .notes_keys_seen(Utf8Path::new("/lavoro"), seen("mod+j", "vault.salta"))
             .unwrap();
 
-        let (terza, avviso) = VaultRegistry::open(&path);
-        assert!(avviso.is_none(), "{avviso:?}");
-        let visti: Vec<(String, Vec<String>)> = terza
+        let (third, warning) = VaultRegistry::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        let seen: Vec<(String, Vec<String>)> = third
             .list()
             .into_iter()
-            .map(|e| (e.root, e.keys_seen.into_keys().collect()))
+            .map(|and| (and.root, and.keys_seen.into_keys().collect()))
             .collect();
         assert_eq!(
-            visti,
+            seen,
             vec![
                 ("/diario".to_string(), vec!["mod+k".to_string()]),
                 ("/lavoro".to_string(), vec!["mod+j".to_string()]),
@@ -663,9 +663,9 @@ mod tests {
     /// toccare il nome. Il banco sta qui perché nessuno rimetta un `Option` per
     /// «lasciarlo com'era».
     #[test]
-    fn togliere_il_nome_scelto_torna_al_nome_della_cartella() {
+    fn remove_the_name_selected_returns_to_the_name_of_the_folder() {
         let reg = VaultRegistry::in_memory();
-        reg.note_opened(Utf8Path::new("/a"), 1).unwrap();
+        reg.notes_opened(Utf8Path::new("/a"), 1).unwrap();
         reg.set_look(Utf8Path::new("/a"), Some("📓".into()), "Diario".into())
             .unwrap();
         assert_eq!(reg.list()[0].name, "Diario");
@@ -678,7 +678,7 @@ mod tests {
     }
 
     #[test]
-    fn un_file_rotto_non_impedisce_di_aprire_un_vault() {
+    fn a_file_broken_not_prevents_of_open_a_vault() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
         std::fs::write(&path, "{ questo non è json").unwrap();
@@ -692,21 +692,21 @@ mod tests {
     /// aperto riscriverebbe il file intero da un elenco vuoto, e i preferiti di
     /// chi ha sbagliato una virgola sparirebbero senza che nessuno glielo dica.
     #[test]
-    fn un_file_rotto_non_lo_riscrive_il_primo_vault_aperto() {
+    fn a_file_broken_not_the_rewrites_the_first_vault_open() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
-        let rotto = "{ questo non è json";
-        std::fs::write(&path, rotto).unwrap();
+        let broken = "{ questo non è json";
+        std::fs::write(&path, broken).unwrap();
         let (reg, _) = VaultRegistry::open(&path);
 
-        let e = reg
-            .note_opened(Utf8Path::new("/vault"), 1)
+        let and = reg
+            .notes_opened(Utf8Path::new("/vault"), 1)
             .expect_err("scrivere su un registro che non si è letto è un rifiuto");
         assert!(
-            matches!(e, PluginError::Io(_)),
-            "un registro che non si è letto è il mondo, non un bug: {e}"
+            matches!(and, PluginError::Io(_)),
+            "un registro che non si è letto è il mondo, non un bug: {and}"
         );
-        assert!(e.to_string().contains("non lo sovrascrive"), "{e}");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), rotto);
+        assert!(and.to_string().contains("non lo sovrascrive"), "{and}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
     }
 }

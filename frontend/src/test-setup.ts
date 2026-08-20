@@ -11,7 +11,7 @@
 // diverse a persone diverse.
 //
 // Qui la si fissa, una volta, per tutta la suite: **l'italiano**, che è la
-// lingua in cui questa shell è scritta e quella in cui i presidi scrivono le
+// lingua in cui questa shell è scritto e quella in cui i presidi scrivono le
 // proprie attese. Chi vuole provare *la traduzione* — che è un'altra domanda —
 // non passa da qui: passa da `catalogoPer`, che prende la lingua come
 // argomento apposta (`i18n/strings.test.ts`).

@@ -3,7 +3,7 @@
 // Prima qui c'era una riga sola — `import { oneDark }` — e sembrava la scelta
 // più economica possibile. Costava però una cosa che non si vedeva: i colori
 // della superficie del documento erano dichiarati **due volte**, una in
-// `theme/serie/foglio-scuro.css` (dove li leggono la modalità Lettura e la live
+// `theme/serie/sheet-dark.css` (dove li leggono la modalità Lettura e la vivi
 // una dentro il pacchetto `@codemirror/theme-one-dark` (dove li legge la
 // modalità Sorgente). Le due liste erano uguali perché qualcuno le aveva
 // ricopiate a mano, e il commento accanto ai token lo diceva: *«i valori
@@ -12,7 +12,7 @@
 // tocca un valore da un lato solo.
 //
 // Con un tema chiaro la cosa smetteva di essere teorica: `oneDark` è scuro per
-// definizione, e non c'è nessun valore da cambiare in `theme/serie/foglio-scuro.css`
+// definizione, e non c'è nessun valore da cambiare in `theme/serie/sheet-dark.css`
 // schiarirlo. O si montava un secondo pacchetto — e allora le liste diventavano
 // tre — o i colori venivano da dove già stanno.
 //
@@ -23,14 +23,14 @@
 // sulla radice e i colori seguono, documento e cronologia di undo intatti.
 //
 // Le due tavolozze sono One Dark e One Light, che sono la stessa tavolozza in
-// due luci (`theme/serie/foglio-scuro.css` e `theme/serie/foglio-chiaro.css`, `--syn-*`). Restare su quella famiglia invece
+// due luci (`theme/serie/sheet-dark.css` e `theme/serie/sheet-light.css`, `--syn-*`). Restare su quella famiglia invece
 // di sceglierne una nuova è ciò che rende «la stessa nota, in due luci»
 // un'affermazione vera e non due gusti affiancati.
 import { EditorView } from "@codemirror/view";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
 import { tags as t } from "@lezer/highlight";
-import type { Tema } from "../theme/theme";
+import type { Theme } from "../theme/theme";
 
 /// Le regole di sintassi. Sono quelle di One Dark — stessi raggruppamenti di
 /// tag, stesso ordine — con i colori sostituiti dai token: così il giorno che
@@ -40,7 +40,7 @@ import type { Tema } from "../theme/theme";
 /// L'ordine conta e non è decorativo: `t.link` compare due volte — una nel
 /// gruppo degli operatori, una da solo con la sottolineatura — e in
 /// `HighlightStyle` vince l'ultima. Riordinare queste righe cambia la resa.
-const sintassi = HighlightStyle.define([
+const syntaxStyle = HighlightStyle.define([
   { tag: t.keyword, color: "var(--syn-keyword)" },
   {
     tag: [t.name, t.deleted, t.character, t.propertyName, t.macroName],
@@ -82,11 +82,11 @@ const sintassi = HighlightStyle.define([
 
 /// Le superfici dell'editor: il foglio, il cursore, la selezione, il margine.
 ///
-/// Quello che `theme/serie/pelle.css` faceva da fuori con due regole su `#editor .cm-editor`
+/// Quello che `theme/serie/skin.css` faceva da fuori con due regole su `#editor .cm-editor`
 /// sta adesso qui, perché è **lo stesso lavoro**: un pezzo dei colori
 /// dell'editor scritto nel foglio della shell e un pezzo dentro il tema era la
 /// divisione che aveva prodotto il doppione di partenza.
-const superfici = EditorView.theme({
+const surfaces = EditorView.theme({
   "&": {
     color: "var(--doc-fg)",
     backgroundColor: "var(--doc-bg)",
@@ -165,13 +165,13 @@ const superfici = EditorView.theme({
 /// in che luce si trova, e da cui dipendono la resa dei controlli nativi dentro
 /// l'editor e la scelta della variante scura dei suoi stili di base. È l'unica
 /// ragione per cui questa è una funzione e non una costante.
-export function temaEditor(tema: Tema): Extension {
+export function editorTheme(theme: Theme): Extension {
   return [
-    superfici,
+    surfaces,
     // Il flag va su un tema **vuoto**: `EditorView.theme` accetta le opzioni
     // solo insieme a delle regole, e ricreare `superfici` a ogni cambio di tema
     // rigenererebbe un foglio di stile intero per un booleano.
-    EditorView.theme({}, { dark: tema === "dark" }),
-    syntaxHighlighting(sintassi),
+    EditorView.theme({}, { dark: theme === "dark" }),
+    syntaxHighlighting(syntaxStyle),
   ];
 }

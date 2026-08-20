@@ -12,7 +12,7 @@ vi.mock("./notify", () => ({
   },
 }));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
-import { accoppia, campiInVigore, mountTree, patchTree } from "./node";
+import { pair, activeFields, mountTree, patchTree } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
@@ -33,69 +33,69 @@ import { registerCustomRenderer, type OnAction } from "./custom";
 // decide giusto, l'elemento si riusa giusto, e l'azione che quell'elemento
 // manda è quella di ieri.
 
-const K = (...chiavi: (string | undefined)[]) => chiavi;
+const K = (...keys: (string | undefined)[]) => keys;
 
 describe("accoppiamento dei figli (§2.8)", () => {
   it("senza chiavi l'identità è la posizione", () => {
-    expect(accoppia(K(undefined, undefined), K(undefined, undefined))).toEqual([
-      { riusa: 0 },
-      { riusa: 1 },
+    expect(pair(K(undefined, undefined), K(undefined, undefined))).toEqual([
+      { reuse: 0 },
+      { reuse: 1 },
     ]);
   });
 
   it("una lista che si riordina sposta le righe invece di rimescolarne il contenuto", () => {
     // È IL caso del §2.8: le stesse tre righe in ordine diverso. Senza chiavi
     // ognuna riceverebbe i dati di un'altra.
-    expect(accoppia(K("a", "b", "c"), K("c", "a", "b"))).toEqual([
-      { riusa: 2 },
-      { riusa: 0 },
-      { riusa: 1 },
+    expect(pair(K("a", "b", "c"), K("c", "a", "b"))).toEqual([
+      { reuse: 2 },
+      { reuse: 0 },
+      { reuse: 1 },
     ]);
   });
 
   it("una riga tolta di mezzo non sposta le altre", () => {
-    expect(accoppia(K("a", "b", "c"), K("a", "c"))).toEqual([{ riusa: 0 }, { riusa: 2 }]);
+    expect(pair(K("a", "b", "c"), K("a", "c"))).toEqual([{ reuse: 0 }, { reuse: 2 }]);
   });
 
   it("una riga nuova si disegna, le vecchie restano loro stesse", () => {
-    expect(accoppia(K("a", "b"), K("a", "nuova", "b"))).toEqual([
-      { riusa: 0 },
-      { crea: true },
-      { riusa: 1 },
+    expect(pair(K("a", "b"), K("a", "nuova", "b"))).toEqual([
+      { reuse: 0 },
+      { create: true },
+      { reuse: 1 },
     ]);
   });
 
   it("chiavi e non-chiavi non si rubano il posto a vicenda", () => {
     // La testata (senza chiave) e le righe (con chiave) convivono: la testata
     // riusa la testata, non la prima riga che capita.
-    expect(accoppia(K(undefined, "a", "b"), K(undefined, "b", "a"))).toEqual([
-      { riusa: 0 },
-      { riusa: 2 },
-      { riusa: 1 },
+    expect(pair(K(undefined, "a", "b"), K(undefined, "b", "a"))).toEqual([
+      { reuse: 0 },
+      { reuse: 2 },
+      { reuse: 1 },
     ]);
   });
 
   it("i senza-chiave si accoppiano in ordine fra loro, saltando i chiavati", () => {
-    expect(accoppia(K("a", undefined, undefined), K(undefined, undefined))).toEqual([
-      { riusa: 1 },
-      { riusa: 2 },
+    expect(pair(K("a", undefined, undefined), K(undefined, undefined))).toEqual([
+      { reuse: 1 },
+      { reuse: 2 },
     ]);
   });
 
   it("una chiave doppia riusa una volta sola: il resto si disegna", () => {
     // Un albero malformato resta disegnabile — perde lo stato, che è il sintomo
     // giusto — invece di far saltare la view.
-    expect(accoppia(K("a"), K("a", "a"))).toEqual([{ riusa: 0 }, { crea: true }]);
-    expect(accoppia(K("a", "a"), K("a"))).toEqual([{ riusa: 0 }]);
+    expect(pair(K("a"), K("a", "a"))).toEqual([{ reuse: 0 }, { create: true }]);
+    expect(pair(K("a", "a"), K("a"))).toEqual([{ reuse: 0 }]);
   });
 
   it("il primo giro disegna tutto, e svuotare non riusa niente", () => {
-    expect(accoppia(K(), K("a", undefined))).toEqual([{ crea: true }, { crea: true }]);
-    expect(accoppia(K("a", "b"), K())).toEqual([]);
+    expect(pair(K(), K("a", undefined))).toEqual([{ create: true }, { create: true }]);
+    expect(pair(K("a", "b"), K())).toEqual([]);
   });
 
   it("una chiave che non c'era prima non ruba il posto di un'altra", () => {
-    expect(accoppia(K("a", "b"), K("c", "d"))).toEqual([{ crea: true }, { crea: true }]);
+    expect(pair(K("a", "b"), K("c", "d"))).toEqual([{ create: true }, { create: true }]);
   });
 });
 
@@ -111,39 +111,39 @@ describe("accoppiamento dei figli (§2.8)", () => {
 // quella riga il presidio passerebbe a vuoto il giorno in cui qualcuno facesse
 // ricostruire i campi invece di riusarli.
 describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => {
-  const cerca = (azione: string | null, value = ""): UiNode =>
+  const search = (action: string | null, value = ""): UiNode =>
     ({
       node: "text_input",
       field: "q",
       label: "Cerca",
       value,
       placeholder: null,
-      action: azione === null ? null : { action: azione, payload: null },
+      action: action === null ? null : { action: action, payload: null },
     }) as UiNode;
 
-  function riconciliato(prima: UiNode, dopo: UiNode) {
+  function reconciled(first: UiNode, after: UiNode) {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const mandate: string[] = [];
     const onAction = async (a: ActionRef) => {
       mandate.push(a.action);
     };
-    mountTree(host, prima, onAction);
+    mountTree(host, first, onAction);
     const input = host.querySelector("input")!;
-    mountTree(host, dopo, onAction);
+    mountTree(host, after, onAction);
     // Se questo non è vero, tutto il resto del caso non prova niente.
     expect(host.querySelector("input")).toBe(input);
     return { input, mandate };
   }
 
   it("il cambio del valore manda l'azione nuova, non quella del primo disegno", () => {
-    const { input, mandate } = riconciliato(cerca("prima"), cerca("dopo"));
+    const { input, mandate } = reconciled(search("prima"), search("dopo"));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     expect(mandate).toEqual(["dopo"]);
   });
 
   it("l'Invio manda l'azione nuova, non quella del primo disegno", () => {
-    const { input, mandate } = riconciliato(cerca("prima"), cerca("dopo"));
+    const { input, mandate } = reconciled(search("prima"), search("dopo"));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(mandate).toEqual(["dopo"]);
   });
@@ -158,9 +158,9 @@ describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => 
     const onAction = async (a: ActionRef) => {
       mandate.push(a.action);
     };
-    mountTree(host, cerca("uno"), onAction);
+    mountTree(host, search("uno"), onAction);
     const input = host.querySelector("input")!;
-    for (const azione of ["due", "tre", "quattro"]) mountTree(host, cerca(azione), onAction);
+    for (const action of ["due", "tre", "quattro"]) mountTree(host, search(action), onAction);
     expect(host.querySelector("input")).toBe(input);
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
@@ -168,14 +168,14 @@ describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => 
   });
 
   it("un campo che perde l'azione smette di mandarla", () => {
-    const { input, mandate } = riconciliato(cerca("prima"), cerca(null));
+    const { input, mandate } = reconciled(search("prima"), search(null));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(mandate).toEqual([]);
   });
 
   it("un tasto che non è Invio non manda niente", () => {
-    const { input, mandate } = riconciliato(cerca("prima"), cerca("dopo"));
+    const { input, mandate } = reconciled(search("prima"), search("dopo"));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
     expect(mandate).toEqual([]);
   });
@@ -194,7 +194,7 @@ describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => 
 // I casi montano lo stesso contenitore **due volte con due handler diversi** —
 // ciò che nessun caso della 0118 fa, perché tutti riusano lo stesso `onAction`.
 describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () => {
-  const campo = (azione: string): UiNode =>
+  const field = (action: string): UiNode =>
     ({
       node: "text_input",
       field: "q",
@@ -202,73 +202,73 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
       value: "",
       placeholder: null,
       key: "campo",
-      action: { action: azione, payload: null },
+      action: { action: action, payload: null },
     }) as UiNode;
 
-  const albero = (azione: string): UiNode =>
-    ({ node: "stack", dir: "column", gap: 4, children: [campo(azione)] }) as UiNode;
+  const tree = (action: string): UiNode =>
+    ({ node: "stack", dir: "column", gap: 4, children: [field(action)] }) as UiNode;
 
   /// Due montaggi dello stesso contenitore con due handler **distinti**, e i due
   /// registri separati per vedere dove è finita l'azione.
-  function montatoDueVolte(primo: UiNode, secondo: UiNode) {
+  function mountedTwice(first: UiNode, second: UiNode) {
     const host = document.createElement("div");
     document.body.appendChild(host);
-    const vecchio: string[] = [];
-    const nuovo: string[] = [];
-    mountTree(host, primo, async (a: ActionRef) => {
-      vecchio.push(a.action);
+    const old: string[] = [];
+    const newItem: string[] = [];
+    mountTree(host, first, async (a: ActionRef) => {
+      old.push(a.action);
     });
     const input = host.querySelector("input");
-    mountTree(host, secondo, async (a: ActionRef) => {
-      nuovo.push(a.action);
+    mountTree(host, second, async (a: ActionRef) => {
+      newItem.push(a.action);
     });
     // Se il secondo montaggio ha ricostruito invece di riusare, il caso non
     // prova niente: il difetto vive solo nel riuso.
     expect(host.querySelector("input")).toBe(input);
-    return { host, vecchio, nuovo };
+    return { host, old, newItem };
   }
 
   it("un patch instrada al montaggio di adesso, non al primo", () => {
-    const { host, vecchio, nuovo } = montatoDueVolte(albero("uno"), albero("due"));
+    const { host, old, newItem } = mountedTwice(tree("uno"), tree("due"));
     const input = host.querySelector("input")!;
-    expect(patchTree(host, "campo", campo("tre"))).toBe(true);
+    expect(patchTree(host, "campo", field("tre"))).toBe(true);
     expect(host.querySelector("input")).toBe(input);
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(nuovo).toEqual(["tre"]);
+    expect(newItem).toEqual(["tre"]);
     // Il patch non riporta indietro ciò che la 0118 aveva rimesso a posto: un
     // handler ripescato risalendo dall'elemento è quello del **primo** disegno,
     // e riconciliare con lui riscriverebbe i legami del sottoalbero patchato.
-    expect(vecchio).toEqual([]);
+    expect(old).toEqual([]);
   });
 
   it("un renderer custom che sopravvive alla riconciliazione instrada al montaggio di adesso", () => {
     const NS = "prova.porta";
-    const porte: OnAction[] = [];
+    const handlers: OnAction[] = [];
     registerCustomRenderer(NS, (_host, _payload, onAction) => {
-      porte.push(onAction);
+      handlers.push(onAction);
     });
-    const nodo = (): UiNode =>
+    const node = (): UiNode =>
       ({ node: "custom", ns: NS, payload: { n: 1 }, fallback: [] }) as UiNode;
 
     const host = document.createElement("div");
     document.body.appendChild(host);
-    const vecchio: string[] = [];
-    const nuovo: string[] = [];
-    mountTree(host, nodo(), async (a: ActionRef) => {
-      vecchio.push(a.action);
+    const old: string[] = [];
+    const newItem: string[] = [];
+    mountTree(host, node(), async (a: ActionRef) => {
+      old.push(a.action);
     });
     const el = host.querySelector(".ui-custom");
-    mountTree(host, nodo(), async (a: ActionRef) => {
-      nuovo.push(a.action);
+    mountTree(host, node(), async (a: ActionRef) => {
+      newItem.push(a.action);
     });
     // Il payload non è cambiato: l'elemento resta, il widget dentro resta, e
     // resta la porta che il renderer si è tenuto. È il punto del caso.
     expect(host.querySelector(".ui-custom")).toBe(el);
-    expect(porte).toHaveLength(1);
+    expect(handlers).toHaveLength(1);
 
-    porte[0]!({ action: "tocca", payload: null }, []);
-    expect(nuovo).toEqual(["tocca"]);
-    expect(vecchio).toEqual([]);
+    handlers[0]!({ action: "tocca", payload: null }, []);
+    expect(newItem).toEqual(["tocca"]);
+    expect(old).toEqual([]);
   });
 });
 
@@ -287,23 +287,23 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
 // quella riga il presidio passerebbe a vuoto il giorno in cui il riconciliatore
 // ricostruisse invece di riusare.
 describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
-  const SELETTORE = "input, textarea, select";
+  const SELECTOR = "input, textarea, select";
 
-  function riusato(prima: UiNode, dopo: UiNode): HTMLElement {
+  function reused(first: UiNode, after: UiNode): HTMLElement {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const onAction = async () => {};
-    mountTree(host, prima, onAction);
-    const controllo = host.querySelector(SELETTORE);
-    mountTree(host, dopo, onAction);
-    expect(host.querySelector(SELETTORE)).toBe(controllo);
+    mountTree(host, first, onAction);
+    const control = host.querySelector(SELECTOR);
+    mountTree(host, after, onAction);
+    expect(host.querySelector(SELECTOR)).toBe(control);
     return host;
   }
 
   /// Il campo, letto come lo leggerebbe un'azione che scatta adesso.
-  const letto = (host: HTMLElement) => campiInVigore(host.querySelector("[data-campo]")!);
+  const read = (host: HTMLElement) => activeFields(host.querySelector("[data-field]")!);
 
-  const testo = (over: Record<string, unknown>): UiNode =>
+  const text = (over: Record<string, unknown>): UiNode =>
     ({
       node: "text_input",
       field: "q",
@@ -314,7 +314,7 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
       ...over,
     }) as UiNode;
 
-  const numero = (over: Record<string, unknown>): UiNode =>
+  const number = (over: Record<string, unknown>): UiNode =>
     ({
       node: "number",
       field: "n",
@@ -327,7 +327,7 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
       ...over,
     }) as UiNode;
 
-  const scelta = (over: Record<string, unknown>): UiNode =>
+  const choice = (over: Record<string, unknown>): UiNode =>
     ({
       node: "select",
       field: "s",
@@ -342,7 +342,7 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
       ...over,
     }) as UiNode;
 
-  const bottoni = (over: Record<string, unknown>): UiNode =>
+  const buttons = (over: Record<string, unknown>): UiNode =>
     ({
       node: "radio",
       field: "r",
@@ -357,19 +357,19 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
     }) as UiNode;
 
   it("il segnaposto è quello del nodo nuovo", () => {
-    const host = riusato(testo({ placeholder: "prima" }), testo({ placeholder: "dopo" }));
+    const host = reused(text({ placeholder: "prima" }), text({ placeholder: "dopo" }));
     expect(host.querySelector("input")!.placeholder).toBe("dopo");
   });
 
   it("un segnaposto che sparisce sparisce davvero", () => {
-    const host = riusato(testo({ placeholder: "prima" }), testo({ placeholder: null }));
+    const host = reused(text({ placeholder: "prima" }), text({ placeholder: null }));
     expect(host.querySelector("input")!.placeholder).toBe("");
   });
 
   it("gli estremi di un numero sono quelli del nodo nuovo", () => {
-    const host = riusato(
-      numero({ min: 0, max: 10, step: 1 }),
-      numero({ min: 5, max: 50, step: 5 }),
+    const host = reused(
+      number({ min: 0, max: 10, step: 1 }),
+      number({ min: 5, max: 50, step: 5 }),
     );
     const input = host.querySelector("input")!;
     expect([input.min, input.max, input.step]).toEqual(["5", "50", "5"]);
@@ -378,7 +378,7 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
   it("le righe di un'area di testo sono quelle del nodo nuovo", () => {
     const area = (rows: number): UiNode =>
       ({ node: "text_area", field: "t", label: null, value: "", rows, action: null }) as UiNode;
-    const host = riusato(area(3), area(7));
+    const host = reused(area(3), area(7));
     // `Number` perché `happy-dom` restituisce l'attributo com'è scritto, e in
     // un browser vero è già un numero: il presidio guarda il valore, non il
     // tipo che gli dà l'ambiente.
@@ -386,48 +386,48 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
   });
 
   it("un'etichetta che sparisce sparisce, e una che compare compare", () => {
-    const via = riusato(testo({ label: "Cerca" }), testo({ label: null }));
+    const via = reused(text({ label: "Cerca" }), text({ label: null }));
     expect(via.querySelector(".ui-field-label")).toBeNull();
-    const arriva = riusato(testo({ label: null }), testo({ label: "Cerca" }));
-    const etichetta = arriva.querySelector<HTMLLabelElement>("label.ui-field-label")!;
-    expect(etichetta.textContent).toBe("Cerca");
+    const appeared = reused(text({ label: null }), text({ label: "Cerca" }));
+    const label = appeared.querySelector<HTMLLabelElement>("label.ui-field-label")!;
+    expect(label.textContent).toBe("Cerca");
     // E l'etichetta arrivata **nomina** il campo: un `<label>` slegato è testo
     // che sembra un'etichetta e non lo è per chi non vede.
-    expect(etichetta.htmlFor).toBe(arriva.querySelector("input")!.id);
+    expect(label.htmlFor).toBe(appeared.querySelector("input")!.id);
   });
 
   it("il nome del campo è quello del nodo nuovo", () => {
-    const host = riusato(testo({ field: "prima" }), testo({ field: "dopo" }));
-    expect(letto(host).map((f) => f.field)).toEqual(["dopo"]);
+    const host = reused(text({ field: "prima" }), text({ field: "dopo" }));
+    expect(read(host).map((f) => f.field)).toEqual(["dopo"]);
   });
 
   it("un select che diventa multiplo riporta una scelta multipla", () => {
     // Il caso del lettore invecchiato: la chiusura registrata da `valore`
     // catturava `node.multiple` al primo disegno, e un select diventato
     // multiplo continuava a riportare un `text`.
-    const host = riusato(scelta({ multiple: false }), scelta({ multiple: true }));
+    const host = reused(choice({ multiple: false }), choice({ multiple: true }));
     expect(host.querySelector("select")!.multiple).toBe(true);
-    expect(letto(host)).toEqual([{ field: "s", value: { type: "choices", value: ["a"] } }]);
+    expect(read(host)).toEqual([{ field: "s", value: { type: "choices", value: ["a"] } }]);
   });
 
   it("le etichette delle opzioni di un select sono quelle del nodo nuovo", () => {
-    const host = riusato(
-      scelta({}),
-      scelta({
+    const host = reused(
+      choice({}),
+      choice({
         options: [
           { value: "a", label: "Primo" },
           { value: "b", label: "Secondo" },
         ],
       }),
     );
-    const opzioni = Array.from(host.querySelectorAll("option"));
-    expect(opzioni.map((o) => o.textContent)).toEqual(["Primo", "Secondo"]);
+    const options = Array.from(host.querySelectorAll("option"));
+    expect(options.map((o) => o.textContent)).toEqual(["Primo", "Secondo"]);
   });
 
   it("le opzioni di un radio sono quelle del nodo nuovo, valore compreso", () => {
-    const host = riusato(
-      bottoni({}),
-      bottoni({
+    const host = reused(
+      buttons({}),
+      buttons({
         value: "x",
         options: [
           { value: "x", label: "Ics" },
@@ -435,10 +435,10 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
         ],
       }),
     );
-    const scelte = Array.from(host.querySelectorAll<HTMLInputElement>("input[type=radio]"));
-    expect(scelte.map((i) => i.value)).toEqual(["x", "y"]);
-    expect(scelte.map((i) => i.checked)).toEqual([true, false]);
-    expect(letto(host)).toEqual([{ field: "r", value: { type: "text", value: "x" } }]);
+    const choices = Array.from(host.querySelectorAll<HTMLInputElement>("input[type=radio]"));
+    expect(choices.map((i) => i.value)).toEqual(["x", "y"]);
+    expect(choices.map((i) => i.checked)).toEqual([true, false]);
+    expect(read(host)).toEqual([{ field: "r", value: { type: "text", value: "x" } }]);
   });
 });
 
@@ -459,7 +459,7 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
 // `role="radiogroup"`: l'esclusività nativa e quella dichiarata sono lo stesso
 // gruppo, o non sono niente.
 describe("un gruppo di radio è il nodo che lo dichiara (§2.1)", () => {
-  const scelta = (): UiNode =>
+  const choice = (): UiNode =>
     ({
       node: "radio",
       field: "r",
@@ -472,45 +472,45 @@ describe("un gruppo di radio è il nodo che lo dichiara (§2.1)", () => {
       action: null,
     }) as UiNode;
 
-  const dentroUnForm = (): UiNode =>
+  const insideForm = (): UiNode =>
     ({
       node: "form",
       submit_label: "Vai",
       submit: { action: "vai", payload: null },
-      children: [scelta()],
+      children: [choice()],
     }) as UiNode;
 
-  const monta = (nodo: UiNode) => {
+  const mount = (node: UiNode) => {
     const host = document.createElement("div");
     document.body.appendChild(host);
-    mountTree(host, nodo, async () => {});
+    mountTree(host, node, async () => {});
     return host;
   };
 
-  const sceltaDi = (host: HTMLElement, valore: string) =>
-    host.querySelector<HTMLInputElement>(`input[type=radio][value="${valore}"]`)!;
+  const choiceOf = (host: HTMLElement, value: string) =>
+    host.querySelector<HTMLInputElement>(`input[type=radio][value="${value}"]`)!;
 
   it("due view senza form con lo stesso campo non si deselezionano a vicenda", () => {
-    const primo = monta(scelta());
-    const secondo = monta(scelta());
+    const first = mount(choice());
+    const second = mount(choice());
 
-    sceltaDi(primo, "a").click();
-    sceltaDi(secondo, "b").click();
+    choiceOf(first, "a").click();
+    choiceOf(second, "b").click();
 
-    expect(sceltaDi(primo, "a").checked).toBe(true);
-    expect(campiInVigore(primo.querySelector(".ui-radio")!)).toEqual([
+    expect(choiceOf(first, "a").checked).toBe(true);
+    expect(activeFields(first.querySelector(".ui-radio")!)).toEqual([
       { field: "r", value: { type: "text", value: "a" } },
     ]);
   });
 
   it("e dentro un form non si deselezionavano già prima: il form è un gruppo", () => {
-    const primo = monta(dentroUnForm());
-    const secondo = monta(dentroUnForm());
+    const first = mount(insideForm());
+    const second = mount(insideForm());
 
-    sceltaDi(primo, "a").click();
-    sceltaDi(secondo, "b").click();
+    choiceOf(first, "a").click();
+    choiceOf(second, "b").click();
 
-    expect(sceltaDi(primo, "a").checked).toBe(true);
+    expect(choiceOf(first, "a").checked).toBe(true);
   });
 });
 
@@ -520,22 +520,22 @@ describe("un gruppo di radio è il nodo che lo dichiara (§2.1)", () => {
 // ricostruivano tutte a ogni riconciliazione — che è precisamente ciò che il
 // §2.8 esiste per non fare.
 describe("le linguette di una barra di schede si riusano (§2.8)", () => {
-  const schede = (azione: string, etichetta = "Prima"): UiNode =>
+  const tabs = (action: string, label = "Prima"): UiNode =>
     ({
       node: "tabs",
       active: 0,
       tabs: [
         {
           node: "tab",
-          label: etichetta,
-          action: { action: azione, payload: null },
+          label: label,
+          action: { action: action, payload: null },
           children: [{ node: "text", content: "uno" }],
         },
         { node: "tab", label: "Seconda", action: null, children: [{ node: "text", content: "due" }] },
       ],
     }) as UiNode;
 
-  const conCampo = (): UiNode =>
+  const withField = (): UiNode =>
     ({
       node: "tabs",
       active: 0,
@@ -558,28 +558,28 @@ describe("le linguette di una barra di schede si riusano (§2.8)", () => {
       ],
     }) as UiNode;
 
-  function montato(prima: UiNode, dopo: UiNode) {
+  function mounted(first: UiNode, after: UiNode) {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const mandate: string[] = [];
     const onAction = async (a: ActionRef) => {
       mandate.push(a.action);
     };
-    mountTree(host, prima, onAction);
-    const linguetta = host.querySelector<HTMLButtonElement>(".ui-tab-button")!;
-    linguetta.focus();
-    mountTree(host, dopo, onAction);
-    return { host, linguetta, mandate };
+    mountTree(host, first, onAction);
+    const tab = host.querySelector<HTMLButtonElement>(".ui-tab-button")!;
+    tab.focus();
+    mountTree(host, after, onAction);
+    return { host, tab, mandate };
   }
 
   it("chi ci sta sopra col tab non perde il fuoco", () => {
-    const { host, linguetta } = montato(schede("apri"), schede("apri"));
-    expect(host.querySelector(".ui-tab-button")).toBe(linguetta);
-    expect(document.activeElement).toBe(linguetta);
+    const { host, tab } = mounted(tabs("apri"), tabs("apri"));
+    expect(host.querySelector(".ui-tab-button")).toBe(tab);
+    expect(document.activeElement).toBe(tab);
   });
 
   it("l'etichetta è quella del nodo nuovo", () => {
-    const { host } = montato(schede("apri", "Prima"), schede("apri", "Terza"));
+    const { host } = mounted(tabs("apri", "Prima"), tabs("apri", "Terza"));
     expect(host.querySelector(".ui-tab-button")!.textContent).toBe("Terza");
   });
 
@@ -588,9 +588,9 @@ describe("le linguette di una barra di schede si riusano (§2.8)", () => {
     // ricostruivano, la chiusura che catturava `tab` era per forza fresca. Chi
     // le riusa senza passare da `ascolta` la fa invecchiare, ed è lo stesso
     // difetto della 0118 in un ramo che quella voce aveva lasciato scoperto.
-    const { host, linguetta, mandate } = montato(schede("prima"), schede("dopo"));
-    expect(host.querySelector(".ui-tab-button")).toBe(linguetta);
-    linguetta.click();
+    const { host, tab, mandate } = mounted(tabs("prima"), tabs("dopo"));
+    expect(host.querySelector(".ui-tab-button")).toBe(tab);
+    tab.click();
     expect(mandate).toEqual(["dopo"]);
   });
 
@@ -600,12 +600,12 @@ describe("le linguette di una barra di schede si riusano (§2.8)", () => {
     // guardare più su l'azione partiva **senza campi**.
     const host = document.createElement("div");
     document.body.appendChild(host);
-    const campi: FieldValue[][] = [];
-    mountTree(host, conCampo(), async (_a: ActionRef, f: FieldValue[]) => {
-      campi.push(f);
+    const fields: FieldValue[][] = [];
+    mountTree(host, withField(), async (_a: ActionRef, f: FieldValue[]) => {
+      fields.push(f);
     });
     host.querySelector<HTMLElement>(".ui-tab-button")!.click();
-    expect(campi).toEqual([[{ field: "q", value: { type: "text", value: "gatto" } }]]);
+    expect(fields).toEqual([[{ field: "q", value: { type: "text", value: "gatto" } }]]);
   });
 });
 
@@ -614,7 +614,7 @@ describe("le linguette di una barra di schede si riusano (§2.8)", () => {
 // ---------------------------------------------------------------------------
 
 describe("un'azione che va storta lo dice, e lo dice alla porta (§20.4)", () => {
-  const campo = (azione: string): UiNode =>
+  const field = (action: string): UiNode =>
     ({
       node: "text_input",
       field: "q",
@@ -622,16 +622,16 @@ describe("un'azione che va storta lo dice, e lo dice alla porta (§20.4)", () =>
       value: "",
       placeholder: null,
       key: "campo",
-      action: { action: azione, payload: null },
+      action: { action: action, payload: null },
     }) as UiNode;
 
   /// Monta un albero il cui handler va storto nel modo chiesto, fa scattare
   /// l'azione, e lascia svuotare la coda dei microtask: una promessa rifiutata
   /// non si vede nello stesso giro in cui nasce.
-  async function scatta(handler: () => void | Promise<void>): Promise<void> {
+  async function triggerAction(handler: () => void | Promise<void>): Promise<void> {
     const host = document.createElement("div");
     document.body.appendChild(host);
-    mountTree(host, campo("mostra.tutto"), handler);
+    mountTree(host, field("mostra.tutto"), handler);
     host.querySelector("input")!.dispatchEvent(new Event("change", { bubbles: true }));
     await Promise.resolve();
     await Promise.resolve();
@@ -645,14 +645,14 @@ describe("un'azione che va storta lo dice, e lo dice alla porta (§20.4)", () =>
   /// Un `throw` sincrono — che nel giro vero è una `TypeError` di qua dal
   /// confine — non arriva mai a una `.catch`.
   it("un handler che pania lo dice, con il nome dell'azione", async () => {
-    await scatta(() => {
+    await triggerAction(() => {
       throw new Error("qualcosa di qua dal confine");
     });
     expect(notify).toHaveBeenCalledTimes(1);
-    const [frase, tono] = notify.mock.calls[0]!;
-    expect(tono).toBe("guasto");
-    expect(frase).toContain("mostra.tutto");
-    expect(frase).toContain("qualcosa di qua dal confine");
+    const [phrase, tone] = notify.mock.calls[0]!;
+    expect(tone).toBe("guasto");
+    expect(phrase).toContain("mostra.tutto");
+    expect(phrase).toContain("qualcosa di qua dal confine");
   });
 
   /// E il verso opposto: un `view_action` che torna con un errore del backend è
@@ -660,18 +660,18 @@ describe("un'azione che va storta lo dice, e lo dice alla porta (§20.4)", () =>
   /// che il difetto misurato nominava, e la frase la compone `errorText` — cioè
   /// il `message` del `PluginError`, non `[object Object]`.
   it("una promessa rifiutata lo dice, con il messaggio del contratto", async () => {
-    await scatta(() => Promise.reject({ kind: "Internal", message: "il provider è caduto" }));
+    await triggerAction(() => Promise.reject({ kind: "Internal", message: "il provider è caduto" }));
     expect(notify).toHaveBeenCalledTimes(1);
-    const [frase] = notify.mock.calls[0]!;
-    expect(frase).toContain("mostra.tutto");
-    expect(frase).toContain("il provider è caduto");
+    const [phrase] = notify.mock.calls[0]!;
+    expect(phrase).toContain("mostra.tutto");
+    expect(phrase).toContain("il provider è caduto");
   });
 
   /// La metà che tiene ferma la prova: un'azione che riesce **non** dice niente.
   /// Senza questo caso, un `notify` messo su ogni azione passerebbe i due casi
   /// qui sopra e riempirebbe il centro notifiche di successi.
   it("un'azione che riesce non dice niente", async () => {
-    await scatta(async () => {});
+    await triggerAction(async () => {});
     expect(notify).not.toHaveBeenCalled();
   });
 });

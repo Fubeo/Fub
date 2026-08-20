@@ -30,8 +30,8 @@ impl std::fmt::Display for RegistryConflict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "`{}` rivendica l'estensione `{}`, che è già di `{}` \
-             (per sostituirlo di proposito: `FormatRegistry::replace`)",
+            "`{}` claims extension `{}`, which already belongs to `{}` \
+             (to replace intentionally: `FormatRegistry::replace`)",
             self.challenger, self.extension, self.incumbent
         )
     }
@@ -90,7 +90,7 @@ impl FormatRegistry {
     pub fn provider_for_ext(&self, ext: &str) -> Option<&dyn FormatProvider> {
         self.by_ext
             .get(&ext.to_lowercase())
-            .map(|&i| self.providers[i].as_ref())
+            .map(|&the| self.providers[the].as_ref())
     }
 
     /// Tutte le estensioni conosciute, per la scansione del vault.
@@ -103,7 +103,7 @@ impl FormatRegistry {
     /// confronto resta disarmato sul caso, com'è in `kind_of` — le chiavi di
     /// `by_ext` sono già minuscole, ma la risposta dev'essere quella di sempre.
     pub fn has_doc_ext(&self, ext: &str) -> bool {
-        self.by_ext.keys().any(|e| e.eq_ignore_ascii_case(ext))
+        self.by_ext.keys().any(|and| and.eq_ignore_ascii_case(ext))
     }
 
     /// L'estensione con cui nasce una nota nuova a cui nessuno ne ha data una:
@@ -118,7 +118,7 @@ impl FormatRegistry {
             .descriptor()
             .extensions
             .first()
-            .map(|e| e.to_lowercase())
+            .map(|and| and.to_lowercase())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -135,9 +135,9 @@ mod tests {
     };
     use fub_abi::model::{DocId, DocumentModel};
 
-    struct Finto(&'static str, &'static str);
+    struct Fake(&'static str, &'static str);
 
-    impl FormatProvider for Finto {
+    impl FormatProvider for Fake {
         fn descriptor(&self) -> FormatDescriptor {
             FormatDescriptor::text(self.0, self.0, &[self.1])
         }
@@ -154,7 +154,7 @@ mod tests {
         fn render_html(
             &self,
             _m: &DocumentModel,
-            _o: &RenderOptions,
+            _or: &RenderOptions,
         ) -> Result<String, FormatError> {
             Ok(String::new())
         }
@@ -164,12 +164,12 @@ mod tests {
     }
 
     #[test]
-    fn chi_registra_dopo_non_vince_piu_in_silenzio() {
+    fn who_registers_after_not_wins_more_in_silence() {
         let mut reg = FormatRegistry::new();
-        reg.register(Box::new(Finto("uno", "md"))).unwrap();
+        reg.register(Box::new(Fake("uno", "md"))).unwrap();
         let err = reg
-            .register(Box::new(Finto("due", "md")))
-            .expect_err("`md` è già rivendicata");
+            .register(Box::new(Fake("due", "md")))
+            .expect_err("`md` is already claimed");
         assert_eq!(err.incumbent, "uno");
         assert_eq!(err.challenger, "due");
         // E il primo è ancora quello che serve i `.md`.
@@ -177,12 +177,12 @@ mod tests {
     }
 
     #[test]
-    fn un_provider_in_conflitto_non_resta_registrato_a_meta() {
+    fn a_provider_in_conflict_not_remains_registered_a_metadata() {
         let mut reg = FormatRegistry::new();
-        reg.register(Box::new(Finto("uno", "md"))).unwrap();
+        reg.register(Box::new(Fake("uno", "md"))).unwrap();
 
-        struct Due;
-        impl FormatProvider for Due {
+        struct Two;
+        impl FormatProvider for Two {
             fn descriptor(&self) -> FormatDescriptor {
                 // Una libera e una contesa.
                 FormatDescriptor::text("due", "due", &["mdx", "md"])
@@ -200,7 +200,7 @@ mod tests {
             fn render_html(
                 &self,
                 _m: &DocumentModel,
-                _o: &RenderOptions,
+                _or: &RenderOptions,
             ) -> Result<String, FormatError> {
                 Ok(String::new())
             }
@@ -208,7 +208,7 @@ mod tests {
                 Ok(String::new())
             }
         }
-        assert!(reg.register(Box::new(Due)).is_err());
+        assert!(reg.register(Box::new(Two)).is_err());
         assert!(
             reg.provider_for_ext("mdx").is_none(),
             "l'estensione libera non deve restare registrata dal perdente"
@@ -216,10 +216,10 @@ mod tests {
     }
 
     #[test]
-    fn sostituire_resta_possibile_ma_va_chiesto_per_nome() {
+    fn replace_remains_possible_but_goes_asked_for_name() {
         let mut reg = FormatRegistry::new();
-        reg.register(Box::new(Finto("uno", "md"))).unwrap();
-        reg.replace(Box::new(Finto("due", "md")));
+        reg.register(Box::new(Fake("uno", "md"))).unwrap();
+        reg.replace(Box::new(Fake("due", "md")));
         assert_eq!(reg.provider_for_ext("md").unwrap().descriptor().id, "due");
     }
 }

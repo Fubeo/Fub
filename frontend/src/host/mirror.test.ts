@@ -93,8 +93,8 @@ import appSamples from "../__fixtures__/mirror-samples-app.json";
 // lista), e da quel momento la riga qui sotto non compila finché `KernelEvent`
 // non porta il caso. È l'esaustività del §16.7 senza nessun elenco scritto a
 // mano, e il presidio è `npx tsc --noEmit`, che gira in CI.
-type Uguali<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
-export const _le_specie_di_evento_coincidono: Uguali<KernelEvent["type"], EventKind> = true;
+type EqualTypes<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+export const _event_kinds_match: EqualTypes<KernelEvent["type"], EventKind> = true;
 
 const fixture = samples as unknown as Record<string, unknown[]>;
 const appFixture = appSamples as unknown as Record<string, unknown[]>;
@@ -768,11 +768,11 @@ describe("mirror TS↔Rust", () => {
       "SettingEntry",
       "PluginError",
     ]) {
-      expect(fixture[type], `manca il tipo ${type} nella fixture`).toBeTruthy();
+      expect(fixture[type], `manca il type ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
     for (const type of Object.keys(APP_RECORD_KEYS)) {
-      expect(appFixture[type], `manca il tipo ${type} nella fixture dell'app`).toBeTruthy();
+      expect(appFixture[type], `manca il type ${type} nella fixture dell'app`).toBeTruthy();
       expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
   });
@@ -790,9 +790,9 @@ describe("mirror TS↔Rust", () => {
     // fixture è generata da `ViewContext::new(MAIN_PANE)` e non da una stringa
     // scritta a mano (crates/fub-features/tests/ts_mirror.rs); se là tornasse
     // un letterale, questo test resterebbe verde per il motivo sbagliato.
-    const contesti = fixture.ViewContext as ViewContext[];
-    expect(contesti.length, "nessun campione di ViewContext").toBeGreaterThan(0);
-    for (const c of contesti) {
+    const contexts = fixture.ViewContext as ViewContext[];
+    expect(contexts.length, "nessun campione di ViewContext").toBeGreaterThan(0);
+    for (const c of contexts) {
       expect(c.pane, "il pane della fixture non è il MAIN_PANE del mirror TS").toBe(MAIN_PANE);
     }
   });
@@ -806,12 +806,12 @@ describe("mirror TS↔Rust", () => {
     // I campi opzionali sono **omessi** da serde, non `null`: il mirror deve
     // reggere entrambe le forme, o la prima riga di una selezione senza testo
     // stamperebbe «undefined» a schermo.
-    const nuda = fixture.DocumentMatch[0] as DocumentMatch;
-    expect(nuda.score).toBeUndefined();
-    expect(nuda.snippet).toBeUndefined();
-    const piena = fixture.DocumentMatch[1] as DocumentMatch;
-    expect(piena.score).toBeTypeOf("number");
-    expect(piena.snippet).toBeTypeOf("string");
+    const bareMatch = fixture.DocumentMatch[0] as DocumentMatch;
+    expect(bareMatch.score).toBeUndefined();
+    expect(bareMatch.snippet).toBeUndefined();
+    const completeMatch = fixture.DocumentMatch[1] as DocumentMatch;
+    expect(completeMatch.score).toBeTypeOf("number");
+    expect(completeMatch.snippet).toBeTypeOf("string");
   });
 
   it("ogni UiNode prodotto da Rust è una variante gestita dal mirror", () => {
@@ -823,21 +823,21 @@ describe("mirror TS↔Rust", () => {
   });
 
   it("ogni specie di valore di campo prodotta da Rust è gestita dal mirror", () => {
-    const azioni = fixture.UiAction as UiAction[];
-    for (const a of azioni) a.fields.forEach((f) => touchUiValue(f.value));
+    const actions = fixture.UiAction as UiAction[];
+    for (const a of actions) a.fields.forEach((f) => touchUiValue(f.value));
     // Il campione «tutte le specie» esiste apposta: senza, un `ui_value` nuovo
     // passerebbe di qui senza essere toccato da nessuno.
-    const ricca = azioni.find((a) => a.fields.length > 1);
-    expect(ricca, "manca il campione con un campo per specie").toBeTruthy();
-    expect(ricca!.fields.map((f) => f.value.type)).toContain("choices");
+    const richAction = actions.find((a) => a.fields.length > 1);
+    expect(richAction, "manca il campione con un campo per specie").toBeTruthy();
+    expect(richAction!.fields.map((f) => f.value.type)).toContain("choices");
   });
 
   it("la chiave viaggia accanto alla specie, non dentro", () => {
     // È la forma su cui poggia il riconciliatore (§2.8): `key` è un campo del
     // nodo, opzionale, e non un livello di annidamento in più.
-    const conChiave = (fixture.UiNode as UiNode[]).filter((n) => n.key !== undefined);
-    expect(conChiave.length, "manca un campione con la chiave").toBeGreaterThan(0);
-    for (const n of conChiave) expect(typeof n.key).toBe("string");
+    const withKey = (fixture.UiNode as UiNode[]).filter((n) => n.key !== undefined);
+    expect(withKey.length, "manca un campione con la chiave").toBeGreaterThan(0);
+    for (const n of withKey) expect(typeof n.key).toBe("string");
   });
 
   it("ogni KernelEvent prodotto da Rust è una variante gestita dal mirror", () => {
@@ -850,25 +850,25 @@ describe("mirror TS↔Rust", () => {
   // shell lo ignorerebbe, cioè filtrerebbe meno di quanto il contratto promette
   // — e una specie nuova di soggetto, che `assertNever` ferma.
   it("la maschera di una view ha le chiavi del mirror, e ogni soggetto è gestito", () => {
-    const maschere = (fixture.ViewSpec as ViewSpec[]).map((s) => s.refresh);
-    expect(maschere.length).toBeGreaterThan(0);
-    const chiavi = keysOf<EventMask>({
+    const refreshMasks = (fixture.ViewSpec as ViewSpec[]).map((s) => s.refresh);
+    expect(refreshMasks.length).toBeGreaterThan(0);
+    const keys = keysOf<EventMask>({
       kinds: true,
       topics: true,
       subjects: true,
       changes: true,
     });
-    for (const m of maschere) {
-      expect(Object.keys(m).sort()).toEqual(chiavi);
+    for (const m of refreshMasks) {
+      expect(Object.keys(m).sort()).toEqual(keys);
       m.kinds.forEach((k) => expect(typeof k).toBe("string"));
       m.subjects.forEach(touchSubject);
     }
     // Il campione stretto esiste apposta: senza, `topics` e `subjects`
     // sarebbero liste vuote in ogni campione e nessuno avrebbe mai toccato la
     // parte che la decisione 0033 ha aggiunto.
-    const stretta = maschere.find((m) => m.topics.length > 0);
-    expect(stretta, "manca il campione con un prefisso di topic").toBeTruthy();
-    expect(stretta!.subjects.map((s) => s.kind)).toEqual(["document", "folder"]);
+    const topicMatch = refreshMasks.find((m) => m.topics.length > 0);
+    expect(topicMatch, "manca il campione con un prefisso di topic").toBeTruthy();
+    expect(topicMatch!.subjects.map((s) => s.kind)).toEqual(["document", "folder"]);
   });
 
   // Ciò che il ponte Tauri consegna davvero non è un evento nudo ma un
@@ -909,18 +909,18 @@ describe("mirror TS↔Rust", () => {
     }
     // Il campione «tutte le specie» esiste apposta: senza, un `param_kind`
     // nuovo passerebbe di qui senza essere toccato da nessuno.
-    const ricco = (fixture.CommandSpec as CommandSpec[]).find((s) => s.params.length > 1);
-    expect(ricco, "manca il campione con un parametro per specie").toBeTruthy();
-    expect(ricco!.params.some((p) => p.kind.kind === "choice")).toBe(true);
+    const richCommand = (fixture.CommandSpec as CommandSpec[]).find((s) => s.params.length > 1);
+    expect(richCommand, "manca il campione con un parametro per specie").toBeTruthy();
+    expect(richCommand!.params.some((p) => p.kind.kind === "choice")).toBe(true);
   });
 
   it("ogni specie di fallimento che Rust sa dire ha un ramo di qua", () => {
-    const errori = fixture.PluginError as PluginError[];
-    for (const e of errori) touchPluginErrorKind(e.kind);
+    const errors = fixture.PluginError as PluginError[];
+    for (const e of errors) touchPluginErrorKind(e.kind);
     // I tre campioni sono i tre che il cestino deve saper distinguere: senza
     // `already_exists` distinto dagli altri due, il ripristino torna a fare la
     // domanda sbagliata a chiunque (§12.2).
-    expect(new Set(errori.map((e) => e.kind))).toEqual(
+    expect(new Set(errors.map((e) => e.kind))).toEqual(
       new Set(["already_exists", "not_found", "io"]),
     );
   });
@@ -929,12 +929,12 @@ describe("mirror TS↔Rust", () => {
     // `asPluginError` guarda la STRUTTURA: ciò che attraversa l'IPC è JSON, e
     // da questa parte non c'è nessuna classe da riconoscere. Un guasto della
     // webview non deve poter passare per un errore del backend.
-    const esiste = fixture.PluginError.find(
+    const exists = fixture.PluginError.find(
       (e) => (e as PluginError).kind === "already_exists",
     )!;
-    expect(isErrorKind(esiste, "already_exists")).toBe(true);
-    expect(isErrorKind(esiste, "io")).toBe(false);
-    expect(errorText(esiste)).toBe((esiste as PluginError).message);
+    expect(isErrorKind(exists, "already_exists")).toBe(true);
+    expect(isErrorKind(exists, "io")).toBe(false);
+    expect(errorText(exists)).toBe((exists as PluginError).message);
 
     expect(asPluginError(new TypeError("rotto qui dentro"))).toBeNull();
     expect(asPluginError("una stringa, come prima della 0041")).toBeNull();
@@ -968,8 +968,8 @@ describe("mirror TS↔Rust", () => {
     // l'utente non può toccare.
     const specs = fixture.SettingSpec as SettingEntry["spec"][];
     for (const spec of specs) touchSettingKind(spec.kind);
-    const specie = new Set(specs.map((s) => s.kind.kind));
-    expect(specie.size, "manca un campione per specie").toBe(5);
+    const kinds = new Set(specs.map((s) => s.kind.kind));
+    expect(kinds.size, "manca un campione per specie").toBe(5);
 
     // E le tre provenienze, che sono ciò da cui il pannello decide se mostrare
     // «azzera»: senza tutte e tre, il ramo che conta non lo esercita nessuno.
@@ -986,37 +986,37 @@ describe("mirror TS↔Rust", () => {
     // Un `enum` non ha un discriminante da esaurire con uno switch: la prova è
     // che ogni valore che Rust serializza sia assegnabile al tipo TS, e che il
     // tipo TS non abbia valori in più (l'array qui sotto li elenca tutti).
-    const tutte: PaneMode[] = ["source", "live_preview", "reading"];
+    const modes: PaneMode[] = ["source", "live_preview", "reading"];
     for (const c of fixture.ViewContext as ViewContext[]) {
-      expect(tutte).toContain(c.mode);
+      expect(modes).toContain(c.mode);
     }
     // La regola dello span, dove la decisione 0093 l'ha messa: il testo c'è
     // sempre, le coordinate ci sono per tutte o per nessuna. Il campione col
     // buffer sporco è un insieme `floating`, e lì uno `span` non è nemmeno
     // esprimibile.
-    const sporca = (fixture.ViewContext as ViewContext[]).find(
+    const dirtyContext = (fixture.ViewContext as ViewContext[]).find(
       (c) => c.selections !== null && c.selections.kind === "floating",
     );
-    expect(sporca, "manca il campione col buffer sporco").toBeTruthy();
-    const fluttuanti = sporca!.selections as { kind: "floating"; value: FloatingSelections };
-    expect(typeof fluttuanti.value.primary.text).toBe("string");
+    expect(dirtyContext, "manca il campione col buffer sporco").toBeTruthy();
+    const floatingSelections = dirtyContext!.selections as { kind: "floating"; value: FloatingSelections };
+    expect(typeof floatingSelections.value.primary.text).toBe("string");
     // E il campione con più cursori: la primaria è un campo, le altre una
     // lista, e la primaria non è la prima per posizione.
-    const molte = (fixture.ViewContext as ViewContext[]).find(
+    const multipleContext = (fixture.ViewContext as ViewContext[]).find(
       (c) => c.selections?.kind === "anchored" && c.selections.value.secondary.length > 1,
     );
-    expect(molte, "manca il campione con più cursori").toBeTruthy();
-    const ancorate = molte!.selections as { kind: "anchored"; value: AnchoredSelections };
-    expect(ancorate.value.primary.span.start).toBeGreaterThan(
-      ancorate.value.secondary[0].span.start,
+    expect(multipleContext, "manca il campione con più cursori").toBeTruthy();
+    const anchoredSelections = multipleContext!.selections as { kind: "anchored"; value: AnchoredSelections };
+    expect(anchoredSelections.value.primary.span.start).toBeGreaterThan(
+      anchoredSelections.value.secondary[0].span.start,
     );
   });
 
-  it("ogni giorno e ogni orologio prodotti da Rust sono del mirror", () => {
+  it("ogni giorno e ogni clockCycleso prodotti da Rust sono del mirror", () => {
     // Come per `PaneMode`: due enum senza discriminante da esaurire, quindi la
     // prova è che ciò che Rust serializza sia assegnabile al tipo TS e che il
     // tipo TS non abbia valori in più.
-    const giorni: Weekday[] = [
+    const weekdays: Weekday[] = [
       "monday",
       "tuesday",
       "wednesday",
@@ -1025,18 +1025,18 @@ describe("mirror TS↔Rust", () => {
       "saturday",
       "sunday",
     ];
-    const orologi: HourCycle[] = ["h23", "h12"];
+    const clockCycles: HourCycle[] = ["h23", "h12"];
     for (const l of fixture.Locale as Locale[]) {
-      expect(giorni).toContain(l.first_day_of_week);
-      expect(orologi).toContain(l.hour_cycle);
+      expect(weekdays).toContain(l.first_day_of_week);
+      expect(clockCycles).toContain(l.hour_cycle);
       expect(typeof l.utc_offset_minutes).toBe("number");
     }
     // Il campione che un campo in ore avrebbe reso inesprimibile: il contratto
     // conta i minuti perché i fusi a mezz'ora e a tre quarti d'ora esistono.
-    const spezzato = (fixture.Locale as Locale[]).find(
+    const split = (fixture.Locale as Locale[]).find(
       (l) => l.utc_offset_minutes % 60 !== 0,
     );
-    expect(spezzato, "manca il campione col fuso non a ore intere").toBeTruthy();
+    expect(split, "manca il campione col fuso non a ore intere").toBeTruthy();
   });
 
   it("gli u64 identità/impronta attraversano l'IPC come stringhe", () => {

@@ -81,13 +81,13 @@ use fub_abi::ui::UiOption;
 /// Il confronto è sul **valore** e non sulla presenza: una scorciatoia adottata
 /// e poi cambiata nel file è una scorciatoia nuova, e chiedere di nuovo è la
 /// sola risposta che non dia per buono un accordo che nessuno ha visto.
-pub fn tasti_da_guardare(
+pub fn keys_to_watch(
     vault: &BTreeMap<String, String>,
-    visti: &BTreeMap<String, String>,
+    seen: &BTreeMap<String, String>,
 ) -> BTreeSet<String> {
     vault
         .iter()
-        .filter(|(key, chord)| visti.get(*key) != Some(chord))
+        .filter(|(key, chord)| seen.get(*key) != Some(chord))
         .map(|(key, _)| key.clone())
         .collect()
 }
@@ -223,7 +223,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     // niente diventava rosso. Adesso l'elenco è
     // [`Famiglia::TUTTE`](fub_kernel::famiglie::Famiglia::TUTTE), e chi ne
     // aggiunge una la aggiunge in un posto solo.
-    settings.extend(fub_kernel::famiglie::Famiglia::impostazioni());
+    settings.extend(fub_kernel::families::Family::all_settings());
     // Le scorciatoie dei comandi **della shell** (§16.3). Stanno nel bundle di
     // core per la ragione di `plugins.disabled`: la shell non è una feature e
     // non porta un manifest, quindi l'unico posto in cui può dichiarare è
@@ -303,7 +303,7 @@ fn log_level_spec() -> SettingSpec {
     .describing(Text::key(C_LOG_LEVEL_DESC))
     .grouped(Text::key(C_GROUP_DIAGNOSTICS))
     // Di macchina: vedi [`LOG_LEVEL`].
-    .per_machine()
+    .for_machine()
 }
 
 /// I componenti verbosi come [`SettingSpec`] (§17.3).
@@ -317,7 +317,7 @@ fn log_verbose_spec() -> SettingSpec {
     )
     .describing(Text::key(C_LOG_VERBOSE_DESC))
     .grouped(Text::key(C_GROUP_DIAGNOSTICS))
-    .per_machine()
+    .for_machine()
 }
 
 /// Le chiavi delle stringhe del core. Le `locale.*` non stanno qui: stanno
@@ -380,12 +380,12 @@ fn level_label_en(level: fub_kernel::log::Level) -> &'static str {
 ///
 /// Adesso la somma è una funzione, la chiamano tutti e due, e la metà del
 /// kernel viene da [`Famiglia::TUTTE`](fub_kernel::famiglie::Famiglia::TUTTE).
-pub fn core_catalog_montato() -> Vec<StringCatalog> {
+pub fn core_catalog_assembled() -> Vec<StringCatalog> {
     // **Due** cataloghi per lingua, e si sommano: le chiavi del core stanno in
     // `fub-host` accanto al loro schema, quelle delle famiglie in `fub-kernel`
     // accanto al proprio. Chi somma è `Strings::template`, e il perché sta nel
     // suo doc.
-    [core_catalog(), fub_kernel::famiglie::Famiglia::cataloghi()].concat()
+    [core_catalog(), fub_kernel::families::Family::all_catalogs()].concat()
 }
 
 /// **La lingua in cui il catalogo di core è scritto**: il gradino su cui la
@@ -549,11 +549,11 @@ const V_ENABLED_DESC: &str = "versioning.enabled.desc";
 /// Adesso la somma è una funzione, la chiamano il montaggio e il banco, e non
 /// ci sono due copie da far divergere. Una seconda feature a cui l'host debba
 /// aggiungere delle chiavi aggiunge **un ramo qui**, e le eredita tutt'e due.
-pub fn catalogo_montato(feature_id: &str, della_feature: Vec<StringCatalog>) -> Vec<StringCatalog> {
+pub fn catalog_assembled(feature_id: &str, feature_catalog: Vec<StringCatalog>) -> Vec<StringCatalog> {
     match feature_id {
         #[cfg(feature = "versioning")]
-        fub_features::VERSIONING_ID => [versioning_settings_catalog(), della_feature].concat(),
-        _ => della_feature,
+        fub_features::VERSIONING_ID => [versioning_settings_catalog(), feature_catalog].concat(),
+        _ => feature_catalog,
     }
 }
 
@@ -597,7 +597,7 @@ pub fn versioning_enabled(ws: &fub_kernel::Workspace) -> bool {
 pub fn disabled_plugins(ws: &fub_kernel::Workspace) -> Vec<String> {
     ws.setting(PLUGINS_DISABLED)
         .ok()
-        .and_then(|v| v.as_list().map(|l| l.to_vec()))
+        .and_then(|v| v.as_list().map(|the| the.to_vec()))
         .unwrap_or_default()
 }
 
@@ -639,7 +639,7 @@ pub fn apply_log_levels(ws: &fub_kernel::Workspace, levels: &fub_kernel::log::Le
     let verbose = ws
         .setting(LOG_VERBOSE)
         .ok()
-        .and_then(|v| v.as_list().map(|l| l.to_vec()))
+        .and_then(|v| v.as_list().map(|the| the.to_vec()))
         .unwrap_or_default();
     levels.set_verbose(verbose);
 }
@@ -648,8 +648,8 @@ pub fn apply_log_levels(ws: &fub_kernel::Workspace, levels: &fub_kernel::log::Le
 mod tests {
     use super::*;
 
-    fn mappa(righe: &[(&str, &str)]) -> BTreeMap<String, String> {
-        righe
+    fn map(rows: &[(&str, &str)]) -> BTreeMap<String, String> {
+        rows
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect()
@@ -659,13 +659,13 @@ mod tests {
     /// una chiave già adottata è un accordo nuovo, e chiedere di nuovo è la sola
     /// risposta che non dia per buono ciò che nessuno ha visto.
     #[test]
-    fn si_guarda_quel_che_e_cambiato_non_quel_che_e_comparso() {
-        let vault = mappa(&[
+    fn is_that_changed_not_that_appeared() {
+        let vault = map(&[
             ("keys.note.create", "Mod-Alt-k"),
             ("keys.trash.empty", "Mod-s"),
             ("keys.vault.undo", "Mod-z"),
         ]);
-        let visti = mappa(&[
+        let seen = map(&[
             // uguale: adottata e non cambiata
             ("keys.note.create", "Mod-Alt-k"),
             // diversa: adottata ieri, cambiata stanotte
@@ -673,9 +673,9 @@ mod tests {
             // e una che il file non porta più: non è in discussione
             ("keys.note.rename", "Mod-r"),
         ]);
-        let da_guardare = tasti_da_guardare(&vault, &visti);
+        let from_watch = keys_to_watch(&vault, &seen);
         assert_eq!(
-            da_guardare,
+            from_watch,
             BTreeSet::from([
                 "keys.trash.empty".to_string(),
                 "keys.vault.undo".to_string()
@@ -686,8 +686,8 @@ mod tests {
     /// Il caso di quasi tutti, e deve costare zero: un vault che non porta
     /// scorciatoie non ha niente da guardare.
     #[test]
-    fn un_vault_senza_tasti_non_chiede_niente() {
-        assert!(tasti_da_guardare(&BTreeMap::new(), &BTreeMap::new()).is_empty());
-        assert!(tasti_da_guardare(&BTreeMap::new(), &mappa(&[("keys.a", "Mod-a")])).is_empty());
+    fn a_vault_without_keys_not_asks_nothing() {
+        assert!(keys_to_watch(&BTreeMap::new(), &BTreeMap::new()).is_empty());
+        assert!(keys_to_watch(&BTreeMap::new(), &map(&[("keys.a", "Mod-a")])).is_empty());
     }
 }

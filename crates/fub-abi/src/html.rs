@@ -46,7 +46,7 @@
 ///
 /// È l'elenco, non un `match`, perché il banco che lo fissa deve poterlo
 /// **contare**: un carattere tolto si vede, un ramo tolto da un `match` no.
-const TABELLA: &[(char, &str)] = &[
+const TABLE: &[(char, &str)] = &[
     ('&', "&amp;"),
     ('<', "&lt;"),
     ('>', "&gt;"),
@@ -63,13 +63,13 @@ pub fn escape(s: &str) -> String {
     // Niente da escapare? Il giro carattere per carattere non serve. La prova
     // nasce dalla TABELLA stessa, così non può divergere da ciò che il ciclo
     // escaperebbe.
-    if !TABELLA.iter().any(|(k, _)| s.contains(*k)) {
+    if !TABLE.iter().any(|(k, _)| s.contains(*k)) {
         return s.to_string();
     }
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
-        match TABELLA.iter().find(|(k, _)| *k == c) {
-            Some((_, entita)) => out.push_str(entita),
+        match TABLE.iter().find(|(k, _)| *k == c) {
+            Some((_, entity)) => out.push_str(entity),
             None => out.push(c),
         }
     }
@@ -88,8 +88,8 @@ pub fn escape(s: &str) -> String {
 /// da fuori, il posto in cui rifiutarlo sarebbe la convalida di chi lo riceve,
 /// non un escape che lo trasformerebbe in un nome diverso e altrettanto
 /// arbitrario.
-pub fn attr(nome: &str, valore: &str) -> String {
-    format!(" {nome}=\"{}\"", escape(valore))
+pub fn attr(name: &str, value: &str) -> String {
+    format!(" {name}=\"{}\"", escape(value))
 }
 
 #[cfg(test)]
@@ -103,8 +103,8 @@ mod tests {
     /// resterebbe verde per costruzione se la tabella si accorciasse — perché
     /// l'assert qui sotto guarda una stringa sola.
     #[test]
-    fn i_cinque_caratteri_e_nessun_altro() {
-        assert_eq!(TABELLA.len(), 5);
+    fn the_five_characters_and_no_others() {
+        assert_eq!(TABLE.len(), 5);
         assert_eq!(escape("a<b>&\"'"), "a&lt;b&gt;&amp;&quot;&#39;");
         // Ciò che non è nella tabella passa intero, accenti e CJK compresi.
         assert_eq!(escape("Caffè — 漢字"), "Caffè — 漢字");
@@ -114,7 +114,7 @@ mod tests {
     /// Un attributo si scrive tutto o niente: chi chiama non ha in mano né le
     /// virgolette né l'escape, quindi non può scriverne metà.
     #[test]
-    fn un_attributo_porta_le_sue_virgolette_e_il_suo_escape() {
+    fn an_attribute_brings_its_own_quotes_and_escape() {
         assert_eq!(attr("data-x", "a\"b"), " data-x=\"a&quot;b\"");
         // L'apice: il carattere che due delle tre copie divergenti si
         // lasciavano indietro.

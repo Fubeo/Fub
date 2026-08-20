@@ -218,7 +218,7 @@ mod tests {
     use fub_abi::ui::UiKind;
     use fub_sdk::testing::MemoryHost;
 
-    fn istanza() -> ViewInstance {
+    fn instance() -> ViewInstance {
         ViewInstance::only(BACKLINKS_VIEW)
     }
 
@@ -242,11 +242,11 @@ mod tests {
         assert!(json.contains(r#""doc":"a/Nota.md""#));
         assert!(
             !json.contains("open:a/Nota.md"),
-            "il documento sta nel payload, non concatenato nell'id"
+            "the document is in the payload, not concatenated into the ID"
         );
         assert!(
             json.contains(r#""key":"a/Nota.md#0""#),
-            "ogni riga porta la propria identità fra due ridisegni"
+            "each row carries its own identity across redraws"
         );
     }
 
@@ -260,15 +260,15 @@ mod tests {
     /// giorno l'identità di una riga si scrivesse in un altro modo, questo
     /// resterebbe la domanda giusta.
     #[test]
-    fn due_menzioni_dalla_stessa_nota_sono_due_righe_con_due_chiavi() {
+    fn two_mentions_from_the_same_notes_are_two_rows_with_two_keys() {
         let refs = vec![
             BacklinkRef {
                 source: DocId::new("a/Nota.md"),
-                context: Some("il primo punto in cui la cita".into()),
+                context: Some("the first place it cites it".into()),
             },
             BacklinkRef {
                 source: DocId::new("a/Nota.md"),
-                context: Some("il secondo, più sotto".into()),
+                context: Some("the second, further down".into()),
             },
             BacklinkRef {
                 source: DocId::new("b/Altra.md"),
@@ -276,18 +276,18 @@ mod tests {
             },
         ];
         let UiKind::Stack { children, .. } = build_backlinks_view(&refs).kind else {
-            panic!("il pannello è una colonna");
+            panic!("the panel is a column");
         };
         let UiKind::List { items } = &children[1].kind else {
-            panic!("la seconda riga della colonna è l'elenco");
+            panic!("the second row of the column is the list");
         };
-        assert_eq!(items.len(), 3, "una riga per riferimento, non per nota");
-        let chiavi: std::collections::BTreeSet<&str> =
+        assert_eq!(items.len(), 3, "one row per reference, not per note");
+        let keys: std::collections::BTreeSet<&str> =
             items.iter().filter_map(|n| n.key.as_deref()).collect();
         assert_eq!(
-            chiavi.len(),
+            keys.len(),
             items.len(),
-            "chiavi dei fratelli: {:?} — devono essere tante quante le righe",
+            "sibling keys: {:?} — there must be as many as there are rows",
             items.iter().map(|n| n.key.as_deref()).collect::<Vec<_>>()
         );
     }
@@ -296,23 +296,23 @@ mod tests {
     fn render_reads_active_doc_and_queries_the_host() {
         // Il provider non riceve niente: il documento attivo e i backlink li
         // prende dall'host, esattamente come farà un plugin.
-        let host = MemoryHost::new().con_backlink("target.md", &["a/Uno.md", "Due.md"]);
+        let host = MemoryHost::new().with_backlink("target.md", &["a/Uno.md", "Due.md"]);
         host.set_active(Some("target.md"));
 
-        let tree = BacklinksView.render_view(&istanza(), &host).unwrap();
+        let tree = BacklinksView.render_view(&instance(), &host).unwrap();
         let json = serde_json::to_string(&tree).unwrap();
         // La testata porta il **numero**, non la frase: la frase la compone il
         // catalogo, e il numero è ciò che questo provider ha da dire.
         assert!(json.contains(r#""key":"count_heading""#), "{json}");
         assert!(json.contains(r#""value":2"#), "{json}");
         assert!(json.contains(r#""doc":"a/Uno.md""#));
-        assert!(json.contains(r#""doc":"Due.md""#));
+        assert!(json.contains(r#""doc":"Two.md""#));
     }
 
     #[test]
     fn render_without_active_doc_is_a_placeholder_not_an_error() {
         let host = MemoryHost::new();
-        let tree = BacklinksView.render_view(&istanza(), &host).unwrap();
+        let tree = BacklinksView.render_view(&instance(), &host).unwrap();
         assert!(matches!(tree.kind, UiKind::EmptyState { .. }));
     }
 
@@ -321,7 +321,7 @@ mod tests {
         let mut host = MemoryHost::new();
         let update = BacklinksView
             .on_action(
-                &istanza(),
+                &instance(),
                 UiAction::new(OPEN).with_payload(serde_json::json!({DOC: "a/Uno.md"})),
                 &mut host,
             )
@@ -340,7 +340,7 @@ mod tests {
     fn an_action_without_a_document_navigates_nowhere() {
         let mut host = MemoryHost::new();
         let update = BacklinksView
-            .on_action(&istanza(), UiAction::new(OPEN), &mut host)
+            .on_action(&instance(), UiAction::new(OPEN), &mut host)
             .unwrap();
         assert_eq!(update, ViewUpdate::None);
     }

@@ -8,7 +8,7 @@ use fub_abi::model::DocId;
 use fub_abi::traits::{PluginManifest, ViewInstance};
 use fub_abi::ui::{UiAction, UiKind, UiNode};
 use fub_features::{
-    TemplateCommands, TemplateView, NOTE_DAILY, NOTE_FROM_TEMPLATE, TEMPLATE_ID, TEMPLATE_VIEW,
+    TemplateCommands, TemplateView, NOTES_DAILY, NOTES_FROM_TEMPLATE, TEMPLATE_ID, TEMPLATE_VIEW,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace};
@@ -54,7 +54,7 @@ impl Vault {
     }
 }
 
-fn voci(tree: &UiNode) -> Vec<String> {
+fn entries(tree: &UiNode) -> Vec<String> {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         match &node.kind {
             UiKind::ListItem { title, .. } => out.push(title.to_string()),
@@ -69,95 +69,95 @@ fn voci(tree: &UiNode) -> Vec<String> {
 }
 
 #[test]
-fn from_template_sostituisce_e_crea() {
+fn from_template_replaces_and_creates() {
     let vault = Vault::new();
     vault.put("Templates/Meeting.md", "# {{title}}\n\nData: {{date}}\n");
     let mut ws = vault.open();
-    let esito = ws
+    let outcome = ws
         .invoke_command(
-            NOTE_FROM_TEMPLATE,
+            NOTES_FROM_TEMPLATE,
             serde_json::json!({"template": "Templates/Meeting.md", "name": "Standup"}),
             InvokeMode::Apply,
             Actor::User,
         )
         .expect("from_template");
-    let CommandEffect::Navigate { doc } = esito.effect else {
-        panic!("atteso Navigate, {:?}", esito.effect);
+    let CommandEffect::Navigate { doc } = outcome.effect else {
+        panic!("atteso Navigate, {:?}", outcome.effect);
     };
     assert_eq!(doc, DocId::new("Standup.md"));
-    let corpo = ws.read_source(&doc).unwrap();
-    assert!(corpo.starts_with("# Standup\n"), "{corpo}");
-    assert!(corpo.contains("Data: 20"), "{corpo}");
+    let body = ws.read_source(&doc).unwrap();
+    assert!(body.starts_with("# Standup\n"), "{body}");
+    assert!(body.contains("Data: 20"), "{body}");
 }
 
 #[test]
-fn daily_crea_e_la_seconda_volta_apre() {
+fn daily_creates_and_the_second_time_opens() {
     let vault = Vault::new();
     vault.put("Templates/Daily.md", "diario {{date}}\n");
     let mut ws = vault.open();
-    let primo = ws
+    let first = ws
         .invoke_command(
-            NOTE_DAILY,
+            NOTES_DAILY,
             serde_json::json!({}),
             InvokeMode::Apply,
             Actor::User,
         )
         .expect("daily");
-    let CommandEffect::Navigate { doc } = primo.effect else {
-        panic!("{:?}", primo.effect);
+    let CommandEffect::Navigate { doc } = first.effect else {
+        panic!("{:?}", first.effect);
     };
     assert!(doc.as_str().starts_with("Daily/"), "{}", doc.as_str());
     assert!(doc.as_str().ends_with(".md"));
-    let corpo = ws.read_source(&doc).unwrap();
-    assert!(corpo.starts_with("diario 20"), "{corpo}");
+    let body = ws.read_source(&doc).unwrap();
+    assert!(body.starts_with("diario 20"), "{body}");
 
-    let secondo = ws
+    let second = ws
         .invoke_command(
-            NOTE_DAILY,
+            NOTES_DAILY,
             serde_json::json!({}),
             InvokeMode::Apply,
             Actor::User,
         )
         .expect("daily di nuovo");
-    let CommandEffect::Navigate { doc: di_nuovo } = secondo.effect else {
-        panic!("{:?}", secondo.effect);
+    let CommandEffect::Navigate { doc: of_new } = second.effect else {
+        panic!("{:?}", second.effect);
     };
-    assert_eq!(doc, di_nuovo);
-    assert_eq!(ws.read_source(&doc).unwrap(), corpo);
+    assert_eq!(doc, of_new);
+    assert_eq!(ws.read_source(&doc).unwrap(), body);
 }
 
 #[test]
-fn la_view_elenca_i_template() {
+fn the_view_lists_the_template() {
     let vault = Vault::new();
     vault.put("Templates/A.md", "a\n");
     vault.put("Templates/B.md", "b\n");
     vault.put("Altro.md", "no\n");
     let ws = vault.open();
     let tree = ws.render_view(&ViewInstance::only(TEMPLATE_VIEW)).unwrap();
-    let voci = voci(&tree);
-    assert_eq!(voci, vec!["A".to_string(), "B".to_string()]);
+    let entries = entries(&tree);
+    assert_eq!(entries, vec!["A".to_string(), "B".to_string()]);
 }
 
 #[test]
-fn dry_run_non_scrive() {
+fn dry_run_not_writes() {
     let vault = Vault::new();
     vault.put("Templates/X.md", "x\n");
     let mut ws = vault.open();
-    let prima = ws.documents();
-    let esito = ws
+    let before = ws.documents();
+    let outcome = ws
         .invoke_command(
-            NOTE_FROM_TEMPLATE,
+            NOTES_FROM_TEMPLATE,
             serde_json::json!({"template": "Templates/X.md", "name": "Y"}),
             InvokeMode::DryRun,
             Actor::User,
         )
         .expect("dry_run");
-    assert!(matches!(esito.effect, CommandEffect::Plan(_)));
-    assert_eq!(ws.documents(), prima);
+    assert!(matches!(outcome.effect, CommandEffect::Plan(_)));
+    assert_eq!(ws.documents(), before);
 }
 
 #[test]
-fn click_crea_da_template() {
+fn click_creates_from_template() {
     let vault = Vault::new();
     vault.put("Templates/Scheda.md", "ciao {{title}}\n");
     let mut ws = vault.open();
@@ -171,8 +171,8 @@ fn click_crea_da_template() {
     match update {
         fub_abi::ui::ViewUpdate::Navigate { doc_id } => {
             assert!(doc_id.ends_with(".md"), "{doc_id}");
-            let corpo = ws.read_source(&DocId::new(&doc_id)).unwrap();
-            assert!(corpo.contains("ciao "), "{corpo}");
+            let body = ws.read_source(&DocId::new(&doc_id)).unwrap();
+            assert!(body.contains("ciao "), "{body}");
         }
         other => panic!("atteso Navigate, {other:?}"),
     }

@@ -20,15 +20,15 @@ use fub_format_markdown::{
     MarkdownExport, MarkdownImport, MarkdownProvider, TARGET_FILES, TARGET_SINGLE,
 };
 use fub_kernel::{FormatRegistry, Workspace};
-use fub_sdk::testing::conformita;
+use fub_sdk::testing::conformance;
 
 mod corpus;
 
-use crate::corpus::{corpus, divergenti, muta, quanti_casi, seme, Caso64};
+use crate::corpus::{corpus, divergent, muta, how_many_cases, seme, Case64};
 
 /// Un `Workspace` sulla radice data, coi due provider di trasferimento
 /// registrati.
-fn workspace_su(root: &Utf8Path) -> Workspace {
+fn workspace_on(root: &Utf8Path) -> Workspace {
     let mut registry = FormatRegistry::new();
     registry
         .register(MarkdownProvider::boxed())
@@ -51,16 +51,16 @@ fn workspace_su(root: &Utf8Path) -> Workspace {
 /// È la differenza che tiene onesto il round-trip di qui sotto: se le note
 /// entrassero dall'import, il presidio confronterebbe l'import con sé stesso e
 /// una normalizzazione fatta in tutt'e due i versi passerebbe inosservata.
-fn vault_con(note: &[(String, String)]) -> (tempfile::TempDir, Workspace) {
+fn vault_with(notes: &[(String, String)]) -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
     std::fs::create_dir_all(&root).expect("la radice esiste anche se le note sono zero");
-    for (rel, body) in note {
+    for (rel, body) in notes {
         let path = root.join(rel);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, body).unwrap();
     }
-    let mut ws = workspace_su(&root);
+    let mut ws = workspace_on(&root);
     ws.reindex().expect("reindex");
     (dir, ws)
 }
@@ -71,7 +71,7 @@ fn vault_con(note: &[(String, String)]) -> (tempfile::TempDir, Workspace) {
 /// - `Progetti/Beta.md`
 /// - `Diario.md` (senza frontmatter)
 fn vault() -> (tempfile::TempDir, Workspace) {
-    vault_con(&[
+    vault_with(&[
         (
             "Progetti/Alpha.md".to_string(),
             "---\ntipo: progetto\n---\n\n# Alpha\n\nVedi [[Beta]]. #lavoro\n".to_string(),
@@ -184,9 +184,9 @@ fn a_source_lands_in_the_folder_that_was_asked_for() {
 
 #[test]
 fn the_three_conflict_policies_do_three_different_things() {
-    let esistente = "---\ntipo: progetto\n---\n\n# Alpha\n\nVedi [[Beta]]. #lavoro\n";
-    let nuovo = "# Altro Alpha\n";
-    let source = ImportSource::text_source("Alpha.md", nuovo);
+    let existing = "---\ntipo: progetto\n---\n\n# Alpha\n\nVedi [[Beta]]. #lavoro\n";
+    let new = "# Altro Alpha\n";
+    let source = ImportSource::text_source("Alpha.md", new);
     let alpha = DocId::new("Progetti/Alpha.md");
 
     // skip: ciò che c'è non si tocca. È il default perché è l'unica politica
@@ -196,7 +196,7 @@ fn the_three_conflict_policies_do_three_different_things() {
         .import(&source, &ImportRequest::apply().into_folder("Progetti"))
         .expect("import");
     assert_eq!(report.documents[0].outcome, ImportOutcome::Skipped);
-    assert_eq!(ws.read_source(&alpha).unwrap(), esistente);
+    assert_eq!(ws.read_source(&alpha).unwrap(), existing);
 
     // replace
     let (_g, mut ws) = vault();
@@ -209,7 +209,7 @@ fn the_three_conflict_policies_do_three_different_things() {
         )
         .expect("import");
     assert_eq!(report.documents[0].outcome, ImportOutcome::Replaced);
-    assert_eq!(ws.read_source(&alpha).unwrap(), nuovo);
+    assert_eq!(ws.read_source(&alpha).unwrap(), new);
 
     // rename: la convenzione è quella dell'host (D3), non una dell'importer.
     let (_g, mut ws) = vault();
@@ -230,7 +230,7 @@ fn the_three_conflict_policies_do_three_different_things() {
     );
     assert_eq!(
         ws.read_source(&alpha).unwrap(),
-        esistente,
+        existing,
         "l'originale è ancora lì"
     );
     assert!(report.log.iter().any(|n| n.level == NoteLevel::Warning));
@@ -275,13 +275,13 @@ fn a_source_nobody_claims_is_a_bad_argument_and_not_an_empty_import() {
 #[test]
 fn a_source_that_is_not_text_stops_before_starting() {
     let (_g, mut ws) = vault();
-    let rotta = ImportSource {
+    let broken = ImportSource {
         name: "Nota.md".to_string(),
         media_type: None,
         content: SourceContent::Bytes(vec![0xff, 0xfe, 0x00]),
     };
     assert!(matches!(
-        ws.import(&rotta, &ImportRequest::apply()),
+        ws.import(&broken, &ImportRequest::apply()),
         Err(PluginError::BadArgs(_))
     ));
     assert!(!ws.documents().contains(&DocId::new("Nota.md")));
@@ -449,7 +449,7 @@ fn a_single_document_target_produces_exactly_one_artifact() {
 /// in cui si concatena* — il primo arriva per primo — invece che da *cosa rende
 /// un frontmatter un frontmatter*, che è stare al byte zero.
 #[test]
-fn in_un_documento_unico_il_frontmatter_resta_metadato_e_non_diventa_un_divisore() {
+fn in_a_document_single_the_frontmatter_remains_metadata_and_not_becomes_a_separator() {
     let (_g, ws) = vault();
     let report = ws
         .export(&ExportRequest::new(
@@ -473,7 +473,7 @@ fn in_un_documento_unico_il_frontmatter_resta_metadato_e_non_diventa_un_divisore
     // E non sono diventati sintassi: ciò che li porta è un recinto, quindi il
     // modello del documento uscito li vede come **codice**, non come un divisore
     // seguito da un'intestazione.
-    let m = modello(out, "export.md");
+    let m = model(out, "export.md");
     let recinti: Vec<&String> = m
         .body
         .iter()
@@ -501,7 +501,7 @@ fn in_un_documento_unico_il_frontmatter_resta_metadato_e_non_diventa_un_divisore
 
     // L'altra metà dell'opzione: senza metadati non ne esce nessuno, ed è ciò
     // che rende la bandiera una scelta invece di una parola.
-    let senza = ws
+    let without = ws
         .export(
             &ExportRequest::new(
                 TARGET_SINGLE,
@@ -511,7 +511,7 @@ fn in_un_documento_unico_il_frontmatter_resta_metadato_e_non_diventa_un_divisore
         )
         .expect("export");
     let out = text(
-        artifact(&senza, "export.md")
+        artifact(&without, "export.md")
             .as_bytes()
             .expect("in memoria"),
     );
@@ -522,8 +522,8 @@ fn in_un_documento_unico_il_frontmatter_resta_metadato_e_non_diventa_un_divisore
 }
 
 #[test]
-fn un_frontmatter_vuoto_non_diventa_sintassi_nel_documento_unico() {
-    let (_g, ws) = vault_con(&[
+fn a_frontmatter_empty_not_becomes_syntax_in_the_document_single() {
+    let (_g, ws) = vault_with(&[
         ("Prima.md".to_string(), "---\n\n---\n\nCorpo.\n".to_string()),
         ("Seconda.md".to_string(), "Altro.\n".to_string()),
     ]);
@@ -542,7 +542,7 @@ fn un_frontmatter_vuoto_non_diventa_sintassi_nel_documento_unico() {
             .expect("in memoria"),
     );
 
-    let model = modello(out, "export.md");
+    let model = model(out, "export.md");
     assert_eq!(
         model
             .body
@@ -598,7 +598,7 @@ fn reimporta(ws: &mut Workspace, a: &ExportArtifact) -> DocId {
             },
             &ImportRequest::apply().into_folder(folder),
         )
-        .unwrap_or_else(|e| panic!("`{}` non è rientrata: {e}", a.path));
+        .unwrap_or_else(|and| panic!("`{}` non è rientrata: {and}", a.path));
     assert_eq!(report.documents.len(), 1);
     assert_eq!(
         report.documents[0].outcome,
@@ -620,22 +620,22 @@ fn what_goes_out_comes_back_in_identical() {
     // Su un vault scritto a mano: quello **sul corpus**, che il §17.1 chiede
     // subito dopo, sta in fondo a questo file.
     let (_g, ws) = vault();
-    let esportato = ws
+    let exported = ws
         .export(&ExportRequest::new(
             TARGET_FILES,
             ExportSelection::default(),
         ))
         .expect("export");
 
-    let (_g2, mut altro) = vault_con(&[]);
-    for a in &esportato.artifacts {
-        reimporta(&mut altro, a);
+    let (_g2, mut other) = vault_with(&[]);
+    for a in &exported.artifacts {
+        reimporta(&mut other, a);
     }
 
-    assert_eq!(altro.documents(), ws.documents());
+    assert_eq!(other.documents(), ws.documents());
     for doc in ws.documents() {
         assert_eq!(
-            altro.read_source(&doc).unwrap(),
+            other.read_source(&doc).unwrap(),
             ws.read_source(&doc).unwrap(),
             "`{doc}` è tornata diversa da com'era uscita"
         );
@@ -659,14 +659,14 @@ fn what_goes_out_comes_back_in_identical() {
 
 /// Le note del vault del corpus: una per caso curato, una per sorgente
 /// divergente, in due cartelle che dicono da quale elenco vengono.
-fn note_del_corpus() -> Vec<(String, String)> {
+fn notes_of_the_corpus() -> Vec<(String, String)> {
     corpus()
         .into_iter()
-        .map(|c| (format!("corpus/{}.md", c.nome), c.source.to_string()))
+        .map(|c| (format!("corpus/{}.md", c.name), c.source.to_string()))
         .chain(
-            divergenti()
+            divergent()
                 .into_iter()
-                .map(|c| (format!("divergenze/{}.md", c.nome), c.source.to_string())),
+                .map(|c| (format!("divergenze/{}.md", c.name), c.source.to_string())),
         )
         .collect()
 }
@@ -699,24 +699,24 @@ const CAPPELLO: &str = "---\na: 1\n---\n\n";
 /// diverga davvero: una scusa che non serve più è la cosa peggiore di un elenco a
 /// mano, perché sta lì a dire che qualcosa non si può fare e nessuno la
 /// ricontrolla.
-fn note_col_cappello() -> Vec<(String, String)> {
-    note_del_corpus()
+fn notes_col_hat() -> Vec<(String, String)> {
+    notes_of_the_corpus()
         .into_iter()
-        .filter(|(path, source)| modello(source, path).frontmatter.is_empty())
+        .filter(|(path, source)| model(source, path).frontmatter.is_empty())
         .filter(|(path, _)| {
-            let nome = nome_del_caso(path);
-            !FUORI_DAL_CAPPELLO.iter().any(|(n, _)| *n == nome)
+            let name = case_name(path);
+            !OUTSIDE_FROM_THE_HAT.iter().any(|(n, _)| *n == name)
         })
         .map(|(path, source)| {
             (
-                format!("cappello/{}.md", nome_del_caso(&path)),
+                format!("cappello/{}.md", case_name(&path)),
                 format!("{CAPPELLO}{source}"),
             )
         })
         .collect()
 }
 
-fn nome_del_caso(path: &str) -> &str {
+fn case_name(path: &str) -> &str {
     path.rsplit_once('/')
         .map(|(_, n)| n)
         .unwrap_or(path)
@@ -732,7 +732,7 @@ fn nome_del_caso(path: &str) -> &str {
 /// tolto il frontmatter tornano in testa, e in testa vogliono dire un'altra cosa.
 /// Il taglio non ha spostato niente: è il documento che, cominciando altrove,
 /// significa altro.
-const FUORI_DAL_CAPPELLO: [(&str, &str); 3] = [
+const OUTSIDE_FROM_THE_HAT: [(&str, &str); 3] = [
     (
         "bom",
         "un BOM in mezzo al documento è testo; tolto il frontmatter torna in testa e \
@@ -751,32 +751,32 @@ const FUORI_DAL_CAPPELLO: [(&str, &str); 3] = [
 ];
 
 #[test]
-fn le_esclusioni_dal_cappello_servono_ancora() {
-    for (nome, ragione) in FUORI_DAL_CAPPELLO {
+fn the_exclusions_from_the_hat_serve_again() {
+    for (name, reason) in OUTSIDE_FROM_THE_HAT {
         let source = corpus()
             .into_iter()
-            .chain(divergenti())
-            .find(|c| c.nome == nome)
+            .chain(divergent())
+            .find(|c| c.name == name)
             .unwrap_or_else(|| {
                 panic!(
-                    "`{nome}` è escluso dal cappello e non è più nel corpus: la \
+                    "`{name}` è escluso dal cappello e non è più nel corpus: la \
                      scusa nomina un caso che non c'è"
                 )
             })
             .source;
         let path = "Prova.md".to_string();
-        let col_cappello = format!("{CAPPELLO}{source}");
-        let (_g, ws) = vault_con(&[(path.clone(), col_cappello.clone())]);
-        let fuori = ws.export(&senza_metadati()).expect("export");
-        let tagliato = text(fuori.artifacts[0].as_bytes().expect("in memoria"));
+        let col_hat = format!("{CAPPELLO}{source}");
+        let (_g, ws) = vault_with(&[(path.clone(), col_hat.clone())]);
+        let outside = ws.export(&without_metadata()).expect("export");
+        let cut = text(outside.artifacts[0].as_bytes().expect("in memoria"));
         // Il confronto è quello del presidio: il documento **come sta nel vault**
         // contro quello che ne esce senza metadati. Confrontare l'uscita con la
         // sorgente originale direbbe un'altra cosa — che il taglio ha reso i byte
         // che erano — e sarebbe vero per costruzione.
-        assert_ne!(
-            struttura(&modello(tagliato, &path)),
-            struttura(&modello(&col_cappello, &path)),
-            "`{nome}` è escluso dal cappello perché «{ragione}», e adesso col \
+        assert_eq!(
+            structure(&model(cut, &path)),
+            structure(&model(&col_hat, &path)),
+            "`{name}` è escluso dal cappello perché «{reason}», e adesso col \
              cappello davanti si comporta come tutti gli altri.\n\
              Se è stato riparato è una bella notizia e va scritta nel verbale: \
              questa riga va tolta da `FUORI_DAL_CAPPELLO`, e il caso torna nella \
@@ -787,15 +787,15 @@ fn le_esclusioni_dal_cappello_servono_ancora() {
 
 /// La richiesta «tutto il vault, senza metadati»: l'unica opzione dell'export
 /// markdown, e l'unico verso che passa dal modello.
-fn senza_metadati() -> ExportRequest {
+fn without_metadata() -> ExportRequest {
     ExportRequest::new(TARGET_FILES, ExportSelection::default())
         .with_options(serde_json::json!({ "frontmatter": false }))
 }
 
-fn modello(source: &str, doc_id: &str) -> DocumentModel {
+fn model(source: &str, doc_id: &str) -> DocumentModel {
     MarkdownProvider::new()
         .parse(&source.into(), &ParseContext::obsidian(doc_id))
-        .unwrap_or_else(|e| panic!("`{doc_id}` non parsa: {e}"))
+        .unwrap_or_else(|and| panic!("`{doc_id}` non parsa: {and}"))
 }
 
 /// Ciò che di un documento **non deve cambiare** quando gli si toglie il
@@ -813,17 +813,17 @@ fn modello(source: &str, doc_id: &str) -> DocumentModel {
 /// [`without_metadata_the_round_trip_is_a_fixed_point`], che con gli span rimessi
 /// al loro posto non lascia passare niente. Una lista di righe però si legge, e un
 /// `DocumentModel` a schermo no.
-fn struttura(d: &DocumentModel) -> Vec<String> {
-    let mut fuori = Vec::new();
-    fuori.extend(specie_dei_blocchi(&d.body));
+fn structure(d: &DocumentModel) -> Vec<String> {
+    let mut outside = Vec::new();
+    outside.extend(kind_of_the_blocks(&d.body));
     for h in &d.outline {
-        fuori.push(format!("heading {} {:?} {:?}", h.level, h.slug, h.text));
+        outside.push(format!("heading {} {:?} {:?}", h.level, h.slug, h.text));
     }
     for t in &d.tags {
-        fuori.push(format!("tag {:?}", t.name));
+        outside.push(format!("tag {:?}", t.name));
     }
     // I bersagli dei link li proietta l'SDK e non questo file:
-    // `conformita::bersagli` esiste dalla 0060 per «la forma in cui un corpus li
+    // `conformance::bersagli` esiste dalla 0060 per «la forma in cui un corpus li
     // confronta con ciò che si aspetta», e fino a qui era **senza un cliente** —
     // dichiarata tale nel suo doc, con la condizione che il primo corpus a
     // chiedersi *cosa un documento nomina* le desse una ragione o la togliesse.
@@ -834,19 +834,19 @@ fn struttura(d: &DocumentModel) -> Vec<String> {
     // È un insieme, quindi perde l'ordine, i doppioni e il flag `embed`: la riga
     // dopo li rimette, perché un taglio che duplica un link o che ne perde
     // l'incorporamento è esattamente il difetto che si sta cercando.
-    for b in conformita::bersagli(d) {
-        fuori.push(format!("nomina {b}"));
+    for b in conformance::targets(d) {
+        outside.push(format!("nomina {b}"));
     }
-    fuori.push(format!(
+    outside.push(format!(
         "{} link, di cui {} incorporati",
         d.links.len(),
-        d.links.iter().filter(|l| l.embed).count()
+        d.links.iter().filter(|the| the.embed).count()
     ));
     for a in &d.anchors {
-        fuori.push(format!("ancora {:?}", a.id));
+        outside.push(format!("ancora {:?}", a.id));
     }
-    fuori.push(format!("testo {:?}", d.text));
-    fuori
+    outside.push(format!("testo {:?}", d.text));
+    outside
 }
 
 /// La specie di ogni blocco, annidamento compreso, e ciò che la distingue da un
@@ -856,38 +856,38 @@ fn struttura(d: &DocumentModel) -> Vec<String> {
 /// Senza questa, `struttura` non vedeva la differenza fra `- [x] fatta` e
 /// `- [ ] fatta`, fra un code block recintato e uno indentato, fra una citazione e
 /// un paragrafo: tre coppie di sorgenti diverse con la stessa proiezione.
-fn specie_dei_blocchi(bs: &[Block]) -> Vec<String> {
-    let mut fuori = Vec::new();
+fn kind_of_the_blocks(bs: &[Block]) -> Vec<String> {
+    let mut outside = Vec::new();
     for b in bs {
         match b {
-            Block::Heading { level, .. } => fuori.push(format!("blocco heading {level}")),
-            Block::Paragraph { .. } => fuori.push("blocco paragrafo".to_string()),
+            Block::Heading { level, .. } => outside.push(format!("blocco heading {level}")),
+            Block::Paragraph { .. } => outside.push("blocco paragrafo".to_string()),
             Block::CodeBlock { lang, code, .. } => {
-                fuori.push(format!("blocco codice {lang:?} {code:?}"))
+                outside.push(format!("blocco codice {lang:?} {code:?}"))
             }
-            Block::ThematicBreak { .. } => fuori.push("blocco riga".to_string()),
+            Block::ThematicBreak { .. } => outside.push("blocco riga".to_string()),
             Block::ReferenceDefinition {
                 label, url, title, ..
-            } => fuori.push(format!(
+            } => outside.push(format!(
                 "blocco definizione riferimento {label:?} {url:?} {title:?}"
             )),
             Block::List { ordered, items, .. } => {
-                fuori.push(format!("blocco lista ordinata={ordered}"));
+                outside.push(format!("blocco lista ordinata={ordered}"));
                 for it in items {
                     // Il simbolo, non il `TaskMarker` intero: quello porta uno span,
                     // e uno span dentro una proiezione dichiarata «senza gli offset»
                     // la fa divergere per il solo fatto che il taglio è avvenuto.
                     // È il difetto che questa riga aveva nella prima versione.
-                    fuori.push(format!(
+                    outside.push(format!(
                         "  voce task={:?}",
                         it.task.as_ref().map(|t| t.symbol)
                     ));
-                    fuori.extend(specie_dei_blocchi(&it.blocks).into_iter().map(indenta));
+                    outside.extend(kind_of_the_blocks(&it.blocks).into_iter().map(indenta));
                 }
             }
             Block::Quote { blocks, .. } => {
-                fuori.push("blocco citazione".to_string());
-                fuori.extend(specie_dei_blocchi(blocks).into_iter().map(indenta));
+                outside.push("blocco citazione".to_string());
+                outside.extend(kind_of_the_blocks(blocks).into_iter().map(indenta));
             }
             Block::Custom {
                 custom_kind,
@@ -895,13 +895,13 @@ fn specie_dei_blocchi(bs: &[Block]) -> Vec<String> {
                 blocks,
                 ..
             } => {
-                fuori.push(format!("blocco {custom_kind} {attrs}"));
-                fuori.extend(specie_dei_blocchi(blocks).into_iter().map(indenta));
+                outside.push(format!("blocco {custom_kind} {attrs}"));
+                outside.extend(kind_of_the_blocks(blocks).into_iter().map(indenta));
             }
             Block::Table {
                 head, rows, align, ..
             } => {
-                fuori.push(format!(
+                outside.push(format!(
                     "blocco tabella intestazione={} righe={} allineamenti={align:?}",
                     head.is_some(),
                     rows.len()
@@ -909,10 +909,10 @@ fn specie_dei_blocchi(bs: &[Block]) -> Vec<String> {
             }
         }
         if let Some(a) = b.anchor() {
-            fuori.push(format!("  ancora del blocco {a:?}"));
+            outside.push(format!("  ancora del blocco {a:?}"));
         }
     }
-    fuori
+    outside
 }
 
 fn indenta(r: String) -> String {
@@ -928,36 +928,36 @@ fn indenta(r: String) -> String {
 /// `source.len() - fuori.len()`. Rimessi a posto, gli span diventano la parte più
 /// severa del confronto — sono la sola cosa che vede un taglio che ha spostato dei
 /// byte invece di toglierne un prefisso.
-fn sposta(d: &mut DocumentModel, delta: usize) {
+fn shift_spans(d: &mut DocumentModel, delta: usize) {
     fn s(x: &mut Span, delta: usize) {
         x.start += delta;
         x.end += delta;
     }
-    fn dentro_gli_inline(is: &mut [Inline], delta: usize) {
-        for i in is {
-            match i {
+    fn within_inlines(is: &mut [Inline], delta: usize) {
+        for the in is {
+            match the {
                 Inline::Link { label, span, .. } => {
                     s(span, delta);
-                    if let Some(l) = label {
-                        dentro_gli_inline(l, delta);
+                    if let Some(the) = label {
+                        within_inlines(the, delta);
                     }
                 }
                 Inline::TagRef { span, .. } | Inline::Custom { span, .. } => s(span, delta),
-                Inline::Emph(dentro)
-                | Inline::Strong(dentro)
-                | Inline::Superscript(dentro)
-                | Inline::Strikethrough(dentro) => dentro_gli_inline(dentro, delta),
+                Inline::Emph(within)
+                | Inline::Strong(within)
+                | Inline::Superscript(within)
+                | Inline::Strikethrough(within) => within_inlines(within, delta),
                 // I due a-capo non portano span: come Text e Code.
                 Inline::Text(_) | Inline::Code(_) | Inline::HardBreak | Inline::SoftBreak => {}
             }
         }
     }
-    fn dentro_i_blocchi(bs: &mut [Block], delta: usize) {
+    fn within_blocks(bs: &mut [Block], delta: usize) {
         for b in bs {
             match b {
                 Block::Heading { inlines, span, .. } | Block::Paragraph { inlines, span, .. } => {
                     s(span, delta);
-                    dentro_gli_inline(inlines, delta);
+                    within_inlines(inlines, delta);
                 }
                 Block::List { items, span, .. } => {
                     s(span, delta);
@@ -966,7 +966,7 @@ fn sposta(d: &mut DocumentModel, delta: usize) {
                         if let Some(t) = &mut it.task {
                             s(&mut t.span, delta);
                         }
-                        dentro_i_blocchi(&mut it.blocks, delta);
+                        within_blocks(&mut it.blocks, delta);
                     }
                 }
                 Block::CodeBlock { span, .. }
@@ -974,28 +974,28 @@ fn sposta(d: &mut DocumentModel, delta: usize) {
                 | Block::ReferenceDefinition { span, .. } => s(span, delta),
                 Block::Quote { blocks, span, .. } | Block::Custom { blocks, span, .. } => {
                     s(span, delta);
-                    dentro_i_blocchi(blocks, delta);
+                    within_blocks(blocks, delta);
                 }
                 Block::Table {
                     head, rows, span, ..
                 } => {
                     s(span, delta);
-                    for riga in head.iter_mut().chain(rows.iter_mut()) {
-                        for cella in &mut riga.cells {
-                            s(&mut cella.span, delta);
-                            dentro_gli_inline(&mut cella.inlines, delta);
+                    for row in head.iter_mut().chain(rows.iter_mut()) {
+                        for cell in &mut row.cells {
+                            s(&mut cell.span, delta);
+                            within_inlines(&mut cell.inlines, delta);
                         }
                     }
                 }
             }
         }
     }
-    dentro_i_blocchi(&mut d.body, delta);
+    within_blocks(&mut d.body, delta);
     for h in &mut d.outline {
         s(&mut h.span, delta);
     }
-    for l in &mut d.links {
-        s(&mut l.span, delta);
+    for the in &mut d.links {
+        s(&mut the.span, delta);
     }
     for t in &mut d.tags {
         s(&mut t.span, delta);
@@ -1007,107 +1007,107 @@ fn sposta(d: &mut DocumentModel, delta: usize) {
 }
 
 #[test]
-fn the_corpus_names_are_usable_as_note_names() {
+fn the_corpus_names_are_usable_as_notes_names() {
     // Un nome del corpus diventa il nome di un file. Se due casi collidessero, o
     // se un nome portasse una barra, il vault del round-trip avrebbe meno note
     // del corpus — e il confronto sui byte passerebbe lo stesso, avendo
     // confrontato di meno. È la stessa specie di guardia di `confronta` in
     // `il_corpus.rs`: un elenco che si svuota passa sempre.
-    let note = note_del_corpus();
-    let mut visti = std::collections::BTreeSet::new();
-    for (path, _) in &note {
-        let nome = path
+    let notes = notes_of_the_corpus();
+    let mut seen = std::collections::BTreeSet::new();
+    for (path, _) in &notes {
+        let name = path
             .rsplit_once('/')
             .expect("le note stanno in due cartelle")
             .1;
-        let nome = nome
+        let name = name
             .strip_suffix(".md")
             .expect("l'estensione la mettiamo noi");
-        assert!(!nome.is_empty(), "un caso senza nome");
+        assert!(!name.is_empty(), "un caso senza nome");
         assert!(
-            !nome.contains('/') && !nome.contains('\\') && !nome.contains('\n'),
-            "il nome del caso `{nome}` non è un componente di path solo"
+            !name.contains('/') && !name.contains('\\') && !name.contains('\n'),
+            "il nome del caso `{name}` non è un componente di path solo"
         );
-        assert!(visti.insert(path.clone()), "due casi si chiamano `{path}`");
+        assert!(seen.insert(path.clone()), "due casi si chiamano `{path}`");
     }
     assert_eq!(
-        note.len(),
-        corpus().len() + divergenti().len(),
+        notes.len(),
+        corpus().len() + divergent().len(),
         "il vault del corpus non ha una nota per sorgente: qualche nome è collassato \
          su un altro"
     );
     assert!(
-        note.len() >= 75,
+        notes.len() >= 75,
         "il vault del corpus ha {} note su settantacinque: il corpus si è svuotato, \
          e un round-trip su niente è verde. La soglia è il conteggio di oggi — sale \
          con lui, e scende solo in un commit che dice perché",
-        note.len()
+        notes.len()
     );
 }
 
 #[test]
 fn the_whole_corpus_leaves_the_vault_and_comes_back_byte_for_byte() {
-    let note = note_del_corpus();
-    let (_g, ws) = vault_con(&note);
+    let notes = notes_of_the_corpus();
+    let (_g, ws) = vault_with(&notes);
 
     // Prima ancora del giro: i byte del caso sono i byte che il vault
     // restituisce. Se il kernel normalizzasse in lettura — un BOM tolto, un CRLF
     // ridotto — il round-trip resterebbe verde normalizzando due volte, e questa
     // riga è ciò che impedisce a quel verde di essere vuoto.
-    for (path, source) in &note {
+    for (path, source) in &notes {
         let doc = DocId::new(path.as_str());
-        let letto = ws
+        let read_value = ws
             .read_source(&doc)
-            .unwrap_or_else(|e| panic!("`{path}` non si rilegge: {e}"));
+            .unwrap_or_else(|and| panic!("`{path}` non si rilegge: {and}"));
         assert_eq!(
-            letto, *source,
+            read_value, *source,
             "`{path}`: il vault non restituisce i byte che ci sono stati messi"
         );
     }
 
-    let esportato = ws
+    let exported = ws
         .export(&ExportRequest::new(
             TARGET_FILES,
             ExportSelection::default(),
         ))
         .expect("export");
     assert_eq!(
-        esportato.artifacts.len(),
-        note.len(),
+        exported.artifacts.len(),
+        notes.len(),
         "l'export ha lasciato indietro delle note"
     );
     assert!(
-        esportato.log.is_empty(),
+        exported.log.is_empty(),
         "un export senza problemi non ha righe di log: {:?}",
-        esportato.log
+        exported.log
     );
 
     // L'export non tocca i byte…
-    for a in &esportato.artifacts {
-        let atteso = ws
+    for a in &exported.artifacts {
+        let expected = ws
             .read_source(&DocId::new(a.path.as_str()))
             .expect("il documento c'è, l'abbiamo appena esportato");
         assert_eq!(
             text(a.as_bytes().expect("in memoria")),
-            atteso.as_str(),
+            expected.as_str(),
             "`{}` è uscita diversa da com'era nel vault",
             a.path
         );
     }
 
     // …e l'import nemmeno.
-    let (_g2, mut altro) = vault_con(&[]);
-    for a in &esportato.artifacts {
-        reimporta(&mut altro, a);
+    let (_g2, mut other) = vault_with(&[]);
+    for a in &exported.artifacts {
+        reimporta(&mut other, a);
     }
     assert_eq!(
-        altro.documents(),
+        other.documents(),
         ws.documents(),
         "il vault d'arrivo non ha gli stessi documenti di quello di partenza"
     );
     for doc in ws.documents() {
         assert_eq!(
-            altro.read_source(&doc).unwrap(),
+            other.read_source(&doc).unwrap(),
             ws.read_source(&doc).unwrap(),
             "`{doc}` è tornata diversa da com'era uscita"
         );
@@ -1123,43 +1123,43 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
     // E ci sta **due volte**: come sono, e col cappello di frontmatter davanti.
     // Senza il cappello il taglio avverrebbe su quattro note su settantacinque, e
     // sulle altre settantuno ogni assert qui sotto sarebbe `x == x`.
-    let mut note = note_del_corpus();
-    note.extend(note_col_cappello());
-    let (_g, ws) = vault_con(&note);
+    let mut notes = notes_of_the_corpus();
+    notes.extend(notes_col_hat());
+    let (_g, ws) = vault_with(&notes);
 
-    let primo = ws.export(&senza_metadati()).expect("export");
-    assert_eq!(primo.artifacts.len(), note.len());
+    let first = ws.export(&without_metadata()).expect("export");
+    assert_eq!(first.artifacts.len(), notes.len());
 
-    let mut proiettato = std::collections::BTreeSet::new();
-    let mut tagliate = 0usize;
-    for a in &primo.artifacts {
+    let mut projected = std::collections::BTreeSet::new();
+    let mut cut = 0usize;
+    for a in &first.artifacts {
         let source = ws.read_source(&DocId::new(a.path.as_str())).unwrap();
-        let fuori = text(a.as_bytes().expect("in memoria"));
+        let outside = text(a.as_bytes().expect("in memoria"));
 
         // L'invariante che vale su qualunque ingresso: togliendo il frontmatter
         // l'export **non può inventare byte**. Ciò che esce è il sorgente, o una
         // sua coda, o niente. Debole da sola — una coda sbagliata resta una coda
         // — ed è la ragione delle due righe dopo.
         assert!(
-            source.ends_with(fuori),
+            source.ends_with(outside),
             "`{}` senza metadati non è una coda del sorgente:\n  fuori {:?}\n  dentro {:?}",
             a.path,
-            fuori,
+            outside,
             source
         );
-        if fuori.len() == source.len() {
+        if outside.len() == source.len() {
             // Nessun frontmatter da togliere: qui non c'è niente da presidiare, e
             // contarla fra le tagliate sarebbe contare un `x == x`.
             continue;
         }
-        tagliate += 1;
+        cut += 1;
 
         // La proiezione leggibile, che è quella che si legge quando diventa rossa.
-        let prima = struttura(&modello(&source, a.path.as_str()));
-        proiettato.extend(prima.iter().cloned());
+        let before = structure(&model(&source, a.path.as_str()));
+        projected.extend(before.iter().cloned());
         assert_eq!(
-            struttura(&modello(fuori, a.path.as_str())),
-            prima,
+            structure(&model(outside, a.path.as_str())),
+            before,
             "`{}`: togliendo il frontmatter è cambiato anche il corpo. Il taglio \
              sullo span ha spostato dei byte invece di toglierne un prefisso",
             a.path
@@ -1170,19 +1170,19 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
         // quindi gli span si possono rimettere al loro posto, e i due modelli
         // devono essere identici. Il frontmatter è la sola differenza ammessa: è
         // ciò che si è tolto.
-        let delta = source.len() - fuori.len();
-        let mut rimesso = modello(fuori, a.path.as_str());
-        sposta(&mut rimesso, delta);
-        let mut atteso = modello(&source, a.path.as_str());
-        atteso.frontmatter = Frontmatter::default();
+        let delta = source.len() - outside.len();
+        let mut rimesso = model(outside, a.path.as_str());
+        shift_spans(&mut rimesso, delta);
+        let mut expected = model(&source, a.path.as_str());
+        expected.frontmatter = Frontmatter::default();
         // E la sua **presenza**, che dal 0213 è un campo a sé: una mappa vuota
         // non distingue «non c'era» da «c'era e non aveva chiavi», e l'export
         // senza metadati toglie i delimitatori insieme alle chiavi. Azzerare
         // solo la mappa lascerebbe qui l'unica differenza che è proprio ciò
         // che si voleva togliere.
-        atteso.frontmatter_present = false;
+        expected.frontmatter_present = false;
         assert_eq!(
-            rimesso, atteso,
+            rimesso, expected,
             "`{}`: il modello del documento tagliato, con gli span rimessi indietro \
              di {delta} byte, non è quello di prima. È il confronto che vede un \
              taglio spostato di un byte, che la sola proiezione qui sopra non vede",
@@ -1196,59 +1196,59 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
     // riga uno `strip_frontmatter` che restituisse sempre il sorgente passerebbe
     // tutti gli assert qui sopra, perché diventerebbero riflessivi — ed è
     // precisamente il difetto per cui esiste il cappello.
-    let con_frontmatter = note
+    let with_frontmatter = notes
         .iter()
-        .filter(|(p, s)| !modello(s, p).frontmatter.is_empty())
+        .filter(|(p, s)| !model(s, p).frontmatter.is_empty())
         .count();
     assert_eq!(
-        tagliate, con_frontmatter,
-        "il taglio è avvenuto su {tagliate} note e {con_frontmatter} hanno un \
+        cut, with_frontmatter,
+        "il taglio è avvenuto su {cut} note e {with_frontmatter} hanno un \
          frontmatter: sono lo stesso insieme o non lo sono. Se `tagliate` è meno, \
          `strip_frontmatter` ha smesso di tagliare su qualcosa che doveva."
     );
     assert!(
-        tagliate >= 70,
-        "il taglio è avvenuto su {tagliate} note su {}: sotto questa soglia la prova \
+        cut >= 70,
+        "il taglio è avvenuto su {cut} note su {}: sotto questa soglia la prova \
          sta confrontando quasi ogni documento con sé stesso, ed è il difetto per \
          cui esiste il cappello.",
-        note.len()
+        notes.len()
     );
 
     // La seconda: se `struttura` proiettasse il vuoto, i due lati sarebbero uguali
     // per ogni documento. È la stessa specie di rifiuto di `confronta` in
     // `il_corpus.rs` — «un confronto contro il vuoto passa sempre» — e nessun
     // sabotaggio della sola proiezione potrebbe farla diventare rossa.
-    for atteso in ["blocco ", "heading ", "nomina ", "ancora ", "tag "] {
+    for expected in ["blocco ", "heading ", "nomina ", "ancora ", "tag "] {
         assert!(
-            proiettato.iter().any(|r| r.starts_with(atteso)),
-            "in {tagliate} note tagliate la proiezione non ha prodotto una sola riga \
-             `{atteso}…`: sta confrontando meno di quel che dice.\n\
-             Ha prodotto: {proiettato:#?}"
+            projected.iter().any(|r| r.starts_with(expected)),
+            "in {cut} note tagliate la proiezione non ha prodotto una sola riga \
+             `{expected}…`: sta confrontando meno di quel che dice.\n\
+             Ha prodotto: {projected:#?}"
         );
     }
     assert!(
-        proiettato
+        projected
             .iter()
             .any(|r| r.starts_with("testo") && r.len() > 12),
         "nessuna nota ha del testo indicizzato: la proiezione confronta stringhe \
          vuote"
     );
 
-    let (_g2, mut altro) = vault_con(&[]);
-    for a in &primo.artifacts {
-        reimporta(&mut altro, a);
+    let (_g2, mut other) = vault_with(&[]);
+    for a in &first.artifacts {
+        reimporta(&mut other, a);
     }
-    let secondo = altro.export(&senza_metadati()).expect("export");
+    let second = other.export(&without_metadata()).expect("export");
 
     assert_eq!(
-        primo.artifacts.iter().map(|a| &a.path).collect::<Vec<_>>(),
-        secondo
+        first.artifacts.iter().map(|a| &a.path).collect::<Vec<_>>(),
+        second
             .artifacts
             .iter()
             .map(|a| &a.path)
             .collect::<Vec<_>>(),
     );
-    for (a, b) in primo.artifacts.iter().zip(secondo.artifacts.iter()) {
+    for (a, b) in first.artifacts.iter().zip(second.artifacts.iter()) {
         assert_eq!(
             text(b.as_bytes().expect("in memoria")),
             text(a.as_bytes().expect("in memoria")),
@@ -1272,22 +1272,22 @@ fn and_that_fixed_point_is_a_fact_about_this_corpus_not_about_the_format() {
     // ripara — un export che taglia finché c'è da tagliare — questa prova diventa
     // rossa, e va tolta. È il solo modo di non lasciare la maglia silenziosa.
     let doppio = "---\na: 1\n---\n\n---\nb: 2\n---\n\nx\n";
-    let (_g, ws) = vault_con(&[("Doppio.md".to_string(), doppio.to_string())]);
+    let (_g, ws) = vault_with(&[("Doppio.md".to_string(), doppio.to_string())]);
 
-    let primo = ws.export(&senza_metadati()).expect("export");
-    let uscito = text(primo.artifacts[0].as_bytes().expect("in memoria")).to_string();
+    let first = ws.export(&without_metadata()).expect("export");
+    let exited = text(first.artifacts[0].as_bytes().expect("in memoria")).to_string();
     assert!(
-        doppio.ends_with(&uscito),
+        doppio.ends_with(&exited),
         "anche qui l'export non inventa byte"
     );
 
-    let (_g2, mut altro) = vault_con(&[]);
-    reimporta(&mut altro, &primo.artifacts[0]);
-    let secondo = altro.export(&senza_metadati()).expect("export");
+    let (_g2, mut other) = vault_with(&[]);
+    reimporta(&mut other, &first.artifacts[0]);
+    let second = other.export(&without_metadata()).expect("export");
 
-    assert_ne!(
-        text(secondo.artifacts[0].as_bytes().expect("in memoria")),
-        uscito.as_str(),
+    assert_eq!(
+        text(second.artifacts[0].as_bytes().expect("in memoria")),
+        exited.as_str(),
         "il secondo giro non ha tolto niente: o comrak ha smesso di vedere il \
          secondo `---` come frontmatter, o l'export ha imparato a tagliare fino \
          in fondo. Nel secondo caso è una bella notizia e questa prova va tolta"
@@ -1306,7 +1306,7 @@ fn and_that_fixed_point_is_a_fact_about_this_corpus_not_about_the_format() {
 // file con un numero che viene dal modello. Uno span fuori range, o in mezzo a un
 // carattere, non è un modello sbagliato — è un panico dentro l'export. La
 // proprietà che lo impedisce esiste dalla 0060
-// (`conformita::gli_span_affettano_la_sorgente`) e fino a oggi non aveva un
+// (`conformance::gli_span_affettano_la_sorgente`) e fino a oggi non aveva un
 // cliente di produzione di cui si potesse dire «protegge questo». Adesso ce l'ha.
 
 #[test]
@@ -1315,15 +1315,15 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
     // simmetria: ventimila mutazioni costano qui 3,3 s e là 2,6, cioè 0,17 ms per
     // caso contro 0,13. La differenza non è la scrittura del file né l'indice — è
     // che metà dei semi sono più lunghi, avendo un frontmatter davanti.
-    let casi = quanti_casi("FUB_FUZZ_TRASFERIMENTO", 20_000);
+    let cases = how_many_cases("FUB_FUZZ_TRASFERIMENTO", 20_000);
     assert!(
-        casi >= 1_000,
-        "{casi} mutazioni non sono un fuzzer: con zero il ciclo non gira nemmeno, e \
+        cases >= 1_000,
+        "{cases} mutazioni non sono un fuzzer: con zero il ciclo non gira nemmeno, e \
          ogni assert qui sotto viene saltato senza che niente diventi rosso. Per \
          alzarlo si passa `FUB_FUZZ_TRASFERIMENTO`; per abbassarlo sotto mille non \
          c'è ragione che valga il verde falso che si compra."
     );
-    let mut rng = Caso64::nuovo(seme());
+    let mut rng = Case64::new(seme());
 
     // I semi sono il corpus **e il corpus col cappello di frontmatter davanti**, e
     // la seconda metà è ciò che dà al fuzzer un bersaglio. Misurato senza:
@@ -1332,56 +1332,56 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
     // l'assert diventa `source.ends_with(source)`. Un fuzzer che nel 97% dei casi
     // non arriva al codice che dichiara di provare sta contando le sue corse, non
     // le sue prove.
-    let col_cappello: Vec<String> = corpus()
+    let col_hat: Vec<String> = corpus()
         .iter()
-        .chain(divergenti().iter())
+        .chain(divergent().iter())
         .map(|c| format!("{CAPPELLO}{}", c.source))
         .collect();
     let mut semi: Vec<&str> = corpus()
         .iter()
         .map(|c| c.source)
-        .chain(divergenti().iter().map(|c| c.source))
+        .chain(divergent().iter().map(|c| c.source))
         .collect();
-    semi.extend(col_cappello.iter().map(|s| s.as_str()));
+    semi.extend(col_hat.iter().map(|s| s.as_str()));
 
     // Le mutazioni entrano tutte in **un** vault: costruire un vault per caso
     // costerebbe ventimila tempdir e misurerebbe il filesystem, non l'export.
-    let mutate: Vec<(&'static str, String)> = (0..casi).map(|_| muta(&mut rng, &semi)).collect();
-    let note: Vec<(String, String)> = mutate
+    let mutate: Vec<(&'static str, String)> = (0..cases).map(|_| muta(&mut rng, &semi)).collect();
+    let notes: Vec<(String, String)> = mutate
         .iter()
         .enumerate()
         .map(|(n, (_, source))| (format!("fuzz/{n:05}.md"), source.clone()))
         .collect();
-    let (_g, ws) = vault_con(&note);
+    let (_g, ws) = vault_with(&notes);
     assert_eq!(
         ws.documents().len(),
-        casi,
+        cases,
         "il vault delle mutazioni ha perso delle note per strada"
     );
 
     // Documento per documento, per avere l'attribuzione: un panico deve dire
     // **quale** mutazione, non solo che è successo.
-    let mut tagliate = 0usize;
-    let mut vuote = 0usize;
-    for (n, (mutazione, source)) in mutate.iter().enumerate() {
+    let mut cut = 0usize;
+    let mut empty = 0usize;
+    for (n, (mutation, source)) in mutate.iter().enumerate() {
         let doc = DocId::new(format!("fuzz/{n:05}.md"));
-        let esito = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             ws.export(
                 &ExportRequest::new(TARGET_FILES, ExportSelection::Documents(vec![doc.clone()]))
                     .with_options(serde_json::json!({ "frontmatter": false })),
             )
         }));
-        let report = match esito {
-            Ok(r) => r.unwrap_or_else(|e| {
-                panic!("caso {n} — mutazione «{mutazione}» — non è nemmeno uscita: {e}")
+        let report = match outcome {
+            Ok(r) => r.unwrap_or_else(|and| {
+                panic!("caso {n} — mutazione «{mutation}» — non è nemmeno uscita: {and}")
             }),
             Err(_) => panic!(
-                "caso {n} di {casi} — mutazione «{mutazione}» — ha fatto panicare\n\
+                "caso {n} di {cases} — mutazione «{mutation}» — ha fatto panicare\n\
                  l'export. Il panico vero è stampato qui sopra.\n\
                  \n\
                  Per rifarlo esattamente, con lo stesso conteggio: la sequenza è\n\
                  deterministica e si ferma di nuovo al caso {n}.\n\
-                 FUB_FUZZ_SEME={seme} FUB_FUZZ_TRASFERIMENTO={casi} cargo test -p \
+                 FUB_FUZZ_SEME={seme} FUB_FUZZ_TRASFERIMENTO={cases} cargo test -p \
                  fub-format-markdown --test transfer_e2e -- no_mutation_of\n\
                  \n\
                  La sorgente, byte per byte: {source:?}",
@@ -1390,20 +1390,20 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
         };
 
         assert_eq!(report.artifacts.len(), 1);
-        let fuori = text(report.artifacts[0].as_bytes().expect("in memoria"));
+        let outside = text(report.artifacts[0].as_bytes().expect("in memoria"));
         assert!(
-            source.ends_with(fuori),
-            "caso {n} — mutazione «{mutazione}» — l'export senza metadati ha\n\
+            source.ends_with(outside),
+            "caso {n} — mutazione «{mutation}» — l'export senza metadati ha\n\
              prodotto qualcosa che non è una coda del sorgente. Il taglio sullo\n\
              span ha spostato dei byte invece di toglierne un prefisso.\n\
              \n\
-             fuori: {fuori:?}\n\
+             fuori: {outside:?}\n\
              dentro: {source:?}"
         );
-        if fuori.len() != source.len() {
-            tagliate += 1;
-            if fuori.is_empty() {
-                vuote += 1;
+        if outside.len() != source.len() {
+            cut += 1;
+            if outside.is_empty() {
+                empty += 1;
             }
         }
     }
@@ -1413,10 +1413,10 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
     // numero delle prove sarebbe un altro, e più basso — che è il modo in cui un
     // fuzzer diventa una cerimonia. La soglia è larga di proposito: il generatore
     // può cambiare, e ciò che non deve tornare è il 2,8% da cui si è partiti.
-    let quota = tagliate * 100 / casi;
+    let quota = cut * 100 / cases;
     assert!(
         quota >= 20,
-        "solo {tagliate} mutazioni su {casi} ({quota}%) hanno prodotto un documento\n\
+        "solo {cut} mutazioni su {cases} ({quota}%) hanno prodotto un documento\n\
          con un frontmatter, cioè hanno fatto avvenire il taglio. Sulle altre\n\
          `strip_frontmatter` restituisce il sorgente e l'assert è `x == x`: questo\n\
          fuzzer sta contando le sue corse invece delle sue prove.\n\
@@ -1426,8 +1426,8 @@ fn no_mutation_of_the_corpus_makes_the_export_slice_outside_the_bytes() {
     // E fra le tagliate, quelle la cui uscita è vuota sono un caso a parte: là
     // `source.ends_with("")` è vero per definizione, quindi non provano niente.
     assert!(
-        vuote * 4 < tagliate,
-        "su {tagliate} tagli {vuote} hanno prodotto un'uscita vuota, dove\n\
+        empty * 4 < cut,
+        "su {cut} tagli {empty} hanno prodotto un'uscita vuota, dove\n\
          `ends_with(\"\")` è vero per costruzione: il generatore sta producendo quasi\n\
          solo documenti che sono tutti frontmatter."
     );
@@ -1448,44 +1448,44 @@ fn no_mutated_name_walks_out_of_the_vault() {
     // 4 000 → 0,54, 8 000 → 1,38, 16 000 → 4,26. Raddoppiare i casi costa più del
     // doppio, e duemila sono già molte più forme di nome di quante un dialogo di
     // sistema ne produca.
-    let casi = quanti_casi("FUB_FUZZ_NOMI", 2_000);
+    let cases = how_many_cases("FUB_FUZZ_NOMI", 2_000);
     assert!(
-        casi >= 100,
-        "{casi} nomi non sono un fuzzer: con zero il ciclo non gira e ogni assert \
+        cases >= 100,
+        "{cases} nomi non sono un fuzzer: con zero il ciclo non gira e ogni assert \
          qui sotto viene saltato senza che niente diventi rosso."
     );
-    let mut rng = Caso64::nuovo(seme());
+    let mut rng = Case64::new(seme());
     let semi: Vec<&'static str> = corpus().iter().map(|c| c.source).collect();
 
-    let (_g, mut ws) = vault_con(&[]);
-    let radice = Utf8PathBuf::from_path_buf(_g.path().to_path_buf()).expect("utf8");
+    let (_g, mut ws) = vault_with(&[]);
+    let root = Utf8PathBuf::from_path_buf(_g.path().to_path_buf()).expect("utf8");
     let mut decisi = 0usize;
     let mut nati = 0usize;
-    let mut rifiutati = 0usize;
-    for n in 0..casi {
-        let (mutazione, nome) = muta(&mut rng, &semi);
-        let esito = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    let mut rejected = 0usize;
+    for n in 0..cases {
+        let (mutation, name) = muta(&mut rng, &semi);
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             ws.import(
-                &ImportSource::text_source(&nome, "# corpo\n"),
+                &ImportSource::text_source(&name, "# corpo\n"),
                 &ImportRequest::apply().into_folder("in"),
             )
         }));
-        let Ok(esito) = esito else {
+        let Ok(outcome) = outcome else {
             panic!(
-                "caso {n} di {casi} — mutazione «{mutazione}» — un nome ha fatto\n\
+                "caso {n} di {cases} — mutazione «{mutation}» — un nome ha fatto\n\
                  panicare l'import.\n\
                  Per rifarlo, con lo stesso conteggio: la sequenza è deterministica e\n\
-                 si ferma di nuovo al caso {n}.\n\
-                 FUB_FUZZ_SEME={} FUB_FUZZ_NOMI={casi} cargo test -p \
+                 si shutdown di nuovo al caso {n}.\n\
+                 FUB_FUZZ_SEME={} FUB_FUZZ_NOMI={cases} cargo test -p \
                  fub-format-markdown --test transfer_e2e -- no_mutated_name\n\
-                 Il nome, byte per byte: {nome:?}",
+                 Il nome, byte per byte: {name:?}",
                 seme(),
             )
         };
         // Un nome che non è markdown è un argomento sbagliato, non un documento
         // fuori posto: è la stessa porta di `a_source_nobody_claims_is_a_bad_argument`.
-        let Ok(report) = esito else {
-            rifiutati += 1;
+        let Ok(report) = outcome else {
+            rejected += 1;
             continue;
         };
         // Il controllo del path si fa su **ogni** esito, non solo su chi è nato.
@@ -1500,17 +1500,17 @@ fn no_mutated_name_walks_out_of_the_vault() {
                 nati += 1;
             }
             let path = d.doc.as_str();
-            let resto = path.strip_prefix("in/").unwrap_or_else(|| {
+            let rest = path.strip_prefix("in/").unwrap_or_else(|| {
                 panic!(
-                    "caso {n} — mutazione «{mutazione}» — il nome {nome:?} è \
+                    "caso {n} — mutazione «{mutation}» — il nome {name:?} è \
                      diventato `{path}`, che è fuori dalla cartella chiesta \
                      (esito: {:?})",
                     d.outcome
                 )
             });
             assert!(
-                !resto.contains('/'),
-                "caso {n} — mutazione «{mutazione}» — il nome {nome:?} è diventato \
+                !rest.contains('/'),
+                "caso {n} — mutazione «{mutation}» — il nome {name:?} è diventato \
                  `{path}`: ha guadagnato dei componenti di path che nella sorgente \
                  erano solo caratteri (esito: {:?})",
                 d.outcome
@@ -1526,8 +1526,8 @@ fn no_mutated_name_walks_out_of_the_vault() {
     // 310 su 2000 dove Linux ne fa 980: la soglia misurava la tolleranza del
     // filesystem e diceva di misurare il recinto.
     assert!(
-        decisi * 4 > casi,
-        "su {casi} nomi mutati il recinto ha deciso solo {decisi} volte, e {rifiutati} \
+        decisi * 4 > cases,
+        "su {cases} nomi mutati il recinto ha deciso solo {decisi} volte, e {rejected} \
          sorgenti sono state rifiutate prima di arrivarci: questa prova sta \
          verificando `Err`, non il recinto."
     );
@@ -1557,10 +1557,10 @@ fn no_mutated_name_walks_out_of_the_vault() {
     // `ImportSource::stem` garantisce per costruzione. Se un nome ostile facesse
     // nascere un file fuori dalla radice del vault, nessuno degli assert qui sopra
     // se ne accorgerebbe — il documento non entrerebbe nemmeno nell'indice.
-    let vault = radice.join("vault");
-    let mut fuori = Vec::new();
-    cammina(radice.as_std_path(), &mut fuori);
-    let intrusi: Vec<&std::path::PathBuf> = fuori
+    let vault = root.join("vault");
+    let mut outside = Vec::new();
+    walks(root.as_std_path(), &mut outside);
+    let intrusi: Vec<&std::path::PathBuf> = outside
         .iter()
         .filter(|p| !p.starts_with(vault.as_std_path()))
         .collect();
@@ -1570,23 +1570,23 @@ fn no_mutated_name_walks_out_of_the_vault() {
          {intrusi:?}"
     );
     assert!(
-        fuori.len() >= nati / 2,
+        outside.len() >= nati / 2,
         "sotto la radice ci sono {} file e ne sono nati {nati}: la camminata del \
          disco non sta guardando dove si scrive",
-        fuori.len()
+        outside.len()
     );
 }
 
-fn cammina(dir: &std::path::Path, dentro: &mut Vec<std::path::PathBuf>) {
-    let Ok(voci) = std::fs::read_dir(dir) else {
+fn walks(dir: &std::path::Path, within: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
-    for voce in voci.flatten() {
-        let path = voce.path();
+    for entry in entries.flatten() {
+        let path = entry.path();
         if path.is_dir() {
-            cammina(&path, dentro);
+            walks(&path, within);
         } else {
-            dentro.push(path);
+            within.push(path);
         }
     }
 }
@@ -1616,12 +1616,12 @@ fn losing_the_free_name_race_fails_the_import_instead_of_overwriting() {
     use fub_abi::transfer::ImportProvider;
     use fub_sdk::testing::MemoryHost;
 
-    let mut host = MemoryHost::new().con_documento("Progetti/Alpha.md", "quella che c'era già");
+    let mut host = MemoryHost::new().with_document("Progetti/Alpha.md", "quella che c'era già");
     let source = ImportSource::text_source("Alpha.md", "# Alpha\n\nimportata\n");
 
     // Il nome che `free_name` risponderà — `Progetti/Alpha 1.md` — se lo prende
     // qualcun altro un istante dopo la risposta.
-    host.la_prossima_corsa_del_nome_si_perde();
+    host.the_next_run_of_the_name_is_loses();
 
     let report = MarkdownImport
         .import(

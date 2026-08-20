@@ -35,14 +35,14 @@
 //
 // Vale la stessa regola, applicata a due altezze: **in un riconciliatore, una
 // chiusura non cattura ciò che il riconciliatore aggiorna**. L'azione di un
-// nodo sta in `legami` e la si legge quando l'evento scatta; l'handler di tutto
+// nodo sta in `links` e la si legge quando l'evento scatta; l'handler di tutto
 // l'albero sta in `Montaggio.corrente` e ci si arriva attraverso la `Porta`.
 // Fuori da `mountTree` un `ActionHandler` non passa: dentro gira solo la porta,
 // che per un contenitore è una sola per sempre.
 import type { ActionRef, FieldValue, UiKind, UiNode, UiOption, UiValue } from "../host/contract";
 import { customRenderer } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
-import { attivabile, identificatore, nonAttivabile } from "./a11y";
+import { activatable, identifier, notActivatable } from "./a11y";
 import { t } from "../i18n/strings";
 import { errorText } from "../host/errors";
 import { notify } from "./notify";
@@ -52,12 +52,12 @@ import { notify } from "./notify";
 /// l'utente ha compilato.
 export type ActionHandler = (action: ActionRef, fields: FieldValue[]) => void | Promise<void>;
 
-declare const PORTA: unique symbol;
+declare const PORT: unique symbol;
 
 /// **La porta di un albero montato**: ciò che gira dentro questo file al posto
 /// di un `ActionHandler`.
 ///
-/// È un handler marchiato, e il marchio è il presidio. Un `ActionHandler` nudo
+/// È un handler marchiato, e il marchio è il prendereddio. Un `ActionHandler` nudo
 /// entra da `mountTree` e non va oltre: tutto il resto — il disegno, la
 /// riconciliazione, gli ascoltatori, i renderer custom — riceve una `Porta`, che
 /// per un contenitore è **una sola per sempre** e a ogni chiamata inoltra
@@ -67,51 +67,51 @@ declare const PORTA: unique symbol;
 /// La sola fabbrica è `instrada`. Un `ActionHandler` passato a una di queste
 /// funzioni **non compila**: è la stessa forma con cui la
 /// [0118](../../../docs/decisions/0118-una-chiusura-non-cattura-cio-che-il-riconciliatore-aggiorna.md)
-/// ha tolto a `invia` la facoltà di ricevere un `ActionRef`, un piano più in su.
-export type Porta = ActionHandler & { readonly [PORTA]: true };
+/// ha tolto a `dispatchAction` la facoltà di ricevere un `ActionRef`, un piano più in su.
+export type Port = ActionHandler & { readonly [PORT]: true };
 
 /// Ciò che la shell ricorda di un elemento che ha disegnato: il nodo da cui
 /// viene (per il confronto al giro dopo) e, se è un campo, come si legge il suo
 /// valore adesso.
-interface Reso {
+interface Rendered {
   node: UiNode;
-  leggi?: () => UiValue;
+  read?: () => UiValue;
 }
 
-const resi = new WeakMap<HTMLElement, Reso>();
+const rendered = new WeakMap<HTMLElement, Rendered>();
 
 /// Ciò che un contenitore ricorda fra un montaggio e l'altro: l'albero (per il
 /// confronto) e **chi instrada le sue azioni adesso**.
-interface Montaggio {
-  radice: HTMLElement | null;
+interface Mount {
+  root: HTMLElement | null;
   /// L'handler dell'ultimo montaggio. Cambia; nessuno lo tiene.
-  corrente: ActionHandler;
+  current: ActionHandler;
   /// Il rinvio a `corrente`. Non cambia mai identità: è ciò che tutti tengono.
-  porta: Porta;
+  port: Port;
 }
 
-const montati = new WeakMap<HTMLElement, Montaggio>();
+const mounted = new WeakMap<HTMLElement, Mount>();
 
 /// Dichiara chi instrada le azioni di questo contenitore **da adesso**.
 ///
 /// È l'unico posto in cui un `ActionHandler` entra nel renderer, e l'unico in
 /// cui una `Porta` nasce. Un rimontaggio non rifà la porta: aggiorna ciò a cui
-/// rinvia, e con una riga sola raggiunge ogni chiusura che l'aveva già presa —
+/// rdispatchAction, e con una riga sola raggiunge ogni chiusura che l'aveva già presa —
 /// un ascoltatore di campo, la linguetta di una scheda, il canvas di un
 /// renderer custom che è sopravvissuto alla riconciliazione.
-function instrada(container: HTMLElement, onAction: ActionHandler): Montaggio {
-  const gia = montati.get(container);
-  if (gia) {
-    gia.corrente = onAction;
-    return gia;
+function route(container: HTMLElement, onAction: ActionHandler): Mount {
+  const existing = mounted.get(container);
+  if (existing) {
+    existing.current = onAction;
+    return existing;
   }
-  const montaggio: Montaggio = {
-    radice: null,
-    corrente: onAction,
-    porta: ((action, fields) => guasto(action, () => montaggio.corrente(action, fields))) as Porta,
+  const mount: Mount = {
+    root: null,
+    current: onAction,
+    port: ((action, fields) => failure(action, () => mount.current(action, fields))) as Port,
   };
-  montati.set(container, montaggio);
-  return montaggio;
+  mounted.set(container, mount);
+  return mount;
 }
 
 /// **Un'azione che va storta lo dice**, e lo dice qui.
@@ -136,21 +136,21 @@ function instrada(container: HTMLElement, onAction: ActionHandler): Montaggio {
 /// **La vista resta com'era, ed è giusto così**: il provider non ha risposto,
 /// quindi non c'è niente di nuovo da disegnare. Ciò che mancava non era il
 /// ridisegno — era dirlo.
-function guasto(action: ActionRef, esegui: () => void | Promise<void>): void | Promise<void> {
-  const dillo = (e: unknown): void => {
+function failure(action: ActionRef, execute: () => void | Promise<void>): void | Promise<void> {
+  const tell = (e: unknown): void => {
     notify(t("views.action_failed", { action: action.action, reason: errorText(e) }), "guasto");
   };
   // I due modi in cui un handler va storto sono due, e nessuno dei due prende
   // l'altro: un `throw` sincrono non arriva mai a una `.catch`, e una promessa
   // rifiutata non passa da un `try` che è già uscito.
-  let esito: void | Promise<void>;
+  let result: void | Promise<void>;
   try {
-    esito = esegui();
+    result = execute();
   } catch (e) {
-    dillo(e);
+    tell(e);
     return;
   }
-  return Promise.resolve(esito).catch(dillo);
+  return Promise.resolve(result).catch(tell);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,17 +163,17 @@ function guasto(action: ActionRef, esegui: () => void | Promise<void>): void | P
 /// sapere quale delle due sta succedendo: è la stessa chiamata, ed è ciò che
 /// impedisce che qualcuno "ottimizzi" ricostruendo.
 export function mountTree(container: HTMLElement, node: UiNode, onAction: ActionHandler): void {
-  const montaggio = instrada(container, onAction);
-  const precedente = montaggio.radice;
-  if (precedente && precedente.parentElement === container) {
-    montaggio.radice = riconcilia(precedente, node, montaggio.porta);
+  const mount = route(container, onAction);
+  const previous = mount.root;
+  if (previous && previous.parentElement === container) {
+    mount.root = reconcile(previous, node, mount.port);
     return;
   }
-  for (const figlio of [...container.children]) smonta(figlio);
+  for (const child of [...container.children]) unmount(child);
   container.replaceChildren();
-  const el = renderUiNode(node, montaggio.porta);
+  const el = renderUiNode(node, mount.port);
   container.appendChild(el);
-  montaggio.radice = el;
+  mount.root = el;
 }
 
 /// Rimpiazza il solo nodo con questa chiave (`ViewUpdate::Patch`).
@@ -181,17 +181,17 @@ export function mountTree(container: HTMLElement, node: UiNode, onAction: Action
 /// Torna `false` se la chiave non c'è: **non è un errore** — è una view
 /// cambiata sotto — e chi chiama ridisegna intero.
 export function patchTree(container: HTMLElement, key: string, node: UiNode): boolean {
-  const montaggio = montati.get(container);
-  if (!montaggio?.radice) return false;
-  const bersaglio = trovaPerChiave(montaggio.radice, key);
-  if (!bersaglio) return false;
+  const mount = mounted.get(container);
+  if (!mount?.root) return false;
+  const target = findByKey(mount.root, key);
+  if (!target) return false;
   // La porta del contenitore, non un handler ripescato dal sottoalbero: un
   // patch arriva senza il contesto del render, e ciò che risale dall'elemento è
   // **il primo** montaggio, non l'ultimo. Riconciliare con quello riscriverebbe
   // i legami del sottoalbero patchato con l'handler di ieri — cioè disferebbe
   // la 0118 proprio dove nessuno guarda.
-  const aggiornato = riconcilia(bersaglio, node, montaggio.porta);
-  if (bersaglio === montaggio.radice) montaggio.radice = aggiornato;
+  const updated = reconcile(target, node, mount.port);
+  if (target === mount.root) mount.root = updated;
   return true;
 }
 
@@ -201,9 +201,9 @@ export function patchTree(container: HTMLElement, key: string, node: UiNode): bo
 /// contenitore, e rifarla lascerebbe in giro rinvii che non inoltrano più a
 /// nessuno.
 export function unmountTree(container: HTMLElement): void {
-  const montaggio = montati.get(container);
-  if (montaggio) montaggio.radice = null;
-  for (const figlio of [...container.children]) smonta(figlio);
+  const mount = mounted.get(container);
+  if (mount) mount.root = null;
+  for (const child of [...container.children]) unmount(child);
   container.replaceChildren();
 }
 
@@ -213,46 +213,46 @@ export function unmountTree(container: HTMLElement): void {
 /// sé — un ciclo di animazione, un timer, un `ResizeObserver` — e togliere
 /// l'elemento non lo spegne. Nessun altro nodo ne ha bisogno: quelli sono
 /// elementi e basta.
-const disposizioni = new WeakMap<HTMLElement, () => void>();
+const disposers = new WeakMap<HTMLElement, () => void>();
 
 /// Spegne ciò che sta per essere tolto: `el` e tutto quello che ha sotto.
 ///
 /// Si cammina il sottoalbero e non il solo `el` perché un nodo custom sta quasi
 /// sempre **dentro** ciò che viene sostituito — è una foglia dell'albero di una
 /// view, e a essere rimpiazzata è la view intera.
-function smonta(el: Element): void {
-  disposizioni.get(el as HTMLElement)?.();
-  disposizioni.delete(el as HTMLElement);
-  for (const dentro of el.querySelectorAll<HTMLElement>(".ui-custom")) {
-    disposizioni.get(dentro)?.();
-    disposizioni.delete(dentro);
+function unmount(el: Element): void {
+  disposers.get(el as HTMLElement)?.();
+  disposers.delete(el as HTMLElement);
+  for (const inside of el.querySelectorAll<HTMLElement>(".ui-custom")) {
+    disposers.get(inside)?.();
+    disposers.delete(inside);
   }
 }
 
-function trovaPerChiave(radice: HTMLElement, key: string): HTMLElement | null {
-  if (resi.get(radice)?.node.key === key) return radice;
-  return radice.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`);
+function findByKey(root: HTMLElement, key: string): HTMLElement | null {
+  if (rendered.get(root)?.node.key === key) return root;
+  return root.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`);
 }
 
 /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
 /// Restituisce l'elemento che ora rappresenta il nodo (lo stesso, o il nuovo).
-function riconcilia(el: HTMLElement, next: UiNode, onAction: Porta): HTMLElement {
-  const prev = resi.get(el)?.node;
+function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
+  const prev = rendered.get(el)?.node;
   if (!prev || prev.node !== next.node) {
-    const nuovo = renderUiNode(next, onAction);
-    smonta(el);
-    el.replaceWith(nuovo);
-    return nuovo;
+    const newItem = renderUiNode(next, onAction);
+    unmount(el);
+    el.replaceWith(newItem);
+    return newItem;
   }
-  if (aggiorna(el, prev, next, onAction)) {
-    resi.set(el, { ...resi.get(el)!, node: next });
-    chiave(el, next);
+  if (update(el, prev, next, onAction)) {
+    rendered.set(el, { ...rendered.get(el)!, node: next });
+    key(el, next);
     return el;
   }
-  const nuovo = renderUiNode(next, onAction);
-  smonta(el);
-  el.replaceWith(nuovo);
-  return nuovo;
+  const newItem = renderUiNode(next, onAction);
+  unmount(el);
+  el.replaceWith(newItem);
+  return newItem;
 }
 
 /// Prova ad aggiornare `el` in posto. `false` = ricostruiscilo.
@@ -262,87 +262,87 @@ function riconcilia(el: HTMLElement, next: UiNode, onAction: Porta): HTMLElement
 /// scrivendo), i **contenitori** si aggiornano perché contengono campi, e le
 /// **foglie** si ricostruiscono perché non hanno niente da conservare e il
 /// confronto costerebbe più del disegno.
-function aggiorna(
+function update(
   el: HTMLElement,
   prev: UiNode,
   next: UiNode,
-  onAction: Porta,
+  onAction: Port,
 ): boolean {
   switch (next.node) {
     case "stack": {
       if (prev.node !== "stack") return false;
       el.style.flexDirection = next.dir === "row" ? "row" : "column";
       el.style.gap = `${next.gap}px`;
-      figli(el, next.children, onAction);
+      children(el, next.children, onAction);
       return true;
     }
     case "list":
       if (prev.node !== "list") return false;
-      figli(el, next.items, onAction);
+      children(el, next.items, onAction);
       return true;
     case "tree":
       if (prev.node !== "tree") return false;
-      figli(el, next.roots, onAction);
+      children(el, next.roots, onAction);
       return true;
     case "section": {
       if (prev.node !== "section") return false;
-      const dettagli = el as HTMLDetailsElement;
-      const titolo = dettagli.querySelector("summary");
-      if (titolo) titolo.textContent = next.title;
+      const details = el as HTMLDetailsElement;
+      const title = details.querySelector("summary");
+      if (title) title.textContent = next.title;
       // `collapsed` è lo stato INIZIALE: se l'utente ha aperto la sezione, un
       // ridisegno non gliela richiude.
-      figli(contenitoreFigli(el), next.children, onAction);
+      children(childrenContainer(el), next.children, onAction);
       return true;
     }
     case "tree_item": {
       if (prev.node !== "tree_item") return false;
-      const riga = el.querySelector<HTMLElement>(":scope > .ui-tree-label");
-      if (riga) {
-        riga.textContent = next.label;
-        collega(riga, next.action, onAction);
+      const row = el.querySelector<HTMLElement>(":scope > .ui-tree-label");
+      if (row) {
+        row.textContent = next.label;
+        connect(row, next.action, onAction);
       }
-      // Gli stati ARIA seguono il nodo anche quando l'elemento è riusato: una
+      // Gli stati ARIA seguono il nodo anche quando l'elemento è reuseto: una
       // cartella che si apre e resta `aria-expanded="false"` è una cartella
       // che, per chi la legge, non si è aperta.
       if (next.selected) el.setAttribute("aria-selected", "true");
       else el.removeAttribute("aria-selected");
       if (next.children.length > 0) el.setAttribute("aria-expanded", String(next.expanded));
       else el.removeAttribute("aria-expanded");
-      figli(contenitoreFigli(el), next.children, onAction);
+      children(childrenContainer(el), next.children, onAction);
       return true;
     }
     case "tab":
       if (prev.node !== "tab") return false;
-      figli(contenitoreFigli(el), next.children, onAction);
+      children(childrenContainer(el), next.children, onAction);
       return true;
     case "tabs": {
       if (prev.node !== "tabs") return false;
       // Quale scheda è aperta è stato della shell: `active` vale alla prima
       // apertura, e un ridisegno non riporta l'utente sulla scheda uno.
-      figli(contenitoreFigli(el), next.tabs, onAction);
-      intestazioniSchede(el, next.tabs, onAction);
+      children(childrenContainer(el), next.tabs, onAction);
+      tabHeaders(el, next.tabs, onAction);
       return true;
     }
     case "form": {
       if (prev.node !== "form") return false;
-      figli(contenitoreFigli(el), next.children, onAction);
-      const invia = el.querySelector<HTMLButtonElement>(":scope > .ui-submit");
-      if (invia) {
-        invia.textContent = next.submit_label;
-        collega(invia, next.submit, onAction);
+      children(childrenContainer(el), next.children, onAction);
+      const dispatchAction = el.querySelector<HTMLButtonElement>(":scope > .ui-submit");
+      if (dispatchAction) {
+        dispatchAction.textContent = next.submit_label;
+        connect(dispatchAction, next.submit, onAction);
       }
       return true;
     }
     case "table": {
       if (prev.node !== "table") return false;
-      const corpo = contenitoreFigli(el);
-      figli(corpo, next.rows, onAction);
+      const body = childrenContainer(el);
+      children(body, next.rows, onAction);
       return prev.columns.length === next.columns.length;
     }
     case "row":
       if (prev.node !== "row") return false;
-      figli(el, next.cells, onAction);
-      collega(el, next.action, onAction);
+      children(el, next.cells, onAction);
+      connect(el, next.action, onAction);
       return true;
     case "custom": {
       if (prev.node !== "custom" || prev.ns !== next.ns) return false;
@@ -356,7 +356,7 @@ function aggiorna(
       if (customRenderer(next.ns)) {
         return JSON.stringify(prev.payload) === JSON.stringify(next.payload);
       }
-      figli(el, next.fallback, onAction);
+      children(el, next.fallback, onAction);
       return true;
     }
     // **I campi non hanno un elenco da riallineare qui.** Ce l'avevano — il
@@ -375,7 +375,7 @@ function aggiorna(
     case "checkbox":
     case "select":
     case "radio":
-      return applicaCampo(el, next, onAction);
+      return applyField(el, next, onAction);
     // Le foglie: niente da conservare, il disegno costa meno del confronto.
     default:
       return false;
@@ -384,13 +384,13 @@ function aggiorna(
 
 /// Il contenitore dei figli di un nodo composito (quelli che hanno anche una
 /// testata: sezione, scheda, form, tabella, voce d'albero).
-function contenitoreFigli(el: HTMLElement): HTMLElement {
+function childrenContainer(el: HTMLElement): HTMLElement {
   return el.querySelector<HTMLElement>(":scope > .ui-children") ?? el;
 }
 
-/// Cosa fare di un figlio nuovo: riusare quello che c'era (a quale posto) o
+/// Cosa fare di un figlio nuovo: reusere quello che c'era (a quale posto) o
 /// disegnarlo da capo.
-export type Accoppiamento = { riusa: number } | { crea: true };
+export type Pairing = { reuse: number } | { create: true };
 
 /// Accoppia i figli vecchi con i nuovi — **per chiave**, dove c'è.
 ///
@@ -398,81 +398,81 @@ export type Accoppiamento = { riusa: number } | { crea: true };
 /// senza un DOM, e ciò che qui può essere sbagliato non è il disegno ma la
 /// decisione. Le due righe che contano:
 ///
-/// - un nodo **con chiave** riusa il vecchio di quella chiave, **ovunque
+/// - un nodo **con chiave** reuse il vecchio di quella chiave, **ovunque
 ///   fosse**. È ciò che rende un riordino uno spostamento invece di un
 ///   rimescolamento di contenuti — senza, la riga 1 riceve i dati della riga 2,
 ///   e con essi il focus e la selezione di qualcun altro;
-/// - un nodo **senza chiave** riusa il prossimo vecchio senza chiave, in
+/// - un nodo **senza chiave** reuse il prossimo vecchio senza chiave, in
 ///   ordine. È il comportamento di prima della seduta, ed è giusto per ciò che
 ///   non si riordina: una testata, un separatore, un segnaposto.
 ///
 /// Una chiave che compare due volte fra i fratelli è un albero malformato: la
-/// prima occorrenza riusa, la seconda disegna. Non è un errore che si alza —
+/// prima occorrenza reuse, la seconda disegna. Non è un errore che si alza —
 /// una view che sbaglia le chiavi deve restare disegnabile — ma non è nemmeno
 /// silenzioso a valle: perde lo stato a ogni giro, che è il sintomo giusto.
-export function accoppia(
-  precedenti: readonly (string | undefined)[],
-  nuovi: readonly (string | undefined)[],
-): Accoppiamento[] {
-  const perChiave = new Map<string, number>();
-  const senzaChiave: number[] = [];
-  precedenti.forEach((k, i) => {
-    if (k === undefined) senzaChiave.push(i);
-    else if (!perChiave.has(k)) perChiave.set(k, i);
+export function pair(
+  previous: readonly (string | undefined)[],
+  newItems: readonly (string | undefined)[],
+): Pairing[] {
+  const forKey = new Map<string, number>();
+  const withoutKey: number[] = [];
+  previous.forEach((k, i) => {
+    if (k === undefined) withoutKey.push(i);
+    else if (!forKey.has(k)) forKey.set(k, i);
   });
 
-  const usati = new Set<number>();
-  let prossimoSenzaChiave = 0;
-  return nuovi.map((k) => {
-    let candidato: number | undefined;
+  const used = new Set<number>();
+  let nextWithoutKey = 0;
+  return newItems.map((k) => {
+    let candidate: number | undefined;
     if (k !== undefined) {
-      candidato = perChiave.get(k);
+      candidate = forKey.get(k);
     } else {
-      candidato = senzaChiave[prossimoSenzaChiave++];
+      candidate = withoutKey[nextWithoutKey++];
     }
-    if (candidato === undefined || usati.has(candidato)) return { crea: true };
-    usati.add(candidato);
-    return { riusa: candidato };
+    if (candidate === undefined || used.has(candidate)) return { create: true };
+    used.add(candidate);
+    return { reuse: candidate };
   });
 }
 
-/// Applica l'accoppiamento al DOM: riconcilia ciò che si riusa, disegna il
+/// Applica l'accoppiamento al DOM: riconcilia ciò che si reuse, disegna il
 /// resto, toglie ciò che non serve più e **sposta** invece di ricreare.
-function figli(parent: HTMLElement, nodi: UiNode[], onAction: Porta): void {
-  const esistenti = Array.from(parent.children).filter(
-    (c): c is HTMLElement => c instanceof HTMLElement && resi.has(c),
+function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
+  const existing = Array.from(parent.children).filter(
+    (c): c is HTMLElement => c instanceof HTMLElement && rendered.has(c),
   );
-  const piano = accoppia(
-    esistenti.map((el) => resi.get(el)!.node.key),
-    nodi.map((n) => n.key),
+  const plan = pair(
+    existing.map((el) => rendered.get(el)!.node.key),
+    nodes.map((n) => n.key),
   );
 
-  const usati = new Set<HTMLElement>();
-  const finali = nodi.map((nodo, i) => {
-    const scelta = piano[i]!;
-    if ("riusa" in scelta) {
-      const el = esistenti[scelta.riusa]!;
-      usati.add(el);
-      return riconcilia(el, nodo, onAction);
+  const used = new Set<HTMLElement>();
+  const finalNodes = nodes.map((node, i) => {
+    const choice = plan[i]!;
+    if ("reuse" in choice) {
+      const el = existing[choice.reuse]!;
+      used.add(el);
+      return reconcile(el, node, onAction);
     }
-    return renderUiNode(nodo, onAction);
+    return renderUiNode(node, onAction);
   });
 
-  for (const el of esistenti) {
-    if (!usati.has(el)) {
-      smonta(el);
+  for (const el of existing) {
+    if (!used.has(el)) {
+      unmount(el);
       el.remove();
     }
   }
   // Rimettere in ordine: `insertBefore` di un nodo già figlio lo SPOSTA, e
   // spostarlo conserva focus, scroll e stato — che è tutto il punto.
-  let riferimento: ChildNode | null = null;
-  for (let i = finali.length - 1; i >= 0; i--) {
-    const el = finali[i]!;
-    if (el.nextSibling !== riferimento || el.parentElement !== parent) {
-      parent.insertBefore(el, riferimento);
+  let reference: ChildNode | null = null;
+  for (let i = finalNodes.length - 1; i >= 0; i--) {
+    const el = finalNodes[i]!;
+    if (el.nextSibling !== reference || el.parentElement !== parent) {
+      parent.insertBefore(el, reference);
     }
-    riferimento = el;
+    reference = el;
   }
 }
 
@@ -480,19 +480,19 @@ function figli(parent: HTMLElement, nodi: UiNode[], onAction: Porta): void {
 // Disegno
 // ---------------------------------------------------------------------------
 
-function renderUiNode(node: UiNode, onAction: Porta): HTMLElement {
-  const el = disegna(node, onAction);
-  resi.set(el, { ...(resi.get(el) ?? {}), node });
-  chiave(el, node);
+function renderUiNode(node: UiNode, onAction: Port): HTMLElement {
+  const el = draw(node, onAction);
+  rendered.set(el, { ...(rendered.get(el) ?? {}), node });
+  key(el, node);
   return el;
 }
 
-function chiave(el: HTMLElement, node: UiNode): void {
+function key(el: HTMLElement, node: UiNode): void {
   if (node.key !== undefined) el.dataset.key = node.key;
   else delete el.dataset.key;
 }
 
-function disegna(node: UiNode, onAction: Porta): HTMLElement {
+function draw(node: UiNode, onAction: Port): HTMLElement {
   switch (node.node) {
     case "stack": {
       const el = div("ui-stack");
@@ -532,7 +532,7 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       // il modo di farlo ignorare in silenzio.
       if (node.selected) el.setAttribute("aria-current", "true");
       else el.removeAttribute("aria-current");
-      collega(el, node.action, onAction);
+      connect(el, node.action, onAction);
       const title = div("ui-list-item-title");
       title.textContent = node.title;
       el.appendChild(title);
@@ -547,7 +547,7 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       const el = document.createElement("button");
       el.className = `ui-button intent-${node.intent}`;
       el.textContent = node.label;
-      collega(el, node.action, onAction);
+      connect(el, node.action, onAction);
       return el;
     }
     case "html": {
@@ -555,7 +555,7 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       // Riservato al codice fidato: il kernel rifiuta questa variante da un
       // provider non fidato (`UiNode::validate_untrusted`), in un punto solo.
       //
-      // E passa comunque dal sanitizer (§3.6): i due presidi rispondono a due
+      // E passa comunque dal sanitizer (§3.6): i due prendereddi rispondono a due
       // domande diverse — il kernel dice *chi* può mandare markup, questo dice
       // *quale* markup entra nella webview. Il codice fidato non è codice
       // infallibile, e la fonte di un frammento «già escapato lato Rust» può
@@ -584,9 +584,9 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       const summary = document.createElement("summary");
       summary.textContent = node.title;
       el.appendChild(summary);
-      const corpo = div("ui-children");
-      for (const child of node.children) corpo.appendChild(renderUiNode(child, onAction));
-      el.appendChild(corpo);
+      const body = div("ui-children");
+      for (const child of node.children) body.appendChild(renderUiNode(child, onAction));
+      el.appendChild(body);
       return el;
     }
     case "table": {
@@ -611,7 +611,7 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
     case "row": {
       const el = document.createElement("tr");
       el.className = "ui-row";
-      collega(el, node.action, onAction);
+      connect(el, node.action, onAction);
       for (const cell of node.cells) {
         const td = document.createElement("td");
         td.appendChild(renderUiNode(cell, onAction));
@@ -627,42 +627,42 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
     }
     case "tree_item": {
       const el = div("ui-tree-item");
-      const riga = div("ui-tree-label");
-      riga.textContent = node.label;
-      collega(riga, node.action, onAction);
+      const row = div("ui-tree-label");
+      row.textContent = node.label;
+      connect(row, node.action, onAction);
       // Il ruolo sta sul **contenitore** e non sull'etichetta, perché è il
       // contenitore ad avere i figli: un `treeitem` che non contiene il proprio
       // gruppo è un albero piatto per chi lo legge. Il nome però viene
       // dall'etichetta e non dal contenitore, o sarebbe l'etichetta *più tutto
       // il sottoalbero* — che su una cartella con cento note è un nome lungo
       // cento note.
-      const idEtichetta = identificatore("albero");
-      riga.id = idEtichetta;
+      const idEtichetta = identifier("albero");
+      row.id = idEtichetta;
       el.setAttribute("role", "treeitem");
       el.setAttribute("aria-labelledby", idEtichetta);
       if (node.selected) el.setAttribute("aria-selected", "true");
-      el.appendChild(riga);
-      const figli = div("ui-children");
-      figli.hidden = !node.expanded;
+      el.appendChild(row);
+      const children = div("ui-children");
+      children.hidden = !node.expanded;
       // `aria-expanded` solo su chi ha davvero dei figli: dichiararlo su una
       // foglia annuncia «compresso» a chi non ha niente da espandere.
       if (node.children.length > 0) {
         el.setAttribute("aria-expanded", String(node.expanded));
-        figli.setAttribute("role", "group");
+        children.setAttribute("role", "group");
       }
-      for (const child of node.children) figli.appendChild(renderUiNode(child, onAction));
-      el.appendChild(figli);
+      for (const child of node.children) children.appendChild(renderUiNode(child, onAction));
+      el.appendChild(children);
       return el;
     }
     case "tabs": {
       const el = div("ui-tabs");
-      const barra = div("ui-tab-bar");
-      el.appendChild(barra);
-      const corpo = div("ui-children");
-      for (const tab of node.tabs) corpo.appendChild(renderUiNode(tab, onAction));
-      el.appendChild(corpo);
-      mostraScheda(el, Math.min(node.active, Math.max(node.tabs.length - 1, 0)));
-      intestazioniSchede(el, node.tabs, onAction);
+      const bar = div("ui-tab-bar");
+      el.appendChild(bar);
+      const body = div("ui-children");
+      for (const tab of node.tabs) body.appendChild(renderUiNode(tab, onAction));
+      el.appendChild(body);
+      showTab(el, Math.min(node.active, Math.max(node.tabs.length - 1, 0)));
+      tabHeaders(el, node.tabs, onAction);
       return el;
     }
     case "tab": {
@@ -671,10 +671,10 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       // linguetta lo mette `intestazioniSchede`, perché è là che le linguette
       // nascono e solo là si sa quale appartiene a quale.
       el.setAttribute("role", "tabpanel");
-      el.id = identificatore("scheda");
-      const corpo = div("ui-children");
-      for (const child of node.children) corpo.appendChild(renderUiNode(child, onAction));
-      el.appendChild(corpo);
+      el.id = identifier("scheda");
+      const body = div("ui-children");
+      for (const child of node.children) body.appendChild(renderUiNode(child, onAction));
+      el.appendChild(body);
       return el;
     }
     case "badge": {
@@ -694,22 +694,22 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
     }
     case "progress": {
       const el = div("ui-progress");
-      const barra = document.createElement("progress");
+      const bar = document.createElement("progress");
       if (node.value !== null) {
-        barra.max = 1;
-        barra.value = node.value;
+        bar.max = 1;
+        bar.value = node.value;
       }
-      el.appendChild(barra);
+      el.appendChild(bar);
       if (node.label) {
-        const testo = div("ui-progress-label");
-        testo.textContent = node.label;
+        const text = div("ui-progress-label");
+        text.textContent = node.label;
         // La `<progress>` prende il nome dall'etichetta che le sta accanto.
         // Senza, un lettore di schermo annuncia «barra di avanzamento, 40%» —
         // e il 40% *di cosa* è precisamente l'informazione che serve.
-        const id = identificatore("avanzamento");
-        testo.id = id;
-        barra.setAttribute("aria-labelledby", id);
-        el.appendChild(testo);
+        const id = identifier("avanzamento");
+        text.id = id;
+        bar.setAttribute("aria-labelledby", id);
+        el.appendChild(text);
       }
       return el;
     }
@@ -717,20 +717,20 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       return document.createElement("hr");
     case "empty_state": {
       const el = div("ui-empty-state");
-      const titolo = div("ui-empty-title");
-      titolo.textContent = node.title;
-      el.appendChild(titolo);
+      const title = div("ui-empty-title");
+      title.textContent = node.title;
+      el.appendChild(title);
       if (node.detail) {
-        const dettaglio = div("ui-empty-detail");
-        dettaglio.textContent = node.detail;
-        el.appendChild(dettaglio);
+        const detail = div("ui-empty-detail");
+        detail.textContent = node.detail;
+        el.appendChild(detail);
       }
       if (node.action) {
-        const bottone = document.createElement("button");
-        bottone.className = "ui-button intent-primary";
-        bottone.textContent = node.detail ?? node.title;
-        collega(bottone, node.action, onAction);
-        el.appendChild(bottone);
+        const button = document.createElement("button");
+        button.className = "ui-button intent-primary";
+        button.textContent = node.detail ?? node.title;
+        connect(button, node.action, onAction);
+        el.appendChild(button);
       }
       return el;
     }
@@ -756,22 +756,22 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
     case "checkbox":
     case "select":
     case "radio": {
-      const el = scheletroCampo(node);
-      applicaCampo(el, node, onAction);
+      const el = fieldSkeleton(node);
+      applyField(el, node, onAction);
       return el;
     }
     case "form": {
       const el = document.createElement("form");
       el.className = "ui-form";
-      const corpo = div("ui-children");
-      for (const child of node.children) corpo.appendChild(renderUiNode(child, onAction));
-      el.appendChild(corpo);
-      const invia = document.createElement("button");
-      invia.type = "submit";
-      invia.className = "ui-button ui-submit intent-primary";
-      invia.textContent = node.submit_label;
-      collega(invia, node.submit, onAction);
-      el.appendChild(invia);
+      const body = div("ui-children");
+      for (const child of node.children) body.appendChild(renderUiNode(child, onAction));
+      el.appendChild(body);
+      const dispatchAction = document.createElement("button");
+      dispatchAction.type = "submit";
+      dispatchAction.className = "ui-button ui-submit intent-primary";
+      dispatchAction.textContent = node.submit_label;
+      connect(dispatchAction, node.submit, onAction);
+      el.appendChild(dispatchAction);
       // Un form nella pagina naviga, se qualcuno lo lascia fare.
       el.addEventListener("submit", (e) => e.preventDefault());
       return el;
@@ -788,8 +788,8 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       // M5, non un caso d'errore.
       const el = div("ui-custom");
       el.dataset.ns = node.ns;
-      const disegna = customRenderer(node.ns);
-      if (disegna) {
+      const draw = customRenderer(node.ns);
+      if (draw) {
         // Lo smontaggio torna dal renderer e si mette da parte: un canvas con
         // un `requestAnimationFrame` in volo su un elemento che nessuno guarda
         // più è un ciclo che continua a girare per sempre, e a saperlo è solo
@@ -799,8 +799,8 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
         // cambia, l'elemento resta e il widget dentro pure, per quanti
         // ridisegni faccia la view intorno. Un handler nudo qui invecchierebbe
         // e ci resterebbe.
-        const smonta = disegna(el, node.payload, onAction);
-        if (smonta) disposizioni.set(el, smonta);
+        const unmount = draw(el, node.payload, onAction);
+        if (unmount) disposers.set(el, unmount);
       } else {
         for (const child of node.fallback) el.appendChild(renderUiNode(child, onAction));
       }
@@ -821,15 +821,15 @@ function disegna(node: UiNode, onAction: Porta): HTMLElement {
       // Qui invece sì: un guasto è la cosa che va detta subito, o l'utente
       // resta ad aspettare un pannello che ha già smesso di provarci.
       el.setAttribute("role", "alert");
-      const messaggio = div("ui-failed-message");
-      messaggio.textContent = node.message;
-      el.appendChild(messaggio);
+      const messageElement = div("ui-failed-message");
+      messageElement.textContent = node.message;
+      el.appendChild(messageElement);
       if (node.retry) {
-        const bottone = document.createElement("button");
-        bottone.className = "ui-button";
-        bottone.textContent = t("app.retry");
-        collega(bottone, node.retry, onAction);
-        el.appendChild(bottone);
+        const button = document.createElement("button");
+        button.className = "ui-button";
+        button.textContent = t("app.retry");
+        connect(button, node.retry, onAction);
+        el.appendChild(button);
       }
       return el;
     }
@@ -853,7 +853,7 @@ function div(className: string): HTMLElement {
 // **Un campo ha un elenco solo di attributi, e lo attraversano tutte e due le
 // sue vite.** Prima ne aveva due — quello che il disegno scriveva e quello che
 // la riconciliazione riscriveva — e due elenchi che nessuno confronta
-// divergono: divergevano su nove voci, e ogni voce era un campo riusato che
+// divergono: divergevano su nove voci, e ogni voce era un campo reuseto che
 // mostrava o mandava la forma di ieri funzionando. È la stessa regola della
 // [0118](../../../docs/decisions/0118-una-chiusura-non-cattura-cio-che-il-riconciliatore-aggiorna.md)
 // spostata dagli ascoltatori agli attributi: chi ne aggiunge uno lo scrive qui
@@ -861,13 +861,13 @@ function div(className: string): HTMLElement {
 
 /// I nodi che sono un **campo**: portano un `field`, un valore che l'utente
 /// cambia, un'etichetta e un'azione.
-type Campo = Extract<UiKind, { field: string }>;
+type Field = Extract<UiKind, { field: string }>;
 
 /// Lo scheletro di un campo: gli elementi che vivono quanto il campo.
 ///
 /// Non scrive **niente** che venga dal nodo se non la sua specie — che è
 /// l'unica cosa che il riconciliatore non può cambiare senza ricostruire.
-function scheletroCampo(node: Campo): HTMLElement {
+function fieldSkeleton(node: Field): HTMLElement {
   switch (node.node) {
     case "text_input":
     case "date_picker": {
@@ -893,9 +893,9 @@ function scheletroCampo(node: Campo): HTMLElement {
       el.className = "ui-checkbox";
       const input = document.createElement("input");
       input.type = "checkbox";
-      const testo = document.createElement("span");
-      testo.className = "ui-field-label";
-      el.append(input, testo);
+      const text = document.createElement("span");
+      text.className = "ui-field-label";
+      el.append(input, text);
       return el;
     }
     case "select": {
@@ -912,26 +912,26 @@ function scheletroCampo(node: Campo): HTMLElement {
 ///
 /// La chiamano il disegno e la riconciliazione con la stessa riga. `false` =
 /// lo scheletro non è quello di questa specie, cioè ricostruiscilo.
-function applicaCampo(el: HTMLElement, node: Campo, onAction: Porta): boolean {
+function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
   switch (node.node) {
     case "text_input":
     case "date_picker": {
       const input = el.querySelector("input");
       if (!input) return false;
       input.type = node.node === "date_picker" ? "date" : "text";
-      attributo(input, "placeholder", node.node === "text_input" ? node.placeholder : null);
-      scriviValore(input, node.value ?? "");
-      valore(el, () => ({ type: "text", value: input.value }));
-      azioniDelCampo(input, node.action, onAction);
+      attribute(input, "placeholder", node.node === "text_input" ? node.placeholder : null);
+      writeValue(input, node.value ?? "");
+      value(el, () => ({ type: "text", value: input.value }));
+      actionsOfField(input, node.action, onAction);
       break;
     }
     case "text_area": {
       const area = el.querySelector("textarea");
       if (!area) return false;
       area.rows = node.rows;
-      scriviValore(area, node.value);
-      valore(el, () => ({ type: "text", value: area.value }));
-      azioniDelCampo(area, node.action, onAction);
+      writeValue(area, node.value);
+      value(el, () => ({ type: "text", value: area.value }));
+      actionsOfField(area, node.action, onAction);
       break;
     }
     case "number":
@@ -942,45 +942,45 @@ function applicaCampo(el: HTMLElement, node: Campo, onAction: Porta): boolean {
       // Gli estremi **prima** del valore: un `range` con i suoi limiti ancora
       // da scrivere ritaglia il valore che gli si dà, e il ritaglio non si
       // disfa quando i limiti arrivano.
-      attributo(input, "min", node.min === null ? null : String(node.min));
-      attributo(input, "max", node.max === null ? null : String(node.max));
-      attributo(input, "step", node.step === null ? null : String(node.step));
-      scriviValore(input, node.value === null ? "" : String(node.value));
-      valore(el, () => ({ type: "number", value: Number(input.value) }));
-      azioniDelCampo(input, node.action, onAction);
+      attribute(input, "min", node.min === null ? null : String(node.min));
+      attribute(input, "max", node.max === null ? null : String(node.max));
+      attribute(input, "step", node.step === null ? null : String(node.step));
+      writeValue(input, node.value === null ? "" : String(node.value));
+      value(el, () => ({ type: "number", value: Number(input.value) }));
+      actionsOfField(input, node.action, onAction);
       break;
     }
     case "checkbox": {
       const input = el.querySelector("input");
       if (!input) return false;
       if (document.activeElement !== input) input.checked = node.value;
-      valore(el, () => ({ type: "bool", value: input.checked }));
-      azioniDelCampo(input, node.action, onAction);
+      value(el, () => ({ type: "bool", value: input.checked }));
+      actionsOfField(input, node.action, onAction);
       break;
     }
     case "select": {
       const select = el.querySelector("select");
       if (!select) return false;
       select.multiple = node.multiple;
-      opzioni(select, node.options, node.value);
-      valore(el, () => {
-        const scelte = Array.from(select.selectedOptions).map((o) => o.value);
+      options(select, node.options, node.value);
+      value(el, () => {
+        const choices = Array.from(select.selectedOptions).map((o) => o.value);
         // `multiple` si legge **dal DOM**, non dal nodo di questo giro: quel
         // nodo è vecchio al giro dopo, e un select diventato multiplo
         // continuerebbe a riportare un `text` — la 0118 applicata al valore.
         return select.multiple
-          ? { type: "choices", value: scelte }
-          : { type: "text", value: scelte[0] ?? "" };
+          ? { type: "choices", value: choices }
+          : { type: "text", value: choices[0] ?? "" };
       });
-      azioniDelCampo(select, node.action, onAction);
+      actionsOfField(select, node.action, onAction);
       break;
     }
     case "radio": {
-      bottoniRadio(el, node, onAction);
+      radioButtons(el, node, onAction);
       // Il valore di un gruppo di radio è ciò che è spuntato adesso, e basta:
       // niente variabile catturata a fare da memoria: sarebbe la «seconda
       // verità» che la testata di questo file esiste per non avere.
-      valore(el, () => ({
+      value(el, () => ({
         type: "text",
         value: el.querySelector<HTMLInputElement>("input[type=radio]:checked")?.value ?? "",
       }));
@@ -994,8 +994,8 @@ function applicaCampo(el: HTMLElement, node: Campo, onAction: Porta): boolean {
   // anche un `data-field` su ogni controllo, e non lo leggeva nessuno — un
   // secondo posto dove scrivere la stessa cosa è la prima metà di due cose che
   // divergono, che è il difetto di cui questa sezione è la cura.
-  el.dataset.campo = node.field;
-  etichetta(el, node.label);
+  el.dataset.field = node.field;
+  label(el, node.label);
   legaEtichetta(el, node.field);
   return true;
 }
@@ -1005,31 +1005,31 @@ function applicaCampo(el: HTMLElement, node: Campo, onAction: Porta): boolean {
 /// La differenza si vede solo al riuso — un campo che perde il segnaposto e se
 /// lo tiene scritto sotto suggerisce quello di un altro nodo — ed è la ragione
 /// per cui non basta assegnare la proprietà quando c'è.
-function attributo(el: HTMLElement, nome: string, valore: string | null): void {
-  if (valore === null) el.removeAttribute(nome);
-  else el.setAttribute(nome, valore);
+function attribute(el: HTMLElement, name: string, value: string | null): void {
+  if (value === null) el.removeAttribute(name);
+  else el.setAttribute(name, value);
 }
 
 /// Il valore del provider, senza sovrascrivere chi sta scrivendo.
 ///
 /// Chi ha le dita sul campo ha ragione: il valore nuovo lo vedrà al prossimo
 /// giro, quando avrà smesso — e intanto l'azione manda ciò che c'è davvero.
-function scriviValore(controllo: HTMLInputElement | HTMLTextAreaElement, v: string): void {
-  if (document.activeElement !== controllo && controllo.value !== v) controllo.value = v;
+function writeValue(control: HTMLInputElement | HTMLTextAreaElement, v: string): void {
+  if (document.activeElement !== control && control.value !== v) control.value = v;
 }
 
 /// Le opzioni di un `select`, riconciliate invece che rifatte.
 ///
 /// Un'opzione in più o in meno non ricostruisce il campo: prima lo faceva —
-/// `aggiorna` tornava `false` appena l'elenco cambiava — e un `select` che
+/// `update` tornava `false` appena l'elenco cambiava — e un `select` che
 /// perdeva il fuoco a ogni cambio di opzioni è la stessa cosa che il §2.8
 /// esiste per non fare.
-function opzioni(select: HTMLSelectElement, options: UiOption[], value: string[]): void {
+function options(select: HTMLSelectElement, options: UiOption[], value: string[]): void {
   while (select.options.length > options.length) select.remove(select.options.length - 1);
-  options.forEach((opzione, i) => {
+  options.forEach((option, i) => {
     const opt = select.options[i] ?? select.appendChild(document.createElement("option"));
-    opt.value = opzione.value;
-    opt.textContent = opzione.label;
+    opt.value = option.value;
+    opt.textContent = option.label;
   });
   if (document.activeElement === select) return;
   for (const opt of Array.from(select.options)) opt.selected = value.includes(opt.value);
@@ -1047,55 +1047,55 @@ function opzioni(select: HTMLSelectElement, options: UiOption[], value: string[]
 /// Il nome è l'id del contenitore, che è **lo stesso elemento** che porta
 /// `role="radiogroup"`: l'esclusività nativa e quella dichiarata sono lo stesso
 /// gruppo, o sono due gruppi che dicono due cose diverse allo stesso utente.
-function bottoniRadio(el: HTMLElement, node: Campo & { node: "radio" }, onAction: Porta): void {
-  if (!el.id) el.id = identificatore("gruppo-radio");
-  const righe = Array.from(el.querySelectorAll<HTMLElement>(":scope > .ui-radio-option"));
-  for (const riga of righe.slice(node.options.length)) riga.remove();
-  node.options.forEach((opzione, i) => {
-    const riga = righe[i] ?? nuovaOpzione(el);
-    const input = riga.querySelector<HTMLInputElement>("input")!;
+function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction: Port): void {
+  if (!el.id) el.id = identifier("gruppo-radio");
+  const rows = Array.from(el.querySelectorAll<HTMLElement>(":scope > .ui-radio-option"));
+  for (const row of rows.slice(node.options.length)) row.remove();
+  node.options.forEach((option, i) => {
+    const row = rows[i] ?? newItemOption(el);
+    const input = row.querySelector<HTMLInputElement>("input")!;
     input.name = el.id;
-    input.value = opzione.value;
-    input.checked = opzione.value === node.value;
-    riga.querySelector<HTMLElement>("span")!.textContent = opzione.label;
-    azioniDelCampo(input, node.action, onAction);
+    input.value = option.value;
+    input.checked = option.value === node.value;
+    row.querySelector<HTMLElement>("span")!.textContent = option.label;
+    actionsOfField(input, node.action, onAction);
   });
 }
 
-function nuovaOpzione(el: HTMLElement): HTMLElement {
-  const riga = document.createElement("label");
-  riga.className = "ui-radio-option";
+function newItemOption(el: HTMLElement): HTMLElement {
+  const row = document.createElement("label");
+  row.className = "ui-radio-option";
   const input = document.createElement("input");
   input.type = "radio";
-  riga.append(input, document.createElement("span"));
-  el.appendChild(riga);
-  return riga;
+  row.append(input, document.createElement("span"));
+  el.appendChild(row);
+  return row;
 }
 
 /// L'etichetta di un campo — **anche quando compare o sparisce**.
 ///
 /// Riallineava solo il testo di un'etichetta che c'era già, e sono i due versi
-/// dello stesso difetto: un campo riusato che perdeva l'etichetta se la teneva
+/// dello stesso difetto: un campo reuseto che perdeva l'etichetta se la teneva
 /// addosso, e uno che la guadagnava restava anonimo. Non si vedono finché non è
 /// lo stesso elemento a fare due nodi diversi.
-function etichetta(el: HTMLElement, label: string | null): void {
-  const esistente = el.querySelector<HTMLElement>(":scope > .ui-field-label");
+function label(el: HTMLElement, label: string | null): void {
+  const existing = el.querySelector<HTMLElement>(":scope > .ui-field-label");
   if (label === null) {
-    esistente?.remove();
+    existing?.remove();
     return;
   }
-  if (esistente) {
-    esistente.textContent = label;
+  if (existing) {
+    existing.textContent = label;
     return;
   }
   // Un `<div>` accanto a un `<input>` è testo che *sembra* un'etichetta e non
   // lo è per nessuno tranne che per chi guarda: un lettore di schermo su quel
   // campo annuncia «casella di testo», e il nome lo ha letto un attimo prima
-  // come frase sciolta, senza modo di collegarlo.
-  const testo = document.createElement("label");
-  testo.className = "ui-field-label";
-  testo.textContent = label;
-  el.prepend(testo);
+  // come frase sciolta, senza modo di connectrlo.
+  const text = document.createElement("label");
+  text.className = "ui-field-label";
+  text.textContent = label;
+  el.prepend(text);
 }
 
 /// Lega l'etichetta di un campo al controllo che nomina.
@@ -1121,7 +1121,7 @@ function etichetta(el: HTMLElement, label: string | null): void {
 /// `select`, `slider`, `date_picker`), e chi la lascia vuota non sta chiedendo
 /// un campo anonimo: sta dicendo che il contesto attorno lo spiega già. Solo
 /// che il contesto lo vede chi guarda lo schermo — chi ascolta sente «casella
-/// di testo» e deve compilarla a indovinare. È il difetto che il presidio di
+/// di testo» e deve compilarla a indovinare. È il difetto che il prendereddio di
 /// questa voce ha trovato per primo.
 ///
 /// Il ripiego è il **nome del campo**, ed è brutto apposta: `tags` non è prosa,
@@ -1139,9 +1139,9 @@ function legaEtichetta(el: HTMLElement, field: string): void {
   // `<span>` della casella di spunta, che nomina per avvolgimento. Per
   // decidere se **legarlo** vale solo la `<label>`, che è l'unica ad avere un
   // `for`.
-  const visibile = el.querySelector<HTMLElement>(":scope > .ui-field-label");
-  const controllo = el.querySelector<HTMLElement>("input, textarea, select");
-  if (!visibile) {
+  const visible = el.querySelector<HTMLElement>(":scope > .ui-field-label");
+  const control = el.querySelector<HTMLElement>("input, textarea, select");
+  if (!visible) {
     // Un'etichetta che se ne va si porta via il proprio legame: un
     // `aria-labelledby` verso un elemento che non c'è più è un nome che nessuno
     // legge, ed è il difetto che `verificaAccessibilita` chiama «riferimento
@@ -1152,32 +1152,32 @@ function legaEtichetta(el: HTMLElement, field: string): void {
       el.setAttribute("aria-label", field);
       return;
     }
-    controllo?.setAttribute("aria-label", field);
+    control?.setAttribute("aria-label", field);
     return;
   }
 
   // E il verso opposto: un campo che *guadagna* un'etichetta non tiene il
   // ripiego, o si ritroverebbe nominato due volte e la seconda col nome brutto.
   el.removeAttribute("aria-label");
-  controllo?.removeAttribute("aria-label");
-  const etichetta = el.querySelector<HTMLLabelElement>(":scope > label.ui-field-label");
-  if (!etichetta || !controllo) return;
+  control?.removeAttribute("aria-label");
+  const label = el.querySelector<HTMLLabelElement>(":scope > label.ui-field-label");
+  if (!label || !control) return;
   // Il nome va al **gruppo**, che è ciò che `radiogroup` esiste per rendere
   // nominabile.
   if (radio) {
-    if (!etichetta.id) etichetta.id = identificatore("gruppo");
+    if (!label.id) label.id = identifier("gruppo");
     el.setAttribute("role", "radiogroup");
-    el.setAttribute("aria-labelledby", etichetta.id);
+    el.setAttribute("aria-labelledby", label.id);
     return;
   }
-  if (etichetta.htmlFor) return;
-  if (!controllo.id) controllo.id = identificatore("campo");
-  etichetta.htmlFor = controllo.id;
+  if (label.htmlFor) return;
+  if (!control.id) control.id = identifier("campo");
+  label.htmlFor = control.id;
 }
 
 /// Registra come si legge il valore di questo campo, adesso.
-function valore(el: HTMLElement, leggi: () => UiValue): void {
-  resi.set(el, { ...(resi.get(el) ?? { node: { node: "separator" } as UiNode }), leggi });
+function value(el: HTMLElement, read: () => UiValue): void {
+  rendered.set(el, { ...(rendered.get(el) ?? { node: { node: "separator" } as UiNode }), read });
 }
 
 /// Cosa manda un elemento quando un suo evento scatta, **adesso**.
@@ -1186,7 +1186,7 @@ function valore(el: HTMLElement, leggi: () => UiValue): void {
 ///
 /// Un ascoltatore registrato una volta sola con l'`ActionRef` catturato dentro
 /// la chiusura è giusto finché l'elemento è nuovo, e diventa **silenziosamente
-/// sbagliato** il primo giro che il riconciliatore (§2.8) lo riusa: il campo
+/// sbagliato** il primo giro che il riconciliatore (§2.8) lo reuse: il campo
 /// mostra il valore nuovo, ha il focus giusto, e manda l'azione di ieri. Non
 /// smette di funzionare — fa la cosa sbagliata funzionando, che è peggio.
 ///
@@ -1196,14 +1196,14 @@ function valore(el: HTMLElement, leggi: () => UiValue): void {
 /// l'ascoltatore cattura solo l'elemento e il nome dell'evento — due cose che
 /// non cambiano mai — e legge l'azione da questa mappa quando l'evento scatta.
 /// Un ascoltatore nuovo registrato da `ascolta` eredita la proprietà gratis.
-interface Legame {
+interface Link {
   action: ActionRef;
-  onAction: Porta;
+  onAction: Port;
 }
 
 /// L'azione in vigore per ogni evento di ogni elemento. `null` = l'elemento ha
 /// l'ascoltatore ma il nodo che rappresenta adesso non ha azione.
-const legami = new WeakMap<HTMLElement, Map<string, Legame | null>>();
+const links = new WeakMap<HTMLElement, Map<string, Link | null>>();
 
 /// **L'unica porta da cui si registra un ascoltatore d'azione.**
 ///
@@ -1211,45 +1211,45 @@ const legami = new WeakMap<HTMLElement, Map<string, Legame | null>>();
 /// accumula: la seconda aggiorna l'azione e basta. È ciò che rende sicuro
 /// richiamarla dal riconciliatore con la stessa disinvoltura con cui la chiama
 /// il disegno.
-function ascolta(
+function listen(
   el: HTMLElement,
-  evento: string,
+  event: string,
   action: ActionRef | null,
-  onAction: Porta,
-  quando?: (e: Event) => boolean,
+  onAction: Port,
+  when?: (e: Event) => boolean,
 ): void {
-  let per = legami.get(el);
-  if (!per) {
-    per = new Map();
-    legami.set(el, per);
+  let bindings = links.get(el);
+  if (!bindings) {
+    bindings = new Map();
+    links.set(el, bindings);
   }
-  const registrato = per.has(evento);
-  per.set(evento, action ? { action, onAction } : null);
-  if (registrato) return;
-  el.addEventListener(evento, (e) => {
-    if (!legami.get(el)?.get(evento)) return;
-    if (quando && !quando(e)) return;
+  const registered = bindings.has(event);
+  bindings.set(event, action ? { action, onAction } : null);
+  if (registered) return;
+  el.addEventListener(event, (e) => {
+    if (!links.get(el)?.get(event)) return;
+    if (when && !when(e)) return;
     e.preventDefault();
-    void invia(el, evento);
+    void dispatchAction(el, event);
   });
 }
 
 /// Un'azione su un elemento cliccabile.
-function collega(el: HTMLElement, action: ActionRef | null, onAction: Porta): void {
+function connect(el: HTMLElement, action: ActionRef | null, onAction: Port): void {
   if (!action) {
     el.classList.remove("clickable");
     // Non basta togliere il click: se questo elemento era attivabile e viene
-    // riusato dal riconciliatore (§2.8) per un nodo senza azione, resterebbe
+    // reuseto dal riconciliatore (§2.8) per un nodo senza azione, resterebbe
     // nel giro del tab senza fare niente.
-    nonAttivabile(el);
+    notActivatable(el);
   } else {
     el.classList.add("clickable");
     // Cliccabile e attivabile sono la stessa cosa, e da qui in poi lo sono per
     // costruzione: passa di qui **ogni** azione di **ogni** nodo dichiarativo,
     // quindi anche quelli dei pannelli che non sono ancora stati scritti.
-    attivabile(el);
+    activatable(el);
   }
-  ascolta(el, "click", action, onAction);
+  listen(el, "click", action, onAction);
 }
 
 /// **Tutti** gli ascoltatori d'azione di un campo, in un posto solo.
@@ -1257,52 +1257,52 @@ function collega(el: HTMLElement, action: ActionRef | null, onAction: Porta): vo
 /// La chiamano il disegno e la riconciliazione, con le stesse due righe: chi
 /// aggiungerà un terzo ascoltatore a un campo lo scrive qui, e lo ha in
 /// entrambe le vite del campo senza ricordarsene.
-function azioniDelCampo(
-  controllo: HTMLElement,
+function actionsOfField(
+  control: HTMLElement,
   action: ActionRef | null,
-  onAction: Porta,
+  onAction: Port,
 ): void {
-  ascolta(controllo, "change", action, onAction);
+  listen(control, "change", action, onAction);
   // Invio = «ho finito»: senza, un campo di ricerca costringerebbe a uscirne
   // per essere ascoltato. Solo dove Invio non vuol già dire altro — in un
   // `<textarea>` è un a capo, su una casella di spunta è la spunta.
-  if (accettaInvio(controllo)) {
-    ascolta(controllo, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter");
+  if (acceptEnter(control)) {
+    listen(control, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter");
   }
 }
 
-function accettaInvio(controllo: HTMLElement): boolean {
-  if (!(controllo instanceof HTMLInputElement)) return false;
-  return controllo.type === "text" || controllo.type === "date";
+function acceptEnter(control: HTMLElement): boolean {
+  if (!(control instanceof HTMLInputElement)) return false;
+  return control.type === "text" || control.type === "date";
 }
 
 /// Manda l'azione **in vigore** per questo evento, col suo payload e coi campi
 /// in vigore: quelli del form che la contiene, o quelli dell'albero intero
 /// fuori da un form.
 ///
-/// Non prende un `ActionRef`, e la mancanza è il presidio: un'azione qui non si
+/// Non prende un `ActionRef`, e la mancanza è il prendereddio: un'azione qui non si
 /// può passare, quindi non si può catturare in una chiusura e non può
 /// invecchiare. Chi ci riprovasse non compila.
-async function invia(da: HTMLElement, evento: string): Promise<void> {
-  const legame = legami.get(da)?.get(evento);
-  if (!legame) return;
-  await legame.onAction(legame.action, campiInVigore(da));
+async function dispatchAction(from: HTMLElement, event: string): Promise<void> {
+  const link = links.get(from)?.get(event);
+  if (!link) return;
+  await link.onAction(link.action, activeFields(from));
 }
 
-export function campiInVigore(da: HTMLElement): FieldValue[] {
-  const ambito = da.closest<HTMLElement>(".ui-form") ?? radiceDi(da);
-  if (!ambito) return [];
-  const trovati = new Map<string, UiValue>();
-  const candidati = [ambito, ...Array.from(ambito.querySelectorAll<HTMLElement>("[data-campo]"))];
-  for (const el of candidati) {
-    const campo = el.dataset.campo;
-    const leggi = resi.get(el)?.leggi;
-    if (!campo || !leggi) continue;
+export function activeFields(from: HTMLElement): FieldValue[] {
+  const scope = from.closest<HTMLElement>(".ui-form") ?? rootOf(from);
+  if (!scope) return [];
+  const found = new Map<string, UiValue>();
+  const candidates = [scope, ...Array.from(scope.querySelectorAll<HTMLElement>("[data-field]"))];
+  for (const el of candidates) {
+    const field = el.dataset.field;
+    const read = rendered.get(el)?.read;
+    if (!field || !read) continue;
     // Un campo dichiarato due volte compare una volta sola, con l'ultimo
     // valore: è la regola scritta accanto a `UiAction::fields`.
-    trovati.set(campo, leggi());
+    found.set(field, read());
   }
-  return [...trovati].map(([field, value]) => ({ field, value }));
+  return [...found].map(([field, value]) => ({ field, value }));
 }
 
 /// La radice dell'albero disegnato che contiene `el`.
@@ -1311,22 +1311,22 @@ export function campiInVigore(da: HTMLElement): FieldValue[] {
 /// fino alla cima: chi manda un'azione può stare su un pezzo di scocca che
 /// questo file ha messo lì senza che sia un nodo — la linguetta di una scheda è
 /// il caso —, e partire da lui dava «nessuna radice», cioè nessun campo.
-function radiceDi(el: HTMLElement): HTMLElement | null {
-  let corrente: HTMLElement | null = el;
-  while (corrente && !resi.has(corrente)) corrente = corrente.parentElement;
-  let ultimo: HTMLElement | null = null;
-  while (corrente && resi.has(corrente)) {
-    ultimo = corrente;
-    corrente = corrente.parentElement;
+function rootOf(el: HTMLElement): HTMLElement | null {
+  let current: HTMLElement | null = el;
+  while (current && !rendered.has(current)) current = current.parentElement;
+  let last: HTMLElement | null = null;
+  while (current && rendered.has(current)) {
+    last = current;
+    current = current.parentElement;
   }
-  return ultimo;
+  return last;
 }
 
 /// Le linguette di un gruppo di schede: le disegna la shell, perché cambiare
 /// scheda è una piega — non serve un giro dal provider (§2.1).
 ///
-/// **Si riusano, non si rifanno.** Erano l'ultimo pezzo d'albero che non
-/// passava da `figli`: un `barra.replaceChildren()` a ogni riconciliazione, cioè
+/// **Si reuseno, non si rifanno.** Erano l'ultimo pezzo d'albero che non
+/// passava da `children`: un `barra.replaceChildren()` a ogni riconciliazione, cioè
 /// esattamente ciò che il §2.8 esiste per non fare. Chi ci stava sopra col tab
 /// perdeva il fuoco a ogni ridisegno della view attorno — e siccome un ridisegno
 /// arriva anche da un `IndexUpdated`, bastava salvare per far saltare via il
@@ -1337,49 +1337,49 @@ function radiceDi(el: HTMLElement): HTMLElement | null {
 /// `ascolta` per la ragione della 0118: una chiusura che cattura `tab`
 /// manderebbe l'azione del giro in cui è nata, e finché i bottoni si
 /// ricostruivano quella chiusura era fresca per caso.
-function intestazioniSchede(el: HTMLElement, tabs: UiNode[], onAction: Porta): void {
-  const barra = el.querySelector<HTMLElement>(":scope > .ui-tab-bar");
-  if (!barra) return;
-  barra.setAttribute("role", "tablist");
+function tabHeaders(el: HTMLElement, tabs: UiNode[], onAction: Port): void {
+  const bar = el.querySelector<HTMLElement>(":scope > .ui-tab-bar");
+  if (!bar) return;
+  bar.setAttribute("role", "tablist");
   // I pannelli, nell'ordine in cui stanno: servono a legare ogni linguetta al
   // suo (`aria-controls`) e viceversa (`aria-labelledby`). È la coppia che
   // permette a un lettore di schermo di dire «scheda 2 di 3, selezionata» e di
   // saltare direttamente al contenuto invece di leggere anche le altre.
-  const pannelli = Array.from(
+  const panels = Array.from(
     el.querySelectorAll<HTMLElement>(":scope > .ui-children > .ui-tab"),
   );
-  const esistenti = Array.from(barra.querySelectorAll<HTMLElement>(":scope > .ui-tab-button"));
-  const usate = new Set<HTMLElement>();
+  const existing = Array.from(bar.querySelectorAll<HTMLElement>(":scope > .ui-tab-button"));
+  const usedElements = new Set<HTMLElement>();
   tabs.forEach((tab, i) => {
     if (tab.node !== "tab") return;
-    const bottone = esistenti[i] ?? nuovaLinguetta(barra, el, i);
-    usate.add(bottone);
-    bottone.textContent = tab.label;
-    const pannello = pannelli[i];
-    if (pannello) {
-      if (!bottone.id) bottone.id = identificatore("linguetta");
-      bottone.setAttribute("aria-controls", pannello.id);
-      pannello.setAttribute("aria-labelledby", bottone.id);
+    const button = existing[i] ?? newItemTab(bar, el, i);
+    usedElements.add(button);
+    button.textContent = tab.label;
+    const panel = panels[i];
+    if (panel) {
+      if (!button.id) button.id = identifier("linguetta");
+      button.setAttribute("aria-controls", panel.id);
+      panel.setAttribute("aria-labelledby", button.id);
     }
     // Chi ha chiesto di saperlo lo sa; chi non ha dichiarato un'azione non
     // viene disturbato per una piega — e se smette di dichiararla, `ascolta`
     // spegne la sua senza togliere l'ascoltatore.
-    ascolta(bottone, "click", tab.action, onAction);
+    listen(button, "click", tab.action, onAction);
   });
-  for (const bottone of esistenti) if (!usate.has(bottone)) bottone.remove();
-  frecceFraSchede(barra, el);
-  segnaSchedaAttiva(el);
+  for (const button of existing) if (!usedElements.has(button)) button.remove();
+  arrowsBetweenTabs(bar, el);
+  markActiveTab(el);
 }
 
 /// Una linguetta nuova, con l'unica cosa che è sua per sempre: **quale scheda
 /// mostra**, cioè la sua posizione, che non cambia per la vita del bottone.
-function nuovaLinguetta(barra: HTMLElement, gruppo: HTMLElement, indice: number): HTMLElement {
-  const bottone = document.createElement("button");
-  bottone.className = "ui-tab-button";
-  bottone.setAttribute("role", "tab");
-  bottone.addEventListener("click", () => mostraScheda(gruppo, indice));
-  barra.appendChild(bottone);
-  return bottone;
+function newItemTab(bar: HTMLElement, group: HTMLElement, index: number): HTMLElement {
+  const button = document.createElement("button");
+  button.className = "ui-tab-button";
+  button.setAttribute("role", "tab");
+  button.addEventListener("click", () => showTab(group, index));
+  bar.appendChild(button);
+  return button;
 }
 
 /// Le frecce dentro una barra di schede: ← → per spostarsi, Home/Fine per
@@ -1389,50 +1389,50 @@ function nuovaLinguetta(barra: HTMLElement, gruppo: HTMLElement, indice: number)
 /// volta sola: `intestazioniSchede` ridisegna i figli a ogni giro, e un
 /// ascoltatore per linguetta sarebbe un ascoltatore in più a ogni ridisegno su
 /// un elemento che nel frattempo è stato buttato.
-function frecceFraSchede(barra: HTMLElement, gruppo: HTMLElement): void {
-  if (barra.dataset.frecce === "sì") return;
-  barra.dataset.frecce = "sì";
-  barra.addEventListener("keydown", (e) => {
-    const passo =
+function arrowsBetweenTabs(bar: HTMLElement, group: HTMLElement): void {
+  if (bar.dataset.frecce === "sì") return;
+  bar.dataset.frecce = "sì";
+  bar.addEventListener("keydown", (e) => {
+    const step =
       e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : e.key === "Home" ? 0 : e.key === "End" ? 0 : null;
-    if (passo === null) return;
-    const bottoni = Array.from(
-      barra.querySelectorAll<HTMLElement>(":scope > .ui-tab-button"),
+    if (step === null) return;
+    const buttons = Array.from(
+      bar.querySelectorAll<HTMLElement>(":scope > .ui-tab-button"),
     );
-    if (bottoni.length === 0) return;
-    const attiva = Number(gruppo.dataset.attiva ?? "0");
-    const prossima =
+    if (buttons.length === 0) return;
+    const active = Number(group.dataset.active ?? "0");
+    const next =
       e.key === "Home"
         ? 0
         : e.key === "End"
-          ? bottoni.length - 1
+          ? buttons.length - 1
           : // Il giro si chiude: dall'ultima si torna alla prima. È ciò che
             // fa un tab widget nativo, e chi ci arriva col tasto se lo aspetta.
-            (attiva + passo + bottoni.length) % bottoni.length;
+            (active + step + buttons.length) % buttons.length;
     e.preventDefault();
-    bottoni[prossima]?.click();
-    bottoni[prossima]?.focus();
+    buttons[next]?.click();
+    buttons[next]?.focus();
   });
 }
 
-function mostraScheda(el: HTMLElement, indice: number): void {
-  el.dataset.attiva = String(indice);
-  segnaSchedaAttiva(el);
+function showTab(el: HTMLElement, index: number): void {
+  el.dataset.active = String(index);
+  markActiveTab(el);
 }
 
-function segnaSchedaAttiva(el: HTMLElement): void {
-  const attiva = Number(el.dataset.attiva ?? "0");
-  const corpo = el.querySelector<HTMLElement>(":scope > .ui-children");
-  const bottoni = el.querySelectorAll<HTMLElement>(":scope > .ui-tab-bar > .ui-tab-button");
-  bottoni.forEach((b, i) => {
-    b.setAttribute("aria-selected", String(i === attiva));
+function markActiveTab(el: HTMLElement): void {
+  const active = Number(el.dataset.active ?? "0");
+  const body = el.querySelector<HTMLElement>(":scope > .ui-children");
+  const buttons = el.querySelectorAll<HTMLElement>(":scope > .ui-tab-bar > .ui-tab-button");
+  buttons.forEach((b, i) => {
+    b.setAttribute("aria-selected", String(i === active));
     // Il tab visita **il gruppo**, non ogni linguetta: dentro ci si muove con
     // le frecce. È la convenzione dei tab widget, ed è ciò che evita che una
     // barra da otto schede diventi otto fermate prima del contenuto.
-    b.tabIndex = i === attiva ? 0 : -1;
+    b.tabIndex = i === active ? 0 : -1;
   });
-  if (!corpo) return;
-  Array.from(corpo.children).forEach((c, i) => {
-    if (c instanceof HTMLElement) c.hidden = i !== attiva;
+  if (!body) return;
+  Array.from(body.children).forEach((c, i) => {
+    if (c instanceof HTMLElement) c.hidden = i !== active;
   });
 }

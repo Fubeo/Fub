@@ -57,7 +57,7 @@ impl Vault {
     }
 }
 
-fn titoli(tree: &UiNode) -> Vec<String> {
+fn titles(tree: &UiNode) -> Vec<String> {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         match &node.kind {
             UiKind::ListItem { title, .. } => out.push(format!("{title}")),
@@ -72,7 +72,7 @@ fn titoli(tree: &UiNode) -> Vec<String> {
     out
 }
 
-fn cartella_inbox() -> QueryExpr {
+fn folder_inbox() -> QueryExpr {
     QueryExpr::of(QueryPredicate::Folder {
         path: "Inbox".into(),
         descendants: true,
@@ -81,12 +81,12 @@ fn cartella_inbox() -> QueryExpr {
 
 /// `queries.save` dichiara `expr: ParamKind::Text`: l'host rifiuta un oggetto
 /// prima di `invoke`. Il comando sa comunque leggere JSON da stringa.
-fn expr_come_testo(expr: &QueryExpr) -> String {
+fn expr_as_text(expr: &QueryExpr) -> String {
     serde_json::to_string(expr).expect("QueryExpr è serializzabile")
 }
 
 #[test]
-fn save_run_delete_su_una_cartella() {
+fn save_run_delete_on_a_folder() {
     let vault = Vault::new();
     vault.put("Inbox/a.md", "# A\n");
     vault.put("fuori.md", "# no\n");
@@ -97,14 +97,14 @@ fn save_run_delete_su_una_cartella() {
         serde_json::json!({
             "id": "inbox",
             "name": "Inbox",
-            "expr": expr_come_testo(&cartella_inbox()),
+            "expr": expr_as_text(&folder_inbox()),
         }),
         InvokeMode::Apply,
         Actor::User,
     )
     .expect("save");
 
-    let esito = ws
+    let outcome = ws
         .invoke_command(
             QUERIES_RUN,
             serde_json::json!({ "id": "inbox" }),
@@ -112,7 +112,7 @@ fn save_run_delete_su_una_cartella() {
             Actor::User,
         )
         .expect("run");
-    match esito.effect {
+    match outcome.effect {
         fub_abi::command::CommandEffect::Navigate { doc } => {
             assert_eq!(doc, DocId::new("Inbox/a.md"));
         }
@@ -138,7 +138,7 @@ fn save_run_delete_su_una_cartella() {
 }
 
 #[test]
-fn la_view_elenca_e_lancia() {
+fn the_view_lists_and_launches() {
     let vault = Vault::new();
     vault.put("Inbox/a.md", "# A\n");
     vault.put("Inbox/b.md", "# B\n");
@@ -148,7 +148,7 @@ fn la_view_elenca_e_lancia() {
         serde_json::json!({
             "id": "inbox",
             "name": "Inbox",
-            "expr": expr_come_testo(&cartella_inbox()),
+            "expr": expr_as_text(&folder_inbox()),
         }),
         InvokeMode::Apply,
         Actor::User,
@@ -156,28 +156,28 @@ fn la_view_elenca_e_lancia() {
     .expect("save");
 
     let tree = ws.render_view(&ViewInstance::only(QUERIES_VIEW)).unwrap();
-    let elenco = titoli(&tree);
-    assert!(elenco.iter().any(|t| t.contains("Inbox")), "{elenco:?}");
+    let list = titles(&tree);
+    assert!(list.iter().any(|t| t.contains("Inbox")), "{list:?}");
 
     ws.view_action(
         &ViewInstance::only(QUERIES_VIEW),
         UiAction::new("run").with_payload(serde_json::json!({ "id": "inbox" })),
     )
     .expect("run");
-    let dopo = ws.render_view(&ViewInstance::only(QUERIES_VIEW)).unwrap();
-    let elenco = titoli(&dopo);
+    let after = ws.render_view(&ViewInstance::only(QUERIES_VIEW)).unwrap();
+    let list = titles(&after);
     assert!(
-        elenco.iter().any(|t| t.contains("Inbox/a.md")),
-        "{elenco:?}"
+        list.iter().any(|t| t.contains("Inbox/a.md")),
+        "{list:?}"
     );
     assert!(
-        elenco.iter().any(|t| t.contains("Inbox/b.md")),
-        "{elenco:?}"
+        list.iter().any(|t| t.contains("Inbox/b.md")),
+        "{list:?}"
     );
 }
 
 #[test]
-fn form_salva_da_testo() {
+fn form_save_from_text() {
     let vault = Vault::new();
     vault.put("a.md", "ciao rust\n");
     let mut ws = vault.open();
@@ -198,12 +198,12 @@ fn form_salva_da_testo() {
         .expect("save");
     assert!(matches!(update, ViewUpdate::Replace { .. }));
     let tree = ws.render_view(&ViewInstance::only(QUERIES_VIEW)).unwrap();
-    let titoli = titoli(&tree);
-    assert!(titoli.iter().any(|t| t.contains("Rust")), "{titoli:?}");
+    let titles = titles(&tree);
+    assert!(titles.iter().any(|t| t.contains("Rust")), "{titles:?}");
 }
 
 #[test]
-fn i_comandi_sono_nel_registro() {
+fn the_commands_are_in_the_record() {
     let vault = Vault::new();
     let ws = vault.open();
     let ids: Vec<String> = ws.commands().into_iter().map(|c| c.id).collect();
@@ -213,7 +213,7 @@ fn i_comandi_sono_nel_registro() {
 }
 
 #[test]
-fn dry_run_non_scrive() {
+fn dry_run_not_writes() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.invoke_command(
@@ -221,7 +221,7 @@ fn dry_run_non_scrive() {
         serde_json::json!({
             "id": "x",
             "name": "X",
-            "expr": expr_come_testo(&QueryExpr::all()),
+            "expr": expr_as_text(&QueryExpr::all()),
         }),
         InvokeMode::DryRun,
         Actor::User,
@@ -239,7 +239,7 @@ fn dry_run_non_scrive() {
 }
 
 #[test]
-fn le_collezioni_elencano_le_query_salvate() {
+fn the_collections_list_the_query_saved() {
     let vault = Vault::new();
     vault.put("Inbox/a.md", "# A\n");
     let mut ws = vault.open();
@@ -248,7 +248,7 @@ fn le_collezioni_elencano_le_query_salvate() {
         serde_json::json!({
             "id": "inbox",
             "name": "Inbox",
-            "expr": expr_come_testo(&cartella_inbox()),
+            "expr": expr_as_text(&folder_inbox()),
         }),
         InvokeMode::Apply,
         Actor::User,
@@ -258,6 +258,6 @@ fn le_collezioni_elencano_le_query_salvate() {
     let tree = ws
         .render_view(&ViewInstance::only(COLLECTIONS_VIEW))
         .unwrap();
-    let elenco = titoli(&tree);
-    assert!(elenco.iter().any(|t| t.contains("Inbox")), "{elenco:?}");
+    let list = titles(&tree);
+    assert!(list.iter().any(|t| t.contains("Inbox")), "{list:?}");
 }

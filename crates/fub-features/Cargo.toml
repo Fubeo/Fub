@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Feature ufficiali come impl native dei trait di estensione: backlink, ricerca, graph, orchestrazione preview."
+description = "Official features as native trait implementations: backlink, search, graph, preview orchestration."
 
 # Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
 # (`src/inventario.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
@@ -96,5 +96,5 @@ tempfile = { workspace = true }
 # cioè un errore di compilazione in una build parziale, che è precisamente ciò
 # che le build parziali della CI esistono per non avere.
 [[example]]
-name = "una_ricerca"
+name = "search"
 required-features = ["search"]

@@ -76,12 +76,12 @@ impl FileSource {
     /// Apre il file. `Io` se non si può: aprire una sorgente è la prima cosa
     /// che può andare storta, e non è un difetto del provider che la riceverà.
     pub fn open(path: &Path) -> Result<Self, PluginError> {
-        let file = File::open(path).map_err(|e| {
-            PluginError::Io(format!("`{}` non si apre: {e}", path.display()).into())
+        let file = File::open(path).map_err(|and| {
+            PluginError::Io(format!("cannot open `{}`: {and}", path.display()).into())
         })?;
         let len = file
             .metadata()
-            .map_err(|e| PluginError::Io(format!("`{}`: {e}", path.display()).into()))?
+            .map_err(|and| PluginError::Io(format!("`{}`: {and}", path.display()).into()))?
             .len();
         Ok(FileSource { file, len })
     }
@@ -94,14 +94,14 @@ impl SourceBacking for FileSource {
         }
         self.file
             .seek(SeekFrom::Start(offset))
-            .map_err(|e| PluginError::Io(format!("non si arriva a {offset}: {e}").into()))?;
+            .map_err(|and| PluginError::Io(format!("cannot seek to {offset}: {and}").into()))?;
         // `min` col residuo: allocare `len` su una richiesta da un gigabyte a
         // due byte dalla fine sarebbe un tetto dell'host pagato da chi non lo
         // ha superato.
-        let quanti = (self.len - offset).min(u64::from(len)) as usize;
-        let mut buf = vec![0u8; quanti];
-        let letti = read_fino_a(&mut self.file, &mut buf)?;
-        buf.truncate(letti);
+        let count = (self.len - offset).min(u64::from(len)) as usize;
+        let mut buf = vec![0u8; count];
+        let read = read_until_a(&mut self.file, &mut buf)?;
+        buf.truncate(read);
         Ok(buf)
     }
 
@@ -113,17 +113,17 @@ impl SourceBacking for FileSource {
 /// Legge riempiendo il buffer, fermandosi alla fine. `Interrupted` non è un
 /// guasto: è il segnale che si riprova, e trattarlo come tale qui evita che una
 /// lettura interrotta diventi una sorgente troncata in silenzio.
-fn read_fino_a(f: &mut impl Read, buf: &mut [u8]) -> Result<usize, PluginError> {
-    let mut letti = 0;
-    while letti < buf.len() {
-        match f.read(&mut buf[letti..]) {
+fn read_until_a(f: &mut impl Read, buf: &mut [u8]) -> Result<usize, PluginError> {
+    let mut read = 0;
+    while read < buf.len() {
+        match f.read(&mut buf[read..]) {
             Ok(0) => break,
-            Ok(n) => letti += n,
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(PluginError::Io(format!("lettura fallita: {e}").into())),
+            Ok(n) => read += n,
+            Err(and) if and.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(and) => return Err(PluginError::Io(format!("read failed: {and}").into())),
         }
     }
-    Ok(letti)
+    Ok(read)
 }
 
 /// Una sorgente che sta già in memoria, dietro un handle.
@@ -135,9 +135,9 @@ pub struct MemorySource(pub Vec<u8>);
 
 impl SourceBacking for MemorySource {
     fn read_at(&mut self, offset: u64, len: u32) -> Result<Vec<u8>, PluginError> {
-        let da = (offset.min(self.0.len() as u64)) as usize;
-        let a = da.saturating_add(len as usize).min(self.0.len());
-        Ok(self.0[da..a].to_vec())
+        let from = (offset.min(self.0.len() as u64)) as usize;
+        let a = from.saturating_add(len as usize).min(self.0.len());
+        Ok(self.0[from..a].to_vec())
     }
 
     fn len(&self) -> u64 {
@@ -153,23 +153,23 @@ impl SourceBacking for MemorySource {
 /// **la sorgente di qualcun altro** invece di ricevere il `BadArgs` che merita.
 #[derive(Default)]
 pub(crate) struct OpenSources {
-    aperte: BTreeMap<u64, Box<dyn SourceBacking>>,
-    prossima: u64,
+    open_sources: BTreeMap<u64, Box<dyn SourceBacking>>,
+    next: u64,
 }
 
 impl OpenSources {
     /// Registra una sorgente e restituisce la sua chiave.
     pub(crate) fn open(&mut self, backing: Box<dyn SourceBacking>) -> SourceHandle {
-        self.prossima += 1;
-        let h = self.prossima;
-        self.aperte.insert(h, backing);
+        self.next += 1;
+        let h = self.next;
+        self.open_sources.insert(h, backing);
         SourceHandle(h)
     }
 
     /// Chiude. Chiudere ciò che non c'è riesce: chi chiude due volte non sta
     /// sbagliando niente che valga un errore.
     pub(crate) fn close(&mut self, handle: SourceHandle) {
-        self.aperte.remove(&handle.0);
+        self.open_sources.remove(&handle.0);
     }
 
     pub(crate) fn read(
@@ -178,9 +178,9 @@ impl OpenSources {
         offset: u64,
         len: u32,
     ) -> Result<Vec<u8>, PluginError> {
-        let Some(b) = self.aperte.get_mut(&handle.0) else {
+        let Some(b) = self.open_sources.get_mut(&handle.0) else {
             return Err(PluginError::BadArgs(
-                "questo handle di sorgente non è (o non è più) aperto".into(),
+                "this source handle is not (or is no longer) open".into(),
             ));
         };
         b.read_at(offset, len)
@@ -188,7 +188,7 @@ impl OpenSources {
 
     /// Quanti byte ha la sorgente dietro una chiave.
     pub(crate) fn len(&self, handle: SourceHandle) -> Option<u64> {
-        self.aperte.get(&handle.0).map(|b| b.len())
+        self.open_sources.get(&handle.0).map(|b| b.len())
     }
 }
 
@@ -203,8 +203,8 @@ impl OpenSources {
 /// chi esporta tre note non deve scegliere una destinazione per averle.
 #[derive(Default)]
 pub struct MemorySink {
-    aperti: BTreeMap<u64, (String, String, Vec<u8>)>,
-    prossima: u64,
+    open: BTreeMap<u64, (String, String, Vec<u8>)>,
+    next: u64,
 }
 
 impl ArtifactSink for MemorySink {
@@ -213,26 +213,26 @@ impl ArtifactSink for MemorySink {
         path: &str,
         media_type: &str,
     ) -> Result<ArtifactHandle, PluginError> {
-        controlla_path(path)?;
-        self.prossima += 1;
-        self.aperti.insert(
-            self.prossima,
+        check_path(path)?;
+        self.next += 1;
+        self.open.insert(
+            self.next,
             (path.to_string(), media_type.to_string(), Vec::new()),
         );
-        Ok(ArtifactHandle(self.prossima))
+        Ok(ArtifactHandle(self.next))
     }
 
     fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError> {
-        let Some((_, _, buf)) = self.aperti.get_mut(&handle.0) else {
-            return Err(handle_ignoto());
+        let Some((_, _, buf)) = self.open.get_mut(&handle.0) else {
+            return Err(handle_unknown());
         };
         buf.extend_from_slice(bytes);
         Ok(())
     }
 
     fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError> {
-        let Some((path, media_type, buf)) = self.aperti.remove(&handle.0) else {
-            return Err(handle_ignoto());
+        let Some((path, media_type, buf)) = self.open.remove(&handle.0) else {
+            return Err(handle_unknown());
         };
         // In memoria la ricevuta porta i byte: sono già qui, e dirlo
         // `Delivered` costringerebbe chi legge il rapporto a cercarli altrove
@@ -273,22 +273,22 @@ pub struct DirectorySink {
     root: PathBuf,
     /// La radice risolta con `canonicalize`, calcolata una sola volta: è fissa
     /// per la vita del sink, e `resta_dentro` la chiedeva a ogni artefatto.
-    root_vera: Option<PathBuf>,
-    aperti: BTreeMap<u64, Artefatto>,
-    prossima: u64,
+    root_real: Option<PathBuf>,
+    open: BTreeMap<u64, Artifact>,
+    next: u64,
 }
 
 /// Un artefatto a metà strada: dove sta adesso, dove andrà, e quanto ne è
 /// passato.
-struct Artefatto {
+struct Artifact {
     path: String,
     media_type: String,
     /// Il temporaneo accanto al destinatario. È il file che si sta scrivendo.
-    di_lato: PathBuf,
+    of_side: PathBuf,
     /// Dove la `rename` lo porterà alla chiusura.
     dest: PathBuf,
     file: File,
-    scritti: u64,
+    written: u64,
 }
 
 impl DirectorySink {
@@ -296,9 +296,9 @@ impl DirectorySink {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         DirectorySink {
             root: root.into(),
-            root_vera: None,
-            aperti: BTreeMap::new(),
-            prossima: 0,
+            root_real: None,
+            open: BTreeMap::new(),
+            next: 0,
         }
     }
 }
@@ -309,91 +309,91 @@ impl ArtifactSink for DirectorySink {
         path: &str,
         media_type: &str,
     ) -> Result<ArtifactHandle, PluginError> {
-        controlla_path(path)?;
+        check_path(path)?;
         let dest = self.root.join(path);
         let dir = dest.parent().unwrap_or(&self.root).to_path_buf();
         // Prima di creare, non dopo: `create_dir_all` attraversa un
         // collegamento senza chiedere, e le cartelle nate di là restano lì
         // anche se poi l'artefatto lo rifiutiamo.
-        if self.root_vera.is_none() {
-            self.root_vera = Some(self.root.canonicalize().map_err(|e| {
-                PluginError::Io(format!("`{}` non si risolve: {e}", self.root.display()).into())
+        if self.root_real.is_none() {
+            self.root_real = Some(self.root.canonicalize().map_err(|and| {
+                PluginError::Io(format!("cannot resolve `{}`: {and}", self.root.display()).into())
             })?);
         }
-        let root_vera = self.root_vera.as_ref().expect("appena risolto");
-        resta_dentro(root_vera, &dir)?;
+        let root_real = self.root_real.as_ref().expect("just resolved");
+        stays_inside(root_real, &dir)?;
         std::fs::create_dir_all(&dir)
-            .map_err(|e| PluginError::Io(format!("`{}` non si crea: {e}", dir.display()).into()))?;
+            .map_err(|and| PluginError::Io(format!("cannot create `{}`: {and}", dir.display()).into()))?;
         // Il nome del file lo dà il provider ed è già passato da
         // `controlla_path`, quindi è UTF-8 e non ha separatori: la cartella
         // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
-        let nome = crate::storage::nome_del_temporaneo(
+        let name = crate::storage::temp_name(
             dest.file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("artefatto"),
         );
-        let di_lato = dest.with_file_name(nome);
-        let file = File::create(&di_lato).map_err(|e| {
-            PluginError::Io(format!("`{}` non si scrive: {e}", dest.display()).into())
+        let of_side = dest.with_file_name(name);
+        let file = File::create(&of_side).map_err(|and| {
+            PluginError::Io(format!("cannot write to `{}`: {and}", dest.display()).into())
         })?;
-        self.prossima += 1;
-        self.aperti.insert(
-            self.prossima,
-            Artefatto {
+        self.next += 1;
+        self.open.insert(
+            self.next,
+            Artifact {
                 path: path.to_string(),
                 media_type: media_type.to_string(),
-                di_lato,
+                of_side,
                 dest,
                 file,
-                scritti: 0,
+                written: 0,
             },
         );
-        Ok(ArtifactHandle(self.prossima))
+        Ok(ArtifactHandle(self.next))
     }
 
     fn write_artifact(&mut self, handle: ArtifactHandle, bytes: &[u8]) -> Result<(), PluginError> {
-        let Some(a) = self.aperti.get_mut(&handle.0) else {
-            return Err(handle_ignoto());
+        let Some(a) = self.open.get_mut(&handle.0) else {
+            return Err(handle_unknown());
         };
         a.file
             .write_all(bytes)
-            .map_err(|e| PluginError::Io(format!("`{}`: {e}", a.path).into()))?;
-        a.scritti += bytes.len() as u64;
+            .map_err(|and| PluginError::Io(format!("`{}`: {and}", a.path).into()))?;
+        a.written += bytes.len() as u64;
         Ok(())
     }
 
     fn close_artifact(&mut self, handle: ArtifactHandle) -> Result<ExportArtifact, PluginError> {
-        let Some(a) = self.aperti.remove(&handle.0) else {
-            return Err(handle_ignoto());
+        let Some(a) = self.open.remove(&handle.0) else {
+            return Err(handle_unknown());
         };
         // Ogni via che esce di qui senza aver consegnato porta via il
         // temporaneo: un artefatto che non è arrivato non deve lasciare per
         // terra un file nascosto in una cartella dell'utente, che non è il
         // vault e non ha nessuna raccolta che ci passi.
-        let guasto = |di_lato: &Path, e: std::io::Error, cosa: &str| {
-            let _ = std::fs::remove_file(di_lato);
-            PluginError::Io(format!("`{}` {cosa}: {e}", a.path).into())
+        let failure = |of_side: &Path, and: std::io::Error, what: &str| {
+            let _ = std::fs::remove_file(of_side);
+            PluginError::Io(format!("`{}` {what}: {and}", a.path).into())
         };
         // Il conto esce dopo che i byte sono sul disco, non dopo un `flush` che
         // su un `File` non fa niente.
-        if let Err(e) = a.file.sync_all() {
-            return Err(guasto(&a.di_lato, e, "non si conclude"));
+        if let Err(and) = a.file.sync_all() {
+            return Err(failure(&a.of_side, and, "sync failed"));
         }
         drop(a.file);
-        let di_lato = a.di_lato;
-        if let Err(e) = std::fs::rename(&di_lato, &a.dest) {
-            return Err(guasto(&di_lato, e, "non arriva a destinazione"));
+        let of_side = a.of_side;
+        if let Err(and) = std::fs::rename(&of_side, &a.dest) {
+            return Err(failure(&of_side, and, "rename to destination failed"));
         }
         // La cartella per ultima, e solo se si può guardare in UTF-8: è un
         // `fsync` best-effort come quello del vault, e la cartella la sceglie
         // l'utente in un dialogo di sistema.
         if let Some(dir) = a.dest.parent().and_then(Utf8Path::from_path) {
-            crate::storage::sincronizza_la_cartella(dir);
+            crate::storage::sync_folder(dir);
         }
         Ok(ExportArtifact {
             path: a.path,
             media_type: a.media_type,
-            content: ArtifactContent::Delivered(a.scritti),
+            content: ArtifactContent::Delivered(a.written),
         })
     }
 }
@@ -407,14 +407,14 @@ impl ArtifactSink for DirectorySink {
 /// indietro; qui siamo in una cartella dell'utente, dove non passa nessuno.
 impl Drop for DirectorySink {
     fn drop(&mut self) {
-        for (_, a) in std::mem::take(&mut self.aperti) {
-            let _ = std::fs::remove_file(&a.di_lato);
+        for (_, a) in std::mem::take(&mut self.open) {
+            let _ = std::fs::remove_file(&a.of_side);
         }
     }
 }
 
-fn handle_ignoto() -> PluginError {
-    PluginError::BadArgs("questo handle di artefatto non è (o non è più) aperto".into())
+fn handle_unknown() -> PluginError {
+    PluginError::BadArgs("this artifact handle is not (or is no longer) open".into())
 }
 
 /// Il path di un artefatto è **dentro l'esito**, e ci resta.
@@ -440,21 +440,21 @@ fn handle_ignoto() -> PluginError {
 /// non entra nella domanda: i byte vanno in un temporaneo dal nome nuovo e la
 /// `rename` della chiusura **sostituisce** un eventuale collegamento invece di
 /// seguirlo, che è la stessa regola con cui il vault scrive (decisione 0065).
-fn resta_dentro(root: &Path, dir: &Path) -> Result<(), PluginError> {
-    let mut esistente = dir;
-    while !esistente.exists() {
-        match esistente.parent() {
-            Some(su) => esistente = su,
+fn stays_inside(root: &Path, dir: &Path) -> Result<(), PluginError> {
+    let mut existing = dir;
+    while !existing.exists() {
+        match existing.parent() {
+            Some(on) => existing = on,
             None => break,
         }
     }
-    let dentro = esistente
+    let within = existing
         .canonicalize()
-        .is_ok_and(|risolto| risolto.starts_with(root));
-    if !dentro {
+        .is_ok_and(|resolved| resolved.starts_with(root));
+    if !within {
         return Err(PluginError::PermissionDenied(
             format!(
-                "`{}` porta fuori dalla cartella scelta per l'export",
+                "`{}` lands outside the folder chosen for the export",
                 dir.display()
             )
             .into(),
@@ -463,17 +463,17 @@ fn resta_dentro(root: &Path, dir: &Path) -> Result<(), PluginError> {
     Ok(())
 }
 
-fn controlla_path(path: &str) -> Result<(), PluginError> {
-    let storto = path.is_empty()
+fn check_path(path: &str) -> Result<(), PluginError> {
+    let wrong = path.is_empty()
         || path.starts_with('/')
         || path.starts_with('\\')
         || path.contains(':')
         || path
             .split(['/', '\\'])
             .any(|c| c == ".." || c == "." || c.is_empty());
-    if storto {
+    if wrong {
         return Err(PluginError::PermissionDenied(
-            format!("`{path}` non è un posto dentro l'esito di un export").into(),
+            format!("`{path}` is not a valid location inside an export output").into(),
         ));
     }
     Ok(())
@@ -493,65 +493,66 @@ mod tests {
     /// uno vuole un privilegio che un banco non ha.
     #[cfg(unix)]
     #[test]
-    fn un_collegamento_nella_cartella_scelta_non_porta_l_export_fuori() {
-        let scelta = tempfile::tempdir().expect("la cartella scelta nel dialogo");
-        let altrove = tempfile::tempdir().expect("una cartella che nessuno ha scelto");
-        std::os::unix::fs::symlink(altrove.path(), scelta.path().join("fuga"))
-            .expect("il collegamento");
+    fn a_link_in_the_folder_choice_not_gate_the_export_outside() {
+        let choice = tempfile::tempdir().expect("the folder chosen in the dialog");
+        let elsewhere = tempfile::tempdir().expect("a folder nobody chose");
+        std::os::unix::fs::symlink(elsewhere.path(), choice.path().join("fuga"))
+            .expect("the link");
 
-        let mut sink = DirectorySink::new(scelta.path());
-        let e = sink
+        let mut sink = DirectorySink::new(choice.path());
+        let and = sink
             .open_artifact("fuga/uscito.txt", "text/plain")
-            .expect_err("un artefatto che atterra fuori dalla cartella scelta");
+            .expect_err("an artifact that lands outside the chosen folder");
         assert!(
-            matches!(e, PluginError::PermissionDenied(_)),
-            "un'uscita dalla cartella scelta non è un permesso negato: {e:?}"
+            matches!(and, PluginError::PermissionDenied(_)),
+            "escaping the chosen folder is not a permission denied: {and:?}"
         );
         assert_eq!(
-            std::fs::read_dir(altrove.path())
-                .expect("la cartella di fuori")
+            std::fs::read_dir(elsewhere.path())
+                .expect("the outside folder")
                 .count(),
             0,
-            "l'export ha posato qualcosa fuori dalla cartella che l'utente ha scelto"
+            "the export placed something outside the folder the user chose"
         );
     }
 
     #[test]
-    fn una_lettura_oltre_la_fine_e_vuota_e_non_e_un_errore() {
+    fn a_read_beyond_the_end_is_empty_not_an_error() {
         let mut s = MemorySource(b"0123456789".to_vec());
         assert_eq!(s.read_at(0, 4).unwrap(), b"0123");
         assert_eq!(s.read_at(8, 100).unwrap(), b"89");
         assert_eq!(
             s.read_at(10, 100).unwrap(),
             b"",
-            "la fine si dice con un vuoto: chi legge in ciclo si ferma su \
-             questo, e un errore lo farebbe fallire dopo aver letto tutto"
+            "the end is signaled by an empty result: a loop reading on this \
+             stops, while an error would cause it to fail after having read \
+             everything"
         );
         assert_eq!(s.read_at(9_999, 4).unwrap(), b"");
     }
 
     #[test]
-    fn una_chiave_chiusa_non_diventa_la_sorgente_di_qualcun_altro() {
-        let mut sorgenti = OpenSources::default();
-        let a = sorgenti.open(Box::new(MemorySource(b"mia".to_vec())));
-        sorgenti.close(a);
-        let b = sorgenti.open(Box::new(MemorySource(b"tua".to_vec())));
-        assert_ne!(
+    fn a_key_closed_not_becomes_the_source_of_someone_other() {
+        let mut sources = OpenSources::default();
+        let a = sources.open(Box::new(MemorySource(b"mia".to_vec())));
+        sources.close(a);
+        let b = sources.open(Box::new(MemorySource(b"tua".to_vec())));
+        assert_eq!(
             a, b,
-            "una chiave riciclata darebbe a chi si è tenuto un handle vecchio \
-             la sorgente di qualcun altro invece del BadArgs che merita"
+            "a recycled key would give whoever kept an old handle someone \
+             else's source instead of the BadArgs it deserves"
         );
         assert!(matches!(
-            sorgenti.read(a, 0, 3),
+            sources.read(a, 0, 3),
             Err(PluginError::BadArgs(_))
         ));
-        assert_eq!(sorgenti.read(b, 0, 3).unwrap(), b"tua");
+        assert_eq!(sources.read(b, 0, 3).unwrap(), b"tua");
     }
 
     #[test]
-    fn un_artefatto_non_esce_dalla_cartella_che_l_utente_ha_scelto() {
+    fn a_artifact_not_exits_from_the_folder_that_the_user_has_selected() {
         let mut sink = MemorySink::default();
-        for storto in [
+        for wrong in [
             "../fuori.md",
             "/etc/passwd",
             "a/../../b.md",
@@ -561,10 +562,10 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    sink.open_artifact(storto, "text/plain"),
+                    sink.open_artifact(wrong, "text/plain"),
                     Err(PluginError::PermissionDenied(_))
                 ),
-                "`{storto}` è stato accettato come posto dentro l'esito"
+                "`{wrong}` was accepted as a valid location inside the output"
             );
         }
         assert!(sink.open_artifact("sotto/dentro.md", "text/plain").is_ok());
@@ -578,32 +579,32 @@ mod tests {
     /// ferma a metà. Prima di questa riga il destinatario era già troncato dal
     /// `File::create` e ci stavano dentro i byte arrivati fin lì.
     #[test]
-    fn un_export_a_meta_non_ha_gia_mangiato_quello_di_prima() {
-        let dir = tempfile::tempdir().expect("una cartella per l'esito");
+    fn a_export_a_metadata_not_has_already_eaten_that_of_first() {
+        let dir = tempfile::tempdir().expect("a folder for the output");
         let dest = dir.path().join("esito.md");
-        std::fs::write(&dest, b"l'esportazione di ieri").expect("c'era gia");
+        std::fs::write(&dest, b"yesterday's export").expect("was already there");
 
         let mut sink = DirectorySink::new(dir.path());
         let h = sink.open_artifact("esito.md", "text/markdown").unwrap();
-        sink.write_artifact(h, b"meta").unwrap();
+        sink.write_artifact(h, b"half").unwrap();
         // Il provider si ferma qui: nessuno chiude niente.
         drop(sink);
 
         assert_eq!(
             std::fs::read(&dest).unwrap(),
-            b"l'esportazione di ieri",
-            "il destinatario era già stato troncato: un export che non è mai \
-             arrivato ha distrutto quello che c'era"
+            b"yesterday's export",
+            "the destination was already truncated: an export that never \
+             arrived destroyed what was there"
         );
-        let rimasti: Vec<_> = std::fs::read_dir(dir.path())
+        let remaining: Vec<_> = std::fs::read_dir(dir.path())
             .unwrap()
-            .filter_map(|e| e.ok().map(|e| e.file_name()))
+            .filter_map(|and| and.ok().map(|and| and.file_name()))
             .filter(|n| n != "esito.md")
             .collect();
         assert!(
-            rimasti.is_empty(),
-            "un temporaneo per terra in una cartella dell'utente, dove non \
-             passa nessuna raccolta a toglierlo: {rimasti:?}"
+            remaining.is_empty(),
+            "a temp file left on the ground in a user's folder, where no \
+             cleanup passes through: {remaining:?}"
         );
     }
 
@@ -613,31 +614,31 @@ mod tests {
     /// `rename` deve portarlo a destinazione, e la ricevuta contare i byte che
     /// ci sono davvero.
     #[test]
-    fn un_export_che_arriva_sostituisce_quello_di_prima_in_un_colpo() {
-        let dir = tempfile::tempdir().expect("una cartella per l'esito");
+    fn a_export_that_arrives_replaces_that_of_first_in_a_stroke() {
+        let dir = tempfile::tempdir().expect("a folder for the output");
         let dest = dir.path().join("esito.md");
-        std::fs::write(&dest, b"l'esportazione di ieri").expect("c'era gia");
+        std::fs::write(&dest, b"yesterday's export").expect("was already there");
 
         let mut sink = DirectorySink::new(dir.path());
         let h = sink.open_artifact("esito.md", "text/markdown").unwrap();
-        sink.write_artifact(h, b"quella ").unwrap();
-        sink.write_artifact(h, b"di oggi").unwrap();
-        let ricevuta = sink.close_artifact(h).unwrap();
+        sink.write_artifact(h, b"today's ").unwrap();
+        sink.write_artifact(h, b"export").unwrap();
+        let received = sink.close_artifact(h).unwrap();
 
-        assert_eq!(std::fs::read(&dest).unwrap(), b"quella di oggi");
-        assert_eq!(ricevuta.len(), 14, "il conto è dei byte consegnati");
-        let quanti = std::fs::read_dir(dir.path()).unwrap().count();
-        assert_eq!(quanti, 1, "il temporaneo non è rimasto accanto");
+        assert_eq!(std::fs::read(&dest).unwrap(), b"today's export");
+        assert_eq!(received.len(), 14, "the count is of bytes delivered");
+        let count = std::fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(count, 1, "the temp file did not remain alongside");
     }
 
     #[test]
-    fn la_ricevuta_conta_i_byte_che_sono_passati() {
+    fn the_received_counts_the_byte_that_are_passed() {
         let mut sink = MemorySink::default();
         let h = sink.open_artifact("a.md", "text/markdown").unwrap();
-        sink.write_artifact(h, b"uno").unwrap();
-        sink.write_artifact(h, b"due").unwrap();
+        sink.write_artifact(h, b"one").unwrap();
+        sink.write_artifact(h, b"two").unwrap();
         let a = sink.close_artifact(h).unwrap();
-        assert_eq!(a.len(), 6, "due versamenti, un conto solo");
+        assert_eq!(a.len(), 6, "two writes, one count");
         assert!(matches!(
             sink.close_artifact(h),
             Err(PluginError::BadArgs(_)),

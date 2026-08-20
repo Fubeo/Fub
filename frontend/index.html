@@ -253,7 +253,7 @@
         <!-- Il **testo** di questi due pulsanti non porta un `data-i18n`, e non
              è una dimenticanza: ci sta un conteggio («Attività 3»), quindi lo
              scrive chi conosce il numero — `panels/activity.ts` e
-             `ui/notify.ts`, che si iscrivono a `onLingua` e si rifanno da sé.
+             `ui/notify.ts`, che si iscrivono a `onLanguage` e si rifanno da sé.
              Due proprietari per la stessa parola vorrebbero dire che l'ultimo
              a girare cancella il conteggio dell'altro. Il `title`, che di
              numeri non ne ha, resta qui. -->
@@ -363,7 +363,7 @@
             aria-label="Sezioni delle impostazioni"
           >
             <button
-              data-scheda="impostazioni"
+              data-tab="settings"
               class="segmented-option"
               role="tab"
               aria-selected="true"
@@ -372,7 +372,7 @@
               Configurazione
             </button>
             <button
-              data-scheda="componenti"
+              data-tab="components"
               class="segmented-option"
               role="tab"
               aria-selected="false"
@@ -381,7 +381,7 @@
               Componenti
             </button>
             <button
-              data-scheda="scorciatoie"
+              data-tab="shortcuts"
               class="segmented-option"
               role="tab"
               aria-selected="false"
@@ -390,7 +390,7 @@
               Scorciatoie
             </button>
             <button
-              data-scheda="vault"
+              data-tab="vault"
               class="segmented-option"
               role="tab"
               aria-selected="false"

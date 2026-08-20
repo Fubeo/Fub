@@ -83,10 +83,11 @@ use std::path::{Path, PathBuf};
 ///
 /// `include_str!` e non `std::fs`: così il legame è una dipendenza di
 /// compilazione: se `format.rs` si sposta, questo test non compila.
-const CONTRATTO: &str = include_str!("../src/format.rs");
+const CONTRACT: &str = include_str!("../src/format.rs");
 
 /// La frase, alla lettera.
-const LA_GARANZIA: &str = "Il kernel non riscrive mai un file esistente passando da qui";
+const THE_GUARANTEE: &str =
+    "Il kernel non riscrive mai un file esistente passando da qui";
 
 /// La prosa di un sorgente Rust, tolti i marcatori di commento e appiattita su
 /// una riga sola.
@@ -95,40 +96,40 @@ const LA_GARANZIA: &str = "Il kernel non riscrive mai un file esistente passando
 /// dipende da `rustfmt` e dalla larghezza della colonna: cercarla come sta
 /// scritta vorrebbe dire un presidio che diventa rosso quando qualcuno aggiunge
 /// una parola tre righe più su. Ciò che si presidia è la **frase**, non
-/// l'impaginazione.
-fn prosa_normalizzata(sorgente: &str) -> String {
+fn prose_normalized(source: &str) -> String {
     let mut out = String::new();
-    for riga in sorgente.lines() {
-        let t = riga.trim_start();
-        let Some(testo) = t
+    for line in source.lines() {
+        let t = line.trim_start();
+        let Some(text) = t
             .strip_prefix("///")
             .or_else(|| t.strip_prefix("//!"))
             .or_else(|| t.strip_prefix("//"))
         else {
             continue;
         };
-        for parola in testo.split_whitespace() {
+        for word in text.split_whitespace() {
             if !out.is_empty() {
                 out.push(' ');
             }
-            out.push_str(parola);
+            out.push_str(word);
         }
     }
     out
 }
 
+/// l'impaginazione.
 // ---------------------------------------------------------------------------
 // Le ragioni
-// ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
 /// **Perché quel punto di codice può nominare `serialize`.**
 ///
 /// Sono due, e nessuna delle due è «sto modificando un documento». Se la ragione
 /// che ti serve non è qui dentro, la risposta quasi sempre non è aggiungerne una
 /// terza: è che quella modifica va fatta con
-/// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
 #[derive(Debug)]
-enum Perche {
+enum Reason {
+/// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
     /// **Non è questo `serialize`.** È l'altro — quello di `serde::Serializer`,
     /// che ha lo stesso nome e nessun rapporto con i documenti: qui sono i
     /// `u64_string::serialize` con cui un id numerico attraversa l'IPC come
@@ -137,13 +138,13 @@ enum Perche {
     /// Sta nell'allowlist e non in un'esclusione dell'estrattore perché
     /// distinguerli a occhio è ciò che il presidio deve costringere a fare: un
     /// filtro che togliesse «i serialize di serde» dovrebbe indovinare quale sia
+    AnotherSerialize,
     /// quale, e indovinerebbe in silenzio.
-    UnAltroSerialize,
     /// **Il formato che lo implementa.** È il *corpo* del metodo del trait, che
     /// delega alla funzione libera del proprio modulo: non una chiamata a
     /// `FormatProvider::serialize`, ma ciò che quel metodo fa. E da lì un file
     /// non si riscrive comunque — un provider non ha un `HostApi` fra le mani.
-    IlFormatoCheLoImplementa,
+    TheFormatThatImplementsIt,
 }
 
 // ---------------------------------------------------------------------------
@@ -159,18 +160,18 @@ enum Perche {
 ///
 /// Fotografia, non ricordo: una riga qui senza una chiamata vera è rossa quanto
 /// una chiamata vera senza la sua riga.
-const ALLOWLIST: &[(&str, &str, usize, Perche)] = &[
+const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
     (
         "crates/fub-abi/src/event.rs",
         "u64_string::serialize",
         1,
-        Perche::UnAltroSerialize,
+        Reason::AnotherSerialize,
     ),
     (
         "crates/fub-abi/src/traits.rs",
         "u64_string::serialize",
         1,
-        Perche::UnAltroSerialize,
+        Reason::AnotherSerialize,
     ),
     (
         // Due, non uno: `SourceHandle` e `ArtifactHandle` (decisione 0102).
@@ -179,26 +180,26 @@ const ALLOWLIST: &[(&str, &str, usize, Perche)] = &[
         "crates/fub-abi/src/transfer.rs",
         "u64_string::serialize",
         2,
-        Perche::UnAltroSerialize,
+        Reason::AnotherSerialize,
     ),
     (
         "crates/fub-format-markdown/src/lib.rs",
         "serialize::serialize",
         1,
-        Perche::IlFormatoCheLoImplementa,
+        Reason::TheFormatThatImplementsIt,
     ),
 ];
 
 /// L'allowlist per chiave, col rifiuto dei doppioni: due righe per lo stesso
 /// punto vorrebbero dire due ragioni per la stessa cosa, e la seconda non la
 /// leggerebbe mai nessuno.
-fn allowlist() -> BTreeMap<(&'static str, &'static str), (usize, &'static Perche)> {
+fn allowlist() -> BTreeMap<(&'static str, &'static str), (usize, &'static Reason)> {
     let mut out = BTreeMap::new();
-    for (file, forma, quante, perche) in ALLOWLIST {
+    for (file, form, count, why) in ALLOWLIST {
         assert!(
-            out.insert((*file, *forma), (*quante, perche)).is_none(),
-            "`{file}` + `{forma}` compare due volte nell'allowlist: somma i conteggi\n\
-             in una riga sola, o la seconda ragione resta lettera morta."
+            out.insert((*file, *form), (*count, why)).is_none(),
+            "`{file}` + `{form}` appears twice in the allowlist: sum the counts\n\
+             in a single line, or the second reason is dead letter."
         );
     }
     out
@@ -210,62 +211,62 @@ fn allowlist() -> BTreeMap<(&'static str, &'static str), (usize, &'static Perche
 
 /// Le cartelle in cui non si entra: non contengono sorgenti del progetto, e una
 /// di esse (`target`) ne contiene di generati che direbbero il falso.
-const NON_SI_ENTRA: &[&str] = &["target", "node_modules", ".git", ".fub"];
+const EXCLUDED: &[&str] = &["target", "node_modules", ".git", ".fub"];
 
 /// La radice del repo, dedotta dal manifest di questo crate.
-fn radice() -> PathBuf {
+fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 /// Ogni `.rs` che sta sotto una cartella `src/`, per percorso relativo alla
 /// radice del repo e con i separatori sempre `/`.
 ///
-/// Non c'è un elenco di crate: un crate nuovo entra nel presidio perché esiste,
+/// Non c'è un elenco di crate: un crate nuovo enter nel presidio perché esiste,
 /// non perché qualcuno si è ricordato di scriverlo qui. Che il cammino funzioni
 /// davvero non è dato per buono — lo verifica
 /// [`il_cammino_trova_il_contratto`], e prima ancora lo verifica il confronto
 /// nei due versi: se questa funzione tornasse a vuoto, le tre righe
-/// dell'allowlist risulterebbero tutte sparite.
-fn sorgenti_di_produzione() -> BTreeMap<String, String> {
+fn production_sources() -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
-    cammina(&radice(), "", &mut out);
+    walk(&root(), "", &mut out);
     out
 }
 
-fn cammina(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
-    let voci =
-        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("`{}` non si legge: {e}", dir.display()));
-    for voce in voci {
-        let voce = voce.unwrap_or_else(|e| panic!("dentro `{}`: {e}", dir.display()));
-        let nome = voce
+fn walk(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|and| panic!("`{}` is unreadable: {and}", dir.display()));
+    for entry in entries {
+        let entry = entry.unwrap_or_else(|and| panic!("inside `{}`: {and}", dir.display()));
+        let name = entry
             .file_name()
             .into_string()
-            .unwrap_or_else(|n| panic!("nome di file non UTF-8: {n:?}"));
-        let percorso = if rel.is_empty() {
-            nome.clone()
+            .unwrap_or_else(|n| panic!("non-UTF-8 file name: {n:?}"));
+        let path = if rel.is_empty() {
+            name.clone()
         } else {
-            format!("{rel}/{nome}")
+            format!("{rel}/{name}")
         };
-        let tipo = voce
+        let kind = entry
             .file_type()
-            .unwrap_or_else(|e| panic!("`{percorso}`: {e}"));
+            .unwrap_or_else(|and| panic!("`{path}`: {and}"));
 
-        if tipo.is_dir() {
-            if !NON_SI_ENTRA.contains(&nome.as_str()) {
-                cammina(&voce.path(), &percorso, out);
+        if kind.is_dir() {
+            if !EXCLUDED.contains(&name.as_str()) {
+                walk(&entry.path(), &path, out);
             }
-        } else if nome.ends_with(".rs") && percorso.contains("/src/") {
-            let src = std::fs::read_to_string(voce.path())
-                .unwrap_or_else(|e| panic!("`{percorso}` non si legge: {e}"));
-            out.insert(percorso, src);
+        } else if name.ends_with(".rs") && path.contains("/src/") {
+            let src = std::fs::read_to_string(entry.path())
+                .unwrap_or_else(|and| panic!("`{path}` is unreadable: {and}"));
+            out.insert(path, src);
         }
     }
 }
 
+/// dell'allowlist risulterebbero tutte sparite.
 // ---------------------------------------------------------------------------
 // L'estrattore
-// ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
 /// `true` se la riga è **prosa**: un commento di riga, di documentazione o di
 /// modulo.
 ///
@@ -277,15 +278,15 @@ fn cammina(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
 ///
 /// Vale solo per i commenti di riga. Un `/* … */` che nominasse `serialize`
 /// produrrebbe un **falso positivo** — il verso innocuo: qualcuno guarda e
-/// toglie la riga, invece di non accorgersi di niente.
-fn e_prosa(riga: &str) -> bool {
-    riga.trim_start().starts_with("//")
+fn is_prose(line: &str) -> bool {
+    line.trim_start().starts_with("//")
 }
 
-fn e_ident(c: char) -> bool {
+fn is_ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
+/// toglie la riga, invece di non accorgersi di niente.
 /// Dove finisce un `#[cfg(test)] mod … { … }` scritto a colonna zero, se è di
 /// quella forma.
 ///
@@ -294,27 +295,27 @@ fn e_ident(c: char) -> bool {
 /// `cargo fmt --all --check` è verde — dentro un blocco indentato non c'è
 /// nessun'altra `}` in prima colonna. `None` quando la forma è un'altra
 /// (`#[cfg(test)]` su una funzione: succede due volte nel repo), e allora non si
-/// salta niente: contare di più è il verso innocuo.
-fn fine_del_modulo_di_prova(righe: &[&str], attributo: usize) -> Option<usize> {
-    let apertura = righe.get(attributo + 1)?;
-    if !(apertura.starts_with("mod ") && apertura.ends_with('{')) {
+fn test_module_end(lines: &[&str], attribute: usize) -> Option<usize> {
+    let opening = lines.get(attribute + 1)?;
+    if !(opening.starts_with("mod ") && opening.ends_with('{')) {
         return None;
     }
-    let fine = righe
+    let end = lines
         .iter()
         .enumerate()
-        .skip(attributo + 2)
+        .skip(attribute + 2)
         .find(|(_, r)| **r == "}")
         .map(|(n, _)| n);
-    Some(fine.unwrap_or_else(|| {
+    Some(end.unwrap_or_else(|| {
         panic!(
-            "il `mod` di prova aperto a riga {} non si chiude con una `}}` in prima\n\
-             colonna: l'estrattore non sa dove finisce.",
-            attributo + 2
+            "the test `mod` opened at line {} does not close with a `}}` in the first\n\
+             column: the extractor does not know where it ends.",
+            attribute + 2
         )
     }))
 }
 
+/// salta niente: contare di più è il verso innocuo.
 /// Le **forme** con cui una riga nomina `serialize` come funzione.
 ///
 /// Conta un'occorrenza quando `serialize` è un identificatore intero e:
@@ -331,283 +332,283 @@ fn fine_del_modulo_di_prova(righe: &[&str], attributo: usize) -> Option<usize> {
 ///
 /// Ciò che non rientra in nessuno di questi casi non è una chiamata: la parola
 /// dentro una stringa (`"serialize fallito"`), o il nome di un modulo dentro un
-/// percorso più lungo.
-fn forme(riga: &str) -> Vec<String> {
-    const AGO: &str = "serialize";
+fn forms(line: &str) -> Vec<String> {
+    const NEEDLE: &str = "serialize";
     let mut out = Vec::new();
-    let mut da = 0;
+    let mut from = 0;
 
-    while let Some(scostamento) = riga[da..].find(AGO) {
-        let i = da + scostamento;
-        da = i + AGO.len();
+    while let Some(offset) = line[from..].find(NEEDLE) {
+        let the = from + offset;
+        from = the + NEEDLE.len();
 
-        let prima = &riga[..i];
-        let dopo = &riga[i + AGO.len()..];
+        let before = &line[..the];
+        let after = &line[the + NEEDLE.len()..];
+/// percorso più lungo.
         // Confini di identificatore: `deserialize` e `serialize_with` non sono
-        // questa funzione.
-        if prima.chars().next_back().is_some_and(e_ident)
-            || dopo.chars().next().is_some_and(e_ident)
+        if before.chars().next_back().is_some_and(is_ident)
+            || after.chars().next().is_some_and(is_ident)
         {
             continue;
         }
-        if prima.ends_with("fn ") || prima.ends_with("mod ") {
+        if before.ends_with("fn ") || before.ends_with("mod ") {
             continue;
         }
 
-        if let Some(percorso) = prima.strip_suffix("::") {
-            let qualificatore: String = percorso
+        if let Some(path) = before.strip_suffix("::") {
+            let qualifier: String = path
                 .chars()
                 .rev()
-                .take_while(|c| e_ident(*c))
+                .take_while(|c| is_ident(*c))
                 .collect::<Vec<_>>()
                 .into_iter()
                 .rev()
                 .collect();
-            out.push(format!("{qualificatore}::{AGO}"));
-        } else if prima.ends_with('.') {
-            out.push(format!(".{AGO}"));
-        } else if dopo.starts_with('(') {
-            out.push(AGO.to_string());
+            out.push(format!("{qualifier}::{NEEDLE}"));
+        } else if before.ends_with('.') {
+            out.push(format!(".{NEEDLE}"));
+        } else if after.starts_with('(') {
+            out.push(NEEDLE.to_string());
         }
     }
     out
 }
 
 /// Le forme di un intero sorgente, con quante volte ciascuna compare.
-fn citazioni(sorgente: &str) -> BTreeMap<String, usize> {
-    let righe: Vec<&str> = sorgente.lines().collect();
+fn citations(source: &str) -> BTreeMap<String, usize> {
+    let lines: Vec<&str> = source.lines().collect();
     let mut out: BTreeMap<String, usize> = BTreeMap::new();
     let mut n = 0;
 
-    while n < righe.len() {
-        let riga = righe[n];
-        if e_prosa(riga) {
+    while n < lines.len() {
+        let line = lines[n];
+        if is_prose(line) {
             n += 1;
             continue;
         }
-        if riga == "#[cfg(test)]" {
-            if let Some(fine) = fine_del_modulo_di_prova(&righe, n) {
-                n = fine + 1;
+        if line == "#[cfg(test)]" {
+            if let Some(end) = test_module_end(&lines, n) {
+                n = end + 1;
                 continue;
             }
         }
-        for forma in forme(riga) {
-            *out.entry(forma).or_default() += 1;
+        for form in forms(line) {
+            *out.entry(form).or_default() += 1;
         }
         n += 1;
     }
     out
 }
 
-/// Tutte le citazioni del codice di produzione, per `(file, forma)`.
-fn citazioni_di_produzione() -> BTreeMap<(String, String), usize> {
+fn production_citations() -> BTreeMap<(String, String), usize> {
     let mut out = BTreeMap::new();
-    for (file, sorgente) in sorgenti_di_produzione() {
-        for (forma, quante) in citazioni(&sorgente) {
-            out.insert((file.clone(), forma), quante);
+    for (file, source) in production_sources() {
+        for (form, count) in citations(&source) {
+            out.insert((file.clone(), form), count);
         }
     }
     out
 }
 
-fn elenca(punti: &BTreeSet<(String, String)>) -> String {
-    punti
+fn list(points: &BTreeSet<(String, String)>) -> String {
+    points
         .iter()
-        .map(|(f, forma)| format!("  {f} — `{forma}`"))
+        .map(|(f, form)| format!("  {f} — `{form}`"))
         .collect::<Vec<_>>()
         .join("\n")
 }
 
+/// Tutte le citazioni del codice di produzione, per `(file, forma)`.
 // ---------------------------------------------------------------------------
 // La rete
+
 // ---------------------------------------------------------------------------
-
 /// **Il cuore**: chi nomina `serialize` è l'allowlist, nei due versi e col
-/// conteggio.
 #[test]
-fn serialize_non_e_la_strada_per_riscrivere_un_documento() {
-    let trovate = citazioni_di_produzione();
-    let dichiarate = allowlist();
+fn serialize_is_not_the_way_to_rewrite_an_existing_document() {
+    let found = production_citations();
+    let declared = allowlist();
 
-    let viste: BTreeSet<(String, String)> = trovate.keys().cloned().collect();
-    let attese: BTreeSet<(String, String)> = dichiarate
+    let seen: BTreeSet<(String, String)> = found.keys().cloned().collect();
+    let expected: BTreeSet<(String, String)> = declared
         .keys()
-        .map(|(f, forma)| (f.to_string(), forma.to_string()))
+        .map(|(f, form)| (f.to_string(), form.to_string()))
         .collect();
 
-    let nuove: BTreeSet<(String, String)> = viste.difference(&attese).cloned().collect();
+    let new: BTreeSet<(String, String)> = seen.difference(&expected).cloned().collect();
     assert!(
-        nuove.is_empty(),
-        "questi punti del codice di produzione nominano `serialize`, e l'allowlist\n\
-         non li conosce:\n\
+        new.is_empty(),
+        "these production code sites name `serialize`, and the allowlist\n\
+         does not know them:\n\
          {}\n\
          \n\
-         Se stai **modificando un documento che esiste**, questa è la strada\n\
-         sbagliata, e non c'è una riga da aggiungere qui: il modello è lossy per\n\
-         costruzione — perde i commenti dello YAML, l'ordine delle chiavi, lo\n\
-         stile delle virgolette, la spaziatura, lo stile dell'enfasi — quindi\n\
-         `read_model` → `serialize` → `write_document` riscrive per intero un file\n\
-         che l'utente vedrà cambiato dappertutto. La strada è `apply_edit` con una\n\
-         `EditRequest`: gli `Span` del modello dicono dove intervenire, e la\n\
-         `Revision` dice su quale testo (decisione 0008).\n\
+         If you are **editing an existing document**, this is the wrong\n\
+         path, and there is no line to add here: the model is lossy by\n\
+         construction — it loses YAML comments, key order, quote style,\n\
+         spacing, emphasis style — so `read_model` → `serialize` →\n\
+         `write_document` rewrites an entire file that the user will see\n\
+         changed everywhere. The path is `apply_edit` with an `EditRequest`:\n\
+         the model's `Span`s say where to intervene, and the `Revision`\n\
+         says on which text (decision 0008).\n\
          \n\
-         Se stai **generando un documento nuovo** (un template, «crea nota») o se\n\
-         è un `serialize` che con i documenti non c'entra (serde), allora la riga\n\
-         qui va aggiunta — con la sua ragione nell'enum `Perche`, che oggi ne ha\n\
-         due e nessuna delle due copre la generazione. Aggiungerne una terza è la\n\
-         decisione da prendere, ed è il motivo per cui questo file esiste.",
-        elenca(&nuove)
+         If you are **generating a new document** (a template, \"create\"\n\
+         notes) or if it is a `serialize` unrelated to documents (serde),\n\
+         then the line should be added here — with its reason in the\n\
+         `Reason` enum, which today has two and neither covers generation.\n\
+         Adding a third is the decision to make, and it is why this file\n\
+         exists.",
+        list(&new)
     );
 
-    let sparite: BTreeSet<(String, String)> = attese.difference(&viste).cloned().collect();
+    let vanished: BTreeSet<(String, String)> = expected.difference(&seen).cloned().collect();
     assert!(
-        sparite.is_empty(),
-        "l'allowlist dichiara punti di chiamata che nel codice non ci sono più:\n\
+        vanished.is_empty(),
+        "the allowlist declares call sites that no longer exist in code:\n\
          {}\n\
-         Toglili: l'elenco è una fotografia, non un ricordo. (Se sono spariti\n\
-         tutti insieme, guarda prima il cammino dei sorgenti: è il modo in cui\n\
-         questo presidio potrebbe smettere di guardare qualcosa.)",
-        elenca(&sparite)
+         Remove them: the list is a snapshot, not a memory. (If they all\n\
+         vanished at once, first check the source walk: that is how this\n\
+         guard could stop watching something.)",
+        list(&vanished)
     );
 
-    for (chiave, quante) in &trovate {
-        let Some((attese, perche)) = dichiarate.get(&(chiave.0.as_str(), chiave.1.as_str())) else {
+    for (key, count) in &found {
+        let Some((expected, why)) = declared.get(&(key.0.as_str(), key.1.as_str())) else {
             continue;
         };
         assert_eq!(
-            quante, attese,
-            "in `{}` la forma `{}` compare {quante} volte e l'allowlist ne dichiara\n\
-             {attese} ({perche:?}). Se la chiamata in più è legittima, aggiorna il\n\
-             conteggio: è la riga che costringe a guardarla.",
-            chiave.0, chiave.1
+            count, expected,
+            "in `{}` the form `{}` appears {count} times and the allowlist declares\n\
+             {expected} ({why:?}). If the extra call is legitimate, update the\n\
+             count: it is the line that forces you to look at it.",
+            key.0, key.1
         );
     }
 }
 
+/// conteggio.
 /// **La frase presidiata esiste ancora, ed è là dove il contratto la fa.**
 ///
 /// Senza questa, il giorno in cui qualcuno riscrivesse il doc di `serialize`
 /// resterebbe in piedi un test che difende una regola che nessun documento
 /// dichiara più — e chi lo trovasse rosso non saprebbe da dove viene. È la sesta
 /// specie presa dal verso in cui si presidia, come in `dieta_ipc.rs`: una
-/// garanzia meccanica deve rimandare a una frase che una macchina sa cercare.
 #[test]
-fn la_garanzia_e_ancora_scritta_nel_contratto() {
+fn the_guarantee_is_still_written_in_the_contract() {
     assert!(
-        prosa_normalizzata(CONTRATTO).contains(LA_GARANZIA),
-        "in `crates/fub-abi/src/format.rs` non c'è più la frase\n  «{LA_GARANZIA}»\n\
-         che questo test rende meccanica. O è stata riscritta — e allora va\n\
-         riscritta anche qui — oppure la regola è cambiata, e allora prima si\n\
-         cambia il contratto e questo presidio si toglie con un verbale."
+        prose_normalized(CONTRACT).contains(THE_GUARANTEE),
+        "in `crates/fub-abi/src/format.rs` the sentence\n  \"{THE_GUARANTEE}\"\n\
+         is no longer there, which this test makes mechanical. Either it was\n\
+         rewritten — and then it must be rewritten here too — or the rule has\n\
+         changed, and then the contract must be changed first and this guard\n\
+         removed with a record."
     );
 }
 
+/// garanzia meccanica deve rimandare a una frase che una macchina sa cercare.
 // ---------------------------------------------------------------------------
 // I test del test
-// ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
 /// Il cammino guarda davvero i sorgenti: se sbagliasse radice tornerebbe a
 /// vuoto, e un insieme vuoto non contraddice nessuna allowlist dal verso che si
-/// guarda per primo.
 #[test]
-fn il_cammino_trova_il_contratto() {
-    let sorgenti = sorgenti_di_produzione();
+fn the_walk_finds_the_contract() {
+    let sources = production_sources();
     assert!(
-        sorgenti.contains_key("crates/fub-abi/src/format.rs"),
-        "il cammino dei sorgenti non ha trovato `crates/fub-abi/src/format.rs`, che\n\
-         è il file in cui `serialize` è dichiarato. Sta guardando il posto sbagliato:\n\
-         ne ha visti {}.",
-        sorgenti.len()
+        sources.contains_key("crates/fub-abi/src/format.rs"),
+        "the source walk did not find `crates/fub-abi/src/format.rs`, which is\n\
+         the file where `serialize` is declared. It is looking in the wrong\n\
+         place: it found {}.",
+        sources.len()
     );
     assert!(
-        !sorgenti.keys().any(|f| f.contains("/tests/")),
-        "il cammino ha raccolto dei file sotto `tests/`: là `serialize` si chiama, ed\n\
-         è giusto che si chiami."
+        !sources.keys().any(|f| f.contains("/tests/")),
+        "the walk collected files under `tests/`: there `serialize` is called, and\n\
+         it is right that it is called."
     );
 }
 
+/// guarda per primo.
 /// **La rete deve sapersi chiudere**: l'estrattore vede la strada sbagliata.
 ///
 /// È la prova che si è fatta a mano una volta — mettendo la funzione nel kernel e
 /// guardando il presidio diventare rosso — resa permanente. Un presidio che non
-/// può diventare rosso è la sesta specie con un nome nuovo.
 #[test]
-fn l_estrattore_vede_la_strada_sbagliata() {
-    let finto = "\
+fn the_extractor_sees_the_wrong_path() {
+    let fake = "\
 impl Workspace {\n\
-    pub fn scrivi_una_proprieta(&mut self, id: &DocId, chiave: &str) -> Result<()> {\n\
+    pub fn write_a_property(&mut self, id: &DocId, key: &str) -> Result<()> {\n\
         let mut model = self.read_model(id)?;\n\
-        model.frontmatter.0.insert(chiave.to_string(), Value::Bool(true));\n\
+        model.frontmatter.0.insert(key.to_string(), Value::Bool(true));\n\
         let source = self.docs.provider_for(id)?.serialize(&model)?;\n\
         self.write_document(id, &source, WriteBase::Dictated)\n\
     }\n\
 }\n";
     assert_eq!(
-        citazioni(finto),
+        citations(fake),
         BTreeMap::from([(".serialize".to_string(), 1)]),
-        "la chiamata di metodo è il gesto che questo presidio esiste per vedere"
+        "the method call is the gesture this guard exists to catch"
     );
 }
 
+/// può diventare rosso è la sesta specie con un nome nuovo.
 /// E deve distinguere ciò che nomina `serialize` da ciò che lo **è**, senza
-/// contare la prosa che ne parla.
 #[test]
-fn l_estrattore_distingue_la_definizione_dalla_chiamata() {
-    let finto = "\
-//! Un modulo che parla di `FormatProvider::serialize` e di `provider.serialize(&m)`.\n\
+fn the_extractor_distinguishes_definition_from_call() {
+    let fake = "\
+/// contare la prosa che ne parla.
 mod serialize;\n\
 use fub_abi::traits::serialize;\n\
 \n\
-impl FormatProvider for Finto {\n\
-    /// Il doc, che cita `.serialize(` per spiegarsi.\n\
+impl FormatProvider for Fake {\n\
+//! Un modulo che parla di `FormatProvider::serialize` e di `provider.serialize(&m)`.\n\
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {\n\
         Ok(serialize::serialize(model))\n\
     }\n\
 }\n\
 \n\
-fn altro(x: &X) -> String {\n\
+fn other(x: &X) -> String {\n\
     let a = crate::ipc::u64_string::serialize(&x.0, s);\n\
     let b = serialize(&x.1);\n\
     let c = FormatProvider::serialize;\n\
-    format!(\"serialize fallito: {a}{b}{c:?}\")\n\
+    format!(\"serialize failed: {a}{b}{c:?}\")\n\
 }\n\
 \n\
 #[cfg(test)]\n\
 mod tests {\n\
     #[test]\n\
-    fn la_prova_del_serializer() {\n\
+    fn the_serializer_test() {\n\
         assert!(MarkdownProvider::new().serialize(&doc).is_ok());\n\
     }\n\
 }\n";
 
     assert_eq!(
-        citazioni(finto),
+        citations(fake),
         BTreeMap::from([
+    /// Il doc, che cita `.serialize(` per spiegarsi.\n\
             // Il `use`: passa dal `::`, ed è il modo in cui una chiamata libera
-            // arriva senza nominare nessuno.
             ("traits::serialize".to_string(), 1),
-            // La delega del provider al proprio modulo.
+            // arriva senza nominare nessuno.
             ("serialize::serialize".to_string(), 1),
-            // L'altro `serialize`, quello di serde.
+            // La delega del provider al proprio modulo.
             ("u64_string::serialize".to_string(), 1),
+            // L'altro `serialize`, quello di serde.
             // La chiamata libera, e il metodo preso senza parentesi (UFCS): due
-            // forme che un estrattore ingenuo lascerebbe passare.
             ("serialize".to_string(), 1),
             ("FormatProvider::serialize".to_string(), 1),
         ]),
-        "attese cinque citazioni: `mod serialize;`, le due `fn serialize`, la prosa\n\
-         e tutto il modulo `#[cfg(test)]` non si contano"
+        "five citations expected: `mod serialize;`, the two `fn serialize`, prose\n\
+         and the entire `#[cfg(test)]` module are not counted"
     );
 }
 
+            // forme che un estrattore ingenuo lascerebbe passare.
 /// Un `#[cfg(test)]` che non apre un modulo non fa saltare niente: succede due
-/// volte nel repo, ed è il caso in cui saltare sarebbe **il verso sbagliato**.
 #[test]
-fn un_cfg_test_su_una_funzione_non_apre_un_modulo() {
-    let finto = "\
+fn a_cfg_test_on_a_function_does_not_open_a_module() {
+    let fake = "\
 #[cfg(test)]\n\
-fn aiuto(p: &dyn FormatProvider, m: &DocumentModel) -> String {\n\
+fn helper(p: &dyn FormatProvider, m: &DocumentModel) -> String {\n\
     p.serialize(m).unwrap()\n\
 }\n";
-    assert_eq!(citazioni(finto), BTreeMap::from([(".serialize".into(), 1)]));
+    assert_eq!(citations(fake), BTreeMap::from([(".serialize".into(), 1)]));
 }

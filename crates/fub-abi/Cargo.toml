@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Contratto Fub: modello documento comune + trait di estensione, definiti una volta sola. Nessuna dipendenza da markdown, tauri o wasm."
+description = "Fub contract: common document model + extension traits, defined once. No dependency on markdown, tauri, or wasm."
 
 [dependencies]
 serde = { workspace = true }

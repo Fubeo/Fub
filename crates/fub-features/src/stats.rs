@@ -144,15 +144,15 @@ impl ViewProvider for StatsView {
         // due letture il documento veniva dalla prima e la selezione dalla
         // seconda, e nulla nel tipo diceva che fossero lo stesso contesto.
         let Some(context) = host.active_context() else {
-            return Ok(riga(Text::key(NO_ACTIVE_DOC)));
+            return Ok(row(Text::key(NO_ACTIVE_DOC)));
         };
         let Some(doc) = context.doc.as_ref() else {
-            return Ok(riga(Text::key(NO_ACTIVE_DOC)));
+            return Ok(row(Text::key(NO_ACTIVE_DOC)));
         };
         let source = host.read_document(doc)?;
         Ok(build_stats_view(
             count(&source),
-            selezione(&context.selections),
+            selection_stats(&context.selections),
             context.mode,
         ))
     }
@@ -186,19 +186,19 @@ impl ViewProvider for StatsView {
 /// Le parole si contano selezione per selezione e poi si sommano: concatenare i
 /// testi e contare dopo attaccherebbe l'ultima parola di una alla prima
 /// dell'altra.
-fn selezione(selections: &Option<SelectionSet>) -> Option<(usize, TextStats)> {
+fn selection_stats(selections: &Option<SelectionSet>) -> Option<(usize, TextStats)> {
     let set = selections.as_ref()?;
-    let pezzi: Vec<TextStats> = set
+    let pieces: Vec<TextStats> = set
         .texts()
         .into_iter()
         .filter(|t| !t.is_empty())
         .map(count)
         .collect();
-    let somma = pezzi.iter().fold(TextStats::default(), |acc, s| TextStats {
+    let sum = pieces.iter().fold(TextStats::default(), |acc, s| TextStats {
         words: acc.words + s.words,
         chars: acc.chars + s.chars,
     });
-    (!pezzi.is_empty()).then_some((pezzi.len(), somma))
+    (!pieces.is_empty()).then_some((pieces.len(), sum))
 }
 
 /// Costruisce l'albero della view. Separato dal provider perché è pura
@@ -210,26 +210,26 @@ pub fn build_stats_view(
     selection: Option<(usize, TextStats)>,
     mode: PaneMode,
 ) -> UiNode {
-    let mut righe = vec![conteggi(DOC_COUNTS, doc)];
+    let mut rows = vec![count_text(DOC_COUNTS, doc)];
     match (mode, selection) {
         // In lettura non c'è selezione da contare: ciò che serve a chi legge è
         // quanto ci metterà.
-        (PaneMode::Reading, _) => righe.push(Text::message(
+        (PaneMode::Reading, _) => rows.push(Text::message(
             READING_TIME,
             vec![Arg::int(MINUTES, reading_minutes(doc.words).max(1) as i64)],
         )),
-        (_, Some((1, sel))) => righe.push(conteggi(SELECTION_COUNTS, sel)),
-        (_, Some((quante, sel))) => righe.push(Text::message(
+        (_, Some((1, sel))) => rows.push(count_text(SELECTION_COUNTS, sel)),
+        (_, Some((count, sel))) => rows.push(Text::message(
             SELECTION_COUNTS_MANY,
             vec![
-                Arg::int(SELECTIONS, quante as i64),
+                Arg::int(SELECTIONS, count as i64),
                 Arg::int(WORDS, sel.words as i64),
                 Arg::int(CHARS, sel.chars as i64),
             ],
         )),
         (_, None) => {}
     }
-    UiNode::row(12, righe.into_iter().map(UiNode::text).collect())
+    UiNode::row(12, rows.into_iter().map(UiNode::text).collect())
 }
 
 /// Una riga di conteggi: i due numeri **come numeri**, non come pezzi di frase
@@ -249,7 +249,7 @@ pub fn build_stats_view(
 /// non la chiede — `Parole: 3`, non `3 parole` —, che è onesta in tutte le
 /// lingue e non finge una grammatica. Il giorno che il motore saprà scegliere,
 /// a cambiare sarà **il catalogo**, e non questa funzione.
-fn conteggi(key: &str, stats: TextStats) -> Text {
+fn count_text(key: &str, stats: TextStats) -> Text {
     Text::message(
         key,
         vec![
@@ -259,8 +259,8 @@ fn conteggi(key: &str, stats: TextStats) -> Text {
     )
 }
 
-fn riga(testo: Text) -> UiNode {
-    UiNode::row(12, vec![UiNode::text(testo)])
+fn row(text: Text) -> UiNode {
+    UiNode::row(12, vec![UiNode::text(text)])
 }
 
 /// Il titolo del pannello, che sta nella barra di stato e si vede sempre.
@@ -336,25 +336,25 @@ mod tests {
     /// passano dalla stessa strada di un utente — chiave, catalogo, template —
     /// e quindi una chiave senza voce, un nome d'argomento scritto diverso fra
     /// codice e catalogo, o una lingua che ne dimentica una riga, cadono qui.
-    fn testi(tree: &UiNode) -> Vec<String> {
-        righe(tree, "it")
+    fn texts(tree: &UiNode) -> Vec<String> {
+        rows(tree, "it")
     }
 
-    fn righe(tree: &UiNode, lingua: &str) -> Vec<String> {
+    fn rows(tree: &UiNode, language: &str) -> Vec<String> {
         let UiKind::Stack { children, .. } = &tree.kind else {
-            panic!("il pannello è uno stack")
+            panic!("the panel is a stack")
         };
-        let catalogo = catalog();
+        let catalog = catalog();
         let locale = Locale {
-            language: lingua.to_string(),
+            language: language.to_string(),
             ..Locale::default()
         };
-        let strings = Strings::new(&catalogo, "it", &locale);
+        let strings = Strings::new(&catalog, "it", &locale);
         children
             .iter()
             .map(|c| match &c.kind {
                 UiKind::Text { content } => strings.render(content),
-                other => panic!("nodo inatteso: {other:?}"),
+                other => panic!("unexpected node: {other:?}"),
             })
             .collect()
     }
@@ -365,7 +365,7 @@ mod tests {
         assert_eq!(s.words, 4);
         assert_eq!(
             s.chars, 23,
-            "i caratteri sono code point: 'ò' è uno, non due byte"
+            "characters are code points: 'ò' is one, not two bytes"
         );
         assert_eq!(count(""), TextStats::default());
         assert_eq!(count("   \n  ").words, 0);
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn the_selection_is_counted_from_its_text_even_with_a_dirty_buffer() {
-        let host = MemoryHost::new().con_documento("nota.md", "uno due tre");
+        let host = MemoryHost::new().with_document("nota.md", "uno due tre");
         host.set_active(Some("nota.md"));
         // Il buffer ha modifiche non salvate: nessuno span attraversa il
         // confine. Il testo sì — ed è tutto ciò che serve a contarlo.
@@ -396,26 +396,26 @@ mod tests {
             .render_view(&ViewInstance::only(STATS_VIEW), &host)
             .unwrap();
         assert_eq!(
-            testi(&tree),
+            texts(&tree),
             vec![
                 "Parole: 3 · Caratteri: 11".to_string(),
                 "Selezione — parole: 2 · caratteri: 14".to_string()
             ],
-            "il conteggio del documento viene dal vault, quello della \
-             selezione dal buffer: sono due testi diversi, ed è il caso normale \
-             mentre si scrive"
+            "the document count comes from the vault, the selection count from \
+             the buffer: two different texts, and that is the normal case while \
+             writing"
         );
     }
 
     #[test]
     fn many_selections_are_summed_and_counted() {
-        let host = MemoryHost::new().con_documento("nota.md", "uno due tre quattro");
+        let host = MemoryHost::new().with_document("nota.md", "uno due tre quattro");
         host.set_active(Some("nota.md"));
         // Tre punti selezionati: il pannello dice il totale, e dice che sono
         // tre — un numero senza quello sarebbe misterioso (decisione 0093).
         host.set_selections(&[(0, "uno"), (4, "due"), (8, "tre")]);
         assert_eq!(
-            testi(
+            texts(
                 &StatsView
                     .render_view(&ViewInstance::only(STATS_VIEW), &host)
                     .unwrap()
@@ -429,11 +429,11 @@ mod tests {
 
     #[test]
     fn a_caret_among_many_selections_adds_nothing_and_is_not_counted() {
-        let host = MemoryHost::new().con_documento("nota.md", "uno due tre");
+        let host = MemoryHost::new().with_document("nota.md", "uno due tre");
         host.set_active(Some("nota.md"));
         host.set_selections(&[(0, "uno"), (4, ""), (8, "tre")]);
         assert_eq!(
-            testi(
+            texts(
                 &StatsView
                     .render_view(&ViewInstance::only(STATS_VIEW), &host)
                     .unwrap()
@@ -442,8 +442,8 @@ mod tests {
                 "Parole: 3 · Caratteri: 11".to_string(),
                 "Selezione (2 punti) — parole: 2 · caratteri: 6".to_string()
             ],
-            "i punti sono quelli che hanno del testo: contare anche i cursori \
-             direbbe tre e mostrerebbe il totale di due"
+            "points are those that have text: counting carets too would say \
+             three and show the total of two"
         );
     }
 
@@ -452,11 +452,11 @@ mod tests {
         // Concatenare i testi e contare dopo attaccherebbe l'ultima parola di
         // una alla prima dell'altra: due selezioni di una parola darebbero una
         // parola sola.
-        let host = MemoryHost::new().con_documento("nota.md", "alfa beta");
+        let host = MemoryHost::new().with_document("nota.md", "alfa beta");
         host.set_active(Some("nota.md"));
         host.set_selections(&[(0, "alfa"), (5, "beta")]);
         assert_eq!(
-            testi(
+            texts(
                 &StatsView
                     .render_view(&ViewInstance::only(STATS_VIEW), &host)
                     .unwrap()
@@ -467,28 +467,28 @@ mod tests {
 
     #[test]
     fn a_caret_is_not_a_selection() {
-        let host = MemoryHost::new().con_documento("nota.md", "una parola");
+        let host = MemoryHost::new().with_document("nota.md", "una parola");
         host.set_active(Some("nota.md"));
         host.set_caret(Some(3));
         assert_eq!(
-            testi(
+            texts(
                 &StatsView
                     .render_view(&ViewInstance::only(STATS_VIEW), &host)
                     .unwrap()
             ),
             vec!["Parole: 2 · Caratteri: 10".to_string()],
-            "un cursore senza testo non è una selezione da contare"
+            "a cursor without text is not a selection to count"
         );
     }
 
     #[test]
     fn reading_mode_shows_the_reading_time_instead() {
-        let host = MemoryHost::new().con_documento("nota.md", "una nota breve");
+        let host = MemoryHost::new().with_document("nota.md", "una nota breve");
         host.set_active(Some("nota.md"));
         host.set_selection(0, "una nota");
         host.set_mode(PaneMode::Reading);
         assert_eq!(
-            testi(
+            texts(
                 &StatsView
                     .render_view(&ViewInstance::only(STATS_VIEW), &host)
                     .unwrap()
@@ -504,7 +504,7 @@ mod tests {
     fn without_a_document_it_says_so() {
         let host = MemoryHost::new();
         assert_eq!(
-            testi(
+            texts(
                 &StatsView
                     .render_view(&ViewInstance::only(STATS_VIEW), &host)
                     .unwrap()
@@ -526,7 +526,7 @@ mod tests {
             PaneMode::LivePreview,
         );
         assert_eq!(
-            testi(&tree),
+            texts(&tree),
             vec![
                 "Parole: 1 · Caratteri: 1".to_string(),
                 "Selezione — parole: 1 · caratteri: 1".to_string()
@@ -550,14 +550,14 @@ mod tests {
             PaneMode::Reading,
         );
         assert_eq!(
-            righe(&tree, "en"),
+            rows(&tree, "en"),
             vec![
                 "Words: 3 · Characters: 14".to_string(),
                 "~1 min read".to_string()
             ]
         );
         assert_eq!(
-            righe(
+            rows(
                 &StatsView
                     .render_view(&ViewInstance::only(STATS_VIEW), &MemoryHost::new())
                     .unwrap(),

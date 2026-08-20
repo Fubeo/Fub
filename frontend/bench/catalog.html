@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Catalogo — banco di Fub</title>
+    <!--
+      La seconda pagina del banco: le tre scene che non sono schermate ma
+      cataloghi (§31.1). Non è la shell — non c'è nessuna `main.ts` qui dentro —
+      ed è voluto: un catalogo non ha uno stato da preparare, ha un elenco da
+      esaurire, e montarci sopra la shell aggiungerebbe soltanto delle cose da
+      nascondere prima di fotografare.
+
+      Ciò che invece è **identico** alla shell è quello che conta: gli stessi tre
+      strati di CSS montati dallo stesso caricatore, e — per i componenti — lo
+      stesso `ui/node.ts` che disegna gli stessi `UiNode`. Qui sotto non c'è
+      markup dei componenti: c'è un contenitore vuoto.
+
+      Il CSS di questa pagina veste la **cornice** del catalogo (le griglie, le
+      didascalie), mai i campioni: se una didascalia e un campione si
+      somigliassero, il catalogo starebbe mostrando sé stesso. Ed è scritto coi
+      token del tema, così la cornice segue la luce come tutto il resto.
+    -->
+    <style>
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-ui);
+        font-size: var(--text-base);
+      }
+      .catalogo {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-8);
+      }
+      .catalogo-testata {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-4);
+        border-bottom: 1px solid var(--border);
+        padding-bottom: var(--space-3);
+      }
+      .catalogo-testata h1 {
+        margin: 0;
+        font-size: var(--text-xl);
+        font-weight: var(--weight-bold);
+      }
+      .catalogo-testata .luce {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--muted);
+        letter-spacing: var(--tracking-caps);
+        text-transform: uppercase;
+      }
+      .sezione > h2 {
+        margin: 0 0 var(--space-4);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        letter-spacing: var(--tracking-caps);
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .griglia {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: var(--space-5);
+      }
+      .cella {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+      .didascalia {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--muted);
+      }
+      .provino {
+        border: 1px dashed var(--border);
+        border-radius: var(--radius-sm);
+        padding: var(--space-3);
+        background: var(--bg-elev);
+        min-width: 0;
+        overflow-x: auto;
+      }
+      /* La tavolozza. */
+      .token {
+        display: grid;
+        grid-template-columns: 2.5rem 1fr auto;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .campione-colore {
+        width: 2.5rem;
+        height: 1.6rem;
+        border-radius: var(--radius-xs);
+        border: 1px solid var(--border);
+      }
+      .token-nome {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
+      .token-valore {
+        display: block;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+      }
+      .conti {
+        display: flex;
+        gap: var(--space-3);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        white-space: nowrap;
+      }
+      .conto b {
+        font-weight: var(--weight-bold);
+      }
+      .conto[data-esito="sotto"] {
+        color: var(--danger);
+      }
+      /* Il campionario tipografico. */
+      .riga-scala {
+        display: grid;
+        grid-template-columns: 12rem 1fr;
+        align-items: baseline;
+        gap: var(--space-4);
+        padding: var(--space-3) 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .misura {
+        max-width: 34em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="catalogo" class="catalogo"></div>
+    <script type="module" src="./catalog.ts"></script>
+  </body>
+</html>

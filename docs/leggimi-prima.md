@@ -43,7 +43,10 @@ Il disegno d'insieme è in
 
 ## 4. Il dizionario del dialetto
 
-Il [glossario.md](glossario.md) definisce le parole del prodotto. Questa tabella
+Le parole del prodotto (lotto, porta, ponte, anagrafe, sidecar, superficie,
+revisione, ricongiungimento) sono definite in una riga dove si usano, in
+[PIANO.md](PIANO.md) e in
+[architecture/mappa-visuale.md](architecture/mappa-visuale.md). Questa tabella
 definisce le parole del metodo interno:
 
 | Parola | In italiano normale |

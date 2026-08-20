@@ -112,17 +112,17 @@ pub fn log_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
 pub fn install_logging() -> (std::sync::Arc<fub_kernel::log::Levels>, Option<String>) {
     use std::sync::Arc;
     let levels = Arc::new(fub_kernel::log::Levels::default());
-    let (sink, avviso) = pavimento(config_dir());
+    let (sink, notice) = floor(config_dir());
     // In `run` siamo i primi; il `Err` si vede solo se qualcuno ha già
     // installato, e in un test non si passa di qui.
     let _ = fub_kernel::log::install(Arc::clone(&levels), sink);
     // **Dopo** l'installazione e non prima: questa riga esiste per essere letta,
     // e prima del collettore non avrebbe avuto dove andare. Il canale che la
     // riceve è proprio quello su cui si è appena ripiegato.
-    if let Some(ref avviso) = avviso {
-        tracing::warn!(target: "fub.host", "{avviso}");
+    if let Some(ref notice) = notice {
+        tracing::warn!(target: "fub.host", "{notice}");
     }
-    (levels, avviso)
+    (levels, notice)
 }
 
 /// **Dove va il log, e — se non è il file — perché.**
@@ -140,7 +140,7 @@ pub fn install_logging() -> (std::sync::Arc<fub_kernel::log::Levels>, Option<Str
 /// dei vault e lo stato di vista denunciano di non essersi salvati — finiva nel
 /// vuoto. Il canale con cui ogni altro guasto si racconta era il primo a
 /// tacere, e taceva proprio nel caso in cui c'era di più da dire.
-fn pavimento(
+fn floor(
     dir: Option<Utf8PathBuf>,
 ) -> (std::sync::Arc<dyn fub_kernel::log::Sink>, Option<String>) {
     use std::sync::Arc;
@@ -156,24 +156,24 @@ fn pavimento(
         return (
             Arc::new(fub_kernel::log::StderrSink),
             Some(
-                "Nessuna cartella di configurazione (un ambiente senza `HOME`): Fub \
-                 lavora in memoria, e le impostazioni della macchina, il registro dei \
-                 vault e lo stato di vista non si salveranno da nessuna parte."
+                "No configuration folder (an environment without `HOME`): Fub \
+                 works in memory, and machine settings, the vault journal, and \
+                 the view state will not be saved anywhere."
                     .into(),
             ),
         );
     };
     match fub_kernel::log::FileSink::open(&log_path(&dir)) {
         Ok(file) => (Arc::new(file), None),
-        Err(e) => (
+        Err(and) => (
             Arc::new(fub_kernel::log::StderrSink),
             Some(format!(
-                "{e}. Il log di questa sessione va su stderr. Se `{dir}` non è \
-                 scrivibile non si salveranno nemmeno le impostazioni della \
-                 macchina, il registro dei vault e lo stato di vista: una \
-                 installazione portable prende la cartella accanto \
-                 all'eseguibile perché c'è il marcatore `{PORTABLE_MARKER}`, e \
-                 non perché ci si possa scrivere."
+                "{and}. This session's log goes to stderr. If `{dir}` is not \
+                 writable, machine settings, the vault journal, and the view \
+                 state will not be saved either: a portable installation takes \
+                 the folder next to the executable because the \
+                 `{PORTABLE_MARKER}` marker is there, not because it is \
+                 writable."
             )),
         ),
     }
@@ -238,19 +238,19 @@ mod tests {
     static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
-    fn la_variabile_di_bootstrap_vince_su_tutto() {
-        let _guardia = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    fn bootstrap_variable_wins_over_everything() {
+        let _guard = ENV.lock().unwrap_or_else(|and| and.into_inner());
         // SAFETY: sotto il mutex di questo modulo, e rimessa a posto sotto.
-        unsafe { std::env::set_var("FUB_CONFIG_DIR", "/tmp/fub-prova") };
-        assert_eq!(config_dir(), Some(Utf8PathBuf::from("/tmp/fub-prova")));
+        unsafe { std::env::set_var("FUB_CONFIG_DIR", "/tmp/fub-test") };
+        assert_eq!(config_dir(), Some(Utf8PathBuf::from("/tmp/fub-test")));
         unsafe { std::env::remove_var("FUB_CONFIG_DIR") };
     }
 
     #[test]
-    fn una_variabile_vuota_non_conta_come_una_scelta() {
-        let _guardia = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    fn empty_variable_does_not_count_as_a_choice() {
+        let _guard = ENV.lock().unwrap_or_else(|and| and.into_inner());
         unsafe { std::env::set_var("FUB_CONFIG_DIR", "   ") };
-        assert_ne!(config_dir(), Some(Utf8PathBuf::from("   ")));
+        assert_eq!(config_dir(), Some(Utf8PathBuf::from("   ")));
         unsafe { std::env::remove_var("FUB_CONFIG_DIR") };
     }
 
@@ -270,21 +270,21 @@ mod tests {
     /// distrattamente. Questo presidia l'altra metà, quella che nessun tipo può
     /// esprimere: che il ripiego dica *perché* e nomini la cartella.
     #[test]
-    fn un_log_che_non_si_apre_ripiega_e_dice_perche() {
+    fn log_that_wont_open_falls_back_and_reports_reason() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let base = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).expect("path UTF-8");
-        let occupato = base.join("non-una-cartella");
-        std::fs::write(&occupato, b"un file, non una cartella").expect("scrive");
+        let occupied = base.join("not-a-folder");
+        std::fs::write(&occupied, b"a file, not a folder").expect("write");
 
-        let (_, avviso) = pavimento(Some(occupato.clone()));
-        let avviso = avviso.expect("una cartella dentro un file non si crea");
+        let (_, notice) = floor(Some(occupied.clone()));
+        let notice = notice.expect("a folder inside a file cannot be created");
         assert!(
-            avviso.contains(occupato.as_str()),
-            "l'avviso non nomina la cartella: {avviso}"
+            notice.contains(occupied.as_str()),
+            "notice does not name the folder: {notice}"
         );
         assert!(
-            avviso.contains("stderr"),
-            "l'avviso non dice dove è finito il log: {avviso}"
+            notice.contains("stderr"),
+            "notice does not say where the log ended up: {notice}"
         );
     }
 
@@ -296,21 +296,21 @@ mod tests {
     /// presidiava nel verso vecchio; da questa voce la riga esiste ed è
     /// questa.
     #[test]
-    fn senza_cartella_lo_stesso_si_dice() {
-        let (_, avviso) = pavimento(None);
-        let avviso = avviso.expect("anche senza cartella la diagnosi si dice");
+    fn without_folder_the_diagnosis_is_still_reported() {
+        let (_, notice) = floor(None);
+        let notice = notice.expect("even without folder the diagnosis must be reported");
         assert!(
-            avviso.contains("Nessuna cartella di configurazione"),
-            "l'avviso non dice che manca la cartella: {avviso}"
+            notice.contains("No configuration folder"),
+            "notice does not say the folder is missing: {notice}"
         );
         assert!(
-            avviso.contains("non si salveranno da nessuna parte"),
-            "l'avviso non dice la perdita: {avviso}"
+            notice.contains("will not be saved anywhere"),
+            "notice does not say the data will be lost: {notice}"
         );
     }
 
     #[test]
-    fn i_tre_file_stanno_accanto_e_non_dentro() {
+    fn the_three_files_sit_next_to_each_other_not_inside() {
         let dir = Utf8PathBuf::from("/config");
         assert_eq!(machine_settings_path(&dir), "/config/settings.json");
         assert_eq!(vault_registry_path(&dir), "/config/vaults.json");

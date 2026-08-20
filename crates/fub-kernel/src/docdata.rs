@@ -64,28 +64,28 @@ use crate::storage::{EntryKind, VaultStorage};
 /// stessa dell'organizzazione (§11.3): il file è già stato spostato, e far
 /// fallire una rinomina riuscita perché un plugin non ha potuto seguirla sarebbe
 /// il verso sbagliato. La rinomina vale, i dati restano indietro, e qualcuno lo
-/// dice.
-pub(crate) fn migrate(
+pub(crate) fn migrate_data(
     storage: &dyn VaultStorage,
     roots: &[Utf8PathBuf],
     from: &DocId,
     to: &DocId,
 ) -> Vec<String> {
-    let mut errori = Vec::new();
+    let mut errors = Vec::new();
     for root in roots {
-        let sorgente = space_dir(root, from);
-        if !storage.stat(&sorgente).is_ok_and(|s| s.is_dir()) {
+        let source = space_dir(root, from);
+        if !storage.stat(&source).is_ok_and(|s| s.is_dir()) {
             continue;
         }
-        let destinazione = space_dir(root, to);
+        let destination = space_dir(root, to);
         let plugin = root.file_name().unwrap_or(root.as_str());
-        if let Err(e) = sposta(storage, &sorgente, &destinazione) {
-            errori.push(format!("{plugin}: {e}"));
+        if let Err(and) = move_space(storage, &source, &destination) {
+            errors.push(format!("{plugin}: {and}"));
         }
     }
-    errori
+    errors
 }
 
+/// dice.
 /// Sposta una cartella di spazio per-documento, **passando di lato**.
 ///
 /// # La destinazione che era la sorgente
@@ -152,36 +152,36 @@ pub(crate) fn migrate(
 /// mentre il fatto era che non si era riusciti a sgomberare, e che qualcosa
 /// nel frattempo era stato tolto.
 ///
-/// [`collect`]: crate::docdata::collect
-fn sposta(
+fn move_space(
     storage: &dyn VaultStorage,
-    sorgente: &Utf8Path,
-    destinazione: &Utf8Path,
+    source: &Utf8Path,
+    destination: &Utf8Path,
 ) -> std::io::Result<()> {
+/// [`collect`]: crate::docdata::collect
     // Sul filesystem insensibile al caso questo `stat` può rispondere con la
     // **sorgente**, che è una cartella e passa: è il caso di sopra, e a
-    // distinguerlo è l'`exists` dopo lo spostamento di lato, non questo.
-    let da_sgomberare = match storage.stat(destinazione) {
+    let to_clear = match storage.stat(destination) {
         Ok(stat) if stat.is_dir() => true,
         Ok(_) => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("{destinazione} c'è già e non è una cartella: non è lo spazio di una nota, e non si toglie"),
+                format!("{destination} already exists and is not a folder: it is not the space of a note, and is not removed"),
             ))
         }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
-        Err(e) => return Err(e),
+        Err(and) if and.kind() == std::io::ErrorKind::NotFound => false,
+        Err(and) => return Err(and),
     };
 
-    let nome = sorgente.file_name().unwrap_or("spazio");
-    let di_lato = sorgente.with_file_name(format!("{nome}.in-corso"));
-    storage.rename(sorgente, &di_lato)?;
-    if da_sgomberare && storage.exists(destinazione) {
-        storage.remove_dir_all(destinazione)?;
+    let name = source.file_name().unwrap_or("space");
+    let aside = source.with_file_name(format!("{name}.in-progress"));
+    storage.rename(source, &aside)?;
+    if to_clear && storage.exists(destination) {
+        storage.remove_dir_all(destination)?;
     }
-    storage.rename(&di_lato, destinazione)
+    storage.rename(&aside, destination)
 }
 
+    // distinguerlo è l'`exists` dopo lo spostamento di lato, non questo.
 /// Toglie gli spazi per-documento delle note che non esistono più, in ogni
 /// spazio dati di plugin. Restituisce quante ne ha tolte.
 ///
@@ -196,27 +196,27 @@ fn sposta(
 /// `continue` e in un `is_ok()`: una cancellazione **parziale** — mezza
 /// cartella tolta, il resto no — tornava indietro come un numero più piccolo,
 /// indistinguibile da un vault in cui c'era meno da raccogliere. Adesso risale,
-/// e chi ha chiamato decide.
 pub(crate) fn collect(
     storage: &dyn VaultStorage,
     roots: &[Utf8PathBuf],
-    esiste: &dyn Fn(&DocId) -> bool,
+    exists: &dyn Fn(&DocId) -> bool,
 ) -> crate::Result<usize> {
-    let mut tolti = 0usize;
+    let mut removed_count = 0usize;
     for root in roots {
         let base = root.join(doc_data::DOC_SPACE);
         let Some(entries) =
-            crate::error::se_c_e(storage.list(&base)).map_err(|e| crate::KernelError::Io {
+            crate::error::optional(storage.list(&base)).map_err(|and| crate::KernelError::Io {
                 path: base.clone(),
-                source: e,
+                source: and,
             })?
         else {
             continue;
         };
         for entry in entries {
-            let Some(nome) = entry.path.file_name() else {
+            let Some(name) = entry.path.file_name() else {
                 continue;
             };
+/// e chi ha chiamato decide.
             // Un nome che il supporto non sa rendere in UTF-8 non l'ha scritto
             // questa convenzione, e non arriva fin qui: `VaultStorage::list` lo
             // rifiuta prima, perché un path non nominabile dal contratto non è
@@ -233,29 +233,28 @@ pub(crate) fn collect(
             // giusta, ed è gratis perché la codifica è reversibile in tutti e
             // due i versi. E dev'essere una **cartella**: uno spazio
             // per-documento lo è, e `remove_dir_all` su un file fallirebbe in
-            // silenzio invece di dire che quel file non era da toccare.
             if entry.stat.kind != EntryKind::Dir
-                || doc_data::encode(&doc_data::decode(nome)) != nome
+                || doc_data::encode(&doc_data::decode(name)) != name
             {
                 continue;
             }
-            let doc = DocId::new(doc_data::decode(nome));
-            if esiste(&doc) {
+            let doc = DocId::new(doc_data::decode(name));
+            if exists(&doc) {
                 continue;
             }
             storage
                 .remove_dir_all(&entry.path)
-                .map_err(|e| crate::KernelError::Io {
+                .map_err(|and| crate::KernelError::Io {
                     path: entry.path.clone(),
-                    source: e,
+                    source: and,
                 })?;
-            tolti += 1;
+            removed_count += 1;
         }
     }
-    Ok(tolti)
+    Ok(removed_count)
 }
 
-/// La cartella di `doc` dentro lo spazio dati di **un** plugin.
+            // silenzio invece di dire che quel file non era da toccare.
 fn space_dir(root: &Utf8Path, doc: &DocId) -> Utf8PathBuf {
     root.join(doc_data::DOC_SPACE)
         .join(doc_data::encode(doc.as_str()))
@@ -264,130 +263,130 @@ fn space_dir(root: &Utf8Path, doc: &DocId) -> Utf8PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{DirEntry, Fusione, MemStorage, Stat};
+    use crate::storage::{DirEntry, Merge, MemStorage, Stat};
     use std::io;
 
+/// La cartella di `doc` dentro lo spazio dati di **un** plugin.
     /// Un supporto che **non distingue il caso**, come APFS e NTFS: due nomi che
     /// differiscono solo per una maiuscola sono lo stesso posto.
     ///
     /// È un doppio e non una macchina, ed è il punto: la macchina su cui il
     /// difetto vive non è quella su cui gira la CI, quindi la proprietà —
     /// «rinominare `Nota.md` in `nota.md` non fa sparire i dati» — o si scrive
-    /// contro un supporto così o non si scrive affatto.
     #[derive(Default)]
-    struct SenzaCaso(MemStorage);
+    struct CaseInsensitive(MemStorage);
 
-    impl SenzaCaso {
-        fn giu(path: &Utf8Path) -> Utf8PathBuf {
+    impl CaseInsensitive {
+        fn lower(path: &Utf8Path) -> Utf8PathBuf {
             Utf8PathBuf::from(path.as_str().to_lowercase())
         }
     }
 
-    impl VaultStorage for SenzaCaso {
+    impl VaultStorage for CaseInsensitive {
         fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
-            self.0.read(&Self::giu(path))
+            self.0.read(&Self::lower(path))
         }
         fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
-            self.0.write(&Self::giu(path), bytes)
+            self.0.write(&Self::lower(path), bytes)
         }
-        fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
-            self.0.update(&Self::giu(path), fondi)
+        fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> io::Result<()> {
+            self.0.update(&Self::lower(path), merge)
         }
         fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
-            self.0.append(&Self::giu(path), bytes)
+            self.0.append(&Self::lower(path), bytes)
         }
         fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
-            self.0.rename(&Self::giu(from), &Self::giu(to))
+            self.0.rename(&Self::lower(from), &Self::lower(to))
         }
         fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
-            self.0.rename_no_replace(&Self::giu(from), &Self::giu(to))
+            self.0.rename_no_replace(&Self::lower(from), &Self::lower(to))
         }
         fn remove(&self, path: &Utf8Path) -> io::Result<()> {
-            self.0.remove(&Self::giu(path))
+            self.0.remove(&Self::lower(path))
         }
         fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
-            self.0.list(&Self::giu(dir))
+            self.0.list(&Self::lower(dir))
         }
         fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
-            self.0.stat(&Self::giu(path))
+            self.0.stat(&Self::lower(path))
         }
         fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
-            self.0.remove_empty_dir(&Self::giu(dir))
+            self.0.remove_empty_dir(&Self::lower(dir))
         }
     }
 
-    fn annotazione(storage: &dyn VaultStorage, root: &Utf8Path, doc: &str) -> Option<Vec<u8>> {
+    fn annotation(storage: &dyn VaultStorage, root: &Utf8Path, doc: &str) -> Option<Vec<u8>> {
         storage
-            .read(&space_dir(root, &DocId::new(doc)).join("annotazione"))
+            .read(&space_dir(root, &DocId::new(doc)).join("annotation"))
             .ok()
     }
 
+    /// contro un supporto così o non si scrive affatto.
     /// **Correggere una maiuscola non è cancellare i dati.** La destinazione
-    /// «già occupata» era la sorgente stessa, vista con l'altro nome.
     #[test]
-    fn una_rinomina_di_solo_caso_non_porta_via_lo_spazio_del_documento() {
-        let storage = SenzaCaso::default();
-        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/prova");
+    fn case_only_rename_does_not_lose_the_document_space() {
+        let storage = CaseInsensitive::default();
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/test");
         let roots = vec![root.clone()];
-        let from = DocId::new("Nota.md");
-        let to = DocId::new("nota.md");
+        let from = DocId::new("Note.md");
+        let to = DocId::new("note.md");
         storage
-            .write(&space_dir(&root, &from).join("annotazione"), b"i dati")
-            .expect("scritto");
+            .write(&space_dir(&root, &from).join("annotation"), b"the data")
+            .expect("written");
 
-        let errori = migrate(&storage, &roots, &from, &to);
+        let errors = migrate_data(&storage, &roots, &from, &to);
 
-        assert!(errori.is_empty(), "{errori:?}");
+        assert!(errors.is_empty(), "{errors:?}");
         assert_eq!(
-            annotazione(&storage, &root, "nota.md").as_deref(),
-            Some(&b"i dati"[..]),
-            "i dati sono ancora lì, sotto il nome nuovo"
+            annotation(&storage, &root, "note.md").as_deref(),
+            Some(&b"the data"[..]),
+            "the data is still there, under the new name"
         );
     }
 
+    /// «già occupata» era la sorgente stessa, vista con l'altro nome.
     /// E il caso per cui la pulizia della destinazione esiste resta chiuso: una
-    /// cartella di una nota che non c'è più non blocca la migrazione.
     #[test]
-    fn un_residuo_sulla_destinazione_si_toglie_e_non_ferma_il_trasloco() {
+    fn a_remnant_on_the_destination_is_removed_and_does_not_block_the_move() {
         let storage = MemStorage::new();
-        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/prova");
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/test");
         let roots = vec![root.clone()];
         let from = DocId::new("a.md");
         let to = DocId::new("b.md");
         storage
-            .write(&space_dir(&root, &from).join("annotazione"), b"i dati di a")
-            .expect("scritto");
+            .write(&space_dir(&root, &from).join("annotation"), b"data of a")
+            .expect("written");
         storage
-            .write(&space_dir(&root, &to).join("annotazione"), b"un residuo")
-            .expect("scritto");
+            .write(&space_dir(&root, &to).join("annotation"), b"a remnant")
+            .expect("written");
 
-        let errori = migrate(&storage, &roots, &from, &to);
+        let errors = migrate_data(&storage, &roots, &from, &to);
 
-        assert!(errori.is_empty(), "{errori:?}");
+        assert!(errors.is_empty(), "{errors:?}");
         assert_eq!(
-            annotazione(&storage, &root, "b.md").as_deref(),
-            Some(&b"i dati di a"[..]),
-            "il residuo ha ceduto il posto"
+            annotation(&storage, &root, "b.md").as_deref(),
+            Some(&b"data of a"[..]),
+            "the remnant gave way"
         );
         assert!(
-            annotazione(&storage, &root, "a.md").is_none(),
-            "e il nome vecchio non nomina più niente"
+            annotation(&storage, &root, "a.md").is_none(),
+            "and the old name no longer names anything"
         );
     }
 
+    /// cartella di una nota che non c'è più non blocca la migrazione.
     /// Un supporto che non lascia togliere niente: `remove_dir_all` si compone
-    /// da `remove`, quindi basta rifiutare quello.
-    struct SenzaCancellare(MemStorage);
+    struct CannotDelete(MemStorage);
 
-    impl VaultStorage for SenzaCancellare {
+    impl VaultStorage for CannotDelete {
         fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
             self.0.read(path)
         }
         fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
             self.0.write(path, bytes)
         }
-        fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
-            self.0.update(path, fondi)
+        fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> io::Result<()> {
+            self.0.update(path, merge)
         }
         fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
             self.0.append(path, bytes)
@@ -401,7 +400,7 @@ mod tests {
         fn remove(&self, _path: &Utf8Path) -> io::Result<()> {
             Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                "il supporto non fa cancellare",
+                "storage does not allow deletion",
             ))
         }
         fn list(&self, dir: &Utf8Path) -> io::Result<Vec<DirEntry>> {
@@ -415,58 +414,59 @@ mod tests {
         }
     }
 
+    /// da `remove`, quindi basta rifiutare quello.
     /// 0193 — **una raccolta a metà non è una raccolta riuscita.**
     ///
     /// L'esito del `remove_dir_all` finiva in un `is_ok()`: ciò che non si era
     /// potuto togliere restava sul disco e il conto tornava semplicemente più
-    /// piccolo, indistinguibile da un vault in cui c'era meno da raccogliere.
     #[test]
-    fn una_raccolta_a_meta_non_e_una_raccolta_riuscita() {
-        let storage = SenzaCancellare(MemStorage::new());
-        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/prova");
+    fn a_half_done_sweep_is_not_a_successful_sweep() {
+        let storage = CannotDelete(MemStorage::new());
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/test");
         let roots = vec![root.clone()];
-        let morta = DocId::new("sparita.md");
+        let dead = DocId::new("gone.md");
         storage
-            .write(&space_dir(&root, &morta).join("annotazione"), b"i dati")
-            .expect("scritto");
+            .write(&space_dir(&root, &dead).join("annotation"), b"the data")
+            .expect("written");
 
-        let esito = collect(&storage, &roots, &|_| false);
+        let result = collect(&storage, &roots, &|_| false);
 
-        let errore = esito.expect_err("ciò che resta si dice");
+        let error = result.expect_err("what remains is reported");
         assert!(
-            matches!(&errore, crate::KernelError::Io { path, .. }
-                     if path.as_str().contains(&doc_data::encode(morta.as_str()))),
-            "e dice quale spazio non si è tolto: {errore}"
+            matches!(&error, crate::KernelError::Io { path, .. }
+                     if path.as_str().contains(&doc_data::encode(dead.as_str()))),
+            "and it says which space was not removed: {error}"
         );
         assert!(
-            annotazione(&storage, &root, "sparita.md").is_some(),
-            "i dati sono ancora lì, ed è precisamente il fatto che nessuno diceva"
+            annotation(&storage, &root, "gone.md").is_some(),
+            "the data is still there, and that is precisely what nobody was saying"
         );
     }
 
-    /// E la raccolta che riesce continua a contare ciò che ha tolto.
+    /// piccolo, indistinguibile da un vault in cui c'era meno da raccogliere.
     #[test]
-    fn una_raccolta_riuscita_conta_quel_che_ha_tolto() {
+    fn a_successful_sweep_counts_what_it_removed() {
         let storage = MemStorage::new();
-        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/prova");
+        let root = Utf8PathBuf::from("/vault/.fub/data/plugins/test");
         let roots = vec![root.clone()];
         storage
             .write(
-                &space_dir(&root, &DocId::new("sparita.md")).join("annotazione"),
-                b"i dati",
+                &space_dir(&root, &DocId::new("gone.md")).join("annotation"),
+                b"the data",
             )
-            .expect("scritto");
+            .expect("written");
         storage
             .write(
-                &space_dir(&root, &DocId::new("viva.md")).join("annotazione"),
-                b"i dati",
+                &space_dir(&root, &DocId::new("alive.md")).join("annotation"),
+                b"the data",
             )
-            .expect("scritto");
+            .expect("written");
 
-        let tolti = collect(&storage, &roots, &|doc| doc.as_str() == "viva.md").expect("raccolta");
+        let removed = collect(&storage, &roots, &|doc| doc.as_str() == "alive.md")
+            .expect("sweep");
 
-        assert_eq!(tolti, 1);
-        assert!(annotazione(&storage, &root, "sparita.md").is_none());
-        assert!(annotazione(&storage, &root, "viva.md").is_some());
+        assert_eq!(removed, 1);
+        assert!(annotation(&storage, &root, "gone.md").is_none());
+        assert!(annotation(&storage, &root, "alive.md").is_some());
     }
 }

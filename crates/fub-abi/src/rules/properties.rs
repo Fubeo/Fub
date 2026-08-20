@@ -222,11 +222,11 @@ fn days_from_civil(year: i64, month: u8, day: u8) -> i64 {
     let m = month.clamp(1, 12) as i64;
     let d = day.clamp(1, 31) as i64;
     let y = year - if m <= 2 { 1 } else { 0 };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
+    let was = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - was * 400;
     let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
+    was * 146_097 + doe - 719_468
 }
 
 /// Le proprietà da restituire, in ordine di chiave. Una chiave chiesta e
@@ -370,7 +370,7 @@ mod tests {
 
     /// Ordina un vault per una chiave, nei due versi. Serve ai banchi che
     /// montano un vault loro invece di quello di [`run`].
-    fn ordine_di(vault: &[(DocId, Frontmatter)], key: &str, descending: bool) -> Vec<String> {
+    fn ordered_ids(vault: &[(DocId, Frontmatter)], key: &str, descending: bool) -> Vec<String> {
         let sort = PropertySort {
             key: key.to_string(),
             descending,
@@ -516,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn diverse_species_sort_by_fixed_rank_in_both_directions() {
+    fn different_species_sort_by_fixed_rank_in_both_directions() {
         // Come Excel: le specie hanno un rango fisso (numero < data < bool <
         // testo < link < elenco < unknown < vuoto), e il rango **non si
         // ribalta** col decrescente — solo dentro la stessa specie il verso
@@ -560,12 +560,12 @@ mod tests {
             (DocId::new("d.md"), fm(serde_json::json!({}))),
         ];
         assert_eq!(
-            ordine_di(&vault, "peso", false),
+            ordered_ids(&vault, "peso", false),
             vec!["b.md", "c.md", "a.md", "d.md"],
             "crescente: 3, 10, poi il testo, poi l'assente"
         );
         assert_eq!(
-            ordine_di(&vault, "peso", true),
+            ordered_ids(&vault, "peso", true),
             vec!["c.md", "b.md", "a.md", "d.md"],
             "decrescente: 10, 3, poi il testo, poi l'assente — il rango non si ribalta"
         );
@@ -584,12 +584,12 @@ mod tests {
             (DocId::new("b.md"), fm(serde_json::json!({"titolo": 1}))),
         ];
         assert_eq!(
-            ordine_di(&vault, "titolo", false),
+            ordered_ids(&vault, "titolo", false),
             vec!["b.md", "a.md"],
             "il numero sta in testa anche se la colonna è di testi"
         );
         assert_eq!(
-            ordine_di(&vault, "titolo", true),
+            ordered_ids(&vault, "titolo", true),
             vec!["b.md", "a.md"],
             "il rango non si ribalta: il numero resta in testa"
         );
@@ -728,7 +728,7 @@ mod tests {
     /// cronologico — plausibile, e sbagliato.
     #[test]
     fn a_mixed_vault_answers_wrong_and_says_nothing_until_the_format_is_declared() {
-        let misto = vec![
+        let mixed = vec![
             (
                 DocId::new("a.md"),
                 fm(serde_json::json!({"q": "2026-07-05"})),
@@ -736,7 +736,7 @@ mod tests {
             (DocId::new("b.md"), fm(serde_json::json!({"q": "5/7/2026"}))),
             (DocId::new("c.md"), fm(serde_json::json!({"q": "1/1/2020"}))),
         ];
-        let dopo = filter(
+        let after = filter(
             "q",
             PropertyTest::GreaterThan(PropertyValue::Date(PropertyDate {
                 year: 2026,
@@ -745,51 +745,51 @@ mod tests {
                 time: None,
             })),
         );
-        let passano = |formats: &DateFormats| -> Vec<&str> {
-            misto
+        let passes = |formats: &DateFormats| -> Vec<&str> {
+            mixed
                 .iter()
-                .filter(|(_, fm)| test(fm, &dopo, formats))
+                .filter(|(_, fm)| test(fm, &after, formats))
                 .map(|(id, _)| id.as_str())
                 .collect()
         };
         assert_eq!(
-            passano(&DateFormats::ISO),
+            passes(&DateFormats::ISO),
             vec!["a.md"],
             "`b.md` è del cinque luglio e il filtro non la trova: per `compare`              un testo e una data non sono confrontabili, e non confrontabile              vale falso"
         );
         let dmy = DateFormats::declaring(DateOrder::Dmy);
-        assert_eq!(passano(&dmy), vec!["a.md", "b.md"]);
+        assert_eq!(passes(&dmy), vec!["a.md", "b.md"]);
 
         // La faccetta: lo stesso giorno scritto in due modi conta due volte.
-        let conta = |formats: &DateFormats| {
-            facets(misto.iter().map(|(id, fm)| (id, fm)), "q", formats).len()
+        let count = |formats: &DateFormats| {
+            facets(mixed.iter().map(|(id, fm)| (id, fm)), "q", formats).len()
         };
-        assert_eq!(conta(&DateFormats::ISO), 3);
-        let mut uguali = misto.clone();
-        uguali[1].1 = fm(serde_json::json!({"q": "5/7/2026"}));
+        assert_eq!(count(&DateFormats::ISO), 3);
+        let mut equal = mixed.clone();
+        equal[1].1 = fm(serde_json::json!({"q": "5/7/2026"}));
         assert_eq!(
-            facets(uguali.iter().map(|(id, fm)| (id, fm)), "q", &dmy).len(),
+            facets(equal.iter().map(|(id, fm)| (id, fm)), "q", &dmy).len(),
             2,
             "col formato dichiarato `2026-07-05` e `5/7/2026` sono lo stesso              giorno, quindi la stessa faccetta"
         );
 
-        let per_data = PropertySort {
+        let for_data = PropertySort {
             key: "q".into(),
             descending: false,
         };
-        let ordine = |formats: &DateFormats| -> Vec<String> {
-            let matches: Matches = misto
+        let order = |formats: &DateFormats| -> Vec<String> {
+            let matches: Matches = mixed
                 .iter()
                 .map(|(id, _)| DocumentMatch::of(id.clone()))
                 .collect();
             finish(
                 matches,
-                Some(&per_data),
+                Some(&for_data),
                 &PropertySelect::None,
                 None,
                 formats,
                 |id| {
-                    misto
+                    mixed
                         .iter()
                         .find(|(other, _)| other == id)
                         .map(|(_, fm)| fm)
@@ -806,7 +806,7 @@ mod tests {
         // come stringhe. È totale e deterministico, anche se la risposta è
         // sbagliata (le date non dichiarate restano testo, e il 2020 finisce
         // dopo il 2026 per via del rango, non del valore).
-        assert_eq!(ordine(&DateFormats::ISO), vec!["a.md", "c.md", "b.md"]);
+        assert_eq!(order(&DateFormats::ISO), vec!["a.md", "c.md", "b.md"]);
         assert_eq!(
             order_of(
                 Some(&PropertyValue::Text("1/1/2020".into())),
@@ -823,7 +823,7 @@ mod tests {
              fisso separa le specie invece di dirle «pari»"
         );
         assert_eq!(
-            ordine(&dmy),
+            order(&dmy),
             vec!["c.md", "a.md", "b.md"],
             "il 2020 prima del cinque luglio 2026, che è la risposta vera"
         );

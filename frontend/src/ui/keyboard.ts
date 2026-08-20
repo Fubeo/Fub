@@ -21,12 +21,12 @@
 // all'ascoltatore, e non è un riconoscimento di tasti: è la rinuncia a tre
 // accordi quando l'editor li ha già presi.
 import { t } from "../i18n/strings";
-import type { Vita } from "./vita";
+import type { Lifetime } from "./lifetime";
 import {
-  ATTESA_MS,
+  WAIT_MS,
   allCommands,
-  avanza,
-  type Attesa,
+  advance,
+  type Waiting,
   type CommandEntry,
 } from "./commands";
 
@@ -35,17 +35,17 @@ import {
 /// Una variabile di modulo e non un registro: lo stato di una sequenza dura
 /// due secondi e riguarda solo chi guida la tastiera. Di registri dei comandi ce
 /// n'è **uno**, dalla 0077, e questo non è uno di quelli.
-let attesa: Attesa | null = null;
+let waiting: Waiting | null = null;
 
 /// Il timer della scadenza, per poterlo disdire quando il tasto arriva.
-let scadenza: ReturnType<typeof setTimeout> | undefined;
+let deadline: ReturnType<typeof setTimeout> | undefined;
 
 /// I tre accordi che l'editor monta anche lui, e che dentro l'editor vince
 /// l'editor (0156). È la stessa lista di `SCONTRI_NOTI` in
 /// `keybindings.test.ts`: là è un lucchetto sugli elenchi dichiarati — i due
 /// registri continuano a dichiararli entrambi — qui è la regola che a runtime
 /// decide chi li tiene, e lo decide il fuoco.
-const CEDUTI_ALL_EDITOR: ReadonlySet<string> = new Set([
+const PASSED_TO_EDITOR: ReadonlySet<string> = new Set([
   "shell.doc.search",
   "shell.pane.split.down",
   "shell.mode.live",
@@ -53,18 +53,18 @@ const CEDUTI_ALL_EDITOR: ReadonlySet<string> = new Set([
 
 /// L'evento è nato dentro l'editor? Il fuoco si osserva qui, dove il DOM c'è, e
 /// non in `avanza`, che resta pura e non riceve il bersaglio.
-function dentroLEditor(target: EventTarget | null): boolean {
+function inEditor(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(".cm-editor") !== null;
 }
 
-/// Monta l'ascoltatore. `esegui` è cosa fare del comando trovato — l'avvio vero
+/// Monta l'ascoltatore. `execute` è cosa fare del comando trovato — l'avvio vero
 /// sta in `main.ts`, che è l'unico a sapere dove chiedere i parametri.
-export function mountKeyboard(vita: Vita, esegui: (entry: CommandEntry) => void): void {
-  vita.ascolta(document, "keydown", (e) => {
-    const esito = avanza(allCommands(), attesa, e);
+export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry) => void): void {
+  lifetime.listen(document, "keydown", (e) => {
+    const result = advance(allCommands(), waiting, e);
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
-    if (esito.tipo === "passa") return;
+    if (result.type === "passa") return;
     // I tre accordi che l'editor monta anche lui: quando il tasto nasce
     // dentro l'editor e non c'è una sequenza in corso, l'editor lo ha già
     // preso in bubbling e la shell si ritira. La sequenza continua sempre
@@ -72,47 +72,47 @@ export function mountKeyboard(vita: Vita, esegui: (entry: CommandEntry) => void)
     // l'editor a fuoco: il fuoco decide solo i tre che nessuno ha
     // dichiarato insieme.
     if (
-      esito.tipo === "esegue" &&
-      attesa === null &&
-      dentroLEditor(e.target) &&
-      CEDUTI_ALL_EDITOR.has(esito.entry.id)
+      result.type === "esegue" &&
+      waiting === null &&
+      inEditor(e.target) &&
+      PASSED_TO_EDITOR.has(result.entry.id)
     ) {
       return;
     }
     e.preventDefault();
-    if (esito.tipo === "attende") {
-      aspetta(esito.attesa);
+    if (result.type === "attende") {
+      waitFor(result.waiting);
       return;
     }
-    smettiDiAspettare();
-    if (esito.tipo === "esegue") esegui(esito.entry);
+    stopWaiting();
+    if (result.type === "esegue") execute(result.entry);
   });
 }
 
 /// Solo per i banchi e per chi chiude un vault: una sequenza a metà che
 /// sopravvive a ciò che l'ha iniziata è lo stato che questo modulo esiste per
 /// non lasciare in giro.
-export function annullaSequenza(): void {
-  smettiDiAspettare();
+export function cancelSequence(): void {
+  stopWaiting();
 }
 
-function aspetta(nuova: Attesa): void {
-  attesa = nuova;
-  mostra(nuova.etichetta);
-  clearTimeout(scadenza);
+function waitFor(newItem: Waiting): void {
+  waiting = newItem;
+  show(newItem.label);
+  clearTimeout(deadline);
   // La scadenza non esegue niente e non dice niente: chiude l'attesa e basta.
   // Un timeout che al termine facesse partire il comando corto sarebbe la
   // regola del prefisso al contrario, e la sorpresa arriverebbe due secondi
   // dopo l'ultimo tasto premuto — cioè quando nessuno la sta più aspettando.
-  scadenza = setTimeout(smettiDiAspettare, ATTESA_MS);
+  deadline = setTimeout(stopWaiting, WAIT_MS);
 }
 
-function smettiDiAspettare(): void {
-  if (!attesa) return;
-  attesa = null;
-  clearTimeout(scadenza);
-  scadenza = undefined;
-  mostra(null);
+function stopWaiting(): void {
+  if (!waiting) return;
+  waiting = null;
+  clearTimeout(deadline);
+  deadline = undefined;
+  show(null);
 }
 
 /// La riga nella barra di stato che dice che l'app sta aspettando.
@@ -122,9 +122,9 @@ function smettiDiAspettare(): void {
 /// avviso del centro notifiche (`ui/notify.ts`) perché non è una cosa da
 /// **rileggere**: vale mentre è vera e poi non vale più, ed è esattamente ciò
 /// per cui la barra di stato c'è.
-function mostra(etichetta: string | null): void {
+function show(label: string | null): void {
   const el = document.getElementById("key-pending");
   if (!el) return;
-  el.textContent = etichetta === null ? "" : t("keys.pending", { chord: etichetta });
-  el.hidden = etichetta === null;
+  el.textContent = label === null ? "" : t("keys.pending", { chord: label });
+  el.hidden = label === null;
 }

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Chi monta Fub: la tabella di montaggio delle feature, la sessione di un vault aperto, il watcher dietro un trait. Nessuna dipendenza da tauri."
+description = "Fub's host: the feature registry, the open-vault session, and the watcher behind a trait. No tauri dependency."
 
 [dependencies]
 camino = { workspace = true }
@@ -124,7 +124,7 @@ ureq = { version = "3", default-features = false, features = [
 ], optional = true }
 
 [features]
-default = ["notify-watcher", "http-client", "feature-ufficiali"]
+default = ["notify-watcher", "http-client", "official-features"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 
 # Il client HTTP: acceso di default come il watcher, e per la stessa ragione —
@@ -137,7 +137,7 @@ http-client = ["dep:ureq"]
 # sono i suoi. Chi ne spegne una toglie la riga dall'inventario, quindi il
 # bundle non si monta — non c'è uno stato in cui la feature sia compilata e non
 # dichiarata, o dichiarata e non compilata.
-feature-ufficiali = [
+official-features = [
     "search",
     "versioning",
     "backlinks",

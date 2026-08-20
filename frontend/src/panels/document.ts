@@ -1,4 +1,4 @@
-// I riquadri dell'area principale: gli editor, i buffer, le tab, la modalità di
+// I riquadri dell'area principale: gli editor, i buffer, le linguetta, la modalità di
 // ciascuno, e il contesto di sessione che ne esce.
 //
 // # Le due verità, e perché sono due
@@ -26,7 +26,7 @@
 //     fondono, ed è per questo che la sincronizzazione non passa dalla history.
 //
 // Il buffer vive finché qualche riquadro tiene aperto quel documento; chiudendo
-// l'ultima tab si mette in salvo ciò che c'era di sporco e poi si dimentica.
+// l'ultima linguetta si mette in salvo ciò che c'era di sporco e poi si dimentica.
 //
 // # Cosa resta di prima
 //
@@ -39,43 +39,43 @@
 // quella domanda lì, e obbligarli a nominare un riquadro vorrebbe dire far
 // sapere a tutti cos'è un riquadro per non guadagnare niente.
 import { createEditor, type Editor } from "../editor/editor";
-import { Coda } from "../ui/corsa";
-import type { Tema } from "../theme/theme";
+import { Queue } from "../ui/race";
+import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
-import { SENZA_FINESTRA, noteDalNome, riferimentoRisolto, tagDelVault } from "../host/query";
+import { WITHOUT_PAGE, notesByName, resolvedReference, vaultTags } from "../host/query";
 import type { Origin, PaneMode, SelectionSet, ViewContext, WriteBase } from "../host/contract";
 import { onEvent } from "../state/kernel";
-import { noteRecentiEsistenti } from "../state/recenti";
+import { existingRecentNotes } from "../state/recent";
 import { emit, on, state } from "../state/store";
 import {
-  consumaCambioSotto,
-  esitoDelFallimento,
-  scriviContandoEco,
-  statoDi,
-  type Esito,
-} from "../state/salvataggio";
-import { CHIAVE_CASO, casoDi, daRecuperare, ricongiungiBozze } from "../state/bozze";
-import { bozzeNonSalvate } from "../host/query";
+  consumeUnderChange,
+  failureOutcome,
+  writeCountingEcho,
+  stateOf,
+  type Outcome,
+} from "../state/saving";
+import { CASE_KEY, caseOf, toRecover, rejoinDrafts } from "../state/drafts";
+import { unsavedDrafts } from "../host/query";
 import type { DraftInfo } from "../host/contract";
 import {
-  apriIn,
-  attivaTab,
-  chiudiPane,
-  chiudiTab,
-  dividi,
-  docAttivo,
-  documenti,
-  fuocoSu,
-  impostaModalita,
+  openIn,
+  activateTab,
+  closePane,
+  closeTab,
+  split,
+  activeDoc,
+  documents,
+  focusPane,
+  setMode as setPaneMode,
   layout,
-  pane,
-  paneAttivo,
-  paneConDoc,
-  panes,
-  rinomina,
-  stessaTab,
-  tabAttiva,
-  togliDappertutto,
+  pane as paneState,
+  activePane,
+  panesWithDoc,
+  panes as layoutPanes,
+  rename,
+  sameTab,
+  activeTab,
+  removeEverywhere,
   type LayoutNode,
   type Tab,
 } from "../state/layout";
@@ -84,12 +84,12 @@ import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { clearPreview, updatePreview } from "./preview";
-import { montaVistaInRiquadro, smontaVistaDalRiquadro, viewPrincipale } from "../ui/views";
+import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
-import { onLingua, t } from "../i18n/strings";
+import { onLanguage, t } from "../i18n/strings";
 
 export interface DocumentDeps {
-  /// Click su un `#tag` nella live preview. Iniettato invece che importato:
+  /// Click su un `#tag` nella vivi preview. Iniettato invece che importato:
   /// il pannello della ricerca apre i documenti, e questo li possiede — se si
   /// importassero a vicenda sarebbe un ciclo.
   searchTag(tag: string): void;
@@ -102,9 +102,9 @@ export interface DocumentDeps {
 /// ognuno è una decisione — «vince il mio testo», un buffer nato da una
 /// battuta prima di aver letto il disco — e un nome li rende cercabili tutti
 /// insieme. Il terzo posto, la bozza vecchia che la sua base non la sapeva, è
-/// passato con `ricongiungiBozze` a `state/bozze.ts`, dove il dettato si
+/// passato con `rejoinDrafts` a `state/drafts.ts`, dove il dettato si
 /// scrive dove la decisione si prende.
-const DETTA: WriteBase = { kind: "dictated" };
+const DICTATED: WriteBase = { kind: "dictated" };
 
 /// Un riquadro **a schermo**: la sua parte di DOM, il suo editor, e quale
 /// documento l'editor sta effettivamente mostrando.
@@ -113,7 +113,7 @@ const DETTA: WriteBase = { kind: "dictated" };
 /// nell'editor, e serve a sapere quando caricare — senza, ogni giro di disegno
 /// riscriverebbe il documento nell'editor e porterebbe via cursore e
 /// cronologia.
-interface Riquadro {
+interface Pane {
   id: string;
   root: HTMLElement;
   tabsEl: HTMLElement;
@@ -122,11 +122,11 @@ interface Riquadro {
   /// Dove finisce una view dichiarata che questo riquadro sta ospitando (§3.3).
   /// Vuoto quasi sempre: è la terza superficie di un riquadro, accanto
   /// all'editor e alla lettura, e come loro c'è anche quando non si vede.
-  vistaEl: HTMLElement;
+  viewEl: HTMLElement;
   editor: Editor;
-  /// Cosa c'è **adesso** in questo riquadro. Una tab e non un path: dalla §3.3
+  /// Cosa c'è **adesso** in questo riquadro. Una linguetta e non un path: dalla §3.3
   /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
-  mostrato: Tab | null;
+  shown: Tab | null;
 }
 
 /// Il testo di un documento aperto, con lo stato del suo salvataggio.
@@ -140,7 +140,7 @@ interface Buffer {
   /// che si salvano insieme non hanno niente da spartire, e una coda unica le
   /// metterebbe in fila per niente. Che sia un campo obbligatorio è la parte che
   /// non si dimentica: un buffer nuovo senza coda non compila.
-  coda: Coda;
+  queue: Queue;
   /// Ha modifiche non ancora scritte su disco? Finché è sporco, questo testo è
   /// la verità del documento: non va MAI sovrascritto da un reload.
   dirty: boolean;
@@ -150,7 +150,7 @@ interface Buffer {
   /// buffer può essere pulito e l'ultima scrittura essere fallita — è il caso in
   /// cui prima di oggi la shell non diceva niente — e può essere sporco mentre
   /// una scrittura è in volo.
-  esito: Esito;
+  result: Outcome;
   /// Quanti `document_changed` **nostri** stiamo ancora aspettando.
   ///
   /// Ogni scrittura che va a buon fine torna indietro come evento: il documento
@@ -168,7 +168,7 @@ interface Buffer {
   /// dentro la scrittura e può arrivare mentre la si aspetta.
   ///
   /// Le due metà del conto stanno tutte e due in `state/salvataggio.ts`, e da
-  /// qui non si tocca: `scriviContandoEco` lo mette e lo riprende se la
+  /// qui non si tocca: `writeCountingEcho` lo mette e lo riprende se la
   /// scrittura fallisce, `consumaCambioSotto` lo toglie quando l'evento arriva.
   ///
   /// Il modo in cui questo conto può sbagliare è uno solo ed è **limitato**: se
@@ -177,7 +177,7 @@ interface Buffer {
   /// una scrittura diretta di un'altra finestra della shell — mai uno della
   /// watcher o di un comando, che è il caso grave, perché quelli non li
   /// consuma mai. Torna a zero a ogni caricamento del documento.
-  echi: number;
+  echoes: number;
   /// **Da cosa questo testo si è discostato** (§18.1): la revisione che il file
   /// aveva quando il buffer l'ha preso in mano, o che l'ultimo salvataggio ha
   /// prodotto.
@@ -204,17 +204,17 @@ interface Buffer {
   timer?: number;
 }
 
-const riquadri = new Map<string, Riquadro>();
+const panes = new Map<string, Pane>();
 const buffers = new Map<string, Buffer>();
 
 let panesEl: HTMLElement;
 let deps: DocumentDeps;
-let tema: Tema | null = null;
+let theme: Theme | null = null;
 
 /// La firma dell'albero disegnato adesso. Ricostruire la struttura del DOM a
 /// ogni segnale sarebbe corretto e sbagliato: sposta i nodi degli editor, che
-/// per CodeMirror vuol dire perdere il fuoco a ogni click su una tab.
-let firmaAlbero = "";
+/// per CodeMirror vuol dire perdere il fuoco a ogni click su una linguetta.
+let treeSignature = "";
 
 /// Pubblicazione del contesto: la selezione si muove a ogni tasto, il kernel
 /// non deve saperlo a ogni tasto.
@@ -232,7 +232,7 @@ export function mountDocument(d: DocumentDeps): void {
     b.addEventListener("click", () => void setMode(b.dataset.mode as PaneMode));
   }
 
-  // Il layout è cambiato — qualcuno ha diviso, chiuso, cambiato tab — e il DOM
+  // Il layout è cambiato — qualcuno ha diviso, chiuso, cambiato linguetta — e il DOM
   // lo insegue. Il verso passa dal bus e non da una chiamata perché chi muta il
   // layout è anche il pannello delle impostazioni, la palette, un comando: tutti
   // punti che non devono conoscere questo modulo.
@@ -242,7 +242,7 @@ export function mountDocument(d: DocumentDeps): void {
   // centro notifiche è la superficie che il §20.4 chiedeva e che dal §10.3 c'è.
   // La coda intanto si riprende al giro dopo (la coda dei disegni).
   on("layout", () => {
-    void sincronizza().catch((e) => {
+    void synchronize().catch((e) => {
       notify(t("panes.redraw_failed", { reason: errorText(e) }), "guasto");
     });
   });
@@ -250,27 +250,27 @@ export function mountDocument(d: DocumentDeps): void {
   onEvent("document_changed", (e, origin) => {
     // La nota è cambiata (anche da fuori: watcher, altra app).
     //
-    // **Il conto degli echi risponde per primo, prima di qualunque guardia.**
+    // **Il conto degli echoes risponde per primo, prima di qualunque guardia.**
     // È del *buffer*, e un buffer può benissimo esistere senza che nessun
-    // riquadro mostri quel documento: succede fra la chiusura di una tab e il
-    // `flush` che la congeda, ed è esattamente il momento in cui una scrittura
+    // riquadro mostri quel documento: succede fra la chiusura di una linguetta e il
+    // `flush` che la releaseTab, ed è esattamente il momento in cui una scrittura
     // in volo produrrà il suo eco. Con la guardia davanti, quell'eco non veniva
-    // consumato da nessuno — e il commento su `Buffer.echi` promette il
+    // consumato da nessuno — e il commento su `Buffer.echoes` promette il
     // contrario, «l'evento con l'identità di una nostra scrittura lo consuma,
     // anche se non c'è niente da dire». Un eco non consumato non si ripara più:
     // si mangia il prossimo avviso vero.
-    avvisaSeIlBufferCopre(e.id, origin);
+    warnIfBufferCovers(e.id, origin);
     // Ciò che segue riguarda invece ogni riquadro che la sta mostrando, non
     // «il» riquadro — e se non ce n'è nessuno non c'è niente da rileggere né da
     // ridisegnare: la guardia sta davanti a ciò che disegna, che è ciò di cui
     // parla.
-    if (paneConDoc(e.id).length === 0) return;
+    if (panesWithDoc(e.id).length === 0) return;
     void reloadIfClean(e.id);
-    void ridisegnaLettura(e.id);
+    void redrawReading(e.id);
   });
 
   onEvent("document_removed", (e) => {
-    if (paneConDoc(e.id).length === 0) return;
+    if (panesWithDoc(e.id).length === 0) return;
     // La nota aperta è sparita da fuori (watcher, altra app). Col buffer
     // sporco il buffer vince — è la verità del documento aperto, e il primo
     // salvataggio la ricrea: qui la resurrezione è voluta. Col buffer pulito
@@ -280,18 +280,18 @@ export function mountDocument(d: DocumentDeps): void {
       notify(t("document.deleted_dirty", { doc: e.id }), "guasto");
       return;
     }
-    dimentica(e.id);
-    togliDappertutto(e.id);
+    forget(e.id);
+    removeEverywhere(e.id);
   });
 
   onEvent("document_renamed", (e) => {
-    // L'identità è il path (0043): le tab che lo mostravano seguono, in tutti i
+    // L'identità è il path (0043): le linguetta che lo mostravano seguono, in tutti i
     // riquadri. Il buffer segue anche lui, o il salvataggio successivo
     // scriverebbe col nome vecchio.
     // La finestra di migrazione finisce qui: chi rinomina ha tenuto fermi i due
     // ritardi dal momento della richiesta (difetto 0210), e ciò che si è battuto
     // nel frattempo riparte adesso, col nome nuovo.
-    sospesi.delete(e.from);
+    suspended.delete(e.from);
     const buf = buffers.get(e.from);
     if (buf) {
       buffers.delete(e.from);
@@ -308,44 +308,44 @@ export function mountDocument(d: DocumentDeps): void {
       // strano ed è quello in cui si perde la sua battuta.
       if (buf.dirty) scheduleSave(e.to);
     }
-    rinomina(e.from, e.to);
+    rename(e.from, e.to);
   });
 
   onEvent("overflow", () => {
     // Eventi persi (coda troncata): ciò che deriviamo dagli eventi va
     // riconciliato da zero, non aggiornato.
-    for (const id of documentiAperti()) {
+    for (const id of openDocuments()) {
       void reloadIfClean(id);
-      void ridisegnaLettura(id);
+      void redrawReading(id);
     }
   });
 
   // Il testo dello stato di salvataggio non passa da `applicaStringhe` — non ha
   // un `data-i18n`, perché lo scrive chi conosce lo stato — quindi si rifà da sé
   // al cambio di lingua, come fanno i due pulsanti della barra.
-  onLingua(disegnaSalvataggio);
+  onLanguage(drawSave);
 
-  registraComandi();
+  registerCommands();
 }
 
 /// I documenti aperti in un riquadro qualunque, senza ripetizioni.
-function documentiAperti(): string[] {
-  const p = panes().flatMap((id) => {
-    const stato = pane(id);
-    return stato ? documenti(stato) : [];
+function openDocuments(): string[] {
+  const p = layoutPanes().flatMap((id) => {
+    const state = paneState(id);
+    return state ? documents(state) : [];
   });
   return [...new Set(p)];
 }
 
 // --- i comandi dei riquadri (§18.2) -----------------------------------------
 //
-// Dividere, chiudere un riquadro, chiudere una tab sono **comandi** e non solo
+// Dividere, chiudere un riquadro, chiudere una linguetta sono **comandi** e non solo
 // gesti del mouse, per la ragione della 0077: un gesto che vive solo in un
 // listener è un gesto che non compare in nessun elenco e che nessuno può
 // riconfigurare. Passano dalla stessa porta del click, così il cablaggio sta in
 // un punto solo.
 
-function registraComandi(): void {
+function registerCommands(): void {
   // Le due modalità come comandi (§18.2): erano due bottoni nel commutatore,
   // cioè raggiungibili col mouse e con nient'altro. Passano dalla stessa porta
   // del click (`setMode`), che è dove sta il cablaggio — classe attiva, resa
@@ -373,25 +373,25 @@ function registraComandi(): void {
     id: "shell.pane.split.right",
     title: "commands.pane.split.right",
     description: "commands.pane.split.right.desc",
-    run: () => dividiRiquadro("row"),
+    run: () => splitPane("row"),
   });
   registerShellCommand({
     id: "shell.pane.split.down",
     title: "commands.pane.split.down",
     description: "commands.pane.split.down.desc",
-    run: () => dividiRiquadro("col"),
+    run: () => splitPane("col"),
   });
   registerShellCommand({
     id: "shell.pane.close",
     title: "commands.pane.close",
     description: "commands.pane.close.desc",
-    run: () => void chiudiRiquadroCorrente(),
+    run: () => void closeCurrentPane(),
   });
   registerShellCommand({
     id: "shell.tab.close",
     title: "commands.tab.close",
     description: "commands.tab.close.desc",
-    run: () => void chiudiTabCorrente(),
+    run: () => void closeCurrentTab(),
   });
   // Le due vie d'uscita da un conflitto (§18.1), e sono comandi e non un
   // dialogo per la ragione della 0088: la decisione è dell'utente, e un modale
@@ -402,13 +402,13 @@ function registraComandi(): void {
     id: "shell.doc.conflict.mine",
     title: "commands.doc.conflict.mine",
     description: "commands.doc.conflict.mine.desc",
-    run: () => void risolviTenendoIlMio(),
+    run: () => void resolveKeepingMine(),
   });
   registerShellCommand({
     id: "shell.doc.conflict.theirs",
     title: "commands.doc.conflict.theirs",
     description: "commands.doc.conflict.theirs.desc",
-    run: () => void risolviScartandoIlMio(),
+    run: () => void resolveDiscardingMine(),
   });
 }
 
@@ -419,15 +419,15 @@ function registraComandi(): void {
 /// sovrascrittura silenziosa di prima con un giro in più, e la guardia non
 /// guarderebbe niente. Qui la sovrascrittura c'è, ed è ciò che l'utente ha
 /// chiesto — dopo che gli è stato detto cosa stava coprendo.
-async function risolviTenendoIlMio(): Promise<void> {
-  const doc = docAttivo();
+async function resolveKeepingMine(): Promise<void> {
+  const doc = activeDoc();
   const buf = doc ? buffers.get(doc) : undefined;
-  if (!doc || buf?.esito !== "conflitto") {
+  if (!doc || buf?.result !== "conflitto") {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  buf.base = DETTA;
-  buf.esito = "in_corso";
+  buf.base = DICTATED;
+  buf.result = "in_corso";
   window.clearTimeout(buf.timer);
   await saveDoc(doc);
 }
@@ -438,23 +438,23 @@ async function risolviTenendoIlMio(): Promise<void> {
 /// che non si può innescare da solo: sta nella palette, dove per arrivarci
 /// bisogna averlo scritto — la stessa regola per cui `shell.history.clear` non
 /// ha un accordo.
-async function risolviScartandoIlMio(): Promise<void> {
-  const doc = docAttivo();
+async function resolveDiscardingMine(): Promise<void> {
+  const doc = activeDoc();
   const buf = doc ? buffers.get(doc) : undefined;
-  if (!doc || buf?.esito !== "conflitto") {
+  if (!doc || buf?.result !== "conflitto") {
     notify(t("document.conflict_none"), "info");
     return;
   }
   window.clearTimeout(buf.timer);
   buf.dirty = false;
-  buf.esito = "ok";
+  buf.result = "ok";
   // La bozza se ne va con lui: teneva *questo* testo, ed è appena stato
   // scartato da chi l'aveva scritto. Lasciarla vorrebbe dire riproporlo al
   // prossimo avvio come se fosse andato perso.
   await dropDraft(doc);
   await reloadIfClean(doc);
-  await ridisegnaLettura(doc);
-  disegnaSalvataggio();
+  await redrawReading(doc);
+  drawSave();
 }
 
 /// Divide il riquadro col fuoco e ci porta dentro **lo stesso documento**.
@@ -462,57 +462,57 @@ async function risolviScartandoIlMio(): Promise<void> {
 /// È ciò che serve nove volte su dieci — la stessa nota di lato, in Lettura,
 /// mentre si scrive — ed è anche il primo cliente vero della regola del buffer
 /// unico: le due superfici mostrano lo stesso testo perché *è* lo stesso testo.
-/// Un riquadro nuovo e vuoto lo si ottiene chiudendo la tab, che è un gesto in
+/// Un riquadro nuovo e vuoto lo si ottiene chiudendo la linguetta, che è un gesto in
 /// meno di quello che servirebbe per il contrario.
-function dividiRiquadro(dir: "row" | "col"): void {
-  const daDividere = layout.focus;
-  const corrente = docAttivo(daDividere);
-  const nuovo = dividi(daDividere, dir);
-  if (nuovo && corrente) apriIn(nuovo, corrente);
+function splitPane(dir: "row" | "col"): void {
+  const toSplit = layout.focus;
+  const current = activeDoc(toSplit);
+  const newItem = split(toSplit, dir);
+  if (newItem && current) openIn(newItem, current);
 }
 
-async function chiudiRiquadroCorrente(): Promise<void> {
+async function closeCurrentPane(): Promise<void> {
   const id = layout.focus;
-  const stato = pane(id);
-  const suoi = stato ? documenti(stato) : [];
-  if (!chiudiPane(id)) return;
+  const state = paneState(id);
+  const own = state ? documents(state) : [];
+  if (!closePane(id)) return;
   // Il riquadro non c'è più: i suoi documenti possono essere rimasti senza
   // nessuno che li guardi, e allora il buffer va messo in salvo e dimenticato.
-  for (const doc of suoi) await congedaSeNessunoLoGuarda(doc);
+  for (const doc of own) await dismissIfUnwatched(doc);
 }
 
-async function chiudiTabCorrente(): Promise<void> {
-  const p = paneAttivo();
-  const tab = tabAttiva();
+async function closeCurrentTab(): Promise<void> {
+  const p = activePane();
+  const tab = activeTab();
   if (p.active < 0) return;
-  chiudiTab(layout.focus, p.active);
-  await congeda(layout.focus, tab);
+  closeTab(layout.focus, p.active);
+  await releaseTab(layout.focus, tab);
 }
 
-/// Una tab è stata chiusa: si lascia andare ciò che teneva in vita.
+/// Una linguetta è stata chiusa: si lascia andare ciò che teneva in vita.
 ///
-/// Le due specie di tab hanno due cose diverse da rilasciare, e nessuna delle
+/// Le due specie di linguetta hanno due cose diverse da rilasciare, e nessuna delle
 /// due si raccoglie da sé: un documento ha un buffer che va **salvato** prima di
 /// dimenticarlo, una view ha un pannello registrato e un albero montato. Che
-/// stiano nella stessa funzione è ciò che tiene chi chiude una tab dal doversi
+/// stiano nella stessa funzione è ciò che tiene chi chiude una linguetta dal doversi
 /// ricordare quale delle due aveva sotto le dita.
-async function congeda(paneId: string, tab: Tab | null): Promise<void> {
+async function releaseTab(paneId: string, tab: Tab | null): Promise<void> {
   if (!tab) return;
-  if (tab.k === "doc") await congedaSeNessunoLoGuarda(tab.doc);
-  else smontaVistaDalRiquadro(tab.view, paneId);
+  if (tab.k === "doc") await dismissIfUnwatched(tab.doc);
+  else unmountViewFromPane(tab.view, paneId);
 }
 
 /// Un documento che nessun riquadro mostra più: si salva se era sporco, e poi si
-/// lascia andare. Salvare **prima** di dimenticare è il punto — chiudere una tab
+/// lascia andare. Salvare **prima** di dimenticare è il punto — chiudere una linguetta
 /// non è annullare ciò che si era scritto, e il debounce poteva avere ancora
 /// qualcosa in coda.
-async function congedaSeNessunoLoGuarda(doc: string): Promise<void> {
-  if (paneConDoc(doc).length > 0) return;
+async function dismissIfUnwatched(doc: string): Promise<void> {
+  if (panesWithDoc(doc).length > 0) return;
   await flushDoc(doc);
-  dimentica(doc);
+  forget(doc);
 }
 
-function dimentica(doc: string): void {
+function forget(doc: string): void {
   const buf = buffers.get(doc);
   if (buf?.timer !== undefined) window.clearTimeout(buf.timer);
   buffers.delete(doc);
@@ -529,7 +529,7 @@ function dimentica(doc: string): void {
 /// pubblicherebbe il contesto di un buffer che non c'è ancora. Accodare invece
 /// di saltare il secondo giro: chi aspetta deve aspettare il disegno che
 /// comprende la sua mutazione, non uno qualunque.
-const codaDeiDisegni = new Coda();
+const drawQueue = new Queue();
 
 /// Le aperture, in fila (difetto 0033).
 ///
@@ -543,35 +543,35 @@ const codaDeiDisegni = new Coda();
 ///
 /// Buttare la vecchia sarebbe sbagliato: sono due note che l'utente ha chiesto
 /// di aprire, e le vuole aperte tutte e due. Vanno in fila.
-const codaDelleAperture = new Coda();
+const openQueue = new Queue();
 
-/// Porta il DOM in accordo col layout: la struttura, le tab, i documenti
+/// Porta il DOM in accordo col layout: la struttura, le linguetta, i documenti
 /// caricati, la modalità, il fuoco.
 ///
 /// È l'unico punto che disegna, ed è il motivo per cui tutto il resto di questo
 /// file può limitarsi a mutare il layout e non pensarci più — la stessa forma
 /// con cui `ui/panel-host.ts` ha tolto ai pannelli il «quando ridisegnarsi».
-export function sincronizza(): Promise<void> {
-  return codaDeiDisegni.accoda(disegna);
+export function synchronize(): Promise<void> {
+  return drawQueue.enqueue(render);
 }
 
-async function disegna(): Promise<void> {
-  costruisciStruttura();
-  const attivo = docAttivo();
-  for (const id of panes()) {
-    const r = riquadri.get(id);
-    const p = pane(id);
+async function render(): Promise<void> {
+  buildStructure();
+  const active = activeDoc();
+  for (const id of layoutPanes()) {
+    const r = panes.get(id);
+    const p = paneState(id);
     if (!r || !p) continue;
-    disegnaTab(r, p.tabs, p.active);
+    drawTab(r, p.tabs, p.active);
     r.root.dataset.mode = p.mode;
     r.root.classList.toggle("focus", id === layout.focus);
-    await mostra(r, tabAttiva(id));
+    await show(r, activeTab(id));
   }
-  aggiornaCommutatore();
-  disegnaSalvataggio();
-  if (state.currentDoc !== attivo) {
-    state.currentDoc = attivo;
-    emit("active-doc", attivo);
+  updateToggle();
+  drawSave();
+  if (state.currentDoc !== active) {
+    state.currentDoc = active;
+    emit("active-doc", active);
   }
 }
 
@@ -581,13 +581,13 @@ async function disegna(): Promise<void> {
 /// ricostruito a ogni click perderebbe cronologia, cursore e fuoco, e la
 /// perdita si vedrebbe solo usando l'app — che è il modo più caro per accorgersi
 /// di una cosa.
-function costruisciStruttura(): void {
-  const firma = JSON.stringify(layout.tree);
-  if (firma === firmaAlbero) return;
-  firmaAlbero = firma;
-  const vivi = new Set(panes());
-  for (const [id, r] of riquadri) {
-    if (!vivi.has(id)) {
+function buildStructure(): void {
+  const signature = JSON.stringify(layout.tree);
+  if (signature === treeSignature) return;
+  treeSignature = signature;
+  const live = new Set(layoutPanes());
+  for (const [id, r] of panes) {
+    if (!live.has(id)) {
       // **Prima** la vista, poi il nodo. Staccare la radice dal documento non
       // smonta un `EditorView`: i suoi osservatori e i suoi ascoltatori restano,
       // perché guardano il proprio DOM e la finestra e non sanno niente di chi
@@ -596,24 +596,24 @@ function costruisciStruttura(): void {
       // teneva, quindi spariva anche il modo di accorgersene.
       r.editor.destroy();
       r.root.remove();
-      riquadri.delete(id);
+      panes.delete(id);
     }
   }
-  panesEl.replaceChildren(nodo(layout.tree));
+  panesEl.replaceChildren(node(layout.tree));
 }
 
-function nodo(n: LayoutNode): HTMLElement {
-  if (n.k === "leaf") return riquadro(n.pane).root;
+function node(n: LayoutNode): HTMLElement {
+  if (n.k === "leaf") return renderPane(n.pane).root;
   const el = document.createElement("div");
   el.className = `pane-split ${n.dir}`;
-  el.append(...n.children.map(nodo));
+  el.append(...n.children.map(node));
   return el;
 }
 
 /// Il riquadro con questo id, creandolo se è nuovo.
-function riquadro(id: string): Riquadro {
-  const gia = riquadri.get(id);
-  if (gia) return gia;
+function renderPane(id: string): Pane {
+  const already = panes.get(id);
+  if (already) return already;
 
   const root = document.createElement("section");
   root.className = "pane";
@@ -639,18 +639,18 @@ function riquadro(id: string): Riquadro {
   // sidebar e non deve esserlo: là una view è un pannello con un titolo che si
   // apre e si chiude, qui **è** il contenuto del riquadro, e il titolo è già
   // sulla tab.
-  const vistaEl = document.createElement("div");
-  vistaEl.className = "pane-view";
+  const viewEl = document.createElement("div");
+  viewEl.className = "pane-view";
 
-  root.append(tabsEl, editorEl, previewEl, vistaEl);
+  root.append(tabsEl, editorEl, previewEl, viewEl);
   // Toccare un riquadro gli dà il fuoco. `mousedown` e non `click` perché il
   // fuoco deve essere già di questo riquadro quando l'editor riceve l'evento:
   // altrimenti il contesto pubblicato subito dopo sarebbe quello di prima.
-  root.addEventListener("mousedown", () => fuocoSu(id));
-  root.addEventListener("focusin", () => fuocoSu(id));
+  root.addEventListener("mousedown", () => focusPane(id));
+  root.addEventListener("focusin", () => focusPane(id));
 
   const editor = createEditor(editorEl, {
-    onChange: (text) => scritto(id, text),
+    onChange: (text) => written(id, text),
     onSelectionChange: () => {
       // Solo il riquadro col fuoco pubblica: il contesto di sessione è «cosa
       // sta guardando l'utente adesso», e con N riquadri la risposta resta una
@@ -664,9 +664,9 @@ function riquadro(id: string): Riquadro {
     // vault sia aperto rispondono vuoto, non con un errore in console.
     completions: {
       // **La quarta superficie che cerca** (§21.5), e la prima che violava la
-      // regola: chiedeva `vociDelVault("document")`, cioè l'elenco intero, e
+      // regola: chiedeva `vaultEntries("document")`, cioè l'elenco intero, e
       // filtrava CodeMirror. Adesso passa dalla porta di tutte le altre —
-      // `noteDalNome`, che è `IndexQuery::Documents` con i campi sul nome e il
+      // `notesByName`, che è `IndexQuery::Documents` con i campi sul nome e il
       // prefisso della §21.2 (0082, 0083).
       //
       // A prefisso vuoto — `[[` appena scritto — si propongono le **recenti**,
@@ -676,28 +676,28 @@ function riquadro(id: string): Riquadro {
       // prima lettera. La decisione è la stessa delle due superfici perché la
       // domanda è la stessa; è qui e non in `editor/completions.ts` perché
       // quel modulo non conosce né il vault né la memoria corta.
-      cercaNote: (prefisso: string) =>
-        (prefisso.trim() ? noteDalNome(prefisso) : noteRecentiEsistenti()).catch(() => []),
-      // `SENZA_FINESTRA`, e dichiarato: i tag sono il **vocabolario** di un
+      searchNotes: (prefix: string) =>
+        (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
+      // `WITHOUT_PAGE`, e dichiarato: i tag sono il **vocabolario** di un
       // vault, non il suo contenuto — cresce col numero di concetti e non col
       // numero di note — e il filtro per prefisso lo fa CodeMirror in locale su
       // ciò che ha in mano. Una finestra qui non taglierebbe una risposta
       // grande: taglierebbe l'alfabeto, e i tag dopo la lettera del taglio
       // smetterebbero di completarsi senza che nessuno lo dica.
-      listTags: () => tagDelVault(SENZA_FINESTRA).catch(() => []),
+      listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
     },
   });
   // Un riquadro nato dopo il tema deve nascere nella luce giusta, non
   // correggersi al primo cambio (§12.4).
-  if (tema) editor.setTheme(tema);
+  if (theme) editor.setTheme(theme);
 
-  const r: Riquadro = { id, root, tabsEl, editorEl, previewEl, vistaEl, editor, mostrato: null };
-  riquadri.set(id, r);
+  const r: Pane = { id, root, tabsEl, editorEl, previewEl, viewEl, editor, shown: null };
+  panes.set(id, r);
   return r;
 }
 
 /// Disegna la striscia delle tab di un riquadro.
-function disegnaTab(r: Riquadro, tabs: Tab[], active: number): void {
+function drawTab(r: Pane, tabs: Tab[], active: number): void {
   r.tabsEl.replaceChildren(
     ...tabs.map((t0, i) => {
       const tab = document.createElement("button");
@@ -710,40 +710,40 @@ function disegnaTab(r: Riquadro, tabs: Tab[], active: number): void {
       // Il `title` di una tab di documento è il **path intero**, perché due note
       // omonime in cartelle diverse sono il caso in cui il nome non basta. Una
       // view non ha un path: il suo titolo è già tutto ciò che c'è da sapere.
-      tab.title = t0.k === "doc" ? t0.doc : nomeTab(t0);
+      tab.title = t0.k === "doc" ? t0.doc : nameTab(t0);
 
-      const nome = document.createElement("span");
-      nome.className = "tab-name";
-      nome.textContent = nomeTab(t0);
+      const name = document.createElement("span");
+      name.className = "tab-name";
+      name.textContent = nameTab(t0);
       // Il pallino del non salvato: è l'unica cosa che dica, guardando una tab
       // che non è quella davanti, che lì dentro c'è del lavoro in coda. Una view
       // non ha un buffer, quindi non si sporca.
       if (t0.k === "doc" && buffers.get(t0.doc)?.dirty) tab.classList.add("dirty");
       if (t0.k === "view") tab.classList.add("tab-view");
 
-      const chiudi = document.createElement("span");
-      chiudi.className = "tab-close";
-      chiudi.textContent = "×";
-      chiudi.title = t("app.close");
-      chiudi.addEventListener("mousedown", (e) => {
+      const close = document.createElement("span");
+      close.className = "tab-close";
+      close.textContent = "×";
+      close.title = t("app.close");
+      close.addEventListener("mousedown", (e) => {
         // `stopPropagation` o il click attiverebbe la tab che si sta chiudendo,
         // caricando un documento un istante prima di toglierlo.
         e.stopPropagation();
         e.preventDefault();
-        chiudiTab(r.id, i);
-        void congeda(r.id, t0);
+        closeTab(r.id, i);
+        void releaseTab(r.id, t0);
       });
 
-      tab.append(nome, chiudi);
-      tab.addEventListener("click", () => attivaTab(r.id, i));
+      tab.append(name, close);
+      tab.addEventListener("click", () => activateTab(r.id, i));
       return tab;
     }),
   );
   r.tabsEl.hidden = tabs.length === 0;
-  const aperta = active >= 0 ? nomeTab(tabs[active]) : null;
+  const open = active >= 0 ? nameTab(tabs[active]) : null;
   r.root.setAttribute(
     "aria-label",
-    aperta ? t("pane.named", { name: aperta }) : t("pane.empty"),
+    open ? t("pane.named", { name: open }) : t("pane.empty"),
   );
 }
 
@@ -754,34 +754,34 @@ function disegnaTab(r: Riquadro, tabs: Tab[], active: number): void {
 /// view non è (più) dichiarata — un bundle spento fra due avvii, con la tab
 /// rimasta nel file della macchina — resta il suo id: è brutto e non mente, che
 /// è l'ordine giusto delle due cose.
-function nomeTab(tab: Tab): string {
-  return tab.k === "doc" ? titolo(tab.doc) : (viewPrincipale(tab.view)?.title ?? tab.view);
+function nameTab(tab: Tab): string {
+  return tab.k === "doc" ? docTitle(tab.doc) : (primaryView(tab.view)?.title ?? tab.view);
 }
 
 /// Il nome di una nota come si legge su una tab: l'ultimo pezzo del path, senza
 /// estensione. Il path intero resta nel `title`, perché due note omonime in due
 /// cartelle sono il caso in cui la tab da sola non basta.
-function titolo(doc: string): string {
+function docTitle(doc: string): string {
   const base = doc.split("/").pop() ?? doc;
-  const punto = base.lastIndexOf(".");
-  return punto > 0 ? base.slice(0, punto) : base;
+  const point = base.lastIndexOf(".");
+  return point > 0 ? base.slice(0, point) : base;
 }
 
 /// Mette in un riquadro ciò che la sua tab attiva dice, se non c'è già.
 ///
 /// Le due specie di tab accendono due superfici diverse dello stesso riquadro, e
-/// il ramo che le distingue sta **qui e basta**: da `disegna` in giù nessuno sa
+/// il ramo che le distingue sta **qui e basta**: da `render` in giù nessuno sa
 /// che esistano due specie, e chi cambia tab non deve dire quale.
-async function mostra(r: Riquadro, tab: Tab | null): Promise<void> {
-  const cambiata = !r.mostrato || !tab || !stessaTab(r.mostrato, tab);
+async function show(r: Pane, tab: Tab | null): Promise<void> {
+  const changed = !r.shown || !tab || !sameTab(r.shown, tab);
   // Una view che se ne va porta con sé il suo pannello: senza, resterebbe
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
-  if (cambiata && r.mostrato?.k === "view") smontaVistaDalRiquadro(r.mostrato.view, r.id);
-  r.mostrato = tab;
+  if (changed && r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
+  r.shown = tab;
   r.root.classList.toggle("con-vista", tab?.k === "view");
 
   if (tab?.k === "view") {
-    // **Non condizionata a `cambiata`**, ed è voluto: `montaVistaInRiquadro` è
+    // **Non condizionata a `cambiata`**, ed è voluto: `mountViewInPane` è
     // idempotente, e chiamarla a ogni giro è ciò che rimette in piedi le view
     // dei riquadri quando `mountDeclaredViews` azzera tutto per un vault nuovo.
     // Con un editor questo giro costerebbe cursore e cronologia; con una view
@@ -789,17 +789,17 @@ async function mostra(r: Riquadro, tab: Tab | null): Promise<void> {
     // farebbe da sé al primo evento.
     r.editor.setDoc("");
     clearPreview(r.previewEl);
-    await montaVistaInRiquadro(tab.view, r.id, r.vistaEl);
+    await mountViewInPane(tab.view, r.id, r.viewEl);
     return;
   }
-  if (!cambiata) return;
+  if (!changed) return;
   if (!tab) {
     r.editor.setDoc("");
     clearPreview(r.previewEl);
     return;
   }
-  r.editor.setDoc(await leggiBuffer(tab.doc));
-  await ridisegnaLettura(tab.doc);
+  r.editor.setDoc(await readBuffer(tab.doc));
+  await redrawReading(tab.doc);
 }
 
 /// Il testo di un documento: dal buffer se qualcuno lo tiene già aperto, dal
@@ -810,16 +810,16 @@ async function mostra(r: Riquadro, tab: Tab | null): Promise<void> {
 /// su disco. L'alternativa — rileggere sempre dal disco — darebbe due riquadri
 /// che mostrano due testi diversi dello stesso documento, che è esattamente ciò
 /// che questa decisione esiste per non avere.
-async function leggiBuffer(doc: string): Promise<string> {
-  const gia = buffers.get(doc);
-  if (gia) return gia.text;
+async function readBuffer(doc: string): Promise<string> {
+  const already = buffers.get(doc);
+  if (already) return already.text;
   const { text, revision } = await api.readDocument(doc);
   buffers.set(doc, {
     text,
     dirty: false,
-    esito: "ok",
-    echi: 0,
-    coda: new Coda(),
+    result: "ok",
+    echoes: 0,
+    queue: new Queue(),
     base: { kind: "descends_from", value: revision },
   });
   return text;
@@ -827,11 +827,11 @@ async function leggiBuffer(doc: string): Promise<string> {
 
 /// Ridisegna la superficie di lettura di ogni riquadro che mostra questo
 /// documento **ed è in Lettura**.
-async function ridisegnaLettura(doc: string): Promise<void> {
+async function redrawReading(doc: string): Promise<void> {
   await Promise.all(
-    paneConDoc(doc).map(async (id) => {
-      const r = riquadri.get(id);
-      if (!r || pane(id)?.mode !== "reading" || docAttivo(id) !== doc) return;
+    panesWithDoc(doc).map(async (id) => {
+      const r = panes.get(id);
+      if (!r || paneState(id)?.mode !== "reading" || activeDoc(id) !== doc) return;
       await updatePreview(r.previewEl, doc);
     }),
   );
@@ -839,15 +839,15 @@ async function ridisegnaLettura(doc: string): Promise<void> {
 
 /// Il commutatore in testata riflette il riquadro col **fuoco**: è di lui che si
 /// sta parlando, ed è di lui che si cambia la modalità.
-function aggiornaCommutatore(): void {
-  const mode = paneAttivo().mode;
+function updateToggle(): void {
+  const mode = activePane().mode;
   for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
-    const scelta = b.dataset.mode === mode;
+    const choice = b.dataset.mode === mode;
     // Quale modalità è accesa lo diceva solo lo sfondo. `aria-pressed` lo dice
     // a chi non lo vede — ed è l'informazione che serve *prima* di premere, non
     // dopo: senza, i tre pulsanti sono tre comandi indistinguibili. Da quando
     // la pelle lo legge, è anche l'unico posto in cui la scelta sta scritta.
-    b.setAttribute("aria-pressed", String(scelta));
+    b.setAttribute("aria-pressed", String(choice));
   }
 }
 
@@ -867,42 +867,42 @@ function aggiornaCommutatore(): void {
 ///
 /// Le bozze **superate** — il disco contiene già quel testo, cioè il caso
 /// normale dopo una chiusura ordinata — non arrivano fin qui: le toglie
-/// `daRecuperare`.
+/// `toRecover`.
 ///
 /// Il ricongiungimento ha una condizione di **identità**: la bozza torna nel
-/// suo documento solo se il buffer che c'è già non è sporco. Quando `recuperaBozze`
-/// corre, `sincronizza` ha appena letto dal disco le tab ripristinate dal layout —
+/// suo documento solo se il buffer che c'è già non è sporco. Quando `recoverDrafts`
+/// corre, `synchronize` ha appena letto dal disco le tab ripristinate dal layout —
 /// buffer **puliti**, cioè la copia più *vecchia* fra le due — e la bozza deve
 /// rientrare sopra di loro. Un buffer sporco invece è un testo battuto dopo, in
 /// questa sessione: un'identità diversa, e la bozza resta orfana sul disco.
 ///
 /// Il rientro non si ferma al buffer: chi arrivava già a schermo leggeva il
-/// disco — la tab ripristinata dal layout, che `sincronizza` ha appena
+/// disco — la tab ripristinata dal layout, che `synchronize` ha appena
 /// disegnato — e la bozza è più nuova di lui. L'editor, il pallino sulla tab,
 /// la barra di stato e la lettura si portano con lei, o la prima battuta,
 /// riscritta sopra il testo vecchio che si vede, coprirebbe il recupero senza
 /// che nessuno l'abbia mai visto.
-export async function recuperaBozze(): Promise<number> {
-  let bozze: DraftInfo[];
+export async function recoverDrafts(): Promise<number> {
+  let drafts: DraftInfo[];
   try {
-    bozze = daRecuperare(await bozzeNonSalvate());
+    drafts = toRecover(await unsavedDrafts());
   } catch {
     // Un recupero che non parte non deve impedire di aprire il vault: è una
     // rete di sicurezza, e una rete che blocca la porta è peggio di nessuna
     // rete. Ciò che non si è letto lo dice il rapporto diagnostico.
     return 0;
   }
-  const rientrate = ricongiungiBozze(bozze, buffers);
+  const rejoined = rejoinDrafts(drafts, buffers);
   // Chi arrivava già a schermo leggeva il disco **prima** del recupero — la
-  // tab ripristinata dal layout, che `sincronizza` ha appena disegnato — e la
+  // tab ripristinata dal layout, che `synchronize` ha appena disegnato — e la
   // bozza è più nuova di lui: le superfici vanno portate con lei, o la prima
   // battuta, riscritta sopra il testo vecchio che si vede, coprirebbe il
   // recupero senza che nessuno l'abbia mai visto.
-  for (const b of rientrate) {
-    notify(`${b.doc}: ${t(CHIAVE_CASO[casoDi(b)])}`, "info");
-    for (const paneId of paneConDoc(b.doc)) {
-      const r = riquadri.get(paneId);
-      if (r && r.mostrato?.k === "doc" && r.mostrato.doc === b.doc) {
+  for (const b of rejoined) {
+    notify(`${b.doc}: ${t(CASE_KEY[caseOf(b)])}`, "info");
+    for (const paneId of panesWithDoc(b.doc)) {
+      const r = panes.get(paneId);
+      if (r && r.shown?.k === "doc" && r.shown.doc === b.doc) {
         r.editor.syncDoc(b.text);
       }
     }
@@ -910,35 +910,35 @@ export async function recuperaBozze(): Promise<number> {
   // Il pallino sulla tab diceva «pulito» — lo si è disegnato prima del
   // recupero — e il buffer rientrato è sporco: si ridisegna, come fa `scritto`
   // quando una battuta sporca un buffer.
-  for (const b of rientrate) {
-    for (const paneId of paneConDoc(b.doc)) {
-      const r = riquadri.get(paneId);
-      const p = pane(paneId);
-      if (r && p) disegnaTab(r, p.tabs, p.active);
+  for (const b of rejoined) {
+    for (const paneId of panesWithDoc(b.doc)) {
+      const r = panes.get(paneId);
+      const p = paneState(paneId);
+      if (r && p) drawTab(r, p.tabs, p.active);
     }
   }
-  disegnaSalvataggio();
+  drawSave();
   // E la lettura, che mostrava il disco, mostra il testo rientrato.
-  await Promise.all(rientrate.map((b) => ridisegnaLettura(b.doc)));
+  await Promise.all(rejoined.map((b) => redrawReading(b.doc)));
   // Il conto dice quante sono **rientrate davvero**, non quante erano in fila:
   // la notifica dice «è stato ritrovato, aprile per decidere», e una bozza
   // saltata — il buffer sporco che la precede — non è ritrovata e non ha
   // nessun documento da aprire.
-  return rientrate.length;
+  return rejoined.length;
 }
 
 // --- aprire e chiudere ------------------------------------------------------
 
 /// Apre un documento nel riquadro col fuoco.
 export async function openDocument(id: string): Promise<void> {
-  await codaDelleAperture.accoda(async () => {
+  await openQueue.enqueue(async () => {
     // Cambio documento: prima si mette in salvo ciò che è appeso al debounce, così
     // nessuna modifica resta indietro. Tutti i buffer e non solo quello che si sta
     // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
     // azioni di view.
     await flushPendingSave();
-    apriIn(layout.focus, id);
-    await sincronizza();
+    openIn(layout.focus, id);
+    await synchronize();
     // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
     // selezione sarebbe quello del documento precedente.
     await publishContext();
@@ -954,8 +954,8 @@ export async function openDocument(id: string): Promise<void> {
 /// aveva un riquadro solo.
 export function closeDocument(id: string | null = state.currentDoc): void {
   if (!id) return;
-  dimentica(id);
-  togliDappertutto(id);
+  forget(id);
+  removeEverywhere(id);
   // Il kernel svuota già il documento del contesto in `remove_document`: qui
   // si ripubblica per allineare i due stati **e** per farsi dire quali view
   // ridisegnare, che è cosa che il kernel non fa da sé.
@@ -964,7 +964,7 @@ export function closeDocument(id: string | null = state.currentDoc): void {
 
 /// Il documento è aperto in **qualche** riquadro?
 export function isOpen(id: string): boolean {
-  return paneConDoc(id).length > 0;
+  return panesWithDoc(id).length > 0;
 }
 
 /// Risolve un wikilink e lo apre; se non risolve, crea la nota che manca col
@@ -983,7 +983,7 @@ export function isOpen(id: string): boolean {
 /// `[[#Sezione]]` non nomina una pagina, nomina *questa*, e chi arrivava qui
 /// usciva su un `if (!page) return` — cioè un click che non faceva niente e non
 /// diceva perché. Il documento corrente non si rilegge dallo stato: lo dice
-/// `docAttivo()`, che è il proprietario di quella domanda (il riquadro col
+/// `activeDoc()`, che è il proprietario di quella domanda (il riquadro col
 /// fuoco, la sua tab attiva). A saperne fare qualcosa è il kernel, dove la
 /// regola vale anche per chi non è questa shell.
 export async function openWikilink(
@@ -991,9 +991,9 @@ export async function openWikilink(
   heading?: string,
   block?: string,
 ): Promise<void> {
-  const target = await riferimentoRisolto(
+  const target = await resolvedReference(
     { kind: "wiki", value: { page, heading: heading ?? null, block: block ?? null } },
-    docAttivo() ?? undefined,
+    activeDoc() ?? undefined,
   );
   if (target) {
     await openDocument(target.doc);
@@ -1007,8 +1007,8 @@ export async function openWikilink(
   // dare alla nota che si creerebbe, e crearla col nome vuoto sarebbe la
   // risposta peggiore di tutte.
   if (!page) return;
-  const creata = await createNote(page);
-  if (creata) await openDocument(creata);
+  const created = await createNote(page);
+  if (created) await openDocument(created);
 }
 
 // --- salvataggio ------------------------------------------------------------
@@ -1020,8 +1020,8 @@ export async function openWikilink(
 
 /// Qualcuno ha scritto in un riquadro: il buffer è la nuova verità, gli altri
 /// editor sullo stesso documento la ricevono, e il salvataggio si mette in coda.
-function scritto(paneId: string, text: string): void {
-  const doc = docAttivo(paneId);
+function written(paneId: string, text: string): void {
+  const doc = activeDoc(paneId);
   if (!doc) return;
   // Un buffer che nasce qui non ha mai letto il disco — è il testo che sta
   // arrivando dall'editor su un documento che nessuno aveva aperto — quindi non
@@ -1029,28 +1029,28 @@ function scritto(paneId: string, text: string): void {
   const buf = buffers.get(doc) ?? {
     text,
     dirty: false,
-    esito: "ok" as Esito,
-    echi: 0,
-    coda: new Coda(),
-    base: DETTA,
+    result: "ok" as Outcome,
+    echoes: 0,
+    queue: new Queue(),
+    base: DICTATED,
   };
   buf.text = text;
   buf.dirty = true;
   buffers.set(doc, buf);
-  for (const altro of paneConDoc(doc)) {
-    if (altro === paneId) continue;
-    const r = riquadri.get(altro);
-    if (r && r.mostrato?.k === "doc" && r.mostrato.doc === doc) r.editor.syncDoc(text);
+  for (const other of panesWithDoc(doc)) {
+    if (other === paneId) continue;
+    const r = panes.get(other);
+    if (r && r.shown?.k === "doc" && r.shown.doc === doc) r.editor.syncDoc(text);
   }
   // Il pallino del non salvato compare adesso, su ogni tab che mostra questa
   // nota. Ridisegnare le tab a ogni battuta costa poco — sono N pulsanti — e
   // l'alternativa sarebbe un secondo posto che sa quando un buffer si sporca.
-  for (const id of paneConDoc(doc)) {
-    const r = riquadri.get(id);
-    const p = pane(id);
-    if (r && p) disegnaTab(r, p.tabs, p.active);
+  for (const id of panesWithDoc(doc)) {
+    const r = panes.get(id);
+    const p = paneState(id);
+    if (r && p) drawTab(r, p.tabs, p.active);
   }
-  disegnaSalvataggio();
+  drawSave();
   scheduleSave(doc);
   scheduleDraft(doc);
 }
@@ -1071,7 +1071,7 @@ function scritto(paneId: string, text: string): void {
 const DRAFT_MS = 1_000;
 
 function scheduleDraft(doc: string): void {
-  if (sospesi.has(doc)) return;
+  if (suspended.has(doc)) return;
   const buf = buffers.get(doc);
   if (!buf) return;
   window.clearTimeout(buf.draftTimer);
@@ -1085,7 +1085,7 @@ function scheduleDraft(doc: string): void {
 /// avvisi — che è il difetto che `consumaCambioSotto` esiste per non avere. Una
 /// volta però va detta, perché una rete di sicurezza che non c'è **si distingue
 /// da una che non è servita solo quando è troppo tardi** (difetto 0209).
-let bozzaCieca = false;
+let blindDraft = false;
 
 /// Mette la bozza sul disco.
 ///
@@ -1104,7 +1104,7 @@ async function writeDraft(doc: string): Promise<void> {
   // vincere su un `save_draft` in volo e lasciare una bozza stantia che al
   // riavvio sopravvive al buffer pulito. Uno sbaglio non avvelena la fila: a
   // tenerlo è la `Coda`, non questa funzione.
-  await buf.coda.accoda(async () => {
+  await buf.queue.enqueue(async () => {
     // Riletto dentro la coda: fra l'accodamento e il turno il documento può
     // essere stato dimenticato, o pulito da un salvataggio riuscito.
     const b = buffers.get(doc);
@@ -1122,10 +1122,10 @@ async function writeDraft(doc: string): Promise<void> {
       );
       // Tornata a scrivere: il silenzio riparte da capo, così una share che va e
       // viene lo dice ogni volta che se ne va invece di dirlo la prima e basta.
-      bozzaCieca = false;
+      blindDraft = false;
     } catch {
-      if (!bozzaCieca) {
-        bozzaCieca = true;
+      if (!blindDraft) {
+        blindDraft = true;
         notify(t("draft.blind"), "guasto");
       }
     }
@@ -1136,7 +1136,7 @@ async function writeDraft(doc: string): Promise<void> {
 async function dropDraft(doc: string): Promise<void> {
   const buf = buffers.get(doc);
   if (buf) window.clearTimeout(buf.draftTimer);
-  const togli = async (): Promise<void> => {
+  const remove = async (): Promise<void> => {
     try {
       await api.discardDraft(doc);
     } catch {
@@ -1146,7 +1146,7 @@ async function dropDraft(doc: string): Promise<void> {
   // C'è un buffer → la stessa fila di `writeDraft` e del salvataggio: il
   // discard va dietro un `save_draft` in volo, non davanti. Non c'è → niente
   // coda, ma nemmeno un salvataggio in volo da ordinare: il discard va dritto.
-  await (buf ? buf.coda.accoda(togli) : togli());
+  await (buf ? buf.queue.enqueue(remove) : remove());
 }
 
 /// Lo stato del salvataggio **del documento che si sta guardando**, nella barra
@@ -1160,30 +1160,30 @@ async function dropDraft(doc: string): Promise<void> {
 ///
 /// Se la shell non ha quell'elemento — un test, un host che monta un pezzo solo
 /// — non succede niente: come per `notify`, il fatto non dipende dal suo disegno.
-function disegnaSalvataggio(): void {
+function drawSave(): void {
   const el = document.getElementById("save-state");
   if (!el) return;
-  const doc = docAttivo();
-  const stato = doc ? statoDi(buffers.get(doc)) : null;
-  if (!stato) {
+  const doc = activeDoc();
+  const state = doc ? stateOf(buffers.get(doc)) : null;
+  if (!state) {
     el.textContent = "";
-    delete el.dataset.stato;
+    delete el.dataset.state;
     return;
   }
-  el.dataset.stato = stato;
-  el.textContent = t(CHIAVE_STATO[stato]);
+  el.dataset.state = state;
+  el.textContent = t(STATE_KEY[state]);
 }
 
-const CHIAVE_STATO = {
-  salvato: "save.saved",
-  in_corso: "save.saving",
-  non_salvato: "save.unsaved",
-  fallito: "save.failed",
-  conflitto: "save.conflitto",
+const STATE_KEY = {
+  "salvato": "save.saved",
+  "in_corso": "save.saving",
+  "non_salvato": "save.unsaved",
+  "fallito": "save.failed",
+  "conflitto": "save.conflitto",
 } as const;
 
 function scheduleSave(doc: string): void {
-  if (sospesi.has(doc)) return;
+  if (suspended.has(doc)) return;
   const buf = buffers.get(doc);
   if (!buf) return;
   window.clearTimeout(buf.timer);
@@ -1205,8 +1205,8 @@ function scheduleSave(doc: string): void {
 /// Una precondizione di cui non si legge l'esito è una decorazione: chi chiede
 /// «mettimi in salvo» deve poter sapere che non è successo.
 export async function flushPendingSave(): Promise<string[]> {
-  const esiti = await Promise.all([...buffers.keys()].map(flushDoc));
-  return esiti.filter((doc): doc is string => doc !== null);
+  const outcomes = await Promise.all([...buffers.keys()].map(flushDoc));
+  return outcomes.filter((doc): doc is string => doc !== null);
 }
 
 /// Il documento, se dopo il tentativo è **ancora** sporco; `null` se è a posto.
@@ -1216,7 +1216,7 @@ async function flushDoc(doc: string): Promise<string | null> {
   window.clearTimeout(buf.timer);
   await saveDoc(doc);
   // Riletto dalla mappa: fra l'attesa e adesso il buffer può essere stato
-  // congedato, e un buffer che non c'è più non è un lavoro rimasto indietro.
+  // releaseTabto, e un buffer che non c'è più non è un lavoro rimasto indietro.
   return buffers.get(doc)?.dirty === true ? doc : null;
 }
 
@@ -1234,13 +1234,13 @@ async function flushDoc(doc: string): Promise<string | null> {
 /// «dove finisce ciò che ho battuto». Se il disco rifiuta — vault in sola
 /// lettura, share di rete caduta — la battuta resta comunque nella bozza, cioè
 /// nel posto da cui il riavvio la ripesca (§15.2).
-export async function mettiInSalvoPrimaDiChiudere(): Promise<void> {
+export async function flushBeforeClose(): Promise<void> {
   for (const buf of buffers.values()) window.clearTimeout(buf.draftTimer);
-  const appesi = await flushPendingSave();
+  const pending = await flushPendingSave();
   // In fila e non insieme, perché sono l'ultima cosa che questa finestra fa: la
   // chiusura aspetta questa promessa, e un `Promise.all` che ne perde una a
   // metà lascerebbe l'ultima bozza a metà file.
-  for (const doc of appesi) await writeDraft(doc);
+  for (const doc of pending) await writeDraft(doc);
 }
 
 /// Tiene fermi **i due ritardi** di quel documento — quelli già in attesa, che
@@ -1279,7 +1279,7 @@ export async function mettiInSalvoPrimaDiChiudere(): Promise<void> {
 /// nome: una rinomina dentro una conversione, un'importazione mentre una
 /// modale è aperta. Un insieme costa una riga e li fa nascere giusti.
 export function suspendSave(id: string): boolean {
-  sospesi.add(id);
+  suspended.add(id);
   const buf = buffers.get(id);
   if (!buf?.dirty) return false;
   window.clearTimeout(buf.timer);
@@ -1287,7 +1287,7 @@ export function suspendSave(id: string): boolean {
   return true;
 }
 
-const sospesi = new Set<string>();
+const suspended = new Set<string>();
 
 /// Scioglie il fermo e rimette in coda i due ritardi, se il buffer è ancora
 /// sporco.
@@ -1296,7 +1296,7 @@ const sospesi = new Set<string>();
 /// programmerebbe una scrittura che nessuno aveva in attesa, e su un buffer
 /// pulito si scriverebbe sul disco un testo che il disco ha già.
 export function resumeSave(id: string): void {
-  if (!sospesi.delete(id)) return;
+  if (!suspended.delete(id)) return;
   if (!buffers.get(id)?.dirty) return;
   scheduleSave(id);
   scheduleDraft(id);
@@ -1320,7 +1320,7 @@ export function resumeSave(id: string): void {
 /// non arriverà nessun evento, e allora lo scioglie il `catch`: un buffer tenuto
 /// fermo per sempre sarebbe il testo dell'utente che non raggiunge più il disco,
 /// cioè un danno peggiore di quello che si sta togliendo.
-export async function rinominaTenendoFermoIlBuffer(from: string, to: string): Promise<void> {
+export async function renameKeepingBuffer(from: string, to: string): Promise<void> {
   suspendSave(from);
   try {
     await renameNote(from, to);
@@ -1335,8 +1335,8 @@ export async function rinominaTenendoFermoIlBuffer(from: string, to: string): Pr
 /// La chiama chi ha appena cestinato una nota **da qui**, e solo lui. Una nota
 /// che sparisce da **fuori** non passa di qua apposta: lì la bozza è la rete
 /// tesa per quel caso, e il recupero ha un caso suo che si chiama `orfana`.
-export async function scartaLaBozzaDi(doc: string): Promise<void> {
-  sospesi.delete(doc);
+export async function discardDraft(doc: string): Promise<void> {
+  suspended.delete(doc);
   await dropDraft(doc);
 }
 
@@ -1373,10 +1373,10 @@ async function saveDoc(doc: string): Promise<void> {
   // Una corsa qui sarebbe il rimedio sbagliato: il testo del secondo
   // salvataggio è ciò che l'utente ha scritto, e buttarlo perché ne è partito
   // un altro vuol dire perdere delle battute. Va in fila, non nel cestino.
-  await buf.coda.accoda(() => scriviBuffer(doc));
+  await buf.queue.enqueue(() => writeBuffer(doc));
 }
 
-async function scriviBuffer(doc: string): Promise<void> {
+async function writeBuffer(doc: string): Promise<void> {
   // Riletto dentro la coda e non catturato fuori: fra l'accodamento e il turno
   // il documento può essere stato dimenticato (chiuso, rinominato, cancellato),
   // e scrivere su un buffer staccato dalla mappa vuol dire scrivere in un
@@ -1384,15 +1384,15 @@ async function scriviBuffer(doc: string): Promise<void> {
   const buf = buffers.get(doc);
   if (!buf?.dirty) return;
   const text = buf.text;
-  buf.esito = "in_corso";
-  disegnaSalvataggio();
-  let prodotta: string;
+  buf.result = "in_corso";
+  drawSave();
+  let produced: string;
   try {
     // La base viaggia con la scrittura: se il file non è più quello da cui
     // questo buffer è partito, il kernel risponde `conflict` e **non scrive
     // niente** (§18.1).
     //
-    // L'eco lo conta `scriviContandoEco`, e lo conta **prima** di chiamare: il
+    // L'eco lo conta `writeCountingEcho`, e lo conta **prima** di chiamare: il
     // `document_changed` che questa scrittura produce lo emette il kernel
     // *dentro* la scrittura, cioè prima che questa `await` risolva. Contarlo
     // qui sotto voleva dire arrivare tardi ogni volta che l'evento vinceva la
@@ -1400,24 +1400,24 @@ async function scriviBuffer(doc: string): Promise<void> {
     // scritto noi. I due rami di `catch` qui sotto non devono sottrarre niente:
     // la sottrazione è dentro quella funzione, che è l'unico posto che non si
     // può dimenticare di aggiornare aggiungendo un ramo.
-    prodotta = await scriviContandoEco(buf, () => api.writeDocument(doc, text, buf.base));
+    produced = await writeCountingEcho(buf, () => api.writeDocument(doc, text, buf.base));
   } catch (e) {
     // Un conflitto non è un disco pieno, ed è la ragione per cui questo ramo è
     // suo (0041 ha reso la specie interrogabile proprio per poterlo fare). Il
     // secondo si riprova — e la battuta dopo ci riprova da sola. Il primo no:
     // riprovare è la sovrascrittura che la guardia ha appena impedito, e ciò
     // che manca non è un tentativo ma una decisione, che è dell'utente.
-    if (esitoDelFallimento(e) === "conflitto") {
-      buf.esito = "conflitto";
+    if (failureOutcome(e) === "conflitto") {
+      buf.result = "conflitto";
       notify(t("document.save_conflict", { doc }), "guasto");
       // Come per il fallimento: il testo è solo in RAM finché la decisione non
       // è presa, e la rete si stende adesso invece che al debounce.
       window.clearTimeout(buf.draftTimer);
       void writeDraft(doc);
-      disegnaSalvataggio();
+      drawSave();
       return;
     }
-    buf.esito = "fallito";
+    buf.result = "fallito";
     notify(t("document.save_failed", { doc, reason: errorText(e) }), "guasto");
     // **Qui la bozza conta più che altrove**, ed è il caso per cui esiste: il
     // disco ha appena rifiutato questo testo, quindi l'unica copia è in RAM.
@@ -1426,15 +1426,15 @@ async function scriviBuffer(doc: string): Promise<void> {
     void writeDraft(doc);
     // Il buffer resta sporco: è la verità del documento, e il tentativo
     // successivo — la battuta dopo, o il flush di una rinomina — riparte da qui.
-    disegnaSalvataggio();
+    drawSave();
     return;
   }
-  buf.esito = "ok";
+  buf.result = "ok";
   // Il disco adesso è questo testo: la scrittura dopo riparte da qui. È ciò che
   // rende la guardia una catena invece di un controllo alla prima battuta —
   // senza, il secondo salvataggio nominerebbe una base ormai vecchia e
   // fallirebbe contro sé stesso.
-  buf.base = { kind: "descends_from", value: prodotta };
+  buf.base = { kind: "descends_from", value: produced };
   // Pulito solo se nel frattempo non è arrivato altro input: `dirty` è stato
   // rimesso a true da `scritto` se l'utente ha continuato a scrivere.
   if (buf.text === text) {
@@ -1444,17 +1444,17 @@ async function scriviBuffer(doc: string): Promise<void> {
     // bozza che vale ancora.
     void dropDraft(doc);
   }
-  disegnaSalvataggio();
-  for (const id of paneConDoc(doc)) {
-    const r = riquadri.get(id);
-    const p = pane(id);
-    if (r && p) disegnaTab(r, p.tabs, p.active);
+  drawSave();
+  for (const id of panesWithDoc(doc)) {
+    const r = panes.get(id);
+    const p = paneState(id);
+    if (r && p) drawTab(r, p.tabs, p.active);
   }
   // Il sorgente sul disco è ora quello del buffer: la selezione torna
   // posizionabile, e il kernel — che l'aveva lasciata cadere alla scrittura —
   // deve risaperlo. È l'altra metà della regola dello span.
   await publishContext();
-  await ridisegnaLettura(doc);
+  await redrawReading(doc);
 }
 
 /// Ricarica un documento dal disco, ma solo se non ha modifiche non salvate.
@@ -1482,14 +1482,14 @@ async function scriviBuffer(doc: string): Promise<void> {
 /// §20.4 l'ha portata sullo schermo tre volte di fila. Un avviso che compare
 /// quando non è successo niente non è un avviso in più: è ciò che insegna a
 /// ignorare gli altri tredici.
-function avvisaSeIlBufferCopre(id: string, origine: Origin): void {
+function warnIfBufferCovers(id: string, source: Origin): void {
   const buf = buffers.get(id);
-  // Il conto degli echi non si tocca da qui: `consumaCambioSotto` lo consuma
+  // Il conto degli echoes non si tocca da qui: `consumaCambioSotto` lo consuma
   // decidendo, perché la nascita e la morte di quell'eco sono due eventi dello
   // stesso conto e stanno da chi lo possiede. Questa funzione decide solo se e
   // come **parlare**, che è ciò che sa fare — e ciò che il modulo dello stato,
   // che non ha un DOM, non saprebbe.
-  switch (consumaCambioSotto(buf, origine)) {
+  switch (consumeUnderChange(buf, source)) {
     case "muto":
       return;
     case "eco":
@@ -1513,21 +1513,21 @@ async function reloadIfClean(id: string): Promise<void> {
   const buf = buffers.get(id);
   if (buf?.dirty) return;
   const { text: source, revision } = await api.readDocument(id);
-  const attuale = buffers.get(id);
-  if (!attuale || attuale.dirty) return;
+  const current = buffers.get(id);
+  if (!current || current.dirty) return;
   // La base segue il testo, e si aggiorna **prima** dell'uscita anticipata: un
   // buffer pulito il cui testo coincide già col disco non ha niente da
   // ricaricare, ma può benissimo non sapere da cosa discende — ed è il caso di
   // chi ha appena scelto di sovrascrivere comunque.
-  attuale.base = { kind: "descends_from", value: revision };
+  current.base = { kind: "descends_from", value: revision };
   // Evita il reset del cursore quando l'evento è l'eco del nostro salvataggio.
-  if (attuale.text === source) return;
-  attuale.text = source;
-  for (const paneId of paneConDoc(id)) {
-    const r = riquadri.get(paneId);
+  if (current.text === source) return;
+  current.text = source;
+  for (const paneId of panesWithDoc(id)) {
+    const r = panes.get(paneId);
     // `syncDoc` e non `setDoc`: il documento è lo stesso, è cambiato il testo
     // sotto — e chi lo sta guardando non deve perdere il punto in cui era.
-    if (r && r.mostrato?.k === "doc" && r.mostrato.doc === id) r.editor.syncDoc(source);
+    if (r && r.shown?.k === "doc" && r.shown.doc === id) r.editor.syncDoc(source);
   }
 }
 
@@ -1539,7 +1539,7 @@ export async function reloadCurrent(): Promise<void> {
   const buf = buffers.get(doc);
   if (buf) buf.dirty = false;
   await reloadIfClean(doc);
-  await ridisegnaLettura(doc);
+  await redrawReading(doc);
 }
 
 // --- contesto di sessione (decisione 0007) ----------------------------------
@@ -1563,9 +1563,9 @@ export async function reloadCurrent(): Promise<void> {
 /// invece è sempre quello vero — ed è ciò che serve a contare le parole
 /// selezionate o a mandarle a un comando.
 function paneContext(): ViewContext {
-  const p = paneAttivo();
-  const doc = docAttivo();
-  const r = riquadri.get(layout.focus);
+  const p = activePane();
+  const doc = activeDoc();
+  const r = panes.get(layout.focus);
   const sel = r?.editor.selections();
   const inEditing = doc !== null && p.mode !== "reading" && sel !== undefined;
   const dirty = doc ? (buffers.get(doc)?.dirty ?? false) : false;
@@ -1630,13 +1630,13 @@ function scheduleContext(): void {
 /// rende utile la divisione: la nota di lato in Lettura mentre si scrive è la
 /// disposizione per cui si divide, e con una modalità globale non esisterebbe.
 export async function setMode(next: PaneMode): Promise<void> {
-  const doc = docAttivo();
+  const doc = activeDoc();
   // Il documento reso lo produce il kernel dal **sorgente salvato**: entrare in
   // lettura con del testo appeso al debounce mostrerebbe la nota di un minuto
   // fa. Si salva prima, e la lettura è sempre di ciò che si è scritto.
   if (next === "reading" && doc) await flushDoc(doc);
-  impostaModalita(layout.focus, next);
-  const r = riquadri.get(layout.focus);
+  setPaneMode(layout.focus, next);
+  const r = panes.get(layout.focus);
   if (r) {
     // Sorgente = la stessa configurazione senza la resa inline.
     r.editor.setLivePreview(next === "live_preview");
@@ -1651,11 +1651,11 @@ export async function setMode(next: PaneMode): Promise<void> {
 
 /// Porta la vista su un offset in byte UTF-8 del documento attivo.
 export function revealByteOffset(byteOffset: number): void {
-  riquadri.get(layout.focus)?.editor.revealByteOffset(byteOffset);
+  panes.get(layout.focus)?.editor.revealByteOffset(byteOffset);
 }
 
 export function focusEditor(): void {
-  riquadri.get(layout.focus)?.editor.focus();
+  panes.get(layout.focus)?.editor.focus();
 }
 
 /// Porta gli editor nell'altra luce (§12.4).
@@ -1665,7 +1665,7 @@ export function focusEditor(): void {
 /// *qualcuno* vuole essere avvisato. La luce si ricorda anche per i riquadri che
 /// non esistono ancora: uno nato dopo il cambio deve nascere già nella luce
 /// giusta, non correggersi al prossimo.
-export function setEditorTheme(t: Tema): void {
-  tema = t;
-  for (const r of riquadri.values()) r.editor.setTheme(t);
+export function setEditorTheme(t: Theme): void {
+  theme = t;
+  for (const r of panes.values()) r.editor.setTheme(t);
 }

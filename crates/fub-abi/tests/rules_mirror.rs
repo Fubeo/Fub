@@ -42,7 +42,7 @@ use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::rules::path_policy::{check, normalized, Naming};
-use fub_abi::rules::tasti;
+use fub_abi::rules::keys;
 use fub_abi::text::{ArgValue, Message, StringCatalog, Strings, Text};
 use fub_abi::Span;
 use serde_json::{json, Value};
@@ -61,10 +61,10 @@ fn page_name_cases() -> Vec<Value> {
         ".foo",
         "dir/.hidden.md",
         "dir/.gitignore",
-        "senza-ext",
-        "dir.con.punti/nota.md",
-        "finisce-con-punto.",
-        "Nota Lunga.md",
+        "no-ext",
+        "dir.with.dots/note.md",
+        "ends-with-dot.",
+        "Long Note.md",
     ]
     .into_iter()
     .map(|id| json!({"id": id, "out": DocId::new(id).page_name()}))
@@ -82,9 +82,9 @@ fn resolution_key_cases() -> Vec<Value> {
     [
         "Café",              // NFC
         "Cafe\u{0301}",      // NFD — la stessa parola per un umano
-        "  spazi attorno  ", // il trim
-        "MAIUSCOLO",
-        "Progetti/Alpha.md",
+        "  spaces around  ", // il trim
+        "UPPERCASE",
+        "Projects/Alpha.md",
         "ÅNGSTRÖM",     // il caso su lettere non ASCII
         "\u{212B}ngen", // il segno angstrom (NFC → Å)
         "già",
@@ -124,65 +124,65 @@ fn resolution_key_cases() -> Vec<Value> {
 /// `COM10` cominciano come `CON` e `COM1` e non lo sono, che è l'errore di chi
 /// implementa la regola con uno `startsWith`.
 fn name_fault_cases() -> Vec<Value> {
-    let nomi = [
+    let names = [
         // Il recinto: vale per entrambe le tolleranze.
-        "../fuori.md",
+        "../outside.md",
         "a/../b.md",
-        "./nota.md",
+        "./note.md",
         "a//b.md",
-        "/assoluto.md",
+        "/absolute.md",
         "",
         "   ",
         // La lettera di drive: su Windows `join` butta via la base, quindi il
         // recinto la rifiuta in entrambe le tolleranze. E i due casi che *non*
         // lo sono, o la regola diventerebbe «niente due punti».
-        "C:/Users/x/segreto.md",
-        "c:nota.md",
+        "C:/Users/x/secret.md",
+        "c:note.md",
         "C:",
-        "note/C:/dentro.md",
-        "CC:/dentro.md",
+        "note/C:/inside.md",
+        "CC:/inside.md",
         // Legittimi in entrambe.
-        "Progetti/Alpha.md",
-        "nota (1).md",
-        "Città è però — «così».md",
+        "Projects/Alpha.md",
+        "note (1).md",
+        "City is though — \"like\".md",
         "漢字のノート.md",
-        "nota..md",
+        "note..md",
         // Portabili no, esistenti sì: la coppia che dà senso alla voce.
         "CON.md",
         "con",
         "NUL.txt.md",
-        "Progetti/COM1.md",
+        "Projects/COM1.md",
         "LPT9.md",
-        "nota?.md",
+        "note?.md",
         "a:b.md",
         "a\\b.md",
-        "\"citata\".md",
+        "\"quoted\".md",
         "a*b.md",
         "a|b.md",
         "a<b>.md",
-        "nota\u{0}.md",
-        "nota\n.md",
-        "nota.",
-        "cartella./nota.md",
+        "note\u{0}.md",
+        "note\n.md",
+        "note.",
+        "folder./note.md",
         ".gitignore",
-        "Progetti/.nascosta.md",
+        "Projects/.hidden.md",
         // Lo spazio macchina, che il recinto guarda in entrambe le domande: è
         // il caso in cui le due gemelle divergerebbero in silenzio scrivendo
         // dentro `.fub/` da una parte e rifiutando dall'altra.
-        ".fub/roba.md",
+        ".fub/stuff.md",
         ".fub",
         ".fub/settings.json",
-        ".trash/Nota.2026-07-24T15-30-00.md",
-        "Progetti/.fub/nota.md",
+        ".trash/Note.2026-07-24T15-30-00.md",
+        "Projects/.fub/note.md",
         // E i quasi-spazio-macchina: cominciano come lui e non lo sono.
-        ".fubbo/nota.md",
-        "fub/nota.md",
-        "Progetti/trash/nota.md",
+        ".fubbo/note.md",
+        "fub/note.md",
+        "Projects/trash/note.md",
         // I quasi-device: cominciano come un device e non lo sono.
-        "CONtratto.md",
+        "CONtract.md",
         "Console.md",
         "COM10.md",
-        "NULLO.md",
+        "NULL.md",
         // La lunghezza, in byte e non in caratteri né in code unit.
         &"🌍".repeat(64),
         &"a".repeat(255),
@@ -194,21 +194,21 @@ fn name_fault_cases() -> Vec<Value> {
         // separatamente senza che nulla lo dica, e qui il costo non sarebbe un
         // nome che non si risolve ma un file scritto sul disco con un nome che
         // chi lo ha chiesto non ha chiesto.
-        " .nota.md",
+        " .note.md",
         " .gitignore",
         " CON.md",
-        "Progetti/ .nascosta.md",
-        "nota.md ",
-        " nota.md ",
-        "nota. ",
+        "Projects/ .hidden.md",
+        "note.md ",
+        " note.md ",
+        "note. ",
         " / ",
     ];
     let mut out = Vec::new();
-    for path in nomi {
-        for (etichetta, naming) in [("existing", Naming::Existing), ("new", Naming::New)] {
+    for path in names {
+        for (label, naming) in [("existing", Naming::Existing), ("new", Naming::New)] {
             out.push(json!({
                 "path": path,
-                "naming": etichetta,
+                "naming": label,
                 "out": check(path, naming).err().map(|f| f.tag()),
             }));
         }
@@ -229,12 +229,12 @@ fn normalized_name_cases() -> Vec<Value> {
     [
         "Café.md",            // NFC
         "Cafe\u{0301}.md",    // NFD, come lo scrive macOS
-        "  nota.md  ",        // il trim
-        "cartella / nota.md", // per segmento, non solo ai due estremi
-        "nota. ",             // lo spazio va, il punto resta
+        "  note.md  ",        // il trim
+        "folder / note.md",   // per segmento, non solo ai due estremi
+        "note. ",             // lo spazio va, il punto resta
         "ÅNGSTRÖM.md",
         "\u{212B}ngen.md", // il segno angstrom, che in NFC diventa Å
-        "Progetti/Città.md",
+        "Projects/City.md",
         "già.md",
         "",
     ]
@@ -283,7 +283,7 @@ fn topic_matches_cases() -> Vec<Value> {
         ("com.acme.tasks:board", "com.acme.tasks:board.moved"),
         ("com.acme.tasks:board", "com.acme.tasks:boards"),
         ("com.acme.tasks:done", "com.acme.tasks:done"),
-        ("", "chiunque:qualunque"),
+        ("", "anyone:anything"),
         ("fub", "fub:index.rebuilt"),
         ("fub:index", "fub:index.rebuilt"),
         ("fub:index", "fub:indexer.done"),
@@ -297,22 +297,22 @@ fn topic_matches_cases() -> Vec<Value> {
 
 fn folder_contains_cases() -> Vec<Value> {
     [
-        ("Progetti", "Progetti/Alpha.md"),
-        ("Progetti", "Progetti/2026/Alpha.md"),
-        ("Progetti/", "Progetti/Alpha.md"),
+        ("Projects", "Projects/Alpha.md"),
+        ("Projects", "Projects/2026/Alpha.md"),
+        ("Projects/", "Projects/Alpha.md"),
         // Gli slash di cortesia ai due capi: la stessa cartella scritta come la
         // scrive chi la incolla da un file manager e chi la pensa come un path
         // assoluto (difetto 0141).
-        ("/Progetti", "Progetti/Alpha.md"),
-        ("/Progetti/", "Progetti/Alpha.md"),
-        ("/Progetti/2026/", "Progetti/2027/Alpha.md"),
-        ("Progetti", "Progetti-vecchi/Alpha.md"),
-        ("Progetti", "Progetti"),
-        ("Progetti", "Alpha.md"),
+        ("/Projects", "Projects/Alpha.md"),
+        ("/Projects/", "Projects/Alpha.md"),
+        ("/Projects/2026/", "Projects/2027/Alpha.md"),
+        ("Projects", "Projects-old/Alpha.md"),
+        ("Projects", "Projects"),
+        ("Projects", "Alpha.md"),
         ("", "Alpha.md"),
-        ("/", "Progetti/Alpha.md"),
-        ("Progetti/2026", "Progetti/2026/Alpha.md"),
-        ("Progetti/2026", "Progetti/2027/Alpha.md"),
+        ("/", "Projects/Alpha.md"),
+        ("Projects/2026", "Projects/2026/Alpha.md"),
+        ("Projects/2026", "Projects/2027/Alpha.md"),
     ]
     .into_iter()
     .map(|(folder, id)| json!({"folder": folder, "id": id, "out": folder_contains(folder, id)}))
@@ -325,7 +325,7 @@ fn folder_contains_cases() -> Vec<Value> {
 /// documento e deve passare comunque, e il diff che non si sa contro quello che
 /// si sa vuoto).
 fn mask_wants_cases() -> Vec<Value> {
-    let stretta = EventMask::of([
+    let narrow = EventMask::of([
         EventKind::DocumentChanged,
         EventKind::DocumentRenamed,
         EventKind::BatchEnded,
@@ -335,44 +335,44 @@ fn mask_wants_cases() -> Vec<Value> {
     ])
     .on_topics(["com.acme.tasks"])
     .about([
-        Subject::document("Diario/oggi.md"),
-        Subject::folder("Progetti"),
+        Subject::document("Diary/today.md"),
+        Subject::folder("Projects"),
     ]);
-    let larga = EventMask::of([EventKind::DocumentChanged, EventKind::Custom]);
+    let wide = EventMask::of([EventKind::DocumentChanged, EventKind::Custom]);
     // Il quarto asse (§22.2, decisione 0069). Senza una maschera che lo
     // dichiari, `changes` sarebbe una lista vuota in ogni campione e il gemello
     // TS resterebbe verde senza aver mai filtrato su un aspetto.
-    let sui_tag = EventMask::of([EventKind::DocumentChanged, EventKind::Overflow])
+    let on_tags = EventMask::of([EventKind::DocumentChanged, EventKind::Overflow])
         .on_changes([DocChange::Tags]);
-    let eventi = [
+    let events = [
         Event::DocumentChanged {
-            id: DocId::new("Progetti/Alpha.md"),
+            id: DocId::new("Projects/Alpha.md"),
             changes: None,
         },
         Event::DocumentChanged {
-            id: DocId::new("Altro/Beta.md"),
+            id: DocId::new("Other/Beta.md"),
             changes: None,
         },
         Event::DocumentChanged {
-            id: DocId::new("Diario/oggi.md"),
+            id: DocId::new("Diary/today.md"),
             changes: None,
         },
         // Il rename è del soggetto di partenza E di quello d'arrivo.
         Event::DocumentRenamed {
-            from: DocId::new("Progetti/Alpha.md"),
-            to: DocId::new("Altro/Alpha.md"),
+            from: DocId::new("Projects/Alpha.md"),
+            to: DocId::new("Other/Alpha.md"),
         },
         Event::DocumentRenamed {
-            from: DocId::new("Altro/Alpha.md"),
-            to: DocId::new("Altro/Gamma.md"),
+            from: DocId::new("Other/Alpha.md"),
+            to: DocId::new("Other/Gamma.md"),
         },
         Event::BatchEnded {
             batch: BatchId(1),
-            changed: vec![DocId::new("Altro/a.md"), DocId::new("Progetti/b.md")],
+            changed: vec![DocId::new("Other/a.md"), DocId::new("Projects/b.md")],
         },
         Event::BatchEnded {
             batch: BatchId(2),
-            changed: vec![DocId::new("Altro/a.md")],
+            changed: vec![DocId::new("Other/a.md")],
         },
         // Un lotto che ha toccato il solo indice non nomina niente: passa.
         Event::BatchEnded {
@@ -384,7 +384,7 @@ fn mask_wants_cases() -> Vec<Value> {
             payload: json!({}),
         },
         Event::Custom {
-            topic: "com.altro.note:done".into(),
+            topic: "com.other.notes:done".into(),
             payload: json!({}),
         },
         // Ciò che non si riscopre riguardando il vault passa qualunque
@@ -400,35 +400,35 @@ fn mask_wants_cases() -> Vec<Value> {
         // lo tocca, e uno **vuoto** — che è un fatto («niente è cambiato») e non
         // passa, mentre `None` più sopra è *non lo so* e passa.
         Event::DocumentChanged {
-            id: DocId::new("Progetti/Alpha.md"),
+            id: DocId::new("Projects/Alpha.md"),
             changes: Some(DocChanges {
                 aspects: vec![DocChange::Tags, DocChange::Body],
-                tags_added: vec!["urgente".into()],
+                tags_added: vec!["urgent".into()],
                 ..DocChanges::default()
             }),
         },
         Event::DocumentChanged {
-            id: DocId::new("Progetti/Alpha.md"),
+            id: DocId::new("Projects/Alpha.md"),
             changes: Some(DocChanges {
                 aspects: vec![DocChange::Frontmatter],
-                properties: vec!["scadenza".into()],
+                properties: vec!["deadline".into()],
                 ..DocChanges::default()
             }),
         },
         Event::DocumentChanged {
-            id: DocId::new("Progetti/Alpha.md"),
+            id: DocId::new("Projects/Alpha.md"),
             changes: Some(DocChanges::default()),
         },
     ];
     let mut out = Vec::new();
-    for (nome, mask) in [
-        ("stretta", &stretta),
-        ("larga", &larga),
-        ("sui_tag", &sui_tag),
+    for (name, mask) in [
+        ("narrow", &narrow),
+        ("wide", &wide),
+        ("on_tags", &on_tags),
     ] {
-        for event in &eventi {
+        for event in &events {
             out.push(json!({
-                "mask_name": nome,
+                "mask_name": name,
                 "mask": mask,
                 "event": event,
                 "out": mask.wants(event),
@@ -484,9 +484,9 @@ fn utf16_to_byte(text: &str, unit: usize) -> usize {
 /// unit), un'emoji (4 byte, 2 code unit — una coppia surrogata), un ideogramma
 /// (3 byte, 1 code unit).
 const OFFSET_TEXTS: &[&str] = &[
-    "ascii puro",
-    "città è però",
-    "ciao 🌍 mondo",
+    "pure ascii",
+    "city is though",
+    "hello 🌍 world",
     "漢字とかな",
     "🌍🌎🌏",
     "",
@@ -502,11 +502,11 @@ fn offset_cases(forward: bool) -> Vec<Value> {
         } else {
             text.chars().count() * 2
         };
-        for i in 0..=limit + 2 {
+        for the in 0..=limit + 2 {
             out.push(if forward {
-                json!({"text": text, "byte": i, "out": byte_to_utf16(text, i)})
+                json!({"text": text, "byte": the, "out": byte_to_utf16(text, the)})
             } else {
-                json!({"text": text, "unit": i, "out": utf16_to_byte(text, i)})
+                json!({"text": text, "unit": the, "out": utf16_to_byte(text, the)})
             });
         }
     }
@@ -521,16 +521,16 @@ fn offset_cases(forward: bool) -> Vec<Value> {
 /// implementazione scrive per prime e sbagliate — il `#` dopo un segno di
 /// punteggiatura, l'accento decomposto, le cifre non ASCII.
 const TAG_TEXTS: &[&str] = &[
-    "ciao #progetto e #area/lavoro",
-    "issue #123 e colore #fff ok",
-    "a#b non e' un tag",
-    "vedi.#tag e (#altro) e \"#terzo\"",
-    "_#dopo-un-underscore",
-    "##doppio",
-    "#Caf\u{e9} contro #Cafe\u{301}",
-    "#\u{661}\u{662}\u{663} non e' #123",
-    "coda #",
-    "emoji 🌍 poi #dopo-emoji",
+    "hello #project and #area/work",
+    "issue #123 and color #fff ok",
+    "a#b is not a tag",
+    "see.#tag and (#other) and \"#third\"",
+    "_#after-an-underscore",
+    "##double",
+    "#Caf\u{e9} vs #Cafe\u{301}",
+    "#\u{661}\u{662}\u{663} is not #123",
+    "trailing #",
+    "emoji 🌍 then #after-emoji",
     "",
 ];
 
@@ -576,7 +576,7 @@ fn scan_tags_cases() -> Vec<Value> {
 /// ma un rifiuto: un modificatore che non esiste, un primo tasto nudo, un
 /// accordo senza tasto. Su queste la risposta è `null` dai due lati, o la shell
 /// rifiuta una riga che il resto dell'app ha già accettato.
-fn accordo_canonico_cases() -> Vec<Value> {
+fn canonical_chord_cases() -> Vec<Value> {
     [
         "Mod-Shift-g",
         "Shift-Mod-g",
@@ -595,7 +595,7 @@ fn accordo_canonico_cases() -> Vec<Value> {
         "   ",
     ]
     .into_iter()
-    .map(|binding| json!({"binding": binding, "out": tasti::canonica(binding)}))
+    .map(|binding| json!({"binding": binding, "out": keys::canonical(binding)}))
     .collect()
 }
 
@@ -614,46 +614,48 @@ fn accordo_canonico_cases() -> Vec<Value> {
 /// un'altra regola, che di là non esiste affatto — `ArgValue::render` col suo
 /// locale — e infilarla qui vorrebbe dire pretendere dalla shell una risposta
 /// che non le è mai stata chiesta.
-fn espansione_cases() -> Vec<Value> {
+fn expansion_cases() -> Vec<Value> {
     let locale = Locale::default();
-    let casi: Vec<(&str, Vec<(&str, &str)>)> = vec![
-        ("ciao {nome}", vec![("nome", "mondo")]),
-        ("{n} e ancora {n}", vec![("n", "uno")]),
+    let cases: Vec<(&str, Vec<(&str, &str)>)> = vec![
+        ("hello {name}", vec![("name", "world")]),
+        ("{n} and again {n}", vec![("n", "one")]),
         // Le graffe letterali, e la letterale attaccata a un nome.
         ("{{a}}", vec![]),
         ("{{{a}}}", vec![("a", "A")]),
         // Il nome che non c'è: resta scritto com'è, graffe comprese.
-        ("<{ignoto}>", vec![]),
+        ("<{unknown}>", vec![]),
         // Le spaiate.
-        ("aperta { e basta", vec![]),
-        ("chiusa } e basta", vec![]),
+        ("open { and that's it", vec![]),
+        ("close } and that's it", vec![]),
         ("{}", vec![]),
         // Cosa può chiamarsi un nome.
         ("{foo-bar}", vec![("foo-bar", "x")]),
         ("{città}", vec![("città", "Roma")]),
         ("{a.b}", vec![("a.b", "1")]),
-        ("{ spaziato }", vec![("spaziato", "no")]),
+        ("{ spaced }", vec![("spaced", "no")]),
         // Un'aperta dentro un nome: il nome è ciò che precede la prima chiusa.
-        ("{a{b}", vec![("b", "B")]),
         // Un nome che in JavaScript è un membro di ogni oggetto.
+        ("{a{b}", vec![("b", "B")]),
+    // Rigenerazione esplicita: `UPDATE_MIRROR=1 cargo test -p fub-abi --test
         ("{constructor}", vec![]),
-        ("niente", vec![]),
+        ("nothing", vec![]),
     ];
-    casi.into_iter()
+    cases
+        .into_iter()
         .map(|(template, args)| {
-            let catalogo = StringCatalog::new("it").with("t", template);
-            let cataloghi = [catalogo];
-            let strings = Strings::new(&cataloghi, "it", &locale);
-            let mut messaggio = Message::new("t");
-            let mut mappa = serde_json::Map::new();
-            for (nome, valore) in &args {
-                messaggio = messaggio.with(*nome, ArgValue::Text((*valore).to_string()));
-                mappa.insert((*nome).to_string(), json!(valore));
+            let catalog = StringCatalog::new("en").with("t", template);
+            let catalogs = [catalog];
+            let strings = Strings::new(&catalogs, "en", &locale);
+            let mut message = Message::new("t");
+            let mut map = serde_json::Map::new();
+            for (name, value) in &args {
+                message = message.with(*name, ArgValue::Text((*value).to_string()));
+                map.insert((*name).to_string(), json!(value));
             }
             json!({
                 "template": template,
-                "args": Value::Object(mappa),
-                "out": strings.render(&Text::Message(messaggio)),
+                "args": Value::Object(map),
+                "out": strings.render(&Text::Message(message)),
             })
         })
         .collect()
@@ -670,9 +672,9 @@ fn expected() -> Value {
         "folder_contains": folder_contains_cases(),
         "mask_wants": mask_wants_cases(),
         "scan_tags": scan_tags_cases(),
-        "accordo_canonico": accordo_canonico_cases(),
+        "canonical_chord": canonical_chord_cases(),
         "byte_to_utf16": offset_cases(true),
-        "espansione": espansione_cases(),
+        "expansion": expansion_cases(),
         "utf16_to_byte": offset_cases(false),
     })
 }
@@ -689,55 +691,55 @@ fn rules_fixture_is_in_sync_with_the_rust_rules() {
     let expected = expected();
     let path = fixture_path();
 
-    // Rigenerazione esplicita: `UPDATE_MIRROR=1 cargo test -p fub-abi --test
     // rules_mirror`. Fuori da quel caso il test non scrive mai nulla.
+/// Il test del test: una fixture di casi che non distinguono niente non
     if std::env::var_os("UPDATE_MIRROR").is_some() {
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).expect("crea la cartella delle fixture");
+            std::fs::create_dir_all(dir).expect("creates the fixture folder");
         }
         let mut json = serde_json::to_string_pretty(&expected).expect("pretty");
         json.push('\n');
-        std::fs::write(&path, json).expect("scrive la fixture");
+        std::fs::write(&path, json).expect("writes the fixture");
         return;
     }
 
-    let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+    let committed = std::fs::read_to_string(&path).unwrap_or_else(|and| {
         panic!(
-            "fixture delle regole mancante ({}): {e}. Rigenerala con \
+            "rules fixture missing ({}): {and}. Regenerate with \
              `UPDATE_MIRROR=1 cargo test -p fub-abi --test rules_mirror`.",
             path.display()
         )
     });
-    let committed: Value = serde_json::from_str(&committed).expect("fixture JSON valida");
+    let committed: Value = serde_json::from_str(&committed).expect("valid JSON fixture");
 
     assert_eq!(
         committed, expected,
-        "la fixture delle regole è stantia: una regola Rust è cambiata senza \
-         rigenerarla. Rigenerala con `UPDATE_MIRROR=1 cargo test -p fub-abi \
-         --test rules_mirror`, poi aggiorna la gemella TypeScript finché \
-         `rules-mirror.test.ts` non torna verde."
+        "the rules fixture is stale: a Rust rule changed without regenerating it. \
+         Regenerate with `UPDATE_MIRROR=1 cargo test -p fub-abi --test \
+         rules_mirror`, then update the TypeScript twin until \
+         `rules-mirror.test.ts` turns green."
     );
 }
 
-/// Il test del test: una fixture di casi che non distinguono niente non
 /// presidierebbe niente.
 ///
 /// Per ogni regola con esito booleano servono entrambi gli esiti, e per le
 /// altre almeno due risposte diverse: se domani qualcuno potasse i casi ostili
 /// lasciando solo quelli facili, la fixture resterebbe verde mentre le due
 /// implementazioni divergono sul resto.
+/// implementazioni divergono sul resto.
 #[test]
 fn every_rule_has_cases_that_disagree_with_each_other() {
     let fixture = expected();
-    for (rule, cases) in fixture.as_object().expect("oggetto") {
-        let cases = cases.as_array().expect("array di casi");
-        assert!(cases.len() >= 2, "`{rule}` ha meno di due casi");
+    for (rule, cases) in fixture.as_object().expect("object") {
+        let cases = cases.as_array().expect("array of cases");
+        assert!(cases.len() >= 2, "`{rule}` has fewer than two cases");
         let distinct: std::collections::BTreeSet<String> =
             cases.iter().map(|c| c["out"].to_string()).collect();
         assert!(
             distinct.len() >= 2,
-            "`{rule}`: tutti i casi danno la stessa risposta ({distinct:?}), \
-             quindi la fixture non distingue due implementazioni diverse"
+            "`{rule}`: all cases yield the same response ({distinct:?}), \
+             so the fixture does not distinguish two different implementations"
         );
     }
 }

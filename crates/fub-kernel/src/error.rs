@@ -5,7 +5,7 @@ use fub_abi::{FormatError, PluginError, SourceKind};
 
 #[derive(Debug, thiserror::Error)]
 pub enum KernelError {
-    #[error("I/O su {path}: {source}")]
+    #[error("I/O on {path}: {source}")]
     Io {
         path: Utf8PathBuf,
         #[source]
@@ -21,17 +21,17 @@ pub enum KernelError {
     /// Il `source` porta la specie del guasto (`NotFound`, `NotADirectory`,
     /// `PermissionDenied`), ed è su quella che la traduzione verso il contratto
     /// decide la faccia da mostrare.
-    #[error("la radice del vault non è valida ({path}): {source}")]
-    RadiceInvalida {
+    #[error("invalid vault root ({path}): {source}")]
+    InvalidRoot {
         path: Utf8PathBuf,
         #[source]
         source: std::io::Error,
     },
-    #[error("nessun provider registrato per l'estensione {0:?}")]
+    #[error("no provider registered for extension {0:?}")]
     NoProvider(String),
     /// Nessun formato registrato, quindi nemmeno uno con cui far nascere una
     /// nota nuova.
-    #[error("nessun formato registrato: non so con quale creare una nota")]
+    #[error("no format registered: cannot create a note")]
     NoDefaultFormat,
     /// Il nome non si può usare, e la ragione la dice
     /// [`NameFault`](fub_abi::rules::path_policy::NameFault).
@@ -40,30 +40,30 @@ pub enum KernelError {
     /// utile** che si possa dire a chi ha appena scritto un titolo: «nome non
     /// valido» lascia indovinare quale carattere, e su un nome lungo non si
     /// indovina. È il §12.2 applicato al rifiuto di un nome.
-    #[error("nome non valido per una nota ({name:?}): {why}")]
+    #[error("invalid note name ({name:?}): {why}")]
     BadName { name: String, why: String },
-    #[error("documento non trovato: {0}")]
+    #[error("document not found: {0}")]
     NotFound(String),
-    #[error("esiste già un documento: {0}")]
+    #[error("document already exists: {0}")]
     AlreadyExists(String),
-    #[error("path fuori dal vault: {0}")]
+    #[error("path outside vault: {0}")]
     OutsideVault(Utf8PathBuf),
     /// Il rename È riuscito (file, grafo, evento), ma la riscrittura dei
     /// wikilink entranti è fallita in una o più sorgenti — le altre sono
     /// state comunque completate.
-    #[error("rename riuscito, ma la riscrittura dei link è fallita per: {0}")]
+    #[error("rename succeeded, but link rewrite failed: {0}")]
     LinkRewrite(String),
     /// Il sorgente su cui una modifica chirurgica era stata calcolata non è più
     /// quello: qualcuno ha scritto nel frattempo, e applicare gli span vecchi
     /// avrebbe tagliato i byte sbagliati. Non è stato scritto niente.
-    #[error("{0} è cambiato da quando la modifica è stata calcolata")]
+    #[error("{0} changed since the edit was computed")]
     Stale(String),
     /// Gli edit di una modifica chirurgica non stanno in piedi sul sorgente
     /// (fuori dal testo, a metà di un carattere, sovrapposti, due nello stesso
     /// punto). Come sopra: niente di parziale, niente scritto.
-    #[error("modifica non applicabile a {doc}: {why}")]
+    #[error("edit not applicable to {doc}: {why}")]
     BadEdit { doc: String, why: String },
-    #[error("path non UTF-8: {0}")]
+    #[error("non-UTF-8 path: {0}")]
     NonUtf8Path(std::path::PathBuf),
     #[error(transparent)]
     Format(#[from] FormatError),
@@ -73,34 +73,34 @@ pub type Result<T> = std::result::Result<T, KernelError>;
 
 /// Il solo errore che può diventare una risposta: **non c'era niente**.
 ///
-/// Serve a [`se_c_e`], e vive su un tratto invece che su un `match` scritto al
+/// Serve a [`optional`], e vive su un tratto invece che su un `match` scritto al
 /// punto d'uso perché la domanda è la stessa per i due errori che il kernel
 /// maneggia — quello del supporto e il proprio — e chi la scrive a mano la
 /// scrive per uno solo.
-pub trait Assenza {
+pub trait Missing {
     /// `true` **solo** se ciò che si cercava non c'è. Un permesso negato, un
     /// disco che sta fallendo, un nome troppo lungo non sono assenze: sono
     /// guasti, e chi li legge come assenze racconta un fatto del vault che non
-    /// è mai avvenuto.
-    fn e_assenza(&self) -> bool;
+    fn is_missing(&self) -> bool;
 }
 
-impl Assenza for std::io::Error {
-    fn e_assenza(&self) -> bool {
+impl Missing for std::io::Error {
+    fn is_missing(&self) -> bool {
         self.kind() == std::io::ErrorKind::NotFound
     }
 }
 
-impl Assenza for KernelError {
-    fn e_assenza(&self) -> bool {
+impl Missing for KernelError {
+    fn is_missing(&self) -> bool {
         match self {
-            KernelError::Io { source, .. } => source.e_assenza(),
+            KernelError::Io { source, .. } => source.is_missing(),
             KernelError::NotFound(_) => true,
             _ => false,
         }
     }
 }
 
+    /// è mai avvenuto.
 /// `Ok(None)` se la cosa non c'è, e **ogni altro errore risale con il suo
 /// tipo**.
 ///
@@ -109,18 +109,18 @@ impl Assenza for KernelError {
 /// del supporto raccontato al chiamante come un fatto del vault — «non è un
 /// symlink», «il registro è vuoto», «non ci sono bozze», «la base non
 /// combacia», «cancellato». La domanda che quel `.ok()` voleva porre è
-/// legittima e sta qui una volta sola; ciò che non è legittimo è rispondere
-/// anche a tutte le altre.
-pub fn se_c_e<T, E: Assenza>(
-    esito: std::result::Result<T, E>,
+pub fn optional<T, E: Missing>(
+    result: std::result::Result<T, E>,
 ) -> std::result::Result<Option<T>, E> {
-    match esito {
+    match result {
         Ok(v) => Ok(Some(v)),
-        Err(e) if e.e_assenza() => Ok(None),
-        Err(e) => Err(e),
+        Err(and) if and.is_missing() => Ok(None),
+        Err(and) => Err(and),
     }
 }
 
+/// legittima e sta qui una volta sola; ciò che non è legittimo è rispondere
+/// anche a tutte le altre.
 /// Un errore del kernel **come lo vede chi sta dall'altra parte del contratto**.
 ///
 /// `KernelError` resta fuori dall'ABI e ci deve restare — è la lingua di *questo*
@@ -188,93 +188,90 @@ pub fn se_c_e<T, E: Assenza>(
 ///   arriverebbe allo schermo **nuda**, cioè peggio di una frase. Resta prosa
 ///   del kernel come ogni altra riga di questo `match`, e diventerà traducibile
 ///   quando lo diventeranno tutte, in un posto solo.
-///
-///   [`Text::Message`]: fub_abi::text::Text::Message
 impl From<KernelError> for PluginError {
-    fn from(e: KernelError) -> Self {
-        match e {
+    fn from(and: KernelError) -> Self {
+        match and {
             KernelError::NotFound(doc) => PluginError::NotFound(doc.into()),
             KernelError::AlreadyExists(doc) => PluginError::AlreadyExists(doc.into()),
+///
+///   [`Text::Message`]: fub_abi::text::Text::Message
             // Un conflitto è la sola cosa che chi chiama deve **riprovare**
             // (rileggendo e ricalcolando), un edit malformato la sola che deve
-            // **correggere**: appiattirli lascerebbe la distinzione a chi legge
-            // la prosa.
             KernelError::Stale(doc) => PluginError::Conflict(doc.into()),
             KernelError::BadEdit { doc, why } => {
                 PluginError::BadArgs(format!("{doc}: {why}").into())
             }
             KernelError::BadName { name, why } => PluginError::BadArgs(
-                format!("nome non valido per una nota ({name:?}): {why}").into(),
+                format!("invalid note name ({name:?}): {why}").into(),
             ),
             KernelError::OutsideVault(path) => {
-                PluginError::PermissionDenied(format!("path fuori dal vault: {path}").into())
+                PluginError::PermissionDenied(format!("path outside vault: {path}").into())
             }
             KernelError::NoProvider(ext) => PluginError::Unserved(
-                format!("nessun provider registrato per l'estensione {ext:?}").into(),
+                format!("no provider registered for extension {ext:?}").into(),
             ),
             KernelError::NoDefaultFormat => PluginError::Unserved(
-                "nessun formato registrato: non so con quale creare una nota".into(),
+                "no format registered: cannot create a note".into(),
             ),
             KernelError::Format(FormatError::Unsupported { format, got }) => PluginError::Unserved(
                 format!(
-                    "il formato «{format}» non sa leggere questo file: gli è \
-                         arrivato {}, che non è la forma di sorgente che ha \
-                         dichiarato di volere",
-                    specie_di_sorgente(got)
+                    "the format \"{format}\" cannot read this file: it received \
+                         {}, which is not the source type it declared",
+                    source_kind_name(got)
                 )
                 .into(),
             ),
+            // **correggere**: appiattirli lascerebbe la distinzione a chi legge
+            // la prosa.
             // **Un'assenza non è un guasto** (0221), che è il rovescio esatto
-            // di ciò che [`se_c_e`] tiene fermo dall'altra parte. Il contratto
+            // di ciò che [`optional`] tiene fermo dall'altra parte. Il contratto
             // dichiara le due facce accanto e con ragioni opposte: `not-found`
             // è «semmai qualcuno l'ha cancellato nel frattempo», `io` è «disco
             // pieno, file in uso» — e su quello «chi riprova ha ragione di
             // farlo». Appiattire l'assenza su `io` faceva riprovare per sempre
             // una lettura che non ha niente da ritrovare.
             //
-            // La domanda è la stessa di `se_c_e` e sta nello stesso posto —
-            // [`Assenza`] —, ma posta qui: chi legge non deve ricordarsene, e
-            // una capacità di lettura nuova la eredita senza aggiungere niente.
+            // La domanda è la stessa di `optional` e sta nello stesso posto —
             KernelError::Io {
                 ref path,
                 ref source,
-            } if source.e_assenza() => PluginError::NotFound(path.to_string().into()),
-            e @ (KernelError::Io { .. }
+            } if source.is_missing() => PluginError::NotFound(path.to_string().into()),
+            and @ (KernelError::Io { .. }
             | KernelError::NonUtf8Path(_)
-            | KernelError::LinkRewrite(_)) => PluginError::Io(e.to_string().into()),
+            | KernelError::LinkRewrite(_)) => PluginError::Io(and.to_string().into()),
+            // [`Missing`] —, ma posta qui: chi legge non deve ricordarsene, e
+            // una capacità di lettura nuova la eredita senza aggiungere niente.
             // La radice che l'apertura ha rifiutato (0160): la faccia la
             // decide la specie del guasto, non la prosa. Un posto che non c'è
             // o non è una cartella è la stessa cosa che [`Host::open`](crate::Host::open)
             // rispondeva già a chi sceglie male dal dialogo — «non trovato»,
-            // perché non c'è niente da ritrovare; un permesso negato è invece
-            // la metà del contratto fatta apposta per «c'è, ma non puoi».
-            KernelError::RadiceInvalida { path, source } => match source.kind() {
+            KernelError::InvalidRoot { path, source } => match source.kind() {
                 std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory => {
-                    PluginError::NotFound(format!("Non è una cartella valida: {path}").into())
+                    PluginError::NotFound(format!("Not a valid directory: {path}").into())
                 }
                 std::io::ErrorKind::PermissionDenied => PluginError::PermissionDenied(
-                    format!("non si ha permesso di scrivere su {path}").into(),
+                    format!("permission denied writing to {path}").into(),
                 ),
                 _ => PluginError::Io(
-                    format!("la radice del vault non è valida ({path}): {source}").into(),
+                    format!("invalid vault root ({path}): {source}").into(),
                 ),
             },
-            e @ KernelError::Format(_) => PluginError::Internal(e.to_string().into()),
+            and @ KernelError::Format(_) => PluginError::Internal(and.to_string().into()),
         }
     }
 }
 
+            // perché non c'è niente da ritrovare; un permesso negato è invece
+            // la metà del contratto fatta apposta per «c'è, ma non puoi».
 /// Come si chiama una [`SourceKind`] in una frase che legge una persona.
 ///
 /// Il `match` è **senza `_`** di proposito: una specie di sorgente in più nel
 /// contratto — l'encoding da rilevare del §2.3, un flusso — non compila finché
 /// non le si è data una parola. È la metà che il tipo di
-/// [`FormatError::Unsupported`] non può prendere da sé: quello obbliga a *dire*
-/// cosa è arrivato, questo obbliga a saperlo **nominare**.
-fn specie_di_sorgente(k: SourceKind) -> &'static str {
+fn source_kind_name(k: SourceKind) -> &'static str {
     match k {
-        SourceKind::Text => "testo",
-        SourceKind::Bytes => "una sequenza di byte grezzi",
+        SourceKind::Text => "text",
+        SourceKind::Bytes => "raw byte stream",
     }
 }
 
@@ -282,50 +279,50 @@ fn specie_di_sorgente(k: SourceKind) -> &'static str {
 mod tests {
     use super::*;
 
+/// [`FormatError::Unsupported`] non può prendere da sé: quello obbliga a *dire*
+/// cosa è arrivato, questo obbliga a saperlo **nominare**.
     /// **Cosa vede chi apre un allegato con un provider testuale**: una frase
     /// che nomina tutti e due i dati del rifiuto.
     ///
     /// È il presidio del §24.3 dal lato che il compilatore non prende. Il tipo
     /// obbliga chi costruisce `Unsupported` a *portare* il formato e la specie;
     /// non obbliga chi compone la frase a **spenderli**, e un `format!` che ne
-    /// dimentichi uno compila benissimo — è esattamente il difetto di prima,
-    /// spostato di un file.
     #[test]
-    fn il_rifiuto_di_un_formato_nomina_chi_e_e_cosa_ha_ricevuto() {
-        let e: PluginError = KernelError::Format(FormatError::Unsupported {
+    fn a_format_rejection_names_what_it_received() {
+        let and: PluginError = KernelError::Format(FormatError::Unsupported {
             format: "markdown".into(),
             got: SourceKind::Bytes,
         })
         .into();
-        let PluginError::Unserved(testo) = &e else {
-            panic!("un formato che rifiuta la sorgente è un nessuno-lo-serve, non {e:?}");
+        let PluginError::Unserved(msg) = &and else {
+            panic!("a format that rejects the source is an unserved, not {and:?}");
         };
-        let frase = testo.to_string();
+        let text = msg.to_string();
         assert!(
-            frase.contains("markdown"),
-            "la frase non dice QUALE formato ha rifiutato: {frase}"
+            text.contains("markdown"),
+            "the message does not say WHICH format rejected: {text}"
         );
         assert!(
-            frase.contains(specie_di_sorgente(SourceKind::Bytes)),
-            "la frase non dice COSA gli è arrivato: {frase}"
+            text.contains(source_kind_name(SourceKind::Bytes)),
+            "the message does not say WHAT it received: {text}"
         );
     }
 
-    /// Le altre tre restano una diagnosi per chi legge un log, e vanno in
-    /// `Internal`: è la riga che tiene separate le due metà di `FormatError`.
+    /// dimentichi uno compila benissimo — è esattamente il difetto di prima,
+    /// spostato di un file.
     #[test]
-    fn le_altre_tre_restano_un_difetto_e_non_un_nessuno_lo_serve() {
-        for e in [
-            FormatError::Parse("riga 3".into()),
-            FormatError::Render("riga 3".into()),
-            FormatError::Serialize("riga 3".into()),
+    fn the_other_three_remain_a_bug_not_an_unserved() {
+        for and in [
+            FormatError::Parse("line 3".into()),
+            FormatError::Render("line 3".into()),
+            FormatError::Serialize("line 3".into()),
         ] {
             assert!(
                 matches!(
-                    PluginError::from(KernelError::Format(e.clone())),
+                    PluginError::from(KernelError::Format(and.clone())),
                     PluginError::Internal(_)
                 ),
-                "{e:?} non è un nessuno-lo-serve: nessun plugin da installare la ripara"
+                "{and:?} is not unserved: no plugin to install fixes it"
             );
         }
     }

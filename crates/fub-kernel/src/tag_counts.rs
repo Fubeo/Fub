@@ -36,7 +36,7 @@ pub(crate) struct TagCounts {
     /// chiave canonica → note che la portano: l'indice inverso che serve a
     /// [`docs_with`](TagCounts::docs_with) per rispondere senza riscansare il
     /// vault.
-    per_chiave: HashMap<String, BTreeSet<DocId>>,
+    for_key: HashMap<String, BTreeSet<DocId>>,
 }
 
 #[derive(Default)]
@@ -76,10 +76,10 @@ impl TagCounts {
         for (key, grafie) in &contribution {
             let entry = self.keys.entry(key.clone()).or_default();
             entry.notes += 1;
-            for grafia in grafie {
-                *entry.grafie.entry(grafia.clone()).or_default() += 1;
+            for spelling in grafie {
+                *entry.grafie.entry(spelling.clone()).or_default() += 1;
             }
-            self.per_chiave
+            self.for_key
                 .entry(key.clone())
                 .or_default()
                 .insert(id.clone());
@@ -93,21 +93,21 @@ impl TagCounts {
             return;
         };
         for (key, grafie) in contribution {
-            if let Some(docs) = self.per_chiave.get_mut(&key) {
+            if let Some(docs) = self.for_key.get_mut(&key) {
                 docs.remove(id);
                 if docs.is_empty() {
-                    self.per_chiave.remove(&key);
+                    self.for_key.remove(&key);
                 }
             }
             let Some(entry) = self.keys.get_mut(&key) else {
                 continue;
             };
             entry.notes -= 1;
-            for grafia in grafie {
-                if let Some(n) = entry.grafie.get_mut(&grafia) {
+            for spelling in grafie {
+                if let Some(n) = entry.grafie.get_mut(&spelling) {
                     *n -= 1;
                     if *n == 0 {
-                        entry.grafie.remove(&grafia);
+                        entry.grafie.remove(&spelling);
                     }
                 }
             }
@@ -120,7 +120,7 @@ impl TagCounts {
     pub(crate) fn clear(&mut self) {
         self.keys.clear();
         self.docs.clear();
-        self.per_chiave.clear();
+        self.for_key.clear();
     }
 
     /// Le **grafie** con cui una nota scrive i propri tag, in ordine.
@@ -160,18 +160,18 @@ impl TagCounts {
     /// documenti chiesti — è ciò che rende `Tags { matching }` una faccetta
     /// invece che una seconda aggregazione con una sua idea di cosa sia un tag.
     pub(crate) fn snapshot_of<'a>(&self, docs: impl Iterator<Item = &'a DocId>) -> Vec<TagCount> {
-        let mut per_key: BTreeMap<String, (BTreeSet<String>, u32)> = BTreeMap::new();
+        let mut for_key: BTreeMap<String, (BTreeSet<String>, u32)> = BTreeMap::new();
         for doc in docs {
             let Some(contribution) = self.docs.get(doc) else {
                 continue;
             };
             for (key, grafie) in contribution {
-                let entry = per_key.entry(key.clone()).or_default();
+                let entry = for_key.entry(key.clone()).or_default();
                 entry.0.extend(grafie.iter().cloned());
                 entry.1 += 1;
             }
         }
-        per_key
+        for_key
             .into_values()
             .map(|(grafie, count)| TagCount {
                 name: grafie.first().expect("almeno una grafia").clone(),
@@ -185,9 +185,9 @@ impl TagCounts {
     /// `progetto/casa`).
     pub(crate) fn docs_with(&self, canonical: &str, descendants: bool) -> Vec<DocId> {
         let mut found: BTreeSet<DocId> =
-            self.per_chiave.get(canonical).cloned().unwrap_or_default();
+            self.for_key.get(canonical).cloned().unwrap_or_default();
         if descendants {
-            for (key, docs) in &self.per_chiave {
+            for (key, docs) in &self.for_key {
                 if is_sub_tag(key, canonical) {
                     found.extend(docs.iter().cloned());
                 }
@@ -215,20 +215,20 @@ mod tests {
     /// L'oracolo: l'aggregazione O(vault) che questa struttura rimpiazza,
     /// riscritta dal vivo sui contributi correnti.
     fn oracle(docs: &[(&DocId, Vec<Tag>)]) -> Vec<TagCount> {
-        let mut per_key: BTreeMap<String, (BTreeSet<String>, u32)> = BTreeMap::new();
+        let mut for_key: BTreeMap<String, (BTreeSet<String>, u32)> = BTreeMap::new();
         for (_, doc_tags) in docs {
             let mut seen: BTreeSet<String> = BTreeSet::new();
             for tag in doc_tags {
                 let key = canonical_tag(&tag.name);
-                let prima_volta = seen.insert(key.clone());
-                let entry = per_key.entry(key).or_default();
+                let first_time = seen.insert(key.clone());
+                let entry = for_key.entry(key).or_default();
                 entry.0.insert(tag.name.clone());
-                if prima_volta {
+                if first_time {
                     entry.1 += 1;
                 }
             }
         }
-        per_key
+        for_key
             .into_values()
             .filter(|(_, count)| *count > 0)
             .map(|(grafie, count)| TagCount {
@@ -261,43 +261,43 @@ mod tests {
             vec![],
         ];
 
-        let mut vivi: Vec<&DocId> = Vec::new();
-        for stato in &mosse {
+        let mut live: Vec<&DocId> = Vec::new();
+        for state in &mosse {
             // Porta la struttura allo stato voluto: upsert per chi c'è,
             // remove per chi non c'è più.
-            for (id, doc_tags) in stato {
+            for (id, doc_tags) in state {
                 counts.upsert(id, doc_tags);
             }
-            for id in vivi
+            for id in live
                 .iter()
-                .filter(|id| !stato.iter().any(|(s, _)| s == *id))
+                .filter(|id| !state.iter().any(|(s, _)| s == *id))
             {
                 counts.remove(id);
             }
-            vivi = stato.iter().map(|(id, _)| *id).collect();
+            live = state.iter().map(|(id, _)| *id).collect();
 
             assert_eq!(
                 counts.snapshot(),
-                oracle(stato),
-                "incrementale e oracolo divergono sullo stato {stato:?}"
+                oracle(state),
+                "incremental and oracle diverge on state {state:?}"
             );
         }
     }
 
     #[test]
     fn a_rename_is_remove_plus_upsert_and_keeps_the_counts() {
-        let prima = DocId::new("prima.md");
-        let dopo = DocId::new("cartella/dopo.md");
+        let before = DocId::new("prima.md");
+        let after = DocId::new("cartella/dopo.md");
         let mut counts = TagCounts::default();
-        counts.upsert(&prima, &tags(&["Rust"]));
+        counts.upsert(&before, &tags(&["Rust"]));
 
-        counts.remove(&prima);
-        counts.upsert(&dopo, &tags(&["Rust"]));
+        counts.remove(&before);
+        counts.upsert(&after, &tags(&["Rust"]));
 
         let snap = counts.snapshot();
         assert_eq!(snap.len(), 1);
         assert_eq!(snap[0].name, "Rust");
-        assert_eq!(snap[0].count, 1, "la nota è una, comunque si chiami");
+        assert_eq!(snap[0].count, 1, "the document is one, whatever its name");
     }
 
     #[test]

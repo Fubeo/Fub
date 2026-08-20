@@ -64,7 +64,7 @@ use fub_abi::rules::path_policy;
 use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{non_lo_sovrascrivo, Durevole, VaultStorage};
+use crate::storage::{do_not_overwrite, Durable, VaultStorage};
 use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3).
@@ -110,7 +110,7 @@ pub struct OrganizationStore {
     /// L'organizzazione, che è **anche** ciò che sta nel sidecar: un
     /// [`Durevole`] perché «su disco prima, in memoria dopo» non dipendesse dal
     /// fatto che chi scrive la prossima mutazione legga il commento sotto.
-    data: RwLock<Durevole<Organization>>,
+    data: RwLock<Durable<Organization>>,
     /// Cosa è andato storto **dopo** l'apertura: una migrazione che non si è
     /// potuta scrivere. Chi monta le mostra e se ne fa carico svuotandole, come
     /// per gli avvisi della configurazione.
@@ -124,20 +124,20 @@ impl OrganizationStore {
     /// ciò che non si è riusciti a leggere.
     pub fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> (Arc<Self>, Option<String>) {
         let path = organization_path(root);
-        let (data, scartate, warning) = match load(&path, storage.as_ref()) {
-            Ok((data, scartate)) => (data, scartate, None),
-            Err(e) => (Organization::default(), Vec::new(), Some(e)),
+        let (data, pruned, warning) = match load(&path, storage.as_ref()) {
+            Ok((data, pruned)) => (data, pruned, None),
+            Err(and) => (Organization::default(), Vec::new(), Some(and)),
         };
         (
             Arc::new(OrganizationStore {
                 path: Some(path.clone()),
                 storage: Some(storage),
-                data: RwLock::new(Durevole::letto(data)),
+                data: RwLock::new(Durable::new(data)),
                 // Le chiavi che il recinto ha scartato **non** rendono il file
                 // illeggibile: il resto dell'organizzazione vale, e la
                 // scrittura successiva le lascerà indietro. Quello che non
                 // possono fare è sparire in silenzio.
-                warnings: RwLock::new(avviso_scartate(&path, scartate).into_iter().collect()),
+                warnings: RwLock::new(notice_pruned(&path, pruned).into_iter().collect()),
             }),
             warning,
         )
@@ -148,7 +148,7 @@ impl OrganizationStore {
         Arc::new(OrganizationStore {
             path: None,
             storage: None,
-            data: RwLock::new(Durevole::letto(Organization::default())),
+            data: RwLock::new(Durable::new(Organization::default())),
             warnings: RwLock::new(Vec::new()),
         })
     }
@@ -156,7 +156,7 @@ impl OrganizationStore {
     /// L'organizzazione intera: è ciò che il canale dati restituisce a
     /// [`IndexQuery::Organization`](fub_abi::traits::IndexQuery::Organization).
     pub fn snapshot(&self) -> Organization {
-        (*self.data.read().expect("organizzazione")).clone()
+        (*self.data.read().expect("organization")).clone()
     }
 
     /// L'emoji di un path (`None` la toglie).
@@ -224,15 +224,15 @@ impl OrganizationStore {
     /// nota entra in coda all'alfabetico, come una appena creata — che è ciò che
     /// è, per quella cartella.
     pub fn migrate(&self, from: &str, to: &str) -> Result<bool, String> {
-        let mut cambiata = false;
-        self.update(|org| cambiata = migra(org, from, to))?;
-        Ok(cambiata)
+        let mut changed = false;
+        self.update(|org| changed = migrate(org, from, to))?;
+        Ok(changed)
     }
 
     /// Gli avvisi accumulati dopo l'apertura, svuotandoli: chi li prende se ne
     /// fa carico.
     pub fn take_warnings(&self) -> Vec<String> {
-        std::mem::take(&mut *self.warnings.write().expect("organizzazione"))
+        std::mem::take(&mut *self.warnings.write().expect("organization"))
     }
 
     /// Annota che una migrazione non si è potuta scrivere.
@@ -243,7 +243,7 @@ impl OrganizationStore {
     /// verso giusto è: la rinomina vale, l'icona resta indietro, e qualcuno lo
     /// dice.
     pub(crate) fn warn(&self, message: String) {
-        self.warnings.write().expect("organizzazione").push(message);
+        self.warnings.write().expect("organization").push(message);
     }
 
     /// Applica `f` **a ciò che sta nel sidecar adesso**, e adotta il risultato.
@@ -270,27 +270,27 @@ impl OrganizationStore {
         // prossimo è chi scriverà il mutatore che ancora non c'è.
         let mut f = move |org: &mut Organization| {
             f(org);
-            senza_doppioni(org);
+            without_duplicates(org);
         };
-        let mut data = self.data.write().expect("organizzazione");
+        let mut data = self.data.write().expect("organization");
         // Lo store in memoria — quello di un test — non ha un disco da
         // rileggere: ciò che c'è «adesso» è ciò che si ha.
         let (Some(path), Some(storage)) = (&self.path, &self.storage) else {
             let mut next = (**data).clone();
             f(&mut next);
-            return data.scrivi(next, |_| Ok(()));
+            return data.write(next, |_| Ok(()));
         };
         // Ciò che si ha in memoria viaggia con la fusione, e serve **solo** se
         // il file non c'è: vedi il § in testa a `fondi`.
-        let in_memoria = (**data).clone();
-        let mut scartate = Vec::new();
-        let esito = data.aggiorna(|| fondi(storage.as_ref(), path, &in_memoria, &mut scartate, f));
+        let in_memory = (**data).clone();
+        let mut pruned = Vec::new();
+        let outcome = data.update(|| merge_entries(storage.as_ref(), path, &in_memory, &mut pruned, f));
         // Il file può essere stato riscritto a mano *dopo* l'apertura: la
         // fusione rilegge, e ciò che il recinto scarta lo si dice adesso.
-        if let Some(avviso) = avviso_scartate(path, scartate) {
-            self.warnings.write().expect("organizzazione").push(avviso);
+        if let Some(warning) = notice_pruned(path, pruned) {
+            self.warnings.write().expect("organization").push(warning);
         }
-        esito
+        outcome
     }
 }
 
@@ -322,43 +322,43 @@ impl OrganizationStore {
 /// Ciò che questa riparazione **non** è: un modo di rimettere la lost update.
 /// Quando il file c'è, la memoria non si guarda affatto — la fusione parte dai
 /// byte riletti, come deve.
-fn fondi(
+fn merge_entries(
     storage: &dyn VaultStorage,
     path: &Utf8Path,
-    in_memoria: &Organization,
-    scartate: &mut Vec<String>,
+    in_memory: &Organization,
+    pruned: &mut Vec<String>,
     mut f: impl FnMut(&mut Organization),
 ) -> Result<Organization, String> {
-    let mut fuso = None;
-    let mut guasto = None;
-    let esito = storage.update(path, &mut |attuale| {
-        let letto = match attuale {
+    let mut zone = None;
+    let mut failure = None;
+    let outcome = storage.update(path, &mut |current| {
+        let new = match current {
             Some(bytes) => decode(path, bytes),
-            None => Ok((in_memoria.clone(), Vec::new())),
+            None => Ok((in_memory.clone(), Vec::new())),
         };
-        let disco = match letto {
-            Ok((disco, fuori)) => {
+        let disk = match new {
+            Ok((disk, outside)) => {
                 // Non si accumula fra un giro e l'altro: ciò che il recinto ha
                 // scartato è ciò che c'era nei byte di **questo** giro, e un
                 // secondo giro li ha riletti daccapo.
-                scartate.clear();
-                scartate.extend(fuori);
-                disco
+                pruned.clear();
+                pruned.extend(outside);
+                disk
             }
-            Err(e) => {
-                guasto = Some(non_lo_sovrascrivo(
-                    &e,
-                    "l'organizzazione che contiene andrebbe persa",
+            Err(and) => {
+                failure = Some(do_not_overwrite(
+                    &and,
+                    "the organization it contains would be lost",
                 ));
-                return Err(std::io::Error::other("il file non si è potuto leggere"));
+                return Err(std::io::Error::other("the file could not be read"));
             }
         };
-        let mut next = disco.clone();
+        let mut next = disk.clone();
         f(&mut next);
-        if next == disco {
+        if next == disk {
             // Niente è cambiato: non si tocca il disco. Cliccare due volte lo
             // stesso interruttore non è una scrittura.
-            fuso = Some(next);
+            zone = Some(next);
             return Ok(None);
         }
         let file = OrganizationFile {
@@ -367,18 +367,18 @@ fn fondi(
         };
         let json = match serde_json::to_vec_pretty(&file) {
             Ok(json) => json,
-            Err(e) => {
-                guasto = Some(e.to_string());
-                return Err(std::io::Error::other("il file non si è potuto comporre"));
+            Err(and) => {
+                failure = Some(and.to_string());
+                return Err(std::io::Error::other("the file could not be composed"));
             }
         };
-        fuso = Some(next);
+        zone = Some(next);
         Ok(Some(json))
     });
-    match (esito, guasto) {
-        (_, Some(guasto)) => Err(guasto),
-        (Err(e), None) => Err(format!("non riesco a scrivere {path}: {e}")),
-        (Ok(()), None) => Ok(fuso.expect("una fusione riuscita ha lasciato l'organizzazione")),
+    match (outcome, failure) {
+        (_, Some(failure)) => Err(failure),
+        (Err(and), None) => Err(format!("cannot write {path}: {and}")),
+        (Ok(()), None) => Ok(zone.expect("a successful merge left the organization")),
     }
 }
 
@@ -388,16 +388,16 @@ fn fondi(
 /// Le liste che riscrive possono nominare la destinazione già per conto loro:
 /// che ne resti una copia sola non lo decide qui, lo decide
 /// [`senza_doppioni`], che passa dopo **ogni** mutazione.
-fn migra(org: &mut Organization, from: &str, to: &str) -> bool {
-    let mut cambiata = false;
+fn migrate(org: &mut Organization, from: &str, to: &str) -> bool {
+    let mut changed = false;
     if let Some(icon) = org.icons.remove(from) {
         org.icons.insert(to.to_string(), icon);
-        cambiata = true;
+        changed = true;
     }
     for p in org.pinned.iter_mut() {
         if p == from {
             *p = to.to_string();
-            cambiata = true;
+            changed = true;
         }
     }
     if let Some(names) = org.order.get_mut(parent_of(from)) {
@@ -407,10 +407,10 @@ fn migra(org: &mut Organization, from: &str, to: &str) -> bool {
             } else {
                 names.remove(at);
             }
-            cambiata = true;
+            changed = true;
         }
     }
-    cambiata
+    changed
 }
 
 /// Le liste dell'organizzazione sono **insiemi ordinati**: lo stesso id non ci
@@ -429,18 +429,18 @@ fn migra(org: &mut Organization, from: &str, to: &str) -> bool {
 /// altrove. La posizione della copia migrata, invece, sarebbe una seconda
 /// regola per lo stesso caso, e l'utente vedrebbe due esiti diversi a seconda di
 /// come l'id è arrivato lì.
-fn senza_doppioni(org: &mut Organization) {
-    una_volta_sola(&mut org.pinned);
-    una_volta_sola(&mut org.spaces);
-    for nomi in org.order.values_mut() {
-        una_volta_sola(nomi);
+fn without_duplicates(org: &mut Organization) {
+    keep_first_occurrence(&mut org.pinned);
+    keep_first_occurrence(&mut org.spaces);
+    for names in org.order.values_mut() {
+        keep_first_occurrence(names);
     }
 }
 
 /// La lista senza le ripetizioni, tenendo la **prima** di ognuna al suo posto.
-fn una_volta_sola(lista: &mut Vec<String>) {
-    let mut visti = HashSet::new();
-    lista.retain(|id| visti.insert(id.clone()));
+fn keep_first_occurrence(ids: &mut Vec<String>) {
+    let mut seen = HashSet::new();
+    ids.retain(|id| seen.insert(id.clone()));
 }
 
 /// La cartella di un path (`""` per la radice), con la stessa regola del
@@ -467,22 +467,22 @@ fn load(
     match storage.read(path) {
         Ok(raw) => decode(path, &raw),
         // Assente = vault mai personalizzato: è un esito normale.
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+        Err(and) if and.kind() == std::io::ErrorKind::NotFound => {
             Ok((Organization::default(), Vec::new()))
         }
-        Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
+        Err(and) => Err(format!("cannot read {path}: {and}")),
     }
 }
 
 /// La frase con cui le chiavi scartate arrivano a chi guarda, o `None` se non
 /// ce n'è nessuna.
-fn avviso_scartate(path: &Utf8Path, scartate: Vec<String>) -> Option<String> {
-    (!scartate.is_empty()).then(|| {
+fn notice_pruned(path: &Utf8Path, pruned: Vec<String>) -> Option<String> {
+    (!pruned.is_empty()).then(|| {
         format!(
-            "{path} nomina {} posizioni che non stanno in questo vault, e Fub \
-             le lascia indietro: {}",
-            scartate.len(),
-            scartate.join(", ")
+            "{path} names {} positions that are not in this vault, and Fub \
+             leaves them behind: {}",
+            pruned.len(),
+            pruned.join(", ")
         )
     })
 }
@@ -496,17 +496,17 @@ fn avviso_scartate(path: &Utf8Path, scartate: Vec<String>) -> Option<String> {
 /// metà difetto.
 fn decode(path: &Utf8Path, raw: &[u8]) -> Result<(Organization, Vec<String>), String> {
     let file: OrganizationFile = serde_json::from_slice(raw)
-        .map_err(|e| format!("{path} non è un workspace.json valido: {e}"))?;
+        .map_err(|and| format!("{path} is not a valid workspace.json: {and}"))?;
     if file.version > SCHEMA_VERSION {
         return Err(format!(
-            "{path} è scritto nella versione {} di questo formato, e questa \
-             copia di Fub legge fino alla {SCHEMA_VERSION}",
+            "{path} is written in version {} of this format, and this \
+             copy of Fub reads up to {SCHEMA_VERSION}",
             file.version
         ));
     }
     let mut organization = file.organization;
-    let scartate = recinta(&mut organization);
-    Ok((organization, scartate))
+    let pruned = recinta(&mut organization);
+    Ok((organization, pruned))
 }
 
 /// Il recinto applicato alle chiavi del sidecar, che sono l'unico path del
@@ -533,55 +533,55 @@ fn decode(path: &Utf8Path, raw: &[u8]) -> Result<(Organization, Vec<String>), St
 /// si sta buttando un dato autorevole: si sta togliendo un nome che non è di
 /// nessuno.
 fn recinta(org: &mut Organization) -> Vec<String> {
-    let mut scartate = Vec::new();
+    let mut pruned = Vec::new();
     org.icons = std::mem::take(&mut org.icons)
         .into_iter()
-        .filter_map(|(k, v)| ammessa(&k, &mut scartate).map(|k| (k, v)))
+        .filter_map(|(k, v)| ammessa(&k, &mut pruned).map(|k| (k, v)))
         .collect();
     org.pinned = std::mem::take(&mut org.pinned)
         .into_iter()
-        .filter_map(|p| ammessa(&p, &mut scartate))
+        .filter_map(|p| ammessa(&p, &mut pruned))
         .collect();
     org.spaces = std::mem::take(&mut org.spaces)
         .into_iter()
-        .filter_map(|s| ammessa(&s, &mut scartate))
+        .filter_map(|s| ammessa(&s, &mut pruned))
         .collect();
     org.order = std::mem::take(&mut org.order)
         .into_iter()
-        .filter_map(|(cartella, nomi)| {
+        .filter_map(|(folder, names)| {
             // La radice è la chiave vuota, ed è l'unica cartella che si nomina
             // non nominandola: il recinto la rifiuterebbe come «non nomina
             // niente», che qui è invece esattamente ciò che vuol dire.
-            let cartella = match cartella.is_empty() {
+            let folder = match folder.is_empty() {
                 true => String::new(),
-                false => ammessa(&cartella, &mut scartate)?,
+                false => ammessa(&folder, &mut pruned)?,
             };
             // I valori non sono path ma **nomi di figli**, e chi disegna li
             // compone con la cartella: un nome che risale o che porta un
             // separatore comporrebbe un path che la chiave non dichiara. Un
             // nome è un path di un segmento solo, e si chiede così.
-            let nomi = nomi
+            let names = names
                 .into_iter()
                 .filter(|n| {
-                    let dentro = path_policy::fenced(n).is_ok() && !n.contains(['/', '\\']);
-                    if !dentro {
-                        scartate.push(format!("{cartella}/{n}"));
+                    let within = path_policy::fenced(n).is_ok() && !n.contains(['/', '\\']);
+                    if !within {
+                        pruned.push(format!("{folder}/{n}"));
                     }
-                    dentro
+                    within
                 })
                 .collect();
-            Some((cartella, nomi))
+            Some((folder, names))
         })
         .collect();
-    scartate
+    pruned
 }
 
 /// Una chiave, se nomina un posto di questo vault. Vedi [`recinta`].
-fn ammessa(chiave: &str, scartate: &mut Vec<String>) -> Option<String> {
-    match path_policy::fenced_doc_id(&DocId::new(chiave)) {
-        Ok(pulita) => Some(pulita.to_string()),
+fn ammessa(key: &str, pruned: &mut Vec<String>) -> Option<String> {
+    match path_policy::fenced_doc_id(&DocId::new(key)) {
+        Ok(cleaned) => Some(cleaned.to_string()),
         Err(_) => {
-            scartate.push(chiave.to_string());
+            pruned.push(key.to_string());
             None
         }
     }
@@ -593,12 +593,12 @@ mod tests {
 
     fn tempdir() -> (tempfile::TempDir, Utf8PathBuf) {
         let dir = tempfile::tempdir().expect("tempdir");
-        let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("path UTF-8");
+        let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("UTF-8 path");
         (dir, path)
     }
 
     #[test]
-    fn scrivere_una_chiave_non_tocca_le_altre() {
+    fn writing_one_key_does_not_touch_the_others() {
         // È la ragione per cui i mutatori sono per chiave e non a blob intero:
         // con due finestre aperte, chi salvava per ultimo cancellava l'altro.
         let store = OrganizationStore::in_memory();
@@ -612,7 +612,7 @@ mod tests {
     }
 
     #[test]
-    fn appuntare_due_volte_non_raddoppia_ne_sposta() {
+    fn pinning_twice_does_not_double_or_move() {
         let store = OrganizationStore::in_memory();
         store.set_pinned("a.md", true).unwrap();
         store.set_pinned("b.md", true).unwrap();
@@ -623,19 +623,19 @@ mod tests {
     }
 
     #[test]
-    fn un_ordine_vuoto_si_dimentica() {
+    fn an_empty_order_is_forgotten() {
         let store = OrganizationStore::in_memory();
         store.set_order("note", vec!["b.md".into()]).unwrap();
         assert!(store.snapshot().order.contains_key("note"));
         store.set_order("note", Vec::new()).unwrap();
         assert!(
             !store.snapshot().order.contains_key("note"),
-            "torna a valere l'alfabetico, che è ciò che significa"
+            "alphabetical takes over again, which is what it means"
         );
     }
 
     #[test]
-    fn un_rename_porta_con_se_icona_pin_e_posto() {
+    fn a_rename_carries_icon_pin_and_position() {
         let store = OrganizationStore::in_memory();
         store.set_icon("a.md", Some("📌".into())).unwrap();
         store.set_pinned("a.md", true).unwrap();
@@ -652,7 +652,7 @@ mod tests {
     }
 
     #[test]
-    fn spostare_in_unaltra_cartella_lascia_il_posto_nellordine() {
+    fn moving_to_another_folder_leaves_the_position_in_order() {
         let store = OrganizationStore::in_memory();
         store.set_icon("a.md", Some("📌".into())).unwrap();
         store
@@ -664,17 +664,17 @@ mod tests {
         assert_eq!(
             org.icons.get("note/a.md").map(String::as_str),
             Some("📌"),
-            "l'icona è della nota, e la segue ovunque"
+            "the icon belongs to the note and follows it everywhere"
         );
         assert_eq!(
             org.order[""],
             ["b.md"],
-            "il posto invece era dei figli di quella cartella"
+            "the position, on the other hand, belonged to that folder's children"
         );
     }
 
     #[test]
-    fn una_migrazione_non_lascia_lo_stesso_id_in_due_posti() {
+    fn a_migration_does_not_leave_the_same_id_in_two_places() {
         let store = OrganizationStore::in_memory();
         store.set_pinned("a.md", true).unwrap();
         store.set_pinned("c.md", true).unwrap();
@@ -693,21 +693,21 @@ mod tests {
         assert!(store.migrate("a.md", "c.md").unwrap());
 
         let org = store.snapshot();
-        assert_eq!(org.pinned, ["c.md"], "una nota appuntata una volta sola");
+        assert_eq!(org.pinned, ["c.md"], "a note pinned once and only once");
         assert_eq!(
             org.order["uno"],
             ["c.md", "x.md"],
-            "chi c'era già non si sposta"
+            "the one already there does not move"
         );
         assert_eq!(
             org.order["due"],
             ["c.md", "x.md"],
-            "e la copia che arriva addosso non porta via il posto di nessuno"
+            "and the copy landing on top does not steal anyone's position"
         );
     }
 
     #[test]
-    fn un_ordine_con_un_doppione_non_lo_conserva() {
+    fn a_duplicated_order_does_not_keep_the_duplicate() {
         let store = OrganizationStore::in_memory();
         store
             .set_order("", vec!["a.md".into(), "b.md".into(), "a.md".into()])
@@ -715,32 +715,32 @@ mod tests {
         assert_eq!(
             store.snapshot().order[""],
             ["a.md", "b.md"],
-            "una lista di id è un insieme ordinato da qualunque porta arrivi"
+            "a list of ids is an ordered set no matter how it arrives"
         );
     }
 
     #[test]
-    fn una_nota_non_organizzata_non_fa_scrivere_niente() {
+    fn an_unorganized_notes_triggers_no_write() {
         let store = OrganizationStore::in_memory();
         store.set_icon("a.md", Some("📌".into())).unwrap();
         assert!(
             !store.migrate("b.md", "c.md").unwrap(),
-            "niente da migrare, nessuna scrittura"
+            "nothing to migrate, no write"
         );
     }
 
     #[test]
-    fn sopravvive_a_un_giro_su_disco() {
+    fn survives_a_disk_round_trip() {
         let (_tmp, root) = tempdir();
         let (store, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(warning.is_none());
         store.set_icon("a.md", Some("📌".into())).unwrap();
 
-        let (riletto, warning) =
+        let (reopened, warning) =
             OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(warning.is_none());
         assert_eq!(
-            riletto.snapshot().icons.get("a.md").map(String::as_str),
+            reopened.snapshot().icons.get("a.md").map(String::as_str),
             Some("📌")
         );
     }
@@ -748,7 +748,7 @@ mod tests {
     /// Il file **nasce senza versione**: quello scritto prima di questa voce si
     /// apre, si legge, e la prima scrittura lo porta alla 1.
     #[test]
-    fn un_sidecar_scritto_prima_di_questa_voce_si_legge() {
+    fn a_sidecar_written_before_this_entry_is_read() {
         let (_tmp, root) = tempdir();
         let path = organization_path(&root);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -763,27 +763,27 @@ mod tests {
         assert_eq!(store.snapshot().pinned, ["a.md"]);
 
         store.set_icon("b.md", Some("📎".into())).unwrap();
-        let scritto = std::fs::read_to_string(&path).unwrap();
-        assert!(scritto.contains("\"version\": 1"), "{scritto}");
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(written.contains("\"version\": 1"), "{written}");
     }
 
     /// La regola della 0036, dove conta più che altrove: la configurazione al
     /// peggio si rifà cliccando, l'organizzazione di mille note no.
     #[test]
-    fn un_file_rotto_non_lo_riscrive_la_prima_scrittura() {
+    fn a_broken_file_is_not_overwritten_by_the_first_write() {
         let (_tmp, root) = tempdir();
         let path = organization_path(&root);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        let rotto = "{ \"icons\": {,} }";
-        std::fs::write(&path, rotto).unwrap();
+        let broken = "{ \"icons\": {,} }";
+        std::fs::write(&path, broken).unwrap();
 
         let (store, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
-        assert!(warning.is_some(), "e lo dice");
-        let e = store
+        assert!(warning.is_some(), "and it says so");
+        let and = store
             .set_icon("a.md", Some("📌".into()))
-            .expect_err("non si scrive su ciò che non si è letto");
-        assert!(e.contains("non lo sovrascrive"), "{e}");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), rotto);
+            .expect_err("nothing is written to what has not been read");
+        assert!(and.contains("does not overwrite"), "{and}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
     }
 
     /// **E un sidecar corretto a mano non aspetta una riapertura** (difetto
@@ -795,26 +795,26 @@ mod tests {
     /// preferito finché non riapriva Fub, perché la bandiera che rispondeva
     /// l'aveva letta all'apertura e nessuno gliela rileggeva più.
     #[test]
-    fn un_sidecar_corretto_a_mano_non_aspetta_una_riapertura() {
+    fn a_sidecar_fixed_by_hand_does_not_wait_for_a_reopen() {
         let (_tmp, root) = tempdir();
         let path = organization_path(&root);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{ \"icons\": {,} }").unwrap();
 
         let (store, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
-        assert!(warning.is_some(), "e lo dice");
+        assert!(warning.is_some(), "and it says so");
 
         std::fs::write(&path, "{ \"version\": 1, \"pinned\": [\"b.md\"] }").unwrap();
 
         store.set_icon("a.md", Some("📌".into())).expect(
-            "il sidecar adesso si legge: rifiutare vorrebbe dire chiedere di \
-             riaprire l'app per un file che è già a posto",
+            "the sidecar is now readable: refusing would mean asking to \
+             reopen the app for a file that is already fine",
         );
         assert_eq!(
             store.snapshot().pinned,
             vec!["b.md".to_string()],
-            "e si è fusi su ciò che il file corretto diceva, non sull'organizzazione \
-             vuota dell'apertura"
+            "and the merge used what the corrected file said, not the empty \
+             organization from open time"
         );
     }
 
@@ -824,7 +824,7 @@ mod tests {
     /// perché su un file rotto c'è qualcosa da non sovrascrivere e su uno
     /// sparito c'è solo da rifarlo.
     #[test]
-    fn un_sidecar_sparito_a_meta_sessione_non_porta_via_l_organizzazione() {
+    fn a_sidecar_disappeared_mid_session_does_not_lose_the_organization() {
         let (_tmp, root) = tempdir();
         let path = organization_path(&root);
         let (store, _) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
@@ -840,26 +840,26 @@ mod tests {
         assert_eq!(
             org.icons.get("a.md").map(String::as_str),
             Some("📌"),
-            "l'icona di prima è ancora lì"
+            "the previous icon is still there"
         );
-        assert_eq!(org.pinned, ["b.md"], "e il preferito pure");
+        assert_eq!(org.pinned, ["b.md"], "and so is the pin");
         assert_eq!(org.icons.get("c.md").map(String::as_str), Some("📎"));
 
         // E il sidecar è tornato, con dentro tutto.
-        let (riletto, warning) =
+        let (reopened, warning) =
             OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
         assert!(warning.is_none(), "{warning:?}");
-        assert_eq!(riletto.snapshot(), org);
+        assert_eq!(reopened.snapshot(), org);
     }
 
     #[test]
-    fn un_file_dal_futuro_non_si_indovina() {
+    fn a_file_from_the_future_is_not_guessed() {
         let (_tmp, root) = tempdir();
         let path = organization_path(&root);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, r#"{"version":99}"#).unwrap();
         let (_, warning) = OrganizationStore::open(&root, Arc::new(crate::storage::FsStorage));
-        let warning = warning.expect("una versione che non si sa leggere si dice");
+        let warning = warning.expect("a version that cannot be read is reported");
         assert!(warning.contains("99"), "{warning}");
     }
 }

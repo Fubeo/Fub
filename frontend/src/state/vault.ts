@@ -12,8 +12,8 @@
 // per questo che qui non c'è quasi nulla — la logica sta nelle feature, e
 // questo modulo è solo il posto dove la shell smette di avere scorciatoie.
 import { api } from "../host/ipc";
-import { vociDelVault } from "../host/query";
-import { COMANDI } from "../host/contract";
+import { vaultEntries } from "../host/query";
+import { COMMANDS } from "../host/contract";
 import { emit, state } from "./store";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
@@ -35,8 +35,8 @@ export function refreshDocuments(): void {
 /// Una domanda con una finestra da **uno**, e non l'elenco intero da cui
 /// prendere il primo: è ciò che serve a chi deve aprire *qualcosa* dopo aver
 /// chiuso il documento che stava guardando.
-export async function primaNota(): Promise<string | null> {
-  const page = await vociDelVault({ offset: 0, limit: 1 }, "document");
+export async function beforeNota(): Promise<string | null> {
+  const page = await vaultEntries({ offset: 0, limit: 1 }, "document");
   return page.items[0]?.id ?? null;
 }
 
@@ -49,7 +49,7 @@ export async function primaNota(): Promise<string | null> {
 /// riuscito ma non ha detto dove: non è un caso previsto, e chi chiama decide
 /// se è un errore da mostrare.
 export async function createNote(name?: string): Promise<string | null> {
-  const outcome = await api.invokeCommand(COMANDI.crea, name ? { name } : undefined);
+  const outcome = await api.invokeCommand(COMMANDS.create, name ? { name } : undefined);
   refreshDocuments();
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
 }
@@ -62,13 +62,13 @@ export async function createNote(name?: string): Promise<string | null> {
 /// l'evento `document_renamed`, perché l'identità è il path e chi la migra deve
 /// essere un punto solo.
 export async function renameNote(from: string, to: string): Promise<void> {
-  await api.invokeCommand(COMANDI.rinomina, { doc: from, to });
+  await api.invokeCommand(COMMANDS.rename, { doc: from, to });
   refreshDocuments();
 }
 
 /// Sposta una nota nel cestino.
 export async function trashNote(id: string): Promise<void> {
-  await api.invokeCommand(COMANDI.cestina, { doc: id });
+  await api.invokeCommand(COMMANDS.trash, { doc: id });
 }
 
 // Ripristinare dal cestino, svuotarlo e proporre un nome libero non stanno più

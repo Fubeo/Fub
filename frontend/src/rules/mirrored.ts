@@ -48,7 +48,7 @@ export function pageName(id: string): string {
 /// Gemella di `fub_abi::rules::path::resolution_key`, ed è **l'unico** modo in
 /// cui questa parte del codice ha il diritto di confrontare due nomi di
 /// documento. Il `toLowerCase()` da solo non basta: un vault sincronizzato con
-/// macOS ha i nomi file in NFD (`e` + accento combinante) mentre il link
+/// macOS ha i nomi file in NFD (`e` + accento combinante) mentre il legame
 /// digitato è NFC, e senza `normalize` la folder note di `Città/` non si trova e
 /// il nome ambiguo non si riconosce — su un vault Linux tutto sembra a posto,
 /// che è il modo peggiore di sbagliare.
@@ -131,9 +131,9 @@ function isDosDevice(segment: string): boolean {
 /// punto: la disciplina che si ripete a ogni sito è quella che il sito nuovo non
 /// eredita.
 export function nameFault(path: string, naming: Naming): NameFault | null {
-  const giudicato = naming === "new" ? normalizedName(path) : path;
-  if (giudicato.trim() === "") return "empty";
-  const segments = giudicato.split("/");
+  const judgedPath = naming === "new" ? normalizedName(path) : path;
+  if (judgedPath.trim() === "") return "empty";
+  const segments = judgedPath.split("/");
   for (const [i, segment] of segments.entries()) {
     if (segment === "" || segment === "." || segment === "..") return "traversal";
     // Il recinto interno, e vale per entrambe le domande: `.fub/` e `.trash/`
@@ -187,7 +187,7 @@ export function normalizedName(path: string): string {
 }
 
 /// Dove comincia e finisce un `#tag`.
-export interface TagTrovato {
+export interface FoundTag {
   /// Il nome senza il `#`.
   name: string;
   /// In **code unit**, `#` compreso: è la valuta di CodeMirror, e la gemella
@@ -201,19 +201,19 @@ export interface TagTrovato {
 /// più le tre categorie di numero. **Non** include i segni combinanti, ed è la
 /// riga da cui dipende che `#Café` scritto decomposto sia lo stesso tag di qua
 /// e di là — cioè uno solo per il vault (0107, `568874c`).
-export const ALFANUMERICO = /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}]/u;
+export const ALPHANUMERIC = /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}]/u;
 /// I caratteri che stanno **dentro** il nome di un tag. Esportata perché il
 /// completamento deve conoscere la stessa classe mentre il tag è a metà: due
 /// classi vorrebbero dire un popup che si apre su un token che, finito di
 /// scrivere, non è un tag.
-export const CARATTERE_DI_TAG = /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}_/-]/u;
+export const TAG_CHARACTER = /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}_/-]/u;
 
 /// I `#tag` di un frammento di **testo semplice** (chi chiama deve già aver
 /// escluso codice inline, blocchi di codice e frontmatter).
 ///
 /// Gemella di `fub_abi::rules::tag::scan_tags`, ed è la regola che la §4.4 ha
-/// trovato scritta **tre** volte nella shell e diversa in tutte e tre — nessuna
-/// delle quali era questa. Le differenze non erano di stile: la live preview
+/// trovato scritto **tre** volte nella shell e diversa in tutte e tre — nessuna
+/// delle quali era questa. Le differenze non erano di stile: la vivi preview
 /// pretendeva spazio o parentesi prima del `#` (quindi `vedi.#tag` non era un
 /// tag mentre lo era per il modello), accettava i segni combinanti dentro il
 /// nome (quindi `#Café` decomposto ne dava uno più lungo), e scartava come
@@ -222,8 +222,8 @@ export const CARATTERE_DI_TAG = /[\p{Alphabetic}\p{Nd}\p{Nl}\p{No}_/-]/u;
 /// Non è una regex: la condizione sul carattere **precedente** guarda un punto
 /// di codice e non una code unit, e una regex con lookbehind su `.` avrebbe
 /// riguardato mezza coppia surrogata.
-export function scanTags(text: string): TagTrovato[] {
-  const out: TagTrovato[] = [];
+export function scanTags(text: string): FoundTag[] {
+  const out: FoundTag[] = [];
   let i = 0;
   while (i < text.length) {
     if (text[i] !== "#") {
@@ -233,9 +233,10 @@ export function scanTags(text: string): TagTrovato[] {
     // Il `#` non deve seguire un carattere alfanumerico. `codePointAt` sul
     // carattere prima: se è un low surrogate, si torna indietro di due.
     if (i > 0) {
-      const primaBassa = text.charCodeAt(i - 1);
-      const inizioPrec = primaBassa >= 0xdc00 && primaBassa <= 0xdfff && i >= 2 ? i - 2 : i - 1;
-      if (ALFANUMERICO.test(text.slice(inizioPrec, i))) {
+      const beforeLowSurrogate = text.charCodeAt(i - 1);
+      const previousIndex =
+        beforeLowSurrogate >= 0xdc00 && beforeLowSurrogate <= 0xdfff && i >= 2 ? i - 2 : i - 1;
+      if (ALPHANUMERIC.test(text.slice(previousIndex, i))) {
         i += 1;
         continue;
       }
@@ -244,7 +245,7 @@ export function scanTags(text: string): TagTrovato[] {
     while (j < text.length) {
       const cp = text.codePointAt(j)!;
       const c = String.fromCodePoint(cp);
-      if (!CARATTERE_DI_TAG.test(c)) break;
+      if (!TAG_CHARACTER.test(c)) break;
       j += c.length;
     }
     const name = text.slice(i + 1, j);

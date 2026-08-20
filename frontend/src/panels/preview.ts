@@ -21,17 +21,17 @@ import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
-import { Corsa, type Atteso } from "../ui/corsa";
+import { Race, type Expected } from "../ui/race";
 
-/// Profondità massima di transclusion: oltre, l'embed resta un link.
+/// Profondità massima di transclusion: oltre, l'embed resta un legame.
 const MAX_EMBED_DEPTH = 5;
 
-let apriPagina: (page: string, heading?: string, block?: string) => Promise<void> = async () => {};
+let openPage: (page: string, heading?: string, block?: string) => Promise<void> = async () => {};
 
 export interface PreviewDeps {
   /// Cliccare un wikilink: risolvere e aprire, o creare la nota che manca.
   ///
-  /// `heading` e `block` sono il punto che il link nomina, quando lo nomina
+  /// `heading` e `block` sono il punto che il legame nomina, quando lo nomina
   /// (`[[Nota#Sezione]]`, `[[Nota#^blocco]]`): il parser li legge dalla 0003 e
   /// fino alla 0049 non c'era una risposta in cui metterli, quindi si
   /// perdevano qui.
@@ -39,7 +39,7 @@ export interface PreviewDeps {
 }
 
 export function configurePreview(deps: PreviewDeps): void {
-  apriPagina = deps.openPage;
+  openPage = deps.openPage;
 }
 
 /// La corsa è **della superficie**, non del modulo.
@@ -49,15 +49,15 @@ export function configurePreview(deps: PreviewDeps): void {
 /// quattro implementazioni a mano — le farebbe annullare a vicenda. La mappa è
 /// **debole** perché il padrone è l'elemento: quando il riquadro se ne va la sua
 /// corsa se ne va con lui, e non c'è nessuna cancellazione da ricordarsi. È la
-/// stessa regola della `Vita` (0133), col contenitore al posto della chiusura.
-const corse = new WeakMap<HTMLElement, Corsa>();
+/// stessa regola della `Lifetime` (0133), col contenitore al posto della chiusura.
+const races = new WeakMap<HTMLElement, Race>();
 
-function corsaDi(previewEl: HTMLElement): Corsa {
-  const gia = corse.get(previewEl);
-  if (gia) return gia;
-  const nuova = new Corsa();
-  corse.set(previewEl, nuova);
-  return nuova;
+function runOf(previewEl: HTMLElement): Race {
+  const existing = races.get(previewEl);
+  if (existing) return existing;
+  const newItem = new Race();
+  races.set(previewEl, newItem);
+  return newItem;
 }
 
 /// Svuota una superficie di lettura.
@@ -66,12 +66,12 @@ export function clearPreview(previewEl: HTMLElement): void {
   // istante fa è ancora in volo, e senza far scadere il giro arriverebbe a
   // riempire un'anteprima che nessuno guarda più — quella del documento di
   // prima, dentro un riquadro che intanto mostra altro.
-  corse.get(previewEl)?.annulla();
+  races.get(previewEl)?.cancel();
   previewEl.innerHTML = "";
 }
 
 /// Chiede al kernel il documento reso e lo innesta in una superficie di
-/// lettura, ricucendo link, parti ed embed.
+/// lettura, ricucendo legame, parti ed embed.
 ///
 /// **Il contenitore arriva da fuori.** Fino a ieri era `#preview`, letto qui:
 /// era vero finché di riquadri ce n'era uno, e sarebbe diventato falso in
@@ -80,20 +80,20 @@ export function clearPreview(previewEl: HTMLElement): void {
 /// è il riquadro (§1.2), e questo modulo torna a sapere solo *come* si rende un
 /// documento.
 export async function updatePreview(previewEl: HTMLElement, id: string): Promise<void> {
-  await corsaDi(previewEl).ultimo(async (atteso) => {
-    const reso = await atteso(
+  await runOf(previewEl).last(async (expected) => {
+    const rendered = await expected(
       api.queryIndex({ kind: "render_preview", doc: id }).then((r) => {
         if (r.kind !== "render_preview") throw new Error("risposta inattesa");
         return r.value;
       }),
     );
-    innesta(previewEl, reso);
+    mountRendered(previewEl, rendered);
     // L'`atteso` scende nell'idratazione, e non è una comodità: gli embed sono
     // il **grosso** delle attese di un'anteprima — una nota che ne trascluda
     // dieci sono dieci viaggi dopo che il primo è già tornato — quindi è lì che
     // la finestra è larga. Passarlo giù è ciò che rende il controllo una cosa
     // che si eredita invece di una cosa che si riscrive.
-    await hydrateEmbeds(previewEl, new Set([id]), new Map(), atteso);
+    await hydrateEmbeds(previewEl, new Set([id]), new Map(), expected);
   });
 }
 
@@ -104,10 +104,10 @@ export async function updatePreview(previewEl: HTMLElement, id: string): Promise
 /// cerca. E l'HTML passa dal punto unico (§3.6) come tutto ciò che entra nella
 /// webview — anche se qui a produrlo è il nostro provider, perché la regola vale
 /// per chi lo produce oggi e per chi lo produrrà.
-function innesta(container: HTMLElement, reso: RenderedDocument): void {
-  setSanitizedHtml(container, reso.html);
+function mountRendered(container: HTMLElement, rendered: RenderedDocument): void {
+  setSanitizedHtml(container, rendered.html);
   wireWikilinks(container);
-  mountParts(container, reso);
+  mountParts(container, rendered);
 }
 
 /// Monta le parti dichiarative di un documento reso (§3.2, §3.3).
@@ -122,8 +122,8 @@ function innesta(container: HTMLElement, reso: RenderedDocument): void {
 /// `ViewProvider` a cui mandare un click — chi lo vorrà passerà da una view
 /// sulla superficie principale. Un `onAction` che non fa niente è la risposta
 /// onesta, e non un `TODO` che finisce in un errore a runtime.
-function mountParts(container: HTMLElement, reso: RenderedDocument): void {
-  for (const part of reso.parts) {
+function mountParts(container: HTMLElement, rendered: RenderedDocument): void {
+  for (const part of rendered.parts) {
     const slot = container.querySelector<HTMLElement>(`[data-ui-slot="${part.slot}"]`);
     if (!slot) continue; // il buco non c'è più: il documento è cambiato sotto
     slot.dataset.kind = part.kind;
@@ -136,17 +136,17 @@ function wireWikilinks(container: HTMLElement): void {
   container.querySelectorAll<HTMLAnchorElement>("a.wikilink").forEach((a) => {
     a.addEventListener("click", async (e) => {
       e.preventDefault();
-      // Vuoto e assente sono la stessa cosa per un `data-`, e non per un link:
+      // Vuoto e assente sono la stessa cosa per un `data-`, e non per un legame:
       // `[[#Sezione]]` scrive `data-wikilink-page=""` ed è un riferimento
       // dentro la nota che si sta leggendo. Un `if (!page) return` qui era il
       // gemello di quello di `openWikilink` — due click che non facevano
       // niente, in due superfici, per la stessa premessa sbagliata.
       const page = a.dataset.wikilinkPage ?? "";
       try {
-        await apriPagina(page, a.dataset.wikilinkHeading, a.dataset.wikilinkBlock);
+        await openPage(page, a.dataset.wikilinkHeading, a.dataset.wikilinkBlock);
       } catch (err) {
-        // Link non risolto e nota non creabile: si segna, non si tace. Il
-        // segno sul link dice *quale*, l'avviso dice *perché* — e senza il
+        // Legame non risolto e nota non creabile: si segna, non si tace. Il
+        // segno sul legame dice *quale*, l'avviso dice *perché* — e senza il
         // secondo un click che non fa niente resta senza spiegazione (§20.4).
         a.classList.add("unresolved");
         notify(t("preview.open_failed", { page, reason: errorText(err) }), "guasto");
@@ -169,7 +169,7 @@ function wireWikilinks(container: HTMLElement): void {
 // ripetuto tre volte nella stessa nota erano tre viaggi identici.
 //
 // Il memo è per **corsa di idratazione**, e la sua correttezza non è una
-// scommessa sul kernel: è scritta nella firma di `FormatProvider::render_html`,
+// scommessa sul kernel: è scritto nella firma di `FormatProvider::render_html`,
 // che promette che *«la resa di un blocco dipende dal blocco, non dal resto del
 // documento»* — cioè che chiedere due volte la stessa pagina con lo stesso
 // heading rende due volte la stessa cosa. Un memo che sopravvivesse alla corsa
@@ -184,7 +184,7 @@ async function hydrateEmbeds(
   container: HTMLElement,
   chain: Set<string>,
   memo: Map<string, Promise<EmbedContent>>,
-  atteso: Atteso,
+  expected: Expected,
 ): Promise<void> {
   const slots = Array.from(
     container.querySelectorAll<HTMLElement>(".embed[data-embed-page]"),
@@ -203,21 +203,21 @@ async function hydrateEmbeds(
       // deve portare anche lei, o due embed della stessa pagina con due ancore
       // diverse si scambierebbero la risposta.
       const block = slot.dataset.embedBlock ?? null;
-      const chiave = `${page} ${heading ?? ""} ${block ?? ""}`;
-      let chiesto = memo.get(chiave);
-      if (!chiesto) {
-        chiesto = api
+      const key = `${page} ${heading ?? ""} ${block ?? ""}`;
+      let requestedContent = memo.get(key);
+      if (!requestedContent) {
+        requestedContent = api
           .queryIndex({ kind: "render_embed", page, heading, block })
           .then((r) => {
             if (r.kind !== "render_embed") throw new Error("risposta inattesa");
             return r.value;
           });
-        memo.set(chiave, chiesto);
+        memo.set(key, requestedContent);
       }
       // L'errore diventa un valore prima del cancello — un embed che non si
       // risolve si segna e basta — così qui sotto non c'è nessun `catch` in cui
       // il segnale di scadenza possa perdersi.
-      const content = await atteso(chiesto.then((c) => c).catch(() => null));
+      const content = await expected(requestedContent.then((c) => c).catch(() => null));
       if (!content) {
         slot.classList.add("unresolved");
         return;
@@ -227,11 +227,11 @@ async function hydrateEmbeds(
         return;
       }
       // Un embed passa dagli stessi renderer dell'anteprima: un diagramma
-      // dentro una nota trasclusa resta un diagramma. `innesta` fa le tre cose
+      // dentro una nota trasclusa resta un diagramma. `mountRendered` fa le tre cose
       // che servono — sanitizza, ricuce i link, monta le parti.
-      innesta(slot, content);
+      mountRendered(slot, content);
       slot.classList.add("embed-loaded");
-      await hydrateEmbeds(slot, new Set([...chain, content.doc_id]), memo, atteso);
+      await hydrateEmbeds(slot, new Set([...chain, content.doc_id]), memo, expected);
     }),
   );
 }

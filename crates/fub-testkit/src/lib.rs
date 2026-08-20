@@ -50,12 +50,12 @@ use fub_abi::{FormatProvider, PluginError};
 
 use fub_kernel::{FormatRegistry, Trust, Workspace};
 
-pub mod formato;
+pub mod format;
 
-pub use formato::{EstrattoreDiProva, TestoDiProva};
+pub use format::{SampleExtractor, SampleText};
 
 /// Il registro degli eventi visti da [`Banco::eventi`], condiviso con la spia.
-type Registro = Arc<Mutex<Vec<Event>>>;
+type Record = Arc<Mutex<Vec<Event>>>;
 
 // ---------------------------------------------------------------------------
 // Il builder
@@ -65,65 +65,65 @@ type Registro = Arc<Mutex<Vec<Event>>>;
 ///
 /// Ogni metodo è uno degli assi su cui i trentacinque helper contati dal §16.2
 /// differivano davvero. Chi non ne tocca nessuno ottiene il caso più frequente.
-pub struct Banco {
-    radice: Radice,
-    formati: FormatRegistry,
+pub struct Bench {
+    root: Root,
+    formats: FormatRegistry,
     /// `true` finché nessuno ha chiamato [`Banco::con_formato`] o
     /// [`Banco::senza_formato`]: serve a distinguere «va bene il default» da
     /// «lo voglio vuoto», che sono due richieste diverse e finora si scrivevano
     /// uguali.
-    formato_predefinito: bool,
+    format_default: bool,
     plugin: Vec<String>,
-    plugin_di_terzi: Vec<String>,
+    plugin_of_third_party: Vec<String>,
     file: Vec<(String, String)>,
-    spia: bool,
-    scandisci: bool,
+    probe: bool,
+    scan: bool,
 }
 
 /// Dove sta il vault: una cartella temporanea che il banco possiede, o una che
 /// gli viene data e di cui non risponde.
-enum Radice {
-    Temporanea,
+enum Root {
+    Temporary,
     Data(Utf8PathBuf),
 }
 
-impl Default for Banco {
+impl Default for Bench {
     fn default() -> Self {
-        Banco::nuovo()
+        Bench::new()
     }
 }
 
-impl Banco {
+impl Bench {
     /// Un banco su una cartella temporanea, con il formato di prova su `md`,
     /// nessun plugin dichiarato e nessun file.
-    pub fn nuovo() -> Self {
-        Banco {
-            radice: Radice::Temporanea,
-            formati: FormatRegistry::new(),
-            formato_predefinito: true,
+    pub fn new() -> Self {
+        Bench {
+            root: Root::Temporary,
+            formats: FormatRegistry::new(),
+            format_default: true,
             plugin: Vec::new(),
-            plugin_di_terzi: Vec::new(),
+            plugin_of_third_party: Vec::new(),
             file: Vec::new(),
-            spia: false,
-            scandisci: true,
+            probe: false,
+            scan: true,
         }
     }
 
     /// Un banco su una cartella **data**, che il chiamante possiede e tiene in
     /// vita: è la forma dei test che aprono lo stesso vault due volte per
     /// provare che qualcosa è sopravvissuto alla chiusura.
-    pub fn su(radice: impl AsRef<Utf8Path>) -> Self {
-        Banco {
-            radice: Radice::Data(radice.as_ref().to_path_buf()),
-            ..Banco::nuovo()
+    pub fn on(root: impl AsRef<Utf8Path>) -> Self {
+        Bench {
+            root: Root::Data(root.as_ref().to_path_buf()),
+            ..Bench::new()
         }
     }
 
     /// Registra un formato. Sostituisce il default invece di aggiungersi, la
     /// prima volta che lo si chiama.
-    pub fn con_formato(mut self, provider: Box<dyn FormatProvider>) -> Self {
-        self.formato_predefinito = false;
-        self.formati
+    pub fn with_format(mut self, provider: Box<dyn FormatProvider>) -> Self {
+        self.format_default = false;
+        self.formats
             .register(provider)
             .expect("nessun conflitto di estensioni sul banco");
         self
@@ -131,8 +131,8 @@ impl Banco {
 
     /// Nessun formato registrato: il vault non riconosce niente. È lo stato in
     /// cui un test guarda cosa fa il kernel su un file che nessuno rivendica.
-    pub fn senza_formato(mut self) -> Self {
-        self.formato_predefinito = false;
+    pub fn without_format(mut self) -> Self {
+        self.format_default = false;
         self
     }
 
@@ -141,21 +141,21 @@ impl Banco {
     /// È l'asse su cui le nove `PlainProvider` del §16.2 differivano davvero:
     /// sei registravano `txt` e tre `md`, il che cambia quali file il kernel
     /// instrada — cioè non erano affatto la stessa struct scritta nove volte.
-    pub fn con_estensione(self, ext: &str) -> Self {
-        self.con_formato(Box::new(TestoDiProva::per_estensione(ext)))
+    pub fn with_extension(self, ext: &str) -> Self {
+        self.with_format(Box::new(SampleText::by_extension(ext)))
     }
 
     /// Dichiara una feature di base. Il kernel non presta capacità a una
     /// stringa (§7.3): un id che nessuno ha dichiarato riceve un host che nega
     /// tutto, e dimenticarsene è il modo più frequente di scrivere un test che
     /// fallisce per il motivo sbagliato.
-    pub fn con_plugin(mut self, id: &str) -> Self {
+    pub fn with_plugin(mut self, id: &str) -> Self {
         self.plugin.push(id.to_string());
         self
     }
 
     /// Dichiara più feature di base in una volta.
-    pub fn con_plugins<'a>(mut self, ids: impl IntoIterator<Item = &'a str>) -> Self {
+    pub fn with_plugins<'a>(mut self, ids: impl IntoIterator<Item = &'a str>) -> Self {
         self.plugin.extend(ids.into_iter().map(str::to_string));
         self
     }
@@ -163,62 +163,62 @@ impl Banco {
     /// Dichiara un plugin **di terzi** — `Trust::Community` e i permessi di
     /// base — invece di una feature di base. La differenza si vede dove il
     /// kernel guarda la fiducia prima di concedere qualcosa.
-    pub fn con_plugin_di_terzi(mut self, id: &str) -> Self {
-        self.plugin_di_terzi.push(id.to_string());
+    pub fn with_third_party_plugin(mut self, id: &str) -> Self {
+        self.plugin_of_third_party.push(id.to_string());
         self
     }
 
     /// Semina un file nel vault prima che il kernel lo guardi: è ciò che
     /// troverebbe aprendo una cartella che già esisteva.
-    pub fn con_file(mut self, rel: &str, corpo: &str) -> Self {
-        self.file.push((rel.to_string(), corpo.to_string()));
+    pub fn with_file(mut self, rel: &str, body: &str) -> Self {
+        self.file.push((rel.to_string(), body.to_string()));
         self
     }
 
     /// Registra una spia che prende **ogni** evento, leggibile da
     /// [`Banco::eventi`]. È la seconda metà di ciò che il §16.2 chiede al banco
     /// del lato host: non solo costruire, ma «asserire su cosa è stato emesso».
-    pub fn con_spia(mut self) -> Self {
-        self.spia = true;
+    pub fn with_spy(mut self) -> Self {
+        self.probe = true;
         self
     }
 
     /// Non scandire il vault al montaggio. Serve dove il test vuole guardare
     /// *la prima* scansione, che altrimenti sarebbe già avvenuta.
-    pub fn senza_scansione(mut self) -> Self {
-        self.scandisci = false;
+    pub fn without_scan(mut self) -> Self {
+        self.scan = false;
         self
     }
 
     /// Costruisce il vault e monta il kernel.
-    pub fn monta(mut self) -> Montato {
-        if self.formato_predefinito {
-            self.formati
-                .register(Box::new(TestoDiProva::per_estensione("md")))
+    pub fn mounts(mut self) -> Mounted {
+        if self.format_default {
+            self.formats
+                .register(Box::new(SampleText::by_extension("md")))
                 .expect("il formato predefinito non collide con niente");
         }
 
-        let (dir, root) = match &self.radice {
-            Radice::Temporanea => {
+        let (dir, root) = match &self.root {
+            Root::Temporary => {
                 let dir = tempfile::tempdir().expect("cartella temporanea");
                 let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
                     .expect("la cartella temporanea non è UTF-8");
                 (Some(dir), root)
             }
-            Radice::Data(root) => (None, root.clone()),
+            Root::Data(root) => (None, root.clone()),
         };
 
-        for (rel, corpo) in &self.file {
-            scrivi_in(&root, rel, corpo);
+        for (rel, body) in &self.file {
+            write_in(&root, rel, body);
         }
 
-        let mut ws = Workspace::new(&root, self.formati).expect("la radice appena creata si apre");
+        let mut ws = Workspace::new(&root, self.formats).expect("la radice appena creata si apre");
 
         for id in &self.plugin {
             ws.register_core_feature(id, id)
                 .expect("id di feature dichiarato una volta sola");
         }
-        for id in &self.plugin_di_terzi {
+        for id in &self.plugin_of_third_party {
             ws.register_plugin(
                 PluginManifest::new(id, id).granting(PluginPermissions::core()),
                 Trust::Community,
@@ -226,27 +226,27 @@ impl Banco {
             .expect("id di plugin dichiarato una volta sola");
         }
 
-        let registro: Registro = Arc::default();
-        if self.spia {
-            ws.register_core_feature(SPIA, SPIA)
+        let journal: Record = Arc::default();
+        if self.probe {
+            ws.register_core_feature(SPY, SPY)
                 .expect("l'id della spia è riservato al banco");
-            ws.register_event_handler(SPIA, Box::new(Spia(registro.clone())))
+            ws.register_event_handler(SPY, Box::new(Spy(journal.clone())))
                 .expect("registrazione della spia");
         }
 
-        if self.scandisci {
+        if self.scan {
             ws.reindex().expect("scansione iniziale");
         }
         // Ciò che è stato emesso *montando* non è ciò che il test guarda: chi
         // chiede la spia vuole vedere gli eventi delle proprie mosse, non quelli
         // della semina. Chi vuole anche quelli usa `senza_scansione`.
-        registro.lock().unwrap().clear();
+        journal.lock().unwrap().clear();
 
-        Montato {
+        Mounted {
             _dir: dir,
             root,
             ws,
-            registro,
+            journal,
         }
     }
 }
@@ -254,7 +254,7 @@ impl Banco {
 /// L'id sotto cui il banco registra la propria spia. È riservato: un test che
 /// dichiarasse lo stesso id troverebbe un errore di registrazione al montaggio,
 /// invece di due gestori che si contendono lo stesso nome.
-pub const SPIA: &str = "fub.testkit.spia";
+pub const SPY: &str = "fub.testkit.spia";
 
 // ---------------------------------------------------------------------------
 // Il banco montato
@@ -265,14 +265,14 @@ pub const SPIA: &str = "fub.testkit.spia";
 /// Tiene in vita la cartella temporanea, che è la cosa che si dimentica: un
 /// `let (_dir, ws) = vault();` con l'underscore sbagliato cancella il vault
 /// prima del primo `assert`, e il test fallisce dicendo che un file non c'è.
-pub struct Montato {
+pub struct Mounted {
     _dir: Option<tempfile::TempDir>,
     root: Utf8PathBuf,
     ws: Workspace,
-    registro: Registro,
+    journal: Record,
 }
 
-impl Montato {
+impl Mounted {
     /// La radice del vault.
     pub fn root(&self) -> &Utf8Path {
         &self.root
@@ -280,28 +280,28 @@ impl Montato {
 
     /// Scrive un file **alle spalle del kernel**: è quel che fa un altro
     /// programma — o Obsidian — mentre Fub guarda altrove.
-    pub fn scrivi(&self, rel: &str, corpo: &str) {
-        scrivi_in(&self.root, rel, corpo);
+    pub fn write(&self, rel: &str, body: &str) {
+        write_in(&self.root, rel, body);
     }
 
     /// Scrive dei **byte**, che è l'unico modo di mettere nel vault un file che
     /// non è testo — un allegato, o un documento con un encoding suo.
-    pub fn scrivi_byte(&self, rel: &str, corpo: &[u8]) {
+    pub fn write_byte(&self, rel: &str, body: &[u8]) {
         let path = self.root.join(rel);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).expect("cartelle intermedie");
         }
-        std::fs::write(&path, corpo).unwrap_or_else(|e| panic!("scrittura di `{rel}`: {e}"));
+        std::fs::write(&path, body).unwrap_or_else(|and| panic!("scrittura di `{rel}`: {and}"));
     }
 
     /// Legge un file dal disco, saltando il kernel.
-    pub fn leggi(&self, rel: &str) -> String {
+    pub fn read(&self, rel: &str) -> String {
         std::fs::read_to_string(self.root.join(rel))
-            .unwrap_or_else(|e| panic!("lettura di `{rel}`: {e}"))
+            .unwrap_or_else(|and| panic!("lettura di `{rel}`: {and}"))
     }
 
     /// Il file c'è sul disco?
-    pub fn esiste(&self, rel: &str) -> bool {
+    pub fn exists(&self, rel: &str) -> bool {
         self.root.join(rel).exists()
     }
 
@@ -309,14 +309,14 @@ impl Montato {
     ///
     /// Vuoto se nessuno ha chiesto [`Banco::con_spia`] — e lo dice invece di
     /// far credere che non sia successo niente.
-    pub fn eventi(&self) -> Vec<Event> {
-        self.registro.lock().unwrap().clone()
+    pub fn events(&self) -> Vec<Event> {
+        self.journal.lock().unwrap().clone()
     }
 
     /// I *tipi* degli eventi emessi, che è ciò su cui la maggior parte dei test
     /// asserisce: la variante, non il carico.
-    pub fn tipi_eventi(&self) -> Vec<EventKind> {
-        self.registro
+    pub fn event_kinds(&self) -> Vec<EventKind> {
+        self.journal
             .lock()
             .unwrap()
             .iter()
@@ -326,8 +326,8 @@ impl Montato {
 
     /// Dimentica gli eventi visti finora: il test che ha appena finito di
     /// preparare il terreno riparte da un registro vuoto.
-    pub fn dimentica_eventi(&self) {
-        self.registro.lock().unwrap().clear();
+    pub fn forgets_events(&self) {
+        self.journal.lock().unwrap().clear();
     }
 
     /// La via d'uscita per i builder del `Workspace` che **consumano `self`**.
@@ -349,29 +349,29 @@ impl Montato {
     /// # fn esempio(states: Arc<fub_kernel::ViewStates>) {
     /// let banco = Banco::nuovo()
     ///     .monta()
-    ///     .adatta(|ws| ws.with_view_states(states));
+    ///     .adapt(|ws| ws.with_view_states(states));
     /// # }
     /// ```
-    pub fn adatta(mut self, f: impl FnOnce(Workspace) -> Workspace) -> Self {
+    pub fn adapt(mut self, f: impl FnOnce(Workspace) -> Workspace) -> Self {
         // Si sostituisce il `Workspace` in posto con un segnaposto per poterlo
         // dare per valore: il banco resta il proprietario e chi chiama non deve
         // saperlo.
-        let segnaposto = Workspace::new(&self.root, FormatRegistry::new())
+        let placeholder = Workspace::new(&self.root, FormatRegistry::new())
             .expect("la radice del banco è già stata aperta al montaggio");
-        let vero = std::mem::replace(&mut self.ws, segnaposto);
-        self.ws = f(vero);
+        let real = std::mem::replace(&mut self.ws, placeholder);
+        self.ws = f(real);
         self
     }
 }
 
-impl std::ops::Deref for Montato {
+impl std::ops::Deref for Mounted {
     type Target = Workspace;
     fn deref(&self) -> &Workspace {
         &self.ws
     }
 }
 
-impl std::ops::DerefMut for Montato {
+impl std::ops::DerefMut for Mounted {
     fn deref_mut(&mut self) -> &mut Workspace {
         &mut self.ws
     }
@@ -379,18 +379,18 @@ impl std::ops::DerefMut for Montato {
 
 // ---------------------------------------------------------------------------
 
-fn scrivi_in(root: &Utf8Path, rel: &str, corpo: &str) {
+fn write_in(root: &Utf8Path, rel: &str, body: &str) {
     let path = root.join(rel);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).expect("cartelle intermedie");
     }
-    std::fs::write(&path, corpo).unwrap_or_else(|e| panic!("scrittura di `{rel}`: {e}"));
+    std::fs::write(&path, body).unwrap_or_else(|and| panic!("scrittura di `{rel}`: {and}"));
 }
 
 /// La spia: prende tutto e ricorda l'ordine.
-struct Spia(Registro);
+struct Spy(Record);
 
-impl EventHandler for Spia {
+impl EventHandler for Spy {
     fn subscribed(&self) -> EventMask {
         EventMask::all()
     }
@@ -413,7 +413,7 @@ impl EventHandler for Spia {
 /// questa. La nota resta perché il posto sia già nominato quando quella voce si
 /// aprirà.
 #[doc(hidden)]
-pub mod _dove_andra_ogni_view_ufficiale {}
+pub mod _where_will_every_official_view_go {}
 
 // ---------------------------------------------------------------------------
 
@@ -424,8 +424,8 @@ pub fn doc(id: &str) -> DocId {
 
 /// Un [`DocumentModel`] nudo con un testo: ciò che un provider giocattolo
 /// produrrebbe, per i test che vogliono un modello senza montare niente.
-pub fn modello(id: &str, testo: &str) -> DocumentModel {
+pub fn model(id: &str, text: &str) -> DocumentModel {
     let mut m = DocumentModel::empty(DocId::new(id));
-    m.text = testo.to_string();
+    m.text = text.to_string();
     m
 }

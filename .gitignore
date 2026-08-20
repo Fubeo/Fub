@@ -7,7 +7,7 @@
 # effetto: un `target/` suo, che qui riempie chi compila il componente a mano.
 # Il test di `fub-wasm-host` invece compila dentro `CARGO_TARGET_TMPDIR`, che
 # sta già sotto `/target`.
-/esempi/*/target
+/examples/*/target
 **/*.rs.bk
 
 # Node / frontend
@@ -37,12 +37,12 @@ dist/
 # rosso niente, che è esattamente il modo in cui un presidio muore.
 .fub/
 
-# vault di prova locale (note usa-e-getta + indici tantivy)
-/VaultProva
+# Test vault (throwaway notes + tantivy indices)
+/TestVault
 
-# Ciò che una corsa del banco visivo produce: le foto di adesso, le differenze e
-# il foglio di contatto. Il termine di paragone — `frontend/banco/baseline/` —
-# è versionato apposta e NON sta qui: un diff che non ha un termine di paragone
-# non è un diff, è una foto.
-frontend/banco/.uscita/
-frontend/dist-banco/
+# What a visual bench run produces: current photos, diffs, and the
+# contact sheet. The baseline — `frontend/bench/baseline/` — is versioned
+# on purpose and is NOT here: a diff without a baseline is not a diff,
+# it is just a photo.
+frontend/bench/.output/
+frontend/dist-bench/

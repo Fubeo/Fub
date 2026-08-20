@@ -62,35 +62,35 @@ use std::path::{Path, PathBuf};
 ///
 /// La ragione è la parte che conta: per tutti e due la riesportazione alla
 /// radice non si può proprio fare, e il motivo si legge nei nomi.
-const MODULI_QUALIFICATI: &[(&str, &str)] = &[
+const QUALIFIED_MODULES: &[(&str, &str)] = &[
     (
         "arena",
-        "è la forma AL CONFINE degli alberi (span a larghezza fissa, figli per \
-         indice): `arena::Block`, `arena::Inline`, `arena::Span`, `arena::UiNode` \
-         e `arena::UiKind` portano di proposito lo stesso nome dei tipi dell'albero \
-         nativo, perché sono lo stesso concetto visto dall'altra parte della \
-         conversione. Riesportarli alla radice non è indesiderabile: sono cinque \
-         collisioni di nome con `model` e `ui`.",
+        "is the BOUNDARY form of the trees (fixed-width span, children by \
+         index): `arena::Block`, `arena::Inline`, `arena::Span`, `arena::UiNode` \
+         and `arena::UiKind` deliberately carry the same name as the native tree \
+         types, because they are the same concept seen from the other side of the \
+         conversion. Re-exporting them from the root is not undesirable: they are five \
+         name collisions with `model` and `ui`.",
     ),
     (
         "rules",
-        "è la parte di una risposta che non dipende da chi la dà, e si chiama col \
-         soggetto davanti: `rules::path`, `rules::tag`, `rules::ids`. `Owner`, \
-         `Naming`, `Newline` alla radice sarebbero tre parole senza il soggetto \
-         che dice di quale regola parlano — e `rules` ha sottomoduli, quindi \
-         l'appiattimento dovrebbe scegliere anche a che profondità fermarsi.",
+        "is the part of a response that does not depend on who gives it, and \
+         is named with the subject in front: `rules::path`, `rules::tag`, \
+         `rules::ids`. `Owner`, `Naming`, `Newline` at the root would be three \
+         words without the subject saying which rule they belong to — and `rules` \
+         has sub-modules, so flattening should also choose how deep to stop.",
     ),
 ];
 
 /// Un tipo pubblico, come sta scritto nel sorgente.
 #[derive(Debug)]
-struct Tipo {
+struct TypeEntry {
     /// Il modulo di **primo livello** (`traits`, `rules`, …): quello che compare
     /// nel `pub use` di `lib.rs`.
-    modulo: String,
+    module: String,
     /// Il path completo dentro il crate, per i messaggi (`rules::ids`).
-    dove: String,
-    nome: String,
+    path: String,
+    name: String,
 }
 
 fn src_dir() -> PathBuf {
@@ -99,92 +99,92 @@ fn src_dir() -> PathBuf {
 
 fn parse(path: &Path) -> syn::File {
     let src = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("impossibile leggere {}: {e}", path.display()));
-    syn::parse_file(&src).unwrap_or_else(|e| panic!("{} non parsa: {e}", path.display()))
+        .unwrap_or_else(|and| panic!("cannot read {}: {and}", path.display()));
+    syn::parse_file(&src).unwrap_or_else(|and| panic!("{} failed to parse: {and}", path.display()))
 }
 
-fn e_pub(vis: &syn::Visibility) -> bool {
+fn is_pub(vis: &syn::Visibility) -> bool {
     matches!(vis, syn::Visibility::Public(_))
 }
 
 /// I tipi pubblici di un file, moduli annidati compresi. `dove` è il path del
 /// modulo che contiene questi item.
-fn tipi_di(items: &[syn::Item], modulo: &str, dove: &str, out: &mut Vec<Tipo>) {
+fn types_of(items: &[syn::Item], module: &str, where_: &str, out: &mut Vec<TypeEntry>) {
     for item in items {
-        let (vis, nome) = match item {
-            syn::Item::Struct(i) => (&i.vis, i.ident.to_string()),
-            syn::Item::Enum(i) => (&i.vis, i.ident.to_string()),
-            syn::Item::Trait(i) => (&i.vis, i.ident.to_string()),
-            syn::Item::Type(i) => (&i.vis, i.ident.to_string()),
+        let (vis, name) = match item {
+            syn::Item::Struct(the) => (&the.vis, the.ident.to_string()),
+            syn::Item::Enum(the) => (&the.vis, the.ident.to_string()),
+            syn::Item::Trait(the) => (&the.vis, the.ident.to_string()),
+            syn::Item::Type(the) => (&the.vis, the.ident.to_string()),
             // Un `pub mod` scritto dentro un file è superficie come gli altri:
             // se ci nascesse un tipo, non deve poterci restare nascosto.
             syn::Item::Mod(m) => {
-                if let (true, Some((_, dentro))) = (e_pub(&m.vis), m.content.as_ref()) {
-                    let giu = format!("{dove}::{}", m.ident);
-                    tipi_di(dentro, modulo, &giu, out);
+                if let (true, Some((_, inside))) = (is_pub(&m.vis), m.content.as_ref()) {
+                    let down = format!("{where_}::{}", m.ident);
+                    types_of(inside, module, &down, out);
                 }
                 continue;
             }
             _ => continue,
         };
-        if e_pub(vis) {
-            out.push(Tipo {
-                modulo: modulo.to_string(),
-                dove: dove.to_string(),
-                nome,
+        if is_pub(vis) {
+            out.push(TypeEntry {
+                module: module.to_string(),
+                path: where_.to_string(),
+                name,
             });
         }
     }
 }
 
 /// Ogni `.rs` sotto `src/`, in ordine deterministico.
-fn sorgenti(dir: &Path, out: &mut Vec<PathBuf>) {
-    let mut voci: Vec<PathBuf> = std::fs::read_dir(dir)
-        .unwrap_or_else(|e| panic!("{} illeggibile: {e}", dir.display()))
-        .map(|e| e.expect("voce di directory").path())
+fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
+        .unwrap_or_else(|and| panic!("{} unreadable: {and}", dir.display()))
+        .map(|and| and.expect("directory entry").path())
         .collect();
-    voci.sort();
-    for v in voci {
+    entries.sort();
+    for v in entries {
         if v.is_dir() {
-            sorgenti(&v, out);
-        } else if v.extension().is_some_and(|e| e == "rs") {
+            sources(&v, out);
+        } else if v.extension().is_some_and(|and| and == "rs") {
             out.push(v);
         }
     }
 }
 
 /// Tutti i tipi pubblici del crate, letti dai sorgenti.
-fn tipi_dichiarati() -> Vec<Tipo> {
-    let radice = src_dir();
-    let mut file = Vec::new();
-    sorgenti(&radice, &mut file);
+fn declared_types() -> Vec<TypeEntry> {
+    let root = src_dir();
+    let mut files = Vec::new();
+    sources(&root, &mut files);
     assert!(
-        file.len() > 20,
-        "solo {} sorgenti trovati sotto src/: il camminatore non sta camminando",
-        file.len()
+        files.len() > 20,
+        "only {} sources found under src/: the walker is not walking",
+        files.len()
     );
 
     let mut out = Vec::new();
-    for f in file {
-        let rel = f.strip_prefix(&radice).expect("dentro src/");
-        let mut segmenti: Vec<String> = rel
+    for f in files {
+        let rel = f.strip_prefix(&root).expect("inside src/");
+        let mut segments: Vec<String> = rel
             .components()
             .map(|c| c.as_os_str().to_string_lossy().into_owned())
             .collect();
         // `foo/mod.rs` è il modulo `foo`; `foo/bar.rs` è `foo::bar`.
-        let ultimo = segmenti.pop().expect("almeno un segmento");
-        let base = ultimo.trim_end_matches(".rs").to_string();
-        if base == "lib" && segmenti.is_empty() {
+        let last = segments.pop().expect("at least one segment");
+        let base = last.trim_end_matches(".rs").to_string();
+        if base == "lib" && segments.is_empty() {
             continue; // la radice non dichiara tipi: li raccoglie
         }
         if base != "mod" {
-            segmenti.push(base);
+            segments.push(base);
         }
-        let Some(modulo) = segmenti.first().cloned() else {
+        let Some(module) = segments.first().cloned() else {
             continue;
         };
-        let dove = segmenti.join("::");
-        tipi_di(&parse(&f).items, &modulo, &dove, &mut out);
+        let where_ = segments.join("::");
+        types_of(&parse(&f).items, &module, &where_, &mut out);
     }
     out
 }
@@ -194,40 +194,40 @@ fn tipi_dichiarati() -> Vec<Tipo> {
 /// Rifiuta le forme che questo lettore non sa giudicare — un `pub use
 /// traits::*` per esempio, che è l'altro estremo del difetto: riesporta tutto
 /// e rinuncia a dire cosa è superficie.
-fn riesportati() -> BTreeMap<String, BTreeSet<String>> {
+fn reexported() -> BTreeMap<String, BTreeSet<String>> {
     let lib = src_dir().join("lib.rs");
     let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for item in parse(&lib).items {
         let syn::Item::Use(u) = item else { continue };
-        if !e_pub(&u.vis) {
+        if !is_pub(&u.vis) {
             continue;
         }
         let syn::UseTree::Path(p) = &u.tree else {
-            panic!("`pub use` di lib.rs in una forma inattesa: attesa `pub use <modulo>::…`");
+            panic!("`pub use` of lib.rs in an unexpected form: expected `pub use <module>::…`");
         };
-        let modulo = p.ident.to_string();
-        let voce = out.entry(modulo.clone()).or_default();
+        let module = p.ident.to_string();
+        let entry = out.entry(module.clone()).or_default();
         match &*p.tree {
             syn::UseTree::Name(n) => {
-                voce.insert(n.ident.to_string());
+                entry.insert(n.ident.to_string());
             }
             syn::UseTree::Group(g) => {
                 for t in &g.items {
                     match t {
                         syn::UseTree::Name(n) => {
-                            voce.insert(n.ident.to_string());
+                            entry.insert(n.ident.to_string());
                         }
                         _ => panic!(
-                            "`pub use {modulo}::{{…}}` contiene una forma che questo test non \
-                             sa giudicare (glob, alias o path annidato): la superficie della \
-                             radice si dichiara nome per nome"
+                            "`pub use {module}::{{…}}` contains a form this test cannot \
+                             judge (glob, alias, or nested path): the root surface is \
+                             declared name by name"
                         ),
                     }
                 }
             }
             _ => panic!(
-                "`pub use {modulo}::…` non è né un nome né un gruppo di nomi: un `*` \
-                 riesporta tutto e rinuncia a dire cosa è superficie"
+                "`pub use {module}::…` is neither a name nor a group of names: a `*` \
+                 re-exports everything and gives up saying what is surface"
             ),
         }
     }
@@ -235,61 +235,60 @@ fn riesportati() -> BTreeMap<String, BTreeSet<String>> {
 }
 
 #[test]
-fn ogni_tipo_pubblico_si_vede_dalla_radice() {
-    let qualificati: BTreeSet<&str> = MODULI_QUALIFICATI.iter().map(|(m, _)| *m).collect();
-    let radice = riesportati();
+fn every_public_type_is_visible_from_the_root() {
+    let qualified: BTreeSet<&str> = QUALIFIED_MODULES.iter().map(|(m, _)| *m).collect();
+    let root = reexported();
 
-    let mut mancanti: Vec<String> = Vec::new();
-    for t in tipi_dichiarati() {
-        if qualificati.contains(t.modulo.as_str()) {
+    let mut missing: Vec<String> = Vec::new();
+    for t in declared_types() {
+        if qualified.contains(t.module.as_str()) {
             continue;
         }
-        let c_e = radice
-            .get(&t.modulo)
-            .is_some_and(|n| n.contains(t.nome.as_str()));
-        if !c_e {
-            mancanti.push(format!("{}::{}", t.dove, t.nome));
+        let has_it = root
+            .get(&t.module)
+            .is_some_and(|n| n.contains(t.name.as_str()));
+        if !has_it {
+            missing.push(format!("{}::{}", t.path, t.name));
         }
     }
-    mancanti.sort();
+    missing.sort();
 
     assert!(
-        mancanti.is_empty(),
-        "{} tipi pubblici del contratto non si vedono da `fub_abi::`:\n  {}\n\n\
-         Chi li usa deve scrivere il path lungo, che passa dal modulo in cui sono \
-         stati dichiarati — un modulo di implementazione, che può spezzarsi. \
-         Aggiungili al blocco `pub use` di src/lib.rs; se davvero il loro modulo \
-         si usa qualificato, il posto in cui dirlo è MODULI_QUALIFICATI, con la \
-         ragione.",
-        mancanti.len(),
-        mancanti.join("\n  ")
+        missing.is_empty(),
+        "{} public types of the contract are not visible from `fub_abi::`:\n  {}\n\n\
+         Anyone using them must write the long path, which goes through the module \
+         where they were declared — an implementation module, which can break. \
+         Add them to the `pub use` block in src/lib.rs; if their module really is \
+         used qualified, the place to say so is QUALIFIED_MODULES, with the reason.",
+        missing.len(),
+        missing.join("\n  ")
     );
 }
 
 #[test]
-fn un_modulo_qualificato_lo_e_per_intero_e_con_una_ragione() {
-    let moduli: BTreeSet<String> = tipi_dichiarati().into_iter().map(|t| t.modulo).collect();
-    let radice = riesportati();
+fn a_qualified_module_is_qualified_throughout_and_with_reason() {
+    let modules: BTreeSet<String> = declared_types().into_iter().map(|t| t.module).collect();
+    let root = reexported();
 
-    for (nome, ragione) in MODULI_QUALIFICATI {
+    for (name, reason) in QUALIFIED_MODULES {
         assert!(
-            moduli.contains(*nome),
-            "`{nome}` è dichiarato modulo qualificato ma sotto src/ non c'è nessun \
-             modulo con quel nome che dichiari tipi: un'eccezione a un difetto che \
-             non esiste più è un ricordo, non un presidio"
+            modules.contains(*name),
+            "`{name}` is declared a qualified module but under src/ there is no \
+             module by that name declaring types: an exception to a defect that \
+             no longer exists is a memory, not a guard"
         );
         assert!(
-            ragione.len() > 80,
-            "`{nome}` sta fra i moduli qualificati con una ragione di {} caratteri: \
-             la ragione è la sola cosa che distingue questo elenco da uno sconto",
-            ragione.len()
+            reason.len() > 80,
+            "`{name}` is in the qualified modules list with a reason of {} characters: \
+             the reason is the only thing that distinguishes this list from a discount",
+            reason.len()
         );
         assert!(
-            !radice.contains_key(*nome),
-            "`{nome}` è dichiarato modulo qualificato — cioè «si usa col nome \
-             davanti» — e insieme è riesportato dalla radice: sono due affermazioni \
-             che insieme non vogliono dire niente. Togli il `pub use {nome}::…` \
-             oppure togli `{nome}` da MODULI_QUALIFICATI."
+            !root.contains_key(*name),
+            "`{name}` is declared a qualified module — i.e. \"used with the name in \
+             front\" — and at the same time is re-exported from the root: these are \
+             two statements that together mean nothing. Remove the `pub use {name}::…` \
+             or remove `{name}` from QUALIFIED_MODULES."
         );
     }
 }
@@ -304,24 +303,24 @@ fn un_modulo_qualificato_lo_e_per_intero_e_con_una_ragione() {
 /// (`traits::JobId`): se il camminatore si fermasse alla radice di `src/`, o
 /// smettesse di scendere nelle cartelle, questo test lo direbbe per nome.
 #[test]
-fn il_camminatore_scende() {
-    let tipi = tipi_dichiarati();
-    let cerca = |dove: &str, nome: &str| {
+fn the_walker_descends() {
+    let types = declared_types();
+    let look_for = |where_: &str, name: &str| {
         assert!(
-            tipi.iter().any(|t| t.dove == dove && t.nome == nome),
-            "`{dove}::{nome}` non è stato visto dal camminatore"
+            types.iter().any(|t| t.path == where_ && t.name == name),
+            "`{where_}::{name}` was not seen by the walker"
         );
     };
-    cerca("rules::ids", "Owner");
-    cerca("traits", "JobId");
-    cerca("model", "DocId");
+    look_for("rules::ids", "Owner");
+    look_for("traits", "JobId");
+    look_for("model", "DocId");
 
     // E il conto complessivo non è ridicolo: un estrattore che tornasse tre
     // tipi passerebbe le tre righe qui sopra.
     assert!(
-        tipi.len() > 150,
-        "solo {} tipi pubblici trovati in tutto il contratto: l'estrattore sta \
-         guardando meno di quello che crede",
-        tipi.len()
+        types.len() > 150,
+        "only {} public types found in the entire contract: the extractor is \
+         looking at less than it thinks",
+        types.len()
     );
 }

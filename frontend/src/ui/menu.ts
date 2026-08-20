@@ -7,8 +7,8 @@
 // cui un pannello nuovo non poteva averle senza copiarle.
 
 import { t } from "../i18n/strings";
-import { intrappolaFuoco } from "./a11y";
-import { apriVita, type Vita } from "./vita";
+import { trapFocus } from "./a11y";
+import { openLifetime, type Lifetime } from "./lifetime";
 
 export interface MenuItem {
   label: string;
@@ -19,16 +19,16 @@ export interface MenuItem {
 
 /// Quanto vive il menu aperto, se ce n'è uno.
 ///
-/// Una `Vita` e non più «la funzione che scioglie la trappola»: quella era una
+/// Una `Lifetime` e non più «la funzione che scioglie la trappola»: quella era una
 /// delle tre cose da disfare, e le altre due — il nodo e l'ascoltatore sul
 /// documento — erano scritte altrove, ognuna con la sua occasione di essere
 /// dimenticata. Adesso il posto è uno, e chiudere il menu è chiuderlo.
-let vitaMenu: Vita | null = null;
+let menuLifetime: Lifetime | null = null;
 
 export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   closeContextMenu();
-  const vita = apriVita();
-  vitaMenu = vita;
+  const lifetime = openLifetime();
+  menuLifetime = lifetime;
   const menu = document.createElement("div");
   menu.id = "context-menu";
   menu.className = "context-menu";
@@ -50,11 +50,11 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
     menu.appendChild(b);
   }
   document.body.appendChild(menu);
-  vita.aggiungi(() => menu.remove());
+  lifetime.add(() => menu.remove());
   // Il fuoco entra nel menu e non ne esce col tab, ed Escape lo chiude. Senza,
   // un menu contestuale era raggiungibile **solo** col tasto destro del mouse:
   // per chi naviga da tastiera, rinominare o eliminare una nota non esisteva.
-  vita.aggiungi(intrappolaFuoco(menu, closeContextMenu));
+  lifetime.add(trapFocus(menu, closeContextMenu));
   // Il primo click fuori chiude, e il ritardo evita che sia questo stesso click
   // ad attivarlo. Il `once` **non** bastava: se il menu si chiudeva prima —
   // Escape, o una voce scelta da tastiera — l'ascoltatore non era ancora
@@ -62,13 +62,13 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   // Restava lì fino al prossimo click qualunque, che chiudeva un menu inesistente
   // e, se nel frattempo se n'era aperto un altro, chiudeva quello. Su una vita
   // già chiusa `ascolta` non fa niente, e il caso non è da ricordarsi: non c'è.
-  setTimeout(() => vita.ascolta(document, "click", closeContextMenu, { once: true }), 0);
+  setTimeout(() => lifetime.listen(document, "click", closeContextMenu, { once: true }), 0);
 }
 
 export function closeContextMenu(): void {
-  const vita = vitaMenu;
-  vitaMenu = null;
-  vita?.chiudi();
+  const lifetime = menuLifetime;
+  menuLifetime = null;
+  lifetime?.close();
 }
 
 const ICON_PRESETS = [
@@ -85,9 +85,9 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   // spariva dallo schermo e il suo ascoltatore su `document` restava — e con
   // lui la trappola del fuoco, che è la parte che si sentiva, perché Escape
   // continuava a rispondere per un selettore che nessuno vedeva più.
-  chiudiPickIcon();
-  const vita = apriVita();
-  vitaIcone = vita;
+  closePickIcon();
+  const lifetime = openLifetime();
+  iconLifetime = lifetime;
   const pop = document.createElement("div");
   pop.id = "icon-picker";
   pop.className = "icon-picker";
@@ -97,15 +97,15 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   pop.style.left = `${Math.min(at.clientX, window.innerWidth - 240)}px`;
   pop.style.top = `${at.clientY}px`;
 
-  const chiudi = () => {
-    if (vitaIcone === vita) vitaIcone = null;
-    vita.chiudi();
+  const close = () => {
+    if (iconLifetime === lifetime) iconLifetime = null;
+    lifetime.close();
   };
-  const fuori = (e: MouseEvent) => {
-    if (!pop.contains(e.target as Node)) chiudi();
+  const outside = (e: MouseEvent) => {
+    if (!pop.contains(e.target as Node)) close();
   };
-  const applica = (icon: string | null) => {
-    chiudi();
+  const apply = (icon: string | null) => {
+    close();
     onPick(icon);
   };
 
@@ -121,7 +121,7 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
     // l'emoji come nome accessibile almeno rende l'annuncio **uno** e
     // prevedibile, invece di lasciarlo a come ciascun motore descrive i simboli.
     b.setAttribute("aria-label", emoji);
-    b.addEventListener("click", () => applica(emoji));
+    b.addEventListener("click", () => apply(emoji));
     grid.appendChild(b);
   }
   pop.appendChild(grid);
@@ -132,37 +132,37 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   // ascolta non c'è mai stato.
   input.setAttribute("aria-label", t("icons.any"));
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && input.value.trim()) applica(input.value.trim());
-    else if (e.key === "Escape") chiudi();
+    if (e.key === "Enter" && input.value.trim()) apply(input.value.trim());
+    else if (e.key === "Escape") close();
   });
   pop.appendChild(input);
 
-  const rimuovi = document.createElement("button");
-  rimuovi.className = "icon-none";
-  rimuovi.textContent = t("icons.none");
-  rimuovi.addEventListener("click", () => applica(null));
-  pop.appendChild(rimuovi);
+  const remove = document.createElement("button");
+  remove.className = "icon-none";
+  remove.textContent = t("icons.none");
+  remove.addEventListener("click", () => apply(null));
+  pop.appendChild(remove);
 
   document.body.appendChild(pop);
-  vita.aggiungi(() => pop.remove());
-  // La trappola prima del `focus()` esplicito: `intrappolaFuoco` metterebbe il
+  lifetime.add(() => pop.remove());
+  // La trappola prima del `focus()` esplicito: `trapFocus` metterebbe il
   // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
   // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare
   // venti pulsanti. Le due righe non sono in conflitto: la seconda sposta il
   // fuoco dentro la stessa superficie, che è dove la trappola lo vuole.
-  vita.aggiungi(intrappolaFuoco(pop, chiudi));
+  lifetime.add(trapFocus(pop, close));
   input.focus();
-  vita.ascolta(document, "mousedown", fuori, { capture: true });
+  lifetime.listen(document, "mousedown", outside, { capture: true });
 }
 
 /// Quanto vive il selettore di icona aperto, se ce n'è uno.
-let vitaIcone: Vita | null = null;
+let iconLifetime: Lifetime | null = null;
 
 /// Chiude il selettore di icona, se è aperto. Non è esportata perché nessuno
 /// fuori di qui lo chiudeva prima; il posto che ne aveva bisogno era `pickIcon`
 /// stessa, che è anche l'unico modo di aprirne un secondo.
-function chiudiPickIcon(): void {
-  const vita = vitaIcone;
-  vitaIcone = null;
-  vita?.chiudi();
+function closePickIcon(): void {
+  const lifetime = iconLifetime;
+  iconLifetime = null;
+  lifetime?.close();
 }

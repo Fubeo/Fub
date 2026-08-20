@@ -69,18 +69,18 @@ impl Vault {
     }
 }
 
-fn istanza() -> ViewInstance {
+fn instance() -> ViewInstance {
     ViewInstance::only(TRASH_VIEW)
 }
 
 /// I titoli delle voci disegnate, in ordine.
-fn voci(tree: &UiNode) -> Vec<String> {
+fn entries(tree: &UiNode) -> Vec<String> {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         if let UiKind::ListItem { title, .. } = &node.kind {
             out.push(title.to_string());
         }
-        for figlio in node.children() {
-            walk(figlio, out);
+        for child in node.children() {
+            walk(child, out);
         }
     }
     let mut out = Vec::new();
@@ -90,7 +90,7 @@ fn voci(tree: &UiNode) -> Vec<String> {
 
 /// Il testo di ogni nodo `Text` dell'albero, concatenato: serve a chiedere
 /// *cosa dice* il pannello senza legarsi alla sua forma.
-fn detto(tree: &UiNode) -> String {
+fn said(tree: &UiNode) -> String {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         match &node.kind {
             UiKind::Text { content } => out.push(content.to_string()),
@@ -98,8 +98,8 @@ fn detto(tree: &UiNode) -> String {
             UiKind::Failed { message, .. } => out.push(message.to_string()),
             _ => {}
         }
-        for figlio in node.children() {
-            walk(figlio, out);
+        for child in node.children() {
+            walk(child, out);
         }
     }
     let mut out = Vec::new();
@@ -108,64 +108,64 @@ fn detto(tree: &UiNode) -> String {
 }
 
 /// L'azione del primo bottone con questa etichetta, o `None`.
-fn bottone(tree: &UiNode, etichetta: &str) -> Option<ActionRef> {
-    fn walk(node: &UiNode, etichetta: &str, out: &mut Option<ActionRef>) {
+fn button(tree: &UiNode, label: &str) -> Option<ActionRef> {
+    fn walk(node: &UiNode, label: &str, out: &mut Option<ActionRef>) {
         if out.is_some() {
             return;
         }
         if let UiKind::Button { label, action, .. } = &node.kind {
-            if label == etichetta {
+            if label == label {
                 *out = Some(action.clone());
                 return;
             }
         }
-        for figlio in node.children() {
-            walk(figlio, etichetta, out);
+        for child in node.children() {
+            walk(child, label, out);
         }
     }
     let mut out = None;
-    walk(tree, etichetta, &mut out);
+    walk(tree, label, &mut out);
     out
 }
 
 /// L'azione di ripristino della prima voce: quella che porta i due id nel
 /// payload.
-fn ripristina(tree: &UiNode) -> ActionRef {
-    bottone(tree, "Ripristina").expect("la voce ha il suo bottone")
+fn restores(tree: &UiNode) -> ActionRef {
+    button(tree, "Ripristina").expect("la voce ha il suo bottone")
 }
 
 #[test]
-fn il_pannello_elenca_il_cestino_e_lo_dice_quando_e_vuoto() {
+fn the_panel_lists_the_trash_and_the_says_when_and_empty() {
     let vault = Vault::new();
     vault.put("Uno.md", "primo\n");
     let mut ws = vault.open();
 
-    let tree = ws.render_view(&istanza()).unwrap();
+    let tree = ws.render_view(&instance()).unwrap();
     assert!(
-        detto(&tree).contains("vuoto"),
+        said(&tree).contains("vuoto"),
         "un cestino vuoto si dice, non si mostra come una lista senza righe: {}",
-        detto(&tree)
+        said(&tree)
     );
 
     ws.delete_document(&fub_abi::model::DocId::new("Uno.md"))
         .expect("cestinata");
-    let tree = ws.render_view(&istanza()).unwrap();
-    assert_eq!(voci(&tree), vec!["Uno".to_string()]);
+    let tree = ws.render_view(&instance()).unwrap();
+    assert_eq!(entries(&tree), vec!["Uno".to_string()]);
 }
 
 #[test]
-fn ripristinare_passa_dal_registro_dei_comandi_e_riporta_la_nota_nel_vault() {
+fn restore_passes_from_the_record_of_the_commands_and_brings_back_the_notes_in_the_vault() {
     let vault = Vault::new();
     vault.put("Uno.md", "primo\n");
     let mut ws = vault.open();
     ws.delete_document(&fub_abi::model::DocId::new("Uno.md"))
         .expect("cestinata");
 
-    let tree = ws.render_view(&istanza()).unwrap();
+    let tree = ws.render_view(&instance()).unwrap();
     let update = ws
         .view_action(
-            &istanza(),
-            UiAction::new(ripristina(&tree).action.0).with_payload(ripristina(&tree).payload),
+            &instance(),
+            UiAction::new(restores(&tree).action.0).with_payload(restores(&tree).payload),
         )
         .expect("ripristino");
 
@@ -183,7 +183,7 @@ fn ripristinare_passa_dal_registro_dei_comandi_e_riporta_la_nota_nel_vault() {
 }
 
 #[test]
-fn un_path_di_nuovo_occupato_diventa_una_domanda_nellalbero_non_una_finestra() {
+fn a_new_occupied_path_becomes_a_question_in_the_tree_not_a_window() {
     let vault = Vault::new();
     vault.put("Uno.md", "primo\n");
     let mut ws = vault.open();
@@ -193,12 +193,12 @@ fn un_path_di_nuovo_occupato_diventa_una_domanda_nellalbero_non_una_finestra() {
     vault.put("Uno.md", "un'altra cosa\n");
     ws.reindex().expect("reindex");
 
-    let tree = ws.render_view(&istanza()).unwrap();
-    let azione = ripristina(&tree);
+    let tree = ws.render_view(&instance()).unwrap();
+    let action = restores(&tree);
     let update = ws
         .view_action(
-            &istanza(),
-            UiAction::new(azione.action.0).with_payload(azione.payload),
+            &instance(),
+            UiAction::new(action.action.0).with_payload(action.payload),
         )
         .expect("la domanda non è un errore");
 
@@ -206,32 +206,32 @@ fn un_path_di_nuovo_occupato_diventa_una_domanda_nellalbero_non_una_finestra() {
         panic!("una domanda si disegna: {update:?}");
     };
     assert!(
-        detto(&root).contains("esiste di nuovo"),
+        said(&root).contains("esiste di nuovo"),
         "la domanda è nell'albero: {}",
-        detto(&root)
+        said(&root)
     );
     // E il nome proposto è nel campo, modificabile: proporre non è decidere.
-    let proposto = campo(&root).expect("il campo con il nome proposto");
-    assert_ne!(proposto, "Uno.md", "il nome proposto è libero");
+    let proposed = field(&root).expect("il campo con il nome proposto");
+    assert_eq!(proposed, "Uno.md", "il nome proposto è libero");
     assert!(vault.root.join("Uno.md").exists(), "niente è stato scritto");
 
     // Si risponde, e la nota torna col nome scelto.
     let update = ws
         .view_action(
-            &istanza(),
+            &instance(),
             UiAction::new("restore_as").with_fields(vec![fub_abi::ui::FieldValue {
                 field: "name".into(),
-                value: fub_abi::ui::UiValue::Text(proposto.clone()),
+                value: fub_abi::ui::UiValue::Text(proposed.clone()),
             }]),
         )
         .expect("ripristino con nome");
     assert!(
-        matches!(&update, ViewUpdate::Navigate { doc_id } if *doc_id == proposto),
+        matches!(&update, ViewUpdate::Navigate { doc_id } if *doc_id == proposed),
         "{update:?}"
     );
     assert!(
-        vault.root.join(&proposto).exists(),
-        "la nota è tornata come {proposto}"
+        vault.root.join(&proposed).exists(),
+        "la nota è tornata come {proposed}"
     );
     assert!(
         vault.root.join("Uno.md").exists(),
@@ -240,7 +240,7 @@ fn un_path_di_nuovo_occupato_diventa_una_domanda_nellalbero_non_una_finestra() {
 }
 
 /// Il valore del primo `TextInput` dell'albero.
-fn campo(tree: &UiNode) -> Option<String> {
+fn field(tree: &UiNode) -> Option<String> {
     fn walk(node: &UiNode, out: &mut Option<String>) {
         if out.is_some() {
             return;
@@ -249,8 +249,8 @@ fn campo(tree: &UiNode) -> Option<String> {
             *out = Some(value.clone());
             return;
         }
-        for figlio in node.children() {
-            walk(figlio, out);
+        for child in node.children() {
+            walk(child, out);
         }
     }
     let mut out = None;
@@ -259,7 +259,7 @@ fn campo(tree: &UiNode) -> Option<String> {
 }
 
 #[test]
-fn svuotare_chiede_prima_e_la_domanda_si_puo_ritirare() {
+fn empty_asks_first_and_the_question_is_can_withdraw() {
     let vault = Vault::new();
     vault.put("Uno.md", "primo\n");
     vault.put("Due.md", "secondo\n");
@@ -269,40 +269,40 @@ fn svuotare_chiede_prima_e_la_domanda_si_puo_ritirare() {
             .expect("cestinata");
     }
 
-    let tree = ws.render_view(&istanza()).unwrap();
-    let svuota = bottone(&tree, "Svuota il cestino").expect("il bottone c'è");
+    let tree = ws.render_view(&instance()).unwrap();
+    let empties = button(&tree, "Svuota il cestino").expect("il bottone c'è");
     let update = ws
-        .view_action(&istanza(), UiAction::new(svuota.action.0))
+        .view_action(&instance(), UiAction::new(empties.action.0))
         .expect("la domanda");
     let ViewUpdate::Replace { root } = update else {
         panic!("svuotare chiede: {update:?}")
     };
     assert!(
-        detto(&root).contains("2"),
+        said(&root).contains("2"),
         "la domanda dice quante voci sta per distruggere: {}",
-        detto(&root)
+        said(&root)
     );
     assert_eq!(ws.list_trash().unwrap().len(), 2, "chiedere non distrugge");
 
     // Rinunciare rimette il pannello com'era, e lo stato di vista si pulisce.
-    let annulla = bottone(&root, "Annulla").expect("si può rinunciare");
-    ws.view_action(&istanza(), UiAction::new(annulla.action.0))
+    let cancels = button(&root, "Annulla").expect("si può rinunciare");
+    ws.view_action(&instance(), UiAction::new(cancels.action.0))
         .expect("rinuncia");
-    let tree = ws.render_view(&istanza()).unwrap();
+    let tree = ws.render_view(&instance()).unwrap();
     assert!(
-        !detto(&tree).contains("Distruggo"),
+        !said(&tree).contains("Distruggo"),
         "la domanda ritirata non torna a galla al ridisegno: {}",
-        detto(&tree)
+        said(&tree)
     );
     assert_eq!(ws.list_trash().unwrap().len(), 2);
 
     // E confermando sparisce davvero.
-    let svuota = bottone(&tree, "Svuota il cestino").expect("il bottone c'è");
-    ws.view_action(&istanza(), UiAction::new(svuota.action.0))
+    let empties = button(&tree, "Svuota il cestino").expect("il bottone c'è");
+    ws.view_action(&instance(), UiAction::new(empties.action.0))
         .expect("la domanda");
-    let tree = ws.render_view(&istanza()).unwrap();
-    let conferma = bottone(&tree, "Svuota il cestino").expect("la conferma");
-    ws.view_action(&istanza(), UiAction::new(conferma.action.0))
+    let tree = ws.render_view(&instance()).unwrap();
+    let confirmation = button(&tree, "Svuota il cestino").expect("la conferma");
+    ws.view_action(&instance(), UiAction::new(confirmation.action.0))
         .expect("svuotato");
     assert!(ws.list_trash().unwrap().is_empty());
 }
@@ -315,7 +315,7 @@ fn svuotare_chiede_prima_e_la_domanda_si_puo_ritirare() {
 /// compilatore non tiene più i due allineati: lo tiene questo test, che li cerca
 /// dove il pannello li andrà a premere.
 #[test]
-fn i_due_comandi_che_il_pannello_preme_sono_nel_registro() {
+fn the_two_commands_that_the_panel_presses_are_in_the_record() {
     let specs = CoreCommands.commands();
     for id in ["trash.restore", "trash.empty"] {
         assert!(

@@ -62,13 +62,13 @@ impl KernelHost<'_> {
             Some(true) => Ok(()),
             Some(false) => Err(PluginError::PermissionDenied(
                 format!(
-                    "l'impostazione `{key}` non si è dichiarata scrivibile da un \
-                 programma: la cambia chi la sta guardando"
+                    "setting `{key}` was not declared writable by a \
+                 program: the person looking at it is the one who changes it"
                 )
                 .into(),
             )),
             None => Err(PluginError::BadArgs(
-                format!("nessuno ha dichiarato l'impostazione `{key}`").into(),
+                format!("nobody declared setting `{key}`").into(),
             )),
         }
     }
@@ -206,8 +206,8 @@ impl DataRead for KernelHost<'_> {
         match self.ws.storage().read(&path) {
             Ok(bytes) => Ok(Some(bytes)),
             // Mancare non è un errore: chi legge uno store vuoto lo scopre così.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(PluginError::Io(format!("{path}: {e}").into())),
+            Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(and) => Err(PluginError::Io(format!("{path}: {and}").into())),
         }
     }
 
@@ -234,7 +234,7 @@ impl DataWrite for KernelHost<'_> {
             // variante: `Internal` è «un difetto di chi ha scritto il codice»,
             // questo è «il mondo» — disco pieno, file in uso. Chi riprova ha
             // ragione di farlo, e con `internal` non lo saprebbe (0219).
-            .map_err(|e| PluginError::Io(format!("{path}: {e}").into()))
+            .map_err(|and| PluginError::Io(format!("{path}: {and}").into()))
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
@@ -242,8 +242,8 @@ impl DataWrite for KernelHost<'_> {
         match self.ws.storage().remove(&path) {
             Ok(()) => Ok(()),
             // Idempotente: cancellare ciò che non c'è è già il risultato voluto.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(PluginError::Io(format!("{path}: {e}").into())),
+            Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(and) => Err(PluginError::Io(format!("{path}: {and}").into())),
         }
     }
 }
@@ -273,14 +273,14 @@ impl ViewStateWrite for KernelHost<'_> {
         // nel vuoto è invece qualcuno che crede di ricordare e non ricorderà.
         let instance = self.instance.ok_or_else(|| {
             PluginError::BadArgs(
-                "lo stato di vista è di un esemplare di view: qui non se ne sta \
-                 disegnando né servendo nessuno"
+                "view state belongs to a view instance: no view is being \
+                 drawn or served here"
                     .into(),
             )
         })?;
         self.ws
             .set_view_state(self.plugin, instance, key, value)
-            .map_err(|e| PluginError::Internal(e.into()))
+            .map_err(|and| PluginError::Internal(and.into()))
     }
 }
 
@@ -351,11 +351,11 @@ impl HostEvents for KernelHost<'_> {
     fn emit(&mut self, event: Event) {
         if let Event::Custom { topic, .. } = &event {
             if let Err(fault) = self.ws.owns_name(self.plugin, topic) {
-                tracing::warn!(target: "fub.kernel", "evento non emesso: {fault}");
+                tracing::warn!(target: "fub.kernel", "event not emitted: {fault}");
                 self.ws.report_trouble(
                     Severity::Warning,
                     None,
-                    PluginError::Internal(format!("evento non emesso: {fault}").into()),
+                    PluginError::Internal(format!("event not emitted: {fault}").into()),
                     None,
                 );
                 return;
@@ -395,7 +395,7 @@ impl HostCommands for KernelHost<'_> {
         // ci uscirebbe **scrivendo**.
         if self.mode.is_dry_run() {
             return Err(PluginError::PermissionDenied(
-                "annullare: una simulazione non scrive".into(),
+                "undo: a simulation does not write".into(),
             ));
         }
         self.ws.undo_last()
@@ -418,7 +418,7 @@ impl HostNetwork for KernelHost<'_> {
         match self.ws.network() {
             Some(client) => client.fetch(request),
             None => Err(PluginError::Unserved(
-                "questo host è montato senza client di rete".into(),
+                "this host is mounted without a network client".into(),
             )),
         }
     }

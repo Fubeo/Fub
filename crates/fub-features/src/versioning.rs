@@ -111,7 +111,7 @@ const NO_VERSIONS: &str = "no_versions";
 const NO_SUCH_VERSION: &str = "no_such_version";
 const CONTENT_GONE: &str = "content_gone";
 const UNREADABLE: &str = "unreadable";
-const META_UNWRITABLE: &str = "meta_unwritable";
+const METADATA_UNWRITABLE: &str = "meta_unwritable";
 const INDEX_UNWRITABLE: &str = "index_unwritable";
 /// Una versione attesa non è stata salvata: il versioning non ha potuto
 /// fotografare il documento. È un guasto `Failure` (0052): una versione è la
@@ -146,7 +146,7 @@ const RESTORE_TS_DESC: &str = "version.restore.ts.desc";
 const PLAN_RESTORE: &str = "plan.restore";
 const DONE_RESTORE: &str = "done.restore";
 const UNDO_RESTORE: &str = "undo.restore";
-const E_NO_NOTE_GIVEN: &str = "err.no_note_given";
+const AND_NO_NOTES_GIVEN: &str = "err.no_note_given";
 const E_NO_TS_GIVEN: &str = "err.no_ts_given";
 
 /// I nomi degli argomenti.
@@ -171,7 +171,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(CONTENT_GONE, "Il contenuto di {path} è sparito.")
             .with(UNREADABLE, "{path} non si legge: {reason}")
             .with(
-                META_UNWRITABLE,
+                METADATA_UNWRITABLE,
                 "Non riesco a scrivere i metadati delle versioni: {reason}",
             )
             .with(
@@ -208,7 +208,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(PLAN_RESTORE, "Riporta {doc} alla versione del {when}")
             .with(DONE_RESTORE, "{doc} riportata alla versione del {when}")
             .with(UNDO_RESTORE, "Rimetti {doc} com'era prima del ripristino")
-            .with(E_NO_NOTE_GIVEN, "Nessuna nota da ripristinare.")
+            .with(AND_NO_NOTES_GIVEN, "Nessuna nota da ripristinare.")
             .with(E_NO_TS_GIVEN, "Nessun istante da ripristinare."),
         StringCatalog::new("en")
             .with(NO_VERSIONS, "No version of {doc}.")
@@ -216,7 +216,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(CONTENT_GONE, "The content of {path} is gone.")
             .with(UNREADABLE, "{path} cannot be read: {reason}")
             .with(
-                META_UNWRITABLE,
+                METADATA_UNWRITABLE,
                 "Cannot write the versions metadata: {reason}",
             )
             .with(
@@ -253,7 +253,7 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(PLAN_RESTORE, "Take {doc} back to the version from {when}")
             .with(DONE_RESTORE, "{doc} taken back to the version from {when}")
             .with(UNDO_RESTORE, "Put {doc} back as it was before the restore")
-            .with(E_NO_NOTE_GIVEN, "No note to restore.")
+            .with(AND_NO_NOTES_GIVEN, "No note to restore.")
             .with(E_NO_TS_GIVEN, "No instant to restore."),
     ]
 }
@@ -261,17 +261,17 @@ pub fn catalog() -> Vec<StringCatalog> {
 const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 const INDEX_FILE: &str = "versions.json";
-const META_FILE: &str = "meta.json";
+const METADATA_FILE: &str = "meta.json";
 
-const MS_ORA: u64 = 3_600_000;
-const MS_GIORNO: u64 = 24 * MS_ORA;
+const MS_HOUR: u64 = 3_600_000;
+const MS_DAY: u64 = 24 * MS_HOUR;
 
 /// Fasce di ritenzione (D6): sotto le 24 ore si tiene **tutto**, fino a una
 /// settimana una versione all'ora, fino a tre mesi una al giorno. Oltre, la
 /// storia recente — quella che si ripesca davvero — è già al sicuro.
-const FASCIA_TUTTO: u64 = MS_GIORNO;
-const FASCIA_ORARIA: u64 = 7 * MS_GIORNO;
-const FASCIA_GIORNALIERA: u64 = 90 * MS_GIORNO;
+const BAND_ALL: u64 = MS_DAY;
+const BAND_HOURLY: u64 = 7 * MS_DAY;
+const BAND_DAILY: u64 = 90 * MS_DAY;
 
 /// Una versione salvata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -326,7 +326,7 @@ struct Index {
 /// [`Inner::applica`] ha l'anagrafe viva **più un piano** che non è ancora
 /// stato installato ([`DocsDelPiano`]).
 #[derive(Serialize)]
-struct IndexDaScrivere<D: Serialize> {
+struct IndexToWrite<D: Serialize> {
     schema_version: SchemaVersion,
     docs: D,
 }
@@ -336,11 +336,11 @@ struct IndexDaScrivere<D: Serialize> {
 /// È l'unità del piano, e ha due varianti perché una scrittura può far sparire
 /// una chiave — [`VersionStore::rename`] la fa — e «assente dal piano» vuol già
 /// dire «non toccata». Un `Option` le confonderebbe.
-enum Voce {
+enum Entry {
     /// Come sarà quel documento se il disco accetta.
-    Messa(DocVersions),
+    Present(DocVersions),
     /// Quel documento non ci sarà più.
-    Tolta,
+    Removed,
 }
 
 /// Il piano: le sole chiavi toccate, con ciò che diranno.
@@ -355,12 +355,12 @@ enum Voce {
 /// niente finché il disco non ha accettato**, e per quello basta un elenco di
 /// una chiave (due nel rename). Vedi [`Inner::applica`], dove la disciplina è
 /// scritta per intero.
-type Piano = BTreeMap<String, Voce>;
+type Plan = BTreeMap<String, Entry>;
 
 /// Il piano di una chiave sola: la forma di tutte le scritture tranne il
 /// rename.
-fn piano_di(id: &DocId, doc: DocVersions) -> Piano {
-    Piano::from([(id.to_string(), Voce::Messa(doc))])
+fn plan_of(id: &DocId, doc: DocVersions) -> Plan {
+    Plan::from([(id.to_string(), Entry::Present(doc))])
 }
 
 /// L'anagrafe **come sarà** se il disco accetta il piano, senza costruirla.
@@ -370,42 +370,42 @@ fn piano_di(id: &DocId, doc: DocVersions) -> Piano {
 /// **copiare** N voci per scriverne N. Le due mappe sono ordinate sulla stessa
 /// chiave, quindi si fondono scorrendole in parallelo, e ciò che il piano
 /// dichiara [`Voce::Tolta`] semplicemente non esce.
-struct DocsDelPiano<'a> {
-    vivi: &'a BTreeMap<String, DocVersions>,
-    piano: &'a Piano,
+struct PlanDocs<'a> {
+    live: &'a BTreeMap<String, DocVersions>,
+    plan: &'a Plan,
 }
 
-impl Serialize for DocsDelPiano<'_> {
+impl Serialize for PlanDocs<'_> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
         // La lunghezza non si dichiara perché non si conosce senza contare, e
         // contare vorrebbe dire scorrere due volte: JSON non ne ha bisogno.
-        let mut mappa = serializer.serialize_map(None)?;
-        let mut vivi = self.vivi.iter().peekable();
-        let mut toccati = self.piano.iter().peekable();
+        let mut map = serializer.serialize_map(None)?;
+        let mut live = self.live.iter().peekable();
+        let mut touched = self.plan.iter().peekable();
         loop {
-            let ordine = match (vivi.peek(), toccati.peek()) {
+            let order = match (live.peek(), touched.peek()) {
                 (None, None) => break,
                 (Some(_), None) => std::cmp::Ordering::Less,
                 (None, Some(_)) => std::cmp::Ordering::Greater,
-                (Some((vivo, _)), Some((toccato, _))) => vivo.as_str().cmp(toccato.as_str()),
+                (Some((live, _)), Some((touched, _))) => live.as_str().cmp(touched.as_str()),
             };
-            if ordine == std::cmp::Ordering::Less {
-                let (chiave, doc) = vivi.next().expect("c'è, l'ho appena guardato");
-                mappa.serialize_entry(chiave, doc)?;
+            if order == std::cmp::Ordering::Less {
+                let (key, doc) = live.next().expect("c'è, l'ho appena guardato");
+                map.serialize_entry(key, doc)?;
                 continue;
             }
             // Il piano ha l'ultima parola sulla chiave che nomina: se è anche
             // viva, la voce viva si salta.
-            if ordine == std::cmp::Ordering::Equal {
-                vivi.next();
+            if order == std::cmp::Ordering::Equal {
+                live.next();
             }
-            let (chiave, voce) = toccati.next().expect("c'è, l'ho appena guardato");
-            if let Voce::Messa(doc) = voce {
-                mappa.serialize_entry(chiave, doc)?;
+            let (key, entry) = touched.next().expect("c'è, l'ho appena guardato");
+            if let Entry::Present(doc) = entry {
+                map.serialize_entry(key, doc)?;
             }
         }
-        mappa.end()
+        map.end()
     }
 }
 
@@ -425,13 +425,13 @@ struct Meta {
 /// che non sappiamo nominare. Schiacciarli su `None` — un `.ok()` — faceva dire
 /// a [`Inner::dir_per`] «libera» di una cartella piena, e a quel punto la prima
 /// [`scrivi_meta`] ci scriveva sopra il nome di un altro documento.
-enum Rivendicazione {
+enum Claim {
     /// Nessun `meta.json`: la cartella non è di nessuno.
-    Nessuna,
+    None,
     /// Un `meta.json` c'è e non si legge. **Non** è una cartella libera.
-    Illeggibile,
+    Unreadable,
     /// La cartella dice di chi è.
-    Di(Meta),
+    Owned(Meta),
 }
 
 struct Inner {
@@ -445,7 +445,7 @@ struct Inner {
     /// aggiungesse un `VersionStore::qualcosa` chiamato dentro una passata la
     /// eredita senza saperlo, e un lotto che valesse solo per `snapshot`
     /// riscriverebbe di nuovo l'indice a ogni tombstone della riconciliazione.
-    lotto: bool,
+    batch: bool,
 }
 
 /// Lo store delle versioni.
@@ -480,21 +480,21 @@ impl VersionStore {
         let docs = match load_index(host) {
             Some(docs) => docs,
             None => {
-                let ricostruito = rebuild_from_store(host)?;
-                if !ricostruito.is_empty() {
+                let rebuilt = rebuild_from_store(host)?;
+                if !rebuilt.is_empty() {
                     tracing::info!(
                         target: "fub.versioning",
                         "indice assente o illeggibile, ricostruito dallo store \
                          ({} document{})",
-                        ricostruito.len(),
-                        if ricostruito.len() == 1 { "o" } else { "i" }
+                        rebuilt.len(),
+                        if rebuilt.len() == 1 { "o" } else { "i" }
                     );
                 }
-                ricostruito
+                rebuilt
             }
         };
         Ok(VersionStore {
-            inner: Arc::new(Mutex::new(Inner { docs, lotto: false })),
+            inner: Arc::new(Mutex::new(Inner { docs, batch: false })),
         })
     }
 
@@ -547,10 +547,10 @@ impl VersionStore {
     /// riconciliazione dopo un `Overflow` è un lampo, e il pannello si ridisegna
     /// alla prima scrittura che segue. È il prezzo dichiarato di non lasciare in
     /// giro un indice che si crede la verità.
-    fn in_lotto<T>(
+    fn in_batch<T>(
         &self,
         host: &mut dyn HostApi,
-        passata: impl FnOnce(&mut dyn HostApi) -> T,
+        pass: impl FnOnce(&mut dyn HostApi) -> T,
     ) -> Result<T, PluginError> {
         // Se togliere l'indice non riesce, la passata **non comincia**: andare
         // avanti vorrebbe dire lasciare sul disco esattamente l'indice vecchio
@@ -558,18 +558,18 @@ impl VersionStore {
         // fallisce su uno spazio dati è lo stesso guasto per cui fallirebbe
         // ogni `data_write` che segue.
         host.data_remove(INDEX_FILE)?;
-        self.inner.lock().expect("mutex").lotto = true;
-        let chiuso_comunque = Lotto { inner: &self.inner };
-        let esito = passata(&mut *host);
-        drop(chiuso_comunque);
+        self.inner.lock().expect("mutex").batch = true;
+        let batch_guard = Batch { inner: &self.inner };
+        let result = pass(&mut *host);
+        drop(batch_guard);
         // Il prestito attraversa il `data_write` come lo attraversa in
         // [`Inner::applica`], e per la stessa ragione: l'indice che va sul disco
         // dev'essere quello che `docs` dice *adesso*. Mollandolo in mezzo, un
         // salvataggio che entrasse qui scriverebbe il suo indice e poi questo ci
         // scriverebbe sopra il proprio, più vecchio di una versione.
         let inner = self.inner.lock().expect("mutex");
-        scrivi_index(&inner.docs, host)?;
-        Ok(esito)
+        write_index(&inner.docs, host)?;
+        Ok(result)
     }
 
     /// Salva una versione, se il contenuto è diverso dall'ultima salvata.
@@ -584,7 +584,7 @@ impl VersionStore {
     ) -> Result<Option<VersionRef>, PluginError> {
         let mut inner = self.inner.lock().expect("mutex");
         let hash = fingerprint(source);
-        let dir_doc = inner.dir_per(id, host)?;
+        let dir_doc = inner.dir_for(id, host)?;
 
         if let Some(doc) = inner.docs.get(id.as_str()) {
             if doc.versions.last().is_some_and(|v| v.hash == hash) {
@@ -594,9 +594,9 @@ impl VersionStore {
                 // il tombstone se ne va comunque, o "il vault al tempo T" la
                 // crederebbe cancellata per sempre.
                 if doc.deleted_at.is_some() {
-                    let mut risorto = doc.clone();
-                    risorto.deleted_at = None;
-                    inner.applica(piano_di(id, risorto), id, host)?;
+                    let mut restored = doc.clone();
+                    restored.deleted_at = None;
+                    inner.apply(plan_of(id, restored), id, host)?;
                 }
                 return Ok(None);
             }
@@ -627,17 +627,17 @@ impl VersionStore {
         // e un indice vecchio che li nomina tutti: si perde la potatura, non
         // una versione. Stessa forma di `rename`, stessa ragione di `trasloca`
         // — vedi il commento là.
-        let potati = pota(&mut doc, id, host);
-        inner.applica(piano_di(id, doc), id, host)?;
-        if !potati.is_empty() {
+        let pruned = prune(&mut doc, id, host);
+        inner.apply(plan_of(id, doc), id, host)?;
+        if !pruned.is_empty() {
             tracing::info!(
                 target: "fub.versioning",
                 "{} version{} di {id} potate dalle fasce di ritenzione",
-                potati.len(),
-                if potati.len() == 1 { "e" } else { "i" }
+                pruned.len(),
+                if pruned.len() == 1 { "e" } else { "i" }
             );
         }
-        spazza(&potati, host);
+        sweep(&pruned, host);
         Ok(Some(version))
     }
 
@@ -663,19 +663,19 @@ impl VersionStore {
         // path viene rioccupato, e che si ripristina sotto un altro nome), le
         // due si uniscono in ordine di tempo: buttarne una sarebbe perdere
         // versioni senza dirlo.
-        let esistente = inner.docs.get(to.as_str()).cloned();
-        let trasloco = trasloca(&doc, from, esistente.as_ref(), to, host)?;
+        let existing = inner.docs.get(to.as_str()).cloned();
+        let relocation = relocate(&doc, from, existing.as_ref(), to, host)?;
         // Da qui l'indice si muove, e si muove su contenuti già al loro posto.
         // Le due sole chiavi che cambiano. L'ordine dei due `insert` conta se
         // `from` e `to` coincidono — un rename di solo caso su un filesystem
         // che non lo distingue: là la chiave resta, con la storia unita.
-        let mut piano = Piano::new();
-        piano.insert(from.to_string(), Voce::Tolta);
-        piano.insert(to.to_string(), Voce::Messa(trasloco.doc));
-        inner.applica(piano, to, host)?;
+        let mut plan = Plan::new();
+        plan.insert(from.to_string(), Entry::Removed);
+        plan.insert(to.to_string(), Entry::Present(relocation.doc));
+        inner.apply(plan, to, host)?;
         // Ultimo ciò che resta indietro: è spazio sprecato, non una bugia, e
         // non vale la pena di far fallire un rename già andato a buon fine.
-        spazza(&trasloco.da_ripulire, host);
+        sweep(&relocation.to_remove, host);
         Ok(())
     }
 
@@ -694,9 +694,9 @@ impl VersionStore {
         if doc.deleted_at.is_some() {
             return Ok(());
         }
-        let mut morto = doc.clone();
-        morto.deleted_at = Some(now);
-        inner.applica(piano_di(id, morto), id, host)
+        let mut deleted = doc.clone();
+        deleted.deleted_at = Some(now);
+        inner.apply(plan_of(id, deleted), id, host)
     }
 
     /// Questo documento risulta cancellato?
@@ -739,17 +739,17 @@ impl VersionStore {
     /// in giù non c'è nessuna guardia da tenere: la lettura del blob è di chi ha
     /// il path.
     pub fn read(&self, id: &DocId, ts: u64, host: &dyn ReadApi) -> Result<String, PluginError> {
-        let path = self.inner.lock().expect("mutex").percorso(id, ts)?;
+        let path = self.inner.lock().expect("mutex").path(id, ts)?;
         let bytes = host.data_read(&path)?.ok_or_else(|| {
             PluginError::Internal(Text::message(
                 CONTENT_GONE,
                 vec![Arg::text(PATH, path.clone())],
             ))
         })?;
-        String::from_utf8(bytes).map_err(|e| {
+        String::from_utf8(bytes).map_err(|and| {
             PluginError::Internal(Text::message(
                 UNREADABLE,
-                vec![Arg::text(PATH, path), Arg::text(REASON, e.to_string())],
+                vec![Arg::text(PATH, path), Arg::text(REASON, and.to_string())],
             ))
         })
     }
@@ -791,7 +791,7 @@ impl Inner {
     /// che c'è adesso e si installa solo se il disco l'ha accettato. Toglierlo di
     /// lì non toglierebbe un'attesa: aprirebbe una finestra in cui due
     /// salvataggi pianificano dalla stessa base e il secondo cancella il primo.
-    fn percorso(&self, id: &DocId, ts: u64) -> Result<String, PluginError> {
+    fn path(&self, id: &DocId, ts: u64) -> Result<String, PluginError> {
         let doc = self.docs.get(id.as_str()).ok_or_else(|| {
             PluginError::BadArgs(Text::message(
                 NO_VERSIONS,
@@ -823,7 +823,7 @@ impl Inner {
     /// solo passando per [`Inner::applica`]. Prenotarlo qui vorrebbe dire
     /// lasciare in memoria, dopo un salvataggio fallito, un documento che il
     /// disco non ha mai visto.
-    fn dir_per(&self, id: &DocId, host: &dyn HostApi) -> Result<String, PluginError> {
+    fn dir_for(&self, id: &DocId, host: &dyn HostApi) -> Result<String, PluginError> {
         if let Some(doc) = self.docs.get(id.as_str()) {
             if !doc.dir.is_empty() {
                 return Ok(doc.dir.clone());
@@ -831,14 +831,14 @@ impl Inner {
         }
         let base = format!("{:016x}", fingerprint(id.as_str()));
         for n in 0u32.. {
-            let nome = if n == 0 {
+            let name = if n == 0 {
                 base.clone()
             } else {
                 format!("{base}-{n}")
             };
-            let libera = match rivendicazione_di(&nome, host)? {
-                Rivendicazione::Nessuna => true,
-                Rivendicazione::Di(meta) => meta.doc_id == id.as_str(),
+            let libera = match claim_of(&name, host)? {
+                Claim::None => true,
+                Claim::Owned(metadata) => metadata.doc_id == id.as_str(),
                 // Un `meta.json` che non si legge **non** è una cartella
                 // libera: è una cartella di cui non sappiamo il proprietario.
                 // Darla via vorrebbe dire scriverci sopra il nome di questo
@@ -852,10 +852,10 @@ impl Inner {
                 // e la cartella non resta perduta per sempre, perché il
                 // prossimo salvataggio del suo vero proprietario riscrive il
                 // `meta.json` e la rende di nuovo leggibile.
-                Rivendicazione::Illeggibile => false,
+                Claim::Unreadable => false,
             };
             if libera {
-                return Ok(nome);
+                return Ok(name);
             }
         }
         unreachable!("la sequenza dei nomi è infinita")
@@ -869,12 +869,12 @@ impl Inner {
     /// protezione della più recente in [`pota`].
     fn free_ts(&self, id: &DocId, host: &dyn HostApi) -> u64 {
         let ts = host.now_unix_millis();
-        let minimo = self
+        let minimum = self
             .docs
             .get(id.as_str())
             .and_then(|d| d.versions.iter().map(|v| v.ts).max())
-            .map_or(0, |ultimo| ultimo + 1);
-        ts.max(minimo)
+            .map_or(0, |last| last + 1);
+        ts.max(minimum)
     }
 
     /// Rende vero sul disco lo stato che i documenti **avranno**, e solo se il
@@ -906,14 +906,14 @@ impl Inner {
     /// Ciò che questa forma **non** basta a garantire è che le rivendicazioni
     /// sul disco restino una per documento: quella la tiene [`trasloca`],
     /// togliendo la rivendicazione vecchia prima che qui se ne scriva una nuova.
-    fn applica(
+    fn apply(
         &mut self,
-        piano: Piano,
-        meta_di: &DocId,
+        plan: Plan,
+        metadata_doc: &DocId,
         host: &mut dyn HostApi,
     ) -> Result<(), PluginError> {
-        if let Some(Voce::Messa(doc)) = piano.get(meta_di.as_str()) {
-            scrivi_meta(meta_di, doc, host)?;
+        if let Some(Entry::Present(doc)) = plan.get(metadata_doc.as_str()) {
+            write_metadata(metadata_doc, doc, host)?;
         }
         // Dentro un lotto l'indice non si scrive: lo scrive
         // [`VersionStore::in_lotto`] una volta sola, in fondo. Il piano si
@@ -922,24 +922,24 @@ impl Inner {
         // accettato qui è il `meta.json`, e il `meta.json` è la verità;
         // l'indice ne è il derivato, e un derivato che manca non è una bugia,
         // è la condizione da cui [`VersionStore::open`] ricostruisce.
-        if !self.lotto {
-            scrivi_index(
-                DocsDelPiano {
-                    vivi: &self.docs,
-                    piano: &piano,
+        if !self.batch {
+            write_index(
+                PlanDocs {
+                    live: &self.docs,
+                    plan: &plan,
                 },
                 host,
             )?;
         }
         // E solo adesso il piano entra: una chiave per volta, non una mappa al
         // posto di un'altra. Ciò che il piano non nomina non è cambiato.
-        for (chiave, voce) in piano {
-            match voce {
-                Voce::Messa(doc) => {
-                    self.docs.insert(chiave, doc);
+        for (key, entry) in plan {
+            match entry {
+                Entry::Present(doc) => {
+                    self.docs.insert(key, doc);
                 }
-                Voce::Tolta => {
-                    self.docs.remove(&chiave);
+                Entry::Removed => {
+                    self.docs.remove(&key);
                 }
             }
         }
@@ -955,47 +955,47 @@ impl Inner {
 /// quello riparato. Il `Drop` **non scrive** — chiudere il conto sul disco può
 /// fallire, e un errore che scappasse da un `Drop` non avrebbe dove andare
 /// (peggio: un panico da un `Drop` è un `abort`).
-struct Lotto<'a> {
+struct Batch<'a> {
     inner: &'a Mutex<Inner>,
 }
 
-impl Drop for Lotto<'_> {
+impl Drop for Batch<'_> {
     fn drop(&mut self) {
         if let Ok(mut inner) = self.inner.lock() {
-            inner.lotto = false;
+            inner.batch = false;
         }
     }
 }
 
-fn scrivi_meta(id: &DocId, doc: &DocVersions, host: &mut dyn HostApi) -> Result<(), PluginError> {
-    let meta = Meta {
+fn write_metadata(id: &DocId, doc: &DocVersions, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    let metadata = Meta {
         doc_id: id.to_string(),
         deleted_at: doc.deleted_at,
     };
-    let raw = serde_json::to_vec(&meta).map_err(|e| {
+    let raw = serde_json::to_vec(&metadata).map_err(|and| {
         PluginError::Internal(Text::message(
-            META_UNWRITABLE,
-            vec![Arg::text(REASON, e.to_string())],
+            METADATA_UNWRITABLE,
+            vec![Arg::text(REASON, and.to_string())],
         ))
     })?;
-    host.data_write(&blob(&doc.dir, META_FILE), &raw)
+    host.data_write(&blob(&doc.dir, METADATA_FILE), &raw)
 }
 
-fn scrivi_index(docs: impl Serialize, host: &mut dyn HostApi) -> Result<(), PluginError> {
-    let index = IndexDaScrivere {
+fn write_index(docs: impl Serialize, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    let index = IndexToWrite {
         schema_version: SCHEMA_VERSION,
         docs,
     };
-    let raw = serde_json::to_vec(&index).map_err(|e| {
+    let raw = serde_json::to_vec(&index).map_err(|and| {
         PluginError::Internal(Text::message(
             INDEX_UNWRITABLE,
-            vec![Arg::text(REASON, e.to_string())],
+            vec![Arg::text(REASON, and.to_string())],
         ))
     })?;
     host.data_write(INDEX_FILE, &raw)
 }
 
-/// Applica le fasce di ritenzione (D6) all'elenco **del piano** e
+/// Applica le fasce di ritenzione (D6) all'elenco **del plan** e
 /// **restituisce i contenuti che avanzano**, senza cancellarne nessuno.
 ///
 /// Non cancella perché non può saperlo: finché l'indice potato non è sul disco,
@@ -1009,46 +1009,46 @@ fn scrivi_index(docs: impl Serialize, host: &mut dyn HostApi) -> Result<(), Plug
 /// l'elenco in memoria e poi non riuscire a scrivere l'indice toglierebbe da
 /// sotto gli occhi versioni che sul disco ci sono ancora.
 #[must_use = "sono i contenuti da spazzare dopo aver scritto l'indice"]
-fn pota(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Vec<String> {
-    let ora = host.now_unix_millis();
-    let mut tenute: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
-    let mut fasce_viste: Vec<(u8, u64)> = Vec::new();
+fn prune(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Vec<String> {
+    let now = host.now_unix_millis();
+    let mut kept: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
+    let mut fasce_seen: Vec<(u8, u64)> = Vec::new();
     // Dalla più recente: dentro ogni fascia vince la più recente.
-    for (i, v) in doc.versions.iter().rev().enumerate() {
-        let eta = ora.saturating_sub(v.ts);
+    for (the, v) in doc.versions.iter().rev().enumerate() {
+        let eta = now.saturating_sub(v.ts);
         // La più recente non si pota mai: è la versione che rappresenta lo
         // stato attuale della nota, anche se la nota è ferma da un anno.
-        let chiave = if i == 0 || eta < FASCIA_TUTTO {
+        let key = if the == 0 || eta < BAND_ALL {
             None
-        } else if eta < FASCIA_ORARIA {
-            Some((1, v.ts / MS_ORA))
-        } else if eta < FASCIA_GIORNALIERA {
-            Some((2, v.ts / MS_GIORNO))
+        } else if eta < BAND_HOURLY {
+            Some((1, v.ts / MS_HOUR))
+        } else if eta < BAND_DAILY {
+            Some((2, v.ts / MS_DAY))
         } else {
             continue; // oltre l'ultima fascia: non si conserva
         };
-        if let Some(chiave) = chiave {
-            if fasce_viste.contains(&chiave) {
+        if let Some(key) = key {
+            if fasce_seen.contains(&key) {
                 continue;
             }
-            fasce_viste.push(chiave);
+            fasce_seen.push(key);
         }
-        tenute.push(*v);
+        kept.push(*v);
     }
-    tenute.reverse();
-    if tenute.len() == doc.versions.len() {
+    kept.reverse();
+    if kept.len() == doc.versions.len() {
         return Vec::new();
     }
 
-    let tenuti: HashSet<u64> = tenute.iter().map(|t| t.ts).collect();
-    let avanzati: Vec<String> = doc
+    let kept_timestamps: HashSet<u64> = kept.iter().map(|t| t.ts).collect();
+    let advanced: Vec<String> = doc
         .versions
         .iter()
-        .filter(|v| !tenuti.contains(&v.ts))
+        .filter(|v| !kept_timestamps.contains(&v.ts))
         .map(|v| blob(&doc.dir, &snapshot_name(v.ts, id.as_str())))
         .collect();
-    doc.versions = tenute;
-    avanzati
+    doc.versions = kept;
+    advanced
 }
 
 /// Toglie dallo store contenuti che l'indice **già scritto** non nomina più.
@@ -1058,18 +1058,18 @@ fn pota(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Vec<String> {
 /// un contenuto che non se ne va è spazio sprecato — non una bugia. Chiamarla
 /// prima di [`Inner::applica`] è l'inversione che rompe tutto, ed è la
 /// ragione per cui [`pota`] restituisce path invece di cancellarli.
-fn spazza(paths: &[String], host: &mut dyn HostApi) {
+fn sweep(paths: &[String], host: &mut dyn HostApi) {
     for path in paths {
-        if let Err(e) = host.data_remove(path) {
-            tracing::warn!(target: "fub.versioning", "{path} è rimasto indietro e non se ne va: {e}");
+        if let Err(and) = host.data_remove(path) {
+            tracing::warn!(target: "fub.versioning", "{path} è rimasto indietro e non se ne va: {and}");
         }
     }
 }
 
 /// L'esito di un trasloco: la storia unita, e i blob rimasti indietro.
-struct Trasloco {
+struct Relocation {
     doc: DocVersions,
-    da_ripulire: Vec<String>,
+    to_remove: Vec<String>,
 }
 
 /// Unisce due storie sullo stesso path, in ordine di tempo, e porta i contenuti
@@ -1085,13 +1085,13 @@ struct Trasloco {
 /// ancora mosso e gli originali sono tutti al loro posto; l'ordine inverso
 /// lascerebbe, al primo errore, un indice che nomina contenuti spariti — cioè
 /// il modo in cui il versioning fallisce senza sembrare rotto.
-fn trasloca(
+fn relocate(
     doc: &DocVersions,
     from: &DocId,
-    esistente: Option<&DocVersions>,
+    existing: Option<&DocVersions>,
     to: &DocId,
     host: &mut dyn HostApi,
-) -> Result<Trasloco, PluginError> {
+) -> Result<Relocation, PluginError> {
     // Dove sta ogni contenuto adesso: la storia che arriva è ancora sotto la
     // sua cartella e col nome che le dava il path vecchio, quella che c'era già
     // sta sotto una cartella tutta sua.
@@ -1100,12 +1100,12 @@ fn trasloca(
         .iter()
         .map(|v| (blob(&doc.dir, &snapshot_name(v.ts, from.as_str())), *v))
         .collect();
-    if let Some(esistente) = esistente {
+    if let Some(existing) = existing {
         candidate.extend(
-            esistente
+            existing
                 .versions
                 .iter()
-                .map(|v| (blob(&esistente.dir, &snapshot_name(v.ts, to.as_str())), *v)),
+                .map(|v| (blob(&existing.dir, &snapshot_name(v.ts, to.as_str())), *v)),
         );
     }
     // Ordinamento stabile: a parità di istante la storia che arriva viene
@@ -1116,21 +1116,21 @@ fn trasloca(
     // cartella per documento non è un vezzo: `rebuild_from_store` si fida di
     // `meta.json`, e due cartelle che dichiarano lo stesso `doc_id` si
     // sovrascriverebbero a vicenda, con una delle due storie persa in silenzio.
-    let dir = match (doc.dir.is_empty(), esistente) {
-        (true, Some(esistente)) => esistente.dir.clone(),
+    let dir = match (doc.dir.is_empty(), existing) {
+        (true, Some(existing)) => existing.dir.clone(),
         _ => doc.dir.clone(),
     };
     let mut versions: Vec<VersionRef> = Vec::with_capacity(candidate.len());
-    let mut destinazioni: Vec<String> = Vec::with_capacity(candidate.len());
-    let mut da_ripulire: Vec<String> = Vec::new();
-    let mut copie: Vec<(usize, Vec<u8>)> = Vec::new();
+    let mut destinations: Vec<String> = Vec::with_capacity(candidate.len());
+    let mut to_remove: Vec<String> = Vec::new();
+    let mut copies: Vec<(usize, Vec<u8>)> = Vec::new();
 
-    for (origine, mut v) in candidate {
+    for (origin, mut v) in candidate {
         match versions.last() {
             // Stesso istante e stesso contenuto: è la stessa fotografia
             // arrivata da due storie, non due versioni.
             Some(u) if u.ts == v.ts && u.hash == v.hash => {
-                da_ripulire.push(origine);
+                to_remove.push(origin);
                 continue;
             }
             // Stesso istante ma contenuti diversi: sono due fotografie davvero
@@ -1139,34 +1139,34 @@ fn trasloca(
             Some(u) if v.ts <= u.ts => v.ts = u.ts + 1,
             _ => {}
         }
-        let destinazione = blob(&dir, &snapshot_name(v.ts, to.as_str()));
-        let copia = if destinazione != origine {
-            let Some(bytes) = host.data_read(&origine)? else {
+        let destination = blob(&dir, &snapshot_name(v.ts, to.as_str()));
+        let copy = if destination != origin {
+            let Some(bytes) = host.data_read(&origin)? else {
                 // L'indice nominava un contenuto che non c'è più: non lo si
                 // porta dietro, o continuerebbe a mentire sotto la chiave nuova.
                 tracing::warn!(
                     target: "fub.versioning",
-                    "{origine} non c'è più, la versione {} esce dalla storia di {to}",
+                    "{origin} non c'è più, la versione {} esce dalla storia di {to}",
                     v.ts
                 );
                 continue;
             };
-            da_ripulire.push(origine);
+            to_remove.push(origin);
             Some(bytes)
         } else {
             None
         };
-        destinazioni.push(destinazione);
+        destinations.push(destination);
         versions.push(v);
-        if let Some(bytes) = copia {
-            copie.push((destinazioni.len() - 1, bytes));
+        if let Some(bytes) = copy {
+            copies.push((destinations.len() - 1, bytes));
         }
     }
 
     // Nessuna destinazione può più essere l'origine che un giro successivo deve
     // ancora leggere: soltanto adesso, a letture finite, i blob si riscrivono.
-    for (indice, bytes) in copie {
-        host.data_write(&destinazioni[indice], &bytes)?;
+    for (index, bytes) in copies {
+        host.data_write(&destinations[index], &bytes)?;
     }
 
     // La cartella abbandonata smette di dire di chi è **qui**, prima che
@@ -1188,23 +1188,23 @@ fn trasloca(
     // cioè la storia intera sotto la chiave di prima — un nome vecchio, non una
     // storia persa. E se è la cancellazione stessa a non riuscire, il `?` ferma
     // il rename prima che la seconda rivendicazione esista.
-    if let Some(esistente) = esistente {
-        if esistente.dir != dir {
-            host.data_remove(&blob(&esistente.dir, META_FILE))?;
+    if let Some(existing) = existing {
+        if existing.dir != dir {
+            host.data_remove(&blob(&existing.dir, METADATA_FILE))?;
         }
     }
     // Un contenuto che serve ancora non si cancella, per quanto il suo vecchio
     // nome sia finito nella lista.
-    da_ripulire.retain(|p| !destinazioni.contains(p));
+    to_remove.retain(|p| !destinations.contains(p));
 
-    Ok(Trasloco {
+    Ok(Relocation {
         doc: DocVersions {
             dir,
             // Il documento è vivo: è appena arrivato qui con un rename.
             deleted_at: None,
             versions,
         },
-        da_ripulire,
+        to_remove,
     })
 }
 
@@ -1235,13 +1235,13 @@ fn load_index(host: &dyn ReadApi) -> Option<BTreeMap<String, DocVersions>> {
     (index.schema_version == SCHEMA_VERSION).then_some(index.docs)
 }
 
-fn rivendicazione_di(dir: &str, host: &dyn HostApi) -> Result<Rivendicazione, PluginError> {
-    let Some(raw) = host.data_read(&blob(dir, META_FILE))? else {
-        return Ok(Rivendicazione::Nessuna);
+fn claim_of(dir: &str, host: &dyn HostApi) -> Result<Claim, PluginError> {
+    let Some(raw) = host.data_read(&blob(dir, METADATA_FILE))? else {
+        return Ok(Claim::None);
     };
     Ok(match serde_json::from_slice(&raw) {
-        Ok(meta) => Rivendicazione::Di(meta),
-        Err(_) => Rivendicazione::Illeggibile,
+        Ok(metadata) => Claim::Owned(metadata),
+        Err(_) => Claim::Unreadable,
     })
 }
 
@@ -1260,23 +1260,23 @@ fn rivendicazione_di(dir: &str, host: &dyn HostApi) -> Result<Rivendicazione, Pl
 /// niente riletto — sta in `fub-features/tests/chi_risponde_apre_i_byte.rs`.
 fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
     // I blob sono ordinati, quindi quelli di una stessa cartella sono contigui.
-    let mut per_dir: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    let mut for_dir: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     let blobs = host.data_list("")?;
     for path in &blobs {
         // Solo il primo livello: la struttura dello store è `<dir>/<file>`, e
         // ciò che sta alla radice (l'indice) non è uno snapshot.
         if let Some((dir, name)) = path.split_once('/') {
             if !name.contains('/') {
-                per_dir.entry(dir).or_default().push(name);
+                for_dir.entry(dir).or_default().push(name);
             }
         }
     }
 
     let mut docs = BTreeMap::new();
-    for (dir, names) in per_dir {
-        let meta = match rivendicazione_di(dir, host)? {
-            Rivendicazione::Di(meta) => meta,
-            Rivendicazione::Nessuna => {
+    for (dir, names) in for_dir {
+        let metadata = match claim_of(dir, host)? {
+            Claim::Owned(metadata) => metadata,
+            Claim::None => {
                 tracing::warn!(target: "fub.versioning", "{dir} non dice di chi è, la salto");
                 continue;
             }
@@ -1285,7 +1285,7 @@ fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions
             // torna leggibile. Nessun altro se la prende — [`Inner::dir_per`]
             // non dà via una cartella che non sa leggere — e il primo
             // salvataggio del suo proprietario la riscrive.
-            Rivendicazione::Illeggibile => {
+            Claim::Unreadable => {
                 tracing::warn!(
                     target: "fub.versioning",
                     "il meta.json di {dir} non si legge: la sua storia resta sul \
@@ -1314,10 +1314,10 @@ fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions
         }
         versions.sort_by_key(|v| v.ts);
         docs.insert(
-            meta.doc_id,
+            metadata.doc_id,
             DocVersions {
                 dir: dir.to_string(),
-                deleted_at: meta.deleted_at,
+                deleted_at: metadata.deleted_at,
                 versions,
             },
         );
@@ -1330,7 +1330,7 @@ fn rebuild_from_store(host: &dyn HostApi) -> Result<BTreeMap<String, DocVersions
 /// dichiarava già da prima che fosse vero: adesso è la [`Fnv1a`] del contratto,
 /// non una terza copia delle stesse due costanti.
 fn fingerprint(source: &str) -> u64 {
-    Fnv1a::di(source.as_bytes())
+    Fnv1a::hash(source.as_bytes())
 }
 
 /// Il campionatore: un [`EventHandler`] come quelli che scriveranno i plugin.
@@ -1347,24 +1347,24 @@ impl VersioningHandler {
     }
 
     /// Una passata sull'intero vault, e chi fotografare.
-    fn sweep(&self, host: &mut dyn HostApi, chi: Passata) -> Result<(), PluginError> {
-        let da_guardare = self.esistenti(host)?;
+    fn sweep(&self, host: &mut dyn HostApi, who: Pass) -> Result<(), PluginError> {
+        let documents = self.existing(host)?;
         // Una passata è un **lotto**: le fotografie vanno sul disco una per una
         // — blob e `meta.json`, che sono l'autorità — e l'indice, che è il
         // derivato, si scrive una volta sola in fondo. Fuori di qui l'indice
         // resta scritto a ogni salvataggio: è il costo onesto di un indice, e
         // diventa un difetto solo quando lo si paga N volte di fila.
-        let esito = self.store.in_lotto(host, |host| {
-            for id in da_guardare {
-                if matches!(chi, Passata::SoloNuovi) && self.store.has_versions(&id) {
+        let result = self.store.in_batch(host, |host| {
+            for id in documents {
+                if matches!(who, Pass::SoloNuovi) && self.store.has_versions(&id) {
                     continue;
                 }
                 // Una nota illeggibile o non salvabile non deve impedire
                 // l'apertura del vault: il vault è la verità, le versioni no.
                 match host.read_document(&id) {
                     Ok(source) => {
-                        if let Err(e) = self.store.snapshot(&id, &source, host) {
-                            tracing::warn!(target: "fub.versioning", "versione di {id} non salvata: {e}");
+                        if let Err(and) = self.store.snapshot(&id, &source, host) {
+                            tracing::warn!(target: "fub.versioning", "versione di {id} non salvata: {and}");
                             // Una versione attesa non salvata è una perdita
                             // autorevole (0052: `Failure`): l'errore è già un
                             // `PluginError` catalogato, e lo si porta nel canale tale
@@ -1372,17 +1372,17 @@ impl VersioningHandler {
                             host.emit(Event::Trouble {
                                 severity: Severity::Failure,
                                 subject: Some(id.clone()),
-                                error: e,
+                                error: and,
                                 gate: None,
                             });
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!(target: "fub.versioning", "{id} non si legge: {e}");
+                    Err(and) => {
+                        tracing::warn!(target: "fub.versioning", "{id} non si legge: {and}");
                         host.emit(Event::Trouble {
                             severity: Severity::Failure,
                             subject: Some(id.clone()),
-                            error: e,
+                            error: and,
                             gate: None,
                         });
                     }
@@ -1395,16 +1395,16 @@ impl VersioningHandler {
         // guasto che prima si presentava una volta per nota, e qui si presenta
         // una volta sola. **Senza soggetto**, perché non è di un documento: è
         // dello store.
-        if let Err(e) = esito {
+        if let Err(and) = result {
             tracing::warn!(
                 target: "fub.versioning",
                 "l'indice non si è scritto dopo la passata: resta da \
-                 ricostruire alla prossima apertura ({e})"
+                 ricostruire alla prossima apertura ({and})"
             );
             host.emit(Event::Trouble {
                 severity: Severity::Failure,
                 subject: None,
-                error: e,
+                error: and,
                 gate: None,
             });
         }
@@ -1431,18 +1431,18 @@ impl VersioningHandler {
     /// dell'indicizzazione. E per questa passata l'anagrafe è la sorgente
     /// giusta anche nel merito: si fotografa ciò che sta **sul disco**, e
     /// `read_document` legge dal disco, non dall'indice.
-    fn esistenti(&self, host: &mut dyn HostApi) -> Result<Vec<DocId>, PluginError> {
-        let risposta = host.query_index(IndexQuery::Entries {
+    fn existing(&self, host: &mut dyn HostApi) -> Result<Vec<DocId>, PluginError> {
+        let answer = host.query_index(IndexQuery::Entries {
             of_kind: Some(EntryKind::Document),
             within: None,
             page: None,
         })?;
-        match risposta {
+        match answer {
             IndexResult::Entries(paged) => {
                 Ok(paged.items.into_iter().map(|entry| entry.id).collect())
             }
-            altro => Err(PluginError::Internal(
-                format!("l'anagrafe ha risposto con {altro:?}").into(),
+            other => Err(PluginError::Internal(
+                format!("l'anagrafe ha risposto con {other:?}").into(),
             )),
         }
     }
@@ -1466,7 +1466,7 @@ impl VersioningHandler {
         &self,
         host: &'h mut (dyn HostApi + 'h),
     ) -> Result<(), PluginError> {
-        self.sweep(host, Passata::SoloNuovi)
+        self.sweep(host, Pass::SoloNuovi)
     }
 
     /// La fotografia **di una sola nota**, un istante prima che venga
@@ -1505,7 +1505,7 @@ impl VersioningHandler {
             // originale da salvare. `NotFound` è l'unico errore di lettura che
             // non è un guasto — ogni altro risale, e ferma la scrittura.
             Err(PluginError::NotFound(_)) => Ok(()),
-            Err(e) => Err(e),
+            Err(and) => Err(and),
         }
     }
 
@@ -1532,21 +1532,21 @@ impl VersioningHandler {
         // l'indicizzazione non ha ancora raggiunto (§15.7) — riceverebbe un
         // **tombstone**, cioè il versioning dichiarerebbe morta una nota viva.
         // Chiedendolo all'anagrafe la domanda è quella che si intendeva fare.
-        let vivi: std::collections::BTreeSet<String> =
-            self.esistenti(host)?.into_iter().map(|id| id.0).collect();
+        let live: std::collections::BTreeSet<String> =
+            self.existing(host)?.into_iter().map(|id| id.0).collect();
         let mut sepolti = 0usize;
         for id in self.store.documents() {
-            if vivi.contains(id.as_str()) || self.store.is_deleted(&id) {
+            if live.contains(id.as_str()) || self.store.is_deleted(&id) {
                 continue;
             }
             match self.store.tombstone(&id, host) {
                 Ok(()) => sepolti += 1,
-                Err(e) => {
-                    tracing::warn!(target: "fub.versioning", "tombstone di {id} non scritto: {e}");
+                Err(and) => {
+                    tracing::warn!(target: "fub.versioning", "tombstone di {id} non scritto: {and}");
                     host.emit(Event::Trouble {
                         severity: Severity::Failure,
                         subject: Some(id.clone()),
-                        error: e,
+                        error: and,
                         gate: None,
                     });
                 }
@@ -1562,19 +1562,19 @@ impl VersioningHandler {
                 if sepolti == 1 { "o" } else { "i" }
             );
         }
-        self.sweep(host, Passata::Tutti)
+        self.sweep(host, Pass::All)
     }
 }
 
 /// Chi fotografare in una passata sull'intero vault.
-enum Passata {
+enum Pass {
     /// Solo chi non ha ancora una storia: chi ce l'ha non paga nemmeno una
     /// lettura. Resta per chi riusa la passata a mano (i test). La
     /// riconciliazione dopo un `Overflow` passa da [`Passata::Tutti`].
     SoloNuovi,
     /// Tutti (riconciliazione dopo un `Overflow`): il dedup per contenuto rende
     /// gratis gli immutati, e per gli altri nasce la versione persa.
-    Tutti,
+    All,
 }
 
 impl EventHandler for VersioningHandler {
@@ -1697,10 +1697,10 @@ fn version_source_doc(
             vec![Arg::text(PATH, path.clone())],
         ))
     })?;
-    String::from_utf8(bytes).map_err(|e| {
+    String::from_utf8(bytes).map_err(|and| {
         PluginError::Internal(Text::message(
             UNREADABLE,
-            vec![Arg::text(PATH, path), Arg::text(REASON, e.to_string())],
+            vec![Arg::text(PATH, path), Arg::text(REASON, and.to_string())],
         ))
     })
 }
@@ -1750,7 +1750,7 @@ impl ViewProvider for HistoryView {
             // albero sparirebbe al primo salvataggio di chi la sta leggendo.
             A_PREVIEW => {
                 let (Some(_), Some(ts)) = (
-                    stessa_nota(&action, host),
+                    same_notes(&action, host),
                     action.payload.get(TS).and_then(|v| v.as_u64()),
                 ) else {
                     return Ok(ViewUpdate::None);
@@ -1769,7 +1769,7 @@ impl ViewProvider for HistoryView {
             // dall'annullamento, fuori dalla simulazione e fuori dalla palette.
             A_RESTORE => {
                 let (Some(doc), Some(ts)) = (
-                    stessa_nota(&action, host),
+                    same_notes(&action, host),
                     action.payload.get(TS).and_then(|v| v.as_u64()),
                 ) else {
                     return Ok(ViewUpdate::None);
@@ -1807,10 +1807,10 @@ impl ViewProvider for HistoryView {
 /// della propria registrazione e la più invasiva delle due risposte sbagliate.
 /// Un click scaduto non fa niente, e quello dopo — sul pannello giusto, che nel
 /// frattempo è arrivato — lo fa.
-fn stessa_nota(action: &UiAction, host: &dyn ReadApi) -> Option<DocId> {
-    let disegnata = action.payload.get(DOC).and_then(|v| v.as_str())?;
-    let attiva = host.active_context().and_then(|c| c.doc)?;
-    (attiva.as_str() == disegnata).then_some(attiva)
+fn same_notes(action: &UiAction, host: &dyn ReadApi) -> Option<DocId> {
+    let drawn = action.payload.get(DOC).and_then(|v| v.as_str())?;
+    let activate = host.active_context().and_then(|c| c.doc)?;
+    (activate.as_str() == drawn).then_some(activate)
 }
 
 fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
@@ -1828,15 +1828,15 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     // `versions` non vuota implica una voce: l'anteprima la riusa.
     let entry = entry.expect("versioni non vuote implicano una voce dell'indice");
 
-    let mut figli = vec![UiNode::text(Text::message(
+    let mut children = vec![UiNode::text(Text::message(
         COUNT,
         vec![Arg::int("count", versions.len() as i64)],
     ))];
-    figli.push(UiNode::list(
+    children.push(UiNode::list(
         versions
             .iter()
             .enumerate()
-            .map(|(i, v)| riga(v, i == 0, doc.as_str()))
+            .map(|(the, v)| row(v, the == 0, doc.as_str()))
             .collect(),
     ));
 
@@ -1847,7 +1847,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         .and_then(|v| v.as_u64())
         .filter(|ts| versions.iter().any(|v| v.ts == *ts))
     {
-        figli.push(UiNode::keyed(
+        children.push(UiNode::keyed(
             format!("preview:{ts}"),
             UiKind::Section {
                 title: Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, ts)]),
@@ -1863,7 +1863,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
             },
         ));
     }
-    Ok(UiNode::column(1, figli))
+    Ok(UiNode::column(1, children))
 }
 
 /// Una versione: quando, quanto grande, e i due gesti che la riguardano.
@@ -1875,9 +1875,9 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
 /// agisce — `version.restore` la vuole, ma la si potrebbe rileggere —: serve a
 /// dire **su quale nota questa riga è stata disegnata**, che è l'unico modo di
 /// accorgersi che nel frattempo è cambiata. Vedi [`stessa_nota`].
-fn riga(v: &VersionRef, corrente: bool, doc: &str) -> UiNode {
-    let quando = Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, v.ts)]);
-    let quanto = if corrente {
+fn row(v: &VersionRef, current: bool, doc: &str) -> UiNode {
+    let when = Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, v.ts)]);
+    let amount = if current {
         Text::key(CURRENT)
     } else {
         Text::message(SIZE, vec![Arg::int("size", v.size as i64)])
@@ -1889,8 +1889,8 @@ fn riga(v: &VersionRef, corrente: bool, doc: &str) -> UiNode {
             gap: 1,
             children: vec![
                 UiNode::list_item(
-                    quando,
-                    Some(quanto),
+                    when,
+                    Some(amount),
                     Some(ActionRef::with(
                         A_PREVIEW,
                         serde_json::json!({ DOC: doc, TS: v.ts }),
@@ -1947,12 +1947,12 @@ impl CommandProvider for VersioningCommands {
         let doc = args
             .document(DOC)
             .or_else(|| host.active_context().and_then(|c| c.doc))
-            .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_NOTE_GIVEN)))?;
+            .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
         let ts = args
             .number(TS)
             .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_TS_GIVEN)))? as u64;
 
-        let quando_dove = |key: &str, when: u64| {
+        let when_for = |key: &str, when: u64| {
             Text::message(
                 key,
                 vec![Arg::text(DOC, doc.as_str()), Arg::timestamp(WHEN, when)],
@@ -1960,9 +1960,9 @@ impl CommandProvider for VersioningCommands {
         };
 
         if mode.is_dry_run() {
-            let piano = CommandPlan::of_edits(quando_dove(PLAN_RESTORE, ts), Vec::new())
+            let plan = CommandPlan::of_edits(when_for(PLAN_RESTORE, ts), Vec::new())
                 .with_doc(doc.clone());
-            return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(piano)));
+            return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
         }
 
         // L'inverso di un ripristino è un altro ripristino: quello alla versione
@@ -1971,7 +1971,7 @@ impl CommandProvider for VersioningCommands {
         // cambiata — ed è l'istante dell'ultima versione salvata, non l'ora
         // corrente: fra le due c'è il dedup (D6), che può non aver fotografato
         // niente se il file era già uguale.
-        let prima = versions_of(host, &doc).first().map(|v| v.ts);
+        let before = versions_of(host, &doc).first().map(|v| v.ts);
         let source = version_source(host, &doc, ts)?;
         // **Detta**, e qui la parola è precisa: un ripristino non discende dal
         // testo che c'è adesso — lo sostituisce apposta, ed è il gesto con cui
@@ -1981,17 +1981,17 @@ impl CommandProvider for VersioningCommands {
         // è perduto: il dedup (D6) ne fotografa una versione prima.
         host.write_document(&doc, &source, WriteBase::Dictated)?;
 
-        let esito = CommandOutcome::notify(quando_dove(DONE_RESTORE, ts));
-        Ok(match prima {
-            Some(prima) => esito.undoable(fub_abi::command::Undo::by_command(
-                quando_dove(UNDO_RESTORE, prima),
+        let result = CommandOutcome::notify(when_for(DONE_RESTORE, ts));
+        Ok(match before {
+            Some(before) => result.undoable(fub_abi::command::Undo::by_command(
+                when_for(UNDO_RESTORE, before),
                 VERSION_RESTORE,
-                serde_json::json!({ DOC: doc.as_str(), TS: prima }),
+                serde_json::json!({ DOC: doc.as_str(), TS: before }),
             )),
             // Nessuna versione prima di questa: non c'è niente a cui tornare, e
             // dichiarare un annullamento che fallirebbe è peggio che non
             // dichiararne nessuno.
-            None => esito,
+            None => result,
         })
     }
 }
@@ -2013,25 +2013,25 @@ mod tests {
         let store = VersionStore::open(&mut host).unwrap();
 
         store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
-        host.avanza(1_000);
+        host.advance(1_000);
         store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
 
-        let versioni = store.list(&id("a.md"));
-        assert_eq!(versioni.len(), 2);
+        let versions = store.list(&id("a.md"));
+        assert_eq!(versions.len(), 2);
         // Dalla più recente: è l'ordine in cui si cerca ciò che si vuole
         // ripescare.
         assert_eq!(
-            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            store.read(&id("a.md"), versions[0].ts, &host).unwrap(),
             "seconda"
         );
         assert_eq!(
-            store.read(&id("a.md"), versioni[1].ts, &host).unwrap(),
+            store.read(&id("a.md"), versions[1].ts, &host).unwrap(),
             "prima"
         );
     }
 
     #[test]
-    fn ogni_chiave_che_il_pannello_scrive_sta_nei_cataloghi_delle_lingue() {
+    fn every_key_that_the_panel_writes_is_in_the_catalogs_of_the_languages() {
         // Il difetto: le righe dello storico dicevano «when» — la chiave nuda
         // — perché `Text::message` riceveva il nome dell'argomento come chiave
         // e il risolutore, senza template, ricade sulla chiave stessa. Il
@@ -2042,25 +2042,25 @@ mod tests {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
-        host.avanza(1_000);
+        host.advance(1_000);
         store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
         host.set_active(Some("a.md"));
 
-        let mut albero = tree(&host).unwrap();
-        let mut chiavi = Vec::new();
+        let mut tree = tree(&host).unwrap();
+        let mut keys = Vec::new();
         use fub_abi::text::{Localize, Text};
-        albero.visit_texts(&mut |t| {
+        tree.visit_texts(&mut |t| {
             if let Text::Message(m) = t {
-                chiavi.push(m.key.clone());
+                keys.push(m.key.clone());
             }
         });
-        assert!(!chiavi.is_empty(), "l'albero deve portare messaggi");
-        for catalogo in catalog() {
-            for chiave in &chiavi {
+        assert!(!keys.is_empty(), "l'albero deve portare messaggi");
+        for catalog in catalog() {
+            for key in &keys {
                 assert!(
-                    catalogo.entries.contains_key(chiave),
-                    "il catalogo {} non ha la chiave {chiave}",
-                    catalogo.locale
+                    catalog.entries.contains_key(key),
+                    "il catalogo {} non ha la chiave {key}",
+                    catalog.locale
                 );
             }
         }
@@ -2073,20 +2073,20 @@ mod tests {
 
         store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
         // L'orologio torna indietro fra due salvataggi (NTP, fuso, VM).
-        host.arretra(60_000);
+        host.backtrack(60_000);
         store.snapshot(&id("a.md"), "seconda", &mut host).unwrap();
 
-        let versioni = store.list(&id("a.md"));
-        assert_eq!(versioni.len(), 2);
+        let versions = store.list(&id("a.md"));
+        assert_eq!(versions.len(), 2);
         // `versions` è dato persistito e deve restare ordinato per tempo:
         // su di esso ragionano "attuale" in `list` e la protezione della più
         // recente in `pota`.
         assert!(
-            versioni[0].ts > versioni[1].ts,
-            "la versione nuova deve avere ts maggiore anche a orologio arretrato: {versioni:?}"
+            versions[0].ts > versions[1].ts,
+            "la versione nuova deve avere ts maggiore anche a orologio arretrato: {versions:?}"
         );
         assert_eq!(
-            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            store.read(&id("a.md"), versions[0].ts, &host).unwrap(),
             "seconda",
             "l'«attuale» è l'ultima salvata, non l'ultima per orologio"
         );
@@ -2112,7 +2112,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rename_moves_the_history_with_the_note() {
+    fn a_rename_moves_the_history_with_the_notes() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store
@@ -2124,10 +2124,10 @@ mod tests {
             .unwrap();
 
         assert!(store.list(&id("vecchia.md")).is_empty());
-        let versioni = store.list(&id("nuova.md"));
-        assert_eq!(versioni.len(), 1);
+        let versions = store.list(&id("nuova.md"));
+        assert_eq!(versions.len(), 1);
         assert_eq!(
-            store.read(&id("nuova.md"), versioni[0].ts, &host).unwrap(),
+            store.read(&id("nuova.md"), versions[0].ts, &host).unwrap(),
             "corpo"
         );
     }
@@ -2149,42 +2149,42 @@ mod tests {
 
         store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
 
-        let versioni = store.list(&id("b.md"));
+        let versions = store.list(&id("b.md"));
         assert_eq!(
-            versioni.len(),
+            versions.len(),
             2,
-            "contenuti diversi sono versioni diverse anche a parità di istante: {versioni:?}"
+            "contenuti diversi sono versioni diverse anche a parità di istante: {versions:?}"
         );
-        let contenuti: Vec<String> = versioni
+        let contents: Vec<String> = versions
             .iter()
             .map(|v| store.read(&id("b.md"), v.ts, &host).unwrap())
             .collect();
-        assert!(contenuti.contains(&"la storia che arriva".to_string()));
-        assert!(contenuti.contains(&"la storia che c'era".to_string()));
+        assert!(contents.contains(&"la storia che arriva".to_string()));
+        assert!(contents.contains(&"la storia che c'era".to_string()));
     }
 
     #[test]
-    fn un_trasloco_legge_tutti_i_blob_prima_di_riscriverli() {
+    fn a_relocation_reads_all_the_blob_first_of_rewrite_them() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
 
         store.snapshot(&id("a.md"), "a zero", &mut host).unwrap();
         store.snapshot(&id("b.md"), "b zero", &mut host).unwrap();
-        host.avanza(1);
+        host.advance(1);
         store.snapshot(&id("a.md"), "a uno", &mut host).unwrap();
 
         store.rename(&id("a.md"), &id("b.md"), &mut host).unwrap();
 
-        let versioni = store.list(&id("b.md"));
-        assert_eq!(versioni.len(), 3, "versioni: {versioni:?}");
-        let contenuti: Vec<String> = versioni
+        let versions = store.list(&id("b.md"));
+        assert_eq!(versions.len(), 3, "versioni: {versions:?}");
+        let contents: Vec<String> = versions
             .iter()
             .map(|v| store.read(&id("b.md"), v.ts, &host).unwrap())
             .collect();
-        for atteso in ["a zero", "b zero", "a uno"] {
+        for expected in ["a zero", "b zero", "a uno"] {
             assert!(
-                contenuti.iter().any(|testo| testo == atteso),
-                "il blob {atteso:?} è stato sovrascritto prima di essere letto: {contenuti:?}"
+                contents.iter().any(|text| text == expected),
+                "il blob {expected:?} è stato sovrascritto prima di essere letto: {contents:?}"
             );
         }
     }
@@ -2204,11 +2204,11 @@ mod tests {
             .rename(&id("appunti.md"), &id("appunti.txt"), &mut host)
             .unwrap();
 
-        let versioni = store.list(&id("appunti.txt"));
-        assert_eq!(versioni.len(), 1);
+        let versions = store.list(&id("appunti.txt"));
+        assert_eq!(versions.len(), 1);
         assert_eq!(
             store
-                .read(&id("appunti.txt"), versioni[0].ts, &host)
+                .read(&id("appunti.txt"), versions[0].ts, &host)
                 .unwrap(),
             "il corpo"
         );
@@ -2226,9 +2226,9 @@ mod tests {
         store
             .snapshot(&id("Nota.md"), "prima vita\n", &mut host)
             .unwrap();
-        host.avanza(1);
+        host.advance(1);
         store.tombstone(&id("Nota.md"), &mut host).unwrap();
-        host.avanza(1);
+        host.advance(1);
         store
             .snapshot(&id("Nota.md"), "usurpatrice\n", &mut host)
             .unwrap();
@@ -2236,7 +2236,7 @@ mod tests {
         // Il ripristino è una scrittura normale (D8): sul nuovo path nasce
         // *prima* una storia sua — con una cartella sua — e solo dopo arriva il
         // `DocumentRenamed` che ci porta quella vecchia.
-        host.avanza(1);
+        host.advance(1);
         store
             .snapshot(&id("Nota 1.md"), "prima vita\n", &mut host)
             .unwrap();
@@ -2247,41 +2247,41 @@ mod tests {
         // L'indice nomina tre versioni: devono essere tre contenuti leggibili.
         // Un indice che nomina un contenuto inesistente è il modo in cui il
         // versioning fallisce in modo indistinguibile dal funzionare.
-        let versioni = store.list(&id("Nota 1.md"));
-        assert_eq!(versioni.len(), 3, "versioni: {versioni:?}");
-        let contenuti: Vec<String> = versioni
+        let versions = store.list(&id("Nota 1.md"));
+        assert_eq!(versions.len(), 3, "versioni: {versions:?}");
+        let contents: Vec<String> = versions
             .iter()
             .map(|v| {
                 store
                     .read(&id("Nota 1.md"), v.ts, &host)
-                    .unwrap_or_else(|e| panic!("versione {}: {e}", v.ts))
+                    .unwrap_or_else(|and| panic!("versione {}: {and}", v.ts))
             })
             .collect();
-        assert!(contenuti.contains(&"prima vita\n".to_string()));
-        assert!(contenuti.contains(&"usurpatrice\n".to_string()));
+        assert!(contents.contains(&"prima vita\n".to_string()));
+        assert!(contents.contains(&"usurpatrice\n".to_string()));
     }
 
     /// Dopo un'unione la cartella abbandonata non deve restare a dire di chi
     /// era: `rebuild_from_store` si fida di `meta.json`, e due cartelle che
     /// dichiarano lo stesso `doc_id` diventano una storia sola.
     #[test]
-    fn the_abandoned_folder_does_not_come_back_as_a_second_history() {
+    fn the_abandoned_folder_does_not_as_back_as_a_second_history() {
         let mut host = MemoryHost::new();
-        let atteso;
+        let expected;
         {
             let store = VersionStore::open(&mut host).unwrap();
             store
                 .snapshot(&id("Nota.md"), "prima vita\n", &mut host)
                 .unwrap();
-            host.avanza(1);
+            host.advance(1);
             store
                 .snapshot(&id("Nota 1.md"), "ripristinata\n", &mut host)
                 .unwrap();
             store
                 .rename(&id("Nota.md"), &id("Nota 1.md"), &mut host)
                 .unwrap();
-            atteso = store.list(&id("Nota 1.md"));
-            assert_eq!(atteso.len(), 2);
+            expected = store.list(&id("Nota 1.md"));
+            assert_eq!(expected.len(), 2);
         }
 
         // L'indice si perde: si ricostruisce dallo store, che è la verità.
@@ -2290,10 +2290,10 @@ mod tests {
 
         assert_eq!(
             store.list(&id("Nota 1.md")).len(),
-            atteso.len(),
+            expected.len(),
             "la storia unita deve sopravvivere intera alla ricostruzione"
         );
-        for v in &atteso {
+        for v in &expected {
             assert!(
                 store.read(&id("Nota 1.md"), v.ts, &host).is_ok(),
                 "versione {} irraggiungibile dopo la ricostruzione",
@@ -2310,14 +2310,14 @@ mod tests {
 
         store.tombstone(&id("a.md"), &mut host).unwrap();
 
-        let versioni = store.list(&id("a.md"));
-        assert_eq!(versioni.len(), 1, "cancellare non cancella la storia");
+        let versions = store.list(&id("a.md"));
+        assert_eq!(versions.len(), 1, "cancellare non cancella la storia");
         assert_eq!(
-            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            store.read(&id("a.md"), versions[0].ts, &host).unwrap(),
             "contenuto"
         );
         // E la nota che torna in vita non è più morta.
-        host.avanza(1_000);
+        host.advance(1_000);
         store.snapshot(&id("a.md"), "risorta", &mut host).unwrap();
         let inner = store.inner.lock().unwrap();
         assert_eq!(inner.docs["a.md"].deleted_at, None);
@@ -2333,54 +2333,54 @@ mod tests {
         for (n, salto) in [
             0,
             60_000,          // stessa ora
-            27 * MS_GIORNO,  // un mese dopo
-            MS_ORA,          // stesso giorno
-            335 * MS_GIORNO, // un anno dopo la prima
-            3 * MS_GIORNO,   // e infine "adesso"
+            27 * MS_DAY,  // un mese dopo
+            MS_HOUR,          // stesso giorno
+            335 * MS_DAY, // un anno dopo la prima
+            3 * MS_DAY,   // e infine "adesso"
         ]
         .into_iter()
         .enumerate()
         {
-            host.avanza(salto);
+            host.advance(salto);
             store
                 .snapshot(&id("a.md"), &format!("versione {n}"), &mut host)
                 .unwrap();
         }
 
-        let ora = host.now_unix_millis();
-        let tenute = store.list(&id("a.md"));
-        let eta: Vec<u64> = tenute.iter().map(|v| ora.saturating_sub(v.ts)).collect();
+        let now = host.now_unix_millis();
+        let kept = store.list(&id("a.md"));
+        let eta: Vec<u64> = kept.iter().map(|v| now.saturating_sub(v.ts)).collect();
         assert!(
-            eta[0] < MS_ORA,
+            eta[0] < MS_HOUR,
             "la più recente resta sempre, anche se il resto è stato potato: {eta:?}"
         );
         assert!(
-            eta.iter().all(|e| *e < FASCIA_GIORNALIERA),
+            eta.iter().all(|and| *and < BAND_DAILY),
             "oltre l'ultima fascia non si conserva: {eta:?}"
         );
         assert!(
-            tenute.len() < 6,
+            kept.len() < 6,
             "le fasce devono aver assottigliato qualcosa: {eta:?}"
         );
         // E i contenuti potati non restano a occupare spazio nello store: la
         // cartella del documento contiene il suo `meta.json` e **solo** gli
         // snapshot che l'indice nomina, nessuno di più.
-        for v in &tenute {
+        for v in &kept {
             assert!(
                 store.read(&id("a.md"), v.ts, &host).is_ok(),
                 "una versione tenuta deve essere leggibile"
             );
         }
         let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
-        let mut rimasti = host.data_list(&dir).unwrap();
-        rimasti.sort();
-        let mut attesi: Vec<String> = tenute
+        let mut remaining = host.data_list(&dir).unwrap();
+        remaining.sort();
+        let mut expected: Vec<String> = kept
             .iter()
             .map(|v| blob(&dir, &snapshot_name(v.ts, "a.md")))
-            .chain(std::iter::once(blob(&dir, META_FILE)))
+            .chain(std::iter::once(blob(&dir, METADATA_FILE)))
             .collect();
-        attesi.sort();
-        assert_eq!(rimasti, attesi, "un blob potato è rimasto nello store");
+        expected.sort();
+        assert_eq!(remaining, expected, "un blob potato è rimasto nello store");
     }
 
     /// La potatura giudicata sul ramo che conta: decide di buttare qualcosa e
@@ -2398,31 +2398,31 @@ mod tests {
         // prossimo salvataggio i primi due finiscono nella fascia oraria, dove
         // ne sopravvive uno solo — cioè la potatura ha qualcosa da buttare.
         for (n, salto) in [0, 60_000].into_iter().enumerate() {
-            host.avanza(salto);
+            host.advance(salto);
             store
                 .snapshot(&id("a.md"), &format!("versione {n}"), &mut host)
                 .unwrap();
         }
-        let prima = store.list(&id("a.md")).len();
-        assert_eq!(prima, 2);
+        let before = store.list(&id("a.md")).len();
+        assert_eq!(before, 2);
 
         // Il disco si rifiuta proprio sull'indice, e proprio sul salvataggio
         // che pota.
-        host.nega_scrittura(INDEX_FILE);
-        host.avanza(2 * MS_GIORNO);
-        let esito = store.snapshot(&id("a.md"), "l'ultima", &mut host);
-        assert!(esito.is_err(), "una scrittura negata non è un successo");
+        host.denies_write(INDEX_FILE);
+        host.advance(2 * MS_DAY);
+        let result = store.snapshot(&id("a.md"), "l'ultima", &mut host);
+        assert!(result.is_err(), "una scrittura negata non è un successo");
         assert!(
-            store.list(&id("a.md")).len() < prima + 1,
+            store.list(&id("a.md")).len() < before + 1,
             "il banco non prova niente se la potatura non ha buttato nulla"
         );
 
         // Si riapre dall'indice che è rimasto sul disco: qualunque versione
         // dica di avere, deve poterla leggere.
         let store = VersionStore::open(&mut host).unwrap();
-        let versioni = store.list(&id("a.md"));
-        assert!(!versioni.is_empty(), "l'indice sul disco non è vuoto");
-        for v in &versioni {
+        let versions = store.list(&id("a.md"));
+        assert!(!versions.is_empty(), "l'indice sul disco non è vuoto");
+        for v in &versions {
             assert!(
                 store.read(&id("a.md"), v.ts, &host).is_ok(),
                 "l'indice nomina la versione {} e il contenuto non c'è più",
@@ -2436,25 +2436,25 @@ mod tests {
     /// che la riporterebbe in vita col contenuto identico (il ramo del dedup,
     /// dove non c'è nessun blob da scrivere e l'unica cosa che cambia è il
     /// tombstone). Rende ciò che memoria e disco dicono, in quest'ordine.
-    fn resurrezione_negata(nega: impl Fn(&MemoryHost, &str)) -> (bool, bool) {
+    fn resurrection_denied(rejects: impl Fn(&MemoryHost, &str)) -> (bool, bool) {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
         store.tombstone(&id("a.md"), &mut host).unwrap();
         let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
 
-        nega(&host, &dir);
-        host.avanza(1_000);
+        rejects(&host, &dir);
+        host.advance(1_000);
         assert!(
             store.snapshot(&id("a.md"), "identico", &mut host).is_err(),
             "una scrittura negata non è un successo"
         );
 
-        let in_memoria = store.is_deleted(&id("a.md"));
-        let sul_disco = VersionStore::open(&mut host)
+        let in_memory = store.is_deleted(&id("a.md"));
+        let on_the_disk = VersionStore::open(&mut host)
             .unwrap()
             .is_deleted(&id("a.md"));
-        (in_memoria, sul_disco)
+        (in_memory, on_the_disk)
     }
 
     /// La forma «muta lo stato, poi persisti col `?`» — quella che [`Inner::applica`]
@@ -2467,26 +2467,26 @@ mod tests {
     /// il `meta.json` della cartella e l'indice — perché a fallire può essere
     /// l'una o l'altra.
     #[test]
-    fn a_resurrection_the_disk_refuses_leaves_the_note_dead_in_memory_too() {
-        for (chi, nega) in [
+    fn a_resurrection_the_disk_refuses_leaves_the_notes_dead_in_memory_too() {
+        for (who, rejects) in [
             (
                 "meta.json",
-                &(|host: &MemoryHost, dir: &str| host.nega_scrittura(&blob(dir, META_FILE)))
+                &(|host: &MemoryHost, dir: &str| host.denies_write(&blob(dir, METADATA_FILE)))
                     as &dyn Fn(&MemoryHost, &str),
             ),
             ("l'indice", &|host: &MemoryHost, _: &str| {
-                host.nega_scrittura(INDEX_FILE)
+                host.denies_write(INDEX_FILE)
             }),
         ] {
-            let (in_memoria, sul_disco) = resurrezione_negata(nega);
+            let (in_memory, on_the_disk) = resurrection_denied(rejects);
             assert!(
-                in_memoria,
-                "{chi} ha detto di no e la memoria è andata avanti da sola: \
+                in_memory,
+                "{who} ha detto di no e la memoria è andata avanti da sola: \
                  mostra viva una nota che al riavvio è di nuovo cestinata"
             );
             assert_eq!(
-                in_memoria, sul_disco,
-                "{chi} ha detto di no e memoria e disco raccontano due storie diverse"
+                in_memory, on_the_disk,
+                "{who} ha detto di no e memoria e disco raccontano due storie diverse"
             );
         }
     }
@@ -2501,21 +2501,21 @@ mod tests {
         store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
         store.tombstone(&id("a.md"), &mut host).unwrap();
 
-        host.avanza(1_000);
+        host.advance(1_000);
         store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
 
         assert!(!store.is_deleted(&id("a.md")), "la nota è tornata viva");
         // Riaperto, e non da zero: uno store che sul disco non ha trovato
         // niente direbbe «non cancellata» anche di una nota che non conosce,
         // e il banco passerebbe a vuoto.
-        let riaperto = VersionStore::open(&mut host).unwrap();
+        let reopened = VersionStore::open(&mut host).unwrap();
         assert_eq!(
-            riaperto.list(&id("a.md")).len(),
+            reopened.list(&id("a.md")).len(),
             1,
             "il disco non sa niente di questa nota: la domanda sul tombstone non vuol dire nulla"
         );
         assert!(
-            !riaperto.is_deleted(&id("a.md")),
+            !reopened.is_deleted(&id("a.md")),
             "viva in memoria e cestinata sul disco: al riavvio risorge il cestino"
         );
     }
@@ -2523,13 +2523,13 @@ mod tests {
     /// La stessa forma sull'altro verso del tombstone: chi lo posa lo eredita
     /// gratis, senza nessun ramo d'errore da ricordarsi di scrivere.
     #[test]
-    fn a_tombstone_the_disk_refuses_leaves_the_note_alive_in_memory_too() {
+    fn a_tombstone_the_disk_refuses_leaves_the_notes_alive_in_memory_too() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
 
-        host.nega_scrittura(INDEX_FILE);
-        host.avanza(1_000);
+        host.denies_write(INDEX_FILE);
+        host.advance(1_000);
         assert!(store.tombstone(&id("a.md"), &mut host).is_err());
 
         assert!(
@@ -2548,7 +2548,7 @@ mod tests {
     fn a_snapshot_the_disk_refuses_does_not_invent_a_document() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
-        host.nega_scrittura(INDEX_FILE);
+        host.denies_write(INDEX_FILE);
 
         assert!(store.snapshot(&id("a.md"), "contenuto", &mut host).is_err());
         assert!(
@@ -2573,9 +2573,9 @@ mod tests {
         host.data_write(INDEX_FILE, b"non sono json").unwrap();
 
         let store = VersionStore::open(&mut host).unwrap();
-        let versioni = store.list(&id("nota/Idea.md"));
-        assert_eq!(versioni.len(), 1, "le versioni si ritrovano dallo store");
-        assert_eq!(versioni[0].ts, ts);
+        let versions = store.list(&id("nota/Idea.md"));
+        assert_eq!(versions.len(), 1, "le versioni si ritrovano dallo store");
+        assert_eq!(versions[0].ts, ts);
         assert_eq!(
             store.read(&id("nota/Idea.md"), ts, &host).unwrap(),
             "il contenuto"
@@ -2595,7 +2595,7 @@ mod tests {
     /// `scrivi_meta` ci scrive sopra un altro `doc_id`, e alla prima
     /// ricostruzione gli snapshot di `b.md` diventano versioni di `a.md`.
     #[test]
-    fn a_folder_whose_meta_cannot_be_read_is_not_given_to_another_document() {
+    fn a_folder_whose_metadata_cannot_be_read_is_not_given_to_another_document() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store
@@ -2608,28 +2608,28 @@ mod tests {
             dir,
             "il banco non prova niente se la cartella si è mossa col rename"
         );
-        let ts_di_b = store.list(&id("b.md"))[0].ts;
+        let ts_of_b = store.list(&id("b.md"))[0].ts;
 
         // L'anagrafe della cartella si corrompe: un troncamento, un disco
         // pieno a metà scrittura.
-        host.data_write(&blob(&dir, META_FILE), b"non sono json")
+        host.data_write(&blob(&dir, METADATA_FILE), b"non sono json")
             .unwrap();
 
         // E una nota nuova nasce col path che quella cartella porta impresso
         // nel nome.
-        host.avanza(1_000);
+        host.advance(1_000);
         store
             .snapshot(&id("a.md"), "una nota tutta nuova\n", &mut host)
             .unwrap();
 
-        assert_ne!(
+        assert_eq!(
             store.inner.lock().unwrap().docs["a.md"].dir,
             dir,
             "la cartella di b.md è stata data ad a.md, e il suo meta.json \
              sovrascritto: la storia di b.md è diventata storia di a.md"
         );
         assert_eq!(
-            store.read(&id("b.md"), ts_di_b, &host).unwrap(),
+            store.read(&id("b.md"), ts_of_b, &host).unwrap(),
             "la storia di a\n",
             "la storia di b.md è ancora dov'era"
         );
@@ -2644,19 +2644,19 @@ mod tests {
     /// capitava per ultima. Qui capitava la cartella *senza* l'unione, quindi
     /// si perdevano due versioni su due.
     #[test]
-    fn a_rename_the_index_refuses_leaves_one_claim_per_document() {
+    fn a_rename_the_index_refuses_leaves_one_claim_for_document() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store
             .snapshot(&id("vecchia.md"), "storia che arriva\n", &mut host)
             .unwrap();
-        host.avanza(1_000);
+        host.advance(1_000);
         store
             .snapshot(&id("Nota.md"), "storia che c'era\n", &mut host)
             .unwrap();
 
-        host.avanza(1_000);
-        host.nega_scrittura(INDEX_FILE);
+        host.advance(1_000);
+        host.denies_write(INDEX_FILE);
         assert!(
             store
                 .rename(&id("vecchia.md"), &id("Nota.md"), &mut host)
@@ -2664,33 +2664,33 @@ mod tests {
             "una scrittura negata non è un successo"
         );
 
-        let rivendicano: Vec<String> = host
+        let claimants: Vec<String> = host
             .data_list("")
             .unwrap()
             .into_iter()
-            .filter(|p| p.ends_with(META_FILE))
+            .filter(|p| p.ends_with(METADATA_FILE))
             .filter(|p| {
                 let raw = host.data_read(p).unwrap().unwrap();
                 serde_json::from_slice::<Meta>(&raw).is_ok_and(|m| m.doc_id == "Nota.md")
             })
             .collect();
         assert_eq!(
-            rivendicano.len(),
+            claimants.len(),
             1,
-            "due cartelle dicono di essere Nota.md: {rivendicano:?}"
+            "due cartelle dicono di essere Nota.md: {claimants:?}"
         );
 
         // E l'indice si perde davvero: è la sola strada per cui una
         // rivendicazione doppia si vede, ed è quella per cui esiste.
         host.data_remove(INDEX_FILE).unwrap();
         let store = VersionStore::open(&mut host).unwrap();
-        let versioni = store.list(&id("Nota.md"));
+        let versions = store.list(&id("Nota.md"));
         assert_eq!(
-            versioni.len(),
+            versions.len(),
             2,
-            "la ricostruzione ha perso una storia: {versioni:?}"
+            "la ricostruzione ha perso una storia: {versions:?}"
         );
-        for v in &versioni {
+        for v in &versions {
             assert!(
                 store.read(&id("Nota.md"), v.ts, &host).is_ok(),
                 "l'indice ricostruito nomina la versione {} e il contenuto non c'è",
@@ -2713,14 +2713,14 @@ mod tests {
     /// Questo banco **non è mai stato rosso**, ed è il punto: tiene ferma la
     /// metà che l'audit aveva dichiarato guasta e che guasta non era.
     #[test]
-    fn a_meta_the_index_did_not_follow_is_ahead_of_the_index_never_behind() {
+    fn a_metadata_the_index_did_not_follow_is_ahead_of_the_index_never_behind() {
         let mut host = MemoryHost::new();
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "identico", &mut host).unwrap();
         store.tombstone(&id("a.md"), &mut host).unwrap();
 
-        host.nega_scrittura(INDEX_FILE);
-        host.avanza(1_000);
+        host.denies_write(INDEX_FILE);
+        host.advance(1_000);
         assert!(
             store.snapshot(&id("a.md"), "identico", &mut host).is_err(),
             "una scrittura negata non è un successo"
@@ -2763,7 +2763,7 @@ mod tests {
         let handler = VersioningHandler::new(VersionStore {
             inner: Arc::new(Mutex::new(Inner {
                 docs: BTreeMap::new(),
-                lotto: false,
+                batch: false,
             })),
         });
         assert!(handler.subscribed().contains(EventKind::Overflow));
@@ -2771,19 +2771,19 @@ mod tests {
 
     #[test]
     fn an_overflow_turns_a_lost_removal_into_a_tombstone() {
-        let mut host = MemoryHost::new().con_documento("a.md", "contenuto");
+        let mut host = MemoryHost::new().with_document("a.md", "contenuto");
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
         let mut handler = VersioningHandler::new(store.clone());
 
         // La nota sparisce e il `DocumentRemoved` va perso nel troncamento.
-        host.dimentica_documento("a.md");
+        host.forgets_document("a.md");
         assert!(
             !store.is_deleted(&id("a.md")),
             "senza riconciliazione lo store crede ancora che sia viva"
         );
 
-        host.avanza(5_000);
+        host.advance(5_000);
         handler
             .handle(&Notice::of(Event::Overflow { dropped: 7 }), &mut host)
             .unwrap();
@@ -2800,14 +2800,14 @@ mod tests {
 
     #[test]
     fn an_overflow_never_moves_the_moment_of_death() {
-        let mut host = MemoryHost::new().con_documento("a.md", "contenuto");
+        let mut host = MemoryHost::new().with_document("a.md", "contenuto");
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "contenuto", &mut host).unwrap();
-        host.dimentica_documento("a.md");
+        host.forgets_document("a.md");
         store.tombstone(&id("a.md"), &mut host).unwrap();
-        let morta_alle = store.inner.lock().unwrap().docs["a.md"].deleted_at;
+        let dead_to_the = store.inner.lock().unwrap().docs["a.md"].deleted_at;
 
-        host.avanza(10 * MS_GIORNO);
+        host.advance(10 * MS_DAY);
         let mut handler = VersioningHandler::new(store.clone());
         handler
             .handle(&Notice::of(Event::Overflow { dropped: 1 }), &mut host)
@@ -2818,24 +2818,24 @@ mod tests {
         // risponderebbe diversamente a ogni overflow.
         assert_eq!(
             store.inner.lock().unwrap().docs["a.md"].deleted_at,
-            morta_alle
+            dead_to_the
         );
     }
 
     #[test]
     fn an_overflow_turns_a_lost_rename_into_a_new_history_plus_a_tombstone() {
-        let mut host = MemoryHost::new().con_documento("vecchia.md", "il corpo");
+        let mut host = MemoryHost::new().with_document("vecchia.md", "il corpo");
         let store = VersionStore::open(&mut host).unwrap();
         store
             .snapshot(&id("vecchia.md"), "il corpo", &mut host)
             .unwrap();
-        let vecchio_ts = store.list(&id("vecchia.md"))[0].ts;
+        let previous_ts = store.list(&id("vecchia.md"))[0].ts;
         let mut handler = VersioningHandler::new(store.clone());
 
         // Il rename avviene e il `DocumentRenamed` va perso: `rename` non viene
         // mai chiamato, quindi la storia NON migra.
-        host.rinomina_di_nascosto("vecchia.md", "nuova.md");
-        host.avanza(1_000);
+        host.rename_of_hidden("vecchia.md", "nuova.md");
+        host.advance(1_000);
         handler
             .handle(&Notice::of(Event::Overflow { dropped: 3 }), &mut host)
             .unwrap();
@@ -2846,20 +2846,20 @@ mod tests {
         // contenuto di prima resta leggibile.
         assert!(store.is_deleted(&id("vecchia.md")));
         assert_eq!(
-            store.read(&id("vecchia.md"), vecchio_ts, &host).unwrap(),
+            store.read(&id("vecchia.md"), previous_ts, &host).unwrap(),
             "il corpo"
         );
-        let nuove = store.list(&id("nuova.md"));
-        assert_eq!(nuove.len(), 1, "sul nuovo path nasce una storia");
+        let new = store.list(&id("nuova.md"));
+        assert_eq!(new.len(), 1, "sul nuovo path nasce una storia");
         assert_eq!(
-            store.read(&id("nuova.md"), nuove[0].ts, &host).unwrap(),
+            store.read(&id("nuova.md"), new[0].ts, &host).unwrap(),
             "il corpo"
         );
     }
 
     #[test]
     fn an_overflow_recovers_the_snapshot_that_the_lost_event_would_have_taken() {
-        let mut host = MemoryHost::new().con_documento("a.md", "prima");
+        let mut host = MemoryHost::new().with_document("a.md", "prima");
         let store = VersionStore::open(&mut host).unwrap();
         store.snapshot(&id("a.md"), "prima", &mut host).unwrap();
         let mut handler = VersioningHandler::new(store.clone());
@@ -2867,21 +2867,21 @@ mod tests {
         // Il contenuto cambia e il `DocumentChanged` va perso.
         host.write_document(&id("a.md"), "seconda", WriteBase::Dictated)
             .unwrap();
-        host.avanza(1_000);
+        host.advance(1_000);
         handler
             .handle(&Notice::of(Event::Overflow { dropped: 2 }), &mut host)
             .unwrap();
 
-        let versioni = store.list(&id("a.md"));
-        assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
+        let versions = store.list(&id("a.md"));
+        assert_eq!(versions.len(), 2, "versioni: {versions:?}");
         assert_eq!(
-            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            store.read(&id("a.md"), versions[0].ts, &host).unwrap(),
             "seconda"
         );
         // E ripassare senza che nulla sia cambiato non gonfia la storia: il
         // dedup per contenuto è ciò che rende sostenibile una riconciliazione
         // che rilegge tutto.
-        host.avanza(1_000);
+        host.advance(1_000);
         handler
             .handle(&Notice::of(Event::Overflow { dropped: 2 }), &mut host)
             .unwrap();
@@ -2891,8 +2891,8 @@ mod tests {
     #[test]
     fn opening_the_vault_photographs_what_has_no_history_yet() {
         let mut host = MemoryHost::new()
-            .con_documento("a.md", "com'era")
-            .con_documento("b.md", "anche questa");
+            .with_document("a.md", "com'era")
+            .with_document("b.md", "anche questa");
         let store = VersionStore::open(&mut host).unwrap();
         // `b.md` una storia ce l'ha già: non deve guadagnare una versione
         // gemella solo perché il vault è stato riaperto.
@@ -2915,7 +2915,7 @@ mod tests {
 
     #[test]
     fn the_first_write_photographs_the_original() {
-        let mut host = MemoryHost::new().con_documento("a.md", "com'era");
+        let mut host = MemoryHost::new().with_document("a.md", "com'era");
         let store = VersionStore::open(&mut host).unwrap();
         let mut handler = VersioningHandler::new(store.clone());
 
@@ -2926,7 +2926,7 @@ mod tests {
             .unwrap();
         host.write_document(&id("a.md"), "adesso", WriteBase::Dictated)
             .unwrap();
-        host.avanza(1_000);
+        host.advance(1_000);
         // L'evento della scrittura lo consegna il kernel; qui lo si chiama a
         // mano, come fanno gli altri test di questo modulo.
         handler
@@ -2939,15 +2939,15 @@ mod tests {
             )
             .unwrap();
 
-        let versioni = store.list(&id("a.md"));
-        assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
+        let versions = store.list(&id("a.md"));
+        assert_eq!(versions.len(), 2, "versioni: {versions:?}");
         assert_eq!(
-            store.read(&id("a.md"), versioni[1].ts, &host).unwrap(),
+            store.read(&id("a.md"), versions[1].ts, &host).unwrap(),
             "com'era",
             "l'originale è in storia"
         );
         assert_eq!(
-            store.read(&id("a.md"), versioni[0].ts, &host).unwrap(),
+            store.read(&id("a.md"), versions[0].ts, &host).unwrap(),
             "adesso"
         );
 
@@ -2958,7 +2958,7 @@ mod tests {
             .unwrap();
         host.write_document(&id("a.md"), "poi", WriteBase::Dictated)
             .unwrap();
-        host.avanza(1_000);
+        host.advance(1_000);
         handler
             .handle(
                 &Notice::of(Event::DocumentChanged {
@@ -2984,7 +2984,7 @@ mod tests {
             .unwrap();
         host.write_document(&id("c.md"), "nuova", WriteBase::Dictated)
             .unwrap();
-        host.avanza(1_000);
+        host.advance(1_000);
         handler
             .handle(
                 &Notice::of(Event::DocumentChanged {
@@ -2995,10 +2995,10 @@ mod tests {
             )
             .unwrap();
 
-        let versioni = store.list(&id("c.md"));
-        assert_eq!(versioni.len(), 1, "versioni: {versioni:?}");
+        let versions = store.list(&id("c.md"));
+        assert_eq!(versions.len(), 1, "versioni: {versions:?}");
         assert_eq!(
-            store.read(&id("c.md"), versioni[0].ts, &host).unwrap(),
+            store.read(&id("c.md"), versions[0].ts, &host).unwrap(),
             "nuova",
             "la prima versione è il testo nuovo"
         );

@@ -4,7 +4,7 @@
 // ricordarsi di chiudere gli altri. Prima la regola stava in `main.ts`, che era
 // anche l'unico posto da cui la si poteva invocare; qui è di chiunque ne abbia
 // bisogno — ed è il pezzetto di "modello di layout" che questa shell ha
-// davvero, in attesa di quello vero (tab, split, pane: FEATURES 3.3, la parte
+// davvero, in attesa di quello vero (linguetta, split, pane: FEATURES 3.3, la parte
 // del §1.2 lasciata aperta).
 //
 // Dalla §Fase 2 la sidebar ospita anche le view dichiarate `left_sidebar`:
@@ -22,7 +22,7 @@ import { registerShellCommand } from "../ui/commands";
 export type SidebarPanel = "files" | "search" | (string & {});
 
 /// I due pannelli nativi della shell, che ci sono sempre.
-const NATIVI: Record<"files" | "search", HTMLElement> = {
+const NATIVE_PANELS: Record<"files" | "search", HTMLElement> = {
   files: $("#files-panel"),
   search: $("#search-panel"),
 };
@@ -37,25 +37,25 @@ const NATIVI: Record<"files" | "search", HTMLElement> = {
 export function showPanel(panel: SidebarPanel): void {
   const viewsLeft = $("#views-left");
   // I due nativi si escludono a vicenda e con le view.
-  NATIVI.files.hidden = panel !== "files";
-  NATIVI.search.hidden = panel !== "search";
+  NATIVE_PANELS.files.hidden = panel !== "files";
+  NATIVE_PANELS.search.hidden = panel !== "search";
   // Le view dichiarate: una sola visibile, le altre `hidden` (non
   // `collapsed`: quello nasconde il corpo e lascia il titolo, e in una
   // sidebar a rail i titoli impilati sono rumore).
-  for (const pannello of viewsLeft.querySelectorAll<HTMLElement>(
+  for (const viewPanel of viewsLeft.querySelectorAll<HTMLElement>(
     ".declared-view-panel",
   )) {
-    const on = pannello.dataset.viewId === panel;
-    pannello.hidden = !on;
+    const on = viewPanel.dataset.viewId === panel;
+    viewPanel.hidden = !on;
     // Aprire un pannello dalla rail vuol dire mostrarne il contenuto **e**
     // dirlo: finché erano due scritture — una classe per la pelle, un
     // `aria-expanded` per chi ascolta — questa riga aggiornava solo la prima,
     // e il titolo continuava ad annunciare «chiuso» sopra un pannello aperto.
     if (on) {
-      const contenuto = pannello.querySelector<HTMLElement>(":scope > .declared-view");
-      if (contenuto) contenuto.hidden = false;
-      const titolo = pannello.querySelector<HTMLElement>(":scope > .panel-title");
-      if (titolo?.hasAttribute("aria-expanded")) titolo.setAttribute("aria-expanded", "true");
+      const content = viewPanel.querySelector<HTMLElement>(":scope > .declared-view");
+      if (content) content.hidden = false;
+      const title = viewPanel.querySelector<HTMLElement>(":scope > .panel-title");
+      if (title?.hasAttribute("aria-expanded")) title.setAttribute("aria-expanded", "true");
     }
   }
   // La rail riflette chi è acceso. Sta qui e non nei click dei bottoni
@@ -65,7 +65,7 @@ export function showPanel(panel: SidebarPanel): void {
   const ribbon = document.getElementById("views-ribbon");
   if (ribbon) {
     for (const btn of ribbon.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
-      // Il grafo è un tab nell'area principale, non un pannello della
+      // Il grafo è un linguetta nell'area principale, non un pannello della
       // sidebar: `showPanel` non lo spegne e non lo accende.
       if (btn.id === "show-graph") continue;
       btn.setAttribute("aria-pressed", String(btn.dataset.panel === panel));
@@ -75,7 +75,7 @@ export function showPanel(panel: SidebarPanel): void {
 
 /// Il pannello nativo è visibile? Le view dichiarate non si chiedono qui.
 export function isPanelVisible(panel: "files" | "search"): boolean {
-  return !NATIVI[panel].hidden;
+  return !NATIVE_PANELS[panel].hidden;
 }
 
 /// I due pannelli come **comandi** (§18.2), dichiarati da chi possiede la

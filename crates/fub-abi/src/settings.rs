@@ -147,7 +147,7 @@ impl SettingKind {
             (SettingKind::Number { min, max, .. }, SettingValue::Number(n)) => {
                 if min.is_some_and(|m| *n < m) || max.is_some_and(|m| *n > m) {
                     return Some(format!(
-                        "{n} è fuori dall'intervallo ammesso ({}…{})",
+                        "{n} is out of the admitted range ({}…{})",
                         min.map(|m| m.to_string()).unwrap_or_else(|| "-∞".into()),
                         max.map(|m| m.to_string()).unwrap_or_else(|| "+∞".into()),
                     ));
@@ -156,14 +156,14 @@ impl SettingKind {
             }
             (SettingKind::Text { .. }, SettingValue::Text(_)) => None,
             (SettingKind::Choice { options, .. }, SettingValue::Text(v)) => {
-                if options.iter().any(|o| &o.value == v) {
+                if options.iter().any(|or| &or.value == v) {
                     None
                 } else {
                     Some(format!(
-                        "`{v}` non è fra le scelte ammesse ({})",
+                        "`{v}` is not among the admitted choices ({})",
                         options
                             .iter()
-                            .map(|o| o.value.as_str())
+                            .map(|or| or.value.as_str())
                             .collect::<Vec<_>>()
                             .join(", ")
                     ))
@@ -321,7 +321,7 @@ impl SettingSpec {
 
     /// Della macchina, non del vault: non viaggia, e un vault che la dichiara
     /// non viene ascoltato.
-    pub fn per_machine(mut self) -> Self {
+    pub fn for_machine(mut self) -> Self {
         self.scope = SettingScope::Machine;
         self
     }
@@ -529,14 +529,14 @@ mod tests {
     /// funzione sola vista da due lati**, e si provano insieme: è la coppia da
     /// cui dipende che negare abbia effetto adesso invece che alla riapertura.
     #[test]
-    fn la_chiave_di_un_permesso_si_compone_e_si_rilegge() {
+    fn permission_key_composes_and_reverse_reads() {
         for plugin in ["com.acme", "fub.search"] {
-            for permesso in crate::options::permission::ALL {
-                let chiave = permission_key(plugin, permesso);
+            for permission in crate::options::permission::ALL {
+                let key = permission_key(plugin, permission);
                 assert_eq!(
-                    permission_of_key(&chiave),
-                    Some((plugin, permesso.to_string())),
-                    "`{chiave}` non si rilegge"
+                    permission_of_key(&key),
+                    Some((plugin, permission.to_string())),
+                    "`{key}` non si rilegge"
                 );
             }
         }
@@ -557,8 +557,8 @@ mod tests {
     /// Ciò che **non** è una chiave di permesso non deve somigliarci: chi
     /// scrive un'impostazione qualunque non deve veder ricalcolare un recinto.
     #[test]
-    fn una_chiave_qualunque_non_e_un_permesso() {
-        for chiave in [
+    fn arbitrary_key_is_not_a_permission() {
+        for key in [
             "plugins.disabled",
             "versioning.enabled",
             "com.acme:permissions.",
@@ -567,7 +567,7 @@ mod tests {
             "com.acme:keys.tasks.add",
             "com.acme:permission.network",
         ] {
-            assert_eq!(permission_of_key(chiave), None, "`{chiave}`");
+            assert_eq!(permission_of_key(key), None, "`{key}`");
         }
     }
 
@@ -575,13 +575,13 @@ mod tests {
     /// perché è l'unico modo in cui un giro completo è un presidio invece di due
     /// funzioni che si sbagliano d'accordo.
     #[test]
-    fn una_chiave_di_scorciatoia_si_riconosce_e_torna_al_comando() {
+    fn keybinding_key_recognizes_and_returns_to_command() {
         for id in ["note.create", "com.acme:tasks.add", "vault.undo"] {
-            let chiave = keybinding_key(id);
+            let key = keybinding_key(id);
             assert_eq!(
-                command_of_keybinding_key(&chiave).as_deref(),
+                command_of_keybinding_key(&key).as_deref(),
                 Some(id),
-                "`{chiave}`"
+                "`{key}`"
             );
         }
     }
@@ -590,8 +590,8 @@ mod tests {
     /// valore di una chiave qualunque vorrebbe dire un tema che non si applica
     /// e nessuno che sappia dire perché.
     #[test]
-    fn una_chiave_qualunque_non_e_una_scorciatoia() {
-        for chiave in [
+    fn arbitrary_key_is_not_a_keybinding() {
+        for key in [
             "appearance.theme",
             "locale.language",
             "plugins.disabled",
@@ -604,12 +604,12 @@ mod tests {
             "com.acme:keys.",
             "com.acme:key.tasks.add",
         ] {
-            assert_eq!(command_of_keybinding_key(chiave), None, "`{chiave}`");
+            assert_eq!(command_of_keybinding_key(key), None, "`{key}`");
         }
     }
 
     #[test]
-    fn il_default_esce_dalla_specie() {
+    fn the_default_exits_from_the_kind() {
         assert_eq!(
             SettingKind::Toggle { default: true }.default_value(),
             SettingValue::Toggle(true)
@@ -627,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn una_scelta_fuori_elenco_e_un_rifiuto_che_elenca() {
+    fn a_choice_outside_list_and_a_refusal_that_lists() {
         let kind = SettingKind::Choice {
             default: "chiaro".into(),
             options: vec![
@@ -637,13 +637,13 @@ mod tests {
         };
         let why = kind
             .rejects(&SettingValue::Text("verde".into()))
-            .expect("`verde` non è fra le scelte");
+            .expect("`verde` is not among the choices");
         assert!(why.contains("chiaro, scuro"), "{why}");
         assert!(kind.rejects(&SettingValue::Text("scuro".into())).is_none());
     }
 
     #[test]
-    fn un_numero_fuori_intervallo_non_si_arrotonda() {
+    fn a_number_outside_range_not_is_rounds() {
         let kind = SettingKind::Number {
             default: 12.0,
             min: Some(8.0),
@@ -659,10 +659,10 @@ mod tests {
 
     /// Il file si legge a occhio: è la ragione dell'`untagged`.
     #[test]
-    fn un_valore_si_scrive_come_lo_scriverebbe_un_umano() {
+    fn value_writes_as_a_human_would() {
         let json = serde_json::to_string(&SettingValue::Toggle(false)).unwrap();
         assert_eq!(json, "false");
-        let letto: SettingValue = serde_json::from_str("[\"a\",\"b\"]").unwrap();
-        assert_eq!(letto, SettingValue::List(vec!["a".into(), "b".into()]));
+        let read_value: SettingValue = serde_json::from_str("[\"a\",\"b\"]").unwrap();
+        assert_eq!(read_value, SettingValue::List(vec!["a".into(), "b".into()]));
     }
 }

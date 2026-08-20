@@ -158,7 +158,7 @@ impl GraphSources {
     /// Ricostruisce il grafo. Costa O(documenti) di CPU e **non** tiene
     /// nessun lucchetto: la fotografia è già in mano.
     pub fn build(self) -> BuiltGraph {
-        let _fase = tracing::info_span!(target: "fub.apertura", "rebuild_graph").entered();
+        let _phase = tracing::info_span!(target: "fub.apertura", "rebuild_graph").entered();
         BuiltGraph {
             graph: LinkGraph::build(self.docs.iter()),
             epoch: self.epoch,
@@ -563,11 +563,11 @@ impl LinkGraph {
         index: &HashMap<String, Vec<DocId>>,
         key: &str,
         exact: &str,
-        forma: impl Fn(&DocId) -> String,
+        form: impl Fn(&DocId) -> String,
     ) -> Option<DocId> {
         let ids = index.get(key)?;
         ids.iter()
-            .find(|id| forma(id) == exact)
+            .find(|id| form(id) == exact)
             .or_else(|| ids.first())
             .cloned()
     }
@@ -1015,9 +1015,9 @@ mod tests {
     #[test]
     fn upsert_replaces_the_links_of_a_document() {
         let a = doc_with_links("a.md", &["Uno"]);
-        let uno = DocumentModel::empty(DocId::new("Uno.md"));
-        let due = DocumentModel::empty(DocId::new("Due.md"));
-        let mut graph = LinkGraph::build([&a, &uno, &due]);
+        let one = DocumentModel::empty(DocId::new("Uno.md"));
+        let two = DocumentModel::empty(DocId::new("Due.md"));
+        let mut graph = LinkGraph::build([&a, &one, &two]);
         assert_eq!(sources(&graph, "Uno.md"), ["a.md"]);
 
         graph.upsert(&doc_with_links("a.md", &["Due"]));
@@ -1146,14 +1146,14 @@ mod tests {
     }
 
     #[test]
-    fn due_file_che_differiscono_per_una_maiuscola_non_sono_lo_stesso_arco() {
+    fn two_files_that_differ_by_case_are_not_the_same_edge() {
         // Il caso che in tutto il repo non era esercitato da nessuno: due file
         // che il filesystem distingue e la chiave di risoluzione no.
-        let grande = doc_with_links("verso-grande.md", &["Nota"]);
+        let large = doc_with_links("verso-grande.md", &["Nota"]);
         let piccola = doc_with_links("verso-piccola.md", &["nota"]);
         let a = DocumentModel::empty(DocId::new("Nota.md"));
         let b = DocumentModel::empty(DocId::new("nota.md"));
-        let graph = LinkGraph::build([&grande, &piccola, &a, &b]);
+        let graph = LinkGraph::build([&large, &piccola, &a, &b]);
 
         // Ognuno dei due arriva dove l'utente l'ha scritto. Prima ci arrivavano
         // tutti e due su `Nota.md`, perché `N` precede `n` in ASCII.
@@ -1164,13 +1164,13 @@ mod tests {
     }
 
     #[test]
-    fn senza_un_gemello_esatto_il_caso_resta_indifferente() {
+    fn without_a_twin_exact_the_case_remains_indifferent() {
         // L'altra metà, ed è la regola che NON cambia: un solo candidato lo si
         // raggiunge scrivendolo come si vuole (0004, e un vault sincronizzato
         // fra macOS e Linux è lo stesso vault).
         let a = doc_with_links("a.md", &["NOTA"]);
-        let nota = DocumentModel::empty(DocId::new("sub/Nota.md"));
-        let graph = LinkGraph::build([&a, &nota]);
+        let notes = DocumentModel::empty(DocId::new("sub/Nota.md"));
+        let graph = LinkGraph::build([&a, &notes]);
         assert_eq!(graph.resolve_wiki("nOtA"), Some(DocId::new("sub/Nota.md")));
         assert_eq!(sources(&graph, "sub/Nota.md"), ["a.md"]);
     }
@@ -1194,8 +1194,8 @@ mod tests {
     #[test]
     fn duplicate_links_keep_multiplicity() {
         let a = doc_with_links("a.md", &["Nota", "Nota"]);
-        let nota = DocumentModel::empty(DocId::new("Nota.md"));
-        let mut graph = LinkGraph::build([&a, &nota]);
+        let notes = DocumentModel::empty(DocId::new("Nota.md"));
+        let mut graph = LinkGraph::build([&a, &notes]);
         assert_eq!(sources(&graph, "Nota.md"), ["a.md", "a.md"]);
         assert_eq!(graph.outgoing(&DocId::new("a.md")).len(), 2);
 
@@ -1208,7 +1208,7 @@ mod tests {
         assert_eq!(
             graph.linked(&target, LinkDirection::Inbound),
             BTreeSet::from([DocId::new("a.md")]),
-            "due riferimenti, ma la nota che linka qui è una"
+            "two references, but the note linking here is one"
         );
         assert_eq!(
             graph.linked(&DocId::new("a.md"), LinkDirection::Outbound),
@@ -1217,7 +1217,7 @@ mod tests {
         assert_eq!(
             graph.linked(&target, LinkDirection::Both),
             BTreeSet::from([DocId::new("a.md")]),
-            "e nei due versi insieme non si conta due volte chi sta in tutti e due"
+            "and in both directions together you do not count twice the one in both"
         );
     }
 
@@ -1252,7 +1252,7 @@ mod tests {
         assert_eq!(
             walk(&graph, "a.md", LinkDirection::Inbound, 1),
             [("d.md".to_string(), 1)],
-            "il verso entrante sono i backlink"
+            "the inbound direction is backlinks"
         );
     }
 
@@ -1271,7 +1271,7 @@ mod tests {
                 ("a.md".to_string(), "b.md".to_string(), 1),
                 ("b.md".to_string(), "c.md".to_string(), 2),
             ],
-            "`via` è l'anello precedente: senza, questa risposta sarebbe un sacchetto di nodi"
+            "`via` is the previous hop: without it this would be a bag of nodes"
         );
     }
 
@@ -1283,7 +1283,7 @@ mod tests {
             .into_iter()
             .map(|(id, _)| id)
             .collect();
-        assert_eq!(names, ["b.md", "d.md"], "uscenti ed entranti, in ordine");
+        assert_eq!(names, ["b.md", "d.md"], "outbound and inbound, in order");
     }
 
     #[test]
@@ -1295,7 +1295,7 @@ mod tests {
         assert_eq!(
             found,
             [("b.md".to_string(), 1)],
-            "il ciclo torna su a.md, che non è vicino di sé stesso"
+            "the cycle returns to a.md, which is not a neighbor of itself"
         );
     }
 
@@ -1336,14 +1336,14 @@ mod tests {
     }
 
     #[test]
-    fn anche_un_link_markdown_sceglie_il_gemello_giusto() {
+    fn a_markdown_link_picks_the_right_twin() {
         // Stessa domanda dal lato dei path, dove il danno è peggiore: qui il
         // riferimento è quello che la riscrittura al rename scrive su disco.
         let a = doc_with_paths("sub/a.md", &["Nota.md"]);
         let b = doc_with_paths("sub/b.md", &["nota.md"]);
-        let grande = DocumentModel::empty(DocId::new("sub/Nota.md"));
+        let large = DocumentModel::empty(DocId::new("sub/Nota.md"));
         let piccola = DocumentModel::empty(DocId::new("sub/nota.md"));
-        let graph = LinkGraph::build([&a, &b, &grande, &piccola]);
+        let graph = LinkGraph::build([&a, &b, &large, &piccola]);
 
         assert_eq!(sources(&graph, "sub/Nota.md"), ["sub/a.md"]);
         assert_eq!(sources(&graph, "sub/nota.md"), ["sub/b.md"]);
@@ -1366,9 +1366,9 @@ mod tests {
     #[test]
     fn a_path_link_walks_up_and_starts_from_the_root() {
         let a = doc_with_paths("x/y/a.md", &["../../Nota.md", "/Altra.md"]);
-        let nota = DocumentModel::empty(DocId::new("Nota.md"));
-        let altra = DocumentModel::empty(DocId::new("Altra.md"));
-        let graph = LinkGraph::build([&a, &nota, &altra]);
+        let notes = DocumentModel::empty(DocId::new("Nota.md"));
+        let other = DocumentModel::empty(DocId::new("Altra.md"));
+        let graph = LinkGraph::build([&a, &notes, &other]);
 
         assert_eq!(sources(&graph, "Nota.md"), ["x/y/a.md"]);
         assert_eq!(sources(&graph, "Altra.md"), ["x/y/a.md"]);
@@ -1389,10 +1389,10 @@ mod tests {
     fn an_explicit_extension_is_taken_seriously() {
         let md = DocumentModel::empty(DocId::new("sub/nota.md"));
         let txt = DocumentModel::empty(DocId::new("sub/nota.txt"));
-        let esatto = doc_with_paths("a.md", &["sub/nota.txt"]);
-        let senza = doc_with_paths("b.md", &["sub/nota"]);
-        let sbagliato = doc_with_paths("c.md", &["sub/nota.png"]);
-        let graph = LinkGraph::build([&md, &txt, &esatto, &senza, &sbagliato]);
+        let exact = doc_with_paths("a.md", &["sub/nota.txt"]);
+        let without = doc_with_paths("b.md", &["sub/nota"]);
+        let wrong = doc_with_paths("c.md", &["sub/nota.png"]);
+        let graph = LinkGraph::build([&md, &txt, &exact, &without, &wrong]);
 
         // L'esatto vince sull'ordine di priorità; il senza-estensione ricade
         // sulla chiave dei wikilink; l'estensione inesistente non ricade su

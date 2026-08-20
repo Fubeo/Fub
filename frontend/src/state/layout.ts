@@ -10,15 +10,15 @@
 //
 // # La forma, e perché è questa
 //
-// Un riquadro tiene **N tab con una attiva**. Da quella forma sola escono insieme
-// le tab e lo split, e il motivo per cui non si è fatto prima lo split (che è ciò
-// che sbloccava la §3.3) e le tab dopo è che «un riquadro = una nota» andrebbe
-// buttato il giorno delle tab: la forma con le tab lo *contiene*. Non è più
+// Un riquadro tiene **N linguetta con una attiva**. Da quella forma sola escono insieme
+// le linguetta e lo split, e il motivo per cui non si è fatto prima lo split (che è ciò
+// che sbloccava la §3.3) e le linguetta dopo è che «un riquadro = una nota» andrebbe
+// buttato il giorno delle linguetta: la forma con le linguetta lo *contiene*. Non è più
 // lavoro di design, è lo stesso lavoro fatto una volta invece che una volta e
 // mezza.
 //
 // «Tab» e non «documento», e la differenza è arrivata con la §3.3
-// ([0079](../../../docs/decisions/0079-il-grafo-esce-dall-overlay.md)): una tab
+// ([0079](../../../docs/decisions/0079-il-grafo-esce-dall-overlay.md)): una linguetta
 // può essere una **view dichiarata** — il grafo — e allora quel riquadro non
 // mostra nessuna nota. Vedi `Tab` qui sotto per il perché sia un tipo
 // discriminato e non un path con un prefisso.
@@ -45,9 +45,9 @@
 // «terzo stato senza contenitore» del §11.2 si scopre non essere terzo.
 import type { PaneMode } from "../host/contract";
 import { MAIN_PANE } from "../host/contract";
-import { emit, leggiStato, scriviStato } from "./store";
+import { emit, readState, writeState } from "./store";
 
-/// Cosa tiene una tab.
+/// Cosa tiene una linguetta.
 ///
 /// **Discriminata, e non un path con un prefisso.** La tentazione era scrivere
 /// `"view:graph"` dentro l'elenco di prima e lasciare tutto com'era: costa una
@@ -71,12 +71,12 @@ export type Tab =
 
 /// Cosa tiene aperto un riquadro.
 export interface PaneState {
-  /// Le tab aperte, in ordine. Può essere vuoto: un riquadro senza niente
+  /// Le linguetta aperte, in ordine. Può essere vuoto: un riquadro senza niente
   /// dentro è uno stato legittimo — è la finestra appena aperta.
   tabs: Tab[];
-  /// L'indice della tab attiva dentro `tabs`, o -1 se non ce n'è.
+  /// L'indice della linguetta attiva dentro `tabs`, o -1 se non ce n'è.
   ///
-  /// Un indice e non un'identità: due tab sullo **stesso** documento nello
+  /// Un indice e non un'identità: due linguetta sullo **stesso** documento nello
   /// stesso riquadro non sono vietate, e con un path non si saprebbe quale
   /// delle due è davanti.
   active: number;
@@ -103,11 +103,11 @@ export interface Layout {
   focus: string;
 }
 
-export const MODALITA_DI_DEFAULT: PaneMode = "live_preview";
+export const DEFAULT_MODE: PaneMode = "live_preview";
 
 /// La finestra come nasce quando non c'è niente da ricordare: un riquadro, il
 /// primo, senza niente dentro.
-export function layoutDiDefault(mode: PaneMode = MODALITA_DI_DEFAULT): Layout {
+export function defaultLayout(mode: PaneMode = DEFAULT_MODE): Layout {
   return {
     tree: { k: "leaf", pane: MAIN_PANE },
     panes: { [MAIN_PANE]: { tabs: [], active: -1, mode } },
@@ -117,17 +117,17 @@ export function layoutDiDefault(mode: PaneMode = MODALITA_DI_DEFAULT): Layout {
 
 /// Il layout corrente. Mutabile e condiviso come `state`, per la stessa ragione:
 /// è ciò che la finestra *è* adesso, e ogni pannello che disegna lo legge.
-export let layout: Layout = layoutDiDefault();
+export let layout: Layout = defaultLayout();
 
 // --- leggere ----------------------------------------------------------------
 
 export function panes(l: Layout = layout): string[] {
   const out: string[] = [];
-  const cammina = (n: LayoutNode): void => {
+  const walk = (n: LayoutNode): void => {
     if (n.k === "leaf") out.push(n.pane);
-    else n.children.forEach(cammina);
+    else n.children.forEach(walk);
   };
-  cammina(l.tree);
+  walk(l.tree);
   return out;
 }
 
@@ -137,12 +137,12 @@ export function pane(id: string, l: Layout = layout): PaneState | undefined {
 
 /// Il riquadro col fuoco. Totale per costruzione: `focus` nomina sempre un
 /// riquadro che c'è.
-export function paneAttivo(l: Layout = layout): PaneState {
+export function activePane(l: Layout = layout): PaneState {
   return l.panes[l.focus];
 }
 
-/// La tab attiva di un riquadro, se ce n'è una.
-export function tabAttiva(id: string = layout.focus, l: Layout = layout): Tab | null {
+/// La linguetta attiva di un riquadro, se ce n'è una.
+export function activeTab(id: string = layout.focus, l: Layout = layout): Tab | null {
   const p = l.panes[id];
   if (!p) return null;
   return p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active] : null;
@@ -150,26 +150,26 @@ export function tabAttiva(id: string = layout.focus, l: Layout = layout): Tab | 
 
 /// Il documento attivo di un riquadro, se ne ha uno.
 ///
-/// `null` adesso ha **due** significati — nessuna tab, o una tab che non è un
+/// `null` adesso ha **due** significati — nessuna linguetta, o una linguetta che non è un
 /// documento — e non ne servono due valori distinti: chi la chiama vuole sapere
 /// quale nota mostrare, e «nessuna» è la stessa risposta in entrambi i casi. È
 /// anche il motivo per cui il `ViewContext` non ha avuto bisogno di niente di
 /// nuovo: `doc: null` è uno stato che il contratto esprimeva già.
-export function docAttivo(id: string = layout.focus, l: Layout = layout): string | null {
-  const t = tabAttiva(id, l);
+export function activeDoc(id: string = layout.focus, l: Layout = layout): string | null {
+  const t = activeTab(id, l);
   return t?.k === "doc" ? t.doc : null;
 }
 
-/// I documenti che un riquadro tiene aperti, in ordine di tab.
-export function documenti(p: PaneState): string[] {
+/// I documenti che un riquadro tiene aperti, in ordine di linguetta.
+export function documents(p: PaneState): string[] {
   return p.tabs.flatMap((t) => (t.k === "doc" ? [t.doc] : []));
 }
 
 /// In quali riquadri è aperto un documento. Serve a chi deve chiuderlo
 /// dappertutto — cancellato, spostato nel cestino — e a chi deve capire se una
 /// modifica riguarda qualche superficie a schermo.
-export function paneConDoc(doc: string, l: Layout = layout): string[] {
-  return panes(l).filter((id) => documenti(l.panes[id]).includes(doc));
+export function panesWithDoc(doc: string, l: Layout = layout): string[] {
+  return panes(l).filter((id) => documents(l.panes[id]).includes(doc));
 }
 
 // --- scrivere ---------------------------------------------------------------
@@ -190,7 +190,7 @@ export function paneConDoc(doc: string, l: Layout = layout): string[] {
 /// Si prende il primo libero e non un contatore che sale: un contatore andrebbe
 /// persistito insieme all'albero, e un contatore persistito che si disallinea
 /// dall'albero conia un id che esiste già.
-export function coniaPaneId(l: Layout = layout): string {
+export function mintPaneId(l: Layout = layout): string {
   for (let n = 2; ; n++) {
     const id = `pane-${n}`;
     if (!l.panes[id]) return id;
@@ -208,43 +208,43 @@ export function coniaPaneId(l: Layout = layout): string {
 /// infila lì accanto invece di annidare una divisione dentro l'altra: tre
 /// riquadri in fila sono tre figli di un nodo, non due nodi con due figli
 /// ciascuno — e la differenza si vede quando se ne chiude uno.
-export function dividi(id: string, dir: "row" | "col", l: Layout = layout): string | null {
+export function split(id: string, dir: "row" | "col", l: Layout = layout): string | null {
   if (!l.panes[id]) return null;
-  const nuovo = coniaPaneId(l);
-  const inserito = sostituisci(l.tree, id, (foglia) => ({
+  const newItem = mintPaneId(l);
+  const inserted = replace(l.tree, id, (leaf) => ({
     k: "split",
     dir,
-    children: [foglia, { k: "leaf", pane: nuovo }],
+    children: [leaf, { k: "leaf", pane: newItem }],
   }));
-  if (!inserito) return null;
-  l.tree = appiattisci(inserito);
-  l.panes[nuovo] = { tabs: [], active: -1, mode: l.panes[id].mode };
-  l.focus = nuovo;
-  cambiato();
-  return nuovo;
+  if (!inserted) return null;
+  l.tree = flatten(inserted);
+  l.panes[newItem] = { tabs: [], active: -1, mode: l.panes[id].mode };
+  l.focus = newItem;
+  changed();
+  return newItem;
 }
 
 /// Chiude un riquadro. L'ultimo non si chiude: una finestra senza riquadri non è
 /// uno stato che si possa disegnare, e «chiudi l'ultimo» vorrebbe dire «chiudi
 /// la finestra», che è un altro comando e di un altro modulo.
-export function chiudiPane(id: string, l: Layout = layout): boolean {
+export function closePane(id: string, l: Layout = layout): boolean {
   if (!l.panes[id] || panes(l).length <= 1) return false;
-  const potato = rimuovi(l.tree, id);
+  const potato = removeNode(l.tree, id);
   if (!potato) return false;
-  l.tree = appiattisci(potato);
+  l.tree = flatten(potato);
   delete l.panes[id];
   if (l.focus === id) l.focus = panes(l)[0];
-  cambiato();
+  changed();
   return true;
 }
 
 /// Sposta il fuoco. Chiamarla su un riquadro che non c'è non fa niente: è la
 /// forma tollerante che serve a chi reagisce a un click su del DOM che potrebbe
 /// essere stantio.
-export function fuocoSu(id: string, l: Layout = layout): void {
+export function focusPane(id: string, l: Layout = layout): void {
   if (!l.panes[id] || l.focus === id) return;
   l.focus = id;
-  cambiato();
+  changed();
 }
 
 /// Mette un documento in un riquadro e lo rende attivo.
@@ -254,8 +254,8 @@ export function fuocoSu(id: string, l: Layout = layout): void {
 /// sempre — un click nell'esploratore su una nota che è già lì — e chi vuole
 /// davvero due tab sulla stessa nota nello stesso riquadro lo chiederà con un
 /// gesto suo, il giorno che quel gesto esista.
-export function apriIn(id: string, doc: string, l: Layout = layout): void {
-  apriTabIn(id, { k: "doc", doc }, l);
+export function openIn(id: string, doc: string, l: Layout = layout): void {
+  openTabIn(id, { k: "doc", doc }, l);
 }
 
 /// Mette una **view dichiarata** in un riquadro e la rende attiva (§3.3).
@@ -264,22 +264,22 @@ export function apriIn(id: string, doc: string, l: Layout = layout): void {
 /// ragione più forte: due tab sullo stesso grafo sarebbero due simulazioni che
 /// girano insieme sullo stesso vault, cioè il doppio del lavoro per due disegni
 /// che convergono allo stesso posto.
-export function apriVistaIn(id: string, view: string, l: Layout = layout): void {
-  apriTabIn(id, { k: "view", view }, l);
+export function openViewIn(id: string, view: string, l: Layout = layout): void {
+  openTabIn(id, { k: "view", view }, l);
 }
 
-function apriTabIn(id: string, tab: Tab, l: Layout): void {
+function openTabIn(id: string, tab: Tab, l: Layout): void {
   const p = l.panes[id];
   if (!p) return;
-  const gia = p.tabs.findIndex((t) => stessaTab(t, tab));
-  p.active = gia >= 0 ? gia : p.tabs.push(tab) - 1;
+  const already = p.tabs.findIndex((t) => sameTab(t, tab));
+  p.active = already >= 0 ? already : p.tabs.push(tab) - 1;
   l.focus = id;
-  cambiato();
+  changed();
 }
 
 /// Due tab sono la stessa cosa aperta? Serve a non aprirne una seconda, ed è
 /// l'unico posto in cui le due specie si confrontano fra loro.
-export function stessaTab(a: Tab, b: Tab): boolean {
+export function sameTab(a: Tab, b: Tab): boolean {
   if (a.k === "doc" && b.k === "doc") return a.doc === b.doc;
   if (a.k === "view" && b.k === "view") return a.view === b.view;
   return false;
@@ -291,96 +291,96 @@ export function stessaTab(a: Tab, b: Tab): boolean {
 /// ogni editor a schede. Chiudere l'ultima tab non chiude il riquadro — un
 /// riquadro vuoto è uno stato legittimo, ed è dove si finisce anche dividendone
 /// uno.
-export function chiudiTab(id: string, indice: number, l: Layout = layout): void {
-  if (togli(id, indice, l)) cambiato();
+export function closeTab(id: string, index: number, l: Layout = layout): void {
+  if (removeTab(id, index, l)) changed();
 }
 
 /// Toglie la tab e basta: **niente annuncio, niente scrittura**. Torna `false`
 /// se non c'era niente da togliere.
 ///
-/// Sta separata da `chiudiTab` per la stessa ragione per cui `rinomina` chiama
-/// `cambiato()` una volta sola in fondo: chi ne chiude N di fila non deve
+/// Sta separata da `closeTab` per la stessa ragione per cui `rename` chiama
+/// `changed()` una volta sola in fondo: chi ne chiude N di fila non deve
 /// pagare N scritture su disco. La mutazione è di qui, l'annuncio è di chi ha
 /// finito.
-function togli(id: string, indice: number, l: Layout): boolean {
+function removeTab(id: string, index: number, l: Layout): boolean {
   const p = l.panes[id];
-  if (!p || indice < 0 || indice >= p.tabs.length) return false;
-  p.tabs.splice(indice, 1);
+  if (!p || index < 0 || index >= p.tabs.length) return false;
+  p.tabs.splice(index, 1);
   if (p.tabs.length === 0) p.active = -1;
-  else if (p.active > indice) p.active -= 1;
-  else if (p.active === indice) p.active = Math.max(0, indice - 1);
+  else if (p.active > index) p.active -= 1;
+  else if (p.active === index) p.active = Math.max(0, index - 1);
   return true;
 }
 
 /// Rende attiva una tab per indice.
-export function attivaTab(id: string, indice: number, l: Layout = layout): void {
+export function activateTab(id: string, index: number, l: Layout = layout): void {
   const p = l.panes[id];
-  if (!p || indice < 0 || indice >= p.tabs.length) return;
-  p.active = indice;
+  if (!p || index < 0 || index >= p.tabs.length) return;
+  p.active = index;
   l.focus = id;
-  cambiato();
+  changed();
 }
 
 /// Il documento è stato rinominato: l'identità è il path (0043), quindi le tab
 /// che lo mostravano seguono. Vale in **tutti** i riquadri, non solo in quello
 /// col fuoco: un rename non guarda chi sta guardando.
-export function rinomina(da: string, a: string, l: Layout = layout): void {
-  let toccato = false;
+export function rename(from: string, a: string, l: Layout = layout): void {
+  let wasTouched = false;
   for (const id of panes(l)) {
     const p = l.panes[id];
     p.tabs = p.tabs.map((t) => {
-      if (t.k !== "doc" || t.doc !== da) return t;
-      toccato = true;
+      if (t.k !== "doc" || t.doc !== from) return t;
+      wasTouched = true;
       return { k: "doc", doc: a };
     });
   }
-  if (toccato) cambiato();
+  if (wasTouched) changed();
 }
 
 /// Il documento non c'è più: via da ogni riquadro che lo teneva.
 ///
-/// **Un annuncio solo, e quindi una scrittura sola.** Ogni `cambiato()` è un
+/// **Un annuncio solo, e quindi una scrittura sola.** Ogni `changed()` è un
 /// `set_view_state`, cioè un `fsync` dall'altra parte dell'IPC: chiudere una
 /// nota aperta in cinque riquadri ne costava cinque, per cinque stati
 /// intermedi che nessuno ha chiesto di vedere e che nessuno può leggere —
-/// `scriviStato` non si aspetta, quindi non è nemmeno vero che le cinque
+/// `writeState` non si aspetta, quindi non è nemmeno vero che le cinque
 /// scritture lascino cinque stati coerenti sul disco: partono tutte insieme e
-/// vince l'ultima. È la stessa forma di `rinomina`, qui sopra.
-export function togliDappertutto(doc: string, l: Layout = layout): void {
-  let toccato = false;
-  for (const id of paneConDoc(doc, l)) {
+/// vince l'ultima. È la stessa forma di `rename`, qui sopra.
+export function removeEverywhere(doc: string, l: Layout = layout): void {
+  let wasTouched = false;
+  for (const id of panesWithDoc(doc, l)) {
     const tabs = l.panes[id].tabs;
     for (let i = tabs.length - 1; i >= 0; i--) {
       const t = tabs[i];
-      if (t.k === "doc" && t.doc === doc) toccato = togli(id, i, l) || toccato;
+      if (t.k === "doc" && t.doc === doc) wasTouched = removeTab(id, i, l) || wasTouched;
     }
   }
-  if (toccato) cambiato();
+  if (wasTouched) changed();
 }
 
 /// Cambia la modalità di un riquadro.
-export function impostaModalita(id: string, mode: PaneMode, l: Layout = layout): void {
+export function setMode(id: string, mode: PaneMode, l: Layout = layout): void {
   const p = l.panes[id];
   if (!p || p.mode === mode) return;
   p.mode = mode;
-  cambiato();
+  changed();
 }
 
 // --- l'albero, in privato ---------------------------------------------------
 
 /// Sostituisce la foglia di `pane` con ciò che `f` ne fa. Torna `null` se quella
 /// foglia non c'è.
-function sostituisci(
+function replace(
   n: LayoutNode,
   pane: string,
-  f: (foglia: LayoutNode) => LayoutNode,
+  f: (leaf: LayoutNode) => LayoutNode,
 ): LayoutNode | null {
   if (n.k === "leaf") return n.pane === pane ? f(n) : null;
   for (let i = 0; i < n.children.length; i++) {
-    const sotto = sostituisci(n.children[i], pane, f);
-    if (sotto) {
+    const below = replace(n.children[i], pane, f);
+    if (below) {
       const children = [...n.children];
-      children[i] = sotto;
+      children[i] = below;
       return { ...n, children };
     }
   }
@@ -389,24 +389,24 @@ function sostituisci(
 
 /// Toglie la foglia di `pane`. Torna `null` se non c'è (o se è la radice, caso
 /// che il chiamante ha già escluso contando i riquadri).
-function rimuovi(n: LayoutNode, pane: string): LayoutNode | null {
+function removeNode(n: LayoutNode, pane: string): LayoutNode | null {
   if (n.k === "leaf") return null;
   const children: LayoutNode[] = [];
-  let trovato = false;
+  let found = false;
   for (const c of n.children) {
     if (c.k === "leaf" && c.pane === pane) {
-      trovato = true;
+      found = true;
       continue;
     }
-    const sotto = rimuovi(c, pane);
-    if (sotto) {
-      trovato = true;
-      children.push(sotto);
+    const below = removeNode(c, pane);
+    if (below) {
+      found = true;
+      children.push(below);
     } else {
       children.push(c);
     }
   }
-  return trovato ? { ...n, children } : null;
+  return found ? { ...n, children } : null;
 }
 
 /// Toglie dall'albero i nodi che non dividono più niente.
@@ -417,10 +417,10 @@ function rimuovi(n: LayoutNode, pane: string): LayoutNode | null {
 /// volta, quindi si pota subito invece di insegnare a tutti i lettori a
 /// ignorarla. Stessa cosa per una divisione dentro una divisione dello stesso
 /// verso: sono la stessa fila.
-function appiattisci(n: LayoutNode): LayoutNode {
+function flatten(n: LayoutNode): LayoutNode {
   if (n.k === "leaf") return n;
   const children = n.children.flatMap((c) => {
-    const p = appiattisci(c);
+    const p = flatten(c);
     return p.k === "split" && p.dir === n.dir ? p.children : [p];
   });
   return children.length === 1 ? children[0] : { ...n, children };
@@ -434,7 +434,7 @@ function appiattisci(n: LayoutNode): LayoutNode {
 const LAYOUT_KEY = "layout";
 /// La chiave di prima, quando la modalità era una sola per tutto il vault.
 /// Si legge ancora — una volta, per non far ripartire in Live Preview chi
-/// stava leggendo — e non si riscrive più. Vedi `caricaLayout`.
+/// stava leggendo — e non si riscrive più. Vedi `loadLayout`.
 const MODE_KEY_LEGACY = "mode";
 
 /// Annuncia che il layout è cambiato e lo mette da parte.
@@ -444,9 +444,9 @@ const MODE_KEY_LEGACY = "mode";
 /// può dimenticare in una funzione nuova. Il salvataggio non si aspetta —
 /// vale la regola di `store.ts`: chi divide un riquadro non deve fermarsi per
 /// una scrittura su disco.
-function cambiato(): void {
+function changed(): void {
   emit("layout");
-  scriviStato(LAYOUT_KEY, layout);
+  writeState(LAYOUT_KEY, layout);
 }
 
 /// Rilegge la finestra com'era, e **la migrazione della modalità**.
@@ -470,16 +470,16 @@ function cambiato(): void {
 /// leggere due valori che nessuno lega. Le domande restano due — la vecchia
 /// chiave si chiedeva già sempre, anche quando il layout c'era — ma l'attesa
 /// diventa una.
-export async function caricaLayout(): Promise<void> {
-  const [salvato, eredita] = await Promise.all([
-    leggiStato<unknown>(LAYOUT_KEY),
-    leggiStato<string>(MODE_KEY_LEGACY),
+export async function loadLayout(): Promise<void> {
+  const [saved, inheritedMode] = await Promise.all([
+    readState<unknown>(LAYOUT_KEY),
+    readState<string>(MODE_KEY_LEGACY),
   ]);
-  layout = parseLayout(salvato) ?? layoutDiDefault(modalitaValida(eredita));
+  layout = parseLayout(saved) ?? defaultLayout(validMode(inheritedMode));
 }
 
-function modalitaValida(v: unknown): PaneMode {
-  return v === "source" || v === "reading" || v === "live_preview" ? v : MODALITA_DI_DEFAULT;
+function validMode(v: unknown): PaneMode {
+  return v === "source" || v === "reading" || v === "live_preview" ? v : DEFAULT_MODE;
 }
 
 /// Da JSON a `Layout`, o `null` se ciò che c'è scritto non è un layout.
@@ -492,25 +492,25 @@ function modalitaValida(v: unknown): PaneMode {
 export function parseLayout(v: unknown): Layout | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  const tree = parseNodo(o.tree);
+  const tree = parseNode(o.tree);
   if (!tree) return null;
   const ids = new Set<string>();
-  const cammina = (n: LayoutNode): boolean => {
+  const walk = (n: LayoutNode): boolean => {
     if (n.k === "leaf") {
       if (ids.has(n.pane)) return false; // due foglie sullo stesso riquadro
       ids.add(n.pane);
       return true;
     }
-    return n.children.every(cammina);
+    return n.children.every(walk);
   };
-  if (!cammina(tree)) return null;
+  if (!walk(tree)) return null;
   if (typeof o.panes !== "object" || o.panes === null) return null;
   const panes: Record<string, PaneState> = {};
   for (const [id, p] of Object.entries(o.panes as Record<string, unknown>)) {
     if (!ids.has(id)) return null;
-    const stato = parsePane(p);
-    if (!stato) return null;
-    panes[id] = stato;
+    const state = parsePane(p);
+    if (!state) return null;
+    panes[id] = state;
   }
   if (Object.keys(panes).length !== ids.size) return null;
   const focus = typeof o.focus === "string" && ids.has(o.focus) ? o.focus : null;
@@ -518,7 +518,7 @@ export function parseLayout(v: unknown): Layout | null {
   return { tree, panes, focus };
 }
 
-function parseNodo(v: unknown): LayoutNode | null {
+function parseNode(v: unknown): LayoutNode | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
   if (o.k === "leaf") return typeof o.pane === "string" && o.pane ? { k: "leaf", pane: o.pane } : null;
@@ -527,7 +527,7 @@ function parseNodo(v: unknown): LayoutNode | null {
   if (!Array.isArray(o.children) || o.children.length < 2) return null;
   const children: LayoutNode[] = [];
   for (const c of o.children) {
-    const n = parseNodo(c);
+    const n = parseNode(c);
     if (!n) return null;
     children.push(n);
   }
@@ -549,10 +549,10 @@ function parseNodo(v: unknown): LayoutNode | null {
 function parsePane(v: unknown): PaneState | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  const grezze = Array.isArray(o.tabs) ? o.tabs : Array.isArray(o.docs) ? o.docs : null;
-  if (!grezze) return null;
+  const rawTabs = Array.isArray(o.tabs) ? o.tabs : Array.isArray(o.docs) ? o.docs : null;
+  if (!rawTabs) return null;
   const tabs: Tab[] = [];
-  for (const t of grezze) {
+  for (const t of rawTabs) {
     const tab = parseTab(t);
     if (!tab) return null;
     tabs.push(tab);
@@ -564,7 +564,7 @@ function parsePane(v: unknown): PaneState | null {
     // mano, ed è anche l'unica che si può riparare invece di buttare tutto:
     // il riquadro c'è, le tab ci sono, non si sa quale era davanti.
     active: Number.isInteger(active) && active >= 0 && active < tabs.length ? active : tabs.length > 0 ? 0 : -1,
-    mode: modalitaValida(o.mode),
+    mode: validMode(o.mode),
   };
 }
 

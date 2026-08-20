@@ -75,11 +75,11 @@ use fub_abi::PluginError;
 
 #[cfg(panic = "abort")]
 compile_error!(
-    "`fub-kernel` regge i panici dei componenti con `catch_unwind` (§9.3, decisione 0032), e \
-     `catch_unwind` presuppone che un panico srotoli. Con `panic = \"abort\"` la rete sparisce \
-     senza che nessun test se ne accorga: un plugin che pania si porta via il processo, cioè il \
-     vault dell'utente. Se questo profilo lo si vuole davvero, la risposta non è togliere questa \
-     riga — è isolare i componenti fuori dal processo (§24.2, o il guest WASM di M5)."
+    "`fub-kernel` catches component panics with `catch_unwind` (§9.3, decision 0032), and \
+     `catch_unwind` presupposes that a panic unwinds. With `panic = \"abort\"` the net \
+     disappears without any test noticing: a panicking plugin takes out the process, i.e. the \
+     user's vault. If this profile is truly desired, the response is not to remove this \
+     line — it is to isolate components outside the process (§24.2, or M5's WASM guest)."
 );
 
 /// Le porte da cui si entra in codice di un terzo vivono nel **contratto**,
@@ -99,7 +99,7 @@ fn why(payload: Box<dyn Any + Send>) -> String {
     if let Some(s) = payload.downcast_ref::<String>() {
         return s.clone();
     }
-    "panico senza messaggio".to_string()
+    "panic without message".to_string()
 }
 
 /// Chiama codice di un provider che può **rispondere di no**: un panico diventa
@@ -161,7 +161,7 @@ pub fn caught<R, E>(
 /// produce non ha un canale (è una funzione libera, senza workspace) e allora
 /// il minimo è che non lo butti via da solo. Un `Option` che si ignora si vede
 /// in review; un `eprintln!` no.
-#[must_use = "un panico che nessuno emette è tornato a essere una perdita silenziosa (§20.2)"]
+#[must_use = "a panic that nobody emits has become a silent loss again (§20.2)"]
 pub fn reporting(who: &str, gate: Gate, detail: &str, f: impl FnOnce()) -> Option<PluginError> {
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(()) => None,

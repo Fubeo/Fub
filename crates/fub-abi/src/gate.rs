@@ -90,19 +90,19 @@ impl Gate {
     /// dettaglio e lo butta è un messaggio che non dice quale.
     pub fn what(self, detail: &str) -> Cow<'static, str> {
         match self {
-            Gate::Command => format!("eseguendo `{detail}`").into(),
-            Gate::ViewRender => format!("disegnando `{detail}`").into(),
-            Gate::ViewAction => format!("reagendo a un'azione di `{detail}`").into(),
-            Gate::Service => format!("servendo `{detail}`").into(),
-            Gate::Event => "ricevendo un evento".into(),
-            Gate::IndexFeed => "indicizzando un lotto di documenti".into(),
-            Gate::IndexForget => "togliendo un lotto di documenti".into(),
-            Gate::IndexUpToDate => "dicendo cosa ha già".into(),
-            Gate::IndexReconcile => "riconciliando".into(),
-            Gate::FormatParse => format!("parsando `{detail}`").into(),
-            Gate::SyntaxRule => "innestandosi sul documento".into(),
-            Gate::CustomRender => format!("disegnando `{detail}`").into(),
-            Gate::Job => format!("eseguendo il job `{detail}`").into(),
+            Gate::Command => format!("executing `{detail}`").into(),
+            Gate::ViewRender => format!("drawing `{detail}`").into(),
+            Gate::ViewAction => format!("responding to an action on `{detail}`").into(),
+            Gate::Service => format!("serving `{detail}`").into(),
+            Gate::Event => "receiving an event".into(),
+            Gate::IndexFeed => "indexing a batch of documents".into(),
+            Gate::IndexForget => "removing a batch of documents".into(),
+            Gate::IndexUpToDate => "saying what it already has".into(),
+            Gate::IndexReconcile => "reconciling".into(),
+            Gate::FormatParse => format!("parsing `{detail}`").into(),
+            Gate::SyntaxRule => "grafting onto the document".into(),
+            Gate::CustomRender => format!("drawing `{detail}`").into(),
+            Gate::Job => format!("executing job `{detail}`").into(),
         }
     }
 

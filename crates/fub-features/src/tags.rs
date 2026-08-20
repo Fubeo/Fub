@@ -246,11 +246,11 @@ fn filter_of(host: &dyn ReadApi) -> Result<String, PluginError> {
 /// l'unica che sa il sigma finale. Un filtro non ASCII contro un nome ASCII non
 /// combacia in nessuna delle due corsie, e non ha bisogno di un caso suo: un
 /// byte sopra `0x7F` non è mai uguale a un byte ASCII.
-fn contiene_a_meno_del_caso(nome: &str, cerca: &str) -> bool {
-    if !nome.is_ascii() {
-        return nome.to_lowercase().contains(cerca);
+fn matches_case_insensitive(name: &str, find: &str) -> bool {
+    if !name.is_ascii() {
+        return name.to_lowercase().contains(find);
     }
-    let (paglia, ago) = (nome.as_bytes(), cerca.as_bytes());
+    let (paglia, ago) = (name.as_bytes(), find.as_bytes());
     // `windows(0)` va in panico, e non è un caso da non avere: il chiamante di
     // oggi filtra il vuoto un rigo sopra, il prossimo può non farlo.
     ago.is_empty()
@@ -263,15 +263,15 @@ fn contiene_a_meno_del_caso(nome: &str, cerca: &str) -> bool {
 /// pura trasformazione dati→UI: si prova senza un host. I tag arrivano già
 /// ordinati per nome dal kernel.
 pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
-    let cerca = filter.trim().to_lowercase();
-    let visibili: Vec<&TagCount> = tags
+    let find = filter.trim().to_lowercase();
+    let visible: Vec<&TagCount> = tags
         .iter()
-        .filter(|t| cerca.is_empty() || contiene_a_meno_del_caso(&t.name, &cerca))
+        .filter(|t| find.is_empty() || matches_case_insensitive(&t.name, &find))
         .collect();
 
     // Il campo c'è sempre, anche quando l'elenco è vuoto: se sparisse appena il
     // filtro non trova niente, cancellare l'ultima lettera sarebbe impossibile.
-    let campo = UiNode::new(UiKind::TextInput {
+    let field = UiNode::new(UiKind::TextInput {
         field: FILTER_FIELD.to_string(),
         label: None,
         value: filter.to_string(),
@@ -282,11 +282,11 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
     // prima»: senza, ogni ridisegno gli toglierebbe il focus di sotto.
     .with_key(FILTER_FIELD);
 
-    let corpo = if visibili.is_empty() {
+    let body = if visible.is_empty() {
         UiNode::empty_state(Text::key(if tags.is_empty() { EMPTY } else { NO_MATCH }))
     } else {
         UiNode::list(
-            visibili
+            visible
                 .iter()
                 .map(|t| {
                     UiNode::list_item(
@@ -300,7 +300,7 @@ pub fn build_tags_view(tags: &[TagCount], filter: &str) -> UiNode {
         )
     };
 
-    UiNode::column(4, vec![campo, corpo])
+    UiNode::column(4, vec![field, body])
 }
 
 #[cfg(test)]
@@ -317,7 +317,7 @@ mod tests {
     }
 
     /// I titoli delle voci, in ordine.
-    fn voci(tree: &UiNode) -> Vec<String> {
+    fn entries(tree: &UiNode) -> Vec<String> {
         fn walk(node: &UiNode, out: &mut Vec<String>) {
             match &node.kind {
                 UiKind::ListItem { title, .. } => out.push(title.to_string()),
@@ -353,11 +353,11 @@ mod tests {
 
     #[test]
     fn render_asks_the_host_for_the_vault_tags() {
-        let host = MemoryHost::new().con_tags(&[("rust", 2), ("note", 5)]);
+        let host = MemoryHost::new().with_tags(&[("rust", 2), ("note", 5)]);
         let tree = TagPanelView
             .render_view(&ViewInstance::only(TAGS_VIEW), &host)
             .unwrap();
-        assert_eq!(voci(&tree), ["#rust", "#note"]);
+        assert_eq!(entries(&tree), ["#rust", "#note"]);
     }
 
     #[test]
@@ -379,7 +379,7 @@ mod tests {
     }
 
     /// Digita `text` nel campo filtro e torna l'albero ridisegnato.
-    fn digita(view: &mut TagPanelView, host: &mut MemoryHost, text: &str) -> UiNode {
+    fn type_text(view: &mut TagPanelView, host: &mut MemoryHost, text: &str) -> UiNode {
         let update = view
             .on_action(
                 &ViewInstance::only(TAGS_VIEW),
@@ -397,7 +397,7 @@ mod tests {
     }
 
     /// Il valore mostrato dal campo di testo.
-    fn campo(tree: &UiNode) -> String {
+    fn field(tree: &UiNode) -> String {
         let UiKind::Stack { children, .. } = &tree.kind else {
             panic!("stack")
         };
@@ -412,18 +412,18 @@ mod tests {
     #[test]
     fn the_filter_survives_between_two_renders() {
         let mut host = MemoryHost::new()
-            .con_tags(&[("rust", 2), ("ruggine", 1), ("note", 5)])
-            .con_esemplare("uno");
+            .with_tags(&[("rust", 2), ("ruggine", 1), ("note", 5)])
+            .with_instance("uno");
         let mut view = TagPanelView;
-        let istanza = ViewInstance::only(TAGS_VIEW);
+        let instance = ViewInstance::only(TAGS_VIEW);
 
-        assert_eq!(voci(&digita(&mut view, &mut host, "rus")), ["#rust"]);
+        assert_eq!(entries(&type_text(&mut view, &mut host, "rus")), ["#rust"]);
 
         // Il ridisegno che arriva dopo — un `IndexUpdated`, un cambio di nota —
         // non riparte da zero: il filtro è dove l'utente lo ha lasciato.
-        let tree = view.render_view(&istanza, &host).unwrap();
-        assert_eq!(voci(&tree), ["#rust"]);
-        assert_eq!(campo(&tree), "rus", "il campo mostra ciò che si è digitato");
+        let tree = view.render_view(&instance, &host).unwrap();
+        assert_eq!(entries(&tree), ["#rust"]);
+        assert_eq!(field(&tree), "rus", "the field shows what was typed");
     }
 
     /// Il guadagno del §11.2, e la ragione per cui la chiave porta l'esemplare:
@@ -432,27 +432,27 @@ mod tests {
     #[test]
     fn two_instances_of_the_panel_filter_apart() {
         let mut host = MemoryHost::new()
-            .con_tags(&[("rust", 2), ("note", 5)])
-            .con_esemplare("uno");
+            .with_tags(&[("rust", 2), ("note", 5)])
+            .with_instance("uno");
         let mut view = TagPanelView;
-        let istanza = ViewInstance::only(TAGS_VIEW);
+        let instance = ViewInstance::only(TAGS_VIEW);
 
-        assert_eq!(voci(&digita(&mut view, &mut host, "rus")), ["#rust"]);
+        assert_eq!(entries(&type_text(&mut view, &mut host, "rus")), ["#rust"]);
 
         // Lo stesso pannello, aperto una seconda volta: il filtro dell'altro non
         // è suo.
-        host.passa_a_esemplare("due");
-        let tree = view.render_view(&istanza, &host).unwrap();
-        assert_eq!(voci(&tree), ["#rust", "#note"]);
-        assert_eq!(campo(&tree), "");
+        host.switch_to_instance("due");
+        let tree = view.render_view(&instance, &host).unwrap();
+        assert_eq!(entries(&tree), ["#rust", "#note"]);
+        assert_eq!(field(&tree), "");
 
         // …e filtrare qui non tocca quello di là.
-        assert_eq!(voci(&digita(&mut view, &mut host, "not")), ["#note"]);
-        host.passa_a_esemplare("uno");
+        assert_eq!(entries(&type_text(&mut view, &mut host, "not")), ["#note"]);
+        host.switch_to_instance("uno");
         assert_eq!(
-            voci(&view.render_view(&istanza, &host).unwrap()),
+            entries(&view.render_view(&instance, &host).unwrap()),
             ["#rust"],
-            "il primo esemplare ha ancora il suo"
+            "the first instance still has its own"
         );
     }
 
@@ -463,11 +463,11 @@ mod tests {
     #[test]
     fn clearing_the_filter_forgets_it() {
         let mut host = MemoryHost::new()
-            .con_tags(&[("rust", 2), ("note", 5)])
-            .con_esemplare("uno");
+            .with_tags(&[("rust", 2), ("note", 5)])
+            .with_instance("uno");
         let mut view = TagPanelView;
-        digita(&mut view, &mut host, "rus");
-        assert_eq!(voci(&digita(&mut view, &mut host, "")), ["#rust", "#note"]);
+        type_text(&mut view, &mut host, "rus");
+        assert_eq!(entries(&type_text(&mut view, &mut host, "")), ["#rust", "#note"]);
         assert_eq!(host.view_state(FILTER_STATE).unwrap(), None);
     }
 
@@ -475,8 +475,8 @@ mod tests {
     /// ricordato, invece di far credere all'utente che il filtro sia salvo.
     #[test]
     fn filtering_outside_an_instance_says_so() {
-        let mut host = MemoryHost::new().con_tags(&[("rust", 2)]);
-        let e = TagPanelView
+        let mut host = MemoryHost::new().with_tags(&[("rust", 2)]);
+        let and = TagPanelView
             .on_action(
                 &ViewInstance::only(TAGS_VIEW),
                 UiAction::new(FILTER).with_fields(vec![fub_abi::ui::FieldValue {
@@ -485,8 +485,8 @@ mod tests {
                 }]),
                 &mut host,
             )
-            .expect_err("nessun esemplare, nessuno stato di vista");
-        assert!(matches!(e, PluginError::BadArgs(_)), "{e:?}");
+            .expect_err("no instance, no view state");
+        assert!(matches!(and, PluginError::BadArgs(_)), "{and:?}");
     }
 
     /// Un valore scritto a mano che non è una stringa non fa cadere il pannello:
@@ -495,14 +495,14 @@ mod tests {
     #[test]
     fn a_filter_that_is_not_a_string_reads_as_empty() {
         let mut host = MemoryHost::new()
-            .con_tags(&[("rust", 2), ("note", 5)])
-            .con_esemplare("uno");
+            .with_tags(&[("rust", 2), ("note", 5)])
+            .with_instance("uno");
         host.set_view_state(FILTER_STATE, Some(serde_json::json!(42)))
             .unwrap();
         let tree = TagPanelView
             .render_view(&ViewInstance::only(TAGS_VIEW), &host)
             .unwrap();
-        assert_eq!(voci(&tree), ["#rust", "#note"]);
+        assert_eq!(entries(&tree), ["#rust", "#note"]);
     }
 
     /// **Il presidio della corsia ASCII.** Il filtro ignora il caso: `#Rust` si
@@ -514,14 +514,14 @@ mod tests {
     /// **non** era verde prima è il conteggio, e sta in
     /// `tests/il_filtro_non_alloca.rs`.
     #[test]
-    fn il_filtro_ignora_il_caso() {
+    fn the_filter_ignores_the_case() {
         let tags = [
             tag("Rust", 1),
             tag("progetto/Città", 2),
             tag("NOTE", 3),
             tag("altro", 4),
         ];
-        for (filtro, atteso) in [
+        for (filter, expected) in [
             ("RUS", vec!["#Rust"]),
             ("rust", vec!["#Rust"]),
             ("città", vec!["#progetto/Città"]),
@@ -529,7 +529,7 @@ mod tests {
             ("note", vec!["#NOTE"]),
             ("O", vec!["#progetto/Città", "#NOTE", "#altro"]),
         ] {
-            assert_eq!(voci(&build_tags_view(&tags, filtro)), atteso, "{filtro:?}");
+            assert_eq!(entries(&build_tags_view(&tags, filter)), expected, "{filter:?}");
         }
     }
 
@@ -543,29 +543,29 @@ mod tests {
     /// *Provato in rosso* sostituendo il corpo di `contiene_a_meno_del_caso` con
     /// la versione carattere per carattere: la prima riga fallisce.
     #[test]
-    fn fuori_dallascii_il_caso_resta_quello_di_to_lowercase() {
+    fn outside_from_ascii_the_case_remains_that_of_to_lowercase() {
         let tags = [tag("ΟΔΟΣ", 1)];
         assert_eq!(
-            voci(&build_tags_view(&tags, "οδος")),
+            entries(&build_tags_view(&tags, "οδος")),
             ["#ΟΔΟΣ"],
-            "il sigma finale minuscolo è ς, e cercando la parola intera il tag si trova"
+            "the final lowercase sigma is ς, and searching the whole word finds the tag"
         );
         assert!(
-            voci(&build_tags_view(&tags, "οδοσ")).is_empty(),
-            "il sigma non finale non è quello che `to_lowercase` produce in coda"
+            entries(&build_tags_view(&tags, "οδοσ")).is_empty(),
+            "the non-final sigma is not what `to_lowercase` produces at the end"
         );
         assert_eq!(
-            voci(&build_tags_view(&tags, "οδο")),
+            entries(&build_tags_view(&tags, "οδο")),
             ["#ΟΔΟΣ"],
-            "e il prefisso, che di sigma non ne ha, si trova comunque"
+            "and the prefix, which has no sigma, is found anyway"
         );
     }
 
     /// Un ago fuori dall'ASCII non combacia dentro un nome ASCII, e non gli
     /// serve un caso a parte: nessun byte sopra `0x7F` è un byte ASCII.
     #[test]
-    fn un_filtro_accentato_non_trova_un_tag_ascii() {
-        assert!(voci(&build_tags_view(&[tag("citta", 1)], "città")).is_empty());
+    fn a_filter_accented_not_finds_a_tag_ascii() {
+        assert!(entries(&build_tags_view(&[tag("citta", 1)], "città")).is_empty());
     }
 
     /// Un filtro che non trova niente non fa sparire il campo: senza, cancellare

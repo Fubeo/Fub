@@ -2,7 +2,7 @@
 //
 // Non cabla nessun comando. Legge le spec dal kernel, disegna un campo per ogni
 // parametro dichiarato e — quando il raggio dichiarato lo merita — chiede prima
-// il **piano** e lo mostra, invece di eseguire e sperare. È la stessa sequenza
+// il **piano** e lo mostra, invece di executere e sperare. È la stessa sequenza
 // che dovranno fare una CLI (27.1) o un centro di comando (22.4): scegliere fra
 // ciò che il registro dichiara, compilare gli argomenti, simulare, approvare.
 //
@@ -26,13 +26,13 @@ import type {
 } from "../host/contract";
 import { pageName } from "../rules/organizer";
 import { errorText } from "../host/errors";
-import { intrappolaFuoco } from "./a11y";
-import type { Tono } from "./notify";
-import { type Chiave, t } from "../i18n/strings";
+import { trapFocus } from "./a11y";
+import type { Tone } from "./notify";
+import { type Key, t } from "../i18n/strings";
 import { allCommands, loadKeyOverrides, type CommandEntry } from "./commands";
 import { state } from "../state/store";
 
-/// Ciò che la palette chiede alla shell: eseguire gli intenti, dire qualcosa
+/// Ciò che la palette chiede alla shell: executere gli intenti, dire qualcosa
 /// all'utente, e mettere in salvo i buffer prima di un comando che scrive. Il
 /// resto (invocare, disegnare, chiedere) è suo.
 export interface PaletteHost {
@@ -41,11 +41,11 @@ export interface PaletteHost {
   // avere lo stesso colore di uno riuscito, o l'unica differenza fra «dodici
   // note archiviate» e «undici su dodici, la dodicesima no» è una frase più
   // lunga che nessuno rilegge (§23.14).
-  notify(message: string, tono?: Tono): void;
+  notify(message: string, tone?: Tone): void;
   listDocuments(): Promise<string[]>;
   // **Flush-before-patch** (M3): salva i documenti ancora sporchi e dice
   // quali non ce l'hanno fatta. È la stessa porta che l'esploratore usa per
-  // `nonInSalvo` — la palette la chiede alla shell invece di importare il
+  // `ensureSaved` — la palette la chiede alla shell invece di importare il
   // pannello, perché il pannello trascina il DOM e la palette deve restare
   // testabile come funzioni pure.
   flushPendingSave(): Promise<string[]>;
@@ -64,21 +64,21 @@ export interface PaletteHost {
 /// buchi ci sono fra un carattere trovato e il successivo, e da dove comincia il
 /// primo. È ciò che fa vincere «nuova nota» su «rinomina» per la query `nn`
 /// senza una tabella di casi speciali.
-export function fuzzyScore(testo: string, query: string): number | null {
-  const t = testo.toLowerCase();
+export function fuzzyScore(text: string, query: string): number | null {
+  const t = text.toLowerCase();
   let i = 0;
-  let punti = 0;
-  let precedente = -1;
+  let points = 0;
+  let previous = -1;
   for (const c of query) {
-    const trovato = t.indexOf(c, i);
-    if (trovato < 0) return null;
+    const found = t.indexOf(c, i);
+    if (found < 0) return null;
     // Un carattere attaccato al precedente non costa niente; uno lontano costa
     // la distanza. Il primo costa da dove comincia.
-    punti += precedente < 0 ? trovato : trovato - precedente - 1;
-    precedente = trovato;
-    i = trovato + 1;
+    points += previous < 0 ? found : found - previous - 1;
+    previous = found;
+    i = found + 1;
   }
-  return punti;
+  return points;
 }
 
 /// I comandi che corrispondono a ciò che l'utente sta scrivendo, dai più
@@ -106,10 +106,10 @@ export function filterCommands(entries: CommandEntry[], query: string): CommandE
     if (title.includes(q)) return [1, title.indexOf(q)];
     if (entry.id.toLowerCase().includes(q)) return [2, 0];
     if (entry.description.toLowerCase().includes(q)) return [3, 0];
-    const sparso = fuzzyScore(entry.title, q);
-    if (sparso !== null) return [4, sparso];
-    const nell_id = fuzzyScore(entry.id, q);
-    if (nell_id !== null) return [5, nell_id];
+    const sparseTitle = fuzzyScore(entry.title, q);
+    if (sparseTitle !== null) return [4, sparseTitle];
+    const idScore = fuzzyScore(entry.id, q);
+    if (idScore !== null) return [5, idScore];
     return null;
   };
   return entries
@@ -138,7 +138,7 @@ export function needsPlan(spec: CommandSpec): boolean {
 /// cioè una volta sola e nella lingua di quel momento: cambiare lingua avrebbe
 /// lasciato la palette a parlare quella di prima, e non lo avrebbe detto
 /// nessuno. Le chiavi non invecchiano; le parole sì.
-const REACH_KEYS: Record<CommandSpec["scope"]["reach"], Chiave> = {
+const REACH_KEYS: Record<CommandSpec["scope"]["reach"], Key> = {
   session: "palette.reach.session",
   document: "palette.reach.document",
   documents: "palette.reach.documents",
@@ -148,9 +148,9 @@ const REACH_KEYS: Record<CommandSpec["scope"]["reach"], Chiave> = {
 
 /// Il raggio in una riga, per la palette: cosa tocca, e se si torna indietro.
 export function scopeLabel(spec: CommandSpec): string {
-  const dove = t(REACH_KEYS[spec.scope.reach]);
-  const cosa = t(spec.scope.writes ? "palette.writes" : "palette.reads", { dove });
-  return spec.scope.reversible ? cosa : t("palette.irreversible", { cosa });
+  const where = t(REACH_KEYS[spec.scope.reach]);
+  const thing = t(spec.scope.writes ? "palette.writes" : "palette.reads", { "dove": where });
+  return spec.scope.reversible ? thing : t("palette.irreversible", { "cosa": thing });
 }
 
 /// Gli argomenti JSON a partire da ciò che l'utente ha compilato.
@@ -175,10 +175,10 @@ export function argsFromForm(
 ): Record<string, unknown> {
   const args: Record<string, unknown> = {};
   for (const param of spec.params) {
-    const letto = leggiParametro(param.kind, raw[param.name]);
-    if (letto === null) continue;
-    if (letto.vuoto && !param.required) continue;
-    args[param.name] = letto.value;
+    const read = readParameter(param.kind, raw[param.name]);
+    if (read === null) continue;
+    if (read.empty && !param.required) continue;
+    args[param.name] = read.value;
   }
   return args;
 }
@@ -192,48 +192,48 @@ export function argsFromForm(
 /// `null` = non si è letto niente di sensato — un numero che non è un numero —
 /// e quello non si manda **mai**, nemmeno obbligatorio: un `NaN` al posto di un
 /// argomento mancante toglie al comando l'unico errore che dice cosa manca.
-function leggiParametro(
+function readParameter(
   kind: ParamKind,
   raw: string | boolean | undefined,
-): { value: unknown; vuoto: boolean } | null {
+): { value: unknown; empty: boolean } | null {
   switch (kind.kind) {
     case "bool": {
       // Una casella non spuntata **è** il vuoto di un booleano: nella palette
       // non c'è modo di dire «falso per scelta» diverso da «lasciata com'era»,
       // e inventarne uno vorrebbe dire scrivere un default che non è nostro.
-      const spuntata = raw === true || raw === "true";
-      return { value: spuntata, vuoto: !spuntata };
+      const checked = raw === true || raw === "true";
+      return { value: checked, empty: !checked };
     }
     case "number": {
-      const testo = String(raw ?? "").trim();
-      if (testo === "") return { value: 0, vuoto: true };
-      const n = Number(testo);
-      return Number.isNaN(n) ? null : { value: n, vuoto: false };
+      const text = String(raw ?? "").trim();
+      if (text === "") return { value: 0, empty: true };
+      const n = Number(text);
+      return Number.isNaN(n) ? null : { value: n, empty: false };
     }
     case "documents": {
       const ids = String(raw ?? "")
         .split(/[\n,]/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
-      return { value: ids, vuoto: ids.length === 0 };
+      return { value: ids, empty: ids.length === 0 };
     }
     case "numbers": {
-      const pezzi = String(raw ?? "")
+      const parts = String(raw ?? "")
         .split(/[\n,]/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
       // Un pezzo che non è un numero bocca tutto, come il numero solo di prima:
       // un elenco quasi giusto al posto di uno mancante toglie al comando
       // l'errore che dice cosa manca (§23.4).
-      if (pezzi.some((s) => Number.isNaN(Number(s)))) return null;
-      return { value: pezzi.map(Number), vuoto: pezzi.length === 0 };
+      if (parts.some((s) => Number.isNaN(Number(s)))) return null;
+      return { value: parts.map(Number), empty: parts.length === 0 };
     }
     default: {
       // Un testo obbligatorio si manda com'è, anche vuoto: `replace: ""`
       // cancella le occorrenze, ed è una richiesta legittima. È il comando a
       // sapere se il vuoto ha senso per lui.
       const s = String(raw ?? "");
-      return { value: s, vuoto: s === "" };
+      return { value: s, empty: s === "" };
     }
   }
 }
@@ -245,15 +245,15 @@ function leggiParametro(
 
 /// Il piano in righe leggibili: il riassunto, poi una riga per nota.
 export function planLines(plan: CommandPlan): string[] {
-  const modifiche = new Map<string, number>();
+  const changes = new Map<string, number>();
   for (const p of plan.edits) {
-    modifiche.set(p.doc, (modifiche.get(p.doc) ?? 0) + p.edit.edits.length);
+    changes.set(p.doc, (changes.get(p.doc) ?? 0) + p.edit.edits.length);
   }
   return plan.docs.map((doc) => {
-    const n = modifiche.get(doc);
-    const nome = pageName(doc);
-    if (n === undefined) return nome;
-    return t("palette.plan_edits", { doc: nome, count: n });
+    const n = changes.get(doc);
+    const name = pageName(doc);
+    if (n === undefined) return name;
+    return t("palette.plan_edits", { doc: name, count: n });
   });
 }
 
@@ -262,12 +262,12 @@ export function planLines(plan: CommandPlan): string[] {
 const OVERLAY_ID = "command-palette";
 
 /// Come si scioglie la trappola del fuoco della palette aperta.
-let sciogliPalette: (() => void) | null = null;
+let releasePalette: (() => void) | null = null;
 
 export function closeCommandPalette() {
   document.getElementById(OVERLAY_ID)?.remove();
-  sciogliPalette?.();
-  sciogliPalette = null;
+  releasePalette?.();
+  releasePalette = null;
 }
 
 /// Apre la palette. Tre passi al più: scegli, compila, approva.
@@ -284,7 +284,7 @@ export async function openCommandPalette(host: PaletteHost) {
     host.notify(t("palette.unavailable", { reason: errorText(e) }));
     return;
   }
-  scegli(allCommands(), apriOverlay(), host);
+  chooseSpecs(allCommands(), openOverlay(), host);
 }
 
 /// Fa partire **un** comando, saltando la scelta: è la via della scorciatoia.
@@ -299,10 +299,10 @@ export function startCommand(entry: CommandEntry, host: PaletteHost) {
     void entry.run();
     return;
   }
-  avvia(entry, apriOverlay(), host);
+  start(entry, openOverlay(), host);
 }
 
-function apriOverlay(): HTMLElement {
+function openOverlay(): HTMLElement {
   closeCommandPalette();
   const overlay = document.createElement("div");
   overlay.id = OVERLAY_ID;
@@ -313,7 +313,7 @@ function apriOverlay(): HTMLElement {
   // La palette è una modale a tutti gli effetti: copre lo schermo, chiede
   // qualcosa e se ne va. Dirlo è ciò che fa annunciare «finestra di dialogo» a
   // chi entra, invece di lasciarlo dentro un `div` sopra la pagina di prima —
-  // che continua a leggere e a essere raggiungibile col tab.
+  // che continua a leggere e a essere raggiungibile col linguetta.
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", t("palette.title"));
@@ -327,12 +327,12 @@ function apriOverlay(): HTMLElement {
   document.body.appendChild(overlay);
   // Dopo l'inserimento nel documento: `intrappolaFuoco` mette a fuoco il primo
   // elemento, e un elemento fuori dal documento non lo può prendere.
-  sciogliPalette = intrappolaFuoco(overlay, closeCommandPalette);
+  releasePalette = trapFocus(overlay, closeCommandPalette);
   return box;
 }
 
 /// Passo 1: l'elenco filtrabile.
-function scegli(specs: CommandEntry[], box: HTMLElement, host: PaletteHost) {
+function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost) {
   box.innerHTML = "";
   const input = document.createElement("input");
   input.className = "palette-input";
@@ -345,83 +345,83 @@ function scegli(specs: CommandEntry[], box: HTMLElement, host: PaletteHost) {
   list.setAttribute("role", "listbox");
   box.append(input, list);
 
-  let visibili = specs;
-  let scelto = 0;
+  let visibleItems = specs;
+  let selected = 0;
 
-  const disegna = () => {
-    visibili = filterCommands(specs, input.value);
-    scelto = Math.min(scelto, Math.max(visibili.length - 1, 0));
+  const render = () => {
+    visibleItems = filterCommands(specs, input.value);
+    selected = Math.min(selected, Math.max(visibleItems.length - 1, 0));
     list.innerHTML = "";
-    for (const [i, spec] of visibili.entries()) {
+    for (const [i, spec] of visibleItems.entries()) {
       const li = document.createElement("li");
       li.setAttribute("role", "option");
-      li.setAttribute("aria-selected", String(i === scelto));
+      li.setAttribute("aria-selected", String(i === selected));
 
-      const riga = document.createElement("div");
-      riga.className = "palette-row";
-      const titolo = document.createElement("span");
-      titolo.className = "palette-title";
-      titolo.textContent = spec.title;
-      riga.append(titolo);
+      const row = document.createElement("div");
+      row.className = "palette-row";
+      const title = document.createElement("span");
+      title.className = "palette-title";
+      title.textContent = spec.title;
+      row.append(title);
       // Il raggio lo dichiara chi sta dall'altra parte del confine: un comando
       // di shell non tocca il vault, e una riga «legge la sessione» sotto
       // «Mostra il grafo» sarebbe una promessa fatta a nome di nessuno.
       if (spec.spec) {
-        const raggio = document.createElement("span");
-        raggio.className = "palette-scope";
-        raggio.textContent = scopeLabel(spec.spec);
-        riga.append(raggio);
+        const radius = document.createElement("span");
+        radius.className = "palette-scope";
+        radius.textContent = scopeLabel(spec.spec);
+        row.append(radius);
       }
       // L'accordo **efficace**, non quello dichiarato: se l'utente l'ha
       // cambiato, la palette è il posto in cui lo scopre.
       if (spec.binding) {
         const kb = document.createElement("kbd");
         kb.textContent = spec.binding;
-        riga.appendChild(kb);
+        row.appendChild(kb);
       }
 
       const desc = document.createElement("div");
       desc.className = "palette-desc";
       desc.textContent = spec.description;
 
-      li.append(riga, desc);
-      li.addEventListener("click", () => avvia(spec, box, host));
+      li.append(row, desc);
+      li.addEventListener("click", () => start(spec, box, host));
       list.appendChild(li);
     }
-    if (visibili.length === 0) {
-      const vuoto = document.createElement("li");
-      vuoto.className = "palette-empty";
-      vuoto.textContent = t("palette.empty");
-      list.appendChild(vuoto);
+    if (visibleItems.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "palette-empty";
+      empty.textContent = t("palette.empty");
+      list.appendChild(empty);
     }
   };
 
   input.addEventListener("input", () => {
-    scelto = 0;
-    disegna();
+    selected = 0;
+    render();
   });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      const passo = e.key === "ArrowDown" ? 1 : -1;
-      scelto = (scelto + passo + visibili.length) % Math.max(visibili.length, 1);
-      disegna();
-      list.children[scelto]?.scrollIntoView({ block: "nearest" });
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      selected = (selected + step + visibleItems.length) % Math.max(visibleItems.length, 1);
+      render();
+      list.children[selected]?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
-      const spec = visibili[scelto];
-      if (spec) avvia(spec, box, host);
+      const spec = visibleItems[selected];
+      if (spec) start(spec, box, host);
     } else if (e.key === "Escape") {
       closeCommandPalette();
     }
   });
 
-  disegna();
+  render();
   input.focus();
 }
 
 /// Passo 2: i parametri, se il comando ne dichiara. Se non ne dichiara, si va
 /// dritti all'esecuzione — la palette non inventa domande che nessuno ha fatto.
-function avvia(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
+function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
   // Un comando di shell si fa e basta: non ha parametri da chiedere né un piano
   // da mostrare, perché non tocca il vault.
   if (entry.run) {
@@ -431,23 +431,23 @@ function avvia(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
   }
   const spec = entry.spec!;
   if (spec.params.length === 0) {
-    void esegui(spec, {}, box, host);
+    void execute(spec, {}, box, host);
     return;
   }
-  compila(spec, box, host);
+  renderForm(spec, box, host);
 }
 
-function compila(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
+function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
   box.innerHTML = "";
-  const titolo = document.createElement("div");
-  titolo.className = "palette-heading";
-  titolo.textContent = spec.title;
+  const title = document.createElement("div");
+  title.className = "palette-heading";
+  title.textContent = spec.title;
   const desc = document.createElement("div");
   desc.className = "palette-desc";
   desc.textContent = spec.description;
   const form = document.createElement("form");
   form.className = "palette-form";
-  box.append(titolo, desc, form);
+  box.append(title, desc, form);
 
   // I documenti del vault come suggerimenti dei campi che ne chiedono: la lista
   // ce l'ha già la shell, e un campo `document` senza di essa costringerebbe a
@@ -465,48 +465,48 @@ function compila(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
     form.appendChild(datalist);
   }
 
-  const campi = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
+  const fields = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
   for (const param of spec.params) {
     const label = document.createElement("label");
-    const nome = document.createElement("span");
-    nome.className = "palette-label";
-    nome.textContent = param.required ? t("palette.required", { title: param.title }) : param.title;
-    label.appendChild(nome);
-    const campo = campoPer(param, datalist.id);
-    campi.set(param.name, campo);
-    label.appendChild(campo);
+    const name = document.createElement("span");
+    name.className = "palette-label";
+    name.textContent = param.required ? t("palette.required", { title: param.title }) : param.title;
+    label.appendChild(name);
+    const field = fieldFor(param, datalist.id);
+    fields.set(param.name, field);
+    label.appendChild(field);
     if (param.description) {
-      const aiuto = document.createElement("span");
-      aiuto.className = "palette-help";
-      aiuto.textContent = param.description;
-      label.appendChild(aiuto);
+      const help = document.createElement("span");
+      help.className = "palette-help";
+      help.textContent = param.description;
+      label.appendChild(help);
     }
     form.appendChild(label);
   }
 
-  const azioni = document.createElement("div");
-  azioni.className = "palette-actions";
-  const conferma = document.createElement("button");
-  conferma.type = "submit";
-  conferma.className = "primary";
-  conferma.textContent = t(needsPlan(spec) ? "palette.preview" : "app.run");
-  const annulla = document.createElement("button");
-  annulla.type = "button";
-  annulla.textContent = t("app.cancel");
-  annulla.addEventListener("click", closeCommandPalette);
-  azioni.append(conferma, annulla);
-  form.appendChild(azioni);
+  const actions = document.createElement("div");
+  actions.className = "palette-actions";
+  const confirm = document.createElement("button");
+  confirm.type = "submit";
+  confirm.className = "primary";
+  confirm.textContent = t(needsPlan(spec) ? "palette.preview" : "app.run");
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = t("app.cancel");
+  cancel.addEventListener("click", closeCommandPalette);
+  actions.append(confirm, cancel);
+  form.appendChild(actions);
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const raw: Record<string, string | boolean> = {};
-    for (const [name, campo] of campi) {
+    for (const [name, field] of fields) {
       raw[name] =
-        campo instanceof HTMLInputElement && campo.type === "checkbox"
-          ? campo.checked
-          : campo.value;
+        field instanceof HTMLInputElement && field.type === "checkbox"
+          ? field.checked
+          : field.value;
     }
-    void esegui(spec, argsFromForm(spec, raw), box, host);
+    void execute(spec, argsFromForm(spec, raw), box, host);
   });
   form.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeCommandPalette();
@@ -515,7 +515,7 @@ function compila(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
   (form.querySelector("input, select, textarea") as HTMLElement | null)?.focus();
 }
 
-function campoPer(
+function fieldFor(
   param: ParamSpec,
   datalistId: string,
 ): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
@@ -565,7 +565,7 @@ function campoPer(
 }
 
 /// Passo 3: simula se serve, mostra il piano, e applica solo dopo un sì.
-async function esegui(
+async function execute(
   spec: CommandSpec,
   args: Record<string, unknown>,
   box: HTMLElement,
@@ -574,14 +574,14 @@ async function esegui(
   // **Flush-before-patch** (M3): un comando che scrive documenti riscrive
   // file — il kernel muove i wikilink entranti, la rinomina sposta la nota — e
   // un buffer rimasto sporco li ricoprirebbe col testo di prima al salvataggio
-  // successivo. È la stessa guardia di `nonInSalvo` dell'esploratore: si salva
+  // successivo. È la stessa guardia di `ensureSaved` dell'esploratore: si salva
   // prima di calcolare le patch, e se qualcosa non ce l'ha fatta l'operazione
   // si ferma qui, con la palette ancora aperta. I comandi di sola lettura non
   // toccano il disco e non devono pagare il giro.
   if (spec.scope.writes) {
-    const appesi = await host.flushPendingSave();
-    if (appesi.length > 0) {
-      host.notify(t("document.unsaved_blocks", { doc: appesi.join(", ") }), "guasto");
+    const pending = await host.flushPendingSave();
+    if (pending.length > 0) {
+      host.notify(t("document.unsaved_blocks", { doc: pending.join(", ") }), "guasto");
       return;
     }
   }
@@ -589,29 +589,29 @@ async function esegui(
     try {
       const outcome = await api.invokeCommand(spec.id, args, "dry_run");
       if (outcome.effect.kind === "plan") {
-        mostraPiano(spec, args, outcome.effect, box, host);
+        showLayer(spec, args, outcome.effect, box, host);
         return;
       }
       // Un comando che avrebbe dovuto dire cosa farebbe e ha fatto altro: si
       // consegna il suo esito e non si applica niente di nascosto.
-      await consegna(outcome, host);
+      await deliverOutcome(outcome, host);
       closeCommandPalette();
       return;
     } catch (e) {
-      fallito(e, box, host);
+      failed(e, box, host);
       return;
     }
   }
   try {
     const outcome = await api.invokeCommand(spec.id, args, "apply");
     closeCommandPalette();
-    await consegna(outcome, host);
+    await deliverOutcome(outcome, host);
   } catch (e) {
-    fallito(e, box, host);
+    failed(e, box, host);
   }
 }
 
-function mostraPiano(
+function showLayer(
   spec: CommandSpec,
   args: Record<string, unknown>,
   plan: CommandPlan,
@@ -619,48 +619,48 @@ function mostraPiano(
   host: PaletteHost,
 ) {
   box.innerHTML = "";
-  const titolo = document.createElement("div");
-  titolo.className = "palette-heading";
-  titolo.textContent = spec.title;
-  const riassunto = document.createElement("div");
-  riassunto.className = "palette-summary";
-  riassunto.textContent = plan.summary;
-  box.append(titolo, riassunto);
+  const title = document.createElement("div");
+  title.className = "palette-heading";
+  title.textContent = spec.title;
+  const summary = document.createElement("div");
+  summary.className = "palette-summary";
+  summary.textContent = plan.summary;
+  box.append(title, summary);
 
-  const lista = document.createElement("ul");
-  lista.className = "plain-list palette-plan";
-  for (const riga of planLines(plan)) {
+  const list = document.createElement("ul");
+  list.className = "plain-list palette-plan";
+  for (const row of planLines(plan)) {
     const li = document.createElement("li");
-    li.textContent = riga;
-    lista.appendChild(li);
+    li.textContent = row;
+    list.appendChild(li);
   }
-  box.appendChild(lista);
+  box.appendChild(list);
 
-  const azioni = document.createElement("div");
-  azioni.className = "palette-actions";
-  const applica = document.createElement("button");
-  applica.className = spec.scope.reversible ? "primary" : "danger";
-  applica.textContent = t("palette.apply");
-  applica.disabled = plan.docs.length === 0;
-  applica.addEventListener("click", async () => {
-    applica.disabled = true;
+  const actions = document.createElement("div");
+  actions.className = "palette-actions";
+  const apply = document.createElement("button");
+  apply.className = spec.scope.reversible ? "primary" : "danger";
+  apply.textContent = t("palette.apply");
+  apply.disabled = plan.docs.length === 0;
+  apply.addEventListener("click", async () => {
+    apply.disabled = true;
     try {
       const outcome = await api.invokeCommand(spec.id, args, "apply");
       closeCommandPalette();
-      await consegna(outcome, host);
+      await deliverOutcome(outcome, host);
     } catch (e) {
-      fallito(e, box, host);
+      failed(e, box, host);
     }
   });
-  const annulla = document.createElement("button");
-  annulla.textContent = t("app.cancel");
-  annulla.addEventListener("click", closeCommandPalette);
-  azioni.append(applica, annulla);
-  box.appendChild(azioni);
-  applica.focus();
+  const cancel = document.createElement("button");
+  cancel.textContent = t("app.cancel");
+  cancel.addEventListener("click", closeCommandPalette);
+  actions.append(apply, cancel);
+  box.appendChild(actions);
+  apply.focus();
 }
 
-async function consegna(outcome: CommandOutcome, host: PaletteHost) {
+async function deliverOutcome(outcome: CommandOutcome, host: PaletteHost) {
   // Un'operazione a metà si **vede** a metà (§23.14). Il `notify` lo dice già a
   // parole — «Note archiviate: 11 · Non spostate: …» — ma con lo stesso colore
   // di un successo pieno, e il colore è la cosa che si legge per prima: chi
@@ -676,11 +676,11 @@ async function consegna(outcome: CommandOutcome, host: PaletteHost) {
 /// Un comando che fallisce lo dice **dentro la palette**, che è dove l'utente
 /// sta guardando: un errore in console sarebbe un comando che non ha fatto
 /// niente in silenzio.
-function fallito(e: unknown, box: HTMLElement, host: PaletteHost) {
-  const messaggio = errorText(e);
-  const errore = box.querySelector(".palette-error") ?? document.createElement("div");
-  errore.className = "palette-error";
-  errore.textContent = messaggio;
-  box.appendChild(errore);
-  host.notify(messaggio);
+function failed(e: unknown, box: HTMLElement, host: PaletteHost) {
+  const message = errorText(e);
+  const error = box.querySelector(".palette-error") ?? document.createElement("div");
+  error.className = "palette-error";
+  error.textContent = message;
+  box.appendChild(error);
+  host.notify(message);
 }

@@ -83,14 +83,14 @@ impl SchemaVersion {
 
     /// Il numero nudo, per chi lo deve confrontare con qualcosa che questo tipo
     /// non conosce.
-    pub const fn numero(self) -> u32 {
+    pub const fn number(self) -> u32 {
         self.0
     }
 
     /// La versione dopo questa. Serve a chi presidia: scrivere un file di una
     /// versione che questa copia di Fub non conosce ancora è il modo di provare
     /// che il rifiuto in avanti c'è davvero.
-    pub const fn successiva(self) -> Self {
+    pub const fn next(self) -> Self {
         SchemaVersion(self.0 + 1)
     }
 }
@@ -108,7 +108,7 @@ mod tests {
     /// Su disco è un intero nudo, e questo è ciò che rende il tipo gratuito per
     /// i file che esistono già.
     #[test]
-    fn su_disco_resta_un_numero() {
+    fn on_disk_it_remains_a_number() {
         #[derive(Serialize, Deserialize, PartialEq, Debug)]
         struct Record {
             v: SchemaVersion,
@@ -116,16 +116,16 @@ mod tests {
         let r = Record {
             v: SchemaVersion::new(3),
         };
-        let json = serde_json::to_string(&r).expect("un record si serializza");
+        let json = serde_json::to_string(&r).expect("a record serializes");
         assert_eq!(json, r#"{"v":3}"#);
-        let riletto: Record = serde_json::from_str(r#"{"v":3}"#).expect("e si rilegge");
-        assert_eq!(riletto, r);
+        let reloaded: Record = serde_json::from_str(r#"{"v":3}"#).expect("and it reads back");
+        assert_eq!(reloaded, r);
     }
 
     #[test]
-    fn si_confronta_come_un_numero() {
+    fn it_compares_like_a_number() {
         assert!(SchemaVersion::new(1) < SchemaVersion::new(2));
-        assert_eq!(SchemaVersion::new(1).successiva(), SchemaVersion::new(2));
+        assert_eq!(SchemaVersion::new(1).next(), SchemaVersion::new(2));
         assert_eq!(format!("{}", SchemaVersion::new(5)), "5");
     }
 }

@@ -91,7 +91,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
-use crate::rules::cartelle;
+use crate::rules::folders;
 use crate::traits::{HostApi, IndexQuery, IndexResult, ReadApi, TransferRead};
 
 /// Quanto chiede per volta chi legge una sorgente intera.
@@ -396,8 +396,8 @@ impl ImportSource {
     /// far guardare a chi non gliene importa.
     pub fn text(&self, host: &dyn TransferRead) -> Result<String, PluginError> {
         let bytes = self.read_all(host)?;
-        String::from_utf8(bytes).map_err(|e| {
-            PluginError::BadArgs(format!("`{}` non è testo UTF-8: {e}", self.name).into())
+        String::from_utf8(bytes).map_err(|and| {
+            PluginError::BadArgs(format!("`{}` is not UTF-8 text: {and}", self.name).into())
         })
     }
 
@@ -489,7 +489,7 @@ impl ImportRequest {
         // **stessa** normalizzazione con cui poi si interroga la cartella:
         // importare in `/Importati/` e chiedere `Importati` devono parlare
         // della stessa cartella (difetto 0141).
-        let folder = cartelle::normalizzata(&self.folder);
+        let folder = folders::normalized(&self.folder);
         if folder.is_empty() {
             DocId::new(name)
         } else {
@@ -655,16 +655,16 @@ impl ExportSelection {
                 .list_documents(None)?
                 .items
                 .into_iter()
-                .filter(|doc| cartelle::contiene(folder, doc.as_str()))
+                .filter(|doc| folders::contains(folder, doc.as_str()))
                 .collect(),
             ExportSelection::Query(query) => match host.query_index(query.clone())? {
                 IndexResult::Backlinks(p) => p.items.into_iter().map(|b| b.source).collect(),
                 IndexResult::Documents(p) => p.items.into_iter().map(|d| d.doc).collect(),
                 IndexResult::Neighbors(p) => p.items.into_iter().map(|n| n.doc).collect(),
-                IndexResult::VaultHealth(p) => p.items.into_iter().map(|i| i.doc).collect(),
+                IndexResult::VaultHealth(p) => p.items.into_iter().map(|the| the.doc).collect(),
                 other => {
                     return Err(PluginError::BadArgs(
-                        format!("questa interrogazione non nomina documenti: {other:?}").into(),
+                        format!("this query does not name documents: {other:?}").into(),
                     ))
                 }
             },
@@ -909,8 +909,8 @@ mod tests {
         assert_eq!(
             escape.stem(),
             Some("config"),
-            "il nome di una sorgente viene da fuori: un importer che lo usasse \
-             com'è scriverebbe fuori dal vault"
+            "a source name comes from outside: an importer that used it as-is \
+             would write outside the vault"
         );
         assert_eq!(escape.extension().as_deref(), Some("md"));
 
@@ -919,7 +919,7 @@ mod tests {
         assert_eq!(
             windows.extension().as_deref(),
             Some("md"),
-            "l'estensione è minuscola: il dispatch non deve dipendere dal caso"
+            "extension is lowercased: dispatch must not depend on case"
         );
 
         assert_eq!(ImportSource::text_source("..", "x").stem(), None);
@@ -928,7 +928,7 @@ mod tests {
         assert_eq!(
             ImportSource::text_source(".gitignore", "x").stem(),
             Some(".gitignore"),
-            "un dotfile non ha estensione: il punto è parte del nome"
+            "a dotfile has no extension: the dot is part of the name"
         );
         assert_eq!(
             ImportSource::text_source(".gitignore", "x").extension(),
@@ -945,7 +945,7 @@ mod tests {
         assert_eq!(
             nested.destination("Nota.md"),
             DocId::new("Importati/2026/Nota.md"),
-            "gli slash di cortesia non diventano componenti vuote"
+            "courtesy slashes do not become empty components"
         );
     }
 
@@ -957,41 +957,41 @@ mod tests {
     /// mentre `within_folder` lo dava falso.
     #[test]
     fn a_folder_selection_takes_the_descendants_and_not_the_namesakes() {
-        assert!(cartelle::contiene("", "a.md"), "vuota = tutto il vault");
-        assert!(cartelle::contiene("x", "x/y/a.md"));
-        assert!(cartelle::contiene("x/y", "x/y/a.md"));
-        assert!(!cartelle::contiene("x", "x.md"));
+        assert!(folders::contains("", "a.md"), "empty = entire vault");
+        assert!(folders::contains("x", "x/y/a.md"));
+        assert!(folders::contains("x/y", "x/y/a.md"));
+        assert!(!folders::contains("x", "x.md"));
         assert!(
-            !cartelle::contiene("x", "xy/a.md"),
-            "`xy` non è dentro `x`: il confronto è per componente, non per prefisso"
+            !folders::contains("x", "xy/a.md"),
+            "`xy` is not inside `x`: comparison is by component, not prefix"
         );
-        assert!(cartelle::contiene("/x/", "x/a.md"));
+        assert!(folders::contains("/x/", "x/a.md"));
     }
 
     /// Un host che serve **una** sorgente e conta quanti byte per volta gli
     /// vengono chiesti, per poter dire se qualcuno ha letto tutto.
-    struct FintoHost {
+    struct FakeHost {
         bytes: Vec<u8>,
         /// Il tetto di una singola lettura: qui piccolo di proposito, perché è
         /// la condizione in cui un ciclo scritto male si ferma a metà.
-        tetto: usize,
+        ceiling: usize,
     }
 
-    impl TransferRead for FintoHost {
+    impl TransferRead for FakeHost {
         fn read_source(
             &self,
             _handle: SourceHandle,
             offset: u64,
             len: u32,
         ) -> Result<Vec<u8>, PluginError> {
-            let da = (offset.min(self.bytes.len() as u64)) as usize;
-            let quanti = (len as usize).min(self.tetto);
-            let a = da.saturating_add(quanti).min(self.bytes.len());
-            Ok(self.bytes[da..a].to_vec())
+            let from = (offset.min(self.bytes.len() as u64)) as usize;
+            let count = (len as usize).min(self.ceiling);
+            let a = from.saturating_add(count).min(self.bytes.len());
+            Ok(self.bytes[from..a].to_vec())
         }
     }
 
-    fn a_pezzi(bytes: &[u8], prologo: usize) -> ImportSource {
+    fn a_pieces(bytes: &[u8], prologo: usize) -> ImportSource {
         ImportSource {
             name: "grande.zip".to_string(),
             media_type: None,
@@ -1004,38 +1004,38 @@ mod tests {
     }
 
     #[test]
-    fn a_non_utf8_source_is_an_error_and_not_a_log_line() {
+    fn a_not_utf8_source_is_an_error_and_not_a_log_line() {
         let bin = ImportSource::from_bytes("immagine.png", vec![0xff, 0xfe, 0x00]);
-        let host = FintoHost {
+        let host = FakeHost {
             bytes: Vec::new(),
-            tetto: 8,
+            ceiling: 8,
         };
         assert!(matches!(bin.text(&host), Err(PluginError::BadArgs(_))));
     }
 
     #[test]
-    fn leggere_tutto_non_si_ferma_al_primo_pezzo_corto() {
-        let bytes: Vec<u8> = (0..1000u32).map(|i| (i % 251) as u8).collect();
-        let source = a_pezzi(&bytes, 16);
-        let host = FintoHost {
+    fn reading_all_does_not_stop_at_the_first_short_chunk() {
+        let bytes: Vec<u8> = (0..1000u32).map(|the| (the % 251) as u8).collect();
+        let source = a_pieces(&bytes, 16);
+        let host = FakeHost {
             bytes: bytes.clone(),
             // Sette byte per volta: se il ciclo si fidasse di una lettura sola,
             // o si fermasse sul conto di `len` invece che sul vuoto, qui
             // sparirebbero 993 byte in silenzio.
-            tetto: 7,
+            ceiling: 7,
         };
         assert_eq!(
             source.read_all(&host).unwrap(),
             bytes,
-            "una lettura può dare meno di quanto le si chiede, e leggere tutto \
-             vuol dire chiedere finché non risponde vuoto"
+            "a read can return less than asked for, and reading everything \
+             means asking until it responds empty"
         );
     }
 
     #[test]
-    fn il_dispatch_guarda_l_assaggio_e_non_ha_bisogno_di_un_host() {
+    fn dispatch_looks_at_the_prologue_and_needs_no_host() {
         let bytes = b"PK\x03\x04resto lunghissimo che nessuno deve leggere".to_vec();
-        let source = a_pezzi(&bytes, 4);
+        let source = a_pieces(&bytes, 4);
         // `can_handle` non riceve un host: se il prologo non fosse nel record,
         // qui non ci sarebbe niente da guardare e un dispatch potrebbe solo
         // fidarsi del nome — che è ciò che la 0006 dichiara insufficiente.
@@ -1043,21 +1043,21 @@ mod tests {
         assert_eq!(
             source.len(),
             bytes.len() as u64,
-            "la lunghezza è quella vera"
+            "length is the real one"
         );
         assert!(
             source.bytes().is_none(),
-            "i byte non sono nel record: chiederli senza un host deve dire di no \
-             invece di restituire l'assaggio come se fosse tutto"
+            "bytes are not in the record: asking for them without a host must \
+             say no rather than returning the prologue as if it were everything"
         );
     }
 
     #[test]
-    fn una_sorgente_in_memoria_risponde_alle_stesse_domande() {
+    fn an_in_memory_source_answers_the_same_questions() {
         let source = ImportSource::text_source("nota.md", "# Ciao\n");
-        let host = FintoHost {
+        let host = FakeHost {
             bytes: Vec::new(),
-            tetto: 1,
+            ceiling: 1,
         };
         assert_eq!(source.prologue(), b"# Ciao\n");
         assert_eq!(source.len(), 7);
@@ -1065,21 +1065,22 @@ mod tests {
         assert_eq!(
             source.text(&host).unwrap(),
             "# Ciao\n",
-            "chi ha i byte in mano non deve passare dall'host per leggerli: \
-             l'host qui non ha niente da dare, e la lettura riesce lo stesso"
+            "one who has the bytes in hand must not go through the host to \
+             read them: the host here has nothing to give, and the read \
+             succeeds anyway"
         );
     }
 
     #[test]
-    fn una_ricevuta_e_i_byte_dicono_la_stessa_lunghezza() {
-        let in_memoria = ExportArtifact::bytes("a.md", "text/markdown", b"12345".to_vec());
-        let versato = ExportArtifact {
+    fn a_receipt_and_bytes_agree_on_length() {
+        let in_memory = ExportArtifact::bytes("a.md", "text/markdown", b"12345".to_vec());
+        let delivered = ExportArtifact {
             path: "a.md".into(),
             media_type: "text/markdown".into(),
             content: ArtifactContent::Delivered(5),
         };
-        assert_eq!(in_memoria.len(), versato.len());
-        assert!(!in_memoria.is_empty() && !versato.is_empty());
+        assert_eq!(in_memory.len(), delivered.len());
+        assert!(!in_memory.is_empty() && !delivered.is_empty());
     }
 
     #[test]
@@ -1098,7 +1099,7 @@ mod tests {
             },
             ImportedDocument {
                 doc: DocId::new("c.md"),
-                outcome: ImportOutcome::Failed("illeggibile".into()),
+                outcome: ImportOutcome::Failed("unreadable".into()),
                 entry: None,
             },
             ImportedDocument {
@@ -1110,8 +1111,8 @@ mod tests {
         assert_eq!(
             report.changed(),
             vec![&DocId::new("a.md"), &DocId::new("d.md")],
-            "saltato e fallito non hanno toccato il vault: annullarli sarebbe \
-             cancellare roba di qualcun altro"
+            "skipped and failed did not touch the vault: undoing them would \
+             delete someone else's work"
         );
     }
 }

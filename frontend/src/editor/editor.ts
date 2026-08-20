@@ -1,6 +1,6 @@
 // Editor markdown basato su CodeMirror 6, con l'esperienza in-editor di
 // Obsidian (todo.md §6): comandi e scorciatoie (`editor-commands.ts`),
-// autocompletamento di wikilink e tag (`completions.ts`), live preview dal
+// autocompletamento di wikilink e tag (`completions.ts`), vivi preview dal
 // tree Lezer (`livepreview.ts`). I tre moduli sono autonomi e ricevono i
 // collegamenti col mondo (aprire una nota, cercare un tag, le sorgenti dei
 // completamenti) da chi crea l'editor: qui si compone, non si decide.
@@ -12,15 +12,15 @@ import { Compartment, EditorState, Transaction } from "@codemirror/state";
 // misura ha corretto la frase: la copia oggi è **una** — `npm ls
 // @codemirror/state` risponde `6.7.1` e undici `deduped`, e nel lock non c'è
 // nessun `node_modules/x/node_modules/y`. Due copie sarebbero due insiemi di
-// identità per i `Facet`, cioè estensioni che la configurazione non vede, e la
-// rottura sarebbe muta: nessun errore di tipo, nessuna eccezione, solo una live
+// identità per i `Facet`, cioè extensions che la configurazione non vede, e la
+// rottura sarebbe muta: nessun errore di tipo, nessuna eccezione, solo una vivi
 // preview che non fa niente. A tenerle una è `.github/scripts/check-npm-copie.mjs`,
 // perché quella promessa la mantiene l'albero delle dipendenze e non questa riga.
 import { basicSetup } from "codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";
-import { temaEditor } from "./theme";
-import { temaCorrente, type Tema } from "../theme/theme";
+import { editorTheme } from "./theme";
+import { currentTheme as getCurrentTheme, type Theme } from "../theme/theme";
 import { byteToCharIndex, charToByteIndices } from "../rules/offsets";
 import { editingExtensions } from "./editor-commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
@@ -108,10 +108,10 @@ export interface Editor {
   /// stato staccato. Ogni divisione chiusa ne lasciava dietro uno, e il modo
   /// per accorgersene era usare l'app per un pomeriggio.
   ///
-  /// Non è la stessa cosa di una `Vita` (`ui/vita.ts`), ed è la ragione per cui
+  /// Non è la stessa cosa di una `Lifetime` (`ui/lifetime.ts`), ed è la ragione per cui
   /// è un metodo qui: ciò che si perde non è un ascoltatore che questo file ha
   /// registrato, è un oggetto di una libreria che sa smontarsi da sé. Chi ha
-  /// una `Vita` lo affida a lei con `vita.aggiungi(editor.destroy)`.
+  /// una `Lifetime` lo affida a lei con `vita.aggiungi(editor.destroy)`.
   destroy(): void;
   /// Passa all'altra luce (§12.4).
   ///
@@ -119,7 +119,7 @@ export interface Editor {
   /// solo, senza che l'editor lo sappia (`editor/theme.ts`). Passa di qui la
   /// sola cosa che il CSS non può dire a CodeMirror: in che luce si trova, che
   /// è un booleano nella sua configurazione.
-  setTheme(tema: Tema): void;
+  setTheme(theme: Theme): void;
 }
 
 export interface EditorOptions {
@@ -129,10 +129,10 @@ export interface EditorOptions {
   /// Invocato quando cambia la selezione (cursore compreso), anche senza
   /// modifiche al testo: è ciò che la shell pubblica come contesto di sessione.
   onSelectionChange(): void;
-  /// Mod-click su un wikilink nella live preview: `page` è la pagina nuda,
-  /// senza alias né `#heading` (stringa vuota per i link interni `[[#…]]`).
+  /// Mod-click su un wikilink nella vivi preview: `page` è la pagina nuda,
+  /// senza alias né `#heading` (stringa vuota per i legame interni `[[#…]]`).
   onOpenWikilink(page: string, heading: string | null, block: string | null): void;
-  /// Click su un `#tag` nella live preview: `tag` è il nome senza `#`.
+  /// Click su un `#tag` nella vivi preview: `tag` è il nome senza `#`.
   onSearchTag(tag: string): void;
   /// Da dove arrivano i completamenti di `[[` e `#`: la shell passa l'IPC,
   /// i test passano liste finte.
@@ -153,7 +153,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   // di avere il vecchio sotto mano. Tenerlo qui è anche ciò che rende la
   // ricostruzione una funzione di due valori invece che di uno stato.
   let previewOn = true;
-  const livePreviewCollegata = () =>
+  const livePreviewExtension = () =>
     livePreview({
       openWikilink: opts.onOpenWikilink,
       searchTag: opts.onSearchTag,
@@ -165,8 +165,8 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   // pagina sta già portando — `theme/theme.ts` lo scrive sulla radice prima che
   // questa funzione venga chiamata — e non con un default cablato, che sarebbe
   // un lampo di scuro a ogni nota aperta in tema chiaro.
-  const tema = new Compartment();
-  let temaAttuale: Tema = temaCorrente();
+  const theme = new Compartment();
+  let currentTheme: Theme = getCurrentTheme();
 
   /// Il documento **nella forma in cui sta sul disco**.
   ///
@@ -175,17 +175,17 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   /// ricompone sempre a LF — la forma dichiarata la rende `sliceString`, ed è
   /// `state.lineBreak` che la sa. Chi esce di qui passa da questa riga: il
   /// salvataggio, la bozza, il riquadro gemello, la selezione (difetto 0207).
-  const reso = (state: EditorState = view.state) =>
+  const rendered = (state: EditorState = view.state) =>
     state.doc.sliceString(0, state.doc.length, state.lineBreak);
 
   /// La stessa posizione, contata sul testo reso: sotto CRLF ogni a capo che
   /// sta prima vale un carattere in più, e sono tanti quante le righe finite.
-  const inReso = (pos: number) =>
+  const renderedOffset = (pos: number) =>
     view.state.lineBreak === "\n" ? pos : pos + view.state.doc.lineAt(pos).number - 1;
 
   const listener = EditorView.updateListener.of((u) => {
     if (u.docChanged && !programmatic) {
-      opts.onChange(reso(u.state));
+      opts.onChange(rendered(u.state));
     }
     // Anche una modifica sposta il cursore: chi ascolta vuole saperlo in
     // entrambi i casi, e un `setDoc` a livello di programma rimappa la
@@ -211,7 +211,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   /// preservare, e prendere il CRLF come separatore vorrebbe dire che i suoi
   /// `\n` solitari smettono di essere righe: lì la normalizzazione di prima è
   /// la risposta meno peggio, e resta.
-  const aCapoDi = (text: string): string | null =>
+  const lineSeparator = (text: string): string | null =>
     text.includes("\r\n") && !/(^|[^\r])\n/.test(text) ? "\r\n" : null;
 
   // La configurazione sta in una funzione perché serve **due volte**: alla
@@ -219,10 +219,10 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   // dietro la cronologia di un altro documento (§13.3). I due compartment
   // partono da ciò che vale adesso, o cambiare nota rimetterebbe la modalità
   // Sorgente in Live Preview e riaccenderebbe il tema di sistema.
-  const estensioni = (aCapo: string | null = null) => [
+  const extensions = (convertLineBreaks: string | null = null) => [
     // Prima di `basicSetup` e di tutto il resto perché non è un'estensione fra
     // le altre: è come il documento si legge.
-    ...(aCapo === null ? [] : [EditorState.lineSeparator.of(aCapo)]),
+    ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
     // Le scorciatoie di editing sono già in `Prec.high`: l'ordine rispetto
     // a `basicSetup` non conta, ma il popup dei completamenti (precedenza
     // massima) vince comunque su Enter/frecce quando è aperto.
@@ -230,16 +230,16 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     basicSetup,
     keymap.of([indentWithTab]),
     // La base GFM non è un dettaglio: senza, il parser non produce i nodi
-    // di `~~barrato~~`/tabelle/todo e la live preview degrada in silenzio.
+    // di `~~barrato~~`/tabelle/todo e la vivi preview degrada in silenzio.
     markdown({ base: markdownLanguage }),
-    tema.of(temaEditor(temaAttuale)),
+    theme.of(editorTheme(currentTheme)),
     EditorView.lineWrapping,
-    preview.of(previewOn ? livePreviewCollegata() : []),
+    preview.of(previewOn ? livePreviewExtension() : []),
     markdownCompletions(opts.completions),
     listener,
   ];
 
-  const view = new EditorView({ parent, state: EditorState.create({ extensions: estensioni() }) });
+  const view = new EditorView({ parent, state: EditorState.create({ extensions: extensions() }) });
 
   return {
     setDoc(text: string) {
@@ -249,7 +249,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       // perché ciò che si sta facendo è appunto cominciare un altro documento.
       programmatic = true;
       view.setState(
-        EditorState.create({ doc: text, extensions: estensioni(aCapoDi(text)) }),
+        EditorState.create({ doc: text, extensions: extensions(lineSeparator(text)) }),
       );
       programmatic = false;
       // `setState` non passa dai listener di aggiornamento (non è una
@@ -270,59 +270,59 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       // sotto un separatore CRLF un `\n` solitario non è un a capo, è un
       // carattere in mezzo a una riga.
       const sep = view.state.lineBreak;
-      const piatto = sep === "\n" ? text : text.split(sep).join("\n");
-      const aCapo = (t: string) => (sep === "\n" ? t : t.split("\n").join(sep));
-      const attuale = view.state.doc.toString();
-      if (attuale === piatto) return;
+      const normalizedText = sep === "\n" ? text : text.split(sep).join("\n");
+      const convertLineBreaks = (t: string) => (sep === "\n" ? t : t.split("\n").join(sep));
+      const current = view.state.doc.toString();
+      if (current === normalizedText) return;
       // La modifica minima: il prefisso e il suffisso in comune non si toccano,
       // e ciò che resta in mezzo è l'unica cosa che è davvero cambiata. Un
       // `changes` che rimpiazza tutto il documento sarebbe corretto e
       // sposterebbe il cursore in fondo a ogni battuta dell'altro riquadro.
-      let testa = 0;
-      const minimo = Math.min(attuale.length, piatto.length);
-      while (testa < minimo && attuale[testa] === text[testa]) testa++;
-      let coda = 0;
+      let prefixLength = 0;
+      const minimum = Math.min(current.length, normalizedText.length);
+      while (prefixLength < minimum && current[prefixLength] === text[prefixLength]) prefixLength++;
+      let queue = 0;
       while (
-        coda < minimo - testa &&
-        attuale[attuale.length - 1 - coda] === piatto[piatto.length - 1 - coda]
+        queue < minimum - prefixLength &&
+        current[current.length - 1 - queue] === normalizedText[normalizedText.length - 1 - queue]
       ) {
-        coda++;
+        queue++;
       }
       programmatic = true;
       view.dispatch({
         changes: {
-          from: testa,
-          to: attuale.length - coda,
-          insert: aCapo(piatto.slice(testa, piatto.length - coda)),
+          from: prefixLength,
+          to: current.length - queue,
+          insert: convertLineBreaks(normalizedText.slice(prefixLength, normalizedText.length - queue)),
         },
         annotations: Transaction.addToHistory.of(false),
       });
       programmatic = false;
     },
-    getDoc: () => reso(),
+    getDoc: () => rendered(),
     focus: () => view.focus(),
     selections() {
-      // Il testo reso, e le estremità contate su di lui: questi offset li usa
+      // Il testo reso, e le endpointstà contate su di lui: questi offset li usa
       // chi taglia i **byte del file**, e in un file CRLF una posizione di
       // CodeMirror è indietro di una riga per ogni riga che la precede.
-      const text = reso();
+      const text = rendered();
       const { ranges, mainIndex } = view.state.selection;
-      const estremi = ranges.map((r) => [inReso(r.from), inReso(r.to)] as const);
-      // Una conversione sola per tutte le estremità: `charToByteIndex` è una
+      const endpoints = ranges.map((r) => [renderedOffset(r.from), renderedOffset(r.to)] as const);
+      // Una conversione sola per tutte le endpointstà: `charToByteIndex` è una
       // scansione dall'inizio, e questa funzione gira a ogni battuta di
       // tastiera. Vedi `charToByteIndices`.
       const byte = charToByteIndices(
         text,
-        estremi.flatMap(([da, a]) => [da, a]),
+        endpoints.flatMap(([from, a]) => [from, a]),
       );
-      const tutte = estremi.map(([da, a], i) => ({
+      const selections = endpoints.map(([from, a], i) => ({
         start: byte[2 * i],
         end: byte[2 * i + 1],
-        text: text.slice(da, a),
+        text: text.slice(from, a),
       }));
       return {
-        primary: tutte[mainIndex],
-        secondary: tutte.filter((_, i) => i !== mainIndex),
+        primary: selections[mainIndex],
+        secondary: selections.filter((_, i) => i !== mainIndex),
       };
     },
     destroy() {
@@ -330,11 +330,11 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     },
     setLivePreview(on: boolean) {
       previewOn = on;
-      view.dispatch({ effects: preview.reconfigure(on ? livePreviewCollegata() : []) });
+      view.dispatch({ effects: preview.reconfigure(on ? livePreviewExtension() : []) });
     },
-    setTheme(next: Tema) {
-      temaAttuale = next;
-      view.dispatch({ effects: tema.reconfigure(temaEditor(next)) });
+    setTheme(next: Theme) {
+      currentTheme = next;
+      view.dispatch({ effects: theme.reconfigure(editorTheme(next)) });
     },
     revealByteOffset(byteOffset: number) {
       const pos = Math.min(

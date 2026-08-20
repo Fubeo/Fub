@@ -2,19 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { state } from "../state/store";
 import {
-  accordiRifiutati,
+  rejectedChords,
   allCommands,
-  avanza,
-  conflitti,
+  advance,
+  conflicts,
   findByChord,
-  frasedeiConflitti,
+  conflictMessage,
   commandOfKeybindingKey,
   keybindingKey,
-  leggiAccordi,
-  mappaAccordi,
+  parseChords,
+  chordMap,
   matchesBinding,
-  normalizza,
-  prefissiOscurati,
+  normalize,
+  shadowedPrefixes,
   registerShellCommand,
   resetShellCommands,
   loadKeyOverrides,
@@ -24,11 +24,11 @@ import {
 /// L'unica cosa che questo modulo chiede al backend è l'elenco delle
 /// impostazioni, e la chiede in un punto solo (`loadKeyOverrides`): il doppio è
 /// una funzione, non un host finto, perché di superficie ce n'è una.
-const dalBackend = vi.fn(async (): Promise<SettingEntry[]> => []);
-vi.mock("../host/query", () => ({ impostazioni: () => dalBackend() }));
+const fromBackend = vi.fn(async (): Promise<SettingEntry[]> => []);
+vi.mock("../host/query", () => ({ settings: () => fromBackend() }));
 
 /// Una riga di impostazione che è un accordo, come la manda il backend.
-function accordo(key: string, value: string): SettingEntry {
+function settingEntry(key: string, value: string): SettingEntry {
   return {
     spec: {
       key,
@@ -56,7 +56,7 @@ function spec(over: Partial<CommandSpec> = {}): CommandSpec {
   };
 }
 
-function voce(over: Partial<CommandEntry> = {}): CommandEntry {
+function entry(over: Partial<CommandEntry> = {}): CommandEntry {
   return {
     id: "a",
     title: "A",
@@ -83,7 +83,7 @@ beforeEach(async () => {
   state.commandSpecs = [];
   // Gli accordi riconfigurati vivono in una mappa di modulo: un banco che non
   // la svuota erediterebbe quelli del banco precedente.
-  dalBackend.mockResolvedValue([]);
+  fromBackend.mockResolvedValue([]);
   await loadKeyOverrides();
 });
 
@@ -113,7 +113,7 @@ describe("la chiave che tiene una scorciatoia", () => {
   });
 
   it("ciò che non è una scorciatoia non le somiglia", () => {
-    for (const chiave of [
+    for (const key of [
       "appearance.theme",
       "locale.language",
       "com.acme:permissions.network",
@@ -125,7 +125,7 @@ describe("la chiave che tiene una scorciatoia", () => {
       "com.acme:keys.",
       "com.acme:key.tasks.add",
     ]) {
-      expect(commandOfKeybindingKey(chiave)).toBeNull();
+      expect(commandOfKeybindingKey(key)).toBeNull();
     }
   });
 });
@@ -139,7 +139,7 @@ describe("l'accordo che vale adesso", () => {
   });
 
   it("un accordo azzerato è un comando senza scorciatoia, non uno che risponde a tutto", () => {
-    const m = mappaAccordi([
+    const m = chordMap([
       {
         spec: {
           key: "keys.note.create",
@@ -176,37 +176,37 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
     // Prima: quello dichiarato dalla tabella generata.
     expect(allCommands()[0]!.binding).toBe("Mod-Shift-g");
 
-    dalBackend.mockResolvedValue([accordo("keys.shell.graph", "Mod-Alt-g")]);
+    fromBackend.mockResolvedValue([settingEntry("keys.shell.graph", "Mod-Alt-g")]);
     await loadKeyOverrides();
 
-    const voce = allCommands()[0]!;
-    expect(voce.binding).toBe("Mod-Alt-g");
+    const entry = allCommands()[0]!;
+    expect(entry.binding).toBe("Mod-Alt-g");
     // E `declared` continua a dire quello di fabbrica, che è ciò da cui il
     // pannello sa scrivere «questo l'hai cambiato tu».
-    expect(voce.declared).toBe("Mod-Shift-g");
+    expect(entry.declared).toBe("Mod-Shift-g");
   });
 
   it("la combinazione nuova è quella che la tastiera trova", async () => {
-    let fatto = false;
+    let done = false;
     registerShellCommand({
       id: "shell.graph",
       title: "commands.graph",
       description: "commands.graph.desc",
       run: () => {
-        fatto = true;
+        done = true;
       },
     });
-    dalBackend.mockResolvedValue([accordo("keys.shell.graph", "Mod-Alt-g")]);
+    fromBackend.mockResolvedValue([settingEntry("keys.shell.graph", "Mod-Alt-g")]);
     await loadKeyOverrides();
 
     // La vecchia non risponde più, e la nuova sì: senza la seconda metà, una
     // scorciatoia «riconfigurata» che risponde a tutte e due sarebbe un
     // conflitto che nessuno ha dichiarato.
     expect(findByChord(allCommands(), chord({ key: "g", ctrlKey: true, shiftKey: true }))).toBeUndefined();
-    const trovato = findByChord(allCommands(), chord({ key: "g", ctrlKey: true, altKey: true }));
-    expect(trovato?.id).toBe("shell.graph");
-    trovato!.run!();
-    expect(fatto).toBe(true);
+    const found = findByChord(allCommands(), chord({ key: "g", ctrlKey: true, altKey: true }));
+    expect(found?.id).toBe("shell.graph");
+    found!.run!();
+    expect(done).toBe(true);
   });
 
   it("un accordo azzerato lascia il comando senza scorciatoia", async () => {
@@ -216,7 +216,7 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
       description: "commands.graph.desc",
       run: () => {},
     });
-    dalBackend.mockResolvedValue([accordo("keys.shell.graph", "")]);
+    fromBackend.mockResolvedValue([settingEntry("keys.shell.graph", "")]);
     await loadKeyOverrides();
     expect(allCommands()[0]!.binding).toBeNull();
   });
@@ -225,13 +225,13 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
 describe("i due registri sono uno solo", () => {
   it("un comando di shell si esegue di qua, uno del kernel passa dalla spec", () => {
     state.commandSpecs = [spec({ id: "note.create", keybinding: "Mod-n" })];
-    let fatto = false;
+    let done = false;
     registerShellCommand({
       id: "shell.graph",
       title: "commands.graph",
       description: "commands.graph.desc",
       run: () => {
-        fatto = true;
+        done = true;
       },
     });
     const entries = allCommands();
@@ -239,7 +239,7 @@ describe("i due registri sono uno solo", () => {
     expect(entries[0]!.spec).not.toBeNull();
     expect(entries[0]!.run).toBeNull();
     entries[1]!.run!();
-    expect(fatto).toBe(true);
+    expect(done).toBe(true);
   });
 
   it("dichiarare due volte lo stesso id sostituisce, non affianca", () => {
@@ -261,7 +261,7 @@ describe("i due registri sono uno solo", () => {
       });
     }
     expect(allCommands()).toHaveLength(1);
-    expect(conflitti(allCommands())).toHaveLength(0);
+    expect(conflicts(allCommands())).toHaveLength(0);
   });
 });
 
@@ -280,7 +280,7 @@ describe("riconoscere un accordo", () => {
   });
 
   it("trova il comando, da qualunque dei due registri venga", () => {
-    const entries = [voce(), voce({ id: "b", binding: "Mod-Shift-f" })];
+    const entries = [entry(), entry({ id: "b", binding: "Mod-Shift-f" })];
     expect(findByChord(entries, chord({ ctrlKey: true, shiftKey: true }))?.id).toBe("b");
     expect(findByChord(entries, chord({ ctrlKey: true }))).toBeUndefined();
   });
@@ -288,109 +288,117 @@ describe("riconoscere un accordo", () => {
 
 describe("la sintassi di una scorciatoia", () => {
   it("un accordo solo, o più d'uno separati da uno spazio", () => {
-    expect(leggiAccordi("Mod-Shift-f")).toHaveLength(1);
-    expect(leggiAccordi("Mod-k d")).toHaveLength(2);
-    expect(leggiAccordi("Mod-k Mod-s")).toHaveLength(2);
+    expect(parseChords("Mod-Shift-f")).toHaveLength(1);
+    expect(parseChords("Mod-k d")).toHaveLength(2);
+    expect(parseChords("Mod-k Mod-s")).toHaveLength(2);
     // Gli spazi di troppo non sono un errore di sintassi: chi scrive
     // un'impostazione a mano ne lascia uno in fondo, e rifiutare per quello
     // sarebbe rifiutare una scorciatoia giusta.
-    expect(leggiAccordi("  Mod-k   d  ")).toHaveLength(2);
+    expect(parseChords("  Mod-k   d  ")).toHaveLength(2);
   });
 
   it("il primo tasto porta un modificatore, il secondo no", () => {
     // La regola in due metà: il primo perché ruberebbe una lettera a chi
     // scrive, il secondo perché il primo ha aperto una modalità che dura quanto
     // l'attesa — dentro quella finestra la `d` non è di nessuno.
-    expect(leggiAccordi("g d")).toBeNull();
-    expect(leggiAccordi("f")).toBeNull();
-    expect(leggiAccordi("Mod-k d")).not.toBeNull();
+    expect(parseChords("g d")).toBeNull();
+    expect(parseChords("f")).toBeNull();
+    expect(parseChords("Mod-k d")).not.toBeNull();
   });
 
   it("un modificatore che non esiste è un rifiuto, non un tasto nudo", () => {
     // Prima di questa voce `Ctrl-k` passava e valeva `k`: cioè un tasto che
     // risponde mentre si scrive, dichiarato da chi credeva di aver scritto
     // Ctrl. Il silenzio era la parte peggiore.
-    expect(leggiAccordi("Ctrl-k")).toBeNull();
-    expect(leggiAccordi("Cmd-k")).toBeNull();
-    expect(leggiAccordi("Mod-Mod-k")).toBeNull();
-    expect(leggiAccordi("Mod-")).toBeNull();
-    expect(leggiAccordi("")).toBeNull();
-    expect(leggiAccordi(null)).toBeNull();
+    expect(parseChords("Ctrl-k")).toBeNull();
+    expect(parseChords("Cmd-k")).toBeNull();
+    expect(parseChords("Mod-Mod-k")).toBeNull();
+    expect(parseChords("Mod-")).toBeNull();
+    expect(parseChords("")).toBeNull();
+    expect(parseChords(null)).toBeNull();
   });
 
   it("la forma canonica non guarda l'ordine dei modificatori, dentro nessun accordo", () => {
-    expect(normalizza("Shift-Mod-g")).toBe(normalizza("Mod-Shift-g"));
-    expect(normalizza("Mod-k Shift-Alt-d")).toBe(normalizza("Mod-k Alt-Shift-d"));
+    expect(normalize("Shift-Mod-g")).toBe(normalize("Mod-Shift-g"));
+    expect(normalize("Mod-k Shift-Alt-d")).toBe(normalize("Mod-k Alt-Shift-d"));
     // Ma l'ordine degli **accordi** è il gesto: due tasti invertiti sono due
     // gesti diversi, non lo stesso scritto in due modi.
-    expect(normalizza("Mod-k Mod-s")).not.toBe(normalizza("Mod-s Mod-k"));
+    expect(normalize("Mod-k Mod-s")).not.toBe(normalize("Mod-s Mod-k"));
   });
 
   it("una sequenza non corrisponde mai a un tasto solo", () => {
     // `matchesBinding` risponde a chi ha in mano un tasto e nessuno stato: per
     // definizione non può riconoscere un gesto che ne vuole due.
     expect(matchesBinding(chord({ key: "k", ctrlKey: true }), "Mod-k d")).toBe(false);
-    expect(findByChord([voce({ binding: "Mod-k d" })], chord({ key: "k", ctrlKey: true }))).toBeUndefined();
+    expect(findByChord([entry({ binding: "Mod-k d" })], chord({ key: "k", ctrlKey: true }))).toBeUndefined();
   });
 });
 
 describe("premere una sequenza", () => {
   const entries = [
-    voce({ id: "seq", title: "Sequenza", binding: "Mod-k d" }),
-    voce({ id: "solo", title: "Solo", binding: "Mod-j" }),
+    entry({ id: "seq", title: "Sequenza", binding: "Mod-k d" }),
+    entry({ id: "solo", title: "Solo", binding: "Mod-j" }),
   ];
   const modK = chord({ key: "k", ctrlKey: true });
 
   it("il primo tasto apre l'attesa e non esegue niente", () => {
-    const esito = avanza(entries, null, modK);
-    expect(esito.tipo).toBe("attende");
+    const result = advance(entries, null, modK);
+    expect(result.type).toBe("attende");
     // L'etichetta è ciò che si legge nella barra di stato, e si legge come si
     // scriverebbe: `Mod-K`, non `mod-k`.
-    expect(esito.tipo === "attende" && esito.attesa.etichetta).toBe("Mod-K");
+    expect(result.type === "attende" && result.waiting.label).toBe("Mod-K");
   });
 
   it("il secondo tasto esegue, ed è nudo", () => {
-    const attesa = avanza(entries, null, modK);
-    const esito = avanza(entries, attesa.tipo === "attende" ? attesa.attesa : null, chord({ key: "d" }));
-    expect(esito.tipo === "esegue" && esito.entry.id).toBe("seq");
+    const waiting = advance(entries, null, modK);
+    const result = advance(entries, waiting.type === "attende" ? waiting.waiting : null, chord({ key: "d" }));
+    expect(result.type === "esegue" && result.entry.id).toBe("seq");
   });
 
   it("il tasto sbagliato annulla, e non arriva alla nota", () => {
     // `annulla` e non `passa`: chi ha premuto `Mod-k` ha già lasciato il gesto
     // di scrivere, e vedersi comparire una `x` è l'unico esito imprevedibile.
-    const attesa = avanza(entries, null, modK);
-    const dentro = attesa.tipo === "attende" ? attesa.attesa : null;
-    expect(avanza(entries, dentro, chord({ key: "x" })).tipo).toBe("annulla");
-    expect(avanza(entries, dentro, chord({ key: "Escape" })).tipo).toBe("annulla");
+    const waiting = advance(entries, null, modK);
+    const inside = waiting.type === "attende" ? waiting.waiting : null;
+    expect(advance(entries, inside, chord({ key: "x" })).type).toBe("annulla");
+    expect(advance(entries, inside, chord({ key: "Escape" })).type).toBe("annulla");
     // Fuori da un'attesa, invece, quegli stessi tasti sono testo di qualcuno.
-    expect(avanza(entries, null, chord({ key: "x" })).tipo).toBe("passa");
-    expect(avanza(entries, null, chord({ key: "Escape" })).tipo).toBe("passa");
+    expect(advance(entries, null, chord({ key: "x" })).type).toBe("passa");
+    expect(advance(entries, null, chord({ key: "Escape" })).type).toBe("passa");
   });
 
   it("tenere `Shift` per fare una maiuscola non annulla l'attesa", () => {
     // Il caso che rompe una sequenza `Mod-k D` senza che nessuno capisca
     // perché: il `keydown` del modificatore arriva **prima** di quello della
     // lettera, e conterebbe come «un tasto che non continua niente».
-    const attesa = avanza(entries, null, modK);
-    const dentro = attesa.tipo === "attende" ? attesa.attesa : null;
+    const waiting = advance(entries, null, modK);
+    const inside = waiting.type === "attende" ? waiting.waiting : null;
     for (const key of ["Shift", "Control", "Alt", "Meta"]) {
-      expect(avanza(entries, dentro, chord({ key })).tipo).toBe("passa");
+      expect(advance(entries, inside, chord({ key })).type).toBe("passa");
     }
   });
 
   it("una scorciatoia normale continua a funzionare, senza passare per l'attesa", () => {
-    expect(avanza(entries, null, chord({ key: "j", ctrlKey: true })).tipo).toBe("esegue");
+    expect(advance(entries, null, chord({ key: "j", ctrlKey: true })).type).toBe("esegue");
   });
 
   it("una sequenza di tre tasti si percorre un passo alla volta", () => {
-    const tre = [voce({ id: "tre", binding: "Mod-k g d" })];
-    const uno = avanza(tre, null, modK);
-    expect(uno.tipo).toBe("attende");
-    const due = avanza(tre, uno.tipo === "attende" ? uno.attesa : null, chord({ key: "g" }));
-    expect(due.tipo).toBe("attende");
-    expect(due.tipo === "attende" && due.attesa.etichetta).toBe("Mod-K G");
-    const fine = avanza(tre, due.tipo === "attende" ? due.attesa : null, chord({ key: "d" }));
-    expect(fine.tipo === "esegue" && fine.entry.id).toBe("tre");
+    const sequence = [entry({ id: "tre", binding: "Mod-k g d" })];
+    const firstStep = advance(sequence, null, modK);
+    expect(firstStep.type).toBe("attende");
+    const secondStep = advance(
+      sequence,
+      firstStep.type === "attende" ? firstStep.waiting : null,
+      chord({ key: "g" }),
+    );
+    expect(secondStep.type).toBe("attende");
+    expect(secondStep.type === "attende" && secondStep.waiting.label).toBe("Mod-K G");
+    const completed = advance(
+      sequence,
+      secondStep.type === "attende" ? secondStep.waiting : null,
+      chord({ key: "d" }),
+    );
+    expect(completed.type === "esegue" && completed.entry.id).toBe("tre");
   });
 });
 
@@ -398,34 +406,34 @@ describe("chi vince fra un accordo e il prefisso di una sequenza", () => {
   // L'accordo completo, in **qualunque ordine** stiano nel registro: se
   // dipendesse dall'ordine, la stessa coppia si comporterebbe in due modi a
   // seconda di chi si è registrato prima.
-  const corto = voce({ id: "corto", title: "Corto", binding: "Mod-k" });
-  const lunga = voce({ id: "lunga", title: "Lunga", binding: "Mod-k d" });
+  const short = entry({ id: "corto", title: "Corto", binding: "Mod-k" });
+  const long = entry({ id: "lunga", title: "Lunga", binding: "Mod-k d" });
   const modK = chord({ key: "k", ctrlKey: true });
 
   it("il corto esegue subito, e non aspetta due secondi per scoprire se arriva la `d`", () => {
-    expect(avanza([corto, lunga], null, modK).tipo).toBe("esegue");
-    expect(avanza([lunga, corto], null, modK).tipo).toBe("esegue");
+    expect(advance([short, long], null, modK).type).toBe("esegue");
+    expect(advance([long, short], null, modK).type).toBe("esegue");
   });
 
   it("e la sequenza oscurata si dice all'avvio, invece di lasciarla scoprire premendo", () => {
-    const oscurati = prefissiOscurati([corto, lunga]);
-    expect(oscurati).toHaveLength(1);
-    expect(oscurati[0]!.corto.id).toBe("corto");
-    expect(oscurati[0]!.lunghe.map((e) => e.id)).toEqual(["lunga"]);
-    const frase = frasedeiConflitti([corto, lunga])!;
-    expect(frase).toContain("Corto");
-    expect(frase).toContain("Lunga");
+    const darkened = shadowedPrefixes([short, long]);
+    expect(darkened).toHaveLength(1);
+    expect(darkened[0]!.short.id).toBe("corto");
+    expect(darkened[0]!.long.map((e) => e.id)).toEqual(["lunga"]);
+    const phrase = conflictMessage([short, long])!;
+    expect(phrase).toContain("Corto");
+    expect(phrase).toContain("Lunga");
   });
 
   it("due sequenze che condividono il primo tasto non si oscurano: sono un prefisso comune", () => {
-    const a = voce({ id: "a", binding: "Mod-k d" });
-    const b = voce({ id: "b", binding: "Mod-k s" });
-    expect(prefissiOscurati([a, b])).toHaveLength(0);
-    expect(conflitti([a, b])).toHaveLength(0);
+    const a = entry({ id: "a", binding: "Mod-k d" });
+    const b = entry({ id: "b", binding: "Mod-k s" });
+    expect(shadowedPrefixes([a, b])).toHaveLength(0);
+    expect(conflicts([a, b])).toHaveLength(0);
     // E sono davvero due gesti distinti fino in fondo.
-    const attesa = avanza([a, b], null, chord({ key: "k", ctrlKey: true }));
-    const dentro = attesa.tipo === "attende" ? attesa.attesa : null;
-    expect(avanza([a, b], dentro, chord({ key: "s" })).tipo === "esegue").toBe(true);
+    const waiting = advance([a, b], null, chord({ key: "k", ctrlKey: true }));
+    const inside = waiting.type === "attende" ? waiting.waiting : null;
+    expect(advance([a, b], inside, chord({ key: "s" })).type === "esegue").toBe(true);
   });
 });
 
@@ -433,46 +441,46 @@ describe("un accordo che non si può premere si dice", () => {
   it("invece di sparire dal conteggio dei conflitti", () => {
     // Il buco che le sequenze rendono facile da cadere dentro: una scorciatoia
     // è una stringa che l'utente scrive a mano, e prima di questa voce una
-    // scritta male finiva in un `continue` — non un conflitto, vero, ma
+    // scritto male finiva in un `continue` — non un conflitto, vero, ma
     // nemmeno una scorciatoia, e nessuno lo diceva.
-    const storto = voce({ id: "x", title: "Storto", binding: "Ctrl-k" });
-    expect(conflitti([storto])).toHaveLength(0);
-    expect(accordiRifiutati([storto]).map((e) => e.id)).toEqual(["x"]);
-    expect(frasedeiConflitti([storto])).toContain("Storto");
+    const malformedEntry = entry({ id: "x", title: "Storto", binding: "Ctrl-k" });
+    expect(conflicts([malformedEntry])).toHaveLength(0);
+    expect(rejectedChords([malformedEntry]).map((e) => e.id)).toEqual(["x"]);
+    expect(conflictMessage([malformedEntry])).toContain("Storto");
   });
 
   it("e un comando senza scorciatoia non è un accordo storto", () => {
-    expect(accordiRifiutati([voce({ binding: null })])).toHaveLength(0);
+    expect(rejectedChords([entry({ binding: null })])).toHaveLength(0);
   });
 });
 
 describe("i conflitti", () => {
   it("due comandi sullo stesso accordo si segnalano, nominandoli", () => {
     const entries = [
-      voce({ id: "a", title: "Alfa", binding: "Mod-g" }),
-      voce({ id: "b", title: "Beta", binding: "Mod-g" }),
-      voce({ id: "c", title: "Gamma", binding: "Mod-h" }),
+      entry({ id: "a", title: "Alfa", binding: "Mod-g" }),
+      entry({ id: "b", title: "Beta", binding: "Mod-g" }),
+      entry({ id: "c", title: "Gamma", binding: "Mod-h" }),
     ];
-    expect(conflitti(entries)).toHaveLength(1);
-    const frase = frasedeiConflitti(entries)!;
-    expect(frase).toContain("Alfa");
-    expect(frase).toContain("Beta");
-    expect(frase).not.toContain("Gamma");
+    expect(conflicts(entries)).toHaveLength(1);
+    const phrase = conflictMessage(entries)!;
+    expect(phrase).toContain("Alfa");
+    expect(phrase).toContain("Beta");
+    expect(phrase).not.toContain("Gamma");
   });
 
   it("l'ordine dei modificatori non fa due accordi diversi", () => {
     // Per la tastiera `Shift-Mod-g` e `Mod-Shift-g` sono lo stesso gesto: senza
     // la forma canonica, il conflitto più facile da creare a mano sarebbe
     // proprio quello che non si vede.
-    expect(normalizza("Shift-Mod-g")).toBe(normalizza("Mod-Shift-g"));
+    expect(normalize("Shift-Mod-g")).toBe(normalize("Mod-Shift-g"));
     expect(
-      conflitti([voce({ id: "a", binding: "Shift-Mod-g" }), voce({ id: "b", binding: "Mod-Shift-g" })]),
+      conflicts([entry({ id: "a", binding: "Shift-Mod-g" }), entry({ id: "b", binding: "Mod-Shift-g" })]),
     ).toHaveLength(1);
   });
 
   it("nessun conflitto è nessun avviso", () => {
-    expect(frasedeiConflitti([voce({ binding: "Mod-g" })])).toBeNull();
+    expect(conflictMessage([entry({ binding: "Mod-g" })])).toBeNull();
     // E un comando senza accordo non litiga con gli altri senza accordo.
-    expect(conflitti([voce({ id: "a" }), voce({ id: "b" })])).toHaveLength(0);
+    expect(conflicts([entry({ id: "a" }), entry({ id: "b" })])).toHaveLength(0);
   });
 });

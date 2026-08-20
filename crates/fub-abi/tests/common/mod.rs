@@ -41,16 +41,16 @@ fn src_dir() -> PathBuf {
 fn parse(file: &str) -> syn::File {
     let path = src_dir().join(file);
     let src = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("impossibile leggere {}: {e}", path.display()));
-    syn::parse_file(&src).unwrap_or_else(|e| panic!("{} non parsa: {e}", path.display()))
+        .unwrap_or_else(|and| panic!("cannot read {}: {and}", path.display()));
+    syn::parse_file(&src).unwrap_or_else(|and| panic!("{} failed to parse: {and}", path.display()))
 }
 
-fn convert(file: &str, e: &syn::ItemEnum) -> RustEnum {
+fn convert(file: &str, and: &syn::ItemEnum) -> RustEnum {
     RustEnum {
         file: file.to_string(),
-        name: e.ident.to_string(),
-        variants: e.variants.iter().map(|v| v.ident.to_string()).collect(),
-        fieldless: e
+        name: and.ident.to_string(),
+        variants: and.variants.iter().map(|v| v.ident.to_string()).collect(),
+        fieldless: and
             .variants
             .iter()
             .all(|v| matches!(v.fields, syn::Fields::Unit)),
@@ -61,13 +61,13 @@ fn convert(file: &str, e: &syn::ItemEnum) -> RustEnum {
 /// tipo che non esiste più non deve poter passare per verde.
 pub fn read_enum(file: &str, name: &str) -> RustEnum {
     for item in parse(file).items {
-        if let syn::Item::Enum(e) = item {
-            if e.ident == name {
-                return convert(file, &e);
+        if let syn::Item::Enum(and) = item {
+            if and.ident == name {
+                return convert(file, &and);
             }
         }
     }
-    panic!("enum `{name}` non trovato fra gli item top-level di src/{file}");
+    panic!("enum `{name}` not found among top-level items in src/{file}");
 }
 
 /// **Tutti** gli enum senza payload dichiarati in `src/*.rs`, in ordine
@@ -80,9 +80,9 @@ pub fn read_enum(file: &str, name: &str) -> RustEnum {
 /// silenzio, che è esattamente il difetto per cui questo modulo esiste.
 pub fn fieldless_enums() -> Vec<RustEnum> {
     let mut files: Vec<String> = std::fs::read_dir(src_dir())
-        .expect("src/ leggibile")
-        .filter_map(|e| {
-            let name = e.ok()?.file_name().to_string_lossy().into_owned();
+        .expect("src/ is readable")
+        .filter_map(|and| {
+            let name = and.ok()?.file_name().to_string_lossy().into_owned();
             name.ends_with(".rs").then_some(name)
         })
         .collect();
@@ -92,11 +92,11 @@ pub fn fieldless_enums() -> Vec<RustEnum> {
     for file in files {
         let ast = parse(&file);
         for item in ast.items {
-            let syn::Item::Enum(e) = item else { continue };
-            if !matches!(e.vis, syn::Visibility::Public(_)) {
+            let syn::Item::Enum(and) = item else { continue };
+            if !matches!(and.vis, syn::Visibility::Public(_)) {
                 continue;
             }
-            let found = convert(&file, &e);
+            let found = convert(&file, &and);
             if !found.fieldless {
                 continue;
             }
@@ -105,10 +105,10 @@ pub fn fieldless_enums() -> Vec<RustEnum> {
             // sul JSON e nessuno lo saprebbe finché la shell non sbaglia un
             // confronto di stringhe.
             assert!(
-                has_snake_case(&e),
-                "`{}` (src/{file}) è un enum senza payload e non dichiara \
-                 `#[serde(rename_all = \"snake_case\")]`: al confine JSON \
-                 sarebbe in CamelCase, e il mirror TS lo direbbe diverso",
+                has_snake_case(&and),
+                "`{}` (src/{file}) is a fieldless enum and does not declare \
+                 `#[serde(rename_all = \"snake_case\")]`: at the JSON boundary \
+                 it would be CamelCase, and the TS mirror would say it differently",
                 found.name
             );
             out.push(found);
@@ -117,8 +117,8 @@ pub fn fieldless_enums() -> Vec<RustEnum> {
     out
 }
 
-fn has_snake_case(e: &syn::ItemEnum) -> bool {
-    e.attrs.iter().any(|a| {
+fn has_snake_case(and: &syn::ItemEnum) -> bool {
+    and.attrs.iter().any(|a| {
         if !a.path().is_ident("serde") {
             return false;
         }
@@ -126,12 +126,12 @@ fn has_snake_case(e: &syn::ItemEnum) -> bool {
         // L'errore si ignora di proposito: un `#[serde(...)]` che questo
         // lettore non sa scomporre non è un enum senza `rename_all`, è un caso
         // che l'assert qui sopra segnalerà con il nome del tipo.
-        let _ = a.parse_nested_meta(|meta| {
-            if meta.path.is_ident("rename_all") {
-                let value: syn::LitStr = meta.value()?.parse()?;
+        let _ = a.parse_nested_meta(|metadata| {
+            if metadata.path.is_ident("rename_all") {
+                let value: syn::LitStr = metadata.value()?.parse()?;
                 found |= value.value() == "snake_case";
-            } else if meta.input.peek(syn::Token![=]) {
-                let _: syn::Expr = meta.value()?.parse()?;
+            } else if metadata.input.peek(syn::Token![=]) {
+                let _: syn::Expr = metadata.value()?.parse()?;
             }
             Ok(())
         });
@@ -143,8 +143,8 @@ fn has_snake_case(e: &syn::ItemEnum) -> bool {
 /// `LeftSidebar` → `["left", "sidebar"]`.
 fn words(camel: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    for (i, c) in camel.chars().enumerate() {
-        if c.is_uppercase() && i > 0 {
+    for (the, c) in camel.chars().enumerate() {
+        if c.is_uppercase() && the > 0 {
             out.push(String::new());
         }
         match out.last_mut() {

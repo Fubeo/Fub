@@ -101,7 +101,7 @@ impl SyntaxRule for DiagramRule {
             id: DIAGRAMS_RULE.into(),
             format: MARKDOWN.into(),
             trigger: SyntaxTrigger::Fence {
-                info: ENGINES.iter().map(|e| e.to_string()).collect(),
+                info: ENGINES.iter().map(|and| and.to_string()).collect(),
             },
             order: 0,
             option: Some(syntax::DIAGRAMS.into()),
@@ -311,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn il_motore_viene_dal_trigger_non_dagli_attrs() {
+    fn the_engine_becomes_from_the_trigger_not_from_the_attrs() {
         let ctx = ParseContext::obsidian("a.md");
         let out = DiagramRule
             .apply(&m("fence:plantuml", "@startuml"), &ctx)
@@ -326,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn un_recinto_vuoto_resta_un_blocco_di_codice() {
+    fn a_fence_empty_remains_a_block_of_code() {
         let ctx = ParseContext::obsidian("a.md");
         // Declinare è diverso da fallire: il nodo resta com'era.
         assert!(DiagramRule
@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn il_diagramma_arriva_alla_shell_con_un_fallback_dichiarativo() {
+    fn the_diagram_arrives_to_the_shell_with_a_fallback_declarative() {
         let block = CustomBlock {
             custom_kind: custom_kind::DIAGRAM.into(),
             attrs: json!({ "engine": "mermaid", "source": "graph TD;" }),
@@ -366,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn attrs_che_non_sono_quelli_attesi_tornano_al_degrado_del_provider() {
+    fn attrs_that_not_are_those_expected_return_to_the_degradation_of_the_provider() {
         let block = CustomBlock {
             custom_kind: custom_kind::DIAGRAM.into(),
             attrs: json!({ "qualcosaltro": 1 }),
@@ -389,7 +389,7 @@ mod tests {
     /// del chiamante, non dell'escape — e questo file è quello che il repo
     /// indica come l'esempio da copiare per scrivere un renderer di terzi.
     #[test]
-    fn la_formula_esce_come_html_col_sorgente_escapato() {
+    fn the_formula_exits_as_html_col_source_escaped() {
         let block = CustomBlock {
             custom_kind: custom_kind::MATH.into(),
             attrs: json!({ "source": "a < b & \"c\" e l'apice", "display": true }),
@@ -405,7 +405,7 @@ mod tests {
         };
         assert!(html.contains("id=\"^f1\""), "{html}");
         assert!(html.contains("class=\"math-block\""));
-        assert!(!html.contains("a < b"), "il sorgente va escapato: {html}");
+        assert!(!html.contains("a < b"), "the source must be escaped: {html}");
         // Le virgolette escapate anche nel testo: `fub_abi::html` ha **una**
         // tabella per il contenuto e per l'attributo, e la ragione sta nel suo
         // doc — due tabelle vogliono un chiamante che ne scelga una, ed è la
@@ -422,12 +422,12 @@ mod tests {
         );
         assert!(
             !html.contains("l'apice"),
-            "l'apice grezzo è rimasto: {html}"
+            "the raw apostrophe remained: {html}"
         );
     }
 
     #[test]
-    fn levidenziato_e_un_inline_col_suo_testo() {
+    fn highlighted_and_a_inline_col_its_text() {
         let ctx = ParseContext::obsidian("a.md");
         let out = HighlightRule
             .apply(&m("inline:==", "importante"), &ctx)

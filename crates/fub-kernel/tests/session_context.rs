@@ -32,9 +32,9 @@ use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
 /// (parse → indici → grafo → eventi): il testo è il modello. Un provider
 /// giocattolo e non il markdown perché il kernel non dipende da comrak, nemmeno
 /// nei test.
-struct TestoNudo;
+struct PlainText;
 
-impl FormatProvider for TestoNudo {
+impl FormatProvider for PlainText {
     fn descriptor(&self) -> FormatDescriptor {
         FormatDescriptor::text("testo", "Testo nudo (test)", &["md"])
     }
@@ -68,12 +68,12 @@ impl FormatProvider for TestoNudo {
 }
 
 /// Una view che dichiara di seguire quel che le si dice, e niente altro.
-struct Spia {
+struct Spy {
     id: &'static str,
     follows: ContextMask,
 }
 
-impl ViewProvider for Spia {
+impl ViewProvider for Spy {
     /// La maschera è dell'**esemplare** (§22.3): si prende da *quella* spec,
     /// non dalla prima dell'elenco — un provider che ne dichiara due darebbe a
     /// tutte e due la maschera della prima.
@@ -144,7 +144,7 @@ impl Fixture {
         }
         ws.register_view_provider(
             "test.doc",
-            Box::new(Spia {
+            Box::new(Spy {
                 id: "solo-doc",
                 follows: ContextMask::document(),
             }),
@@ -152,7 +152,7 @@ impl Fixture {
         .expect("registrato");
         ws.register_view_provider(
             "test.sel",
-            Box::new(Spia {
+            Box::new(Spy {
                 id: "doc-e-selezione",
                 follows: ContextMask(vec![ContextKind::Document, ContextKind::Selection]),
             }),
@@ -160,7 +160,7 @@ impl Fixture {
         .expect("registrato");
         ws.register_view_provider(
             "test.sorda",
-            Box::new(Spia {
+            Box::new(Spy {
                 id: "sorda",
                 follows: ContextMask::default(),
             }),
@@ -170,7 +170,7 @@ impl Fixture {
     }
 }
 
-fn contesto(doc: &str) -> ViewContext {
+fn context(doc: &str) -> ViewContext {
     ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new(doc)))
 }
 
@@ -181,33 +181,33 @@ fn only_the_views_that_follow_what_changed_are_redrawn() {
 
     // Primo contesto: prima non ce n'era nessuno, quindi cambia tutto.
     assert_eq!(
-        ws.set_active_context(Some(contesto("Nota.md"))),
+        ws.set_active_context(Some(context("Nota.md"))),
         vec!["solo-doc", "doc-e-selezione"],
         "chi non dichiara nulla non si ridisegna neanche all'apertura"
     );
 
     // Solo il cursore si muove: il pannello backlink non ha ragione di
     // ridisegnarsi, ed è tutto il punto della maschera.
-    let col_cursore = contesto("Nota.md").with_selections(Some(SelectionSet::caret(7)));
+    let with_cursor = context("Nota.md").with_selections(Some(SelectionSet::caret(7)));
     assert_eq!(
-        ws.set_active_context(Some(col_cursore.clone())),
+        ws.set_active_context(Some(with_cursor.clone())),
         vec!["doc-e-selezione"]
     );
 
     // Ripubblicare lo stesso contesto non ridisegna niente: la shell può
     // pubblicare quanto vuole, il costo lo decide il confronto.
-    assert!(ws.set_active_context(Some(col_cursore.clone())).is_empty());
+    assert!(ws.set_active_context(Some(with_cursor.clone())).is_empty());
 
     // La modalità cambia: nessuna delle tre la segue.
     assert!(ws
-        .set_active_context(Some(col_cursore.clone().with_mode(PaneMode::Reading)))
+        .set_active_context(Some(with_cursor.clone().with_mode(PaneMode::Reading)))
         .is_empty());
 
     // Cambia il pannello: è un contesto di un altro pannello, e vale come
     // cambio di tutto ciò che si può seguire.
-    let altro = ViewContext::new("split-2").with_doc(Some(DocId::new("Nota.md")));
+    let other = ViewContext::new("split-2").with_doc(Some(DocId::new("Nota.md")));
     assert_eq!(
-        ws.set_active_context(Some(altro)),
+        ws.set_active_context(Some(other)),
         vec!["solo-doc", "doc-e-selezione"]
     );
 
@@ -238,9 +238,9 @@ fn deactivating_a_plugin_leaves_the_session_context_alone() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
 
-    let pubblicato = contesto("Nota.md").with_selections(Some(SelectionSet::caret(3)));
+    let published = context("Nota.md").with_selections(Some(SelectionSet::caret(3)));
     assert_eq!(
-        ws.set_active_context(Some(pubblicato.clone())),
+        ws.set_active_context(Some(published.clone())),
         vec!["solo-doc", "doc-e-selezione"]
     );
 
@@ -248,12 +248,12 @@ fn deactivating_a_plugin_leaves_the_session_context_alone() {
 
     assert_eq!(
         ws.active_context(),
-        Some(pubblicato),
+        Some(published),
         "il contesto è della shell: non se ne va con chi lo leggeva"
     );
 
     assert_eq!(
-        ws.set_active_context(Some(contesto("Altra.md"))),
+        ws.set_active_context(Some(context("Altra.md"))),
         vec!["solo-doc"],
         "la view di chi si è spento non è più fra quelle da ridisegnare: la \
          shell non riceve mai un id a cui non corrisponde più un provider"
@@ -265,7 +265,7 @@ fn the_shortcut_for_a_single_pane_shell_clears_the_selection() {
     let fx = Fixture::new();
     let ws = fx.workspace();
     ws.set_active_context(Some(
-        contesto("Nota.md").with_selections(Some(SelectionSet::anchored(Span::new(0, 4), "ciao"))),
+        context("Nota.md").with_selections(Some(SelectionSet::anchored(Span::new(0, 4), "ciao"))),
     ));
 
     ws.set_active_document(Some(DocId::new("Altra.md")));
@@ -284,11 +284,11 @@ fn the_shortcut_for_a_single_pane_shell_clears_the_selection() {
 #[test]
 fn a_write_drops_every_selection_not_just_the_primary() {
     let fx = Fixture::new();
-    let mut ws = con_provider(&fx.root);
+    let mut ws = with_provider(&fx.root);
     let doc = DocId::new("Nota.md");
     ws.write_document(&doc, "# Titolo\n\ntesto\n", WriteBase::Dictated)
         .expect("scrive");
-    ws.set_active_context(Some(contesto("Nota.md").with_selections(Some(
+    ws.set_active_context(Some(context("Nota.md").with_selections(Some(
         SelectionSet::Anchored(fub_abi::session::AnchoredSelections {
             primary: fub_abi::session::AnchoredSelection::new(Span::new(2, 8), "Titolo"),
             secondary: vec![fub_abi::session::AnchoredSelection::new(
@@ -314,10 +314,10 @@ fn a_write_drops_every_selection_not_just_the_primary() {
 // una scrittura che passi per `ingest_model`, che è il punto in cui il kernel
 // sa che il sorgente sotto la selezione è cambiato.
 
-fn con_provider(root: &Utf8PathBuf) -> Workspace {
+fn with_provider(root: &Utf8PathBuf) -> Workspace {
     let mut registry = FormatRegistry::new();
     registry
-        .register(Box::new(TestoNudo))
+        .register(Box::new(PlainText))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(root, registry).expect("l'apertura del vault riesce");
     for plugin in ["test.doc", "test.sel", "test.sorda"] {
@@ -330,7 +330,7 @@ fn con_provider(root: &Utf8PathBuf) -> Workspace {
 #[test]
 fn a_rewritten_source_drops_the_selection_under_it() {
     let fx = Fixture::new();
-    let mut ws = con_provider(&fx.root);
+    let mut ws = with_provider(&fx.root);
     ws.write_document(
         &DocId::new("Nota.md"),
         "# Titolo\n\ntesto\n",
@@ -339,7 +339,7 @@ fn a_rewritten_source_drops_the_selection_under_it() {
     .expect("scrive");
 
     ws.set_active_context(Some(
-        contesto("Nota.md")
+        context("Nota.md")
             .with_selections(Some(SelectionSet::anchored(Span::new(2, 8), "Titolo"))),
     ));
 
@@ -365,7 +365,7 @@ fn a_rewritten_source_drops_the_selection_under_it() {
 
     // Una scrittura su un *altro* documento non tocca la selezione.
     ws.set_active_context(Some(
-        contesto("Nota.md").with_selections(Some(SelectionSet::caret(3))),
+        context("Nota.md").with_selections(Some(SelectionSet::caret(3))),
     ));
     ws.write_document(&DocId::new("Altra.md"), "niente\n", WriteBase::Dictated)
         .expect("scrive l'altra");
@@ -378,11 +378,11 @@ fn a_rewritten_source_drops_the_selection_under_it() {
 #[test]
 fn the_context_follows_a_rename_and_empties_on_removal() {
     let fx = Fixture::new();
-    let mut ws = con_provider(&fx.root);
+    let mut ws = with_provider(&fx.root);
     ws.write_document(&DocId::new("Nota.md"), "# Titolo\n", WriteBase::Dictated)
         .expect("scrive");
     ws.set_active_context(Some(
-        contesto("Nota.md").with_selections(Some(SelectionSet::caret(2))),
+        context("Nota.md").with_selections(Some(SelectionSet::caret(2))),
     ));
 
     ws.rename_document(&DocId::new("Nota.md"), &DocId::new("Spostata.md"))

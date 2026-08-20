@@ -341,14 +341,14 @@ impl DocChanges {
             }
         }
         self.aspects.sort();
-        for (mio, suo) in [
+        for (mine, its) in [
             (&mut self.properties, other.properties),
             (&mut self.tags_added, other.tags_added),
             (&mut self.tags_removed, other.tags_removed),
         ] {
-            mio.extend(suo);
-            mio.sort();
-            mio.dedup();
+            mine.extend(its);
+            mine.sort();
+            mine.dedup();
         }
     }
 
@@ -1141,23 +1141,23 @@ mod tests {
     fn a_subscription_can_name_a_topic_and_a_place() {
         // Il caso della voce: due plugin che si parlano, e un handler che si
         // sveglia solo per i propri.
-        let miei = EventMask::of([EventKind::Custom]).on_topics(["com.acme.tasks"]);
-        assert!(miei.wants(&Event::Custom {
+        let mine = EventMask::of([EventKind::Custom]).on_topics(["com.acme.tasks"]);
+        assert!(mine.wants(&Event::Custom {
             topic: "com.acme.tasks:done".into(),
             payload: serde_json::Value::Null,
         }));
-        assert!(!miei.wants(&Event::Custom {
+        assert!(!mine.wants(&Event::Custom {
             topic: "com.altro.note:done".into(),
             payload: serde_json::Value::Null,
         }));
 
         // E l'evento più caldo, ristretto a una cartella.
-        let qui = EventMask::of([EventKind::DocumentChanged]).about([Subject::folder("Progetti")]);
-        assert!(qui.wants(&Event::DocumentChanged {
+        let here = EventMask::of([EventKind::DocumentChanged]).about([Subject::folder("Progetti")]);
+        assert!(here.wants(&Event::DocumentChanged {
             id: DocId::new("Progetti/Alpha.md"),
             changes: None,
         }));
-        assert!(!qui.wants(&Event::DocumentChanged {
+        assert!(!here.wants(&Event::DocumentChanged {
             id: DocId::new("Diario/2026-07-28.md"),
             changes: None,
         }));
@@ -1266,11 +1266,11 @@ mod tests {
 
     #[test]
     fn the_actor_answers_the_only_question_it_exists_for() {
-        let mio = Actor::Plugin {
+        let mine = Actor::Plugin {
             id: "fub.automa".into(),
         };
-        assert!(mio.is_plugin("fub.automa"), "questa l'ho scritta io");
-        assert!(!mio.is_plugin("fub.altro"));
+        assert!(mine.is_plugin("fub.automa"), "questa l'ho scritta io");
+        assert!(!mine.is_plugin("fub.altro"));
         assert!(!Actor::User.is_plugin("fub.automa"));
     }
 }

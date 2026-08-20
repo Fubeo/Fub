@@ -14,7 +14,7 @@
 //!   preferenza di chi apre il vault: mostrarle vorrebbe dire indicizzare
 //!   l'indice, riesumare come documenti le note appena cestinate, e dare un
 //!   [`DocId`](fub_abi::DocId) a un file che fra un istante non esiste più.
-//!   Nessuna impostazione le rivela, ed è [`e_struttura`].
+//!   Nessuna impostazione le rivela, ed è [`is_structural`].
 //! - **La preferenza.** Che `node_modules/` o `.git/` non siano note è vero
 //!   quasi sempre e non è vero per costruzione; che i dotfile si vedano o no è
 //!   una domanda che ha due risposte legittime (§3.2 del catalogo). Sono
@@ -42,7 +42,7 @@
 //! [`resolution_key`](fub_abi::rules::path::resolution_key) — trim, NFC,
 //! minuscolo — che è l'unico punto in cui si decide *quando due nomi sono lo
 //! stesso nome*. Ci passano sia i nomi dichiarati sia il nome che arriva dal
-//! disco, e ci passa anche [`e_struttura`]: `.Fub` su un filesystem
+//! disco, e ci passa anche [`is_structural`]: `.Fub` su un filesystem
 //! insensibile al caso **è** `.fub`, e non escluderla sarebbe indicizzare
 //! l'indice.
 //!
@@ -100,7 +100,7 @@
 //! combaciava con niente — e non se ne accorgeva nessuno, perché un'esclusione
 //! che non scatta non dà errore: dà un vault che indicizza `build/` e chi l'ha
 //! scritta convinto di averlo escluso. Le dichiarazioni passano da
-//! [`cartelle::normalizzata`](fub_abi::rules::cartelle::normalizzata), che è la
+//! [`folders::normalized`](fub_abi::rules::folders::normalized), che è la
 //! stessa regola con cui il resto del progetto decide dove finisce una cartella
 //! (difetto 0141): `build/`, `/build` e `build` sono la stessa cartella qui
 //! come in una query.
@@ -110,7 +110,7 @@
 //! dal vault senza che niente lo dicesse, ed è il danno peggiore di questo
 //! modulo: non è un file che non si vede, è un file che non c'è — nessun
 //! [`DocId`](fub_abi::DocId), nessuna voce d'anagrafe, nessun evento. Per
-//! questo [`IgnorePolicy::esclude`] chiede la [`Specie`]: la struttura e i
+//! per questo [`IgnorePolicy::excludes`] chiede la [`Kind`]: la struttura e i
 //! nascosti valgono per tutte e due, l'elenco dichiarato solo per le cartelle.
 //! Chi cammina l'albero la specie ce l'ha già in mano — gliela dà la voce di
 //! directory —, e chi giudica un path intero sa che tutto ciò che sta *in
@@ -131,7 +131,7 @@
 
 use std::collections::BTreeSet;
 
-use fub_abi::rules::cartelle;
+use fub_abi::rules::folders;
 use fub_abi::rules::path::resolution_key;
 use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
 use fub_abi::text::{StringCatalog, Text};
@@ -214,26 +214,26 @@ pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules", "ta
 /// davvero un file che si chiama così lo rivede accendendo «mostra i file
 /// nascosti», che è la stessa via di uscita che ha già oggi per i `.qualcosa`.
 /// Una regola senza uscita toglierebbe un file davvero, e senza dirlo.
-pub(crate) fn e_temporaneo_altrui(key: &str) -> bool {
+pub(crate) fn is_foreign_temporary(key: &str) -> bool {
     // `~$nota.docx`: il file di proprietà che Office scrive accanto a quello
     // aperto, e che resta lì finché la finestra è aperta.
     let office = key
         .strip_prefix("~$")
-        .is_some_and(|resto| !resto.is_empty());
+        .is_some_and(|rest| !rest.is_empty());
     // `nota.md~`: la copia di prima, che lasciano dietro Emacs, gedit, kate,
     // joe e mezzo Unix.
-    let copia = key.strip_suffix('~').is_some_and(|base| !base.is_empty());
+    let copy = key.strip_suffix('~').is_some_and(|base| !base.is_empty());
     // `#nota.md#`: il salvataggio automatico di Emacs, che non comincia per
     // punto e quindi non lo prende nessun'altra riga.
-    let autosalvataggio = key.len() > 2 && key.starts_with('#') && key.ends_with('#');
-    office || copia || autosalvataggio
+    let autosave = key.len() > 2 && key.starts_with('#') && key.ends_with('#');
+    office || copy || autosave
 }
 
-pub(crate) fn e_struttura(key: &str) -> bool {
+pub(crate) fn is_structural(key: &str) -> bool {
     key == FUB_DIR
         || key == TRASH_DIR
-        || crate::storage::e_temporaneo_di_scrittura(key)
-        || crate::storage::e_lock_di_scrittura(key)
+        || crate::storage::is_write_temporary(key)
+        || crate::storage::is_write_lock(key)
 }
 
 /// Che cosa è la voce di cui si sta chiedendo.
@@ -244,9 +244,9 @@ pub(crate) fn e_struttura(key: &str) -> bool {
 /// questa parola un file chiamato `build` spariva dal vault insieme alla
 /// cartella `build/` (difetto 0176).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Specie {
+pub enum Kind {
     /// Una cartella: contiene, e può essere dichiarata esclusa.
-    Cartella,
+    Folder,
     /// Un file, o comunque una voce che non contiene niente.
     File,
 }
@@ -262,7 +262,7 @@ pub enum Specie {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IgnorePolicy {
     folders: BTreeSet<String>,
-    mostra_i_nascosti: bool,
+    show_hidden: bool,
 }
 
 impl Default for IgnorePolicy {
@@ -283,7 +283,7 @@ impl IgnorePolicy {
     /// scelte di chi ha scritto la frase.
     ///
     /// E prima ancora passano da
-    /// [`cartelle::normalizzata`](fub_abi::rules::cartelle::normalizzata),
+    /// [`folders::normalized`](fub_abi::rules::folders::normalized),
     /// perché nemmeno gli slash sono una scelta: `build/` è come si nomina una
     /// cartella per chi arriva da un `.gitignore`, e confrontato per uguaglianza
     /// con un nome che dal disco arriva senza slash non escludeva niente, in
@@ -291,14 +291,14 @@ impl IgnorePolicy {
     /// lasciata vuota — non entra affatto: una chiave vuota non combacia con
     /// nessun nome, e tenerla vorrebbe dire portarsi in giro una dichiarazione
     /// che non dichiara.
-    pub fn declaring(folders: impl IntoIterator<Item = String>, mostra_i_nascosti: bool) -> Self {
+    pub fn declaring(folders: impl IntoIterator<Item = String>, show_hidden: bool) -> Self {
         IgnorePolicy {
             folders: folders
                 .into_iter()
-                .map(|f| resolution_key(cartelle::normalizzata(&f)))
-                .filter(|chiave| !chiave.is_empty())
+                .map(|f| resolution_key(folders::normalized(&f)))
+                .filter(|key| !key.is_empty())
                 .collect(),
-            mostra_i_nascosti,
+            show_hidden,
         }
     }
 
@@ -313,24 +313,24 @@ impl IgnorePolicy {
     /// domanda, e il quarto ramo che qualcuno aggiungerà eredita la regola
     /// invece di doverla ripetere.
     ///
-    /// Le prime due valgono per qualunque [`Specie`] — la cartella di Fub non
+    /// Le prime due valgono per qualunque [`Kind`] — la cartella di Fub non
     /// diventa un documento perché qualcuno ci mette accanto un file omonimo —
     /// mentre l'elenco dichiarato parla di cartelle e solo di quelle: un file
     /// che si chiama come una cartella esclusa è un file di questo vault, e
     /// toglierlo sarebbe toglierlo davvero, senza [`DocId`](fub_abi::DocId) e
     /// senza un evento che lo dica (difetto 0176).
-    pub fn esclude(&self, name: &str, specie: Specie) -> bool {
+    pub fn excludes(&self, name: &str, kind: Kind) -> bool {
         let name = resolution_key(name);
-        if e_struttura(&name) {
+        if is_structural(&name) {
             return true;
         }
         // Il punto davanti e la convenzione dell'attrezzo che lo ha scritto
         // sono la stessa domanda — «questo lo ha messo qui un programma per
         // sé?» — e stanno sulla stessa riga perché abbiano la stessa uscita.
-        if !self.mostra_i_nascosti && (name.starts_with('.') || e_temporaneo_altrui(&name)) {
+        if !self.show_hidden && (name.starts_with('.') || is_foreign_temporary(&name)) {
             return true;
         }
-        specie == Specie::Cartella && self.folders.contains(&name)
+        kind == Kind::Folder && self.folders.contains(&name)
     }
 }
 
@@ -351,11 +351,11 @@ pub(crate) fn resolve(settings: Option<&SharedSettings>) -> IgnorePolicy {
         Ok((SettingValue::List(v), _)) => v,
         _ => DEFAULT_EXCLUDED.iter().map(|s| s.to_string()).collect(),
     };
-    let mostra_i_nascosti = matches!(
+    let show_hidden = matches!(
         store.effective(SHOW_HIDDEN),
         Ok((SettingValue::Toggle(true), _))
     );
-    IgnorePolicy::declaring(folders, mostra_i_nascosti)
+    IgnorePolicy::declaring(folders, show_hidden)
 }
 
 /// Le impostazioni che il core dichiara per l'esclusione.
@@ -371,28 +371,28 @@ pub fn ignore_settings() -> Vec<SettingSpec> {
     vec![
         SettingSpec::new(
             EXCLUDED_FOLDERS,
-            Text::key(I_EXCLUDED),
+            Text::key(THE_EXCLUDED),
             SettingKind::List {
                 default: DEFAULT_EXCLUDED.iter().map(|s| s.to_string()).collect(),
             },
         )
-        .describing(Text::key(I_EXCLUDED_DESC))
-        .grouped(Text::key(I_GROUP)),
+        .describing(Text::key(THE_EXCLUDED_DESC))
+        .grouped(Text::key(THE_GROUP)),
         SettingSpec::new(
             SHOW_HIDDEN,
-            Text::key(I_HIDDEN),
+            Text::key(THE_HIDDEN),
             SettingKind::Toggle { default: false },
         )
-        .describing(Text::key(I_HIDDEN_DESC))
-        .grouped(Text::key(I_GROUP)),
+        .describing(Text::key(THE_HIDDEN_DESC))
+        .grouped(Text::key(THE_GROUP)),
     ]
 }
 
-const I_GROUP: &str = "files.group";
-const I_EXCLUDED: &str = "files.excluded_folders";
-const I_EXCLUDED_DESC: &str = "files.excluded_folders.desc";
-const I_HIDDEN: &str = "files.show_hidden";
-const I_HIDDEN_DESC: &str = "files.show_hidden.desc";
+const THE_GROUP: &str = "files.group";
+const THE_EXCLUDED: &str = "files.excluded_folders";
+const THE_EXCLUDED_DESC: &str = "files.excluded_folders.desc";
+const THE_HIDDEN: &str = "files.show_hidden";
+const THE_HIDDEN_DESC: &str = "files.show_hidden.desc";
 
 /// Le frasi di queste impostazioni, nel catalogo di chi le ha scritte (0040).
 ///
@@ -403,10 +403,10 @@ const I_HIDDEN_DESC: &str = "files.show_hidden.desc";
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
-            .with(I_GROUP, "File")
-            .with(I_EXCLUDED, "Cartelle escluse")
+            .with(THE_GROUP, "File")
+            .with(THE_EXCLUDED, "Cartelle escluse")
             .with(
-                I_EXCLUDED_DESC,
+                THE_EXCLUDED_DESC,
                 "Le cartelle che non fanno parte di questo vault: non sono \
                  documenti, non si cercano, non compaiono nell'elenco dei file. \
                  Vale a qualunque profondità, per nome, senza distinzione fra \
@@ -421,9 +421,9 @@ pub fn catalog() -> Vec<StringCatalog> {
                  esclusi comunque: non sono una preferenza. \
                  Un cambiamento vale dal prossimo «Ricostruisci gli indici».",
             )
-            .with(I_HIDDEN, "Mostra i file nascosti")
+            .with(THE_HIDDEN, "Mostra i file nascosti")
             .with(
-                I_HIDDEN_DESC,
+                THE_HIDDEN_DESC,
                 "Considera documenti anche i file e le cartelle il cui nome \
                  comincia per punto. Restano esclusi comunque la cartella di \
                  Fub, il cestino, i file di servizio di una scrittura e tutto ciò \
@@ -431,10 +431,10 @@ pub fn catalog() -> Vec<StringCatalog> {
                  prossimo «Ricostruisci gli indici».",
             ),
         StringCatalog::new("en")
-            .with(I_GROUP, "Files")
-            .with(I_EXCLUDED, "Excluded folders")
+            .with(THE_GROUP, "Files")
+            .with(THE_EXCLUDED, "Excluded folders")
             .with(
-                I_EXCLUDED_DESC,
+                THE_EXCLUDED_DESC,
                 "The folders that are not part of this vault: not documents, \
                  not searched, not listed. Matched by name, at any depth, \
                  ignoring case: `node_modules` also excludes `Node_Modules`, \
@@ -448,9 +448,9 @@ pub fn catalog() -> Vec<StringCatalog> {
                  excluded regardless: they are not a \
                  preference. A change applies from the next «Rebuild indexes».",
             )
-            .with(I_HIDDEN, "Show hidden files")
+            .with(THE_HIDDEN, "Show hidden files")
             .with(
-                I_HIDDEN_DESC,
+                THE_HIDDEN_DESC,
                 "Treat files and folders whose name starts with a dot as \
                  documents too. Fub's own folder, the trash, the service \
                  files of a write and everything listed under excluded folders \
@@ -466,7 +466,7 @@ mod tests {
 
     /// Un vault che non dichiara niente si comporta come prima della §15.6.
     #[test]
-    fn chi_non_dichiara_niente_esclude_come_ieri() {
+    fn default_policy_excludes_like_before() {
         let p = IgnorePolicy::default();
         for name in [
             ".obsidian",
@@ -476,14 +476,14 @@ mod tests {
             "node_modules",
             "target",
         ] {
-            assert!(p.esclude(name, Specie::Cartella), "{name}");
+            assert!(p.excludes(name, Kind::Folder), "{name}");
         }
         assert!(
-            p.esclude(".bozza.md", Specie::File),
-            "un nascosto è escluso"
+            p.excludes(".bozza.md", Kind::File),
+            "a hidden file is excluded"
         );
-        assert!(!p.esclude("Idea.md", Specie::File));
-        assert!(!p.esclude("progetti", Specie::Cartella));
+        assert!(!p.excludes("Idea.md", Kind::File));
+        assert!(!p.excludes("progetti", Kind::Folder));
     }
 
     /// **Il file d'appoggio di un altro programma non è una nota**, e non deve
@@ -492,20 +492,20 @@ mod tests {
     /// Le forme che cominciano per punto le prendeva già la riga dei nascosti;
     /// queste tre non cominciano per punto, e prima di questa riga passavano.
     #[test]
-    fn i_temporanei_degli_altri_programmi_non_sono_note() {
+    fn other_programs_temporary_files_are_not_notes() {
         let p = IgnorePolicy::default();
         for name in ["~$Relazione.docx", "Nota.md~", "#Nota.md#"] {
             assert!(
-                p.esclude(name, Specie::File),
-                "{name} prende un DocId, compare nell'esploratore e sparisce da \
-                 sé: una voce che nasce e muore da sola a ogni salvataggio"
+                p.excludes(name, Kind::File),
+                "{name} gets a DocId, appears in the explorer, and vanishes on \
+                 its own: an entry born and dying by itself at every save"
             );
         }
         // E non un carattere in più di così: il `~` e il `#` dentro un nome sono
         // caratteri come gli altri, e una regola che li prendesse toglierebbe
         // note vere.
         for name in ["Nota~2.md", "#hashtag.md", "~.md", "Nota.md"] {
-            assert!(!p.esclude(name, Specie::File), "{name}");
+            assert!(!p.excludes(name, Kind::File), "{name}");
         }
     }
 
@@ -513,12 +513,12 @@ mod tests {
     /// chi li scrive, non struttura, quindi chi vuole vederli accende
     /// l'interruttore che accende anche i `.qualcosa`.
     #[test]
-    fn chi_mostra_i_nascosti_vede_anche_quelli() {
-        let tutto = IgnorePolicy::declaring(Vec::new(), true);
-        assert!(!tutto.esclude("Nota.md~", Specie::File));
-        assert!(!tutto.esclude("~$Relazione.docx", Specie::File));
+    fn showing_hidden_files_reveals_those_too() {
+        let all = IgnorePolicy::declaring(Vec::new(), true);
+        assert!(!all.excludes("Nota.md~", Kind::File));
+        assert!(!all.excludes("~$Relazione.docx", Kind::File));
         // La struttura invece resta senza appello, com'era.
-        assert!(tutto.esclude(FUB_DIR, Specie::Cartella));
+        assert!(all.excludes(FUB_DIR, Kind::Folder));
     }
 
     /// **Il cuore della voce**: le due specie non sono la stessa lista. Un vault
@@ -526,28 +526,28 @@ mod tests {
     /// struttura — se no, l'indice si indicizzerebbe e il cestino tornerebbe a
     /// essere un elenco di note.
     #[test]
-    fn nessuna_dichiarazione_rivela_la_struttura() {
-        let tutto = IgnorePolicy::declaring(Vec::new(), true);
-        assert!(tutto.esclude(FUB_DIR, Specie::Cartella));
+    fn no_declaration_reveals_the_structure() {
+        let all = IgnorePolicy::declaring(Vec::new(), true);
+        assert!(all.excludes(FUB_DIR, Kind::Folder));
         // E nemmeno un file che si chiamasse come loro: la struttura non è un
         // elenco di cartelle, è dove Fub scrive.
-        assert!(tutto.esclude(FUB_DIR, Specie::File));
-        assert!(tutto.esclude(TRASH_DIR, Specie::Cartella));
+        assert!(all.excludes(FUB_DIR, Kind::File));
+        assert!(all.excludes(TRASH_DIR, Kind::Folder));
         // La preferenza, invece, si sposta davvero.
-        assert!(!tutto.esclude(".bozza.md", Specie::File));
-        assert!(!tutto.esclude("node_modules", Specie::Cartella));
+        assert!(!all.excludes(".bozza.md", Kind::File));
+        assert!(!all.excludes("node_modules", Kind::Folder));
     }
 
     /// Dichiarare l'elenco lo **sostituisce**, non lo allunga: chi lo scrive sta
     /// dicendo cosa non è suo, e una lista che si sommasse a una costante
     /// invisibile sarebbe di nuovo una politica per metà nel sorgente.
     #[test]
-    fn dichiarare_le_cartelle_sostituisce_il_default() {
+    fn declaring_folders_replaces_the_default() {
         let p = IgnorePolicy::declaring(["build".to_string()], false);
-        assert!(p.esclude("build", Specie::Cartella));
-        assert!(!p.esclude("node_modules", Specie::Cartella));
+        assert!(p.excludes("build", Kind::Folder));
+        assert!(!p.excludes("node_modules", Kind::Folder));
         // I nascosti sono l'altra metà e non si muovono con questa.
-        assert!(p.esclude(".git", Specie::Cartella));
+        assert!(p.excludes(".git", Kind::Folder));
     }
 
     /// **La riparazione della 0110 con la 0107 in mano**: la stessa cartella
@@ -560,19 +560,19 @@ mod tests {
     /// scritture della stessa stringa si costruiscono qui, e la funzione è
     /// pura.
     #[test]
-    fn una_cartella_dichiarata_in_nfc_e_la_stessa_scritta_in_nfd() {
+    fn a_folder_declared_in_nfc_is_the_same_written_in_nfd() {
         let nfc = "Caf\u{e9}"; // «Café» come lo scrive una tastiera
         let nfd = "Cafe\u{301}"; // «Café» come lo scrive macOS sul disco
-        assert_ne!(nfc, nfd, "le due scritture sono byte diversi");
+        assert_eq!(nfc, nfd, "the two writings are different bytes");
 
         let p = IgnorePolicy::declaring([nfc.to_string()], false);
         assert!(
-            p.esclude(nfd, Specie::Cartella),
-            "la cartella di macOS non veniva esclusa"
+            p.excludes(nfd, Kind::Folder),
+            "the macOS folder was not excluded"
         );
         // E nell'altro verso, perché la dichiarazione può nascere su macOS.
         let p = IgnorePolicy::declaring([nfd.to_string()], false);
-        assert!(p.esclude(nfc, Specie::Cartella));
+        assert!(p.excludes(nfc, Kind::Folder));
     }
 
     /// La seconda riproduzione: su un filesystem insensibile al caso
@@ -581,19 +581,19 @@ mod tests {
     /// Vale anche per la **struttura**, che non è dichiarata da nessuno: `.FUB`
     /// e `.fub` sono la stessa cartella dove c'è l'indice.
     #[test]
-    fn il_caso_di_una_lettera_non_fa_due_cartelle() {
+    fn a_single_letter_case_does_not_make_two_folders() {
         let p = IgnorePolicy::default();
-        assert!(p.esclude("Node_Modules", Specie::Cartella));
-        assert!(p.esclude("NODE_MODULES", Specie::Cartella));
+        assert!(p.excludes("Node_Modules", Kind::Folder));
+        assert!(p.excludes("NODE_MODULES", Kind::Folder));
 
-        let tutto = IgnorePolicy::declaring(Vec::new(), true);
+        let all = IgnorePolicy::declaring(Vec::new(), true);
         assert!(
-            tutto.esclude(".FUB", Specie::Cartella),
-            "l'indice si sarebbe indicizzato"
+            all.excludes(".FUB", Kind::Folder),
+            "the index would have indexed itself"
         );
         assert!(
-            tutto.esclude(".Trash", Specie::Cartella),
-            "il cestino sarebbe risorto"
+            all.excludes(".Trash", Kind::Folder),
+            "the trash would have risen from the dead"
         );
     }
 
@@ -604,15 +604,15 @@ mod tests {
     /// resta da presidiare è che non se ne mangi altro: una dichiarazione è un
     /// **nome intero**, non un prefisso, e non diventa un pattern.
     #[test]
-    fn piegare_il_caso_non_allarga_la_dichiarazione() {
+    fn folding_case_does_not_widen_the_declaration() {
         let p = IgnorePolicy::declaring(["build".to_string()], false);
         assert!(
-            p.esclude("Build", Specie::Cartella),
-            "è la scelta, ed è dichiarata"
+            p.excludes("Build", Kind::Folder),
+            "it is the chosen direction, and it is declared"
         );
-        assert!(!p.esclude("building", Specie::Cartella));
-        assert!(!p.esclude("build.md", Specie::File));
-        assert!(!p.esclude("rebuild", Specie::Cartella));
+        assert!(!p.excludes("building", Kind::Folder));
+        assert!(!p.excludes("build.md", Kind::File));
+        assert!(!p.excludes("rebuild", Kind::Folder));
     }
 
     /// **La prima metà della 0176**: una cartella si dichiara come la si
@@ -622,12 +622,12 @@ mod tests {
     /// e confrontata per uguaglianza con `build` non combaciava con niente —
     /// cioè quella riga non escludeva un bel niente, e nessuno lo diceva.
     #[test]
-    fn una_cartella_dichiarata_con_lo_slash_e_la_stessa_cartella() {
-        for scritta in ["build", "build/", "/build", "/build/"] {
-            let p = IgnorePolicy::declaring([scritta.to_string()], false);
+    fn a_folder_declared_with_a_slash_is_the_same_folder() {
+        for written in ["build", "build/", "/build", "/build/"] {
+            let p = IgnorePolicy::declaring([written.to_string()], false);
             assert!(
-                p.esclude("build", Specie::Cartella),
-                "«{scritta}» non escludeva niente, in silenzio"
+                p.excludes("build", Kind::Folder),
+                "\"{written}\" excluded nothing, silently"
             );
         }
         // E ciò che si riduce a niente non diventa una chiave vuota che
@@ -644,28 +644,28 @@ mod tests {
     /// non è un elenco ma il posto dove Fub scrive, resta esclusa per tutte e
     /// due le specie.
     #[test]
-    fn un_file_non_e_la_cartella_che_si_chiama_come_lui() {
+    fn a_file_is_not_the_folder_named_after_it() {
         let p = IgnorePolicy::declaring(["build".to_string()], false);
-        assert!(p.esclude("build", Specie::Cartella));
+        assert!(p.excludes("build", Kind::Folder));
         assert!(
-            !p.esclude("build", Specie::File),
-            "un file di nome «build» spariva dal vault senza dirlo"
+            !p.excludes("build", Kind::File),
+            "a file named \"build\" vanished from the vault without saying so"
         );
         // La struttura non fa questa distinzione, e non deve farla.
-        assert!(p.esclude(FUB_DIR, Specie::File));
-        assert!(p.esclude(TRASH_DIR, Specie::File));
+        assert!(p.excludes(FUB_DIR, Kind::File));
+        assert!(p.excludes(TRASH_DIR, Kind::File));
         // Nemmeno i nascosti: la domanda lì è sul nome, non sulla specie.
-        assert!(p.esclude(".git", Specie::File));
+        assert!(p.excludes(".git", Kind::File));
     }
 
     /// Le due chiavi viaggiano col vault e nessun programma le scrive.
     #[test]
-    fn la_politica_viaggia_col_vault_e_nessun_programma_la_scrive() {
+    fn the_policy_travels_with_the_vault_and_no_program_writes_it() {
         let specs = ignore_settings();
         assert_eq!(specs.len(), 2);
         for spec in specs {
             assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
-            assert!(!spec.program_writable, "{} è scrivibile", spec.key);
+            assert!(!spec.program_writable, "{} is writable", spec.key);
         }
     }
 
@@ -673,11 +673,11 @@ mod tests {
     /// elenco**: due liste che dicono cosa esclude un vault appena aperto
     /// potrebbero divergere, e la seconda non la legge nessuno.
     #[test]
-    fn lo_schema_e_il_valutatore_dichiarano_lo_stesso_default() {
+    fn the_schema_and_the_evaluator_declare_the_same_default() {
         let SettingKind::List { default } = &ignore_settings()[0].kind else {
-            panic!("le cartelle escluse sono una lista");
+            panic!("excluded folders are a list");
         };
-        let dallo_schema = IgnorePolicy::declaring(default.clone(), false);
-        assert_eq!(dallo_schema, IgnorePolicy::default());
+        let from_the_schema = IgnorePolicy::declaring(default.clone(), false);
+        assert_eq!(from_the_schema, IgnorePolicy::default());
     }
 }

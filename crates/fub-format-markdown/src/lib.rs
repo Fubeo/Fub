@@ -176,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn unentita_nominale_con_tag_si_scioglie_non_si_raddoppia() {
+    fn entity_nominale_with_tag_is_resolves_not_is_doubles() {
         // `&amp;` col tag: il modello porta la `&` decodificata — come nel ramo
         // senza tag — e il render la ri-escapa una volta sola, non `&amp;amp;`.
         let doc = parse("A&amp;B #tag fine");
@@ -193,7 +193,7 @@ mod tests {
     }
 
     #[test]
-    fn unentita_numerica_con_tag_si_scioglie_nel_modello() {
+    fn entity_numerica_with_tag_is_resolves_in_the_model() {
         let doc = parse("pre &#65; #tag fine");
         match &paragrafo_inlines(&doc)[0] {
             Inline::Text(t) => assert_eq!(t, "pre A "),
@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn una_e_commerciale_nuda_con_tag_resta_una_e() {
+    fn a_and_commerciale_bare_with_tag_remains_a_and() {
         let doc = parse("Tom & Jerry #tag");
         match &paragrafo_inlines(&doc)[0] {
             Inline::Text(t) => assert_eq!(t, "Tom & Jerry "),
@@ -220,31 +220,31 @@ mod tests {
     }
 
     #[test]
-    fn il_ramo_con_tag_decodifica_come_quello_senza_per_le_entita() {
+    fn the_branch_with_tag_decodifica_as_that_without_for_the_entity() {
         // Un'entità nominale fuori dai cinque caratteri HTML significativi:
         // comrak la scioglie, e il ramo con il tag fa lo stesso — la `©`
         // resta `©`, non `&amp;copy;`.
-        let con_tag = parse("&copy; #t");
-        let senza = parse("&copy; qui");
-        let con = match &paragrafo_inlines(&con_tag)[0] {
+        let with_tag = parse("&copy; #t");
+        let without = parse("&copy; qui");
+        let with = match &paragrafo_inlines(&with_tag)[0] {
             Inline::Text(t) => t.clone(),
             _ => unreachable!(),
         };
-        let sen = match &paragrafo_inlines(&senza)[0] {
+        let sen = match &paragrafo_inlines(&without)[0] {
             Inline::Text(t) => t.clone(),
             _ => unreachable!(),
         };
-        assert_eq!(con, "© ");
+        assert_eq!(with, "© ");
         assert_eq!(sen, "© qui");
         let html = MarkdownProvider::new()
-            .render_html(&con_tag, &Default::default())
+            .render_html(&with_tag, &Default::default())
             .unwrap();
         assert!(html.contains("© <span"), "render: {html}");
         assert!(!html.contains("amp;copy"), "render: {html}");
     }
 
     #[test]
-    fn gli_escape_nei_segmenti_con_tag_si_sciolgono_comprima() {
+    fn the_escape_in_the_segments_with_tag_is_dissolve_compress() {
         // Un escape (`\*` → `*`) nel segmento prima del tag: la traduzione
         // degli offset non deve perderlo. Il modello porta `*testo*`, non
         // `\*testo\*`.
@@ -264,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn unentita_a_due_codepoint_seguita_da_un_altra_non_si_riallinea() {
+    fn entity_a_two_codepoint_followed_from_a_other_not_is_realigns() {
         // `&acE;` decodifica in DUE code point (U+223E U+0333): l'allineamento
         // a ritroso provava 1 o 2 code point contro il token dopo — un'altra
         // entità — e non aveva modo di decidere. La decodifica lineare usa la
@@ -279,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn un_ampersand_escapato_non_apre_entita() {
+    fn a_ampersand_escaped_not_opens_entity() {
         // `\&amp;` è `&amp;` letterale: l'escape della `&` ha priorità, e la
         // sequenza che da lì in poi sembrerebbe un'entità non si decodifica.
         let doc = parse("\\&amp; #tag fine");
@@ -305,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn i_riferimenti_numerici_fuori_intervallo_diventano_ufffd() {
+    fn the_references_numeric_outside_range_become_ufffd() {
         // Codepoint 0, surrogati e oltre U+10FFFF non sono caratteri: comrak
         // li sostituisce con U+FFFD, e il decoder fa lo stesso.
         let doc = parse("&#0; &#x110000; &#xD800; #tag");
@@ -316,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn le_cifre_oltre_il_tetto_non_sono_un_entita() {
+    fn the_digits_beyond_the_ceiling_not_are_a_entity() {
         // 8 cifre decimali o 7 esadecimali non sono un riferimento numerico
         // (i tetti di comrak sono 7 e 6): la `&` resta letterale.
         let doc = parse("&#12345678; &#x1234567; #tag");
@@ -334,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn un_entita_senza_punto_e_virgola_resta_testo() {
+    fn a_entity_without_point_and_comma_remains_text() {
         // Il `;` è obbligatorio: `&amp` e `&amp x;` (spazio nella finestra)
         // restano letterali.
         let doc = parse("&amp &amp x; #tag");
@@ -364,7 +364,7 @@ mod tests {
     /// un heading di questa nota inventa un tag» — e adesso quella sorgente sta
     /// nel corpus curato.
     #[test]
-    fn un_tag_nasce_solo_dove_qualcuno_lo_ha_scritto() {
+    fn a_tag_born_only_where_someone_the_has_written() {
         for src in [
             "[[#Sezione]]",
             "[[Nota#Sezione]]",
@@ -387,8 +387,8 @@ mod tests {
 
         // E l'altra metà: dentro un alias il `#` è dell'autore, e resta un tag.
         let doc = parse("[[Nota|alias con #tag]]");
-        let nomi: Vec<_> = doc.tags.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(nomi, vec!["tag"], "body: {:?}", doc.body);
+        let names: Vec<_> = doc.tags.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, vec!["tag"], "body: {:?}", doc.body);
         // Lo span punta al `#tag` della sorgente, non a un'invenzione.
         let s = doc.tags[0].span;
         assert_eq!(&"[[Nota|alias con #tag]]"[s.start..s.end], "#tag");
@@ -401,7 +401,7 @@ mod tests {
         let embed = doc
             .links
             .iter()
-            .find(|l| l.embed && matches!(&l.target, LinkTarget::Wiki { .. }))
+            .find(|the| the.embed && matches!(&the.target, LinkTarget::Wiki { .. }))
             .expect("un embed");
         assert_eq!(
             &src[embed.span.start..embed.span.end],
@@ -410,7 +410,7 @@ mod tests {
         );
         // E un `!` sotto escape non apre un embed.
         let doc = parse("testo \\![[Nota]] qui");
-        assert!(!doc.links.iter().any(|l| l.embed), "links: {:?}", doc.links);
+        assert!(!doc.links.iter().any(|the| the.embed), "links: {:?}", doc.links);
     }
 
     #[test]
@@ -438,14 +438,14 @@ mod tests {
         let slugs: Vec<&str> = doc.outline.iter().map(|h| h.slug.as_str()).collect();
         assert_eq!(slugs, ["note", "note-1", "note-2"]);
 
-        let ancore: Vec<Option<&str>> = doc
+        let anchors: Vec<Option<&str>> = doc
             .body
             .iter()
             .filter(|b| matches!(b, Block::Heading { .. }))
             .map(Block::anchor)
             .collect();
         assert_eq!(
-            ancore,
+            anchors,
             [Some("note"), Some("note-1"), Some("note-2")],
             "l'ancora del blocco e lo slug dell'outline sono la stessa assegnazione"
         );
@@ -479,7 +479,7 @@ mod tests {
     /// due, e la confusione tornerebbe a mordere sul primo id scritto con una
     /// lettera maiuscola.
     #[test]
-    fn l_id_esplicito_di_un_heading_si_conserva_esattamente() {
+    fn the_id_explicit_of_a_heading_is_preserves_exactly() {
         let doc = parse("## Titolo ^Mio-ID\n");
         // La chiave: lo slug è la forma canonica dell'id scritto — la stessa
         // che la tabella piatta `anchors` usa per `[[Nota#^mio-id]]` — e
@@ -504,10 +504,10 @@ mod tests {
         // La riscrittura riporta l'id **com'era scritto**, sulla riga del
         // titolo — e il giro è stabile: rileggere ciò che si è scritto dà lo
         // stesso modello.
-        let giro = MarkdownProvider::new().serialize(&doc).unwrap();
-        assert_eq!(giro, "## Titolo ^Mio-ID\n");
-        let riletto = parse(&giro);
-        assert_eq!(riletto, doc);
+        let round = MarkdownProvider::new().serialize(&doc).unwrap();
+        assert_eq!(round, "## Titolo ^Mio-ID\n");
+        let reparsed = parse(&round);
+        assert_eq!(reparsed, doc);
 
         // La resa HTML porta l'id scritto: `id="Mio-ID"`, non `id="mio-id"`.
         let html = MarkdownProvider::new()
@@ -537,8 +537,8 @@ mod tests {
     /// qui). Il banco misura ciò che questa funzione promette: le `opts`
     /// arrivano intere ovunque ci sia un inline.
     #[test]
-    fn le_opzioni_del_chiamante_valgono_anche_dentro_l_etichetta() {
-        let dentro = Inline::Link {
+    fn the_callers_options_also_apply_inside_the_label() {
+        let within = Inline::Link {
             target: LinkTarget::Wiki {
                 page: "Nota".into(),
                 heading: None,
@@ -551,10 +551,10 @@ mod tests {
         let mut doc = DocumentModel::empty(DocId::new("nota.md"));
         doc.body.push(Block::Paragraph {
             inlines: vec![
-                dentro.clone(),
+                within.clone(),
                 Inline::Link {
                     target: LinkTarget::Url("https://esempio.it".into()),
-                    label: Some(vec![Inline::Text("vai a ".into()), dentro]),
+                    label: Some(vec![Inline::Text("vai a ".into()), within]),
                     embed: false,
                     span: Span::EMPTY,
                 },
@@ -636,7 +636,7 @@ mod tests {
     /// «l'heading si chiama nulla», e chi legge l'attributo con un `?? null`
     /// riceve la stringa vuota e va a cercare una sezione che non esiste.
     #[test]
-    fn il_segnaposto_di_un_embed_porta_anche_l_ancora_di_blocco() {
+    fn the_placeholder_of_a_embed_carries_also_the_again_of_block() {
         let html = MarkdownProvider::new()
             .render_html(&parse("![[Altra Nota#^blocco]]"), &RenderOptions::preview())
             .unwrap();
@@ -687,7 +687,7 @@ mod tests {
     /// `fub_abi::html`; il banco che era davvero rosso sull'apice è quello di
     /// `fub-features` · `blocks.rs`, dove la tabella incompleta stava.
     #[test]
-    fn un_apice_in_un_attributo_esce_come_entita() {
+    fn a_quote_in_a_attribute_exits_as_entity() {
         let html = MarkdownProvider::new()
             .render_html(&parse("[[L'ora del tè]]"), &RenderOptions::preview())
             .unwrap();
@@ -719,7 +719,7 @@ mod tests {
     /// Che il testo esca **escapato** è la metà che non cambia: resta dato, non
     /// torna markup.
     #[test]
-    fn un_blocco_senza_figli_non_perde_il_proprio_testo() {
+    fn a_block_without_children_does_not_lose_its_own_text() {
         let html = MarkdownProvider::new()
             .render_html(
                 &parse("<div class=\"x\">ciao</div>\n"),
@@ -780,10 +780,10 @@ mod tests {
     /// (`frontend/src/theme/serie/pelle.css`), e allargare la classe con un prefisso
     /// avrebbe scollegato il tema senza che niente diventasse rosso.
     #[test]
-    fn due_kind_omonimi_di_namespace_diversi_non_collidono_sulla_classe() {
-        let custom_inline = |kind: &str, chiave: &str, text: &str| Inline::Custom {
+    fn two_kind_same_named_of_namespace_different_not_collide_on_the_class() {
+        let custom_inline = |kind: &str, key: &str, text: &str| Inline::Custom {
             custom_kind: kind.into(),
-            attrs: serde_json::json!({ chiave: text }),
+            attrs: serde_json::json!({ key: text }),
             span: fub_abi::model::Span::EMPTY,
         };
         let custom_block = |kind: &str, source: &str| Block::Custom {
@@ -812,18 +812,18 @@ mod tests {
             .render_html(&doc, &RenderOptions::preview())
             .unwrap();
 
-        for lato in ["inline", "block"] {
+        for side in ["inline", "block"] {
             for ns in ["terzi", "altri"] {
                 assert!(
-                    html.contains(&format!("class=\"{lato}-{ns}:spoiler\"")),
-                    "manca la classe `{lato}-{ns}:spoiler`: {html}"
+                    html.contains(&format!("class=\"{side}-{ns}:spoiler\"")),
+                    "manca la classe `{side}-{ns}:spoiler`: {html}"
                 );
             }
             // E la classe senza namespace non esce affatto: se uscisse, i due
             // autori sarebbero di nuovo lo stesso selettore.
             assert!(
-                !html.contains(&format!("class=\"{lato}-spoiler\"")),
-                "il namespace è stato tagliato sul lato {lato}: {html}"
+                !html.contains(&format!("class=\"{side}-spoiler\"")),
+                "il namespace è stato tagliato sul lato {side}: {html}"
             );
         }
 
@@ -880,7 +880,7 @@ mod tests {
         assert_eq!(
             items
                 .iter()
-                .map(|i| i.task.map(|t| (t.symbol, t.checked())))
+                .map(|the| the.task.map(|t| (t.symbol, t.checked())))
                 .collect::<Vec<_>>(),
             vec![
                 Some((Some('x'), true)),
@@ -1010,7 +1010,7 @@ mod tests {
         assert!(doc
             .links
             .iter()
-            .any(|l| l.target == LinkTarget::wiki("Nota")));
+            .any(|the| the.target == LinkTarget::wiki("Nota")));
 
         let html = MarkdownProvider::new()
             .render_html(&doc, &RenderOptions::default())
@@ -1042,8 +1042,8 @@ mod tests {
         let Some(Block::Paragraph { inlines, .. }) = doc.body.first() else {
             panic!("atteso un paragrafo");
         };
-        assert!(inlines.iter().any(|i| matches!(
-            i,
+        assert!(inlines.iter().any(|the| matches!(
+            the,
             Inline::Custom { custom_kind, .. } if custom_kind == custom_kind::FOOTNOTE_REFERENCE
         )));
 
@@ -1091,7 +1091,7 @@ mod tests {
     /// Le proprietà tipizzate lette dal frontmatter vero, non da un JSON
     /// costruito a mano: è il giro completo YAML → JSON → `PropertyValue`.
     #[test]
-    fn frontmatter_properties_come_out_typed() {
+    fn frontmatter_properties_as_out_typed() {
         let doc = parse("---\nscadenza: 2026-07-25\nrating: 4\nautore: \"[[Mario]]\"\ntag: [a, b]\n---\n\nCorpo.");
         assert!(matches!(
             doc.frontmatter.property("scadenza", &DateFormats::ISO),

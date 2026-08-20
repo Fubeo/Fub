@@ -86,13 +86,13 @@ impl VaultRead for ReadHost<'_> {
 impl DataRead for ReadHost<'_> {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
         if path.is_empty() {
-            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
+            return Err(PluginError::BadArgs("empty blob name".into()));
         }
         let path = self.ws.plugin_data_path(self.plugin, path)?;
         match self.ws.storage().read(&path) {
             Ok(bytes) => Ok(Some(bytes)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(PluginError::Internal(format!("{path}: {e}").into())),
+            Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(and) => Err(PluginError::Internal(format!("{path}: {and}").into())),
         }
     }
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { byteToCharIndex, charToByteIndex, charToByteIndices } from "./offsets";
 
 // Il ponte byte UTF-8 → code unit UTF-16 è codice load-bearing: uno scroll
-// dell'outline (o, a M3, una decorazione di live-preview) calcolato su un
+// dell'outline (o, a M3, una decorazione di vivi-preview) calcolato su un
 // offset mappato male cade righe più in là, e lo fa **in silenzio** su testo
 // accentato — cioè su ogni nota in italiano. Questi test sono la verifica che
 // prima era a mano (§4 del piano dice: il ponte va testato su multibyte).
@@ -123,15 +123,15 @@ describe("charToByteIndices", () => {
     // esiste per il costo, non per la semantica, e il giorno che le due
     // divergessero le selezioni pubblicate sarebbero sbagliate senza che
     // nulla lo dica (decisione 0093).
-    const indici = [...Array(doc.length + 3).keys()];
-    expect(charToByteIndices(doc, indici)).toEqual(indici.map((i) => charToByteIndex(doc, i)));
+    const indices = [...Array(doc.length + 3).keys()];
+    expect(charToByteIndices(doc, indices)).toEqual(indices.map((i) => charToByteIndex(doc, i)));
   });
 
-  it("risponde nell'ordine in cui gli indici arrivano, non in quello ordinato", () => {
+  it("risponde nell'ordine in cui gli indices arrivano, non in quello ordinato", () => {
     // Chi chiama ha delle coppie (inizio, fine) da ricomporre: restituirle
     // ordinate accoppierebbe la fine di una con l'inizio di un'altra.
-    const indici = [9, 0, 4, 2];
-    expect(charToByteIndices(doc, indici)).toEqual(indici.map((i) => charToByteIndex(doc, i)));
+    const indices = [9, 0, 4, 2];
+    expect(charToByteIndices(doc, indices)).toEqual(indices.map((i) => charToByteIndex(doc, i)));
   });
 
   it("regge il vuoto, il negativo e l'oltre la fine come la singola", () => {

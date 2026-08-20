@@ -30,9 +30,9 @@ pub const PROPERTIES_ID: &str = "fub.properties";
 /// Id della `ViewSpec`.
 pub const PROPERTIES_VIEW: &str = "properties";
 /// Imposta (o aggiunge) una chiave del frontmatter.
-pub const NOTE_PROPERTY_SET: &str = "note.property.set";
+pub const NOTES_PROPERTY_SET: &str = "note.property.set";
 /// Toglie una chiave del frontmatter.
-pub const NOTE_PROPERTY_REMOVE: &str = "note.property.remove";
+pub const NOTES_PROPERTY_REMOVE: &str = "note.property.remove";
 
 /// La chiave del core: formato di data dichiarato dal vault. Non si importa da
 /// `fub-kernel` (invariante): il nome è il contratto, ed è lo stesso.
@@ -48,14 +48,14 @@ const NEW_KEY: &str = "new_key";
 const NEW_VALUE: &str = "new_value";
 
 const VIEW_TITLE: &str = "view_title";
-const EMPTY_NO_NOTE: &str = "empty_no_note";
+const EMPTY_NO_NOTES: &str = "empty_no_note";
 const EMPTY_NO_PROPS: &str = "empty_no_props";
 const ADD_KEY_LABEL: &str = "add_key_label";
 const ADD_VALUE_LABEL: &str = "add_value_label";
 const ADD_SUBMIT: &str = "add_submit";
 const REMOVE_LABEL: &str = "remove_label";
 const E_EMPTY_KEY: &str = "e_empty_key";
-const E_NO_NOTE: &str = "e_no_note";
+const AND_NO_NOTES: &str = "e_no_note";
 const E_YAML: &str = "e_yaml";
 const P_SET: &str = "p_set";
 const P_REMOVE: &str = "p_remove";
@@ -70,14 +70,14 @@ pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Proprietà")
-            .with(EMPTY_NO_NOTE, "Nessuna nota aperta.")
+            .with(EMPTY_NO_NOTES, "Nessuna nota aperta.")
             .with(EMPTY_NO_PROPS, "Questa nota non ha proprietà.")
             .with(ADD_KEY_LABEL, "Chiave")
             .with(ADD_VALUE_LABEL, "Valore")
             .with(ADD_SUBMIT, "Aggiungi")
             .with(REMOVE_LABEL, "Rimuovi")
             .with(E_EMPTY_KEY, "La chiave è vuota.")
-            .with(E_NO_NOTE, "Nessuna nota su cui scrivere la proprietà.")
+            .with(AND_NO_NOTES, "Nessuna nota su cui scrivere la proprietà.")
             .with(E_YAML, "Non ho potuto scrivere il frontmatter: {reason}")
             .with(P_SET, "Proprietà «{key}» in {doc}")
             .with(P_REMOVE, "Tolta «{key}» da {doc}")
@@ -119,14 +119,14 @@ pub fn catalog() -> Vec<StringCatalog> {
             ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Properties")
-            .with(EMPTY_NO_NOTE, "No note open.")
+            .with(EMPTY_NO_NOTES, "No note open.")
             .with(EMPTY_NO_PROPS, "This note has no properties.")
             .with(ADD_KEY_LABEL, "Key")
             .with(ADD_VALUE_LABEL, "Value")
             .with(ADD_SUBMIT, "Add")
             .with(REMOVE_LABEL, "Remove")
             .with(E_EMPTY_KEY, "The key is empty.")
-            .with(E_NO_NOTE, "No note to write the property on.")
+            .with(AND_NO_NOTES, "No note to write the property on.")
             .with(E_YAML, "Could not write the frontmatter: {reason}")
             .with(P_SET, "Property «{key}» in {doc}")
             .with(P_REMOVE, "Removed «{key}» from {doc}")
@@ -210,14 +210,14 @@ impl ViewProvider for PropertiesView {
                 let Some(key) = action.payload.get(KEY).and_then(|v| v.as_str()) else {
                     return Ok(ViewUpdate::None);
                 };
-                let Some(value) = yaml_dal_campo(&action, key) else {
+                let Some(value) = yaml_from_field(&action, key) else {
                     return Ok(ViewUpdate::None);
                 };
                 let mut args = serde_json::json!({ KEY: key, VALUE: value });
                 if let Some(doc) = action.payload.get(DOC).and_then(|v| v.as_str()) {
                     args[DOC] = serde_json::Value::String(doc.to_string());
                 }
-                comando_poi_albero(host, NOTE_PROPERTY_SET, args)
+                command_then_tree(host, NOTES_PROPERTY_SET, args)
             }
             REMOVE => {
                 let Some(key) = action.payload.get(KEY).and_then(|v| v.as_str()) else {
@@ -227,7 +227,7 @@ impl ViewProvider for PropertiesView {
                 if let Some(doc) = action.payload.get(DOC).and_then(|v| v.as_str()) {
                     args[DOC] = serde_json::Value::String(doc.to_string());
                 }
-                comando_poi_albero(host, NOTE_PROPERTY_REMOVE, args)
+                command_then_tree(host, NOTES_PROPERTY_REMOVE, args)
             }
             ADD => {
                 let key = action.text_field(NEW_KEY).unwrap_or_default();
@@ -236,14 +236,14 @@ impl ViewProvider for PropertiesView {
                 if let Some(doc) = action.payload.get(DOC).and_then(|v| v.as_str()) {
                     args[DOC] = serde_json::Value::String(doc.to_string());
                 }
-                comando_poi_albero(host, NOTE_PROPERTY_SET, args)
+                command_then_tree(host, NOTES_PROPERTY_SET, args)
             }
             _ => Ok(ViewUpdate::None),
         }
     }
 }
 
-fn comando_poi_albero(
+fn command_then_tree(
     host: &mut dyn HostApi,
     id: &str,
     args: serde_json::Value,
@@ -252,29 +252,29 @@ fn comando_poi_albero(
         Ok(_) => Ok(ViewUpdate::Replace {
             root: tree(host, None)?,
         }),
-        Err(e) => Ok(ViewUpdate::Replace {
+        Err(and) => Ok(ViewUpdate::Replace {
             root: tree(
                 host,
                 Some(Text::message(
                     FAILED,
-                    vec![Arg::text("reason", e.to_string())],
+                    vec![Arg::text("reason", and.to_string())],
                 )),
             )?,
         }),
     }
 }
 
-fn yaml_dal_campo(action: &UiAction, key: &str) -> Option<String> {
+fn yaml_from_field(action: &UiAction, key: &str) -> Option<String> {
     if let Some(b) = action.bool_field(key) {
         return Some(if b { "true" } else { "false" }.into());
     }
     if let Some(n) = action.number_field(key) {
-        return Some(numero_yaml(n));
+        return Some(yaml_number(n));
     }
     action.text_field(key).map(str::to_string)
 }
 
-fn numero_yaml(n: f64) -> String {
+fn yaml_number(n: f64) -> String {
     if n.is_finite() && n.fract() == 0.0 && n.abs() < (i64::MAX as f64) {
         format!("{}", n as i64)
     } else {
@@ -282,24 +282,24 @@ fn numero_yaml(n: f64) -> String {
     }
 }
 
-fn tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError> {
+fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError> {
     let Some(doc) = host.active_context().and_then(|c| c.doc) else {
-        return Ok(UiNode::empty_state(Text::key(EMPTY_NO_NOTE)));
+        return Ok(UiNode::empty_state(Text::key(EMPTY_NO_NOTES)));
     };
     let model = host.read_model(&doc)?;
     let formats = date_formats(host);
     let props = model.frontmatter.properties(&formats);
-    let mut figli = Vec::new();
-    if let Some(avviso) = avviso {
-        figli.push(UiNode::failed(avviso, None));
+    let mut children = Vec::new();
+    if let Some(warning) = warning {
+        children.push(UiNode::failed(warning, None));
     }
     if props.is_empty() {
-        figli.push(UiNode::empty_state(Text::key(EMPTY_NO_PROPS)));
+        children.push(UiNode::empty_state(Text::key(EMPTY_NO_PROPS)));
     } else {
-        figli.extend(props.iter().map(|(k, v)| riga(&doc, k, v)));
+        children.extend(props.iter().map(|(k, v)| row(&doc, k, v)));
     }
-    figli.push(form_aggiungi(&doc));
-    Ok(UiNode::column(1, figli))
+    children.push(add_form(&doc));
+    Ok(UiNode::column(1, children))
 }
 
 fn date_formats(host: &dyn ReadApi) -> DateFormats {
@@ -318,10 +318,10 @@ fn date_formats(host: &dyn ReadApi) -> DateFormats {
     }
 }
 
-fn riga(doc: &DocId, key: &str, value: &PropertyValue) -> UiNode {
+fn row(doc: &DocId, key: &str, value: &PropertyValue) -> UiNode {
     let payload = serde_json::json!({ KEY: key, DOC: doc.as_str() });
-    let campo = widget(key, value, payload.clone());
-    let togli = UiNode::button(
+    let field = widget(key, value, payload.clone());
+    let removes = UiNode::button(
         Text::key(REMOVE_LABEL),
         Intent::Danger,
         ActionRef::with(REMOVE, payload),
@@ -331,7 +331,7 @@ fn riga(doc: &DocId, key: &str, value: &PropertyValue) -> UiNode {
         UiKind::Stack {
             dir: fub_abi::ui::Axis::Row,
             gap: 1,
-            children: vec![campo, togli],
+            children: vec![field, removes],
         },
     )
 }
@@ -375,14 +375,14 @@ fn widget(key: &str, value: &PropertyValue, payload: serde_json::Value) -> UiNod
         PropertyValue::Link(t) => UiNode::new(UiKind::TextInput {
             field: key.to_string(),
             label,
-            value: mostra_link(t),
+            value: show_link(t),
             placeholder: None,
             action,
         }),
         PropertyValue::List(items) => UiNode::new(UiKind::TextInput {
             field: key.to_string(),
             label,
-            value: mostra_lista(items),
+            value: show_list(items),
             placeholder: None,
             action,
         }),
@@ -399,7 +399,7 @@ fn widget(key: &str, value: &PropertyValue, payload: serde_json::Value) -> UiNod
     }
 }
 
-fn mostra_link(t: &LinkTarget) -> String {
+fn show_link(t: &LinkTarget) -> String {
     match t {
         LinkTarget::Wiki { .. } => match t.wiki_inner() {
             Some(inner) => format!("[[{inner}]]"),
@@ -409,15 +409,15 @@ fn mostra_link(t: &LinkTarget) -> String {
     }
 }
 
-fn mostra_lista(items: &[fub_abi::model::PropertyScalar]) -> String {
-    let vals: Vec<serde_json::Value> = items.iter().map(scalare_json).collect();
+fn show_list(items: &[fub_abi::model::PropertyScalar]) -> String {
+    let vals: Vec<serde_json::Value> = items.iter().map(scalar_to_json).collect();
     match serde_yaml_ng::to_string(&vals) {
         Ok(s) => s.trim().to_string(),
         Err(_) => String::new(),
     }
 }
 
-fn scalare_json(s: &fub_abi::model::PropertyScalar) -> serde_json::Value {
+fn scalar_to_json(s: &fub_abi::model::PropertyScalar) -> serde_json::Value {
     use fub_abi::model::PropertyScalar;
     match s {
         PropertyScalar::Empty => serde_json::Value::Null,
@@ -429,12 +429,12 @@ fn scalare_json(s: &fub_abi::model::PropertyScalar) -> serde_json::Value {
         PropertyScalar::Date(d) => {
             serde_json::Value::String(format!("{:04}-{:02}-{:02}", d.year, d.month, d.day))
         }
-        PropertyScalar::Link(t) => serde_json::Value::String(mostra_link(t)),
+        PropertyScalar::Link(t) => serde_json::Value::String(show_link(t)),
         PropertyScalar::Unknown(v) => v.clone(),
     }
 }
 
-fn form_aggiungi(doc: &DocId) -> UiNode {
+fn add_form(doc: &DocId) -> UiNode {
     UiNode::new(UiKind::Form {
         children: vec![
             UiNode::new(UiKind::TextInput {
@@ -465,14 +465,14 @@ pub struct PropertiesCommands;
 impl CommandProvider for PropertiesCommands {
     fn commands(&self) -> Vec<CommandSpec> {
         vec![
-            comando(NOTE_PROPERTY_SET)
-                .with_param(parametro(NOTE_PROPERTY_SET, DOC, ParamKind::Document))
-                .with_param(parametro(NOTE_PROPERTY_SET, KEY, ParamKind::Text).required())
-                .with_param(parametro(NOTE_PROPERTY_SET, VALUE, ParamKind::Text).required())
+            command(NOTES_PROPERTY_SET)
+                .with_param(parameter(NOTES_PROPERTY_SET, DOC, ParamKind::Document))
+                .with_param(parameter(NOTES_PROPERTY_SET, KEY, ParamKind::Text).required())
+                .with_param(parameter(NOTES_PROPERTY_SET, VALUE, ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            comando(NOTE_PROPERTY_REMOVE)
-                .with_param(parametro(NOTE_PROPERTY_REMOVE, DOC, ParamKind::Document))
-                .with_param(parametro(NOTE_PROPERTY_REMOVE, KEY, ParamKind::Text).required())
+            command(NOTES_PROPERTY_REMOVE)
+                .with_param(parameter(NOTES_PROPERTY_REMOVE, DOC, ParamKind::Document))
+                .with_param(parameter(NOTES_PROPERTY_REMOVE, KEY, ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Document)),
         ]
     }
@@ -485,30 +485,30 @@ impl CommandProvider for PropertiesCommands {
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         match command {
-            NOTE_PROPERTY_SET => set(Args::new(&args), mode, host),
-            NOTE_PROPERTY_REMOVE => remove(Args::new(&args), mode, host),
+            NOTES_PROPERTY_SET => set(Args::new(&args), mode, host),
+            NOTES_PROPERTY_REMOVE => remove(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
 }
 
-fn comando(id: &str) -> CommandSpec {
+fn command(id: &str) -> CommandSpec {
     CommandSpec::new(id, Text::key(format!("{id}.title")))
         .describing(Text::key(format!("{id}.desc")))
 }
 
-fn parametro(comando: &str, name: &str, kind: ParamKind) -> ParamSpec {
-    ParamSpec::new(name, Text::key(format!("{comando}.{name}.title")), kind)
-        .describing(Text::key(format!("{comando}.{name}.desc")))
+fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
+    ParamSpec::new(name, Text::key(format!("{command}.{name}.title")), kind)
+        .describing(Text::key(format!("{command}.{name}.desc")))
 }
 
-fn doc_da(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
+fn doc_from(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
     args.document(DOC)
         .or_else(|| host.active_context().and_then(|c| c.doc))
-        .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_NOTE)))
+        .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES)))
 }
 
-fn chiave_da(args: Args<'_>) -> Result<String, PluginError> {
+fn key_from(args: Args<'_>) -> Result<String, PluginError> {
     let key = args.text(KEY).unwrap_or("").trim();
     if key.is_empty() {
         Err(PluginError::BadArgs(Text::key(E_EMPTY_KEY)))
@@ -522,11 +522,11 @@ fn set(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = doc_da(args, host)?;
-    let key = chiave_da(args)?;
+    let doc = doc_from(args, host)?;
+    let key = key_from(args)?;
     let grezzo = args.text(VALUE).unwrap_or("");
-    let valore = parse_yaml_valore(grezzo);
-    riscrivi(
+    let value = parse_yaml_value(grezzo);
+    rewrite(
         host,
         &doc,
         mode,
@@ -538,8 +538,8 @@ fn set(
             U_SET,
             vec![Arg::text(KEY, &key), Arg::text(DOC, doc.as_str())],
         ),
-        |mappa| {
-            mappa.insert(key.clone(), valore.clone());
+        |map| {
+            map.insert(key.clone(), value.clone());
             Ok(())
         },
     )
@@ -550,8 +550,8 @@ fn remove(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = doc_da(args, host)?;
-    let key = chiave_da(args)?;
+    let doc = doc_from(args, host)?;
+    let key = key_from(args)?;
     let model = host.read_model(&doc)?;
     if model.frontmatter.get(&key).is_none() {
         return Ok(CommandOutcome::notify(Text::message(
@@ -559,7 +559,7 @@ fn remove(
             vec![Arg::text(KEY, &key), Arg::text(DOC, doc.as_str())],
         )));
     }
-    riscrivi(
+    rewrite(
         host,
         &doc,
         mode,
@@ -571,26 +571,26 @@ fn remove(
             U_REMOVE,
             vec![Arg::text(KEY, &key), Arg::text(DOC, doc.as_str())],
         ),
-        |mappa| {
-            mappa.remove(&key);
+        |map| {
+            map.remove(&key);
             Ok(())
         },
     )
 }
 
-fn riscrivi(
+fn rewrite(
     host: &mut dyn HostApi,
     doc: &DocId,
     mode: InvokeMode,
     summary: Text,
     undo_label: Text,
-    mut muta: impl FnMut(&mut serde_json::Map<String, serde_json::Value>) -> Result<(), PluginError>,
+    mut mutate: impl FnMut(&mut serde_json::Map<String, serde_json::Value>) -> Result<(), PluginError>,
 ) -> Result<CommandOutcome, PluginError> {
     let source = host.read_document(doc)?;
     let model = host.read_model(doc)?;
-    let mut mappa = model.frontmatter.0.clone();
-    muta(&mut mappa)?;
-    let edit = edit_frontmatter(&source, &model, &mappa)?;
+    let mut map = model.frontmatter.0.clone();
+    mutate(&mut map)?;
+    let edit = edit_frontmatter(&source, &model, &map)?;
     let revision = host.document_revision(doc)?;
     let request = EditRequest::new(revision, vec![edit]);
     if mode.is_dry_run() {
@@ -611,7 +611,7 @@ fn riscrivi(
 }
 
 /// Parsa un frammento YAML in JSON. Se non è YAML, resta una stringa.
-pub(crate) fn parse_yaml_valore(s: &str) -> serde_json::Value {
+pub(crate) fn parse_yaml_value(s: &str) -> serde_json::Value {
     let t = s.trim();
     // `[[page]]` è YAML flow-sequence, non un wikilink. Si tiene stringa
     // **prima** del parse, altrimenti diventa `[["page"]]`.
@@ -629,15 +629,15 @@ pub(crate) fn parse_yaml_valore(s: &str) -> serde_json::Value {
 pub(crate) fn edit_frontmatter(
     source: &str,
     model: &DocumentModel,
-    mappa: &serde_json::Map<String, serde_json::Value>,
+    map: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<TextEdit, PluginError> {
-    let start = inizio_sorgente(source);
-    let blocco = serializza_blocco(mappa)?;
+    let start = source_start(source);
+    let block = serialize_block(map)?;
     if model.frontmatter_present {
-        let end = fine_frontmatter(source, model);
-        Ok(TextEdit::replace(Span::new(start, end), blocco))
+        let end = end_frontmatter(source, model);
+        Ok(TextEdit::replace(Span::new(start, end), block))
     } else {
-        let mut text = blocco;
+        let mut text = block;
         if start < source.len() {
             if !text.ends_with('\n') {
                 text.push('\n');
@@ -648,7 +648,7 @@ pub(crate) fn edit_frontmatter(
     }
 }
 
-pub(crate) fn inizio_sorgente(source: &str) -> usize {
+pub(crate) fn source_start(source: &str) -> usize {
     if source.starts_with('\u{FEFF}') {
         '\u{FEFF}'.len_utf8()
     } else {
@@ -659,39 +659,39 @@ pub(crate) fn inizio_sorgente(source: &str) -> usize {
 /// Come `fine_del_frontmatter` in `fub-format-markdown`: fine = inizio riga del
 /// primo blocco del body (attraverso soli space/tab), o `source.len()` se il
 /// body è vuoto.
-fn fine_frontmatter(source: &str, model: &DocumentModel) -> usize {
+fn end_frontmatter(source: &str, model: &DocumentModel) -> usize {
     match model.body.first() {
         Some(first) => {
-            let contenuto = first.span().start;
-            let contenuto = contenuto.min(source.len());
-            let riga = source[..contenuto]
+            let content = first.span().start;
+            let content = content.min(source.len());
+            let row = source[..content]
                 .rfind(['\n', '\r'])
-                .map(|i| i + 1)
+                .map(|the| the + 1)
                 .unwrap_or(0);
             if source
-                .get(riga..contenuto)
+                .get(row..content)
                 .is_some_and(|s| s.chars().all(|c| c == ' ' || c == '\t'))
             {
-                riga
+                row
             } else {
-                contenuto
+                content
             }
         }
         None => source.len(),
     }
 }
 
-pub(crate) fn serializza_blocco(
-    mappa: &serde_json::Map<String, serde_json::Value>,
+pub(crate) fn serialize_block(
+    map: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<String, PluginError> {
-    if mappa.is_empty() {
+    if map.is_empty() {
         return Ok("---\n\n---\n".to_string());
     }
     let yaml =
-        serde_yaml_ng::to_string(&serde_json::Value::Object(mappa.clone())).map_err(|e| {
+        serde_yaml_ng::to_string(&serde_json::Value::Object(map.clone())).map_err(|and| {
             PluginError::BadArgs(Text::message(
                 E_YAML,
-                vec![Arg::text("reason", e.to_string())],
+                vec![Arg::text("reason", and.to_string())],
             ))
         })?;
     let yaml = yaml
@@ -706,36 +706,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn serializza_vuoto_tiene_i_delimitatori() {
-        let s = serializza_blocco(&serde_json::Map::new()).unwrap();
+    fn serializes_empty_holds_the_delimiters() {
+        let s = serialize_block(&serde_json::Map::new()).unwrap();
         assert_eq!(s, "---\n\n---\n");
     }
 
     #[test]
-    fn serializza_preserva_ordine_chiavi() {
+    fn serialize_preserves_key_order() {
         let mut m = serde_json::Map::new();
         m.insert("title".into(), serde_json::json!("ciao"));
         m.insert("done".into(), serde_json::json!(true));
-        let s = serializza_blocco(&m).unwrap();
-        let i_title = s.find("title").expect("title");
-        let i_done = s.find("done").expect("done");
-        assert!(i_title < i_done, "{s}");
+        let s = serialize_block(&m).unwrap();
+        let the_title = s.find("title").expect("title");
+        let the_done = s.find("done").expect("done");
+        assert!(the_title < the_done, "{s}");
         assert!(s.starts_with("---\n"));
         assert!(s.contains("ciao"));
     }
 
     #[test]
-    fn parse_yaml_fallback_a_stringa() {
-        assert_eq!(parse_yaml_valore("true"), serde_json::json!(true));
-        assert_eq!(parse_yaml_valore("3"), serde_json::json!(3));
-        assert_eq!(parse_yaml_valore("[[page]]"), serde_json::json!("[[page]]"));
+    fn parse_yaml_fallback_a_string() {
+        assert_eq!(parse_yaml_value("true"), serde_json::json!(true));
+        assert_eq!(parse_yaml_value("3"), serde_json::json!(3));
+        assert_eq!(parse_yaml_value("[[page]]"), serde_json::json!("[[page]]"));
     }
 
     #[test]
-    fn wikilink_a_mano() {
-        assert_eq!(mostra_link(&LinkTarget::wiki("page")), "[[page]]");
+    fn wikilink_a_hand() {
+        assert_eq!(show_link(&LinkTarget::wiki("page")), "[[page]]");
         assert_eq!(
-            mostra_link(&LinkTarget::Wiki {
+            show_link(&LinkTarget::Wiki {
                 page: "page".into(),
                 heading: Some("H".into()),
                 block: None,
@@ -743,7 +743,7 @@ mod tests {
             "[[page#H]]"
         );
         assert_eq!(
-            mostra_link(&LinkTarget::Wiki {
+            show_link(&LinkTarget::Wiki {
                 page: "page".into(),
                 heading: None,
                 block: Some("b".into()),
@@ -751,20 +751,20 @@ mod tests {
             "[[page#^b]]"
         );
         assert_eq!(
-            mostra_link(&LinkTarget::Url("https://esempio.test".into())),
+            show_link(&LinkTarget::Url("https://esempio.test".into())),
             "https://esempio.test"
         );
     }
 
     #[test]
-    fn bom_non_entra_nello_span() {
+    fn bom_not_enters_in_the_span() {
         let s = "\u{FEFF}# ciao\n";
-        assert_eq!(inizio_sorgente(s), 3);
-        assert_eq!(inizio_sorgente("# ciao\n"), 0);
+        assert_eq!(source_start(s), 3);
+        assert_eq!(source_start("# ciao\n"), 0);
     }
 
     #[test]
-    fn insert_senza_frontmatter_lascia_il_corpo() {
+    fn insert_without_frontmatter_leaves_the_body() {
         let source = "# Hello\n\nresto\n";
         let model = DocumentModel::empty(DocId::new("a.md"));
         let mut m = serde_json::Map::new();
@@ -776,7 +776,7 @@ mod tests {
         out.insert_str(0, &edit.text);
         assert!(out.ends_with("# Hello\n\nresto\n"), "{out}");
         assert!(out.starts_with("---\n"));
-        let corpo = &out[edit.text.len()..];
-        assert_eq!(corpo, source);
+        let body = &out[edit.text.len()..];
+        assert_eq!(body, source);
     }
 }

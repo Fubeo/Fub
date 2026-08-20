@@ -31,36 +31,36 @@
 // salvataggio, che un esito non ce l'aveva proprio. Da lì è uscita anche
 // `esisteUnDom` qui sotto: aperta la porta a `state/store.ts` e
 // `state/kernel.ts`, che un DOM non ce l'hanno, la promessa di funzionare senza
-// disegno ha smesso di essere solo scritta.
+// disegno ha smesso di essere solo scritto.
 //
 // [decisione 0013]: ../../../docs/decisions/0013-elenco-delle-capacita.md
 // [decisione 0052]: ../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md
 // [decisione 0080]: ../../../docs/decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md
 
-import { onLingua, t, type Chiave } from "../i18n/strings";
+import { onLanguage, t, type Key } from "../i18n/strings";
 import type { Gate, KernelEvent } from "../host/contract";
 import { onEvent } from "../state/kernel";
 
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
-export type Tono = "info" | "guasto";
+export type Tone = "info" | "guasto";
 
 /// Un avviso nello storico: il testo, il tono, quando, e **quante volte**.
-export interface Avviso {
-  testo: string;
-  tono: Tono;
+export interface Notice {
+  text: string;
+  tone: Tone;
   /// L'ultima volta che è successo, in millisecondi (`Date.now`).
-  quando: number;
+  when: number;
   /// Quante volte di fila. Uno è il caso normale; sopra uno la riga mostra
   /// «×N».
-  volte: number;
+  times: number;
 }
 
 /// Quanti avvisi si ricordano. Uno storico illimitato è una perdita di memoria
 /// travestita da funzionalità; cinquanta coprono una sessione di lavoro
 /// difficile e stanno in una schermata di scorrimento.
-export const MEMORIA = 50;
+export const HISTORY_LIMIT = 50;
 
 /// La regola dello storico, e l'unica decisione di questo modulo: **due avvisi
 /// identici di fila sono uno**.
@@ -72,44 +72,44 @@ export const MEMORIA = 50;
 ///
 /// È una funzione pura, e non per gusto: è ciò che di questo modulo si può
 /// provare senza un DOM.
-export function raccogli(storico: Avviso[], nuovo: Avviso): Avviso[] {
-  const ultimo = storico[0];
-  if (ultimo && ultimo.testo === nuovo.testo && ultimo.tono === nuovo.tono) {
-    const unito: Avviso = {
-      ...ultimo,
-      quando: nuovo.quando,
-      volte: ultimo.volte + 1,
+export function collect(history: Notice[], newItem: Notice): Notice[] {
+  const last = history[0];
+  if (last && last.text === newItem.text && last.tone === newItem.tone) {
+    const merged: Notice = {
+      ...last,
+      when: newItem.when,
+      times: last.times + 1,
     };
-    return [unito, ...storico.slice(1)];
+    return [merged, ...history.slice(1)];
   }
-  return [nuovo, ...storico].slice(0, MEMORIA);
+  return [newItem, ...history].slice(0, HISTORY_LIMIT);
 }
 
 /// Come una riga si legge: il testo, e quante volte se è più di una.
-export function rigaDi(avviso: Avviso): string {
-  return avviso.volte > 1 ? `${avviso.testo} ×${avviso.volte}` : avviso.testo;
+export function lineOf(notice: Notice): string {
+  return notice.times > 1 ? `${notice.text} ×${notice.times}` : notice.text;
 }
 
 // --- da qui in giù è disegno ------------------------------------------------
 
 /// Per quanto resta a galla un avviso prima di scendere nello storico. Non è la
 /// sua vita: è quanto interrompe.
-const IN_VISTA_MS = 5000;
+const TOAST_DURATION_MS = 5000;
 
-let storico: Avviso[] = [];
+let history: Notice[] = [];
 /// Quanti ne sono arrivati da quando lo storico è stato guardato l'ultima
 /// volta. È il numero sul pulsante, ed è l'unica ragione per cui «aprire» il
 /// centro è un fatto che vale la pena registrare.
-let daLeggere = 0;
-let aperto = false;
+let unreadCount = 0;
+let open = false;
 
 /// Dice un messaggio all'utente. È la porta di tutta la shell, e resta una
 /// riga: chi chiama non sa che esistono uno storico e un raggruppamento.
-export function notify(message: string, tono: Tono = "info"): void {
-  storico = raccogli(storico, { testo: message, tono, quando: Date.now(), volte: 1 });
-  if (!aperto) daLeggere += 1;
-  mostra(storico[0]);
-  ridisegna();
+export function notify(message: string, tone: Tone = "info"): void {
+  history = collect(history, { text: message, tone, when: Date.now(), times: 1 });
+  if (!open) unreadCount += 1;
+  show(history[0]);
+  redraw();
 }
 
 /// **Il kernel dice che qualcosa è andato storto, e lo si mostra** (§20.2).
@@ -121,10 +121,10 @@ export function notify(message: string, tono: Tono = "info"): void {
 /// La severità sceglie il tono, ed è una traduzione uno a uno perché i due
 /// gradini sono stati scelti guardando questi due toni: un derivato perduto
 /// informa, ciò che non si ricostruisce è un guasto.
-export function ascoltaIGuasti(): void {
+export function listenForFailures(): void {
   onEvent("trouble", (e) => {
-    const avviso = avvisoDiGuasto(e);
-    notify(avviso.testo, avviso.tono);
+    const notice = failureNotice(e);
+    notify(notice.text, notice.tone);
   });
 }
 
@@ -138,20 +138,20 @@ export function ascoltaIGuasti(): void {
 /// **La porta del panico si dice** (§17.3, decisione 0161): quando il kernel
 /// sa da dove è entrato il guasto, la frase lo racconta in coda — sapere da che
 /// parte guardare quando un componente di terzi esplode è metà della diagnosi.
-export function avvisoDiGuasto(e: Extract<KernelEvent, { type: "trouble" }>): {
-  testo: string;
-  tono: Tono;
+export function failureNotice(e: Extract<KernelEvent, { type: "trouble" }>): {
+  text: string;
+  tone: Tone;
 } {
   const reason = e.error.message;
   const base = e.subject
     ? t("trouble.about", { doc: e.subject, reason })
     : t("trouble.vault", { reason });
   return {
-    testo:
+    text:
       e.gate === null
         ? base
         : base + t("trouble.gate", { gate: t(GATE_LABELS[e.gate]) }),
-    tono: e.severity === "failure" ? "guasto" : "info",
+    tone: e.severity === "failure" ? "guasto" : "info",
   };
 }
 
@@ -165,7 +165,7 @@ export function avvisoDiGuasto(e: Extract<KernelEvent, { type: "trouble" }>): {
 /// È un `Record` **esaustivo** di proposito, sul modello di `REACH_KEYS` in
 /// `palette.ts`: aggiungere un gate al contratto senza un'etichetta qui è un
 /// errore di compilazione, non una porta che l'avviso tace.
-const GATE_LABELS: Record<Gate, Chiave> = {
+const GATE_LABELS: Record<Gate, Key> = {
   command: "gate.command",
   view_render: "gate.view_render",
   view_action: "gate.view_action",
@@ -183,29 +183,29 @@ const GATE_LABELS: Record<Gate, Chiave> = {
 
 /// Ciò che è stato detto, dal più recente. Serve a chi disegna lo storico, e ai
 /// test che guardano il canale invece del DOM.
-export function avvisiRecenti(): Avviso[] {
-  return storico;
+export function recentNotices(): Notice[] {
+  return history;
 }
 
 /// Il pannello dello storico si apre e si chiude da qui: è anche il momento in
 /// cui il contatore dei non letti torna a zero.
-export function apriStorico(apri = !aperto): void {
-  aperto = apri;
-  if (aperto) daLeggere = 0;
-  ridisegna();
+export function openHistory(isOpen = !open): void {
+  open = isOpen;
+  if (open) unreadCount = 0;
+  redraw();
 }
 
-export function svuotaStorico(): void {
-  storico = [];
-  daLeggere = 0;
-  ridisegna();
+export function clearHistory(): void {
+  history = [];
+  unreadCount = 0;
+  redraw();
 }
 
 /// C'è un documento su cui disegnare?
 ///
 /// La riga che questo modulo prometteva da sempre — *«se la shell non li ha (un
 /// test, un host che monta solo un pezzo) non succede niente»* — e che era vera
-/// per il pannello e falsa per tutto il resto: `mostra` e `ridisegna` toccavano
+/// per il pannello e falsa per tutto il resto: `show` e `redraw` toccavano
 /// `document` senza chiederselo. Finché i chiamanti erano pannelli non si vedeva,
 /// perché un pannello un DOM ce l'ha per definizione. Col §20.4 la porta è aperta
 /// anche a `state/store.ts` e `state/kernel.ts`, che DOM non ne hanno e che nei
@@ -214,7 +214,7 @@ export function svuotaStorico(): void {
 /// È il difetto di questa seduta preso dal lato di chi ascolta — un canale che
 /// smette di funzionare in silenzio proprio mentre gli si racconta un guasto —
 /// e l'ha trovato un test che non guardava questo file.
-function esisteUnDom(): boolean {
+function hasDom(): boolean {
   return typeof document !== "undefined";
 }
 
@@ -226,10 +226,10 @@ function esisteUnDom(): boolean {
 /// occupano lo stesso angolo e dicono la stessa cosa: a pannello aperto la riga
 /// nuova compare in cima da sé, e un rettangolo sopra la lista coprirebbe
 /// proprio ciò che l'utente è andato a leggere.
-function mostra(avviso: Avviso): void {
-  if (aperto || !esisteUnDom()) return;
-  const vecchio = document.getElementById("toast");
-  if (vecchio) vecchio.remove();
+function show(notice: Notice): void {
+  if (open || !hasDom()) return;
+  const old = document.getElementById("toast");
+  if (old) old.remove();
   const toast = document.createElement("div");
   toast.id = "toast";
   toast.className = "toast";
@@ -239,69 +239,69 @@ function mostra(avviso: Avviso): void {
   // per cui non ruba il fuoco — informa senza interrompere (§10.3), e `alert`
   // taglierebbe la parola a metà frase.
   toast.setAttribute("role", "status");
-  toast.dataset.tono = avviso.tono;
+  toast.dataset.tone = notice.tone;
   // Testo semplice: ciò che arriva da un provider non diventa mai markup
   // (stessa regola di `SearchHit.snippet` e `UiNode` non fidato).
-  toast.textContent = rigaDi(avviso);
+  toast.textContent = lineOf(notice);
   document.body.appendChild(toast);
   window.setTimeout(() => {
     if (document.getElementById("toast") === toast) toast.remove();
-  }, IN_VISTA_MS);
+  }, TOAST_DURATION_MS);
 }
 
 /// Il pulsante nella barra di stato e il pannello dello storico. Se la shell
 /// non li ha (un test, un host che monta solo un pezzo) non succede niente:
 /// `notify` continua a funzionare, perché il canale non dipende dal suo
 /// disegno.
-function ridisegna(): void {
-  if (!esisteUnDom()) return;
-  const pulsante = document.getElementById("notify-button");
-  if (pulsante) {
-    pulsante.textContent =
-      daLeggere > 0 ? t("notices.count", { count: daLeggere }) : t("notices.title");
-    pulsante.classList.toggle("ha-novita", daLeggere > 0);
-    pulsante.setAttribute("aria-expanded", String(aperto));
+function redraw(): void {
+  if (!hasDom()) return;
+  const button = document.getElementById("notify-button");
+  if (button) {
+    button.textContent =
+      unreadCount > 0 ? t("notices.count", { count: unreadCount }) : t("notices.title");
+    button.classList.toggle("ha-novita", unreadCount > 0);
+    button.setAttribute("aria-expanded", String(open));
   }
 
-  const pannello = document.getElementById("notify-panel");
-  if (!pannello) return;
-  pannello.hidden = !aperto;
-  if (!aperto) return;
+  const panel = document.getElementById("notify-panel");
+  if (!panel) return;
+  panel.hidden = !open;
+  if (!open) return;
 
-  const lista = pannello.querySelector("#notify-list");
-  if (!(lista instanceof HTMLElement)) return;
-  lista.replaceChildren();
-  if (storico.length === 0) {
-    const vuoto = document.createElement("li");
-    vuoto.className = "muted";
-    vuoto.textContent = t("notices.none");
-    lista.appendChild(vuoto);
+  const list = panel.querySelector("#notify-list");
+  if (!(list instanceof HTMLElement)) return;
+  list.replaceChildren();
+  if (history.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "muted";
+    empty.textContent = t("notices.none");
+    list.appendChild(empty);
     return;
   }
-  for (const avviso of storico) {
-    const riga = document.createElement("li");
-    riga.dataset.tono = avviso.tono;
-    const testo = document.createElement("span");
-    testo.className = "notify-testo";
-    testo.textContent = rigaDi(avviso);
-    const ora = document.createElement("span");
-    ora.className = "muted notify-ora";
-    ora.textContent = new Date(avviso.quando).toLocaleTimeString();
-    riga.append(testo, ora);
-    lista.appendChild(riga);
+  for (const notice of history) {
+    const row = document.createElement("li");
+    row.dataset.tone = notice.tone;
+    const text = document.createElement("span");
+    text.className = "notify-testo";
+    text.textContent = lineOf(notice);
+    const time = document.createElement("span");
+    time.className = "muted notify-ora";
+    time.textContent = new Date(notice.when).toLocaleTimeString();
+    row.append(text, time);
+    list.appendChild(row);
   }
 }
 
 /// Accende il centro notifiche: il pulsante nella barra di stato e il pannello.
 /// Da chiamare una volta sola, dal punto di montaggio.
 export function mountNotifications(): void {
-  document.getElementById("notify-button")?.addEventListener("click", () => apriStorico());
-  document.getElementById("notify-clear")?.addEventListener("click", () => svuotaStorico());
-  document.getElementById("notify-close")?.addEventListener("click", () => apriStorico(false));
+  document.getElementById("notify-button")?.addEventListener("click", () => openHistory());
+  document.getElementById("notify-clear")?.addEventListener("click", () => clearHistory());
+  document.getElementById("notify-close")?.addEventListener("click", () => openHistory(false));
   // Come per il centro attività: il pulsante porta un conteggio, quindi non lo
   // può scrivere `applicaStringhe` — e il testo **degli avvisi** resta com'era,
   // perché un avviso è già stato detto e ridirlo in un'altra lingua vorrebbe
   // dire riscrivere la storia di ciò che è successo.
-  onLingua(ridisegna);
-  ridisegna();
+  onLanguage(redraw);
+  redraw();
 }

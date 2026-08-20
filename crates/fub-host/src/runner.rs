@@ -47,12 +47,12 @@ use std::time::{Duration, Instant};
 
 use fub_abi::traits::{JobId, JobProgress, TimerSchedule};
 use fub_abi::PluginError;
-use fub_kernel::{Indicizzazione, JobBell, PendingJob, Workspace};
+use fub_kernel::{Indexing, JobBell, PendingJob, Workspace};
 use jiff::Timestamp;
 
-use crate::parete::{verdetto, Fuso, Posizione};
+use crate::wall::{verdict, Zone, Position};
 
-use crate::custodia::Custodia;
+use crate::custody::Custody;
 use crate::jobs::JobHost;
 use crate::records::UnreadDoc;
 use crate::registry::BundleRegistry;
@@ -131,7 +131,7 @@ impl Flags {
     /// centro attività, e sull'IPC come stringa che chiunque può comporre —
     /// quindi un id di un altro vault, o di un elenco vecchio, o inventato,
     /// entrava qui e lasciava una bandiera che nessuno avrebbe mai tolto: solo
-    /// `Shared::run` e `avanza_apertura` chiamano `forget`, e un job che non
+    /// `Shared::run` e `advance_opening` chiamano `forget`, e un job che non
     /// esiste non passa né dall'uno né dall'altro.
     ///
     /// Chi sa distinguere i due casi è il kernel, che gli id li **emette**
@@ -139,16 +139,16 @@ impl Flags {
     /// qualcuno e la coda lo consegnerà, da lì in su non è mai stato un job e
     /// non c'è niente da aspettare. Non è un tetto prudenziale — è la stessa
     /// domanda del campo `seen`, posta all'unico che ne ha la risposta esatta.
-    fn cancel(&mut self, id: JobId, emessi: u64) {
+    fn cancel(&mut self, id: JobId, issued: u64) {
         if let Some(flag) = self.live.get(&id) {
             flag.store(true, Ordering::Relaxed);
             return;
         }
-        let da_venire = match self.seen {
+        let upcoming = match self.seen {
             Some(seen) => id.0 > seen,
             None => true,
         };
-        if da_venire && id.0 < emessi {
+        if upcoming && id.0 < issued {
             self.live.insert(id, Arc::new(AtomicBool::new(true)));
         }
     }
@@ -165,14 +165,14 @@ impl Flags {
 /// Sotto questo lock non gira mai codice di nessuno — ci si scrive un id e si
 /// esce — quindi avvelenarlo vuol dire che è panicato il runner stesso, e
 /// continuare vorrebbe dire spegnere un componente mentre un suo job è dentro.
-const VELENO: &str = "il conto dei job in volo è avvelenato";
+const POISONED: &str = "il conto dei job in volo è avvelenato";
 
 /// Come si dice a un job che non parte, e perché.
 ///
 /// Una funzione e non due frasi uguali in due punti: la stessa riga la scrive
 /// chi rifiuta un job intero e chi ne calcola l'esito senza eseguirlo, e sono lo
 /// stesso fatto visto da due altezze.
-fn rifiuto(job: &PendingJob, why: &str) -> PluginError {
+fn refusal(job: &PendingJob, why: &str) -> PluginError {
     PluginError::Cancelled(format!("il job `{}` {why}", job.spec.job).into())
 }
 
@@ -188,18 +188,18 @@ fn rifiuto(job: &PendingJob, why: &str) -> PluginError {
 /// bastano a saperlo: sono per job, non dicono di **chi** è il job, e non
 /// distinguono «accodato» da «dentro».
 #[derive(Default)]
-struct InVolo {
+struct InFlight {
     /// Le bandiere dei job che sono **dentro** `run_job` adesso, per bundle.
     ///
     /// La bandiera e non il solo conto: chi aspetta la alza, ed è tutto ciò che
     /// vuol dire chiedere a un job di smettere.
-    dentro: HashMap<String, HashMap<JobId, Arc<AtomicBool>>>,
+    within: HashMap<String, HashMap<JobId, Arc<AtomicBool>>>,
     /// I bundle che si stanno spegnendo: un loro job non parte più.
     ///
     /// Senza, il pool riempirebbe da dietro ciò che chi spegne sta svuotando —
     /// un drenaggio prende **tutta** la coda, e aspettare che esca uno mentre
     /// parte il successivo è un'attesa che non finisce.
-    fermi: HashSet<String>,
+    stopped: HashSet<String>,
 }
 
 /// Un job **dentro** il codice del suo bundle: finché questo vive, chi vuole
@@ -209,26 +209,26 @@ struct InVolo {
 /// lo fa nessuno — lo fa il `Drop`. Un job che panicasse a metà, o che tornasse
 /// da un ramo d'errore scritto domani, esce lo stesso; e chi spegne resterebbe
 /// ad aspettare per sempre se uscire fosse una riga da ricordarsi.
-struct Dentro {
-    volo: Arc<(Mutex<InVolo>, Condvar)>,
+struct Inside {
+    in_flight: Arc<(Mutex<InFlight>, Condvar)>,
     plugin: String,
     id: JobId,
 }
 
-impl Drop for Dentro {
+impl Drop for Inside {
     fn drop(&mut self) {
-        let (posto, campana) = &*self.volo;
+        let (place, bell) = &*self.in_flight;
         // Un `Drop` non pania: durante uno srotolamento costerebbe il processo
         // invece del job. Il veleno qui lo si prende com'è — ciò che resta da
         // fare è togliersi dal conto, e va fatto comunque.
-        let mut volo = posto.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(dentro) = volo.dentro.get_mut(&self.plugin) {
-            dentro.remove(&self.id);
-            if dentro.is_empty() {
-                volo.dentro.remove(&self.plugin);
+        let mut in_flight = place.lock().unwrap_or_else(|and| and.into_inner());
+        if let Some(within) = in_flight.within.get_mut(&self.plugin) {
+            within.remove(&self.id);
+            if within.is_empty() {
+                in_flight.within.remove(&self.plugin);
             }
         }
-        campana.notify_all();
+        bell.notify_all();
     }
 }
 
@@ -238,17 +238,17 @@ impl Drop for Dentro {
 /// Lo si tiene per il tempo dello spegnimento e lo si lascia cadere dopo: è un
 /// permesso, non uno stato. Lasciarlo alzato per sempre vorrebbe dire che
 /// riaccendere un componente non gli restituisce i job.
-pub struct Fermo {
-    volo: Arc<(Mutex<InVolo>, Condvar)>,
+pub struct ShutDown {
+    in_flight: Arc<(Mutex<InFlight>, Condvar)>,
     plugin: String,
 }
 
-impl Drop for Fermo {
+impl Drop for ShutDown {
     fn drop(&mut self) {
-        let (posto, campana) = &*self.volo;
-        let mut volo = posto.lock().unwrap_or_else(|e| e.into_inner());
-        volo.fermi.remove(&self.plugin);
-        campana.notify_all();
+        let (place, bell) = &*self.in_flight;
+        let mut in_flight = place.lock().unwrap_or_else(|and| and.into_inner());
+        in_flight.stopped.remove(&self.plugin);
+        bell.notify_all();
     }
 }
 
@@ -273,46 +273,46 @@ impl Drop for Fermo {
 /// Le due **non si sommano mai**: l'attesa resta sempre e solo monotona, perché
 /// aspettare è «per quanto» e non «fino a quando». Il tempo di parete entra in
 /// un punto solo — *fra quanti secondi accade quell'ora civile* — e da lì in poi
-/// il campo [`prossima`](Quadrante::prossima) è dello stesso tipo per tutte e
+/// il campo [`next`](Quadrante::prossima) è dello stesso tipo per tutte e
 /// tre le forme. Un orologio spostato allunga o accorcia una singola attesa e
 /// poi si ricalcola; che una sveglia di parete non suoni due volte non dipende
 /// dall'orologio ma dalla sua [`ultima`](Quadrante::ultima) occorrenza civile.
 #[derive(Default)]
-struct Sveglie {
+struct Alarms {
     /// Chiave: (componente, nome della sveglia).
-    quadranti: HashMap<(String, String), Quadrante>,
+    quadrants: HashMap<(String, String), Quadrant>,
     /// I recuperi di parete accumulati da [`parete`](Sveglie::parete), da
-    /// drenare una volta sola in [`scadute`](Sveglie::scadute). Li accumula
-    /// `parete` e non chi la chiama perché [`riconcilia`](Sveglie::riconcilia)
-    /// e [`scadute`](Sveglie::scadute) la chiamano entrambe: se il risultato
-    /// tornasse al chiamante, `riconcilia` lo butterebbe via e il recupero si
+    /// drenare una volta sola in [`expired`](Sveglie::scadute). Li accumula
+    /// `parete` e non chi la chiama perché [`reconcile`](Sveglie::riconcilia)
+    /// e [`expired`](Sveglie::scadute) la chiamano entrambe: se il risultato
+    /// tornasse al chiamante, `reconcile` lo butterebbe via e il recupero si
     /// perderebbe — [`dove`](Quadrante::dove) è già avanzato, e la chiamata
     /// dopo non lo rivede.
-    recuperi: Vec<(String, String)>,
+    recoveries: Vec<(String, String)>,
 }
 
-struct Quadrante {
+struct Quadrant {
     schedule: TimerSchedule,
     /// Da quando si conta: la prima volta che questo scheduler l'ha vista.
     /// Solo per il tempo trascorso — un orario di parete non conta da quando è
     /// stato registrato, conta dal calendario.
-    ancora: Instant,
+    still: Instant,
     /// Quante volte ha già suonato (tempo trascorso).
-    suonate: u64,
+    fired: u64,
     /// Dove sta una sveglia di **parete**: l'ultima occorrenza civile
     /// considerata e quella che sta aspettando.
     ///
     /// È l'invariante «al più una suonata per occorrenza» reso un campo, ed è
     /// ciò che fa suonare una volta sola le 2:30 che l'uscita dell'ora legale fa
     /// accadere due volte.
-    dove: Posizione,
+    position: Position,
     /// Quando suona la prossima. `None` = ha finito (un `after` che è già
     /// suonato, o un orario di parete impossibile), e la voce **resta** in mappa
     /// proprio per non essere riseminata dalla riconciliazione al giro dopo.
-    prossima: Option<Instant>,
+    next: Option<Instant>,
 }
 
-impl Sveglie {
+impl Alarms {
     /// Allinea i quadranti a ciò che è dichiarato **adesso**.
     ///
     /// È qui che una sveglia nasce e muore, e il fatto che la sorgente sia il
@@ -320,40 +320,40 @@ impl Sveglie {
     /// smettere di suonare un componente disattivato — senza che questo codice
     /// sappia niente della disattivazione.
     ///
-    /// `fuso_macchina` è il nome IANA che il locale risolve
+    /// `machine_zone` è il nome IANA che il locale risolve
     /// ([`locale.timezone`](fub_kernel::locale::TIMEZONE)): vuoto = quello del
     /// sistema. Non è una chiave nuova, ed è la misura che ha risparmiato
     /// un'impostazione — vedi la decisione 0091.
-    fn riconcilia(
+    fn reconcile(
         &mut self,
-        dichiarate: &[(String, fub_abi::traits::TimerSpec)],
-        ora: Instant,
-        fuso_macchina: &str,
+        declared: &[(String, fub_abi::traits::TimerSpec)],
+        now: Instant,
+        machine_zone: &str,
     ) {
         // Le coppie dichiarate, in un insieme: i due `retain` sotto le cercano
         // per appartenenza invece di rifare un `any` annidato per ogni voce.
-        let dichiarate_set: HashSet<(&str, &str)> = dichiarate
+        let declared_set: HashSet<(&str, &str)> = declared
             .iter()
-            .map(|(o, spec)| (o.as_str(), spec.id.as_str()))
+            .map(|(or, spec)| (or.as_str(), spec.id.as_str()))
             .collect();
-        self.quadranti
-            .retain(|(owner, timer), _| dichiarate_set.contains(&(owner.as_str(), timer.as_str())));
+        self.quadrants
+            .retain(|(owner, timer), _| declared_set.contains(&(owner.as_str(), timer.as_str())));
         // I recuperi seguono il manifest come i quadranti: una sveglia rimossa
         // non suona per un'occorrenza calcolata prima di sparire.
-        self.recuperi
-            .retain(|(owner, timer)| dichiarate_set.contains(&(owner.as_str(), timer.as_str())));
-        for (owner, spec) in dichiarate {
-            self.quadranti
+        self.recoveries
+            .retain(|(owner, timer)| declared_set.contains(&(owner.as_str(), timer.as_str())));
+        for (owner, spec) in declared {
+            self.quadrants
                 .entry((owner.clone(), spec.id.clone()))
-                .or_insert_with(|| Quadrante {
+                .or_insert_with(|| Quadrant {
                     schedule: spec.schedule.clone(),
-                    ancora: ora,
-                    suonate: 0,
-                    dove: Posizione::default(),
-                    prossima: spec
+                    still: now,
+                    fired: 0,
+                    position: Position::default(),
+                    next: spec
                         .schedule
                         .nth_after(0)
-                        .map(|s| ora + Duration::from_secs(s)),
+                        .map(|s| now + Duration::from_secs(s)),
                 });
         }
         // Gli orari di parete si ricalcolano **a ogni giro** e non solo alla
@@ -362,7 +362,7 @@ impl Sveglie {
         // anche ciò che rende gratis il caso in cui l'utente sposta l'orologio o
         // cambia `locale.timezone` mentre l'app è viva — non c'è niente da
         // invalidare, perché non c'era niente di derivato da tenere.
-        self.parete(ora, fuso_macchina);
+        self.wall(now, machine_zone);
     }
 
     /// Riporta i quadranti di parete a ciò che dice il calendario adesso, e
@@ -370,86 +370,86 @@ impl Sveglie {
     ///
     /// È l'unico punto in cui questo modulo tocca il tempo di sistema. I
     /// recuperi si accumulano invece di tornare al chiamante perché
-    /// [`riconcilia`](Sveglie::riconcilia) e [`scadute`](Sveglie::scadute) la
+    /// [`reconcile`](Sveglie::riconcilia) e [`expired`](Sveglie::scadute) la
     /// chiamano entrambe, e l'effetto collaterale su [`dove`](Quadrante::dove)
     /// fa sì che la chiamata dopo non rivedrebbe un recupero già visto: se il
-    /// risultato tornasse e `riconcilia` lo buttasse via — come faceva — il
+    /// risultato tornasse e `reconcile` lo buttasse via — come faceva — il
     /// recupero era perso per sempre.
-    fn parete(&mut self, ora: Instant, fuso_macchina: &str) {
-        let adesso = Timestamp::now();
-        for (chiave, q) in self.quadranti.iter_mut() {
-            let Some(sveglia) = q.schedule.wall_clock() else {
+    fn wall(&mut self, instant: Instant, machine_zone: &str) {
+        let timestamp = Timestamp::now();
+        for (key, q) in self.quadrants.iter_mut() {
+            let Some(alarm) = q.schedule.wall_clock() else {
                 continue;
             };
-            let Some(fuso) = Fuso::della(sveglia, fuso_macchina) else {
+            let Some(zone) = Zone::of(alarm, machine_zone) else {
                 // Fuso irrisolvibile: la sveglia non suona, e resta in mappa a
                 // non suonare — non ripiega su UTC.
-                q.prossima = None;
+                q.next = None;
                 continue;
             };
-            let v = verdetto(sveglia, &fuso, adesso, q.dove);
-            q.dove = v.dove;
-            q.prossima = v.fra.map(|d| ora + d);
-            if v.suona && !self.recuperi.contains(chiave) {
-                self.recuperi.push(chiave.clone());
+            let v = verdict(alarm, &zone, timestamp, q.position);
+            q.position = v.position;
+            q.next = v.between.map(|d| instant + d);
+            if v.ring && !self.recoveries.contains(key) {
+                self.recoveries.push(key.clone());
             }
         }
     }
 
     /// Fra quanto suona la prima. `None` = nessuna sveglia viva, e chi aspetta
     /// può dormire senza scadenza come faceva prima che le sveglie esistessero.
-    fn fra_quanto(&self, ora: Instant) -> Option<Duration> {
-        self.quadranti
+    fn time_until(&self, now: Instant) -> Option<Duration> {
+        self.quadrants
             .values()
-            .filter_map(|q| q.prossima)
+            .filter_map(|q| q.next)
             .min()
-            .map(|p| p.saturating_duration_since(ora))
+            .map(|p| p.saturating_duration_since(now))
     }
 
     /// Chi è scaduto, con il quadrante già avanzato al giro dopo.
-    fn scadute(&mut self, ora: Instant, fuso_macchina: &str) -> Vec<(String, String)> {
-        let mut suonano = Vec::new();
-        for (chiave, q) in self.quadranti.iter_mut() {
+    fn expired(&mut self, now: Instant, machine_zone: &str) -> Vec<(String, String)> {
+        let mut ringing = Vec::new();
+        for (key, q) in self.quadrants.iter_mut() {
             // Un orario di parete non si avanza qui: la sua prossima non è una
             // funzione di quante volte ha suonato, e a ricalcolarla è
             // [`parete`](Sveglie::parete), che gira subito sotto.
             if q.schedule.wall_clock().is_some() {
                 continue;
             }
-            let Some(prossima) = q.prossima else { continue };
-            if prossima > ora {
+            let Some(next) = q.next else { continue };
+            if next > now {
                 continue;
             }
-            suonano.push(chiave.clone());
-            q.suonate += 1;
+            ringing.push(key.clone());
+            q.fired += 1;
             // Dall'**ancora** e non da adesso: contare dal risveglio farebbe
             // slittare in avanti «ogni ora» di quanto il pool ha tardato, e
             // dopo un giorno la sveglia delle nove sarebbe delle nove e un
             // quarto senza che nessuno abbia cambiato niente.
-            q.prossima = q
+            q.next = q
                 .schedule
-                .nth_after(q.suonate)
-                .map(|s| q.ancora + Duration::from_secs(s));
+                .nth_after(q.fired)
+                .map(|s| q.still + Duration::from_secs(s));
         }
-        suonano.sort();
+        ringing.sort();
         // `parete` ricalcola i quadranti di parete e accumula i recuperi
         // dell'occorrenza appena passata insieme a quelli delle riconciliazioni
         // precedenti: si drenano qui, una volta sola.
-        self.parete(ora, fuso_macchina);
+        self.wall(now, machine_zone);
         // I due modi di essere scaduti si uniscono qui e non prima, perché sono
         // due domande diverse fatte allo stesso orologio: «è passato
         // l'intervallo?» e «è passata l'ora?».
-        self.recuperi.sort();
-        suonano.append(&mut self.recuperi);
-        suonano
+        self.recoveries.sort();
+        ringing.append(&mut self.recoveries);
+        ringing
     }
 }
 
 /// Ciò che i thread condividono: il vault, chi possiede i bundle, il campanello,
 /// le bandiere di chi è stato annullato, e i quadranti delle sveglie.
 struct Shared {
-    workspace: Custodia<Workspace>,
-    bundles: Custodia<BundleRegistry>,
+    workspace: Custody<Workspace>,
+    bundles: Custody<BundleRegistry>,
     bell: Arc<JobBell>,
     /// Il pool sta chiudendo: nessun job nuovo parte.
     stopping: AtomicBool,
@@ -460,33 +460,33 @@ struct Shared {
     /// dedicato all'indicizzazione avrebbe voluto una seconda cancellazione, un
     /// secondo modo di chiudere e un secondo posto da cui il workspace si
     /// prende in esclusiva — cioè tre cose che il §9.3 ha già deciso una volta.
-    apertura: Custodia<Option<InCorso>>,
-    flags: Custodia<Flags>,
+    opening: Custody<Option<InProgress>>,
+    flags: Custody<Flags>,
     /// Le sveglie sono **una** per pool e non una per thread: due thread con due
     /// quadranti farebbero suonare ogni sveglia due volte.
-    sveglie: Custodia<Sveglie>,
+    alarms: Custody<Alarms>,
     /// Chi è dentro il codice di un bundle, e chi si sta spegnendo.
     ///
     /// Un `Mutex` con una `Condvar` e non una [`Custodia`]: qui non si prende
     /// un prestito, si **aspetta un fatto**, e la 0120 presta e basta. È la
-    /// stessa coppia di [`InCorso::fine`], per la stessa ragione.
-    volo: Arc<(Mutex<InVolo>, Condvar)>,
+    /// stessa coppia di [`InProgress::fine`], per la stessa ragione.
+    in_flight: Arc<(Mutex<InFlight>, Condvar)>,
 }
 
 /// L'indicizzazione dell'apertura mentre gira: il lavoro, la sua identità di
 /// job, e dove va a finire il suo esito.
-pub struct InCorso {
+pub struct InProgress {
     pub(crate) id: JobId,
-    pub(crate) work: Indicizzazione,
+    pub(crate) work: Indexing,
     /// Il totale non cambia più dopo la scansione, e si tiene qui perché il
     /// progresso lo vuole a ogni fetta.
-    pub(crate) totale: u64,
+    pub(crate) total: u64,
     /// Ciò che di questo vault non si è potuto leggere, per chi risponde a
     /// `Host::vaults()`. È condiviso perché la risposta esiste **prima** di
     /// questo esito: chi apre non aspetta l'indicizzazione, quindi il posto
     /// dove gli scarti si depositano deve esserci già quando ancora non ce n'è
     /// nessuno.
-    pub(crate) unread: Custodia<Vec<UnreadDoc>>,
+    pub(crate) unread: Custody<Vec<UnreadDoc>>,
     /// **Quando l'indicizzazione ha finito**, per chi deve aspettarla.
     ///
     /// Una condizione e non un'attesa a intervalli, per la stessa ragione per
@@ -494,7 +494,7 @@ pub struct InCorso {
     /// ([0032](../../../docs/decisions/0032-il-runner-dei-job.md)): un
     /// intervallo è una politica da scegliere — ogni quanto? a che costo? —
     /// dove basta un fatto.
-    pub(crate) fine: Arc<(Mutex<bool>, Condvar)>,
+    pub(crate) end: Arc<(Mutex<bool>, Condvar)>,
 }
 
 impl Shared {
@@ -511,22 +511,22 @@ impl Shared {
     /// da un provider all'apertura del vault vede un indice che si sta
     /// popolando, e farlo aspettare la fine è il verso che gli fa vedere di
     /// più. Non è fame: una fetta è limitata, e fra due fette la coda si drena.
-    fn avanza_apertura(&self) -> Result<bool, PluginError> {
-        let Some(mut in_corso) = self.apertura.write()?.take() else {
+    fn advance_opening(&self) -> Result<bool, PluginError> {
+        let Some(mut in_progress) = self.opening.write()?.take() else {
             return Ok(false);
         };
         // La bandiera è **quella di tutti**: annullare l'indicizzazione è
         // premere lo stesso pulsante che annulla un export, e passa dalla
         // stessa `Flags`. Senza questo, «annulla» avrebbe avuto due
         // implementazioni e una delle due sarebbe stata dimenticata.
-        let flag = self.flag(in_corso.id)?;
-        let smettere = flag.load(Ordering::Relaxed) || self.stopping.load(Ordering::Acquire);
+        let flag = self.flag(in_progress.id)?;
+        let stop = flag.load(Ordering::Relaxed) || self.stopping.load(Ordering::Acquire);
 
-        if !smettere && !in_corso.work.finita() {
-            let label = in_corso.work.prossimo().map(|id| id.to_string());
+        if !stop && !in_progress.work.finished() {
+            let label = in_progress.work.next().map(|id| id.to_string());
             // La fetta intera — piano e applicazione — è ciò che il banco conta
             // per dire quante iterazioni ha fatto l'apertura (§25.3).
-            let _fase = tracing::info_span!(target: "fub.apertura", "fetta").entered();
+            let _phase = tracing::info_span!(target: "fub.apertura", "fetta").entered();
             // **Il disco sotto prestito condiviso** (0119, secondo sito): la
             // fetta si legge e si parsa qui, dove chi guarda il vault appena
             // aperto — la ricerca, l'albero, l'autocompletamento — entra
@@ -536,7 +536,7 @@ impl Shared {
             // dura secondi in mezzo ci sta un salvataggio dell'utente.
             let prepared = {
                 let ws = self.workspace.read()?;
-                ws.plan_batch(&mut in_corso.work)
+                ws.plan_batch(&mut in_progress.work)
             };
             {
                 let mut ws = self.workspace.write()?;
@@ -545,16 +545,16 @@ impl Shared {
                 // caso in cui una barra può dire il vero, e
                 // [`JobProgress::total`] è opzionale proprio per distinguerlo
                 // da quelli in cui mentirebbe.
-                ws.note_job_progress(
-                    in_corso.id,
+                ws.notes_job_progress(
+                    in_progress.id,
                     JobProgress {
-                        done: in_corso.work.fatti(),
-                        total: Some(in_corso.totale),
+                        done: in_progress.work.done(),
+                        total: Some(in_progress.total),
                         label,
                     },
                 );
             }
-            *self.apertura.write()? = Some(in_corso);
+            *self.opening.write()? = Some(in_progress);
             return Ok(true);
         }
 
@@ -569,9 +569,9 @@ impl Shared {
             let sources = self.workspace.read()?.graph_sources();
             sources.build()
         };
-        let apertura = {
+        let opening = {
             let mut ws = self.workspace.write()?;
-            ws.finish_index_with_graph(in_corso.work, graph)
+            ws.finish_index_with_graph(in_progress.work, graph)
         };
         // **Il flush degli indici è una fase sua** (difetto 0113), come la
         // terza fase di `ExternalSync::batch`: un prestito esclusivo separato
@@ -589,41 +589,41 @@ impl Shared {
         // Non bloccano l'UI né il lock di scrittura esclusivo durante il calcolo
         // e la scrittura su disco della fotografia del vault.
         self.workspace.read()?.store_entries();
-        if let Err(e) = self.workspace.read()?.collect_doc_data() {
-            tracing::warn!(target: "fub.host", "spazi per-documento non raccolti: {e}");
+        if let Err(and) = self.workspace.read()?.collect_doc_data() {
+            tracing::warn!(target: "fub.host", "spazi per-documento non raccolti: {and}");
         }
-        *in_corso.unread.write()? = apertura
-            .scartati
+        *in_progress.unread.write()? = opening
+            .discarded
             .iter()
-            .map(|scarto| UnreadDoc {
-                doc_id: scarto.id.to_string(),
-                why: scarto.why.clone(),
+            .map(|discard| UnreadDoc {
+                doc_id: discard.id.to_string(),
+                why: discard.why.clone(),
             })
             .collect();
 
         // L'esito di un'indicizzazione annullata è un `Cancelled` come quello
         // di ogni altro job annullato: chi guarda il centro attività distingue
         // «finito» da «fermato» senza sapere che quel job era un'apertura.
-        let outcome = if apertura.interrotta {
+        let outcome = if opening.interrupted {
             Err(PluginError::Cancelled(
-                "l'indicizzazione del vault è stata interrotta: la ricerca è parziale finché non si riapre"
+                "l'indicizzazione del vault è stata interrupted: la ricerca è parziale finché non si riapre"
                     .into(),
             ))
         } else {
-            Ok(serde_json::json!({ "scartati": apertura.scartati.len() }))
+            Ok(serde_json::json!({ "discarded": opening.discarded.len() }))
         };
-        self.forget(in_corso.id)?;
+        self.forget(in_progress.id)?;
         self.workspace.write()?.complete_job(
-            in_corso.id,
+            in_progress.id,
             fub_kernel::INDEX_JOB.to_string(),
             outcome,
         );
         // Ultimo, e dopo l'esito: chi si sveglia qui deve trovare il vault
         // nello stato in cui l'indicizzazione lo ha lasciato, non mentre ce lo
         // sta mettendo.
-        let (fatto, campana) = &*in_corso.fine;
-        *fatto.lock().expect("fine avvelenata") = true;
-        campana.notify_all();
+        let (done, bell) = &*in_progress.end;
+        *done.lock().expect("fine avvelenata") = true;
+        bell.notify_all();
         Ok(true)
     }
 
@@ -647,8 +647,8 @@ impl Shared {
     /// non dentro: è una lettura del workspace, e annidarla sotto le bandiere
     /// sarebbe il secondo ordine fra due lock che altrove è già l'opposto.
     fn cancel(&self, id: JobId) -> Result<(), PluginError> {
-        let emessi = self.workspace.read()?.jobs_issued();
-        self.flags.write()?.cancel(id, emessi);
+        let issued = self.workspace.read()?.jobs_issued();
+        self.flags.write()?.cancel(id, issued);
         Ok(())
     }
 
@@ -666,18 +666,18 @@ impl Shared {
     ///
     /// `None` vuol dire «non entrare»: il job non parte, e riceve il proprio
     /// esito come ogni altro che non parte.
-    fn entra(&self, plugin: &str, id: JobId, flag: &Arc<AtomicBool>) -> Option<Dentro> {
-        let (posto, _) = &*self.volo;
-        let mut volo = posto.lock().expect(VELENO);
-        if volo.fermi.contains(plugin) {
+    fn enter(&self, plugin: &str, id: JobId, flag: &Arc<AtomicBool>) -> Option<Inside> {
+        let (place, _) = &*self.in_flight;
+        let mut in_flight = place.lock().expect(POISONED);
+        if in_flight.stopped.contains(plugin) {
             return None;
         }
-        volo.dentro
+        in_flight.within
             .entry(plugin.to_string())
             .or_default()
             .insert(id, Arc::clone(flag));
-        Some(Dentro {
-            volo: Arc::clone(&self.volo),
+        Some(Inside {
+            in_flight: Arc::clone(&self.in_flight),
             plugin: plugin.to_string(),
             id,
         })
@@ -698,20 +698,20 @@ impl Shared {
     /// **Chi la chiama non deve tenere in mano né il workspace né il registry**:
     /// un job dentro `run_job` li chiede per finire, e aspettarlo tenendoli
     /// sarebbe aspettare sé stessi.
-    fn ferma(&self, plugin: &str) -> Fermo {
-        let (posto, campana) = &*self.volo;
-        let mut volo = posto.lock().expect(VELENO);
-        volo.fermi.insert(plugin.to_string());
-        if let Some(dentro) = volo.dentro.get(plugin) {
-            for flag in dentro.values() {
+    fn shutdown(&self, plugin: &str) -> ShutDown {
+        let (place, bell) = &*self.in_flight;
+        let mut in_flight = place.lock().expect(POISONED);
+        in_flight.stopped.insert(plugin.to_string());
+        if let Some(within) = in_flight.within.get(plugin) {
+            for flag in within.values() {
                 flag.store(true, Ordering::Relaxed);
             }
         }
-        while volo.dentro.contains_key(plugin) {
-            volo = campana.wait(volo).expect(VELENO);
+        while in_flight.within.contains_key(plugin) {
+            in_flight = bell.wait(in_flight).expect(POISONED);
         }
-        Fermo {
-            volo: Arc::clone(&self.volo),
+        ShutDown {
+            in_flight: Arc::clone(&self.in_flight),
             plugin: plugin.to_string(),
         }
     }
@@ -721,17 +721,17 @@ impl Shared {
     /// regola che la [0028](../../../docs/decisions/0028-come-un-componente-smette.md)
     /// ha già scritto per i job di chi si disattiva.
     fn run(&self, job: PendingJob) -> Result<(), PluginError> {
-        let outcome = self.esito(&job);
+        let outcome = self.outcome(&job);
         // Le bandiere si puliscono dopo l'esito e **prima** della riconsegna,
         // ma il loro guasto non la scavalca: un `?` qui buttava via un esito
         // che c'era già — il job aveva girato, la risposta era in mano — per un
         // lucchetto che con quella risposta non c'entra niente. Si riconsegna,
         // e poi lo si dice.
-        let bandiere = self.forget(job.id);
+        let flags = self.forget(job.id);
         self.workspace
             .write()?
             .complete_job(job.id, job.spec.job, outcome);
-        bandiere
+        flags
     }
 
     /// **Ciò che questo job risponde, comunque vada** — anche quando ciò che va
@@ -742,17 +742,17 @@ impl Shared {
     /// spegnendo, un bundle smontato non sono un motivo per sparire, sono la
     /// **risposta**. Sparire lo è solo per il workspace, che è il canale stesso
     /// su cui la risposta viaggia.
-    fn esito(&self, job: &PendingJob) -> Result<serde_json::Value, PluginError> {
+    fn outcome(&self, job: &PendingJob) -> Result<serde_json::Value, PluginError> {
         let flag = self.flag(job.id)?;
         // **Ci si annuncia prima di prendere il corpo**, e il guard si dichiara
         // per primo perché cada per **ultimo**: fra queste due righe ci sta chi
         // spegne il componente, e se la copia del bundle si prendesse prima di
         // annunciarsi quell'attesa non la vedrebbe. Per la stessa ragione
-        // `_dentro` deve sopravvivere all'`Arc` del plugin — un `Drop` in
+        // `_inside` deve sopravvivere all'`Arc` del plugin — un `Drop` in
         // ordine inverso sveglierebbe chi spegne con una copia ancora in giro,
         // che è il difetto scritto al contrario.
-        let Some(_dentro) = self.entra(&job.plugin, job.id, &flag) else {
-            return Err(rifiuto(
+        let Some(_inside) = self.enter(&job.plugin, job.id, &flag) else {
+            return Err(refusal(
                 job,
                 "non parte: il suo componente si sta spegnendo",
             ));
@@ -801,15 +801,15 @@ impl Shared {
     /// Riconsegna un job **senza eseguirlo**: è stato chiesto, e chi lo ha
     /// chiesto aspetta un `JobDone`.
     fn refuse(&self, job: PendingJob, why: &str) -> Result<PluginError, PluginError> {
-        let refusal = rifiuto(&job, why);
+        let refusal = refusal(&job, why);
         // Come in `run`: le bandiere prima, ma il loro guasto **dopo** la
         // riconsegna. Chi rifiuta è già dentro un guaio, ed è il momento in cui
         // un esito perso non lo nota nessuno.
-        let bandiere = self.forget(job.id);
+        let flags = self.forget(job.id);
         self.workspace
             .write()?
             .complete_job(job.id, job.spec.job, Err(refusal.clone()));
-        bandiere?;
+        flags?;
         Ok(refusal)
     }
 
@@ -826,29 +826,29 @@ impl Shared {
     /// — l'utente lo scrive nelle impostazioni, o si porta il portatile in un
     /// altro paese — e non c'è niente da invalidare perché non c'è niente di
     /// derivato.
-    fn fuso_macchina(&self) -> Result<String, PluginError> {
+    fn machine_zone(&self) -> Result<String, PluginError> {
         Ok(self.workspace.read()?.locale().timezone)
     }
 
     /// Fra quanto suona la prima sveglia, riallineando prima i quadranti a ciò
     /// che è dichiarato adesso (§22.1).
-    fn fra_quanto_suona(&self) -> Result<Option<Duration>, PluginError> {
-        let dichiarate = self.workspace.read()?.declared_timers();
-        if dichiarate.is_empty() {
+    fn time_until_alarm(&self) -> Result<Option<Duration>, PluginError> {
+        let declared = self.workspace.read()?.declared_timers();
+        if declared.is_empty() {
             // Nessuna sveglia: si torna esattamente al pool di prima, che
             // dorme senza scadenza. Vale la pena che sia un ramo e non un
             // `Duration::MAX`, perché è la promessa che chi non dichiara timer
             // non paga nemmeno un risveglio.
-            let mut sveglie = self.sveglie.write()?;
-            sveglie.quadranti.clear();
-            sveglie.recuperi.clear();
+            let mut alarms = self.alarms.write()?;
+            alarms.quadrants.clear();
+            alarms.recoveries.clear();
             return Ok(None);
         }
-        let fuso = self.fuso_macchina()?;
-        let ora = Instant::now();
-        let mut sveglie = self.sveglie.write()?;
-        sveglie.riconcilia(&dichiarate, ora, &fuso);
-        Ok(sveglie.fra_quanto(ora))
+        let zone = self.machine_zone()?;
+        let now = Instant::now();
+        let mut alarms = self.alarms.write()?;
+        alarms.reconcile(&declared, now, &zone);
+        Ok(alarms.time_until(now))
     }
 
     /// Fa suonare ciò che è scaduto.
@@ -857,17 +857,17 @@ impl Shared {
     /// **dopo** averlo lasciato: emettere è un giro sincrono del kernel, e
     /// tenere due lock nello stesso ordine in due posti è il modo di scoprire un
     /// giorno che l'ordine era tre.
-    fn suona(&self) -> Result<(), PluginError> {
+    fn ring(&self) -> Result<(), PluginError> {
         // Il fuso si prende **prima** del lock delle sveglie, e non dentro: è
         // una lettura del workspace, e l'ordine fra i due lock è già stabilito
-        // da `fra_quanto_suona`. Invertirlo qui sarebbe la seconda metà di un
+        // da `time_until_alarm`. Invertirlo qui sarebbe la seconda metà di un
         // abbraccio mortale che nessuno vedrebbe finché non capita.
-        let fuso = self.fuso_macchina()?;
-        let scadute = {
-            let mut sveglie = self.sveglie.write()?;
-            sveglie.scadute(Instant::now(), &fuso)
+        let zone = self.machine_zone()?;
+        let expired = {
+            let mut alarms = self.alarms.write()?;
+            alarms.expired(Instant::now(), &zone)
         };
-        for (owner, timer) in scadute {
+        for (owner, timer) in expired {
             if self.stopping.load(Ordering::Acquire) {
                 return Ok(());
             }
@@ -889,20 +889,20 @@ impl Shared {
     /// La riga che dice *perché* l'ha già scritta la porta, una volta sola:
     /// questa non la ripete, dice solo chi si è fermato.
     fn work(&self) {
-        if let Err(e) = self.giro() {
-            tracing::error!(target: "fub.host", "il pool dei job si ferma: {e}");
+        if let Err(and) = self.round() {
+            tracing::error!(target: "fub.host", "il pool dei job si ferma: {and}");
             self.stopping.store(true, Ordering::Release);
             self.bell.ring();
         }
     }
 
     /// Il giro vero, fino a quando c'è da lavorare o fino al primo veleno.
-    fn giro(&self) -> Result<(), PluginError> {
+    fn round(&self) -> Result<(), PluginError> {
         while !self.stopping.load(Ordering::Acquire) {
             // L'apertura prima di tutto, e **prima del biglietto**: finché c'è
             // una fetta da fare questo thread non deve nemmeno considerare di
             // dormire.
-            if self.avanza_apertura()? {
+            if self.advance_opening()? {
                 std::thread::yield_now();
                 continue;
             }
@@ -931,10 +931,10 @@ impl Shared {
                 // questo thread stava per non fare niente: uno scheduler che
                 // gira accanto al pool sarebbe un thread in più, e uno che gira
                 // dentro il ciclo dei job pagherebbe un orologio a ogni job.
-                match self.fra_quanto_suona()? {
-                    Some(fra) => {
-                        self.bell.wait_beyond_or(ticket, fra);
-                        self.suona()?;
+                match self.time_until_alarm()? {
+                    Some(between) => {
+                        self.bell.wait_beyond_or(ticket, between);
+                        self.ring()?;
                     }
                     None => {
                         self.bell.wait_beyond(ticket);
@@ -942,7 +942,7 @@ impl Shared {
                 }
                 continue;
             }
-            self.lotto(jobs)?;
+            self.batch(jobs)?;
         }
         Ok(())
     }
@@ -960,36 +960,36 @@ impl Shared {
     ///
     /// Il guasto ferma il pool come prima: ciò che cambia è che se ne va dopo
     /// aver dato un esito a chi era in mano, e non prima.
-    fn lotto(&self, jobs: Vec<PendingJob>) -> Result<(), PluginError> {
+    fn batch(&self, jobs: Vec<PendingJob>) -> Result<(), PluginError> {
         // La presa in carico è dentro il conto e non prima: se fallisce lei il
         // lotto è già fuori dalla coda uguale, e il posto dove va a finire è lo
         // stesso di ogni altro guasto. Una via d'uscita sola, che è anche il
         // modo in cui questa riparazione ha un presidio: due drenaggi scritti
         // due volte sono due, e uno dei due non lo prova nessuno.
-        let mut guasto = self.claim(&jobs).err();
-        let mut resto = jobs.into_iter();
-        while guasto.is_none() {
-            let Some(job) = resto.next() else { break };
+        let mut failure = self.claim(&jobs).err();
+        let mut remaining_jobs = jobs.into_iter();
+        while failure.is_none() {
+            let Some(job) = remaining_jobs.next() else { break };
             // Il controllo è **dentro** il ciclo e non solo in cima: un
             // drenaggio prende tutta la coda, e senza questa riga chiudere
             // vorrebbe dire eseguire fino in fondo tutto ciò che un thread
             // si è trovato in mano. Chi chiude aspetta chi ha *già*
             // cominciato, non chi non è ancora partito.
-            let fatto = if self.stopping.load(Ordering::Acquire) {
+            let done = if self.stopping.load(Ordering::Acquire) {
                 self.refuse(job, "non parte: il vault si sta chiudendo")
                     .map(|_| ())
             } else {
                 self.run(job)
             };
-            guasto = fatto.err();
+            failure = done.err();
         }
-        match guasto {
+        match failure {
             // **L'unica via d'uscita che perde qualcosa**, e non perde niente:
             // ciò che resta in mano riceve il proprio esito prima che questo
             // thread se ne vada.
-            Some(e) => {
-                self.abbandona(resto);
-                Err(e)
+            Some(and) => {
+                self.abandon(remaining_jobs);
+                Err(and)
             }
             None => Ok(()),
         }
@@ -1000,7 +1000,7 @@ impl Shared {
     /// Il rifiuto può fallire a sua volta — se ad avvelenarsi è il workspace non
     /// c'è più nessun canale su cui rispondere, ed è il limite che la 0120
     /// dichiara — ma è l'ultima cosa che si prova, non la prima che si salta.
-    fn abbandona(&self, jobs: impl IntoIterator<Item = PendingJob>) {
+    fn abandon(&self, jobs: impl IntoIterator<Item = PendingJob>) {
         for job in jobs {
             let _ = self.refuse(job, "non parte: il pool si è fermato");
         }
@@ -1024,10 +1024,10 @@ impl JobRunner {
     /// con un thread in più: nessuno accende niente dopo, e non c'è una
     /// finestra in cui l'indicizzazione esiste ma non la sta facendo nessuno.
     pub fn start(
-        workspace: Custodia<Workspace>,
-        bundles: Custodia<BundleRegistry>,
+        workspace: Custody<Workspace>,
+        bundles: Custody<BundleRegistry>,
         threads: usize,
-        apertura: Option<InCorso>,
+        opening: Option<InProgress>,
     ) -> Result<Self, PluginError> {
         // Un `Result` per una riga che in pratica non fallisce mai — questo
         // workspace lo ha appena costruito chi apre — e non è una formalità: è
@@ -1040,10 +1040,10 @@ impl JobRunner {
             bundles,
             bell,
             stopping: AtomicBool::new(false),
-            apertura: Custodia::new("l'apertura in corso", apertura),
-            flags: Custodia::vuota("le bandiere dei job"),
-            sveglie: Custodia::vuota("le sveglie del vault"),
-            volo: Arc::new((Mutex::new(InVolo::default()), Condvar::new())),
+            opening: Custody::new("l'apertura in corso", opening),
+            flags: Custody::empty("le bandiere dei job"),
+            alarms: Custody::empty("le sveglie del vault"),
+            in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
         });
         let workers = (0..threads.max(1))
             .map(|n| {
@@ -1094,8 +1094,8 @@ impl JobRunner {
     /// riconsegnare l'esito, e aspettarlo tenendolo sarebbe aspettare sé
     /// stessi. Vedi `Host::set_plugin_enabled`, che è l'unico chiamante.
     #[must_use = "il componente resta fermo solo finché si tiene questo permesso"]
-    pub fn ferma_bundle(&self, id: &str) -> Fermo {
-        self.shared.ferma(id)
+    pub fn shutdown_bundle(&self, id: &str) -> ShutDown {
+        self.shared.shutdown(id)
     }
 
     /// **Ferma il pool**: annulla tutti, sveglia chi dorme, aspetta chi lavora,
@@ -1116,14 +1116,14 @@ impl JobRunner {
         }
         // **L'apertura che nessuno ha finito riceve comunque un esito.** Un
         // worker che vede `stopping` in cima al ciclo esce senza passare da
-        // `avanza_apertura`, quindi chiudere un vault a metà indicizzazione
+        // `advance_opening`, quindi chiudere un vault a metà indicizzazione
         // lascerebbe un job vivo per sempre — e la regola che vale per i job
         // dei plugin («sempre un esito», 0028) non vale meno per questo.
         // `stopping` è già alto: la chiamata prende il ramo che chiude.
         // Ciò che va storto **chiudendo** si raccoglie e si dice: un vault
         // avvelenato è uno dei modi in cui l'apertura non arriva a un esito, ed
         // è la stessa lista in cui finiscono gli altri.
-        errors.extend(self.shared.avanza_apertura().err());
+        errors.extend(self.shared.advance_opening().err());
         errors.extend(self.refuse_pending());
         errors
     }
@@ -1141,14 +1141,14 @@ impl JobRunner {
         // altri guasti della chiusura.
         let pending = match self.shared.workspace.write() {
             Ok(mut ws) => ws.take_pending_jobs(),
-            Err(e) => return vec![e],
+            Err(and) => return vec![and],
         };
         pending
             .into_iter()
             .map(|job| {
                 self.shared
                     .refuse(job, "non parte: il vault si sta chiudendo")
-                    .unwrap_or_else(|e| e)
+                    .unwrap_or_else(|and| and)
             })
             .collect()
     }
@@ -1184,7 +1184,7 @@ mod tests {
     use fub_abi::traits::WallClock;
 
     /// Cosa dice la bandiera di un job, o `None` se non ne ha una.
-    fn bandiera(flags: &Flags, id: u64) -> Option<bool> {
+    fn flag(flags: &Flags, id: u64) -> Option<bool> {
         flags
             .live
             .get(&JobId(id))
@@ -1193,26 +1193,26 @@ mod tests {
 
     /// Annullare un job **preso in carico** lo raggiunge: è il caso normale.
     #[test]
-    fn annullare_un_job_vivo_alza_la_sua_bandiera() {
+    fn undo_a_job_live_raises_the_its_flag() {
         let mut flags = Flags::default();
         flags.claim(JobId(7));
         flags.cancel(JobId(7), 8);
-        assert_eq!(bandiera(&flags, 7), Some(true));
+        assert_eq!(flag(&flags, 7), Some(true));
     }
 
     /// Annullare un job che il pool **non ha ancora visto** deve valere: è la
     /// corsa che la 0032 ha deciso di non perdere. La bandiera nasce alzata, e
     /// il drenaggio la trova così invece di rimetterla a zero.
     #[test]
-    fn annullare_un_job_ancora_in_coda_lo_aspetta() {
+    fn undo_a_job_again_in_queue_the_waits() {
         let mut flags = Flags::default();
         flags.claim(JobId(3));
         // Il kernel ha già emesso fino al 9 compreso: quel job esiste, è in
         // coda, e il pool non l'ha ancora drenato.
         flags.cancel(JobId(9), 10);
-        assert_eq!(bandiera(&flags, 9), Some(true));
+        assert_eq!(flag(&flags, 9), Some(true));
         flags.claim(JobId(9));
-        assert_eq!(bandiera(&flags, 9), Some(true));
+        assert_eq!(flag(&flags, 9), Some(true));
     }
 
     /// Annullare un id che il kernel **non ha mai emesso** non lascia niente.
@@ -1224,12 +1224,12 @@ mod tests {
     /// segno di `seen` sembrava «uno che deve ancora partire», e ogni pressione
     /// lasciava una bandiera per la vita della sessione.
     #[test]
-    fn annullare_un_id_mai_emesso_non_lascia_niente() {
+    fn undo_a_id_never_issued_not_leaves_nothing() {
         let mut flags = Flags::default();
         flags.claim(JobId(1));
         // Il kernel ha emesso 0 e 1: il 42 non è mai stato un job.
         flags.cancel(JobId(42), 2);
-        assert_eq!(bandiera(&flags, 42), None);
+        assert_eq!(flag(&flags, 42), None);
         assert_eq!(
             flags.live.len(),
             1,
@@ -1238,7 +1238,7 @@ mod tests {
         // E il confine è **esatto**, non prudenziale: l'ultimo emesso resta
         // annullabile prima che il pool lo veda.
         flags.cancel(JobId(1), 2);
-        assert_eq!(bandiera(&flags, 1), Some(true));
+        assert_eq!(flag(&flags, 1), Some(true));
     }
 
     /// Annullare un job **già concluso** non lascia niente dietro.
@@ -1247,7 +1247,7 @@ mod tests {
     /// tre casi: senza il segno ogni pressione lascerebbe una bandiera che
     /// nessuno toglie, e la mappa crescerebbe per tutta la vita del vault.
     #[test]
-    fn annullare_un_job_finito_non_lascia_niente() {
+    fn undo_a_job_finished_not_leaves_nothing() {
         let mut flags = Flags::default();
         for id in [1, 2, 3] {
             flags.claim(JobId(id));
@@ -1276,20 +1276,20 @@ mod tests {
     /// **La bandiera si guarda fra una fetta e l'altra**, ed è ciò che rende
     /// annullabile un lavoro che non chiama mai l'host (§15.7).
     ///
-    /// Sta qui, su [`Shared::avanza_apertura`] chiamata a mano, e non su un
+    /// Sta qui, su [`Shared::advance_opening`] chiamata a mano, e non su un
     /// pool acceso, per la ragione in testa a questo modulo: con dei thread
     /// veri la differenza fra «la bandiera ha fermato l'indicizzazione» e «il
     /// disco è arrivato in fondo prima che la si alzasse» è un istante da
     /// indovinare, e un presidio che si indovina non presidia. Chiamata da qui,
     /// nessuna fetta è ancora partita: se la bandiera vale, ne parte zero.
     #[test]
-    fn con_la_bandiera_alzata_nessuna_fetta_parte() {
-        let (_dir, shared, id) = un_vault_da_indicizzare();
+    fn with_the_flag_raised_no_one_slice_part() {
+        let (_dir, shared, id) = a_vault_to_index();
         shared.flags.write().unwrap().claim(id);
         shared.flags.write().unwrap().cancel(id, id.0 + 1);
 
         assert!(
-            shared.avanza_apertura().unwrap(),
+            shared.advance_opening().unwrap(),
             "c'era un'apertura da portare avanti"
         );
 
@@ -1300,7 +1300,7 @@ mod tests {
         // E l'apertura è **chiusa**, non sospesa: chi smette riceve un esito
         // come chiunque altro (0028), e non resta niente da portare avanti.
         assert!(
-            !shared.avanza_apertura().unwrap(),
+            !shared.advance_opening().unwrap(),
             "l'apertura annullata è rimasta in mano a qualcuno"
         );
     }
@@ -1309,17 +1309,17 @@ mod tests {
     /// finito** (§15.7).
     ///
     /// Il caso è quello di un worker che vede `stopping` in cima al proprio
-    /// ciclo ed esce **senza passare da `avanza_apertura`**: da fuori quel
+    /// ciclo ed esce **senza passare da `advance_opening`**: da fuori quel
     /// momento non si provoca — dipende da dove il thread si trovava — e qui lo
     /// si mette in scena esattamente, con un pool che non ha thread. Senza la
     /// riga in fondo a [`JobRunner::stop`] l'apertura resterebbe in mano a
     /// nessuno, cioè un job vivo per sempre e un `wait_indexed` che non torna.
     #[test]
-    fn fermare_il_pool_da_un_esito_all_apertura_rimasta() {
-        let (_dir, shared, _id) = un_vault_da_indicizzare();
-        let fine = {
-            let apertura = shared.apertura.read().unwrap();
-            Arc::clone(&apertura.as_ref().expect("un'apertura in corso").fine)
+    fn stop_the_pool_from_a_outcome_all_opening_remaining() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let end = {
+            let opening = shared.opening.read().unwrap();
+            Arc::clone(&opening.as_ref().expect("un'apertura in corso").end)
         };
         let mut runner = JobRunner {
             shared: Arc::clone(&shared),
@@ -1329,11 +1329,11 @@ mod tests {
         runner.stop();
 
         assert!(
-            shared.apertura.read().unwrap().is_none(),
+            shared.opening.read().unwrap().is_none(),
             "l'apertura è rimasta appesa a pool fermo"
         );
         assert!(
-            *fine.0.lock().unwrap(),
+            *end.0.lock().unwrap(),
             "chi aspettava l'indicizzazione non è stato svegliato"
         );
     }
@@ -1344,32 +1344,32 @@ mod tests {
     /// decidere quando finisce. Finché non è armato il formato parsa come
     /// qualunque altro.
     #[derive(Default)]
-    struct Cancello {
-        dentro: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+    struct Gate {
+        within: Mutex<Option<std::sync::mpsc::Sender<()>>>,
         via: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
     }
 
-    impl Cancello {
-        fn arma(&self) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
-            let (dentro_tx, dentro_rx) = std::sync::mpsc::channel();
+    impl Gate {
+        fn arm(&self) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+            let (inside_tx, inside_rx) = std::sync::mpsc::channel();
             let (via_tx, via_rx) = std::sync::mpsc::channel();
-            *self.dentro.lock().unwrap() = Some(dentro_tx);
+            *self.within.lock().unwrap() = Some(inside_tx);
             *self.via.lock().unwrap() = Some(via_rx);
-            (dentro_rx, via_tx)
+            (inside_rx, via_tx)
         }
 
-        fn attraversa(&self) {
-            let dentro = self.dentro.lock().unwrap().take();
+        fn cross(&self) {
+            let within = self.within.lock().unwrap().take();
             let via = self.via.lock().unwrap().take();
-            if let (Some(dentro), Some(via)) = (dentro, via) {
-                dentro.send(()).expect("il test aspetta il parse");
+            if let (Some(within), Some(via)) = (within, via) {
+                within.send(()).expect("il test aspetta il parse");
                 via.recv().expect("il test lascia uscire il parse");
             }
         }
     }
 
     /// Un formato di testo nudo che, a cancello armato, si ferma dentro `parse`.
-    struct Lento(Arc<Cancello>);
+    struct Lento(Arc<Gate>);
 
     impl fub_abi::FormatProvider for Lento {
         fn descriptor(&self) -> fub_abi::format::FormatDescriptor {
@@ -1383,7 +1383,7 @@ mod tests {
             source: &fub_abi::format::DocumentSource,
             ctx: &fub_abi::format::ParseContext,
         ) -> Result<fub_abi::model::DocumentModel, fub_abi::error::FormatError> {
-            self.0.attraversa();
+            self.0.cross();
             let mut model = fub_abi::model::DocumentModel::empty(fub_abi::model::DocId::new(
                 ctx.doc_id.clone(),
             ));
@@ -1393,7 +1393,7 @@ mod tests {
         fn render_html(
             &self,
             m: &fub_abi::model::DocumentModel,
-            _o: &fub_abi::format::RenderOptions,
+            _or: &fub_abi::format::RenderOptions,
         ) -> Result<String, fub_abi::error::FormatError> {
             Ok(m.text.clone())
         }
@@ -1419,40 +1419,40 @@ mod tests {
     /// prestito esclusivo, perché aspetterebbe la fine del parse e poi
     /// passerebbe.
     #[test]
-    fn chi_legge_entra_mentre_la_fetta_dell_apertura_legge_il_disco() {
-        let cancello: Arc<Cancello> = Arc::default();
+    fn who_reads_enters_while_the_opening_slice_reads_the_disk() {
+        let gate: Arc<Gate> = Arc::default();
         let mut formats = fub_kernel::FormatRegistry::new();
         formats
-            .register(Box::new(Lento(cancello.clone())))
+            .register(Box::new(Lento(gate.clone())))
             .expect("un provider solo non va in conflitto");
         // Una nota sola: una fetta sola, quindi il cancello si attraversa una
         // volta e il test non deve indovinare quante.
-        let (_dir, shared, _id, _root) = un_vault_scansionato(1, formats);
+        let (_dir, shared, _id, _root) = a_vault_scanned(1, formats);
 
-        let (dentro, via) = cancello.arma();
-        let fetta = {
+        let (within, via) = gate.arm();
+        let slice = {
             let shared = Arc::clone(&shared);
-            std::thread::spawn(move || shared.avanza_apertura())
+            std::thread::spawn(move || shared.advance_opening())
         };
 
         // Il parse è cominciato: da qui in poi la fetta sta facendo I/O.
-        dentro.recv().expect("la fetta entra nel parse");
-        let letto = shared.workspace.try_read();
+        within.recv().expect("la fetta entra nel parse");
+        let read_value = shared.workspace.try_read();
         assert!(
-            letto.is_some(),
+            read_value.is_some(),
             "il workspace non si presta mentre la fetta dell'apertura legge il \
              disco: la fase che legge e parsa tiene il prestito esclusivo, e chi \
              guarda il vault appena aperto — la ricerca, l'albero — aspetta \
              un'I/O che non lo riguarda (0024, 0119)"
         );
         // E non è un prestito vuoto: da lì si interroga davvero.
-        assert!(letto
+        assert!(read_value
             .expect("il prestito condiviso c'è")
             .query_index(fub_abi::traits::IndexQuery::VaultStatus)
             .is_ok());
         via.send(()).expect("la fetta può finire");
         assert!(
-            fetta
+            slice
                 .join()
                 .expect("il thread finisce")
                 .expect("nessun veleno"),
@@ -1477,19 +1477,19 @@ mod tests {
     /// job insieme al guasto, e chi lo aveva chiesto aspettava un `JobDone`
     /// che non sarebbe mai arrivato.
     #[test]
-    fn un_job_che_non_si_riesce_a_preparare_ha_comunque_un_esito() {
-        let (_dir, shared, _id) = un_vault_da_indicizzare();
-        let ascolto = shared.workspace.read().unwrap().bus().subscribe();
-        avvelena(&shared.flags);
+    fn a_job_that_not_is_succeeds_a_prepare_has_anyway_a_outcome() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let subscription = shared.workspace.read().unwrap().bus().subscribe();
+        poison(&shared.flags);
 
-        let esito = shared.run(un_job(7));
+        let outcome = shared.run(a_job(7));
 
         assert!(
-            esito.is_err(),
+            outcome.is_err(),
             "il veleno delle bandiere deve restare visibile: è ciò che ferma il pool"
         );
         assert_eq!(
-            conclusi(&ascolto),
+            completed(&subscription),
             vec!["lavoro-7".to_string()],
             "il job è sparito senza dire niente: chi lo ha chiesto aspetta un \
              `JobDone` che non arriverà, e il workspace era vivo"
@@ -1504,19 +1504,19 @@ mod tests {
     /// cui si è inciampato — e succedeva nel ramo che si imbocca quando
     /// qualcosa è già andato storto, cioè quando nessuno sta guardando.
     #[test]
-    fn un_lotto_gia_drenato_non_sparisce_col_pool() {
-        let (_dir, shared, _id) = un_vault_da_indicizzare();
-        let ascolto = shared.workspace.read().unwrap().bus().subscribe();
-        avvelena(&shared.flags);
+    fn a_drained_batch_does_not_disappear_from_pool() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let subscription = shared.workspace.read().unwrap().bus().subscribe();
+        poison(&shared.flags);
 
-        let esito = shared.lotto(vec![un_job(1), un_job(2), un_job(3)]);
+        let outcome = shared.batch(vec![a_job(1), a_job(2), a_job(3)]);
 
         assert!(
-            esito.is_err(),
+            outcome.is_err(),
             "il guasto che ferma il pool resta un guasto"
         );
         assert_eq!(
-            conclusi(&ascolto),
+            completed(&subscription),
             vec![
                 "lavoro-1".to_string(),
                 "lavoro-2".to_string(),
@@ -1529,7 +1529,7 @@ mod tests {
 
     /// Un job da eseguire, di un componente che non esiste: qui non si guarda
     /// cosa risponde: si guarda **se** risponde.
-    fn un_job(id: u64) -> PendingJob {
+    fn a_job(id: u64) -> PendingJob {
         PendingJob {
             id: JobId(id),
             plugin: "prova.componente".to_string(),
@@ -1541,25 +1541,25 @@ mod tests {
     }
 
     /// I job che hanno ricevuto un esito, nell'ordine in cui l'hanno ricevuto.
-    fn conclusi(ascolto: &fub_kernel::bus::Subscription) -> Vec<String> {
-        let mut fatti = Vec::new();
-        while let Ok(notice) = ascolto.try_recv() {
+    fn completed(subscription: &fub_kernel::bus::Subscription) -> Vec<String> {
+        let mut done = Vec::new();
+        while let Ok(notice) = subscription.try_recv() {
             if let fub_abi::Event::JobDone { job, .. } = notice.event {
-                fatti.push(job);
+                done.push(job);
             }
         }
-        fatti
+        done
     }
 
     /// Avvelena una custodia come la avvelena la vita: un thread che pania
     /// tenendo il prestito **esclusivo**. Il panico è di proposito e non deve
     /// sporcare l'output del banco.
-    fn avvelena<T: Send + Sync + 'static>(c: &Custodia<T>) {
-        let copia = c.clone();
+    fn poison<T: Send + Sync + 'static>(c: &Custody<T>) {
+        let copy = c.clone();
         let hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let _ = std::thread::spawn(move || {
-            let _g = copia.write().expect("viva prima del misfatto");
+            let _g = copy.write().expect("viva prima del misfatto");
             panic!("a metà");
         })
         .join();
@@ -1568,59 +1568,59 @@ mod tests {
 
     /// Un vault seminato, scansionato e con la sua identità di job: il punto in
     /// cui `Host::open` consegna la seconda fase al pool.
-    fn un_vault_da_indicizzare() -> (tempfile::TempDir, Arc<Shared>, JobId) {
+    fn a_vault_to_index() -> (tempfile::TempDir, Arc<Shared>, JobId) {
         let mut formats = fub_kernel::FormatRegistry::new();
         formats
             .register(fub_format_markdown::MarkdownProvider::boxed())
             .expect("un provider solo non va in conflitto");
-        let (dir, shared, id, _) = un_vault_scansionato(3, formats);
+        let (dir, shared, id, _) = a_vault_scanned(3, formats);
         (dir, shared, id)
     }
 
     /// Lo stesso, con il registro dei formati in mano al chiamante: è la leva
     /// con cui il presidio del prestito mette un parse **lento** sul percorso
     /// dell'apertura.
-    fn un_vault_scansionato(
-        quante: usize,
+    fn a_vault_scanned(
+        count: usize,
         formats: fub_kernel::FormatRegistry,
     ) -> (tempfile::TempDir, Arc<Shared>, JobId, camino::Utf8PathBuf) {
         let dir = tempfile::tempdir().expect("tempdir");
         let root =
             camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("una radice utf8");
-        for n in 0..quante {
+        for n in 0..count {
             std::fs::write(root.join(format!("Nota{n}.md")), "# Titolo\n\nCorpo.\n")
                 .expect("semina");
         }
 
         let mut ws = Workspace::new(&root, formats).expect("la radice appena creata si apre");
         let work = ws.scan_vault().expect("la scansione riesce");
-        assert_eq!(work.totale(), quante as u64, "le note seminate si leggono");
+        assert_eq!(work.total(), count as u64, "le note seminate si leggono");
         let id = ws.begin_index_job();
 
         let shared = Shared {
-            workspace: Custodia::new("il vault di prova", ws),
-            bundles: Custodia::new("i componenti di prova", BundleRegistry::new()),
+            workspace: Custody::new("il vault di prova", ws),
+            bundles: Custody::new("i componenti di prova", BundleRegistry::new()),
             bell: Arc::new(JobBell::default()),
             stopping: AtomicBool::new(false),
-            apertura: Custodia::new(
+            opening: Custody::new(
                 "l'apertura di prova",
-                Some(InCorso {
+                Some(InProgress {
                     id,
-                    totale: work.totale(),
+                    total: work.total(),
                     work,
-                    unread: Custodia::vuota("gli scarti di prova"),
-                    fine: Arc::new((Mutex::new(false), Condvar::new())),
+                    unread: Custody::empty("gli scarti di prova"),
+                    end: Arc::new((Mutex::new(false), Condvar::new())),
                 }),
             ),
-            flags: Custodia::vuota("le bandiere di prova"),
-            sveglie: Custodia::vuota("le sveglie di prova"),
-            volo: Arc::new((Mutex::new(InVolo::default()), Condvar::new())),
+            flags: Custody::empty("le bandiere di prova"),
+            alarms: Custody::empty("le sveglie di prova"),
+            in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
         };
         (dir, Arc::new(shared), id, root)
     }
 
     #[test]
-    fn un_job_in_attesa_del_proprio_turno_si_annulla() {
+    fn a_job_in_wait_of_the_own_turn_is_cancels() {
         let mut flags = Flags::default();
         flags.claim(JobId(4)); // il lotto di un thread
         flags.claim(JobId(5));
@@ -1628,14 +1628,14 @@ mod tests {
         flags.claim(JobId(7));
         flags.live.remove(&JobId(4)); // il 4 è finito
         flags.cancel(JobId(5), 8); // il 5 aspetta ancora il proprio turno
-        assert_eq!(bandiera(&flags, 5), Some(true));
-        assert_eq!(bandiera(&flags, 4), None);
+        assert_eq!(flag(&flags, 5), Some(true));
+        assert_eq!(flag(&flags, 4), None);
     }
     // -----------------------------------------------------------------------
     // Le due sorgenti di tempo dentro lo stesso quadrante (§22.4, 0091).
     // -----------------------------------------------------------------------
 
-    fn dichiara(id: &str, schedule: TimerSchedule) -> (String, fub_abi::traits::TimerSpec) {
+    fn declare(id: &str, schedule: TimerSchedule) -> (String, fub_abi::traits::TimerSpec) {
         (
             "test.sveglia".to_string(),
             fub_abi::traits::TimerSpec {
@@ -1653,43 +1653,43 @@ mod tests {
     /// diventerebbe «ogni 86400 secondi da adesso», che è la cosa che questa
     /// voce esiste per non fare.
     #[test]
-    fn le_due_famiglie_convivono_nello_stesso_quadrante() {
-        let mut sveglie = Sveglie::default();
-        let ora = Instant::now();
-        sveglie.riconcilia(
+    fn the_two_families_coexist_in_the_same_quadrant() {
+        let mut alarms = Alarms::default();
+        let now = Instant::now();
+        alarms.reconcile(
             &[
-                dichiara("battito", TimerSchedule::Every { seconds: 3600 }),
-                dichiara(
+                declare("battito", TimerSchedule::Every { seconds: 3600 }),
+                declare(
                     "digest",
                     // Mezzanotte e un minuto: sempre nel futuro, salvo il minuto
                     // in cui questo test giri esattamente lì.
                     TimerSchedule::AtWallClock(WallClock::daily(0, 1).anchored("Europe/Rome")),
                 ),
             ],
-            ora,
+            now,
             "",
         );
-        assert_eq!(sveglie.quadranti.len(), 2);
+        assert_eq!(alarms.quadrants.len(), 2);
 
-        let parete = &sveglie.quadranti[&("test.sveglia".into(), "digest".into())];
+        let wall = &alarms.quadrants[&("test.sveglia".into(), "digest".into())];
         assert!(
-            parete.prossima.is_some(),
+            wall.next.is_some(),
             "una sveglia di parete ha una prossima: gliela dà il calendario"
         );
         assert!(
-            parete.dove.attesa.is_some(),
+            wall.position.wait_for.is_some(),
             "e sa quale occorrenza sta aspettando, che è ciò che le fa \
              distinguere una suonata puntuale da un recupero"
         );
-        assert_eq!(parete.dove.attesa.map(|a| (a.hour, a.minute)), Some((0, 1)));
+        assert_eq!(wall.position.wait_for.map(|a| (a.hour, a.minute)), Some((0, 1)));
 
         // Il trascorso non ha imparato niente dal calendario: la sua prossima è
         // ancora un'ora dall'ancora, come è sempre stata.
-        let trascorso = &sveglie.quadranti[&("test.sveglia".into(), "battito".into())];
-        assert_eq!(trascorso.dove, Posizione::default());
+        let elapsed = &alarms.quadrants[&("test.sveglia".into(), "battito".into())];
+        assert_eq!(elapsed.position, Position::default());
         assert_eq!(
-            trascorso.prossima,
-            Some(trascorso.ancora + Duration::from_secs(3600))
+            elapsed.next,
+            Some(elapsed.still + Duration::from_secs(3600))
         );
     }
 
@@ -1699,109 +1699,109 @@ mod tests {
     /// vorrebbe dire farla riseminare dalla riconciliazione al giro dopo, e il
     /// pool si sveglierebbe a vuoto per sempre.
     #[test]
-    fn un_fuso_irrisolvibile_non_ripiega_e_non_suona() {
-        let mut sveglie = Sveglie::default();
-        let ora = Instant::now();
-        sveglie.riconcilia(
-            &[dichiara(
+    fn a_timezone_unresolvable_not_falls_back_and_not_rings() {
+        let mut alarms = Alarms::default();
+        let now = Instant::now();
+        alarms.reconcile(
+            &[declare(
                 "digest",
                 TimerSchedule::AtWallClock(WallClock::daily(9, 0).anchored("Europa/Roma")),
             )],
-            ora,
+            now,
             "",
         );
-        let q = &sveglie.quadranti[&("test.sveglia".into(), "digest".into())];
-        assert_eq!(q.prossima, None, "non suona");
+        let q = &alarms.quadrants[&("test.sveglia".into(), "digest".into())];
+        assert_eq!(q.next, None, "non suona");
         assert_eq!(
-            sveglie.fra_quanto(ora),
+            alarms.time_until(now),
             None,
             "e chi aspetta non si sveglia per lei"
         );
-        assert!(sveglie.scadute(ora, "").is_empty());
-        assert_eq!(sveglie.quadranti.len(), 1, "ma resta dichiarata");
+        assert!(alarms.expired(now, "").is_empty());
+        assert_eq!(alarms.quadrants.len(), 1, "ma resta dichiarata");
     }
 
     /// Una sveglia di parete che sparisce dal manifest sparisce dai quadranti,
     /// come ogni altra: la sorgente resta il manifest a ogni giro.
     #[test]
-    fn anche_una_sveglia_di_parete_muore_col_manifest() {
-        let mut sveglie = Sveglie::default();
-        let ora = Instant::now();
-        let dichiarata = [dichiara(
+    fn also_a_alarm_of_wall_dies_col_manifest() {
+        let mut alarms = Alarms::default();
+        let now = Instant::now();
+        let declared = [declare(
             "digest",
             TimerSchedule::AtWallClock(WallClock::daily(9, 0)),
         )];
-        sveglie.riconcilia(&dichiarata, ora, "");
-        assert_eq!(sveglie.quadranti.len(), 1);
-        sveglie.riconcilia(&[], ora, "");
-        assert!(sveglie.quadranti.is_empty());
+        alarms.reconcile(&declared, now, "");
+        assert_eq!(alarms.quadrants.len(), 1);
+        alarms.reconcile(&[], now, "");
+        assert!(alarms.quadrants.is_empty());
     }
 
-    /// **Un recupero di parete calcolato in `riconcilia` non si perde**: viene
-    /// conservato e drenato una volta sola da `scadute`.
+    /// **Un recupero di parete calcolato in `reconcile` non si perde**: viene
+    /// conservato e drenato una volta sola da `expired`.
     ///
-    /// È il difetto che aveva `riconcilia` a chiamare `parete` e a buttarne via
+    /// È il difetto che aveva `reconcile` a chiamare `parete` e a buttarne via
     /// il risultato — [`dove`](Quadrante::dove) era già avanzato, e la `parete`
-    /// di `scadute` non l'avrebbe più visto. Qui lo si mette in scena senza
+    /// di `expired` non l'avrebbe più visto. Qui lo si mette in scena senza
     /// dormire: si torna indietro l'ultima occorrenza considerata di un giorno,
     /// e la riconciliazione successiva la vede come un recupero dovuto.
     #[test]
-    fn un_recupero_di_parete_si_conserva_e_si_drena_una_volta() {
-        let mut sveglie = Sveglie::default();
-        let ora = Instant::now();
-        let dichiarata = [dichiara(
+    fn a_recovery_of_wall_is_preserves_and_is_drains_a_time() {
+        let mut alarms = Alarms::default();
+        let now = Instant::now();
+        let declared = [declare(
             "digest",
             TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
         )];
-        sveglie.riconcilia(&dichiarata, ora, "");
+        alarms.reconcile(&declared, now, "");
 
         // Simula il passare di un'occorrenza mentre il pool dormiva: l'ultima
         // occorrenza considerata torna indietro di un giorno, come se la
         // sveglia fosse stata in letargo dall'occorrenza precedente.
         {
-            let q = sveglie
-                .quadranti
+            let q = alarms
+                .quadrants
                 .get_mut(&("test.sveglia".into(), "digest".into()))
                 .expect("la sveglia è dichiarata");
-            q.dove.ultima = q.dove.ultima.map(|u| u.prev_day());
+            q.position.last = q.position.last.map(|u| u.prev_day());
         }
 
-        sveglie.riconcilia(&dichiarata, ora, "");
-        let suonate = sveglie.scadute(ora, "");
+        alarms.reconcile(&declared, now, "");
+        let fired = alarms.expired(now, "");
         assert_eq!(
-            suonate,
+            fired,
             vec![("test.sveglia".to_string(), "digest".to_string())],
             "il recupero accumulato in riconcilia non è arrivato a scadute"
         );
         // Drenato una volta sola: una seconda chiamata non lo ridà.
         assert!(
-            sveglie.scadute(ora, "").is_empty(),
+            alarms.expired(now, "").is_empty(),
             "il recupero drenato si è ripresentato"
         );
     }
 
     /// Più riconciliazioni prima di un drenaggio non duplicano il recupero.
     #[test]
-    fn piu_riconciliazioni_non_duplicano_un_recupero() {
-        let mut sveglie = Sveglie::default();
-        let ora = Instant::now();
-        let dichiarata = [dichiara(
+    fn more_reconciliations_not_duplicate_a_recovery() {
+        let mut alarms = Alarms::default();
+        let now = Instant::now();
+        let declared = [declare(
             "digest",
             TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
         )];
-        sveglie.riconcilia(&dichiarata, ora, "");
+        alarms.reconcile(&declared, now, "");
         {
-            let q = sveglie
-                .quadranti
+            let q = alarms
+                .quadrants
                 .get_mut(&("test.sveglia".into(), "digest".into()))
                 .expect("la sveglia è dichiarata");
-            q.dove.ultima = q.dove.ultima.map(|u| u.prev_day());
+            q.position.last = q.position.last.map(|u| u.prev_day());
         }
-        sveglie.riconcilia(&dichiarata, ora, "");
-        // Una seconda riconciliazione prima che `scadute` dreni.
-        sveglie.riconcilia(&dichiarata, ora, "");
+        alarms.reconcile(&declared, now, "");
+        // Una seconda riconciliazione prima che `expired` dreni.
+        alarms.reconcile(&declared, now, "");
         assert_eq!(
-            sveglie.scadute(ora, "").len(),
+            alarms.expired(now, "").len(),
             1,
             "due riconciliazioni hanno duplicato un recupero"
         );
@@ -1810,27 +1810,27 @@ mod tests {
     /// Una sveglia rimossa dal manifest non suona per un recupero accumulato
     /// prima di sparire.
     #[test]
-    fn una_sveglia_rimossa_non_recupera() {
-        let mut sveglie = Sveglie::default();
-        let ora = Instant::now();
-        let dichiarata = [dichiara(
+    fn a_alarm_removed_not_recovers() {
+        let mut alarms = Alarms::default();
+        let now = Instant::now();
+        let declared = [declare(
             "digest",
             TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
         )];
-        sveglie.riconcilia(&dichiarata, ora, "");
+        alarms.reconcile(&declared, now, "");
         {
-            let q = sveglie
-                .quadranti
+            let q = alarms
+                .quadrants
                 .get_mut(&("test.sveglia".into(), "digest".into()))
                 .expect("la sveglia è dichiarata");
-            q.dove.ultima = q.dove.ultima.map(|u| u.prev_day());
+            q.position.last = q.position.last.map(|u| u.prev_day());
         }
-        sveglie.riconcilia(&dichiarata, ora, "");
+        alarms.reconcile(&declared, now, "");
         // La sveglia sparisce dal manifest: il suo recupero accumulato sparisce
         // con lei.
-        sveglie.riconcilia(&[], ora, "");
+        alarms.reconcile(&[], now, "");
         assert!(
-            sveglie.scadute(ora, "").is_empty(),
+            alarms.expired(now, "").is_empty(),
             "una sveglia rimossa suona per un recupero accumulato prima di sparire"
         );
     }

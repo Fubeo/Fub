@@ -630,8 +630,9 @@ osservazioni. Esclude difetti la cui riparazione richiede decisioni (es.
 Il sesto blocco (`0223`–`0224`) copre le duplicazioni silenziose nel
 compilatore.
 Il settimo blocco (`0225`–`0226`) identifica ventuno definizioni mancanti e il
-bisogno di file d'ingresso. Hanno corretto undici voci nel glossario in
-duecentodiciassette file il 2026-08-10.
+bisogno di file d'ingresso. Hanno corretto undici voci del glossario in
+duecentodiciassette file il 2026-08-10; il glossario è stato poi chiuso (vedi
+la [0142](decisions/0142-il-vocabolario-del-metodo-esce-dal-glossario.md)).
 L'ottavo blocco (`0227`–`0228`) è **una riga sola di codice vista da due
 momenti**, e non arriva da una lettura: arriva da un cronometro. La domanda era
 se la gestione dei file fosse inutilmente complessa, e la risposta misurata è
@@ -688,8 +689,15 @@ Esegui tre mosse obbligatorie.
 
 ### 1. Chiudere il glossario (difetto `0225`)
 
-Aggiungi undici voci a [glossario.md](glossario.md), nella sezione `## Il
-metodo`.
+Chiuso il 2026-08-10: undici voci del metodo erano state aggiunte al
+glossario, nella sezione `## Il metodo`. La
+[0142](decisions/0142-il-vocabolario-del-metodo-esce-dal-glossario.md) le ha
+poi spostate nel dizionario del dialetto di
+[leggimi-prima.md](leggimi-prima.md), e il file del glossario non esiste più:
+il lessico del prodotto è definito in una riga dove si usa, in
+[PIANO.md](PIANO.md) e in
+[architecture/mappa-visuale.md](architecture/mappa-visuale.md). Le undici voci
+erano:
 
 | termine | volte in `docs/` | cosa vuol dire, in una riga | dove è già usato per esteso |
 | --- | --- | --- | --- |
@@ -708,7 +716,7 @@ metodo`.
 Regole fisse della voce: `DocumentModel` · [`file`](roadmap/numerazione.md) ·
 [verbale](decisions/README.md). Due o tre righe massime, usa
 [check-doc-links](../.github/scripts/check-doc-links.mjs). Le eccezioni in
-`glossario.md` e [README.md](README.md) vanno aggiornate col commit `441d376`.
+[README.md](README.md) vanno aggiornate col commit `441d376`.
 
 ### 2. Il file d'ingresso (difetto `0226`)
 

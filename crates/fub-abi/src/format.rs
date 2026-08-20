@@ -119,7 +119,7 @@ impl FormatDescriptor {
         FormatDescriptor {
             id: id.into(),
             name: name.into(),
-            extensions: extensions.iter().map(|e| e.to_string()).collect(),
+            extensions: extensions.iter().map(|and| and.to_string()).collect(),
             source: SourceKind::Text,
         }
     }

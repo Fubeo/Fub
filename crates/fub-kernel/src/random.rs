@@ -61,9 +61,9 @@ pub fn random_bytes(n: u32) -> Result<Vec<u8>, PluginError> {
     if n > MAX_RANDOM_BYTES {
         return Err(PluginError::BadArgs(
             format!(
-                "sono stati chiesti {n} byte di caso, e questo host ne rende al \
-                 massimo {MAX_RANDOM_BYTES}: un'identità che ne volesse di più \
-                 non è un'identità"
+                "{n} random bytes were requested, but this host provides at \
+                 most {MAX_RANDOM_BYTES}: an identity wanting more \
+                 is not an identity"
             )
             .into(),
         ));
@@ -103,14 +103,14 @@ mod tests {
     #[test]
     fn the_ceiling_says_no_instead_of_truncating() {
         for n in [MAX_RANDOM_BYTES + 1, 4096, u32::MAX] {
-            let err = random_bytes(n).expect_err("sopra il tetto non si tronca, si rifiuta");
+            let err = random_bytes(n).expect_err("above the ceiling we do not truncate, we refuse");
             assert!(
                 matches!(err, PluginError::BadArgs(_)),
-                "chiedere troppo è una colpa di chi chiama: {err}"
+                "asking for too much is the caller's fault: {err}"
             );
             assert!(
                 err.message().to_string().contains(&n.to_string()),
-                "il rifiuto deve dire quanto era stato chiesto: {err}"
+                "the refusal must say how much was asked: {err}"
             );
         }
     }
@@ -127,11 +127,11 @@ mod tests {
     /// UUID di fila senza una collisione è ciò che serve a un vault.
     #[test]
     fn two_calls_never_agree() {
-        let mut visti = HashSet::new();
+        let mut seen = HashSet::new();
         for _ in 0..10_000 {
             assert!(
-                visti.insert(random_bytes(16).unwrap()),
-                "due identità uguali: il flusso si ripete"
+                seen.insert(random_bytes(16).unwrap()),
+                "duplicate identity: the stream repeats"
             );
         }
     }
@@ -141,10 +141,10 @@ mod tests {
     #[test]
     fn a_long_block_does_not_repeat_itself() {
         let b = random_bytes(64).unwrap();
-        let primo = &b[..8];
+        let first = &b[..8];
         assert!(
-            b.chunks(8).skip(1).any(|c| c != primo),
-            "il blocco è otto byte ripetuti otto volte"
+            b.chunks(8).skip(1).any(|c| c != first),
+            "the block is eight bytes repeated eight times"
         );
     }
 }

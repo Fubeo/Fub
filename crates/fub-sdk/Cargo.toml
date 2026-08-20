@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Helper ergonomici per scrivere provider Fub (nativi e, in futuro, guest WASM): toolkit di scansione testo per tag/wikilink, riesporta il contratto."
+description = "Ergonomic helpers for writing Fub providers (native and, in the future, guest WASM): text scanning toolkit for tags/wikilinks, re-exports the contract."
 
 [dependencies]
 fub-abi = { workspace = true }

@@ -224,7 +224,7 @@ impl OptionMap {
 fn status_of(value: &serde_json::Value) -> OptionStatus<'_> {
     match value {
         serde_json::Value::Bool(false) | serde_json::Value::Null => OptionStatus::Off,
-        altro => OptionStatus::On(altro),
+        other => OptionStatus::On(other),
     }
 }
 
@@ -515,7 +515,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn presenza_e_valore() {
+    fn presence_and_value() {
         let m = OptionMap::new()
             .on(syntax::TAGS)
             .with(syntax::WIKILINKS, false)
@@ -540,7 +540,7 @@ mod tests {
     /// e va provato rosso **togliendone una**: se si toglie `null`, o il
     /// booleano `true`, nessuno si accorge che la tabella non le copre più.
     #[test]
-    fn gli_stati_di_una_voce_sono_tre_e_non_due() {
+    fn the_states_of_an_entry_are_three_not_two() {
         let m = OptionMap::new()
             .with("fub:spenta", false)
             .with("fub:nulla", serde_json::Value::Null)
@@ -590,7 +590,7 @@ mod tests {
     /// **Elencare ciò che è acceso** non è iterare la mappa, ed è la differenza
     /// che faceva divergere `syntax_forms` da `format_of`.
     #[test]
-    fn active_e_iter_meno_le_spente() {
+    fn active_is_iter_minus_the_off_entries() {
         let m = OptionMap::new()
             .on(syntax::TAGS)
             .with(syntax::WIKILINKS, false)
@@ -610,7 +610,7 @@ mod tests {
     }
 
     #[test]
-    fn il_namespace_separa_chi_definisce_la_voce() {
+    fn the_namespace_separates_who_defines_the_entry() {
         let m = OptionMap::new()
             .on(syntax::TAGS)
             .on("terzi:tags")
@@ -628,38 +628,38 @@ mod tests {
     }
 
     #[test]
-    fn overlay_e_per_chiave_non_per_mappa() {
+    fn overlay_by_key_not_map() {
         let vault = OptionMap::new().on(syntax::TAGS).on(syntax::WIKILINKS);
-        let nota = OptionMap::new().with(syntax::WIKILINKS, false);
-        let effettivo = vault.overlay(&nota);
+        let notes = OptionMap::new().with(syntax::WIKILINKS, false);
+        let effective = vault.overlay(&notes);
         // La nota spegne i wikilink e NON si porta via i tag.
-        assert!(effettivo.enabled(syntax::TAGS));
-        assert!(!effettivo.enabled(syntax::WIKILINKS));
+        assert!(effective.enabled(syntax::TAGS));
+        assert!(!effective.enabled(syntax::WIKILINKS));
     }
 
     /// L'elenco dei permessi è **chiuso e senza doppioni**, e ogni nome sta nel
     /// namespace del core: sono le tre proprietà su cui poggia il fatto che un
     /// pannello possa mostrarli tutti sapendo di averli mostrati tutti.
     #[test]
-    fn l_elenco_dei_permessi_e_chiuso() {
-        let unici: std::collections::BTreeSet<&str> = permission::ALL.iter().copied().collect();
-        assert_eq!(unici.len(), permission::ALL.len(), "un nome è ripetuto");
-        for nome in permission::ALL {
+    fn the_permission_list_is_closed() {
+        let unique: std::collections::BTreeSet<&str> = permission::ALL.iter().copied().collect();
+        assert_eq!(unique.len(), permission::ALL.len(), "a name is duplicated");
+        for name in permission::ALL {
             assert_eq!(
-                OptionMap::ns_of(nome),
+                OptionMap::ns_of(name),
                 Some(CORE_NS),
-                "`{nome}` non è nel namespace del core"
+                "`{name}` is not in the core namespace"
             );
-            assert!(!permission::name_of(nome).is_empty());
+            assert!(!permission::name_of(name).is_empty());
         }
         assert_eq!(permission::name_of(permission::NETWORK), "network");
         // Una chiave senza namespace è sé stessa: chi la mostra non deve
         // inventarsi un pezzo che non c'è.
-        assert_eq!(permission::name_of("nudo"), "nudo");
+        assert_eq!(permission::name_of("bare"), "bare");
     }
 
     #[test]
-    fn serializza_come_oggetto_e_in_ordine_stabile() {
+    fn serializes_as_object_and_in_order_stable() {
         let m = OptionMap::new().on(syntax::WIKILINKS).on(syntax::TAGS);
         let s = serde_json::to_string(&m).expect("serializza");
         assert_eq!(s, r#"{"fub:tags":true,"fub:wikilinks":true}"#);

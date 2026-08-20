@@ -196,21 +196,21 @@ fn forbidden(name: &str) -> bool {
 
 /// Il grafo delle sole dipendenze **normali** del workspace.
 struct Graph<'a> {
-    meta: &'a Value,
+    metadata: &'a Value,
     name_of: BTreeMap<&'a str, &'a str>,
     deps: BTreeMap<&'a str, Vec<&'a str>>,
 }
 
 impl<'a> Graph<'a> {
-    fn new(meta: &'a Value) -> Self {
+    fn new(metadata: &'a Value) -> Self {
         let mut name_of = BTreeMap::new();
-        for pkg in arr(meta, "packages") {
+        for pkg in arr(metadata, "packages") {
             name_of.insert(str_of(pkg, "id"), str_of(pkg, "name"));
         }
 
         // kind assente/null = dipendenza normale; `dev` e `build` non entrano
         // nella libreria.
-        let resolve = meta
+        let resolve = metadata
             .get("resolve")
             .expect("`resolve` assente: serve il grafo");
         let mut deps: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -229,7 +229,7 @@ impl<'a> Graph<'a> {
         }
 
         Graph {
-            meta,
+            metadata,
             name_of,
             deps,
         }
@@ -266,7 +266,7 @@ impl<'a> Graph<'a> {
     /// `None` è la dipendenza normale (in `cargo metadata` il `kind` è assente o
     /// nullo), `Some("dev")` quella di prova.
     fn declared(&self, crate_name: &str, kind: Option<&str>) -> BTreeSet<&'a str> {
-        let pkg = arr(self.meta, "packages")
+        let pkg = arr(self.metadata, "packages")
             .iter()
             .find(|p| str_of(p, "name") == crate_name)
             .unwrap_or_else(|| panic!("`{crate_name}` non è nel workspace"));
@@ -287,7 +287,7 @@ impl<'a> Graph<'a> {
 
     /// I crate del workspace, per nome.
     fn members(&self) -> BTreeSet<&'a str> {
-        arr(self.meta, "workspace_members")
+        arr(self.metadata, "workspace_members")
             .iter()
             .map(|id| {
                 let id = id.as_str().expect("`workspace_members` non è di stringhe");
@@ -302,8 +302,8 @@ impl<'a> Graph<'a> {
 
 #[test]
 fn abi_and_kernel_stay_agnostic() {
-    let meta = metadata();
-    let graph = Graph::new(&meta);
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
 
     // 1. denylist, transitiva.
     for (crate_name, _) in ALLOWED_DIRECT {
@@ -346,25 +346,25 @@ fn abi_and_kernel_stay_agnostic() {
 /// **tutto** ciò che entra, non solo ciò che è vietato.
 #[test]
 fn the_contract_reaches_nothing_nobody_asked_for() {
-    let meta = metadata();
-    let graph = Graph::new(&meta);
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
     let allowed: BTreeSet<&str> = ALLOWED_TRANSITIVE_ABI.iter().copied().collect();
     let reached = graph.closure("fub-abi");
 
     let intruders: Vec<&&str> = reached.difference(&allowed).collect();
     assert!(
         intruders.is_empty(),
-        "`fub-abi` raggiunge {intruders:?}, che non sono nell'allowlist transitiva.\n\
-         Se è un crate di supporto arrivato con un `cargo update`, guardalo e\n\
-         aggiungilo a ALLOWED_TRANSITIVE_ABI. Se non sai cos'è, è esattamente il\n\
-         caso per cui questo elenco esiste."
+        "`fub-abi` reaches {intruders:?}, which are not in the transitive allowlist.\n\
+         If it is a support crate that arrived with a `cargo update`, look at it\n\
+         and add it to ALLOWED_TRANSITIVE_ABI. If you do not know what it is,\n\
+         that is exactly the case this list exists for."
     );
 
     let vanished: Vec<&&str> = allowed.difference(&reached).collect();
     assert!(
         vanished.is_empty(),
-        "`fub-abi` non raggiunge più {vanished:?}: toglilo da ALLOWED_TRANSITIVE_ABI,\n\
-         così l'elenco resta una fotografia e non un ricordo."
+        "`fub-abi` no longer reaches {vanished:?}: remove it from\n\
+         ALLOWED_TRANSITIVE_ABI, so the list stays a snapshot and not a memory."
     );
 }
 
@@ -381,8 +381,8 @@ fn the_contract_reaches_nothing_nobody_asked_for() {
 /// si guardano.
 #[test]
 fn official_features_do_not_depend_on_the_kernel() {
-    let meta = metadata();
-    let graph = Graph::new(&meta);
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
 
     assert!(
         !graph.direct("fub-features").contains("fub-kernel"),
@@ -415,9 +415,9 @@ fn official_features_do_not_depend_on_the_kernel() {
 /// l'unificazione delle feature nel workspace la accende per tutti appena
 /// qualcuno la chiede.
 #[test]
-fn l_sdk_non_vede_il_kernel() {
-    let meta = metadata();
-    let graph = Graph::new(&meta);
+fn the_sdk_does_not_see_the_kernel() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
 
     assert!(
         !graph.direct("fub-sdk").contains("fub-kernel"),
@@ -448,9 +448,9 @@ fn l_sdk_non_vede_il_kernel() {
 /// La rete guarda **tutti** i membri, presenti e futuri: è la forma che non
 /// invecchia quando nasce l'ennesimo crate.
 #[test]
-fn il_banco_di_prova_non_entra_in_nessuna_libreria() {
-    let meta = metadata();
-    let graph = Graph::new(&meta);
+fn the_test_bench_enters_no_library() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
 
     let colpevoli: Vec<&str> = graph
         .members()
@@ -482,8 +482,8 @@ fn il_banco_di_prova_non_entra_in_nessuna_libreria() {
 /// è anzi ciò che monta.
 #[test]
 fn whoever_mounts_does_not_depend_on_whoever_draws() {
-    let meta = metadata();
-    let graph = Graph::new(&meta);
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
     let reached = graph.closure("fub-host");
 
     let ui: Vec<&str> = reached
@@ -532,9 +532,9 @@ fn whoever_mounts_does_not_depend_on_whoever_draws() {
 /// la CLI (27.1), l'API locale (27.2) — eredita la stessa regola gratis, perché
 /// la rete guarda **chiunque** dipenda da `fub-host`.
 #[test]
-fn chi_incolla_non_scavalca_chi_monta() {
-    let meta = metadata();
-    let graph = Graph::new(&meta);
+fn the_glue_does_not_bypass_the_mounter() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
 
     let colpevoli: Vec<&str> = graph
         .members()
@@ -561,7 +561,7 @@ fn chi_incolla_non_scavalca_chi_monta() {
 // ---------------------------------------------------------------------------
 
 /// Il documento che contiene il grafo, relativo alla radice del repo.
-const DIAGRAM_DOC: &str = "docs/architecture/mappa-visuale.md";
+const DIAGRAM_DOC: &str = "docs/architecture/visual-map.md";
 
 /// Il commento Mermaid che marca *quale* blocco è il grafo delle dipendenze.
 /// Serve perché quel documento ne contiene più d'uno, e il primo è disposto a
@@ -603,7 +603,7 @@ fn read_diagram(source: &str) -> Diagram {
 
     let mut marked: Vec<Vec<&str>> = blocks
         .into_iter()
-        .filter(|b| b.iter().any(|l| l.contains(DIAGRAM_MARKER)))
+        .filter(|b| b.iter().any(|the| the.contains(DIAGRAM_MARKER)))
         .collect();
     assert_eq!(
         marked.len(),
@@ -618,25 +618,25 @@ fn read_diagram(source: &str) -> Diagram {
     let mut out = Diagram::default();
 
     for line in marked.remove(0) {
-        let l = line.trim();
-        if l.is_empty()
-            || l.starts_with("%%")
-            || l.starts_with("flowchart")
-            || l.starts_with("classDef")
+        let the = line.trim();
+        if the.is_empty()
+            || the.starts_with("%%")
+            || the.starts_with("flowchart")
+            || the.starts_with("classDef")
         {
             continue;
         }
 
         // Dichiarazione: `id["nome-crate"]` con `:::classe` facoltativa.
-        if let Some((id, rest)) = l.split_once("[\"") {
+        if let Some((id, rest)) = the.split_once("[\"") {
             let (name, tail) = rest.split_once("\"]").unwrap_or_else(|| {
-                panic!("{DIAGRAM_DOC}: dichiarazione senza `\"]` finale:\n  {l}")
+                panic!("{DIAGRAM_DOC}: dichiarazione senza `\"]` finale:\n  {the}")
             });
             let id = id.trim();
             assert!(
                 tail.is_empty() || tail.starts_with(":::"),
                 "{DIAGRAM_DOC}: dopo la dichiarazione di `{id}` c'è `{tail}`, che non è\n\
-                 né vuoto né una classe `:::`:\n  {l}"
+                 né vuoto né una classe `:::`:\n  {the}"
             );
             assert!(
                 names.insert(id, name.to_string()).is_none(),
@@ -647,14 +647,14 @@ fn read_diagram(source: &str) -> Diagram {
         }
 
         // Arco: `a --> b` (normale) oppure `a -.-> b` (solo dev).
-        let parts: Vec<&str> = l.split_whitespace().collect();
+        let parts: Vec<&str> = the.split_whitespace().collect();
         let resolve = |id: &str| -> String {
             names
                 .get(id)
                 .unwrap_or_else(|| {
                     panic!(
                         "{DIAGRAM_DOC}: l'arco nomina `{id}`, che non è un riquadro dichiarato\n\
-                         prima nello stesso blocco:\n  {l}"
+                         prima nello stesso blocco:\n  {the}"
                     )
                 })
                 .clone()
@@ -667,7 +667,7 @@ fn read_diagram(source: &str) -> Diagram {
                 out.dev.insert((resolve(from), resolve(to)));
             }
             _ => panic!(
-                "{DIAGRAM_DOC}: riga fuori dal dialetto che questo test sa leggere:\n  {l}\n\
+                "{DIAGRAM_DOC}: riga fuori dal dialetto che questo test sa leggere:\n  {the}\n\
                  Ammessi: `id[\"nome\"]:::classe`, `a --> b`, `a -.-> b`, commenti `%%`,\n\
                  `flowchart …` e `classDef …`. Se serve altro, allarga il parser insieme\n\
                  al disegno — non lasciare che il disegno dica cose che nessuno rilegge."
@@ -693,9 +693,9 @@ fn read_diagram(source: &str) -> Diagram {
 /// ridisegnano, o `fub-kernel`, che dichiara `fub-abi` in entrambe le
 /// sezioni, avrebbe due frecce per una relazione sola.
 #[test]
-fn il_diagramma_dice_le_dipendenze_vere() {
-    let meta = metadata();
-    let graph = Graph::new(&meta);
+fn the_diagram_declares_the_real_dependencies() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
     let members = graph.members();
 
     let doc = concat!(
@@ -704,7 +704,7 @@ fn il_diagramma_dice_le_dipendenze_vere() {
         "docs/architecture/mappa-visuale.md"
     );
     let source =
-        std::fs::read_to_string(doc).unwrap_or_else(|e| panic!("{DIAGRAM_DOC} non si legge: {e}"));
+        std::fs::read_to_string(doc).unwrap_or_else(|and| panic!("{DIAGRAM_DOC} non si legge: {and}"));
     let drawn = read_diagram(&source);
 
     // 1. I riquadri sono i crate del workspace, tutti e soli.

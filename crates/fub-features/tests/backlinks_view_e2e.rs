@@ -66,7 +66,7 @@ fn backlink_titles(tree: &UiNode) -> Vec<String> {
         match &node.kind {
             UiKind::List { items } => items
                 .iter()
-                .filter_map(|i| match &i.kind {
+                .filter_map(|the| match &the.kind {
                     UiKind::ListItem { title, .. } => Some(title.to_string()),
                     _ => None,
                 })
@@ -116,9 +116,9 @@ fn the_view_reads_active_doc_and_backlinks_from_the_kernel_host() {
     let tree = ws
         .render_view(&ViewInstance::only(BACKLINKS_VIEW))
         .expect("render con attivo");
-    let mut titoli = backlink_titles(&tree);
-    titoli.sort();
-    assert_eq!(titoli, vec!["Due".to_string(), "Uno".to_string()]);
+    let mut titles = backlink_titles(&tree);
+    titles.sort();
+    assert_eq!(titles, vec!["Due".to_string(), "Uno".to_string()]);
 }
 
 #[test]

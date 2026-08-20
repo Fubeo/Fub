@@ -59,7 +59,7 @@ jobs:
       # righe da cambiare per un `cargo update` — e la prima dimenticata non
       # diventa un errore, diventa una seconda versione nell'albero.
       - name: le versioni delle dipendenze si scrivono in un posto solo
-        run: node .github/scripts/check-cargo-versioni.mjs
+        run: node .github/scripts/check-cargo-versions.mjs
       # E la domanda che nessun altro passo si fa: **questa feature, qualcuno la
       # compila?** Una feature spenta non è codice che fallisce, è codice che non
       # esiste — e con lui spariscono i suoi `#[test]`, che non diventano rossi e
@@ -94,7 +94,7 @@ jobs:
       # È la decisione 0145, ed è la riga che ha risposto alla §28.1 senza
       # toccare né un test né un'asserzione né un `--test` di questo file.
       - name: il profilo dev è quello deciso, chiave per chiave (0145)
-        run: node .github/scripts/check-profilo-dev.mjs
+        run: node .github/scripts/check-dev-profile.mjs
       # Il terzo confine, e l'unico che si GENERA: le union di stringhe del
       # mirror TS sono emesse dagli enum senza payload del contratto
       # (decisione 0053). Sta qui e non solo nel `cargo test --workspace`
@@ -267,9 +267,9 @@ jobs:
       # in lettere: se si spegnesse lui, il controllo direbbe verde senza aver
       # guardato.
       - name: Il lettore dei numeri sa leggere l'italiano
-        run: node .github/scripts/check-prosa.mjs --autoprova
+        run: node .github/scripts/check-prose.mjs --autoprova
       - name: I numeri e le garanzie che la prosa afferma sui sorgenti
-        run: node .github/scripts/check-prosa.mjs
+        run: node .github/scripts/check-prose.mjs
       # E la terza specie, che non è né un link né un numero: una tabella che al
       # sorgente si legge intatta e alla pagina non dice più quello che dice il
       # sorgente. Due modi. Una riga vuota in mezzo la chiude, e le righe sotto
@@ -284,9 +284,9 @@ jobs:
       # ne separa due, e la cella mancante contro la cella vuota ma presente. Se
       # si spegnessero loro, il conto direbbe verde su tutto.
       - name: La riga vuota che spezza una tabella non è quella che ne separa due
-        run: node .github/scripts/check-tabelle.mjs --autoprova
+        run: node .github/scripts/check-tables.mjs --autoprova
       - name: Ogni tabella dei documenti è ancora una tabella, e con tutte le sue colonne
-        run: node .github/scripts/check-tabelle.mjs
+        run: node .github/scripts/check-tables.mjs
       # E la promessa che il CONTRIBUTING fa alla CI, resa meccanica: ogni
       # comando che un job lancia dev'essere nel ciclo locale di
       # docs/CONTRIBUTING.md o fra le sue eccezioni dichiarate, e viceversa —
@@ -297,9 +297,9 @@ jobs:
       # del workflow, il recinto e l'elenco delle eccezioni del documento: se
       # si spegnesse lui, il controllo direbbe verde senza aver guardato.
       - name: Il ciclo locale di CONTRIBUTING.md sa leggere i comandi della CI
-        run: node .github/scripts/check-ciclo-locale.mjs --autoprova
+        run: node .github/scripts/check-locale-loop.mjs --autoprova
       - name: Ogni comando della CI sta nel ciclo locale di CONTRIBUTING.md, o fra le sue eccezioni
-        run: node .github/scripts/check-ciclo-locale.mjs
+        run: node .github/scripts/check-locale-loop.mjs
 
   frontend:
     name: frontend (type-check + test + build)
@@ -336,7 +336,7 @@ jobs:
       # funzione è del DOM e non c'è niente di sbagliato nel suo tipo. Il difetto
       # era misurato ed era sei volte la stessa riga (decisione 0133).
       - name: ogni ascoltatore globale della shell ha una Vita (decisione 0133)
-        run: node .github/scripts/check-ascoltatori.mjs
+        run: node .github/scripts/check-listeners.mjs
       # La stessa mossa sul tempo invece che sulla vita: dentro il corpo di un
       # giro (`corsa.ultimo(async (atteso) => …)`) non si aspetta di nascosto.
       # `atteso` è l'unico modo di ottenere il risultato di un'attesa, e quella
@@ -346,7 +346,7 @@ jobs:
       # erano scritte tutte e quattro le implementazioni a mano che la decisione
       # 0134 ha sostituito.
       - name: dentro un giro non si aspetta di nascosto (decisione 0134)
-        run: node .github/scripts/check-corse.mjs
+        run: node .github/scripts/check-races.mjs
       # E la stessa domanda delle versioni Rust, dall'altro lato: un pacchetto
       # npm in due copie. Non è un caso ipotetico scelto a caso — l'albero della
       # shell porta `@codemirror/state` sia diretto sia dentro `codemirror`, e
@@ -357,7 +357,7 @@ jobs:
       # giorno in cui un `npm install` le separa, che è l'unico in cui nessuno
       # guarderebbe.
       - name: nessun pacchetto npm in due copie
-        run: node .github/scripts/check-npm-copie.mjs
+        run: node .github/scripts/check-npm-copies.mjs
       # Il banco visivo del §31.1 entra in CI **per metà**, e la riga che separa
       # le due metà è: cosa dipende dalla macchina.
       #
@@ -373,15 +373,15 @@ jobs:
       # caratteri non dipendono. È la metà che vede ciò che la tabella delle
       # coppie non può vedere — un inchiostro sopra un velo, un testo dentro un
       # fondo che una regola ha cambiato — e le cinque coppie che oggi stanno
-      # sotto la soglia sono scritte nel debito dichiarato di `banco/a11y.mjs`,
+      # sotto la soglia sono scritte nel debito dichiarato di `bench/a11y.mjs`,
       # con accanto la voce che le paga.
       #
       # (Che ogni scena abbia la sua baseline in entrambe le luci lo verifica
-      # `banco/scene.test.ts`, che gira dentro `npm test` qui sopra: è una
+      # `bench/scene.test.ts`, che gira dentro `npm test` qui sopra: è una
       # domanda sui file, e i file sono gli stessi ovunque.)
       - name: il browser del banco visivo, alla revisione che il lock pinna
         run: npx playwright install --with-deps chromium
         working-directory: frontend
       - name: il contrasto della pagina vera, in tutte e due le luci (§31.1)
-        run: npm run banco:a11y
+        run: npm run bench:a11y
         working-directory: frontend

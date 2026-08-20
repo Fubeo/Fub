@@ -14,7 +14,7 @@ use fub_abi::session::ViewContext;
 use fub_abi::traits::{PluginManifest, ViewInstance};
 use fub_abi::ui::{FieldValue, UiAction, UiKind, UiNode, UiValue};
 use fub_features::{
-    PropertiesCommands, PropertiesView, NOTE_PROPERTY_REMOVE, NOTE_PROPERTY_SET, PROPERTIES_ID,
+    PropertiesCommands, PropertiesView, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
     PROPERTIES_VIEW,
 };
 use fub_format_markdown::MarkdownProvider;
@@ -61,17 +61,17 @@ impl Vault {
     }
 }
 
-fn istanza() -> ViewInstance {
+fn instance() -> ViewInstance {
     ViewInstance::only(PROPERTIES_VIEW)
 }
 
-fn apri_nota(ws: &Workspace, rel: &str) {
+fn open_notes(ws: &Workspace, rel: &str) {
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new(rel))),
     ));
 }
 
-fn campi(tree: &UiNode) -> Vec<(String, &'static str)> {
+fn fields(tree: &UiNode) -> Vec<(String, &'static str)> {
     fn walk(node: &UiNode, out: &mut Vec<(String, &'static str)>) {
         match &node.kind {
             UiKind::TextInput { field, .. } => out.push((field.clone(), "text")),
@@ -89,7 +89,7 @@ fn campi(tree: &UiNode) -> Vec<(String, &'static str)> {
     out
 }
 
-fn e_empty_state(tree: &UiNode) -> bool {
+fn and_empty_state(tree: &UiNode) -> bool {
     fn walk(node: &UiNode) -> bool {
         match &node.kind {
             UiKind::EmptyState { .. } => true,
@@ -120,38 +120,38 @@ paragraph
 ";
 
 #[test]
-fn render_misto_ha_il_widget_giusto_per_chiave() {
+fn render_mixed_has_the_widget_right_for_key() {
     let vault = Vault::new();
     vault.put("a.md", MISTA);
     let ws = vault.open();
-    apri_nota(&ws, "a.md");
-    let tree = ws.render_view(&istanza()).unwrap();
-    let campi = campi(&tree);
-    assert!(campi.contains(&("title".into(), "text")), "{campi:?}");
-    assert!(campi.contains(&("count".into(), "number")), "{campi:?}");
-    assert!(campi.contains(&("done".into(), "checkbox")), "{campi:?}");
-    assert!(campi.contains(&("when".into(), "date")), "{campi:?}");
-    assert!(campi.contains(&("tags".into(), "text")), "{campi:?}");
-    assert!(campi.contains(&("see".into(), "text")), "{campi:?}");
+    open_notes(&ws, "a.md");
+    let tree = ws.render_view(&instance()).unwrap();
+    let fields = fields(&tree);
+    assert!(fields.contains(&("title".into(), "text")), "{fields:?}");
+    assert!(fields.contains(&("count".into(), "number")), "{fields:?}");
+    assert!(fields.contains(&("done".into(), "checkbox")), "{fields:?}");
+    assert!(fields.contains(&("when".into(), "date")), "{fields:?}");
+    assert!(fields.contains(&("tags".into(), "text")), "{fields:?}");
+    assert!(fields.contains(&("see".into(), "text")), "{fields:?}");
 }
 
 #[test]
-fn nessuna_nota_aperta_e_empty_state() {
+fn no_one_notes_open_and_empty_state() {
     let vault = Vault::new();
     vault.put("a.md", MISTA);
     let ws = vault.open();
-    let tree = ws.render_view(&istanza()).unwrap();
-    assert!(e_empty_state(&tree));
+    let tree = ws.render_view(&instance()).unwrap();
+    assert!(and_empty_state(&tree));
 }
 
 #[test]
-fn set_bool_scrive_yaml_e_lascia_il_corpo() {
+fn set_bool_writes_yaml_and_leaves_the_body() {
     let vault = Vault::new();
     vault.put("a.md", MISTA);
     let mut ws = vault.open();
-    apri_nota(&ws, "a.md");
+    open_notes(&ws, "a.md");
     ws.view_action(
-        &istanza(),
+        &instance(),
         UiAction::new("set")
             .with_payload(serde_json::json!({"key": "done", "doc": "a.md"}))
             .with_fields(vec![FieldValue {
@@ -160,26 +160,26 @@ fn set_bool_scrive_yaml_e_lascia_il_corpo() {
             }]),
     )
     .expect("view_action");
-    let dopo = vault.read("a.md");
+    let after = vault.read("a.md");
     assert!(
-        dopo.contains("done: true") || dopo.contains("done: true\n"),
-        "{dopo}"
+        after.contains("done: true") || after.contains("done: true\n"),
+        "{after}"
     );
-    assert!(dopo.contains("# Body stays"), "{dopo}");
-    assert!(dopo.contains("paragraph\n"), "{dopo}");
-    let corpo = dopo.split_once("\n# Body stays").expect("corpo").1;
-    let atteso = MISTA.split_once("\n# Body stays").expect("orig").1;
-    assert_eq!(corpo, atteso);
+    assert!(after.contains("# Body stays"), "{after}");
+    assert!(after.contains("paragraph\n"), "{after}");
+    let body = after.split_once("\n# Body stays").expect("corpo").1;
+    let expected = MISTA.split_once("\n# Body stays").expect("orig").1;
+    assert_eq!(body, expected);
 }
 
 #[test]
-fn add_su_nota_senza_frontmatter_nasce_il_blocco() {
+fn add_on_notes_without_frontmatter_born_the_block() {
     let vault = Vault::new();
     vault.put("a.md", "# Solo corpo\n\nresto\n");
     let mut ws = vault.open();
-    apri_nota(&ws, "a.md");
+    open_notes(&ws, "a.md");
     ws.view_action(
-        &istanza(),
+        &instance(),
         UiAction::new("add")
             .with_payload(serde_json::json!({"doc": "a.md"}))
             .with_fields(vec![
@@ -194,89 +194,89 @@ fn add_su_nota_senza_frontmatter_nasce_il_blocco() {
             ]),
     )
     .expect("view_action");
-    let dopo = vault.read("a.md");
-    assert!(dopo.starts_with("---\n"), "{dopo}");
-    assert!(dopo.contains("title:"), "{dopo}");
-    assert!(dopo.contains("# Solo corpo"), "{dopo}");
-    assert!(dopo.contains("resto\n"), "{dopo}");
-    let corpo = dopo.split_once("# Solo corpo").expect("corpo").1;
-    let atteso = "# Solo corpo\n\nresto\n"
+    let after = vault.read("a.md");
+    assert!(after.starts_with("---\n"), "{after}");
+    assert!(after.contains("title:"), "{after}");
+    assert!(after.contains("# Solo corpo"), "{after}");
+    assert!(after.contains("resto\n"), "{after}");
+    let body = after.split_once("# Solo corpo").expect("corpo").1;
+    let expected = "# Solo corpo\n\nresto\n"
         .split_once("# Solo corpo")
         .expect("orig")
         .1;
-    assert_eq!(corpo, atteso);
+    assert_eq!(body, expected);
 }
 
 #[test]
-fn remove_toglie_la_chiave_e_il_corpo_resta() {
+fn remove_removes_the_key_and_the_body_remains() {
     let vault = Vault::new();
     vault.put("a.md", MISTA);
     let mut ws = vault.open();
-    apri_nota(&ws, "a.md");
+    open_notes(&ws, "a.md");
     ws.view_action(
-        &istanza(),
+        &instance(),
         UiAction::new("remove").with_payload(serde_json::json!({"key": "count", "doc": "a.md"})),
     )
     .expect("view_action");
-    let dopo = vault.read("a.md");
-    assert!(!dopo.contains("count:"), "{dopo}");
-    assert!(dopo.contains("title:"), "{dopo}");
-    let corpo = dopo.split_once("\n# Body stays").expect("corpo").1;
-    let atteso = MISTA.split_once("\n# Body stays").expect("orig").1;
-    assert_eq!(corpo, atteso);
+    let after = vault.read("a.md");
+    assert!(!after.contains("count:"), "{after}");
+    assert!(after.contains("title:"), "{after}");
+    let body = after.split_once("\n# Body stays").expect("corpo").1;
+    let expected = MISTA.split_once("\n# Body stays").expect("orig").1;
+    assert_eq!(body, expected);
 }
 
 #[test]
-fn dry_run_non_scrive() {
+fn dry_run_not_writes() {
     let vault = Vault::new();
     vault.put("a.md", MISTA);
     let mut ws = vault.open();
-    let prima = vault.read("a.md");
-    let esito = ws
+    let before = vault.read("a.md");
+    let outcome = ws
         .invoke_command(
-            NOTE_PROPERTY_SET,
+            NOTES_PROPERTY_SET,
             serde_json::json!({"doc": "a.md", "key": "done", "value": "true"}),
             InvokeMode::DryRun,
             Actor::User,
         )
         .expect("dry_run");
     assert!(
-        matches!(esito.effect, CommandEffect::Plan(_)),
+        matches!(outcome.effect, CommandEffect::Plan(_)),
         "{:?}",
-        esito.effect
+        outcome.effect
     );
-    assert_eq!(vault.read("a.md"), prima);
+    assert_eq!(vault.read("a.md"), before);
 }
 
 #[test]
-fn undo_del_set_ripristina_il_blocco() {
+fn undo_of_the_set_restores_the_block() {
     let vault = Vault::new();
     vault.put("a.md", MISTA);
     let mut ws = vault.open();
-    let prima = vault.read("a.md");
-    let esito = ws
+    let before = vault.read("a.md");
+    let outcome = ws
         .invoke_command(
-            NOTE_PROPERTY_SET,
+            NOTES_PROPERTY_SET,
             serde_json::json!({"doc": "a.md", "key": "done", "value": "true"}),
             InvokeMode::Apply,
             Actor::User,
         )
         .expect("apply");
-    let dopo = vault.read("a.md");
-    assert_ne!(dopo, prima);
-    let undo = esito.undo.expect("undoable");
+    let after = vault.read("a.md");
+    assert_eq!(after, before);
+    let undo = outcome.undo.expect("undoable");
     let UndoStep::Edit(p) = &undo.steps[0] else {
         panic!("atteso Edit, trovato {:?}", undo.steps);
     };
     ws.apply_edit(&p.doc, p.edit.clone()).expect("inverse");
-    assert_eq!(vault.read("a.md"), prima);
+    assert_eq!(vault.read("a.md"), before);
 }
 
 #[test]
-fn i_comandi_sono_nel_registro() {
+fn the_commands_are_in_the_record() {
     let vault = Vault::new();
     let ws = vault.open();
     let ids: Vec<String> = ws.commands().into_iter().map(|c| c.id).collect();
-    assert!(ids.contains(&NOTE_PROPERTY_SET.to_string()), "{ids:?}");
-    assert!(ids.contains(&NOTE_PROPERTY_REMOVE.to_string()), "{ids:?}");
+    assert!(ids.contains(&NOTES_PROPERTY_SET.to_string()), "{ids:?}");
+    assert!(ids.contains(&NOTES_PROPERTY_REMOVE.to_string()), "{ids:?}");
 }

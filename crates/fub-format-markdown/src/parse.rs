@@ -23,28 +23,28 @@ use crate::offsets::Offsets;
 
 /// Costruisce le opzioni comrak per il dialetto Obsidian.
 pub fn build_options(ctx: &ParseContext) -> Options<'static> {
-    let mut o = Options::default();
-    o.extension.front_matter_delimiter = Some("---".to_string());
-    o.extension.strikethrough = true;
-    o.extension.table = true;
-    o.extension.tasklist = true;
+    let mut or = Options::default();
+    or.extension.front_matter_delimiter = Some("---".to_string());
+    or.extension.strikethrough = true;
+    or.extension.table = true;
+    or.extension.tasklist = true;
     // Senza `relaxed`, comrak riconosce come task solo `[ ]`, `[x]` e `[X]`: un
     // `[/]` resterebbe testo, e gli stati personalizzati (10.1) sarebbero
     // irrappresentabili proprio nel modello che la decisione 0003 apre per loro.
-    o.parse.relaxed_tasklist_matching = true;
-    o.extension.superscript = true;
+    or.parse.relaxed_tasklist_matching = true;
+    or.extension.superscript = true;
     // GitHub alerts ≈ callout Obsidian.
-    o.extension.alerts = true;
+    or.extension.alerts = true;
     // Footnote e definition list: la decisione 0003 dice che restino
     // `Block::Custom`, ma con un `custom_kind` **registrato** nel contratto — e
     // una decisione su come rappresentare qualcosa che il parser non produce
     // affatto sarebbe stata presa a vuoto.
-    o.extension.footnotes = true;
-    o.extension.description_lists = true;
+    or.extension.footnotes = true;
+    or.extension.description_lists = true;
     if ctx.enabled(syntax::WIKILINKS) {
-        o.extension.wikilinks_title_after_pipe = true;
+        or.extension.wikilinks_title_after_pipe = true;
     }
-    o
+    or
 }
 
 /// Accumulatore delle tabelle piatte estratte durante la visita.
@@ -82,7 +82,7 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     // (paragrafi che cominciano con `[etichetta]:`), e si ritagliano i
     // sourcepos dei paragrafi che restano: il contenuto residuo non comincia
     // più alla riga del primo `[`.
-    let defs = recupera_definizioni(root, source, &offsets, &options);
+    let defs = recover_definitions(root, source, &offsets, &options);
 
     let mut acc = Acc::default();
     let mut frontmatter = Frontmatter::default();
@@ -105,8 +105,8 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
                     frontmatter = fm;
                     frontmatter_present = true;
                 }
-                Err(motivo) => {
-                    body.push(frontmatter_non_letto(raw, motivo, span_of(child, &offsets)));
+                Err(reason) => {
+                    body.push(frontmatter_verbatim(raw, reason, span_of(child, &offsets)));
                 }
             }
             continue;
@@ -133,7 +133,7 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     // Le definizioni recuperate entrano nell'albero **dopo** la conversione, nel
     // contenitore più profondo che contiene il loro span: il paragrafo che le
     // portava è stato staccato dal pre-pass, e lo span dice dove abitavano.
-    inserisci_definizioni(defs, &mut body);
+    insert_definitions(defs, &mut body);
 
     Ok(DocumentModel {
         id: DocId::new(ctx.doc_id.clone()),
@@ -183,8 +183,8 @@ fn span_of<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>) -> Span {
 /// Serve dove il `sourcepos` di una dipendenza fa uscire un nodo dal nodo che lo
 /// contiene: il modello promette che uno span nomini **quel** pezzo di documento,
 /// e un figlio che esce dal padre rende indecidibile quale dei due mente.
-fn ritagliato_su(figlio: Span, padre: Span) -> Span {
-    ritagliato_dopo(figlio, padre, padre.start)
+fn clipped_to_child(child: Span, parent: Span) -> Span {
+    clipped_after_sibling(child, parent, parent.start)
 }
 
 /// Lo span di un figlio, ritagliato sul padre **e dopo il fratello che lo
@@ -197,10 +197,10 @@ fn ritagliato_su(figlio: Span, padre: Span) -> Span {
 /// ricade su uno span a larghezza zero, che non è un valore inventato per
 /// l'occasione: è già come il modello rappresenta una **cella vuota**
 /// (`| a || b |` dà una cella `5..5`).
-fn ritagliato_dopo(figlio: Span, padre: Span, dopo: usize) -> Span {
-    let minimo = dopo.max(padre.start).min(padre.end);
-    let start = figlio.start.clamp(minimo, padre.end);
-    let end = figlio.end.clamp(start, padre.end);
+fn clipped_after_sibling(child: Span, parent: Span, after: usize) -> Span {
+    let minimum = after.max(parent.start).min(parent.end);
+    let start = child.start.clamp(minimum, parent.end);
+    let end = child.end.clamp(start, parent.end);
     Span::new(start, end)
 }
 
@@ -306,7 +306,7 @@ fn convert_block<'a>(
             let anchor = trailing_anchor(source, span, acc);
             let mut text = String::new();
             let inlines =
-                inlines_del_blocco(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
+                block_inlines(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
             acc.text.push_str(&text);
             acc.text.push('\n');
             // Un'ancora scritta dall'utente è un id dichiarato: la generazione
@@ -341,7 +341,7 @@ fn convert_block<'a>(
             let anchor = trailing_anchor(source, span, acc);
             let mut text = String::new();
             let inlines =
-                inlines_del_blocco(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
+                block_inlines(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
             let ptext = text.trim().to_string();
             acc.text.push_str(&ptext);
             acc.text.push('\n');
@@ -386,7 +386,7 @@ fn convert_block<'a>(
                     // possiede mai il separatore che la stacca dal blocco dopo,
                     // mentre allargare la lista le farebbe possedere byte che non
                     // sono suoi.
-                    span: ritagliato_su(span_of(item, offsets), span),
+                    span: clipped_to_child(span_of(item, offsets), span),
                 });
             }
             Some(Block::List {
@@ -546,20 +546,20 @@ fn convert_table<'a>(
     // tabella si chiude su una riga vuota o su un altro blocco, non su una riga
     // di testo) e un `\r` nudo che spezza una riga in due. Vedi
     // [`ritagliato_dopo`].
-    let mut fine = span.start;
+    let mut end = span.start;
     for r in node.children() {
         let is_header = matches!(r.data.borrow().value, NodeValue::TableRow(true));
         let mut cells = Vec::new();
         for c in r.children() {
             let mut text = String::new();
-            let inlines = inlines_del_blocco(c, source, offsets, ctx, acc, None, &mut text);
+            let inlines = block_inlines(c, source, offsets, ctx, acc, None, &mut text);
             acc.text.push_str(text.trim());
             acc.text.push(' ');
-            let cella = ritagliato_dopo(span_of(c, offsets), span, fine);
-            fine = cella.end;
+            let cell = clipped_after_sibling(span_of(c, offsets), span, end);
+            end = cell.end;
             cells.push(TableCell {
                 inlines,
-                span: cella,
+                span: cell,
             });
         }
         let row = TableRow { cells };
@@ -606,7 +606,7 @@ fn push_link(
     label: Option<Vec<Inline>>,
     embed: bool,
     span: Span,
-    nel_testo: Range<usize>,
+    in_text: Range<usize>,
 ) {
     acc.links.push((
         Link {
@@ -615,7 +615,7 @@ fn push_link(
             span,
             context: None,
         },
-        nel_testo,
+        in_text,
     ));
     out.push(Inline::Link {
         target,
@@ -644,7 +644,7 @@ fn push_link(
 /// I link già scoperti da un blocco **più interno** non si sovrascrivono: il
 /// contesto è quello del blocco più vicino che porti del testo, che è ciò che
 /// faceva già un paragrafo dentro una citazione.
-fn inlines_del_blocco<'a>(
+fn block_inlines<'a>(
     node: &'a AstNode<'a>,
     source: &str,
     offsets: &Offsets<'_>,
@@ -667,9 +667,9 @@ fn inlines_del_blocco<'a>(
     //
     // Un contesto vuoto non è un contesto: `Some("")` occuperebbe il campo e
     // impedirebbe a chiunque altro di riempirlo, dicendo niente.
-    for (link, nel_testo) in &mut acc.links[link_base..] {
+    for (link, in_text) in &mut acc.links[link_base..] {
         if link.context.is_none() {
-            let c = snippet::window(text, nel_testo.clone());
+            let c = snippet::window(text, in_text.clone());
             if !c.is_empty() {
                 link.context = Some(c);
             }
@@ -705,7 +705,7 @@ fn inlines_del_blocco<'a>(
 /// il parser. A leggere l'interno è [`scan::parse_wikilink_inner`], la stessa
 /// funzione che ha già ricavato il bersaglio: qui la si applica ai byte giusti
 /// invece che a un url in cui l'alias non c'è più.
-fn alias_scritto(source: &str, span: Span) -> bool {
+fn written_alias(source: &str, span: Span) -> bool {
     let Some(slice) = source.get(span.start..span.end) else {
         return false;
     };
@@ -719,17 +719,17 @@ fn alias_scritto(source: &str, span: Span) -> bool {
     scan::parse_wikilink_inner(inner).alias.is_some()
 }
 
-fn etichetta_sintetica<'a>(node: &'a AstNode<'a>, url: &str) -> Option<String> {
-    let mut figli = node.children();
-    let solo = figli.next()?;
-    if figli.next().is_some() {
+fn synthetic_label<'a>(node: &'a AstNode<'a>, url: &str) -> Option<String> {
+    let mut children = node.children();
+    let only = children.next()?;
+    if children.next().is_some() {
         return None;
     }
-    let value = &solo.data.borrow().value;
-    let NodeValue::Text(testo) = value else {
+    let value = &only.data.borrow().value;
+    let NodeValue::Text(text) = value else {
         return None;
     };
-    (testo == url).then(|| testo.to_string())
+    (text == url).then(|| text.to_string())
 }
 
 fn convert_inlines<'a>(
@@ -818,7 +818,7 @@ fn convert_inlines<'a>(
             NodeValue::Link(link) => {
                 let mut label_text = String::new();
                 let label = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
-                let inizio = text_out.len();
+                let start = text_out.len();
                 text_out.push_str(&label_text);
                 push_link(
                     acc,
@@ -827,7 +827,7 @@ fn convert_inlines<'a>(
                     Some(label),
                     false,
                     span,
-                    inizio..text_out.len(),
+                    start..text_out.len(),
                 );
             }
             NodeValue::WikiLink(wl) => {
@@ -879,25 +879,25 @@ fn convert_inlines<'a>(
                 // «Nota#^blocco» — e allora è contenuto da conservare, non da
                 // ricalcolare. Riparare dove un riferimento *punta* non è titolo
                 // per cambiare ciò che si *legge*.
-                let sintetica = etichetta_sintetica(child, &wl.url);
-                let scritta_a_mano = alias_scritto(source, span)
-                    || sintetica.as_deref() != parsed.target.wiki_inner().as_deref();
-                let (label, nel_testo) = if scritta_a_mano {
+                let synthetic = synthetic_label(child, &wl.url);
+                let hand_written = written_alias(source, span)
+                    || synthetic.as_deref() != parsed.target.wiki_inner().as_deref();
+                let (label, in_text) = if hand_written {
                     let mut label_text = String::new();
-                    let l = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
-                    let inizio = text_out.len();
+                    let the = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
+                    let start = text_out.len();
                     text_out.push_str(&label_text);
-                    (Some(l), inizio..text_out.len())
+                    (Some(the), start..text_out.len())
                 } else {
                     // Il testo mostrato entra nel testo del blocco lo stesso —
                     // è ciò che si legge a schermo, e la finestra di contesto di
                     // un backlink si centra lì — ma senza passare per la
                     // scansione dei tag, che è il difetto qui sopra.
-                    let inizio = text_out.len();
+                    let start = text_out.len();
                     text_out.push_str(&wl.url);
-                    (None, inizio..text_out.len())
+                    (None, start..text_out.len())
                 };
-                push_link(acc, &mut out, parsed.target, label, embed, span, nel_testo);
+                push_link(acc, &mut out, parsed.target, label, embed, span, in_text);
             }
             NodeValue::Image(img) => {
                 let mut label_text = String::new();
@@ -910,7 +910,7 @@ fn convert_inlines<'a>(
                 // dichiarata del corpus — quindi la posizione del link nel
                 // testo è vuota, e la finestra si centra sul punto in cui
                 // l'immagine sta.
-                let inizio = text_out.len();
+                let start = text_out.len();
                 push_link(
                     acc,
                     &mut out,
@@ -918,7 +918,7 @@ fn convert_inlines<'a>(
                     Some(label),
                     true,
                     span,
-                    inizio..text_out.len(),
+                    start..text_out.len(),
                 );
             }
             NodeValue::HtmlInline(literal) => {
@@ -1012,9 +1012,9 @@ fn push_text_features(
         // conta i byte del testo `a | b` e la fetta sorgente termina prima di
         // `b`. Senza feature da localizzare, il testo del parser è l'unica
         // proiezione completa e ha già sciolto escape ed entità correttamente.
-        let slice_completo =
-            slice == decoded || decodifica_segmento(source, slice, base) == decoded;
-        if slice_completo {
+        let full_slice =
+            slice == decoded || decode_segment(source, slice, base) == decoded;
+        if full_slice {
             push_plain_or_tags(source, slice, base, ctx, acc, out);
         } else if !decoded.is_empty() {
             out.push(Inline::Text(decoded.to_string()));
@@ -1022,19 +1022,19 @@ fn push_text_features(
         return;
     }
     let mut cursor = 0;
-    let mut nel_testo = text_base;
-    for (parentesi, inner) in embeds {
+    let mut in_text = text_base;
+    for (parentheses, inner) in embeds {
         // Il `!` lo aggiunge allo span [`embed_before`], che è la stessa
         // funzione da cui passa il ramo comrak: qui `find_embeds` consegna le
         // sole parentesi, e chi decide dove comincia un embed è uno solo.
         let (embed, abs) = embed_before(
             source,
-            Span::new(base + parentesi.start, base + parentesi.end),
+            Span::new(base + parentheses.start, base + parentheses.end),
         );
-        let inizio = abs.start - base;
-        if inizio > cursor {
-            let seg = &slice[cursor..inizio];
-            nel_testo += push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
+        let start = abs.start - base;
+        if start > cursor {
+            let seg = &slice[cursor..start];
+            in_text += push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
         }
         let parsed = scan::parse_wikilink_inner(&inner);
         // L'embed testuale sta DENTRO il testo pushato (comrak non l'ha
@@ -1046,7 +1046,7 @@ fn push_text_features(
         // questa strada passava `None` senza guardarlo un `![[Nota|Alias]]`
         // rientrava dal giro come `![[Nota]]`.
         let label = parsed.alias.map(|a| vec![Inline::Text(a)]);
-        let scritto = decodifica_segmento(source, &slice[inizio..abs.end - base], abs.start).len();
+        let written = decode_segment(source, &slice[start..abs.end - base], abs.start).len();
         push_link(
             acc,
             out,
@@ -1054,9 +1054,9 @@ fn push_text_features(
             label,
             embed,
             abs,
-            nel_testo..nel_testo + scritto,
+            in_text..in_text + written,
         );
-        nel_testo += scritto;
+        in_text += written;
         cursor = abs.end - base;
     }
     if cursor < slice.len() {
@@ -1086,14 +1086,14 @@ fn push_text_features(
 /// contorno che ne dipende è dichiarato nel corpus della shell
 /// (`frontend/src/editor/corpus.test.ts`: «lo span del modello comprende il `!`
 /// dell'embed»).
-fn embed_before(source: &str, parentesi: Span) -> (bool, Span) {
-    if parentesi.start > 0
-        && source.as_bytes()[parentesi.start - 1] == b'!'
-        && !is_escaped(source, parentesi.start - 1)
+fn embed_before(source: &str, parentheses: Span) -> (bool, Span) {
+    if parentheses.start > 0
+        && source.as_bytes()[parentheses.start - 1] == b'!'
+        && !is_escaped(source, parentheses.start - 1)
     {
-        (true, Span::new(parentesi.start - 1, parentesi.end))
+        (true, Span::new(parentheses.start - 1, parentheses.end))
     } else {
-        (false, parentesi)
+        (false, parentheses)
     }
 }
 
@@ -1105,22 +1105,22 @@ fn embed_before(source: &str, parentesi: Span) -> (bool, Span) {
 /// embed.
 fn find_embeds(text: &str) -> Vec<(Span, String)> {
     let mut res = Vec::new();
-    let mut i = 0;
-    while i < text.len() {
-        if !text.is_char_boundary(i) {
-            i += 1;
+    let mut the = 0;
+    while the < text.len() {
+        if !text.is_char_boundary(the) {
+            the += 1;
             continue;
         }
-        if text[i..].starts_with("![[") && !is_escaped(text, i) {
-            if let Some(rel) = text[i + 3..].find("]]") {
-                let inner = text[i + 3..i + 3 + rel].to_string();
-                let end = i + 3 + rel + 2;
-                res.push((Span::new(i + 1, end), inner));
-                i = end;
+        if text[the..].starts_with("![[") && !is_escaped(text, the) {
+            if let Some(rel) = text[the + 3..].find("]]") {
+                let inner = text[the + 3..the + 3 + rel].to_string();
+                let end = the + 3 + rel + 2;
+                res.push((Span::new(the + 1, end), inner));
+                the = end;
                 continue;
             }
         }
-        i += 1;
+        the += 1;
     }
     res
 }
@@ -1147,12 +1147,12 @@ fn is_entity_hash(text: &str, idx: usize) -> bool {
         return false;
     }
     let rest = &text[idx + 1..];
-    let (cifre, esadecimale) = match rest.strip_prefix(['x', 'X']) {
+    let (digits, esadecimale) = match rest.strip_prefix(['x', 'X']) {
         Some(hex) => (hex, true),
         None => (rest, false),
     };
-    match cifre.find(';') {
-        Some(n) if n > 0 => cifre[..n].chars().all(|c| {
+    match digits.find(';') {
+        Some(n) if n > 0 => digits[..n].chars().all(|c| {
             if esadecimale {
                 c.is_ascii_hexdigit()
             } else {
@@ -1183,7 +1183,7 @@ fn push_plain_or_tags(
             // Sul sorgente gli pseudo-tag si riconoscono: `\#` è sotto escape,
             // `&#x27;` è un'entità — nessuno dei due è un tag per Obsidian.
             .filter(|t| {
-                !sotto_escape(source, slice, base, t.span.start)
+                !under_escape(source, slice, base, t.span.start)
                     && !is_entity_hash(slice, t.span.start)
             })
             .collect()
@@ -1192,9 +1192,9 @@ fn push_plain_or_tags(
     };
     if tags.is_empty() {
         if !slice.is_empty() {
-            let testo = decodifica_segmento(source, slice, base);
-            let n = testo.len();
-            out.push(Inline::Text(testo));
+            let text = decode_segment(source, slice, base);
+            let n = text.len();
+            out.push(Inline::Text(text));
             return n;
         }
         return 0;
@@ -1206,12 +1206,12 @@ fn push_plain_or_tags(
     // somma a `nel_testo`, e il testo di un tag (`#nome`) si decodifica in sé
     // stesso — i caratteri di un nome di tag non hanno escape né entità.
     let mut cursor = 0;
-    let mut scritti = 0;
+    let mut written = 0;
     for tag in tags {
         if tag.span.start > cursor {
-            let testo = decodifica_segmento(source, &slice[cursor..tag.span.start], base + cursor);
-            scritti += testo.len();
-            out.push(Inline::Text(testo));
+            let text = decode_segment(source, &slice[cursor..tag.span.start], base + cursor);
+            written += text.len();
+            out.push(Inline::Text(text));
         }
         let abs = Span::new(base + tag.span.start, base + tag.span.end);
         out.push(Inline::TagRef {
@@ -1222,34 +1222,34 @@ fn push_plain_or_tags(
             name: tag.name,
             span: abs,
         });
-        scritti += tag.span.end - tag.span.start;
+        written += tag.span.end - tag.span.start;
         cursor = tag.span.end;
     }
     if cursor < slice.len() {
-        let testo = decodifica_segmento(source, &slice[cursor..], base + cursor);
-        scritti += testo.len();
-        out.push(Inline::Text(testo));
+        let text = decode_segment(source, &slice[cursor..], base + cursor);
+        written += text.len();
+        out.push(Inline::Text(text));
     }
-    scritti
+    written
 }
 
 /// La tabella delle entità nominali per **nome interno** — `amp` per `&amp;`
 /// — come la `ENTITY_MAP` che comrak si genera in build: costruita **una
 /// volta sola** da [`ENTITIES`], tenendo le sole forme con `;` (comrak ignora
 /// le varianti legacy senza punto e virgola).
-static ENTITA: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+static ENTITY_MAP: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
 
 /// L'entità nominale `nome` (ciò che sta fra `&` e `;`), o `None`.
-fn entita_nominale(nome: &str) -> Option<&'static str> {
-    ENTITA
+fn named_entity(name: &str) -> Option<&'static str> {
+    ENTITY_MAP
         .get_or_init(|| {
             ENTITIES
                 .iter()
-                .filter(|e| e.entity.starts_with('&') && e.entity.ends_with(';'))
-                .map(|e| (&e.entity[1..e.entity.len() - 1], e.characters))
+                .filter(|and| and.entity.starts_with('&') && and.entity.ends_with(';'))
+                .map(|and| (&and.entity[1..and.entity.len() - 1], and.characters))
                 .collect()
         })
-        .get(nome)
+        .get(name)
         .copied()
 }
 
@@ -1276,45 +1276,45 @@ fn entita_nominale(nome: &str) -> Option<&'static str> {
 /// a `base` nel sorgente decide se era un escape. È la stessa regola di
 /// [`sotto_escape`], e vale solo lì: dentro la fetta gli escape tengono la
 /// loro barra e non c'è ambiguità.
-fn decodifica_segmento(source: &str, s: &str, base: usize) -> String {
+fn decode_segment(source: &str, s: &str, base: usize) -> String {
     let mut out = String::with_capacity(s.len());
     let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < s.len() {
-        match bytes[i] {
-            b'\\' if i == 0 && is_escaped(source, base) => {
+    let mut the = 0;
+    while the < s.len() {
+        match bytes[the] {
+            b'\\' if the == 0 && is_escaped(source, base) => {
                 // Barra **decodificata** (`\\` nel sorgente): non apre un
                 // escape, il prossimo carattere è testo libero.
                 out.push('\\');
-                i += 1;
+                the += 1;
             }
-            b'\\' => match s[i + 1..].chars().next() {
+            b'\\' => match s[the + 1..].chars().next() {
                 Some(c) if c.is_ascii_punctuation() => {
                     out.push(c);
-                    i += 1 + c.len_utf8();
+                    the += 1 + c.len_utf8();
                 }
                 _ => {
                     out.push('\\');
-                    i += 1;
+                    the += 1;
                 }
             },
-            b'&' if i == 0 && is_escaped(source, base) => {
+            b'&' if the == 0 && is_escaped(source, base) => {
                 // `\&…;` nel sorgente: l'escape ha sciolto la `&`, e quel che
                 // segue è letterale — `\&amp;` non è l'entità `&`.
                 out.push('&');
-                i += 1;
+                the += 1;
             }
-            b'&' => match entita(s, i, &mut out) {
-                Some(fine) => i = fine,
+            b'&' => match entity(s, the, &mut out) {
+                Some(end) => the = end,
                 None => {
                     out.push('&');
-                    i += 1;
+                    the += 1;
                 }
             },
             _ => {
-                let c = s[i..].chars().next().expect("confine di carattere");
+                let c = s[the..].chars().next().expect("confine di carattere");
                 out.push(c);
-                i += c.len_utf8();
+                the += c.len_utf8();
             }
         }
     }
@@ -1324,37 +1324,37 @@ fn decodifica_segmento(source: &str, s: &str, base: usize) -> String {
 /// L'entità che comincia a `si` (`s[si] == '&'`), scritta decodificata in
 /// `out`; restituisce la fine (esclusa) del consumo, o `None` se lì non c'è
 /// un'entità e la `&` resta letterale. Replica `comrak::entity::unescape`.
-fn entita(s: &str, si: usize, out: &mut String) -> Option<usize> {
-    let testo = &s[si + 1..];
-    let bytes = testo.as_bytes();
+fn entity(s: &str, is: usize, out: &mut String) -> Option<usize> {
+    let text = &s[is + 1..];
+    let bytes = text.as_bytes();
     // Riferimento numerico: `&#cifre;` o `&#xcifre;`. Il numero si accumula
     // cappato a U+110000 come fa comrak; il tetto delle cifre decide se è
     // un'entità, i codepoint fuori intervallo diventano U+FFFD.
-    if testo.len() >= 3 && bytes[0] == b'#' {
-        let (cp, num_cifre, esadecimale, avanti) = if bytes[1].is_ascii_digit() {
+    if text.len() >= 3 && bytes[0] == b'#' {
+        let (cp, num_digits, esadecimale, forward) = if bytes[1].is_ascii_digit() {
             let mut cp = 0u32;
-            let mut i = 1;
-            while i < bytes.len() && bytes[i].is_ascii_digit() {
-                cp = (cp * 10 + (bytes[i] - b'0') as u32).min(0x11_0000);
-                i += 1;
+            let mut the = 1;
+            while the < bytes.len() && bytes[the].is_ascii_digit() {
+                cp = (cp * 10 + (bytes[the] - b'0') as u32).min(0x11_0000);
+                the += 1;
             }
-            (cp, i - 1, false, i)
+            (cp, the - 1, false, the)
         } else if bytes[1] == b'x' || bytes[1] == b'X' {
             let mut cp = 0u32;
-            let mut i = 2;
-            while i < bytes.len() && bytes[i].is_ascii_hexdigit() {
-                cp = (cp * 16 + (bytes[i] as char).to_digit(16).expect("cifra esadecimale"))
+            let mut the = 2;
+            while the < bytes.len() && bytes[the].is_ascii_hexdigit() {
+                cp = (cp * 16 + (bytes[the] as char).to_digit(16).expect("cifra esadecimale"))
                     .min(0x11_0000);
-                i += 1;
+                the += 1;
             }
-            (cp, i - 2, true, i)
+            (cp, the - 2, true, the)
         } else {
             (0, 0, false, 0)
         };
-        if avanti < bytes.len()
-            && bytes[avanti] == b';'
-            && ((esadecimale && (1..=6).contains(&num_cifre))
-                || (!esadecimale && (1..=7).contains(&num_cifre)))
+        if forward < bytes.len()
+            && bytes[forward] == b';'
+            && ((esadecimale && (1..=6).contains(&num_digits))
+                || (!esadecimale && (1..=7).contains(&num_digits)))
         {
             // La stessa soglia di comrak: 0, i surrogati (0xE000 compreso) e
             // oltre U+10FFFF non sono caratteri, e un riferimento che li
@@ -1365,19 +1365,19 @@ fn entita(s: &str, si: usize, out: &mut String) -> Option<usize> {
                 cp
             };
             out.push(char::from_u32(cp).unwrap_or('\u{FFFD}'));
-            return Some(si + 1 + avanti + 1);
+            return Some(is + 1 + forward + 1);
         }
     }
     // Entità nominale: il primo `;` entro una finestra di 32 byte — uno
     // spazio uccide il candidato — e il nome prima di lui nella tabella.
-    let limite = testo.len().min(32);
-    for j in 2..limite {
+    let limit = text.len().min(32);
+    for j in 2..limit {
         match bytes[j] {
             b' ' => return None,
             b';' => {
-                if let Some(chars) = entita_nominale(&testo[..j]) {
+                if let Some(chars) = named_entity(&text[..j]) {
                     out.push_str(chars);
-                    return Some(si + 1 + j + 1);
+                    return Some(is + 1 + j + 1);
                 }
                 return None;
             }
@@ -1398,7 +1398,7 @@ fn entita(s: &str, si: usize, out: &mut String) -> Option<usize> {
 /// diceva già la cosa giusta («sul sorgente gli escape sono ancora visibili»),
 /// ma la fetta non è il sorgente: il risultato era che `\#nontag` **dichiarava
 /// un tag**, che finiva nell'indice e nel pannello dei tag.
-fn sotto_escape(source: &str, slice: &str, base: usize, idx: usize) -> bool {
+fn under_escape(source: &str, slice: &str, base: usize, idx: usize) -> bool {
     if is_escaped(slice, idx) {
         return true;
     }
@@ -1434,15 +1434,15 @@ fn parse_frontmatter(raw: &str) -> Result<Frontmatter, String> {
         // Uno YAML valido che non è una mappa (`- a`, `solo testo`) non è un
         // frontmatter: non ha proprietà da offrire, e non è un errore di
         // sintassi che si possa citare con una riga.
-        Ok(altro) => Err(format!(
+        Ok(other) => Err(format!(
             "il frontmatter non è una mappa di proprietà ma {}",
-            specie_yaml(&altro)
+            yaml_kind(&other)
         )),
-        Err(e) => Err(e.to_string()),
+        Err(and) => Err(and.to_string()),
     }
 }
 
-fn specie_yaml(v: &serde_json::Value) -> &'static str {
+fn yaml_kind(v: &serde_json::Value) -> &'static str {
     match v {
         serde_json::Value::Null => "un valore vuoto",
         serde_json::Value::Bool(_) => "un booleano",
@@ -1460,12 +1460,12 @@ fn specie_yaml(v: &serde_json::Value) -> &'static str {
 /// frontmatter dal corpo, e quella riga la rimette il serializer come
 /// separatore fra blocchi. Senza la normalizzazione il giro completo
 /// guadagnerebbe una riga vuota a ogni passaggio.
-fn frontmatter_non_letto(raw: &str, motivo: String, span: Span) -> Block {
+fn frontmatter_verbatim(raw: &str, reason: String, span: Span) -> Block {
     let mut text = raw.trim_end().to_string();
     text.push('\n');
     Block::Custom {
         custom_kind: custom_kind::FRONTMATTER_UNPARSED.to_string(),
-        attrs: serde_json::json!({ "text": text, "error": motivo }),
+        attrs: serde_json::json!({ "text": text, "error": reason }),
         blocks: Vec::new(),
         anchor: None,
         span,
@@ -1492,15 +1492,15 @@ fn frontmatter_non_letto(raw: &str, motivo: String, span: Span) -> Block {
 /// contenitore e non al testo. Serve a ricostruire il `line_offsets` di comrak
 /// (che è privato) per correggere le colonne degli inline residui.
 #[derive(Clone, Copy)]
-enum Marcatore {
+enum Container {
     /// Una citazione: `>` più uno spazio opzionale per riga.
-    Citazione,
+    BlockQuote,
     /// Una voce di lista: la larghezza del suo marcatore in byte (`- ` → 2).
-    Voce(usize),
+    ListItem(usize),
 }
 
 /// Una definizione letta dalla sorgente, già tradotta in byte e decodificata.
-struct Definizione {
+struct Definition {
     span: Span,
     label: String,
     url: String,
@@ -1511,124 +1511,124 @@ struct Definizione {
 /// testa e risconta i sourcepos del contenuto residuo; i paragrafi di **sola**
 /// definizione — che comrak ha già staccato — si rileggono dall'ombra della
 /// sorgente (vedi [`gira_ombra`]).
-fn recupera_definizioni<'a>(
+fn recover_definitions<'a>(
     root: &'a AstNode<'a>,
     source: &str,
     offsets: &Offsets<'_>,
     options: &Options<'_>,
-) -> Vec<Definizione> {
+) -> Vec<Definition> {
     let mut defs = Vec::new();
-    let mut contenitori: Vec<Marcatore> = Vec::new();
+    let mut containers: Vec<Container> = Vec::new();
     // Gli span dei paragrafi **prima** della correzione dei misti: è contro
     // questi che l'ombra decide se un suo paragrafo è un paragrafo vero.
-    let mut reali = Vec::new();
-    span_dei_paragrafi(root, offsets, &mut reali);
-    gira_definizioni(root, source, offsets, &mut defs, &mut contenitori);
+    let mut real_spans = Vec::new();
+    paragraph_spans(root, offsets, &mut real_spans);
+    walk_definitions(root, source, offsets, &mut defs, &mut containers);
     // I paragrafi di **sola** definizione comrak li stacca in
     // `finalize_borrowed` (l'arm `Paragraph`): nell'albero vero non ci sono, e
     // il giro sopra non li ha visti — senza un recupero, `[rif]: nota.md` da
     // solo produceva `body: []`. Si rileggono da un'ombra della sorgente a
     // lunghezza uguale in cui comrak non riconosce le definizioni: lì quei
     // paragrafi restano, e la fetta si legge dal vero con lo stesso span.
-    let ombra = ombra_sorgente(source, options.extension.footnotes);
+            // Definizioni in testa, come le consuma comrak: una dopo l'altra,
+    let shadow = shadow_source(source, options.extension.footnotes);
     let arena = Arena::new();
-    let root_ombra = comrak::parse_document(&arena, text_policy::strip_bom(&ombra), options);
-    gira_ombra(root_ombra, source, offsets, &reali, &mut defs);
+    let shadow_root = comrak::parse_document(&arena, text_policy::strip_bom(&shadow), options);
+    walk_shadow(shadow_root, source, offsets, &real_spans, &mut defs);
     defs
 }
 
-fn gira_definizioni<'a>(
+fn walk_definitions<'a>(
     node: &'a AstNode<'a>,
     source: &str,
     offsets: &Offsets<'_>,
-    defs: &mut Vec<Definizione>,
-    contenitori: &mut Vec<Marcatore>,
+    defs: &mut Vec<Definition>,
+    containers: &mut Vec<Container>,
 ) {
-    let valore = node.data.borrow().value.clone();
+    let value = node.data.borrow().value.clone();
     let span = span_of(node, offsets);
-    match valore {
+    match value {
         NodeValue::Paragraph => {
-            let Some(fetta) = source.get(span.start..span.end) else {
+            let Some(slice) = source.get(span.start..span.end) else {
                 return;
             };
-            // Definizioni in testa, come le consuma comrak: una dopo l'altra,
             // finché la riga non comincia più con `[`.
-            let prima = defs.len();
-            let pos = definizioni_da_fetta(fetta, span.start, source, defs);
-            if defs.len() == prima {
+            // Qui arrivano solo i paragrafi **misti**: quello di sola
+            let before = defs.len();
+            let pos = definitions_from_slice(slice, span.start, source, defs);
+            if defs.len() == before {
                 return;
             }
-            // Qui arrivano solo i paragrafi **misti**: quello di sola
             // definizione comrak lo stacca in `finalize_borrowed`, e lo
             // rilegge l'ombra (`gira_ombra`). Il contenuto residuo comincia
             // alla riga `n`+1, alla colonna del primo byte di contenuto di lì.
-            let n = terminatori_nella(&fetta[..pos]);
-            let resto = &fetta[pos..];
-            if resto.is_empty() {
                 // Difensivo: comrak ha già staccato il paragrafo vuoto, e se
+            let n = terminators_in(&slice[..pos]);
+            let remainder = &slice[pos..];
+            if remainder.is_empty() {
                 // un residuo vuoto arrivasse qui non ci sarebbe nulla da
                 // riscontare.
+                // `riga` è la riga sorgente vera: il suo indice nella fetta
                 return;
             }
             let mut sp = node.data.borrow().sourcepos;
-            let riga_zero = sp.start.line;
+            let row_zero = sp.start.line;
             sp.start.line += n;
-            let prefissi = prefissi_di_riga(source, span.start, fetta, contenitori);
-            sp.start.column = 1 + prefissi[n];
+            let prefixes = row_prefixes(source, span.start, slice, containers);
+            sp.start.column = 1 + prefixes[n];
             node.data.borrow_mut().sourcepos = sp;
-            let delta = |riga: usize| -> isize {
-                // `riga` è la riga sorgente vera: il suo indice nella fetta
+            let delta = |row: usize| -> isize {
                 // è `riga - riga_zero`, e comrak ha contato le colonne come
                 // se quella riga fosse la prima del paragrafo — il vero
                 // prefisso di riga è `prefissi[k]`.
-                let k = riga.saturating_sub(riga_zero);
-                prefissi.get(k).copied().unwrap_or(0) as isize
+            // Gli altri contenitori (footnote, definition list, html…) non
+                let k = row.saturating_sub(row_zero);
+                prefixes.get(k).copied().unwrap_or(0) as isize
             };
-            sposta_figli(node, n, &delta);
+            shift_descendants(node, n, &delta);
         }
         NodeValue::BlockQuote => {
-            contenitori.push(Marcatore::Citazione);
+            containers.push(Container::BlockQuote);
             for child in node.children() {
-                gira_definizioni(child, source, offsets, defs, contenitori);
+                walk_definitions(child, source, offsets, defs, containers);
             }
-            contenitori.pop();
+            containers.pop();
         }
         NodeValue::List(_) => {
             for item in node.children() {
-                let larghezza = larghezza_marcatore(source, item);
-                contenitori.push(Marcatore::Voce(larghezza));
+                let width = marker_width(source, item);
+                containers.push(Container::ListItem(width));
                 for child in item.children() {
-                    gira_definizioni(child, source, offsets, defs, contenitori);
+                    walk_definitions(child, source, offsets, defs, containers);
                 }
-                contenitori.pop();
+                containers.pop();
             }
         }
         _ => {
-            // Gli altri contenitori (footnote, definition list, html…) non
             // aggiungono marcatori di riga propri; i figli si visitano uguale.
+/// Gli span dei paragrafi dell'albero vero, **prima** che la correzione dei
             for child in node.children() {
-                gira_definizioni(child, source, offsets, defs, contenitori);
+                walk_definitions(child, source, offsets, defs, containers);
             }
         }
     }
 }
 
-/// Gli span dei paragrafi dell'albero vero, **prima** che la correzione dei
 /// misti li sposti: è contro questi che l'ombra decide se un suo paragrafo è
 /// un paragrafo vero (già letto dal giro principale) o uno staccato da comrak.
-fn span_dei_paragrafi<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>, spans: &mut Vec<Span>) {
-    let valore = node.data.borrow().value.clone();
-    if matches!(valore, NodeValue::Paragraph) {
+/// L'ombra a lunghezza uguale: ogni `[` diventa una `x`.
+///
+fn paragraph_spans<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>, spans: &mut Vec<Span>) {
+    let value = node.data.borrow().value.clone();
+    if matches!(value, NodeValue::Paragraph) {
         spans.push(span_of(node, offsets));
         return;
     }
     for child in node.children() {
-        span_dei_paragrafi(child, offsets, spans);
+        paragraph_spans(child, offsets, spans);
     }
 }
 
-/// L'ombra a lunghezza uguale: ogni `[` diventa una `x`.
-///
 /// Le reference definition sono l'unico costrutto che comrak consuma dentro un
 /// paragrafo, e le riconosce dal primo carattere: senza `[` i paragrafi di
 /// sola definizione restano paragrafi, con gli **stessi** span — la lunghezza
@@ -1638,268 +1638,271 @@ fn span_dei_paragrafi<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>, spans: &
 /// da recuperare ma un blocco `FootnoteDefinition`, che l'ombra deve
 /// conservare come il vero — sennò una nota tornerebbe come reference
 /// definition.
-fn ombra_sorgente(source: &str, footnotes: bool) -> String {
-    let b = source.as_bytes();
-    let mut ombra = Vec::with_capacity(b.len());
-    for (i, &c) in b.iter().enumerate() {
-        if c == b'[' && !(footnotes && b.get(i + 1) == Some(&b'^')) {
-            ombra.push(b'x');
-        } else {
-            ombra.push(c);
-        }
-    }
     // La sostituzione è byte-per-byte a lunghezza uguale, e l'unico byte
     // cambiato è `[` (un byte): la stringa resta UTF-8 valida.
-    String::from_utf8(ombra).expect("l'ombra è una permutazione della sorgente")
-}
-
+fn shadow_source(source: &str, footnotes: bool) -> String {
+    let b = source.as_bytes();
+    let mut shadow = Vec::with_capacity(b.len());
+    for (the, &c) in b.iter().enumerate() {
+        if c == b'[' && !(footnotes && b.get(the + 1) == Some(&b'^')) {
+            shadow.push(b'x');
+        } else {
+            shadow.push(c);
+        }
+    }
 /// Il giro sull'ombra: legge le definizioni dei paragrafi che nessun paragrafo
 /// vero copre — sono quelli che comrak ha staccato perché di **sola**
+    String::from_utf8(shadow).expect("shadow is a permutation of the source")
+}
+
 /// definizione. La fetta si legge dal vero (l'ombra ha gli stessi span), e per
 /// loro non c'è alcun sourcepos da correggere: contenuto residuo non ce n'è.
-fn gira_ombra<'a>(
-    node: &'a AstNode<'a>,
-    source: &str,
-    offsets: &Offsets<'_>,
-    reali: &[Span],
-    defs: &mut Vec<Definizione>,
-) {
-    let valore = node.data.borrow().value.clone();
-    if matches!(valore, NodeValue::Paragraph) {
-        let span = span_of(node, offsets);
         // `reali` è ordinato per inizio e disgiunto (pre-order di
         // `span_dei_paragrafi`): il solo candidato a contenere `span` è il
         // primo che non finisce prima di lui.
-        let idx = reali.partition_point(|r| r.end <= span.start);
-        if reali.get(idx).is_some_and(|r| contiene(*r, span)) {
+fn walk_shadow<'a>(
+    node: &'a AstNode<'a>,
+    source: &str,
+    offsets: &Offsets<'_>,
+    real_spans: &[Span],
+    defs: &mut Vec<Definition>,
+) {
+    let value = node.data.borrow().value.clone();
+    if matches!(value, NodeValue::Paragraph) {
+        let span = span_of(node, offsets);
+/// Quante righe hanno consumato le definizioni: il numero di terminatori nella
+/// fetta consumata (`\r\n` è **un** terminatore).
+/// I prefissi di riga del paragrafo: per ogni riga della fetta, quanti byte di
+        let idx = real_spans.partition_point(|r| r.end <= span.start);
+        if real_spans.get(idx).is_some_and(|r| contains_span(*r, span)) {
             return;
         }
-        if let Some(fetta) = source.get(span.start..span.end) {
-            definizioni_da_fetta(fetta, span.start, source, defs);
+        if let Some(slice) = source.get(span.start..span.end) {
+            definitions_from_slice(slice, span.start, source, defs);
         }
         return;
     }
     for child in node.children() {
-        gira_ombra(child, source, offsets, reali, defs);
+        walk_shadow(child, source, offsets, real_spans, defs);
     }
 }
 
-/// Quante righe hanno consumato le definizioni: il numero di terminatori nella
-/// fetta consumata (`\r\n` è **un** terminatore).
-fn terminatori_nella(fetta: &str) -> usize {
-    let b = fetta.as_bytes();
+/// marcatore e indentazione comrak ha consumato (il suo `line_offsets`, che il
+/// crate tiene privato). `inizio_fetta` è il byte della prima riga nel sorgente.
+fn terminators_in(slice: &str) -> usize {
+    let b = slice.as_bytes();
     let mut n = 0;
-    let mut i = 0;
-    while i < b.len() {
-        match b[i] {
+    let mut the = 0;
+    while the < b.len() {
+        match b[the] {
             b'\n' => {
                 n += 1;
-                i += 1;
+                the += 1;
             }
             b'\r' => {
                 n += 1;
-                i += 1;
-                if b.get(i) == Some(&b'\n') {
-                    i += 1;
+                the += 1;
+                if b.get(the) == Some(&b'\n') {
+                    the += 1;
                 }
             }
-            _ => i += 1,
+            _ => the += 1,
         }
     }
     n
 }
 
-/// I prefissi di riga del paragrafo: per ogni riga della fetta, quanti byte di
-/// marcatore e indentazione comrak ha consumato (il suo `line_offsets`, che il
-/// crate tiene privato). `inizio_fetta` è il byte della prima riga nel sorgente.
-fn prefissi_di_riga(
-    source: &str,
-    inizio_fetta: usize,
-    fetta: &str,
-    contenitori: &[Marcatore],
-) -> Vec<usize> {
-    let mut prefissi = Vec::new();
-    let mut riga_inizio = inizio_fetta;
-    for riga in righe_di(fetta) {
-        let fine = riga_inizio + riga.len();
-        prefissi.push(prefisso_di_riga(&source[riga_inizio..fine], contenitori));
-        riga_inizio = fine;
         // il terminatore sta fra le righe della fetta? la riga seguente
         // comincia dopo; `righe_di` non lo include.
-        while riga_inizio < source.len() && matches!(source.as_bytes()[riga_inizio], b'\n' | b'\r')
-        {
-            riga_inizio += 1;
-            if source.as_bytes().get(riga_inizio) == Some(&b'\n') {
-                riga_inizio += 1;
-            }
-        }
-    }
-    prefissi
-}
-
 /// Le righe di una fetta, senza i terminatori.
-fn righe_di(fetta: &str) -> Vec<&str> {
-    let mut righe = Vec::new();
-    let mut i = 0;
-    let b = fetta.as_bytes();
-    for (j, &c) in b.iter().enumerate() {
-        if c == b'\n' || c == b'\r' {
-            righe.push(&fetta[i..j]);
-            i = j + 1;
-            if c == b'\r' && b.get(j + 1) == Some(&b'\n') {
-                i = j + 2;
-            }
-        }
-    }
-    if i < fetta.len() {
-        righe.push(&fetta[i..]);
-    }
-    righe
-}
-
+fn row_prefixes(
+    source: &str,
+    slice_start: usize,
+    slice: &str,
+    containers: &[Container],
+) -> Vec<usize> {
+    let mut prefixes = Vec::new();
+    let mut row_start = slice_start;
+    for row in lines_of(slice) {
+        let end = row_start + row.len();
+        prefixes.push(row_prefix(&source[row_start..end], containers));
+        row_start = end;
 /// Quanti byte della riga appartengono ai contenitori (e all'indentazione del
 /// paragrafo): per una riga pigra (citazione che non si apre) il contenuto
-/// comincia al primo byte non bianco.
-fn prefisso_di_riga(riga: &str, contenitori: &[Marcatore]) -> usize {
-    let b = riga.as_bytes();
-    let mut i = 0;
-    let mut pigra = false;
-    for m in contenitori {
-        match m {
-            Marcatore::Citazione => {
-                if b.get(i) == Some(&b'>') {
-                    i += 1;
-                    if b.get(i) == Some(&b' ') {
-                        i += 1;
-                    }
-                } else {
-                    pigra = true;
-                    break;
-                }
-            }
-            Marcatore::Voce(larghezza) => {
-                if pigra {
-                    break;
-                }
-                i = (i + larghezza).min(b.len());
+        while row_start < source.len() && matches!(source.as_bytes()[row_start], b'\n' | b'\r')
+        {
+            row_start += 1;
+            if source.as_bytes().get(row_start) == Some(&b'\n') {
+                row_start += 1;
             }
         }
     }
-    if pigra {
+    prefixes
+}
+
+/// comincia al primo byte non bianco.
+fn lines_of(slice: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut the = 0;
+    let b = slice.as_bytes();
+    for (j, &c) in b.iter().enumerate() {
+        if c == b'\n' || c == b'\r' {
+            result.push(&slice[the..j]);
+            the = j + 1;
+            if c == b'\r' && b.get(j + 1) == Some(&b'\n') {
+                the = j + 2;
+            }
+        }
+    }
+    if the < slice.len() {
+        result.push(&slice[the..]);
+    }
+    result
+}
+
+/// La larghezza in byte del marcatore della voce: `- ` → 2, `1. ` → 3.
+/// Sposta i sourcepos dei discendenti di un paragrafo misto: righe di `n`,
+/// colonne secondo lo scarto di prefisso della loro riga.
+fn row_prefix(row: &str, containers: &[Container]) -> usize {
+    let b = row.as_bytes();
+    let mut the = 0;
+    let mut lazy = false;
+    for m in containers {
+        match m {
+            Container::BlockQuote => {
+                if b.get(the) == Some(&b'>') {
+                    the += 1;
+                    if b.get(the) == Some(&b' ') {
+                        the += 1;
+                    }
+                } else {
+                    lazy = true;
+                    break;
+                }
+            }
+            Container::ListItem(width) => {
+                if lazy {
+                    break;
+                }
+                the = (the + width).min(b.len());
+            }
+        }
+    }
+    if lazy {
         b.iter().take_while(|&&c| c == b' ' || c == b'\t').count()
     } else {
-        i + b[i..]
+        the + b[the..]
             .iter()
             .take_while(|&&c| c == b' ' || c == b'\t')
             .count()
     }
 }
 
-/// La larghezza in byte del marcatore della voce: `- ` → 2, `1. ` → 3.
-fn larghezza_marcatore(source: &str, item: &AstNode<'_>) -> usize {
+/// Una definizione grezza, con la sua estensione consumata (incluso il
+fn marker_width(source: &str, item: &AstNode<'_>) -> usize {
     let sp = item.data.borrow().sourcepos.start;
-    let mut inizio = 0;
+    let mut start = 0;
     let b = source.as_bytes();
     for _ in 1..sp.line {
-        while inizio < b.len() && !matches!(b[inizio], b'\n' | b'\r') {
-            inizio += 1;
+        while start < b.len() && !matches!(b[start], b'\n' | b'\r') {
+            start += 1;
         }
-        if inizio < b.len() {
-            inizio += 1;
-            if b.get(inizio) == Some(&b'\n') {
-                inizio += 1;
+        if start < b.len() {
+            start += 1;
+            if b.get(start) == Some(&b'\n') {
+                start += 1;
             }
         }
     }
-    let riga = &source[inizio..];
-    let rb = riga.as_bytes();
-    let mut i = sp.column.saturating_sub(1);
-    if matches!(rb.get(i), Some(b'-' | b'+' | b'*')) {
-        i += 1;
+    let row = &source[start..];
+    let rb = row.as_bytes();
+    let mut the = sp.column.saturating_sub(1);
+    if matches!(rb.get(the), Some(b'-' | b'+' | b'*')) {
+        the += 1;
     } else {
-        let mut cifre = 0;
-        while rb.get(i).is_some_and(|c| c.is_ascii_digit()) {
-            i += 1;
-            cifre += 1;
+        let mut digits = 0;
+        while rb.get(the).is_some_and(|c| c.is_ascii_digit()) {
+            the += 1;
+            digits += 1;
         }
-        if cifre == 0 || !matches!(rb.get(i), Some(b'.' | b')')) {
+        if digits == 0 || !matches!(rb.get(the), Some(b'.' | b')')) {
             return 2;
         }
-        i += 1;
+        the += 1;
     }
-    let spazi = rb[i..]
+    let spaces = rb[the..]
         .iter()
         .take_while(|&&c| c == b' ' || c == b'\t')
         .take(4)
         .count();
-    if spazi == 0 {
+    if spaces == 0 {
         2
     } else {
-        (i - sp.column.saturating_sub(1)) + spazi
+        (the - sp.column.saturating_sub(1)) + spaces
     }
 }
 
-/// Sposta i sourcepos dei discendenti di un paragrafo misto: righe di `n`,
-/// colonne secondo lo scarto di prefisso della loro riga.
-fn sposta_figli<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isize) {
-    for child in node.children() {
-        sposta_nodo(child, n, delta);
-    }
-}
-
-fn sposta_nodo<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isize) {
-    let mut sp = node.data.borrow().sourcepos;
-    let inizio = sp.start.line;
-    let fine = sp.end.line;
-    sp.start.line += n;
-    sp.end.line += n;
-    sp.start.column = (sp.start.column as isize + delta(inizio)).max(1) as usize;
-    sp.end.column = (sp.end.column as isize + delta(fine)).max(1) as usize;
-    node.data.borrow_mut().sourcepos = sp;
-    for child in node.children() {
-        sposta_nodo(child, n, delta);
-    }
-}
-
-/// Una definizione grezza, con la sua estensione consumata (incluso il
 /// terminatore di riga) e le posizioni di url e titolo nella fetta (per la
 /// base di `decodifica_segmento`).
-struct DefGrezz {
-    def: Definizione,
-    fine: usize,
-    url_inizio: usize,
-    titolo_inizio: usize,
+fn shift_descendants<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isize) {
+    for child in node.children() {
+        shift_node(child, n, delta);
+    }
+}
+
+fn shift_node<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isize) {
+    let mut sp = node.data.borrow().sourcepos;
+    let start_line = sp.start.line;
+    let end_line = sp.end.line;
+    sp.start.line += n;
+    sp.end.line += n;
+    sp.start.column = (sp.start.column as isize + delta(start_line)).max(1) as usize;
+    sp.end.column = (sp.end.column as isize + delta(end_line)).max(1) as usize;
+    node.data.borrow_mut().sourcepos = sp;
+    for child in node.children() {
+        shift_node(child, n, delta);
+    }
 }
 
 /// Le definizioni in testa a una fetta di paragrafo, decodificate e in `defs`;
 /// restituisce quanti byte (nella fetta) hanno consumato, cioè dove comincia
 /// il contenuto residuo. È il lettore condiviso dal giro vero e dall'ombra.
-fn definizioni_da_fetta(
-    fetta: &str,
-    base: usize,
-    source: &str,
-    defs: &mut Vec<Definizione>,
-) -> usize {
-    let mut pos = 0;
-    while fetta.as_bytes().get(pos) == Some(&b'[') {
-        match definizione_in(fetta, pos, base) {
-            Some(d) => {
-                let DefGrezz {
-                    def,
-                    fine,
-                    url_inizio,
-                    titolo_inizio,
-                } = d;
+struct RawDef {
+    def: Definition,
+    end: usize,
+    url_start: usize,
+    title_start: usize,
+}
+
                 // `fine` è già un offset assoluto nella fetta: sommarlo a
                 // `pos` raddoppia quanto consumato dalla seconda definizione.
-                pos = fine;
                 // La decodifica degli escape e delle entità, con la base nel
+fn definitions_from_slice(
+    slice: &str,
+    base: usize,
+    source: &str,
+    defs: &mut Vec<Definition>,
+) -> usize {
+    let mut pos = 0;
+    while slice.as_bytes().get(pos) == Some(&b'[') {
+        match definition_at(slice, pos, base) {
+            Some(d) => {
+                let RawDef {
+                    def,
+                    end,
+                    url_start,
+                    title_start,
+                } = d;
                 // sorgente: la stessa regola dei link.
-                let url = decodifica_segmento(source, &def.url, base + url_inizio);
+// La grammatica è quella di `Parser::parse_reference_inline` di comrak:
+                pos = end;
+// `[etichetta]` + `:` + spnl + destinazione + spnl + titolo? + spnl + fine
+// riga — con il ripiego senza titolo quando il titolo non chiude la riga.
+                let url = decode_segment(source, &def.url, base + url_start);
                 let title = def
                     .title
-                    .map(|t| decodifica_segmento(source, &t, base + titolo_inizio));
-                defs.push(Definizione {
+                    .map(|t| decode_segment(source, &t, base + title_start));
+                defs.push(Definition {
                     span: def.span,
                     label: def.label,
                     url,
@@ -1912,265 +1915,266 @@ fn definizioni_da_fetta(
     pos
 }
 
-/// La grammatica è quella di `Parser::parse_reference_inline` di comrak:
-/// `[etichetta]` + `:` + spnl + destinazione + spnl + titolo? + spnl + fine
-/// riga — con il ripiego senza titolo quando il titolo non chiude la riga.
-fn definizione_in(fetta: &str, pos: usize, base: usize) -> Option<DefGrezz> {
-    let b = fetta.as_bytes();
-    let (dopo, label) = etichetta_in(fetta, pos)?;
-    if b.get(dopo) != Some(&b':') {
-        return None;
-    }
-    let mut p = spnl_in(fetta, dopo + 1);
-    let (dopo_url, url, url_inizio) = destinazione_in(fetta, p)?;
-    p = dopo_url;
-    let prima_titolo = p;
-    p = spnl_in(fetta, p);
-    let (mut titolo, titolo_inizio) = if let Some((fine, t)) = titolo_in(fetta, p) {
         // `titolo_in` restituisce la fine esclusa dopo la chiusura e la fetta
         // senza i delimitatori: l'inizio del **contenuto** è il byte dopo
         // l'apre — `p + 1` — non `fine - t.len()`, che per un contenuto lungo
+fn definition_at(slice: &str, pos: usize, base: usize) -> Option<RawDef> {
+    let b = slice.as_bytes();
+    let (after_label, label) = label_at(slice, pos)?;
+    if b.get(after_label) != Some(&b':') {
+        return None;
+    }
+    let mut p = spnl_at(slice, after_label + 1);
+    let (after_url, url, url_start) = dest_at(slice, p)?;
+    p = after_url;
+    let before_title = p;
+    p = spnl_at(slice, p);
+    let (mut title, title_start) = if let Some((end, t)) = title_at(slice, p) {
         // L vale `p + 2` (la fine esclusa è `i + 1`, la chiusura sta a `i`).
         // `titolo_inizio` è la base da cui `decodifica_segmento` decide la
         // priorità escape/entità del **primo** carattere del titolo:
         // sbagliata di un byte, `"\"inizio"` legge il vicino sbagliato e
         // l'escape in testa si scioglie o resta a seconda di quello.
-        let inizio = p + 1;
-        p = fine;
-        (Some(t), inizio)
-    } else {
-        (None, prima_titolo)
-    };
-    let senza_titolo = titolo.is_none();
-    if senza_titolo {
-        p = prima_titolo;
-    }
-    let mut fine = spazi_in(fetta, p);
-    if !fine_riga_in(fetta, fine) {
-        if senza_titolo {
-            return None;
-        }
         // Il titolo c'era ma non chiudeva la riga: si ripiega alla
         // definizione senza titolo, come comrak.
-        titolo = None;
-        p = prima_titolo;
-        fine = spazi_in(fetta, p);
-        if !fine_riga_in(fetta, fine) {
+    // `fine` è la posizione del terminatore di riga (o dell'EOF). Il consumo
+    // del pre-pass include il terminatore; lo span del blocco lo rifila.
+        let content_start = p + 1;
+        p = end;
+        (Some(t), content_start)
+    } else {
+        (None, before_title)
+    };
+    let no_title = title.is_none();
+    if no_title {
+        p = before_title;
+    }
+    let mut end = spaces_at(slice, p);
+    if !eol_at(slice, end) {
+        if no_title {
+            return None;
+        }
+// `[etichetta]` — il contenuto è rifilato, come in comrak.
+// La destinazione, nuda o fra `<…>` — come `manual_scan_link_url`.
+        title = None;
+        p = before_title;
+        end = spaces_at(slice, p);
+        if !eol_at(slice, end) {
             return None;
         }
     }
-    // `fine` è la posizione del terminatore di riga (o dell'EOF). Il consumo
-    // del pre-pass include il terminatore; lo span del blocco lo rifila.
-    let mut consumato = fine;
-    match b.get(consumato) {
-        Some(b'\n') => consumato += 1,
+// Il titolo fra `"…"`, `'…'` o `(…)` — le parentesi non si annidano.
+// spnl: spazi/tab, poi al più una fine riga, poi spazi/tab.
+    let mut consumed = end;
+    match b.get(consumed) {
+        Some(b'\n') => consumed += 1,
         Some(b'\r') => {
-            consumato += 1;
-            if b.get(consumato) == Some(&b'\n') {
-                consumato += 1;
+            consumed += 1;
+            if b.get(consumed) == Some(&b'\n') {
+                consumed += 1;
             }
         }
         None => {}
         _ => return None,
     }
-    let mut fine_contenuto = fine;
-    if fine_contenuto > 0 && b[fine_contenuto - 1] == b'\n' {
-        fine_contenuto -= 1;
+    let mut content_end = end;
+    if content_end > 0 && b[content_end - 1] == b'\n' {
+        content_end -= 1;
     }
-    if fine_contenuto > 0 && b[fine_contenuto - 1] == b'\r' {
-        fine_contenuto -= 1;
+    if content_end > 0 && b[content_end - 1] == b'\r' {
+        content_end -= 1;
     }
-    Some(DefGrezz {
-        def: Definizione {
-            span: Span::new(base + pos, base + fine_contenuto),
+    Some(RawDef {
+        def: Definition {
+            span: Span::new(base + pos, base + content_end),
             label: label.to_string(),
             url: url.to_string(),
-            title: titolo.map(str::to_string),
+            title: title.map(str::to_string),
         },
-        fine: consumato,
-        url_inizio,
-        titolo_inizio,
+        end: consumed,
+        url_start,
+        title_start,
     })
 }
 
-/// `[etichetta]` — il contenuto è rifilato, come in comrak.
-fn etichetta_in(fetta: &str, pos: usize) -> Option<(usize, &str)> {
-    let b = fetta.as_bytes();
+/// Fine riga o fine della fetta (l'EOF conta, come in comrak).
+fn label_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
+    let b = slice.as_bytes();
     if b.get(pos) != Some(&b'[') {
         return None;
     }
-    let mut i = pos + 1;
-    let mut lun = 0usize;
-    while i < b.len() {
-        match b[i] {
+    let mut the = pos + 1;
+    let mut mon = 0usize;
+    while the < b.len() {
+        match b[the] {
             b']' => {
-                let label = fetta[pos + 1..i].trim();
+                let label = slice[pos + 1..the].trim();
                 if label.is_empty() {
                     return None;
                 }
-                return Some((i + 1, label));
+                return Some((the + 1, label));
             }
             b'[' => return None,
             b'\\' => {
-                i += 1;
-                lun += 1;
-                if b.get(i).is_some_and(|c| c.is_ascii_punctuation()) {
-                    i += 1;
-                    lun += 1;
+                the += 1;
+                mon += 1;
+                if b.get(the).is_some_and(|c| c.is_ascii_punctuation()) {
+                    the += 1;
+                    mon += 1;
                 }
             }
             _ => {
-                i += 1;
-                lun += 1;
+                the += 1;
+                mon += 1;
             }
         }
-        if lun > 999 {
+        if mon > 999 {
             return None;
         }
     }
     None
 }
 
-/// La destinazione, nuda o fra `<…>` — come `manual_scan_link_url`.
-fn destinazione_in(fetta: &str, pos: usize) -> Option<(usize, &str, usize)> {
-    let b = fetta.as_bytes();
+/// Inserisce le definizioni nell'albero: il contenitore più profondo che
+fn dest_at(slice: &str, pos: usize) -> Option<(usize, &str, usize)> {
+    let b = slice.as_bytes();
     if pos >= b.len() {
         return None;
     }
     if b[pos] == b'<' {
-        let mut i = pos + 1;
-        while i < b.len() {
-            match b[i] {
-                b'>' => return Some((i + 1, &fetta[pos + 1..i], pos + 1)),
-                b'\\' => i += 2,
+        let mut the = pos + 1;
+        while the < b.len() {
+            match b[the] {
+                b'>' => return Some((the + 1, &slice[pos + 1..the], pos + 1)),
+                b'\\' => the += 2,
                 b'\n' | b'\r' | b'<' => return None,
-                _ => i += 1,
+                _ => the += 1,
             }
         }
         return None;
     }
-    let mut i = pos;
-    let mut profondita = 0usize;
-    while i < b.len() {
-        match b[i] {
-            b'\\' if i + 1 < b.len() && b[i + 1].is_ascii_punctuation() => i += 2,
+    let mut the = pos;
+    let mut depth = 0usize;
+    while the < b.len() {
+        match b[the] {
+            b'\\' if the + 1 < b.len() && b[the + 1].is_ascii_punctuation() => the += 2,
             b'(' => {
-                profondita += 1;
-                i += 1;
-                if profondita > 32 {
+                depth += 1;
+                the += 1;
+                if depth > 32 {
                     return None;
                 }
             }
             b')' => {
-                if profondita == 0 {
+                if depth == 0 {
                     break;
                 }
-                profondita -= 1;
-                i += 1;
+                depth -= 1;
+                the += 1;
             }
             c if c.is_ascii_whitespace() || (c.is_ascii_control() && c != 0) => {
-                if i == pos {
+                if the == pos {
                     return None;
                 }
                 break;
             }
-            _ => i += 1,
+            _ => the += 1,
         }
     }
-    if i == pos || profondita != 0 {
+    if the == pos || depth != 0 {
         None
     } else {
-        Some((i, &fetta[pos..i], pos))
+        Some((the, &slice[pos..the], pos))
     }
 }
 
-/// Il titolo fra `"…"`, `'…'` o `(…)` — le parentesi non si annidano.
-fn titolo_in(fetta: &str, pos: usize) -> Option<(usize, &str)> {
-    let b = fetta.as_bytes();
-    let (aperta, chiusa) = match b.get(pos) {
+/// contiene il loro span, in ordine di sorgente.
+fn title_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
+    let b = slice.as_bytes();
+    let (open, close) = match b.get(pos) {
         Some(b'"') => (b'"', b'"'),
         Some(b'\'') => (b'\'', b'\''),
         Some(b'(') => (b'(', b')'),
         _ => return None,
     };
-    let _ = aperta;
-    let mut i = pos + 1;
-    while i < b.len() {
-        match b[i] {
+    let _ = open;
+    let mut the = pos + 1;
+    while the < b.len() {
+        match b[the] {
             b'\\' => {
-                i += 2;
+                the += 2;
             }
-            c if c == chiusa => return Some((i + 1, &fetta[pos + 1..i])),
-            b'(' if chiusa == b')' => return None,
-            _ => i += 1,
+            c if c == close => return Some((the + 1, &slice[pos + 1..the])),
+            b'(' if close == b')' => return None,
+            _ => the += 1,
         }
     }
     None
 }
 
 /// spnl: spazi/tab, poi al più una fine riga, poi spazi/tab.
-fn spnl_in(fetta: &str, mut pos: usize) -> usize {
-    pos = spazi_in(fetta, pos);
-    if fine_riga_in(fetta, pos) {
+fn spnl_at(slice: &str, mut pos: usize) -> usize {
+    pos = spaces_at(slice, pos);
+    if eol_at(slice, pos) {
         pos += 1;
-        if fetta.as_bytes().get(pos) == Some(&b'\n') {
+        if slice.as_bytes().get(pos) == Some(&b'\n') {
             pos += 1;
         }
-        pos = spazi_in(fetta, pos);
+        pos = spaces_at(slice, pos);
     }
     pos
 }
 
-fn spazi_in(fetta: &str, mut pos: usize) -> usize {
-    while pos < fetta.len() && matches!(fetta.as_bytes()[pos], b' ' | b'\t') {
+fn spaces_at(slice: &str, mut pos: usize) -> usize {
+    while pos < slice.len() && matches!(slice.as_bytes()[pos], b' ' | b'\t') {
         pos += 1;
     }
     pos
 }
 
 /// Fine riga o fine della fetta (l'EOF conta, come in comrak).
-fn fine_riga_in(fetta: &str, pos: usize) -> bool {
-    matches!(fetta.as_bytes().get(pos), None | Some(b'\n') | Some(b'\r'))
+fn eol_at(slice: &str, pos: usize) -> bool {
+    matches!(slice.as_bytes().get(pos), None | Some(b'\n') | Some(b'\r'))
 }
 
 /// Inserisce le definizioni nell'albero: il contenitore più profondo che
 /// contiene il loro span, in ordine di sorgente.
-fn inserisci_definizioni(defs: Vec<Definizione>, body: &mut Vec<Block>) {
+fn insert_definitions(defs: Vec<Definition>, body: &mut Vec<Block>) {
     for d in defs {
-        let blocco = Block::ReferenceDefinition {
+        let block = Block::ReferenceDefinition {
             label: d.label,
             url: d.url,
             title: d.title,
             anchor: None,
             span: d.span,
         };
-        inserisci_una(blocco, body);
+        insert_one(block, body);
     }
 }
 
-fn inserisci_una(d: Block, blocchi: &mut Vec<Block>) {
-    let Some(pos) = blocchi.iter().position(|b| contiene(b.span(), d.span())) else {
-        inserisci_in_ordine(d, blocchi);
+fn insert_one(d: Block, blocks: &mut Vec<Block>) {
+    let Some(pos) = blocks.iter().position(|b| contains_span(b.span(), d.span())) else {
+        insert_in_order(d, blocks);
         return;
     };
-    match &mut blocchi[pos] {
-        Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => inserisci_una(d, blocks),
+    match &mut blocks[pos] {
+        Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => insert_one(d, blocks),
         Block::List { items, .. } => {
-            if let Some(pos) = items.iter().position(|it| contiene(it.span, d.span())) {
-                inserisci_una(d, &mut items[pos].blocks);
+            if let Some(pos) = items.iter().position(|it| contains_span(it.span, d.span())) {
+                insert_one(d, &mut items[pos].blocks);
             } else {
-                inserisci_in_ordine(d, blocchi);
+                insert_in_order(d, blocks);
             }
         }
-        _ => inserisci_in_ordine(d, blocchi),
+        _ => insert_in_order(d, blocks),
     }
 }
 
-fn contiene(padre: Span, figlio: Span) -> bool {
-    padre.start <= figlio.start && figlio.end <= padre.end
+fn contains_span(parent: Span, child: Span) -> bool {
+    parent.start <= child.start && child.end <= parent.end
 }
 
-fn inserisci_in_ordine(d: Block, blocchi: &mut Vec<Block>) {
-    let pos = blocchi.partition_point(|b| b.span().start < d.span().start);
-    blocchi.insert(pos, d);
+fn insert_in_order(d: Block, blocks: &mut Vec<Block>) {
+    let pos = blocks.partition_point(|b| b.span().start < d.span().start);
+    blocks.insert(pos, d);
 }

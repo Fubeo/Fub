@@ -3,7 +3,7 @@
 // chiamano uguale.
 //
 // Diceva «sette su otto», e le superfici erano dieci da prima che questa riga
-// fosse scritta. Nessuno se n'era accorto perché il numero era **dedotto**: non
+// fosse scritto. Nessuno se n'era accorto perché il numero era **dedotto**: non
 // c'era niente che confrontasse il conto di questo commento con l'enum del
 // contratto. Adesso c'è, in fondo al file, e legge il mirror generato invece di
 // ricordarselo — la §23.2 ha chiuso su questo, che è la stessa forma del §16.7
@@ -23,7 +23,7 @@
 // suoi.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import html from "../../index.html?raw";
-import enumsGenerati from "../host/enums.generated?raw";
+import generatedEnums from "../host/enums.generated?raw";
 import type { ViewSpec } from "../host/contract";
 
 const renderView = vi.fn(async () => ({ node: "empty_state", label: "vuoto", key: null }));
@@ -69,18 +69,18 @@ function spec(id: string, surface: ViewSpec["surface"]): ViewSpec {
 /// Non è pignoleria: `ui/views` cerca i suoi contenitori al caricamento del
 /// modulo, e con lui si carica mezza shell — l'esploratore, la ricerca, la
 /// sidebar — che i propri elementi li cerca allo stesso modo. Una fixture
-/// scritta a mano andrebbe tenuta d'accordo con `index.html`, cioè sarebbe una
+/// scritto a mano andrebbe tenuta d'accordo con `index.html`, cioè sarebbe una
 /// seconda copia di ciò che questo test dovrebbe verificare. Presa così, se
 /// qualcuno toglie un `id` dal documento il rosso arriva qui.
-const CORPO = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html)![1];
+const BODY = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html)![1];
 
-function preparaDom(): void {
+function prepareDom(): void {
   // Via gli `<script>`: qui i moduli li carica vitest, e un `type="module"`
   // dentro `innerHTML` non parte comunque.
-  document.body.innerHTML = CORPO.replace(/<script[\s\S]*?<\/script>/gi, "");
+  document.body.innerHTML = BODY.replace(/<script[\s\S]*?<\/script>/gi, "");
 }
 
-async function moduli() {
+async function loadViews() {
   return await import("./views");
 }
 
@@ -88,34 +88,34 @@ beforeEach(() => {
   vi.resetModules();
   renderView.mockClear();
   viewAction.mockClear();
-  preparaDom();
+  prepareDom();
 });
 
 describe("una view dell'area principale", () => {
   it("non si monta all'avvio: aspetta un riquadro", async () => {
     listViews.mockResolvedValueOnce([spec("graph", "main")]);
-    const views = await moduli();
+    const views = await loadViews();
     await views.mountDeclaredViews();
 
     // Nessun contenitore della shell l'ha presa, e nessuno l'ha chiesta al
     // kernel: un riquadro non è un posto che si riempie da solo.
     expect(renderView).not.toHaveBeenCalled();
     expect(document.getElementById("views-left")!.children).toHaveLength(0);
-    // …ma è **disponibile**, col titolo che finirà sulla tab.
-    expect(views.viewPrincipali().map((s) => s.id)).toEqual(["graph"]);
-    expect(views.viewPrincipale("graph")?.title).toBe("graph");
+    // …ma è **disponibile**, col titolo che finirà sulla linguetta.
+    expect(views.primaryViews().map((s) => s.id)).toEqual(["graph"]);
+    expect(views.primaryView("graph")?.title).toBe("graph");
   });
 
   // La prova che mancava, ed è quella che il grafo vuoto ha fatto scoprire a
   // mano: al kernel si nomina la **view**, non il pannello.
   it("montata in un riquadro, chiede al kernel la view e non il pannello", async () => {
     listViews.mockResolvedValueOnce([spec("graph", "main")]);
-    const views = await moduli();
+    const views = await loadViews();
     await views.mountDeclaredViews();
 
-    const riquadro = document.createElement("div");
-    document.body.appendChild(riquadro);
-    await views.montaVistaInRiquadro("graph", "main", riquadro);
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("graph", "main", pane);
 
     expect(renderView).toHaveBeenCalledWith("graph", "main", null);
   });
@@ -125,14 +125,14 @@ describe("una view dell'area principale", () => {
   // dove l'utente vede due cose.
   it("due riquadri sono due esemplari della stessa view", async () => {
     listViews.mockResolvedValueOnce([spec("graph", "main")]);
-    const views = await moduli();
+    const views = await loadViews();
     await views.mountDeclaredViews();
 
-    const uno = document.createElement("div");
-    const due = document.createElement("div");
-    document.body.append(uno, due);
-    await views.montaVistaInRiquadro("graph", "main", uno);
-    await views.montaVistaInRiquadro("graph", "pane-2", due);
+    const firstPane = document.createElement("div");
+    const secondPane = document.createElement("div");
+    document.body.append(firstPane, secondPane);
+    await views.mountViewInPane("graph", "main", firstPane);
+    await views.mountViewInPane("graph", "pane-2", secondPane);
 
     expect(renderView.mock.calls).toEqual([
       ["graph", "main", null],
@@ -142,12 +142,12 @@ describe("una view dell'area principale", () => {
 
   it("una view che nessuno dichiara non si monta", async () => {
     listViews.mockResolvedValueOnce([]);
-    const views = await moduli();
+    const views = await loadViews();
     await views.mountDeclaredViews();
 
-    const riquadro = document.createElement("div");
-    document.body.appendChild(riquadro);
-    await views.montaVistaInRiquadro("graph", "main", riquadro);
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("graph", "main", pane);
     expect(renderView).not.toHaveBeenCalled();
   });
 });
@@ -155,7 +155,7 @@ describe("una view dell'area principale", () => {
 describe("le superfici che questa shell ospita da sé", () => {
   it("una view di sidebar si monta all'avvio, e pannello e view si chiamano uguale", async () => {
     listViews.mockResolvedValueOnce([spec("tags", "left_sidebar")]);
-    const views = await moduli();
+    const views = await loadViews();
     await views.mountDeclaredViews();
 
     expect(renderView).toHaveBeenCalledWith("tags", "tags", null);
@@ -176,20 +176,20 @@ describe("le superfici che questa shell ospita da sé", () => {
 /// **per costruzione** invece che a memoria — ed è la ragione per cui questo
 /// blocco esiste: il `switch` di `surfaceContainer` lo tiene già onesto il
 /// compilatore, ma il compilatore non vede che tre superfici tornano `null` e
-/// solo due hanno una ragione scritta. Quella terza è `main`, che è ospitata da
+/// solo due hanno una ragione scritto. Quella terza è `main`, che è ospitata da
 /// un riquadro e non da un contenitore, e la differenza fra «non ancora» e «non
 /// si può» è tutta lì.
 ///
 /// Chi aggiunge una superficie al contratto trova questo rosso prima di M5.
 describe("ogni superficie del contratto è classificata", () => {
   /// Le superfici lette dal mirror, nell'ordine in cui il contratto le dichiara.
-  const DAL_CONTRATTO = [
-    .../export type ViewSurface =([\s\S]*?);/.exec(enumsGenerati)![1].matchAll(/"([a-z_]+)"/g),
+  const FROM_CONTRACT = [
+    .../export type ViewSurface =([\s\S]*?);/.exec(generatedEnums)![1].matchAll(/"([a-z_]+)"/g),
   ].map((m) => m[1]);
 
   /// Dove finisce una view che dichiara quella superficie. `null` vuol dire che
   /// la shell non la ospita e lo **dice**, invece di perderla in silenzio.
-  const ATTESE: Record<string, string | null> = {
+  const EXPECTED: Record<string, string | null> = {
     left_sidebar: "views-left",
     right_sidebar: "views-right",
     bottom: "views-bottom",
@@ -203,29 +203,29 @@ describe("ogni superficie del contratto è classificata", () => {
   };
 
   it("il mirror generato e questo banco parlano delle stesse superfici", () => {
-    expect(DAL_CONTRATTO.length).toBeGreaterThan(0);
-    expect([...DAL_CONTRATTO].sort()).toEqual(Object.keys(ATTESE).sort());
+    expect(FROM_CONTRACT.length).toBeGreaterThan(0);
+    expect([...FROM_CONTRACT].sort()).toEqual(Object.keys(EXPECTED).sort());
   });
 
-  for (const surface of Object.keys(ATTESE)) {
-    const dove = ATTESE[surface];
+  for (const surface of Object.keys(EXPECTED)) {
+    const where = EXPECTED[surface];
 
-    it(`\`${surface}\` finisce ${dove === null ? "in un avviso con la sua ragione" : `in \`${dove}\``}`, async () => {
+    it(`\`${surface}\` finisce ${where === null ? "in un avviso con la sua ragione" : `in \`${where}\``}`, async () => {
       listViews.mockResolvedValueOnce([spec("prova", surface as ViewSpec["surface"])]);
-      const views = await moduli();
+      const views = await loadViews();
       await views.mountDeclaredViews();
 
-      if (dove === "riquadro") {
+      if (where === "riquadro") {
         // L'area principale si dichiara e aspetta: non è montata, è
         // **disponibile**. È la strada che la 0079 ha aperto e che la §23.2 ha
         // verificato esistere davvero — un riquadro tiene una view, non per
         // forza un documento.
-        expect(views.viewPrincipali().map((s) => s.id)).toEqual(["prova"]);
+        expect(views.primaryViews().map((s) => s.id)).toEqual(["prova"]);
         return;
       }
 
-      expect(views.viewPrincipali()).toHaveLength(0);
-      if (dove === null) {
+      expect(views.primaryViews()).toHaveLength(0);
+      if (where === null) {
         // Non ospitata: nessun contenitore la prende, e nessuno la monta di
         // nascosto altrove.
         expect(renderView).not.toHaveBeenCalled();
@@ -234,9 +234,9 @@ describe("ogni superficie del contratto è classificata", () => {
       // `#views-ribbon` ha un figlio permanente (`#rail-shell`, §Fase 2):
       // la view si aggiunge dopo, non lo sostituisce. `#views-right` ha la
       // tablist dell'inspector (§Fase 3) che va in cima.
-      const figliAttesi =
-        dove === "views-ribbon" || dove === "views-right" ? 2 : 1;
-      expect(document.getElementById(dove)!.children).toHaveLength(figliAttesi);
+      const expectedChildren =
+        where === "views-ribbon" || where === "views-right" ? 2 : 1;
+      expect(document.getElementById(where)!.children).toHaveLength(expectedChildren);
     });
   }
 });
@@ -248,46 +248,46 @@ describe("un rimontaggio che non riesce", () => {
     // pannelli, alberi, mappe e i sette contenitori, e *poi* chiedeva l'elenco;
     // se la domanda falliva non c'era nessun `catch` da nessuna parte, e la
     // shell restava vuota per sempre — nemmeno un riquadro poteva più riaprire
-    // una view principale, perché `viewPrincipali()` era diventata vuota.
+    // una view principale, perché `primaryViews()` era diventata vuota.
     listViews.mockResolvedValueOnce([spec("tags", "left_sidebar"), spec("graph", "main")]);
-    const views = await moduli();
+    const views = await loadViews();
     await views.mountDeclaredViews();
-    const primaSidebar = document.querySelector("#views-left")!.childElementCount;
-    expect(primaSidebar).toBeGreaterThan(0);
-    expect(views.viewPrincipali().map((s) => s.id)).toEqual(["graph"]);
+    const beforeSidebar = document.querySelector("#views-left")!.childElementCount;
+    expect(beforeSidebar).toBeGreaterThan(0);
+    expect(views.primaryViews().map((s) => s.id)).toEqual(["graph"]);
 
     listViews.mockRejectedValueOnce(new Error("kernel in riavvio"));
     await expect(views.mountDeclaredViews()).rejects.toThrow("kernel in riavvio");
 
     // Vecchio, ma vivo: è la peggiore delle due cose che si possono avere e la
     // migliore delle due che si possono scegliere.
-    expect(document.querySelector("#views-left")!.childElementCount).toBe(primaSidebar);
-    expect(views.viewPrincipali().map((s) => s.id)).toEqual(["graph"]);
+    expect(document.querySelector("#views-left")!.childElementCount).toBe(beforeSidebar);
+    expect(views.primaryViews().map((s) => s.id)).toEqual(["graph"]);
   });
 
   it("due rimontaggi insieme: il vecchio non smonta ciò che il nuovo ha montato", async () => {
     // L'altra metà del 0088, quella che un token chiude. L'ordine di arrivo lo
     // decide il banco, non due latenze sperate.
-    const views = await moduli();
-    let risolviVecchio!: (v: ViewSpec[]) => void;
+    const views = await loadViews();
+    let resolveOld!: (v: ViewSpec[]) => void;
     listViews.mockImplementationOnce(
       () =>
         new Promise<ViewSpec[]>((res) => {
-          risolviVecchio = res;
+          resolveOld = res;
         }),
     );
-    const vecchio = views.mountDeclaredViews();
+    const old = views.mountDeclaredViews();
 
     listViews.mockResolvedValueOnce([spec("tags", "left_sidebar")]);
     await views.mountDeclaredViews();
-    const dopoIlNuovo = document.querySelector("#views-left")!.innerHTML;
+    const afterIlNewItem = document.querySelector("#views-left")!.innerHTML;
 
     // Il vecchio risponde adesso, con un elenco diverso: se arrivasse a montare,
     // smonterebbe prima tutto ciò che il nuovo ha appena messo.
-    risolviVecchio([spec("backlinks", "left_sidebar"), spec("stats", "right_sidebar")]);
-    await vecchio;
+    resolveOld([spec("backlinks", "left_sidebar"), spec("stats", "right_sidebar")]);
+    await old;
 
-    expect(document.querySelector("#views-left")!.innerHTML).toBe(dopoIlNuovo);
+    expect(document.querySelector("#views-left")!.innerHTML).toBe(afterIlNewItem);
     expect(document.querySelector("#views-right")!.childElementCount).toBe(0);
   });
 });

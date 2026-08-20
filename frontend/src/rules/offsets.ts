@@ -61,30 +61,30 @@ export function byteToCharIndex(text: string, byteOffset: number): number {
 /// Restituisce i byte **nell'ordine in cui gli indici sono arrivati**, non in
 /// quello ordinato: chi chiama ha delle coppie da ricomporre.
 export function charToByteIndices(text: string, charIndexes: readonly number[]): number[] {
-  const ordine = charIndexes
-    .map((valore, posto) => ({ valore, posto }))
-    .sort((a, b) => a.valore - b.valore);
+  const order = charIndexes
+    .map((value, position) => ({ value, position }))
+    .sort((a, b) => a.value - b.value);
   const out = new Array<number>(charIndexes.length).fill(0);
   let bytes = 0;
   let units = 0;
   let k = 0;
-  while (k < ordine.length && ordine[k].valore <= 0) {
-    out[ordine[k].posto] = 0;
+  while (k < order.length && order[k].value <= 0) {
+    out[order[k].position] = 0;
     k += 1;
   }
   for (const ch of text) {
-    while (k < ordine.length && units >= ordine[k].valore) {
-      out[ordine[k].posto] = bytes;
+    while (k < order.length && units >= order[k].value) {
+      out[order[k].position] = bytes;
       k += 1;
     }
-    if (k >= ordine.length) return out;
+    if (k >= order.length) return out;
     const cp = ch.codePointAt(0)!;
     bytes += utf8Len(cp);
     units += cp > 0xffff ? 2 : 1;
   }
   // Ciò che resta cade oltre la fine → tutto il documento, come l'andata.
-  while (k < ordine.length) {
-    out[ordine[k].posto] = bytes;
+  while (k < order.length) {
+    out[order[k].position] = bytes;
     k += 1;
   }
   return out;

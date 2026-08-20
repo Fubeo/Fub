@@ -630,7 +630,7 @@ fn sig_from(all: Vec<String>, result: String) -> RustSig {
             has_host = true;
             continue;
         }
-        assert_ne!(ty, SELF, "un provider non può comparire fra i parametri");
+        assert_eq!(ty, SELF, "un provider non può comparire fra i parametri");
         params.push(ty);
     }
     RustSig {
@@ -777,8 +777,8 @@ fn render(resolve: &Resolve, ty: &Type) -> String {
 fn load(source: &str) -> Wit {
     let mut resolve = Resolve::new();
     // Se il contratto non è un WIT valido il test muore QUI, ed è il punto.
-    if let Err(e) = resolve.push_str("wit/fub/abi.wit", source) {
-        panic!("wit/fub/abi.wit non è un WIT valido: {e:?}");
+    if let Err(and) = resolve.push_str("wit/fub/abi.wit", source) {
+        panic!("wit/fub/abi.wit non è un WIT valido: {and:?}");
     }
 
     let mut types: BTreeMap<String, Decl> = BTreeMap::new();
@@ -815,8 +815,8 @@ fn load(source: &str) -> Wit {
                         .map(|c| (c.name.clone(), c.ty.as_ref().map(|t| render(&resolve, t))))
                         .collect(),
                 ),
-                TypeDefKind::Enum(e) => {
-                    Shape::Enum(e.cases.iter().map(|c| c.name.clone()).collect())
+                TypeDefKind::Enum(and) => {
+                    Shape::Enum(and.cases.iter().map(|c| c.name.clone()).collect())
                 }
                 TypeDefKind::Type(t) => Shape::Alias(render(&resolve, t)),
                 TypeDefKind::List(t) => Shape::Alias(format!("list<{}>", render(&resolve, t))),
@@ -1022,17 +1022,17 @@ impl Wit {
         self.errors.push(msg);
     }
 
-    fn shape_of(&mut self, name: &str, atteso: &'static str) -> Option<&Shape> {
+    fn shape_of(&mut self, name: &str, expected: &'static str) -> Option<&Shape> {
         self.covered_types.insert(name.to_string());
         let Some(decl) = self.types.get(name) else {
             self.errors
-                .push(format!("`{name}` ({atteso}) manca dal WIT"));
+                .push(format!("`{name}` ({expected}) manca dal WIT"));
             return None;
         };
         let got = decl.shape.kind();
-        if got != atteso {
+        if got != expected {
             self.errors.push(format!(
-                "`{name}`: nel WIT è `{got}`, nell'abi è `{atteso}`"
+                "`{name}`: nel WIT è `{got}`, nell'abi è `{expected}`"
             ));
             return None;
         }
@@ -1434,8 +1434,8 @@ fn property_scalar_case(p: &PropertyScalar) -> Case {
     }
 }
 
-fn inline_case(i: &arena::Inline) -> Case {
-    match i {
+fn inline_case(the: &arena::Inline) -> Case {
+    match the {
         arena::Inline::Text(s) => case_ty("text", wit(s)),
         arena::Inline::Emph(v) => case_ty("emph", wit(v)),
         arena::Inline::Strong(v) => case_ty("strong", wit(v)),
@@ -1849,8 +1849,8 @@ fn view_update_case(v: &ViewUpdate) -> Case {
     }
 }
 
-fn event_case(e: &Event) -> Case {
-    match e {
+fn event_case(and: &Event) -> Case {
+    match and {
         Event::VaultOpened { root } => case_rec(
             "vault-opened",
             "event-vault-opened",
@@ -1996,7 +1996,7 @@ fn setting_value_case(v: &SettingValue) -> Case {
         SettingValue::Toggle(b) => case_ty("toggle", wit(b)),
         SettingValue::Number(n) => case_ty("number", wit(n)),
         SettingValue::Text(t) => case_ty("text", wit(t)),
-        SettingValue::List(l) => case_ty("list", wit(l)),
+        SettingValue::List(the) => case_ty("list", wit(the)),
     }
 }
 
@@ -2247,8 +2247,8 @@ fn property_test_case(t: &PropertyTest) -> Case {
     }
 }
 
-fn command_effect_case(e: &CommandEffect) -> Case {
-    match e {
+fn command_effect_case(and: &CommandEffect) -> Case {
+    match and {
         CommandEffect::Done => case("done"),
         CommandEffect::Navigate { doc } => case_ty("navigate", wit(doc)),
         CommandEffect::Reveal { doc, span } => case_rec(
@@ -2282,8 +2282,8 @@ fn undo_step_case(s: &UndoStep) -> Case {
     }
 }
 
-fn format_error_case(e: &FormatError) -> Case {
-    match e {
+fn format_error_case(and: &FormatError) -> Case {
+    match and {
         FormatError::Parse(s) => case_ty("parse", wit(s)),
         FormatError::Render(s) => case_ty("render", wit(s)),
         FormatError::Serialize(s) => case_ty("serialize", wit(s)),
@@ -2295,8 +2295,8 @@ fn format_error_case(e: &FormatError) -> Case {
     }
 }
 
-fn plugin_error_case(e: &PluginError) -> Case {
-    match e {
+fn plugin_error_case(and: &PluginError) -> Case {
+    match and {
         PluginError::UnknownCommand(s) => case_ty("unknown-command", wit(s)),
         PluginError::UnknownView(s) => case_ty("unknown-view", wit(s)),
         PluginError::UnknownJob(s) => case_ty("unknown-job", wit(s)),
@@ -2328,8 +2328,8 @@ fn paged_fields<T: WitType>(p: &Paged<T>) -> Vec<(&'static str, String)> {
     ]
 }
 
-fn import_outcome_case(o: &ImportOutcome) -> Case {
-    match o {
+fn import_outcome_case(or: &ImportOutcome) -> Case {
+    match or {
         ImportOutcome::Created => case("created"),
         ImportOutcome::Replaced => case("replaced"),
         ImportOutcome::Skipped => case("skipped"),
@@ -5478,7 +5478,7 @@ fn conform(source: &str) -> Result<(), String> {
     // per uguaglianza perché fra gli import risolti compaiono anche le
     // interfacce di soli **tipi** che quelle usano (`model`, `errors`, `index`,
     // …): sono dipendenze del grafo, non capacità concesse.
-    for famiglia in [
+    for family in [
         "host-vault-read",
         "host-vault-write",
         "host-vault-structure",
@@ -5498,8 +5498,8 @@ fn conform(source: &str) -> Result<(), String> {
         "host-transfer-write",
     ] {
         assert!(
-            imports.contains(famiglia),
-            "`plugin-world` deve importare `{famiglia}`, importa {imports:?}"
+            imports.contains(family),
+            "`plugin-world` deve importare `{family}`, importa {imports:?}"
         );
     }
     assert!(
@@ -5536,7 +5536,7 @@ fn conform(source: &str) -> Result<(), String> {
 
 fn wit_source() -> String {
     std::fs::read_to_string(WIT_PATH)
-        .unwrap_or_else(|e| panic!("impossibile leggere {WIT_PATH}: {e}"))
+        .unwrap_or_else(|and| panic!("impossibile leggere {WIT_PATH}: {and}"))
 }
 
 #[test]
@@ -5574,7 +5574,7 @@ fn the_expected_case_order_comes_from_the_rust_declaration() {
 /// il WIT e il mirror TS non sono due grafie della stessa cosa, e nessuno dei
 /// due si genera dall'altro.
 #[test]
-fn lo_stesso_nome_si_proietta_in_due_modi_diversi() {
+fn the_same_name_is_projected_in_two_different_ways() {
     for (rust, wit, json) in [
         ("DryRun", "dry-run", "dry_run"),
         ("LeftSidebar", "left-sidebar", "left_sidebar"),
@@ -5711,7 +5711,7 @@ fn wit_conformance_actually_fails_on_drift() {
     ];
 
     for (what, mutated, needle) in cases {
-        assert_ne!(&base, mutated, "la mutazione «{what}» non ha toccato nulla");
+        assert_eq!(&base, mutated, "la mutazione «{what}» non ha toccato nulla");
         let report = conform(mutated).expect_err(&format!(
             "«{what}» non ha fatto fallire il test di conformità"
         ));

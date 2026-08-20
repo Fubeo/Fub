@@ -29,7 +29,7 @@ use fub_abi::event::Event;
 use fub_abi::{PluginError, Severity};
 use fub_kernel::{ParsedChange, Workspace};
 
-use crate::custodia::Custodia;
+use crate::custody::Custody;
 
 /// Un rilevatore vivo: si tiene, e quando cade smette di guardare.
 ///
@@ -80,7 +80,7 @@ pub trait WatcherFactory: Send + Sync {
     fn start(
         &self,
         root: &Utf8Path,
-        workspace: Custodia<Workspace>,
+        workspace: Custody<Workspace>,
         watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String>;
 }
@@ -109,7 +109,7 @@ impl WatcherFactory for NoWatcher {
     fn start(
         &self,
         _root: &Utf8Path,
-        _workspace: Custodia<Workspace>,
+        _workspace: Custody<Workspace>,
         _watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String> {
         Ok(Box::new(NoWatcher))
@@ -181,11 +181,11 @@ pub enum ExternalChange {
 /// chi aspetta non aspetta più il lotto **intero**: fra la 2 e la 3 il lucchetto
 /// si rilascia, e i lettori in coda passano.
 pub struct ExternalSync {
-    workspace: Custodia<Workspace>,
+    workspace: Custody<Workspace>,
 }
 
 impl ExternalSync {
-    pub fn new(workspace: Custodia<Workspace>) -> Self {
+    pub fn new(workspace: Custody<Workspace>) -> Self {
         ExternalSync { workspace }
     }
 
@@ -255,7 +255,7 @@ impl ExternalSync {
     /// c'è per ogni fabbrica, e ciò che il rilevatore avrebbe visto se fosse
     /// stato acceso lo vede il workspace stesso.
     pub fn catch_up(&mut self) {
-        let _fase = tracing::info_span!(target: "fub.apertura", "catch_up").entered();
+        let _phase = tracing::info_span!(target: "fub.opening", "catch_up").entered();
         // Fase 1 — i piani, sotto prestito condiviso. Come in `batch`, un piano
         // `None` sta per i rami che non leggono niente (un file sparito, un
         // path di un'altra specie, una lettura fallita): la fase 2 li rifà per
@@ -298,15 +298,15 @@ impl ExternalSync {
         if flush_errors.is_empty() {
             return;
         }
-        for e in &flush_errors {
-            tracing::warn!(target: "fub.host", "flush indice: {e}");
+        for and in &flush_errors {
+            tracing::warn!(target: "fub.host", "flush index: {and}");
         }
         ws.with_host("fub.host", |host| {
-            for e in flush_errors {
+            for and in flush_errors {
                 host.emit(Event::Trouble {
                     severity: Severity::Warning,
                     subject: None,
-                    error: PluginError::Internal(format!("flush indice: {e}").into()),
+                    error: PluginError::Internal(format!("flush index: {and}").into()),
                     gate: None,
                 });
             }
@@ -324,22 +324,22 @@ impl ExternalSync {
     /// È `pub` come `batch`, e per la stessa ragione: le due cose che un
     /// rilevatore ha da dire al workspace sono «ecco cosa è cambiato» e «ho
     /// smesso di vedere», e la seconda non è meno di `notify` della prima.
-    pub fn watch_died(&mut self, motivi: Vec<String>) {
+    pub fn watch_died(&mut self, reasons: Vec<String>) {
         // I motivi si scrivono nel log **prima** del prestito: se il vault è
         // avvelenato il canale degli eventi non c'è più, e la ragione per cui
         // il rilevamento è morto resterebbe l'unica cosa che nessuno ha detto.
-        for motivo in &motivi {
-            tracing::error!(target: "fub.host", "{motivo}");
+        for reason in &reasons {
+            tracing::error!(target: "fub.host", "{reason}");
         }
         let Ok(mut ws) = self.workspace.write() else {
             return;
         };
         ws.with_host("fub.host", |host| {
-            for motivo in motivi {
+            for reason in reasons {
                 host.emit(Event::Trouble {
                     severity: Severity::Failure,
                     subject: None,
-                    error: PluginError::Internal(motivo.into()),
+                    error: PluginError::Internal(reason.into()),
                     gate: None,
                 });
             }
@@ -355,7 +355,7 @@ mod notify_watcher {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
-    use crate::custodia::Custodia;
+    use crate::custody::Custody;
     use std::time::Duration;
 
     use camino::{Utf8Path, Utf8PathBuf};
@@ -490,7 +490,7 @@ mod notify_watcher {
         fn start(
             &self,
             root: &Utf8Path,
-            workspace: Custodia<Workspace>,
+            workspace: Custody<Workspace>,
             watching: Arc<AtomicBool>,
         ) -> Result<Box<dyn VaultWatcher>, String> {
             let failed = watching.clone();
@@ -535,16 +535,16 @@ mod notify_watcher {
                         sync.watch_died(
                             errors
                                 .iter()
-                                .map(|e| format!("watch error: {e:?}"))
+                                .map(|and| format!("watch error: {and:?}"))
                                 .collect(),
                         );
                     }
                 },
             )
-            .map_err(|e| e.to_string())?;
+            .map_err(|and| and.to_string())?;
             debouncer
                 .watch(root.as_std_path(), RecursiveMode::Recursive)
-                .map_err(|e| e.to_string())?;
+                .map_err(|and| and.to_string())?;
             // Alzata **dopo** che `watch` è riuscita: fra il debouncer costruito
             // e la radice osservata c'è un errore possibile, e in mezzo la
             // risposta giusta è ancora `false`.
@@ -578,11 +578,11 @@ mod notify_watcher {
         /// scrittura si ripete finché la consegna non è partita, e ciò che si
         /// pretende è un ordine fra due fatti, non un tempo (§23.16).
         #[test]
-        fn chi_lascia_andare_il_rilevatore_aspetta_la_consegna_in_volo() {
-            let dir = tempfile::tempdir().expect("una cartella da guardare");
-            let (dice_sono_dentro, sono_dentro) = std::sync::mpsc::channel();
-            let consegnato = Arc::new(AtomicBool::new(false));
-            let dentro_al_lotto = consegnato.clone();
+        fn dropping_the_watcher_waits_for_the_in_flight_delivery() {
+            let dir = tempfile::tempdir().expect("a folder to watch");
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let delivered = Arc::new(AtomicBool::new(false));
+            let batch_done = delivered.clone();
             let mut debouncer = new_debouncer(
                 Duration::from_millis(20),
                 None,
@@ -590,58 +590,59 @@ mod notify_watcher {
                     if result.is_err() {
                         return;
                     }
-                    let _ = dice_sono_dentro.send(());
+                    let _ = sender.send(());
                     // Ciò che un lotto vero fa qui è `ExternalSync::batch`: il
                     // workspace in scrittura e gli indici resi durevoli. Quanto
                     // duri non conta, conta che stia ancora durando.
+        /// **L'anello che si chiudeva.** Questi sono gli eventi che inotify
                     std::thread::sleep(Duration::from_millis(300));
-                    dentro_al_lotto.store(true, Ordering::SeqCst);
+                    batch_done.store(true, Ordering::SeqCst);
                 },
             )
-            .expect("il debouncer parte");
+            .expect("the debouncer starts");
             debouncer
                 .watch(dir.path(), RecursiveMode::Recursive)
-                .expect("la radice si guarda");
+                .expect("the root is watched");
             let watching = Arc::new(AtomicBool::new(true));
-            let rilevatore = Debounced {
+            let watcher = Debounced {
                 debouncer: Some(debouncer),
                 watching: watching.clone(),
             };
 
-            let mut partita = false;
+            let mut started = false;
             for n in 0..100 {
-                std::fs::write(dir.path().join(format!("nota-{n}.md")), b"ciao")
-                    .expect("una nota che cambia");
-                if sono_dentro.recv_timeout(Duration::from_millis(100)).is_ok() {
-                    partita = true;
+                std::fs::write(dir.path().join(format!("note-{n}.md")), b"hello")
+                    .expect("a file that changes");
+                if receiver.recv_timeout(Duration::from_millis(100)).is_ok() {
+                    started = true;
                     break;
                 }
             }
             assert!(
-                partita,
-                "il rilevatore non ha mai consegnato: senza un lotto in volo \
-                 questo banco non prova niente"
+                started,
+                "the watcher never delivered: without a batch in flight \
+                 this test proves nothing"
             );
 
-            drop(rilevatore);
+            drop(watcher);
 
             assert!(
-                consegnato.load(Ordering::SeqCst),
-                "il vault si è chiuso con un lotto ancora in volo: fra un istante \
-                 prenderà il workspace in scrittura e renderà durevoli gli indici \
-                 dentro un vault che nessuno guarda più"
+                delivered.load(Ordering::SeqCst),
+                "the vault closed with a batch still in flight: in a moment it \
+                 will take the workspace for writing and make indices durable \
+                 inside a vault nobody watches any more"
             );
             assert!(
                 !watching.load(Ordering::Relaxed),
-                "chi ha smesso di guardare non l'ha detto"
+                "the one that stopped watching did not say so"
             );
         }
 
-        /// **L'anello che si chiudeva.** Questi sono gli eventi che inotify
         /// riporta quando Fub apre un documento per localizzare le occorrenze
         /// di una ricerca: se contassero come cambiamenti, il rilevatore
         /// chiederebbe al kernel di rileggere ciò che il kernel ha appena
         /// letto — e la rilettura sarebbe un'altra apertura.
+        /// E ciò che cambia davvero continua ad arrivare: il filtro sta fra le
         #[test]
         fn reading_a_document_is_not_changing_it() {
             for kind in [
@@ -650,12 +651,12 @@ mod notify_watcher {
                 EventKind::Access(AccessKind::Close(AccessMode::Read)),
                 EventKind::Modify(ModifyKind::Metadata(MetadataKind::AccessTime)),
             ] {
-                assert!(!is_a_change_kind(&kind), "{kind:?} non è un cambiamento");
+                assert!(!is_a_change_kind(&kind), "{kind:?} is not a change");
             }
         }
 
-        /// E ciò che cambia davvero continua ad arrivare: il filtro sta fra le
         /// letture e le scritture, non fra il rilevatore e il vault.
+                // Chi non sa dire cosa è successo va creduto: meglio una
         #[test]
         fn what_changes_still_gets_through() {
             for kind in [
@@ -663,16 +664,15 @@ mod notify_watcher {
                 EventKind::Modify(ModifyKind::Data(DataChange::Content)),
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
                 EventKind::Remove(RemoveKind::File),
-                // Chi non sa dire cosa è successo va creduto: meglio una
                 // rilettura in più di un indice che drifta.
+        /// **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
                 EventKind::Any,
                 EventKind::Other,
             ] {
-                assert!(is_a_change_kind(&kind), "{kind:?} è un cambiamento");
+                assert!(is_a_change_kind(&kind), "{kind:?} is a change");
             }
         }
 
-        /// **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
         /// caduta).
         ///
         /// La riga temeva che la metà «da» di una rinomina restasse appesa in
@@ -694,36 +694,37 @@ mod notify_watcher {
         /// prima la nascita della nota dev'essere stata consegnata, poi la sua
         /// sparizione dev'essere un secondo lotto. Se la metà «da» non uscisse,
         /// il secondo lotto non arriverebbe mai.
+            // Fuori dalla cartella guardata: una partenza che non avrà mai un
         #[test]
-        fn una_rinomina_orfana_esce_come_un_path_toccato() {
-            let dentro = tempfile::tempdir().expect("la cartella guardata");
-            let fuori = tempfile::tempdir().expect("una cartella che nessuno guarda");
-            let (dice, lotti) = std::sync::mpsc::channel();
+        fn an_orphan_rename_emerges_as_a_touched_path() {
+            let inside = tempfile::tempdir().expect("the watched folder");
+            let outside = tempfile::tempdir().expect("a folder nobody watches");
+            let (sender, receiver) = std::sync::mpsc::channel();
             let mut debouncer = new_debouncer(
                 Duration::from_millis(20),
                 None,
                 move |result: DebounceEventResult| {
-                    let Ok(eventi) = result else { return };
-                    let eventi: Vec<_> = eventi.into_iter().filter(is_a_change).collect();
-                    if eventi.is_empty() {
+                    let Ok(events) = result else { return };
+                    let events: Vec<_> = events.into_iter().filter(is_a_change).collect();
+                    if events.is_empty() {
                         return;
                     }
-                    let _ = dice.send(changes(eventi));
+                    let _ = sender.send(changes(events));
                 },
             )
-            .expect("un rilevatore");
+            .expect("a watcher");
             debouncer
-                .watch(dentro.path(), RecursiveMode::Recursive)
-                .expect("guardare la cartella");
+                .watch(inside.path(), RecursiveMode::Recursive)
+                .expect("watching the folder");
 
-            let nota = dentro.path().join("nota.md");
-            let toccata = ExternalChange::Touched(
-                Utf8PathBuf::from_path_buf(nota.clone()).expect("un path utf-8"),
+            let notes = inside.path().join("note.md");
+            let touched = ExternalChange::Touched(
+                Utf8PathBuf::from_path_buf(notes.clone()).expect("a utf-8 path"),
             );
-            let arriva = || {
+            let arrives = || {
                 for _ in 0..50 {
-                    if let Ok(lotto) = lotti.recv_timeout(Duration::from_millis(100)) {
-                        if lotto.contains(&toccata) {
+                    if let Ok(batch) = receiver.recv_timeout(Duration::from_millis(100)) {
+                        if batch.contains(&touched) {
                             return true;
                         }
                     }
@@ -731,21 +732,21 @@ mod notify_watcher {
                 false
             };
 
-            std::fs::write(&nota, b"ciao").expect("una nota");
+            std::fs::write(&notes, b"hello").expect("a note");
             assert!(
-                arriva(),
-                "la nascita della nota non è stata consegnata: senza questa \
-                 prima metà il banco non prova niente"
+                arrives(),
+                "the birth of the note was not delivered: without this \
+                 first half the test proves nothing"
             );
 
-            // Fuori dalla cartella guardata: una partenza che non avrà mai un
             // arrivo da accoppiarci.
-            std::fs::rename(&nota, fuori.path().join("nota.md")).expect("la rinomina orfana");
+            // arrivo da accoppiarci.
+            std::fs::rename(&notes, outside.path().join("note.md")).expect("the orphan rename");
             assert!(
-                arriva(),
-                "la metà «da» di una rinomina orfana non è uscita: la nota è \
-                 sparita dal disco e resta viva in anagrafe finché qualcuno non \
-                 riapre il vault"
+                arrives(),
+                "the 'from' half of an orphan rename did not come out: the note \
+                 is gone from disk and stays alive in the registry until someone \
+                 reopens the vault"
             );
         }
     }

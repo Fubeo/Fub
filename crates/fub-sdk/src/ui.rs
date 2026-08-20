@@ -27,8 +27,8 @@ use fub_abi::ui::{ActionRef, UiNode};
 ///
 /// Prende una **chiave**, non una stringa (§12.1): la prosa sta nel catalogo di
 /// chi scrive il provider, e la shell non conosce le chiavi di nessuno.
-pub fn segnaposto(chiave: &str) -> UiNode {
-    UiNode::empty_state(Text::key(chiave))
+pub fn placeholder(key: &str) -> UiNode {
+    UiNode::empty_state(Text::key(key))
 }
 
 /// Una riga cliccabile che porta con sé il dato su cui l'azione va servita.
@@ -38,22 +38,22 @@ pub fn segnaposto(chiave: &str) -> UiNode {
 /// ridisegni** — il documento, non la posizione nell'elenco. Prima della
 /// [decisione 0016](../../../docs/decisions/0016-cosa-e-una-view.md) il dato
 /// veniva codificato dentro l'`ActionId` e ognuno lo codificava a modo suo.
-pub fn riga_con_dato(
-    titolo: impl Into<Text>,
-    sottotitolo: Option<Text>,
-    azione: &str,
-    campo: &str,
-    valore: &str,
+pub fn row_with_datum(
+    title: impl Into<Text>,
+    subtitle: Option<Text>,
+    action: &str,
+    field: &str,
+    value: &str,
 ) -> UiNode {
     UiNode::list_item(
-        titolo,
-        sottotitolo,
+        title,
+        subtitle,
         Some(ActionRef::with(
-            azione,
-            serde_json::json!({ campo: valore }),
+            action,
+            serde_json::json!({ field: value }),
         )),
     )
-    .with_key(valore)
+    .with_key(value)
 }
 
 #[cfg(test)]
@@ -62,23 +62,23 @@ mod tests {
     use fub_abi::ui::UiKind;
 
     #[test]
-    fn il_segnaposto_e_uno_stato_vuoto_non_un_testo_in_una_colonna() {
+    fn placeholder_is_an_empty_state_not_text_in_a_column() {
         // La differenza si vede quando è la shell a doverlo disegnare
         // diversamente dal contenuto.
         assert!(matches!(
-            segnaposto("empty").kind,
+            placeholder("empty").kind,
             UiKind::EmptyState { .. }
         ));
     }
 
     #[test]
-    fn la_riga_porta_il_dato_nel_payload_e_si_riconosce_fra_due_ridisegni() {
-        let riga = riga_con_dato("Nota", None, "open", "doc", "a/Uno.md");
-        assert_eq!(riga.key.as_deref(), Some("a/Uno.md"));
-        let UiKind::ListItem { action, .. } = &riga.kind else {
-            panic!("una riga è un ListItem");
+    fn row_carries_the_datum_in_the_payload_and_is_identifiable_across_redraws() {
+        let row = row_with_datum("Note", None, "open", "doc", "a/One.md");
+        assert_eq!(row.key.as_deref(), Some("a/One.md"));
+        let UiKind::ListItem { action, .. } = &row.kind else {
+            panic!("a row is a ListItem");
         };
-        let action = action.as_ref().expect("la riga ha un'azione");
-        assert_eq!(action.payload["doc"], "a/Uno.md");
+        let action = action.as_ref().expect("a row has an action");
+        assert_eq!(action.payload["doc"], "a/One.md");
     }
 }

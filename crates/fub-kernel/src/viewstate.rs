@@ -50,7 +50,7 @@ use std::sync::{Arc, RwLock};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{non_lo_sovrascrivo, update_atomic};
+use crate::storage::{do_not_overwrite, update_atomic};
 use fub_abi::schema::SchemaVersion;
 
 /// La versione di schema del file (§15.3).
@@ -89,7 +89,7 @@ impl ViewStates {
     pub fn open(path: &Utf8Path) -> (Arc<Self>, Option<String>) {
         let (vaults, warning) = match load(path) {
             Ok(vaults) => (vaults, None),
-            Err(e) => (BTreeMap::new(), Some(e)),
+            Err(and) => (BTreeMap::new(), Some(and)),
         };
         (
             Arc::new(ViewStates {
@@ -138,7 +138,7 @@ impl ViewStates {
         key: &str,
         value: Option<serde_json::Value>,
     ) -> Result<(), String> {
-        self.muta(|next| match value {
+        self.mutate(|next| match value {
             Some(v) => {
                 next.entry(vault.to_string())
                     .or_default()
@@ -154,8 +154,8 @@ impl ViewStates {
             None => {
                 if let Some(keys) = next
                     .get_mut(vault)
-                    .and_then(|o| o.get_mut(owner))
-                    .and_then(|i| i.get_mut(instance))
+                    .and_then(|or| or.get_mut(owner))
+                    .and_then(|the| the.get_mut(instance))
                 {
                     keys.remove(key);
                 }
@@ -181,7 +181,7 @@ impl ViewStates {
     /// **mezzo** dimenticato, con lo scroll ancora lì sotto l'altro nome.
     ///
     /// Con la firma che prende l'insieme quel mezzo non esiste: è
-    /// [`ViewStates::muta`] una volta sola, cioè una sola scrittura atomica,
+    /// [`ViewStates::mutate`] una volta sola, cioè una sola scrittura atomica,
     /// che o toglie tutte le forme o non ne toglie nessuna. È la stessa riga di
     /// `Registry::forget`, che dallo stesso chiamante riceve lo stesso elenco —
     /// e chi le chiama entrambe non ha più modo di scrivere il ciclo che stava
@@ -191,7 +191,7 @@ impl ViewStates {
     ///
     /// C'era una scorciatoia — *se in memoria non c'è, non costa una scrittura*
     /// — e chiedeva alla copia sbagliata. La copia in memoria è vecchia per
-    /// definizione ([`ViewStates::muta`]: è **il disco** che si rilegge sotto
+    /// definizione ([`ViewStates::mutate`]: è **il disco** che si rilegge sotto
     /// lock, apposta), quindi lo scroll depositato da un'altra finestra di Fub
     /// dopo la nostra apertura sta nel file e non qui: la scorciatoia lo
     /// dichiarava assente, tornava `Ok`, e quel vault restava là dentro per
@@ -199,15 +199,15 @@ impl ViewStates {
     /// un file che non cala mai, che è precisamente ciò che questa funzione
     /// esiste per evitare. Costava una scrittura risparmiata su un gesto che si
     /// fa una volta ogni tanto.
-    pub fn forget_vault(&self, forme: &[Utf8PathBuf]) -> Result<(), String> {
-        self.muta(|next| {
-            for forma in forme {
-                next.remove(forma.as_str());
+    pub fn forget_vault(&self, forms: &[Utf8PathBuf]) -> Result<(), String> {
+        self.mutate(|next| {
+            for form in forms {
+                next.remove(form.as_str());
             }
         })
     }
 
-    /// Una mutazione dello stato di vista: si applica a ciò che **sul disco c'è
+    /// Una mutatezione dello stato di vista: si applica a ciò che **sul disco c'è
     /// adesso**, non alla copia in memoria di chi la chiede.
     ///
     /// È la forma che il §15.2 chiede a chi ricompone un file della macchina
@@ -217,9 +217,9 @@ impl ViewStates {
     /// quelli dell'altra. Ciò che le due si scambiano non è mai la stessa
     /// chiave, quindi la fusione le tiene entrambe.
     ///
-    /// La mutazione si scrive **una volta sola** e vale per i due casi: in
+    /// La mutatezione si scrive **una volta sola** e vale per i due casi: in
     /// memoria si applica alla mappa che c'è, su disco a quella riletta.
-    fn muta(&self, f: impl FnOnce(&mut BTreeMap<String, Owners>)) -> Result<(), String> {
+    fn mutate(&self, f: impl FnOnce(&mut BTreeMap<String, Owners>)) -> Result<(), String> {
         let mut vaults = self.vaults.write().expect("stato di vista");
         let Some(path) = &self.path else {
             f(&mut vaults);
@@ -229,13 +229,13 @@ impl ViewStates {
             path,
             // La rilettura è il cancello: vedi `non_lo_sovrascrivo`.
             || {
-                load(path).map_err(|e| {
-                    non_lo_sovrascrivo(&e, "lo stato di vista che contiene andrebbe perso")
+                load(path).map_err(|and| {
+                    do_not_overwrite(&and, "lo stato di vista che contiene andrebbe perso")
                 })
             },
-            |disco| {
-                f(disco);
-                encode(disco)
+            |disk| {
+                f(disk);
+                encode(disk)
             },
         )?;
         Ok(())
@@ -247,7 +247,7 @@ fn encode(vaults: &BTreeMap<String, Owners>) -> Result<Vec<u8>, String> {
         version: SCHEMA_VERSION,
         vaults: vaults.clone(),
     };
-    serde_json::to_vec_pretty(&file).map_err(|e| e.to_string())
+    serde_json::to_vec_pretty(&file).map_err(|and| and.to_string())
 }
 
 /// Toglie i contenitori rimasti vuoti dopo un `set(.., None)`.
@@ -272,7 +272,7 @@ fn load(path: &Utf8Path) -> Result<BTreeMap<String, Owners>, String> {
     match std::fs::read_to_string(path) {
         Ok(json) => {
             let file: ViewStateFile = serde_json::from_str(&json)
-                .map_err(|e| format!("{path} non è uno stato di vista valido: {e}"))?;
+                .map_err(|and| format!("{path} non è uno stato di vista valido: {and}"))?;
             if file.version > SCHEMA_VERSION {
                 return Err(format!(
                     "{path} è scritto nella versione {} di questo formato, e questa \
@@ -282,8 +282,8 @@ fn load(path: &Utf8Path) -> Result<BTreeMap<String, Owners>, String> {
             }
             Ok(file.vaults)
         }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
-        Err(e) => Err(format!("non riesco a leggere {path}: {e}")),
+        Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(and) => Err(format!("non riesco a leggere {path}: {and}")),
     }
 }
 
@@ -298,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    fn due_esemplari_della_stessa_view_hanno_due_stati() {
+    fn two_instances_of_the_same_view_have_two_states() {
         // È la ragione per cui la chiave porta l'esemplare e non solo la view:
         // lo stesso pannello aperto due volte ha due scroll, ed è il
         // «per-pannello» che il §11.2 chiedeva.
@@ -320,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn lo_stesso_esemplare_in_due_vault_non_si_mescola() {
+    fn the_same_instance_in_two_vault_not_is_mixes() {
         let states = ViewStates::in_memory();
         states
             .set("/a", "p", "i", "aperte", Some(serde_json::json!(["x"])))
@@ -329,7 +329,7 @@ mod tests {
     }
 
     #[test]
-    fn un_proprietario_non_vede_la_chiave_di_un_altro() {
+    fn a_owner_not_sees_the_key_of_a_other() {
         let states = ViewStates::in_memory();
         states
             .set("/v", "p", "i", "k", Some(serde_json::json!(1)))
@@ -338,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn dimenticare_una_chiave_non_lascia_contenitori_vuoti() {
+    fn forget_a_key_not_leaves_containers_empty() {
         let states = ViewStates::in_memory();
         states
             .set("/v", "p", "i", "k", Some(serde_json::json!(1)))
@@ -351,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    fn dimenticare_un_vault_dimentica_come_lo_si_guardava() {
+    fn forget_a_vault_forgets_as_the_is_watched() {
         let states = ViewStates::in_memory();
         states
             .set("/a", "p", "i", "k", Some(serde_json::json!(1)))
@@ -378,11 +378,11 @@ mod tests {
     /// compilatore a presidiare, non l'asserzione; l'asserzione dice cosa il
     /// compilatore sta proteggendo.
     #[test]
-    fn le_forme_di_una_radice_se_ne_vanno_in_una_mossa_sola() {
+    fn the_forms_of_a_root_if_of_it_go_in_a_move_single() {
         let states = ViewStates::in_memory();
-        for forma in ["/var/vault", "/private/var/vault"] {
+        for form in ["/var/vault", "/private/var/vault"] {
             states
-                .set(forma, "p", "i", "k", Some(serde_json::json!(1)))
+                .set(form, "p", "i", "k", Some(serde_json::json!(1)))
                 .unwrap();
         }
         states
@@ -402,36 +402,36 @@ mod tests {
     /// La scorciatoia «se in memoria non c'è, non costa una scrittura»
     /// interrogava la copia vecchia per decidere di non guardare quella fresca.
     /// Qui il file cresce dopo l'apertura — che è ciò che fa una seconda
-    /// finestra di Fub aperta sullo stesso vault, e la ragione per cui `muta`
+    /// finestra di Fub aperta sullo stesso vault, e la ragione per cui `mutate`
     /// rilegge il disco sotto lock — e con la scorciatoia `forget_vault`
     /// rispondeva `Ok` senza togliere niente: il vault spariva dal registro, e
     /// il suo scroll restava in un file che non cala mai.
     #[test]
-    fn dimentica_anche_cio_che_e_arrivato_nel_file_dopo_l_apertura() {
+    fn forgets_also_that_that_and_arrived_in_the_file_after_the_opening() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("view-state.json");
         let (states, _) = ViewStates::open(&path);
 
         // Un'altra finestra deposita lo scroll di un vault che questa copia in
         // memoria non ha mai visto.
-        let (altra, _) = ViewStates::open(&path);
-        altra
+        let (other, _) = ViewStates::open(&path);
+        other
             .set("/a", "p", "i", "k", Some(serde_json::json!(1)))
             .unwrap();
 
         states.forget_vault(&[Utf8PathBuf::from("/a")]).unwrap();
 
-        let (riletto, warning) = ViewStates::open(&path);
+        let (reopened, warning) = ViewStates::open(&path);
         assert!(warning.is_none());
         assert_eq!(
-            riletto.get("/a", "p", "i", "k"),
+            reopened.get("/a", "p", "i", "k"),
             None,
             "dimenticare guarda il file, non il ricordo che se ne aveva"
         );
     }
 
     #[test]
-    fn sopravvive_a_un_giro_su_disco() {
+    fn survives_a_a_round_on_disk() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("view-state.json");
         let (states, warning) = ViewStates::open(&path);
@@ -440,10 +440,10 @@ mod tests {
             .set("/v", "p", "i", "scroll", Some(serde_json::json!(42)))
             .unwrap();
 
-        let (riletto, warning) = ViewStates::open(&path);
+        let (reopened, warning) = ViewStates::open(&path);
         assert!(warning.is_none());
         assert_eq!(
-            riletto.get("/v", "p", "i", "scroll"),
+            reopened.get("/v", "p", "i", "scroll"),
             Some(serde_json::json!(42))
         );
     }
@@ -451,19 +451,19 @@ mod tests {
     /// La regola della 0036, di nuovo: leggere a vuoto salva il file per il
     /// tempo di **una** scrittura, perché scriverne una lo riscrive intero.
     #[test]
-    fn un_file_rotto_non_lo_riscrive_la_prima_scrittura() {
+    fn a_file_broken_not_the_rewrites_the_first_write() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("view-state.json");
-        let rotto = "{ \"version\": 1, \"vaults\": {,} }";
-        std::fs::write(&path, rotto).unwrap();
+        let broken = "{ \"version\": 1, \"vaults\": {,} }";
+        std::fs::write(&path, broken).unwrap();
 
         let (states, warning) = ViewStates::open(&path);
         assert!(warning.is_some(), "e lo dice");
-        let e = states
+        let and = states
             .set("/v", "p", "i", "k", Some(serde_json::json!(1)))
             .expect_err("non si scrive su ciò che non si è letto");
-        assert!(e.contains("non lo sovrascrive"), "{e}");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), rotto);
+        assert!(and.contains("non lo sovrascrive"), "{and}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
     }
 
     /// **E un file corretto a mano non aspetta una riapertura** (difetto 0170).
@@ -473,7 +473,7 @@ mod tests {
     /// nessuno, e si scopre riaprendo — cioè con l'unico gesto che rimetteva a
     /// posto anche la bandiera.
     #[test]
-    fn un_file_corretto_a_mano_non_aspetta_una_riapertura() {
+    fn a_file_correct_a_hand_not_waits_a_reopening() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("view-state.json");
         std::fs::write(&path, "{ \"version\": 1, \"vaults\": {,} }").unwrap();
@@ -498,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn un_file_dal_futuro_non_si_indovina() {
+    fn a_file_from_the_future_not_is_guesses() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("view-state.json");
         std::fs::write(&path, "{ \"version\": 99, \"vaults\": {} }").unwrap();

@@ -1,0 +1,1030 @@
+// Senza la cargo feature `search` (§16.3) questo banco non ha soggetto.
+#![cfg(feature = "search")]
+//! Il canale dati con **due** indici veri: quello del kernel (metadati, tag,
+//! grafo) e tantivy.
+//!
+//! È il banco che prima non si poteva montare, perché prima non c'era niente da
+//! pianificare: la ricerca era una stringa in un linguaggio di terzi e le
+//! proprietà erano un'altra variante, quindi «le note `tipo: progetto` che
+//! parlano di rust» non era una domanda esprimibile — era due domande e
+//! un'intersezione fatta a mano da chi disegna, cioè una cosa che un plugin non
+//! poteva fare e la shell sì.
+//!
+//! Ogni test qui prova una delle tre metà della seduta 5 messe insieme: il
+//! linguaggio (§5.3), il routing dichiarato (§5.2) e le risposte del kernel come
+//! provider (§5.1).
+
+use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
+use fub_abi::model::{DocId, LinkTarget, PropertyValue};
+use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextMode, TextQuery};
+use fub_abi::traits::{
+    DocumentMatch, Excerpts, IndexQuery, IndexResult, LinkDirection, Page, PropertyFilter,
+    PropertySelect, PropertySort, PropertyTest,
+};
+use fub_abi::PluginError;
+use fub_features::{SearchIndex, SEARCH_ID};
+use fub_format_markdown::MarkdownProvider;
+use fub_kernel::{FormatRegistry, Workspace};
+
+/// Un vault in cui testo e frontmatter dicono cose **diverse**: è l'unico modo
+/// perché un join possa sbagliare in modo visibile.
+fn vault() -> (tempfile::TempDir, Workspace) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+    let write = |rel: &str, body: &str| {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    };
+
+    // Progetto, parla di rust.
+    write(
+        "Progetti/Ferrite.md",
+        "---\ntipo: progetto\npriorita: 3\n---\n# Ferrite\n\nUn motore in rust. #lavoro\n",
+    );
+    // Progetto, NON parla di rust.
+    write(
+        "Progetti/Cucina.md",
+        "---\ntipo: progetto\npriorita: 9\n---\nRicette e liste della spesa. #casa\n",
+    );
+    // Parla di rust ma NON è un progetto.
+    write(
+        "Appunti/Rust in breve.md",
+        "---\ntipo: nota\n---\nAppunti sparsi su rust e i suoi bordi. #lavoro\n",
+    );
+    // Archiviata: parla di rust ed è un progetto, ma sta altrove.
+    write(
+        "Archivio/Vecchio.md",
+        "---\ntipo: progetto\npriorita: 1\n---\nUn vecchio esperimento in rust. #lavoro/vecchio\n",
+    );
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
+    ws.register_core_feature(SEARCH_ID, SEARCH_ID)
+        .expect("dichiarato");
+    let data = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
+    let index = SearchIndex::open(&data).expect("indice");
+    ws.register_index_provider(SEARCH_ID, Box::new(index))
+        .expect("registrazione e attivazione");
+    ws.reindex().expect("reindex");
+    (dir, ws)
+}
+
+fn lit(predicate: QueryPredicate) -> QueryLiteral {
+    QueryLiteral {
+        negated: false,
+        predicate,
+    }
+}
+
+fn not(predicate: QueryPredicate) -> QueryLiteral {
+    QueryLiteral {
+        negated: true,
+        predicate,
+    }
+}
+
+fn clause(all: Vec<QueryLiteral>) -> QueryExpr {
+    QueryExpr {
+        any: vec![QueryClause { all }],
+    }
+}
+
+fn text(q: &str) -> QueryPredicate {
+    QueryPredicate::Text(TextQuery::terms(q))
+}
+
+fn properties(key: &str, test: PropertyTest) -> QueryPredicate {
+    QueryPredicate::Property {
+        filter: PropertyFilter {
+            key: key.to_string(),
+            test,
+        },
+    }
+}
+
+fn documents(ws: &Workspace, matching: QueryExpr) -> Vec<DocumentMatch> {
+    page(ws, matching, None, PropertySelect::None, None).items
+}
+
+fn ids(ws: &Workspace, matching: QueryExpr) -> Vec<String> {
+    let mut ids: Vec<String> = documents(ws, matching)
+        .into_iter()
+        .map(|d| d.doc.to_string())
+        .collect();
+    ids.sort();
+    ids
+}
+
+fn page(
+    ws: &Workspace,
+    matching: QueryExpr,
+    sort: Option<PropertySort>,
+    select: PropertySelect,
+    page: Option<Page>,
+) -> fub_abi::traits::Paged<DocumentMatch> {
+    match ws.query_index(IndexQuery::Documents {
+        matching,
+        sort,
+        select,
+        page,
+        excerpts: Excerpts::Attach,
+    }) {
+        Ok(IndexResult::Documents(page)) => page,
+        other => panic!("attesi documenti, trovato {other:?}"),
+    }
+}
+
+/// **Il test che conta di più.** Senza di lui gli altri provano due canali che
+/// funzionano ognuno per conto suo — che è esattamente ciò che c'era prima.
+///
+/// La domanda ha due foglie di due proprietari: il testo lo sa solo tantivy (il
+/// kernel non indicizza il corpo), il frontmatter lo sa solo il kernel. Nessuno
+/// dei due può rispondere da solo, e la risposta non è né l'una né l'altra.
+#[test]
+fn the_notes__of__a_kind_that_speak__of_something() {
+    let (_g, ws) = vault();
+
+    let join = clause(vec![
+        lit(text("rust")),
+        lit(properties(
+            "tipo",
+            PropertyTest::Equals(PropertyValue::Text("progetto".into())),
+        )),
+    ]);
+    assert_eq!(
+        ids(&ws, join),
+        ["Archivio/Vecchio.md", "Progetti/Ferrite.md"],
+        "chi parla di rust E è un progetto: non la nota (che non è un progetto) \
+         né Cucina (che non parla di rust)"
+    );
+
+    // Le due metà, da sole, dicono cose diverse: è la prova che l'intersezione
+    // non è una delle due travestita.
+    assert_eq!(
+        ids(&ws, clause(vec![lit(text("rust"))])),
+        [
+            "Appunti/Rust in breve.md",
+            "Archivio/Vecchio.md",
+            "Progetti/Ferrite.md"
+        ]
+    );
+    assert_eq!(
+        ids(
+            &ws,
+            clause(vec![lit(properties(
+                "tipo",
+                PropertyTest::Equals(PropertyValue::Text("progetto".into()))
+            ))])
+        ),
+        [
+            "Archivio/Vecchio.md",
+            "Progetti/Cucina.md",
+            "Progetti/Ferrite.md"
+        ]
+    );
+}
+
+/// La negazione attraversa il confine fra i due indici: «parla di rust ma non
+/// sta in Archivio» è una clausola sola con un letterale negato, e il
+/// complemento si prende sull'universo del vault.
+#[test]
+fn a_leaf_denied_removes__from_what_is_the_other_has_selected() {
+    let (_g, ws) = vault();
+    let q = clause(vec![
+        lit(text("rust")),
+        not(QueryPredicate::Folder {
+            path: "Archivio".into(),
+            descendants: true,
+        }),
+    ]);
+    assert_eq!(
+        ids(&ws, q),
+        ["Appunti/Rust in breve.md", "Progetti/Ferrite.md"]
+    );
+}
+
+/// L'OR fra due clausole di proprietari diversi: nessun indice vede l'intera
+/// domanda, e la risposta è l'unione delle due metà — senza ripetizioni, perché
+/// una nota che soddisfa entrambe compare una volta sola.
+#[test]
+fn the_union_of_two_clauses_from_different_owners() {
+    let (_g, ws) = vault();
+    let q = QueryExpr {
+        any: vec![
+            QueryClause {
+                all: vec![lit(text("ricette"))],
+            },
+            QueryClause {
+                all: vec![lit(properties("priorita", PropertyTest::Exists))],
+            },
+        ],
+    };
+    assert_eq!(
+        ids(&ws, q),
+        [
+            "Archivio/Vecchio.md",
+            "Progetti/Cucina.md",
+            "Progetti/Ferrite.md"
+        ],
+        "Cucina soddisfa entrambe le clausole e compare una volta"
+    );
+}
+
+/// Il **pushdown**: se una clausola è tutta di un motore, ci va intera invece
+/// di essere ricomposta a mano. È ciò che tiene vero il filtro dentro tantivy
+/// (decisione 0005) adesso che l'ambito è una foglia come le altre.
+#[test]
+fn a_clause_all__of__a_engine_there_goes_whole() {
+    let (_g, ws) = vault();
+    let q = IndexQuery::Documents {
+        matching: clause(vec![
+            lit(text("rust")),
+            lit(QueryPredicate::Folder {
+                path: "Progetti".into(),
+                descendants: true,
+            }),
+        ]),
+        sort: None,
+        select: PropertySelect::None,
+        page: None,
+        excerpts: Excerpts::Attach,
+    };
+    let plan = ws.query_plan(&q);
+    let step = plan.steps.first().expect("un passo");
+    assert!(
+        step.pushed_down,
+        "la clausola è andata giù intera: {plan:?}"
+    );
+    assert_eq!(step.evaluator.as_deref(), Some(SEARCH_ID));
+
+    match ws.query_index(q) {
+        Ok(IndexResult::Documents(page)) => {
+            assert_eq!(page.items.len(), 1);
+            assert_eq!(page.items[0].doc, DocId::new("Progetti/Ferrite.md"));
+            assert_eq!(
+                page.total, 1,
+                "il totale viene dal motore, non da un ritaglio a valle"
+            );
+        }
+        other => panic!("attesi documenti, trovato {other:?}"),
+    }
+
+    // E quando la clausola è mista, il pushdown non c'è e il piano lo dice: le
+    // due foglie vanno ai due proprietari e il kernel ricompone.
+    let mista = ws.query_plan(&IndexQuery::Documents {
+        matching: clause(vec![
+            lit(text("rust")),
+            lit(properties("tipo", PropertyTest::Exists)),
+        ]),
+        sort: None,
+        select: PropertySelect::None,
+        page: None,
+        excerpts: Excerpts::Attach,
+    });
+    assert!(mista.steps.iter().all(|s| !s.pushed_down));
+    let a_who: Vec<Option<&str>> = mista.steps.iter().map(|s| s.evaluator.as_deref()).collect();
+    assert_eq!(a_who, [Some(SEARCH_ID), Some(fub_kernel::CORE_ID)]);
+}
+
+/// La riga di una risposta porta ciò che le è stato chiesto, e l'ordine è
+/// quello che si è chiesto: un elenco di risultati è una **collezione**, non
+/// una lista di titoli, e le due cose erano due varianti separate.
+#[test]
+fn a_row_carries_relevance_extracted__and_columns_together() {
+    let (_g, ws) = vault();
+    let page = page(
+        &ws,
+        clause(vec![lit(text("rust"))]),
+        Some(PropertySort {
+            key: "priorita".into(),
+            descending: true,
+        }),
+        PropertySelect::keys(&["tipo", "priorita"]),
+        None,
+    );
+    let rows: Vec<(String, Vec<String>)> = page
+        .items
+        .iter()
+        .map(|d| {
+            (
+                d.doc.to_string(),
+                d.properties.iter().map(|p| p.key.clone()).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                "Progetti/Ferrite.md".to_string(),
+                vec!["priorita".to_string(), "tipo".to_string()]
+            ),
+            (
+                "Archivio/Vecchio.md".to_string(),
+                vec!["priorita".to_string(), "tipo".to_string()]
+            ),
+            // Chi non ha la chiave di ordinamento va in fondo, in entrambi i
+            // versi: è la regola delle proprietà, e non cambia perché adesso a
+            // ordinare è il pianificatore.
+            (
+                "Appunti/Rust in breve.md".to_string(),
+                vec!["tipo".to_string()]
+            ),
+        ]
+    );
+    assert!(
+        page.items[0].score.is_some(),
+        "la rilevanza c'è: a selezionare è stato (anche) del testo"
+    );
+    assert!(page.items[0].snippet.is_some());
+}
+
+/// I tag di un **sottoinsieme**: le faccette che la decisione 0005 aveva
+/// dichiarato fuori portata («servono un campo facet nel motore, e la decisione
+/// di chi le calcola»). Con un linguaggio non servono: il sottoinsieme è una
+/// query, e i tag li conta chi li ha in cache.
+#[test]
+fn the_tag__of__a_result_are_the_its_facets() {
+    let (_g, ws) = vault();
+
+    let all = match ws.query_index(IndexQuery::Tags {
+        matching: QueryExpr::all(),
+        page: None,
+    }) {
+        Ok(IndexResult::Tags(t)) => t.items,
+        other => panic!("attesi tag, trovato {other:?}"),
+    };
+    assert_eq!(
+        all
+            .iter()
+            .map(|t| (t.name.as_str(), t.count))
+            .collect::<Vec<_>>(),
+        [("casa", 1), ("lavoro", 2), ("lavoro/vecchio", 1)]
+    );
+
+    // Le faccette di «chi parla di rust»: la domanda attraversa i due indici —
+    // il sottoinsieme lo sceglie tantivy, i tag li conta il kernel.
+    let facets = match ws.query_index(IndexQuery::Tags {
+        matching: clause(vec![lit(text("rust"))]),
+        page: None,
+    }) {
+        Ok(IndexResult::Tags(t)) => t.items,
+        other => panic!("attesi tag, trovato {other:?}"),
+    };
+    assert_eq!(
+        facets
+            .iter()
+            .map(|t| (t.name.as_str(), t.count))
+            .collect::<Vec<_>>(),
+        [("lavoro", 2), ("lavoro/vecchio", 1)],
+        "#casa non c'è: Cucina non parla di rust"
+    );
+}
+
+/// Il grafo intero in **una** domanda, che è ciò che rende inutile un comando
+/// bespoke sull'IPC (§5.4): semi = tutto il vault, un passo, verso uscente.
+#[test]
+fn the_graph_whole__and__a_question_single() {
+    let (_g, ws) = vault();
+    // Ferrite → Cucina, così c'è almeno un arco da trovare.
+    ws.read_source(&DocId::new("Progetti/Ferrite.md"))
+        .expect("la nota c'è");
+    let mut ws = ws;
+    ws.write_document(
+        &DocId::new("Progetti/Ferrite.md"),
+        "---\ntipo: progetto\npriorita: 3\n---\nUn motore in rust, vedi [[Cucina]]. #lavoro\n",
+        WriteBase::Dictated,
+    )
+    .expect("scrittura");
+
+    let edges = match ws.query_index(IndexQuery::Neighbors {
+        seeds: QueryExpr::all(),
+        direction: LinkDirection::Outbound,
+        depth: 1,
+        page: None,
+    }) {
+        Ok(IndexResult::Neighbors(n)) => n.items,
+        other => panic!("attesi vicini, trovato {other:?}"),
+    };
+    let drawn: Vec<(String, String)> = edges
+        .iter()
+        .map(|n| (n.via.to_string(), n.doc.to_string()))
+        .collect();
+    assert_eq!(
+        drawn,
+        [(
+            "Progetti/Ferrite.md".to_string(),
+            "Progetti/Cucina.md".to_string()
+        )],
+        "a un passo il `via` è il seme: ogni riga È un arco"
+    );
+}
+
+/// Una domanda che nessuno serve non è una risposta vuota, ed è la diagnostica
+/// che il routing dichiarato porta con sé (§5.2 + §12.2).
+#[test]
+fn what_nobody_needs_says_so() {
+    let (_g, ws) = vault();
+    let r = ws.query_index(IndexQuery::Custom {
+        ns: "plugin.che.non.ce".into(),
+        query: serde_json::Value::Null,
+    });
+    assert!(matches!(r, Err(PluginError::Unserved(_))), "{r:?}");
+
+    // E ciò che qualcuno serve ma che non trova niente resta una risposta.
+    assert!(documents(&ws, clause(vec![lit(text("brontosauro"))])).is_empty());
+}
+
+/// «Ogni documento» detto con una clausola vuota **in mezzo ad altre** resta
+/// ogni documento, anche per chi non saprebbe valutare le foglie che le stanno
+/// accanto.
+///
+/// È la forma che un query builder produce da solo: un gruppo di righe ancora
+/// vuoto accanto a uno riempito. L'espressione è tutta per l'identità dell'OR,
+/// ma le sue foglie hanno proprietari diversi — e il pianificatore consegnava
+/// al destinatario l'albero originale invece di quello risolto, così l'indice
+/// del kernel riceveva una foglia di testo e rispondeva `Unserved` a una
+/// domanda la cui risposta è tutto. Si vedeva su `PropertyValues` e
+/// `Neighbors`; `Tags` si salvava per una guardia propria e `Documents` perché
+/// il routing manda la foglia al suo proprietario.
+#[test]
+fn a_clause_empty_beside_a__a_leaf_foreign__remains_every_document() {
+    let (_g, ws) = vault();
+    let all__and__a_leaf_foreign = QueryExpr {
+        any: vec![
+            QueryClause { all: vec![] },
+            QueryClause {
+                all: vec![lit(text("rust"))],
+            },
+        ],
+    };
+    assert!(
+        all__and__a_leaf_foreign.is_everything(),
+        "una clausola vuota in OR è l'identità: l'espressione seleziona tutto"
+    );
+
+    let values = ws.query_index(IndexQuery::PropertyValues {
+        key: "tipo".into(),
+        matching: all__and__a_leaf_foreign.clone(),
+        page: None,
+    });
+    let answer = values.expect("le faccette di tutto");
+    let IndexResult::PropertyValues(values) = answer else {
+        panic!("il canale ha risposto fuori tema");
+    };
+    assert_eq!(
+        values.total, 2,
+        "`tipo` vale progetto o nota su tutto il vault"
+    );
+
+    let nearby = ws.query_index(IndexQuery::Neighbors {
+        seeds: all__and__a_leaf_foreign.clone(),
+        direction: LinkDirection::Outbound,
+        depth: 1,
+        page: None,
+    });
+    assert!(nearby.is_ok(), "i vicini di tutto: {nearby:?}");
+
+    // Le altre due passavano già, e devono continuare a passare per la stessa
+    // ragione delle prime due e non per la propria.
+    let tag = ws.query_index(IndexQuery::Tags {
+        matching: all__and__a_leaf_foreign.clone(),
+        page: None,
+    });
+    assert!(tag.is_ok(), "i tag di tutto: {tag:?}");
+    assert_eq!(
+        ids(&ws, all__and__a_leaf_foreign).len(),
+        4,
+        "e i documenti sono il vault intero, non i soli che parlano di rust"
+    );
+}
+
+/// La frase esatta è un modo della foglia, non delle virgolette dentro una
+/// stringa che qualcun altro parsa.
+#[test]
+fn the_phrase_exact__and__a_way__does_not__a_syntax() {
+    let (_g, ws) = vault();
+    let phrase = |t: &str| {
+        clause(vec![lit(QueryPredicate::Text(TextQuery {
+            mode: TextMode::Phrase,
+            ..TextQuery::terms(t)
+        }))])
+    };
+    assert_eq!(ids(&ws, phrase("motore in rust")), ["Progetti/Ferrite.md"]);
+    assert!(
+        ids(&ws, phrase("rust motore")).is_empty(),
+        "la sequenza conta: due termini in ordine diverso non sono la frase"
+    );
+    // Gli stessi due termini, come termini, la trovano lo stesso.
+    assert_eq!(
+        ids(&ws, clause(vec![lit(text("rust motore"))])),
+        ["Progetti/Ferrite.md"]
+    );
+}
+
+/// Un vault di note **indistinguibili per la ricerca**: stesso testo, quindi
+/// stesso punteggio. È l'unico modo per vedere chi rompe la parità, e i nomi
+/// sono scelti perché l'ordine di scrittura non sia già quello di `DocId`.
+fn vault_on_equal_terms() -> (tempfile::TempDir, Workspace) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+    for rel in ["z.md", "m.md", "a.md", "q.md", "b.md"] {
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join(rel), "parola uguale per tutti\n").unwrap();
+    }
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
+    ws.register_core_feature(SEARCH_ID, SEARCH_ID)
+        .expect("dichiarato");
+    let data = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
+    let index = SearchIndex::open(&data).expect("indice");
+    ws.register_index_provider(SEARCH_ID, Box::new(index))
+        .expect("registrazione e attivazione");
+    ws.reindex().expect("reindex");
+    (dir, ws)
+}
+
+/// A pari rilevanza l'ordine è quello del **contratto**, anche quando a
+/// rispondere è un indice che il kernel non ha scritto.
+///
+/// `properties::finish` rompe la parità per `DocId` (decisione 0020), e non è
+/// estetica: è ciò che rende l'ordine **totale e stabile**, cioè ciò che tiene
+/// onesta la paginazione. Un indice di terzi ha il suo ordine interno — tantivy
+/// rompe la parità per indirizzo di segmento, che cambia quando i segmenti si
+/// fondono — e se la sua risposta arrivasse alla shell senza passare dalla coda
+/// del contratto, due pagine della stessa domanda potrebbero ripetere e saltare
+/// righe.
+#[test]
+fn a_equal_relevance_sorts_the_contract__does_not_the_engine() {
+    let (_g, ws) = vault_on_equal_terms();
+    let query = || clause(vec![lit(text("parola"))]);
+
+    let all = page(&ws, query(), None, PropertySelect::None, None);
+    let order: Vec<String> = all.items.iter().map(|d| d.doc.to_string()).collect();
+    assert_eq!(
+        order,
+        ["a.md", "b.md", "m.md", "q.md", "z.md"],
+        "a pari punteggio la parità si rompe per DocId, non per l'ordine interno del motore"
+    );
+
+    // E la conseguenza che conta: la finestra scorre senza ripetere né saltare.
+    let mut browsed: Vec<String> = Vec::new();
+    for offset in [0u32, 2, 4] {
+        let p = page(
+            &ws,
+            query(),
+            None,
+            PropertySelect::None,
+            Some(Page { offset, limit: 2 }),
+        );
+        assert_eq!(p.total, 5, "il totale non dipende dalla finestra");
+        browsed.extend(p.items.iter().map(|d| d.doc.to_string()));
+    }
+    assert_eq!(
+        browsed, order,
+        "sfogliare la stessa domanda deve dare la stessa risposta, in pezzi"
+    );
+}
+
+/// E quando i punteggi **non** sono pari, comanda la rilevanza.
+///
+/// Il gemello del test qui sopra, e serve a dire che la coda del contratto non
+/// ha appiattito tutto sull'ordine dei `DocId`: chi ha cercato si aspetta i
+/// risultati migliori in cima, e la parità è solo ciò che si rompe *dopo*.
+#[test]
+fn without_key__of_ordering_commands_the_relevance() {
+    let (_g, ws) = vault();
+    let items = page(
+        &ws,
+        clause(vec![lit(text("rust"))]),
+        None,
+        PropertySelect::None,
+        None,
+    )
+    .items;
+
+    let punteggi: Vec<f32> = items.iter().map(|d| d.score.expect("rilevanza")).collect();
+    assert!(
+        punteggi.len() >= 3,
+        "il vault ne ha tre che parlano di rust"
+    );
+    assert!(
+        punteggi.windows(2).all(|w| w[0] >= w[1]),
+        "i risultati scendono per rilevanza: {punteggi:?}"
+    );
+    // Senza questo l'asserzione sopra sarebbe vera anche a punteggi tutti
+    // uguali, cioè non proverebbe niente.
+    assert!(
+        punteggi.first() > punteggi.last(),
+        "e i punteggi sono davvero diversi: {punteggi:?}"
+    );
+}
+
+/// **Cosa nomina questo riferimento** (§13.1): le tre specie di bersaglio
+/// passano dal canale dati, e la risposta è la stessa per la shell e per un
+/// provider.
+///
+/// Prima questa domanda usciva solo per `resolve_link`, un comando IPC scritto
+/// apposta: la sola risposta sul vault che la shell sapeva chiedere e un plugin
+/// no. Il presidio guarda proprio quella simmetria — la strada è
+/// `query_index`, che è ciò che una feature ha e nient'altro.
+#[test]
+fn what_names__a_reference_the__says_the_channel_data() {
+    let (_g, ws) = vault();
+    let resolves = |target: LinkTarget, from: Option<&str>| -> Option<String> {
+        match ws
+            .query_index(IndexQuery::Resolve {
+                target,
+                from: from.map(DocId::new),
+            })
+            .expect("il kernel serve `resolve`")
+        {
+            IndexResult::Resolved(found) => found.map(|r| r.doc.0),
+            other => panic!("risposta fuori tema: {}", other.kind_name()),
+        }
+    };
+
+    // Wiki: il nome nudo, regola Obsidian.
+    assert_eq!(
+        resolves(LinkTarget::wiki("Ferrite"), None).as_deref(),
+        Some("Progetti/Ferrite.md")
+    );
+    // E `from` per un wikilink non cambia niente: la regola non guarda da dove
+    // si sta scrivendo.
+    assert_eq!(
+        resolves(LinkTarget::wiki("Ferrite"), Some("Archivio/Vecchio.md")).as_deref(),
+        Some("Progetti/Ferrite.md")
+    );
+
+    // Path: relativo alla cartella di chi lo ospita…
+    assert_eq!(
+        resolves(
+            LinkTarget::Path("Cucina.md".into()),
+            Some("Progetti/Ferrite.md")
+        )
+        .as_deref(),
+        Some("Progetti/Cucina.md")
+    );
+    // …e senza un ospite, relativo alla radice. Sono due risposte **diverse**
+    // per la stessa stringa, ed è la ragione per cui `from` sta nella domanda
+    // invece che essere indovinato.
+    assert_eq!(resolves(LinkTarget::Path("Cucina.md".into()), None), None);
+    assert_eq!(
+        resolves(LinkTarget::Path("Progetti/Cucina.md".into()), None).as_deref(),
+        Some("Progetti/Cucina.md")
+    );
+
+    // Il mondo esterno non è nel vault, e dirlo è una risposta: chi passa qui
+    // l'esito di `classify` senza filtrarlo prima riceve `None`, non un errore.
+    assert_eq!(
+        resolves(LinkTarget::Url("https://example.org".into()), None),
+        None
+    );
+
+    // Un nome che non nomina niente è `None` e non un errore: è il caso da cui
+    // nascono «crea la nota che manca» e il redirect.
+    assert_eq!(resolves(LinkTarget::wiki("Inesistente"), None), None);
+}
+
+// ---------------------------------------------------------------------------
+// Le coordinate: dove sta un risultato, dove punta un riferimento (0049)
+// ---------------------------------------------------------------------------
+
+/// Un vault fatto per le **posizioni**: una parola che compare più volte nella
+/// stessa nota, un heading, un'ancora di blocco, e una nota che li nomina.
+fn vault__with_points() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+    let write = |rel: &str, body: &str| {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    };
+
+    write(
+        "Note/Doppia.md",
+        "# Il gatto\n\nIl gatto dorme sul divano.\n\nPoi il Gatto si sveglia. ^risveglio\n",
+    );
+    write(
+        "Note/Rimando.md",
+        "Vedi [[Doppia#^risveglio]] e [[Doppia#Il gatto]].\n",
+    );
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
+    ws.register_core_feature(SEARCH_ID, SEARCH_ID)
+        .expect("dichiarato");
+    let data = ws.plugin_data_dir(SEARCH_ID).expect("spazio dati");
+    let index = SearchIndex::open(&data).expect("indice");
+    ws.register_index_provider(SEARCH_ID, Box::new(index))
+        .expect("registrazione e attivazione");
+    ws.reindex().expect("reindex");
+    (dir, ws, root)
+}
+
+/// La §21.3: un risultato sa dire **a che punto** del documento sta, e la
+/// seconda occorrenza ha lo span della seconda.
+///
+/// Prima di questa firma il pannello poteva aprire la nota e basta: gli
+/// `highlights` sono offset dentro l'estratto, e fra l'estratto e il file non
+/// c'è nessuna coordinata. Qui si verifica la cosa che quella distanza rendeva
+/// inesprimibile — non difficile: **inesprimibile**.
+#[test]
+fn a_result_knows_say_a_that_point__of_the_document_is() {
+    let (_g, ws, root) = vault__with_points();
+    let source = std::fs::read_to_string(root.join("Note/Doppia.md")).expect("il sorgente");
+
+    let hits = documents(&ws, clause(vec![lit(text("gatto"))]));
+    let duplicate = hits
+        .iter()
+        .find(|m| m.doc.as_str() == "Note/Doppia.md")
+        .expect("la nota che parla di gatti");
+
+    // Tre occorrenze: l'heading e i due paragrafi. Non è il conto a essere il
+    // punto — è che siano **più di una**, che è la forma che «un estratto per
+    // documento» non poteva portare.
+    assert!(
+        duplicate.occurrences.len() >= 3,
+        "una nota può portare N punti a cui saltare, non uno: {:?}",
+        duplicate.occurrences
+    );
+    // Gli span sono byte del SORGENTE, non dello snippet: si tagliano sul file
+    // e devono cadere sulla parola cercata, maiuscola compresa.
+    for point in &duplicate.occurrences {
+        let found = &source[point.span.start..point.span.end];
+        assert_eq!(
+            found.to_lowercase(),
+            "gatto",
+            "lo span cade sul termine, nel sorgente"
+        );
+    }
+    // In ordine di posizione, e la seconda è davvero la seconda.
+    let spans: Vec<usize> = duplicate.occurrences.iter().map(|p| p.span.start).collect();
+    let mut ordered = spans.clone();
+    ordered.sort_unstable();
+    assert_eq!(spans, ordered, "in ordine di posizione");
+    assert_eq!(
+        duplicate.occurrences[1].span.start,
+        source.match_indices("gatto").nth(1).expect("la seconda").0,
+        "il secondo risultato porta alla SECONDA occorrenza"
+    );
+
+    // E ognuna dice **di quando**: uno span invecchia appena il documento
+    // cambia sotto, e la revisione è quella del sorgente su cui è stato
+    // misurato — non una presa altrove.
+    let revision = fub_abi::edit::Revision::of(&source);
+    for point in &duplicate.occurrences {
+        assert_eq!(
+            point.revision, revision,
+            "la posizione porta la sua revisione"
+        );
+    }
+}
+
+/// Le occorrenze si calcolano solo per chi ha cercato del **testo**: una
+/// selezione che non ha niente da localizzare non paga nessuna lettura.
+#[test]
+fn a_selection__without_text__does_not_carries_coordinate() {
+    let (_g, ws, _root) = vault__with_points();
+    let hits = documents(
+        &ws,
+        clause(vec![lit(QueryPredicate::Folder {
+            path: "Note".into(),
+            descendants: false,
+        })]),
+    );
+    assert!(!hits.is_empty(), "la cartella c'è");
+    for hit in &hits {
+        assert!(
+            hit.occurrences.is_empty(),
+            "`occurrences` vuoto = nessuno le ha calcolate, ed è il caso di chi \
+             non ha cercato niente da localizzare"
+        );
+    }
+}
+
+/// La §21.10: `[[Nota#^blocco]]` e `[[Nota#Sezione]]` sanno dire **dove
+/// dentro**, e un punto che non c'è più non impedisce di aprire.
+#[test]
+fn a_reference_a__a_point_knows_say_where_points() {
+    let (_g, ws, root) = vault__with_points();
+    let source = std::fs::read_to_string(root.join("Note/Doppia.md")).expect("il sorgente");
+
+    let resolves = |target: LinkTarget| match ws
+        .query_index(IndexQuery::Resolve { target, from: None })
+        .expect("il kernel serve `resolve`")
+    {
+        IndexResult::Resolved(found) => found,
+        other => panic!("risposta fuori tema: {}", other.kind_name()),
+    };
+
+    // Il blocco: l'ancora è la chiave, e lo span è quello del blocco che la
+    // porta. Il parser la produce dalla 0003 e nessuno la leggeva.
+    let block = resolves(LinkTarget::Wiki {
+        page: "Doppia".into(),
+        heading: None,
+        block: Some("risveglio".into()),
+    })
+    .expect("la nota c'è");
+    assert_eq!(block.doc.as_str(), "Note/Doppia.md");
+    let point = block.at.expect("e il punto dentro");
+    assert_eq!(point.anchor.as_deref(), Some("risveglio"));
+    assert!(
+        source[point.span.start..point.span.end].contains("si sveglia"),
+        "lo span è quello del blocco ancorato, nel sorgente"
+    );
+
+    // L'heading: altro spazio di nomi, stessa risposta.
+    let section = resolves(LinkTarget::Wiki {
+        page: "Doppia".into(),
+        heading: Some("Il gatto".into()),
+        block: None,
+    })
+    .expect("la nota c'è");
+    let point = section.at.expect("e il punto dentro");
+    assert_eq!(
+        point.anchor.as_deref(),
+        Some("il-gatto"),
+        "lo slug dell'heading"
+    );
+    assert_eq!(point.span.start, 0, "l'heading apre il documento");
+
+    // Un riferimento che nomina la nota e basta non si inventa un punto.
+    assert_eq!(resolves(LinkTarget::wiki("Doppia")).expect("c'è").at, None);
+
+    // E un punto che non c'è (o non c'è più) lascia la risposta al documento:
+    // si apre in cima, che è più di quel che si faceva prima e meno di una
+    // bugia.
+    let vanished = resolves(LinkTarget::Wiki {
+        page: "Doppia".into(),
+        block: Some("mai-esistito".into()),
+        heading: None,
+    })
+    .expect("la nota c'è lo stesso");
+    assert_eq!(vanished.doc.as_str(), "Note/Doppia.md");
+    assert_eq!(vanished.at, None);
+}
+
+/// Un wikilink **senza pagina** — `[[#Sezione]]`, `[[#^blocco]]` — nomina il
+/// documento che lo ospita.
+///
+/// La regola sta nel kernel e non in chi risolve, e la ragione è la solita: a
+/// chiedere `resolve` non è solo questa shell, e la metà dei wikilink che un
+/// documento contiene può essere di questa specie. Chi ci arrivava prima
+/// riceveva `None` — cioè «link rotto» — e la shell, che è l'unica ad averci
+/// provato, si fermava un passo prima con un `if` che sapeva solo tacere.
+#[test]
+fn a_reference__without_page_names_who_the_hosts() {
+    let (_g, ws, _root) = vault__with_points();
+    let resolves = |target: LinkTarget, from: Option<&str>| match ws
+        .query_index(IndexQuery::Resolve {
+            target,
+            from: from.map(DocId::new),
+        })
+        .expect("il kernel serve `resolve`")
+    {
+        IndexResult::Resolved(found) => found,
+        other => panic!("risposta fuori tema: {}", other.kind_name()),
+    };
+    let within = |heading: Option<&str>, block: Option<&str>| LinkTarget::Wiki {
+        page: String::new(),
+        heading: heading.map(str::to_string),
+        block: block.map(str::to_string),
+    };
+
+    // L'heading: il documento è quello che ospita il link, e il punto si cerca
+    // dentro di lui come per ogni altro riferimento.
+    let section = resolves(within(Some("Il gatto"), None), Some("Note/Doppia.md"))
+        .expect("il documento che ospita il link");
+    assert_eq!(section.doc.as_str(), "Note/Doppia.md");
+    assert_eq!(
+        section.at.expect("e il punto dentro").anchor.as_deref(),
+        Some("il-gatto")
+    );
+
+    // Il blocco: altro spazio di nomi, stessa risposta.
+    let block = resolves(within(None, Some("risveglio")), Some("Note/Doppia.md"))
+        .expect("il documento che ospita il link");
+    assert_eq!(block.doc.as_str(), "Note/Doppia.md");
+    assert_eq!(
+        block.at.expect("e il punto dentro").anchor.as_deref(),
+        Some("risveglio")
+    );
+
+    // **Senza un ospite non c'è niente da nominare**: `[[#Sezione]]` non è un
+    // riferimento a un documento in particolare, è un riferimento a *questo*, e
+    // chi chiede senza dire quale non ha fatto una domanda intera. È la stessa
+    // regola che `from` ha già per i path relativi, letta in un caso in più.
+    assert_eq!(resolves(within(Some("Il gatto"), None), None), None);
+
+    // E un wikilink senza pagina **e senza punto** non nomina niente: `[[]]`
+    // non è «questo documento», è un link vuoto.
+    assert_eq!(resolves(within(None, None), Some("Note/Doppia.md")), None);
+}
+
+/// Un vault con **due sezioni omonime** nella stessa nota: è lo stato in cui
+/// un id generato e un frammento cercato si scoprono d'accordo o no.
+fn vault__with_same_named() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+    std::fs::create_dir_all(root.join("Note")).unwrap();
+    std::fs::write(
+        root.join("Note/Omonime.md"),
+        "## Note\n\nla prima sezione parla di alberi.\n\n\
+         ## Corpo\n\nin mezzo.\n\n\
+         ## Note\n\nla seconda sezione parla di radici.\n",
+    )
+    .unwrap();
+
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("nessun conflitto di estensioni");
+    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
+    ws.reindex().expect("reindex");
+    (dir, ws, root)
+}
+
+/// Chi **genera** l'id di un titolo e chi **risolve** un `#frammento` devono
+/// nominare lo stesso punto, e questo è il verso che nessun test per-crate
+/// prende: il generatore sta nel provider markdown, il resolver nel kernel, e
+/// finché la disambiguazione non esisteva erano d'accordo per la ragione
+/// sbagliata — atterravano **entrambi** sul primo di due omonimi, e il secondo
+/// non era nominabile da nessuna sintassi.
+///
+/// Il presidio si prova rosso cambiando **uno solo** dei due lati.
+#[test]
+fn who_generates__a_id__and_who_resolves__a_fragment_name_the__same_point() {
+    let (_g, ws, root) = vault__with_same_named();
+    let source = std::fs::read_to_string(root.join("Note/Omonime.md")).expect("il sorgente");
+
+    let resolves = |heading: &str| match ws
+        .query_index(IndexQuery::Resolve {
+            target: LinkTarget::Wiki {
+                page: "Omonime".into(),
+                heading: Some(heading.into()),
+                block: None,
+            },
+            from: None,
+        })
+        .expect("il kernel serve `resolve`")
+    {
+        IndexResult::Resolved(found) => found.expect("la nota c'è").at,
+        other => panic!("risposta fuori tema: {}", other.kind_name()),
+    };
+
+    let before = resolves("Note").expect("il punto della prima");
+    assert_eq!(before.anchor.as_deref(), Some("note"));
+    assert!(
+        source[before.span.start..].starts_with("## Note\n\nla prima"),
+        "`#Note` resta la prima sezione: nessun link già scritto cambia destinazione"
+    );
+
+    // E la seconda, che prima di questa firma era irraggiungibile.
+    let second = resolves("Note 1").expect("il punto della seconda");
+    assert_eq!(second.anchor.as_deref(), Some("note-1"));
+    assert!(
+        source[second.span.start..].starts_with("## Note\n\nla seconda"),
+        "il frammento disambiguato atterra sulla SECONDA sezione omonima"
+    );
+
+    // L'accordo, detto per intero: l'ancora che il resolver restituisce è un
+    // id che esiste davvero nell'HTML, per ogni titolo del documento.
+    let reso = ws
+        .render_preview(&DocId::new("Note/Omonime.md"))
+        .expect("la resa");
+    for heading in ["Note", "Note 1", "Corpo"] {
+        let point = resolves(heading).expect("ogni titolo si risolve");
+        let id = point.anchor.expect("con la sua ancora");
+        assert!(
+            reso.html.contains(&format!("id=\"{id}\"")),
+            "il resolver nomina `{id}`, che nell'HTML non esiste: html={}",
+            reso.html
+        );
+    }
+
+    // Anche l'embed guarda la stessa sezione del link: `![[Nota#Note 1]]` e
+    // `[[Nota#Note 1]]` non possono mostrare due cose.
+    let (_id, embed) = ws
+        .render_embed("Omonime", Some("Note 1"), None)
+        .expect("l'embed della seconda");
+    assert!(
+        embed.html.contains("radici") && !embed.html.contains("alberi"),
+        "l'embed disambiguato ritaglia la seconda sezione: {}",
+        embed.html
+    );
+}

@@ -13,7 +13,7 @@
 // `--accent-contrast` esiste per stare sopra `--accent` — è scritto nel suo
 // nome —, `--text` e `--muted` stanno sopra le quattro superfici, `--doc-fg`
 // sopra `--doc-bg`. La tabella qui sotto è quell'elenco, e non un campione: se
-// una coppia è nella tabella è perché una regola della **pelle** (`pelle.css`)
+// una coppia è nella tabella è perché una regola della **pelle** (`skin.css`)
 // la mette davvero insieme, e il commento accanto dice quale.
 //
 // Il presidio non è il conto: il conto lo sapeva fare chiunque anche prima. Il
@@ -25,8 +25,8 @@
 //
 // # Cosa resta da presidiare adesso che i colori si ricavano
 //
-// Dalla §31.2 i colori non sono più scelti: la ricetta (`serie/ricetta.ts`)
-// dichiara di ogni inchiostro la tinta, il croma, **sopra cosa sta** e quanto
+// Dalla §31.2 i colori non sono più scelti: la ricetta (`serie/recipe.ts`)
+// dichiara di ogni ink la tinta, il croma, **sopra cosa sta** e quanto
 // vuole reggere, e la chiarezza la trova cercandola. La domanda legittima è se
 // questo banco non stia allora ricontando ciò che la generazione ha già contato.
 //
@@ -41,12 +41,12 @@
 // - **Le coppie sono di un'altra fonte.** La ricetta dice `sopra: SUPERFICI`
 //   perché è ciò che *vuole garantire*; la tabella qui sotto dice
 //   `["muted", "bg-chrome", …, "la barra di stato"]` perché è ciò che
-//   **`pelle.css` mette davvero insieme**. Le due liste si somigliano, e il
+//   **`skin.css` mette davvero insieme**. Le due liste si somigliano, e il
 //   giorno in cui non si somigliano più è il giorno che interessa: una regola
 //   nuova che accosta due ruoli che la ricetta non aveva messo in relazione.
 //
 // Il conto della chiarezza, quello sì, non si riconta: lo presidia
-// `ricetta.test.ts`, che è il posto in cui sta la generazione.
+// `recipe.test.ts`, che è il posto in cui sta la generazione.
 //
 // # Le tre soglie, e perché non è una sola
 //
@@ -90,10 +90,10 @@ import { describe, expect, it } from "vitest";
 // qui dentro finché il lettore era uno solo. Adesso lo legge anche il catalogo
 // della tavolozza del banco, che i colori li prende **resi** invece che dal
 // foglio come testo: due misure della stessa promessa, e una formula sola
-// (`theme/contrasto.ts`).
-import { contrasto } from "./contrasto";
-import scuro from "./serie/foglio-scuro.css?raw";
-import chiaro from "./serie/foglio-chiaro.css?raw";
+// (`theme/contrast.ts`).
+import { contrast } from "./contrast";
+import dark from "./serie/sheet-dark.css?raw";
+import light from "./serie/sheet-light.css?raw";
 
 /// La soglia del testo (WCAG 1.4.3).
 const AA = 4.5;
@@ -103,9 +103,9 @@ const UI = 3;
 /// Una coppia dichiarata: chi sta sopra chi, quanto deve reggere, e per quale
 /// regola vera — la terza colonna è ciò che impedisce a questa tabella di
 /// diventare una lista di buone intenzioni.
-type Coppia = readonly [inchiostro: string, fondo: string, soglia: number, dove: string];
+type Pair = readonly [ink: string, background: string, threshold: number, where: string];
 
-const COPPIE: readonly Coppia[] = [
+const PAIRS: readonly Pair[] = [
   // Il testo della shell sulle quattro superfici. `--bg-hover` è una superficie
   // come le altre da quando le righe non si riempiono più d'accento.
   ["text", "bg", AA, "il corpo dell'app"],
@@ -124,7 +124,7 @@ const COPPIE: readonly Coppia[] = [
   ["danger-contrast", "danger", AA, "il testo di un bottone distruttivo"],
   ["bg", "accent-soft", AA, "button:hover, #mode-switch attivo, .hit-snippet mark"],
 
-  // L'accento come **inchiostro**: è il ruolo di `--accent-soft`, ed è per
+  // L'accento come **ink**: è il ruolo di `--accent-soft`, ed è per
   // questo che i due esistono separati.
   ["accent-soft", "bg", AA, ".brand, i link-button al passaggio"],
   ["accent-soft", "bg-elev", AA, "il titolo di uno spazio, il chevron"],
@@ -161,7 +161,7 @@ const COPPIE: readonly Coppia[] = [
 
 /// Le dieci specie della tavolozza di sintassi, tutte contro il fondo del
 /// documento: è l'unico fondo su cui vivano.
-const SINTASSI = [
+const SYNTAX_TOKENS = [
   "keyword",
   "name",
   "function",
@@ -178,9 +178,9 @@ const SINTASSI = [
 /// attiva, e la selezione. Sono tre e non uno perché il testo evidenziato è
 /// ancora testo — e il fondo della selezione è il più lontano dei tre dalla
 /// carta, cioè quello su cui un colore tarato solo sulla pagina cede per primo.
-const FONDI_CARTA = ["doc-bg", "doc-active-line", "doc-selection"] as const;
+const PAPER_BACKGROUNDS = ["doc-bg", "doc-active-line", "doc-selection"] as const;
 
-type Tema = "dark" | "light";
+type Theme = "dark" | "light";
 
 // ---------------------------------------------------------------------------
 // I token, letti dal foglio vero.
@@ -189,11 +189,11 @@ type Tema = "dark" | "light";
 /// Il corpo di un blocco `selettore { … }` di primo livello, coi commenti già
 /// tolti: senza toglierli, un `--token: valore;` citato dentro una spiegazione
 /// entrerebbe nella tavolozza come se fosse dichiarato.
-function blocco(css: string, selettore: string): string {
-  const chiuso = selettore.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const trovato = new RegExp(`^${chiuso}\\s*\\{([\\s\\S]*?)\\n\\}`, "m").exec(css);
-  if (!trovato) throw new Error(`«${selettore}» non è un blocco di tokens.css`);
-  return trovato[1]!;
+function block(css: string, selector: string): string {
+  const closed = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const found = new RegExp(`^${closed}\\s*\\{([\\s\\S]*?)\\n\\}`, "m").exec(css);
+  if (!found) throw new Error(`«${selector}» non è un blocco di tokens.css`);
+  return found[1]!;
 }
 /// I temi come li vede il browser: fogli completi, montati per
 /// **sostituzione**. Il chiaro non eredita più nulla dallo scuro — non è un
@@ -202,42 +202,42 @@ function blocco(css: string, selettore: string): string {
 /// gemello scuro. La cascata non c'è più, e con lei il risparmio di non
 /// ricopiare i valori: il prezzo è liste che devono restare uguali, e lo tiene
 /// `struttura.test.ts`. Qui ciascun file si legge da sé.
-function tavolozze(
-  scuro: string,
-  chiaro: string,
-): Record<Tema, Record<string, string>> {
+function palettes(
+  dark: string,
+  light: string,
+): Record<Theme, Record<string, string>> {
   const token = (css: string): Record<string, string> => {
-    const senzaCommenti = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
     return Object.fromEntries(
-      [...blocco(senzaCommenti, ":root").matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map((m) => [
+      [...block(withoutComments, ":root").matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)].map((m) => [
         m[1]!,
         m[2]!.trim(),
       ]),
     );
   };
-  return { dark: token(scuro), light: token(chiaro) };
+  return { dark: token(dark), light: token(light) };
 }
 
-const TAVOLOZZE = tavolozze(scuro, chiaro);
-const TEMI = ["dark", "light"] as const;
+const PALETTES = palettes(dark, light);
+const THEMES = ["dark", "light"] as const;
 
 describe("il conto è quello della WCAG", () => {
   // I due estremi e un valore noto: senza, un errore di segno nella formula
   // renderebbe verde qualunque tabella.
   it("bianco su nero è 21:1, e un colore con sé stesso è 1:1", () => {
-    expect(contrasto("#ffffff", "#000000")).toBeCloseTo(21, 5);
-    expect(contrasto("#a3e635", "#a3e635")).toBeCloseTo(1, 5);
+    expect(contrast("#ffffff", "#000000")).toBeCloseTo(21, 5);
+    expect(contrast("#a3e635", "#a3e635")).toBeCloseTo(1, 5);
   });
 
   it("e il verso non conta", () => {
-    expect(contrasto("#ffffff", "#a3e635")).toBeCloseTo(contrasto("#a3e635", "#ffffff"), 10);
+    expect(contrast("#ffffff", "#a3e635")).toBeCloseTo(contrast("#a3e635", "#ffffff"), 10);
   });
 
   it("il grigio a metà scala sopra il bianco sta poco sotto 4:1", () => {
     // `#767676` è l'esempio canonico della WCAG: il grigio più chiaro che
     // regge 4,5:1 sul bianco è `#767676`, e sta appena sopra.
-    expect(contrasto("#767676", "#ffffff")).toBeGreaterThanOrEqual(4.5);
-    expect(contrasto("#777777", "#ffffff")).toBeLessThan(4.5);
+    expect(contrast("#767676", "#ffffff")).toBeGreaterThanOrEqual(4.5);
+    expect(contrast("#777777", "#ffffff")).toBeLessThan(4.5);
   });
 });
 
@@ -246,13 +246,13 @@ describe("i token si leggono davvero dal foglio", () => {
   // che è il modo in cui un presidio su un file letto come testo smette di
   // presidiare senza dirlo — la stessa cautela del presidio della scocca.
   it("le due tavolozze sono piene, e sono due", () => {
-    expect(Object.keys(TAVOLOZZE.dark).length).toBeGreaterThan(50);
+    expect(Object.keys(PALETTES.dark).length).toBeGreaterThan(50);
     // Il riconoscimento passa dalla **carta**, che nella ricetta è l'estremo
     // dichiarato (0 al buio, 1 in luce) e non un valore che si ricava: un `--bg`
     // scritto qui farebbe diventare rosso il presidio del contrasto il giorno in
     // cui cambia il passo della scala, che è un'altra cosa e ha un altro banco.
-    expect(TAVOLOZZE.dark["doc-bg"], "al buio la carta è il nero").toBe("#000000");
-    expect(TAVOLOZZE.light["doc-bg"], "in luce la carta è il bianco").toBe("#ffffff");
+    expect(PALETTES.dark["doc-bg"], "al buio la carta è il nero").toBe("#000000");
+    expect(PALETTES.light["doc-bg"], "in luce la carta è il bianco").toBe("#ffffff");
     // I valori non-colore identici fra i fogli (la scala, il moto, i quattro
     // alpha) li presidia `struttura.test.ts`: qui conta il contrasto, non la
     // gemellarità del vocabolario.
@@ -262,26 +262,26 @@ describe("i token si leggono davvero dal foglio", () => {
     // Un token rinominato senza aggiornare la tabella lascerebbe una coppia
     // che non si conta più — e un presidio che salta le righe che non capisce
     // è un presidio che si spegne da solo.
-    const mancanti = COPPIE.flatMap(([a, b]) =>
-      TEMI.flatMap((tema) =>
-        [a, b].filter((n) => TAVOLOZZE[tema][n] === undefined).map((n) => `${tema}: --${n}`),
+    const missing = PAIRS.flatMap(([a, b]) =>
+      THEMES.flatMap((theme) =>
+        [a, b].filter((n) => PALETTES[theme][n] === undefined).map((n) => `${theme}: --${n}`),
       ),
     );
-    expect(mancanti).toEqual([]);
+    expect(missing).toEqual([]);
   });
 });
 
-describe.each(TEMI)("il tema %s regge le soglie che dichiara", (tema) => {
-  const palette = TAVOLOZZE[tema];
-  const misura = (a: string, b: string) => contrasto(palette[a]!, palette[b]!);
+describe.each(THEMES)("il tema %s regge le soglie che dichiara", (theme) => {
+  const palette = PALETTES[theme];
+  const measurement = (a: string, b: string) => contrast(palette[a]!, palette[b]!);
 
-  it.each(COPPIE)("%s sopra %s ≥ %d:1 (%s)", (inchiostro, fondo, soglia, dove) => {
-    const v = misura(inchiostro, fondo);
+  it.each(PAIRS)("%s sopra %s ≥ %d:1 (%s)", (ink, background, threshold, where) => {
+    const v = measurement(ink, background);
     expect(
       v,
-      `--${inchiostro} (${palette[inchiostro]}) sopra --${fondo} (${palette[fondo]}) sta a ` +
-        `${v.toFixed(2)}:1, sotto la soglia ${soglia}:1 che «${dove}» pretende`,
-    ).toBeGreaterThanOrEqual(soglia);
+      `--${ink} (${palette[ink]}) sopra --${background} (${palette[background]}) sta a ` +
+        `${v.toFixed(2)}:1, sotto la soglia ${threshold}:1 che «${where}» pretende`,
+    ).toBeGreaterThanOrEqual(threshold);
   });
 
   it("ogni specie di sintassi regge la soglia del testo, su tutti e tre i fondi", () => {
@@ -294,28 +294,28 @@ describe.each(TEMI)("il tema %s regge le soglie che dichiara", (tema) => {
     // I fondi sono tre e non uno perché tre sono quelli su cui il codice finisce
     // davvero: la selezione è il più lontano dalla carta, ed è là che un colore
     // tarato solo sulla pagina cede.
-    const sotto = SINTASSI.flatMap((s) =>
-      FONDI_CARTA.map((f) => [`syn-${s}`, f, misura(`syn-${s}`, f)] as const),
+    const below = SYNTAX_TOKENS.flatMap((s) =>
+      PAPER_BACKGROUNDS.map((f) => [`syn-${s}`, f, measurement(`syn-${s}`, f)] as const),
     ).filter(([, , v]) => v < AA);
     expect(
-      sotto.map(([s, f, v]) => `--${s} su --${f}: ${v.toFixed(2)}:1`),
+      below.map(([s, f, v]) => `--${s} su --${f}: ${v.toFixed(2)}:1`),
       "una specie di sintassi sotto 4,5:1 è testo che non si legge: si alza la " +
         "mira della famiglia nella ricetta, non si scrive un'esenzione qui",
     ).toEqual([]);
   });
 
-  it("e nemmeno l'inchiostro del documento cede sul fondo più lontano", () => {
+  it("e nemmeno l'ink del documento cede sul fondo più lontano", () => {
     // Le stesse tre superfici, per i ruoli non-sintassi che ci vivono sopra: il
     // corpo della nota, i wikilink, i numeri di riga. La tabella delle coppie li
-    // conta sulla sola pagina perché è là che una regola di `pelle.css` li mette;
+    // conta sulla sola pagina perché è là che una regola di `skin.css` li mette;
     // la selezione invece non è una regola, è uno stato — e uno stato che
     // peggiora la leggibilità del testo che evidenzia sarebbe un difetto muto.
-    const INCHIOSTRI_DEL_DOCUMENTO = ["doc-fg", "doc-link", "doc-danger", "doc-gutter-fg"];
-    const sotto = INCHIOSTRI_DEL_DOCUMENTO.flatMap((n) =>
-      FONDI_CARTA.map((f) => [n, f, misura(n, f)] as const),
+    const DOCUMENT_INKS = ["doc-fg", "doc-link", "doc-danger", "doc-gutter-fg"];
+    const below = DOCUMENT_INKS.flatMap((n) =>
+      PAPER_BACKGROUNDS.map((f) => [n, f, measurement(n, f)] as const),
     ).filter(([, , v]) => v < AA);
     expect(
-      sotto.map(([n, f, v]) => `--${n} su --${f}: ${v.toFixed(2)}:1`),
+      below.map(([n, f, v]) => `--${n} su --${f}: ${v.toFixed(2)}:1`),
       "selezionare una riga non deve renderla meno leggibile di prima",
     ).toEqual([]);
   });

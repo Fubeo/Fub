@@ -1,16 +1,16 @@
 // Test del quadtree Barnes-Hut: convergenza a theta→0 (replica l'O(n²)) e
-// `vicino` rispetta il raggio e trova il più vicino. Niente Canvas2D, niente
+// `nearest` rispetta il raggio e trova il più vicino. Niente Canvas2D, niente
 // performance.now: tutto deterministico.
 
 import { describe, expect, it } from "vitest";
-import { costruisci, PoolQuad, visita, vicino, type Quadtree } from "./quadtree";
-import { confOrganica, creaStruttura, type DatiGrafo, type Struttura } from "./tipi";
+import { build, QuadtreePool, visit, nearest, type Quadtree } from "./quadtree";
+import { organicConfig, createStructure, type GraphData, type Structure } from "./types";
 
 /// Un grafo a forma di stella deterministica: n nodi su spirale di girasole
 /// con jitter fisso, masse crescenti per grado (qualche arco). Abbastanza
 /// nodi da far splittare l'albero, non così tanti da rendere l'O(n²) lento
 /// nel test.
-function grafoTest(n: number, archi: number): Struttura {
+function graphTest(n: number, archi: number): Structure {
   const nodes: string[] = [];
   for (let i = 0; i < n; i++) nodes.push("n" + i);
   const edges: { from: string; to: string }[] = [];
@@ -20,12 +20,12 @@ function grafoTest(n: number, archi: number): Struttura {
     const a = (i * 7 + 3) % n;
     if (da !== a) edges.push({ from: "n" + da, to: "n" + a });
   }
-  const dati: DatiGrafo = { nodes, edges };
-  return creaStruttura(dati, confOrganica(), 42);
+  const data: GraphData = { nodes, edges };
+  return createStructure(data, organicConfig(), 42);
 }
 
 /// Repulsione esatta O(n²) per un nodo, in Float64 (riferimento di precisione).
-function repulsioneEsatta(s: Struttura, i: number, rep: number): [number, number] {
+function exactRepulsion(s: Structure, i: number, rep: number): [number, number] {
   let fx = 0;
   let fy = 0;
   for (let j = 0; j < s.n; j++) {
@@ -35,7 +35,7 @@ function repulsioneEsatta(s: Struttura, i: number, rep: number): [number, number
     const d2 = dx * dx + dy * dy;
     if (d2 < 1e-4) continue;
     const inv = 1 / Math.sqrt(d2);
-    const f = (rep * s.massa[j]) / (d2 + 64);
+    const f = (rep * s.mass[j]) / (d2 + 64);
     fx -= f * dx * inv;
     fy -= f * dy * inv;
   }
@@ -43,13 +43,13 @@ function repulsioneEsatta(s: Struttura, i: number, rep: number): [number, number
 }
 
 /// Repulsione Barnes-Hut per un nodo, accumulando in Float64.
-function repulsioneBH(q: Quadtree, s: Struttura, i: number, theta: number, rep: number): [number, number] {
+function bhRepulsion(q: Quadtree, s: Structure, i: number, theta: number, rep: number): [number, number] {
   let fx = 0;
   let fy = 0;
-  visita(q, theta, s.x[i], s.y[i], (dx, dy, d2, massa) => {
+  visit(q, theta, s.x[i], s.y[i], (dx, dy, d2, mass) => {
     if (d2 < 1e-4) return;
     const inv = 1 / Math.sqrt(d2);
-    const f = (rep * massa) / (d2 + 64);
+    const f = (rep * mass) / (d2 + 64);
     fx -= f * dx * inv;
     fy -= f * dy * inv;
   });
@@ -57,15 +57,15 @@ function repulsioneBH(q: Quadtree, s: Struttura, i: number, theta: number, rep: 
 }
 
 describe("quadtree — Barnes-Hut", () => {
-  it("a theta → 0 replica la repulsione O(n²) entro 1e-3 relativo", () => {
-    const s = grafoTest(50, 40);
-    const pool = new PoolQuad();
-    const q = costruisci(s, pool);
-    const rep = confOrganica().repulsione;
+  it("a theta → 0 replica la repulsion O(n²) entro 1e-3 relativo", () => {
+    const s = graphTest(50, 40);
+    const pool = new QuadtreePool();
+    const q = build(s, pool);
+    const rep = organicConfig().repulsion;
     let maxRel = 0;
     for (let i = 0; i < s.n; i++) {
-      const [fxo, fyo] = repulsioneEsatta(s, i, rep);
-      const [fxb, fyb] = repulsioneBH(q, s, i, 0, rep);
+      const [fxo, fyo] = exactRepulsion(s, i, rep);
+      const [fxb, fyb] = bhRepulsion(q, s, i, 0, rep);
       const rel = Math.hypot(fxb - fxo, fyb - fyo) / Math.max(1, Math.hypot(fxo, fyo));
       if (rel > maxRel) maxRel = rel;
     }
@@ -74,15 +74,15 @@ describe("quadtree — Barnes-Hut", () => {
     expect(maxRel).toBeLessThan(1e-3);
   });
 
-  it("a theta = 0.9 la repulsione è vicina ma non esatta (approssimazione)", () => {
-    const s = grafoTest(50, 40);
-    const pool = new PoolQuad();
-    const q = costruisci(s, pool);
-    const rep = confOrganica().repulsione;
+  it("a theta = 0.9 la repulsion è vicina ma non esatta (approssimazione)", () => {
+    const s = graphTest(50, 40);
+    const pool = new QuadtreePool();
+    const q = build(s, pool);
+    const rep = organicConfig().repulsion;
     let maxRel = 0;
     for (let i = 0; i < s.n; i++) {
-      const [fxo, fyo] = repulsioneEsatta(s, i, rep);
-      const [fxb, fyb] = repulsioneBH(q, s, i, 0.9, rep);
+      const [fxo, fyo] = exactRepulsion(s, i, rep);
+      const [fxb, fyb] = bhRepulsion(q, s, i, 0.9, rep);
       const rel = Math.hypot(fxb - fxo, fyb - fyo) / Math.max(1, Math.hypot(fxo, fyo));
       if (rel > maxRel) maxRel = rel;
     }
@@ -92,47 +92,47 @@ describe("quadtree — Barnes-Hut", () => {
   });
 
   it("il pool si riusa senza allocare: due costruzioni danno lo stesso albero", () => {
-    const s = grafoTest(30, 20);
-    const pool = new PoolQuad();
-    costruisci(s, pool);
-    const usati1 = pool.usati;
+    const s = graphTest(30, 20);
+    const pool = new QuadtreePool();
+    build(s, pool);
+    const used1 = pool.used;
     // Sposta un nodo e ricostruisce: stesso pool, capacità riusata.
     s.x[0] += 5;
-    costruisci(s, pool);
-    const usati2 = pool.usati;
+    build(s, pool);
+    const used2 = pool.used;
     // Stesso numero di nodi dell'albero (la forma del grafo non è cambiata).
-    expect(usati2).toBe(usati1);
-    // La visita torna coerente.
-    const rep = confOrganica().repulsione;
-    const [fxo, fyo] = repulsioneEsatta(s, 0, rep);
-    const [fxb, fyb] = repulsioneBH(pool, s, 0, 0, rep);
+    expect(used2).toBe(used1);
+    // La visit torna coerente.
+    const rep = organicConfig().repulsion;
+    const [fxo, fyo] = exactRepulsion(s, 0, rep);
+    const [fxb, fyb] = bhRepulsion(pool, s, 0, 0, rep);
     expect(Math.hypot(fxb - fxo, fyb - fyo) / Math.max(1, Math.hypot(fxo, fyo))).toBeLessThan(1e-3);
   });
 });
 
-describe("quadtree — vicino", () => {
+describe("quadtree — nearest", () => {
   it("su un nodo con r > 0 trova il nodo stesso (d2 = 0)", () => {
-    const s = grafoTest(30, 20);
-    const pool = new PoolQuad();
-    const q = costruisci(s, pool);
+    const s = graphTest(30, 20);
+    const pool = new QuadtreePool();
+    const q = build(s, pool);
     for (let i = 0; i < s.n; i++) {
-      expect(vicino(q, s.x[i], s.y[i], 1)).toBe(i);
+      expect(nearest(q, s.x[i], s.y[i], 1)).toBe(i);
     }
   });
 
-  it("rispetta il raggio: −1 se nessun nodo entro r", () => {
-    const s = grafoTest(20, 10);
-    const pool = new PoolQuad();
-    const q = costruisci(s, pool);
-    // Punto lontano da tutti i nodi: nessuno entro r piccolo.
-    expect(vicino(q, 1e6, 1e6, 1)).toBe(-1);
-    expect(vicino(q, 1e6, 1e6, 0)).toBe(-1);
+  it("rispetta il radius: −1 se nessun nodo entro r", () => {
+    const s = graphTest(20, 10);
+    const pool = new QuadtreePool();
+    const q = build(s, pool);
+    // Point lontano da tutti i nodi: nessuno entro r piccolo.
+    expect(nearest(q, 1e6, 1e6, 1)).toBe(-1);
+    expect(nearest(q, 1e6, 1e6, 0)).toBe(-1);
   });
 
   it("trova il più vicino come la forza bruta (300 query casuali)", () => {
-    const s = grafoTest(40, 30);
-    const pool = new PoolQuad();
-    const q = costruisci(s, pool);
+    const s = graphTest(40, 30);
+    const pool = new QuadtreePool();
+    const q = build(s, pool);
     // RNG deterministico (mulberry32, seme 7).
     let a = 7 >>> 0;
     const rng = () => {
@@ -157,7 +157,7 @@ describe("quadtree — vicino", () => {
           bestB = j;
         }
       }
-      const res = vicino(q, x, y, r);
+      const res = nearest(q, x, y, r);
       if (bestB === -1) {
         expect(res).toBe(-1);
       } else {

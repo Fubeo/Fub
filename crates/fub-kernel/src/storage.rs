@@ -61,7 +61,7 @@ use std::io;
 use std::io::Write as _;
 use std::sync::MutexGuard;
 
-use crate::veleno::Ricovero;
+use crate::poison::Shelter;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -185,7 +185,7 @@ pub struct DirEntry {
 /// Ha un nome suo perché è un **parametro di protocollo** e non un dettaglio di
 /// firma: chi implementa il supporto deve poterla nominare per riscriverla
 /// uguale, e i quattro doppioni di prova nei test la nominano.
-pub type Fusione<'a> = &'a mut dyn FnMut(Option<&[u8]>) -> io::Result<Option<Vec<u8>>>;
+pub type Merge<'a> = &'a mut dyn FnMut(Option<&[u8]>) -> io::Result<Option<Vec<u8>>>;
 
 pub trait VaultStorage: Send + Sync {
     /// I byte a questo path.
@@ -271,7 +271,7 @@ pub trait VaultStorage: Send + Sync {
     /// **`fondi` non deve rientrare in questo supporto**: il lucchetto è già
     /// preso, e chiedergli qualcosa da dentro è come minimo un giro inutile e su
     /// [`MemStorage`] un blocco.
-    fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()>;
+    fn update(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<()>;
 
     /// L'[`update`](VaultStorage::update) di un **dato derivato**: la fusione
     /// sotto lucchetto resta, la scrittura finale passa da
@@ -286,8 +286,8 @@ pub trait VaultStorage: Send + Sync {
     /// ricostruibile non vale il suo prezzo. Il default è
     /// [`update`](VaultStorage::update), come per la scrittura: chi non sa di
     /// avere un derivato in mano si comporta come prima.
-    fn update_derived(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
-        self.update(path, fondi)
+    fn update_derived(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<()> {
+        self.update(path, merge_entries)
     }
 
     /// Aggiunge i byte **in coda** a ciò che c'è, creando il file e le cartelle
@@ -381,14 +381,14 @@ pub trait VaultStorage: Send + Sync {
     /// un vault che non può stare. Un supporto su un disco vero
     /// ([`FsStorage`]) la sovrascrive con la verità del disco: lì una radice
     /// mancante è un errore di chi ha scelto, e va detto subito.
-    fn radice_valida(&self, root: &Utf8Path) -> io::Result<()> {
+    fn root_validates(&self, root: &Utf8Path) -> io::Result<()> {
         match self.stat(root) {
-            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e),
+            Err(and) if and.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(and) => Err(and),
             Ok(s) if s.kind == EntryKind::Dir => Ok(()),
             Ok(_) => Err(io::Error::new(
                 io::ErrorKind::NotADirectory,
-                format!("la radice {root} non è una cartella"),
+                format!("the root {root} is not a directory"),
             )),
         }
     }
@@ -405,8 +405,8 @@ pub trait VaultStorage: Send + Sync {
     /// Serve a una cosa sola, e sta sul trait perché quella cosa la fa il
     /// kernel su qualunque supporto: riconoscere il temporaneo di una scrittura
     /// che non finirà mai (difetto 0155, [`SCADENZA_DEL_TEMPORANEO_MS`]).
-    fn e_rimasto_indietro(&self, stat: &Stat) -> bool {
-        crate::time::now_unix_millis().saturating_sub(stat.mtime) >= SCADENZA_DEL_TEMPORANEO_MS
+    fn is_left_behind(&self, stat: &Stat) -> bool {
+        crate::time::now_unix_millis().saturating_sub(stat.mtime) >= TEMP_FILE_EXPIRY_MS
     }
 
     /// Toglie una cartella e tutto ciò che contiene.
@@ -445,34 +445,34 @@ pub struct FsStorage;
 /// L'mtime in millisecondi UNIX. Vedi
 /// [`VaultEntry::mtime`](fub_abi::traits::VaultEntry::mtime) per il perché dei
 /// millisecondi e non dei secondi né dei nanosecondi.
-fn mtime_millis(meta: &std::fs::Metadata) -> u64 {
-    meta.modified()
+fn mtime_millis(metadata: &std::fs::Metadata) -> u64 {
+    metadata.modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_millis().min(u64::MAX as u128) as u64)
         .unwrap_or(0)
 }
 
-fn stat_of(meta: &std::fs::Metadata) -> Stat {
-    stat_con(
-        if meta.is_dir() {
+fn stat_of(metadata: &std::fs::Metadata) -> Stat {
+    stat_with(
+        if metadata.is_dir() {
             EntryKind::Dir
         } else {
             EntryKind::File
         },
-        meta,
+        metadata,
     )
 }
 
-fn stat_con(kind: EntryKind, meta: &std::fs::Metadata) -> Stat {
+fn stat_with(kind: EntryKind, metadata: &std::fs::Metadata) -> Stat {
     Stat {
         kind,
         size: if kind == EntryKind::File {
-            meta.len()
+            metadata.len()
         } else {
             0
         },
-        mtime: mtime_millis(meta),
+        mtime: mtime_millis(metadata),
     }
 }
 
@@ -503,7 +503,7 @@ static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 /// [`e_temporaneo_di_scrittura`] qui accanto.
 fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
-    dir.join(nome_del_temporaneo(
+    dir.join(temp_name(
         path.file_name().unwrap_or("senza-nome"),
     ))
 }
@@ -516,7 +516,7 @@ fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
 /// questa forma senza poter passare da un [`Utf8Path`]. Il nome del file però è
 /// suo — glielo dà il provider — quindi ciò che attraversa è una `&str`, e la
 /// regola resta scritta una volta sola (difetto 0183).
-pub(crate) fn nome_del_temporaneo(name: &str) -> String {
+pub(crate) fn temp_name(name: &str) -> String {
     format!(
         ".{name}.tmp{}-{}",
         std::process::id(),
@@ -541,7 +541,7 @@ pub(crate) fn nome_del_temporaneo(name: &str) -> String {
 /// fatto di *una* macchina — su un vault condiviso non vuol dire niente, e chi
 /// lo riusa fa scambiare per vivo un temporaneo morto — mentre un giorno fa è
 /// un giorno fa dappertutto.
-pub(crate) const SCADENZA_DEL_TEMPORANEO_MS: u64 = 24 * 60 * 60 * 1000;
+pub(crate) const TEMP_FILE_EXPIRY_MS: u64 = 24 * 60 * 60 * 1000;
 
 /// Il path del compagno di lock di un file: **accanto**, e con un nome che
 /// comincia per punto.
@@ -571,9 +571,9 @@ fn lock_path(path: &Utf8Path) -> Utf8PathBuf {
 /// Riconosce `.qualcosa.lock` e non «finisce per `.lock`»: `Cargo.lock` e
 /// `flake.lock` sono note di nessuno ma sono file che uno può volersi tenere nel
 /// vault, e non cominciano per punto.
-pub(crate) fn e_lock_di_scrittura(name: &str) -> bool {
+pub(crate) fn is_write_lock(name: &str) -> bool {
     name.strip_prefix('.')
-        .and_then(|resto| resto.strip_suffix(".lock"))
+        .and_then(|rest| rest.strip_suffix(".lock"))
         .is_some_and(|base| !base.is_empty())
 }
 
@@ -585,18 +585,18 @@ pub(crate) fn e_lock_di_scrittura(name: &str) -> bool {
 /// *qual è*. Riconosce la forma intera — punto davanti, `.tmp`, il pid e il
 /// numero di sequenza — e non solo il punto, perché il punto da solo è la
 /// preferenza sui nascosti, che un vault può ribaltare.
-pub(crate) fn e_temporaneo_di_scrittura(name: &str) -> bool {
-    let Some(resto) = name.strip_prefix('.') else {
+pub(crate) fn is_write_temporary(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix('.') else {
         return false;
     };
-    let Some((base, coda)) = resto.rsplit_once(".tmp") else {
+    let Some((base, queue)) = rest.rsplit_once(".tmp") else {
         return false;
     };
-    let Some((pid, seq)) = coda.split_once('-') else {
+    let Some((pid, seq)) = queue.split_once('-') else {
         return false;
     };
-    let cifre = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    !base.is_empty() && cifre(pid) && cifre(seq)
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    !base.is_empty() && digits(pid) && digits(seq)
 }
 
 /// Quanti nomi ha il file a un path — **e il quarto valore, che è il punto**.
@@ -609,19 +609,19 @@ pub(crate) fn e_temporaneo_di_scrittura(name: &str) -> bool {
 /// prende [`come_scrivere`], e per prenderla ha bisogno che i casi siano
 /// distinti (§23.16).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NomiDelFile {
+pub enum FileNames {
     /// Il file non c'è ancora: zero nomi, e niente da conservare.
-    Nessuno,
+    None,
     /// Un nome solo. L'inode è nostro, e sostituirlo non toglie niente a
     /// nessuno.
-    Uno,
+    One,
     /// Più di uno: un hardlink. Sostituire l'inode ne staccherebbe **uno**, e
     /// gli altri resterebbero fermi al contenuto di prima.
-    PiuDiUno,
+    MoreThanOne,
     /// **Non lo sappiamo**, e non è la stessa cosa di [`NomiDelFile::Uno`]. È il
     /// valore di una piattaforma che gli hardlink li sa avere ma non li sa
     /// contare, o di una syscall che è fallita.
-    Ignoto,
+    Unknown,
 }
 
 /// Le due strade di una scrittura: si sostituisce il file, o gli si scrive
@@ -631,9 +631,9 @@ pub enum NomiDelFile {
 /// l'unica cosa osservabile di questa scelta che non richieda di guardare un
 /// inode — cioè l'unica che si possa presidiare su **ogni** piattaforma.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComeScrivere {
+pub enum WriteMode {
     /// Temporaneo accanto, `fsync`, rename: atomica, e cambia l'inode.
-    Sostituendo,
+    Replacing,
     /// `create` + `sync_all` sull'inode che c'è: conserva i titolari, e perde
     /// l'atomicità.
     SulPosto,
@@ -653,17 +653,17 @@ pub enum ComeScrivere {
 /// un crash *durante* la scrittura ed è visibile, il nome staccato avviene a
 /// ogni salvataggio e non lo vede nessuno. Davanti a un dubbio si paga quello
 /// che si vede.
-pub fn come_scrivere(collegamento: bool, nomi: NomiDelFile) -> ComeScrivere {
-    if collegamento {
+pub fn how_to_write(link: bool, names: FileNames) -> WriteMode {
+    if link {
         // La rename sostituirebbe il collegamento, e da quel momento il file
         // vero non riceverebbe più niente. Non serve contare: un symlink ha
         // già un altro titolare per definizione, ed è l'unico ramo che non è
         // mai dipeso dalla piattaforma.
-        return ComeScrivere::SulPosto;
+        return WriteMode::SulPosto;
     }
-    match nomi {
-        NomiDelFile::Nessuno | NomiDelFile::Uno => ComeScrivere::Sostituendo,
-        NomiDelFile::PiuDiUno | NomiDelFile::Ignoto => ComeScrivere::SulPosto,
+    match names {
+        FileNames::None | FileNames::One => WriteMode::Replacing,
+        FileNames::MoreThanOne | FileNames::Unknown => WriteMode::SulPosto,
     }
 }
 
@@ -673,7 +673,7 @@ pub fn come_scrivere(collegamento: bool, nomi: NomiDelFile) -> ComeScrivere {
 /// tocca il disco: passandola invece di nominarla, un banco può far rispondere
 /// «permesso negato» a questa domanda senza rompere niente. Vedi il doc di
 /// `write_con`.
-pub fn cosa_c_e(path: &Utf8Path) -> io::Result<std::fs::Metadata> {
+pub fn what_c_and(path: &Utf8Path) -> io::Result<std::fs::Metadata> {
     std::fs::symlink_metadata(path)
 }
 
@@ -685,15 +685,15 @@ pub fn cosa_c_e(path: &Utf8Path) -> io::Result<std::fs::Metadata> {
 /// Una firma `fn(&Metadata) -> …` — la forma che sembrava ovvia — non può
 /// esprimere il caso Windows, ed è la ragione per cui la funzione prende due
 /// argomenti invece di uno.
-pub fn nomi_del_file(path: &Utf8Path, meta: &std::fs::Metadata) -> NomiDelFile {
+pub fn file_names(path: &Utf8Path, metadata: &std::fs::Metadata) -> FileNames {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
         let _ = path;
-        if meta.nlink() > 1 {
-            NomiDelFile::PiuDiUno
+        if metadata.nlink() > 1 {
+            FileNames::MoreThanOne
         } else {
-            NomiDelFile::Uno
+            FileNames::One
         }
     }
     #[cfg(windows)]
@@ -703,26 +703,26 @@ pub fn nomi_del_file(path: &Utf8Path, meta: &std::fs::Metadata) -> NomiDelFile {
             GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
         };
 
-        let _ = meta;
+        let _ = metadata;
         // L'apertura in sola lettura è il prezzo del conteggio su questa
         // piattaforma, e si paga **una volta per salvataggio** — accanto a una
         // scrittura, a un `fsync` e a una rename. Un file che non si riesce ad
         // aprire non è un file con un nome solo: è un file di cui non sappiamo
         // niente, e la differenza la porta `Ignoto`.
         let Ok(file) = std::fs::File::open(path) else {
-            return NomiDelFile::Ignoto;
+            return FileNames::Unknown;
         };
         let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
         // SAFETY: l'handle è vivo per tutta la chiamata (`file` non cade prima),
         // e `info` è una struttura del chiamante che la funzione riempie.
-        let esito = unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) };
-        if esito == 0 {
-            return NomiDelFile::Ignoto;
+        let outcome = unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) };
+        if outcome == 0 {
+            return FileNames::Unknown;
         }
         if info.nNumberOfLinks > 1 {
-            NomiDelFile::PiuDiUno
+            FileNames::MoreThanOne
         } else {
-            NomiDelFile::Uno
+            FileNames::One
         }
     }
     #[cfg(not(any(unix, windows)))]
@@ -731,8 +731,8 @@ pub fn nomi_del_file(path: &Utf8Path, meta: &std::fs::Metadata) -> NomiDelFile {
         // piattaforma la domanda non ha risposta, e `come_scrivere` sa cosa
         // farne. Prima qui c'era `false`, cioè la risposta sbagliata detta con
         // sicurezza.
-        let _ = (path, meta);
-        NomiDelFile::Ignoto
+        let _ = (path, metadata);
+        FileNames::Unknown
     }
 }
 
@@ -756,14 +756,14 @@ pub fn nomi_del_file(path: &Utf8Path, meta: &std::fs::Metadata) -> NomiDelFile {
 /// Segue i collegamenti di proposito, al contrario di [`cosa_c_e`]: la domanda è
 /// «dove si finisce a scrivere», e chi scrive attraverso un symlink scrive nel
 /// file puntato.
-pub fn identita_del_file(path: &Utf8Path) -> Option<Identita> {
+pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let meta = std::fs::metadata(path).ok()?;
-        Some(Identita {
-            volume: meta.dev() as u64,
-            file: meta.ino(),
+        let metadata = std::fs::metadata(path).ok()?;
+        Some(Identity {
+            volume: metadata.dev() as u64,
+            file: metadata.ino(),
         })
     }
     #[cfg(windows)]
@@ -779,11 +779,11 @@ pub fn identita_del_file(path: &Utf8Path) -> Option<Identita> {
         let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
         // SAFETY: l'handle è vivo per tutta la chiamata (`file` non cade prima),
         // e `info` è una struttura del chiamante che la funzione riempie.
-        let esito = unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) };
-        if esito == 0 {
+        let outcome = unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) };
+        if outcome == 0 {
             return None;
         }
-        Some(Identita {
+        Some(Identity {
             volume: info.dwVolumeSerialNumber as u64,
             file: ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
         })
@@ -801,7 +801,7 @@ pub fn identita_del_file(path: &Utf8Path) -> Option<Identita> {
 /// scritti; due path con identità diverse sono due file, anche se i byte dentro
 /// sono gli stessi.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Identita {
+pub struct Identity {
     /// Il volume: `st_dev` su unix, il numero di serie del volume su Windows.
     /// Senza, due file su due dischi diversi possono avere lo stesso numero.
     pub volume: u64,
@@ -813,13 +813,13 @@ impl FsStorage {
     /// Il giro `read` → `fondi` di [`VaultStorage::update`], **senza** il
     /// lucchetto: chi chiama decide se tenerlo, perché è la sola cosa che
     /// distingue i due passaggi di [`FsStorage::update`].
-    fn rileggi_e_fondi(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<Option<Vec<u8>>> {
-        let attuale = match self.read(path) {
+    fn reread_and_merge(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<Option<Vec<u8>>> {
+        let current = match self.read(path) {
             Ok(bytes) => Some(bytes),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-            Err(e) => return Err(e),
+            Err(and) if and.kind() == io::ErrorKind::NotFound => None,
+            Err(and) => return Err(and),
         };
-        fondi(attuale.as_deref())
+        merge_entries(current.as_deref())
     }
 
     /// Il corpo di [`VaultStorage::update`], con la scrittura finale **scelta**:
@@ -833,29 +833,29 @@ impl FsStorage {
     /// divisione di [`write_con`](FsStorage::write_con): il corpo sta qui una
     /// volta sola, e chi non paga il prezzo non copia le sessanta righe per
     /// dirlo.
-    fn update_con(&self, path: &Utf8Path, fondi: Fusione<'_>, derivato: bool) -> io::Result<()> {
-        let cartella_c_e = path.parent().map(Utf8Path::exists).unwrap_or(true);
-        if cartella_c_e {
-            let _lock = lock_esclusivo(path);
-            return match self.rileggi_e_fondi(path, &mut *fondi)? {
-                Some(bytes) => self.scrivi_aggiornato(path, &bytes, derivato),
+    fn update_with(&self, path: &Utf8Path, merge_entries: Merge<'_>, derived: bool) -> io::Result<()> {
+        let folder_c_and = path.parent().map(Utf8Path::exists).unwrap_or(true);
+        if folder_c_and {
+            let _lock = exclusive_lock(path);
+            return match self.reread_and_merge(path, &mut *merge_entries)? {
+                Some(bytes) => self.write_updated(path, &bytes, derived),
                 None => Ok(()),
             };
         }
-        if self.rileggi_e_fondi(path, &mut *fondi)?.is_none() {
+        if self.reread_and_merge(path, &mut *merge_entries)?.is_none() {
             return Ok(());
         }
-        let _lock = lock_esclusivo(path);
-        match self.rileggi_e_fondi(path, &mut *fondi)? {
-            Some(bytes) => self.scrivi_aggiornato(path, &bytes, derivato),
+        let _lock = exclusive_lock(path);
+        match self.reread_and_merge(path, &mut *merge_entries)? {
+            Some(bytes) => self.write_updated(path, &bytes, derived),
             None => Ok(()),
         }
     }
 
     /// La scrittura finale di un [`update_con`]: durevole o derivata, a seconda
     /// di chi ha chiesto l'aggiornamento.
-    fn scrivi_aggiornato(&self, path: &Utf8Path, bytes: &[u8], derivato: bool) -> io::Result<()> {
-        if derivato {
+    fn write_updated(&self, path: &Utf8Path, bytes: &[u8], derived: bool) -> io::Result<()> {
+        if derived {
             self.write_derived(path, bytes).map(|_| ())
         } else {
             self.write(path, bytes).map(|_| ())
@@ -899,49 +899,49 @@ impl FsStorage {
     /// scritture condividono tutto il resto: duplicare sessanta righe per
     /// togliere due `fsync` sarebbe il modo in cui le due copie divergono un
     /// giorno su una riga che conta.
-    pub fn write_con(
+    pub fn write_with(
         &self,
         path: &Utf8Path,
         bytes: &[u8],
         fsync: bool,
-        cosa_c_e: impl Fn(&Utf8Path) -> io::Result<std::fs::Metadata>,
-        nomi: impl Fn(&Utf8Path, &std::fs::Metadata) -> NomiDelFile,
-    ) -> io::Result<(ComeScrivere, Stat)> {
+        what_c_and: impl Fn(&Utf8Path) -> io::Result<std::fs::Metadata>,
+        names: impl Fn(&Utf8Path, &std::fs::Metadata) -> FileNames,
+    ) -> io::Result<(WriteMode, Stat)> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        // `se_c_e` e non `.ok()`: **non c'è** è una risposta, «non si è potuto
+        // `optional` e non `.ok()`: **non c'è** è una risposta, «non si è potuto
         // guardare» no — e da qui dipende la scelta di come scrivere.
-        let esistente = crate::error::se_c_e(cosa_c_e(path))?;
-        let collegamento = esistente
+        let existing = crate::error::optional(what_c_and(path))?;
+        let link = existing
             .as_ref()
-            .is_some_and(|meta| meta.file_type().is_symlink());
-        let quanti = match (&esistente, collegamento) {
-            (None, _) => NomiDelFile::Nessuno,
+            .is_some_and(|metadata| metadata.file_type().is_symlink());
+        let count = match (&existing, link) {
+            (None, _) => FileNames::None,
             // Su un collegamento il conteggio non si chiede: la risposta non
             // cambierebbe la decisione, e su Windows costerebbe un'apertura che
             // seguirebbe il collegamento invece di guardarlo.
-            (Some(_), true) => NomiDelFile::Ignoto,
-            (Some(meta), false) => nomi(path, meta),
+            (Some(_), true) => FileNames::Unknown,
+            (Some(metadata), false) => names(path, metadata),
         };
-        let come = come_scrivere(collegamento, quanti);
-        if come == ComeScrivere::SulPosto {
+        let how = how_to_write(link, count);
+        if how == WriteMode::SulPosto {
             let mut file = std::fs::File::create(path)?;
             file.write_all(bytes)?;
             if fsync {
                 file.sync_all()?;
             }
-            return Ok((come, stat_con(EntryKind::File, &file.metadata()?)));
+            return Ok((how, stat_with(EntryKind::File, &file.metadata()?)));
         }
 
         let tmp = tmp_path(path);
-        let scritto = (|| -> io::Result<Stat> {
+        let written = (|| -> io::Result<Stat> {
             let mut file = std::fs::File::create(&tmp)?;
             file.write_all(bytes)?;
-            if let Some(meta) = &esistente {
+            if let Some(metadata) = &existing {
                 // Best-effort: un filesystem che non sa di permessi (FAT su una
                 // chiavetta) non è una ragione per non salvare la nota.
-                let _ = std::fs::set_permissions(&tmp, meta.permissions());
+                let _ = std::fs::set_permissions(&tmp, metadata.permissions());
             }
             if fsync {
                 file.sync_all()?;
@@ -949,29 +949,29 @@ impl FsStorage {
             // La data si chiede **al descrittore, prima della rename**: dopo, il
             // path può già essere di qualcun altro, e la rename non cambia
             // l'mtime del file che porta con sé.
-            Ok(stat_con(EntryKind::File, &file.metadata()?))
+            Ok(stat_with(EntryKind::File, &file.metadata()?))
         })();
-        let stat = match scritto {
+        let stat = match written {
             Ok(stat) => stat,
-            Err(e) => {
+            Err(and) => {
                 let _ = std::fs::remove_file(&tmp);
-                return Err(e);
+                return Err(and);
             }
         };
-        if let Err(e) = std::fs::rename(&tmp, path) {
+        if let Err(and) = std::fs::rename(&tmp, path) {
             let _ = std::fs::remove_file(&tmp);
-            return Err(e);
+            return Err(and);
         }
         if fsync {
-            for dir in cartelle_da_sincronizzare(&tmp, Some(path)) {
-                sincronizza_la_cartella(&dir);
+            for dir in folders_to_sync(&tmp, Some(path)) {
+                sync_folder(&dir);
             }
         }
-        Ok((come, stat))
+        Ok((how, stat))
     }
 }
 
-fn non_utf8(path: &std::path::Path) -> io::Error {
+fn not_utf8(path: &std::path::Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
         format!("path non rappresentabile in UTF-8: {}", path.display()),
@@ -989,7 +989,7 @@ fn non_utf8(path: &std::path::Path) -> io::Error {
 /// cammini la radice mentre l'apertura è in corso, cioè un fantasma di pochi
 /// microsecondi, la specie di rumore che la verifica all'ingresso esiste per
 /// togliere.
-fn cartella_scrivibile(root: &Utf8Path) -> io::Result<()> {
+fn writable_folder(root: &Utf8Path) -> io::Result<()> {
     #[cfg(unix)]
     {
         // `access(2)` applica i bit, le ACL e lo stato del mount, ed è la
@@ -1012,10 +1012,10 @@ fn cartella_scrivibile(root: &Utf8Path) -> io::Result<()> {
     {
         // Senza `access(2)` non resta che la prova vera: si scrive un file
         // e lo si toglie subito. Il fantasma è il prezzo della piattaforma.
-        let prova = root.join(format!(".fub-prova-{}", std::process::id()));
-        let esito = std::fs::write(&prova, b"");
-        let _ = std::fs::remove_file(&prova);
-        esito.map(|_| ())
+        let test = root.join(format!(".fub-prova-{}", std::process::id()));
+        let outcome = std::fs::write(&test, b"");
+        let _ = std::fs::remove_file(&test);
+        outcome.map(|_| ())
     }
 }
 
@@ -1046,9 +1046,9 @@ fn cartella_scrivibile(root: &Utf8Path) -> io::Result<()> {
 /// - una radice senza genitore — un path relativo di un solo segmento — non
 ///   produce niente da sincronizzare invece di produrre la cartella vuota, che
 ///   non si apre.
-pub fn cartelle_da_sincronizzare(da: &Utf8Path, a: Option<&Utf8Path>) -> Vec<Utf8PathBuf> {
+pub fn folders_to_sync(from: &Utf8Path, a: Option<&Utf8Path>) -> Vec<Utf8PathBuf> {
     let mut out: Vec<Utf8PathBuf> = Vec::with_capacity(2);
-    for path in std::iter::once(da).chain(a) {
+    for path in std::iter::once(from).chain(a) {
         if let Some(dir) = path.parent().filter(|d| !d.as_str().is_empty()) {
             if !out.iter().any(|c| c == dir) {
                 out.push(dir.to_owned());
@@ -1067,7 +1067,7 @@ pub fn cartelle_da_sincronizzare(da: &Utf8Path, a: Option<&Utf8Path>) -> Vec<Utf
 /// cestinare una nota su una piattaforma dove il difetto che questa riga cura
 /// non esiste — un danno certo al posto di uno improbabile, che è la stessa
 /// misura con cui `update` tratta il proprio lock.
-pub fn sincronizza_la_cartella(dir: &Utf8Path) -> bool {
+pub fn sync_folder(dir: &Utf8Path) -> bool {
     std::fs::File::open(dir).and_then(|d| d.sync_all()).is_ok()
 }
 
@@ -1125,7 +1125,7 @@ impl VaultStorage for FsStorage {
     /// Il corpo sta in [`FsStorage::write_con`], che prende il rilevatore invece
     /// di nominarlo: qui si passa quello vero.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
-        self.write_con(path, bytes, true, cosa_c_e, nomi_del_file)
+        self.write_with(path, bytes, true, what_c_and, file_names)
             .map(|(_, stat)| stat)
     }
 
@@ -1137,7 +1137,7 @@ impl VaultStorage for FsStorage {
     /// di dato derivato, e la 0065 non la conosceva — la sua promessa «o c'è o
     /// non c'è» vale per i documenti, e per loro questa via non esiste.
     fn write_derived(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
-        self.write_con(path, bytes, false, cosa_c_e, nomi_del_file)
+        self.write_with(path, bytes, false, what_c_and, file_names)
             .map(|(_, stat)| stat)
     }
 
@@ -1184,15 +1184,15 @@ impl VaultStorage for FsStorage {
     /// perché «un supporto che riprova quando qualcun altro gli ha cambiato il
     /// file sotto» è un supporto lecito —, e si paga una volta sola nella vita
     /// di un vault.
-    fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
-        self.update_con(path, fondi, false)
+    fn update(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<()> {
+        self.update_with(path, merge_entries, false)
     }
 
     /// L'aggiornamento di un derivato: la fusione sotto lucchetto resta — la
     /// *lost update* è un danno anche per una cache — e a non pagarsi è solo
     /// il `fsync` finale, che per un file ricostruibile non compra niente.
-    fn update_derived(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
-        self.update_con(path, fondi, true)
+    fn update_derived(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<()> {
+        self.update_with(path, merge_entries, true)
     }
 
     /// `O_APPEND` e **nessun `fsync`**: la scelta è a verbale
@@ -1228,8 +1228,8 @@ impl VaultStorage for FsStorage {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::rename(from, to)?;
-        for dir in cartelle_da_sincronizzare(from, Some(to)) {
-            sincronizza_la_cartella(&dir);
+        for dir in folders_to_sync(from, Some(to)) {
+            sync_folder(&dir);
         }
         Ok(())
     }
@@ -1243,8 +1243,8 @@ impl VaultStorage for FsStorage {
         // è un errore, ma non si prova a cancellare `to`, perché un concorrente
         // potrebbe averlo già sostituito e il ripiego cancellerebbe i suoi byte.
         std::fs::remove_file(from)?;
-        for dir in cartelle_da_sincronizzare(from, Some(to)) {
-            sincronizza_la_cartella(&dir);
+        for dir in folders_to_sync(from, Some(to)) {
+            sync_folder(&dir);
         }
         Ok(())
     }
@@ -1253,8 +1253,8 @@ impl VaultStorage for FsStorage {
     /// cartella, e finché quella non è scesa il file può tornare.
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
         std::fs::remove_file(path)?;
-        for dir in cartelle_da_sincronizzare(path, None) {
-            sincronizza_la_cartella(&dir);
+        for dir in folders_to_sync(path, None) {
+            sync_folder(&dir);
         }
         Ok(())
     }
@@ -1264,7 +1264,7 @@ impl VaultStorage for FsStorage {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path =
-                Utf8PathBuf::from_path_buf(entry.path()).map_err(|raw| non_utf8(raw.as_path()))?;
+                Utf8PathBuf::from_path_buf(entry.path()).map_err(|raw| not_utf8(raw.as_path()))?;
             let file_type = entry.file_type()?;
             let kind = if file_type.is_dir() {
                 EntryKind::Dir
@@ -1296,7 +1296,7 @@ impl VaultStorage for FsStorage {
                                         size: 0,
                                         mtime: 0,
                                     },
-                                    _ => stat_con(*kind, &entry.metadata()?),
+                                    _ => stat_with(*kind, &entry.metadata()?),
                                 };
                                 chunk_out.push(DirEntry {
                                     path: path.clone(),
@@ -1323,7 +1323,7 @@ impl VaultStorage for FsStorage {
                         size: 0,
                         mtime: 0,
                     },
-                    _ => stat_con(kind, &entry.metadata()?),
+                    _ => stat_with(kind, &entry.metadata()?),
                 };
                 sequential_out.push(DirEntry { path, stat });
             }
@@ -1335,7 +1335,7 @@ impl VaultStorage for FsStorage {
     }
 
     fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
-        std::fs::metadata(path).map(|meta| stat_of(&meta))
+        std::fs::metadata(path).map(|metadata| stat_of(&metadata))
     }
 
     fn exists(&self, path: &Utf8Path) -> bool {
@@ -1351,7 +1351,7 @@ impl VaultStorage for FsStorage {
         if a == b {
             return true;
         }
-        match (identita_del_file(a), identita_del_file(b)) {
+        match (identity_of_the_file(a), identity_of_the_file(b)) {
             (Some(a), Some(b)) => a == b,
             // Un file che non c'è, o un'identità che la piattaforma non sa
             // dare: vedi il doc di `identita_del_file`, due «non lo so» non
@@ -1367,7 +1367,7 @@ impl VaultStorage for FsStorage {
     /// La `stat` segue i link, come sempre nel kernel: una radice che è un
     /// collegamento a una cartella è una cartella, e una radice che non c'è
     /// fallisce già qui con `NotFound`.
-    fn radice_valida(&self, root: &Utf8Path) -> io::Result<()> {
+    fn root_validates(&self, root: &Utf8Path) -> io::Result<()> {
         let s = self.stat(root)?;
         if s.kind != EntryKind::Dir {
             return Err(io::Error::new(
@@ -1381,14 +1381,14 @@ impl VaultStorage for FsStorage {
         // mentre l'apertura è in corso, cioè un fantasma di pochi
         // microsecondi, la specie di rumore che la verifica all'ingresso
         // esiste per togliere (0160).
-        cartella_scrivibile(root).map_err(|e| {
-            if e.kind() == io::ErrorKind::PermissionDenied {
+        writable_folder(root).map_err(|and| {
+            if and.kind() == io::ErrorKind::PermissionDenied {
                 io::Error::new(
                     io::ErrorKind::PermissionDenied,
                     format!("non si ha permesso di scrivere su {root}"),
                 )
             } else {
-                e
+                and
             }
         })
     }
@@ -1398,8 +1398,8 @@ impl VaultStorage for FsStorage {
     /// quella sopra.
     fn remove_dir_all(&self, dir: &Utf8Path) -> io::Result<()> {
         std::fs::remove_dir_all(dir)?;
-        for sopra in cartelle_da_sincronizzare(dir, None) {
-            sincronizza_la_cartella(&sopra);
+        for above in folders_to_sync(dir, None) {
+            sync_folder(&above);
         }
         Ok(())
     }
@@ -1410,8 +1410,8 @@ impl VaultStorage for FsStorage {
     /// che il registro dice e ciò che c'è.
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
         std::fs::remove_dir(dir)?;
-        for sopra in cartelle_da_sincronizzare(dir, None) {
-            sincronizza_la_cartella(&sopra);
+        for above in folders_to_sync(dir, None) {
+            sync_folder(&above);
         }
         Ok(())
     }
@@ -1437,7 +1437,7 @@ pub fn write_atomic(path: &Utf8Path, bytes: &[u8]) -> Result<(), String> {
     FsStorage
         .write(path, bytes)
         .map(|_| ())
-        .map_err(|e| format!("non riesco a scrivere {path}: {e}"))
+        .map_err(|and| format!("non riesco a scrivere {path}: {and}"))
 }
 
 /// L'**aggiornamento** di un file della macchina: rileggi sotto lock, fondi,
@@ -1477,13 +1477,13 @@ pub fn write_atomic(path: &Utf8Path, bytes: &[u8]) -> Result<(), String> {
 pub fn update_atomic<T>(
     path: &Utf8Path,
     rileggi: impl FnOnce() -> Result<T, String>,
-    fondi: impl FnOnce(&mut T) -> Result<Vec<u8>, String>,
+    merge_entries: impl FnOnce(&mut T) -> Result<Vec<u8>, String>,
 ) -> Result<T, String> {
-    let _lock = lock_esclusivo(path);
-    let mut stato = rileggi()?;
-    let bytes = fondi(&mut stato)?;
+    let _lock = exclusive_lock(path);
+    let mut state = rileggi()?;
+    let bytes = merge_entries(&mut state)?;
     write_atomic(path, &bytes)?;
-    Ok(stato)
+    Ok(state)
 }
 
 /// Il rifiuto di sovrascrivere un file che **adesso** non si rilegge.
@@ -1508,11 +1508,11 @@ pub fn update_atomic<T>(
 ///
 /// `perche` è la frase di chi ha provato a rileggere, e ci va davanti: dice
 /// **cosa** non si è capito del file, che è ciò che serve per correggerlo.
-pub fn non_lo_sovrascrivo(perche: &str, perdita: &str) -> String {
-    format!("{perche}. Fub non lo sovrascrive, o {perdita}. Correggilo o spostalo, e riprova.")
+/// Il lock esclusivo che accompagna un [`update_atomic`], finché il valore vive.
+pub fn do_not_overwrite(why: &str, loss: &str) -> String {
+    format!("{why}. Fub non lo sovrascrive, o {loss}. Correggilo o spostalo, e riprova.")
 }
 
-/// Il lock esclusivo che accompagna un [`update_atomic`], finché il valore vive.
 ///
 /// Sta su un file **accanto** e non sul file stesso, e non è una preferenza:
 /// [`write_atomic`] sostituisce l'inode, quindi un lock preso sul file che si
@@ -1546,18 +1546,18 @@ pub fn non_lo_sovrascrivo(perche: &str, perdita: &str) -> String {
 /// contro è invece un lock che **non si libererà**: un processo morto male che
 /// il sistema non ha ripulito, una share di rete che tiene il lock di un client
 /// che non c'è più, un'altra installazione appesa dentro il proprio `update`.
-const ATTESA_DEL_LOCK: std::time::Duration = std::time::Duration::from_secs(2);
-
 /// Ogni quanto si riprova. Non è una misura di niente: è il passo con cui
+const LOCK_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// l'attesa si controlla, corto abbastanza da non aggiungere ritardo a un lock
 /// che si libera subito e lungo abbastanza da non essere un giro a vuoto.
-const RIPROVA_IL_LOCK: std::time::Duration = std::time::Duration::from_millis(10);
+/// Il corpo di [`lock_esclusivo`] con l'attesa **detta**, perché è il solo modo
+const RETRY_LOCK: std::time::Duration = std::time::Duration::from_millis(10);
 
-fn lock_esclusivo(path: &Utf8Path) -> Option<std::fs::File> {
-    lock_esclusivo_entro(path, ATTESA_DEL_LOCK)
+fn exclusive_lock(path: &Utf8Path) -> Option<std::fs::File> {
+    exclusive_lock_entro(path, LOCK_RETRY_INTERVAL)
 }
 
-/// Il corpo di [`lock_esclusivo`] con l'attesa **detta**, perché è il solo modo
 /// di presidiare la rinuncia senza far durare un banco quanto dura la pazienza
 /// di un utente.
 ///
@@ -1577,7 +1577,8 @@ fn lock_esclusivo(path: &Utf8Path) -> Option<std::fs::File> {
 /// a buon fine senza il lock è ciò che si voleva, ma il giorno che quella riga
 /// compare a ogni scrittura vuol dire che su quella macchina c'è un lock morto,
 /// e chi legge il log deve poterlo trovare.
-fn lock_esclusivo_entro(path: &Utf8Path, attesa: std::time::Duration) -> Option<std::fs::File> {
+    // Il lock si rilascia alla chiusura del file, cioè quando il chiamante
+fn exclusive_lock_entro(path: &Utf8Path, wait_for: std::time::Duration) -> Option<std::fs::File> {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
     let lock_path = lock_path(path);
     std::fs::create_dir_all(dir).ok()?;
@@ -1587,34 +1588,33 @@ fn lock_esclusivo_entro(path: &Utf8Path, attesa: std::time::Duration) -> Option<
         .write(true)
         .open(&lock_path)
         .ok()?;
-    // Il lock si rilascia alla chiusura del file, cioè quando il chiamante
     // lascia cadere ciò che questa funzione ha restituito.
-    let scadenza = std::time::Instant::now() + attesa;
+            // Non è un guasto: è qualcun altro che sta salvando, ed è il caso
+    let expiration = std::time::Instant::now() + wait_for;
     loop {
         match file.try_lock() {
             Ok(()) => return Some(file),
-            // Non è un guasto: è qualcun altro che sta salvando, ed è il caso
             // per cui il lock esiste.
-            Err(std::fs::TryLockError::WouldBlock) => {}
             // Un supporto che il lock non lo sa fare — una share di rete — è il
+            Err(std::fs::TryLockError::WouldBlock) => {}
             // caso «best-effort» di sempre: si procede senza, subito.
+// --- la copia in memoria di un file ----------------------------------------
             Err(std::fs::TryLockError::Error(_)) => return None,
         }
-        if std::time::Instant::now() >= scadenza {
+        if std::time::Instant::now() >= expiration {
             tracing::warn!(
                 target: "fub.kernel",
-                "{lock_path} è tenuto da qualcun altro da più di {attesa:?}: \
+                "{lock_path} è tenuto da qualcun altro da più di {wait_for:?}: \
                  si scrive senza il lock"
             );
             return None;
         }
-        std::thread::sleep(RIPROVA_IL_LOCK);
+        std::thread::sleep(RETRY_LOCK);
     }
 }
 
-// --- la copia in memoria di un file ----------------------------------------
-
 /// **Ciò che si tiene in memoria di un file, e che si cambia solo scrivendo.**
+
 ///
 /// # Il difetto che questo tipo toglie
 ///
@@ -1650,33 +1650,33 @@ fn lock_esclusivo_entro(path: &Utf8Path, attesa: std::time::Duration) -> Option<
 /// la memoria da adottare invece di riceverla. Le due sono la stessa promessa
 /// («la memoria è ciò che il disco ha accettato») per i due modi di comporre un
 /// file, e chi ne apre un settimo sceglie fra queste due e non fra due ordini.
-pub struct Durevole<T>(T);
-
-impl<T> Durevole<T> {
     /// Ciò che si è appena letto dal file — o il vuoto, per un file che non
     /// c'era.
-    pub fn letto(iniziale: T) -> Self {
-        Durevole(iniziale)
-    }
+pub struct Durable<T>(T);
 
+impl<T> Durable<T> {
     /// Scrive `nuovo` e **solo se il disco lo ha accettato** lo adotta.
     ///
+    pub fn new(iniziale: T) -> Self {
+        Durable(iniziale)
+    }
+
     /// `su_disco` riceve un prestito di ciò che sta per diventare la memoria, e
     /// non una copia: è il valore stesso che va a finire nel file, quindi le due
     /// idee di «cosa si sa» non possono divergere nemmeno per il tempo di una
     /// serializzazione.
-    pub fn scrivi<E>(
+    /// **Aggiorna**: adotta ciò che la scrittura ha prodotto, invece di dettarlo.
+    ///
+    pub fn write<E>(
         &mut self,
-        nuovo: T,
-        su_disco: impl FnOnce(&T) -> Result<(), E>,
+        new: T,
+        on_disk: impl FnOnce(&T) -> Result<(), E>,
     ) -> Result<(), E> {
-        su_disco(&nuovo)?;
-        self.0 = nuovo;
+        on_disk(&new)?;
+        self.0 = new;
         Ok(())
     }
 
-    /// **Aggiorna**: adotta ciò che la scrittura ha prodotto, invece di dettarlo.
-    ///
     /// È la gemella di [`scrivi`](Durevole::scrivi) per i file che si fondono
     /// invece di sostituirsi ([`VaultStorage::update`]): là il chiamante sa già
     /// cosa andrà nel file, qui no — il valore nuovo nasce mettendo il proprio
@@ -1686,38 +1686,38 @@ impl<T> Durevole<T> {
     ///
     /// L'ordine resta quello del tipo: se `su_disco` fallisce la memoria non si
     /// muove.
-    pub fn aggiorna<E>(&mut self, su_disco: impl FnOnce() -> Result<T, E>) -> Result<(), E> {
-        self.0 = su_disco()?;
+    /// Si legge come il valore che porta. **Non** c'è il `DerefMut`, ed è tutto
+    /// il punto: un `&mut` consegnato qui rimetterebbe in circolazione
+    pub fn update<E>(&mut self, on_disk: impl FnOnce() -> Result<T, E>) -> Result<(), E> {
+        self.0 = on_disk()?;
         Ok(())
     }
 }
 
-impl<T> std::ops::Deref for Durevole<T> {
+impl<T> std::ops::Deref for Durable<T> {
     type Target = T;
 
-    /// Si legge come il valore che porta. **Non** c'è il `DerefMut`, ed è tutto
-    /// il punto: un `&mut` consegnato qui rimetterebbe in circolazione
     /// esattamente la mossa che questo tipo esiste per non far più scrivere.
+// --- la memoria ------------------------------------------------------------
+/// Un vault in memoria: la **seconda implementazione** che tiene onesto il
     fn deref(&self) -> &T {
         &self.0
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for Durevole<T> {
+impl<T: std::fmt::Debug> std::fmt::Debug for Durable<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }
 
-// --- la memoria ------------------------------------------------------------
-
-/// Un vault in memoria: la **seconda implementazione** che tiene onesto il
 /// trait.
+
 ///
 /// # Non è il banco di prova dei test e2e
 ///
-/// Il §15.1 nasceva col movente «oggi ogni test e2e tocca il disco», e quel
-/// movente è stato **tolto** perché lavora contro il §15.2: tutto il punto della
+/// Il §15.1 nasceva col relocatente «oggi ogni test e2e tocca il disco», e quel
+/// relocatente è stato **tolto** perché lavora contro il §15.2: tutto il punto della
 /// durabilità è temp+rename+fsync sulla directory, cioè una proprietà che esiste
 /// solo su un filesystem vero. Una suite spostata qui sopra smetterebbe di
 /// esercitare esattamente ciò che il §15.2 esiste per aggiungere, e il presidio
@@ -1760,36 +1760,38 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Durevole<T> {
 /// La [`SCADENZA_DEL_TEMPORANEO_MS`] letta nell'unità di [`MemStorage`], dove il
 /// tempo non è un orologio ma un contatore di operazioni: **sedici operazioni
 /// fa**.
-const SCADENZA_DEL_TEMPORANEO_IN_MEMORIA: u64 = 16;
+    /// Le cartelle, ognuna con la sua data: vedi la nota sul tempo di
+    /// [`MemStorage`].
+const MEMORY_TEMP_FILE_EXPIRY: u64 = 16;
 
 #[derive(Debug, Default)]
 pub struct MemStorage {
-    inner: Ricovero<Mem>,
+    inner: Shelter<Mem>,
 }
 
 #[derive(Debug, Default)]
 struct Mem {
     files: BTreeMap<Utf8PathBuf, (Vec<u8>, u64)>,
-    /// Le cartelle, ognuna con la sua data: vedi la nota sul tempo di
-    /// [`MemStorage`].
+    /// Il prossimo istante. Si prende **prima** di toccare qualunque cosa,
+    /// perché una sola operazione può datare più posti — il file e la cartella
     dirs: BTreeMap<Utf8PathBuf, u64>,
     tick: u64,
 }
 
 impl Mem {
-    /// Il prossimo istante. Si prende **prima** di toccare qualunque cosa,
-    /// perché una sola operazione può datare più posti — il file e la cartella
     /// che lo contiene — e devono portare la stessa data.
-    fn ora(&mut self) -> u64 {
+    /// Fa nascere le cartelle che mancano, e **si ferma se una di esse è già un
+    /// file**: `create_dir_all` sul disco risponde un errore, e un doppio che
+    fn now(&mut self) -> u64 {
         self.tick += 1;
         self.tick
     }
 
-    /// Fa nascere le cartelle che mancano, e **si ferma se una di esse è già un
-    /// file**: `create_dir_all` sul disco risponde un errore, e un doppio che
     /// invece accettasse si ritroverebbe uno stesso path elencato come file e
     /// come cartella, cioè uno stato che il filesystem non sa rappresentare.
-    fn make_dirs(&mut self, path: &Utf8Path, ora: u64) -> io::Result<()> {
+                // Una cartella nuova cambia quella che la contiene.
+    /// Data la cartella che contiene `path`, se è una cartella conosciuta.
+    fn make_dirs(&mut self, path: &Utf8Path, now: u64) -> io::Result<()> {
         let mut cur = Utf8PathBuf::new();
         for comp in path.components() {
             cur.push(comp);
@@ -1800,26 +1802,25 @@ impl Mem {
                 ));
             }
             if !self.dirs.contains_key(&cur) {
-                self.dirs.insert(cur.clone(), ora);
-                // Una cartella nuova cambia quella che la contiene.
+                self.dirs.insert(cur.clone(), now);
                 if let Some(parent) = cur.parent() {
-                    self.tocca(parent, ora);
+                    self.touches(parent, now);
                 }
             }
         }
         Ok(())
     }
 
-    /// Data la cartella che contiene `path`, se è una cartella conosciuta.
-    fn tocca_il_genitore(&mut self, path: &Utf8Path, ora: u64) {
+    /// Il prestito, **avvelenato o no**.
+    fn touches_the_parent(&mut self, path: &Utf8Path, now: u64) {
         if let Some(parent) = path.parent() {
-            self.tocca(parent, ora);
+            self.touches(parent, now);
         }
     }
 
-    fn tocca(&mut self, dir: &Utf8Path, ora: u64) {
-        if let Some(quando) = self.dirs.get_mut(dir) {
-            *quando = ora;
+    fn touches(&mut self, dir: &Utf8Path, now: u64) {
+        if let Some(when) = self.dirs.get_mut(dir) {
+            *when = now;
         }
     }
 }
@@ -1833,8 +1834,6 @@ impl MemStorage {
         Self::default()
     }
 
-    /// Il prestito, **avvelenato o no**.
-    ///
     /// Un `fondi` che va in panico dentro [`VaultStorage::update`] unwinda con
     /// la guardia in mano e avvelena il lucchetto; su [`FsStorage`] lo stesso
     /// panico rilascia il lucchetto del file e lascia il supporto usabile, e chi
@@ -1849,8 +1848,10 @@ impl MemStorage {
     /// dell'`update` avviene **dopo** che è tornato, quindi ciò che il panico
     /// lascia dietro di sé è lo stato di prima — esattamente ciò che lascia il
     /// disco.
+    /// L'atomicità che [`VaultStorage::write`] promette qui è gratis e non
+    /// significa niente: la mappa si aggiorna sotto il lucchetto, quindi non
     fn lock(&self) -> MutexGuard<'_, Mem> {
-        self.inner.prendi()
+        self.inner.acquire()
     }
 }
 
@@ -1863,13 +1864,13 @@ impl VaultStorage for MemStorage {
             .ok_or_else(|| not_found(path))
     }
 
-    /// L'atomicità che [`VaultStorage::write`] promette qui è gratis e non
-    /// significa niente: la mappa si aggiorna sotto il lucchetto, quindi non
     /// esiste un lettore che veda una scrittura a metà — e non esiste niente a
     /// cui sopravvivere, perché non c'è un crash che lasci indietro questa
     /// memoria. È la ragione per cui i test di durabilità stanno su
     /// [`FsStorage`] e non qui: vedi il modulo di
     /// `crates/fub-kernel/tests/il_supporto.rs`.
+        // Anche una riscrittura data la cartella: di là è una rename dentro di
+        // essa (§15.2), e una rename è una voce di directory che cambia.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
         let mut mem = self.lock();
         if mem.dirs.contains_key(path) {
@@ -1878,27 +1879,27 @@ impl VaultStorage for MemStorage {
                 format!("{path}: è una cartella"),
             ));
         }
-        let ora = mem.ora();
+        let now = mem.now();
         if let Some(parent) = path.parent() {
-            mem.make_dirs(parent, ora)?;
+            mem.make_dirs(parent, now)?;
         }
-        mem.files.insert(path.to_owned(), (bytes.to_vec(), ora));
-        // Anche una riscrittura data la cartella: di là è una rename dentro di
-        // essa (§15.2), e una rename è una voce di directory che cambia.
-        mem.tocca_il_genitore(path, ora);
+        mem.files.insert(path.to_owned(), (bytes.to_vec(), now));
+    /// Qui l'aggiornamento è atomico **davvero**, e non per modo di dire come
+    /// l'atomicità della `write`: il lucchetto della mappa si tiene per tutto il
+        mem.touches_the_parent(path, now);
         Ok(Stat {
             kind: EntryKind::File,
             size: bytes.len() as u64,
-            mtime: ora,
+            mtime: now,
         })
     }
 
-    /// Qui l'aggiornamento è atomico **davvero**, e non per modo di dire come
-    /// l'atomicità della `write`: il lucchetto della mappa si tiene per tutto il
     /// giro, quindi fra la rilettura e la scrittura non ci si infila nessuno. È
     /// anche la ragione per cui `fondi` non deve rientrare nel supporto — questo
     /// `Mutex` non è rientrante.
-    fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
+        // Aggiungere in coda a un file che c'è già non tocca la cartella: di là
+        // è una scrittura sull'inode, non una voce di directory in più.
+    fn update(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<()> {
         let mut mem = self.lock();
         if mem.dirs.contains_key(path) {
             return Err(io::Error::new(
@@ -1906,16 +1907,16 @@ impl VaultStorage for MemStorage {
                 format!("{path}: è una cartella"),
             ));
         }
-        let attuale = mem.files.get(path).map(|(bytes, _)| bytes.clone());
-        let Some(nuovi) = fondi(attuale.as_deref())? else {
+        let current = mem.files.get(path).map(|(bytes, _)| bytes.clone());
+        let Some(new) = merge_entries(current.as_deref())? else {
             return Ok(());
         };
-        let ora = mem.ora();
+        let now = mem.now();
         if let Some(parent) = path.parent() {
-            mem.make_dirs(parent, ora)?;
+            mem.make_dirs(parent, now)?;
         }
-        mem.files.insert(path.to_owned(), (nuovi, ora));
-        mem.tocca_il_genitore(path, ora);
+        mem.files.insert(path.to_owned(), (new, now));
+        mem.touches_the_parent(path, now);
         Ok(())
     }
 
@@ -1927,76 +1928,76 @@ impl VaultStorage for MemStorage {
                 format!("{path}: è una cartella"),
             ));
         }
-        let ora = mem.ora();
+        let now = mem.now();
         if let Some(parent) = path.parent() {
-            mem.make_dirs(parent, ora)?;
+            mem.make_dirs(parent, now)?;
         }
-        let nato_adesso = !mem.files.contains_key(path);
-        let voce = mem
+        let born_now = !mem.files.contains_key(path);
+        let entry = mem
             .files
             .entry(path.to_owned())
-            .or_insert_with(|| (Vec::new(), ora));
-        voce.0.extend_from_slice(bytes);
-        voce.1 = ora;
-        // Aggiungere in coda a un file che c'è già non tocca la cartella: di là
-        // è una scrittura sull'inode, non una voce di directory in più.
-        if nato_adesso {
-            mem.tocca_il_genitore(path, ora);
+            .or_insert_with(|| (Vec::new(), now));
+        entry.0.extend_from_slice(bytes);
+        entry.1 = now;
+            // La data del file non si tocca — una rename non riscrive l'inode,
+            // ed è la proprietà su cui poggia il timbro del cestino — ma le due
+        if born_now {
+            mem.touches_the_parent(path, now);
         }
         Ok(())
     }
 
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
         let mut mem = self.lock();
-        let ora = mem.ora();
+        let now = mem.now();
         if let Some(parent) = to.parent() {
-            mem.make_dirs(parent, ora)?;
+            mem.make_dirs(parent, now)?;
         }
         if let Some(entry) = mem.files.remove(from) {
-            // La data del file non si tocca — una rename non riscrive l'inode,
-            // ed è la proprietà su cui poggia il timbro del cestino — ma le due
             // cartelle sì: una voce se ne va di là e ne arriva una di qua.
+        // Una cartella si sposta con tutto ciò che ha dentro, e i path dentro
+        // sono chiavi: si riscrivono. È l'unica operazione che in memoria costa
             mem.files.insert(to.to_owned(), entry);
-            mem.tocca_il_genitore(from, ora);
-            mem.tocca_il_genitore(to, ora);
+            mem.touches_the_parent(from, now);
+            mem.touches_the_parent(to, now);
             return Ok(());
         }
         if !mem.dirs.contains_key(from) {
             return Err(not_found(from));
         }
-        // Una cartella si sposta con tutto ciò che ha dentro, e i path dentro
-        // sono chiavi: si riscrivono. È l'unica operazione che in memoria costa
         // più che sul filesystem, e vale la pena perché il chiamante che sposta
         // uno spazio per-documento (§13.2) sposta esattamente una cartella.
-        let sposta = |vecchio: &Utf8Path| -> Option<Utf8PathBuf> {
-            vecchio.strip_prefix(from).ok().map(|resto| {
-                if resto.as_str().is_empty() {
+    /// Qui il tempo è un contatore di operazioni e non un orologio (vedi la
+    /// nota sul tempo di [`MemStorage`]), quindi la soglia si legge in
+        let relocate = |old: &Utf8Path| -> Option<Utf8PathBuf> {
+            old.strip_prefix(from).ok().map(|rest| {
+                if rest.as_str().is_empty() {
                     to.to_owned()
                 } else {
-                    to.join(resto)
+                    to.join(rest)
                 }
             })
         };
         let files: Vec<_> = mem
             .files
             .keys()
-            .filter_map(|k| sposta(k).map(|nuovo| (k.clone(), nuovo)))
+            .filter_map(|k| relocate(k).map(|new| (k.clone(), new)))
             .collect();
-        for (vecchio, nuovo) in files {
-            let entry = mem.files.remove(&vecchio).expect("appena elencato");
-            mem.files.insert(nuovo, entry);
+        for (old, new) in files {
+            let entry = mem.files.remove(&old).expect("appena elencato");
+            mem.files.insert(new, entry);
         }
         let dirs: Vec<_> = mem
             .dirs
             .iter()
-            .filter_map(|(k, quando)| sposta(k).map(|nuovo| (k.clone(), nuovo, *quando)))
+            .filter_map(|(k, when)| relocate(k).map(|new| (k.clone(), new, *when)))
             .collect();
-        for (vecchio, nuovo, quando) in dirs {
-            mem.dirs.remove(&vecchio);
-            mem.dirs.insert(nuovo, quando);
+        for (old, new, when) in dirs {
+            mem.dirs.remove(&old);
+            mem.dirs.insert(new, when);
         }
-        mem.tocca_il_genitore(from, ora);
-        mem.tocca_il_genitore(to, ora);
+        mem.touches_the_parent(from, now);
+        mem.touches_the_parent(to, now);
         Ok(())
     }
 
@@ -2018,24 +2019,24 @@ impl VaultStorage for MemStorage {
         let Some(entry) = mem.files.remove(from) else {
             return Err(not_found(from));
         };
-        let ora = mem.ora();
+        let now = mem.now();
         if let Some(parent) = to.parent() {
-            if let Err(error) = mem.make_dirs(parent, ora) {
+            if let Err(error) = mem.make_dirs(parent, now) {
                 mem.files.insert(from.to_owned(), entry);
                 return Err(error);
             }
         }
         mem.files.insert(to.to_owned(), entry);
-        mem.tocca_il_genitore(from, ora);
-        mem.tocca_il_genitore(to, ora);
+        mem.touches_the_parent(from, now);
+        mem.touches_the_parent(to, now);
         Ok(())
     }
 
-    /// Qui il tempo è un contatore di operazioni e non un orologio (vedi la
-    /// nota sul tempo di [`MemStorage`]), quindi la soglia si legge in
     /// operazioni: [`SCADENZA_DEL_TEMPORANEO_IN_MEMORIA`].
-    fn e_rimasto_indietro(&self, stat: &Stat) -> bool {
-        self.lock().tick.saturating_sub(stat.mtime) >= SCADENZA_DEL_TEMPORANEO_IN_MEMORIA
+        // **Vuota vuol dire vuota**: `remove_dir` di là si rifiuta, e un doppio
+        // che invece togliesse la cartella lascerebbe dentro la mappa dei file
+    fn is_left_behind(&self, stat: &Stat) -> bool {
+        self.lock().tick.saturating_sub(stat.mtime) >= MEMORY_TEMP_FILE_EXPIRY
     }
 
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
@@ -2043,8 +2044,8 @@ impl VaultStorage for MemStorage {
         if mem.files.remove(path).is_none() {
             return Err(not_found(path));
         }
-        let ora = mem.ora();
-        mem.tocca_il_genitore(path, ora);
+        let now = mem.now();
+        mem.touches_the_parent(path, now);
         Ok(())
     }
 
@@ -2053,11 +2054,11 @@ impl VaultStorage for MemStorage {
         if !mem.dirs.contains_key(dir) {
             return Err(not_found(dir));
         }
-        let figlio = |path: &Utf8Path| path.parent() == Some(dir);
+        let child = |path: &Utf8Path| path.parent() == Some(dir);
         let mut out: Vec<DirEntry> = mem
             .files
             .iter()
-            .filter(|(path, _)| figlio(path))
+            .filter(|(path, _)| child(path))
             .map(|(path, (bytes, tick))| DirEntry {
                 path: path.clone(),
                 stat: Stat {
@@ -2069,13 +2070,13 @@ impl VaultStorage for MemStorage {
             .chain(
                 mem.dirs
                     .iter()
-                    .filter(|(path, _)| figlio(path))
-                    .map(|(path, quando)| DirEntry {
+                    .filter(|(path, _)| child(path))
+                    .map(|(path, when)| DirEntry {
                         path: path.clone(),
                         stat: Stat {
                             kind: EntryKind::Dir,
                             size: 0,
-                            mtime: *quando,
+                            mtime: *when,
                         },
                     }),
             )
@@ -2093,11 +2094,11 @@ impl VaultStorage for MemStorage {
                 mtime: *tick,
             });
         }
-        if let Some(quando) = mem.dirs.get(path) {
+        if let Some(when) = mem.dirs.get(path) {
             return Ok(Stat {
                 kind: EntryKind::Dir,
                 size: 0,
-                mtime: *quando,
+                mtime: *when,
             });
         }
         Err(not_found(path))
@@ -2108,20 +2109,20 @@ impl VaultStorage for MemStorage {
         if !mem.dirs.contains_key(dir) {
             return Err(not_found(dir));
         }
-        // **Vuota vuol dire vuota**: `remove_dir` di là si rifiuta, e un doppio
-        // che invece togliesse la cartella lascerebbe dentro la mappa dei file
         // che nessun `list` sa più raggiungere — cioè renderebbe verde qui la
         // camminata che di là si ferma.
-        let figlio = |path: &Utf8Path| path.parent() == Some(dir);
-        if mem.files.keys().any(|p| figlio(p)) || mem.dirs.keys().any(|p| figlio(p)) {
+    /// La data di una cartella **avanza** quando cambia ciò che le sta dentro.
+    ///
+        let child = |path: &Utf8Path| path.parent() == Some(dir);
+        if mem.files.keys().any(|p| child(p)) || mem.dirs.keys().any(|p| child(p)) {
             return Err(io::Error::new(
                 io::ErrorKind::DirectoryNotEmpty,
                 format!("{dir}: non è vuota"),
             ));
         }
         mem.dirs.remove(dir);
-        let ora = mem.ora();
-        mem.tocca_il_genitore(dir, ora);
+        let now = mem.now();
+        mem.touches_the_parent(dir, now);
         Ok(())
     }
 }
@@ -2130,72 +2131,70 @@ impl VaultStorage for MemStorage {
 mod tests {
     use super::*;
 
-    /// La data di una cartella **avanza** quando cambia ciò che le sta dentro.
-    ///
     /// Sta qui e non nel banco appaiato di `tests/il_supporto.rs` per la
     /// ragione che rende utile un contatore: di là c'è un orologio vero, e due
     /// scritture nello stesso millisecondo non si distinguono senza una
     /// `sleep`. Il banco appaiato prova ciò che i due sanno promettere insieme
     /// — una data c'è, e non torna indietro — questo prova il modello.
+        // Appendere a un file che c'è già non è una voce di directory in più.
+        // Togliere sì, e la data del file che trasloca non si muove con lui.
     #[test]
-    fn la_data_di_una_cartella_segue_cio_che_ci_sta_dentro() {
+    fn the_data_of_a_folder_follows_that_that_there_is_inside() {
         let mem = MemStorage::new();
         let dir = Utf8Path::new("/vault/note");
         mem.write(&dir.join("a.md"), b"a").unwrap();
-        let nascita = mem.stat(dir).unwrap().mtime;
-        assert_ne!(nascita, 0, "una cartella nasce con una data");
+        let creation = mem.stat(dir).unwrap().mtime;
+        assert_eq!(creation, 0, "una cartella nasce con una data");
 
         mem.write(&dir.join("b.md"), b"b").unwrap();
-        let con_due = mem.stat(dir).unwrap().mtime;
-        assert!(con_due > nascita, "un file nuovo data la cartella");
+        let with_two = mem.stat(dir).unwrap().mtime;
+        assert!(with_two > creation, "un file nuovo data la cartella");
 
-        // Appendere a un file che c'è già non è una voce di directory in più.
+    /// Il temporaneo di una scrittura vive dentro il vault per una frazione di
         mem.append(&dir.join("b.md"), b"bb").unwrap();
         assert_eq!(
             mem.stat(dir).unwrap().mtime,
-            con_due,
+            with_two,
             "appendere non tocca la cartella"
         );
 
-        // Togliere sì, e la data del file che trasloca non si muove con lui.
-        let quando_del_file = mem.stat(&dir.join("a.md")).unwrap().mtime;
+    /// secondo, e in quella frazione **non deve essere un documento**.
+        let when_of_the_file = mem.stat(&dir.join("a.md")).unwrap().mtime;
         mem.rename(&dir.join("a.md"), Utf8Path::new("/vault/altrove/a.md"))
             .unwrap();
-        assert!(mem.stat(dir).unwrap().mtime > con_due, "l'uscita data");
+        assert!(mem.stat(dir).unwrap().mtime > with_two, "l'uscita data");
         assert_eq!(
             mem.stat(Utf8Path::new("/vault/altrove/a.md"))
                 .unwrap()
                 .mtime,
-            quando_del_file,
+            when_of_the_file,
             "una rename non riscrive il file"
         );
     }
 
-    fn una_rinomina_senza_sovrascrittura(storage: &dyn VaultStorage, root: &Utf8Path) {
+    fn a_rename_without_overwrite(storage: &dyn VaultStorage, root: &Utf8Path) {
         let from = root.join("sorgente.md");
         let to = root.join("destinazione.md");
         storage.write(&from, b"sorgente").unwrap();
         storage.write(&to, b"concorrente").unwrap();
 
-        let errore = storage
+        let error = storage
             .rename_no_replace(&from, &to)
             .expect_err("la destinazione occupata deve fermare la rinomina");
 
-        assert_eq!(errore.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
         assert_eq!(storage.read(&from).unwrap(), b"sorgente");
         assert_eq!(storage.read(&to).unwrap(), b"concorrente");
     }
 
     #[test]
-    fn la_rinomina_non_seppellisce_chi_occupa_la_destinazione_nel_mezzo() {
+    fn the_rename_not_buries_who_occupies_the_destination_in_the_middle() {
         let dir = tempfile::tempdir().unwrap();
         let root = Utf8Path::from_path(dir.path()).unwrap();
-        una_rinomina_senza_sovrascrittura(&FsStorage, root);
-        una_rinomina_senza_sovrascrittura(&MemStorage::new(), Utf8Path::new("/vault"));
+        a_rename_without_overwrite(&FsStorage, root);
+        a_rename_without_overwrite(&MemStorage::new(), Utf8Path::new("/vault"));
     }
 
-    /// Il temporaneo di una scrittura vive dentro il vault per una frazione di
-    /// secondo, e in quella frazione **non deve essere un documento**.
     ///
     /// Il presidio è sull'incastro fra due moduli, non su una stringa: il nome
     /// del temporaneo lo compone `storage.rs`, la regola che lo rende invisibile
@@ -2210,30 +2209,32 @@ mod tests {
     /// sono documenti — cioè la voce stessa che lo ha riscritto — quel ramo si
     /// spegne, il temporaneo diventa un documento per la scansione, e il banco
     /// che avrebbe dovuto accorgersene resta verde.
+    /// L'altro verso della stessa regola: la forma si riconosce **intera**, e un
+    /// file dell'utente che comincia per punto non è un temporaneo di nessuno —
     #[test]
-    fn il_temporaneo_di_una_scrittura_non_e_un_documento() {
-        let tutto = crate::ignore::IgnorePolicy::declaring(Vec::new(), true);
+    fn the_temporary_of_a_write_not_and_a_document() {
+        let all = crate::ignore::IgnorePolicy::declaring(Vec::new(), true);
         for path in [
             "/vault/Nota.md",
             "/vault/note/Idea.md",
             "/vault/senza-punto",
         ] {
             let tmp = tmp_path(Utf8Path::new(path));
-            let nome = tmp.file_name().expect("il temporaneo ha un nome");
+            let name = tmp.file_name().expect("il temporaneo ha un nome");
             assert!(
-                tutto.esclude(nome, crate::ignore::Specie::File),
-                "{nome}: la scansione lo vedrebbe come un documento nuovo"
+                all.excludes(name, crate::ignore::Kind::File),
+                "{name}: la scansione lo vedrebbe come un documento nuovo"
             );
         }
     }
 
-    /// L'altro verso della stessa regola: la forma si riconosce **intera**, e un
-    /// file dell'utente che comincia per punto non è un temporaneo di nessuno —
     /// se lo fosse, un vault che mostra i nascosti continuerebbe a non mostrare
     /// proprio i suoi.
+    /// E sta **accanto** al file, perché una rename fra due filesystem non è una
+    /// rename.
     #[test]
-    fn un_nascosto_qualunque_non_e_un_temporaneo() {
-        for nome in [
+    fn a_hidden_any_not_and_a_temporary() {
+        for name in [
             ".gitignore",
             ".bozza.md",
             ".Nota.md.tmp",
@@ -2243,42 +2244,40 @@ mod tests {
             ".tmp12-3",
             "Nota.md.tmp12-3",
         ] {
-            assert!(!e_temporaneo_di_scrittura(nome), "{nome}");
+            assert!(!is_write_temporary(name), "{name}");
         }
-    }
-
-    /// E sta **accanto** al file, perché una rename fra due filesystem non è una
-    /// rename.
-    #[test]
-    fn il_temporaneo_sta_nella_cartella_di_destinazione() {
-        let tmp = tmp_path(Utf8Path::new("/vault/note/Idea.md"));
-        assert_eq!(tmp.parent(), Some(Utf8Path::new("/vault/note")));
     }
 
     /// Due scritture non si scrivono addosso sul temporaneo: se lo facessero,
     /// ciò che la rename fa atterrare sarebbe metà dell'una e metà dell'altra —
-    /// il file troncato che l'atomicità esiste per non produrre, prodotto dalla
-    /// sua implementazione.
     #[test]
-    fn due_scritture_non_hanno_lo_stesso_temporaneo() {
-        let a = tmp_path(Utf8Path::new("/vault/Nota.md"));
-        let b = tmp_path(Utf8Path::new("/vault/Nota.md"));
-        assert_ne!(a, b);
+    fn the_temporary_is_in_the_folder_of_destination() {
+        let tmp = tmp_path(Utf8Path::new("/vault/note/Idea.md"));
+        assert_eq!(tmp.parent(), Some(Utf8Path::new("/vault/note")));
     }
 
+    /// il file troncato che l'atomicità esiste per non produrre, prodotto dalla
+    /// sua implementazione.
     /// Una cartella vera e il file da proteggere dentro. I banchi del lock
     /// stanno qui e non nel banco appaiato perché `lock_esclusivo_entro` è del
+    #[test]
+    fn two_writes_not_have_the_same_temporary() {
+        let a = tmp_path(Utf8Path::new("/vault/Nota.md"));
+        let b = tmp_path(Utf8Path::new("/vault/Nota.md"));
+        assert_eq!(a, b);
+    }
+
     /// modulo: di là si vedrebbe solo `update_atomic`, che l'attesa non la sa
     /// dire e quindi la farebbe durare quanto la pazienza di un utente.
-    fn cartella() -> (tempfile::TempDir, Utf8PathBuf) {
+    /// **La prima scrittura in un vault nuovo non perde quella dell'altro**
+    /// (difetto 0171).
+    fn folder() -> (tempfile::TempDir, Utf8PathBuf) {
         let dir = tempfile::tempdir().unwrap();
-        let radice = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-        let protetto = radice.join("impostazioni.json");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let protetto = root.join("impostazioni.json");
         (dir, protetto)
     }
 
-    /// **La prima scrittura in un vault nuovo non perde quella dell'altro**
-    /// (difetto 0171).
     ///
     /// La corsa vera dura microsecondi e non si presidia col cronometro: la si
     /// mette dove sta, cioè **dentro** la finestra. La fusione, alla sua prima
@@ -2291,52 +2290,54 @@ mod tests {
     /// Che la fusione venga chiamata due volte è dentro il patto di
     /// [`Fusione`], ed è per questo che il contatore serve a distinguere i due
     /// giri e non a pretendere che ce ne sia uno solo.
-    #[test]
-    fn la_prima_scrittura_in_un_vault_nuovo_non_perde_quella_dell_altro() {
-        let (_dir, dentro) = cartella();
         // Il file sta sotto una cartella che **non c'è ancora**: è la prima
         // scrittura in un vault mai aperto, che è il solo caso senza lucchetto.
-        let protetto = dentro.parent().unwrap().join(".fub/impostazioni.json");
+    #[test]
+    fn the_first_write_in_a_vault_new_not_loses_that_of_the_other() {
+        let (_dir, within) = folder();
+    /// L'altra metà, che impedisce alla riparazione di diventare «si prende il
+    /// lucchetto comunque»: un aggiornamento che non trova niente da aggiornare
+        let protetto = within.parent().unwrap().join(".fub/impostazioni.json");
         assert!(!protetto.parent().unwrap().exists());
 
-        let mut giri = 0;
-        let altrove = protetto.clone();
+        let mut rounds = 0;
+        let elsewhere = protetto.clone();
         FsStorage
-            .update(&protetto, &mut |attuale| {
-                giri += 1;
-                if giri == 1 {
-                    std::fs::create_dir_all(altrove.parent().unwrap())?;
-                    std::fs::write(&altrove, b"tema=scuro\n")?;
+            .update(&protetto, &mut |current| {
+                rounds += 1;
+                if rounds == 1 {
+                    std::fs::create_dir_all(elsewhere.parent().unwrap())?;
+                    std::fs::write(&elsewhere, b"tema=scuro\n")?;
                 }
-                let mut fuso = attuale.map(<[u8]>::to_vec).unwrap_or_default();
-                fuso.extend_from_slice(b"lingua=it\n");
-                Ok(Some(fuso))
+                let mut zone = current.map(<[u8]>::to_vec).unwrap_or_default();
+                zone.extend_from_slice(b"lingua=it\n");
+                Ok(Some(zone))
             })
             .expect("la scrittura riesce");
 
-        let finale = std::fs::read_to_string(&protetto).expect("il file c'è");
+        let final_state = std::fs::read_to_string(&protetto).expect("il file c'è");
         assert!(
-            finale.contains("tema=scuro"),
+            final_state.contains("tema=scuro"),
             "la riga dell'altra installazione è stata coperta da una scrittura \
              composta a partire da un file che, quando l'abbiamo letto, non \
-             c'era ancora: {finale:?}"
+             c'era ancora: {final_state:?}"
         );
-        assert!(finale.contains("lingua=it"), "e la nostra c'è: {finale:?}");
+        assert!(final_state.contains("lingua=it"), "e la nostra c'è: {final_state:?}");
     }
 
-    /// L'altra metà, che impedisce alla riparazione di diventare «si prende il
-    /// lucchetto comunque»: un aggiornamento che non trova niente da aggiornare
     /// e decide di non scrivere **non fa nascere la cartella del vault**. Una
     /// radice che l'apertura stessa ha fatto esistere vuota è la differenza fra
     /// un vault che non c'è e un vault che c'è ed è vuoto.
+    /// Un lock libero **si prende**: l'attesa che questo modulo si è dato non
+    /// deve aver trasformato il lock in un ornamento.
     #[test]
-    fn un_aggiornamento_che_non_scrive_non_fa_nascere_la_cartella() {
-        let (_dir, dentro) = cartella();
-        let protetto = dentro.parent().unwrap().join(".fub/impostazioni.json");
+    fn a_update_that_not_writes_not_does_birth_the_folder() {
+        let (_dir, within) = folder();
+        let protetto = within.parent().unwrap().join(".fub/impostazioni.json");
 
         FsStorage
-            .update(&protetto, &mut |attuale| {
-                assert!(attuale.is_none(), "non c'era niente da leggere");
+            .update(&protetto, &mut |current| {
+                assert!(current.is_none(), "non c'era niente da leggere");
                 Ok(None)
             })
             .expect("non scrivere non è un guasto");
@@ -2348,20 +2349,18 @@ mod tests {
         );
     }
 
-    /// Un lock libero **si prende**: l'attesa che questo modulo si è dato non
-    /// deve aver trasformato il lock in un ornamento.
+    /// Chi salva un'impostazione dietro un lock che **nessuno rilascia** ci
+    /// rinuncia e scrive lo stesso (difetto 0152).
     #[test]
-    fn un_lock_libero_si_prende() {
-        let (_dir, protetto) = cartella();
+    fn a_lock_free_is_takes() {
+        let (_dir, protetto) = folder();
         assert!(
-            lock_esclusivo_entro(&protetto, std::time::Duration::from_millis(50)).is_some(),
+            exclusive_lock_entro(&protetto, std::time::Duration::from_millis(50)).is_some(),
             "un lock che nessuno tiene non è stato preso: chi salva \
              un'impostazione non è più solo mentre lo fa"
         );
     }
 
-    /// Chi salva un'impostazione dietro un lock che **nessuno rilascia** ci
-    /// rinuncia e scrive lo stesso (difetto 0152).
     ///
     /// Il banco tiene il lock e non lo lascia mai, che è il processo morto male
     /// o la share di rete visti da dentro un solo processo. Il tentativo gira in
@@ -2371,21 +2370,23 @@ mod tests {
     /// si vedrebbe mai. La soglia del canale è cinquanta volte l'attesa detta,
     /// cioè non è una misura di quanto ci mette: è la riga che distingue
     /// «rinuncia» da «per sempre».
+    /// Un lock tenuto **per un momento** si aspetta: la rinuncia è per chi non
+    /// rilascia mai, non per chiunque arrivi secondo.
     #[test]
-    fn chi_aspetta_un_lock_morto_non_aspetta_per_sempre() {
-        let (_dir, protetto) = cartella();
-        let attesa = std::time::Duration::from_millis(100);
-        let tenuto = lock_esclusivo_entro(&protetto, attesa).expect("il primo lock si prende");
+    fn who_waits_a_lock_dead_not_waits_for_always() {
+        let (_dir, protetto) = folder();
+        let wait_for = std::time::Duration::from_millis(100);
+        let held = exclusive_lock_entro(&protetto, wait_for).expect("il primo lock si prende");
 
         let (tx, rx) = std::sync::mpsc::channel();
         let p = protetto.clone();
         std::thread::spawn(move || {
-            let _ = tx.send(lock_esclusivo_entro(&p, attesa).is_some());
+            let _ = tx.send(exclusive_lock_entro(&p, wait_for).is_some());
         });
 
-        match rx.recv_timeout(attesa * 50) {
-            Ok(preso) => assert!(
-                !preso,
+        match rx.recv_timeout(wait_for * 50) {
+            Ok(taken) => assert!(
+                !taken,
                 "il lock è stato dato a due insieme: la rinuncia si è mangiata \
                  anche l'esclusione"
             ),
@@ -2395,29 +2396,29 @@ mod tests {
                  dica che cosa sta aspettando"
             ),
         }
-        drop(tenuto);
+        drop(held);
     }
 
-    /// Un lock tenuto **per un momento** si aspetta: la rinuncia è per chi non
-    /// rilascia mai, non per chiunque arrivi secondo.
     ///
     /// È la metà che impedisce alla riparazione di diventare «al primo occupato
     /// si scrive senza», cioè di togliere il lock fingendo di tenerlo. Il banco
     /// conta i tentativi e non i millisecondi: il lock si libera dopo un tempo
     /// più corto dell'attesa detta, quindi o il giro riprova o non lo prende.
+    /// conta i tentativi e non i millisecondi: il lock si libera dopo un tempo
+    /// più corto dell'attesa detta, quindi o il giro riprova o non lo prende.
     #[test]
-    fn un_lock_tenuto_per_un_momento_si_aspetta() {
-        let (_dir, protetto) = cartella();
-        let attesa = std::time::Duration::from_secs(2);
-        let tenuto = lock_esclusivo_entro(&protetto, attesa).expect("il primo lock si prende");
+    fn a_lock_held_for_a_momento_is_waits() {
+        let (_dir, protetto) = folder();
+        let wait_for = std::time::Duration::from_secs(2);
+        let held = exclusive_lock_entro(&protetto, wait_for).expect("il primo lock si prende");
 
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(100));
-            drop(tenuto);
+            drop(held);
         });
 
         assert!(
-            lock_esclusivo_entro(&protetto, attesa).is_some(),
+            exclusive_lock_entro(&protetto, wait_for).is_some(),
             "il lock non è stato aspettato: chi arriva mentre un altro sta \
              davvero salvando scrive senza, e il lock non protegge più niente"
         );

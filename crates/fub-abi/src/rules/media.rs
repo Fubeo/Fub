@@ -44,7 +44,7 @@ use crate::traits::EntryKind;
 /// lo sa parsare — ed è quella la differenza che conta a valle.
 pub fn kind_of(id: &DocId, doc_extensions: &[String]) -> EntryKind {
     kind_of_ext(id, |ext| {
-        doc_extensions.iter().any(|e| e.eq_ignore_ascii_case(ext))
+        doc_extensions.iter().any(|and| and.eq_ignore_ascii_case(ext))
     })
 }
 
@@ -136,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn chi_rivendica_lestensione_vince_sempre() {
+    fn who_claims_extension_wins_always() {
         assert_eq!(
             kind_of(&DocId::new("note/a.md"), &md()),
             EntryKind::Document
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn sconosciuto_e_una_risposta_non_un_buco() {
+    fn unknown_and_a_response_not_a_hole() {
         // Un `.canvas` oggi non lo rivendica nessuno: il vault lo vede e dice
         // che non sa cosa sia. Domani, con un provider registrato, la stessa
         // riga risponde `Document` senza che il file sia cambiato.
@@ -173,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn il_mime_viene_dal_nome_e_lo_dice_la_firma() {
+    fn the_mime_becomes_from_the_name_and_the_says_the_signature() {
         assert_eq!(mime_of(&DocId::new("img/foto.PNG")), Some("image/png"));
         assert_eq!(mime_of(&DocId::new("a/b/rec.m4a")), Some("audio/mp4"));
         assert_eq!(

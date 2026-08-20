@@ -165,12 +165,12 @@ pub struct Draft {
 /// testo dell'utente perduto, e mostrarne tre quando ce n'erano quattro sarebbe
 /// la perdita silenziosa che la seduta 20 vieta.
 #[derive(Debug, Default)]
-pub struct Bozze {
+pub struct DraftRead {
     /// Le bozze, dalla più recente alla più vecchia.
     pub drafts: Vec<Draft>,
     /// Quanti file non si sono letti: illeggibili, non parsabili, o di una
     /// versione di schema che non si conosce.
-    pub scartate: usize,
+    pub pruned: usize,
 }
 
 /// Le bozze di un vault.
@@ -238,7 +238,7 @@ impl Drafts {
     ///
     /// La cartella che **non c'è** è il caso normale — nessuno ha mai avuto un
     /// buffer sporco — e un file rotto in mezzo si conta in
-    /// [`Bozze::scartate`] invece di fermare la lettura degli altri.
+    /// [`Bozze::pruned`] invece di fermare la lettura degli altri.
     ///
     /// **Una cartella che non si legge non è una cartella senza bozze**, e
     /// prima lo era: un `list` fallito per permessi o per I/O faceva sparire in
@@ -246,10 +246,10 @@ impl Drafts {
     /// successivo ci scriveva sopra convinto che non ci fosse niente. Qui il
     /// posto in cui questo testo vive è l'unica copia al mondo, quindi il
     /// guasto risale e chi ha chiesto lo vede.
-    pub(crate) fn read(&self) -> std::io::Result<Bozze> {
-        let mut bozze = Bozze::default();
-        let Some(entries) = crate::error::se_c_e(self.storage.list(&self.dir))? else {
-            return Ok(bozze);
+    pub(crate) fn read(&self) -> std::io::Result<DraftRead> {
+        let mut drafts = DraftRead::default();
+        let Some(entries) = crate::error::optional(self.storage.list(&self.dir))? else {
+            return Ok(drafts);
         };
         for entry in entries {
             if !entry.stat.is_file() {
@@ -257,10 +257,10 @@ impl Drafts {
             }
             // Il nome dice già di quale documento è: se non lo dice, il file non
             // è nostro e non lo si conta fra le bozze perdute.
-            let Some(di_chi) = entry.path.file_name().and_then(documento_del_nome) else {
+            let Some(whose) = entry.path.file_name().and_then(document_from_name) else {
                 continue;
             };
-            let letta = self
+            let parsed = self
                 .storage
                 .read(&entry.path)
                 .ok()
@@ -274,18 +274,18 @@ impl Drafts {
                     if self.storage.same_file(&self.path(&d.doc), &entry.path) {
                         d
                     } else {
-                        Draft { doc: di_chi, ..d }
+                        Draft { doc: whose, ..d }
                     }
                 });
-            match letta {
-                Some(draft) => bozze.drafts.push(draft),
-                None => bozze.scartate += 1,
+            match parsed {
+                Some(draft) => drafts.drafts.push(draft),
+                None => drafts.pruned += 1,
             }
         }
         // Dalla più recente: è l'ordine in cui si offre un recupero, perché la
         // bozza di dieci secondi fa è quella su cui l'utente era.
-        bozze.drafts.sort_by_key(|d| std::cmp::Reverse(d.at));
-        Ok(bozze)
+        drafts.drafts.sort_by_key(|d| std::cmp::Reverse(d.at));
+        Ok(drafts)
     }
 
     /// La bozza di un documento, se c'è — e un errore se non si è potuto
@@ -297,7 +297,7 @@ impl Drafts {
     /// permesso negato come «non c'era nessuna bozza» le farebbe portare a
     /// destinazione un record che dice ancora il nome vecchio.
     pub(crate) fn get(&self, doc: &DocId) -> std::io::Result<Option<Draft>> {
-        let bytes = crate::error::se_c_e(self.storage.read(&self.path(doc)))?;
+        let bytes = crate::error::optional(self.storage.read(&self.path(doc)))?;
         Ok(bytes.and_then(|bytes| {
             serde_json::from_slice::<Draft>(&bytes)
                 .ok()
@@ -324,7 +324,7 @@ impl Drafts {
     /// Trovandola occupata la bozza di `to` non si tocca — è il testo non
     /// salvato di un'identità diversa — e quella di `from` non resta sotto
     /// l'id morto, dove nessun recupero la cercherebbe: prende un **nome di
-    /// recupero** libero ([`Drafts::nome_di_recupero`]), che decodifica in un
+    /// recupero** libero ([`Drafts::recovery_name`]), che decodifica in un
     /// documento che non esiste, e [`Drafts::read`] la elenca fra le bozze
     /// **orfane** — l'unica forma che un recupero ritrova. Due bozze vive in
     /// due posti sono un disordine; una sola, sotto una chiave che nessuno
@@ -367,35 +367,35 @@ impl Drafts {
     /// stato a metà della voce — la bozza al nome nuovo con dentro scritto
     /// quello vecchio.
     pub(crate) fn migrate(&self, from: &DocId, to: &DocId) -> std::io::Result<()> {
-        let vecchio = self.path(from);
-        let nuovo = self.path(to);
-        if !self.storage.exists(&vecchio) {
+        let old = self.path(from);
+        let new = self.path(to);
+        if !self.storage.exists(&old) {
             return Ok(());
         }
-        if !self.storage.same_file(&vecchio, &nuovo) {
+        if !self.storage.same_file(&old, &new) {
             // La destinazione non si sovrascrive, mai: se ha già una bozza sua
             // — o un concorrente gliene posa una fra qui e la mossa — quella
             // di `from` prende un nome di recupero libero
-            // ([`Drafts::nome_di_recupero`]), e la lettura la elenca come
+            // ([`Drafts::recovery_name`]), e la lettura la elenca come
             // bozza orfana. La verifica e la mossa sono una sola operazione:
             // `rename_no_replace`, e non `exists` seguito da `rename` — fra i
             // due non c'è un concorrente che possa farsi sovrascrivere.
-            return match self.storage.rename_no_replace(&vecchio, &nuovo) {
+            return match self.storage.rename_no_replace(&old, &new) {
                 Ok(()) => Ok(()),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    self.nome_di_recupero(from, &vecchio)?;
+                Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists => {
+                    self.recovery_name(from, &old)?;
                     Ok(())
                 }
-                Err(e) => Err(e),
+                Err(and) => Err(and),
             };
         }
         let Some(mut draft) = self.get(from)? else {
-            return self.storage.rename(&vecchio, &nuovo);
+            return self.storage.rename(&old, &new);
         };
         draft.doc = to.clone();
         let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
-        self.storage.write(&vecchio, &bytes)?;
-        self.storage.rename(&vecchio, &nuovo)
+        self.storage.write(&old, &bytes)?;
+        self.storage.rename(&old, &new)
     }
 
     /// Sposta il file di bozza sotto un **nome di recupero** libero, e torna
@@ -419,8 +419,8 @@ impl Drafts {
     /// resta `prima~recupero`. Estensione e forma restano quelle di ogni
     /// bozza: un nome che [`documento_del_nome`] non riconoscesse sarebbe
     /// testo che nessuno sa leggere.
-    fn nome_di_recupero(&self, from: &DocId, vecchio: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
-        let cartella = vecchio.parent().ok_or_else(|| {
+    fn recovery_name(&self, from: &DocId, old: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
+        let folder = old.parent().ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "il file di bozza non sta in una cartella",
@@ -429,22 +429,22 @@ impl Drafts {
         // Lo stelo resta com'è, `~recupero` si attacca davanti all'estensione.
         // Un nome senza doti — o con il punto in testa o in coda — non ha
         // estensione da conservare, e il suffisso va in fondo al nome.
-        let (stelo, estensione) = match from.as_str().rsplit_once('.') {
-            Some((s, e)) if !s.is_empty() && !e.is_empty() => (s, Some(e)),
+        let (stem, extension) = match from.as_str().rsplit_once('.') {
+            Some((s, and)) if !s.is_empty() && !and.is_empty() => (s, Some(and)),
             _ => (from.as_str(), None),
         };
         for n in 1u64.. {
-            let candidato = match estensione {
-                Some(ext) if n == 1 => format!("{stelo}~recupero.{ext}"),
-                Some(ext) => format!("{stelo}~recupero-{n}.{ext}"),
-                None if n == 1 => format!("{stelo}~recupero"),
-                None => format!("{stelo}~recupero-{n}"),
+            let candidate = match extension {
+                Some(ext) if n == 1 => format!("{stem}~recovery.{ext}"),
+                Some(ext) => format!("{stem}~recovery-{n}.{ext}"),
+                None if n == 1 => format!("{stem}~recovery"),
+                None => format!("{stem}~recovery-{n}"),
             };
-            let percorso = cartella.join(format!("{}.{EXT}", encode(candidato.as_str())));
-            match self.storage.rename_no_replace(vecchio, &percorso) {
-                Ok(()) => return Ok(percorso),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(e),
+            let path = folder.join(format!("{}.{EXT}", encode(candidate.as_str())));
+            match self.storage.rename_no_replace(old, &path) {
+                Ok(()) => return Ok(path),
+                Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(and) => return Err(and),
             }
         }
         unreachable!("i nomi di recupero non finiscono: a ogni giro l'encode è diverso")
@@ -460,7 +460,7 @@ impl Drafts {
 /// decodificare due volte, e dare a chi legge la possibilità di fare la prima
 /// senza la seconda — che è come il campo dentro il record poteva restare
 /// indietro rispetto al nome del file (difetto 0169).
-fn documento_del_nome(name: &str) -> Option<DocId> {
+fn document_from_name(name: &str) -> Option<DocId> {
     let stem = name.strip_suffix(&format!(".{EXT}"))?;
     if stem.is_empty() {
         return None;
@@ -472,22 +472,22 @@ fn documento_del_nome(name: &str) -> Option<DocId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{DirEntry, Fusione, MemStorage, Stat};
+    use crate::storage::{DirEntry, Merge, MemStorage, Stat};
     use std::io;
 
     /// Un supporto che non lascia togliere niente: è il modo di fermare una
     /// migrazione **fra** le sue mutazioni, se ne ha più di una.
-    struct SenzaCancellare(MemStorage);
+    struct NoDelete(MemStorage);
 
-    impl VaultStorage for SenzaCancellare {
+    impl VaultStorage for NoDelete {
         fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
             self.0.read(path)
         }
         fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
             self.0.write(path, bytes)
         }
-        fn update(&self, path: &Utf8Path, fondi: Fusione<'_>) -> io::Result<()> {
-            self.0.update(path, fondi)
+        fn update(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<()> {
+            self.0.update(path, merge_entries)
         }
         fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
             self.0.append(path, bytes)
@@ -523,26 +523,26 @@ mod tests {
     /// record nuovo è già stato scritto — che è tutto ciò che serve quando le
     /// mutazioni sono due. Con una sola non c'è un «dopo» in cui fermarsi.
     #[test]
-    fn una_bozza_che_segue_la_rinomina_non_si_sdoppia_se_il_supporto_inciampa() {
+    fn a_draft_that_follows_the_rename_not_is_duplicates_if_the_support_stumbles() {
         let d = Drafts::open(
             Utf8Path::new("/vault"),
-            Arc::new(SenzaCancellare(MemStorage::new())) as Arc<dyn VaultStorage>,
+            Arc::new(NoDelete(MemStorage::new())) as Arc<dyn VaultStorage>,
         );
         d.save(&doc("a.md"), "il mio testo", None, 10).unwrap();
 
         let _ = d.migrate(&doc("a.md"), &doc("b.md"));
 
-        let bozze = d.read().unwrap();
+        let drafts = d.read().unwrap();
         assert_eq!(
-            bozze.drafts.len(),
+            drafts.drafts.len(),
             1,
-            "una nota ha una bozza sola, e due copie dello stesso testo sotto \
-             due nomi sono un recupero che chiede all'utente quale delle due \
-             sia la sua: {:?}",
-            bozze.drafts.iter().map(|d| &d.doc).collect::<Vec<_>>()
+            "a note has one draft only, and two copies of the same text under \
+             two names are a recovery that asks the user which of the two \
+             is theirs: {:?}",
+            drafts.drafts.iter().map(|d| &d.doc).collect::<Vec<_>>()
         );
-        assert_eq!(bozze.drafts[0].doc, doc("b.md"), "e sta al nome nuovo");
-        assert_eq!(bozze.drafts[0].text, "il mio testo");
+        assert_eq!(drafts.drafts[0].doc, doc("b.md"), "and it is at the new name");
+        assert_eq!(drafts.drafts[0].text, "il mio testo");
     }
 
     /// 0169, l'altra metà — **di chi è una bozza lo dice dove sta**, non cosa
@@ -552,7 +552,7 @@ mod tests {
     /// interrotta: il file al nome nuovo, il campo fermo a quello vecchio, cioè
     /// una bozza che dice di appartenere a una nota che non esiste più.
     #[test]
-    fn di_chi_e_una_bozza_lo_dice_dove_sta() {
+    fn of_who_and_a_draft_the_says_where_is() {
         let storage = Arc::new(MemStorage::new()) as Arc<dyn VaultStorage>;
         let d = Drafts::open(Utf8Path::new("/vault"), storage.clone());
         d.save(&doc("a.md"), "il mio testo", None, 10).unwrap();
@@ -565,12 +565,12 @@ mod tests {
             )
             .unwrap();
 
-        let bozze = d.read().unwrap();
+        let drafts = d.read().unwrap();
         assert_eq!(
-            bozze.drafts[0].doc,
+            drafts.drafts[0].doc,
             doc("b.md"),
-            "il record direbbe `a.md`, che è una nota che non c'è: chi offre il \
-             recupero lo offrirebbe per il documento sbagliato"
+            "the record would say `a.md`, which is a note that is not there: \
+             whoever offers recovery would offer it for the wrong document"
         );
     }
 
@@ -586,18 +586,18 @@ mod tests {
     }
 
     #[test]
-    fn una_bozza_si_scrive_e_si_rilegge() {
+    fn a_draft_is_writes_and_is_rereads() {
         let d = drafts();
         d.save(&doc("note/a.md"), "ciao", None, 10).unwrap();
-        let bozze = d.read().unwrap();
-        assert_eq!(bozze.scartate, 0);
-        assert_eq!(bozze.drafts.len(), 1);
-        assert_eq!(bozze.drafts[0].text, "ciao");
-        assert_eq!(bozze.drafts[0].doc, doc("note/a.md"));
+        let drafts = d.read().unwrap();
+        assert_eq!(drafts.pruned, 0);
+        assert_eq!(drafts.drafts.len(), 1);
+        assert_eq!(drafts.drafts[0].text, "ciao");
+        assert_eq!(drafts.drafts[0].doc, doc("note/a.md"));
     }
 
     #[test]
-    fn il_documento_sopravvive_alla_codifica_del_nome() {
+    fn the_document_survives_to_the_encoding_of_the_name() {
         // La proprietà che rende possibile il recupero: di ogni file si sa quale
         // nota nomina, anche quando il nome porta `/` e caratteri ostili.
         let d = drafts();
@@ -608,7 +608,7 @@ mod tests {
     }
 
     #[test]
-    fn la_piu_recente_viene_prima() {
+    fn the_more_recent_becomes_first() {
         let d = drafts();
         d.save(&doc("a.md"), "vecchia", None, 1).unwrap();
         d.save(&doc("b.md"), "nuova", None, 99).unwrap();
@@ -617,49 +617,49 @@ mod tests {
     }
 
     #[test]
-    fn riscrivere_non_accumula() {
+    fn rewrite_not_accumulates() {
         let d = drafts();
         d.save(&doc("a.md"), "uno", None, 1).unwrap();
         d.save(&doc("a.md"), "due", None, 2).unwrap();
-        let bozze = d.read().unwrap();
-        assert_eq!(bozze.drafts.len(), 1);
-        assert_eq!(bozze.drafts[0].text, "due");
+        let drafts = d.read().unwrap();
+        assert_eq!(drafts.drafts.len(), 1);
+        assert_eq!(drafts.drafts[0].text, "due");
     }
 
     #[test]
-    fn buttare_una_bozza_che_non_c_e_non_e_un_errore() {
+    fn discard_a_draft_that_not_c_and_not_and_a_error() {
         let d = drafts();
         assert!(d.discard(&doc("mai-esistita.md")).is_ok());
     }
 
     #[test]
-    fn la_base_distingue_una_nota_nuova_da_una_che_c_era() {
+    fn the_base_distingue_a_notes_new_from_a_that_c_was() {
         let d = drafts();
         d.save(&doc("nuova.md"), "x", None, 1).unwrap();
         d.save(&doc("vecchia.md"), "y", Some(Revision::of("prima")), 2)
             .unwrap();
-        let bozze = d.read().unwrap();
-        let nuova = bozze.drafts.iter().find(|b| b.doc == doc("nuova.md"));
-        let vecchia = bozze.drafts.iter().find(|b| b.doc == doc("vecchia.md"));
-        assert!(nuova.unwrap().base.is_none());
-        assert_eq!(vecchia.unwrap().base, Some(Revision::of("prima")));
+        let drafts = d.read().unwrap();
+        let new = drafts.drafts.iter().find(|b| b.doc == doc("nuova.md"));
+        let old = drafts.drafts.iter().find(|b| b.doc == doc("vecchia.md"));
+        assert!(new.unwrap().base.is_none());
+        assert_eq!(old.unwrap().base, Some(Revision::of("prima")));
     }
 
     #[test]
-    fn una_bozza_segue_la_rinomina() {
+    fn a_draft_follows_the_rename() {
         let d = drafts();
         d.save(&doc("prima.md"), "testo", None, 1).unwrap();
         d.migrate(&doc("prima.md"), &doc("dopo.md")).unwrap();
-        let bozze = d.read().unwrap();
-        assert_eq!(bozze.drafts.len(), 1);
+        let drafts = d.read().unwrap();
+        assert_eq!(drafts.drafts.len(), 1);
         // Non basta che il file si sia spostato: il record deve dire il nome
         // nuovo, o la bozza rivendicherebbe una nota che non è la sua.
-        assert_eq!(bozze.drafts[0].doc, doc("dopo.md"));
-        assert_eq!(bozze.drafts[0].text, "testo");
+        assert_eq!(drafts.drafts[0].doc, doc("dopo.md"));
+        assert_eq!(drafts.drafts[0].text, "testo");
     }
 
     #[test]
-    fn una_rinomina_non_seppellisce_la_bozza_che_trova() {
+    fn a_rename_not_buries_the_draft_that_finds() {
         // Il caso che la garanzia dell'anagrafe non copre: `dopo.md` non è un
         // documento — non lo è mai stato — quindi il rename passa, e la bozza
         // che sta lì sotto è l'unica copia di ciò che qualcuno ha scritto.
@@ -670,38 +670,38 @@ mod tests {
             .unwrap();
 
         d.migrate(&doc("prima.md"), &doc("dopo.md")).unwrap();
-        let bozze = d.read().unwrap();
+        let drafts = d.read().unwrap();
         assert_eq!(
-            bozze.drafts.len(),
+            drafts.drafts.len(),
             2,
-            "nessuna delle due si è persa, e nessun testo esiste due volte: \
+            "neither of them was lost, and no text exists twice: \
              {:?}",
-            bozze.drafts.iter().map(|b| &b.doc).collect::<Vec<_>>()
+            drafts.drafts.iter().map(|b| &b.doc).collect::<Vec<_>>()
         );
-        let testo = |id: &str| {
-            bozze
+        let text = |id: &str| {
+            drafts
                 .drafts
                 .iter()
                 .find(|b| b.doc == doc(id))
                 .map(|b| b.text.as_str())
         };
-        assert_eq!(testo("dopo.md"), Some("il testo che non esiste altrove"));
+        assert_eq!(text("dopo.md"), Some("il testo che non esiste altrove"));
         assert_eq!(
-            testo("prima~recupero.md"),
+            text("prima~recupero.md"),
             Some("il testo che si sposta"),
-            "e chi non è potuto atterrare sulla destinazione prende un nome di \
-             recupero — l'estensione del documento conservata — che decodifica \
-             in un documento che non esiste: la bozza si rilegge come orfana, \
-             e un recupero la ritrova"
+            "and the one that could not land on the destination takes a \
+             recovery name — the document extension preserved — which decodes \
+             to a document that does not exist: the draft is read back as \
+             orphan, and a recovery finds it"
         );
         assert!(
-            testo("prima.md").is_none(),
-            "sotto l'id morto non resta niente"
+            text("prima.md").is_none(),
+            "under the dead id nothing remains"
         );
     }
 
     #[test]
-    fn un_nome_di_recupero_gia_preso_non_ferma_la_migrazione() {
+    fn a_recovery_name_already_taken_does_not_stop_the_migration() {
         // Il primo nome di recupero può essere già occupato — da un'altra
         // rinomina in collisione, o da una bozza orfana che c'era prima — e il
         // giro dopo deve trovarne un altro, non fallire.
@@ -724,36 +724,36 @@ mod tests {
         .unwrap();
 
         d.migrate(&doc("prima.md"), &doc("dopo.md")).unwrap();
-        let bozze = d.read().unwrap();
+        let drafts = d.read().unwrap();
         assert_eq!(
-            bozze.drafts.len(),
+            drafts.drafts.len(),
             3,
-            "nessun testo si perde e nessuno si duplica"
+            "no text is lost and none is duplicated"
         );
-        let testo = |id: &str| {
-            bozze
+        let text = |id: &str| {
+            drafts
                 .drafts
                 .iter()
                 .find(|b| b.doc == doc(id))
                 .map(|b| b.text.as_str())
         };
         assert_eq!(
-            testo("dopo.md"),
+            text("dopo.md"),
             Some("la destinazione che ha già una bozza")
         );
         assert_eq!(
-            testo("prima~recupero.md"),
+            text("prima~recupero.md"),
             Some("un recupero che c'era già")
         );
         assert_eq!(
-            testo("prima~recupero-2.md"),
+            text("prima~recupero-2.md"),
             Some("il testo che si sposta"),
-            "il nome di recupero libero è il secondo della famiglia"
+            "the free recovery name is the second in the family"
         );
     }
 
     #[test]
-    fn una_versione_di_schema_ignota_si_conta_invece_di_sparire() {
+    fn a_version_of_schema_unknown_is_counts_instead_of_disappear() {
         let d = drafts();
         let storage = Arc::clone(&d.storage);
         storage
@@ -762,13 +762,13 @@ mod tests {
                 br#"{"v":9999,"doc":"futura.md","at":1,"base":null,"text":"x"}"#,
             )
             .unwrap();
-        let bozze = d.read().unwrap();
-        assert!(bozze.drafts.is_empty());
-        assert_eq!(bozze.scartate, 1, "chi legge deve sapere di non aver letto");
+        let drafts = d.read().unwrap();
+        assert!(drafts.drafts.is_empty());
+        assert_eq!(drafts.pruned, 1, "the reader must know it did not read");
     }
 
     #[test]
-    fn un_file_rotto_non_ferma_gli_altri() {
+    fn a_file_broken_not_stops_the_other() {
         let d = drafts();
         d.save(&doc("buona.md"), "ok", None, 5).unwrap();
         Arc::clone(&d.storage)
@@ -777,8 +777,8 @@ mod tests {
                 b"{ nz",
             )
             .unwrap();
-        let bozze = d.read().unwrap();
-        assert_eq!(bozze.drafts.len(), 1);
-        assert_eq!(bozze.scartate, 1);
+        let drafts = d.read().unwrap();
+        assert_eq!(drafts.drafts.len(), 1);
+        assert_eq!(drafts.pruned, 1);
     }
 }

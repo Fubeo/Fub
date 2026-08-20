@@ -186,7 +186,7 @@ fn workspace_incremental_matches_full_rebuild() {
 /// Il caso del milestone: creare la nota mancante fa comparire il backlink,
 /// senza toccare nient'altro.
 #[test]
-fn creating_a_missing_note_makes_the_backlink_appear() {
+fn creating_a_missing_notes_makes_the_backlink_appear() {
     let dir = TempDir::new("create");
     let mut ws = workspace(&dir.0, GraphUpdate::Incremental);
 

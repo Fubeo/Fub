@@ -26,19 +26,19 @@
 // [decisione 0032]: ../../../docs/decisions/0032-il-runner-dei-job.md
 // [decisione 0035]: ../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md
 import { api } from "../host/ipc";
-import { lavoriInCorso } from "../host/query";
+import { activeJobs } from "../host/query";
 import type { JobProgress, JobStatus, KernelNotice } from "../host/contract";
 import { onAnyEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
 import { notify } from "../ui/notify";
-import type { Tono } from "../ui/notify";
+import type { Tone } from "../ui/notify";
 import { errorText } from "../host/errors";
-import { onLingua, t } from "../i18n/strings";
+import { onLanguage, t } from "../i18n/strings";
 
 /// Una riga del centro attività. È `JobStatus` senza i campi che una riga non
 /// disegna: chi arriva da un evento non conosce né il plugin né l'istante, e
 /// inventarli per far tornare un tipo vorrebbe dire mostrarli.
-export interface Lavoro {
+export interface JobRow {
   id: string;
   job: string;
   progress: JobProgress | null;
@@ -49,57 +49,57 @@ export interface Lavoro {
 /// Il secondo campo è la metà che non si può dedurre guardando il primo: un
 /// progresso per un job che non conosciamo e un `overflow` lasciano l'elenco in
 /// uno stato che sembra buono e non lo è.
-export interface Esito {
-  lavori: Lavoro[];
-  riconcilia: boolean;
+export interface Result {
+  jobs: JobRow[];
+  reconcile: boolean;
 }
 
 /// La regola del centro attività, e l'unica cosa che qui vale la pena provare:
 /// **come un evento cambia l'elenco**. Pura, perché il resto di questo modulo è
 /// DOM e perché una regola che si prova solo aprendo l'app non la prova nessuno.
-export function applica(lavori: Lavoro[], notice: KernelNotice): Esito {
-  const fermo = { lavori, riconcilia: false };
+export function apply(jobs: JobRow[], notice: KernelNotice): Result {
+  const unchanged = { jobs, reconcile: false };
   switch (notice.event.type) {
     case "job_started": {
       const { id, job } = notice.event;
-      if (lavori.some((l) => l.id === id)) return fermo;
-      return { lavori: [...lavori, { id, job, progress: null }], riconcilia: false };
+      if (jobs.some((l) => l.id === id)) return unchanged;
+      return { jobs: [...jobs, { id, job, progress: null }], reconcile: false };
     }
     case "job_progress": {
       const { id, progress } = notice.event;
-      const dentro = lavori.some((l) => l.id === id);
+      const inside = jobs.some((l) => l.id === id);
       // Un progresso per un lavoro che non abbiamo: l'avvio è stato buttato da
       // uno dei due freni, oppure questa finestra è arrivata dopo. Il nome del
       // job questo evento non lo porta — e inventarne uno («lavoro 7») sarebbe
       // una riga che mente — quindi la si chiede.
-      if (!dentro) return { lavori, riconcilia: true };
+      if (!inside) return { jobs, reconcile: true };
       return {
-        lavori: lavori.map((l) => (l.id === id ? { ...l, progress } : l)),
-        riconcilia: false,
+        jobs: jobs.map((l) => (l.id === id ? { ...l, progress } : l)),
+        reconcile: false,
       };
     }
     case "job_done": {
       const { id } = notice.event;
-      return { lavori: lavori.filter((l) => l.id !== id), riconcilia: false };
+      return { jobs: jobs.filter((l) => l.id !== id), reconcile: false };
     }
     // «Riconcilia da zero», che per questo elenco vuol dire richiederlo: è la
     // ragione per cui la query esiste.
     case "overflow":
-      return { lavori, riconcilia: true };
+      return { jobs, reconcile: true };
     // Un vault che si apre o si chiude porta via i suoi lavori: sono di quel
     // vault, e questa shell ne guarda uno alla volta.
     case "vault_opened":
     case "vault_closed":
-      return { lavori: [], riconcilia: notice.event.type === "vault_opened" };
+      return { jobs: [], reconcile: notice.event.type === "vault_opened" };
     default:
-      return fermo;
+      return unchanged;
   }
 }
 
 /// Cosa mostra la riga di un lavoro: ciò che il job racconta di sé, o il nome
 /// del suo entry point finché non racconta niente.
-export function etichettaDi(lavoro: Lavoro): string {
-  return lavoro.progress?.label ?? lavoro.job;
+export function labelOf(job: JobRow): string {
+  return job.progress?.label ?? job.job;
 }
 
 /// Cosa dire all'utente quando un lavoro finisce, o `null` se non c'è niente da
@@ -112,140 +112,140 @@ export function etichettaDi(lavoro: Lavoro): string {
 /// un comando, un'automazione — quindi non c'è la famiglia di job silenziosi
 /// per cui questa regola sarebbe rumore. Il giorno che ci fosse, è qui che si
 /// mette la differenza.
-export function avvisoDi(notice: KernelNotice): { testo: string; tono: Tono } | null {
+export function noticeOf(notice: KernelNotice): { text: string; tone: Tone } | null {
   if (notice.event.type !== "job_done") return null;
   const { job, result } = notice.event;
   // `result` attraversa l'IPC come un `Result` serializzato da serde: `Ok` è
   // ciò che il job ha reso, `Err` è un `PluginError`, che è (ancora) prosa
   // composta — §12.2 gli darà una forma, e a quel punto questa riga la userà.
-  const errore = (result as { Err?: unknown } | null)?.Err;
-  return errore === undefined
-    ? { testo: t("activity.finished", { job }), tono: "info" }
-    : { testo: t("activity.failed", { job, reason: descrivi(errore) }), tono: "guasto" };
+  const error = (result as { Err?: unknown } | null)?.Err;
+  return error === undefined
+    ? { text: t("activity.finished", { job }), tone: "info" }
+    : { text: t("activity.failed", { job, reason: describe(error) }), tone: "guasto" };
 }
 
 /// Un `PluginError` in una riga. Finché il §12.2 non gli dà una forma, ciò che
 /// arriva è una variante con dentro una stringa: si prende la stringa, e se non
 /// c'è si mostra il nome della variante — che è comunque più di «errore».
-function descrivi(errore: unknown): string {
-  if (typeof errore === "string") return errore;
-  if (errore && typeof errore === "object") {
-    const voci = Object.entries(errore as Record<string, unknown>);
-    const [nome, dettaglio] = voci[0] ?? [t("activity.unknown_error"), undefined];
-    return typeof dettaglio === "string" && dettaglio.length > 0 ? dettaglio : nome;
+function describe(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const entries = Object.entries(error as Record<string, unknown>);
+    const [name, detail] = entries[0] ?? [t("activity.unknown_error"), undefined];
+    return typeof detail === "string" && detail.length > 0 ? detail : name;
   }
-  return String(errore);
+  return String(error);
 }
 
 // --- da qui in giù è disegno ------------------------------------------------
 
-let lavori: Lavoro[] = [];
-let aperto = false;
+let jobs: JobRow[] = [];
+let open = false;
 
 export function mountActivity(): void {
   $("#activity-button").addEventListener("click", () => {
-    aperto = !aperto;
+    open = !open;
     // Aprire è il secondo momento in cui conviene riconciliare: costa una query
     // e toglie di mezzo ogni deriva accumulata mentre nessuno guardava.
-    if (aperto) void richiedi();
-    else ridisegna();
+    if (open) void request();
+    else redraw();
   });
   document.getElementById("activity-close")?.addEventListener("click", () => {
-    aperto = false;
-    ridisegna();
+    open = false;
+    redraw();
   });
 
   // Si ascolta **tutto** e si sceglie dentro `applica`: la regola sta in una
   // funzione sola, e questo pannello non si iscrive a cinque tipi che poi
   // qualcuno dimentica di allineare al contratto.
-  onAnyEvent((notice) => {
-    const esito = applica(lavori, notice);
-    lavori = esito.lavori;
-    ridisegna();
-    if (esito.riconcilia) void richiedi();
+  onAnyEvent((eventNotice) => {
+    const result = apply(jobs, eventNotice);
+    jobs = result.jobs;
+    redraw();
+    if (result.reconcile) void request();
     // L'esito di un lavoro lungo è l'unico dei tre eventi del ciclo che l'utente
     // deve **leggere**: gli altri due li racconta la riga.
-    const avviso = avvisoDi(notice);
-    if (avviso) notify(avviso.testo, avviso.tono);
+    const resultNotice = noticeOf(eventNotice);
+    if (resultNotice) notify(resultNotice.text, resultNotice.tone);
   });
 
   // La lingua che cambia rifà il pulsante e le righe: il pulsante porta un
   // conteggio, quindi il testo fermo di `index.html` non lo può possedere.
-  onLingua(ridisegna);
+  onLanguage(redraw);
 
-  ridisegna();
+  redraw();
 }
 
 /// Richiede l'elenco al kernel. Un vault che non c'è o che non risponde lascia
 /// l'elenco com'era: un centro attività vuoto per un errore direbbe «non sta
 /// girando niente», che è la bugia peggiore che questo pannello possa dire.
-async function richiedi(): Promise<void> {
+async function request(): Promise<void> {
   try {
-    lavori = (await lavoriInCorso()).map(daStatus);
+    jobs = (await activeJobs()).map(fromStatus);
   } catch {
     // Non è un caso da mostrare: la riconciliazione riparte al prossimo evento.
   }
-  ridisegna();
+  redraw();
 }
 
-function daStatus(status: JobStatus): Lavoro {
+function fromStatus(status: JobStatus): JobRow {
   return { id: status.id, job: status.job, progress: status.progress };
 }
 
-function ridisegna(): void {
-  const pulsante = document.getElementById("activity-button");
-  if (pulsante) {
-    pulsante.textContent =
-      lavori.length > 0 ? t("activity.count", { count: lavori.length }) : t("activity.title");
-    pulsante.classList.toggle("in-corso", lavori.length > 0);
-    pulsante.setAttribute("aria-expanded", String(aperto));
+function redraw(): void {
+  const button = document.getElementById("activity-button");
+  if (button) {
+    button.textContent =
+      jobs.length > 0 ? t("activity.count", { count: jobs.length }) : t("activity.title");
+    button.classList.toggle("in-corso", jobs.length > 0);
+    button.setAttribute("aria-expanded", String(open));
   }
 
-  const pannello = document.getElementById("activity-panel");
-  if (!pannello) return;
-  pannello.hidden = !aperto;
-  if (!aperto) return;
+  const panel = document.getElementById("activity-panel");
+  if (!panel) return;
+  panel.hidden = !open;
+  if (!open) return;
 
-  const lista = pannello.querySelector("#activity-list");
-  if (!(lista instanceof HTMLElement)) return;
-  lista.replaceChildren();
-  if (lavori.length === 0) {
-    const vuoto = document.createElement("li");
-    vuoto.className = "muted";
-    vuoto.textContent = t("activity.none");
-    lista.appendChild(vuoto);
+  const list = panel.querySelector("#activity-list");
+  if (!(list instanceof HTMLElement)) return;
+  list.replaceChildren();
+  if (jobs.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "muted";
+    empty.textContent = t("activity.none");
+    list.appendChild(empty);
     return;
   }
-  for (const lavoro of lavori) {
-    lista.appendChild(riga(lavoro));
+  for (const job of jobs) {
+    list.appendChild(row(job));
   }
 }
 
-function riga(lavoro: Lavoro): HTMLLIElement {
+function row(job: JobRow): HTMLLIElement {
   const el = document.createElement("li");
   el.className = "activity-row";
 
-  const testo = document.createElement("span");
-  testo.className = "activity-label";
-  testo.textContent = etichettaDi(lavoro);
-  testo.title = `${lavoro.job} · ${lavoro.id}`;
+  const text = document.createElement("span");
+  text.className = "activity-label";
+  text.textContent = labelOf(job);
+  text.title = `${job.job} · ${job.id}`;
 
   // Una barra **indeterminata** quando il totale non c'è: un `progress` senza
   // valore è l'attesa che non sa quanto dura, ed è ciò che il contratto dice
   // con `total: null` — disegnarne una piena a metà sarebbe inventare un dato.
-  const barra = document.createElement("progress");
-  if (lavoro.progress && lavoro.progress.total !== null) {
-    barra.max = lavoro.progress.total;
-    barra.value = lavoro.progress.done;
+  const bar = document.createElement("progress");
+  if (job.progress && job.progress.total !== null) {
+    bar.max = job.progress.total;
+    bar.value = job.progress.done;
   }
 
-  const ferma = document.createElement("button");
-  ferma.className = "link-button";
-  ferma.textContent = t("app.cancel");
-  ferma.title = t("activity.stop");
-  ferma.addEventListener("click", () => void annulla(lavoro));
+  const stopButton = document.createElement("button");
+  stopButton.className = "link-button";
+  stopButton.textContent = t("app.cancel");
+  stopButton.title = t("activity.stop");
+  stopButton.addEventListener("click", () => void cancel(job));
 
-  el.append(testo, barra, ferma);
+  el.append(text, bar, stopButton);
   return el;
 }
 
@@ -253,10 +253,10 @@ function riga(lavoro: Lavoro): HTMLLIElement {
 /// (decisione 0032). La riga **non** si toglie qui: la toglie il `job_done` che
 /// arriva, perché un lavoro annullato ha comunque un esito — e toglierla prima
 /// racconterebbe che si è fermato, quando invece si sta fermando.
-async function annulla(lavoro: Lavoro): Promise<void> {
+async function cancel(job: JobRow): Promise<void> {
   try {
-    await api.cancelJob(lavoro.id);
+    await api.cancelJob(job.id);
   } catch (e) {
-    notify(t("activity.stop_failed", { job: etichettaDi(lavoro), reason: errorText(e) }), "guasto");
+    notify(t("activity.stop_failed", { job: labelOf(job), reason: errorText(e) }), "guasto");
   }
 }

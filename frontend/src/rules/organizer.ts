@@ -27,8 +27,8 @@ export interface FolderContent {
   notes: string[];
   /// Quante ne ha lasciate fuori la finestra (§2.9): un livello troncato **si
   /// dice**, e per dirlo bisogna portarselo fin qui. Zero è il caso normale.
-  altreCartelle: number;
-  altreNote: number;
+  otherFolders: number;
+  otherNote: number;
 }
 
 /// Quante voci di un livello l'albero chiede e disegna (§2.9).
@@ -45,7 +45,7 @@ export interface FolderContent {
 /// che sta prima del layout — quanto attraversa il ponte e quanti elementi
 /// nascono — ed è la metà che si conta (`ridisegno.test.ts`). Ciò che resta
 /// fuori si dice, non si tace: `altreNote`/`altreCartelle`.
-export const FINESTRA_DEL_LIVELLO = { offset: 0, limit: 200 };
+export const LEVEL_PAGE = { offset: 0, limit: 200 };
 
 const collator = new Intl.Collator("it", { sensitivity: "base", numeric: true });
 
@@ -65,8 +65,8 @@ export function sortContent(content: FolderContent, meta: Organization): FolderC
       compareNames(childName(a.path), childName(b.path), custom),
     ),
     notes: [...content.notes].sort((a, b) => compareNames(childName(a), childName(b), custom)),
-    altreCartelle: content.altreCartelle,
-    altreNote: content.altreNote,
+    otherFolders: content.otherFolders,
+    otherNote: content.otherNote,
   };
 }
 
@@ -114,9 +114,9 @@ export function folderNoteCandidates(path: string, exts: string[]): string[] {
 export function folderNoteIn(
   path: string,
   exts: string[],
-  esistenti: ReadonlySet<string>,
+  existing: ReadonlySet<string>,
 ): string | null {
-  return folderNoteCandidates(path, exts).find((c) => esistenti.has(c)) ?? null;
+  return folderNoteCandidates(path, exts).find((c) => existing.has(c)) ?? null;
 }
 
 /// I nomi dei figli di una cartella nell'ordine in cui la sidebar li mostra

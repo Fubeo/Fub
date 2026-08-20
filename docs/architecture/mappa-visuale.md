@@ -18,7 +18,7 @@ sezione dice in testa a chi serve.
 | 5 | [Due giri completi](#due-giri-completi) | Cosa succede quando premo un tasto | 10 min |
 | — | [Le otto scelte che hanno formato tutto](#le-otto-scelte-che-hanno-formato-tutto) | Perché è fatto così, e cosa costa | 10 min |
 | — | [Cosa non c'è ancora](#cosa-non-cè-ancora) | I buchi, dichiarati | 3 min |
-| — | [Legenda e glossario](#legenda-e-glossario) | Cosa vuol dire quella parola | — |
+| — | [Legenda](#legenda) | Cosa vuol dire quella parola | — |
 
 Tre convenzioni valgono per tutti i disegni:
 
@@ -1564,7 +1564,7 @@ I buchi dichiarati sono **dieci** [conta: buchi-dichiarati], e stanno in
 
 ---
 
-## Legenda e glossario
+## Legenda
 
 ### I colori
 

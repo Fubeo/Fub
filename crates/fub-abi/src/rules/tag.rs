@@ -70,22 +70,22 @@ pub fn is_sub_tag(key: &str, ancestor: &str) -> bool {
 pub fn scan_tags(text: &str) -> Vec<Tag> {
     let bytes = text.as_bytes();
     let mut tags = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] != b'#' {
-            i += 1;
+    let mut the = 0;
+    while the < bytes.len() {
+        if bytes[the] != b'#' {
+            the += 1;
             continue;
         }
         // Il '#' non deve seguire un carattere alfanumerico.
-        if i > 0 {
-            let prev = text[..i].chars().next_back();
+        if the > 0 {
+            let prev = text[..the].chars().next_back();
             if prev.map(|c| c.is_alphanumeric()).unwrap_or(false) {
-                i += 1;
+                the += 1;
                 continue;
             }
         }
         // Consuma i caratteri del nome del tag.
-        let name_start = i + 1;
+        let name_start = the + 1;
         let mut j = name_start;
         while j < text.len() {
             let c = text[j..].chars().next().unwrap();
@@ -99,10 +99,10 @@ pub fn scan_tags(text: &str) -> Vec<Tag> {
         if !name.is_empty() && !name.chars().all(|c| c.is_ascii_digit()) {
             tags.push(Tag {
                 name: name.to_string(),
-                span: Span::new(i, j),
+                span: Span::new(the, j),
             });
         }
-        i = j.max(i + 1);
+        the = j.max(the + 1);
     }
     tags
 }
@@ -142,7 +142,7 @@ mod tests {
     /// I tre confini che una seconda implementazione sbaglia per primi, e che
     /// la §4.4 ha misurato divergenti fra il modello e la live preview.
     #[test]
-    fn i_tre_confini_che_una_seconda_implementazione_sbaglia() {
+    fn the_three_boundaries_that_a_second_implementation_fails() {
         // 1. Prima del `#`: alfanumerico, non «spazio».
         assert_eq!(names("vedi.#tag"), vec!["tag"]);
         assert_eq!(names("_#tag"), vec!["tag"]);

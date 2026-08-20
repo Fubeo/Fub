@@ -55,7 +55,7 @@ pub mod commands;
 pub mod dashboard;
 #[cfg(feature = "graph")]
 pub mod graph;
-pub mod inventario;
+pub mod inventory;
 #[cfg(feature = "outline")]
 pub mod outline;
 #[cfg(feature = "properties")]
@@ -88,7 +88,7 @@ pub use blocks::{
 };
 #[cfg(feature = "commands")]
 pub use commands::{
-    occurrences, CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TASK_TOGGLE, NOTE_TRASH,
+    occurrences, CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_RENAME, NOTES_TASK_TOGGLE, NOTES_TRASH,
     SEARCH_OPEN, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
     SETTINGS_SET, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
@@ -96,12 +96,12 @@ pub use commands::{
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "graph")]
 pub use graph::{GraphView, GRAPH_ID, GRAPH_NS, GRAPH_VIEW};
-pub use inventario::{ogni_feature_ufficiale, ogni_view_ufficiale, FeatureUfficiale};
+pub use inventory::{every_official_feature, every_official_view, OfficialFeature};
 #[cfg(feature = "outline")]
 pub use outline::{build_outline_view, OutlineView, OUTLINE_ID, OUTLINE_VIEW};
 #[cfg(feature = "properties")]
 pub use properties::{
-    PropertiesCommands, PropertiesView, NOTE_PROPERTY_REMOVE, NOTE_PROPERTY_SET, PROPERTIES_ID,
+    PropertiesCommands, PropertiesView, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
     PROPERTIES_VIEW,
 };
 #[cfg(feature = "queries")]
@@ -119,7 +119,7 @@ pub use stats::{
 pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
 #[cfg(feature = "template")]
 pub use template::{
-    TemplateCommands, TemplateView, NOTE_DAILY, NOTE_FROM_TEMPLATE, TEMPLATE_ID, TEMPLATE_VIEW,
+    TemplateCommands, TemplateView, NOTES_DAILY, NOTES_FROM_TEMPLATE, TEMPLATE_ID, TEMPLATE_VIEW,
 };
 #[cfg(feature = "trash")]
 pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};

@@ -1,21 +1,22 @@
 # crates/fub-abi/wit/
 
-Il contratto **WIT** di Fub, cioè `fub-abi` scritto una seconda volta nella
-lingua dei componenti WASM.
+The **WIT** contract of Fub — that is, `fub-abi` written a second time in the
+language of WASM components.
 
-Sta dentro `fub-abi` e non alla radice del repo perché è il **gemello di
-questo crate**: descrive i suoi tipi, cambia quando cambiano loro, e i due test
-che lo verificano — [`wit_conformance.rs`](../tests/wit_conformance.rs) e
-[`wit_additivity.rs`](../tests/wit_additivity.rs) — vivono qui accanto. Finché
-stava in radice quei test risalivano due livelli fuori dal proprio crate per
-leggere un file che era comunque loro.
+It lives inside `fub-abi` rather than at the repo root because it is the
+**twin of this crate**: it describes the same types, changes when they change,
+and the two tests that verify it —
+[`wit_conformance.rs`](../tests/wit_conformance.rs) and
+[`wit_additivity.rs`](../tests/wit_additivity.rs) — live right next to it.
+While it was at the root those tests had to travel two levels up out of their
+own crate to read a file that was theirs anyway.
 
-- Il contratto vivo: [`fub/abi.wit`](fub/abi.wit) — package `fub:abi@0.1.1`.
-- Il contratto **com'era**, versione per versione: [`frozen/`](frozen/).
+- The live contract: [`fub/abi.wit`](fub/abi.wit) — package `fub:abi@0.1.1`.
+- The contract **as it was**, version by version: [`frozen/`](frozen/).
 
-**La documentazione sta in `docs/`**, e non qui:
+**The documentation lives in `docs/`**, not here:
 
-- perché questo albero esiste, cosa presidia e come si aggiorna →
+- why this tree exists, what it governs, and how to update it →
   [docs/architecture/wit.md](../../../docs/architecture/wit.md);
-- la linea di base congelata e la promessa di additività →
-  [docs/architecture/wit-congelato.md](../../../docs/architecture/wit-congelato.md).
+- the frozen baseline and the additivity promise →
+  [docs/architecture/frozen-wit.md](../../../docs/architecture/frozen-wit.md).

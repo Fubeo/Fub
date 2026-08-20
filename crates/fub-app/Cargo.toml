@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Colla Tauri v2 di Fub: comandi/eventi IPC, finestre, dialoghi. Chi monta è `fub-host`."
+description = "Tauri v2 glue for Fub: IPC commands/events, windows, dialogs. Assembly lives in `fub-host`."
 
 [lib]
 name = "fub_app_lib"
@@ -47,7 +47,8 @@ fub-kernel = { workspace = true }
 # risalgono: accendere quella del crate sotto lasciava quel `#[cfg]` spento.
 # Una feature si chiede al crate da cui si dipende — è l'unico che sappia
 # tradurla — ed è ciò che `features = [...]` qui sopra fa adesso.
-fub-host = { workspace = true, features = ["feature-ufficiali"] }
+# `features = [...]` above does now.
+fub-host = { workspace = true, features = ["official-features"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }

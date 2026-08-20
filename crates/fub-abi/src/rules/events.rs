@@ -61,7 +61,7 @@ pub fn topic_matches(prefix: &str, topic: &str) -> bool {
 /// abbona a una cartella e chi la interroga devono parlare della stessa
 /// cartella (difetto 0141).
 pub fn folder_contains(folder: &str, id: &str) -> bool {
-    super::cartelle::contiene(folder, id)
+    super::folders::contains(folder, id)
 }
 
 /// Questo evento va consegnato a chi ha dichiarato questa maschera?
@@ -138,29 +138,29 @@ pub fn mask_wants(mask: &EventMask, event: &Event) -> bool {
 /// — **non nasce nessun `Overflow`**: un invito a riconciliare che non
 /// corrisponde a nessuna perdita è una riconciliazione chiesta per niente.
 pub fn degrade(burst: Vec<Notice>) -> Vec<Notice> {
-    let mut tenuti: Vec<Notice> = Vec::new();
+    let mut kept: Vec<Notice> = Vec::new();
     let mut dropped: u64 = 0;
-    let mut dove: Option<usize> = None;
+    let mut insertion_at: Option<usize> = None;
     for notice in burst {
         match &notice.event {
-            Event::Overflow { dropped: gia } => {
-                dropped += gia;
-                dove = Some(tenuti.len());
+            Event::Overflow { dropped: already } => {
+                dropped += already;
+                insertion_at = Some(kept.len());
             }
             event if event.is_recoverable() => {
                 dropped += 1;
-                dove = Some(tenuti.len());
+                insertion_at = Some(kept.len());
             }
-            _ => tenuti.push(notice),
+            _ => kept.push(notice),
         }
     }
-    if let Some(dove) = dove {
-        tenuti.insert(
-            dove,
+    if let Some(insertion_at) = insertion_at {
+        kept.insert(
+            insertion_at,
             Notice::new(Event::Overflow { dropped }, Origin::by(Actor::Kernel)),
         );
     }
-    tenuti
+    kept
 }
 
 #[cfg(test)]
@@ -206,12 +206,12 @@ mod tests {
 
     #[test]
     fn an_empty_filter_is_not_a_filter() {
-        let tutto = EventMask::all();
-        assert!(tutto.wants(&Event::Custom {
+        let all = EventMask::all();
+        assert!(all.wants(&Event::Custom {
             topic: "chiunque:qualunque".into(),
             payload: serde_json::Value::Null,
         }));
-        assert!(tutto.wants(&Event::DocumentChanged {
+        assert!(all.wants(&Event::DocumentChanged {
             id: DocId::new("ovunque/nota.md"),
             changes: None,
         }));
@@ -227,16 +227,16 @@ mod tests {
     /// vorrebbe dire non filtrare proprio dove la risposta è più precisa.
     #[test]
     fn not_knowing_passes_and_knowing_nothing_does_not() {
-        let sui_tag = EventMask::of([EventKind::DocumentChanged]).on_changes([DocChange::Tags]);
-        assert!(sui_tag.wants(&Event::DocumentChanged {
+        let on_the_tag = EventMask::of([EventKind::DocumentChanged]).on_changes([DocChange::Tags]);
+        assert!(on_the_tag.wants(&Event::DocumentChanged {
             id: DocId::new("a.md"),
             changes: None,
         }));
-        assert!(!sui_tag.wants(&Event::DocumentChanged {
+        assert!(!on_the_tag.wants(&Event::DocumentChanged {
             id: DocId::new("a.md"),
             changes: Some(DocChanges::default()),
         }));
-        assert!(sui_tag.wants(&Event::DocumentChanged {
+        assert!(on_the_tag.wants(&Event::DocumentChanged {
             id: DocId::new("a.md"),
             changes: Some(DocChanges {
                 aspects: vec![DocChange::Tags],
@@ -245,9 +245,9 @@ mod tests {
         }));
         // E un evento che un cambiamento non lo racconta affatto passa comunque:
         // il quarto asse non è un modo di filtrare via le altre specie.
-        let anche_i_lotti = EventMask::of([EventKind::DocumentChanged, EventKind::BatchEnded])
+        let also_the_batches = EventMask::of([EventKind::DocumentChanged, EventKind::BatchEnded])
             .on_changes([DocChange::Tags]);
-        assert!(anche_i_lotti.wants(&Event::BatchEnded {
+        assert!(also_the_batches.wants(&Event::BatchEnded {
             batch: BatchId(1),
             changed: vec![DocId::new("a.md")],
         }));
@@ -256,12 +256,12 @@ mod tests {
     #[test]
     fn a_rename_out_of_a_folder_is_news_for_that_folder() {
         let mask = EventMask::of([EventKind::DocumentRenamed]).about([Subject::folder("Progetti")]);
-        let uscita = Event::DocumentRenamed {
+        let output = Event::DocumentRenamed {
             from: DocId::new("Progetti/Alpha.md"),
             to: DocId::new("Archivio/Alpha.md"),
         };
         assert!(
-            mask.wants(&uscita),
+            mask.wants(&output),
             "chi guarda una cartella deve sapere che una nota se n'è andata: \
              è l'unico modo che ha di smettere di tenerne lo stato"
         );
@@ -310,7 +310,7 @@ mod tests {
         }
     }
 
-    fn guasto() -> Notice {
+    fn failure() -> Notice {
         Notice::of(Event::Trouble {
             severity: Severity::Failure,
             subject: Some(DocId::new("a.md")),
@@ -325,7 +325,7 @@ mod tests {
     fn what_cannot_be_rediscovered_survives_a_ceiling() {
         let burst = vec![
             Notice::of(Event::IndexUpdated),
-            guasto(),
+            failure(),
             Notice::of(Event::DocumentChanged {
                 id: DocId::new("b.md"),
                 changes: None,
@@ -370,7 +370,7 @@ mod tests {
     /// per niente.
     #[test]
     fn nothing_to_drop_is_no_invitation() {
-        let out = degrade(vec![guasto(), guasto()]);
+        let out = degrade(vec![failure(), failure()]);
         assert_eq!(out.len(), 2);
         assert!(out
             .iter()

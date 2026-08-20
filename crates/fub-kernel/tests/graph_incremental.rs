@@ -153,13 +153,13 @@ fn model(path: &str, links: &[&str], dests: &[&str], aliases: &[&str]) -> Docume
     m.links = wiki
         .chain(markdown)
         .enumerate()
-        .map(|(i, (target, written))| Link {
+        .map(|(the, (target, written))| Link {
             target,
             embed: false,
-            span: Span::new(i, i + 1),
+            span: Span::new(the, the + 1),
             // il contesto entra nel BacklinkRef: distinguerlo per posizione
             // rende visibile anche un ordinamento sbagliato dei backlink.
-            context: Some(format!("{path}#{i} → {written}")),
+            context: Some(format!("{path}#{the} → {written}")),
         })
         .collect();
     if !aliases.is_empty() {
@@ -342,8 +342,8 @@ fn incremental_is_cheaper_than_rebuild() {
 
     let mut rng = Rng::new(99);
     let docs: Vec<DocumentModel> = (0..DOCS)
-        .map(|i| {
-            let path = format!("dir{}/nota-{i}.md", i % 50);
+        .map(|the| {
+            let path = format!("dir{}/nota-{the}.md", the % 50);
             let links: Vec<String> = (0..5)
                 .map(|_| format!("nota-{}", rng.below(DOCS)))
                 .collect();
@@ -364,9 +364,9 @@ fn incremental_is_cheaper_than_rebuild() {
 
     let mut graph = LinkGraph::build(docs.iter());
     let start = Instant::now();
-    for i in 0..EDITS {
+    for the in 0..EDITS {
         graph.upsert(&docs[rng.below(DOCS)]);
-        std::hint::black_box(i);
+        std::hint::black_box(the);
     }
     let incremental = start.elapsed();
 

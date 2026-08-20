@@ -20,7 +20,7 @@
 //   tutto ciò che nella shell accetta del testo e propone delle note passa da
 //   `IndexQuery::Documents`, o il ranking nasce quattro volte;
 // - **le coordinate ci sono**: la [0049](../../../docs/decisions/0049-una-posizione-dentro-un-documento.md)
-//   ha messo le occorrenze nella risposta, e da lì `righeDaMostrare` e
+//   ha messo le occorrenze nella risposta, e da lì `rowsToShow` e
 //   `revealByteOffset` sono le stesse identiche del pannello della ricerca. Un
 //   risultato che non fosse cliccabile qui sarebbe una lista di conferme che
 //   qualcosa esiste, in un documento che si sta già guardando.
@@ -32,16 +32,16 @@
 // n'è uno, il modale lo dice invece di cercare in tutto il vault: una ricerca
 // che cambia silenziosamente raggio è peggio di una che non parte.
 import type { DocumentMatch } from "../host/contract";
-import { testoNelDocumento } from "../host/contract";
+import { textInDocument } from "../host/contract";
 import { errorText } from "../host/errors";
-import { documentiCheCombaciano } from "../host/query";
+import { matchingDocuments } from "../host/query";
 import { t } from "../i18n/strings";
-import { righeDaMostrare } from "../rules/risultati";
-import { attivabile, intrappolaFuoco } from "../ui/a11y";
+import { rowsToShow } from "../rules/results";
+import { activatable, trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
-import { Corsa } from "../ui/corsa";
+import { Race } from "../ui/race";
 import { state } from "../state/store";
-import { evidenziato } from "../ui/highlight";
+import { highlighted } from "../ui/highlight";
 import { revealByteOffset } from "./document";
 
 const OVERLAY_ID = "doc-search";
@@ -49,15 +49,15 @@ const OVERLAY_ID = "doc-search";
 /// Quante occorrenze si mostrano. Dentro **una** nota il numero è piccolo per
 /// natura, e una finestra serve lo stesso: una nota di diario che nomina una
 /// parola trecento volte non deve costruire trecento righe a ogni tasto.
-const QUANTE = 50;
+const MAX_OCCURRENCES = 50;
 
 /// Come si scioglie la trappola del fuoco, quando il modale è aperto.
-let sciogli: (() => void) | null = null;
+let release: (() => void) | null = null;
 
-export function chiudiRicercaNellaNota(): void {
+export function closeInDocumentSearch(): void {
   document.getElementById(OVERLAY_ID)?.remove();
-  sciogli?.();
-  sciogli = null;
+  release?.();
+  release = null;
 }
 
 /// Il comando, dichiarato da chi ce l'ha (§18.2).
@@ -71,32 +71,32 @@ export function mountDocSearch(): void {
     id: "shell.doc.search",
     title: "commands.doc.search",
     description: "commands.doc.search.desc",
-    run: () => apriRicercaNellaNota(),
+    run: () => openInDocumentSearch(),
   });
 }
 
-export function apriRicercaNellaNota(): void {
+export function openInDocumentSearch(): void {
   const doc = state.currentDoc;
-  const box = apriOverlay();
+  const box = openOverlay();
 
   const input = document.createElement("input");
   input.className = "palette-input";
   input.placeholder = t("docsearch.placeholder");
   input.setAttribute("aria-label", t("docsearch.title"));
-  const riassunto = document.createElement("p");
-  riassunto.className = "docsearch-summary";
-  const lista = document.createElement("ul");
+  const summary = document.createElement("p");
+  summary.className = "docsearch-summary";
+  const list = document.createElement("ul");
   // Niente `role="listbox"`: qui nessuna riga è «scelta» — si scorre e si
   // clicca. Un ruolo di selezione senza selezione prometterebbe una freccia
   // che non c'è.
-  lista.className = "plain-list palette-list";
-  box.append(input, riassunto, lista);
+  list.className = "plain-list palette-list";
+  box.append(input, summary, list);
 
   if (doc === null) {
     // Niente nota, niente ricerca — e lo si dice qui invece di non aprire
     // niente: una scorciatoia premuta che non fa succedere nulla si legge come
     // un guasto della tastiera.
-    riassunto.textContent = t("docsearch.no_doc");
+    summary.textContent = t("docsearch.no_doc");
     input.disabled = true;
     return;
   }
@@ -109,89 +109,89 @@ export function apriRicercaNellaNota(): void {
   // di una più recente. La corsa è **di questa casella** e non del modulo:
   // questo pannello si apre su una nota, e due note aperte sono due caselle che
   // non devono annullarsi a vicenda (decisione 0134).
-  const corsa = new Corsa();
+  const race = new Race();
 
-  const cerca = async () => {
-    const testo = input.value.trim();
-    if (!testo) {
+  const search = async () => {
+    const text = input.value.trim();
+    if (!text) {
       // Svuotare a mano non è un giro: ciò che era in volo va fatto scadere, o
       // ripopolerebbe una casella che l'utente ha appena svuotato.
-      corsa.annulla();
-      riassunto.textContent = "";
-      lista.innerHTML = "";
+      race.cancel();
+      summary.textContent = "";
+      list.innerHTML = "";
       return;
     }
-    await corsa.ultimo(async (atteso) => {
+    await race.last(async (expected) => {
       // L'errore diventa un valore prima del cancello: il ramo che dice «non si
       // può cercare» è una scrittura come le altre e passa di qui.
-      const esito = await atteso(
-        documentiCheCombaciano(testoNelDocumento([doc], testo, true), {
+      const result = await expected(
+        matchingDocuments(textInDocument([doc], text, true), {
           offset: 0,
-          limit: QUANTE,
+          limit: MAX_OCCURRENCES,
         })
           .then((p) => ({ hits: p.items }))
-          .catch((e: unknown) => ({ errore: errorText(e) })),
+          .catch((e: unknown) => ({ error: errorText(e) })),
       );
-      if ("errore" in esito) {
-        riassunto.textContent = t("search.unavailable");
-        lista.innerHTML = "";
+      if ("error" in result) {
+        summary.textContent = t("search.unavailable");
+        list.innerHTML = "";
         // Il motivo in chiaro: «ricerca non disponibile» dice che non si può
         // cercare, non perché — e il perché qui è quasi sempre un vault senza
         // indice full-text.
-        riassunto.title = esito.errore;
+        summary.title = result.error;
         return;
       }
       // Nessuno stato «sto ancora indicizzando» come nel pannello del vault: chi
       // ha una nota aperta l'ha aperta da un indice che risponde, e la domanda in
       // più a ogni ricerca vuota costerebbe più di ciò che chiarisce.
-      disegna(esito.hits);
+      render(result.hits);
     });
   };
 
-  const disegna = (hits: DocumentMatch[]) => {
-    const righe = righeDaMostrare(hits);
-    riassunto.textContent =
-      righe.length === 0 ? t("search.empty") : t("search.count", { count: righe.length });
-    lista.innerHTML = "";
+  const render = (hits: DocumentMatch[]) => {
+    const rows = rowsToShow(hits);
+    summary.textContent =
+      rows.length === 0 ? t("search.empty") : t("search.count", { count: rows.length });
+    list.innerHTML = "";
     // Fuori dal documento e attaccate in una volta sola, come nel pannello: qui
     // si ridisegna a ogni tasto premuto.
-    const nuove = document.createDocumentFragment();
-    for (const riga of righe) {
+    const newItems = document.createDocumentFragment();
+    for (const row of rows) {
       const li = document.createElement("li");
-      if (riga.occorrenza === undefined) {
-        li.appendChild(evidenziato(riga.snippet ?? "", riga.highlights ?? []));
+      if (row.occurrence === undefined) {
+        li.appendChild(highlighted(row.snippet ?? "", row.highlights ?? []));
       } else {
         li.className = "hit-occurrence";
-        li.textContent = t("search.occurrence", { n: riga.occorrenza });
+        li.textContent = t("search.occurrence", { n: row.occurrence });
       }
-      if (riga.byteOffset !== undefined) {
-        const dove = riga.byteOffset;
+      if (row.byteOffset !== undefined) {
+        const where = row.byteOffset;
         // Il documento è già aperto: qui non si apre niente, ci si porta il
         // cursore — e il modale si chiude, perché il gesto è finito.
         li.addEventListener("click", () => {
-          chiudiRicercaNellaNota();
-          revealByteOffset(dove);
+          closeInDocumentSearch();
+          revealByteOffset(where);
         });
-        attivabile(li);
+        activatable(li);
       }
-      nuove.appendChild(li);
+      newItems.appendChild(li);
     }
-    lista.appendChild(nuove);
+    list.appendChild(newItems);
   };
 
   input.addEventListener("input", () => {
     window.clearTimeout(timer);
-    timer = window.setTimeout(() => void cerca(), 180);
+    timer = window.setTimeout(() => void search(), 180);
   });
 }
 
-function apriOverlay(): HTMLElement {
-  chiudiRicercaNellaNota();
+function openOverlay(): HTMLElement {
+  closeInDocumentSearch();
   const overlay = document.createElement("div");
   overlay.id = OVERLAY_ID;
   overlay.className = "modale";
   // Una modale dichiarata tale, come la palette: chi entra sente «finestra di
-  // dialogo» e il tab non esce di sotto.
+  // dialogo» e il linguetta non esce di sotto.
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", t("docsearch.title"));
@@ -200,11 +200,11 @@ function apriOverlay(): HTMLElement {
   box.className = "palette-box";
   overlay.appendChild(box);
   overlay.addEventListener("mousedown", (e) => {
-    if (e.target === overlay) chiudiRicercaNellaNota();
+    if (e.target === overlay) closeInDocumentSearch();
   });
   document.body.appendChild(overlay);
   // Dopo l'inserimento: `intrappolaFuoco` mette a fuoco il primo elemento, e
   // un elemento fuori dal documento non lo può prendere.
-  sciogli = intrappolaFuoco(overlay, chiudiRicercaNellaNota);
+  release = trapFocus(overlay, closeInDocumentSearch);
   return box;
 }

@@ -20,13 +20,13 @@
 // app vorrebbero dire che una stringa della shell e una di un provider possono
 // cadere in due lingue diverse sullo stesso schermo.
 //
-// L'ultimo gradino è brutto apposta, ed è la ragione scritta nella 0040: una
+// L'ultimo gradino è brutto apposta, ed è la ragione scritto nella 0040: una
 // chiave mancante deve essere *visibile e cercabile*, non plausibile.
 //
 // # Ciò che qui si può fare e in Rust no
 //
-// `Chiave` è l'unione delle chiavi del catalogo italiano, e i cataloghi delle
-// altre lingue sono `Record<Chiave, string>`: **una chiave dimenticata in
+// `Key` è l'unione delle chiavi del catalogo italiano, e i cataloghi delle
+// altre lingue sono `Record<Key, string>`: **una chiave dimenticata in
 // inglese non compila**. In Rust la stessa promessa costa un test che cammina
 // sui cataloghi (`fub-features/tests/i_cataloghi.rs`), perché lì un catalogo è
 // dato di manifest e le chiavi sono `&str`. Qui il compilatore la regala, e
@@ -36,10 +36,10 @@
 // Ciò che il compilatore **non** copre è il testo fermo di `index.html`, che
 // nomina le chiavi in un attributo: quello lo presidia `strings.test.ts`,
 // leggendo il file vero.
-import { impostazioni } from "../host/query";
+import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
-import type { Smontaggio } from "../ui/vita";
+import type { Teardown } from "../ui/lifetime";
 
 /// Il catalogo italiano. È anche la **forma** del catalogo: le altre lingue
 /// devono avere le sue chiavi, tutte, o non compilano.
@@ -98,7 +98,7 @@ const IT = {
   "rail.graph": "Grafo",
   "rail.graph.hint": "Il grafo dei collegamenti",
 
-  // --- l'inspector: i tab a destra --------------------------------------
+  // --- l'inspector: i linguetta a destra --------------------------------------
   "inspector.region": "Ispettore",
 
   "command-search.placeholder": "Cerca nel vault…",
@@ -411,7 +411,7 @@ const IT = {
   // I comandi **della finestra**: gli stessi campi di quelli del kernel, perché
   // sono comandi come loro — quello che cambia è chi li esegue.
   "commands.conflict": "«{chord}» è la scorciatoia di più comandi: {commands}.",
-  // I due modi, oltre alla contesa, in cui una scorciatoia scritta non si preme
+  // I due modi, oltre alla contesa, in cui una scorciatoia scritto non si preme
   // (§18.2). Si dicono all'avvio insieme ai conflitti veri, perché chiedono la
   // stessa cosa a chi legge: aprire le impostazioni e cambiare una riga.
   "commands.shadowed":
@@ -540,7 +540,7 @@ const IT = {
     "Il file è cambiato da quando questo testo se n'è discostato: tenendone uno si perde l'altro.",
   "draft.case.incerta":
     "Non si sa da quale versione del file questo testo sia partito: guardali prima di scegliere.",
-  // Non «una bozza non è stata scritta» ma **la rete non c'è più**: la prima è
+  // Non «una bozza non è stata scritto» ma **la rete non c'è più**: la prima è
   // una notizia su un file, la seconda è ciò che cambia cosa si può fare adesso.
   "draft.blind":
     "Il testo non salvato non arriva più sul disco: da adesso un crash lo perderebbe. Salva a mano ciò che non vuoi rischiare.",
@@ -548,7 +548,7 @@ const IT = {
   // --- lo stato del salvataggio (§20.4) ----------------------------------
   // Quattro parole nella barra di stato, e non un'icona: «salvato» e «non
   // salvato» sono la differenza fra un'ora di lavoro che c'è e un'ora che non
-  // c'è, e un pallino la fa indovinare. Il pallino sulla tab resta dov'era: dice
+  // c'è, e un pallino la fa indovinare. Il pallino sulla linguetta resta dov'era: dice
   // *quale* nota, questa dice *cosa le è successo*.
   "save.saved": "Salvato",
   "save.saving": "Salvataggio…",
@@ -558,11 +558,11 @@ const IT = {
 } as const;
 
 /// Una chiave del catalogo della shell.
-export type Chiave = keyof typeof IT;
+export type Key = keyof typeof IT;
 
 /// L'inglese. Il tipo è ciò che lo tiene completo: togliere una riga qui è un
 /// errore di compilazione, non una chiave nuda scoperta da qualcuno.
-const EN: Record<Chiave, string> = {
+const EN: Record<Key, string> = {
   "app.skip_to_editor": "Skip to the editor",
   "app.open_vault": "Open vault…",
   "app.settings": "Settings",
@@ -605,7 +605,7 @@ const EN: Record<Chiave, string> = {
   "menu.go.switcher": "Go to note",
   "menu.tools.settings": "Settings",
 
-  // --- the rail: the left icon strip, always visible --------------------
+  // --- the rail: the left icon strip, always visibile --------------------
   "rail.notes": "Notes",
   "rail.notes.hint": "The vault tree",
   "rail.search": "Search",
@@ -728,7 +728,7 @@ const EN: Record<Chiave, string> = {
   "trouble.about": "{doc}: {reason}",
   "trouble.vault": "{reason}",
   // The panic gate (§17.3, decision 0161): when the kernel knows where the
-  // fault came in, the notice says so at the end. The phrases adapt those of
+  // fault came in, the notice says so at the end. The frasi adapt those of
   // `Gate::what` in crates/fub-abi/src/gate.rs, without the site detail.
   "trouble.gate": " · via {gate}",
   "gate.command": "running a command",
@@ -956,16 +956,16 @@ const EN: Record<Chiave, string> = {
   "save.conflitto": "Changed on disk",
 };
 
-/// La lingua di ripiego di questa shell, che è quella in cui è scritta.
-const RIPIEGO = "it";
+/// La lingua di ripiego di questa shell, che è quella in cui è scritto.
+const FALLBACK = "it";
 
-const CATALOGHI: Record<string, Record<string, string>> = { it: IT, en: EN };
+const CATALOGS: Record<string, Record<string, string>> = { it: IT, en: EN };
 
 /// La chiave dell'impostazione della lingua. La stessa stringa sta in
 /// `fub-kernel/src/locale.rs`, come `CHIAVE_TEMA` sta in
 /// `fub-host/src/settings.rs` — e per la stessa ragione: una shell in
 /// TypeScript non importa una costante Rust.
-export const CHIAVE_LINGUA = "locale.language";
+export const LANGUAGE_KEY = "locale.language";
 
 /// Dove la shell ricorda l'ultima **scelta** di lingua.
 ///
@@ -976,11 +976,11 @@ export const CHIAVE_LINGUA = "locale.language";
 /// seguendo il sistema di **oggi**.
 const CACHE = "fub.locale.language";
 
-/// La scelta corrente, così com'è scritta nell'impostazione.
-let scelta = "";
+/// La scelta corrente, così com'è scritto nell'impostazione.
+let choice = "";
 
 /// Chi va avvisato quando la lingua cambia: chi ha già disegnato del testo.
-const ascoltatori: Array<() => void> = [];
+const listeners: Array<() => void> = [];
 
 /// La lingua che vale, date la scelta e quella del sistema.
 ///
@@ -988,22 +988,22 @@ const ascoltatori: Array<() => void> = [];
 /// stringa vuota è «come il sistema» (la convenzione delle chiavi `locale.*`), e
 /// lo è anche qualunque cosa non sia una stringa — un `settings.json` scritto a
 /// mano non deve poter spegnere le stringhe.
-export function linguaEffettiva(scelta: unknown, sistema: string): string {
-  return typeof scelta === "string" && scelta.trim() !== "" ? scelta.trim() : sistema;
+export function effectiveLanguage(choice: unknown, systemLanguage: string): string {
+  return typeof choice === "string" && choice.trim() !== "" ? choice.trim() : systemLanguage;
 }
 
 /// Il catalogo da cui pescare, per una lingua: la scala della 0040, i primi tre
 /// gradini. Il quarto — la chiave nuda — lo fa `t`, perché è l'assenza di un
 /// catalogo e non un catalogo.
-export function catalogoPer(lingua: string): Record<string, string> {
-  const base = lingua.split(/[-_]/)[0] ?? "";
-  return CATALOGHI[lingua.toLowerCase()] ?? CATALOGHI[base.toLowerCase()] ?? CATALOGHI[RIPIEGO]!;
+export function catalogFor(language: string): Record<string, string> {
+  const base = language.split(/[-_]/)[0] ?? "";
+  return CATALOGS[language.toLowerCase()] ?? CATALOGS[base.toLowerCase()] ?? CATALOGS[FALLBACK]!;
 }
 
 /// La lingua corrente. Fuori da un browser (i test) `navigator` può non esserci.
-function linguaCorrente(): string {
-  const sistema = typeof navigator === "undefined" ? RIPIEGO : navigator.language || RIPIEGO;
-  return linguaEffettiva(scelta, sistema);
+function languageCurrent(): string {
+  const systemLanguage = typeof navigator === "undefined" ? FALLBACK : navigator.language || FALLBACK;
+  return effectiveLanguage(choice, systemLanguage);
 }
 
 /// Sostituisce `{nome}` con l'argomento che si chiama così.
@@ -1025,53 +1025,53 @@ function linguaCorrente(): string {
 /// Il nome si cerca **fra le chiavi proprie** dell'oggetto e non con un
 /// accesso nudo: `{constructor}` in JavaScript trova qualcosa in qualunque
 /// oggetto, e sarebbe una funzione stampata in mezzo a una frase.
-export function espandi(template: string, args: Record<string, string | number>): string {
-  let fuori = "";
-  let resto = template;
+export function expand(template: string, args: Record<string, string | number>): string {
+  let outside = "";
+  let rest = template;
   for (;;) {
-    const dove = resto.search(/[{}]/);
-    if (dove < 0) break;
-    fuori += resto.slice(0, dove);
-    const graffa = resto[dove]!;
-    resto = resto.slice(dove + 1);
+    const where = rest.search(/[{}]/);
+    if (where < 0) break;
+    outside += rest.slice(0, where);
+    const brace = rest[where]!;
+    rest = rest.slice(where + 1);
     // Raddoppiata = letterale, per l'una e per l'altra.
-    if (resto[0] === graffa) {
-      fuori += graffa;
-      resto = resto.slice(1);
+    if (rest[0] === brace) {
+      outside += brace;
+      rest = rest.slice(1);
       continue;
     }
     // Una graffa chiusa spaiata è testo: non c'è niente da chiudere.
-    if (graffa === "}") {
-      fuori += "}";
+    if (brace === "}") {
+      outside += "}";
       continue;
     }
-    const fine = resto.indexOf("}");
+    const end = rest.indexOf("}");
     // Una graffa aperta che non si chiude mai: testo fino alla fine.
-    if (fine < 0) {
-      fuori += "{";
+    if (end < 0) {
+      outside += "{";
       break;
     }
-    const nome = resto.slice(0, fine);
-    fuori += Object.prototype.hasOwnProperty.call(args, nome) ? String(args[nome]) : `{${nome}}`;
-    resto = resto.slice(fine + 1);
+    const name = rest.slice(0, end);
+    outside += Object.prototype.hasOwnProperty.call(args, name) ? String(args[name]) : `{${name}}`;
+    rest = rest.slice(end + 1);
   }
-  return fuori + resto;
+  return outside + rest;
 }
 
 /// Il testo di una chiave, nella lingua di chi guarda.
-export function t(chiave: Chiave, args: Record<string, string | number> = {}): string {
-  const template = catalogoPer(linguaCorrente())[chiave] ?? IT[chiave] ?? chiave;
-  return espandi(template, args);
+export function t(key: Key, args: Record<string, string | number> = {}): string {
+  const template = catalogFor(languageCurrent())[key] ?? IT[key] ?? key;
+  return expand(template, args);
 }
 
 /// Gli attributi che il testo fermo di `index.html` può chiedere, e dove
 /// finisce ciò che si trova.
 ///
 /// Un solo attributo per elemento sarebbe bastato al 90% dei casi e non al
-/// resto: un pulsante ha un testo **e** un `title`, e un campo ha un
+/// rest: un pulsante ha un testo **e** un `title`, e un campo ha un
 /// segnaposto e un nome accessibile. Sono quattro nomi e non un mini-linguaggio
 /// dentro un attributo, che è la forma che si finisce per dover parsare.
-const ATTRIBUTI = [
+const ATTRIBUTES = [
   ["data-i18n", "testo"],
   ["data-i18n-title", "title"],
   ["data-i18n-placeholder", "placeholder"],
@@ -1083,13 +1083,13 @@ const ATTRIBUTI = [
 /// Gira al montaggio e a ogni cambio di lingua. Il testo scritto nell'HTML resta
 /// comunque quello italiano — non è un segnaposto vuoto — perché è ciò che si
 /// vede se questa funzione non gira: un ripiego che è già la lingua di ripiego.
-export function applicaStringhe(root: ParentNode = document): void {
-  for (const [attributo, dove] of ATTRIBUTI) {
-    for (const el of root.querySelectorAll<HTMLElement>(`[${attributo}]`)) {
-      const chiave = el.getAttribute(attributo) as Chiave;
-      const testo = t(chiave);
-      if (dove === "testo") el.textContent = testo;
-      else el.setAttribute(dove, testo);
+export function applyStrings(root: ParentNode = document): void {
+  for (const [attribute, where] of ATTRIBUTES) {
+    for (const el of root.querySelectorAll<HTMLElement>(`[${attribute}]`)) {
+      const key = el.getAttribute(attribute) as Key;
+      const text = t(key);
+      if (where === "testo") el.textContent = text;
+      else el.setAttribute(where, text);
     }
   }
 }
@@ -1104,35 +1104,35 @@ export function applicaStringhe(root: ParentNode = document): void {
 /// — un elenco che si scopre incompleto solo cambiando lingua e guardando bene.
 ///
 /// Torna **come smettere**, come `onKernelEvent` in `host/ipc.ts` e come
-/// `intrappolaFuoco`. I quattro chiamanti di oggi lo ignorano, ed è corretto:
+/// `trapFocus`. I quattro chiamanti di oggi lo ignorano, ed è corretto:
 /// sono superfici montate una volta che vivono quanto la finestra, e per loro
 /// non c'è niente da disfare. Il difetto non morde adesso — morde il primo
 /// chiamante che sia un pannello, che si iscriverebbe di nuovo a ogni
 /// montaggio senza che la vecchia iscrizione se ne vada, e ridisegnerebbe N
-/// volte una superficie che non esiste più. Chi ha una `Vita` scrive
-/// `vita.aggiungi(onLingua(ridisegna))` e non ci pensa.
-export function onLingua(ascoltatore: () => void): Smontaggio {
-  ascoltatori.push(ascoltatore);
+/// volte una superficie che non esiste più. Chi ha una `Lifetime` scrive
+/// `lifetime.aggiungi(onLanguage(redraw))` e non ci pensa.
+export function onLanguage(listener: () => void): Teardown {
+  listeners.push(listener);
   return () => {
-    const i = ascoltatori.indexOf(ascoltatore);
-    if (i >= 0) ascoltatori.splice(i, 1);
+    const i = listeners.indexOf(listener);
+    if (i >= 0) listeners.splice(i, 1);
   };
 }
 
 /// Rilegge la scelta dall'impostazione, se c'è un vault che possa rispondere.
-async function rileggi(): Promise<void> {
+async function reread(): Promise<void> {
   try {
-    const entry = (await impostazioni()).find((e) => e.spec.key === CHIAVE_LINGUA);
+    const entry = (await settings()).find((e) => e.spec.key === LANGUAGE_KEY);
     if (!entry) return;
-    const prossima = typeof entry.value === "string" ? entry.value : "";
-    if (prossima === scelta) return;
-    scelta = prossima;
-    localStorage.setItem(CACHE, scelta);
-    applicaStringhe();
+    const next = typeof entry.value === "string" ? entry.value : "";
+    if (next === choice) return;
+    choice = next;
+    localStorage.setItem(CACHE, choice);
+    applyStrings();
     // Una copia: un ascoltatore che si disiscrive mentre viene chiamato
     // altrimenti accorcerebbe l'array sotto l'iteratore, e il successivo
     // salterebbe il turno.
-    for (const ascoltatore of [...ascoltatori]) ascoltatore();
+    for (const listener of [...listeners]) listener();
   } catch {
     // Nessun vault aperto, o il canale dati che non risponde: si resta su ciò
     // che la cache diceva. Una lingua è la cosa meno urgente da cui far fallire
@@ -1148,12 +1148,12 @@ async function rileggi(): Promise<void> {
 /// cambierebbe riavviandola.
 export function mountStrings(onChange: () => void): void {
   try {
-    scelta = localStorage.getItem(CACHE) ?? "";
+    choice = localStorage.getItem(CACHE) ?? "";
   } catch {
-    scelta = "";
+    choice = "";
   }
-  applicaStringhe();
-  ascoltatori.push(onChange);
-  onEvent("setting_changed", () => void rileggi());
-  on("vault", () => void rileggi());
+  applyStrings();
+  listeners.push(onChange);
+  onEvent("setting_changed", () => void reread());
+  on("vault", () => void reread());
 }

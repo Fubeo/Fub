@@ -140,7 +140,7 @@ impl std::str::FromStr for Version {
             it.next()
                 .ok_or_else(|| format!("`{s}`: manca la {what}"))?
                 .parse::<u64>()
-                .map_err(|e| format!("`{s}`: {what} non numerica ({e})"))
+                .map_err(|and| format!("`{s}`: {what} non numerica ({and})"))
         };
         let major = next("major")?;
         let minor = next("minor")?;
@@ -198,8 +198,8 @@ fn render(resolve: &Resolve, ty: &Type) -> String {
 
 fn load(source: &str, origin: &str) -> Contract {
     let mut resolve = Resolve::new();
-    if let Err(e) = resolve.push_str(origin, source) {
-        panic!("{origin} non è un WIT valido: {e:?}");
+    if let Err(and) = resolve.push_str(origin, source) {
+        panic!("{origin} non è un WIT valido: {and:?}");
     }
 
     let mut types: BTreeMap<String, Shape> = BTreeMap::new();
@@ -235,8 +235,8 @@ fn load(source: &str, origin: &str) -> Contract {
                         .map(|c| (c.name.clone(), c.ty.as_ref().map(|t| render(&resolve, t))))
                         .collect(),
                 ),
-                TypeDefKind::Enum(e) => {
-                    Shape::Enum(e.cases.iter().map(|c| c.name.clone()).collect())
+                TypeDefKind::Enum(and) => {
+                    Shape::Enum(and.cases.iter().map(|c| c.name.clone()).collect())
                 }
                 TypeDefKind::Flags(f) => {
                     Shape::Flags(f.flags.iter().map(|f| f.name.clone()).collect())
@@ -334,12 +334,12 @@ fn prefix<T: PartialEq + std::fmt::Debug>(base: &[T], now: &[T], what: &str) -> 
             now.len()
         ));
     }
-    for (i, was) in base.iter().enumerate() {
-        if now[i] != *was {
+    for (the, was) in base.iter().enumerate() {
+        if now[the] != *was {
             return Some(format!(
-                "{what}: in posizione {i} c'era {was:?} e ora c'è {:?} \
+                "{what}: in posizione {the} c'era {was:?} e ora c'è {:?} \
                  (rinomina, ritipo o riordino: l'ordine è ABI)",
-                now[i]
+                now[the]
             ));
         }
     }
@@ -347,8 +347,8 @@ fn prefix<T: PartialEq + std::fmt::Debug>(base: &[T], now: &[T], what: &str) -> 
 }
 
 /// Le interfacce che il **plugin esporta**, cioè quelle che deve implementare.
-fn implementate_dal_plugin(c: &Contract) -> BTreeSet<String> {
-    c.worlds.values().flat_map(|(_, e)| e.clone()).collect()
+fn exported_by_plugin(c: &Contract) -> BTreeSet<String> {
+    c.worlds.values().flat_map(|(_, and)| and.clone()).collect()
 }
 
 /// Perché una funzione in più **non** è sempre un'aggiunta.
@@ -370,26 +370,26 @@ fn implementate_dal_plugin(c: &Contract) -> BTreeSet<String> {
 /// Il presidio è rimasto verde per due di queste (vedi [`OBBLIGAZIONI_NOTE`]),
 /// ed è la ragione per cui questa funzione esiste: la regola era stata scritta
 /// guardando il lato che si concede e applicata anche al lato che si deve.
-fn nuove_obbligazioni(base: &Contract, now: &Contract) -> Vec<String> {
-    let esportate = implementate_dal_plugin(base);
-    let note: BTreeSet<&str> = OBBLIGAZIONI_NOTE.iter().map(|(f, _)| *f).collect();
+fn new_obligations(base: &Contract, now: &Contract) -> Vec<String> {
+    let exported = exported_by_plugin(base);
+    let known: BTreeSet<&str> = KNOWN_OBLIGATIONS.iter().map(|(f, _)| *f).collect();
     let mut errors = Vec::new();
     for name in now.functions.keys() {
         let Some((iface, _)) = name.split_once("::") else {
             continue;
         };
-        if !esportate.contains(iface) || base.functions.contains_key(name) {
+        if !exported.contains(iface) || base.functions.contains_key(name) {
             continue;
         }
-        if note.contains(name.as_str()) {
+        if known.contains(name.as_str()) {
             continue;
         }
         errors.push(format!(
             "funzione `{name}`: `{iface}` è un'interfaccia che il PLUGIN esporta, quindi una \
-             funzione in più non è un'aggiunta — è un'obbligazione. Un componente compilato \
-             contro {} non la esporta, e un world che la pretende è un world che lui non \
-             soddisfa. Se è deliberata: una riga in `OBBLIGAZIONI_NOTE` con il perché, e una \
-             riga nella tabella dei ritagli di `docs/architecture/wit-congelato.md`",
+             function in more is not an addition — it is an obligation. A component compiled \
+             against {} does not export it, and a world that requires it is a world it does \
+             not satisfy. If deliberate: a line in `KNOWN_OBLIGATIONS` with the reason, and a \
+             line in the cuts table of `docs/architecture/wit-frozen.md`",
             base.version
         ));
     }
@@ -403,7 +403,7 @@ fn nuove_obbligazioni(base: &Contract, now: &Contract) -> Vec<String> {
 /// starle aggiungendo, perché il test diceva di sì. Una riga nuova qui va
 /// **argomentata**, come nell'allowlist di `serialize_non_riscrive`: il costo è
 /// reale e va pagato da chi lo sceglie, non ereditato in silenzio.
-const OBBLIGAZIONI_NOTE: &[(&str, &str)] = &[
+const KNOWN_OBLIGATIONS: &[(&str, &str)] = &[
     (
         "index::up-to-date",
         "decisione 0047 (§14.2): la domanda che mancava a un IndexProvider per poter \
@@ -503,7 +503,7 @@ fn breaks(base: &Contract, now: &Contract) -> Vec<String> {
         }
     }
 
-    errors.extend(nuove_obbligazioni(base, now));
+    errors.extend(new_obligations(base, now));
 
     for (name, (imports, exports)) in &base.worlds {
         let Some((now_imports, now_exports)) = now.worlds.get(name) else {
@@ -533,14 +533,14 @@ fn breaks(base: &Contract, now: &Contract) -> Vec<String> {
 /// Ogni `wit/frozen/<versione>.wit`, con la versione presa dal **nome del file**.
 fn frozen() -> Vec<(Version, Contract)> {
     let dir = std::path::Path::new(FROZEN_DIR);
-    let entries = std::fs::read_dir(dir).unwrap_or_else(|e| {
-        panic!("{FROZEN_DIR} non è leggibile: {e} — la linea di base del contratto non è opzionale")
+    let entries = std::fs::read_dir(dir).unwrap_or_else(|and| {
+        panic!("{FROZEN_DIR} non è leggibile: {and} — la linea di base del contratto non è opzionale")
     });
 
     let mut out = Vec::new();
     for entry in entries {
         let path = entry.expect("voce di directory illeggibile").path();
-        if path.extension().and_then(|e| e.to_str()) != Some("wit") {
+        if path.extension().and_then(|and| and.to_str()) != Some("wit") {
             continue;
         }
         let stem = path
@@ -548,8 +548,8 @@ fn frozen() -> Vec<(Version, Contract)> {
             .and_then(|s| s.to_str())
             .expect("nome di file non UTF-8")
             .to_string();
-        let version: Version = stem.parse().unwrap_or_else(|e| {
-            panic!("wit/frozen/{stem}.wit: il nome del file È la versione pubblicata — {e}")
+        let version: Version = stem.parse().unwrap_or_else(|and| {
+            panic!("wit/frozen/{stem}.wit: il nome del file È la versione pubblicata — {and}")
         });
         let source = std::fs::read_to_string(&path).expect("snapshot illeggibile");
         let contract = load(&source, &format!("wit/frozen/{stem}.wit"));
@@ -579,7 +579,7 @@ fn current() -> Contract {
 /// Senza questo, il presidio si spegne da solo il giorno in cui qualcuno svuota
 /// la cartella: zero snapshot = zero confronti = verde.
 #[test]
-fn esiste_una_linea_di_base_e_copre_la_versione_corrente() {
+fn a_baseline_exists_and_covers_the_current_version() {
     let now = current();
     let snapshots = frozen();
     assert!(
@@ -611,7 +611,7 @@ fn esiste_una_linea_di_base_e_copre_la_versione_corrente() {
 /// Il presidio vero: il contratto attuale serve ogni versione che dichiara di
 /// servire.
 #[test]
-fn il_contratto_cresce_solo_per_aggiunta() {
+fn the_contract_grows_only_by_addition() {
     let now = current();
     let mut errors: Vec<String> = Vec::new();
 
@@ -631,7 +631,7 @@ fn il_contratto_cresce_solo_per_aggiunta() {
         errors.extend(
             breaks(&base, &now)
                 .into_iter()
-                .map(|e| format!("[{version}] {e}")),
+                .map(|and| format!("[{version}] {and}")),
         );
     }
 
@@ -648,19 +648,18 @@ fn il_contratto_cresce_solo_per_aggiunta() {
 }
 
 /// Un cambiamento del contratto, applicato al modello parsato: nome e come si
-/// ottiene.
-type Cambio = (&'static str, Box<dyn Fn(&mut Contract)>);
+type Change = (&'static str, Box<dyn Fn(&mut Contract)>);
 
+/// ottiene.
 /// Il test del test: ogni forma di rottura deve farlo diventare rosso.
 ///
 /// Le divergenze si introducono sul **modello parsato**, non sul sorgente: così
 /// colpiscono esattamente il costrutto voluto e non dipendono da come è scritto
-/// il file.
 #[test]
-fn ogni_forma_di_rottura_e_rossa() {
+fn every_form_of_breakage_turns_red() {
     let base = current();
 
-    let mutazioni: Vec<Cambio> = vec![
+    let mutations: Vec<Change> = vec![
         (
             "un tipo rimosso",
             Box::new(|c: &mut Contract| {
@@ -807,6 +806,7 @@ fn ogni_forma_di_rottura_e_rossa() {
             }),
         ),
         (
+            // è più soddisfatto e non c'è instanziazione.
             // Il caso di questa voce (decisione 0092), e ci è arrivato tardi:
             // `write-document` ha ritipato il proprio `base` e il banco non
             // aveva nessuna rottura che *ritipasse* un parametro — solo
@@ -815,7 +815,6 @@ fn ogni_forma_di_rottura_e_rossa() {
             // suo messaggio nomina già il ritipo; ciò che mancava non era il
             // presidio, era la **prova** che quel ramo funzioni. Un ramo che
             // nessuno esercita è un ramo di cui si scopre lo stato il giorno
-            // che serve.
             "un parametro ritipato",
             Box::new(|c: &mut Contract| {
                 let sig = c
@@ -864,25 +863,24 @@ fn ogni_forma_di_rottura_e_rossa() {
         ),
     ];
 
-    for (nome, rompi) in mutazioni {
-        let mut rotto = base.clone();
-        rompi(&mut rotto);
-        let errors = breaks(&base, &rotto);
+    for (name, break_fn) in mutations {
+        let mut broken = base.clone();
+        break_fn(&mut broken);
+        let errors = breaks(&base, &broken);
         assert!(
             !errors.is_empty(),
-            "«{nome}» non fa diventare rosso il presidio: sta verificando meno di quel \
-             che dichiara"
+            "«{name}» does not turn the guard red: it is checking less than it declares"
         );
     }
 }
 
+            // che serve.
 /// L'altra metà: ciò che è davvero un'aggiunta deve passare, o il presidio
-/// blocca il lavoro che il §1 del piano deve poter fare.
 #[test]
-fn le_aggiunte_in_coda_passano() {
+fn additions_at_the_end_pass() {
     let base = current();
 
-    let aggiunte: Vec<Cambio> = vec![
+    let additions: Vec<Change> = vec![
         (
             "un campo in fondo a un record",
             Box::new(|c: &mut Contract| {
@@ -913,18 +911,18 @@ fn le_aggiunte_in_coda_passano() {
         (
             "un tipo nuovo",
             Box::new(|c: &mut Contract| {
+/// blocca il lavoro che il §1 del piano deve poter fare.
                 // Un tipo che il contratto NON ha (il §13.1 lo prevede): il
                 // segnaposto precedente era `property-value`, che nel frattempo
-                // è nato davvero — e un tipo che esiste non è un'aggiunta.
                 c.types
                     .insert("model::doc-ref".into(), Shape::Alias("string".into()));
             }),
         ),
         (
+                // è nato davvero — e un tipo che esiste non è un'aggiunta.
             // Il gemello del caso rosso qui sopra, ed è la coppia che dice
             // dov'è il taglio: la STESSA aggiunta è additiva sull'interfaccia
             // che il plugin importa e rotta su quella che esporta. Chi importa
-            // può ignorare ciò che non conosce; chi esporta deve fornirlo.
             "una funzione nuova (decisione 0013: una capacità in più)",
             Box::new(|c: &mut Contract| {
                 c.functions.insert(
@@ -964,13 +962,13 @@ fn le_aggiunte_in_coda_passano() {
         ),
     ];
 
-    for (nome, aggiungi) in aggiunte {
-        let mut cresciuto = base.clone();
-        aggiungi(&mut cresciuto);
-        let errors = breaks(&base, &cresciuto);
+    for (name, apply_change) in additions {
+        let mut grown = base.clone();
+        apply_change(&mut grown);
+        let errors = breaks(&base, &grown);
         assert!(
             errors.is_empty(),
-            "«{nome}» è un'aggiunta e il presidio la rifiuta:\n  - {}",
+            "«{name}» è un'aggiunta e il presidio la rifiuta:\n  - {}",
             errors.join("\n  - ")
         );
     }

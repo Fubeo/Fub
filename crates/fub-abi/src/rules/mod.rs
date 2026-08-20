@@ -83,9 +83,9 @@
 //!
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
 
-pub mod carichi;
-pub mod cartelle;
-pub mod cestino;
+pub mod folders;
+pub mod loads;
+pub mod trash;
 pub mod composition;
 pub mod doc_data;
 pub mod events;
@@ -97,7 +97,7 @@ pub mod path_policy;
 pub mod properties;
 pub mod snippet;
 pub mod tag;
-pub mod tasti;
+pub mod keys;
 pub mod text_policy;
 
 pub use crate::model::{

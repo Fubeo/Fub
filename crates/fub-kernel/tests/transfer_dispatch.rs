@@ -27,7 +27,7 @@ use fub_abi::transfer::{
     ImportedDocument,
 };
 use fub_kernel::{FormatRegistry, Workspace};
-use fub_testkit::TestoDiProva;
+use fub_testkit::SampleText;
 
 type Log = Arc<Mutex<Vec<String>>>;
 
@@ -64,10 +64,10 @@ impl ImportProvider for SpyImport {
         let Some(doc) = self.writes.clone() else {
             return Ok(report);
         };
-        let testo = source.text(host)?;
-        let outcome = match host.write_document(&doc, &testo, WriteBase::Dictated) {
+        let text = source.text(host)?;
+        let outcome = match host.write_document(&doc, &text, WriteBase::Dictated) {
             Ok(_) => ImportOutcome::Created,
-            Err(e) => ImportOutcome::Failed(e.to_string()),
+            Err(and) => ImportOutcome::Failed(and.to_string()),
         };
         // Un evento emesso DENTRO la chiamata: gli handler lo devono vedere
         // dopo, non adesso.
@@ -105,7 +105,7 @@ impl ExportProvider for SpyExport {
         _out: &mut dyn ArtifactSink,
     ) -> Result<ExportReport, PluginError> {
         let docs = request.selection.resolve(host)?;
-        let elenco = docs
+        let list = docs
             .iter()
             .map(|d| d.as_str())
             .collect::<Vec<_>>()
@@ -114,7 +114,7 @@ impl ExportProvider for SpyExport {
             artifacts: vec![ExportArtifact {
                 path: "elenco.txt".into(),
                 media_type: "text/plain".into(),
-                content: fub_abi::transfer::ArtifactContent::Bytes(elenco.into_bytes()),
+                content: fub_abi::transfer::ArtifactContent::Bytes(list.into_bytes()),
             }],
             log: Vec::new(),
         })
@@ -146,7 +146,7 @@ fn workspace() -> (tempfile::TempDir, Workspace) {
     std::fs::write(root.join("esistente.txt"), "ciao").unwrap();
     let mut registry = FormatRegistry::new();
     registry
-        .register(TestoDiProva::per_estensione("txt").boxed())
+        .register(SampleText::by_extension("txt").boxed())
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
@@ -189,15 +189,15 @@ fn the_first_provider_that_claims_the_source_takes_it() {
     )
     .expect("import");
 
-    let visto = log.lock().unwrap().clone();
+    let seen = log.lock().unwrap().clone();
     assert_eq!(
-        visto.iter().filter(|c| c.starts_with("can_handle")).count(),
+        seen.iter().filter(|c| c.starts_with("can_handle")).count(),
         2,
         "l'interrogazione si ferma al primo sì: csv dice no, txt dice sì"
     );
     assert!(
-        visto.contains(&"import:txt".to_string()) && !visto.contains(&"import:csv".to_string()),
-        "chi ha detto no non viene importato: {visto:?}"
+        seen.contains(&"import:txt".to_string()) && !seen.contains(&"import:csv".to_string()),
+        "chi ha detto no non viene importato: {seen:?}"
     );
     assert!(ws.documents().contains(&DocId::new("nuova.txt")));
 }
@@ -225,16 +225,16 @@ fn events_emitted_during_an_import_arrive_after_it_returns() {
     )
     .expect("import");
 
-    let visto = log.lock().unwrap().clone();
-    let emesso = visto.iter().position(|c| c == "emesso").expect("emesso");
-    let consegnato = visto
+    let seen = log.lock().unwrap().clone();
+    let emitted = seen.iter().position(|c| c == "emesso").expect("emesso");
+    let delivered = seen
         .iter()
         .position(|c| c == "consegnato:import.finito")
         .expect("l'evento arriva, prima o poi");
     assert!(
-        emesso < consegnato,
+        emitted < delivered,
         "un provider non è mai rientrato nella propria istanza: l'evento \
-         emesso dentro `import` si consegna a chiamata tornata ({visto:?})"
+         emesso dentro `import` si consegna a chiamata tornata ({seen:?})"
     );
 }
 
@@ -302,13 +302,13 @@ fn an_export_sees_the_whole_world_through_a_read_only_host() {
 /// per volta di proposito — se il ciclo si fidasse di una lettura sola, o se il
 /// prologo venisse scambiato per il contenuto, qui il documento entrerebbe
 /// troncato invece che sbagliato, che è il modo peggiore di sbagliare.
-struct ImporterAPezzi {
+struct ChunkedImporter {
     /// Quanti giri di lettura ha fatto: è il conto che dice se ha davvero
     /// letto a pezzi o se ha barato leggendo tutto in un colpo.
-    giri: Arc<Mutex<usize>>,
+    rounds: Arc<Mutex<usize>>,
 }
 
-impl ImportProvider for ImporterAPezzi {
+impl ImportProvider for ChunkedImporter {
     fn can_handle(&self, source: &ImportSource) -> bool {
         // Il dispatch guarda l'**assaggio**, non i byte: per una sorgente a
         // handle i byte non ci sono, e `can_handle` non ha un host con cui
@@ -322,21 +322,21 @@ impl ImportProvider for ImporterAPezzi {
         request: &ImportRequest,
         host: &mut dyn HostApi,
     ) -> Result<ImportReport, PluginError> {
-        let mut testo = Vec::new();
+        let mut text = Vec::new();
         let mut offset = 0u64;
         loop {
-            let pezzo = host.read_source(handle_di(source), offset, 16)?;
-            if pezzo.is_empty() {
+            let piece = host.read_source(handle_of(source), offset, 16)?;
+            if piece.is_empty() {
                 break;
             }
-            *self.giri.lock().unwrap() += 1;
-            offset += pezzo.len() as u64;
-            testo.extend_from_slice(&pezzo);
+            *self.rounds.lock().unwrap() += 1;
+            offset += piece.len() as u64;
+            text.extend_from_slice(&piece);
         }
         let doc = request.destination("a-pezzi.txt");
-        let testo =
-            String::from_utf8(testo).map_err(|e| PluginError::BadArgs(e.to_string().into()))?;
-        host.write_document(&doc, &testo, WriteBase::Dictated)?;
+        let text =
+            String::from_utf8(text).map_err(|and| PluginError::BadArgs(and.to_string().into()))?;
+        host.write_document(&doc, &text, WriteBase::Dictated)?;
         let mut report = ImportReport::new(request.mode);
         report.documents.push(ImportedDocument {
             doc,
@@ -347,7 +347,7 @@ impl ImportProvider for ImporterAPezzi {
     }
 }
 
-fn handle_di(source: &ImportSource) -> fub_abi::transfer::SourceHandle {
+fn handle_of(source: &ImportSource) -> fub_abi::transfer::SourceHandle {
     match &source.content {
         fub_abi::transfer::SourceContent::Streamed(s) => s.handle,
         fub_abi::transfer::SourceContent::Bytes(_) => {
@@ -357,27 +357,27 @@ fn handle_di(source: &ImportSource) -> fub_abi::transfer::SourceHandle {
 }
 
 #[test]
-fn una_sorgente_piu_grande_del_record_entra_lo_stesso() {
+fn a_source_more_grande_of_the_record_enters_the_same() {
     let (_g, mut ws) = workspace();
-    let giri: Arc<Mutex<usize>> = Arc::default();
-    ws.register_import_provider("spia.txt", Box::new(ImporterAPezzi { giri: giri.clone() }))
+    let rounds: Arc<Mutex<usize>> = Arc::default();
+    ws.register_import_provider("spia.txt", Box::new(ChunkedImporter { rounds: rounds.clone() }))
         .expect("registrato");
 
     // Molto più lungo del pezzo che l'importer chiede, così i giri sono tanti.
-    let contenuto = format!("FUB1{}", "x".repeat(500));
+    let content = format!("FUB1{}", "x".repeat(500));
     let source = ws
         .open_source(
             "grande.fub",
             None,
             Box::new(fub_kernel::transfer::MemorySource(
-                contenuto.clone().into_bytes(),
+                content.clone().into_bytes(),
             )),
         )
         .expect("aperta");
 
     assert_eq!(
         source.len(),
-        contenuto.len() as u64,
+        content.len() as u64,
         "la lunghezza si sa prima di leggere: è la differenza fra sfogliare e \
          tenere in memoria"
     );
@@ -390,26 +390,26 @@ fn una_sorgente_piu_grande_del_record_entra_lo_stesso() {
     assert_eq!(report.documents.len(), 1);
     assert_eq!(
         ws.read_source(&DocId::new("a-pezzi.txt")).expect("scritto"),
-        contenuto,
+        content,
         "ciò che è entrato è la sorgente INTERA, non il suo assaggio"
     );
     assert!(
-        *giri.lock().unwrap() > 30,
+        *rounds.lock().unwrap() > 30,
         "l'importer ha letto in {} giri: se fosse uno, la sorgente gli \
          sarebbe arrivata tutta in mano e questa voce non avrebbe fatto niente",
-        giri.lock().unwrap()
+        rounds.lock().unwrap()
     );
 
     // La chiave vale finché chi l'ha aperta non la chiude — non finisce con la
     // chiamata — così preview e apply sono due giri sulla stessa sorgente.
-    let secondo = ws.import(&source, &ImportRequest::preview());
+    let second = ws.import(&source, &ImportRequest::preview());
     assert!(
-        secondo.is_ok(),
+        second.is_ok(),
         "chiudere la sorgente alla fine di un import costringerebbe a \
          riaprirla fra la preview e l'applicazione, cioè a rileggerla"
     );
 
-    ws.close_source(handle_di(&source));
+    ws.close_source(handle_of(&source));
     assert!(
         matches!(
             ws.import(&source, &ImportRequest::apply()),
@@ -421,13 +421,13 @@ fn una_sorgente_piu_grande_del_record_entra_lo_stesso() {
 }
 
 #[test]
-fn un_export_puo_finire_sul_disco_invece_che_in_un_vec() {
+fn a_export_can_end_on_the_disk_instead_that_in_a_vec() {
     let (_g, mut ws) = workspace();
     ws.register_export_provider("spia", Box::new(SpyExport))
         .expect("registrato");
 
-    let fuori = tempfile::tempdir().expect("tempdir");
-    let mut sink = fub_kernel::transfer::DirectorySink::new(fuori.path());
+    let outside = tempfile::tempdir().expect("tempdir");
+    let mut sink = fub_kernel::transfer::DirectorySink::new(outside.path());
     let report = ws
         .export_to(
             &ExportRequest::new("spia.elenco", ExportSelection::default()),
@@ -446,28 +446,28 @@ fn un_export_puo_finire_sul_disco_invece_che_in_un_vec() {
 }
 
 #[test]
-fn chi_versa_nel_sink_riceve_una_ricevuta_e_lascia_un_file() {
-    let fuori = tempfile::tempdir().expect("tempdir");
-    let mut sink = fub_kernel::transfer::DirectorySink::new(fuori.path());
+fn whoever_pours_into_the_sink_receives_a_receipt_and_leaves_a_file() {
+    let outside = tempfile::tempdir().expect("tempdir");
+    let mut sink = fub_kernel::transfer::DirectorySink::new(outside.path());
     let h = sink
         .open_artifact("sotto/nota.md", "text/markdown")
         .expect("aperto");
     sink.write_artifact(h, b"prima ").expect("versato");
     sink.write_artifact(h, b"e poi").expect("versato");
-    let ricevuta = sink.close_artifact(h).expect("chiuso");
+    let received = sink.close_artifact(h).expect("chiuso");
 
     assert_eq!(
-        ricevuta.len(),
+        received.len(),
         11,
         "il conto è dei byte passati, non promesso"
     );
     assert!(
-        ricevuta.as_bytes().is_none(),
+        received.as_bytes().is_none(),
         "un artefatto versato non porta i byte nel rapporto: sono già dove \
          l'utente li voleva, e portarli sarebbe tenerli in memoria un'altra volta"
     );
     assert_eq!(
-        std::fs::read_to_string(fuori.path().join("sotto/nota.md")).expect("scritto"),
+        std::fs::read_to_string(outside.path().join("sotto/nota.md")).expect("scritto"),
         "prima e poi",
         "le cartelle intermedie le crea l'host: un provider non conosce il disco"
     );

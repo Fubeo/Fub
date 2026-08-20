@@ -44,8 +44,8 @@ impl std::fmt::Display for RouteConflict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "`{}` rivendica {:?}, che è già di `{}` \
-             (per sostituirlo di proposito: `Workspace::replace_index_provider`)",
+            "`{}` claims {:?}, which already belongs to `{}` \
+             (to replace intentionally: `Workspace::replace_index_provider`)",
             self.challenger, self.kind, self.incumbent
         )
     }
@@ -180,24 +180,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn una_famiglia_ha_un_padrone_e_il_secondo_non_vince_in_silenzio() {
+    fn a_family_has_a_owner_and_the_second_not_wins_in_silence() {
         let mut table = RouteTable::default();
         table
             .declare(Target::Core, &[QueryRoute::Query(QueryKind::Tags)])
-            .expect("il primo passa");
+            .expect("the first passes");
         let conflict = table
             .declare(Target::Provider(0), &[QueryRoute::Query(QueryKind::Tags)])
-            .expect_err("la seconda rivendicazione è un conflitto");
+            .expect_err("the second claim is a conflict");
         assert_eq!(conflict.kind, QueryKind::Tags);
         assert_eq!(
             table.owner(&QueryKind::Tags),
             Some(Target::Core),
-            "e chi c'era resta: il perdente non si registra"
+            "and the one that was there stays: the loser does not register"
         );
     }
 
     #[test]
-    fn un_indice_in_conflitto_non_resta_registrato_a_meta() {
+    fn a_index_in_conflict_not_remains_registered_a_metadata() {
         let mut table = RouteTable::default();
         table
             .declare(Target::Core, &[QueryRoute::Query(QueryKind::Tags)])
@@ -211,13 +211,13 @@ mod tests {
         );
         assert!(
             table.evaluators(&PredicateKind::Text).is_empty(),
-            "la rotta libera non deve restare al perdente: risponderebbe ad \
-             alcune domande e non ad altre"
+            "the free route must not remain with the loser: it would answer \
+             some questions and not others"
         );
     }
 
     #[test]
-    fn una_foglia_ne_ammette_piu_duno_in_ordine_di_registrazione() {
+    fn a_leaf_of_it_admits_more_one_in_order_of_registration() {
         let mut table = RouteTable::default();
         table
             .declare(Target::Core, &[QueryRoute::Predicate(PredicateKind::Tag)])
@@ -227,7 +227,7 @@ mod tests {
                 Target::Provider(0),
                 &[QueryRoute::Predicate(PredicateKind::Tag)],
             )
-            .expect("un fatto sul vault lo può verificare più di uno");
+            .expect("a fact about the vault can be verified by more than one");
         assert_eq!(
             table.evaluators(&PredicateKind::Tag),
             &[Target::Core, Target::Provider(0)]
@@ -235,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn sostituire_resta_possibile_ma_va_chiesto_per_nome() {
+    fn replace_remains_possible_but_goes_asked_for_name() {
         let mut table = RouteTable::default();
         table
             .declare(Target::Core, &[QueryRoute::Query(QueryKind::Tags)])

@@ -103,7 +103,7 @@ impl ViewProvider for DashboardView {
 }
 
 fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
-    let notes = conta(
+    let notes = count_query(
         host,
         IndexQuery::Entries {
             of_kind: Some(EntryKind::Document),
@@ -112,10 +112,10 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         },
         |r| match r {
             IndexResult::Entries(p) => Ok(p.total),
-            other => fuori_tema("entries", other),
+            other => unexpected_result("entries", other),
         },
     )?;
-    let files = conta(
+    let files = count_query(
         host,
         IndexQuery::Entries {
             of_kind: None,
@@ -124,10 +124,10 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         },
         |r| match r {
             IndexResult::Entries(p) => Ok(p.total),
-            other => fuori_tema("entries", other),
+            other => unexpected_result("entries", other),
         },
     )?;
-    let tags = conta(
+    let tags = count_query(
         host,
         IndexQuery::Tags {
             matching: QueryExpr::all(),
@@ -135,7 +135,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         },
         |r| match r {
             IndexResult::Tags(p) => Ok(p.total),
-            other => fuori_tema("tags", other),
+            other => unexpected_result("tags", other),
         },
     )?;
     let rotti = match host.query_index(IndexQuery::VaultHealth {
@@ -143,19 +143,19 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         page: None,
     })? {
         IndexResult::VaultHealth(p) => p,
-        other => return fuori_tema("vault-health", other),
+        other => return unexpected_result("vault-health", other),
     };
 
-    let mut figli = vec![
-        riga(NOTES, notes),
-        riga(TAGS, tags),
-        riga(FILES, files),
-        riga(BROKEN, rotti.total),
+    let mut children = vec![
+        row(NOTES, notes),
+        row(TAGS, tags),
+        row(FILES, files),
+        row(BROKEN, rotti.total),
     ];
     if rotti.items.is_empty() {
-        figli.push(UiNode::empty_state(Text::key(NO_BROKEN)));
+        children.push(UiNode::empty_state(Text::key(NO_BROKEN)));
     } else {
-        figli.push(UiNode::list(
+        children.push(UiNode::list(
             rotti
                 .items
                 .into_iter()
@@ -171,23 +171,23 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
                 .collect(),
         ));
     }
-    Ok(UiNode::column(1, figli))
+    Ok(UiNode::column(1, children))
 }
 
-fn riga(chiave: &str, n: u32) -> UiNode {
-    UiNode::text(Text::message(chiave, vec![Arg::int("n", n as i64)]))
+fn row(key: &str, n: u32) -> UiNode {
+    UiNode::text(Text::message(key, vec![Arg::int("n", n as i64)]))
 }
 
-fn conta(
+fn count_query(
     host: &dyn ReadApi,
     q: IndexQuery,
-    leggi: fn(IndexResult) -> Result<u32, PluginError>,
+    read: fn(IndexResult) -> Result<u32, PluginError>,
 ) -> Result<u32, PluginError> {
-    leggi(host.query_index(q)?)
+    read(host.query_index(q)?)
 }
 
-fn fuori_tema<T>(atteso: &str, other: IndexResult) -> Result<T, PluginError> {
+fn unexpected_result<T>(expected: &str, other: IndexResult) -> Result<T, PluginError> {
     Err(PluginError::Internal(
-        format!("dashboard: atteso {atteso}, arrivato {}", other.kind_name()).into(),
+        format!("dashboard: expected {expected}, got {}", other.kind_name()).into(),
     ))
 }

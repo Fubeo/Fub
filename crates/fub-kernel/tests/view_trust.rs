@@ -107,7 +107,7 @@ impl Fixture {
 /// Il grado di fiducia sta nella **dichiarazione** e non nella registrazione
 /// della view: era un parametro del solo `register_view_provider`, e la
 /// conseguenza era che un `IndexProvider` di terzi non ne aveva nessuno (§7.3).
-fn monta(ws: &mut Workspace, plugin: &str, trust: Trust, provider: Box<dyn ViewProvider>) {
+fn mounts(ws: &mut Workspace, plugin: &str, trust: Trust, provider: Box<dyn ViewProvider>) {
     let manifest = match trust {
         Trust::Core => PluginManifest::core(plugin, plugin),
         _ => PluginManifest::new(plugin, plugin),
@@ -127,7 +127,7 @@ fn html() -> UiNode {
     )
 }
 
-fn dichiarativo() -> UiNode {
+fn declarative() -> UiNode {
     UiNode::column(
         4,
         vec![UiNode::list_item(
@@ -142,7 +142,7 @@ fn dichiarativo() -> UiNode {
 fn a_trusted_provider_may_return_active_content() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    monta(
+    mounts(
         &mut ws,
         "core.fidato",
         Trust::Core,
@@ -162,7 +162,7 @@ fn a_trusted_provider_may_return_active_content() {
 fn an_untrusted_provider_cannot_smuggle_active_content() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    monta(
+    mounts(
         &mut ws,
         "terzi.ostile",
         Trust::Community,
@@ -182,11 +182,11 @@ fn an_untrusted_provider_cannot_smuggle_active_content() {
 fn an_untrusted_provider_may_still_describe_a_ui() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    monta(
+    mounts(
         &mut ws,
         "terzi.perbene",
         Trust::Community,
-        Puppet::boxed("terzi.perbene:perbene", dichiarativo(), ViewUpdate::None),
+        Puppet::boxed("terzi.perbene:perbene", declarative(), ViewUpdate::None),
     );
 
     // Il confine non è "i plugin non disegnano": è "i plugin descrivono, il core
@@ -194,7 +194,7 @@ fn an_untrusted_provider_may_still_describe_a_ui() {
     assert_eq!(
         ws.render_view(&ViewInstance::only("terzi.perbene:perbene"))
             .unwrap(),
-        dichiarativo()
+        declarative()
     );
 }
 
@@ -202,13 +202,13 @@ fn an_untrusted_provider_may_still_describe_a_ui() {
 fn the_same_guard_applies_to_what_comes_back_from_an_action() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    monta(
+    mounts(
         &mut ws,
         "terzi.tardivo",
         Trust::Community,
         Puppet::boxed(
             "terzi.tardivo:tardivo",
-            dichiarativo(),
+            declarative(),
             ViewUpdate::Replace { root: html() },
         ),
     );
@@ -231,13 +231,13 @@ fn the_same_guard_applies_to_what_comes_back_from_an_action() {
 fn a_patch_carries_a_tree_too_and_gets_the_same_guard() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    monta(
+    mounts(
         &mut ws,
         "terzi.chirurgo",
         Trust::Community,
         Puppet::boxed(
             "terzi.chirurgo:chirurgo",
-            dichiarativo(),
+            declarative(),
             ViewUpdate::Patch {
                 key: "riga-1".into(),
                 node: html(),
@@ -266,13 +266,13 @@ fn a_patch_carries_a_tree_too_and_gets_the_same_guard() {
 fn navigate_and_none_are_not_trees_and_pass() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    monta(
+    mounts(
         &mut ws,
         "terzi.navigante",
         Trust::Community,
         Puppet::boxed(
             "terzi.navigante:navigante",
-            dichiarativo(),
+            declarative(),
             ViewUpdate::Navigate {
                 doc_id: "a.md".into(),
             },
@@ -297,11 +297,11 @@ fn navigate_and_none_are_not_trees_and_pass() {
 fn an_action_reaches_the_provider_with_its_own_data_space() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    monta(
+    mounts(
         &mut ws,
         "terzi.diario",
         Trust::Community,
-        Puppet::boxed("terzi.diario:diario", dichiarativo(), ViewUpdate::None),
+        Puppet::boxed("terzi.diario:diario", declarative(), ViewUpdate::None),
     );
 
     ws.view_action(
@@ -310,12 +310,12 @@ fn an_action_reaches_the_provider_with_its_own_data_space() {
     )
     .unwrap();
 
-    let scritto = data_root(&fx.root)
+    let written = data_root(&fx.root)
         .join("plugins")
         .join("terzi.diario")
         .join("ultima-azione.txt");
     assert_eq!(
-        std::fs::read_to_string(&scritto).expect("il provider ha scritto nel suo recinto"),
+        std::fs::read_to_string(&written).expect("il provider ha scritto nel suo recinto"),
         "premuto"
     );
 }
@@ -324,11 +324,11 @@ fn an_action_reaches_the_provider_with_its_own_data_space() {
 fn a_view_nobody_offers_is_unknown_not_empty() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    monta(
+    mounts(
         &mut ws,
         "core.una",
         Trust::Core,
-        Puppet::boxed("una", dichiarativo(), ViewUpdate::None),
+        Puppet::boxed("una", declarative(), ViewUpdate::None),
     );
 
     // "Non esiste" e "è vuota" sono due risposte diverse: confonderle
