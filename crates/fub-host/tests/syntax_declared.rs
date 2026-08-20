@@ -36,8 +36,6 @@
 //! nella [0115](../../../docs/decisions/0115-la-verita-e-la-dichiarazione.md)
 //! come casella, non come buco: l'accessore che quel canale servirebbe è già
 //! questo, e quello che manca è la rotta.
-//! checkbox, not a hole: the accessor that channel would serve is already
-//! this one, and what is missing is the route.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;

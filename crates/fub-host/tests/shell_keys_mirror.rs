@@ -54,7 +54,7 @@ fn path() -> PathBuf {
 fn render() -> String {
     let mut out = String::from(HEADER);
     out.push_str(
-        "\n/// Suggested bindings for shell commands, id -> binding.\n\
+        "\n/// Gli accordi suggeriti per i comandi della shell, id → accordo.\n\
          export const SHELL_KEYS = {\n",
     );
     for (id, chord) in SHELL_COMMANDS {
@@ -66,7 +66,7 @@ fn render() -> String {
     }
     out.push_str("} as const satisfies Record<string, string | null>;\n\n");
     out.push_str(
-        "/// Id of a shell command: one of those in the table, and no other.\n\
+        "/// L'id di un comando della shell: uno di quelli in tabella, e nessun altro.\n\
          export type ShellCommandId = keyof typeof SHELL_KEYS;\n",
     );
     out

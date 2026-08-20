@@ -34,8 +34,6 @@
 //!    `pub fn catalog()` dei sorgenti, e i due numeri stanno nella stessa
 //!    frase. Un `pub fn catalog()` nuovo senza la sua variante li fa divergere,
 //!    ed è precisamente il caso che nessun `assert` dentro Rust può vedere.
-//!    makes them diverge, which is precisely the case that no `assert` inside
-//!    Rust can see.
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
 

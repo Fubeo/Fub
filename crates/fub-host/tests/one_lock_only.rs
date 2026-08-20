@@ -152,7 +152,6 @@ const THE_CARRIES: &[&str] = &["custodia.rs"];
 /// `Mutex` costruito a mano in un `#[cfg(test)]` è comunque un secondo posto in
 /// cui la politica non c'è, e va dichiarato. *«Qualcuno srotola la risposta
 /// della porta?»* no: un test che scrive `.unwrap()` su un `Result` sta dicendo
-/// "this must not fail," which is what a test does for a living.
 /// «qui non deve fallire», che è ciò che un test fa di mestiere.
 ///
 /// Il taglio presuppone che il modulo di test stia **in fondo**, che è come

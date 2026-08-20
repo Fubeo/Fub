@@ -58,8 +58,6 @@
 //! su niente altro — `wait` restituisce la stessa guardia che ha ricevuto. È la
 //! ragione `Condition` dell'allowlist di `un_lucchetto_solo.rs`, che fin qui
 //! era **un commento** e qui diventa un tipo.
-//! That is why `Condition` is in the allowlist of `one_lock_only.rs`, which
-//! until now was **a comment** and here becomes a type.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{

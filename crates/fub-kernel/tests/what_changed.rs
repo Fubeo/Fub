@@ -18,8 +18,6 @@
 //! 1. il **filtro** è per aspetto — chiuso dal contratto, e vive nella maschera;
 //! 2. il **racconto** è per nome — quali chiavi, quali tag — e vive nell'evento,
 //!    perché il diff che lo produce è già in mano a chi lo emette.
-//!    the event, because the diff that produces it is already in the hands
-//!    of whoever emits it.
 
 use std::sync::{Arc, Mutex};
 

@@ -27,8 +27,6 @@
 //! che dopo un crash vero il registro sia intero. La coda troncata qui si
 //! fabbrica tagliando il file, che è l'effetto osservabile del crash e non il
 //! crash.
-//! is manufactured by cutting the file, which is the observable effect of a
-//! crash and not the crash itself.
 
 use camino::Utf8PathBuf;
 use fub_abi::edit::WriteBase;
