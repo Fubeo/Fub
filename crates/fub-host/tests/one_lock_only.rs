@@ -143,7 +143,7 @@ const THE_CARRIES: &[&str] = &["custodia.rs"];
 /// Le righe di **codice** di un sorgente: la prosa si salta sempre, i banchi
 /// solo quando la domanda li riguarda.
 ///
-/// Che un commento non sia codice è la trappola misurata da `dieta_ipc.rs` — in
+/// Che un commento non sia codice è la trappola misurata da `lean_ipc.rs` — in
 /// un repo in cui i file spiegano sé stessi, un `grep` ingenuo conta le
 /// spiegazioni.
 ///
@@ -240,7 +240,7 @@ const FOLDERS: &[(&str, &str)] = &[("src", "src"), ("app/src", "../fub-app/src")
 /// **Il conto guarda tutte le cartelle che dice di guardare**, o dice quale file
 /// gli è sfuggito.
 ///
-/// È la lezione di `dieta_ipc.rs`: un presidio che legge un elenco di file sa
+/// È la lezione di `lean_ipc.rs`: un presidio che legge un elenco di file sa
 /// quell'elenco, e un file nuovo entra in silenzio. Qui l'elenco lo si
 /// confronta con le cartelle vere.
 ///

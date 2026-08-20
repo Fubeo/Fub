@@ -452,7 +452,7 @@ fn the_test_bench_enters_no_library() {
     let metadata = metadata();
     let graph = Graph::new(&metadata);
 
-    let colpevoli: Vec<&str> = graph
+    let guilty: Vec<&str> = graph
         .members()
         .into_iter()
         .filter(|m| *m != "fub-testkit")
@@ -460,8 +460,8 @@ fn the_test_bench_enters_no_library() {
         .collect();
 
     assert!(
-        colpevoli.is_empty(),
-        "{colpevoli:?} dichiarano `fub-testkit` fra le dipendenze **normali**.\n\
+        guilty.is_empty(),
+        "{guilty:?} dichiarano `fub-testkit` fra le dipendenze **normali**.\n\
          È il banco di prova del lato host: ha il kernel dentro, e va nei\n\
          [dev-dependencies] di chi lo usa. Vedi\n\
          docs/decisions/0055-il-banco-del-lato-host.md."
@@ -536,7 +536,7 @@ fn the_glue_does_not_bypass_the_mounter() {
     let metadata = metadata();
     let graph = Graph::new(&metadata);
 
-    let colpevoli: Vec<&str> = graph
+    let guilty: Vec<&str> = graph
         .members()
         .into_iter()
         .filter(|m| *m != "fub-host" && *m != "fub-features")
@@ -545,8 +545,8 @@ fn the_glue_does_not_bypass_the_mounter() {
         .collect();
 
     assert!(
-        colpevoli.is_empty(),
-        "{colpevoli:?} dichiarano **sia** `fub-host` **sia** `fub-features` fra le\n\
+        guilty.is_empty(),
+        "{guilty:?} dichiarano **sia** `fub-host` **sia** `fub-features` fra le\n\
          dipendenze normali. Chi ha già il montaggio non ha ragione di raggiungere\n\
          le feature ufficiali da sé: quale bundle esista e quale sia acceso lo\n\
          decide `fub-host` in un posto solo (§16.3), e una cargo feature chiesta\n\

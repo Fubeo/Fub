@@ -137,9 +137,9 @@ fn the_vault_responds_again(ws: &mut Workspace) {
 
 // --- i cinque provider che esplodono ----------------------------------------
 
-struct ComandoMina;
+struct MineCommand;
 
-impl CommandProvider for ComandoMina {
+impl CommandProvider for MineCommand {
     fn commands(&self) -> Vec<CommandSpec> {
         vec![
             CommandSpec::new("test.mina.esplodi", "Esplodi")
@@ -302,7 +302,7 @@ impl IndexProvider for PanickingIndex {
 #[test]
 fn a_command_that_panics_costs_the_call_and_is_can_call_again() {
     let (_dir, mut ws) = bench();
-    ws.register_command_provider("test.mina", Box::new(ComandoMina))
+    ws.register_command_provider("test.mina", Box::new(MineCommand))
         .expect("registrato");
 
     for round in 1..=2 {
@@ -801,7 +801,7 @@ fn a_carries_that_receives_a_detail_the_names() {
 /// non vuol dire niente, il conto prende la variante che nessuno ha elencato.**
 /// Nessuno dei due basta da solo, ed è la ragione per cui ci sono tutti e due.
 #[test]
-fn the_list_of_the_porte_and_that_of_the_enum() {
+fn the_list_of_the_gates_and_that_of_the_enum() {
     for (the, carries) in Gate::ALL.iter().enumerate() {
         assert_eq!(
             *carries as usize, the,

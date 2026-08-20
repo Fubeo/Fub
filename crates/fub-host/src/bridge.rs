@@ -330,7 +330,7 @@ mod tests {
         overflow_for: std::sync::atomic::AtomicU64,
     }
 
-    /// «Non è ancora successo», per i due conti dell'[`Uscita`].
+    /// «Non è ancora successo», per i due conti dell'[`Exit`].
     const NO_OVERFLOW: u64 = u64::MAX;
 
     impl Default for Exit {

@@ -108,7 +108,7 @@ pub struct OrganizationStore {
     /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
     storage: Option<Arc<dyn VaultStorage>>,
     /// L'organizzazione, che è **anche** ciò che sta nel sidecar: un
-    /// [`Durevole`] perché «su disco prima, in memoria dopo» non dipendesse dal
+    /// [`Durable`] perché «su disco prima, in memoria dopo» non dipendesse dal
     /// fatto che chi scrive la prossima mutazione legga il commento sotto.
     data: RwLock<Durable<Organization>>,
     /// Cosa è andato storto **dopo** l'apertura: una migrazione che non si è

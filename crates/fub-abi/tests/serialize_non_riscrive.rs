@@ -224,7 +224,7 @@ fn root() -> PathBuf {
 /// Non c'è un elenco di crate: un crate nuovo enter nel presidio perché esiste,
 /// non perché qualcuno si è ricordato di scriverlo qui. Che il cammino funzioni
 /// davvero non è dato per buono — lo verifica
-/// [`il_cammino_trova_il_contratto`], e prima ancora lo verifica il confronto
+/// [`the_walk_finds_the_contract`], e prima ancora lo verifica il confronto
 /// nei due versi: se questa funzione tornasse a vuoto, le tre righe
 fn production_sources() -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
@@ -490,7 +490,7 @@ fn serialize_is_not_the_way_to_rewrite_an_existing_document() {
 /// Senza questa, il giorno in cui qualcuno riscrivesse il doc di `serialize`
 /// resterebbe in piedi un test che difende una regola che nessun documento
 /// dichiara più — e chi lo trovasse rosso non saprebbe da dove viene. È la sesta
-/// specie presa dal verso in cui si presidia, come in `dieta_ipc.rs`: una
+/// specie presa dal verso in cui si presidia, come in `lean_ipc.rs`: una
 #[test]
 fn the_guarantee_is_still_written_in_the_contract() {
     assert!(

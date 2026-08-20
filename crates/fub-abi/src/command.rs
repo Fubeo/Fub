@@ -113,7 +113,7 @@ pub struct CommandSpec {
     /// davvero i tasti è la shell, e l'utente li può cambiare).
     ///
     /// **La forma è una regola dichiarata e non un esempio da imitare**:
-    /// [`crate::rules::tasti`] dice quali modificatori esistono — `mod`,
+    /// [`crate::rules::keys`] dice quali modificatori esistono — `mod`,
     /// `shift`, `alt`, e `Ctrl-k` si **rifiuta** —, che il primo accordo ne
     /// porta uno (un tasto nudo ruberebbe una lettera a chi scrive), e che uno
     /// spazio separa gli accordi di una **sequenza**: `"Mod-k d"` è due accordi
@@ -1262,11 +1262,11 @@ mod tests {
 
     #[test]
     fn no_arguments_is_null_or_empty_object() {
-        let semplice = CommandSpec::new("search.open", "Cerca");
-        assert!(semplice.validate_args(&serde_json::Value::Null).is_ok());
-        assert!(semplice.validate_args(&json!({})).is_ok());
+        let plain = CommandSpec::new("search.open", "Cerca");
+        assert!(plain.validate_args(&serde_json::Value::Null).is_ok());
+        assert!(plain.validate_args(&json!({})).is_ok());
         assert!(
-            semplice.validate_args(&json!("cerca")).is_err(),
+            plain.validate_args(&json!("cerca")).is_err(),
             "gli argomenti sono un oggetto, non un valore nudo"
         );
     }

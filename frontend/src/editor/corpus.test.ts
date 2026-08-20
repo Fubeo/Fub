@@ -24,7 +24,7 @@ import corpus from "../__fixtures__/corpus-syntax.json";
 // diventa rossa e va tolta — che è il modo in cui una divergenza smette di
 // essere silenziosa. La forma è quella di `divergenze_dichiarate` di là.
 
-interface CasoCorpus {
+interface CorpusCase {
   name: string;
   source: string;
   tag: { name: string; from: number; to: number }[];
@@ -32,14 +32,14 @@ interface CasoCorpus {
   task: { symbol: string; from: number; to: number }[];
 }
 
-const cases = corpus as CasoCorpus[];
+const cases = corpus as CorpusCase[];
 
 /// Le divergenze note fra la passata del modello e quella della shell.
 ///
 /// La chiave è `"<nome del caso>/<famiglia>"`; il valore è la ragione, che è
 /// la parte che conta — una riga senza ragione è un caso spento, non una
 /// divergenza dichiarata.
-const DIVERGENZE: Record<string, string> = {
+const DIVERGENCES: Record<string, string> = {
   // **CodeMirror normalizza i terminatori di riga, il modello no** — ma solo il
   // CRLF costa un carattere. `EditorState.create` spezza il documento su
   // `\r\n`, `\r` e `\n` e lo ricompone col proprio separatore: un `\r` nudo
@@ -86,14 +86,14 @@ function decorateAllActive(doc: string): LiveDeco[] {
   return computeDecorations(state, active);
 }
 
-function di(ds: LiveDeco[], kind: LiveDecoKind): LiveDeco[] {
+function ofKind(ds: LiveDeco[], kind: LiveDecoKind): LiveDeco[] {
   return ds.filter((d) => d.kind === kind);
 }
 
 /// Il confronto, con la divergenza dichiarata al posto dell'asserzione.
-function compare(testCase: CasoCorpus, family: string, expected: unknown, actual: unknown): void {
+function compare(testCase: CorpusCase, family: string, expected: unknown, actual: unknown): void {
   const key = `${testCase.name}/${family}`;
-  const reason = DIVERGENZE[key];
+  const reason = DIVERGENCES[key];
   if (reason) {
     // Una divergenza dichiarata che **non** si presenta più è rossa: è così che
     // la lista non diventa un ricordo.
@@ -106,7 +106,7 @@ function compare(testCase: CasoCorpus, family: string, expected: unknown, actual
 describe("il corpus: le due passate dicono la stessa cosa", () => {
   it("la fixture porta abbastanza casi da poter divergere", () => {
     expect(cases.length).toBeGreaterThan(30);
-    const count = (f: (c: CasoCorpus) => unknown[]) =>
+    const count = (f: (c: CorpusCase) => unknown[]) =>
       cases.reduce((n, c) => n + f(c).length, 0);
     expect(count((c) => c.tag)).toBeGreaterThan(2);
     expect(count((c) => c.wikilink)).toBeGreaterThan(2);
@@ -128,7 +128,7 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
         testCase,
         "tag",
         testCase.tag.map((t) => [t.name, t.from, t.to]),
-        di(active, "tag").map((d) => [d.data, d.from, d.to]),
+        ofKind(active, "tag").map((d) => [d.data, d.from, d.to]),
       );
 
       // --- i wikilink: la decorazione copre l'INTERNO, il modello il match ---
@@ -139,7 +139,7 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
         // copre l'interno, quindi il salto è di tre da quel lato e di due
         // dall'altro. È una differenza dichiarata, non un `+2` da indovinare.
         testCase.wikilink.map((w) => [w.page, w.from + (w.embed ? 3 : 2), w.to - 2]),
-        di(active, "wikilink").map((d) => [
+        ofKind(active, "wikilink").map((d) => [
           parseWikilinkInner(d.data ?? "").page,
           d.from,
           d.to,
@@ -154,7 +154,7 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
         testCase,
         "task",
         testCase.task.map((t) => [t.from - 1, t.to + 1]),
-        di(inactive, "checkbox").map((d) => [d.from, d.to]),
+        ofKind(inactive, "checkbox").map((d) => [d.from, d.to]),
       );
     });
   }

@@ -336,7 +336,7 @@ impl Case64 {
 
 /// I byte ostili che si infilano dentro una sorgente. Sono quelli che nei vault
 /// veri ci sono e che nessuno scrive di proposito.
-pub const OSTILI: [&str; 10] = [
+pub const HOSTILE: [&str; 10] = [
     "\u{feff}", // un BOM in mezzo, non in testa
     "\r",       // un ritorno a capo nudo
     "\0",       // un NUL, che è UTF-8 valido e non se lo aspetta nessuno
@@ -355,8 +355,8 @@ pub const OSTILI: [&str; 10] = [
 /// I semi non sono `&'static str`: l'uscita è una `String` sua, quindi non li
 /// tiene, e chi fuzza il trasferimento semina anche sorgenti **composte** — il
 /// corpus con un frontmatter davanti — che a compile time non esistono.
-pub fn muta(rng: &mut Case64, semi: &[&str]) -> (&'static str, String) {
-    let base = semi[rng.until_a(semi.len())];
+pub fn mutate(rng: &mut Case64, seeds: &[&str]) -> (&'static str, String) {
+    let base = seeds[rng.until_a(seeds.len())];
     match rng.until_a(7) {
         0 => {
             let the = rng.boundary(base);
@@ -364,17 +364,17 @@ pub fn muta(rng: &mut Case64, semi: &[&str]) -> (&'static str, String) {
         }
         1 => ("duplicato", format!("{base}{base}")),
         2 => {
-            let other = semi[rng.until_a(semi.len())];
+            let other = seeds[rng.until_a(seeds.len())];
             let the = rng.boundary(base);
             let j = rng.boundary(other);
             ("intrecciato", format!("{}{}", &base[..the], &other[j..]))
         }
         3 => {
             let the = rng.boundary(base);
-            let ostile = OSTILI[rng.until_a(OSTILI.len())];
+            let hostile = HOSTILE[rng.until_a(HOSTILE.len())];
             (
                 "con un byte ostile in mezzo",
-                format!("{}{}{}", &base[..the], ostile, &base[the..]),
+                format!("{}{}{}", &base[..the], hostile, &base[the..]),
             )
         }
         4 => {
@@ -387,10 +387,10 @@ pub fn muta(rng: &mut Case64, semi: &[&str]) -> (&'static str, String) {
             )
         }
         5 => {
-            let ostile = OSTILI[rng.until_a(OSTILI.len())];
+            let hostile = HOSTILE[rng.until_a(HOSTILE.len())];
             (
                 "annidato profondo",
-                format!("{}{base}", ostile.repeat(1 + rng.until_a(64))),
+                format!("{}{base}", hostile.repeat(1 + rng.until_a(64))),
             )
         }
         _ => {
@@ -426,7 +426,7 @@ pub fn how_many_cases(variable: &str, default: usize) -> usize {
 }
 
 /// Il seme, condiviso dalle tre porte: `FUB_FUZZ_SEME`.
-pub fn seme() -> u64 {
+pub fn seed() -> u64 {
     match std::env::var("FUB_FUZZ_SEME") {
         Err(_) => 0x4675_6D4D_4420_3031,
         Ok(v) => v.parse().unwrap_or_else(|and| {

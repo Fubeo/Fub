@@ -51,7 +51,7 @@ fn serialize(model: &DocumentModel) -> String {
 }
 
 /// I frontmatter che **non** si proiettano su una mappa JSON, e il perché.
-const ILLEGGIBILI: &[(&str, &str)] = &[
+const UNREADABLE: &[(&str, &str)] = &[
     ("comma", "---\ntags: [a, b\n---\n\nCorpo della nota.\n"),
     ("colon", "---\ntitolo: a: b\n---\n\nCorpo della nota.\n"),
     (
@@ -69,7 +69,7 @@ const ILLEGGIBILI: &[(&str, &str)] = &[
 /// sorgenti devono contenere lo stesso frontmatter.
 #[test]
 fn unreadable_frontmatter_survives_the_full_round_trip() {
-    for (case, source) in ILLEGGIBILI {
+    for (case, source) in UNREADABLE {
         let model = parse(source);
         let rewritten = serialize(&model);
 
@@ -95,7 +95,7 @@ fn unreadable_frontmatter_survives_the_full_round_trip() {
 /// è potuto leggere: senza il motivo resta una perdita muta, solo rimandata.
 #[test]
 fn the_preserved_block_states_what_it_preserves_and_why() {
-    for (case, source) in ILLEGGIBILI {
+    for (case, source) in UNREADABLE {
         let model = parse(source);
 
         let Some(Block::Custom {
@@ -212,7 +212,7 @@ fn the_serializer_does_not_swallownits_own_failures() {
 /// che oggi è una cintura in più diventa la strada.
 #[test]
 fn frontmatter_shape_does_not_cause_yaml_failure() {
-    let ostili = serde_json::json!({
+    let hostile = serde_json::json!({
         "nul": "x\u{0}y",
         "campanello": "x\u{7}y",
         "escape": "x\u{1b}y",
@@ -224,13 +224,13 @@ fn frontmatter_shape_does_not_cause_yaml_failure() {
         "annidato": { "a": [1, 2.5, null, true, { "b": "\u{0}" }] },
         "vuoto": null,
     });
-    let mut map = ostili.as_object().expect("è un oggetto").clone();
+    let mut map = hostile.as_object().expect("è un oggetto").clone();
     // E una profondità che nessun frontmatter scritto a mano raggiunge.
-    let mut profondo = serde_json::json!("fondo");
+    let mut deep = serde_json::json!("fondo");
     for _ in 0..256 {
-        profondo = serde_json::json!([profondo]);
+        deep = serde_json::json!([deep]);
     }
-    map.insert("profondo".to_string(), profondo);
+    map.insert("profondo".to_string(), deep);
 
     let outcome = serde_yaml_ng::to_string(&map);
     assert!(

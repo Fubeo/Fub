@@ -323,8 +323,8 @@ struct Index {
 ///
 /// `docs` è generico e non un `&BTreeMap` perché i due chiamanti hanno in mano
 /// due cose diverse: [`VersionStore::in_lotto`] ha l'anagrafe viva, e
-/// [`Inner::applica`] ha l'anagrafe viva **più un piano** che non è ancora
-/// stato installato ([`DocsDelPiano`]).
+/// [`Inner::apply`] ha l'anagrafe viva **più un piano** che non è ancora
+/// stato installato ([`PlanDocs`]).
 #[derive(Serialize)]
 struct IndexToWrite<D: Serialize> {
     schema_version: SchemaVersion,
@@ -353,7 +353,7 @@ enum Entry {
 /// (8,5 ms contro 0,09 ms su 16 000 note, sotto il prestito esclusivo). Quel
 /// che serviva davvero della copia non era la mappa: era **non installare
 /// niente finché il disco non ha accettato**, e per quello basta un elenco di
-/// una chiave (due nel rename). Vedi [`Inner::applica`], dove la disciplina è
+/// una chiave (due nel rename). Vedi [`Inner::apply`], dove la disciplina è
 /// scritta per intero.
 type Plan = BTreeMap<String, Entry>;
 
@@ -423,8 +423,8 @@ struct Meta {
 /// cosa e nessun chiamante li tratta allo stesso modo: una cartella senza
 /// `meta.json` non è di nessuno, una col `meta.json` illeggibile è di qualcuno
 /// che non sappiamo nominare. Schiacciarli su `None` — un `.ok()` — faceva dire
-/// a [`Inner::dir_per`] «libera» di una cartella piena, e a quel punto la prima
-/// [`scrivi_meta`] ci scriveva sopra il nome di un altro documento.
+/// a [`Inner::dir_for`] «libera» di una cartella piena, e a quel punto la prima
+/// [`write_metadata`] ci scriveva sopra il nome di un altro documento.
 enum Claim {
     /// Nessun `meta.json`: la cartella non è di nessuno.
     None,
@@ -438,11 +438,11 @@ struct Inner {
     docs: BTreeMap<String, DocVersions>,
     /// C'è un lotto aperto ([`VersionStore::in_lotto`])?
     ///
-    /// Dentro un lotto [`Inner::applica`] scrive il `meta.json` — che è
+    /// Dentro un lotto [`Inner::apply`] scrive il `meta.json` — che è
     /// l'autorità — e **non** l'indice, che è il derivato e si compone in fondo
     /// una volta sola. Il flag sta qui e non nel chiamante perché la regola
-    /// deve valere per **ogni** strada che passa da `applica`: chi domani
-    /// aggiungesse un `VersionStore::qualcosa` chiamato dentro una passata la
+    /// deve valere per **ogni** strada che passa da `apply`: chi domani
+    /// aggiungesse un `VersioningHandler::sweep` chiamato dentro una passata la
     /// eredita senza saperlo, e un lotto che valesse solo per `snapshot`
     /// riscriverebbe di nuovo l'indice a ogni tombstone della riconciliazione.
     batch: bool,
@@ -461,7 +461,7 @@ pub struct VersionStore {
     /// e la riga fra le due non è dove sta l'I/O: è cosa succede se qualcuno
     /// entra in mezzo.
     ///
-    /// [`Inner::applica`] costruisce il piano da ciò che `docs` dice *adesso* e
+    /// [`Inner::apply`] costruisce il piano da ciò che `docs` dice *adesso* e
     /// lo installa solo se il disco l'ha accettato: mollare il prestito in
     /// mezzo darebbe a due salvataggi la stessa base, e il secondo cancellerebbe
     /// il primo senza che nessuno dei due se ne accorga. Là il prestito che
@@ -469,7 +469,7 @@ pub struct VersionStore {
     /// l'I/O da sotto sposterebbe una riga di questo `todo.md` da una famiglia a
     /// un'altra.
     ///
-    /// In lettura no: quello che serve è il path, e [`Inner::percorso`] lo
+    /// In lettura no: quello che serve è il path, e [`Inner::path`] lo
     /// consegna con la guardia già finita. Vedi [`VersionStore::read`].
     inner: Arc<Mutex<Inner>>,
 }
@@ -563,7 +563,7 @@ impl VersionStore {
         let result = pass(&mut *host);
         drop(batch_guard);
         // Il prestito attraversa il `data_write` come lo attraversa in
-        // [`Inner::applica`], e per la stessa ragione: l'indice che va sul disco
+        // [`Inner::apply`], e per la stessa ragione: l'indice che va sul disco
         // dev'essere quello che `docs` dice *adesso*. Mollandolo in mezzo, un
         // salvataggio che entrasse qui scriverebbe il suo indice e poi questo ci
         // scriverebbe sopra il proprio, più vecchio di una versione.
@@ -620,12 +620,12 @@ impl VersionStore {
         // "il vault al tempo T" la crederebbe cancellata per sempre.
         doc.deleted_at = None;
 
-        // La potatura decide **prima** e cancella **dopo**: `pota` tocca solo
+        // La potatura decide **prima** e cancella **dopo**: `prune` tocca solo
         // l'elenco del piano e dice quali contenuti avanzano, l'indice va sul
         // disco, e solo un indice già scritto autorizza a togliere i blob. Se
-        // `applica` fallisce si esce di qui con tutti i contenuti al loro posto
+        // `apply` fallisce si esce di qui con tutti i contenuti al loro posto
         // e un indice vecchio che li nomina tutti: si perde la potatura, non
-        // una versione. Stessa forma di `rename`, stessa ragione di `trasloca`
+        // una versione. Stessa forma di `rename`, stessa ragione di `relocate`
         // — vedi il commento là.
         let pruned = prune(&mut doc, id, host);
         inner.apply(plan_of(id, doc), id, host)?;
@@ -735,7 +735,7 @@ impl VersionStore {
     ///
     /// **E il lucchetto dello store non attraversa il disco.** Il prestito serve
     /// a sapere *dove* sta il blob — cioè a leggere l'anagrafe in memoria — e
-    /// quello finisce con [`Inner::percorso`], che è l'unica a vederlo. Da qui
+    /// e quello finisce con [`Inner::path`], che è l'unica a vederlo. Da qui
     /// in giù non c'è nessuna guardia da tenere: la lettura del blob è di chi ha
     /// il path.
     pub fn read(&self, id: &DocId, ts: u64, host: &dyn ReadApi) -> Result<String, PluginError> {
@@ -778,7 +778,7 @@ impl VersionStore {
 impl Inner {
     /// Dove sta il blob di **questa** versione, secondo l'anagrafe in memoria.
     ///
-    /// Esiste per una ragione sola, ed è la stessa per cui [`Inner::applica`] è
+    /// Esiste per una ragione sola, ed è la stessa per cui [`Inner::apply`] è
     /// il posto unico in cui `docs` cambia: qui il prestito dello store finisce
     /// **prima** dell'I/O, e finisce per costruzione — chi legge il blob riceve
     /// un `String` e non ha modo di tenere una guardia che non ha mai visto. La
@@ -820,7 +820,7 @@ impl Inner {
     /// Non crea niente — né sul disco né in memoria: le directory intermedie
     /// nascono alla prima scrittura, uno store senza contenuti non deve
     /// lasciare cartelle vuote in giro, e il nome trovato entra nell'anagrafe
-    /// solo passando per [`Inner::applica`]. Prenotarlo qui vorrebbe dire
+    /// solo passando per [`Inner::apply`]. Prenotarlo qui vorrebbe dire
     /// lasciare in memoria, dopo un salvataggio fallito, un documento che il
     /// disco non ha mai visto.
     fn dir_for(&self, id: &DocId, host: &dyn HostApi) -> Result<String, PluginError> {
@@ -836,7 +836,7 @@ impl Inner {
             } else {
                 format!("{base}-{n}")
             };
-            let libera = match claim_of(&name, host)? {
+            let is_free = match claim_of(&name, host)? {
                 Claim::None => true,
                 Claim::Owned(metadata) => metadata.doc_id == id.as_str(),
                 // Un `meta.json` che non si legge **non** è una cartella
@@ -854,7 +854,7 @@ impl Inner {
                 // `meta.json` e la rende di nuovo leggibile.
                 Claim::Unreadable => false,
             };
-            if libera {
+            if is_free {
                 return Ok(name);
             }
         }
@@ -866,7 +866,7 @@ impl Inner {
     /// ma sovrascriversi a vicenda no — e se l'orologio torna indietro fra due
     /// salvataggi (NTP, fuso, VM), `versions` deve restare ordinato per tempo:
     /// è dato persistito, e su di esso ragionano "attuale" in `list` e la
-    /// protezione della più recente in [`pota`].
+    /// protezione della più recente in [`prune`].
     fn free_ts(&self, id: &DocId, host: &dyn HostApi) -> u64 {
         let ts = host.now_unix_millis();
         let minimum = self
@@ -881,7 +881,7 @@ impl Inner {
     /// disco l'ha accettato lo installa in memoria.
     ///
     /// È il posto **unico** in cui `Inner::docs` cambia, ed è la ragione per
-    /// cui [`Inner::dir_per`] e [`pota`] lavorano su un piano invece che sullo
+    /// cui [`Inner::dir_for`] e [`prune`] lavorano su un piano invece che sullo
     /// stato vivo: la mutazione qui è il *prodotto* della scrittura riuscita,
     /// non il suo presupposto. Nella forma opposta — muta, poi persisti col
     /// `?` — un disco che dice di no lascia la memoria avanti di un passo, e
@@ -904,7 +904,7 @@ impl Inner {
     /// un tombstone di cui la verità non sa niente.
     ///
     /// Ciò che questa forma **non** basta a garantire è che le rivendicazioni
-    /// sul disco restino una per documento: quella la tiene [`trasloca`],
+    /// sul disco restino una per documento: quella la tiene [`relocate`],
     /// togliendo la rivendicazione vecchia prima che qui se ne scriva una nuova.
     fn apply(
         &mut self,
@@ -1001,7 +1001,7 @@ fn write_index(docs: impl Serialize, host: &mut dyn HostApi) -> Result<(), Plugi
 /// Non cancella perché non può saperlo: finché l'indice potato non è sul disco,
 /// i blob che qui risultano di troppo sono ancora nominati dall'indice che c'è,
 /// e toglierli lo renderebbe bugiardo. Li spazza chi chiama, dopo
-/// [`Inner::applica`], con [`spazza`]. La direzione innocua dell'errore è il
+/// [`Inner::apply`], con [`sweep`]. La direzione innocua dell'errore è il
 /// blob orfano — costa spazio; quella rovinosa è l'indice che nomina un
 /// contenuto sparito, che rompe ogni [`VersionStore::read`].
 ///
@@ -1056,8 +1056,8 @@ fn prune(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Vec<String> {
 /// È il posto unico in cui il versioning cancella un blob, e non rende un
 /// errore di proposito: qui si arriva solo a indice persistito, e a quel punto
 /// un contenuto che non se ne va è spazio sprecato — non una bugia. Chiamarla
-/// prima di [`Inner::applica`] è l'inversione che rompe tutto, ed è la
-/// ragione per cui [`pota`] restituisce path invece di cancellarli.
+/// prima di [`Inner::apply`] è l'inversione che rompe tutto, ed è la
+/// ragione per cui [`prune`] restituisce path invece di cancellarli.
 fn sweep(paths: &[String], host: &mut dyn HostApi) {
     for path in paths {
         if let Err(and) = host.data_remove(path) {
@@ -1170,7 +1170,7 @@ fn relocate(
     }
 
     // La cartella abbandonata smette di dire di chi è **qui**, prima che
-    // `applica` scriva la rivendicazione nuova — e non dopo, con gli altri
+    // `apply` scriva la rivendicazione nuova — e non dopo, con gli altri
     // avanzi.
     //
     // La regola «prima l'indice, poi si cancella» vale per i **contenuti**, che
@@ -1356,7 +1356,7 @@ impl VersioningHandler {
         // diventa un difetto solo quando lo si paga N volte di fila.
         let result = self.store.in_batch(host, |host| {
             for id in documents {
-                if matches!(who, Pass::SoloNuovi) && self.store.has_versions(&id) {
+                if matches!(who, Pass::OnlyNew) && self.store.has_versions(&id) {
                     continue;
                 }
                 // Una nota illeggibile o non salvabile non deve impedire
@@ -1466,7 +1466,7 @@ impl VersioningHandler {
         &self,
         host: &'h mut (dyn HostApi + 'h),
     ) -> Result<(), PluginError> {
-        self.sweep(host, Pass::SoloNuovi)
+        self.sweep(host, Pass::OnlyNew)
     }
 
     /// La fotografia **di una sola nota**, un istante prima che venga
@@ -1571,7 +1571,7 @@ enum Pass {
     /// Solo chi non ha ancora una storia: chi ce l'ha non paga nemmeno una
     /// lettura. Resta per chi riusa la passata a mano (i test). La
     /// riconciliazione dopo un `Overflow` passa da [`Passata::Tutti`].
-    SoloNuovi,
+    OnlyNew,
     /// Tutti (riconciliazione dopo un `Overflow`): il dedup per contenuto rende
     /// gratis gli immutati, e per gli altri nasce la versione persa.
     All,
@@ -1874,7 +1874,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
 /// La nota viaggia nel payload accanto all'istante, e non perché serva a chi
 /// agisce — `version.restore` la vuole, ma la si potrebbe rileggere —: serve a
 /// dire **su quale nota questa riga è stata disegnata**, che è l'unico modo di
-/// accorgersi che nel frattempo è cambiata. Vedi [`stessa_nota`].
+/// accorgersi che nel frattempo è cambiata. Vedi [`same_notes`].
 fn row(v: &VersionRef, current: bool, doc: &str) -> UiNode {
     let when = Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, v.ts)]);
     let amount = if current {
@@ -2080,7 +2080,7 @@ mod tests {
         assert_eq!(versions.len(), 2);
         // `versions` è dato persistito e deve restare ordinato per tempo:
         // su di esso ragionano "attuale" in `list` e la protezione della più
-        // recente in `pota`.
+        // recente in `prune`.
         assert!(
             versions[0].ts > versions[1].ts,
             "la versione nuova deve avere ts maggiore anche a orologio arretrato: {versions:?}"
@@ -2457,7 +2457,7 @@ mod tests {
         (in_memory, on_the_disk)
     }
 
-    /// La forma «muta lo stato, poi persisti col `?`» — quella che [`Inner::applica`]
+    /// La forma «muta lo stato, poi persisti col `?`» — quella che [`Inner::apply`]
     /// toglie di mezzo — giudicata sul campo che l'utente vede: il tombstone.
     ///
     /// Ciò che non deve succedere è che la nota torni viva **solo in memoria**:
@@ -2592,7 +2592,7 @@ mod tests {
     /// chiave migra e la cartella resta col nome dell'impronta vecchia, quindi
     /// basta che una nota rinasca con quel path per trovarsela davanti. Se
     /// l'anagrafe della cartella è illeggibile e la si dà via, la prima
-    /// `scrivi_meta` ci scrive sopra un altro `doc_id`, e alla prima
+    /// `write_metadata` ci scrive sopra un altro `doc_id`, e alla prima
     /// ricostruzione gli snapshot di `b.md` diventano versioni di `a.md`.
     #[test]
     fn a_folder_whose_metadata_cannot_be_read_is_not_given_to_another_document() {
@@ -2701,7 +2701,7 @@ mod tests {
 
     /// Il verso che l'audit aveva letto al contrario, e che va tenuto fermo.
     ///
-    /// Fra `scrivi_meta` riuscita e `scrivi_index` fallita il `meta.json` resta
+    /// Fra `write_metadata` riuscita e `write_index` fallita il `meta.json` resta
     /// **avanti** all'indice, e sembra una bugia sul disco. Non lo è: il disco
     /// è l'autorità e l'indice il derivato, e il meta è avanti *verso il vero* —
     /// la nota che risorge è viva davvero, quella che prende il tombstone è
@@ -2726,7 +2726,7 @@ mod tests {
             "una scrittura negata non è un successo"
         );
         // Indice e memoria restano indietro **insieme**: è la proprietà che
-        // `applica` garantisce, e che gli altri banchi già misurano.
+        // `apply` garantisce, e che gli altri banchi già misurano.
         assert!(store.is_deleted(&id("a.md")));
 
         // Ma il disco no. Persa l'anagrafe derivata, resta quella vera.

@@ -483,7 +483,7 @@ pub struct Granted {
 /// Senza questo cambio `1 << cap` sarebbe andato in overflow — in debug con un
 /// panic, in release **in silenzio**, cioè con una famiglia concessa a chi non
 /// l'aveva dichiarata. A vederlo è stato l'`assert` in coda a
-/// `i_discriminanti_coprono_ogni_famiglia`, scritto quando i bit erano appena
+/// `the_discriminants_cover_every_family`, scritto quando i bit erano appena
 /// finiti e proprio perché finivano: il presidio ha fatto il suo mestiere una
 /// riga prima del danno.
 ///
@@ -491,7 +491,7 @@ pub struct Granted {
 /// di nuovo. Il tipo largo è la forma che rende [`Granted`] clonabile senza
 /// allocare, ed è anche il motivo per cui [`Capability`] è un enum piccolo e
 /// chiuso invece di una stringa — e per cui i suoi discriminanti devono restare
-/// contigui, che è ciò che presidia `i_discriminanti_coprono_ogni_famiglia`.
+/// contigui, che è ciò che presidia `the_discriminants_cover_every_family`.
 ///
 /// Che l'insieme non si **persista** da nessuna parte è ciò che ha reso questo
 /// cambio meccanico: si ricalcola da [`Capability::ALL`] a ogni registrazione,

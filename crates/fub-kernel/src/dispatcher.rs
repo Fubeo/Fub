@@ -641,7 +641,7 @@ impl JobBell {
         self.queued.reports()
     }
 
-    /// Aspetta che suoni oltre `seen`, **o che scada `entro`**, e restituisce
+    /// Aspetta che suoni oltre `seen`, **o che scada `within`**, e restituisce
     /// il conto (che può essere ancora `seen`, se è scaduto il tempo).
     ///
     /// Esiste per le sveglie del §22.1 (decisione 0069) e non per il polling:
@@ -649,9 +649,9 @@ impl JobBell {
     /// svegli tu, ma non oltre questo momento, perché a quel punto ho un lavoro
     /// mio». La differenza è che l'intervallo non lo sceglie chi aspetta — lo
     /// dice la sveglia più vicina.
-    pub fn wait_beyond_or(&self, seen: u64, entro: std::time::Duration) -> u64 {
+    pub fn wait_beyond_or(&self, seen: u64, within: std::time::Duration) -> u64 {
         let queued = self.queued.acquire();
-        *self.queued.wait_or(queued, entro, |q| *q == seen)
+        *self.queued.wait_or(queued, within, |q| *q == seen)
     }
 
     /// Aspetta che suoni oltre `seen`, e restituisce il conto nuovo.

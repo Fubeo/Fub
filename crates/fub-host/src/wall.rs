@@ -118,7 +118,7 @@ impl Zone {
 /// Sono due campi e non uno perché rispondono a due domande che si somigliano e
 /// non coincidono — *cosa ho già considerato* e *cosa sto aspettando* — e
 /// confonderle è precisamente il difetto in cui questa implementazione è caduta
-/// alla prima stesura: con la sola [`last`](Self::ultima) una sveglia
+/// alla prima stesura: con la sola [`last`](Self::last) una sveglia
 /// puntuale con `catch_up_seconds = 0` non suonava **mai**, perché ogni suonata
 /// sarebbe stata un recupero e la finestra era zero.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -316,10 +316,10 @@ mod tests {
     #[test]
     fn catch_up_has_a_window() {
         let tight = WallClock::daily(9, 0).anchored("Europe/Rome");
-        let larga = WallClock::daily(9, 0)
+        let wide = WallClock::daily(9, 0)
             .anchored("Europe/Rome")
             .catching_up(3600);
-        let zone = Zone::of(&larga, "").expect("zone");
+        let zone = Zone::of(&wide, "").expect("zone");
 
         // Il giro prima ha visto le 9 di ieri, e aspettava quelle di **oggi**:
         // il recupero riguarda ciò che non era in calendario, quindi l'attesa si
@@ -341,7 +341,7 @@ mod tests {
         };
 
         // Venti minuti di ritardo, finestra di un'ora: suona.
-        let v = verdict(&larga, &zone, ts("2026-01-15T08:20:00Z"), yesterday);
+        let v = verdict(&wide, &zone, ts("2026-01-15T08:20:00Z"), yesterday);
         assert!(v.ring, "twenty minutes inside a one-hour window");
 
         // Stesso ritardo, nessuna finestra: tace.
@@ -352,7 +352,7 @@ mod tests {
         // Le due occorrenze perse cadono fuori dalla finestra: zero suonate, non
         // due. La più recente si consuma lo stesso — è il campo `last` a
         // impedire che la si riesamini per sempre — e la prossima è quella di
-        let v = verdict(&larga, &zone, ts("2026-01-17T05:00:00Z"), yesterday);
+        let v = verdict(&wide, &zone, ts("2026-01-17T05:00:00Z"), yesterday);
         assert!(!v.ring, "twenty hours are outside a one-hour window");
         let consumed = v.position.last.expect("consumed");
         assert_eq!(

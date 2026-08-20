@@ -26,7 +26,7 @@ import type { Structure } from "./sim/types";
 
 export interface InteractionActions {
   open(id: string): void;
-  warm(livello: number): void;
+  warm(level: number): void;
   requestRedraw(): void;
 }
 
@@ -254,7 +254,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
   // prima del drag (pinMappa), riaccende la sim e pulisce il cursore. La
   // usa `onPointerUp` e il pinch, che smonta il drag del primo dito quando
   // arriva il secondo.
-  const rilasciaPresa = (): void => {
+  const releaseGrip = (): void => {
     const s = structureRef();
     if (state.dragged >= 0) {
       const i = state.dragged;
@@ -278,7 +278,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
     // Il pinch è zoom sul punto medio delle dita, con fattore pari al
     // rapporto tra distanza attuale e distanza alla discesa del secondo dito.
     if (activePointers.size >= 2) {
-      rilasciaPresa();
+      releaseGrip();
       state = initialDragState();
       const pts = [...activePointers.values()];
       pinchBase = {
@@ -355,8 +355,8 @@ export function createInteraction(options: InteractionOptions): Interaction {
     // Prima si rilascia la presa, poi si aggiorna la macchina: `aggiornaDrag`
     // con "up" azzera `dragged`/`draggingEmpty` nello stato, e
     // `rilasciaPresa` legge da lì l'indice del nodo da sbloccare.
-    const presaAttiva = state.dragged >= 0 || state.draggingEmpty;
-    if (presaAttiva) rilasciaPresa();
+    const activeGrip = state.dragged >= 0 || state.draggingEmpty;
+    if (activeGrip) releaseGrip();
     const result = updateDrag(state, { type: "up", x: p.x, y: p.y, button: e.button }, hit, s2m);
     state = result.state;
     actions.requestRedraw();

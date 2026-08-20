@@ -255,10 +255,10 @@ describe("CoalescingQueue", () => {
     const steps: string[] = [];
     const throttle = deferred<void>();
 
-    const lenta = queue.enqueueByKey("lenta", async () => {
-      steps.push("lenta: dentro");
+    const slow = queue.enqueueByKey("slow", async () => {
+      steps.push("slow: dentro");
       await throttle.promise;
-      steps.push("lenta: fuori");
+      steps.push("slow: fuori");
     });
     const fast = queue.enqueueByKey("veloce", async () => {
       steps.push("veloce");
@@ -267,11 +267,11 @@ describe("CoalescingQueue", () => {
     await Promise.resolve();
     // La lenta è sospesa e la veloce è partita lo stesso: se le chiavi
     // condividessero una coda sola, qui ci sarebbe solo «lenta: dentro».
-    expect(steps).toEqual(["lenta: dentro", "veloce"]);
+    expect(steps).toEqual(["slow: dentro", "veloce"]);
 
     throttle.resolve();
-    await Promise.all([lenta, fast]);
-    expect(steps).toEqual(["lenta: dentro", "veloce", "lenta: fuori"]);
+    await Promise.all([slow, fast]);
+    expect(steps).toEqual(["slow: dentro", "veloce", "slow: fuori"]);
   });
 
   it("uno sbaglio arriva a chi ha accodato e non ferma la coda", async () => {

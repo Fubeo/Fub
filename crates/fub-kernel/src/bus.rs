@@ -604,17 +604,17 @@ mod tests {
         const GIRI: usize = 256;
         let bus = EventBus::new();
         let rx = bus.subscribe();
-        let (pronto_tx, pronto_rx) = channel::<()>();
+        let (ready_tx, ready_rx) = channel::<()>();
         let emettitore = std::thread::spawn(move || {
             for n in 0..GIRI {
-                if pronto_rx.recv().is_err() {
+                if ready_rx.recv().is_err() {
                     return;
                 }
                 bus.emit(changed(n));
             }
         });
         for _ in 0..GIRI {
-            pronto_tx.send(()).unwrap();
+            ready_tx.send(()).unwrap();
             rx.recv().unwrap();
         }
         emettitore.join().unwrap();

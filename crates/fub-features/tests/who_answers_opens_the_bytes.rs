@@ -54,7 +54,7 @@ use fub_sdk::testing::MemoryHost;
 
 /// L'ago. Una parola che non compare per caso, e abbastanza lunga da poterla
 /// nascondere dentro un'altra.
-const AGO: &str = "aghifoglia";
+const NEEDLE: &str = "aghifoglia";
 
 /// Quante note. Non tre: una scansione del vault su tre note non si vede, e la
 /// taglia serve a rendere il numero **grande** invece che discutibile.
@@ -65,7 +65,7 @@ fn vault(count: usize, matching: usize) -> MemoryHost {
     let mut host = MemoryHost::new();
     for the in 0..count {
         let body = if the < matching {
-            format!("# Nota {the}\n\nQui c'è una {AGO} vera.\n")
+            format!("# Nota {the}\n\nQui c'è una {NEEDLE} vera.\n")
         } else {
             format!("# Nota {the}\n\nUn corpo qualsiasi, senza niente da sostituire.\n")
         };
@@ -78,7 +78,7 @@ fn replace(host: &mut MemoryHost, mode: InvokeMode) {
     CoreCommands
         .invoke(
             VAULT_REPLACE,
-            serde_json::json!({ "find": AGO, "replace": "conifera" }),
+            serde_json::json!({ "find": NEEDLE, "replace": "conifera" }),
             mode,
             host,
         )
@@ -200,7 +200,7 @@ fn replace_finds_what_the_index_cannot_see() {
         1,
         "l'indice non risponde nemmeno a un termine che ha: il banco è rotto, non il codice"
     );
-    let found = ask(AGO);
+    let found = ask(NEEDLE);
     assert_eq!(
         found, 0,
         "l'indice ne ha trovate {found}: se sa rispondere, questo banco non \

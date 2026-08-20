@@ -25,7 +25,7 @@
 //!    `Send + Sync`, cioè che chiamare `query` da N thread sia *lecito*, non che
 //!    sia *parallelo*. Sta qui perché è una qualità di questo indice, e per la
 //!    stessa ragione ha un presidio suo
-//!    (`due_ricerche_stanno_nell_indice_insieme`).
+//!    (`two_searches_are_in_the_index_together`).
 //!
 //! # Come questo indice usa l'`HostApi` (e dove non può)
 //!
@@ -2005,7 +2005,7 @@ mod tests {
 
     /// Il testo con l'ultimo termine **incompleto**: la forma che manda una
     /// casella mentre si digita (§21.2).
-    fn text_parziale(q: &str) -> QueryExpr {
+    fn partial_text(q: &str) -> QueryExpr {
         clause(vec![lit(QueryPredicate::Text(
             TextQuery::terms(q).while_typing(),
         ))])
@@ -2110,7 +2110,7 @@ mod tests {
     /// I due documenti di `page_name_outranks_body`: uno vince per il titolo,
     /// l'altro per la ripetizione nel corpo. È la coppia giusta per provare un
     /// peso, perché l'esito dipende **solo** da quello.
-    fn title_contro_body(idx: &mut SearchIndex) {
+    fn title_against_body(idx: &mut SearchIndex) {
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
             "nota/Rust.md",
             "appunti sparsi di programmazione",
@@ -2131,7 +2131,7 @@ mod tests {
         let mut host = host_with_weight(BOOST_NAME_KEY, 0.0);
         let mut idx = open(&path, &mut host);
         assert_eq!(idx.weights().name, 0.0, "letto in `activate`");
-        title_contro_body(&mut idx);
+        title_against_body(&mut idx);
 
         let hits = search(&idx, "rust");
         assert_eq!(hits.len(), 2, "zero non esclude: la nota si trova ancora");
@@ -2158,7 +2158,7 @@ mod tests {
         let (_g, path) = tmp();
         let mut host = host_with_weight(BOOST_NAME_KEY, PAGE_NAME_BOOST as f64);
         let mut idx = open(&path, &mut host);
-        title_contro_body(&mut idx);
+        title_against_body(&mut idx);
         assert_eq!(
             search(&idx, "rust")[0].doc,
             DocId::new("nota/Rust.md"),
@@ -2671,7 +2671,7 @@ mod tests {
     }
 
     #[test]
-    fn a_manifest_of_a_other_epoca_is_carries_via_also_the_fingerprints_of_the_sources() {
+    fn a_manifest_of_a_other_era_is_carries_via_also_the_fingerprints_of_the_sources() {
         let (_g, path) = tmp();
         let mut host = MemoryHost::new();
         {
@@ -3136,7 +3136,7 @@ mod tests {
             "l'esattezza resta il default: `arch` da solo non trova niente"
         );
         // Con il prefisso, li trova entrambi — ed è la stessa stringa.
-        let mut ids: Vec<String> = page_of(&idx, text_parziale("arch"), None)
+        let mut ids: Vec<String> = page_of(&idx, partial_text("arch"), None)
             .items
             .into_iter()
             .map(|m| m.doc.0)
@@ -3147,7 +3147,7 @@ mod tests {
         // Due termini: l'ultimo è il prefisso, il primo no. `kernel arch` deve
         // trovare la nota che ha kernel E qualcosa che comincia per arch, e non
         // quella che ha solo kernel.
-        let ids: Vec<String> = page_of(&idx, text_parziale("kernel arch"), None)
+        let ids: Vec<String> = page_of(&idx, partial_text("kernel arch"), None)
             .items
             .into_iter()
             .map(|m| m.doc.0)
@@ -3156,7 +3156,7 @@ mod tests {
 
         // E il termine che **non** è l'ultimo resta intero: `arch kernel` non
         // deve trovare `archivio`, perché lì il prefisso non è più suo.
-        let ids: Vec<String> = page_of(&idx, text_parziale("arch kernel"), None)
+        let ids: Vec<String> = page_of(&idx, partial_text("arch kernel"), None)
             .items
             .into_iter()
             .map(|m| m.doc.0)

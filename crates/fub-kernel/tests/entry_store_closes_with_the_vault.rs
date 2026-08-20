@@ -18,14 +18,14 @@
 //!
 //! # Chi è stato rosso
 //!
-//! `una_riapertura_dopo_una_sessione_di_scritture_non_riparsa_niente`: togliendo
+//! `a_reopening_after_a_session_of_writes_not_reappeared_nothing`: togliendo
 //! `store_entries` da [`Workspace::close_with`] fallisce con `letture = 40`
 //! invece di `0` — una per documento toccato, su un vault di 400. Il numero
 //! cresce col lavoro fatto nella sessione, non col vault: è il motivo per cui
 //! la riga d'audit che lo descriveva («tutto ciò che si salva viene riletto»)
 //! diceva più di quel che si osserva.
 //!
-//! `una_sessione_che_non_tocca_niente_non_riscrive_l_anagrafe`: togliendo il
+//! `a_session_that_not_touches_nothing_not_rewrites_the_registry`: togliendo il
 //! confronto con la tabella già durevole in `EntryStore::store` fallisce con
 //! `2` scritture invece di `0` — la fine dell'apertura e la chiusura, che si
 //! scambiano lo stesso contenuto. È il rovescio della riga qui sopra: scrivere
@@ -286,7 +286,7 @@ fn open(storage: Arc<CountingStorage>) -> Workspace {
     ws
 }
 
-/// [`aperto`], con **un indice registrato**: il terzo banco ne ha bisogno
+/// [`open`], con **un indice registrato**: il terzo banco ne ha bisogno
 /// perché l'ordine fra l'anagrafe e il flush si vede solo da dentro un flush.
 fn open_with_index(storage: Arc<CountingStorage>, index: EntryStoreWatchingIndex) -> Workspace {
     let mut registry = FormatRegistry::new();

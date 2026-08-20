@@ -77,13 +77,13 @@ export function loadConfig(storage: Storage | undefined = localStorage): GraphCo
 /// scrivere spazzatura nel supporto.
 export function saveConfig(config: GraphConfig, storage: Storage | undefined = localStorage): void {
   if (!storage) return;
-  const daSalvare: GraphConfig = {
+  const toSave: GraphConfig = {
     physics: clampPhysicsConfig(config.physics),
     graphics: clampGraphicsConfig(config.graphics),
     preset: config.preset in PRESETS || config.preset === "custom" ? config.preset : "organica",
   };
   try {
-    storage.setItem(CONFIG_KEY, JSON.stringify(daSalvare));
+    storage.setItem(CONFIG_KEY, JSON.stringify(toSave));
   } catch {
     // La quota è piena o il supporto è vietato: il grafo vive anche senza
     // memoria, e lanciare qui interromperebbe un gesto che è riuscito.

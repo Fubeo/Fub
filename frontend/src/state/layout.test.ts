@@ -327,7 +327,7 @@ describe("rileggere la finestra com'era", () => {
     expect(
       parseLayout({
         ...base,
-        panes: { ...base.panes, fantasma: { docs: [], active: -1, mode: "live_preview" } },
+        panes: { ...base.panes, ghost: { docs: [], active: -1, mode: "live_preview" } },
       }),
     ).toBeNull();
     expect(parseLayout({ ...base, focus: "pane-9" })).toBeNull();

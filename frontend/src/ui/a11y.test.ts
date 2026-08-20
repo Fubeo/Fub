@@ -267,7 +267,7 @@ describe("due modali aperte: comanda l'ultima", () => {
   /// `document` in cattura, quindi partivano nell'ordine in cui erano stati
   /// attaccati e a vincere era la più vecchia, cioè quella dipinta sotto
   /// (difetto 0149).
-  function openDue() {
+  function openTwo() {
     document.body.innerHTML = `
       <button id="fuori">Apri</button>
       <div id="sotto" tabindex="-1"><button id="s1">S1</button><button id="s2">S2</button></div>
@@ -283,7 +283,7 @@ describe("due modali aperte: comanda l'ultima", () => {
   }
 
   it("il tab non passa nemmeno per la superficie di sotto", () => {
-    const { releaseBelow, releaseAbove } = openDue();
+    const { releaseBelow, releaseAbove } = openTwo();
     expect(document.activeElement?.id, "il fuoco entra nell'ultima aperta").toBe("p1");
 
     // Dove il fuoco è *passato*, non solo dove si è fermato: con due trappole
@@ -315,7 +315,7 @@ describe("due modali aperte: comanda l'ultima", () => {
   });
 
   it("Escape ne chiude una sola, e quella sotto torna a comandare", () => {
-    const { counts, releaseBelow, releaseAbove } = openDue();
+    const { counts, releaseBelow, releaseAbove } = openTwo();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(
@@ -342,7 +342,7 @@ describe("due modali aperte: comanda l'ultima", () => {
     // Le superfici non si chiudono per forza in ordine: quella di sotto può
     // andarsene per conto suo — un comando, un documento che sparisce — mentre
     // sopra ce n'è ancora una.
-    const { counts, releaseBelow, releaseAbove } = openDue();
+    const { counts, releaseBelow, releaseAbove } = openTwo();
     releaseBelow();
 
     document.querySelector<HTMLElement>("#p2")!.focus();

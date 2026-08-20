@@ -871,7 +871,7 @@ fn convert_inlines<'a>(
                 // restituiva già e che qui si buttava.
                 //
                 // Il terzo caso è quello che tiene ferma la promessa già
-                // presidiata da `un_riferimento_si_riscrive_com_era`: quando la
+                // presidiata da `a_reference_is_rewrites_com_was`: quando la
                 // forma scritta dal bersaglio **non è quella canonica**
                 // (`[[Nota^blocco]]`, che il nostro lettore accetta per
                 // indulgenza), l'etichetta sintetica dice qualcosa che il
@@ -1147,13 +1147,13 @@ fn is_entity_hash(text: &str, idx: usize) -> bool {
         return false;
     }
     let rest = &text[idx + 1..];
-    let (digits, esadecimale) = match rest.strip_prefix(['x', 'X']) {
+    let (digits, is_hex) = match rest.strip_prefix(['x', 'X']) {
         Some(hex) => (hex, true),
         None => (rest, false),
     };
     match digits.find(';') {
         Some(n) if n > 0 => digits[..n].chars().all(|c| {
-            if esadecimale {
+            if is_hex {
                 c.is_ascii_hexdigit()
             } else {
                 c.is_ascii_digit()
@@ -1239,7 +1239,7 @@ fn push_plain_or_tags(
 /// le varianti legacy senza punto e virgola).
 static ENTITY_MAP: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
 
-/// L'entità nominale `nome` (ciò che sta fra `&` e `;`), o `None`.
+/// L'entità nominale `name` (ciò che sta fra `&` e `;`), o `None`.
 fn named_entity(name: &str) -> Option<&'static str> {
     ENTITY_MAP
         .get_or_init(|| {
@@ -1331,7 +1331,7 @@ fn entity(s: &str, is: usize, out: &mut String) -> Option<usize> {
     // cappato a U+110000 come fa comrak; il tetto delle cifre decide se è
     // un'entità, i codepoint fuori intervallo diventano U+FFFD.
     if text.len() >= 3 && bytes[0] == b'#' {
-        let (cp, num_digits, esadecimale, forward) = if bytes[1].is_ascii_digit() {
+        let (cp, num_digits, is_hex, forward) = if bytes[1].is_ascii_digit() {
             let mut cp = 0u32;
             let mut the = 1;
             while the < bytes.len() && bytes[the].is_ascii_digit() {
@@ -1353,8 +1353,8 @@ fn entity(s: &str, is: usize, out: &mut String) -> Option<usize> {
         };
         if forward < bytes.len()
             && bytes[forward] == b';'
-            && ((esadecimale && (1..=6).contains(&num_digits))
-                || (!esadecimale && (1..=7).contains(&num_digits)))
+            && ((is_hex && (1..=6).contains(&num_digits))
+                || (!is_hex && (1..=7).contains(&num_digits)))
         {
             // La stessa soglia di comrak: 0, i surrogati (0xE000 compreso) e
             // oltre U+10FFFF non sono caratteri, e un riferimento che li
@@ -1568,7 +1568,7 @@ fn walk_definitions<'a>(
             if remainder.is_empty() {
                 // un residuo vuoto arrivasse qui non ci sarebbe nulla da
                 // riscontare.
-                // `riga` è la riga sorgente vera: il suo indice nella fetta
+                // `row` è la riga sorgente vera: il suo indice nella fetta
                 return;
             }
             let mut sp = node.data.borrow().sourcepos;
@@ -1578,9 +1578,9 @@ fn walk_definitions<'a>(
             sp.start.column = 1 + prefixes[n];
             node.data.borrow_mut().sourcepos = sp;
             let delta = |row: usize| -> isize {
-                // è `riga - riga_zero`, e comrak ha contato le colonne come
+                // è `row - row_zero`, e comrak ha contato le colonne come
                 // se quella riga fosse la prima del paragrafo — il vero
-                // prefisso di riga è `prefissi[k]`.
+                // prefisso di riga è `prefixes[k]`.
             // Gli altri contenitori (footnote, definition list, html…) non
                 let k = row.saturating_sub(row_zero);
                 prefixes.get(k).copied().unwrap_or(0) as isize

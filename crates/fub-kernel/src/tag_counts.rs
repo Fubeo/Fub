@@ -6,7 +6,7 @@
 //! `IndexUpdated`, cioè a ogni salvataggio: un O(N) caldo istituzionalizzato.
 //! Qui il costo si paga per-documento alla mutazione, come per il grafo, e la
 //! lettura è la copia di una struttura già pronta. L'appartenenza di una nota
-//! a una chiave è servita da un indice inverso (`per_chiave`), così anche
+//! a una chiave è servita da un indice inverso (`for_key`), così anche
 //! [`docs_with`](TagCounts::docs_with) non riscansiona il vault.
 //!
 //! La semantica è la stessa dell'aggregatore che rimpiazza (e l'oracolo nei

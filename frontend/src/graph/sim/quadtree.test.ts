@@ -10,15 +10,15 @@ import { organicConfig, createStructure, type GraphData, type Structure } from "
 /// con jitter fisso, masse crescenti per grado (qualche arco). Abbastanza
 /// nodi da far splittare l'albero, non così tanti da rendere l'O(n²) lento
 /// nel test.
-function graphTest(n: number, archi: number): Structure {
+function graphTest(n: number, edgeCount: number): Structure {
   const nodes: string[] = [];
   for (let i = 0; i < n; i++) nodes.push("n" + i);
   const edges: { from: string; to: string }[] = [];
   // Archi a catena + qualche lungo: dà gradi variabili (masse diverse).
-  for (let i = 0; i < archi; i++) {
-    const da = i % n;
-    const a = (i * 7 + 3) % n;
-    if (da !== a) edges.push({ from: "n" + da, to: "n" + a });
+  for (let i = 0; i < edgeCount; i++) {
+    const fromIdx = i % n;
+    const toIdx = (i * 7 + 3) % n;
+    if (fromIdx !== toIdx) edges.push({ from: "n" + fromIdx, to: "n" + toIdx });
   }
   const data: GraphData = { nodes, edges };
   return createStructure(data, organicConfig(), 42);

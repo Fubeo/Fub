@@ -192,7 +192,7 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
 /// Perché una superficie non è ospitata. Sta scritto qui e non in un commento
 /// perché è ciò che l'avviso dice a chi ha scritto la view: senza, il messaggio
 /// sarebbe «non supportato», che non aiuta nessuno a capire cosa aspettare.
-const NON_OSPITATE: Record<string, string> = {
+const NOT_HOSTED: Record<string, string> = {
   context_menu: "questa shell non ha un menu contestuale estendibile",
 };
 
@@ -271,7 +271,7 @@ export async function mountDeclaredViews(): Promise<void> {
         t("views.surface_missing", {
           view: spec.id,
           surface: spec.surface,
-          reason: NON_OSPITATE[spec.surface] ?? "superficie sconosciuta",
+          reason: NOT_HOSTED[spec.surface] ?? "superficie sconosciuta",
         }),
         "info",
       );

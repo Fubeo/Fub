@@ -147,9 +147,9 @@ describe("updateDrag (macchina a stati pura)", () => {
 
   it("è pura: lo stato in ingresso non viene mutato", () => {
     const first: DragState = initialDragState();
-    const congelato = { ...first };
+    const frozen = { ...first };
     updateDrag(first, { type: "down", x: 5, y: 5, button: 0 }, hit, s2m);
-    expect(first).toEqual(congelato);
+    expect(first).toEqual(frozen);
   });
 });
 

@@ -154,7 +154,7 @@ fn mirror_unions_match_the_rust_types() {
 
 /// Il presidio deve saper **fallire**, o essere verde non vuol dire niente.
 ///
-/// È il gemello di `ogni_forma_di_rottura_e_rossa` di `wit_additivity.rs` e di
+/// È il gemello di `every_form_of_breakage_turns_red` di `wit_additivity.rs` e di
 /// `wit_conformance_actually_fails_on_drift`: si prendono le quattro forme in
 /// cui il file committato può divergere dai tipi Rust e si verifica che il
 /// confronto le veda tutte e quattro. La quarta è quella che conta: **un

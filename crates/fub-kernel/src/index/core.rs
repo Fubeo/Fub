@@ -393,9 +393,9 @@ fn remember(map: &mut BTreeMap<String, BTreeSet<DocId>>, key: &str, id: &DocId) 
 }
 
 fn forget_entry(map: &mut BTreeMap<String, BTreeSet<DocId>>, key: &str, id: &DocId) {
-    if let Some(gruppo) = map.get_mut(key) {
-        gruppo.remove(id);
-        if gruppo.is_empty() {
+    if let Some(group) = map.get_mut(key) {
+        group.remove(id);
+        if group.is_empty() {
             map.remove(key);
         }
     }

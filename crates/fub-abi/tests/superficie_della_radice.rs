@@ -20,7 +20,7 @@
 //!    `lib.rs`.
 //!
 //! Poi confronta **in una direzione sola**, e questa è la cosa da non imitare
-//! a occhi chiusi. `dieta_ipc` e `ALLOWED_TRANSITIVE_ABI` confrontano il loro
+//! a occhi chiusi. `lean_ipc` e `ALLOWED_TRANSITIVE_ABI` confrontano il loro
 //! elenco nei due versi, perché un elenco che resta lungo mentre il codice si
 //! accorcia è un ricordo e non una fotografia; qui il verso di ritorno — «alla
 //! radice c'è un nome che nel modulo non esiste più» — **non può diventare
@@ -107,7 +107,7 @@ fn is_pub(vis: &syn::Visibility) -> bool {
     matches!(vis, syn::Visibility::Public(_))
 }
 
-/// I tipi pubblici di un file, moduli annidati compresi. `dove` è il path del
+/// I tipi pubblici di un file, moduli annidati compresi. `where_` è il path del
 /// modulo che contiene questi item.
 fn types_of(items: &[syn::Item], module: &str, where_: &str, out: &mut Vec<TypeEntry>) {
     for item in items {
@@ -296,7 +296,7 @@ fn a_qualified_module_is_qualified_throughout_and_with_reason() {
 /// Il test del test: il camminatore vede davvero i moduli annidati e i
 /// sottomoduli su file.
 ///
-/// Senza questo, `ogni_tipo_pubblico_si_vede_dalla_radice` potrebbe essere
+/// Senza questo, `every_public_type_is_visible_from_the_root` potrebbe essere
 /// verde perché non guarda niente — e un presidio che non aggancia è
 /// indistinguibile da uno soddisfatto. I due tipi nominati qui stanno uno in un
 /// sottomodulo su file (`rules::ids::Owner`) e uno in un file piano

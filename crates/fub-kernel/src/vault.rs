@@ -243,13 +243,13 @@ impl Vault {
     /// Un vault su un supporto qualunque (§15.1).
     ///
     /// **La radice si fissa qui**, e da qui in poi non è più quella che il
-    /// chiamante ha scritto: è la sua forma assoluta ([`radice_assoluta`]).
+    /// chiamante ha scritto: è la sua forma assoluta ([`root_absolute`]).
     /// Questa è la sola riga che la costruisce, quindi non esiste un `Vault` la
     /// cui radice si sposti sotto ai piedi.
     ///
     /// È anche la sola riga che **verifica la radice**, e la verifica adesso:
-    /// chiede al supporto se può starci un vault ([`VaultStorage::radice_valida`])
-    /// e risponde con [`KernelError::RadiceInvalida`] se non può. Un errore più
+    /// chiede al supporto se può starci un vault ([`VaultStorage::root_validates`])
+    /// e risponde con [`KernelError::InvalidRoot`] se non può. Un errore più
     /// tardi — alla prima operazione che tocca il disco — sarebbe un vault già
     /// mostrato come aperto, con eventi già emessi (0160).
     pub fn on(root: impl AsRef<Utf8Path>, storage: Arc<dyn VaultStorage>) -> Result<Self> {

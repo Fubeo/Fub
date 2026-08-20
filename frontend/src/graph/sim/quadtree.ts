@@ -47,7 +47,7 @@ export interface Quadtree {
   // dimezzano fino a 2^-24 e il confronto col bordo non deve perdere bit.
   cx: Float64Array;
   cy: Float64Array;
-  meta: Float64Array;
+  halfSize: Float64Array;
   cmx: Float64Array;
   cmy: Float64Array;
   mass: Float64Array;
@@ -72,7 +72,7 @@ export class QuadtreePool implements Quadtree {
   s: Structure | null = null;
   cx = new Float64Array(0);
   cy = new Float64Array(0);
-  meta = new Float64Array(0);
+  halfSize = new Float64Array(0);
   cmx = new Float64Array(0);
   cmy = new Float64Array(0);
   mass = new Float64Array(0);
@@ -103,9 +103,9 @@ export class QuadtreePool implements Quadtree {
     const cy = new Float64Array(newCapacity);
     cy.set(this.cy);
     this.cy = cy;
-    const meta = new Float64Array(newCapacity);
-    meta.set(this.meta);
-    this.meta = meta;
+    const halfSize = new Float64Array(newCapacity);
+    halfSize.set(this.halfSize);
+    this.halfSize = halfSize;
     const cmx = new Float64Array(newCapacity);
     cmx.set(this.cmx);
     this.cmx = cmx;
@@ -179,7 +179,7 @@ export class QuadtreePool implements Quadtree {
     const root = this.newNode();
     this.cx[root] = (minx + maxx) / 2;
     this.cy[root] = (miny + maxy) / 2;
-    this.meta[root] = Math.max(maxx - minx, maxy - miny) / 2 + 1e-9;
+    this.halfSize[root] = Math.max(maxx - minx, maxy - miny) / 2 + 1e-9;
     for (let i = 0; i < n; i++) {
       this.insert(root, i, s.x[i], s.y[i], s.mass[i], 0);
     }
@@ -222,12 +222,12 @@ export class QuadtreePool implements Quadtree {
     // centro del padre, così i 4 bbox dei figli coprono esattamente i 4
     // quadranti della cella padre (niente buchi: il pruning di `nearest`
     // non può perdere il nodo più vicino).
-    const hsm = this.meta[i] / 2;
+    const hsm = this.halfSize[i] / 2;
     for (let k = 0; k < 4; k++) {
       const f = this.children[b + k];
       this.cx[f] = this.cx[i] + (k & 1 ? hsm : -hsm);
       this.cy[f] = this.cy[i] + (k & 2 ? hsm : -hsm);
-      this.meta[f] = hsm;
+      this.halfSize[f] = hsm;
     }
     // Ridistribuisce il contenuto esistente: ogni nodo va nel figlio giusto
     // secondo la sua posizione, non in un figlio fisso.
@@ -306,7 +306,7 @@ function visitNode(q: Quadtree, i: number, t2: number, x: number, y: number, f: 
     const dx = q.cmx[fk] - x;
     const dy = q.cmy[fk] - y;
     const d2 = dx * dx + dy * dy;
-    const sm = q.meta[fk];
+    const sm = q.halfSize[fk];
     if (sm * sm < t2 * d2) {
       f(dx, dy, d2, q.mass[fk]);
     } else {
@@ -361,8 +361,8 @@ export function nearest(q: Quadtree, x: number, y: number, r: number): number {
         const fk = q.children[b + k];
         if (fk < 0) continue;
         // Distanza minima dal punto alla cella (0 se dentro).
-        const ddx = Math.abs(x - q.cx[fk]) - q.meta[fk];
-        const ddy = Math.abs(y - q.cy[fk]) - q.meta[fk];
+        const ddx = Math.abs(x - q.cx[fk]) - q.halfSize[fk];
+        const ddy = Math.abs(y - q.cy[fk]) - q.halfSize[fk];
         const dmin2 = (ddx > 0 ? ddx * ddx : 0) + (ddy > 0 ? ddy * ddy : 0);
         if (dmin2 <= bestD2) q.stack[sp++] = fk;
       }

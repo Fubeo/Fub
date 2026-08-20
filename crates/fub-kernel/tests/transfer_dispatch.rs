@@ -357,7 +357,7 @@ fn handle_of(source: &ImportSource) -> fub_abi::transfer::SourceHandle {
 }
 
 #[test]
-fn a_source_more_grande_of_the_record_enters_the_same() {
+fn a_source_larger_than_the_record_enters_the_same() {
     let (_g, mut ws) = workspace();
     let rounds: Arc<Mutex<usize>> = Arc::default();
     ws.register_import_provider("spia.txt", Box::new(ChunkedImporter { rounds: rounds.clone() }))

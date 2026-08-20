@@ -98,7 +98,7 @@ export interface Chart {
   /// qui: lo gestiscono `config.ts` e il pannello.
   setConfig(config: GraphConfig): void;
   /// Riporta l'alpha al livello dato e azzera la quiete: la sim riparte.
-  warm(livello: number): void;
+  warm(level: number): void;
   /// Toglie tutti i pin e il drag: i nodi tornano liberi.
   unpinNodes(): void;
   /// L'aria del canvas (role/aria-label) per la tastiera.
@@ -138,12 +138,12 @@ export function createChart(options: ChartOptions = {}): Chart {
   // e il pittore lo vuole per il focus. −1 = nessuno.
   let hovered = -1;
   let emaFrameMs = 16.7;
-  let primaOra = 0;
-  let ultimaOra = 0;
+  let firstTime = 0;
+  let lastTime = 0;
   let W = -1;
   let H = -1;
-  let fitInizialeFatto = false;
-  let fitQuieteFatto = false;
+  let initialFitDone = false;
+  let quietFitDone = false;
   // I listener che aggiungiamo al canvas per l'hover; tenuti per rimuoverli.
   const onMove = (e: PointerEvent): void => {
     if (!s || !cameraState) return;
@@ -246,13 +246,13 @@ export function createChart(options: ChartOptions = {}): Chart {
       return;
     }
     const t = clock();
-    if (primaOra === 0) {
-      primaOra = t;
-      ultimaOra = t;
+    if (firstTime === 0) {
+      firstTime = t;
+      lastTime = t;
     }
-    const dtS = Math.min(Math.max(0, (t - ultimaOra) / 1000), DT_MAX);
-    ultimaOra = t;
-    const tempoMs = t - primaOra;
+    const dtS = Math.min(Math.max(0, (t - lastTime) / 1000), DT_MAX);
+    lastTime = t;
+    const elapsedMs = t - firstTime;
 
     const v = viewport();
     // Senza RO (happy-dom) il resize si controlla qui; con RO l'osservatore
@@ -261,10 +261,10 @@ export function createChart(options: ChartOptions = {}): Chart {
 
     // Fit iniziale differito: solo quando c'è una superficie vera. Il salta
     // evita che il primo frame insegua una camera che parte da (1,0,0).
-    if (v && !fitInizialeFatto && v.w >= MIN_VIEW_SIZE && v.h >= MIN_VIEW_SIZE) {
+    if (v && !initialFitDone && v.w >= MIN_VIEW_SIZE && v.h >= MIN_VIEW_SIZE) {
       cameraState.fit(bound(), v);
       cameraState.set(cameraState.state(), true);
-      fitInizialeFatto = true;
+      initialFitDone = true;
     }
 
     const tier: Tier = calculateTier(s.n, emaFrameMs);
@@ -279,8 +279,8 @@ export function createChart(options: ChartOptions = {}): Chart {
       // Secondo fit, alla prima quiete: il grafo si è disteso e il fit
       // iniziale (sulla semina) è rimasto indietro. Morbido: il loop resta
       // acceso finché la camera non converge.
-      if (fitInizialeFatto && !fitQuieteFatto && engineState.quietSince >= QUIET_FIT_STEPS && v) {
-        fitQuieteFatto = true;
+      if (initialFitDone && !quietFitDone && engineState.quietSince >= QUIET_FIT_STEPS && v) {
+        quietFitDone = true;
         cameraState.fit(bound(), v);
       }
     }
@@ -297,7 +297,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       focused: interaction.getFocusedNode(),
       alpha: engineState.alpha,
       tier,
-      tempoMs,
+      elapsedMs,
     };
     painter.redraw(state);
 
@@ -319,14 +319,14 @@ export function createChart(options: ChartOptions = {}): Chart {
       canvas.addEventListener("pointermove", onMove);
       canvas.addEventListener("pointerleave", onLeave);
     }
-    const canvasPerInteraction = canvas ?? document.createElement("canvas");
+    const interactionCanvas = canvas ?? document.createElement("canvas");
     interaction = interactionFactory({
-      canvas: canvasPerInteraction,
+      canvas: interactionCanvas,
       structureRef: () => s as Structure,
       cameraState,
       actions: {
         open: (id: string) => openExternal(id),
-        warm: (livello: number) => warm(livello),
+        warm: (level: number) => warm(level),
         requestRedraw,
       },
     });
@@ -396,10 +396,10 @@ export function createChart(options: ChartOptions = {}): Chart {
     }
   }
 
-  function warm(livello: number): void {
-    if (engineState.alpha < livello) engineState.alpha = livello;
+  function warm(level: number): void {
+    if (engineState.alpha < level) engineState.alpha = level;
     engineState.quietSince = 0;
-    fitQuieteFatto = false;
+    quietFitDone = false;
     requestRedraw();
   }
 

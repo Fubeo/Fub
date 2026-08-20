@@ -32,7 +32,7 @@ export interface DrawState {
   focused: number;
   alpha: number;
   tier: Tier;
-  tempoMs: number;
+  elapsedMs: number;
 }
 
 export interface Painter {
@@ -90,7 +90,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   host.append(background, main);
 
   const ctx = main.getContext("2d");
-  const ctxSfondo = background.getContext("2d");
+  const backgroundCtx = background.getContext("2d");
 
   let W = 1;
   let H = 1;
@@ -98,9 +98,9 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   let tints: Tints = readTints(host);
   let atlas: Atlas = generateAtlas(tints, RADIUS_BUCKETS);
   const fontStack = () => getComputedStyle(host).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
-  const coloreFocus = () => getComputedStyle(host).getPropertyValue("--focus-ring").trim();
-  let fontCorrente = fontStack();
-  let currentFocus = coloreFocus();
+  const focusColor = () => getComputedStyle(host).getPropertyValue("--focus-ring").trim();
+  let currentFont = fontStack();
+  let currentFocus = focusColor();
   /// L'ultimo stato disegnato: serve al cambio tema, che deve ricolorare il
   /// grafo **subito** anche se il rAF è spento (un grafo quieto non ha
   /// frame in volo da cui aspettare).
@@ -108,9 +108,9 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   /// Cache delle larghezze delle etichette: misurare il testo ogni frame con
   /// `measureText` costa più del disegno stesso. Chiave = id + peso (il bold
   /// degli accenti misura diverso).
-  const larghezze = new Map<string, number>();
+  const widths = new Map<string, number>();
   /// Marca del quartiere a 1 salto, riusata tra i frame (zero allocazioni).
-  let marca = new Uint8Array(0);
+  let mark = new Uint8Array(0);
 
   function resize(w: number, h: number, r: number): void {
     W = Math.max(1, w);
@@ -124,27 +124,27 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     // dpr lo paga il canvas. Tutte le conversioni mondo→schermo stanno
     // dentro la camera, non nel canvas.
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (ctxSfondo) ctxSfondo.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (backgroundCtx) backgroundCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   function updateTints(): void {
     const t = readTints(host);
     const font = fontStack();
-    const focus = coloreFocus();
+    const focus = focusColor();
     // La `source` è una chiave: se i colori non sono cambiati, rigenerare
     // l'atlas sarebbe lavoro buttato (l'osservatore scatta a ogni scrittura
     // di data-theme, anche quando il valore non cambia davvero).
-    const coloriCambiati = t.source !== tints.source;
-    const fontCambiata = font !== fontCorrente;
-    if (!coloriCambiati && !fontCambiata && focus === currentFocus) return;
+    const colorsChanged = t.source !== tints.source;
+    const fontChanged = font !== currentFont;
+    if (!colorsChanged && !fontChanged && focus === currentFocus) return;
     tints = t;
-    fontCorrente = font;
+    currentFont = font;
     currentFocus = focus;
-    if (coloriCambiati) {
+    if (colorsChanged) {
       atlas = generateAtlas(tints, RADIUS_BUCKETS);
       // Il font delle etichette può dipendere dal tema: la cache delle
       // larghezze misurate col font vecchio non vale più.
-      larghezze.clear();
+      widths.clear();
     }
     if (previousState) {
       redrawBackground();
@@ -157,39 +157,39 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   /// fissa. Niente vignette: un gradiente radiale per tema sarebbe un altro
   /// colore da tenere allineato ai token per un guadagno estetico minimo.
   function redrawBackground(): void {
-    if (!ctxSfondo) return;
-    ctxSfondo.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctxSfondo.clearRect(0, 0, W, H);
+    if (!backgroundCtx) return;
+    backgroundCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    backgroundCtx.clearRect(0, 0, W, H);
     if (!config.grid) return;
     const c = previousState?.camera ?? { scale: 1, tx: 0, ty: 0 };
     const target = 24 / c.scale;
-    let spaziatura = GRID_LADDER[0];
+    let spacing = GRID_LADDER[0];
     for (const s of GRID_LADDER) {
       if (s >= target) {
-        spaziatura = s;
+        spacing = s;
         break;
       }
-      spaziatura = s;
+      spacing = s;
     }
-    const step = spaziatura * c.scale;
+    const step = spacing * c.scale;
     const x0 = Math.floor(-c.tx / step) * step;
     const y0 = Math.floor(-c.ty / step) * step;
-    ctxSfondo.fillStyle = tints.node;
-    ctxSfondo.globalAlpha = 0.35;
-    ctxSfondo.beginPath();
+    backgroundCtx.fillStyle = tints.node;
+    backgroundCtx.globalAlpha = 0.35;
+    backgroundCtx.beginPath();
     for (let y = y0; y < H; y += step) {
       for (let x = x0; x < W; x += step) {
-        ctxSfondo.rect(x - 0.75, y - 0.75, 1.5, 1.5);
+        backgroundCtx.rect(x - 0.75, y - 0.75, 1.5, 1.5);
       }
     }
-    ctxSfondo.fill();
-    ctxSfondo.globalAlpha = 1;
+    backgroundCtx.fill();
+    backgroundCtx.globalAlpha = 1;
   }
 
   /// Bbox di un arco (estremi + punto di controllo) in schermo: la curva
   /// quadratica può sporgere di molto oltre i suoi estremi quando è corta e
   /// curva, e il culling deve saperlo.
-  function arcoInVista(s: Structure, c: Camera, e: number, curv: number): boolean {
+  function edgeInView(s: Structure, c: Camera, e: number, curv: number): boolean {
     const x1 = s.x[s.from[e]];
     const y1 = s.y[s.from[e]];
     const x2 = s.x[s.to[e]];
@@ -228,7 +228,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   function redraw(state: DrawState): void {
     previousState = state;
     if (!ctx) return;
-    const { s, camera: c, openDocuments, hovered, dragged, focused, alpha, tier, tempoMs } = state;
+    const { s, camera: c, openDocuments, hovered, dragged, focused, alpha, tier, elapsedMs } = state;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Trail: finché la simulazione è calda il canvas si sporca di
@@ -251,24 +251,24 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
 
     // Il quartiere a 1 salto del focus: la marca si riusa tra i frame e si
     // azzera in place — nel frame caldo non si alloca.
-    if (marca.length < s.n) marca = new Uint8Array(s.n);
-    else marca.fill(0);
+    if (mark.length < s.n) mark = new Uint8Array(s.n);
+    else mark.fill(0);
     if (focus >= 0) {
-      marca[focus] = 1;
+      mark[focus] = 1;
       for (let e = 0; e < s.m; e++) {
-        if (s.from[e] === focus) marca[s.to[e]] = 1;
-        else if (s.to[e] === focus) marca[s.from[e]] = 1;
+        if (s.from[e] === focus) mark[s.to[e]] = 1;
+        else if (s.to[e] === focus) mark[s.from[e]] = 1;
       }
     }
 
     // Archi — un beginPath/stroke per stato: batch di fondo (alpha 0.12) e
     // batch pieno. Senza focus c'è un solo batch, alfa da scala.
-    const alphaArco = clamp(c.scale * 0.35, 0.18, 0.5);
+    const edgeAlpha = clamp(c.scale * 0.35, 0.18, 0.5);
     if (focus >= 0) {
       ctx.beginPath();
       for (let e = 0; e < s.m; e++) {
-        if (marca[s.from[e]] || marca[s.to[e]]) continue;
-        if (!arcoInVista(s, c, e, curv)) continue;
+        if (mark[s.from[e]] || mark[s.to[e]]) continue;
+        if (!edgeInView(s, c, e, curv)) continue;
         addEdge(ctx, s, c, e, curv);
       }
       ctx.globalAlpha = BACKGROUND_ALPHA;
@@ -278,13 +278,13 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     }
     ctx.beginPath();
     for (let e = 0; e < s.m; e++) {
-      if (focus >= 0 && !(marca[s.from[e]] || marca[s.to[e]])) continue;
-      if (!arcoInVista(s, c, e, curv)) continue;
+      if (focus >= 0 && !(mark[s.from[e]] || mark[s.to[e]])) continue;
+      if (!edgeInView(s, c, e, curv)) continue;
       addEdge(ctx, s, c, e, curv);
     }
     // Gli archi del quartiere sono i pochi che meritano un filo più spesso:
     // sono l'oggetto dell'attenzione dell'utente.
-    ctx.globalAlpha = alphaArco;
+    ctx.globalAlpha = edgeAlpha;
     ctx.strokeStyle = tints.node;
     ctx.lineWidth = focus >= 0 ? 1.5 : 1;
     ctx.stroke();
@@ -295,7 +295,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     if (focus >= 0) {
       ctx.globalAlpha = BACKGROUND_ALPHA;
       for (let i = 0; i < s.n; i++) {
-        if (i === focus || marca[i]) continue;
+        if (i === focus || mark[i]) continue;
         const sx = s.x[i] * c.scale + c.tx;
         const sy = s.y[i] * c.scale + c.ty;
         const rS = s.radius[i] * c.scale;
@@ -305,19 +305,19 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     }
     ctx.globalAlpha = 1;
     for (let i = 0; i < s.n; i++) {
-      if (focus >= 0 && i !== focus && !marca[i]) continue;
+      if (focus >= 0 && i !== focus && !mark[i]) continue;
       const sx = s.x[i] * c.scale + c.tx;
       const sy = s.y[i] * c.scale + c.ty;
       const rS = s.radius[i] * c.scale;
       if (sx < -rS - CULL_MARGIN || sx > W + rS + CULL_MARGIN || sy < -rS - CULL_MARGIN || sy > H + rS + CULL_MARGIN) continue;
-      const acceso = openDocuments.has(s.id[i]);
-      const role: TintRole = dragged === i ? "active" : hovered === i ? "hover" : acceso ? "active" : "node";
+      const isOpen = openDocuments.has(s.id[i]);
+      const role: TintRole = dragged === i ? "active" : hovered === i ? "hover" : isOpen ? "active" : "node";
       let alone: number | undefined;
       // L'alone pulsante dei nodi aperti: fase dall'hash dell'id, così i
       // vicini non pulsano in sincrono (sembra vivo, non un semaforo).
-      if (acceso && config.pulse && alpha > PULSE_THRESHOLD) {
-        const fase = ((fnv1a(s.id[i]) % 1000) / 1000) * Math.PI * 2;
-        alone = 0.5 + 0.5 * Math.sin((tempoMs / 1000) * Math.PI * 2 * 1.2 + fase);
+      if (isOpen && config.pulse && alpha > PULSE_THRESHOLD) {
+        const phase = ((fnv1a(s.id[i]) % 1000) / 1000) * Math.PI * 2;
+        alone = 0.5 + 0.5 * Math.sin((elapsedMs / 1000) * Math.PI * 2 * 1.2 + phase);
       }
       drawNode(ctx, atlas, sx, sy, s.radius[i], role, alone);
       if (i === focus) {
@@ -345,8 +345,8 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     const threshold = 3 * (1 - config.labelDensity) + 1;
     const fade = clamp((c.scale - 0.5) / 0.5, 0, 1);
     if (fade > 0.01) {
-      const fontBase = `11px ${fontCorrente}`;
-      const fontBold = `600 11px ${fontCorrente}`;
+      const fontBase = `11px ${currentFont}`;
+      const fontBold = `600 11px ${currentFont}`;
       ctx.textBaseline = "middle";
       ctx.fillStyle = tints.text;
       for (let i = 0; i < s.n; i++) {
@@ -359,12 +359,12 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
         if (sx < -CULL_MARGIN || sx > W + CULL_MARGIN || sy < -CULL_MARGIN || sy > H + CULL_MARGIN) continue;
         ctx.font = fontBase;
         const key = "n" + s.id[i];
-        let larg = larghezze.get(key);
-        if (larg === undefined) {
-          larg = ctx.measureText(s.id[i]).width;
-          larghezze.set(key, larg);
+        let width = widths.get(key);
+        if (width === undefined) {
+          width = ctx.measureText(s.id[i]).width;
+          widths.set(key, width);
         }
-        ctx.globalAlpha = fade * (focus >= 0 && i !== focus && !marca[i] ? 0.35 : 1);
+        ctx.globalAlpha = fade * (focus >= 0 && i !== focus && !mark[i] ? 0.35 : 1);
         ctx.fillText(s.id[i], sx + rS + 5, sy);
       }
       ctx.globalAlpha = 1;
@@ -377,10 +377,10 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
         if (sx < -CULL_MARGIN || sx > W + CULL_MARGIN || sy < -CULL_MARGIN || sy > H + CULL_MARGIN) continue;
         ctx.font = fontBold;
         const key = "b" + s.id[i];
-        let larg = larghezze.get(key);
-        if (larg === undefined) {
-          larg = ctx.measureText(s.id[i]).width;
-          larghezze.set(key, larg);
+        let width = widths.get(key);
+        if (width === undefined) {
+          width = ctx.measureText(s.id[i]).width;
+          widths.set(key, width);
         }
         ctx.fillText(s.id[i], sx + rS + 5, sy);
       }

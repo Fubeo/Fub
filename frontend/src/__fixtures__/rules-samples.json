@@ -2179,7 +2179,7 @@
       "out": []
     }
   ],
-  "accordo_canonico": [
+  "canonical_chord": [
     {
       "binding": "Mod-Shift-g",
       "out": "mod-shift-g"
@@ -2664,7 +2664,7 @@
       "out": 0
     }
   ],
-  "espansione": [
+  "expansion": [
     {
       "template": "ciao {nome}",
       "args": {

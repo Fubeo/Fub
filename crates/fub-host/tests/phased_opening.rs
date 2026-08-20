@@ -72,7 +72,7 @@ fn state(host: &Host) -> IndexingState {
 /// di stare ancora indicizzando, e più tardi dichiara di aver finito. Le due
 /// risposte diverse sono la fase che prima non esisteva.
 #[test]
-fn open_returns_first_that_the_index_sia_pieno() {
+fn open_returns_first_that_the_index_is_full() {
     let v = Vault::with(400);
     let host = Host::new().with_watcher(Box::new(NoWatcher));
 

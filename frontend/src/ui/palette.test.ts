@@ -129,7 +129,7 @@ describe("gli argomenti che la palette costruisce", () => {
       param("docs", { kind: "documents" }),
       param("at", { kind: "numbers" }),
       param("limit", { kind: "number" }),
-      param("nota", { kind: "document" }),
+      param("note", { kind: "document" }),
     ],
   });
 
@@ -142,10 +142,10 @@ describe("gli argomenti che la palette costruisce", () => {
   });
 
   it("un campo facoltativo lasciato vuoto non viene mandato", () => {
-    const args = argsFromForm(s, { find: "x", replace: "y", docs: "", limit: "", nota: "" });
+    const args = argsFromForm(s, { find: "x", replace: "y", docs: "", limit: "", note: "" });
     expect(args).not.toHaveProperty("docs");
     expect(args).not.toHaveProperty("limit");
-    expect(args).not.toHaveProperty("nota");
+    expect(args).not.toHaveProperty("note");
   });
 
   it("un elenco di documenti si scrive una riga per volta", () => {

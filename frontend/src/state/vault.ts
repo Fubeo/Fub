@@ -35,7 +35,7 @@ export function refreshDocuments(): void {
 /// Una domanda con una finestra da **uno**, e non l'elenco intero da cui
 /// prendere il primo: è ciò che serve a chi deve aprire *qualcosa* dopo aver
 /// chiuso il documento che stava guardando.
-export async function beforeNota(): Promise<string | null> {
+export async function beforeNote(): Promise<string | null> {
   const page = await vaultEntries({ offset: 0, limit: 1 }, "document");
   return page.items[0]?.id ?? null;
 }

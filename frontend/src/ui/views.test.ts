@@ -280,14 +280,14 @@ describe("un rimontaggio che non riesce", () => {
 
     listViews.mockResolvedValueOnce([spec("tags", "left_sidebar")]);
     await views.mountDeclaredViews();
-    const afterIlNewItem = document.querySelector("#views-left")!.innerHTML;
+    const afterTheNewItem = document.querySelector("#views-left")!.innerHTML;
 
     // Il vecchio risponde adesso, con un elenco diverso: se arrivasse a montare,
     // smonterebbe prima tutto ciò che il nuovo ha appena messo.
     resolveOld([spec("backlinks", "left_sidebar"), spec("stats", "right_sidebar")]);
     await old;
 
-    expect(document.querySelector("#views-left")!.innerHTML).toBe(afterIlNewItem);
+    expect(document.querySelector("#views-left")!.innerHTML).toBe(afterTheNewItem);
     expect(document.querySelector("#views-right")!.childElementCount).toBe(0);
   });
 });

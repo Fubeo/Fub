@@ -26,12 +26,12 @@
 import { defineConfig, type Plugin } from "vite";
 import { fileURLToPath } from "node:url";
 
-const qui = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
+const here = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 
 /// I due moduli della cucitura, e con cosa il banco li sostituisce.
 const REPLACEMENTS: Record<string, string> = {
-  [qui("./src/host/ipc.ts")]: qui("./bench/fake-ipc.ts"),
-  [qui("./src/host/dialog.ts")]: qui("./bench/fake-dialog.ts"),
+  [here("./src/host/ipc.ts")]: here("./bench/fake-ipc.ts"),
+  [here("./src/host/dialog.ts")]: here("./bench/fake-dialog.ts"),
 };
 
 function seamForBench(): Plugin {
@@ -97,8 +97,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        shell: qui("./index.html"),
-        catalogo: qui("./bench/catalog.html"),
+        shell: here("./index.html"),
+        catalogo: here("./bench/catalog.html"),
       },
     },
   },

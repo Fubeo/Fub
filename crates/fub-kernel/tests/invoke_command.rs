@@ -242,7 +242,7 @@ impl CommandProvider for TriesEverything {
             .map(|_| ()),
         );
         // offre**: se passasse, una simulazione avrebbe una scala per uscire da
-        // sé stessa. Che nessuno serva `test.altro` non c'entra — il cancello
+        // sé stessa. Che nessuno serva `test.other` non c'entra — il cancello
         // risponde prima di cercare chi lo serve, e un `Unserved` qui sarebbe
         // già la prova che il controllo è arrivato dopo.
         // **Una `DryRun` che scarica non è una simulazione**, ed è l'unica

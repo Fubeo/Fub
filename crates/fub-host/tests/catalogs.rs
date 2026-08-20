@@ -292,10 +292,10 @@ fn the_two_core_halves_do_not_step_on_each_others_toes() {
         .filter(|c| c.locale == "it")
         .flat_map(|c| c.entries.keys().cloned())
         .collect();
-    let doppie: Vec<&String> = host.intersection(&kernel).collect();
+    let doubles: Vec<&String> = host.intersection(&kernel).collect();
     assert!(
-        doppie.is_empty(),
-        "two halves of the same component declare the same key: {doppie:?}"
+        doubles.is_empty(),
+        "two halves of the same component declare the same key: {doubles:?}"
     );
 }
 

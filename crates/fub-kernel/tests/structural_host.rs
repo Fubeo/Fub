@@ -412,7 +412,7 @@ type Log = Arc<Mutex<Vec<String>>>;
 struct Macro(Log);
 
 const MACRO: &str = "test.macro";
-const PASSO: &str = "test.passo";
+const STEP: &str = "test.passo";
 const OUROBOROS: &str = "test.ouroboros";
 
 impl CommandProvider for Macro {
@@ -421,7 +421,7 @@ impl CommandProvider for Macro {
             CommandSpec::new(MACRO, "Macro")
                 .describing("Invoca il passo, due volte.")
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
-            CommandSpec::new(PASSO, "Passo")
+            CommandSpec::new(STEP, "Passo")
                 .describing("Crea una nota.")
                 .with_param(ParamSpec::new("id", "Id", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Document)),
@@ -441,7 +441,7 @@ impl CommandProvider for Macro {
         match command {
             MACRO => {
                 for id in ["macro-a.md", "macro-b.md"] {
-                    let outcome = host.run_command(PASSO, serde_json::json!({ "id": id }))?;
+                    let outcome = host.run_command(STEP, serde_json::json!({ "id": id }))?;
                     self.0
                         .lock()
                         .unwrap()
@@ -449,7 +449,7 @@ impl CommandProvider for Macro {
                 }
                 Ok(CommandOutcome::notify("macro fatta"))
             }
-            PASSO => {
+            STEP => {
                 let id = DocId::new(args["id"].as_str().unwrap_or_default());
                 if mode.is_dry_run() {
                     // Il passo *sa* di essere simulato senza che la macro

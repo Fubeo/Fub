@@ -358,7 +358,7 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
 /// chiave convenzionale si rende vuoto — è il prezzo della forma (b) della
 /// §25.7, e oggi nessun plugin lo paga. «Sostituire il campione con niente»
 /// è ciò che la riga vecchia rifiutava: non è niente, è la **chiave
-/// dichiarata** in `rules::carichi`, e chi la segue rende come prima.
+/// dichiarata** in `rules::loads`, e chi la segue rende come prima.
 /// La classe CSS di un `Custom`: il prefisso del lato che lo rende — `block` o
 fn text_content<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str> {
     loads::text_payload(kind, attrs)

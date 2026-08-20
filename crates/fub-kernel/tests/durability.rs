@@ -25,8 +25,8 @@
 //! verde*.
 //!
 //! Da qui i test che esercitano la scelta «sostituire o scrivere sul posto»
-//! passano da `FsStorage::write_con`, che prende il rilevatore invece di
-//! nominarlo, e da `come_scrivere`, che è pura: i test di questo file che si
+//! passano da `FsStorage::write_with`, che prende il rilevatore invece di
+//! nominarlo, e da `how_to_write`, che è pura: i test di questo file che si
 //! compilano ed eseguono su ogni piattaforma sono
 //! **sedici** [conta: durabilita-su-ogni-piattaforma].
 //! Quel numero è il presidio del presidio: se qualcuno riportasse
@@ -95,13 +95,13 @@ fn the_rule_is_in_a_table_and_the_table_turns_everywhere() {
     let cases = [
         (false, FileNames::None, WriteMode::Replacing),
         (false, FileNames::One, WriteMode::Replacing),
-        (false, FileNames::MoreThanOne, WriteMode::SulPosto),
-        (false, FileNames::Unknown, WriteMode::SulPosto),
+        (false, FileNames::MoreThanOne, WriteMode::InPlace),
+        (false, FileNames::Unknown, WriteMode::InPlace),
         // Un collegamento ha già un altro titolare: il conteggio non lo cambia.
-        (true, FileNames::None, WriteMode::SulPosto),
-        (true, FileNames::One, WriteMode::SulPosto),
-        (true, FileNames::MoreThanOne, WriteMode::SulPosto),
-        (true, FileNames::Unknown, WriteMode::SulPosto),
+        (true, FileNames::None, WriteMode::InPlace),
+        (true, FileNames::One, WriteMode::InPlace),
+        (true, FileNames::MoreThanOne, WriteMode::InPlace),
+        (true, FileNames::Unknown, WriteMode::InPlace),
     ];
     for (link, names, expected) in cases {
         assert_eq!(
@@ -131,7 +131,7 @@ fn a_file_with_more_names_not_is_replaces_everywhere_rounds_this_test() {
         })
         .unwrap();
 
-    assert_eq!(how, WriteMode::SulPosto, "l'inode ha altri titolari");
+    assert_eq!(how, WriteMode::InPlace, "l'inode ha altri titolari");
     assert_eq!(
         std::fs::read(&notes).unwrap(),
         b"seconda",
@@ -159,7 +159,7 @@ fn a_count_that_not_is_knows_not_and_a_name_only() {
 
     assert_eq!(
         how,
-        WriteMode::SulPosto,
+        WriteMode::InPlace,
         "chi non sa quanti nomi ha un file non lo sostituisce"
     );
     assert_eq!(std::fs::read(&notes).unwrap(), b"seconda");
@@ -212,7 +212,7 @@ fn a_a_file_that_not_c_and_not_is_asks_nothing() {
 /// Sta sotto `#[cfg(unix)]` perché per fare un symlink serve un filesystem che
 /// li faccia, ma **il ramo che presidia non è di unix**: è la trappola misurata
 /// dalla verifica del rosso. Togliere questa riga *da sola* non rende rosso
-/// niente; toglierla **insieme** al corto-circuito di `come_scrivere` — cioè la
+/// niente; toglierla **insieme** al corto-circuito di `how_to_write` — cioè la
 /// semplificazione «ovvia», un ramo solo che chiede sempre il conteggio — fa sì
 /// che su unix `nlink` di un symlink valga `1`, quindi `Uno`, quindi
 /// `Sostituendo`: **il collegamento verrebbe rimpiazzato**, che è precisamente
@@ -235,7 +235,7 @@ fn on_a_link_the_count_not_is_asks() {
         })
         .unwrap();
 
-    assert_eq!(how, WriteMode::SulPosto);
+    assert_eq!(how, WriteMode::InPlace);
     assert!(!asked.get(), "a un collegamento non si contano i nomi");
     assert!(
         std::fs::symlink_metadata(&linked)

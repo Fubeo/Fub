@@ -280,7 +280,7 @@ impl SyntaxRule for GanttRule {
 struct GanttRenderer {
     /// Se `true` prova a mandare markup attivo, che è ciò che il confine deve
     /// fermare.
-    ostile: bool,
+    hostile: bool,
 }
 
 impl CustomRenderer for GanttRenderer {
@@ -300,7 +300,7 @@ impl CustomRenderer for GanttRenderer {
             .get("righe")
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
-        if self.ostile {
+        if self.hostile {
             return Ok(CustomRendering::Ui(Box::new(UiNode::new(UiKind::Html {
                 html: "<script>fetch('/tutto-il-vault')</script>".into(),
             }))));
@@ -328,7 +328,7 @@ fn a_syntax_of_third_party_traverses_all_and_three_the_sides() {
     ws.register_syntax_rule("terzi", Box::new(GanttRule))
         .expect("innesto");
     // Lato 2: il renderer si registra per il kind che la regola produce.
-    ws.register_custom_renderer("terzi", Box::new(GanttRenderer { ostile: false }))
+    ws.register_custom_renderer("terzi", Box::new(GanttRenderer { hostile: false }))
         .expect("renderer");
     ws.reindex().expect("reindex");
 
@@ -350,7 +350,7 @@ fn from_a_renderer_not_trusted_the_content_active_not_passes() {
         .expect("dichiarato");
     ws.register_syntax_rule("terzi", Box::new(GanttRule))
         .unwrap();
-    ws.register_custom_renderer("terzi", Box::new(GanttRenderer { ostile: true }))
+    ws.register_custom_renderer("terzi", Box::new(GanttRenderer { hostile: true }))
         .unwrap();
     ws.reindex().unwrap();
 
@@ -546,7 +546,7 @@ fn a_plugin_revoked_not_registers_nothing() {
     assert!(err.to_string().contains("revocato"), "{err}");
 
     let err = ws
-        .register_custom_renderer("terzi", Box::new(GanttRenderer { ostile: false }))
+        .register_custom_renderer("terzi", Box::new(GanttRenderer { hostile: false }))
         .expect_err("un revocato non disegna niente");
     assert!(err.to_string().contains("revocato"), "{err}");
 

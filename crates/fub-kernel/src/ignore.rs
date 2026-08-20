@@ -188,7 +188,7 @@ pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules", "ta
 /// insensibile al caso `.Fub` è la cartella di Fub.
 /// Questo nome è il temporaneo di **un altro attrezzo**?
 ///
-/// Non è la gemella di [`e_temporaneo_di_scrittura`](crate::storage::e_temporaneo_di_scrittura)
+/// Non è la gemella di [`is_write_temporary`](crate::storage::is_write_temporary)
 /// e non le sta accanto: quella riconosce una forma che il kernel **scrive**, e
 /// chi conosce una forma è chi la scrive; questa riconosce le forme che
 /// scrivono gli altri, che nessuno qui compone e che quindi sono una politica —

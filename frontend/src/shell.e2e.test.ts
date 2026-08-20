@@ -578,7 +578,7 @@ describe("le bozze e il salvataggio vanno in fila", () => {
     // lo save_draft era ancora in volo. `attendi` fallisce se la condizione non
     // si avvera entro il debounce, ed è l'esito giusto: il discard non deve
     // partire. Si ribalta l'eccezione in «non partito».
-    let discardInVolo = true;
+    let discardInFlight = true;
     try {
       await waitFor(
         "il discard NON parte mentre save_draft è in volo",
@@ -586,10 +586,10 @@ describe("le bozze e il salvataggio vanno in fila", () => {
         700,
       );
     } catch {
-      discardInVolo = false;
+      discardInFlight = false;
     }
     expect(
-      discardInVolo,
+      discardInFlight,
       "il discard è partito mentre lo save_draft era ancora in volo: le bozze " +
         "non vanno in fila col salvataggio",
     ).toBe(false);

@@ -159,7 +159,7 @@ pub struct Draft {
 
 /// Ciò che una lettura delle bozze ha trovato, **e ciò che non ha letto**.
 ///
-/// La stessa forma di [`Lettura`](crate::journal::Lettura) e per la stessa
+/// La stessa forma di [`JournalRead`](crate::journal::JournalRead) e per la stessa
 /// ragione: chi legge deve poter dire che la sua vista è parziale invece di
 /// crederla intera. Qui pesa di più che altrove — una bozza che non si legge è
 /// testo dell'utente perduto, e mostrarne tre quando ce n'erano quattro sarebbe
@@ -417,7 +417,7 @@ impl Drafts {
     /// estensione riconosciuta il registro dei formati non sa né salvarlo né
     /// renderlo — quindi l'estensione è la sua, l'ultima, e senza estensione
     /// resta `prima~recupero`. Estensione e forma restano quelle di ogni
-    /// bozza: un nome che [`documento_del_nome`] non riconoscesse sarebbe
+    /// bozza: un nome che [`document_from_name`] non riconoscesse sarebbe
     /// testo che nessuno sa leggere.
     fn recovery_name(&self, from: &DocId, old: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
         let folder = old.parent().ok_or_else(|| {
@@ -633,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn the_base_distingue_a_notes_new_from_a_that_c_was() {
+    fn the_base_distinguishes_a_new_note_from_an_old_one() {
         let d = drafts();
         d.save(&doc("nuova.md"), "x", None, 1).unwrap();
         d.save(&doc("vecchia.md"), "y", Some(Revision::of("prima")), 2)

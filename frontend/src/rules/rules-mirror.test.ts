@@ -56,11 +56,11 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   // shell la usa a ogni tasto premuto — e la copia del contratto serve a chi
   // guarda il registro fermo; `null` da entrambe le parti vuol dire «questa app
   // non la sa premere», e sono le stringhe su cui le due copie divergevano.
-  "accordo_canonico": (c) => normalize(c.binding),
+  "canonical_chord": (c) => normalize(c.binding),
   byte_to_utf16: (c) => byteToCharIndex(c.text, c.byte),
   // I due motori di sostituzione `{nome}`: l'unica coppia che il repo
   // dichiarava gemella e nessuna fixture teneva tale (difetto 0224).
-  espansione: (c) => expand(c.template, c.args),
+  expansion: (c) => expand(c.template, c.args),
   utf16_to_byte: (c) => charToByteIndex(c.text, c.unit),
   // La maschera di un abbonamento (§10.1). `mask_name` è solo l'etichetta che
   // rende leggibile un caso fallito: la regola guarda `mask` ed `event`.
@@ -112,11 +112,11 @@ describe("mirror delle regole TS↔Rust", () => {
     // niente: una sequenza (che una copia che spezza solo sul `-` sbaglia) e una
     // scorciatoia rifiutata (che una copia che normalizza tutto accetta).
     expect(
-      fixture["accordo_canonico"].some((c) => String(c.binding).includes(" ") && c.out !== null),
+      fixture["canonical_chord"].some((c) => String(c.binding).includes(" ") && c.out !== null),
       "manca una sequenza fra i casi degli accordi",
     ).toBe(true);
     expect(
-      fixture["accordo_canonico"].some((c) => c.out === null),
+      fixture["canonical_chord"].some((c) => c.out === null),
       "manca un accordo che questa app non sa premere",
     ).toBe(true);
 

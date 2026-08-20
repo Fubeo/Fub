@@ -20,7 +20,7 @@ import { mountLocale } from "./state/locale";
 import { loadOrganization } from "./state/organization";
 import { emit, loadActiveSpace, loadExpanded, state } from "./state/store";
 import { loadLayout, activeDoc } from "./state/layout";
-import { loadCommandSpecs, beforeNota } from "./state/vault";
+import { loadCommandSpecs, beforeNote } from "./state/vault";
 import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
 import { listenForFailures, mountNotifications, notify } from "./ui/notify";
@@ -393,7 +393,7 @@ async function openVaultPath(dir: string): Promise<void> {
   // ricorda com'era, farlo comunque vorrebbe dire scavalcare con una nota
   // qualunque le tab che l'utente aveva lasciato aperte.
   if (!activeDoc()) {
-    const before = await beforeNota();
+    const before = await beforeNote();
     if (before) await openDocument(before);
   }
 }

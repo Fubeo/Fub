@@ -42,7 +42,7 @@
 //! banco non ha aggiunto: `crates/fub-kernel/src/occurrences.rs`, sopra
 //! `prefix_len_ci` («*gli offset sono il prodotto di questa funzione*», per cui
 //! si confronta carattere per carattere), e `crates/fub-features/src/tags.rs`,
-//! sopra `contiene_a_meno_del_caso` («*la corsia veloce vale solo dove è
+//! sopra `matches_case_insensitive` («*la corsia veloce vale solo dove è
 //! dimostrabilmente la stessa risposta*», cioè su nomi tutti ASCII).
 //!
 //! # Cosa guarda, e cosa gli sfugge — detto qui e non altrove
@@ -114,7 +114,7 @@ enum Family {
     AsciiCase,
     /// NFC **senza** piegare il caso: due nomi che si scrivono con gli stessi
     /// caratteri e byte diversi sono lo stesso nome, ma `A` e `a` no.
-    SoloNfc,
+    NfcOnly,
     /// Dove finisce una cartella: quali `/` si tagliano, e da quale capo.
     FolderBoundary,
 }
@@ -122,12 +122,12 @@ enum Family {
 impl Family {
     /// Il gesto che una regola di questa famiglia **deve** mostrare. Senza
     /// questo legame la famiglia sarebbe una decorazione: si potrebbe scrivere
-    /// `SoloNfc` accanto a una funzione che piega il caso e nessuno lo saprebbe.
+    /// `NfcOnly` accanto a una funzione che piega il caso e nessuno lo saprebbe.
     fn gesture(self) -> Gesture {
         match self {
             Family::ContextualCase | Family::PerCharacterCase => Gesture::Case,
             Family::AsciiCase => Gesture::AsciiCase,
-            Family::SoloNfc => Gesture::Nfc,
+            Family::NfcOnly => Gesture::Nfc,
             Family::FolderBoundary => Gesture::Boundary,
         }
     }
@@ -202,7 +202,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             (
                 Family::ContextualCase,
                 "non è una regola di confronto: prepara l'ago **una volta** perché \
-                 `contiene_a_meno_del_caso` lo riceve già minuscolo. Diverge perché piega un \
+                 `matches_case_insensitive` lo riceve già minuscolo. Diverge perché piega un \
                  solo capo, e il contratto di quel capo sta nella riga di doc della funzione che \
                  lo consuma.",
             ),
@@ -476,11 +476,11 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  altro posto.",
             ),
         ),
-        // -- SoloNfc: stessi caratteri, byte diversi ------------------------
+        // -- NfcOnly: stessi caratteri, byte diversi ------------------------
         (
             "crates/fub-abi/src/rules/composition.rs::composed",
             (
-                Family::SoloNfc,
+                Family::NfcOnly,
                 "non è una regola di identità: è il **terreno** su cui le altre la decidono, e \
                  l'unica riga della tabella che le altre chiamano invece di riscrivere. Diverge \
                  da `exact_key` perché non rifila: chi taglia gli spazi decide cosa sia un nome, \
@@ -490,7 +490,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         (
             "crates/fub-abi/src/rules/path.rs::exact_key",
             (
-                Family::SoloNfc,
+                Family::NfcOnly,
                 "la ragione è scritta sopra la funzione: «`resolution_key` dice **chi è \
                  candidato**, `exact_key` dice **chi ha ragione fra i candidati**». Divergere \
                  sul caso è il suo mestiere, non un difetto.",
@@ -499,7 +499,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         (
             "crates/fub-abi/src/rules/path_policy.rs::normalized",
             (
-                Family::SoloNfc,
+                Family::NfcOnly,
                 "normalizza per **segmento** e non sull'intera stringa, perché è la forma su cui \
                  `check` giudica un nome nuovo: «composte qui, non c'è più un ordine da \
                  ricordare» (path_policy.rs). Non piega il caso perché un nome nuovo si scrive \
@@ -684,7 +684,7 @@ fn gesture(row: &str) -> Option<Gesture> {
     }
 }
 
-/// Le regole viste nei sorgenti: chiave `file::funzione` → i gesti che mostra,
+/// Le regole viste nei sorgenti: chiave `file::function` → i gesti che mostra,
 /// con la prima riga in cui compare ciascuno.
 fn inventory() -> BTreeMap<String, (BTreeSet<Gesture>, usize)> {
     let mut out: BTreeMap<String, (BTreeSet<Gesture>, usize)> = BTreeMap::new();
@@ -749,7 +749,7 @@ fn no_name_rule_without_declaration() {
 /// **La famiglia dichiarata è compatibile con ciò che la funzione fa.**
 ///
 /// Senza questo conto la colonna *famiglia* sarebbe una decorazione: si potrebbe
-/// scrivere `SoloNfc` accanto a una funzione che piega il caso in ASCII, e la
+/// scrivere `NfcOnly` accanto a una funzione che piega il caso in ASCII, e la
 /// tabella direbbe il contrario del sorgente restando verde.
 #[test]
 fn the_family_declared_and_that_that_is_reads() {
@@ -781,19 +781,19 @@ fn the_family_declared_and_that_that_is_reads() {
 /// della funzione e nient'altro di più lungo lo sta ripetendo.
 #[test]
 fn every_reason_says_something() {
-    let corte: Vec<String> = rules()
+    let short_reasons: Vec<String> = rules()
         .into_iter()
         .filter(|(_, (_, why))| why.chars().count() < 80)
         .map(|(k, (_, why))| format!("{k}: {why:?}"))
         .collect();
     assert!(
-        corte.is_empty(),
+        short_reasons.is_empty(),
         "queste ragioni non argomentano niente:\n  {}",
-        corte.join("\n  ")
+        short_reasons.join("\n  ")
     );
 }
 
-/// Il test del test: `nessuna_regola_di_nome_senza_dichiarazione` è verde anche
+/// Il test del test: `no_name_rule_without_declaration` è verde anche
 /// se il cammino non trova niente e se l'estrattore salta tutto, e le due avarie
 /// sono indistinguibili da un repo dichiarato per intero.
 #[test]
@@ -826,7 +826,7 @@ fn the_path_and_the_extractor_attach() {
         Family::ContextualCase,
         Family::PerCharacterCase,
         Family::AsciiCase,
-        Family::SoloNfc,
+        Family::NfcOnly,
         Family::FolderBoundary,
     ] {
         assert!(

@@ -256,10 +256,10 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
     n: 0,
     m: 0,
   };
-  const indice = new Map<string, number>();
+  const index = new Map<string, number>();
   for (const id of data.nodes) {
-    if (indice.has(id)) continue;
-    indice.set(id, s.n);
+    if (index.has(id)) continue;
+    index.set(id, s.n);
     s.id.push(id);
     s.n++;
   }
@@ -268,21 +268,21 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
   // disco, niente anelli concentrici, e col jitter deterministico nessun
   // nodo parte esattamente sopra un altro.
   const step = config.baseLength * 0.9;
-  const angoloOro = Math.PI * (3 - Math.sqrt(5));
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < s.n; i++) {
     const r = step * Math.sqrt(i + rng() * config.jitter);
-    const t = i * angoloOro;
+    const t = i * goldenAngle;
     s.x[i] = r * Math.cos(t);
     s.y[i] = r * Math.sin(t);
   }
   for (const e of data.edges) {
-    const da = indice.get(e.from);
-    const a = indice.get(e.to);
-    if (da === undefined || a === undefined || da === a) continue;
-    s.from[s.m] = da;
-    s.to[s.m] = a;
-    s.degree[da]++;
-    s.degree[a]++;
+    const fromIndex = index.get(e.from);
+    const toIndex = index.get(e.to);
+    if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) continue;
+    s.from[s.m] = fromIndex;
+    s.to[s.m] = toIndex;
+    s.degree[fromIndex]++;
+    s.degree[toIndex]++;
     // Curvatura stabile per coppia: hash dell'identità, non della posizione
     // — sopravvive al movimento e separa gli archi bidirezionali.
     s.curvature[s.m] = (((fnv1a(e.from + "|" + e.to) % 1000) / 1000 - 0.5) * 0.44) * 1;

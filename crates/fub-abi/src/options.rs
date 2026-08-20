@@ -55,7 +55,7 @@ use serde::{Deserialize, Serialize};
 /// Il namespace del core. Ogni chiave dichiarata da Fub comincia di qui.
 pub const CORE_NS: &str = "fub";
 
-/// Compone una chiave: `ns` + `nome`.
+/// Compone una chiave: `ns` + `name`.
 pub fn key(ns: &str, name: &str) -> String {
     format!("{ns}:{name}")
 }
@@ -467,7 +467,7 @@ pub mod permission {
     /// che è un'informazione e non un dettaglio.
     ///
     /// Il presidio che lo tiene onesto sta accanto al `Guard`
-    /// (`ogni_permesso_di_una_famiglia_e_nominato`): ogni famiglia che ha un
+    /// (`every_family_permission_is_named`): ogni famiglia che ha un
     /// permesso ha il proprio nome qui dentro. Il verso opposto **non** è
     /// presidiato e non deve esserlo — [`CAMERA`], [`MICROPHONE`],
     /// [`EXTERNAL_FS`], [`READ_CLIPBOARD`] e [`WRITE_CLIPBOARD`] sono nomi

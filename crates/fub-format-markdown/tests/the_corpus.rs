@@ -62,13 +62,13 @@
 //!
 //! # Le due sorgenti d'ingresso non pretendono la stessa cosa
 //!
-//! Sul corpus curato si chiede tutto ([`conformance::Pretesa::ELaCoerenza`]); sulle
+//! Sul corpus curato si chiede tutto ([`conformance::Claim::Coherence`]); sulle
 //! mutazioni generate si chiede solo ciò la cui violazione fa **panicare o
-//! scrivere alla cieca** ([`conformance::Pretesa::CheAffettino`]), che è
+//! scrivere alla cieca** ([`conformance::Claim::SliceOnly`]), che è
 //! esattamente ciò che il §17.1 chiede al fuzzing — *«un parser che pania è un
 //! vault che non si apre»*, dove la casella che lo chiede è il capitolo 5.3 di
 //! `FEATURES.md`. La ragione della differenza sta nel doc di
-//! [`conformance::Pretesa`], e il caso che l'ha imposta è nella lista delle
+//! [`conformance::Claim`], e il caso che l'ha imposta è nella lista delle
 //! divergenze: il termine di una definition list «stretta» ha uno span di **un
 //! byte**, su markdown perfettamente normale, e finché non è deciso *cosa sia*
 //! quello span la coerenza non è una cosa che si possa pretendere.
@@ -85,7 +85,7 @@ use serde_json::{json, Value};
 
 mod corpus;
 
-use crate::corpus::{corpus, divergent, muta, how_many_cases, seme, Case64};
+use crate::corpus::{corpus, divergent, mutate, how_many_cases, seed, Case64};
 
 /// Il sorgente del contratto, da cui si estraggono le tre sorgenti di verità del
 /// confronto.
@@ -600,7 +600,7 @@ fn declared_divergences() -> Vec<(&'static str, Reason, fn(&DocumentModel, &str)
             // indirizzabile, un embed del termine ritaglia una lettera, e un tag
             // scritto nel termine esce dallo span del blocco che lo contiene. È
             // il caso che ha costretto a distinguere le due pretese di
-            // `conformance::Pretesa`: la coerenza non si può pretendere su
+            // `conformance::Claim`: la coerenza non si può pretendere su
             // qualunque ingresso finché questo non è riparato.
             "il termine di una definition list stretta ha uno span di un byte",
             Reason::DependsOnBytes,
@@ -805,7 +805,7 @@ fn superscript_and_strikethrough_are_distinct_constructs_that_round_trip() {
 /// Sono i due modi in cui una riga dell'elenco può diventare verde per sempre
 /// **senza** che nessuno l'abbia riparata — ed è precisamente il fallimento che
 /// l'elenco esiste per impedire.
-const CONTROLLI: [&str; 5] = [
+const CHECKS: [&str; 5] = [
     "",
     "# Titolo\n\nUn paragrafo con [[Nota]], #tag e `codice`.\n",
     "- [ ] una task\n- [x] un'altra\n",
@@ -816,7 +816,7 @@ const CONTROLLI: [&str; 5] = [
 #[test]
 fn no_divergence_is_true_on_an_arbitrary_document() {
     for (name, reason, still_true) in declared_divergences() {
-        for check in CONTROLLI {
+        for check in CHECKS {
             let doc = parse(check);
             assert!(
                 !still_true(&doc, check),
@@ -868,7 +868,7 @@ fn no_divergence_is_true_on_an_arbitrary_document() {
 fn every_corpus_link_carries_the_context_of_its_block() {
     let mut without: Vec<String> = Vec::new();
     let mut with_context = 0usize;
-    let mut pretesi = 0usize;
+    let mut claimed = 0usize;
     for case in corpus() {
         let doc = parse(case.source);
         let contexts: BTreeMap<(usize, usize), Option<String>> = doc
@@ -907,7 +907,7 @@ fn every_corpus_link_carries_the_context_of_its_block() {
             {
                 continue;
             }
-            pretesi += 1;
+            claimed += 1;
             if context.is_none() {
                 without.push(format!(
                     "  «{}»: link a {}..{}, nel blocco {}..{} che dice anche {:?}",
@@ -935,8 +935,8 @@ fn every_corpus_link_carries_the_context_of_its_block() {
     // nessun link abbia contesto la renderebbe vera con un `context` sempre
     // `None`, che è precisamente ciò che si sta presidiando.
     assert!(
-        pretesi >= 6 && with_context >= 8,
-        "il corpus pretende un contesto per {pretesi} link e ne vede {with_context} \
+        claimed >= 6 && with_context >= 8,
+        "il corpus pretende un contesto per {claimed} link e ne vede {with_context} \
          con contesto: troppo pochi perché questo conto provi qualcosa"
     );
 }
@@ -1129,28 +1129,28 @@ fn kind_names(d: &DocumentModel) -> BTreeSet<String> {
 // - da questa porta passa **solo UTF-8 valido**, perché `parse` prende testo. I
 //   byte non decodificabili non sono un buco lasciato aperto: il provider li
 //   rifiuta per contratto, e la proprietà che lo dice è
-//   `un_provider_testuale_rifiuta_i_byte`;
+//   `a_text_provider_refuses_bytes`;
 // - il seme è **fisso**, quindi questa è una rete di regressione e non
 //   un'esplorazione: la stessa corsa a ogni push. Cercare davvero è alzare
 //   `FUB_FUZZ_CASI` a mano — con tre milioni di casi la corsa dura una
 //   quindicina di secondi — oppure è il lavoro di libFuzzer, che sta con la
 //   macchina della seconda metà del §17.1.
 
-/// Il mutatore — `Caso64`, `OSTILI`, `muta` — sta in [`crate::corpus`] insieme
+/// Il mutatore — `Case64`, `HOSTILE`, `mutate` — sta in [`crate::corpus`] insieme
 /// alle sorgenti che semina, perché da oggi lo usa anche `transfer_e2e.rs`: là le
 /// mutazioni diventano note di un vault e il bersaglio è l'export, qui restano
 /// testo e il bersaglio è il parser. Il seme è lo stesso
 /// (`FUB_FUZZ_SEME`), il conteggio no: le due porte non costano uguale.
 #[test]
 fn no_corpus_mutation_breaks_a_property() {
-    let (cases, seme) = (how_many_cases("FUB_FUZZ_CASI", 20_000), seme());
+    let (cases, seed) = (how_many_cases("FUB_FUZZ_CASI", 20_000), seed());
     let p = provider();
-    let semi: Vec<&'static str> = corpus().iter().map(|c| c.source).collect();
-    let mut rng = Case64::new(seme);
+    let seeds: Vec<&'static str> = corpus().iter().map(|c| c.source).collect();
+    let mut rng = Case64::new(seed);
     let mut models = 0usize;
 
     for n in 0..cases {
-        let (mutation, source) = muta(&mut rng, &semi);
+        let (mutation, source) = mutate(&mut rng, &seeds);
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             conformance::no_span_panics_its_user(&p, &source, &ctx())
         }));
@@ -1161,8 +1161,8 @@ fn no_corpus_mutation_breaks_a_property() {
                  proprietà. Il panico vero è stampato qui sopra.\n\
                  \n\
                  Per rifarlo esattamente:\n\
-                 FUB_FUZZ_SEME={seme} FUB_FUZZ_CASI={} cargo test -p \
-                 fub-format-markdown --test il_corpus -- nessuna_mutazione\n\
+                 FUB_FUZZ_SEME={seed} FUB_FUZZ_CASI={} cargo test -p \
+                 fub-format-markdown --test the_corpus -- no_corpus_mutation\n\
                  \n\
                  La sorgente, byte per byte: {source:?}",
                 n + 1

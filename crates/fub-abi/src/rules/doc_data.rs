@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn outbound_and_return_on_names_ostili() {
+    fn outbound_and_return_on_hostile_names() {
         for id in [
             "Nota.md",
             "Progetti/Ferrite.md",

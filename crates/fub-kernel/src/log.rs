@@ -166,11 +166,11 @@ pub struct Levels {
     /// non fare. La domanda vera che qualcuno si pone è *voglio vedere tutto di
     /// questo componente*, e ha una risposta booleana.
     ///
-    /// Sta in un [`RicoveroCondiviso`] e non in un `RwLock` nudo perché **questo è il
+    /// Sta in un [`SharedShelter`] e non in un `RwLock` nudo perché **questo è il
     /// filtro di ogni callsite di `tracing`**: un `expect` qui trasformerebbe un
     /// panico avvenuto altrove in un panico su *ogni riga di log successiva*,
     /// cioè nel canale con cui ogni altro guasto si racconta. Vedi
-    /// [`crate::veleno`], e [`FileSink`] per l'altra metà della stessa strada.
+    /// [`crate::poison`], e [`FileSink`] per l'altra metà della stessa strada.
     verbose: SharedShelter<Vec<String>>,
 }
 
@@ -277,7 +277,7 @@ impl Sink for StderrSink {
 /// guasti si raccontano si toglierebbe di mezzo per primo, e ciò che resta è un
 /// guasto muto.
 ///
-/// Quindi il lucchetto è un [`Ricovero`]: ci si riprende. Ciò che protegge è un
+/// Quindi il lucchetto è un [`Shelter`]: ci si riprende. Ciò che protegge è un
 /// file aperto e un contatore di byte — al peggio manca l'ultimo incremento, e
 /// una rotazione arriva una riga tardi.
 ///
@@ -286,7 +286,7 @@ impl Sink for StderrSink {
 /// stesso thread: un cerchio, e con un prestito esclusivo già preso, un blocco.
 /// Si denuncia **nel file, direttamente**, con la guardia già in mano e saltando
 /// il collettore — è la sola strada che esce dal cerchio. Se il file non è
-/// aperto la riga si perde, e resta il conto di [`Ricovero::denunce`]: è meno,
+/// aperto la riga si perde, e resta il conto di [`Shelter::reports`]: è meno,
 /// ma è osservabile da qualcuno.
 ///
 /// # E se il file sparisce da sotto
@@ -765,7 +765,7 @@ mod tests {
 
     /// Il file ruota, e ciò che c'era prima si ritrova in `.1`.
     #[test]
-    fn the_file_ruota_and_not_loses_the_generation_of_first() {
+    fn the_file_rotates_and_not_loses_the_generation_of_first() {
         let (_tmp, dir) = tempdir();
         let path = dir.join("fub.log");
         let sink = FileSink::open(&path).expect("il file si apre");
@@ -847,7 +847,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Il veleno del canale che denuncia (0126 estesa, `crate::veleno`)
+    // Il veleno del canale che denuncia (0126 estesa, `crate::poison`)
     // -----------------------------------------------------------------------
 
     /// Avvelena un lucchetto facendo paniare **dentro** un `catch_unwind` col

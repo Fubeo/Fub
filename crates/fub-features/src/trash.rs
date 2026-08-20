@@ -337,7 +337,7 @@ fn display_name(id: &DocId) -> String {
 
 /// L'albero del pannello: la domanda in corso se ce n'è una, l'elenco sempre.
 ///
-/// `avviso` è ciò che è appena andato storto, e non sta nello stato di vista: un
+/// `warning` è ciò che è appena andato storto, e non sta nello stato di vista: un
 /// guasto non deve sopravvivere alla chiusura del vault né tornare a galla alla
 /// riapertura, perché nel frattempo può essere stato riparato. Vive quanto
 /// l'albero che lo mostra, che è quanto deve.

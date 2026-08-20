@@ -222,9 +222,9 @@ fn filter_of(host: &dyn ReadApi) -> Result<String, PluginError> {
         .unwrap_or_default())
 }
 
-/// `nome` contiene `cerca` — che arriva **già minuscolo** — a meno del caso.
+/// `name` contiene `find` — che arriva **già minuscolo** — a meno del caso.
 ///
-/// Vuol dire *esattamente* `nome.to_lowercase().contains(cerca)`, che è la riga
+/// Vuol dire *esattamente* `name.to_lowercase().contains(find)`, che è la riga
 /// che c'era: qui non si è cambiata la regola, si è tolta la copia. Quella riga
 /// allocava una `String` **per tag e per battuta** — su un vault da cinquecento
 /// tag sono cinquecento allocazioni ogni volta che si preme un tasto nel campo
@@ -250,13 +250,13 @@ fn matches_case_insensitive(name: &str, find: &str) -> bool {
     if !name.is_ascii() {
         return name.to_lowercase().contains(find);
     }
-    let (paglia, ago) = (name.as_bytes(), find.as_bytes());
+    let (haystack, needle) = (name.as_bytes(), find.as_bytes());
     // `windows(0)` va in panico, e non è un caso da non avere: il chiamante di
     // oggi filtra il vuoto un rigo sopra, il prossimo può non farlo.
-    ago.is_empty()
-        || paglia
-            .windows(ago.len())
-            .any(|w| w.eq_ignore_ascii_case(ago))
+    needle.is_empty()
+        || haystack
+            .windows(needle.len())
+            .any(|w| w.eq_ignore_ascii_case(needle))
 }
 
 /// Costruisce l'albero `UiNode` del pannello tag. Separato dal provider perché è

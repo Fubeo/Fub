@@ -81,9 +81,9 @@ fn a_root_without_permission_of_write_becomes_rejected() {
 
     // Da root la scrittura su 0500 riesce lo stesso: se riesce, il banco non
     // può dimostrare il rifiuto e si salta, ripristinando il permesso.
-    let sonda = root.join(".fub-prova-root");
-    if std::fs::write(&sonda, b"").is_ok() {
-        let _ = std::fs::remove_file(&sonda);
+    let probe = root.join(".fub-prova-root");
+    if std::fs::write(&probe, b"").is_ok() {
+        let _ = std::fs::remove_file(&probe);
         std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
             .expect("permesso restituito");
         eprintln!("si salta: questo utente scrive anche su una cartella 0500");
@@ -104,7 +104,7 @@ fn a_root_without_permission_of_write_becomes_rejected() {
 /// **La via del workspace eredita il rifiuto**: chi monta un workspace su una
 /// radice impossibile fallisce al montaggio, non alla prima scrittura.
 #[test]
-fn the_via_of_the_workspace_rejects_also_lei() {
+fn the_path_of_the_workspace_rejects_too() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let missing = Utf8PathBuf::from_path_buf(tmp.path().join("via-del-workspace").to_path_buf())
         .expect("utf8");
@@ -123,14 +123,14 @@ fn a_root_real_is_opens_without_leave_the_proof() {
     let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).expect("utf8");
 
     Vault::open(&root).expect("una radice vera si apre");
-    let residui: Vec<_> = std::fs::read_dir(&root)
+    let leftovers: Vec<_> = std::fs::read_dir(&root)
         .expect("elenco")
         .filter_map(|and| and.ok())
         .filter(|and| and.file_name().to_string_lossy().contains(".fub-prova"))
         .collect();
     assert!(
-        residui.is_empty(),
-        "la prova di scrittura ha lasciato un file: {residui:?}"
+        leftovers.is_empty(),
+        "la prova di scrittura ha lasciato un file: {leftovers:?}"
     );
 }
 
@@ -138,13 +138,13 @@ fn a_root_real_is_opens_without_leave_the_proof() {
 /// per nascere è legittima (le cartelle nascono alla prima scrittura), una
 /// radice che è un file no.
 #[test]
-fn the_mondo_in_memory_accepts_a_root_that_is_for_birth_and_rejects_a_file() {
+fn the_in_memory_world_accepts_a_root_that_is_for_birth_and_rejects_a_file() {
     let storage = Arc::new(MemStorage::new());
-    let nascente = Utf8PathBuf::from("/vault-nascente");
+    let nascent = Utf8PathBuf::from("/vault-nascente");
 
-    let vault = Vault::on(&nascente, Arc::clone(&storage) as Arc<dyn VaultStorage>)
+    let vault = Vault::on(&nascent, Arc::clone(&storage) as Arc<dyn VaultStorage>)
         .expect("un vault in memoria su una radice nascente si apre");
-    assert_eq!(vault.root(), nascente.as_str());
+    assert_eq!(vault.root(), nascent.as_str());
 
     // Una radice che è un file è impossibile anche in memoria.
     let occupied = Utf8PathBuf::from("/occupato-da-un-file");
