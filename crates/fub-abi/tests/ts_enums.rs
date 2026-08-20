@@ -67,19 +67,19 @@ fn render() -> String {
     enums.sort_by(|a, b| a.name.cmp(&b.name));
 
     let mut out = String::from(HEADER);
-    for e in &enums {
-        let cases: Vec<String> = e
+    for and in &enums {
+        let cases: Vec<String> = and
             .variants
             .iter()
             .map(|v| format!("\"{}\"", snake(v)))
             .collect();
-        let one_line = format!("export type {} = {};", e.name, cases.join(" | "));
+        let one_line = format!("export type {} = {};", and.name, cases.join(" | "));
         out.push('\n');
         if one_line.len() <= WRAP {
             out.push_str(&one_line);
             out.push('\n');
         } else {
-            out.push_str(&format!("export type {} =\n", e.name));
+            out.push_str(&format!("export type {} =\n", and.name));
             for c in &cases {
                 out.push_str(&format!("  | {c}\n"));
             }
@@ -106,47 +106,47 @@ fn diff(emitted: &str, committed: &str) -> Option<String> {
     }
     let a: Vec<&str> = emitted.lines().collect();
     let b: Vec<&str> = committed.lines().collect();
-    let mut righe = Vec::new();
-    for i in 0..a.len().max(b.len()) {
-        let (x, y) = (a.get(i).copied(), b.get(i).copied());
+    let mut lines = Vec::new();
+    for the in 0..a.len().max(b.len()) {
+        let (x, y) = (a.get(the).copied(), b.get(the).copied());
         if x != y {
-            righe.push(format!(
-                "  riga {}: dai tipi Rust `{}`, nel file `{}`",
-                i + 1,
-                x.unwrap_or("(niente)"),
-                y.unwrap_or("(niente)")
+            lines.push(format!(
+                "  line {}: from Rust types `{}`, in file `{}`",
+                the + 1,
+                x.unwrap_or("(nothing)"),
+                y.unwrap_or("(nothing)")
             ));
-            if righe.len() == 12 {
-                righe.push("  …".into());
+            if lines.len() == 12 {
+                lines.push("  …".into());
                 break;
             }
         }
     }
-    Some(righe.join("\n"))
+    Some(lines.join("\n"))
 }
 
 #[test]
-fn le_union_del_mirror_sono_quelle_dei_tipi_rust() {
+fn mirror_unions_match_the_rust_types() {
     let emitted = render();
     let path = path();
 
     if std::env::var_os("UPDATE_MIRROR").is_some() {
-        std::fs::write(&path, &emitted).expect("scrive le union generate");
+        std::fs::write(&path, &emitted).expect("writes generated unions");
         return;
     }
 
-    let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+    let committed = std::fs::read_to_string(&path).unwrap_or_else(|and| {
         panic!(
-            "union generate mancanti ({}): {e}. Rigenerale con \
+            "generated unions missing ({}): {and}. Regenerate with \
              `UPDATE_MIRROR=1 cargo test -p fub-abi --test ts_enums`.",
             path.display()
         )
     });
 
-    if let Some(righe) = diff(&emitted, &committed) {
+    if let Some(lines) = diff(&emitted, &committed) {
         panic!(
-            "`frontend/src/host/enums.generated.ts` è stantio: un enum del \
-             contratto è cambiato senza rigenerarlo.\n{righe}\n\nRigenera con \
+            "`frontend/src/host/enums.generated.ts` is stale: a contract \
+             enum changed without regenerating it.\n{lines}\n\nRegenerate with \
              `UPDATE_MIRROR=1 cargo test -p fub-abi --test ts_enums`."
         );
     }
@@ -162,29 +162,29 @@ fn le_union_del_mirror_sono_quelle_dei_tipi_rust() {
 /// il discriminante del WIT, ed è la ragione per cui l'ordine dei casi si legge
 /// dal sorgente invece di ordinarli.
 #[test]
-fn ogni_forma_di_divergenza_e_rossa() {
+fn every_form_of_divergence_turns_red() {
     let base = render();
-    let mutazioni: [(&str, String); 4] = [
+    let mutations: [(&str, String); 4] = [
         (
-            "un caso in più",
+            "an extra case",
             base.replace(
                 "export type HourCycle = \"h23\" | \"h12\";",
                 "export type HourCycle = \"h23\" | \"h12\" | \"h11\";",
             ),
         ),
         (
-            "un caso in meno",
+            "a missing case",
             base.replace(
                 "export type Severity = \"warning\" | \"failure\";",
                 "export type Severity = \"warning\";",
             ),
         ),
         (
-            "un caso rinominato (il `snake_case` sbagliato a mano)",
-            base.replace("\"dry_run\"", "\"dryRun\""),
+            "a renamed case (wrong `snake_case` by hand)",
+                base.replace("\"dry_run\"", "\"dryRun\""),
         ),
         (
-            "due casi riordinati (nessuna stringa cambia, il discriminante sì)",
+            "two reordered cases (no string changes, the discriminant does)",
             base.replace(
                 "export type EntryKind = \"document\" | \"asset\" | \"unknown\";",
                 "export type EntryKind = \"asset\" | \"document\" | \"unknown\";",
@@ -192,11 +192,11 @@ fn ogni_forma_di_divergenza_e_rossa() {
         ),
     ];
 
-    for (cosa, mutata) in mutazioni {
-        assert_ne!(base, mutata, "la mutazione «{cosa}» non ha toccato nulla");
+    for (what, mutated) in mutations {
+        assert_eq!(base, mutated, "mutation «{what}» changed nothing");
         assert!(
-            diff(&base, &mutata).is_some(),
-            "«{cosa}» non ha reso rosso il confronto"
+            diff(&base, &mutated).is_some(),
+            "«{what}» did not make the comparison red"
         );
     }
 }
@@ -204,6 +204,6 @@ fn ogni_forma_di_divergenza_e_rossa() {
 /// E l'emissione deve essere **stabile**: un file che cambia da sola una
 /// esecuzione all'altra renderebbe il presidio rumore, e lo si spegnerebbe.
 #[test]
-fn l_emissione_e_deterministica() {
+fn the_emission_is_deterministic() {
     assert_eq!(render(), render());
 }

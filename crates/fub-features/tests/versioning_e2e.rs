@@ -76,7 +76,7 @@ impl Vault {
     }
 
     /// Apre il vault col versioning **spento** (D7): l'handler non si registra.
-    fn open_senza_versioning(&self) -> Workspace {
+    fn open_without_versioning(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
             .register(MarkdownProvider::boxed())
@@ -95,7 +95,7 @@ impl Vault {
 
 /// Rileggere una versione passa dall'`HostApi`, come farebbe l'app: lo store
 /// non ha un canale sul filesystem tutto suo.
-fn versione(ws: &mut Workspace, store: &VersionStore, id: &DocId, ts: u64) -> String {
+fn version(ws: &mut Workspace, store: &VersionStore, id: &DocId, ts: u64) -> String {
     ws.with_host(VERSIONING_ID, |host| store.read(id, ts, host))
         .expect("lettura della versione")
 }
@@ -104,24 +104,24 @@ fn versione(ws: &mut Workspace, store: &VersionStore, id: &DocId, ts: u64) -> St
 fn every_save_that_changes_something_leaves_a_version_behind() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
-    let nota = DocId::new("Nota.md");
+    let notes = DocId::new("Nota.md");
 
-    ws.write_document(&nota, "prima stesura\n", WriteBase::Dictated)
+    ws.write_document(&notes, "prima stesura\n", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&nota, "seconda stesura\n", WriteBase::Dictated)
+    ws.write_document(&notes, "seconda stesura\n", WriteBase::Dictated)
         .unwrap();
     // Salvare senza aver cambiato niente non è una versione (D6).
-    ws.write_document(&nota, "seconda stesura\n", WriteBase::Dictated)
+    ws.write_document(&notes, "seconda stesura\n", WriteBase::Dictated)
         .unwrap();
 
-    let versioni = store.list(&nota);
-    assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
+    let versions = store.list(&notes);
+    assert_eq!(versions.len(), 2, "versioni: {versions:?}");
     assert_eq!(
-        versione(&mut ws, &store, &nota, versioni[0].ts),
+        version(&mut ws, &store, &notes, versions[0].ts),
         "seconda stesura\n"
     );
     assert_eq!(
-        versione(&mut ws, &store, &nota, versioni[1].ts),
+        version(&mut ws, &store, &notes, versions[1].ts),
         "prima stesura\n"
     );
 }
@@ -130,31 +130,31 @@ fn every_save_that_changes_something_leaves_a_version_behind() {
 fn restoring_a_version_is_itself_undoable() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
-    let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "quella buona\n", WriteBase::Dictated)
+    let notes = DocId::new("Nota.md");
+    ws.write_document(&notes, "quella buona\n", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&nota, "quella che ho rovinato\n", WriteBase::Dictated)
+    ws.write_document(&notes, "quella che ho rovinato\n", WriteBase::Dictated)
         .unwrap();
 
     // Il ripristino è una scrittura normale (D8): non c'è un percorso speciale
     // che scavalchi grafo, indici ed eventi — e infatti passa dall'handler.
-    let vecchia = *store.list(&nota).last().unwrap();
-    let contenuto = versione(&mut ws, &store, &nota, vecchia.ts);
-    ws.write_document(&nota, &contenuto, WriteBase::Dictated)
+    let old = *store.list(&notes).last().unwrap();
+    let content = version(&mut ws, &store, &notes, old.ts);
+    ws.write_document(&notes, &content, WriteBase::Dictated)
         .unwrap();
 
-    assert_eq!(ws.read_source(&nota).unwrap(), "quella buona\n");
-    let versioni = store.list(&nota);
-    assert_eq!(versioni.len(), 3, "il ripristino stesso è una versione");
+    assert_eq!(ws.read_source(&notes).unwrap(), "quella buona\n");
+    let versions = store.list(&notes);
+    assert_eq!(versions.len(), 3, "il ripristino stesso è una versione");
     // Quindi si può annullare il ripristino: la versione rovinata è ancora lì.
     assert_eq!(
-        versione(&mut ws, &store, &nota, versioni[1].ts),
+        version(&mut ws, &store, &notes, versions[1].ts),
         "quella che ho rovinato\n"
     );
 }
 
 #[test]
-fn a_renamed_note_keeps_its_history_under_the_new_name() {
+fn a_renamed_notes_keeps_its_history_under_the_new_name() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
     ws.write_document(&DocId::new("Bozza.md"), "appunti\n", WriteBase::Dictated)
@@ -166,67 +166,67 @@ fn a_renamed_note_keeps_its_history_under_the_new_name() {
     assert!(store.list(&DocId::new("Bozza.md")).is_empty());
     // L'identità è il path, e la storia lo segue: il rename è un evento a sé
     // (`DocumentRenamed`), non un remove+add che spezzerebbe la cronologia.
-    let versioni = store.list(&DocId::new("Definitivo.md"));
-    assert_eq!(versioni.len(), 1);
+    let versions = store.list(&DocId::new("Definitivo.md"));
+    assert_eq!(versions.len(), 1);
     assert_eq!(
-        versione(
+        version(
             &mut ws,
             &store,
             &DocId::new("Definitivo.md"),
-            versioni[0].ts
+            versions[0].ts
         ),
         "appunti\n"
     );
 }
 
 #[test]
-fn a_note_thrown_away_can_still_be_read_from_its_history() {
+fn a_notes_thrown_away_can_still_be_read_from_its_history() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
-    let nota = DocId::new("Effimera.md");
+    let notes = DocId::new("Effimera.md");
     ws.write_document(
-        &nota,
+        &notes,
         "contenuto che vorrò rileggere\n",
         WriteBase::Dictated,
     )
     .unwrap();
 
-    ws.delete_document(&nota).unwrap();
+    ws.delete_document(&notes).unwrap();
 
-    assert!(!ws.documents().contains(&nota));
-    let versioni = store.list(&nota);
+    assert!(!ws.documents().contains(&notes));
+    let versions = store.list(&notes);
     assert_eq!(
-        versioni.len(),
+        versions.len(),
         1,
         "il cestino svuota il vault, non la storia"
     );
     assert_eq!(
-        versione(&mut ws, &store, &nota, versioni[0].ts),
+        version(&mut ws, &store, &notes, versions[0].ts),
         "contenuto che vorrò rileggere\n"
     );
 }
 
 #[test]
-fn a_restore_from_a_folder_reunites_the_note_with_its_history() {
+fn a_restore_from_a_folder_reunites_the_notes_with_its_history() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
     std::fs::create_dir_all(v.root.join("progetti")).unwrap();
-    let nota = DocId::new("progetti/Nota.md");
-    ws.write_document(&nota, "prima del cestino\n", WriteBase::Dictated)
+    let notes = DocId::new("progetti/Nota.md");
+    ws.write_document(&notes, "prima del cestino\n", WriteBase::Dictated)
         .unwrap();
 
-    let trashed = ws.delete_document(&nota).unwrap();
+    let trashed = ws.delete_document(&notes).unwrap();
     let restored = ws.restore_from_trash(&trashed, None).unwrap();
 
     // Il sidecar riporta la nota NELLA SUA CARTELLA: la storia è ancora sotto
     // la stessa chiave, con lo snapshot del ripristino in coda — niente storia
     // orfana in radice, niente tombstone che mente.
-    assert_eq!(restored, nota);
-    let versioni = store.list(&nota);
-    assert!(!store.is_deleted(&nota));
-    assert_eq!(versioni.len(), 1, "versioni: {versioni:?}");
+    assert_eq!(restored, notes);
+    let versions = store.list(&notes);
+    assert!(!store.is_deleted(&notes));
+    assert_eq!(versions.len(), 1, "versioni: {versions:?}");
     assert_eq!(
-        versione(&mut ws, &store, &nota, versioni[0].ts),
+        version(&mut ws, &store, &notes, versions[0].ts),
         "prima del cestino\n"
     );
 }
@@ -235,12 +235,12 @@ fn a_restore_from_a_folder_reunites_the_note_with_its_history() {
 fn a_restore_under_a_new_name_migrates_the_history() {
     let v = Vault::new();
     let (mut ws, store) = v.open();
-    let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "prima vita\n", WriteBase::Dictated)
+    let notes = DocId::new("Nota.md");
+    ws.write_document(&notes, "prima vita\n", WriteBase::Dictated)
         .unwrap();
-    let trashed = ws.delete_document(&nota).unwrap();
+    let trashed = ws.delete_document(&notes).unwrap();
     // Il path d'origine viene rioccupato: il ripristino dovrà andare altrove.
-    ws.write_document(&nota, "usurpatrice\n", WriteBase::Dictated)
+    ws.write_document(&notes, "usurpatrice\n", WriteBase::Dictated)
         .unwrap();
 
     let restored = ws
@@ -252,13 +252,13 @@ fn a_restore_under_a_new_name_migrates_the_history() {
     // ripristino emette `DocumentRenamed`): non è rimasta orfana con un
     // tombstone sotto la chiave vecchia — quella ora appartiene all'usurpatrice.
     let migrate = store.list(&DocId::new("Nota 1.md"));
-    let contenuti: Vec<String> = migrate
+    let contents: Vec<String> = migrate
         .iter()
-        .map(|v| versione(&mut ws, &store, &DocId::new("Nota 1.md"), v.ts))
+        .map(|v| version(&mut ws, &store, &DocId::new("Nota 1.md"), v.ts))
         .collect();
     assert!(
-        contenuti.contains(&"prima vita\n".to_string()),
-        "la prima vita deve stare nella storia migrata: {contenuti:?}"
+        contents.contains(&"prima vita\n".to_string()),
+        "la prima vita deve stare nella storia migrata: {contents:?}"
     );
     assert!(!store.is_deleted(&DocId::new("Nota 1.md")));
 }
@@ -266,7 +266,7 @@ fn a_restore_under_a_new_name_migrates_the_history() {
 #[test]
 fn with_versioning_off_the_vault_has_no_trace_of_it() {
     let v = Vault::new();
-    let mut ws = v.open_senza_versioning();
+    let mut ws = v.open_without_versioning();
 
     ws.write_document(&DocId::new("Nota.md"), "una stesura\n", WriteBase::Dictated)
         .unwrap();
@@ -281,23 +281,23 @@ fn with_versioning_off_the_vault_has_no_trace_of_it() {
 }
 
 #[test]
-fn the_state_a_note_was_found_in_is_recoverable_after_the_first_edit() {
+fn the_state_a_notes_was_found_in_is_recoverable_after_the_first_edit() {
     let v = Vault::new();
     // Una nota che c'era già: Fub non l'ha mai vista cambiare.
     v.put("Trovata.md", "come l'ho trovata\n");
     let (mut ws, store) = v.open();
-    let nota = DocId::new("Trovata.md");
+    let notes = DocId::new("Trovata.md");
 
-    ws.write_document(&nota, "come l'ho rovinata\n", WriteBase::Dictated)
+    ws.write_document(&notes, "come l'ho rovinata\n", WriteBase::Dictated)
         .unwrap();
 
     // L'handler gira *dopo* la scrittura e vede solo il testo nuovo: senza la
     // prima fotografia — qui chiamata a mano, in produzione dal gancio del
     // workspace (0154) — lo stato originale sarebbe perso.
-    let versioni = store.list(&nota);
-    assert_eq!(versioni.len(), 2, "versioni: {versioni:?}");
+    let versions = store.list(&notes);
+    assert_eq!(versions.len(), 2, "versioni: {versions:?}");
     assert_eq!(
-        versione(&mut ws, &store, &nota, versioni[1].ts),
+        version(&mut ws, &store, &notes, versions[1].ts),
         "come l'ho trovata\n"
     );
 }
@@ -305,19 +305,19 @@ fn the_state_a_note_was_found_in_is_recoverable_after_the_first_edit() {
 #[test]
 fn the_history_survives_closing_and_reopening_the_vault() {
     let v = Vault::new();
-    let nota = DocId::new("Nota.md");
+    let notes = DocId::new("Nota.md");
     {
         let (mut ws, _store) = v.open();
-        ws.write_document(&nota, "scritta ieri\n", WriteBase::Dictated)
+        ws.write_document(&notes, "scritta ieri\n", WriteBase::Dictated)
             .unwrap();
     }
 
     let (mut ws, store) = v.open();
 
-    let versioni = store.list(&nota);
-    assert_eq!(versioni.len(), 1);
+    let versions = store.list(&notes);
+    assert_eq!(versions.len(), 1);
     assert_eq!(
-        versione(&mut ws, &store, &nota, versioni[0].ts),
+        version(&mut ws, &store, &notes, versions[0].ts),
         "scritta ieri\n"
     );
 }
@@ -352,8 +352,8 @@ fn a_real_overflow_reaches_the_handler_and_it_reconciles() {
     let v = Vault::new();
     v.put("Nota.md", "come l'ho trovata\n");
     let (mut ws, store) = v.open();
-    let nota = DocId::new("Nota.md");
-    assert_eq!(store.list(&nota).len(), 1, "la prima fotografia");
+    let notes = DocId::new("Nota.md");
+    assert_eq!(store.list(&notes).len(), 1, "la prima fotografia");
 
     ws.register_event_handler("test.loudmouth", Box::new(Loudmouth))
         .expect("registrato");
@@ -361,7 +361,7 @@ fn a_real_overflow_reaches_the_handler_and_it_reconciles() {
     // La nota cambia sul disco e il workspace non ne sa niente: nessun
     // `DocumentChanged`, quindi nessuno snapshot per la via normale.
     v.put("Nota.md", "cambiata alle spalle di tutti\n");
-    assert_eq!(store.list(&nota).len(), 1);
+    assert_eq!(store.list(&notes).len(), 1);
 
     // Un'altra operazione fa traboccare la coda: da qui nasce l'`Event::Overflow`.
     ws.write_document(
@@ -373,14 +373,14 @@ fn a_real_overflow_reaches_the_handler_and_it_reconciles() {
 
     // L'handler era abbonato, l'overflow gli è arrivato, e la riconciliazione ha
     // riletto il vault: la versione che l'evento perso non ha prodotto c'è.
-    let versioni = store.list(&nota);
+    let versions = store.list(&notes);
     assert_eq!(
-        versioni.len(),
+        versions.len(),
         2,
-        "l'overflow deve aver innescato la riconciliazione: {versioni:?}"
+        "l'overflow deve aver innescato la riconciliazione: {versions:?}"
     );
     assert_eq!(
-        versione(&mut ws, &store, &nota, versioni[0].ts),
+        version(&mut ws, &store, &notes, versions[0].ts),
         "cambiata alle spalle di tutti\n"
     );
 }

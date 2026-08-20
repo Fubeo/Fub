@@ -22,7 +22,7 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_kernel::{FormatRegistry, Workspace};
-use fub_testkit::TestoDiProva;
+use fub_testkit::SampleText;
 
 type Log = Arc<Mutex<Vec<String>>>;
 
@@ -70,7 +70,7 @@ impl ViewProvider for WritingView {
     fn views(&self) -> Vec<ViewSpec> {
         vec![ViewSpec::new(
             "scrivente",
-            "Scrivente",
+            "Writing",
             ViewSurface::RightSidebar,
         )]
     }
@@ -89,13 +89,13 @@ impl ViewProvider for WritingView {
         _action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
-        self.0.lock().unwrap().push("on_action:inizio".into());
+        self.0.lock().unwrap().push("on_action:start".into());
         host.write_document(
             &DocId::new("nota.md"),
-            "scritto dal provider",
+            "written by the provider",
             WriteBase::Dictated,
         )?;
-        self.0.lock().unwrap().push("on_action:fine".into());
+        self.0.lock().unwrap().push("on_action:end".into());
         Ok(ViewUpdate::None)
     }
 }
@@ -105,12 +105,12 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     let mut registry = FormatRegistry::new();
     registry
-        .register(TestoDiProva::per_estensione("md").dentro_un_pre().boxed())
-        .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
+        .register(SampleText::by_extension("md").inside_pre().boxed())
+        .expect("no extension conflict");
+    let mut ws = Workspace::new(&root, registry).expect("vault opens successfully");
     for plugin in ["recorder", "scrivente", "prova.plugin"] {
         ws.register_core_feature(plugin, plugin)
-            .expect("dichiarato");
+            .expect("declared");
     }
     (dir, ws)
 }
@@ -120,32 +120,32 @@ fn events_emitted_inside_on_action_are_delivered_after_the_call_returns() {
     let (_dir, mut ws) = vault();
     let log: Log = Arc::default();
     ws.register_event_handler("recorder", Box::new(Recorder(log.clone())))
-        .expect("registrato");
+        .expect("registered");
     ws.register_view_provider("scrivente", Box::new(WritingView(log.clone())))
-        .expect("registrato");
+        .expect("registered");
 
     ws.view_action(&ViewInstance::only("scrivente"), UiAction::new("scrivi"))
-        .expect("l'azione riesce");
+        .expect("action succeeds");
 
     let log = log.lock().unwrap();
-    let fine = log
+    let end = log
         .iter()
-        .position(|r| r == "on_action:fine")
-        .expect("il provider è arrivato in fondo");
+        .position(|r| r == "on_action:end")
+        .expect("the provider reached the end");
     let handler_records: Vec<usize> = log
         .iter()
         .enumerate()
         .filter(|(_, r)| r.starts_with("handler:"))
-        .map(|(i, _)| i)
+        .map(|(the, _)| the)
         .collect();
     assert!(
         !handler_records.is_empty(),
-        "la scrittura ha emesso eventi e l'handler deve riceverli: {log:?}"
+        "the write emitted events and the handler must receive them: {log:?}"
     );
     assert!(
-        handler_records.iter().all(|&i| i > fine),
-        "gli eventi devono arrivare DOPO che `on_action` è tornata, mai dentro \
-         il suo frame (a M5 la rientranza di un'istanza trappa): {log:?}"
+        handler_records.iter().all(|&the| the > end),
+        "events must arrive AFTER `on_action` has returned, never inside its \
+         frame (at M5 instance reentrance traps): {log:?}"
     );
 }
 
@@ -154,7 +154,7 @@ fn events_emitted_through_with_host_are_delivered_after_the_closure_returns() {
     let (_dir, mut ws) = vault();
     let log: Log = Arc::default();
     ws.register_event_handler("recorder", Box::new(Recorder(log.clone())))
-        .expect("registrato");
+        .expect("registered");
 
     ws.with_host("prova.plugin", |host| {
         host.write_document(
@@ -165,12 +165,12 @@ fn events_emitted_through_with_host_are_delivered_after_the_closure_returns() {
         .unwrap();
         assert!(
             log.lock().unwrap().is_empty(),
-            "dentro la chiusura la coda non si drena"
+            "inside the closure the queue does not drain"
         );
     });
 
     assert!(
         !log.lock().unwrap().is_empty(),
-        "a chiusura tornata gli eventi accodati vengono consegnati"
+        "once the closure returns the queued events are delivered"
     );
 }

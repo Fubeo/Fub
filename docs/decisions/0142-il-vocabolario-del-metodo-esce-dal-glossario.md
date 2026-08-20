@@ -2,6 +2,10 @@
 
 Data: 2026-08-11
 
+Nota storica: il file `docs/glossario.md` non esiste più. Il lessico del
+prodotto è definito in una riga dove si usa, in `docs/PIANO.md` e in
+`docs/architecture/mappa-visuale.md` (sezione *Le parole*).
+
 ## Contesto
 
 Il glossario di Fub (`docs/glossario.md`) conteneva sia il vocabolario del

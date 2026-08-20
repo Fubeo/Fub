@@ -47,7 +47,7 @@ impl Vault {
     }
 }
 
-fn testi(tree: &UiNode) -> Vec<String> {
+fn texts(tree: &UiNode) -> Vec<String> {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         match &node.kind {
             UiKind::Text { content } => out.push(format!("{content}")),
@@ -70,38 +70,38 @@ fn testi(tree: &UiNode) -> Vec<String> {
 }
 
 #[test]
-fn conta_note_tag_e_link_rotti() {
+fn counts_notes_tag_and_link_rotti() {
     let vault = Vault::new();
     vault.put("a.md", "# A\n\n#rust\n[[manca]]\n");
     vault.put("b.md", "# B\n");
     let ws = vault.open();
     let tree = ws.render_view(&ViewInstance::only(DASHBOARD_VIEW)).unwrap();
-    let testi = testi(&tree);
-    let blob = testi.join(" | ");
+    let texts = texts(&tree);
+    let blob = texts.join(" | ");
     assert!(
-        testi.iter().any(|t| t.contains("2") && t.contains("note")),
+        texts.iter().any(|t| t.contains("2") && t.contains("note")),
         "note: {blob}"
     );
-    assert!(testi.iter().any(|t| t.contains("tag")), "tag: {blob}");
+    assert!(texts.iter().any(|t| t.contains("tag")), "tag: {blob}");
     assert!(
-        testi.iter().any(|t| t.contains("link rotti")),
+        texts.iter().any(|t| t.contains("link rotti")),
         "rotti: {blob}"
     );
     assert!(
-        testi.iter().any(|t| t.contains("a.md")),
+        texts.iter().any(|t| t.contains("a.md")),
         "il link rotto nomina la nota: {blob}"
     );
 }
 
 #[test]
-fn vault_vuoto_zero_rotti() {
+fn vault_empty_zero_rotti() {
     let vault = Vault::new();
     let ws = vault.open();
     let tree = ws.render_view(&ViewInstance::only(DASHBOARD_VIEW)).unwrap();
-    let testi = testi(&tree);
-    let blob = testi.join(" | ");
+    let texts = texts(&tree);
+    let blob = texts.join(" | ");
     assert!(
-        testi.iter().any(|t| t.contains("0") && t.contains("note")),
+        texts.iter().any(|t| t.contains("0") && t.contains("note")),
         "{blob}"
     );
 }

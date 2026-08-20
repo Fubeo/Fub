@@ -50,7 +50,7 @@
 export type Oklch = { readonly l: number; readonly c: number; readonly h: number };
 
 /// Da OKLab a sRGB **lineare** (senza la codifica di trasferimento).
-function aLineare(l: number, a: number, b: number): [number, number, number] {
+function toLinear(l: number, a: number, b: number): [number, number, number] {
   const l_ = l + 0.3963377774 * a + 0.2158037573 * b;
   const m_ = l - 0.1055613458 * a - 0.0638541728 * b;
   const s_ = l - 0.0894841775 * a - 1.291485548 * b;
@@ -67,16 +67,16 @@ function aLineare(l: number, a: number, b: number): [number, number, number] {
 }
 
 /// La codifica di trasferimento di sRGB, dal lineare al valore che si scrive.
-function codifica(v: number): number {
+function encode(v: number): number {
   return v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
 }
 
 /// Se i tre canali lineari stanno dentro sRGB. La tolleranza è quella della
 /// quantizzazione a otto bit: un canale a `-1e-9` è dentro, e pretendere lo
 /// zero esatto farebbe abbassare il croma a colori che si rendono benissimo.
-function dentroIlGamut([r, g, b]: [number, number, number]): boolean {
-  const soglia = 1 / 512;
-  return [r, g, b].every((v) => v >= -soglia && v <= 1 + soglia);
+function inGamut([r, g, b]: [number, number, number]): boolean {
+  const threshold = 1 / 512;
+  return [r, g, b].every((v) => v >= -threshold && v <= 1 + threshold);
 }
 
 /// I tre canali a otto bit, con la chiarezza e la tinta tenute ferme e il croma
@@ -86,28 +86,28 @@ function dentroIlGamut([r, g, b]: [number, number, number]): boolean {
 /// sul croma sotto un milionesimo, cioè molto sotto un passo di quantizzazione.
 /// È fisso e non «finché converge» perché la generazione deve dare gli stessi
 /// byte a ogni corsa, su qualunque macchina.
-function canaliDi({ l, c, h }: Oklch): [number, number, number] {
+function channelsOf({ l, c, h }: Oklch): [number, number, number] {
   const rad = (h * Math.PI) / 180;
-  const lineare = (croma: number) =>
-    aLineare(l, croma * Math.cos(rad), croma * Math.sin(rad));
+  const linear = (chroma: number) =>
+    toLinear(l, chroma * Math.cos(rad), chroma * Math.sin(rad));
 
-  let dentro = lineare(c);
-  if (!dentroIlGamut(dentro)) {
-    let basso = 0;
-    let alto = c;
-    for (let giro = 0; giro < 20; giro += 1) {
-      const meta = (basso + alto) / 2;
-      const prova = lineare(meta);
-      if (dentroIlGamut(prova)) {
-        basso = meta;
-        dentro = prova;
+  let inside = linear(c);
+  if (!inGamut(inside)) {
+    let lower = 0;
+    let upper = c;
+    for (let iteration = 0; iteration < 20; iteration += 1) {
+      const midpoint = (lower + upper) / 2;
+      const candidate = linear(midpoint);
+      if (inGamut(candidate)) {
+        lower = midpoint;
+        inside = candidate;
       } else {
-        alto = meta;
+        upper = midpoint;
       }
     }
   }
 
-  return dentro.map((v) => Math.round(Math.min(1, Math.max(0, codifica(v))) * 255)) as [
+  return inside.map((v) => Math.round(Math.min(1, Math.max(0, encode(v))) * 255)) as [
     number,
     number,
     number,
@@ -118,8 +118,8 @@ function canaliDi({ l, c, h }: Oklch): [number, number, number] {
 /// sempre minuscolo. La forma corta (`#fff`) non si emette apposta — i due
 /// presidi che leggono i fogli come testo confrontano stringhe, e due modi di
 /// scrivere lo stesso colore sono due stringhe.
-export function esa(colore: Oklch): string {
-  return `#${canaliDi(colore)
+export function toHex(color: Oklch): string {
+  return `#${channelsOf(color)
     .map((v) => v.toString(16).padStart(2, "0"))
     .join("")}`;
 }
@@ -129,7 +129,7 @@ export function esa(colore: Oklch): string {
 // ---------------------------------------------------------------------------
 
 /// La decodifica di trasferimento di sRGB, dal valore scritto al lineare.
-function decodifica(v: number): number {
+function decode(v: number): number {
   return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 }
 
@@ -137,10 +137,10 @@ function decodifica(v: number): number {
 /// non torna indietro — ma lo usa chi deve dire *dove stava* un colore scelto a
 /// mano: è così che le tinte di questa ricetta sono state prese dalla tavolozza
 /// che c'era, invece di essere immaginate da capo.
-export function daEsa(esadecimale: string): Oklch {
-  const cifre = esadecimale.trim().replace(/^#/, "");
+export function fromHex(hex: string): Oklch {
+  const digits = hex.trim().replace(/^#/, "");
   const [r, g, b] = [0, 2, 4].map((i) =>
-    decodifica(parseInt(cifre.slice(i, i + 2), 16) / 255),
+    decode(parseInt(digits.slice(i, i + 2), 16) / 255),
   ) as [number, number, number];
 
   const L = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);

@@ -11,8 +11,8 @@
 //
 // # Cosa questo file NON contiene
 //
-// La query. Sta in `host/contract.ts` (`nomeCercato`) e il giro sta in
-// `host/query.ts` (`noteDalNome`), che è la regola della 0082 scritta come
+// La query. Sta in `host/contract.ts` (`nameQuery`) e il giro sta in
+// `host/query.ts` (`noteDalNome`), che è la regola della 0082 scritto come
 // posizione dei file: le due superfici che propongono dei nomi — questa e
 // l'autocompletamento dei wikilink — fanno **la stessa** domanda, e il giorno
 // in cui il ranking dei nomi cambia cambia in un posto solo.
@@ -40,22 +40,22 @@
 // Non l'ho trovata, creala. Compare solo a risultati vuoti, e il nome che
 // propone non è la query così com'è: passa da `rules/nome-cercato.ts`, perché
 // `note.create` prende un **path** e una query può contenere uno slash.
-import { noteDalNome } from "../host/query";
-import { Corsa } from "../ui/corsa";
+import { notesByName } from "../host/query";
+import { Race } from "../ui/race";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
 import { notify } from "../ui/notify";
-import { nomeDaCercato } from "../rules/nome-cercato";
+import { searchedName } from "../rules/searched-name";
 import { pageName } from "../rules/organizer";
 import {
-  dimenticaTutto,
-  noteRecentiEsistenti,
-  ricercheRecenti,
-  ricordaLeAperture,
-  ricordaRicerca,
-} from "../state/recenti";
+  forgetAll,
+  existingRecentNotes,
+  recentSearches,
+  rememberOpens,
+  rememberSearch,
+} from "../state/recent";
 import { createNote } from "../state/vault";
-import { attivabile, intrappolaFuoco } from "../ui/a11y";
+import { activatable, trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { openDocument } from "./document";
 
@@ -67,21 +67,21 @@ const OVERLAY_ID = "quick-switcher";
 /// le frecce ci scorrono sopra e l'invio ne sceglie una — e tre liste
 /// vorrebbero dire tenere d'accordo un indice con un'aritmetica di confini, che
 /// è la cosa che si sbaglia il giorno in cui se ne aggiunge una quarta.
-type Voce =
+type Entry =
   /// Una nota del vault, per path.
   | { k: "doc"; doc: string }
   /// Una ricerca fatta di recente: si ripesca per rifarla.
   | { k: "query"; q: string }
   /// La nota che non c'era, col nome che il testo cercato propone.
-  | { k: "crea"; nome: string };
+  | { k: "crea"; name: string };
 
 /// Come si scioglie la trappola del fuoco, quando il modale è aperto.
-let sciogli: (() => void) | null = null;
+let release: (() => void) | null = null;
 
-export function chiudiQuickSwitcher(): void {
+export function closeQuickSwitcher(): void {
   document.getElementById(OVERLAY_ID)?.remove();
-  sciogli?.();
-  sciogli = null;
+  release?.();
+  release = null;
 }
 
 /// Il comando, dichiarato da chi ce l'ha (§18.2).
@@ -95,12 +95,12 @@ export function chiudiQuickSwitcher(): void {
 /// Qui parte anche la memoria corta: la mette in ascolto chi ha interesse, che è
 /// questo pannello e nessun altro.
 export function mountQuickSwitcher(): void {
-  ricordaLeAperture();
+  rememberOpens();
   registerShellCommand({
     id: "shell.switcher",
     title: "commands.switcher",
     description: "commands.switcher.desc",
-    run: () => apriQuickSwitcher(),
+    run: () => openQuickSwitcher(),
   });
   // **Cancellare la memoria**, e perché il comando è di *shell* e non del
   // registro dei comandi.
@@ -115,77 +115,77 @@ export function mountQuickSwitcher(): void {
   //
   // È dichiarato qui perché la regola del §18.2 è che dichiara chi ha
   // interesse, e chi ha interesse alla memoria corta è questo pannello: è lui
-  // che la mette in ascolto (`ricordaLeAperture`) ed è lui che la mostra.
+  // che la mette in ascolto (`rememberOpens`) ed è lui che la mostra.
   registerShellCommand({
     id: "shell.history.clear",
     title: "commands.history_clear",
     description: "commands.history_clear.desc",
     run: () => {
-      dimenticaTutto();
+      forgetAll();
       notify(t("history.cleared"), "info");
     },
   });
 }
 
-export function apriQuickSwitcher(): void {
-  const box = apriOverlay();
+export function openQuickSwitcher(): void {
+  const box = openOverlay();
 
   const input = document.createElement("input");
   input.className = "palette-input";
   input.placeholder = t("switcher.placeholder");
   input.setAttribute("aria-label", t("switcher.title"));
-  const lista = document.createElement("ul");
-  lista.className = "plain-list palette-list";
+  const list = document.createElement("ul");
+  list.className = "plain-list palette-list";
   // Come la palette dei comandi: una riga è «quella scelta» e le frecce la
   // spostano, quindi è una listbox — e dirlo è ciò che permette di sapere su
   // cosa si sta per premere Invio senza guardare lo sfondo.
-  lista.setAttribute("role", "listbox");
-  box.append(input, lista);
+  list.setAttribute("role", "listbox");
+  box.append(input, list);
 
-  let visibili: Voce[] = [];
-  let scelto = 0;
+  let visibleItems: Entry[] = [];
+  let selected = 0;
   // Come nella ricerca dentro la nota: una risposta lenta di una query vecchia
   // non deve sovrascrivere i risultati di una più recente. La corsa è di questo
   // esemplare della palette, non del modulo (decisione 0134).
-  const corsa = new Corsa();
+  const race = new Race();
   let timer: number | undefined;
 
-  const disegna = () => {
-    lista.innerHTML = "";
-    const nuove = document.createDocumentFragment();
-    for (const [i, voce] of visibili.entries()) {
+  const render = () => {
+    list.innerHTML = "";
+    const newItems = document.createDocumentFragment();
+    for (const [i, entry] of visibleItems.entries()) {
       const li = document.createElement("li");
       li.setAttribute("role", "option");
-      li.setAttribute("aria-selected", String(i === scelto));
-      const titolo = document.createElement("span");
-      titolo.className = "palette-title";
-      const dove = document.createElement("span");
-      dove.className = "palette-desc";
-      if (voce.k === "doc") {
-        // Il nome pagina davanti e il path sotto, come in una tab: due note
+      li.setAttribute("aria-selected", String(i === selected));
+      const title = document.createElement("span");
+      title.className = "palette-title";
+      const where = document.createElement("span");
+      where.className = "palette-desc";
+      if (entry.k === "doc") {
+        // Il nome pagina davanti e il path sotto, come in una linguetta: due note
         // omonime in cartelle diverse sono il caso in cui il nome non basta, ed
         // è anche il caso in cui questa superficie serve di più.
-        titolo.textContent = pageName(voce.doc);
-        dove.textContent = voce.doc;
-      } else if (voce.k === "query") {
-        titolo.textContent = voce.q;
-        dove.textContent = t("switcher.recent_search");
+        title.textContent = pageName(entry.doc);
+        where.textContent = entry.doc;
+      } else if (entry.k === "query") {
+        title.textContent = entry.q;
+        where.textContent = t("switcher.recent_search");
       } else {
-        titolo.textContent = voce.nome;
-        dove.textContent = t("switcher.create");
+        title.textContent = entry.name;
+        where.textContent = t("switcher.create");
       }
-      li.append(titolo, dove);
-      li.addEventListener("click", () => attiva(voce));
-      attivabile(li);
-      nuove.appendChild(li);
+      li.append(title, where);
+      li.addEventListener("click", () => active(entry));
+      activatable(li);
+      newItems.appendChild(li);
     }
-    if (visibili.length === 0) {
-      const vuoto = document.createElement("li");
-      vuoto.className = "palette-empty";
-      vuoto.textContent = t(input.value.trim() ? "switcher.empty" : "switcher.hint");
-      nuove.appendChild(vuoto);
+    if (visibleItems.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "palette-empty";
+      empty.textContent = t(input.value.trim() ? "switcher.empty" : "switcher.hint");
+      newItems.appendChild(empty);
     }
-    lista.appendChild(nuove);
+    list.appendChild(newItems);
   };
 
   /// Cosa fa una voce quando la si sceglie, ed è **una cosa diversa per specie**.
@@ -194,27 +194,27 @@ export function apriQuickSwitcher(): void {
   /// aprire qualcosa, che è ciò che uno si aspetta da una cronologia — la si
   /// ripesca per rifarla, non per finire dritto da qualche parte; una nota da
   /// creare si crea e si apre.
-  const attiva = (voce: Voce) => {
-    if (voce.k === "doc") {
+  const active = (entry: Entry) => {
+    if (entry.k === "doc") {
       // La ricerca che ha portato qui si ricorda **adesso**, non a ogni tasto:
       // la memoria è di ciò che si è cercato, e ciò che si è cercato è il testo
       // che ha prodotto un'apertura. Ricordare mentre si digita riempirebbe la
       // lista di «r», «ri», «riu».
-      ricordaRicerca(input.value);
-      apri(voce.doc);
+      rememberSearch(input.value);
+      open(entry.doc);
       return;
     }
-    if (voce.k === "query") {
-      input.value = voce.q;
+    if (entry.k === "query") {
+      input.value = entry.q;
       input.focus();
-      void cerca();
+      void search();
       return;
     }
-    void crea(voce.nome);
+    void create(entry.name);
   };
 
-  const apri = (doc: string) => {
-    chiudiQuickSwitcher();
+  const open = (doc: string) => {
+    closeQuickSwitcher();
     void openDocument(doc);
   };
 
@@ -229,19 +229,19 @@ export function apriQuickSwitcher(): void {
   /// contenerla. Quando succede si mostra l'errore del kernel e il modale resta
   /// aperto, che è la sola risposta onesta — inventare un `nome (2)` sarebbe
   /// creare una seconda nota a chi ne stava cercando una.
-  const crea = async (nome: string) => {
-    ricordaRicerca(input.value);
+  const create = async (name: string) => {
+    rememberSearch(input.value);
     try {
-      const doc = await createNote(nome);
-      if (doc) apri(doc);
+      const doc = await createNote(name);
+      if (doc) open(doc);
     } catch (e) {
       notify(errorText(e), "guasto");
     }
   };
 
-  const cerca = async () => {
-    const testo = input.value.trim();
-    await corsa.ultimo(async (atteso) => {
+  const search = async () => {
+    const text = input.value.trim();
+    await race.last(async (expected) => {
       // A mani vuote le note aperte di recente e le ricerche fatte di recente:
       // dove stanno scritte, e a quali condizioni, sta in `state/recenti.ts`.
       // Le note passano dal vault perché una rinominata non si può proporre;
@@ -249,42 +249,42 @@ export function apriQuickSwitcher(): void {
       //
       // L'errore diventa un valore prima del cancello: sotto non c'è nessun
       // `catch`, quindi non c'è dove perdere il segnale di scadenza.
-      const esito = await atteso(
-        (testo
-          ? noteDalNome(testo).then((d) => d.map((doc): Voce => ({ k: "doc", doc })))
-          : noteRecentiEsistenti().then((d) => [
-              ...d.map((doc): Voce => ({ k: "doc", doc })),
-              ...ricercheRecenti().map((q): Voce => ({ k: "query", q })),
+      const result = await expected(
+        (text
+          ? notesByName(text).then((d) => d.map((doc): Entry => ({ k: "doc", doc })))
+          : existingRecentNotes().then((d) => [
+              ...d.map((doc): Entry => ({ k: "doc", doc })),
+              ...recentSearches().map((q): Entry => ({ k: "query", q })),
             ])
         )
-          .then((trovate) => ({ trovate }))
-          .catch((e: unknown) => ({ errore: errorText(e) })),
+          .then((found) => ({ found }))
+          .catch((e: unknown) => ({ error: errorText(e) })),
       );
-      if ("errore" in esito) {
-        visibili = [];
-        disegna();
+      if ("error" in result) {
+        visibleItems = [];
+        render();
         // Il motivo in chiaro, come nella ricerca: «non disponibile» dice che
         // non si può cercare, non perché.
-        const vuoto = lista.querySelector(".palette-empty");
-        if (vuoto) {
-          vuoto.textContent = t("search.unavailable");
-          (vuoto as HTMLElement).title = esito.errore;
+        const empty = list.querySelector(".palette-empty");
+        if (empty) {
+          empty.textContent = t("search.unavailable");
+          (empty as HTMLElement).title = result.error;
         }
         return;
       }
-      const trovate = esito.trovate;
-      visibili = trovate;
+      const found = result.found;
+      visibleItems = found;
       // Il gesto che chiude il giro: non l'ho trovata, creala. Compare **solo**
       // a risultati vuoti — con dei risultati sotto gli occhi, «crea» è la voce
       // che si preme per sbaglio — e solo se dal testo esce un nome di nota
       // (`nomeDaCercato` risponde `null` a chi ha scritto solo spazi o solo
       // caratteri che in un nome non ci possono stare).
-      if (testo && trovate.length === 0) {
-        const nome = nomeDaCercato(testo);
-        if (nome) visibili = [{ k: "crea", nome }];
+      if (text && found.length === 0) {
+        const name = searchedName(text);
+        if (name) visibleItems = [{ k: "crea", name }];
       }
-      scelto = 0;
-      disegna();
+      selected = 0;
+      render();
     });
   };
 
@@ -294,30 +294,30 @@ export function apriQuickSwitcher(): void {
     // giro per battuta è piccolo (banco `una_ricerca.rs`, fase 5), ma «piccolo»
     // moltiplicato per ogni tasto di una parola lunga resta una raffica di cui
     // interessa solo l'ultimo.
-    timer = window.setTimeout(() => void cerca(), 180);
+    timer = window.setTimeout(() => void search(), 180);
   });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      if (visibili.length === 0) return;
-      const passo = e.key === "ArrowDown" ? 1 : -1;
-      scelto = (scelto + passo + visibili.length) % visibili.length;
-      disegna();
-      lista.children[scelto]?.scrollIntoView({ block: "nearest" });
+      if (visibleItems.length === 0) return;
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      selected = (selected + step + visibleItems.length) % visibleItems.length;
+      render();
+      list.children[selected]?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
-      const voce = visibili[scelto];
-      if (voce) attiva(voce);
+      const entry = visibleItems[selected];
+      if (entry) active(entry);
     }
   });
 
   // Le recenti si mostrano subito: il modale si apre già con qualcosa sotto le
   // dita, che è metà del motivo per cui questa superficie si usa tanto.
-  void cerca();
+  void search();
   input.focus();
 }
 
-function apriOverlay(): HTMLElement {
-  chiudiQuickSwitcher();
+function openOverlay(): HTMLElement {
+  closeQuickSwitcher();
   const overlay = document.createElement("div");
   overlay.id = OVERLAY_ID;
   // La forma è quella delle altre due modali (§21.4): da quando le modali sono
@@ -331,9 +331,9 @@ function apriOverlay(): HTMLElement {
   box.className = "palette-box";
   overlay.appendChild(box);
   overlay.addEventListener("mousedown", (e) => {
-    if (e.target === overlay) chiudiQuickSwitcher();
+    if (e.target === overlay) closeQuickSwitcher();
   });
   document.body.appendChild(overlay);
-  sciogli = intrappolaFuoco(overlay, chiudiQuickSwitcher);
+  release = trapFocus(overlay, closeQuickSwitcher);
   return box;
 }

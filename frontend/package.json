@@ -9,12 +9,12 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "banco": "vite --config vite.banco.config.ts",
-    "banco:verifica": "node banco/foto.mjs",
-    "banco:aggiorna": "node banco/foto.mjs --aggiorna",
-    "banco:a11y": "node banco/a11y.mjs",
-    "tema:genera": "node tema/genera.mjs",
-    "tema:verifica": "node tema/genera.mjs --verifica"
+    "bench": "vite --config vite.bench.config.ts",
+    "bench:verify": "node bench/photos.mjs",
+    "bench:update": "node bench/photos.mjs --update",
+    "bench:a11y": "node bench/a11y.mjs",
+    "theme:generate": "node theme/generate.mjs",
+    "theme:verify": "node theme/generate.mjs --verify"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

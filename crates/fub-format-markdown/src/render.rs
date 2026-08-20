@@ -7,7 +7,7 @@ use fub_abi::model::{
     custom_kind, Block, ColumnAlign, DocumentModel, Inline, LinkTarget, TableRow,
 };
 use fub_abi::options::render_option;
-use fub_abi::rules::carichi;
+use fub_abi::rules::loads;
 
 use fub_abi::html::{attr, escape};
 use std::fmt::Write;
@@ -40,10 +40,10 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
     let id = anchor_attr(block);
     match block {
         Block::Heading { level, inlines, .. } => {
-            let l = (*level).clamp(1, 6);
-            write!(out, "<h{l}{id}>").unwrap();
+            let the = (*level).clamp(1, 6);
+            write!(out, "<h{the}{id}>").unwrap();
             render_inlines(inlines, opts, out);
-            write!(out, "</h{l}>").unwrap();
+            write!(out, "</h{the}>").unwrap();
         }
         Block::Paragraph { inlines, .. } => {
             write!(out, "<p{id}>").unwrap();
@@ -60,11 +60,11 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             // `<ol start>` è il campo `start` del modello: senza, una lista che
             // nel file comincia da 3 si legge da 1 in anteprima, cioè il testo
             // e ciò che se ne vede dicono due cose diverse.
-            let da = match start {
+            let from = match start {
                 Some(n) if *ordered && *n != 1 => format!(" start=\"{n}\""),
                 _ => String::new(),
             };
-            write!(out, "<{tag}{id}{da}>").unwrap();
+            write!(out, "<{tag}{id}{from}>").unwrap();
             for item in items {
                 match &item.task {
                     Some(t) => {
@@ -104,10 +104,10 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         }
         Block::CodeBlock { lang, code, .. } => {
             match lang {
-                Some(l) => write!(
+                Some(the) => write!(
                     out,
                     "<pre{id}><code{}>",
-                    attr("class", &format!("language-{l}"))
+                    attr("class", &format!("language-{the}"))
                 )
                 .unwrap(),
                 None => write!(out, "<pre{id}><code>").unwrap(),
@@ -130,7 +130,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             // Non è un link (`<a>`) e non ha semantica di paragrafo: è un
             // contenitore con l'etichetta come attributo, e il titolo accanto
             // alla destinazione, entrambi escapati — dati, non markup.
-            let titolo = title
+            let title = title
                 .as_deref()
                 .map(|t| format!(" {}", escape(t)))
                 .unwrap_or_default();
@@ -139,7 +139,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 "<div{id} class=\"reference-definition\"{}>{}{}</div>",
                 attr("data-label", label),
                 escape(url),
-                titolo
+                title
             )
             .unwrap();
         }
@@ -171,13 +171,13 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // l'utente ha sbagliato una virgola nelle proprietà e vedrebbe
                 // le proprietà svanire senza un avviso. Il testo resta **dato**
                 // (escapato), e il motivo si legge accanto.
-                let motivo = attrs.get("error").and_then(|v| v.as_str()).unwrap_or("");
+                let reason = attrs.get("error").and_then(|v| v.as_str()).unwrap_or("");
                 let text = attrs.get("text").and_then(|v| v.as_str()).unwrap_or("");
                 write!(
                     out,
                     "<div{id} class=\"block-frontmatter-unparsed\">\
                      <div class=\"frontmatter-error\">{}</div><pre>{}</pre></div>",
-                    escape(motivo),
+                    escape(reason),
                     escape(text)
                 )
                 .unwrap();
@@ -190,12 +190,12 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 let label = attrs
                     .get("label")
                     .and_then(|v| v.as_str())
-                    .map(|l| attr("data-label", l))
+                    .map(|the| attr("data-label", the))
                     .unwrap_or_default();
                 write!(
                     out,
                     "<div{id}{}{label}>",
-                    attr("class", &classe("block", custom_kind))
+                    attr("class", &css_class("block", custom_kind))
                 )
                 .unwrap();
                 // Un blocco **senza figli** non ha niente da rendere per questa
@@ -206,7 +206,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // quella che una `SyntaxRule` produce — quindi va letto di lì.
                 if blocks.is_empty() {
                     out.push_str(&escape(
-                        contenuto_testuale(custom_kind, attrs).unwrap_or_default(),
+                        text_content(custom_kind, attrs).unwrap_or_default(),
                     ));
                 } else {
                     render_blocks(blocks, opts, out);
@@ -225,9 +225,9 @@ fn render_row(
     out: &mut String,
 ) {
     out.push_str("<tr>");
-    for (i, cell) in row.cells.iter().enumerate() {
+    for (the, cell) in row.cells.iter().enumerate() {
         let tag = if header { "th" } else { "td" };
-        let style = match align.get(i).copied().unwrap_or(ColumnAlign::None) {
+        let style = match align.get(the).copied().unwrap_or(ColumnAlign::None) {
             ColumnAlign::None => String::new(),
             ColumnAlign::Left => " style=\"text-align:left\"".into(),
             ColumnAlign::Center => " style=\"text-align:center\"".into(),
@@ -324,11 +324,11 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             // il proprio contenuto sotto un altro nome del registro spariva
             // esattamente come sparivano i blocchi. Adesso la domanda la fa
             // `carichi::carico_testuale`, come per i blocchi.
-            let text = contenuto_testuale(custom_kind, attrs).unwrap_or_default();
+            let text = text_content(custom_kind, attrs).unwrap_or_default();
             write!(
                 out,
                 "<span{}>{}</span>",
-                attr("class", &classe("inline", custom_kind)),
+                attr("class", &css_class("inline", custom_kind)),
                 escape(text)
             )
             .unwrap();
@@ -359,11 +359,11 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
 /// §25.7, e oggi nessun plugin lo paga. «Sostituire il campione con niente»
 /// è ciò che la riga vecchia rifiutava: non è niente, è la **chiave
 /// dichiarata** in `rules::carichi`, e chi la segue rende come prima.
-fn contenuto_testuale<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str> {
-    carichi::carico_testuale(kind, attrs)
+/// La classe CSS di un `Custom`: il prefisso del lato che lo rende — `block` o
+fn text_content<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str> {
+    loads::text_payload(kind, attrs)
 }
 
-/// La classe CSS di un `Custom`: il prefisso del lato che lo rende — `block` o
 /// `inline` — e poi il `custom_kind` **intero**, namespace compreso.
 ///
 /// **Sta in una funzione sola perché i due lati la componevano diversa**, e la
@@ -385,11 +385,11 @@ fn contenuto_testuale<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'
 /// della shell è scritto (`frontend/src/theme/serie/pelle.css`). Il `:` in un nome di
 /// classe è lecito in HTML; in un selettore CSS si scrive `\:`, ed è la stessa
 /// forma che i blocchi emettono già da prima di questa riga.
-fn classe(lato: &str, custom_kind: &str) -> String {
-    format!("{lato}-{custom_kind}")
+/// Le coordinate di un wikilink come data-attribute, col prefisso di chi le
+fn css_class(side: &str, custom_kind: &str) -> String {
+    format!("{side}-{custom_kind}")
 }
 
-/// Le coordinate di un wikilink come data-attribute, col prefisso di chi le
 /// riceve: `data-wikilink-*` per un riferimento, `data-embed-*` per il
 /// segnaposto di una transclusion.
 ///
@@ -404,18 +404,19 @@ fn classe(lato: &str, custom_kind: &str) -> String {
 /// Un campo assente **non si scrive**: un `data-embed-heading=""` non dice «non
 /// c'è heading», dice «l'heading è quello che si chiama nulla», e chi legge
 /// l'attributo con un `?? null` riceve la stringa vuota.
+                // Transclusion: `render_html` è una funzione pura per-documento
 fn wiki_attrs(
-    prefisso: &str,
+    prefix: &str,
     page: &str,
     heading: &Option<String>,
     block: &Option<String>,
 ) -> String {
-    let mut out = attr(&format!("data-{prefisso}-page"), page);
+    let mut out = attr(&format!("data-{prefix}-page"), page);
     if let Some(h) = heading {
-        out.push_str(&attr(&format!("data-{prefisso}-heading"), h));
+        out.push_str(&attr(&format!("data-{prefix}-heading"), h));
     }
     if let Some(b) = block {
-        out.push_str(&attr(&format!("data-{prefisso}-block"), b));
+        out.push_str(&attr(&format!("data-{prefix}-block"), b));
     }
     out
 }
@@ -434,27 +435,27 @@ fn render_link(
             block,
         } => {
             if embed {
-                // Transclusion: `render_html` è una funzione pura per-documento
                 // e NON può leggere altri documenti (niente HostApi qui). Si
                 // emette un placeholder; il frontend chiama `render_embed` del
                 // kernel e innesta il contenuto (profondità e cicli a suo
                 // carico). Vedi docs/architecture/ui-protocol.md.
+            // Le stesse tre coordinate, con l'altro prefisso: il **blocco** il
                 write!(
                     out,
                     "<div class=\"embed\"{}>",
                     wiki_attrs("embed", page, heading, block)
                 )
                 .unwrap();
-                render_link_label(label, &interno(target, page), opts, out);
+                render_link_label(label, &inner(target, page), opts, out);
                 out.push_str("</div>");
                 return;
             }
-            // Le stesse tre coordinate, con l'altro prefisso: il **blocco** il
             // parser lo legge dalla 0003, e fino alla 0049 si fermava qui —
             // `[[Nota#^blocco]]` arrivava alla shell come un link alla nota e
             // basta. Adesso c'è una risposta in cui metterlo
             // (`resolved-ref.at`), e questo è il primo centimetro del giro.
             // Wikilink come data-attribute: il frontend risolve la navigazione.
+        // Un riferimento incorporato che non è un wikilink è, quasi sempre,
             write!(
                 out,
                 "<a class=\"wikilink\"{}",
@@ -465,15 +466,15 @@ fn render_link(
                 out.push_str(" href=\"#\"");
             }
             out.push('>');
-            render_link_label(label, &interno(target, page), opts, out);
+            render_link_label(label, &inner(target, page), opts, out);
             out.push_str("</a>");
         }
-        // Un riferimento incorporato che non è un wikilink è, quasi sempre,
         // un'immagine. Anche qui si emette il **segnaposto** del protocollo di
         // transclusion e non un `<img>`: caricare una risorsa — del vault o
         // peggio remota — è una decisione della shell (13.1 per gli allegati,
         // 5.3 e 23 per il contenuto remoto), non del provider che ha letto il
         // file. Chi disegna sa dove sta il vault; questo codice no.
+/// Ciò che si legge di un wikilink **senza alias**: l'interno intero, non la
         LinkTarget::Url(url) if embed => {
             write!(out, "<div class=\"embed\"{}>", attr("data-embed-url", url)).unwrap();
             render_link_label(label, url, opts, out);
@@ -502,7 +503,6 @@ fn render_link(
     }
 }
 
-/// Ciò che si legge di un wikilink **senza alias**: l'interno intero, non la
 /// sola pagina.
 ///
 /// `label: None` vuol dire «l'autore non ha scritto un alias», e allora ciò che
@@ -510,11 +510,11 @@ fn render_link(
 /// Finché il parser sintetizzava l'etichetta dal bersaglio la differenza non si
 /// vedeva mai da qui; adesso che non la sintetizza più, il ripiego sulla sola
 /// `page` mangerebbe l'heading a schermo.
-fn interno(target: &LinkTarget, page: &str) -> String {
+/// L'etichetta di un link, **con le opzioni di chi ha chiesto la resa**.
+fn inner(target: &LinkTarget, page: &str) -> String {
     target.wiki_inner().unwrap_or_else(|| page.to_string())
 }
 
-/// L'etichetta di un link, **con le opzioni di chi ha chiesto la resa**.
 ///
 /// Un'etichetta non è testo piatto: è una fetta di inline come le altre, e può
 /// contenere un wikilink (`[vai a [[Nota]]](url)`, l'`alt` di un'immagine). Qui
@@ -529,6 +529,7 @@ fn interno(target: &LinkTarget, page: &str) -> String {
 /// La riparazione è passare le `opts` che il chiamante ha già in mano, come fa
 /// ogni altro ramo della resa: così **un'opzione nuova la ereditano tutti e sei
 /// i siti** che rendono un'etichetta, e ogni inline annidato la vede a qualunque
+/// profondità, senza che nessuno debba ricordarsene di nuovo.
 /// profondità, senza che nessuno debba ricordarsene di nuovo.
 fn render_link_label(
     label: Option<&[Inline]>,

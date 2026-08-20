@@ -53,7 +53,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::PluginError;
 use crate::model::DocId;
-use crate::rules::cartelle;
+use crate::rules::folders;
 use crate::traits::{DocumentMatch, LinkDirection, PropertyFilter};
 
 /// Un'interrogazione sui documenti: le clausole sono in **OR**, e vuoto è
@@ -282,13 +282,13 @@ impl QueryExpr {
     pub fn predicates(&self) -> impl Iterator<Item = &QueryPredicate> {
         self.any
             .iter()
-            .flat_map(|c| c.all.iter().map(|l| &l.predicate))
+            .flat_map(|c| c.all.iter().map(|the| &the.predicate))
     }
 }
 
 impl QueryClause {
     pub fn predicates(&self) -> impl Iterator<Item = &QueryPredicate> {
-        self.all.iter().map(|l| &l.predicate)
+        self.all.iter().map(|the| &the.predicate)
     }
 }
 
@@ -328,7 +328,7 @@ pub fn folder_of(doc: &DocId) -> String {
 /// La cartella che contiene un path, qualunque cosa quel path nomini: un file o
 /// **un'altra cartella** (§14.3). `""` per chi sta nella radice.
 pub fn parent_folder(path: &str) -> &str {
-    cartelle::genitrice(path)
+    folders::parent(path)
 }
 
 /// Il documento sta in questa cartella? Con `descendants`, anche in una sua
@@ -350,7 +350,7 @@ pub fn in_folder(doc: &DocId, path: &str, descendants: bool) -> bool {
 /// se la scrivevano ognuna per conto proprio davano tre risposte diverse alla
 /// stessa cartella (difetto 0141).
 pub fn within_folder(own: &str, path: &str, descendants: bool) -> bool {
-    cartelle::dentro(path, own, descendants)
+    folders::within(path, own, descendants)
 }
 
 /// Un tag (in forma canonica) soddisfa la richiesta? Con `descendants`, anche
@@ -563,13 +563,13 @@ mod tests {
 
     /// Un valutatore finto: l'universo sono cinque note, e l'unico predicato che
     /// conosce è `Docs`.
-    struct Finto;
+    struct Fake;
 
     fn doc(n: &str) -> DocId {
         DocId::new(n)
     }
 
-    impl QueryEvaluator for Finto {
+    impl QueryEvaluator for Fake {
         fn universe(&self) -> Result<Matches, PluginError> {
             Ok(Matches::of_docs(
                 ["a.md", "b.md", "c.md", "d.md", "e.md"].map(doc),
@@ -597,13 +597,13 @@ mod tests {
     }
 
     #[test]
-    fn vuoto_vuol_dire_tutto_ed_e_lidentita_dellintersezione() {
-        let tutto = Finto.expr(&QueryExpr::all()).unwrap();
-        assert_eq!(ids(tutto).len(), 5, "nessuna clausola = ogni documento");
+    fn empty_means_everything_and_is_the_intersection_identity() {
+        let everything = Fake.expr(&QueryExpr::all()).unwrap();
+        assert_eq!(ids(everything).len(), 5, "no clause = every document");
 
         // Una clausola vuota è l'identità: in OR con un'altra, il risultato è
         // comunque tutto — ed è il motivo per cui `is_everything` la riconosce.
-        let con_vuota = QueryExpr {
+        let with_empty = QueryExpr {
             any: vec![
                 QueryClause { all: vec![] },
                 QueryClause {
@@ -611,21 +611,21 @@ mod tests {
                 },
             ],
         };
-        assert!(con_vuota.is_everything());
-        assert_eq!(Finto.expr(&con_vuota).unwrap().len(), 5);
+        assert!(with_empty.is_everything());
+        assert_eq!(Fake.expr(&with_empty).unwrap().len(), 5);
     }
 
     #[test]
-    fn and_or_e_negazione_sono_scritti_una_volta_sola() {
+    fn and_or_and_negation_are_written_a_time_single() {
         // (a,b) AND (b,c) = b
-        let clausola = QueryClause {
+        let clause = QueryClause {
             all: vec![some(&["a.md", "b.md"]), some(&["b.md", "c.md"])],
         };
-        assert_eq!(ids(Finto.clause(&clausola).unwrap()), vec!["b.md"]);
+        assert_eq!(ids(Fake.clause(&clause).unwrap()), vec!["b.md"]);
 
         // (a) OR (c) = a,c — e l'ordine è quello dei DocId, non quello di
         // scrittura: senza, la seconda pagina di una risposta non combacia.
-        let unione = QueryExpr {
+        let union = QueryExpr {
             any: vec![
                 QueryClause {
                     all: vec![some(&["c.md"])],
@@ -635,11 +635,11 @@ mod tests {
                 },
             ],
         };
-        assert_eq!(ids(Finto.expr(&unione).unwrap()), vec!["a.md", "c.md"]);
+        assert_eq!(ids(Fake.expr(&union).unwrap()), vec!["a.md", "c.md"]);
 
         // NOT (a,b,c,d) = e — il complemento è rispetto all'universo di chi
         // valuta, che è l'unica risposta possibile a "tutto tranne".
-        let negata = QueryExpr {
+        let negated = QueryExpr {
             any: vec![QueryClause {
                 all: vec![QueryLiteral {
                     negated: true,
@@ -649,15 +649,15 @@ mod tests {
                 }],
             }],
         };
-        assert_eq!(ids(Finto.expr(&negata).unwrap()), vec!["e.md"]);
+        assert_eq!(ids(Fake.expr(&negated).unwrap()), vec!["e.md"]);
     }
 
     #[test]
-    fn un_and_gia_vuoto_non_interroga_il_resto() {
+    fn an_already_empty_and_does_not_query_the_rest() {
         // Il secondo letterale è un predicato che questo valutatore NON sa
         // servire: se venisse interrogato, il test sarebbe un errore invece che
         // un insieme vuoto.
-        let clausola = QueryClause {
+        let clause = QueryClause {
             all: vec![
                 some(&[]),
                 QueryLiteral {
@@ -671,11 +671,11 @@ mod tests {
                 },
             ],
         };
-        assert!(Finto.clause(&clausola).unwrap().is_empty());
+        assert!(Fake.clause(&clause).unwrap().is_empty());
     }
 
     #[test]
-    fn una_query_attraversa_il_json_come_la_manda_la_shell() {
+    fn a_query_crosses_the_json_as_the_sends_the_shell() {
         let expr = QueryExpr {
             any: vec![QueryClause {
                 all: vec![
@@ -693,11 +693,11 @@ mod tests {
                 ],
             }],
         };
-        let json = serde_json::to_string(&expr).expect("una query è JSON, o non arriva a nessuno");
+        let json = serde_json::to_string(&expr).expect("a query is JSON or it reaches nobody");
         assert_eq!(
             serde_json::from_str::<QueryExpr>(&json).unwrap(),
             expr,
-            "round-trip: è la stessa serializzazione che attraversa l'IPC"
+            "round-trip: it is the same serialization that crosses the IPC"
         );
         assert!(
             json.contains("\"kind\":\"text\""),

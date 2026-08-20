@@ -113,7 +113,7 @@ pub fn catalog() -> Vec<StringCatalog> {
         ),
         StringCatalog::new("en").with(VIEW_TITLE, "Graph").with(
             FALLBACK,
-            "This shell cannot draw a graph: it has no renderer for “fub:graph”.",
+            "This shell cannot draw a graph: it has no renderer for `fub:graph`.",
         ),
     ]
 }
@@ -189,8 +189,8 @@ impl ViewProvider for GraphView {
 /// L'albero della view: un nodo custom col grafo dentro, e il ripiego per chi
 /// non sa disegnarlo.
 fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
-    let nodes = documenti(host)?;
-    let edges = archi(host)?;
+    let nodes = documents(host)?;
+    let edges = edges(host)?;
     Ok(UiNode::new(UiKind::Custom {
         ns: GRAPH_NS.to_string(),
         payload: json!({ NODES: nodes, EDGES: edges }),
@@ -203,7 +203,7 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
 /// Senza finestra, come i tag: un grafo mostrato a pagine non è un grafo. È
 /// anche il motivo per cui il §2.9 (virtualizzazione) non lo tocca — qui non c'è
 /// una lista da tagliare, c'è una topologia che o si ha intera o si mente.
-fn documenti(host: &dyn ReadApi) -> Result<Vec<String>, PluginError> {
+fn documents(host: &dyn ReadApi) -> Result<Vec<String>, PluginError> {
     Ok(host
         .query_index(IndexQuery::Documents {
             matching: QueryExpr::all(),
@@ -233,8 +233,8 @@ fn documenti(host: &dyn ReadApi) -> Result<Vec<String>, PluginError> {
 /// mandarne due significa farne disegnare due sovrapposte a chi sta di là. Che a
 /// dedurre sia il provider e non chi disegna è la regola generale — il confine si
 /// attraversa una volta, quindi lo si attraversa già pulito.
-fn archi(host: &dyn ReadApi) -> Result<Vec<serde_json::Value>, PluginError> {
-    let vicini = match host.query_index(IndexQuery::Neighbors {
+fn edges(host: &dyn ReadApi) -> Result<Vec<serde_json::Value>, PluginError> {
+    let neighbors = match host.query_index(IndexQuery::Neighbors {
         seeds: QueryExpr::all(),
         direction: LinkDirection::Outbound,
         depth: 1,
@@ -243,21 +243,21 @@ fn archi(host: &dyn ReadApi) -> Result<Vec<serde_json::Value>, PluginError> {
         IndexResult::Neighbors(n) => n.items,
         other => {
             return Err(PluginError::Internal(
-                format!("query vicini: risposta fuori tema: {}", other.kind_name()).into(),
+                format!("neighbors query: off-topic response: {}", other.kind_name()).into(),
             ))
         }
     };
-    let mut visti = std::collections::BTreeSet::new();
+    let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
-    for NeighborRef { doc, via, .. } in vicini {
+    for NeighborRef { doc, via, .. } in neighbors {
         // `via` è il documento **da cui** si parte e `doc` quello a cui si
         // arriva: il verso è quello della query (`Outbound`), non l'ordine dei
         // campi.
-        let arco = (via.to_string(), doc.to_string());
-        if !visti.insert(arco.clone()) {
+        let edge = (via.to_string(), doc.to_string());
+        if !seen.insert(edge.clone()) {
             continue;
         }
-        out.push(json!({ FROM: arco.0, TO: arco.1 }));
+        out.push(json!({ FROM: edge.0, TO: edge.1 }));
     }
     Ok(out)
 }
@@ -270,13 +270,13 @@ mod tests {
     /// Il nodo custom dell'albero, con il suo payload.
     fn custom(tree: &UiNode) -> (&str, &serde_json::Value) {
         let UiKind::Custom { ns, payload, .. } = &tree.kind else {
-            panic!("il grafo è un nodo custom")
+            panic!("the graph is a custom node")
         };
         (ns, payload)
     }
 
-    fn nomi(payload: &serde_json::Value, chiave: &str) -> Vec<String> {
-        payload[chiave]
+    fn names(payload: &serde_json::Value, key: &str) -> Vec<String> {
+        payload[key]
             .as_array()
             .unwrap()
             .iter()
@@ -289,15 +289,15 @@ mod tests {
     #[test]
     fn the_graph_is_a_custom_node_with_nodes_and_edges() {
         let host = MemoryHost::new()
-            .con_documento("a.md", "[[b]]")
-            .con_documento("b.md", "")
-            .con_arco("a.md", "b.md");
+            .with_document("a.md", "[[b]]")
+            .with_document("b.md", "")
+            .with_edge("a.md", "b.md");
         let tree = GraphView
             .render_view(&ViewInstance::only(GRAPH_VIEW), &host)
             .unwrap();
         let (ns, payload) = custom(&tree);
         assert_eq!(ns, GRAPH_NS);
-        assert_eq!(nomi(payload, NODES), [r#""a.md""#, r#""b.md""#]);
+        assert_eq!(names(payload, NODES), [r#""a.md""#, r#""b.md""#]);
         assert_eq!(
             payload[EDGES].as_array().unwrap(),
             &[json!({ FROM: "a.md", TO: "b.md" })]
@@ -310,10 +310,10 @@ mod tests {
     #[test]
     fn two_links_between_the_same_notes_are_one_edge() {
         let host = MemoryHost::new()
-            .con_documento("a.md", "[[b]] e ancora [[b]]")
-            .con_documento("b.md", "")
-            .con_arco("a.md", "b.md")
-            .con_arco("a.md", "b.md");
+            .with_document("a.md", "[[b]] and again [[b]]")
+            .with_document("b.md", "")
+            .with_edge("a.md", "b.md")
+            .with_edge("a.md", "b.md");
         let tree = GraphView
             .render_view(&ViewInstance::only(GRAPH_VIEW), &host)
             .unwrap();
@@ -326,7 +326,7 @@ mod tests {
     /// conosce nemmeno quando il vault è pieno.
     #[test]
     fn the_fallback_says_what_is_missing() {
-        let host = MemoryHost::new().con_documento("a.md", "");
+        let host = MemoryHost::new().with_document("a.md", "");
         let tree = GraphView
             .render_view(&ViewInstance::only(GRAPH_VIEW), &host)
             .unwrap();
@@ -343,14 +343,14 @@ mod tests {
         let update = GraphView
             .on_action(
                 &ViewInstance::only(GRAPH_VIEW),
-                UiAction::new(OPEN).with_payload(json!({ DOC: "nota.md" })),
+                UiAction::new(OPEN).with_payload(json!({ DOC: "note.md" })),
                 &mut host,
             )
             .unwrap();
         assert_eq!(
             update,
             ViewUpdate::Navigate {
-                doc_id: "nota.md".into()
+                doc_id: "note.md".into()
             }
         );
     }

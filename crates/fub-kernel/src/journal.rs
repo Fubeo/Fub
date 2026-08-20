@@ -186,7 +186,7 @@ const FILE: &str = "journal.jsonl";
 /// Diecimila è largo per un uso normale (un salvataggio è un record) e stretto
 /// abbastanza da tenere il file nell'ordine dei megabyte, cioè leggibile in un
 /// colpo all'apertura del vault.
-pub const TETTO: usize = 10_000;
+pub const CEILING: usize = 10_000;
 
 /// Per quanti giorni si conserva una riga. **Zero = per sempre**, ed è il
 /// default: vedi il § «E chi decide *per quanto*» in testa al modulo.
@@ -396,14 +396,14 @@ impl JournalRecord {
 
 /// Ciò che una lettura del registro ha trovato, **e ciò che non ha letto**.
 #[derive(Debug, Default)]
-pub struct Lettura {
+pub struct JournalRead {
     /// I record, dal più vecchio al più recente.
     pub records: Vec<JournalRecord>,
     /// Quante righe sono state scartate: una coda troncata da un crash, una riga
     /// illeggibile, o una riga di una versione di schema che non si conosce.
     /// Non è un errore ed è per questo che si conta: chi legge deve poter dire
     /// che la sua vista è parziale, invece di crederla intera.
-    pub scartate: usize,
+    pub pruned: usize,
 }
 
 /// Il registro append-only di un vault.
@@ -449,7 +449,7 @@ impl Journal {
         // una chiave arriva alla dichiarazione, che è dopo, e leggerne una non
         // dichiarata darebbe un errore — non un default. La potatura per età la
         // fa [`Workspace`] appena la finestra esiste, e ogni volta che cambia.
-        journal.pota(0);
+        journal.prune(0);
         journal
     }
 
@@ -463,14 +463,14 @@ impl Journal {
     /// dà a chi ha svuotato sarebbe di una riga che nel frattempo è stata
     /// buttata senza essere contata.
     pub(crate) fn clear(&self) -> Result<usize, String> {
-        let mut quante = 0;
+        let mut count = 0;
         self.storage
-            .update(&self.path, &mut |attuale| {
-                quante = attuale.map(|raw| parse(raw).records.len()).unwrap_or(0);
+            .update(&self.path, &mut |current| {
+                count = current.map(|raw| parse(raw).records.len()).unwrap_or(0);
                 Ok(Some(Vec::new()))
             })
-            .map(|()| quante)
-            .map_err(|e| format!("non riesco a svuotare {}: {e}", self.path))
+            .map(|()| count)
+            .map_err(|and| format!("cannot empty {}: {and}", self.path))
     }
 
     /// Legge il registro, scartando ciò che non è una riga intera di questa
@@ -486,8 +486,8 @@ impl Journal {
     /// Ciò che sta *dentro* il file e non si capisce continua a contarsi in
     /// [`Lettura::scartate`] invece di fermare la lettura: quella è una vista
     /// parziale dichiarata, non un guasto del supporto.
-    pub(crate) fn read(&self) -> std::io::Result<Lettura> {
-        let raw = crate::error::se_c_e(self.storage.read(&self.path))?;
+    pub(crate) fn read(&self) -> std::io::Result<JournalRead> {
+        let raw = crate::error::optional(self.storage.read(&self.path))?;
         Ok(raw.as_deref().map(parse).unwrap_or_default())
     }
 
@@ -505,7 +505,7 @@ impl Journal {
             writer: self.writer.clone(),
             op,
         };
-        let json = serde_json::to_vec(&record).map_err(|e| e.to_string())?;
+        let json = serde_json::to_vec(&record).map_err(|and| and.to_string())?;
         // I **due** delimitatori fanno parte del record, e ognuno ha il suo
         // lavoro. Quello in coda dice che la riga è finita: senza, l'ultima riga
         // di un file scritto per intero sarebbe indistinguibile da una troncata
@@ -515,13 +515,13 @@ impl Journal {
         // — cioè decidere fuori dal lucchetto ciò che si scrive dentro. Costa un
         // byte per riga; la riga vuota che ne esce quando il file era intero non
         // è un record e la lettura la salta (vedi il § in testa al modulo).
-        let mut riga = Vec::with_capacity(json.len() + 2);
-        riga.push(b'\n');
-        riga.extend_from_slice(&json);
-        riga.push(b'\n');
+        let mut row = Vec::with_capacity(json.len() + 2);
+        row.push(b'\n');
+        row.extend_from_slice(&json);
+        row.push(b'\n');
         self.storage
-            .append(&self.path, &riga)
-            .map_err(|e| format!("non riesco a scrivere {}: {e}", self.path))
+            .append(&self.path, &row)
+            .map_err(|and| format!("cannot write {}: {and}", self.path))
     }
 
     /// Riscrive il file tenendo le ultime [`TETTO`] righe e quelle dentro la
@@ -546,7 +546,7 @@ impl Journal {
     /// Un fallimento non risale e non blocca niente: un vault si apre anche se
     /// il suo registro non si è potuto potare, e la riga successiva ci si
     /// appende sopra lo stesso.
-    pub(crate) fn pota(&self, giorni: u64) {
+    pub(crate) fn prune(&self, days: u64) {
         // Un **aggiornamento** e non una lettura seguita da una scrittura, e la
         // differenza è vera ma più stretta di come si legge: `update` rilegge
         // dentro il lucchetto (0066), quindi due potature dello stesso registro
@@ -567,11 +567,11 @@ impl Journal {
         // Qui il file si **sostituisce**, ed è l'unico momento in cui il
         // registro passa dalla scrittura atomica del supporto (0065): l'unico in
         // cui perderlo tutto insieme sarebbe possibile.
-        let esito = self.storage.update(&self.path, &mut |attuale| {
-            Ok(attuale.and_then(|raw| potato(raw, giorni)))
+        let outcome = self.storage.update(&self.path, &mut |current| {
+            Ok(current.and_then(|raw| pruned(raw, days)))
         });
-        if let Err(e) = esito {
-            tracing::warn!(target: "fub.kernel", "registro: non potato: {e}");
+        if let Err(and) = outcome {
+            tracing::warn!(target: "fub.kernel", "journal: not pruned: {and}");
         }
     }
 }
@@ -582,15 +582,15 @@ impl Journal {
 /// adesso e torna quelli che ci devono essere. Sta fuori perché è ciò che gira
 /// **dentro** il lucchetto del supporto, e ciò che gira là dentro non deve poter
 /// toccare il supporto.
-fn potato(raw: &[u8], giorni: u64) -> Option<Vec<u8>> {
+fn pruned(raw: &[u8], days: u64) -> Option<Vec<u8>> {
     // Solo un file che finisce per intero si pota: se in coda c'è una riga
     // lasciata a metà da un crash, non la si riscrive di certo — la prossima
     // aggiunta si delimita da sé e il file torna potabile da lì.
-    let tutte: Vec<&[u8]> = raw.split(|b| *b == b'\n').collect();
-    let (Some(ultima), tutte) = (tutte.last(), &tutte[..tutte.len().saturating_sub(1)]) else {
+    let all: Vec<&[u8]> = raw.split(|b| *b == b'\n').collect();
+    let (Some(last), all) = (all.last(), &all[..all.len().saturating_sub(1)]) else {
         return None;
     };
-    if !ultima.is_empty() {
+    if !last.is_empty() {
         return None;
     }
     // Una riga vuota non è un record: è il delimitatore in testa di
@@ -598,28 +598,28 @@ fn potato(raw: &[u8], giorni: u64) -> Option<Vec<u8>> {
     // sbagliato — a metà dei record, con un delimitatore per riga —, e tenerla
     // nel file riscritto non servirebbe a niente: dopo una riscrittura la coda è
     // integra per costruzione, e il record che verrà si delimita da sé.
-    let righe: Vec<&[u8]> = tutte.iter().copied().filter(|r| !r.is_empty()).collect();
-    let mut taglio = righe
+    let rows: Vec<&[u8]> = all.iter().copied().filter(|r| !r.is_empty()).collect();
+    let mut cut = rows
         .len()
-        .saturating_sub(TETTO)
-        .max(scadute(&righe, giorni));
-    if taglio == 0 {
+        .saturating_sub(CEILING)
+        .max(expired(&rows, days));
+    if cut == 0 {
         return None;
     }
-    let chiave = |riga: &[u8]| -> Option<(String, BatchId)> {
-        let r: JournalRecord = serde_json::from_slice(riga).ok()?;
+    let key = |row: &[u8]| -> Option<(String, BatchId)> {
+        let r: JournalRecord = serde_json::from_slice(row).ok()?;
         r.origin.batch.map(|b| (r.writer, b))
     };
-    while taglio > 0 && taglio < righe.len() {
-        let qui = chiave(righe[taglio]);
-        if qui.is_none() || qui != chiave(righe[taglio - 1]) {
+    while cut > 0 && cut < rows.len() {
+        let here = key(rows[cut]);
+        if here.is_none() || here != key(rows[cut - 1]) {
             break;
         }
-        taglio += 1;
+        cut += 1;
     }
     let mut bytes = Vec::new();
-    for riga in &righe[taglio..] {
-        bytes.extend_from_slice(riga);
+    for row in &rows[cut..] {
+        bytes.extend_from_slice(row);
         bytes.push(b'\n');
     }
     Some(bytes)
@@ -637,46 +637,46 @@ fn potato(raw: &[u8], giorni: u64) -> Option<Vec<u8>> {
 /// Per la stessa ragione una riga che non porta nemmeno `at` **ferma** la
 /// scansione invece di cadere: il conto delle scadute è un prefisso, e ciò che
 /// non si data non è vecchio, è ignoto.
-fn scadute(righe: &[&[u8]], giorni: u64) -> usize {
-    if giorni == 0 {
+fn expired(rows: &[&[u8]], days: u64) -> usize {
+    if days == 0 {
         return 0;
     }
     #[derive(Deserialize)]
-    struct Quando {
+    struct When {
         at: u64,
     }
-    let soglia = crate::time::now_unix_millis().saturating_sub(giorni.saturating_mul(86_400_000));
-    righe
+    let threshold = crate::time::now_unix_millis().saturating_sub(days.saturating_mul(86_400_000));
+    rows
         .iter()
-        .position(|riga| match serde_json::from_slice::<Quando>(riga) {
-            Ok(q) => q.at >= soglia,
+        .position(|row| match serde_json::from_slice::<When>(row) {
+            Ok(q) => q.at >= threshold,
             Err(_) => true,
         })
-        .unwrap_or(righe.len())
+        .unwrap_or(rows.len())
 }
 
 /// Le righe intere di questa versione, e il conto di ciò che si è scartato.
-fn parse(raw: &[u8]) -> Lettura {
-    let mut lettura = Lettura::default();
-    let mut resto = raw;
-    while let Some(fine) = resto.iter().position(|b| *b == b'\n') {
-        let riga = &resto[..fine];
-        resto = &resto[fine + 1..];
-        if riga.is_empty() {
+fn parse(raw: &[u8]) -> JournalRead {
+    let mut read = JournalRead::default();
+    let mut rest = raw;
+    while let Some(end) = rest.iter().position(|b| *b == b'\n') {
+        let row = &rest[..end];
+        rest = &rest[end + 1..];
+        if row.is_empty() {
             continue;
         }
-        match serde_json::from_slice::<JournalRecord>(riga) {
+        match serde_json::from_slice::<JournalRecord>(row) {
             // Una versione che non si conosce è **di domani**, non rotta: si
             // salta come si salta una riga illeggibile, e si conta.
-            Ok(record) if record.v == SCHEMA_VERSION => lettura.records.push(record),
-            _ => lettura.scartate += 1,
+            Ok(record) if record.v == SCHEMA_VERSION => read.records.push(record),
+            _ => read.pruned += 1,
         }
     }
     // Ciò che resta senza terminatore è la coda troncata da un crash.
-    if !resto.is_empty() {
-        lettura.scartate += 1;
+    if !rest.is_empty() {
+        read.pruned += 1;
     }
-    lettura
+    read
 }
 
 #[cfg(test)]
@@ -685,11 +685,11 @@ mod tests {
     use crate::storage::MemStorage;
     use fub_abi::event::Actor;
 
-    fn banco() -> (Utf8PathBuf, Arc<MemStorage>) {
+    fn bench() -> (Utf8PathBuf, Arc<MemStorage>) {
         (Utf8PathBuf::from("/vault"), Arc::new(MemStorage::new()))
     }
 
-    fn rinomina(n: u32) -> JournalOp {
+    fn rename(n: u32) -> JournalOp {
         JournalOp::Renamed {
             from: DocId::new(format!("{n}.md")),
             to: DocId::new(format!("{n}-nuovo.md")),
@@ -697,26 +697,26 @@ mod tests {
     }
 
     #[test]
-    fn una_riga_per_mutazione_e_si_rileggono_in_ordine() {
-        let (root, storage) = banco();
+    fn a_row_for_mutation_and_is_reread_in_order() {
+        let (root, storage) = bench();
         let journal = Journal::open(&root, Arc::clone(&storage) as Arc<dyn VaultStorage>);
         for n in 0..3 {
             journal
-                .append(Origin::by(Actor::User), rinomina(n))
-                .expect("appende");
+                .append(Origin::by(Actor::User), rename(n))
+                .expect("appends");
         }
-        let lettura = journal.read().expect("registro leggibile");
-        assert_eq!(lettura.records.len(), 3);
-        assert_eq!(lettura.scartate, 0);
-        assert_eq!(lettura.records[0].op, rinomina(0));
-        assert_eq!(lettura.records[2].op, rinomina(2));
+        let read = journal.read().expect("journal readable");
+        assert_eq!(read.records.len(), 3);
+        assert_eq!(read.pruned, 0);
+        assert_eq!(read.records[0].op, rename(0));
+        assert_eq!(read.records[2].op, rename(2));
     }
 
     /// Una riga di una versione che non si conosce non fa rifiutare il file: si
     /// salta e si conta, come la coda troncata. È la regola che permette a
     /// questo file di sopravvivere a un aggiornamento di Fub.
     #[test]
-    fn una_riga_di_domani_si_salta_e_si_conta() {
+    fn a_row_of_domani_is_skips_and_is_counts() {
         let raw = format!(
             "{}\n{{\"v\":99,\"at\":1,\"origin\":{{\"actor\":{{\"kind\":\"user\"}},\"batch\":null}},\"writer\":\"x\",\"op\":{{\"op\":\"created\",\"doc\":\"b.md\",\"to\":\"r\"}}}}\n",
             serde_json::to_string(&JournalRecord {
@@ -724,38 +724,38 @@ mod tests {
                 at: 1,
                 origin: Origin::by(Actor::User),
                 writer: "x".into(),
-                op: rinomina(0),
+                op: rename(0),
             })
             .unwrap()
         );
-        let lettura = parse(raw.as_bytes());
-        assert_eq!(lettura.records.len(), 1, "la riga di oggi si legge");
-        assert_eq!(lettura.scartate, 1, "e quella di domani si conta");
+        let read = parse(raw.as_bytes());
+        assert_eq!(read.records.len(), 1, "today's line is read");
+        assert_eq!(read.pruned, 1, "and tomorrow's is counted");
     }
 
     #[test]
-    fn il_tetto_taglia_il_piu_vecchio() {
-        let (root, storage) = banco();
+    fn the_ceiling_cuts_the_more_old() {
+        let (root, storage) = bench();
         let journal = Journal::open(&root, Arc::clone(&storage) as Arc<dyn VaultStorage>);
-        for n in 0..(TETTO as u32 + 5) {
+        for n in 0..(CEILING as u32 + 5) {
             journal
-                .append(Origin::by(Actor::User), rinomina(n))
-                .expect("appende");
+                .append(Origin::by(Actor::User), rename(n))
+                .expect("appends");
         }
         assert_eq!(
-            journal.read().expect("registro leggibile").records.len(),
-            TETTO + 5,
-            "prima di potare"
+            journal.read().expect("journal readable").records.len(),
+            CEILING + 5,
+            "before pruning"
         );
 
         // Potare avviene all'apertura, non a ogni riga.
-        let riaperto = Journal::open(&root, storage as Arc<dyn VaultStorage>);
-        let lettura = riaperto.read().expect("registro leggibile");
-        assert_eq!(lettura.records.len(), TETTO);
+        let reopened = Journal::open(&root, storage as Arc<dyn VaultStorage>);
+        let read = reopened.read().expect("journal readable");
+        assert_eq!(read.records.len(), CEILING);
         assert_eq!(
-            lettura.records[0].op,
-            rinomina(5),
-            "cade fuori il più vecchio"
+            read.records[0].op,
+            rename(5),
+            "the oldest drops out"
         );
     }
 }

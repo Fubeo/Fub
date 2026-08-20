@@ -142,7 +142,7 @@ fn highlights_land_on_the_right_bytes_in_accented_text() {
 }
 
 #[test]
-fn editing_a_note_updates_what_is_findable() {
+fn editing_a_notes_updates_what_is_findable() {
     let v = Vault::new();
     v.put("nota.md", "Il contenuto originale parla di vulcani.\n");
     let mut ws = v.open();
@@ -163,7 +163,7 @@ fn editing_a_note_updates_what_is_findable() {
 }
 
 #[test]
-fn a_renamed_note_leaves_no_ghost_behind() {
+fn a_renamed_notes_leaves_no_ghost_behind() {
     let v = Vault::new();
     v.put("Bozza.md", "Appunti sulla fotosintesi.\n");
     let mut ws = v.open();
@@ -182,7 +182,7 @@ fn a_renamed_note_leaves_no_ghost_behind() {
 }
 
 #[test]
-fn deleting_a_note_removes_it_from_search() {
+fn deleting_a_notes_removes_it_from_search() {
     let v = Vault::new();
     v.put("effimera.md", "Contenuto passeggero.\n");
     let mut ws = v.open();
@@ -193,7 +193,7 @@ fn deleting_a_note_removes_it_from_search() {
 }
 
 #[test]
-fn trashing_a_note_makes_it_vanish_from_search_and_backlinks_and_coming_back_undoes_it() {
+fn trashing_a_notes_makes_it_vanish_from_search_and_backlinks_and_coming_back_undoes_it() {
     let v = Vault::new();
     v.put("Fotosintesi.md", "La clorofilla cattura la luce.\n");
     v.put("Biologia.md", "Vedi [[Fotosintesi]] per il dettaglio.\n");
@@ -201,7 +201,7 @@ fn trashing_a_note_makes_it_vanish_from_search_and_backlinks_and_coming_back_und
     assert_eq!(found(&ws, "clorofilla"), vec!["Fotosintesi.md"]);
     assert_eq!(ws.backlinks(&DocId::new("Fotosintesi.md")).len(), 1);
 
-    let cestinata = ws.delete_document(&DocId::new("Fotosintesi.md")).unwrap();
+    let trashed = ws.delete_document(&DocId::new("Fotosintesi.md")).unwrap();
 
     assert!(found(&ws, "clorofilla").is_empty(), "non più cercabile");
     // Il link da Biologia non è stato toccato — cancellare una nota non
@@ -214,7 +214,7 @@ fn trashing_a_note_makes_it_vanish_from_search_and_backlinks_and_coming_back_und
     assert!(ws.resolve_link("Fotosintesi").is_none());
     assert!(ws.backlinks(&DocId::new("Fotosintesi.md")).is_empty());
 
-    ws.restore_from_trash(&cestinata, None).unwrap();
+    ws.restore_from_trash(&trashed, None).unwrap();
 
     assert_eq!(found(&ws, "clorofilla"), vec!["Fotosintesi.md"]);
     assert_eq!(
@@ -395,14 +395,14 @@ fn query_latency_on_a_large_vault() {
     ];
 
     let v = Vault::new();
-    for i in 0..DOCS {
+    for the in 0..DOCS {
         let body: String = (0..120)
-            .map(|j| WORDS[(i * 7 + j * 3) % WORDS.len()])
+            .map(|j| WORDS[(the * 7 + j * 3) % WORDS.len()])
             .collect::<Vec<_>>()
             .join(" ");
         v.put(
-            &format!("dir{}/nota-{i}.md", i % 40),
-            &format!("# Nota {i}\n\n{body}\n"),
+            &format!("dir{}/nota-{the}.md", the % 40),
+            &format!("# Nota {the}\n\n{body}\n"),
         );
     }
 
@@ -511,8 +511,8 @@ fn omitting_excerpts_keeps_relevance() {
     );
     let ws = v.open();
 
-    let con = search(&ws, "memoria");
-    let senza = match ws.query_index(IndexQuery::Documents {
+    let with = search(&ws, "memoria");
+    let without = match ws.query_index(IndexQuery::Documents {
         matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("memoria"))),
         sort: None,
         select: PropertySelect::None,
@@ -524,23 +524,23 @@ fn omitting_excerpts_keeps_relevance() {
     };
 
     assert_eq!(
-        con.iter().map(|h| h.doc.to_string()).collect::<Vec<_>>(),
-        senza.iter().map(|h| h.doc.to_string()).collect::<Vec<_>>(),
+        with.iter().map(|h| h.doc.to_string()).collect::<Vec<_>>(),
+        without.iter().map(|h| h.doc.to_string()).collect::<Vec<_>>(),
         "stessa selezione e stesso ordine: `Omit` non è un'altra domanda"
     );
     assert_eq!(
-        senza[0].doc.to_string(),
+        without[0].doc.to_string(),
         "Memoria.md",
         "il boost del titolo"
     );
     assert!(
-        senza
+        without
             .iter()
             .all(|h| h.snippet.is_none() && h.highlights.is_empty()),
         "nessun estratto era stato chiesto"
     );
     assert!(
-        senza.iter().all(|h| h.score.is_some()),
+        without.iter().all(|h| h.score.is_some()),
         "la rilevanza resta: serve a ordinare, non a raccontare"
     );
 }

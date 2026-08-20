@@ -272,12 +272,12 @@ impl DocumentStore {
         let grafted = self.syntax.forms(&provider.descriptor().id);
         // La domanda «è già innestato?» si fa una volta per nome che il
         // provider dichiara: su un insieme, non rescandendo l'elenco.
-        let innestati: HashSet<&str> = grafted.iter().map(|g| g.name.as_str()).collect();
+        let nested: HashSet<&str> = grafted.iter().map(|g| g.name.as_str()).collect();
         let mut out: Vec<SyntaxForm> = provider
             .capabilities()
             .syntax
             .active()
-            .filter(|(name, _)| !innestati.contains(*name))
+            .filter(|(name, _)| !nested.contains(*name))
             .map(|(name, _)| SyntaxForm {
                 name: name.to_string(),
                 trigger: None,
@@ -313,8 +313,8 @@ impl DocumentStore {
             .list(&plugins)
             .unwrap_or_default()
             .into_iter()
-            .filter(|e| e.stat.is_dir())
-            .map(|e| e.path)
+            .filter(|and| and.stat.is_dir())
+            .map(|and| and.path)
             .collect()
     }
 }

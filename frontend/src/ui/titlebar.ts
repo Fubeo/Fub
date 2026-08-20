@@ -10,24 +10,24 @@
 // controlli fa d'istinto, e non bisogna insegnarglielo. I controlli stessi
 // non lo fanno — chi clicca un bottone vuole quel bottone, non l'intera barra.
 //
-// `eMassimizzata` decide l'icona del bottone: quadrato piccolo quando è
+// `isMaximized` decide l'icona del bottone: quadrato piccolo quando è
 // massimizzata (premi per ripristinare), quadrato grande quando no (premi
-// per ingrandire). `onCambio` la ridisegna quando lo stato cambia da fuori —
+// per ingrandire). `onResize` la ridisegna quando lo stato cambia da fuori —
 // un tasto della tastiera, una scorciatoia di sistema — perché la titlebar è
 // il posto in cui lo stato della finestra si legge, e un'icona vecchia
 // sarebbe una bugia.
-import { finestra } from "../host/ipc";
+import { window } from "../host/ipc";
 import { $ } from "./dom";
 import { icon } from "./icons";
-import type { Vita } from "./vita";
-import { t, onLingua } from "../i18n/strings";
+import type { Lifetime } from "./lifetime";
+import { t, onLanguage } from "../i18n/strings";
 
 /// Monta i controlli finestra e il doppio click della titlebar.
 ///
-/// Prende la `Vita` della finestra: gli ascoltori che attacca vivono quanto
+/// Prende la `Lifetime` della finestra: gli ascoltori che attacca vivono quanto
 /// lei, e quando la shell smonta non restano appesi. L'unlistener di
-/// `onCambio` è l'altro capo — la shell lo tiene nella vita, e chiudi.
-export function mountTitlebar(vita: Vita): void {
+/// `onResize` è l'altro capo — la shell lo tiene nella vita, e chiudi.
+export function mountTitlebar(lifetime: Lifetime): void {
   const topbar = $("#topbar");
   const min = $("#win-min") as HTMLButtonElement;
   const max = $("#win-max") as HTMLButtonElement;
@@ -38,11 +38,11 @@ export function mountTitlebar(vita: Vita): void {
   // sinistra per chiudere, come ha sempre fatto. La classe da sola non basta:
   // `#window-controls` vive in `#titlebar-right`, e `order` non lo porta
   // fuori dalla sua zona. Si sposta il nodo in cima a `#titlebar-left`.
-  if (piattaformaMac()) {
+  if (macPlatform()) {
     topbar.classList.add("titlebar--darwin");
-    const controlli = document.getElementById("window-controls");
-    const sinistra = document.getElementById("titlebar-left");
-    if (controlli && sinistra) sinistra.prepend(controlli);
+    const controls = document.getElementById("window-controls");
+    const left = document.getElementById("titlebar-left");
+    if (controls && left) left.prepend(controls);
   }
 
   // Le icone: i tre controlli e i due bottoni a destra nascono vuoti
@@ -56,15 +56,15 @@ export function mountTitlebar(vita: Vita): void {
 
   min.addEventListener("click", (e) => {
     e.stopPropagation();
-    void finestra.minimizza();
+    void window.minimize();
   });
   max.addEventListener("click", (e) => {
     e.stopPropagation();
-    void finestra.alternaMassimizza();
+    void window.toggleMaximize();
   });
   close.addEventListener("click", (e) => {
     e.stopPropagation();
-    void finestra.chiudi();
+    void window.close();
   });
 
   // Doppio click sulla barra (non sui controlli): alterna la massimizzazione.
@@ -73,43 +73,43 @@ export function mountTitlebar(vita: Vita): void {
   // il bottone.
   topbar.addEventListener("dblclick", (e) => {
     if (e.target instanceof HTMLElement && e.target.closest("button")) return;
-    void finestra.alternaMassimizza();
+    void window.toggleMaximize();
   });
 
   // L'icona del max segue lo stato. La si ridisegna adesso e a ogni cambio:
   // un'icona vecchia direbbe «premi per ingrandire» quando la finestra è già
   // piena, ed è la bugia più stupida che una titlebar possa dire.
-  void aggiornaIconaMax(max);
-  // `onCambio` restituisce la promessa di un unlisten: la si affida alla vita
+  void updateMaxIcon(max);
+  // `onResize` restituisce la promessa di un unlisten: la si affida alla vita
   // quando arriva, e se la vita si chiude prima non resta appesa — `aggiungi`
   // su una vita chiusa smonta subito, e l'unlisten non ancora arrivato è un
   // no-op di là dal confine.
-  finestra
-    .onCambio(() => void aggiornaIconaMax(max))
-    .then((unlisten) => vita.aggiungi(unlisten))
+  window
+    .onResize(() => void updateMaxIcon(max))
+    .then((unlisten) => lifetime.add(unlisten))
     .catch(() => {});
 
   // L'aria-label seguono la lingua, come ogni testo della shell. Si
   // iscrivono qui perché la titlebar non ha un `render`: è fissa, e i suoi
   // testi si rinfrescano quando la lingua cambia e non a ogni ridisegno.
-  applicaLabelControlli(min, max, close);
-  vita.aggiungi(onLingua(() => applicaLabelControlli(min, max, close)));
+  applyControlLabels(min, max, close);
+  lifetime.add(onLanguage(() => applyControlLabels(min, max, close)));
 }
 
 /// Disegna l'icona del bottone max in base allo stato della finestra.
 ///
-/// Restituisce la promessa perché `eMassimizzata` è async — chiede alla
+/// Restituisce la promessa perché `isMaximized` è async — chiede alla
 /// finestra il suo stato, che è di là dal confine — e chi la chiama può
 /// attendere o meno.
-async function aggiornaIconaMax(btn: HTMLButtonElement): Promise<void> {
-  const massimizzata = await finestra.eMassimizzata();
-  btn.innerHTML = icon(massimizzata ? "restore" : "square");
-  btn.setAttribute("aria-pressed", String(massimizzata));
-  btn.setAttribute("aria-label", t(massimizzata ? "window.restore" : "window.max"));
+async function updateMaxIcon(btn: HTMLButtonElement): Promise<void> {
+  const maximized = await window.isMaximized();
+  btn.innerHTML = icon(maximized ? "restore" : "square");
+  btn.setAttribute("aria-pressed", String(maximized));
+  btn.setAttribute("aria-label", t(maximized ? "window.restore" : "window.max"));
 }
 
 /// Applica gli aria-label dei tre controlli, nella lingua corrente.
-function applicaLabelControlli(
+function applyControlLabels(
   min: HTMLButtonElement,
   max: HTMLButtonElement,
   close: HTMLButtonElement,
@@ -124,7 +124,7 @@ function applicaLabelControlli(
 
 /// È un Mac? `navigator.platform` lo dice, e con la tolleranza che si deve a
 /// un dato che in un Tauri mobile non ci sarà.
-function piattaformaMac(): boolean {
+function macPlatform(): boolean {
   return (
     typeof navigator !== "undefined" && /mac/i.test(navigator.platform ?? "")
   );

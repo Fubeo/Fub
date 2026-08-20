@@ -93,7 +93,7 @@ fn computes_backlinks_with_context() {
         sources.contains(&"Daily/2026-07-24.md"),
         "backlink: {sources:?}"
     );
-    ogni_backlink_porta_il_contesto(&bl, "Nota B");
+    every_backlink_carries_the_context(&bl, "Nota B");
 }
 
 /// **Ogni** backlink porta il contesto, e il contesto è la riga in cui il
@@ -125,7 +125,7 @@ fn computes_backlinks_with_context() {
 /// Sta in una funzione e non nel banco perché i backlink li chiedono altri sei
 /// test di questo file: il secondo che vorrà guardare il contesto non ha da
 /// riscrivere né la pretesa né il messaggio.
-fn ogni_backlink_porta_il_contesto(refs: &[BacklinkRef], bersaglio: &str) {
+fn every_backlink_carries_the_context(refs: &[BacklinkRef], target: &str) {
     assert!(!refs.is_empty(), "nessun backlink da controllare");
     for r in refs {
         let ctx = r.context.as_deref().unwrap_or_else(|| {
@@ -136,8 +136,8 @@ fn ogni_backlink_porta_il_contesto(refs: &[BacklinkRef], bersaglio: &str) {
             )
         });
         assert!(
-            ctx.contains(bersaglio),
-            "il contesto del backlink da {} non nomina `{bersaglio}`: {ctx:?} — \
+            ctx.contains(target),
+            "il contesto del backlink da {} non nomina `{target}`: {ctx:?} — \
              il campo porta un pezzo del documento che non è la riga del \
              riferimento",
             r.source.as_str()
@@ -205,37 +205,37 @@ fn edit_updates_graph_and_backlinks() {
 /// `fub-format-markdown/src/lib.rs`: il segnaposto non scriveva l'ancora. Questo
 /// banco presidia il resto della strada, che quell'ancora prima non aveva.
 #[test]
-fn un_embed_a_un_blocco_ritaglia_quel_blocco() {
+fn a_embed_a_a_block_ritaglia_quel_block() {
     let (_scratch, mut ws) = open_scratch();
-    let nota = DocId::new("Nota B.md");
+    let notes = DocId::new("Nota B.md");
     ws.write_document(
-        &nota,
+        &notes,
         "# Nota B\n\nprimo paragrafo\n\nil secondo, indirizzabile ^bersaglio\n\nterzo\n",
         WriteBase::Dictated,
     )
     .unwrap();
 
-    let (_id, tutta) = ws
+    let (_id, all) = ws
         .render_embed("Nota B", None, None)
         .expect("la nota intera");
     assert!(
-        tutta.html.contains("primo") && tutta.html.contains("terzo"),
+        all.html.contains("primo") && all.html.contains("terzo"),
         "senza coordinate si trascluda tutto: {}",
-        tutta.html
+        all.html
     );
 
-    let (_id, blocco) = ws
+    let (_id, block) = ws
         .render_embed("Nota B", None, Some("bersaglio"))
         .expect("il blocco indirizzato");
     assert!(
-        blocco.html.contains("il secondo"),
+        block.html.contains("il secondo"),
         "l'embed non porta il blocco chiesto: {}",
-        blocco.html
+        block.html
     );
     assert!(
-        !blocco.html.contains("primo") && !blocco.html.contains("terzo"),
+        !block.html.contains("primo") && !block.html.contains("terzo"),
         "l'embed di un blocco porta anche il resto della nota: {}",
-        blocco.html
+        block.html
     );
 
     // Case-insensitive come tutta la risoluzione delle ancore
@@ -255,16 +255,16 @@ fn un_embed_a_un_blocco_ritaglia_quel_blocco() {
 }
 
 #[test]
-fn a_new_note_takes_the_first_free_untitled_name() {
+fn a_new_notes_takes_the_first_free_untitled_name() {
     let (_scratch, mut ws) = open_scratch();
 
-    assert_eq!(ws.create_note(None).unwrap(), DocId::new("Senza titolo.md"));
+    assert_eq!(ws.create_notes(None).unwrap(), DocId::new("Senza titolo.md"));
     assert_eq!(
-        ws.create_note(None).unwrap(),
+        ws.create_notes(None).unwrap(),
         DocId::new("Senza titolo 1.md")
     );
     assert_eq!(
-        ws.create_note(None).unwrap(),
+        ws.create_notes(None).unwrap(),
         DocId::new("Senza titolo 2.md")
     );
 
@@ -274,38 +274,38 @@ fn a_new_note_takes_the_first_free_untitled_name() {
 }
 
 #[test]
-fn creating_the_note_a_dangling_link_points_to_makes_the_backlink_appear() {
+fn creating_the_notes_a_dangling_link_points_to_makes_the_backlink_appear() {
     let (_scratch, mut ws) = open_scratch();
     // `index.md` contiene `[[Inesistente]]`, un link che non risolve.
     assert!(ws.resolve_link("Inesistente").is_none());
 
-    let creata = ws.create_note(Some("Inesistente")).unwrap();
+    let created = ws.create_notes(Some("Inesistente")).unwrap();
 
     assert_eq!(
-        creata,
+        created,
         DocId::new("Inesistente.md"),
         "l'estensione la mette il kernel"
     );
-    assert_eq!(ws.resolve_link("Inesistente"), Some(creata.clone()));
+    assert_eq!(ws.resolve_link("Inesistente"), Some(created.clone()));
     // Il backlink compare da solo: il link in `index.md` non è stato toccato,
     // è il grafo a risolverlo di nuovo ora che la destinazione esiste.
-    let sorgenti: Vec<String> = ws
-        .backlinks(&creata)
+    let sources: Vec<String> = ws
+        .backlinks(&created)
         .iter()
         .map(|r| r.source.to_string())
         .collect();
     assert!(
-        sorgenti.contains(&"index.md".to_string()),
-        "backlink: {sorgenti:?}"
+        sources.contains(&"index.md".to_string()),
+        "backlink: {sources:?}"
     );
 }
 
 #[test]
-fn a_note_created_in_a_folder_stays_there() {
+fn a_notes_created_in_a_folder_stays_there() {
     let (_scratch, mut ws) = open_scratch();
-    let creata = ws.create_note(Some("Progetti/Beta")).unwrap();
-    assert_eq!(creata, DocId::new("Progetti/Beta.md"));
-    assert_eq!(ws.resolve_link("Beta"), Some(creata));
+    let created = ws.create_notes(Some("Progetti/Beta")).unwrap();
+    assert_eq!(created, DocId::new("Progetti/Beta.md"));
+    assert_eq!(ws.resolve_link("Beta"), Some(created));
 }
 
 /// I link markdown ordinari (decisione 0004) sul parser vero: gli `Span` sono quelli di
@@ -314,9 +314,9 @@ fn a_note_created_in_a_folder_stays_there() {
 #[test]
 fn markdown_links_are_edges_and_survive_a_rename() {
     let (_scratch, mut ws) = open_scratch();
-    let sorgente = DocId::new("Progetti/fonte.md");
+    let source = DocId::new("Progetti/fonte.md");
     ws.write_document(
-        &sorgente,
+        &source,
         concat!(
             "# Fonte\n\n",
             // Le due grafie di uno spazio in una destinazione markdown: le
@@ -330,57 +330,57 @@ fn markdown_links_are_edges_and_survive_a_rename() {
     .unwrap();
 
     // Archi e backlink: come i wikilink, senza distinzioni.
-    let sorgenti: Vec<String> = ws
+    let sources: Vec<String> = ws
         .backlinks(&DocId::new("Nota B.md"))
         .iter()
         .map(|r| r.source.to_string())
         .collect();
     assert_eq!(
-        sorgenti
+        sources
             .iter()
             .filter(|s| *s == "Progetti/fonte.md")
             .count(),
         2,
-        "i due link a Nota B (nudo e con ancora) sono due archi: {sorgenti:?}"
+        "i due link a Nota B (nudo e con ancora) sono due archi: {sources:?}"
     );
     assert!(ws
         .backlinks(&DocId::new("Progetti/Alpha.md"))
         .iter()
-        .any(|r| r.source == sorgente));
+        .any(|r| r.source == source));
 
     // Rename del bersaglio: i riferimenti si riscrivono relativi alla sorgente,
     // l'ancora resta, gli spazi si codificano, l'url non si tocca.
     ws.rename_document(&DocId::new("Nota B.md"), &DocId::new("Archivio/Nota C.md"))
         .unwrap();
-    let testo = ws.read_source(&sorgente).unwrap();
+    let text = ws.read_source(&source).unwrap();
     assert!(
-        testo.contains("[link relativo](<../Archivio/Nota%20C.md>)"),
-        "riscrittura mancata: {testo}"
+        text.contains("[link relativo](<../Archivio/Nota%20C.md>)"),
+        "riscrittura mancata: {text}"
     );
     assert!(
-        testo.contains("[link con ancora](../Archivio/Nota%20C.md#sezione)"),
-        "ancora persa: {testo}"
+        text.contains("[link con ancora](../Archivio/Nota%20C.md#sezione)"),
+        "ancora persa: {text}"
     );
     assert!(
-        testo.contains("[url](https://esempio.test/Nota%20B.md)"),
-        "un url non è un arco e non si riscrive: {testo}"
+        text.contains("[url](https://esempio.test/Nota%20B.md)"),
+        "un url non è un arco e non si riscrive: {text}"
     );
     assert!(
-        testo.contains("[dentro la cartella](Alpha.md)"),
-        "il link a un documento che non si è mosso resta com'era: {testo}"
+        text.contains("[dentro la cartella](Alpha.md)"),
+        "il link a un documento che non si è mosso resta com'era: {text}"
     );
 
     // E se a spostarsi è la sorgente, i suoi link relativi si ri-basano.
-    ws.rename_document(&sorgente, &DocId::new("fonte.md"))
+    ws.rename_document(&source, &DocId::new("fonte.md"))
         .unwrap();
-    let testo = ws.read_source(&DocId::new("fonte.md")).unwrap();
+    let text = ws.read_source(&DocId::new("fonte.md")).unwrap();
     assert!(
-        testo.contains("[link relativo](<Archivio/Nota%20C.md>)"),
-        "ri-basatura mancata: {testo}"
+        text.contains("[link relativo](<Archivio/Nota%20C.md>)"),
+        "ri-basatura mancata: {text}"
     );
     assert!(
-        testo.contains("[dentro la cartella](Progetti/Alpha.md)"),
-        "ri-basatura mancata: {testo}"
+        text.contains("[dentro la cartella](Progetti/Alpha.md)"),
+        "ri-basatura mancata: {text}"
     );
     assert!(ws
         .backlinks(&DocId::new("Progetti/Alpha.md"))
@@ -396,9 +396,9 @@ fn markdown_links_are_edges_and_survive_a_rename() {
 #[test]
 fn an_embedded_reference_is_an_edge_too() {
     let (_scratch, mut ws) = open_scratch();
-    let sorgente = DocId::new("Progetti/fonte.md");
+    let source = DocId::new("Progetti/fonte.md");
     ws.write_document(
-        &sorgente,
+        &source,
         concat!(
             "# Fonte\n\n",
             "Incorporo ![una nota](<../Nota B.md>) e un ![allegato](../allegati/foto.png).\n",
@@ -411,24 +411,24 @@ fn an_embedded_reference_is_an_edge_too() {
     assert!(ws
         .backlinks(&DocId::new("Nota B.md"))
         .iter()
-        .any(|r| r.source == sorgente));
+        .any(|r| r.source == source));
 
     // E si riscrive al rename come ogni altro riferimento, dentro lo `Span` che
     // comrak ha dato all'immagine.
     ws.rename_document(&DocId::new("Nota B.md"), &DocId::new("Archivio/Nota C.md"))
         .unwrap();
-    let testo = ws.read_source(&sorgente).unwrap();
+    let text = ws.read_source(&source).unwrap();
     assert!(
-        testo.contains("![una nota](<../Archivio/Nota%20C.md>)"),
-        "riscrittura mancata: {testo}"
+        text.contains("![una nota](<../Archivio/Nota%20C.md>)"),
+        "riscrittura mancata: {text}"
     );
     assert!(
-        testo.contains("![allegato](../allegati/foto.png)"),
-        "un riferimento a un file che non si è mosso resta com'era: {testo}"
+        text.contains("![allegato](../allegati/foto.png)"),
+        "un riferimento a un file che non si è mosso resta com'era: {text}"
     );
     assert!(
-        testo.contains("![remota](https://esempio.test/x.png)"),
-        "un url non è un arco: {testo}"
+        text.contains("![remota](https://esempio.test/x.png)"),
+        "un url non è un arco: {text}"
     );
 }
 
@@ -437,9 +437,9 @@ fn an_embedded_reference_is_an_edge_too() {
 #[test]
 fn the_label_is_not_mistaken_for_the_reference() {
     let (_scratch, mut ws) = open_scratch();
-    let sorgente = DocId::new("fonte.md");
+    let source = DocId::new("fonte.md");
     ws.write_document(
-        &sorgente,
+        &source,
         "Un [[Nota B|Nota B]] e un [Progetti/Alpha.md](Progetti/Alpha.md).\n",
         WriteBase::Dictated,
     )
@@ -453,9 +453,9 @@ fn the_label_is_not_mistaken_for_the_reference() {
     )
     .unwrap();
 
-    let testo = ws.read_source(&sorgente).unwrap();
+    let text = ws.read_source(&source).unwrap();
     assert_eq!(
-        testo,
+        text,
         // Nel wikilink cambia la pagina (la prima), non l'etichetta; nel link
         // markdown cambia la destinazione (la seconda), non l'etichetta.
         "Un [[Nota C|Nota B]] e un [Progetti/Alpha.md](Progetti/Beta.md).\n"
@@ -463,30 +463,30 @@ fn the_label_is_not_mistaken_for_the_reference() {
 }
 
 #[test]
-fn creating_a_note_over_an_existing_one_is_refused() {
+fn creating_a_notes_over_an_existing_one_is_refused() {
     let (_scratch, mut ws) = open_scratch();
     // Nessun nome aggiustato in silenzio: se il path esistesse, il link da cui
     // arriva la richiesta non sarebbe stato non risolto.
-    let err = ws.create_note(Some("Nota B")).unwrap_err();
+    let err = ws.create_notes(Some("Nota B")).unwrap_err();
     assert!(
         matches!(err, KernelError::AlreadyExists(_)),
         "trovato {err}"
     );
-    let err = ws.create_note(Some("   ")).unwrap_err();
+    let err = ws.create_notes(Some("   ")).unwrap_err();
     assert!(matches!(err, KernelError::BadName { .. }), "trovato {err}");
 
     // E i nomi che il §15.5 non fa nascere: il messaggio porta la ragione,
     // perché «nome non valido» non dice quale carattere è il problema.
-    for (nome, atteso) in [
+    for (name, expected) in [
         ("CON", "device DOS"),
         ("nota?", "si riserva"),
         (".nascosta", "comincia con un punto"),
     ] {
-        let err = ws.create_note(Some(nome)).unwrap_err();
-        let testo = err.to_string();
+        let err = ws.create_notes(Some(name)).unwrap_err();
+        let text = err.to_string();
         assert!(
-            matches!(err, KernelError::BadName { .. }) && testo.contains(atteso),
-            "`{nome}`: atteso un BadName che dica {atteso:?}, trovato {testo}"
+            matches!(err, KernelError::BadName { .. }) && text.contains(expected),
+            "`{name}`: atteso un BadName che dica {expected:?}, trovato {text}"
         );
     }
 }

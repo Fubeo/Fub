@@ -197,7 +197,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gli_header_si_confrontano_senza_maiuscole() {
+    fn headers_are_compared_case_insensitively() {
         let r = HttpResponse {
             status: 200,
             headers: vec![HttpHeader::new("Content-Type", "application/json")],
@@ -209,7 +209,7 @@ mod tests {
 
     /// Lo stesso nome più volte è HTTP normale, e una mappa lo avrebbe perso.
     #[test]
-    fn lo_stesso_header_puo_ripetersi() {
+    fn the_same_header_can_repeat() {
         let r = HttpResponse {
             status: 200,
             headers: vec![
@@ -218,14 +218,14 @@ mod tests {
             ],
             body: Vec::new(),
         };
-        assert_eq!(r.headers.len(), 2, "nessuna delle due si perde");
-        assert_eq!(r.header("set-cookie"), Some("a=1"), "e la prima è la prima");
+        assert_eq!(r.headers.len(), 2, "neither is lost");
+        assert_eq!(r.header("set-cookie"), Some("a=1"), "and the first is the first");
     }
 
     /// Un redirect si **vede** invece di essere seguito: è la proprietà su cui
     /// poggia il fatto che l'allowlist non si possa scavalcare.
     #[test]
-    fn un_redirect_si_legge_e_non_si_segue() {
+    fn a_redirect_is_read_not_followed() {
         let r = HttpResponse {
             status: 302,
             headers: vec![HttpHeader::new("Location", "https://altrove.example/x")],
@@ -240,20 +240,20 @@ mod tests {
         assert_eq!(
             ok.redirect_to(),
             None,
-            "un `Location` su un 200 non è un redirect"
+            "a `Location` on a 200 is not a redirect"
         );
     }
 
     /// Un 404 è una risposta e non un guasto: qui si presidia che il tipo sappia
     /// dirlo, cioè che lo stato ci sia e sia quello arrivato.
     #[test]
-    fn uno_stato_di_errore_resta_una_risposta() {
+    fn an_error_status_remains_a_response() {
         let r = HttpResponse {
             status: 404,
             headers: Vec::new(),
-            body: b"non c'e".to_vec(),
+            body: b"not here".to_vec(),
         };
         assert_eq!(r.status, 404);
-        assert!(!r.body.is_empty(), "e il corpo di un errore si legge");
+        assert!(!r.body.is_empty(), "and the body of an error is readable");
     }
 }

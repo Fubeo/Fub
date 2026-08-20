@@ -263,14 +263,14 @@ impl Locale {
 pub fn civil_from_days(days: i64) -> (i64, u64, u64) {
     // Origine spostata al 2000-03-01, primo giorno di un'era di 400 anni.
     let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64; // giorno nell'era, [0, 146096]
+    let was = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - was * 146_097) as u64; // giorno nell'era, [0, 146096]
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365; // [0, 399]
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // giorno nell'anno di marzo
     let mp = (5 * doy + 2) / 153; // mese con marzo = 0
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe as i64 + era * 400;
+    let y = yoe as i64 + was * 400;
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
@@ -290,18 +290,18 @@ mod tests {
 
     #[test]
     fn a_regional_tag_falls_back_to_its_language() {
-        let l = Locale {
+        let the = Locale {
             language: "it-CH".into(),
             ..Locale::default()
         };
-        assert_eq!(l.language_base(), "it");
-        assert!(l.has_language());
+        assert_eq!(the.language_base(), "it");
+        assert!(the.has_language());
         // La forma con l'underscore arriva da chi legge `LANG=it_IT.UTF-8`.
-        let l = Locale {
+        let the = Locale {
             language: "it_IT".into(),
             ..Locale::default()
         };
-        assert_eq!(l.language_base(), "it");
+        assert_eq!(the.language_base(), "it");
     }
 
     /// I fusi a mezz'ora e a tre quarti d'ora esistono, e il campo li regge.
@@ -324,35 +324,35 @@ mod tests {
     #[test]
     fn the_same_instant_reads_differently_to_different_people() {
         // 2026-07-28T12:30:00Z
-        let istante = 1_785_241_800_000;
+        let instant = 1_785_241_800_000;
         let utc = Locale::default();
-        assert_eq!(utc.format_timestamp(istante), "2026-07-28 12:30");
+        assert_eq!(utc.format_timestamp(instant), "2026-07-28 12:30");
 
         let roma = Locale {
             utc_offset_minutes: 120,
             ..Locale::default()
         };
-        assert_eq!(roma.format_timestamp(istante), "2026-07-28 14:30");
+        assert_eq!(roma.format_timestamp(instant), "2026-07-28 14:30");
 
         let new_york = Locale {
             utc_offset_minutes: -240,
             hour_cycle: HourCycle::H12,
             ..Locale::default()
         };
-        assert_eq!(new_york.format_timestamp(istante), "2026-07-28 8:30 AM");
+        assert_eq!(new_york.format_timestamp(instant), "2026-07-28 8:30 AM");
     }
 
     /// Mezzogiorno e mezzanotte sono i due casi in cui un orologio a 12 ore
     /// sbaglia, se chi lo scrive fa `hh % 12` e non ci ripensa.
     #[test]
     fn twelve_hour_clocks_have_no_hour_zero() {
-        let l = Locale {
+        let the = Locale {
             hour_cycle: HourCycle::H12,
             ..Locale::default()
         };
-        assert_eq!(l.format_timestamp(0), "1970-01-01 12:00 AM");
-        assert_eq!(l.format_timestamp(12 * 3_600_000), "1970-01-01 12:00 PM");
-        assert_eq!(l.format_timestamp(13 * 3_600_000), "1970-01-01 1:00 PM");
+        assert_eq!(the.format_timestamp(0), "1970-01-01 12:00 AM");
+        assert_eq!(the.format_timestamp(12 * 3_600_000), "1970-01-01 12:00 PM");
+        assert_eq!(the.format_timestamp(13 * 3_600_000), "1970-01-01 1:00 PM");
     }
 
     /// Un offset negativo applicato all'epoca porta i millisecondi civili sotto

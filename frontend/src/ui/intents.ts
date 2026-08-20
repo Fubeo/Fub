@@ -40,7 +40,7 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       break;
     case "custom":
       if (intent.ns === SETTINGS_EXPORT_NS) {
-        await raccogliExport(intent.payload);
+        await collectExport(intent.payload);
         break;
       }
       // Intento con namespace che questa shell non prevede: da contratto
@@ -66,7 +66,7 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
 /// **qualcuno lo raccolga**: un comando che consegna un intento a una shell che
 /// lo ignora è un export che finisce nel vuoto, con l'utente convinto di aver
 /// esportato.
-async function raccogliExport(payload: unknown): Promise<void> {
+async function collectExport(payload: unknown): Promise<void> {
   const json = JSON.stringify(payload, null, 2);
   try {
     await navigator.clipboard.writeText(json);

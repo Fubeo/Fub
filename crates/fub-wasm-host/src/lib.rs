@@ -31,16 +31,16 @@
 
 #![deny(missing_docs)]
 
-mod componente;
-mod eventi;
-mod limiti;
-mod modello;
-mod ospite;
-mod prestito;
-mod traduzione;
+mod component;
+mod events;
+mod limits;
+mod model;
+mod guest;
+mod borrow;
+mod translate;
 
-pub use componente::{
-    Componente, ErroreDiCaricamento, WasmBundle, WasmCommandProvider, WasmPlugin,
+pub use component::{
+    Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin,
 };
 
 /// I binding **lato host** di `plugin-world`, generati dal contratto.
@@ -61,7 +61,7 @@ pub use componente::{
 // Il generato non si documenta: la documentazione del contratto sta nel WIT, e
 // riscriverla qui sarebbe una seconda copia che diverge alla prima modifica.
 #[allow(missing_docs)]
-pub mod contratto {
+pub mod contract {
     wasmtime::component::bindgen!({
         path: "../fub-abi/wit/fub/abi.wit",
         world: "plugin-world",

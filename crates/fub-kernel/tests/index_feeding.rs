@@ -20,7 +20,7 @@ use fub_abi::traits::{
     IndexResult, Page, Paged, PredicateKind, PropertyEntry, PropertySelect, QueryRoute,
 };
 use fub_kernel::{data_root, FormatRegistry, Workspace};
-use fub_testkit::TestoDiProva;
+use fub_testkit::SampleExtractor;
 
 /// Una chiamata ricevuta dalla spia.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,7 +42,7 @@ enum Call {
 
 /// Nome del blob con cui la spia si ricorda di sé stessa, nello spazio dati che
 /// l'host le assegna.
-const MEMORIA: &str = "memoria.txt";
+const MEMORY: &str = "memory.txt";
 
 /// Spia che registra ciò che il kernel le manda.
 ///
@@ -87,11 +87,11 @@ impl IndexProvider for SpyIndex {
         // Un indice persistente si ricorda da `data_*`, ed è l'unico storage
         // durevole che avrà anche un provider di terzi: la spia lo esercita
         // come lo eserciterebbe lui.
-        let memoria = host
-            .data_read(MEMORIA)?
+        let memory = host
+            .data_read(MEMORY)?
             .map(|b| String::from_utf8_lossy(&b).into_owned());
-        self.record(Call::Activate(memoria));
-        host.data_write(MEMORIA, b"c'ero")?;
+        self.record(Call::Activate(memory));
+        host.data_write(MEMORY, b"was here")?;
         Ok(())
     }
 
@@ -113,7 +113,7 @@ impl IndexProvider for SpyIndex {
     }
 
     fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
-        let mut ids: Vec<String> = ids.iter().map(|i| i.to_string()).collect();
+        let mut ids: Vec<String> = ids.iter().map(|the| the.to_string()).collect();
         ids.sort();
         self.record(Call::Reconcile(ids));
         Vec::new()
@@ -128,7 +128,7 @@ impl IndexProvider for SpyIndex {
     /// indice persistente lascia scritto di essersi chiuso bene.
     fn close(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
         self.record(Call::Close);
-        host.data_write(MEMORIA, b"chiuso")?;
+        host.data_write(MEMORY, b"closed")?;
         Ok(())
     }
 
@@ -139,7 +139,7 @@ impl IndexProvider for SpyIndex {
         };
         self.record(Call::Query(excerpts));
         Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(
-            DocId::new("risposta.txt"),
+            DocId::new("response.txt"),
         )
         .with_score(1.0)])))
     }
@@ -168,19 +168,19 @@ impl Fixture {
     fn workspace(&self) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
-            .register(TestoDiProva::per_estensione("txt").boxed())
-            .expect("nessun conflitto di estensioni");
-        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
+            .register(SampleExtractor::by_extension("txt").boxed())
+            .expect("no extension conflict");
+        let mut ws = Workspace::new(&self.root, registry).expect("the vault opens");
         for plugin in [
-            "test.spia",
+            "test.spy",
             "test.loudmouth",
-            "test.muta",
-            "test.risponde",
-            "test.rivale",
-            "test.altra",
+            "test.mute",
+            "test.answering",
+            "test.rival",
+            "test.other",
         ] {
             ws.register_core_feature(plugin, plugin)
-                .expect("dichiarato");
+                .expect("declared");
         }
         ws
     }
@@ -193,17 +193,18 @@ fn calls_of(log: &Arc<Mutex<Vec<Call>>>) -> Vec<Call> {
 #[test]
 fn reindex_feeds_every_document_then_declares_the_full_truth() {
     let fx = Fixture::new();
-    fx.write("a.txt", "alfa");
+    fx.write("a.txt", "alpha");
     fx.write("sub/b.txt", "beta");
 
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider("test.spia", Box::new(spy))
-        .expect("registrato");
+
+    ws.register_index_provider("test.spy", Box::new(spy))
+        .expect("registered");
     ws.reindex().unwrap();
 
     let calls = calls_of(&log);
-    assert!(calls.contains(&Call::Indexed("a.txt".into(), "alfa".into())));
+    assert!(calls.contains(&Call::Indexed("a.txt".into(), "alpha".into())));
     assert!(calls.contains(&Call::Indexed("sub/b.txt".into(), "beta".into())));
     // La riconciliazione arriva DOPO l'alimentazione — altrimenti dichiarerebbe
     // morti documenti che l'indice non ha ancora visto — e prima del flush.
@@ -231,20 +232,20 @@ fn writes_and_removals_reach_the_index() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider("test.spia", Box::new(spy))
-        .expect("registrato");
+    ws.register_index_provider("test.spy", Box::new(spy))
+        .expect("registered");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
-    ws.write_document(&DocId::new("nuova.txt"), "contenuto", WriteBase::Dictated)
+    ws.write_document(&DocId::new("new.txt"), "content", WriteBase::Dictated)
         .unwrap();
-    ws.remove_document(&DocId::new("nuova.txt"));
+    ws.remove_document(&DocId::new("new.txt"));
 
     assert_eq!(
         calls_of(&log),
         vec![
-            Call::Indexed("nuova.txt".into(), "contenuto".into()),
-            Call::Removed("nuova.txt".into()),
+            Call::Indexed("new.txt".into(), "content".into()),
+            Call::Removed("new.txt".into()),
         ]
     );
 }
@@ -252,16 +253,16 @@ fn writes_and_removals_reach_the_index() {
 #[test]
 fn a_rename_is_remove_plus_add_for_an_index() {
     let fx = Fixture::new();
-    fx.write("vecchio.txt", "corpo");
+    fx.write("old.txt", "body");
 
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider("test.spia", Box::new(spy))
-        .expect("registrato");
+    ws.register_index_provider("test.spy", Box::new(spy))
+        .expect("registered");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
-    ws.rename_document(&DocId::new("vecchio.txt"), &DocId::new("nuovo.txt"))
+    ws.rename_document(&DocId::new("old.txt"), &DocId::new("new.txt"))
         .unwrap();
 
     // Per l'indice la chiave È l'identità, e la chiave è cambiata: il vecchio
@@ -269,8 +270,8 @@ fn a_rename_is_remove_plus_add_for_an_index() {
     assert_eq!(
         calls_of(&log),
         vec![
-            Call::Removed("vecchio.txt".into()),
-            Call::Indexed("nuovo.txt".into(), "corpo".into()),
+            Call::Removed("old.txt".into()),
+            Call::Indexed("new.txt".into(), "body".into()),
         ]
     );
 }
@@ -291,7 +292,7 @@ fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
             let event = &notice.event;
             if !matches!(event, Event::Overflow { .. }) {
                 host.emit(Event::Custom {
-                    topic: "test/eco".into(),
+                    topic: "test/echo".into(),
                     payload: serde_json::Value::Null,
                 });
             }
@@ -302,34 +303,34 @@ fn an_index_never_misses_an_update_even_when_the_event_queue_overflows() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider("test.spia", Box::new(spy))
-        .expect("registrato");
+    ws.register_index_provider("test.spy", Box::new(spy))
+        .expect("registered");
     ws.register_event_handler("test.loudmouth", Box::new(Loudmouth))
-        .expect("registrato");
+        .expect("registered");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
     // Questa scrittura fa traboccare la coda eventi...
-    ws.write_document(&DocId::new("a.txt"), "sopravvissuto", WriteBase::Dictated)
+    ws.write_document(&DocId::new("a.txt"), "survived", WriteBase::Dictated)
         .unwrap();
 
     // ...ma l'indice ha ricevuto comunque il suo aggiornamento, perché non
     // passa dalla coda: è la ragione per cui il kernel lo alimenta da sé.
     assert_eq!(
         calls_of(&log),
-        vec![Call::Indexed("a.txt".into(), "sopravvissuto".into())]
+        vec![Call::Indexed("a.txt".into(), "survived".into())]
     );
 }
 
 #[test]
 fn a_file_the_vault_ignores_never_reaches_models_events_or_index() {
     let fx = Fixture::new();
-    fx.write("viva.txt", "presente");
+    fx.write("alive.txt", "present");
 
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider("test.spia", Box::new(spy))
-        .expect("registrato");
+    ws.register_index_provider("test.spy", Box::new(spy))
+        .expect("registered");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
     let events = ws.bus().subscribe();
@@ -337,37 +338,36 @@ fn a_file_the_vault_ignores_never_reaches_models_events_or_index() {
     // Questi file esistono, hanno un'estensione gestita e un provider: è solo
     // il posto in cui si trovano a renderli invisibili al vault. Ed è il
     // percorso del *watcher* — `sync_path` — non quello della scansione, che
-    // il filtro già lo aveva.
-    let ignorati = [
-        ".trash/cestinata.txt",
+    let ignored = [
+        ".trash/deleted.txt",
         ".obsidian/workspace.txt",
-        "node_modules/pacchetto/readme.txt",
+        "node_modules/package/readme.txt",
     ];
-    for rel in ignorati {
-        fx.write(rel, "roba che il vault non deve guardare");
+    for rel in ignored {
+        fx.write(rel, "stuff the vault must not look at");
         assert!(
             !ws.sync_path(&fx.root.join(rel)).unwrap(),
-            "{rel} non è roba del vault"
+            "{rel} is not vault material"
         );
     }
 
-    assert_eq!(ws.documents(), vec![DocId::new("viva.txt")]);
+    assert_eq!(ws.documents(), vec![DocId::new("alive.txt")]);
     assert!(
         calls_of(&log).is_empty(),
-        "l'indice non deve nemmeno sentirne parlare: sarebbe cercabile una nota cestinata"
+        "the index must not even hear about it: a trashed note would be searchable"
     );
-    assert!(events.try_iter().next().is_none(), "nessun evento");
+    assert!(events.try_iter().next().is_none(), "no events");
 }
 
 #[test]
 fn backlinks_never_reach_the_providers() {
     let fx = Fixture::new();
-    fx.write("a.txt", "corpo");
+    fx.write("a.txt", "body");
 
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider("test.spia", Box::new(spy))
-        .expect("registrato");
+    ws.register_index_provider("test.spy", Box::new(spy))
+        .expect("registered");
     ws.reindex().unwrap();
     log.lock().unwrap().clear();
 
@@ -376,31 +376,31 @@ fn backlinks_never_reach_the_providers() {
         page: None,
     });
 
+    // il filtro già lo aveva.
     // Il grafo del kernel è l'unica fonte di verità dei backlink: nessun
     // provider viene interpellato, non c'è una seconda verità che possa
-    // divergere dalla prima.
     assert!(matches!(r, Ok(IndexResult::Backlinks(_))));
     assert!(calls_of(&log).is_empty());
 }
 
+    // divergere dalla prima.
 /// Chi non ha dichiarato una rotta **non viene interpellato**: non c'è nessuna
-/// caduta in avanti da provocare, e la spia muta non vede passare niente.
 #[test]
 fn a_provider_that_declared_nothing_is_never_asked() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (mute, mute_log) = SpyIndex::new(false);
     let (answering, answering_log) = SpyIndex::new(true);
-    ws.register_index_provider("test.muta", Box::new(mute))
-        .expect("registrato");
-    ws.register_index_provider("test.risponde", Box::new(answering))
-        .expect("registrato");
+    ws.register_index_provider("test.mute", Box::new(mute))
+        .expect("registered");
+    ws.register_index_provider("test.answering", Box::new(answering))
+        .expect("registered");
     ws.reindex().unwrap();
     mute_log.lock().unwrap().clear();
     answering_log.lock().unwrap().clear();
 
     let r = ws.query_index(IndexQuery::Documents {
-        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("qualsiasi"))),
+        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("any"))),
         sort: None,
         select: PropertySelect::None,
         page: Some(Page::first(5)),
@@ -409,40 +409,40 @@ fn a_provider_that_declared_nothing_is_never_asked() {
 
     match r {
         Ok(IndexResult::Documents(hits)) => {
-            assert_eq!(hits.items[0].doc, DocId::new("risposta.txt"))
+            assert_eq!(hits.items[0].doc, DocId::new("response.txt"))
         }
-        other => panic!("attesi dei documenti, trovato {other:?}"),
+        other => panic!("expected documents, got {other:?}"),
     }
     assert!(
         calls_of(&mute_log).is_empty(),
-        "prima veniva interpellata per prima e rispondeva `BadArgs`: il \
-         dispatch per tentativi faceva girare ogni query su ogni indice"
+        "before, it was consulted first and responded `BadArgs`: the try-based \
+         dispatch ran every query on every index"
     );
+/// caduta in avanti da provocare, e la spia muta non vede passare niente.
     // Due, e non una: dalla §21.9 una domanda testuale si fa in **due tempi** —
     // si seleziona senza estratti, e gli estratti si richiedono per le sole
     // righe che sono sopravvissute alla finestra. Chi risponde li vede
     // entrambi, e li vede sullo stesso indice: il secondo tempo non riparte dal
-    // routing, torna da chi ha selezionato.
     assert_eq!(
         calls_of(&answering_log),
         vec![Call::Query(Excerpts::Omit), Call::Query(Excerpts::Attach)]
     );
 }
 
+    // routing, torna da chi ha selezionato.
 /// «Nessuno la serve» è una risposta a sé, e non l'errore dell'ultimo
 /// interpellato: chi disegna deve poter scegliere fra «installa un indice» e
-/// «qualcosa è andato storto».
 #[test]
 fn a_query_nobody_declared_is_unserved() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (mute, _) = SpyIndex::new(false);
-    ws.register_index_provider("test.muta", Box::new(mute))
-        .expect("registrato");
+    ws.register_index_provider("test.mute", Box::new(mute))
+        .expect("registered");
     ws.reindex().unwrap();
 
     let r = ws.query_index(IndexQuery::Custom {
-        ns: "nessuno".into(),
+        ns: "nobody".into(),
         query: serde_json::Value::Null,
     });
     assert!(matches!(r, Err(PluginError::Unserved(_))), "{r:?}");
@@ -455,24 +455,24 @@ fn with_no_provider_a_search_says_so_instead_of_pretending() {
     ws.reindex().unwrap();
 
     let r = ws.query_index(IndexQuery::Documents {
-        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("qualsiasi"))),
+        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("any"))),
         sort: None,
         select: PropertySelect::None,
         page: Some(Page::first(5)),
         excerpts: Excerpts::Attach,
     });
+/// «qualcosa è andato storto».
     // Zero risultati e "nessun indice sa cercare nel testo" sono due cose
     // diverse: la prima è una risposta, la seconda una mancanza, e confonderle
-    // nasconderebbe un guasto.
     assert!(matches!(r, Err(PluginError::Unserved(_))), "{r:?}");
 }
 
+    // nasconderebbe un guasto.
 /// Due indici che rivendicano la stessa famiglia: prima vinceva il primo
-/// registrato **in silenzio**, adesso il secondo non si registra e lo dice.
 #[test]
 fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
-    struct Rivale;
-    impl IndexProvider for Rivale {
+    struct Rival;
+    impl IndexProvider for Rival {
         fn routes(&self) -> Vec<QueryRoute> {
             vec![QueryRoute::Query(fub_abi::traits::QueryKind::Tags)]
         }
@@ -497,7 +497,7 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
         fn query(&self, _q: IndexQuery) -> Result<IndexResult, PluginError> {
             Ok(IndexResult::Tags(Paged::all(vec![
                 fub_abi::traits::TagCount {
-                    name: "dal-rivale".into(),
+                    name: "from-rival".into(),
                     count: 1,
                 },
             ])))
@@ -505,31 +505,30 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
     }
 
     let fx = Fixture::new();
-    fx.write("a.txt", "#gatto");
+    fx.write("a.txt", "#cat");
     let mut ws = fx.workspace();
     let err = ws
-        .register_index_provider("test.rivale", Box::new(Rivale))
-        .expect_err("i tag sono già dell'indice del kernel");
+        .register_index_provider("test.rival", Box::new(Rival))
+        .expect_err("tags already belong to the kernel index");
     assert!(matches!(err, fub_kernel::RegistryError::Route(_)), "{err}");
     ws.reindex().unwrap();
 
-    // E chi c'era risponde ancora: il perdente non si è registrato a metà.
+/// registrato **in silenzio**, adesso il secondo non si registra e lo dice.
     let r = ws.query_index(IndexQuery::Tags {
         matching: QueryExpr::all(),
         page: None,
     });
     match r {
         Ok(IndexResult::Tags(tags)) => assert!(
-            !tags.items.iter().any(|t| t.name == "dal-rivale"),
-            "risponde ancora l'indice del kernel: il perdente non si è \
-             registrato nemmeno a metà"
+            !tags.items.iter().any(|t| t.name == "from-rival"),
+            "the kernel index still responds: the loser did not register even halfway"
         ),
-        other => panic!("attesi dei tag, trovato {other:?}"),
+        other => panic!("expected tags, got {other:?}"),
     }
 
-    // Sostituirlo resta possibile, ma si chiede per nome.
-    ws.replace_index_provider("test.rivale", Box::new(Rivale))
-        .expect("la sostituzione dichiarata non è un conflitto");
+    // E chi c'era risponde ancora: il perdente non si è registrato a metà.
+    ws.replace_index_provider("test.rival", Box::new(Rival))
+        .expect("the declared replacement is not a conflict");
     let r = ws.query_index(IndexQuery::Tags {
         matching: QueryExpr::all(),
         page: None,
@@ -537,11 +536,11 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
     match r {
         Ok(IndexResult::Tags(tags)) => assert_eq!(
             tags.items.first().map(|t| t.name.as_str()),
-            Some("dal-rivale"),
-            "adesso risponde il rivale, e il kernel non è più il primo \
-             rispondente non scavalcabile"
+            Some("from-rival"),
+            "now the rival responds, and the kernel is no longer the first \
+             un-overridable responder"
         ),
-        other => panic!("attesi dei tag, trovato {other:?}"),
+        other => panic!("expected tags, got {other:?}"),
     }
 }
 
@@ -550,40 +549,41 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    ws.register_index_provider("test.spia", Box::new(spy))
-        .expect("registrato");
+    ws.register_index_provider("test.spy", Box::new(spy))
+        .expect("registered");
 
+    // Sostituirlo resta possibile, ma si chiede per nome.
     // L'attivazione è la PRIMA cosa che accade, e accade alla registrazione:
     // dopo il primo `on_documents_indexed` sarebbe già troppo tardi per
-    // ricordarsi di ciò che si è già visto.
     assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
 
+    // ricordarsi di ciò che si è già visto.
     // E ciò che l'indice scrive finisce nel *suo* recinto, che gli assegna
-    // l'host: il provider ha nominato un blob, non un path.
-    let memoria = data_root(&fx.root)
+    let memory = data_root(&fx.root)
         .join("plugins")
-        .join("test.spia")
-        .join(MEMORIA);
-    assert_eq!(std::fs::read_to_string(&memoria).unwrap(), "c'ero");
+        .join("test.spy")
+        .join(MEMORY);
+    assert_eq!(std::fs::read_to_string(&memory).unwrap(), "was here");
 
+    // l'host: il provider ha nominato un blob, non un path.
     // Alla riapertura del vault la memoria si ritrova. È esattamente ciò che
     // un indice persistente deve poter fare — e ciò che, senza host in
-    // `activate`, un provider di terzi non potrebbe fare affatto.
-    let mut riaperto = fx.workspace();
+    let mut reopened = fx.workspace();
     let (spy, log) = SpyIndex::new(true);
-    riaperto
-        .register_index_provider("test.spia", Box::new(spy))
+    reopened
+        .register_index_provider("test.spy", Box::new(spy))
         .unwrap();
-    assert_eq!(calls_of(&log), vec![Call::Activate(Some("c'ero".into()))]);
+    assert_eq!(calls_of(&log), vec![Call::Activate(Some("was here".into()))]);
 
-    // Un altro indice non vede la memoria del primo: il recinto è per-id.
+    // `activate`, un provider di terzi non potrebbe fare affatto.
     let (spy, log) = SpyIndex::new(true);
-    riaperto
-        .register_index_provider("test.altra", Box::new(spy))
+    reopened
+        .register_index_provider("test.other", Box::new(spy))
         .unwrap();
     assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
 }
 
+    // Un altro indice non vede la memoria del primo: il recinto è per-id.
 /// Un provider che, nel secondo tempo della §21.9, riporta **due righe per lo
 /// stesso documento**: prima la seconda cancellava la prima.
 ///
@@ -593,11 +593,9 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
 /// 0049 dice che le occorrenze **si sommano** — la ricerca ne mostra N e
 /// permette di saltare dall'una all'altra — ma la fusione la fa
 /// `DocumentMatch::absorb`, e chi raccoglieva gli estratti in una `BTreeMap`
-/// con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
-/// la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
-struct IndiceASegmenti;
+struct SegmentIndex;
 
-impl IndexProvider for IndiceASegmenti {
+impl IndexProvider for SegmentIndex {
     fn routes(&self) -> Vec<QueryRoute> {
         vec![QueryRoute::Predicate(PredicateKind::Text)]
     }
@@ -621,34 +619,34 @@ impl IndexProvider for IndiceASegmenti {
     }
 
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
-        let doc = DocId::new("lunga.txt");
+        let doc = DocId::new("long.txt");
         let rev = Revision::new("r1");
         let excerpts = match query {
             IndexQuery::Documents { excerpts, .. } => excerpts,
             _ => Excerpts::Omit,
         };
         if !excerpts.wanted() {
-            // Primo tempo: si seleziona e basta, una riga per documento.
+/// con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
             return Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(
                 doc,
             )
             .with_score(1.0)])));
         }
-        // Secondo tempo: due segmenti, due righe, lo stesso documento.
-        let mut primo = DocumentMatch::of(doc.clone()).with_score(1.0);
-        primo.snippet = Some("…alfa…".into());
-        primo.occurrences = vec![DocPosition::at(Span::new(3, 7), rev.clone())];
-        primo.properties = vec![PropertyEntry {
-            key: "titolo".into(),
-            value: PropertyValue::Text("Lunga".into()),
+/// la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
+        let mut first = DocumentMatch::of(doc.clone()).with_score(1.0);
+        first.snippet = Some("…alpha…".into());
+        first.occurrences = vec![DocPosition::at(Span::new(3, 7), rev.clone())];
+        first.properties = vec![PropertyEntry {
+            key: "title".into(),
+            value: PropertyValue::Text("Long".into()),
         }];
-        let mut secondo = DocumentMatch::of(doc).with_score(0.5);
-        secondo.occurrences = vec![DocPosition::at(Span::new(90, 94), rev)];
-        secondo.properties = vec![PropertyEntry {
-            key: "autore".into(),
-            value: PropertyValue::Text("qualcuno".into()),
+        let mut second = DocumentMatch::of(doc).with_score(0.5);
+        second.occurrences = vec![DocPosition::at(Span::new(90, 94), rev)];
+        second.properties = vec![PropertyEntry {
+            key: "author".into(),
+            value: PropertyValue::Text("someone".into()),
         }];
-        Ok(IndexResult::Documents(Paged::all(vec![primo, secondo])))
+        Ok(IndexResult::Documents(Paged::all(vec![first, second])))
     }
 }
 
@@ -656,12 +654,12 @@ impl IndexProvider for IndiceASegmenti {
 fn two_excerpt_rows_for_one_document_merge_instead_of_overwriting() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
-    ws.register_index_provider("test.altra", Box::new(IndiceASegmenti))
-        .expect("registrato");
+    ws.register_index_provider("test.other", Box::new(SegmentIndex))
+        .expect("registered");
     ws.reindex().unwrap();
 
     let r = ws.query_index(IndexQuery::Documents {
-        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("alfa"))),
+        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("alpha"))),
         sort: None,
         select: PropertySelect::None,
         page: Some(Page::first(5)),
@@ -670,28 +668,28 @@ fn two_excerpt_rows_for_one_document_merge_instead_of_overwriting() {
 
     let hits = match r {
         Ok(IndexResult::Documents(hits)) => hits,
-        other => panic!("attesi dei documenti, trovato {other:?}"),
+        other => panic!("expected documents, got {other:?}"),
     };
-    assert_eq!(hits.items.len(), 1, "un documento resta un documento");
+    assert_eq!(hits.items.len(), 1, "a document remains a document");
     let row = &hits.items[0];
 
-    // Le occorrenze si sommano (decisione 0049): prima ne arrivava **una**,
-    // quella del segmento letto per ultimo.
+            // Primo tempo: si seleziona e basta, una riga per documento.
+        // Secondo tempo: due segmenti, due righe, lo stesso documento.
     assert_eq!(
         row.occurrences.len(),
         2,
-        "le occorrenze dei due segmenti si sommano: {:?}",
+        "the occurrences of the two segments add up: {:?}",
         row.occurrences
     );
     assert_eq!(row.occurrences[0].span, Span::new(3, 7));
     assert_eq!(row.occurrences[1].span, Span::new(90, 94));
 
-    // Le proprietà si uniscono, in ordine di chiave.
-    let chiavi: Vec<&str> = row.properties.iter().map(|p| p.key.as_str()).collect();
-    assert_eq!(chiavi, vec!["autore", "titolo"]);
+    // Le occorrenze si sommano (decisione 0049): prima ne arrivava **una**,
+    let keys: Vec<&str> = row.properties.iter().map(|p| p.key.as_str()).collect();
+    assert_eq!(keys, vec!["author", "title"]);
 
-    // La rilevanza che resta è la maggiore, e l'estratto è il primo che c'è —
-    // non quello della riga arrivata per ultima, che non ne aveva nessuno.
+    // quella del segmento letto per ultimo.
+    // Le proprietà si uniscono, in ordine di chiave.
     assert_eq!(row.score, Some(1.0));
-    assert_eq!(row.snippet.as_deref(), Some("…alfa…"));
+    assert_eq!(row.snippet.as_deref(), Some("…alpha…"));
 }

@@ -51,7 +51,7 @@ use fub_abi::rules::events::degrade;
 use fub_abi::{Event, Notice};
 use fub_kernel::Subscription;
 
-use crate::session::{Consegna, EventSink};
+use crate::session::{Delivery, EventSink};
 
 /// Oltre quanti eventi in una raffica il ponte smette di raccontarli uno per
 /// uno e dice «riconcilia».
@@ -76,7 +76,7 @@ pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
         // conto sta **qui** e non dentro i sink: le uscite sono più d'una — il
         // webview, un giorno le SSE di un'API locale — e questo è il punto da
         // cui passano tutte.
-        let mut debito = 0u64;
+        let mut debt = 0u64;
         // `recv` blocca finché non c'è **almeno** un evento: è l'unico punto in
         // cui questo thread dorme, e non consuma niente mentre il vault è fermo.
         while let Ok(first) = rx.recv() {
@@ -86,7 +86,7 @@ pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
             // una finestra scelta da noi.
             burst.extend(rx.try_iter());
             for notice in reduce(burst) {
-                debito = consegna(&*sink, &notice, debito);
+                debt = delivers(&*sink, &notice, debt);
             }
         }
         // **E qui il ponte finisce**, che prima non lo diceva nessuno.
@@ -97,10 +97,10 @@ pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
         // «il vault è stato chiuso» e «il ponte è morto e l'app è ferma» non
         // esiste. Il debito residuo esce con lui perché è l'unico momento in cui
         // si sa che non sarà pagato: quegli eventi non li riconcilierà nessuno.
-        if debito > 0 {
+        if debt > 0 {
             tracing::error!(
                 target: "fub.host",
-                debito,
+                debt,
                 "il ponte degli eventi ha chiuso con un debito: l'uscita non ha \
                  mai ripreso a consegnare, e chi riceve è rimasto indietro senza \
                  saperlo"
@@ -128,19 +128,19 @@ pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
 /// debito cresce di uno e si riproverà al prossimo. Consegnarlo scavalcando un
 /// «riconcilia» non consegnato vorrebbe dire raccontare un vault che non è
 /// quello che chi riceve ha in mano.
-fn consegna(sink: &dyn EventSink, notice: &Notice, debito: u64) -> u64 {
-    if debito > 0 {
-        let arretrato = Notice::new(
-            Event::Overflow { dropped: debito },
+fn delivers(sink: &dyn EventSink, notice: &Notice, debt: u64) -> u64 {
+    if debt > 0 {
+        let backlog = Notice::new(
+            Event::Overflow { dropped: debt },
             Origin::by(Actor::Kernel),
         );
-        if sink.emit(&arretrato) == Consegna::Persa {
-            return debito + 1;
+        if sink.emit(&backlog) == Delivery::Dropped {
+            return debt + 1;
         }
     }
     match sink.emit(notice) {
-        Consegna::Fatta => 0,
-        Consegna::Persa => 1,
+        Delivery::Done => 0,
+        Delivery::Dropped => 1,
     }
 }
 
@@ -184,15 +184,15 @@ enum Grain {
 /// `None` vince su `Some`: se di una delle due copie non si sa cosa è cambiato,
 /// dell'unione non si sa niente, e dirlo è l'unico modo di non far filtrare via
 /// un evento su un diff che non è quello vero.
-fn fondi(tenuto: &mut Event, scartato: Event) {
-    let (Event::DocumentChanged { changes: qui, .. }, Event::DocumentChanged { changes: la, .. }) =
-        (tenuto, scartato)
+fn merge(held: &mut Event, discarded: Event) {
+    let (Event::DocumentChanged { changes: here, .. }, Event::DocumentChanged { changes: the, .. }) =
+        (held, discarded)
     else {
         return;
     };
-    match (qui.as_mut(), la) {
-        (Some(qui), Some(la)) => qui.merge(la),
-        _ => *qui = None,
+    match (here.as_mut(), the) {
+        (Some(here), Some(the)) => here.merge(the),
+        _ => *here = None,
     }
 }
 
@@ -230,7 +230,7 @@ fn grain(event: &Event) -> Option<Grain> {
 /// stretto, cioè a chi ha fatto la cosa giusta. È lo stesso argomento con cui la
 /// decisione 0033 lascia passare ciò che non nomina nessun documento.
 fn coalesce(burst: Vec<Notice>) -> Vec<Notice> {
-    let tutte: HashSet<String> = burst
+    let all: HashSet<String> = burst
         .iter()
         .filter_map(|n| match &n.event {
             Event::ViewInvalidated {
@@ -240,32 +240,32 @@ fn coalesce(burst: Vec<Notice>) -> Vec<Notice> {
             _ => None,
         })
         .collect();
-    let assorbito = |event: &Event| {
+    let absorbed = |event: &Event| {
         matches!(
             event,
-            Event::ViewInvalidated { view, instance: Some(_) } if tutte.contains(view)
+            Event::ViewInvalidated { view, instance: Some(_) } if all.contains(view)
         )
     };
 
-    let mut visti: HashMap<Grain, usize> = HashMap::new();
-    let mut tenuti: Vec<Notice> = Vec::with_capacity(burst.len());
+    let mut seen: HashMap<Grain, usize> = HashMap::new();
+    let mut kept: Vec<Notice> = Vec::with_capacity(burst.len());
     // A rovescio, tenendo il primo che si incontra di ogni grana: è «l'ultimo»
     // letto nel verso giusto.
     for notice in burst.into_iter().rev() {
-        if assorbito(&notice.event) {
+        if absorbed(&notice.event) {
             continue;
         }
         if let Some(g) = grain(&notice.event) {
-            if let Some(&dove) = visti.get(&g) {
-                fondi(&mut tenuti[dove].event, notice.event);
+            if let Some(&position) = seen.get(&g) {
+                merge(&mut kept[position].event, notice.event);
                 continue;
             }
-            visti.insert(g, tenuti.len());
+            seen.insert(g, kept.len());
         }
-        tenuti.push(notice);
+        kept.push(notice);
     }
-    tenuti.reverse();
-    tenuti
+    kept.reverse();
+    kept
 }
 
 /// Sopra il tetto la riduzione non è più del ponte: è la regola del contratto
@@ -276,7 +276,7 @@ fn coalesce(burst: Vec<Notice>) -> Vec<Notice> {
 /// Quanti eventi di ogni specie ci sono in una raffica: serve solo ai test, e
 /// sta qui perché è la lettura con cui si controlla una riduzione.
 #[cfg(test)]
-fn per_specie(notices: &[Notice]) -> std::collections::HashMap<String, usize> {
+fn by_kind(notices: &[Notice]) -> std::collections::HashMap<String, usize> {
     let mut out = std::collections::HashMap::new();
     for n in notices {
         *out.entry(format!("{:?}", n.kind())).or_insert(0) += 1;
@@ -290,7 +290,7 @@ mod tests {
     use fub_abi::event::{DocChange, DocChanges};
     use fub_abi::traits::JobId;
 
-    fn cambiato(id: &str) -> Notice {
+    fn changed(id: &str) -> Notice {
         Notice::of(Event::DocumentChanged {
             id: DocId::new(id),
             changes: None,
@@ -299,11 +299,11 @@ mod tests {
 
     /// Lo stesso, ma con un diff dichiarato: serve alle prove che il
     /// raggruppamento **fonde** invece di buttare (decisione 0069).
-    fn cambiato_con(id: &str, aspetto: DocChange) -> Notice {
+    fn changed_with(id: &str, aspect: DocChange) -> Notice {
         Notice::of(Event::DocumentChanged {
             id: DocId::new(id),
             changes: Some(DocChanges {
-                aspects: vec![aspetto],
+                aspects: vec![aspect],
                 ..DocChanges::default()
             }),
         })
@@ -320,43 +320,43 @@ mod tests {
     /// si contano senza chiedere niente a nessuno.
     ///
     /// [decisione 0120]: ../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md
-    struct Uscita {
-        aperta: std::sync::atomic::AtomicBool,
+    struct Exit {
+        open: std::sync::atomic::AtomicBool,
         /// Quanti notice sono usciti davvero.
-        visti: std::sync::atomic::AtomicUsize,
-        /// In che posizione è uscito l'`Overflow`, e quanto valeva: [`SENZA`]
+        seen: std::sync::atomic::AtomicUsize,
+        /// In che posizione è uscito l'`Overflow`, e quanto valeva: [`NO_OVERFLOW`]
         /// finché non ne esce uno.
-        overflow_a: std::sync::atomic::AtomicU64,
-        overflow_di: std::sync::atomic::AtomicU64,
+        overflow_at: std::sync::atomic::AtomicU64,
+        overflow_for: std::sync::atomic::AtomicU64,
     }
 
     /// «Non è ancora successo», per i due conti dell'[`Uscita`].
-    const SENZA: u64 = u64::MAX;
+    const NO_OVERFLOW: u64 = u64::MAX;
 
-    impl Default for Uscita {
+    impl Default for Exit {
         fn default() -> Self {
             use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
-            Uscita {
-                aperta: AtomicBool::new(false),
-                visti: AtomicUsize::new(0),
-                overflow_a: AtomicU64::new(SENZA),
-                overflow_di: AtomicU64::new(SENZA),
+            Exit {
+                open: AtomicBool::new(false),
+                seen: AtomicUsize::new(0),
+                overflow_at: AtomicU64::new(NO_OVERFLOW),
+                overflow_for: AtomicU64::new(NO_OVERFLOW),
             }
         }
     }
 
-    impl crate::session::EventSink for Uscita {
-        fn emit(&self, notice: &Notice) -> Consegna {
+    impl crate::session::EventSink for Exit {
+        fn emit(&self, notice: &Notice) -> Delivery {
             use std::sync::atomic::Ordering::Relaxed;
-            if !self.aperta.load(Relaxed) {
-                return Consegna::Persa;
+            if !self.open.load(Relaxed) {
+                return Delivery::Dropped;
             }
-            let posizione = self.visti.fetch_add(1, Relaxed);
+            let position = self.seen.fetch_add(1, Relaxed);
             if let Event::Overflow { dropped } = notice.event {
-                self.overflow_a.store(posizione as u64, Relaxed);
-                self.overflow_di.store(dropped, Relaxed);
+                self.overflow_at.store(position as u64, Relaxed);
+                self.overflow_for.store(dropped, Relaxed);
             }
-            Consegna::Fatta
+            Delivery::Done
         }
     }
 
@@ -367,35 +367,35 @@ mod tests {
     /// niente: un `if let` senza `else` e un `let _ =`. Ciò che l'utente vedeva
     /// era una shell ferma su uno stato vecchio, e nessuno diceva perché.
     #[test]
-    fn cio_che_l_uscita_non_ha_preso_diventa_un_overflow_appena_riapre() {
+    fn that_that_the_exit_not_has_taken_becomes_a_overflow_just_reopens() {
         use std::sync::atomic::Ordering::Relaxed;
-        let uscita = Uscita::default();
+        let output = Exit::default();
 
         // Chiusa: tre fatti non escono, e il debito li conta.
-        let mut debito = 0;
+        let mut debt = 0;
         for id in ["a.md", "b.md", "c.md"] {
-            debito = consegna(&uscita, &cambiato(id), debito);
+            debt = delivers(&output, &changed(id), debt);
         }
-        assert_eq!(debito, 3, "il debito conta ciò che non è uscito");
-        assert_eq!(uscita.visti.load(Relaxed), 0, "e niente è uscito");
+        assert_eq!(debt, 3, "il debito conta ciò che non è uscito");
+        assert_eq!(output.seen.load(Relaxed), 0, "e niente è uscito");
 
         // Si apre: il primo fatto nuovo arriva **preceduto** dal conto.
-        uscita.aperta.store(true, Relaxed);
-        debito = consegna(&uscita, &cambiato("d.md"), debito);
-        assert_eq!(debito, 0, "pagato");
+        output.open.store(true, Relaxed);
+        debt = delivers(&output, &changed("d.md"), debt);
+        assert_eq!(debt, 0, "pagato");
         assert_eq!(
-            uscita.overflow_di.load(Relaxed),
+            output.overflow_for.load(Relaxed),
             3,
             "chi riceve non sa di essere indietro di tre fatti: resta su uno stato \
              vecchio e nessuno gli dice di riconciliare"
         );
         assert_eq!(
-            uscita.overflow_a.load(Relaxed),
+            output.overflow_at.load(Relaxed),
             0,
             "e il conto arriva **prima** del fatto nuovo, che è l'ordine in cui le \
              due cose sono successe"
         );
-        assert_eq!(uscita.visti.load(Relaxed), 2, "il conto, e poi il fatto");
+        assert_eq!(output.seen.load(Relaxed), 2, "il conto, e poi il fatto");
     }
 
     /// **Un guasto non si raggruppa, e non si perde in una raffica** (§20.2).
@@ -407,8 +407,8 @@ mod tests {
     /// l'ultimo anello del percorso: kernel → bus → **ponte** → centro
     /// notifiche.
     #[test]
-    fn un_guasto_attraversa_il_ponte_anche_dentro_una_raffica() {
-        let guasto = |m: &str| {
+    fn a_fault_crosses_the_bridge_also_inside_a_burst() {
+        let failure = |m: &str| {
             Notice::of(Event::Trouble {
                 severity: fub_abi::Severity::Warning,
                 subject: Some(DocId::new("Alpha.md")),
@@ -418,10 +418,10 @@ mod tests {
         };
         let mut burst: Vec<Notice> = Vec::new();
         for _ in 0..50 {
-            burst.push(cambiato("Alpha.md"));
+            burst.push(changed("Alpha.md"));
         }
-        burst.push(guasto("indice non allineato"));
-        burst.push(guasto("flush fallito"));
+        burst.push(failure("indice non allineato"));
+        burst.push(failure("flush fallito"));
 
         let out = reduce(burst);
         let troubles: Vec<&Notice> = out
@@ -445,10 +445,10 @@ mod tests {
     /// interesse, che è lo stesso danno che la 0033 ha evitato lasciando
     /// passare ciò che non nomina nessun documento.
     #[test]
-    fn grouping_two_changes_of_the_same_note_keeps_both_stories() {
+    fn grouping_two_changes_of_the_same_notes_keeps_both_stories() {
         let out = reduce(vec![
-            cambiato_con("Alpha.md", DocChange::Tags),
-            cambiato_con("Alpha.md", DocChange::Frontmatter),
+            changed_with("Alpha.md", DocChange::Tags),
+            changed_with("Alpha.md", DocChange::Frontmatter),
         ]);
         assert_eq!(out.len(), 1, "restano una: {out:?}");
         let Event::DocumentChanged { changes, .. } = &out[0].event else {
@@ -469,12 +469,12 @@ mod tests {
     fn grouping_with_an_unknown_diff_makes_the_whole_thing_unknown() {
         for burst in [
             vec![
-                cambiato("Alpha.md"),
-                cambiato_con("Alpha.md", DocChange::Tags),
+                changed("Alpha.md"),
+                changed_with("Alpha.md", DocChange::Tags),
             ],
             vec![
-                cambiato_con("Alpha.md", DocChange::Tags),
-                cambiato("Alpha.md"),
+                changed_with("Alpha.md", DocChange::Tags),
+                changed("Alpha.md"),
             ],
         ] {
             let out = reduce(burst);
@@ -489,14 +489,14 @@ mod tests {
     fn a_burst_says_once_what_it_said_a_hundred_times() {
         let mut burst: Vec<Notice> = Vec::new();
         for _ in 0..100 {
-            burst.push(cambiato("Alpha.md"));
+            burst.push(changed("Alpha.md"));
             burst.push(Notice::of(Event::IndexUpdated));
         }
         let out = reduce(burst);
         assert_eq!(out.len(), 2, "duecento messaggi per due fatti: {out:?}");
-        let specie = per_specie(&out);
-        assert_eq!(specie.get("DocumentChanged"), Some(&1));
-        assert_eq!(specie.get("IndexUpdated"), Some(&1));
+        let kind = by_kind(&out);
+        assert_eq!(kind.get("DocumentChanged"), Some(&1));
+        assert_eq!(kind.get("IndexUpdated"), Some(&1));
     }
 
     #[test]
@@ -504,14 +504,14 @@ mod tests {
         // Riscritta, cancellata, ricreata: tenere la **prima** occorrenza
         // farebbe rileggere il documento prima di sapere che era sparito.
         let out = reduce(vec![
-            cambiato("Alpha.md"),
+            changed("Alpha.md"),
             Notice::of(Event::DocumentRemoved {
                 id: DocId::new("Alpha.md"),
             }),
-            cambiato("Alpha.md"),
+            changed("Alpha.md"),
         ]);
-        let specie: Vec<String> = out.iter().map(|n| format!("{:?}", n.kind())).collect();
-        assert_eq!(specie, vec!["DocumentRemoved", "DocumentChanged"]);
+        let kind: Vec<String> = out.iter().map(|n| format!("{:?}", n.kind())).collect();
+        assert_eq!(kind, vec!["DocumentRemoved", "DocumentChanged"]);
     }
 
     #[test]
@@ -547,7 +547,7 @@ mod tests {
     /// niente.
     #[test]
     fn a_job_walking_says_where_it_got_to_not_every_step() {
-        let passo = |id: u64, done: u64| {
+        let step = |id: u64, done: u64| {
             Notice::of(Event::JobProgress {
                 id: JobId(id),
                 progress: fub_abi::traits::JobProgress {
@@ -562,8 +562,8 @@ mod tests {
             job: "export".into(),
         })];
         for n in 0..500 {
-            burst.push(passo(1, n));
-            burst.push(passo(2, n));
+            burst.push(step(1, n));
+            burst.push(step(2, n));
         }
 
         let out = reduce(burst);
@@ -571,10 +571,10 @@ mod tests {
         assert!(matches!(out[0].event, Event::JobStarted { .. }));
         // I due job non si mangiano i passi a vicenda, e di ognuno resta dove è
         // arrivato davvero.
-        for (n, atteso) in [(1, JobId(1)), (2, JobId(2))] {
+        for (n, expected) in [(1, JobId(1)), (2, JobId(2))] {
             assert!(
                 matches!(&out[n].event, Event::JobProgress { id, progress }
-                    if *id == atteso && progress.done == 499),
+                    if *id == expected && progress.done == 499),
                 "{:?}",
                 out[n].event
             );
@@ -586,8 +586,8 @@ mod tests {
         // Due documenti diversi sono due fatti; due custom pure, anche con lo
         // stesso topic — il payload è di chi lo manda.
         let out = reduce(vec![
-            cambiato("Alpha.md"),
-            cambiato("Beta.md"),
+            changed("Alpha.md"),
+            changed("Beta.md"),
             Notice::of(Event::Custom {
                 topic: "acme:x".into(),
                 payload: serde_json::json!(1),
@@ -603,14 +603,14 @@ mod tests {
     #[test]
     fn over_the_ceiling_it_says_reconcile_and_keeps_what_nobody_can_rediscover() {
         let mut burst: Vec<Notice> = (0..BURST_CEILING * 3)
-            .map(|n| cambiato(&format!("nota-{n}.md")))
+            .map(|n| changed(&format!("nota-{n}.md")))
             .collect();
-        let esito = Notice::of(Event::JobDone {
+        let outcome = Notice::of(Event::JobDone {
             id: JobId(7),
             job: "export".into(),
             result: Ok(serde_json::Value::Null),
         });
-        burst.insert(0, esito);
+        burst.insert(0, outcome);
         burst.push(Notice::of(Event::VaultClosed {
             root: "/vault".into(),
         }));
@@ -635,7 +635,7 @@ mod tests {
     #[test]
     fn two_reconciles_in_a_row_are_one() {
         let mut burst: Vec<Notice> = vec![Notice::of(Event::Overflow { dropped: 40 })];
-        burst.extend((0..BURST_CEILING * 2).map(|n| cambiato(&format!("nota-{n}.md"))));
+        burst.extend((0..BURST_CEILING * 2).map(|n| changed(&format!("nota-{n}.md"))));
         let out = reduce(burst);
         assert_eq!(out.len(), 1, "{out:?}");
         assert!(
@@ -646,7 +646,7 @@ mod tests {
     #[test]
     fn under_the_ceiling_nothing_is_thrown_away() {
         let burst: Vec<Notice> = (0..BURST_CEILING)
-            .map(|n| cambiato(&format!("nota-{n}.md")))
+            .map(|n| changed(&format!("nota-{n}.md")))
             .collect();
         let out = reduce(burst);
         assert_eq!(out.len(), BURST_CEILING);

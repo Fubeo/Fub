@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, HashMap};
 use fub_abi::traits::VaultEntry;
 
 use crate::graph::LinkGraph;
-use crate::index::core::{resolve_entry_in, NomiDellAnagrafe};
+use crate::index::core::{resolve_entry_in, EntryNames};
 
 /// Il vault **come lo vede un controllo di salute**: il grafo dei link e
 /// l'anagrafe, insieme.
@@ -44,8 +44,8 @@ pub(crate) struct VaultView<'a> {
     /// una scansione per domanda diventava il vault moltiplicato per sé stesso.
     /// Chi ha l'indice presta le sue, ed è la via di ogni chiamante vero; un
     /// banco che si costruisce un'anagrafe a mano le fa con
-    /// [`NomiDellAnagrafe::di`], che costa una passata sola.
-    pub(crate) nomi: &'a NomiDellAnagrafe,
+    /// [`EntryNames::of`], che costa una passata sola.
+    pub(crate) names: &'a EntryNames,
 }
 
 impl LinkResolver for VaultView<'_> {
@@ -58,7 +58,7 @@ impl LinkResolver for VaultView<'_> {
     }
 
     fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId> {
-        resolve_entry_in(self.entries, self.nomi, source, target)
+        resolve_entry_in(self.entries, self.names, source, target)
     }
 }
 
@@ -141,16 +141,16 @@ fn orphans<'a>(docs: impl Iterator<Item = &'a DocId>, graph: &LinkGraph) -> Vec<
 /// quale dei due file appenderla, e non c'è nessuna ragione per preferirne uno
 /// — è la stessa asimmetria arbitraria che questa voce è venuta a togliere.
 fn collisions(entries: &BTreeMap<DocId, VaultEntry>) -> Vec<HealthIssue> {
-    let mut per_chiave: BTreeMap<String, Vec<&DocId>> = BTreeMap::new();
+    let mut by_key: BTreeMap<String, Vec<&DocId>> = BTreeMap::new();
     for id in entries.keys() {
-        per_chiave
+        by_key
             .entry(resolution_key(id.as_str()))
             .or_default()
             .push(id);
     }
     // La chiave si calcola una volta sola per voce: la seconda passata guarda
     // il gruppo per riferimento invece di rifare il calcolo che l'ha costruito.
-    let gruppo_di: HashMap<&DocId, &Vec<&DocId>> = per_chiave
+    let group_of: HashMap<&DocId, &Vec<&DocId>> = by_key
         .values()
         .flat_map(|g| g.iter().map(move |id| (*id, g)))
         .collect();
@@ -160,19 +160,19 @@ fn collisions(entries: &BTreeMap<DocId, VaultEntry>) -> Vec<HealthIssue> {
     entries
         .keys()
         .filter_map(|id| {
-            let gruppo = gruppo_di.get(id)?;
+            let gruppo = group_of.get(id)?;
             if gruppo.len() < 2 {
                 return None;
             }
-            let altri: Vec<&str> = gruppo
+            let other: Vec<&str> = gruppo
                 .iter()
-                .filter(|o| **o != id)
-                .map(|o| o.as_str())
+                .filter(|or| **or != id)
+                .map(|or| or.as_str())
                 .collect();
             Some(HealthIssue {
                 doc: id.clone(),
                 check: HealthCheck::CollidingPaths,
-                detail: Some(altri.join(", ")),
+                detail: Some(other.join(", ")),
                 // Il problema non sta in un punto del sorgente: sta nel nome.
                 span: None,
             })
@@ -198,7 +198,7 @@ fn dates<'a>(
         }
         let detail = sospette
             .iter()
-            .map(|(key, testo)| format!("{key}: {testo}"))
+            .map(|(key, text)| format!("{key}: {text}"))
             .collect::<Vec<_>>()
             .join(", ");
         Some(HealthIssue {
@@ -249,7 +249,7 @@ mod tests {
 
     /// Un'anagrafe con dentro questi file (specie irrilevante per il
     /// controllo: conta che ci **siano**).
-    fn anagrafe(paths: &[&str]) -> BTreeMap<DocId, VaultEntry> {
+    fn entries_of(paths: &[&str]) -> BTreeMap<DocId, VaultEntry> {
         paths
             .iter()
             .map(|p| {
@@ -269,19 +269,19 @@ mod tests {
     }
 
     fn issues(check: HealthCheck, docs: &[DocumentModel], graph: &LinkGraph) -> Vec<HealthIssue> {
-        issues_con(check, docs, graph, &anagrafe(&[]))
+        issues_with(check, docs, graph, &entries_of(&[]))
     }
 
-    fn issues_con(
+    fn issues_with(
         check: HealthCheck,
         docs: &[DocumentModel],
         graph: &LinkGraph,
         entries: &BTreeMap<DocId, VaultEntry>,
     ) -> Vec<HealthIssue> {
-        issues_con_formati(check, docs, graph, entries, &DateFormats::ISO)
+        issues_with_formats(check, docs, graph, entries, &DateFormats::ISO)
     }
 
-    fn issues_con_formati(
+    fn issues_with_formats(
         check: HealthCheck,
         docs: &[DocumentModel],
         graph: &LinkGraph,
@@ -295,7 +295,7 @@ mod tests {
             &VaultView {
                 graph,
                 entries,
-                nomi: &NomiDellAnagrafe::di(entries),
+                names: &EntryNames::of(entries),
             },
             &md(),
             formats,
@@ -310,18 +310,18 @@ mod tests {
         ];
         let graph = LinkGraph::build(docs.iter());
         let found = issues(HealthCheck::BrokenLinks, &docs, &graph);
-        assert_eq!(found.len(), 1, "solo il secondo link è rotto");
+        assert_eq!(found.len(), 1, "only the second link is broken");
         assert_eq!(found[0].doc, DocId::new("a.md"));
         assert_eq!(
             found[0].detail.as_deref(),
             Some("Non esiste"),
-            "il dettaglio è la destinazione com'era scritta: è ciò che si corregge"
+            "the detail is the destination as written: this is what gets corrected"
         );
-        assert!(found[0].span.is_some(), "un link rotto ha un punto");
+        assert!(found[0].span.is_some(), "a broken link has a span");
     }
 
     #[test]
-    fn un_allegato_che_ce_non_e_un_link_rotto() {
+    fn an_attachment_that_exists_is_not_a_broken_link() {
         // Prima del §14.1 questa asserzione era «il png resta **sempre**
         // fuori», e non poteva essere altrimenti: un PNG nel kernel non
         // esisteva, quindi «c'è» e «non c'è» erano la stessa risposta e
@@ -332,22 +332,22 @@ mod tests {
             vec![path("img/foto.png"), path("note/b.md"), path("note/c")],
         )];
         let graph = LinkGraph::build(docs.iter());
-        let found = issues_con(
+        let found = issues_with(
             HealthCheck::BrokenLinks,
             &docs,
             &graph,
-            &anagrafe(&["img/foto.png"]),
+            &entries_of(&["img/foto.png"]),
         );
-        let broken: Vec<&str> = found.iter().filter_map(|i| i.detail.as_deref()).collect();
+        let broken: Vec<&str> = found.iter().filter_map(|the| the.detail.as_deref()).collect();
         assert_eq!(
             broken,
             vec!["note/b.md", "note/c"],
-            "il png c'è, i due path a documenti no"
+            "the png is there, the two path-to-document references are not"
         );
     }
 
     #[test]
-    fn un_allegato_che_manca_e_un_link_rotto() {
+    fn a_missing_attachment_is_a_broken_link() {
         // Ed è il caso che l'utente vede davvero: un'immagine che non si
         // carica. È la metà della promessa che il vault non poteva mantenere
         // finché non sapeva cosa avesse dentro.
@@ -356,35 +356,35 @@ mod tests {
             vec![path("../img/foto.png"), path("img/sparita.png")],
         )];
         let graph = LinkGraph::build(docs.iter());
-        let found = issues_con(
+        let found = issues_with(
             HealthCheck::BrokenLinks,
             &docs,
             &graph,
-            &anagrafe(&["img/foto.png"]),
+            &entries_of(&["img/foto.png"]),
         );
-        let broken: Vec<&str> = found.iter().filter_map(|i| i.detail.as_deref()).collect();
+        let broken: Vec<&str> = found.iter().filter_map(|the| the.detail.as_deref()).collect();
         assert_eq!(
             broken,
             vec!["img/sparita.png"],
-            "il riferimento relativo risolve e non è rotto; quello che non \
-             nomina niente sì"
+            "the relative reference resolves and is not broken; the one that \
+             names nothing is"
         );
         assert!(
             found[0].span.is_some(),
-            "un allegato mancante ha un punto nel sorgente, come ogni link rotto"
+            "a missing attachment has a span in the source, like every broken link"
         );
     }
 
     #[test]
-    fn lancora_non_fa_parte_del_nome_di_un_allegato() {
+    fn the_anchor_is_not_part_of_an_attachment_name() {
         // `documento.pdf#page=3` nomina il PDF: il frammento è per chi lo apre.
         let docs = vec![doc("a.md", vec![path("doc/manuale.pdf#page=3")])];
         let graph = LinkGraph::build(docs.iter());
-        assert!(issues_con(
+        assert!(issues_with(
             HealthCheck::BrokenLinks,
             &docs,
             &graph,
-            &anagrafe(&["doc/manuale.pdf"])
+            &entries_of(&["doc/manuale.pdf"])
         )
         .is_empty());
     }
@@ -405,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn an_orphan_is_a_note_nobody_names() {
+    fn an_orphan_is_a_notes_nobody_names() {
         let docs = vec![
             doc("hub.md", vec![wiki("Figlia")]),
             doc("Figlia.md", vec![]),
@@ -413,116 +413,116 @@ mod tests {
         ];
         let graph = LinkGraph::build(docs.iter());
         let found = issues(HealthCheck::OrphanDocuments, &docs, &graph);
-        let orphans: Vec<&str> = found.iter().map(|i| i.doc.as_str()).collect();
+        let orphans: Vec<&str> = found.iter().map(|the| the.doc.as_str()).collect();
         assert_eq!(
             orphans,
             vec!["hub.md", "sola.md"],
-            "orfana = zero riferimenti entranti; linkare non salva dall'orfanità"
+            "orphan = zero incoming references; linking does not save from orphanhood"
         );
         assert!(found[0].detail.is_none() && found[0].span.is_none());
     }
 
     #[test]
-    fn due_file_che_differiscono_per_una_maiuscola_sono_una_collisione() {
+    fn two_files_differing_in_case_are_a_collision() {
         // E il caso che vale il controllo è questo: in **radice**, dove nessun
         // wikilink può disambiguare perché la risoluzione per nome passa da una
         // chiave che il caso l'ha già collassato.
-        let entries = anagrafe(&["Nota.md", "nota.md", "sola.md"]);
+        let entries = entries_of(&["Nota.md", "nota.md", "sola.md"]);
         let graph = LinkGraph::build(std::iter::empty::<&DocumentModel>());
-        let found = issues_con(HealthCheck::CollidingPaths, &[], &graph, &entries);
+        let found = issues_with(HealthCheck::CollidingPaths, &[], &graph, &entries);
         let colliding: Vec<(&str, &str)> = found
             .iter()
-            .map(|i| (i.doc.as_str(), i.detail.as_deref().unwrap_or("")))
+            .map(|the| (the.doc.as_str(), the.detail.as_deref().unwrap_or("")))
             .collect();
         assert_eq!(
             colliding,
             vec![("Nota.md", "nota.md"), ("nota.md", "Nota.md")],
-            "una issue per ciascuno dei due, e ognuna nomina l'altro: non c'è \
-             ragione di appendere la collisione a uno dei due"
+            "one issue per each of the two, each naming the other: there is no \
+             reason to append the collision to only one of them"
         );
         assert!(
             found[0].span.is_none(),
-            "il problema è il nome, non un punto"
+            "the problem is the name, not a span"
         );
     }
 
     #[test]
-    fn un_allegato_collide_come_una_nota() {
+    fn an_attachment_collides_like_a_notes() {
         // L'anagrafe e non i documenti: se l'elenco fossero le note, `foto.PNG`
         // e `foto.png` — che è come nasce il caso più comune, due export dallo
         // stesso strumento — non li vedrebbe nessuno.
-        let entries = anagrafe(&["img/foto.PNG", "img/foto.png"]);
+        let entries = entries_of(&["img/foto.PNG", "img/foto.png"]);
         let graph = LinkGraph::build(std::iter::empty::<&DocumentModel>());
-        let found = issues_con(HealthCheck::CollidingPaths, &[], &graph, &entries);
+        let found = issues_with(HealthCheck::CollidingPaths, &[], &graph, &entries);
         assert_eq!(found.len(), 2);
     }
 
     #[test]
-    fn due_estensioni_diverse_non_sono_una_collisione() {
+    fn two_different_extensions_are_not_a_collision() {
         // La chiave è quella del path **intero**: `nota.md` e `nota.txt` sono
         // due file che il filesystem distingue e la chiave pure. Segnalarli
         // sarebbe rumore, ed è il modo più facile di rendere inutile un
         // controllo di salute.
-        let entries = anagrafe(&["nota.md", "nota.txt", "note/nota.md"]);
+        let entries = entries_of(&["nota.md", "nota.txt", "note/nota.md"]);
         let graph = LinkGraph::build(std::iter::empty::<&DocumentModel>());
-        assert!(issues_con(HealthCheck::CollidingPaths, &[], &graph, &entries).is_empty());
+        assert!(issues_with(HealthCheck::CollidingPaths, &[], &graph, &entries).is_empty());
     }
 
     #[test]
-    fn anche_due_composizioni_unicode_collidono() {
+    fn unicode_compositions_collide_too() {
         // L'altra metà di `resolution_key`, e la meno visibile: `é` come code
         // point solo (NFC, come lo scrive Linux) e come `e` + accento
         // combinante (NFD, come lo scrive macOS). Sul disco di un vault
         // sincronizzato sono due file, e a occhio sono lo stesso nome.
-        let entries = anagrafe(&["Caf\u{e9}.md", "Cafe\u{301}.md"]);
+        let entries = entries_of(&["Caf\u{e9}.md", "Cafe\u{301}.md"]);
         let graph = LinkGraph::build(std::iter::empty::<&DocumentModel>());
         assert_eq!(
-            issues_con(HealthCheck::CollidingPaths, &[], &graph, &entries).len(),
+            issues_with(HealthCheck::CollidingPaths, &[], &graph, &entries).len(),
             2,
-            "due nomi che a schermo sono identici: è il caso che nessuno vede"
+            "two names that look identical on screen: this is the case nobody sees"
         );
     }
 
     /// Un documento col frontmatter dato, per i controlli sulle proprietà.
-    fn con_proprieta(id: &str, json: serde_json::Value) -> DocumentModel {
+    fn with_properties(id: &str, json: serde_json::Value) -> DocumentModel {
         let mut m = DocumentModel::empty(DocId::new(id));
         m.frontmatter = Frontmatter(json.as_object().expect("un oggetto").clone());
         m
     }
 
     #[test]
-    fn una_proprieta_che_sembra_una_data_si_dice() {
+    fn a_property_that_looks_like_a_date_is_stated() {
         let docs = vec![
-            con_proprieta("a.md", serde_json::json!({"scadenza": "5/7/2026"})),
+            with_properties("a.md", serde_json::json!({"scadenza": "5/7/2026"})),
             // Già ISO: non c'è niente da dire.
-            con_proprieta("b.md", serde_json::json!({"scadenza": "2026-07-05"})),
+            with_properties("b.md", serde_json::json!({"scadenza": "2026-07-05"})),
             // Un testo che non somiglia a nessuna data non è rumore da fare.
-            con_proprieta("c.md", serde_json::json!({"titolo": "capitolo 3"})),
+            with_properties("c.md", serde_json::json!({"titolo": "capitolo 3"})),
         ];
         let graph = LinkGraph::build(docs.iter());
         let found = issues(HealthCheck::UnrecognizedDates, &docs, &graph);
-        let detto: Vec<(&str, &str)> = found
+        let said: Vec<(&str, &str)> = found
             .iter()
-            .map(|i| (i.doc.as_str(), i.detail.as_deref().unwrap_or("")))
+            .map(|the| (the.doc.as_str(), the.detail.as_deref().unwrap_or("")))
             .collect();
         assert_eq!(
-            detto,
+            said,
             vec![("a.md", "scadenza: 5/7/2026")],
-            "il dettaglio nomina la chiave e come è scritta: è ciò che serve \
-             per decidere quale formato dichiarare"
+            "the detail names the key and how it is written: this is what is \
+             needed to decide which format to declare"
         );
     }
 
     #[test]
-    fn chi_ha_dichiarato_il_formato_non_se_lo_sente_ripetere() {
+    fn whoever_declared_the_format_is_not_told_again() {
         let docs = vec![
-            con_proprieta("a.md", serde_json::json!({"scadenza": "5/7/2026"})),
+            with_properties("a.md", serde_json::json!({"scadenza": "5/7/2026"})),
             // Questa resta illeggibile anche con `dmy`: il mese non esiste.
-            con_proprieta("b.md", serde_json::json!({"scadenza": "2026/13/40"})),
+            with_properties("b.md", serde_json::json!({"scadenza": "2026/13/40"})),
         ];
         let graph = LinkGraph::build(docs.iter());
-        let entries = anagrafe(&[]);
-        let found = issues_con_formati(
+        let entries = entries_of(&[]);
+        let found = issues_with_formats(
             HealthCheck::UnrecognizedDates,
             &docs,
             &graph,
@@ -531,19 +531,19 @@ mod tests {
         );
         assert!(
             found.is_empty(),
-            "una data dichiarata **è** una data, e `2026/13/40` non somiglia a \
-             nessuna: chiedere due volte la stessa cosa rende il controllo \
-             inutile, e un controllo rumoroso è un controllo spento"
+            "a declared date **is** a date, and `2026/13/40` does not resemble \
+             any: asking the same thing twice makes the check useless, and a \
+             noisy check is a dead check"
         );
     }
 
     #[test]
-    fn anche_una_data_dentro_un_elenco_si_dice() {
+    fn a_date_inside_a_list_is_stated_too() {
         // Le proprietà a elenco sono la forma normale di 8.2 (`autore: [a, b]`),
         // e una data ci sta dentro come ci sta da sola: guardare solo gli
         // scalari nudi vorrebbe dire tacere su metà del frontmatter di un vault
         // vero.
-        let docs = vec![con_proprieta(
+        let docs = vec![with_properties(
             "a.md",
             serde_json::json!({"tappe": ["2026-07-05", "6/7/2026"]}),
         )];

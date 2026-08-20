@@ -102,9 +102,9 @@ pub fn window(text: &str, link: Range<usize>) -> String {
         // Il margine attorno al link è ciò che resta del tetto, diviso in
         // due: `link_chars < SNIPPET_CHARS` per il ramo qui sopra, quindi
         // questa sottrazione non può andare sottozero.
-        let margine = (SNIPPET_CHARS - link_chars) / 2;
-        let link_inizio = text[..start].chars().count();
-        let mut from = link_inizio.saturating_sub(margine);
+        let margin = (SNIPPET_CHARS - link_chars) / 2;
+        let link_start = text[..start].chars().count();
+        let mut from = link_start.saturating_sub(margin);
         let mut to = from + SNIPPET_CHARS;
         if to > n {
             // Il link è a meno di una finestra dalla fine: la finestra
@@ -114,15 +114,15 @@ pub fn window(text: &str, link: Range<usize>) -> String {
         }
         (char_nth_byte(text, from), char_nth_byte(text, to))
     };
-    let fetta = text[from..to].trim();
-    if fetta.is_empty() {
+    let slice = text[from..to].trim();
+    if slice.is_empty() {
         return String::new();
     }
-    let mut out = String::with_capacity(fetta.len() + 2);
+    let mut out = String::with_capacity(slice.len() + 2);
     if from > 0 {
         out.push('…');
     }
-    out.push_str(fetta);
+    out.push_str(slice);
     if to < text.len() {
         out.push('…');
     }
@@ -133,7 +133,7 @@ pub fn window(text: &str, link: Range<usize>) -> String {
 fn char_nth_byte(text: &str, k: usize) -> usize {
     text.char_indices()
         .nth(k)
-        .map(|(i, _)| i)
+        .map(|(the, _)| the)
         .unwrap_or(text.len())
 }
 
@@ -142,21 +142,21 @@ fn char_nth_byte(text: &str, k: usize) -> usize {
 /// Sono i metodi `str::{floor,ceil}_char_boundary` (stabili da 1.91),
 /// implementati qui perché l'MSRV del workspace è 1.89 — e sono le stesse due
 /// righe che quei metodi contengono.
-fn floor_char_boundary(text: &str, i: usize) -> usize {
-    let mut i = i.min(text.len());
-    while !text.is_char_boundary(i) {
-        i -= 1;
+fn floor_char_boundary(text: &str, the: usize) -> usize {
+    let mut the = the.min(text.len());
+    while !text.is_char_boundary(the) {
+        the -= 1;
     }
-    i
+    the
 }
 
 /// Il confine di carattere più vicino a `i` senza scenderci sotto.
-fn ceil_char_boundary(text: &str, i: usize) -> usize {
-    let mut i = i.min(text.len());
-    while !text.is_char_boundary(i) {
-        i += 1;
+fn ceil_char_boundary(text: &str, the: usize) -> usize {
+    let mut the = the.min(text.len());
+    while !text.is_char_boundary(the) {
+        the += 1;
     }
-    i
+    the
 }
 
 #[cfg(test)]
@@ -186,8 +186,8 @@ mod tests {
         // Link a 3 caratteri dall'inizio: niente ellissi in testa, una in coda.
         // La fetta finisce con uno spazio ("parole " × 31 dopo "abc") e il
         // trim lo toglie: 219 caratteri + l'ellissi.
-        let testo = format!("abc{}", "parole ".repeat(40));
-        let ctx = window(&testo, 0..3);
+        let text = format!("abc{}", "parole ".repeat(40));
+        let ctx = window(&text, 0..3);
         assert!(ctx.starts_with("abc"));
         assert!(!ctx.starts_with('…'));
         assert!(ctx.ends_with('…'));
@@ -197,9 +197,9 @@ mod tests {
     #[test]
     fn a_cut_on_the_left_wears_a_leading_ellipsis() {
         // Link a 3 caratteri dalla fine: niente ellissi in coda, una in testa.
-        let testo = format!("{}abc", "parole ".repeat(40));
-        let n = testo.len();
-        let ctx = window(&testo, n - 3..n);
+        let text = format!("{}abc", "parole ".repeat(40));
+        let n = text.len();
+        let ctx = window(&text, n - 3..n);
         assert!(ctx.ends_with("abc"));
         assert!(!ctx.ends_with('…'));
         assert!(ctx.starts_with('…'));
@@ -208,9 +208,9 @@ mod tests {
 
     #[test]
     fn a_cut_on_both_sides_wears_two_ellipses() {
-        let testo = format!("{}LINK{}", "parole ".repeat(40), "parole ".repeat(40));
-        let inizio = testo.find("LINK").unwrap();
-        let ctx = window(&testo, inizio..inizio + 4);
+        let text = format!("{}LINK{}", "parole ".repeat(40), "parole ".repeat(40));
+        let start = text.find("LINK").unwrap();
+        let ctx = window(&text, start..start + 4);
         assert!(ctx.contains("LINK"));
         assert!(ctx.starts_with('…') && ctx.ends_with('…'));
         assert_eq!(ctx.chars().count(), SNIPPET_CHARS + 2);
@@ -221,15 +221,15 @@ mod tests {
         // Accenti (2 byte), CJK (3), emoji (4) e una famiglia ZWJ (11 char
         // per cluster): il taglio cade su confini di carattere e il risultato
         // contiene il link per intero.
-        let testo = format!(
+        let text = format!(
             "{} {} {} {}",
             "però città perché così ".repeat(20),
             "日本語のテキスト".repeat(20),
             "🎉".repeat(50),
             "👨‍👩‍👧‍👦".repeat(20),
         );
-        let inizio = testo.find("日本語").unwrap();
-        let ctx = window(&testo, inizio..inizio + "日本語".len());
+        let start = text.find("日本語").unwrap();
+        let ctx = window(&text, start..start + "日本語".len());
         assert!(ctx.contains("日本語"));
         assert!(ctx.chars().count() <= SNIPPET_CHARS + 2);
     }
@@ -238,19 +238,19 @@ mod tests {
     fn a_label_longer_than_the_cap_is_kept_whole() {
         // Il ramo esplicito: un'etichetta che non sta nel tetto si conserva
         // intera, con le ellissi ai lati se c'è altro testo.
-        let etichetta = "e".repeat(300);
-        let testo = format!("pre {etichetta} post");
-        let inizio = testo.find(&etichetta).unwrap();
-        let ctx = window(&testo, inizio..inizio + 300);
-        assert!(ctx.contains(&etichetta));
+        let label = "e".repeat(300);
+        let text = format!("pre {label} post");
+        let start = text.find(&label).unwrap();
+        let ctx = window(&text, start..start + 300);
+        assert!(ctx.contains(&label));
         assert!(ctx.starts_with('…') && ctx.ends_with('…'));
         // E senza testo attorno: il link è il testo, niente ellissi.
-        assert_eq!(window(&etichetta, 0..300), etichetta);
+        assert_eq!(window(&label, 0..300), label);
     }
 
     #[test]
     fn an_all_whitespace_window_is_empty() {
-        let testo = format!("x{}", " ".repeat(400));
-        assert_eq!(window(&testo, 201..201), "");
+        let text = format!("x{}", " ".repeat(400));
+        assert_eq!(window(&text, 201..201), "");
     }
 }

@@ -197,7 +197,7 @@ impl ViewProvider for QueriesView {
         instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
-        albero(instance.view.as_str(), host, None)
+        tree_helper(instance.view.as_str(), host, None)
     }
 
     fn on_action(
@@ -211,7 +211,7 @@ impl ViewProvider for QueriesView {
             SAVE => {
                 let name = action.text_field(NEW_NAME).unwrap_or_default();
                 let text = action.text_field(NEW_TEXT).unwrap_or_default();
-                comando_poi_albero(
+                command_then_tree(
                     host,
                     view,
                     QUERIES_SAVE,
@@ -223,7 +223,7 @@ impl ViewProvider for QueriesView {
                     return Ok(ViewUpdate::None);
                 };
                 host.set_view_state(LAST, Some(serde_json::Value::String(id.to_string())))?;
-                comando_poi_albero(host, view, QUERIES_RUN, serde_json::json!({ ID: id }))
+                command_then_tree(host, view, QUERIES_RUN, serde_json::json!({ ID: id }))
             }
             DELETE => {
                 let Some(id) = action.payload.get(ID).and_then(|v| v.as_str()) else {
@@ -237,7 +237,7 @@ impl ViewProvider for QueriesView {
                 {
                     host.set_view_state(LAST, None)?;
                 }
-                comando_poi_albero(host, view, QUERIES_DELETE, serde_json::json!({ ID: id }))
+                command_then_tree(host, view, QUERIES_DELETE, serde_json::json!({ ID: id }))
             }
             OPEN => {
                 let Some(doc) = action.payload.get("doc").and_then(|v| v.as_str()) else {
@@ -252,7 +252,7 @@ impl ViewProvider for QueriesView {
     }
 }
 
-fn comando_poi_albero(
+fn command_then_tree(
     host: &mut dyn HostApi,
     view: &str,
     id: &str,
@@ -260,39 +260,39 @@ fn comando_poi_albero(
 ) -> Result<ViewUpdate, PluginError> {
     match host.run_command(id, args) {
         Ok(_) => Ok(ViewUpdate::Replace {
-            root: albero(view, host, None)?,
+            root: tree_helper(view, host, None)?,
         }),
-        Err(e) => Ok(ViewUpdate::Replace {
-            root: albero(
+        Err(and) => Ok(ViewUpdate::Replace {
+            root: tree_helper(
                 view,
                 host,
                 Some(Text::message(
                     FAILED,
-                    vec![Arg::text("reason", e.to_string())],
+                    vec![Arg::text("reason", and.to_string())],
                 )),
             )?,
         }),
     }
 }
 
-fn albero(view: &str, host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError> {
+fn tree_helper(view: &str, host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError> {
     if view == COLLECTIONS_VIEW {
-        collections_tree(host, avviso)
+        collections_tree(host, warning)
     } else {
-        tree(host, avviso)
+        tree(host, warning)
     }
 }
 
-fn tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError> {
-    let store = leggi(host)?;
-    let mut figli = Vec::new();
-    if let Some(avviso) = avviso {
-        figli.push(UiNode::failed(avviso, None));
+fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError> {
+    let store = load(host)?;
+    let mut children = Vec::new();
+    if let Some(warning) = warning {
+        children.push(UiNode::failed(warning, None));
     }
     if store.queries.is_empty() {
-        figli.push(UiNode::empty_state(Text::key(EMPTY)));
+        children.push(UiNode::empty_state(Text::key(EMPTY)));
     } else {
-        figli.push(UiNode::list(
+        children.push(UiNode::list(
             store
                 .queries
                 .iter()
@@ -327,23 +327,23 @@ fn tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError>
         .and_then(|v| v.as_str().map(str::to_string))
     {
         if let Some(q) = store.queries.iter().find(|q| q.id == id) {
-            figli.push(risultati(host, q)?);
+            children.push(results(host, q)?);
         }
     }
-    figli.push(form_salva());
-    Ok(UiNode::column(1, figli))
+    children.push(form_save());
+    Ok(UiNode::column(1, children))
 }
 
-fn collections_tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError> {
-    let store = leggi(host)?;
-    let mut figli = Vec::new();
-    if let Some(avviso) = avviso {
-        figli.push(UiNode::failed(avviso, None));
+fn collections_tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError> {
+    let store = load(host)?;
+    let mut children = Vec::new();
+    if let Some(warning) = warning {
+        children.push(UiNode::failed(warning, None));
     }
     if store.queries.is_empty() {
-        figli.push(UiNode::empty_state(Text::key(COLLECTIONS_EMPTY)));
+        children.push(UiNode::empty_state(Text::key(COLLECTIONS_EMPTY)));
     } else {
-        figli.push(UiNode::list(
+        children.push(UiNode::list(
             store
                 .queries
                 .iter()
@@ -363,13 +363,13 @@ fn collections_tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, 
         .and_then(|v| v.as_str().map(str::to_string))
     {
         if let Some(q) = store.queries.iter().find(|q| q.id == id) {
-            figli.push(risultati(host, q)?);
+            children.push(results(host, q)?);
         }
     }
-    Ok(UiNode::column(1, figli))
+    Ok(UiNode::column(1, children))
 }
 
-fn risultati(host: &dyn ReadApi, q: &SavedQuery) -> Result<UiNode, PluginError> {
+fn results(host: &dyn ReadApi, q: &SavedQuery) -> Result<UiNode, PluginError> {
     let paged = host
         .query_index(IndexQuery::Documents {
             matching: q.expr.clone(),
@@ -379,13 +379,13 @@ fn risultati(host: &dyn ReadApi, q: &SavedQuery) -> Result<UiNode, PluginError> 
             excerpts: Default::default(),
         })?
         .documents()?;
-    let mut figli = vec![UiNode::new(UiKind::Text {
+    let mut children = vec![UiNode::new(UiKind::Text {
         content: Text::message(RESULTS, vec![Arg::text(NAME, q.name.clone())]),
     })];
     if paged.items.is_empty() {
-        figli.push(UiNode::empty_state(Text::key(NO_MATCH)));
+        children.push(UiNode::empty_state(Text::key(NO_MATCH)));
     } else {
-        figli.push(UiNode::list(
+        children.push(UiNode::list(
             paged
                 .items
                 .into_iter()
@@ -401,10 +401,10 @@ fn risultati(host: &dyn ReadApi, q: &SavedQuery) -> Result<UiNode, PluginError> 
                 .collect(),
         ));
     }
-    Ok(UiNode::column(1, figli))
+    Ok(UiNode::column(1, children))
 }
 
-fn form_salva() -> UiNode {
+fn form_save() -> UiNode {
     UiNode::new(UiKind::Form {
         children: vec![
             UiNode::new(UiKind::TextInput {
@@ -435,17 +435,17 @@ pub struct QueriesCommands;
 impl CommandProvider for QueriesCommands {
     fn commands(&self) -> Vec<CommandSpec> {
         vec![
-            comando(QUERIES_SAVE)
-                .with_param(parametro(QUERIES_SAVE, ID, ParamKind::Text))
-                .with_param(parametro(QUERIES_SAVE, NAME, ParamKind::Text).required())
-                .with_param(parametro(QUERIES_SAVE, EXPR, ParamKind::Text))
-                .with_param(parametro(QUERIES_SAVE, TEXT, ParamKind::Text))
+            command(QUERIES_SAVE)
+                .with_param(parameter(QUERIES_SAVE, ID, ParamKind::Text))
+                .with_param(parameter(QUERIES_SAVE, NAME, ParamKind::Text).required())
+                .with_param(parameter(QUERIES_SAVE, EXPR, ParamKind::Text))
+                .with_param(parameter(QUERIES_SAVE, TEXT, ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
-            comando(QUERIES_RUN)
-                .with_param(parametro(QUERIES_RUN, ID, ParamKind::Text).required())
+            command(QUERIES_RUN)
+                .with_param(parameter(QUERIES_RUN, ID, ParamKind::Text).required())
                 .with_scope(CommandScope::read_only()),
-            comando(QUERIES_DELETE)
-                .with_param(parametro(QUERIES_DELETE, ID, ParamKind::Text).required())
+            command(QUERIES_DELETE)
+                .with_param(parameter(QUERIES_DELETE, ID, ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
         ]
     }
@@ -466,14 +466,14 @@ impl CommandProvider for QueriesCommands {
     }
 }
 
-fn comando(id: &str) -> CommandSpec {
+fn command(id: &str) -> CommandSpec {
     CommandSpec::new(id, Text::key(format!("{id}.title")))
         .describing(Text::key(format!("{id}.desc")))
 }
 
-fn parametro(comando: &str, name: &str, kind: ParamKind) -> ParamSpec {
-    ParamSpec::new(name, Text::key(format!("{comando}.{name}.title")), kind)
-        .describing(Text::key(format!("{comando}.{name}.desc")))
+fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
+    ParamSpec::new(name, Text::key(format!("{command}.{name}.title")), kind)
+        .describing(Text::key(format!("{command}.{name}.desc")))
 }
 
 fn save(
@@ -488,23 +488,23 @@ fn save(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_EMPTY_NAME)))?
         .to_string();
-    let expr = expr_da(args, raw)?;
-    let mut store = leggi(host)?;
+    let expr = expr_from(args, raw)?;
+    let mut store = load(host)?;
     let id = args
         .text(ID)
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .unwrap_or_else(|| id_libero(&store, &name));
+        .unwrap_or_else(|| free_id(&store, &name));
     if mode.is_dry_run() {
         return Ok(CommandOutcome::notify(Text::message(
             P_SAVE,
             vec![Arg::text(NAME, &name)],
         )));
     }
-    if let Some(esistente) = store.queries.iter_mut().find(|q| q.id == id) {
-        esistente.name = name.clone();
-        esistente.expr = expr;
+    if let Some(existing) = store.queries.iter_mut().find(|q| q.id == id) {
+        existing.name = name.clone();
+        existing.expr = expr;
     } else {
         store.queries.push(SavedQuery {
             id,
@@ -512,7 +512,7 @@ fn save(
             expr,
         });
     }
-    scrivi(host, &store)?;
+    persist(host, &store)?;
     Ok(CommandOutcome::notify(Text::message(
         P_SAVE,
         vec![Arg::text(NAME, name)],
@@ -524,8 +524,8 @@ fn run(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let id = id_da(args)?;
-    let store = leggi(host)?;
+    let id = id_from(args)?;
+    let store = load(host)?;
     let q =
         store.queries.iter().find(|q| q.id == id).ok_or_else(|| {
             PluginError::BadArgs(Text::message(E_MISSING, vec![Arg::text(ID, &id)]))
@@ -562,8 +562,8 @@ fn delete(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let id = id_da(args)?;
-    let mut store = leggi(host)?;
+    let id = id_from(args)?;
+    let mut store = load(host)?;
     let Some(pos) = store.queries.iter().position(|q| q.id == id) else {
         return Err(PluginError::BadArgs(Text::message(
             E_MISSING,
@@ -578,14 +578,14 @@ fn delete(
         )));
     }
     store.queries.remove(pos);
-    scrivi(host, &store)?;
+    persist(host, &store)?;
     Ok(CommandOutcome::notify(Text::message(
         P_DELETE,
         vec![Arg::text(NAME, name)],
     )))
 }
 
-fn id_da(args: Args<'_>) -> Result<String, PluginError> {
+fn id_from(args: Args<'_>) -> Result<String, PluginError> {
     args.text(ID)
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -593,7 +593,7 @@ fn id_da(args: Args<'_>) -> Result<String, PluginError> {
         .ok_or_else(|| PluginError::BadArgs(Text::message(E_MISSING, vec![Arg::text(ID, "")])))
 }
 
-fn expr_da(args: Args<'_>, raw: &serde_json::Value) -> Result<QueryExpr, PluginError> {
+fn expr_from(args: Args<'_>, raw: &serde_json::Value) -> Result<QueryExpr, PluginError> {
     if let Some(v) = raw.get(EXPR) {
         if !v.is_null() && !(v.is_string() && v.as_str().is_some_and(str::is_empty)) {
             return parse_expr(v);
@@ -607,22 +607,22 @@ fn expr_da(args: Args<'_>, raw: &serde_json::Value) -> Result<QueryExpr, PluginE
 
 fn parse_expr(v: &serde_json::Value) -> Result<QueryExpr, PluginError> {
     if let Some(s) = v.as_str() {
-        return serde_json::from_str(s).map_err(|e| {
+        return serde_json::from_str(s).map_err(|and| {
             PluginError::BadArgs(Text::message(
                 E_BAD_EXPR,
-                vec![Arg::text("reason", e.to_string())],
+                vec![Arg::text("reason", and.to_string())],
             ))
         });
     }
-    serde_json::from_value(v.clone()).map_err(|e| {
+    serde_json::from_value(v.clone()).map_err(|and| {
         PluginError::BadArgs(Text::message(
             E_BAD_EXPR,
-            vec![Arg::text("reason", e.to_string())],
+            vec![Arg::text("reason", and.to_string())],
         ))
     })
 }
 
-fn id_libero(store: &Store, name: &str) -> String {
+fn free_id(store: &Store, name: &str) -> String {
     let mut base: String = name
         .chars()
         .map(|c| {
@@ -642,9 +642,9 @@ fn id_libero(store: &Store, name: &str) -> String {
         return base.to_string();
     }
     for n in 2.. {
-        let candidato = format!("{base}-{n}");
-        if store.queries.iter().all(|q| q.id != candidato) {
-            return candidato;
+        let candidate = format!("{base}-{n}");
+        if store.queries.iter().all(|q| q.id != candidate) {
+            return candidate;
         }
     }
     base.to_string()
@@ -663,24 +663,24 @@ struct SavedQuery {
     expr: QueryExpr,
 }
 
-fn leggi(host: &dyn ReadApi) -> Result<Store, PluginError> {
+fn load(host: &dyn ReadApi) -> Result<Store, PluginError> {
     match host.data_read(STORE)? {
         None => Ok(Store {
             schema_version: SCHEMA,
             queries: Vec::new(),
         }),
-        Some(bytes) => serde_json::from_slice(&bytes).map_err(|e| {
+        Some(bytes) => serde_json::from_slice(&bytes).map_err(|and| {
             PluginError::Internal(Text::message(
                 E_STORE,
-                vec![Arg::text("reason", e.to_string())],
+                vec![Arg::text("reason", and.to_string())],
             ))
         }),
     }
 }
 
-fn scrivi(host: &mut dyn HostApi, store: &Store) -> Result<(), PluginError> {
+fn persist(host: &mut dyn HostApi, store: &Store) -> Result<(), PluginError> {
     let bytes = serde_json::to_vec_pretty(store)
-        .map_err(|e| PluginError::Internal(format!("queries.json: {e}").into()))?;
+        .map_err(|and| PluginError::Internal(format!("queries.json: {and}").into()))?;
     host.data_write(STORE, &bytes)
 }
 
@@ -689,16 +689,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn id_slug_dalla_frase() {
+    fn id_slug_from_the_phrase() {
         let store = Store {
             schema_version: 1,
             queries: Vec::new(),
         };
-        assert_eq!(id_libero(&store, "Inbox rust"), "inbox-rust");
+        assert_eq!(free_id(&store, "Inbox rust"), "inbox-rust");
     }
 
     #[test]
-    fn id_slug_evita_i_duplicati() {
+    fn id_slug_avoids_the_duplicates() {
         let store = Store {
             schema_version: 1,
             queries: vec![SavedQuery {
@@ -707,11 +707,11 @@ mod tests {
                 expr: QueryExpr::all(),
             }],
         };
-        assert_eq!(id_libero(&store, "Inbox"), "inbox-2");
+        assert_eq!(free_id(&store, "Inbox"), "inbox-2");
     }
 
     #[test]
-    fn parse_expr_da_oggetto() {
+    fn parse_expr_from_object() {
         let v = serde_json::json!({"any": []});
         assert_eq!(parse_expr(&v).unwrap(), QueryExpr::all());
     }

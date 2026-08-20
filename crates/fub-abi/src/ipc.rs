@@ -75,7 +75,7 @@ mod tests {
     use serde::Serialize;
 
     #[derive(Serialize, serde::Deserialize, PartialEq, Debug)]
-    struct Impronta {
+    struct Fingerprint {
         #[serde(with = "super::u64_string")]
         hash: u64,
     }
@@ -83,29 +83,29 @@ mod tests {
     #[test]
     fn a_full_width_u64_survives_the_json_boundary_as_a_string() {
         // Un valore oltre 2^53: come `number` JS perderebbe gli ultimi bit.
-        let v = Impronta {
+        let v = Fingerprint {
             hash: 0xDEAD_BEEF_CAFE_F00D,
         };
         let json = serde_json::to_string(&v).unwrap();
         assert!(
             json.contains("\"16045690984503111693\""),
-            "l'impronta viaggia come stringa: {json}"
+            "the fingerprint travels as a string: {json}"
         );
-        assert_eq!(serde_json::from_str::<Impronta>(&json).unwrap(), v);
+        assert_eq!(serde_json::from_str::<Fingerprint>(&json).unwrap(), v);
     }
 
     #[test]
     fn data_written_before_the_rule_is_still_readable() {
-        let vecchio = r#"{"hash": 42}"#;
+        let old_data = r#"{"hash": 42}"#;
         assert_eq!(
-            serde_json::from_str::<Impronta>(vecchio).unwrap().hash,
+            serde_json::from_str::<Fingerprint>(old_data).unwrap().hash,
             42,
-            "gli indici persistiti col numero nudo restano leggibili"
+            "indices persisted with a bare number remain readable"
         );
     }
 
     #[test]
     fn garbage_is_an_error_not_a_zero() {
-        assert!(serde_json::from_str::<Impronta>(r#"{"hash": "x"}"#).is_err());
+        assert!(serde_json::from_str::<Fingerprint>(r#"{"hash": "x"}"#).is_err());
     }
 }

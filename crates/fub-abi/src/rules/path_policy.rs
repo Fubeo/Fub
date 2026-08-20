@@ -332,21 +332,21 @@ impl std::error::Error for NameFault {}
 pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
     // Dichiarato fuori dall'`if` perché il `&str` che segue ci vive dentro: è la
     // forma che dura quanto la funzione, senza chiedere una `Cow` a chi legge.
-    let scritto;
+    let written;
     let path = if naming == Naming::New {
-        scritto = normalized(path);
-        scritto.as_str()
+        written = normalized(path);
+        written.as_str()
     } else {
         path
     };
     if path.trim().is_empty() {
         return Err(NameFault::Empty);
     }
-    for (i, segment) in path.split('/').enumerate() {
+    for (the, segment) in path.split('/').enumerate() {
         // Il recinto, sempre: un segmento vuoto, `.` o `..`. La riga sta in
         // [`risalita`] e non qui perché è la stessa domanda che [`fenced`] fa
         // da sola, e due copie divergono.
-        if let Some(fault) = risalita(segment) {
+        if let Some(fault) = ascent(segment) {
             return Err(fault);
         }
         // E il recinto interno, sempre anche lui: lo spazio macchina non è
@@ -379,7 +379,7 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
             // il prezzo è che su Linux un file chiamato davvero `C:` in radice
             // smette di essere apribile, e il verso è giusto — sul sistema per
             // cui la regola c'è un nome così non esiste, e la fuga sì.
-            if let Some(fault) = unita_windows(i, segment) {
+            if let Some(fault) = unit_windows(the, segment) {
                 return Err(fault);
             }
             continue;
@@ -426,15 +426,15 @@ pub fn check(path: &str, naming: Naming) -> Result<(), NameFault> {
 }
 
 /// Un segmento che risale, o che non nomina niente: vuoto, `.`, `..`.
-fn risalita(segment: &str) -> Option<NameFault> {
+fn ascent(segment: &str) -> Option<NameFault> {
     (segment.is_empty() || segment == "." || segment == "..").then(|| NameFault::Traversal {
         segment: segment.to_string(),
     })
 }
 
 /// Un primo segmento che comincia con una lettera di unità Windows.
-fn unita_windows(i: usize, segment: &str) -> Option<NameFault> {
-    (i == 0 && drive_prefix(segment)).then(|| NameFault::Traversal {
+fn unit_windows(the: usize, segment: &str) -> Option<NameFault> {
+    (the == 0 && drive_prefix(segment)).then(|| NameFault::Traversal {
         segment: segment.to_string(),
     })
 }
@@ -468,11 +468,11 @@ pub fn fenced(path: &str) -> Result<(), NameFault> {
     if path.trim().is_empty() {
         return Err(NameFault::Empty);
     }
-    for (i, segment) in path.split('/').enumerate() {
-        if let Some(fault) = risalita(segment) {
+    for (the, segment) in path.split('/').enumerate() {
+        if let Some(fault) = ascent(segment) {
             return Err(fault);
         }
-        if let Some(fault) = unita_windows(i, segment) {
+        if let Some(fault) = unit_windows(the, segment) {
             return Err(fault);
         }
     }
@@ -509,13 +509,13 @@ pub fn from_outside(name: &str) -> String {
 /// `data_*` dà a una risalita: per chi la riceve, i due recinti si comportano
 /// allo stesso modo.
 pub fn fenced_doc_id(id: &DocId) -> Result<DocId, PluginError> {
-    let pulito = from_outside(id.as_str());
-    check(&pulito, Naming::Existing).map_err(|_| {
+    let clean = from_outside(id.as_str());
+    check(&clean, Naming::Existing).map_err(|_| {
         PluginError::PermissionDenied(
             format!("`{id}`: un documento si nomina con un path relativo dentro il vault").into(),
         )
     })?;
-    Ok(DocId::new(pulito))
+    Ok(DocId::new(clean))
 }
 
 /// La forma con cui un nome **nuovo** si scrive sul disco: ogni segmento senza
@@ -583,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn il_recinto_vale_nei_due_versi() {
+    fn the_fence_equals_in_the_two_versi() {
         for naming in [Naming::Existing, Naming::New] {
             assert_eq!(faults("../fuori.md", naming), Some("traversal"));
             assert_eq!(faults("a/../../fuori.md", naming), Some("traversal"));
@@ -615,17 +615,17 @@ mod tests {
         // E ciò che *non* è una lettera di drive resta leggibile: il due punti
         // da solo è un carattere come un altro su Linux, e un vault che lo
         // contiene si apre (vedi `un_nome_che_ce_gia_si_legge…`).
-        for dentro in ["note/C:/dentro.md", "CC:/dentro.md", "domande: e r.md"] {
-            assert_eq!(faults(dentro, Naming::Existing), None, "`{dentro}` esiste");
+        for within in ["note/C:/dentro.md", "CC:/dentro.md", "domande: e r.md"] {
+            assert_eq!(faults(within, Naming::Existing), None, "`{within}` esiste");
         }
     }
 
     #[test]
-    fn un_nome_che_ce_gia_si_legge_anche_se_non_e_portabile() {
+    fn a_name_that_exists_already_is_reads_also_if_not_and_portable() {
         // Il caso che dà senso alle due tolleranze: un vault sincronizzato da
         // Linux contiene questi file, e non aprirli vorrebbe dire non aprire il
         // vault.
-        for esistente in [
+        for existing in [
             "CON.md",
             "nota?.md",
             "domande: e risposte.md",
@@ -634,19 +634,19 @@ mod tests {
             "Progetti/con|pipe.md",
         ] {
             assert_eq!(
-                faults(esistente, Naming::Existing),
+                faults(existing, Naming::Existing),
                 None,
-                "`{esistente}` esiste: leggerlo non è un errore"
+                "`{existing}` esiste: leggerlo non è un errore"
             );
             assert!(
-                check(esistente, Naming::New).is_err(),
-                "`{esistente}` non va creato"
+                check(existing, Naming::New).is_err(),
+                "`{existing}` non va creato"
             );
         }
     }
 
     #[test]
-    fn i_device_dos_lo_sono_a_ogni_estensione() {
+    fn the_device_dos_the_are_a_every_extension() {
         assert_eq!(faults("CON.md", Naming::New), Some("device"));
         assert_eq!(faults("con", Naming::New), Some("device"));
         assert_eq!(faults("NUL.txt.md", Naming::New), Some("device"));
@@ -661,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn i_caratteri_che_un_filesystem_si_riserva() {
+    fn the_chars_that_a_filesystem_is_riserva() {
         assert_eq!(faults("nota?.md", Naming::New), Some("reserved"));
         assert_eq!(faults("a:b.md", Naming::New), Some("reserved"));
         assert_eq!(faults("a\\b.md", Naming::New), Some("reserved"));
@@ -676,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    fn il_punto_in_coda_e_quello_in_testa_sono_due_guasti_diversi() {
+    fn the_point_in_queue_and_that_in_head_are_two_faults_different() {
         assert_eq!(faults("nota..md", Naming::New), None); // il punto è in mezzo
         assert_eq!(faults("nota.", Naming::New), Some("trailing-dot"));
         assert_eq!(
@@ -692,9 +692,9 @@ mod tests {
     /// `.fub/settings.json` e `.trash/Nota.md`, cioè i metadati del vault e le
     /// note cestinate, che nessuna anagrafe elenca e nessuna fusione protegge.
     #[test]
-    fn lo_spazio_macchina_non_e_un_documento() {
+    fn the_space_machine_not_and_a_document() {
         for naming in [Naming::Existing, Naming::New] {
-            for dentro in [
+            for within in [
                 ".fub",
                 ".fub/settings.json",
                 ".fub/data/plugins/altro/cache.md",
@@ -705,7 +705,7 @@ mod tests {
                 "Progetti/.fub/nota.md",
                 "a/b/.trash/nota.md",
             ] {
-                assert_eq!(faults(dentro, naming), Some("machine"), "`{dentro}`");
+                assert_eq!(faults(within, naming), Some("machine"), "`{within}`");
             }
             // È il nome esatto, non un prefisso: una nota che *comincia* come lo
             // spazio macchina è una nota.
@@ -719,7 +719,7 @@ mod tests {
     }
 
     #[test]
-    fn la_lunghezza_si_conta_in_byte_e_non_in_caratteri() {
+    fn the_length_is_counts_in_byte_and_not_in_chars() {
         // 64 emoji: 64 caratteri, 128 code unit UTF-16, 256 byte. Chi contasse
         // i caratteri lo lascerebbe passare, e il file non si creerebbe.
         let emoji = "🌍".repeat(64);
@@ -727,8 +727,8 @@ mod tests {
         assert_eq!(emoji.len(), 256);
         assert_eq!(faults(&emoji, Naming::New), Some("too-long"));
         // Al limite esatto passa.
-        let al_limite = "a".repeat(MAX_SEGMENT_BYTES);
-        assert_eq!(faults(&al_limite, Naming::New), None);
+        let to_the_limit = "a".repeat(MAX_SEGMENT_BYTES);
+        assert_eq!(faults(&to_the_limit, Naming::New), None);
         assert_eq!(
             faults(&"a".repeat(MAX_SEGMENT_BYTES + 1), Naming::New),
             Some("too-long")
@@ -741,12 +741,12 @@ mod tests {
     }
 
     #[test]
-    fn un_nome_nuovo_si_scrive_in_nfc() {
+    fn a_name_new_is_writes_in_nfc() {
         // `Café` in NFD è come lo scrive macOS. Creandolo così accanto a uno in
         // NFC il vault avrebbe due file che per il grafo sono uno.
         let nfd = "Cafe\u{0301}.md";
         let nfc = "Café.md";
-        assert_ne!(nfd, nfc);
+        assert_eq!(nfd, nfc);
         assert_eq!(normalized(nfd), nfc);
         assert_eq!(normalized(nfc), nfc);
         // E la chiave di risoluzione li vedeva già uguali: è la ragione per cui
@@ -758,7 +758,7 @@ mod tests {
     }
 
     #[test]
-    fn normalized_toglie_gli_spazi_di_ogni_segmento_e_non_i_punti() {
+    fn normalized_removes_the_spaces_of_every_segment_and_not_the_points() {
         assert_eq!(normalized("  nota.md  "), "nota.md");
         // Per segmento, non solo ai due estremi del path: `cartella ` sarebbe un
         // nome di cartella che Windows tronca.
@@ -789,8 +789,8 @@ mod tests {
     /// nomina i casi che si sono rotti davvero: se un giorno qualcuno rimettesse
     /// il giudizio sulla forma digitata, qui si vedrebbe *quali* nomi cambiano.
     #[test]
-    fn il_giudizio_su_un_nome_nuovo_e_quello_sulla_forma_che_si_scrive() {
-        let casi = [
+    fn the_judgment_on_a_name_new_and_that_on_the_form_that_is_writes() {
+        let cases = [
             (" .nota.md", Some("hidden")),       // il caso che la 0068 nominava
             (" .gitignore", Some("hidden")),     //
             (" CON.md", Some("device")),         // `is_dos_device` vedeva `" CON"`
@@ -801,10 +801,10 @@ mod tests {
             ("   ", Some("empty")),              //
             ("nota. ", Some("trailing-dot")),    // il punto resta, e resta un guasto
         ];
-        for (path, atteso) in casi {
+        for (path, expected) in cases {
             assert_eq!(
                 faults(path, Naming::New),
-                atteso,
+                expected,
                 "`{path}` va giudicato come `{}`",
                 normalized(path)
             );
@@ -817,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    fn l_ordine_dei_controlli_e_quello_dichiarato() {
+    fn the_order_of_the_checks_and_that_declared() {
         // Lo stesso nome peggiorato un guasto alla volta: ciascuno risponde col
         // primo dell'elenco, e la fixture del §6.2 confronta *quella* risposta.
         assert_eq!(faults("..", Naming::New), Some("traversal"));

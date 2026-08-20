@@ -144,8 +144,8 @@ pub(crate) struct CoreIndex {
     /// porte che toccano `entries` — [`set_entry`](CoreIndex::set_entry) e
     /// [`remove_entry`](CoreIndex::remove_entry) — che è la ragione per cui un
     /// conto ricavato qui non può divergere da ciò da cui è ricavato.
-    pub(crate) nomi: NomiDellAnagrafe,
     /// Le voci di `entries` **che non si scrivono in anagrafe**: quelle la cui
+    pub(crate) names: EntryNames,
     /// data non era nel passato nel momento in cui la si è letta (difetto
     /// 0187).
     ///
@@ -154,8 +154,8 @@ pub(crate) struct CoreIndex {
     /// alla tabella, presa però dove la domanda ha senso — al momento
     /// dell'osservazione — e tenuta da parte fino a quando serve, cioè quando
     /// qualcuno scrive. Ci si passa dalle stesse due porte di `nomi`.
-    osservate_nel_proprio_istante: BTreeSet<DocId>,
     /// **Le cartelle** (§14.3), come la camminata le ha viste.
+    observed_in_the_own_instant: BTreeSet<DocId>,
     ///
     /// Un insieme di path e non una mappa di record: ciò che si sa di una
     /// cartella — quante sottocartelle ha, quanti file — si **conta** dalle due
@@ -167,23 +167,23 @@ pub(crate) struct CoreIndex {
     /// vuota non compare in nessun path e c'è lo stesso; una cartella che resta
     /// vuota perché la sua ultima nota è finita nel cestino resta lì, perché è
     /// ciò che è successo davvero sul disco.
-    pub(crate) folders: BTreeSet<String>,
     /// I conteggi dei tag, mantenuti incrementalmente come il grafo: le
+    pub(crate) folders: BTreeSet<String>,
     /// interrogazioni sui tag rispondono da qui, senza O(vault).
+    /// Generazione dei metadati da cui il grafo si ricostruisce. Avanza a ogni
     pub(crate) tags: TagCounts,
     pub(crate) graph: LinkGraph,
     pub(crate) graph_update: GraphUpdate,
-    /// Generazione dei metadati da cui il grafo si ricostruisce. Avanza a ogni
     /// `restore` / alimentazione / rimozione: una fotografia presa prima non
     /// si installa sopra una scrittura arrivata in mezzo.
-    pub(crate) graph_epoch: u64,
     /// Serve a un controllo solo — distinguere un link a una nota da un
+    pub(crate) graph_epoch: u64,
     /// riferimento a un allegato — ed è **condiviso** col workspace invece che
     /// copiato: due elenchi di estensioni sarebbero due idee di cosa è un
     /// documento, e la seconda mentirebbe in silenzio il giorno che i formati
     /// si registrano a caldo.
-    registry: Arc<FormatRegistry>,
     /// Che rapporto ha questo vault con il disco (§9.7).
+    registry: Arc<FormatRegistry>,
     ///
     /// Sta qui e non sul `Workspace` per la ragione della
     /// [0019](../../../../docs/decisions/0019-il-canale-dati.md): *le risposte
@@ -191,18 +191,18 @@ pub(crate) struct CoreIndex {
     /// sul workspace avrebbe voluto dire intercettare una variante **prima** del
     /// router — cioè rimettere il ramo privilegiato che quella decisione ha
     /// tolto.
-    pub(crate) watch: WatchState,
     /// **Cosa sta girando adesso** (§10.3), per la stessa ragione della riga
+    pub(crate) watch: WatchState,
     /// sopra: è una risposta del kernel, e le risposte del kernel sono un
     /// provider (decisione 0019).
-    pub(crate) jobs: JobsState,
     /// **Com'è configurato questo vault** (§11.1), e per la terza volta la
+    pub(crate) jobs: JobsState,
     /// stessa ragione. È **condiviso** col workspace, come `registry`: lo
     /// riempie chi dichiara un plugin, lo scrive chi tocca un interruttore, e
     /// questo indice lo legge — una copia sarebbe una configurazione che
     /// risponde a com'era al montaggio.
-    settings: SharedSettings,
     /// **Com'è organizzato questo vault** (§11.3): icone, appuntate,
+    settings: SharedSettings,
     /// ordinamenti, spazi. Condiviso col workspace come `settings`, e per la
     /// stessa ragione — lo scrive chi appunta una nota, e questo indice lo
     /// legge; una copia risponderebbe con com'era al montaggio.
@@ -210,8 +210,8 @@ pub(crate) struct CoreIndex {
     /// Che sia qui è il guadagno di questa voce: prima l'organizzazione non era
     /// interrogabile affatto — la leggeva un comando IPC, quindi la sapeva
     /// chiedere la shell e nessun altro.
-    organization: Arc<OrganizationStore>,
     /// **Cosa è rimasto non salvato** (§15.2), e per la quarta volta la ragione
+    organization: Arc<OrganizationStore>,
     /// della 0019: è una risposta del kernel, e le risposte del kernel sono un
     /// provider. Condiviso col workspace come i due di sopra — a scrivere le
     /// bozze è chi batte sulla tastiera, e questo indice le legge.
@@ -220,26 +220,27 @@ pub(crate) struct CoreIndex {
     /// nemmeno il rapporto col disco, e sta qui da prima. Ciò che questa
     /// tabella instrada è **chi risponde a quale domanda**, e a questa risponde
     /// il kernel.
+/// Il **file** che un path nomina dentro un'anagrafe, se c'è — di qualunque
     drafts: Arc<Drafts>,
 }
 
-/// Il **file** che un path nomina dentro un'anagrafe, se c'è — di qualunque
 /// specie (§14.1).
 ///
 /// Funzione libera e non metodo perché il suo cliente non è solo l'indice: la
 /// usa il controllo di salute, che riceve l'anagrafe e non chi la tiene.
+        // Un wikilink nomina un file **per nome**, come nomina una nota per
 pub(crate) fn resolve_entry_in(
     entries: &BTreeMap<DocId, VaultEntry>,
-    nomi: &NomiDellAnagrafe,
+    names: &EntryNames,
     source: &DocId,
     target: &LinkTarget,
 ) -> Option<DocId> {
     let raw = match target {
-        // Un wikilink nomina un file **per nome**, come nomina una nota per
         // nome: `![[foto.png]]` è il modo in cui si incorpora un allegato.
-        LinkTarget::Wiki { page, .. } => return nomi.nominato(page),
-        LinkTarget::Path(raw) => raw,
         // Il mondo esterno non è nel vault.
+        LinkTarget::Wiki { page, .. } => return names.named(page),
+        LinkTarget::Path(raw) => raw,
+    // Ripiego, e non è pignoleria: macOS scrive i nomi dei file in NFD e i
         LinkTarget::Url(_) => return None,
     };
     let path = fub_abi::rules::path::resolve_against(source, raw)?;
@@ -247,16 +248,15 @@ pub(crate) fn resolve_entry_in(
     if entries.contains_key(&id) {
         return Some(id);
     }
-    // Ripiego, e non è pignoleria: macOS scrive i nomi dei file in NFD e i
     // link si digitano in NFC, quindi il confronto byte a byte manca
     // esattamente i nomi accentati. La chiave di risoluzione le riconcilia (è
     // la stessa regola con cui il grafo indicizza), e si paga solo quando il
     // confronto esatto ha già detto di no — cioè su un riferimento che sta per
     // essere dichiarato rotto.
-    nomi.con_la_chiave_di_path(&fub_abi::rules::path::resolution_key(id.as_str()))
+/// **I nomi dell'anagrafe**, dalla chiave di risoluzione ai file che la portano.
+    names.by_path_key(&fub_abi::rules::path::resolution_key(id.as_str()))
 }
 
-/// **I nomi dell'anagrafe**, dalla chiave di risoluzione ai file che la portano.
 ///
 /// Risolvere un riferimento è una domanda **per chiave**, e prima era una
 /// scansione: si calcolavano fino a due chiavi per ogni voce del vault e si
@@ -278,24 +278,24 @@ pub(crate) fn resolve_entry_in(
 /// Il prezzo è due chiavi in memoria per voce, ed è il conto che questa forma
 /// paga per non riscandire: un'anagrafe di ventimila file tiene quarantamila
 /// stringhe corte invece di ricalcolarne quarantamila **a ogni link**.
-#[derive(Debug, Default)]
-pub(crate) struct NomiDellAnagrafe {
     /// La chiave del **path intero**, per ogni voce di qualunque specie: è ciò
+#[derive(Debug, Default)]
+pub(crate) struct EntryNames {
     /// che serve al ripiego di [`resolve_entry_in`], che riconcilia NFD e NFC
     /// dopo che il confronto esatto ha già detto di no. I documenti ci sono
     /// perché quel ripiego li considera.
-    per_path: BTreeMap<String, BTreeSet<DocId>>,
     /// Le chiavi con cui un **nome** trova un file che non è un documento: il
+    by_path: BTreeMap<String, BTreeSet<DocId>>,
     /// nome del file con la sua estensione — che è come si scrive
     /// `![[foto.png]]` — e il path intero, per chi disambigua scrivendolo.
     ///
     /// I documenti restano fuori: quelli li risolve il grafo, che conosce anche
     /// gli alias, e chi chiama prova prima lui.
-    per_nome: BTreeMap<String, BTreeSet<DocId>>,
+    /// I nomi di un'anagrafe che c'è già, in una passata.
+    by_name: BTreeMap<String, BTreeSet<DocId>>,
 }
 
-impl NomiDellAnagrafe {
-    /// I nomi di un'anagrafe che c'è già, in una passata.
+impl EntryNames {
     ///
     /// **Solo per i banchi**, e la riga che lo dice è il `cfg`: in produzione
     /// non esiste un'anagrafe senza chi la mantiene — a `entries` si arriva
@@ -305,51 +305,51 @@ impl NomiDellAnagrafe {
     /// bisogno di questa, e averla `pub(crate)` in produzione vorrebbe dire
     /// tenere aperta una seconda via per fare i nomi — cioè il modo in cui due
     /// elenchi cominciano a divergere.
+    /// Registra una voce, con la sua specie.
     #[cfg(test)]
-    pub(crate) fn di(entries: &BTreeMap<DocId, VaultEntry>) -> Self {
-        let mut nomi = NomiDellAnagrafe::default();
+    pub(crate) fn of(entries: &BTreeMap<DocId, VaultEntry>) -> Self {
+        let mut names = EntryNames::default();
         for (id, entry) in entries {
-            nomi.inserisci(id, entry.kind);
+            names.insert_entry(id, entry.kind);
         }
-        nomi
+        names
     }
 
-    /// Registra una voce, con la sua specie.
     ///
     /// Toglie prima di mettere perché la stessa voce può rientrare cambiando
     /// specie, e una chiave vecchia rimasta dietro risponderebbe con un file
     /// che non si chiama più così.
-    pub(crate) fn inserisci(&mut self, id: &DocId, kind: EntryKind) {
-        self.togli(id);
+    /// Toglie una voce da tutte le chiavi che la portavano.
+    pub(crate) fn insert_entry(&mut self, id: &DocId, kind: EntryKind) {
+        self.remove_entry(id);
         let path = fub_abi::rules::path::resolution_key(id.as_str());
-        let nome = fub_abi::rules::path::resolution_key(file_name_of(id.as_str()));
-        ricorda(&mut self.per_path, &path, id);
+        let name = fub_abi::rules::path::resolution_key(file_name_of(id.as_str()));
+        remember(&mut self.by_path, &path, id);
         if kind != EntryKind::Document {
-            ricorda(&mut self.per_nome, &path, id);
-            ricorda(&mut self.per_nome, &nome, id);
+            remember(&mut self.by_name, &path, id);
+            remember(&mut self.by_name, &name, id);
         }
     }
 
-    /// Toglie una voce da tutte le chiavi che la portavano.
     ///
     /// Le chiavi si ricalcolano dall'id invece di tenerle scritte: sono due
     /// stringhe corte, e un secondo elenco da mantenere è un secondo elenco che
     /// può divergere dal primo. La specie qui non serve — togliere da una chiave
     /// che non c'era non è un errore.
-    pub(crate) fn togli(&mut self, id: &DocId) {
-        let path = fub_abi::rules::path::resolution_key(id.as_str());
-        let nome = fub_abi::rules::path::resolution_key(file_name_of(id.as_str()));
-        scorda(&mut self.per_path, &path, id);
-        scorda(&mut self.per_nome, &path, id);
-        scorda(&mut self.per_nome, &nome, id);
-    }
-
-    pub(crate) fn svuota(&mut self) {
-        self.per_path.clear();
-        self.per_nome.clear();
-    }
-
     /// Il file che un **nome** nomina, fra quelli che non sono documenti (§14.1).
+    pub(crate) fn remove_entry(&mut self, id: &DocId) {
+        let path = fub_abi::rules::path::resolution_key(id.as_str());
+        let name = fub_abi::rules::path::resolution_key(file_name_of(id.as_str()));
+        forget_entry(&mut self.by_path, &path, id);
+        forget_entry(&mut self.by_name, &path, id);
+        forget_entry(&mut self.by_name, &name, id);
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.by_path.clear();
+        self.by_name.clear();
+    }
+
     ///
     /// La regola è quella dei wikilink fra note, e lo è di proposito: si
     /// confronta la chiave di risoluzione (trim, NFC, minuscolo) contro il nome
@@ -360,56 +360,57 @@ impl NomiDellAnagrafe {
     ///
     /// Gli omonimi di una chiave sono pochi — è la ragione per cui questa forma
     /// guadagna: il `min_by_key` è rimasto, ma gira su loro e non sul vault.
-    pub(crate) fn nominato(&self, name: &str) -> Option<DocId> {
+            // Il più vicino alla radice, e a parità il primo in ordine di path:
+    pub(crate) fn named(&self, name: &str) -> Option<DocId> {
         let wanted = fub_abi::rules::path::resolution_key(name);
         if wanted.is_empty() {
             return None;
         }
-        self.per_nome
+        self.by_name
             .get(&wanted)?
             .iter()
-            // Il più vicino alla radice, e a parità il primo in ordine di path:
             // il gruppo è ordinato, quindi `min_by_key` è stabile.
+            // La voce il cui **path intero** ha questa chiave: la prima in ordine di
             .min_by_key(|id| id.as_str().matches('/').count())
             .cloned()
     }
 
-    /// La voce il cui **path intero** ha questa chiave: la prima in ordine di
     /// path, che è ciò che rispondeva la scansione.
-    pub(crate) fn con_la_chiave_di_path(&self, chiave: &str) -> Option<DocId> {
-        self.per_path.get(chiave)?.iter().next().cloned()
+/// Il nome di un file dentro il suo path.
+    pub(crate) fn by_path_key(&self, key: &str) -> Option<DocId> {
+        self.by_path.get(key)?.iter().next().cloned()
     }
 }
 
-fn ricorda(mappa: &mut BTreeMap<String, BTreeSet<DocId>>, chiave: &str, id: &DocId) {
-    if chiave.is_empty() {
+fn remember(map: &mut BTreeMap<String, BTreeSet<DocId>>, key: &str, id: &DocId) {
+    if key.is_empty() {
         return;
     }
-    mappa
-        .entry(chiave.to_string())
+    map
+        .entry(key.to_string())
         .or_default()
         .insert(id.clone());
 }
 
-fn scorda(mappa: &mut BTreeMap<String, BTreeSet<DocId>>, chiave: &str, id: &DocId) {
-    if let Some(gruppo) = mappa.get_mut(chiave) {
+fn forget_entry(map: &mut BTreeMap<String, BTreeSet<DocId>>, key: &str, id: &DocId) {
+    if let Some(gruppo) = map.get_mut(key) {
         gruppo.remove(id);
         if gruppo.is_empty() {
-            mappa.remove(chiave);
+            map.remove(key);
         }
     }
 }
 
-/// Il nome di un file dentro il suo path.
+/// Il primo path che può stare dentro `folder`, in una mappa ordinata per path.
 fn file_name_of(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 
-/// Il primo path che può stare dentro `folder`, in una mappa ordinata per path.
 ///
 /// I path di un sottoalbero sono **contigui** nell'ordine lessicografico, e
 /// questa è la loro soglia: da qui in poi, finché il prefisso regge, c'è solo
 /// roba di quella cartella. Per la radice è la stringa vuota, cioè tutto.
+/// Quanti, fra i path ordinati che l'iteratore produce **a partire dalla
 fn subtree_start(folder: &str) -> String {
     if folder.is_empty() {
         String::new()
@@ -418,13 +419,13 @@ fn subtree_start(folder: &str) -> String {
     }
 }
 
-/// Quanti, fra i path ordinati che l'iteratore produce **a partire dalla
 /// soglia** di `folder`, le stanno direttamente dentro.
 ///
 /// Il `take_while` è ciò che rende il conto proporzionale al sottoalbero e non
 /// al vault: appena il prefisso non regge più, il resto della mappa non si
 /// guarda. Per la radice il prefisso è vuoto e si guarda tutto — che è giusto,
 /// perché i figli della radice si contano una volta sola.
+/// Il fatto che il §9.7 rende interrogabile: se qualcuno vede le scritture
 fn count_direct<'a>(paths: impl Iterator<Item = &'a str>, folder: &str) -> u32 {
     let prefix = subtree_start(folder);
     paths
@@ -434,11 +435,10 @@ fn count_direct<'a>(paths: impl Iterator<Item = &'a str>, folder: &str) -> u32 {
         .min(u32::MAX as usize) as u32
 }
 
-/// Il fatto che il §9.7 rende interrogabile: se qualcuno vede le scritture
 /// altrui, e cosa è già andato storto nel leggerle.
+    /// **Condiviso** con chi tiene vivo il rilevatore (`fub-host`): il kernel
 #[derive(Default)]
 pub(crate) struct WatchState {
-    /// **Condiviso** con chi tiene vivo il rilevatore (`fub-host`): il kernel
     /// non sa cosa sia un watcher, e questo è tutto ciò che gliene serve sapere.
     ///
     /// Un `Arc<AtomicBool>` e non un `bool`, perché la risposta deve poter
@@ -446,10 +446,10 @@ pub(crate) struct WatchState {
     /// `VaultWatcher::is_watching` rispondeva *per costruzione* — distingueva
     /// «non ho avviato un debouncer» da «ne ho avviato uno», e un debouncer
     /// morto continuava a rispondere `true`.
+    /// **A che punto è l'indicizzazione dell'apertura** (§15.7).
     pub(crate) watching: Arc<AtomicBool>,
     failures: u32,
     last_error: Option<String>,
-    /// **A che punto è l'indicizzazione dell'apertura** (§15.7).
     ///
     /// Il *lavoro* dell'indicizzazione sta fuori dal kernel — è
     /// l'[`Indicizzazione`](crate::Indicizzazione), che chi ha i thread si passa
@@ -459,17 +459,18 @@ pub(crate) struct WatchState {
     /// e del campanello dei job
     /// ([0032](../../../docs/decisions/0032-il-runner-dei-job.md)): il kernel
     /// non fa il mestiere, ma è l'unico posto da cui la domanda si può fare.
+    /// Registra l'esito di una sincronizzazione per-path.
     pub(crate) indexing: IndexingState,
 }
 
 impl WatchState {
-    /// Registra l'esito di una sincronizzazione per-path.
     ///
     /// Sta **dentro** il kernel, ed è il punto: i due chiamanti veri scrivevano
     /// `let _ = ws.sync_path(…)`, quindi il `Result` c'era e non lo leggeva
     /// nessuno. Registrandolo qui, un chiamante distratto non può più nasconderlo
     /// — al più non lo guarda lui, ma il vault se lo ricorda.
-    fn note(&mut self, error: impl std::fmt::Display) {
+/// **I lavori lunghi vivi** (§10.3, decisione 0035): da quando il kernel
+    fn notes(&mut self, error: impl std::fmt::Display) {
         self.failures = self.failures.saturating_add(1);
         self.last_error = Some(error.to_string());
     }
@@ -484,7 +485,6 @@ impl WatchState {
     }
 }
 
-/// **I lavori lunghi vivi** (§10.3, decisione 0035): da quando il kernel
 /// accetta un job a quando ne riconsegna l'esito.
 ///
 /// È una tabella e non un conto, ed è ciò che permette al centro attività di
@@ -499,17 +499,18 @@ impl WatchState {
 /// fare è chi i numeri li assegna, cioè questo kernel. Ne esce l'elenco
 /// nell'ordine in cui il lavoro è stato chiesto, che è l'unico che chi guarda
 /// riconosce.
+    /// Un job è stato accettato: da qui è vivo, e da qui si vede.
 #[derive(Default)]
 pub(crate) struct JobsState {
     live: BTreeMap<u64, JobStatus>,
 }
 
 impl JobsState {
-    /// Un job è stato accettato: da qui è vivo, e da qui si vede.
     ///
     /// Il `since` lo prende chi accetta e non chi chiede: è il momento in cui il
     /// kernel se ne è fatto carico, e un job che aspetta un thread libero è già
     /// in attesa da allora.
+    /// Registra un progresso, e dice se il job era **vivo**.
     pub(crate) fn accepted(&mut self, id: JobId, job: &str, plugin: &str) {
         self.live.insert(
             id.0,
@@ -523,12 +524,12 @@ impl JobsState {
         );
     }
 
-    /// Registra un progresso, e dice se il job era **vivo**.
     ///
     /// Il `false` non è pignoleria: un progresso che arriva per un job già
     /// concluso — l'host che lo timbra gira su un altro thread, e fra il suo
     /// ultimo passo e l'esito ci sta di tutto — non deve far ricomparire una
     /// riga nel centro attività. Chi lo riceve non lo emette nemmeno.
+    /// Di chi è questo job, se è ancora vivo. Serve a intestargli il proprio
     pub(crate) fn progressed(&mut self, id: JobId, progress: JobProgress) -> bool {
         match self.live.get_mut(&id.0) {
             Some(status) => {
@@ -539,9 +540,9 @@ impl JobsState {
         }
     }
 
-    /// Di chi è questo job, se è ancora vivo. Serve a intestargli il proprio
     /// progresso: l'origine di un `job-progress` è il plugin che sta lavorando,
     /// e chi timbra l'evento ha in mano l'id, non il nome.
+    /// L'esito è tornato: il job smette di essere vivo.
     pub(crate) fn owner(&self, id: JobId) -> String {
         self.live
             .get(&id.0)
@@ -549,7 +550,7 @@ impl JobsState {
             .unwrap_or_default()
     }
 
-    /// L'esito è tornato: il job smette di essere vivo.
+    /// I formati di data che **questo vault dichiara** (§8.2), letti adesso.
     pub(crate) fn finished(&mut self, id: JobId) {
         self.live.remove(&id.0);
     }
@@ -560,13 +561,13 @@ impl JobsState {
 }
 
 impl CoreIndex {
-    /// I formati di data che **questo vault dichiara** (§8.2), letti adesso.
     ///
     /// A ogni domanda e non una volta al montaggio, per la ragione per cui le
     /// impostazioni sono condivise e non copiate: chi cambia la dichiarazione
     /// cambia il valore di ogni proprietà data del vault, e un indice che
     /// rispondesse con com'era al montaggio direbbe che il filtro non trova
     /// **anche dopo** che l'utente ha riparato la causa.
+    /// La **coda** di una risposta `Documents`, con dentro le due cose che il
     pub(crate) fn date_formats(&self) -> DateFormats {
         let declared = self
             .settings
@@ -580,7 +581,6 @@ impl CoreIndex {
         crate::properties::date_formats(declared.as_deref())
     }
 
-    /// La **coda** di una risposta `Documents`, con dentro le due cose che il
     /// kernel sa e [`properties::finish`] no: i formati che il vault dichiara e
     /// dove si legge il frontmatter.
     ///
@@ -597,6 +597,7 @@ impl CoreIndex {
     /// **uno** [conta: code-delle-documents-nel-kernel], ed è un conto e non un
     /// test perché nessun test può vedere una rotta che ancora non esiste, e il
     /// compilatore non sa distinguere un `&DateFormats` giusto da uno sbagliato.
+    /// Registra un fallimento di sincronizzazione (§9.7).
     pub(crate) fn finish_documents(
         &self,
         matches: Matches,
@@ -618,8 +619,8 @@ impl CoreIndex {
         CoreIndex {
             metas: BTreeMap::new(),
             entries: BTreeMap::new(),
-            nomi: NomiDellAnagrafe::default(),
-            osservate_nel_proprio_istante: BTreeSet::new(),
+            names: EntryNames::default(),
+            observed_in_the_own_instant: BTreeSet::new(),
             folders: BTreeSet::new(),
             tags: TagCounts::default(),
             graph: LinkGraph::default(),
@@ -634,17 +635,17 @@ impl CoreIndex {
         }
     }
 
-    /// Registra un fallimento di sincronizzazione (§9.7).
-    pub(crate) fn note_sync_failure(&mut self, error: impl std::fmt::Display) {
-        self.watch.note(error);
+    /// Gli id indicizzati, in ordine. L'ordine non è una cortesia: è ciò che
+    pub(crate) fn notes_sync_failure(&mut self, error: impl std::fmt::Display) {
+        self.watch.notes(error);
     }
 
     pub(crate) fn contains(&self, id: &DocId) -> bool {
         self.metas.contains_key(id)
     }
 
-    /// Gli id indicizzati, in ordine. L'ordine non è una cortesia: è ciò che
     /// rende stabile una risposta paginata.
+    /// Rimette in cache i metadati di un documento **senza riaprirlo** (§14.2):
     pub(crate) fn ids(&self) -> impl Iterator<Item = &DocId> {
         self.metas.keys()
     }
@@ -656,13 +657,12 @@ impl CoreIndex {
     pub(crate) fn clear(&mut self) {
         self.metas.clear();
         self.entries.clear();
-        self.nomi.svuota();
+        self.names.clear();
         self.folders.clear();
         self.tags.clear();
         self.graph_epoch = 0;
     }
 
-    /// Rimette in cache i metadati di un documento **senza riaprirlo** (§14.2):
     /// è la strada che l'anagrafe apre, e l'unica differenza con
     /// [`on_documents_indexed`](IndexProvider::on_documents_indexed) è che qui il
     /// modello non c'è — non è stato parsato, perché il file non è stato letto.
@@ -671,42 +671,42 @@ impl CoreIndex {
     /// ricostruisce in blocco alla fine (un `upsert` per documento, a caldo,
     /// vedrebbe un insieme ancora incompleto). L'epoca avanza lo stesso: i
     /// metadati da cui il grafo si ricostruisce sono cambiati.
-    pub(crate) fn restore(&mut self, id: &DocId, meta: StoredMeta) {
+    /// Ciò che di un documento va scritto nell'anagrafe perché la prossima
+    pub(crate) fn restore(&mut self, id: &DocId, metadata: StoredMeta) {
         self.graph_epoch = self.graph_epoch.wrapping_add(1);
         self.tags
-            .upsert_names(id, meta.tags.iter().map(String::as_str));
+            .upsert_names(id, metadata.tags.iter().map(String::as_str));
         self.metas.insert(
             id.clone(),
             DocMeta {
                 id: id.clone(),
-                frontmatter: meta.frontmatter,
-                outline: meta.outline,
-                links: meta.links,
-                anchors: meta.anchors,
+                frontmatter: metadata.frontmatter,
+                outline: metadata.outline,
+                links: metadata.links,
+                anchors: metadata.anchors,
             },
         );
     }
 
-    /// Ciò che di un documento va scritto nell'anagrafe perché la prossima
     /// apertura non debba riaprirlo.
-    pub(crate) fn stored_meta(&self, id: &DocId) -> Option<StoredMeta> {
-        let meta = self.metas.get(id)?;
+    /// Il **file** che un riferimento nomina, se il vault ce l'ha — di
+    pub(crate) fn stored_metadata(&self, id: &DocId) -> Option<StoredMeta> {
+        let metadata = self.metas.get(id)?;
         Some(StoredMeta {
-            frontmatter: meta.frontmatter.clone(),
-            outline: meta.outline.clone(),
-            links: meta.links.clone(),
-            anchors: meta.anchors.clone(),
+            frontmatter: metadata.frontmatter.clone(),
+            outline: metadata.outline.clone(),
+            links: metadata.links.clone(),
+            anchors: metadata.anchors.clone(),
             tags: self.tags.names_of(id),
         })
     }
 
-    /// Il **file** che un riferimento nomina, se il vault ce l'ha — di
     /// qualunque specie (§14.1).
+    /// Mette (o aggiorna) una voce dell'anagrafe.
     pub(crate) fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId> {
-        resolve_entry_in(&self.entries, &self.nomi, source, target)
+        resolve_entry_in(&self.entries, &self.names, source, target)
     }
 
-    /// Mette (o aggiorna) una voce dell'anagrafe.
     /// **Cosa cambia** se questo modello sostituisce quello che c'è (§22.2,
     /// decisione 0069).
     ///
@@ -721,19 +721,20 @@ impl CoreIndex {
     /// [`DocChanges::everything`], che è la risposta vera e non una comodità —
     /// chi si è abbonato ai cambi di tag vuole sapere della nota che nasce
     /// con un tag.
+        // Il corpo non sta in cache (è lo split metadata/body): a rispondere è
     pub(crate) fn changes_for(&self, model: &DocumentModel, new: &Revision) -> DocChanges {
         let Some(before) = self.metas.get(&model.id) else {
             return DocChanges::everything();
         };
         let mut changes = DocChanges::default();
-        // Il corpo non sta in cache (è lo split metadata/body): a rispondere è
         // l'impronta che l'anagrafe teneva del giro prima. Se non ce l'ha —
         // una voce entrata senza fingerprint — la risposta onesta è «sì»:
         // dire di no vorrebbe dire far perdere un risveglio a chi ha ragione.
+        // **La regola *racily clean*, posta dove si osserva** (difetto 0187).
         let body_changed = match self
             .entries
             .get(&model.id)
-            .and_then(|e| e.fingerprint.as_ref())
+            .and_then(|and| and.fingerprint.as_ref())
         {
             Some(old) => old != new,
             None => true,
@@ -765,7 +766,6 @@ impl CoreIndex {
     }
 
     pub(crate) fn set_entry(&mut self, entry: VaultEntry) {
-        // **La regola *racily clean*, posta dove si osserva** (difetto 0187).
         //
         // Una data che non è strettamente nel passato rispetto a adesso è una
         // data che può ancora cambiare senza cambiare: il file può essere
@@ -781,24 +781,25 @@ impl CoreIndex {
         // dell'osservazione: fra questa riga e l'anagrafe scritta su disco ci
         // sta una sessione intera, e una soglia presa là dichiarerebbe pulito
         // tutto ciò che si è visto qui.
+    /// Se di questa voce **non ci si può fidare fino alla prossima apertura**:
         if entry.mtime < crate::time::now_unix_millis() {
-            self.osservate_nel_proprio_istante.remove(&entry.id);
+            self.observed_in_the_own_instant.remove(&entry.id);
         } else {
-            self.osservate_nel_proprio_istante.insert(entry.id.clone());
+            self.observed_in_the_own_instant.insert(entry.id.clone());
         }
-        self.nomi.inserisci(&entry.id, entry.kind);
+        self.names.insert_entry(&entry.id, entry.kind);
         self.entries.insert(entry.id.clone(), entry);
     }
 
-    /// Se di questa voce **non ci si può fidare fino alla prossima apertura**:
     /// la sua data non era nel passato quando la si è letta, quindi una
     /// scrittura arrivata subito dopo sarebbe indistinguibile da nessuna
     /// scrittura (difetto 0187). Chi scrive l'anagrafe la salta.
-    pub(crate) fn osservata_nel_proprio_istante(&self, id: &DocId) -> bool {
-        self.osservate_nel_proprio_istante.contains(id)
+    /// Mette una cartella fra quelle che ci sono (§14.3).
+    pub(crate) fn observed_at_the_same_instant(&self, id: &DocId) -> bool {
+        self.observed_in_the_own_instant.contains(id)
     }
 
-    /// Mette una cartella fra quelle che ci sono (§14.3).
+    /// Registra le cartelle che un path **attraversa**, dalla radice in giù.
     pub(crate) fn set_folder(&mut self, path: impl Into<String>) {
         let path = path.into();
         if !path.is_empty() {
@@ -806,25 +807,25 @@ impl CoreIndex {
         }
     }
 
-    /// Registra le cartelle che un path **attraversa**, dalla radice in giù.
     ///
     /// Serve a chi tocca un file solo (il rilevatore, una scrittura): un file
     /// che nasce in `a/b/c.md` dice che `a` e `a/b` esistono, e senza questa
     /// riga l'albero non le vedrebbe fino alla riapertura del vault. Il
     /// contrario non vale — cancellare l'ultimo file di una cartella **non**
     /// toglie la cartella, perché sul disco c'è ancora.
+    /// Le cartelle chieste, col conto di cosa contengono.
     pub(crate) fn ensure_folders_of(&mut self, id: &DocId) {
         for folder in fub_abi::query::folders_of(id) {
             self.set_folder(folder);
         }
     }
 
-    /// Le cartelle chieste, col conto di cosa contengono.
     ///
     /// I conti si fanno qui e non si tengono scritti: le due mappe sono
     /// ordinate, quindi contare i figli diretti di una cartella costa il suo
     /// sottoalbero e non il vault, e un conto ricavato non può divergere da ciò
     /// da cui è ricavato.
+    /// Toglie una voce dall'anagrafe, e dice **cosa era**: è l'unico momento in
     fn folders_under(&self, under: Option<&FolderScope>) -> Vec<VaultFolder> {
         self.folders
             .iter()
@@ -851,26 +852,25 @@ impl CoreIndex {
             .collect()
     }
 
-    /// Toglie una voce dall'anagrafe, e dice **cosa era**: è l'unico momento in
     /// cui la sua specie si può ancora sapere, ed è ciò che un evento di
     /// sparizione deve portare con sé.
+    /// Il frontmatter di un documento, per chi compone una riga di risposta.
     pub(crate) fn remove_entry(&mut self, id: &DocId) -> Option<EntryKind> {
-        self.nomi.togli(id);
-        self.osservate_nel_proprio_istante.remove(id);
-        self.entries.remove(id).map(|e| e.kind)
+        self.names.remove_entry(id);
+        self.observed_in_the_own_instant.remove(id);
+        self.entries.remove(id).map(|and| and.kind)
     }
 
     pub(crate) fn rebuild_graph(&mut self) {
-        let _fase = tracing::info_span!(target: "fub.apertura", "rebuild_graph").entered();
+        let _phase = tracing::info_span!(target: "fub.apertura", "rebuild_graph").entered();
         self.graph = LinkGraph::build(self.metas.values());
     }
 
-    /// Il frontmatter di un documento, per chi compone una riga di risposta.
+    /// Cosa nomina un riferimento: **quale** documento e, quando il riferimento
     pub(crate) fn frontmatter(&self, id: &DocId) -> Option<&Frontmatter> {
         self.metas.get(id).map(|m| &m.frontmatter)
     }
 
-    /// Cosa nomina un riferimento: **quale** documento e, quando il riferimento
     /// porta un punto, **dove dentro** (decisione 0049).
     ///
     /// Prima di quella firma la risposta era un `DocId` e basta, e questo è il
@@ -886,27 +886,28 @@ impl CoreIndex {
     /// riferimento nomina un punto che non c'è più, la risposta resta il
     /// documento con `at: None` — un heading rinominato apre la nota in cima,
     /// che è più di quel che faceva prima e meno di una bugia.
+            // `[[#Sezione]]` e `[[#^blocco]]` nominano il documento che li
     fn resolve(&self, target: &LinkTarget, from: Option<&DocId>) -> Option<ResolvedRef> {
         let doc = match target {
-            // `[[#Sezione]]` e `[[#^blocco]]` nominano il documento che li
             // ospita, e senza un ospite non nominano niente: è la stessa
             // ragione per cui `from` esiste per i path relativi — la domanda
             // non è intera finché non si dice da dove la si fa.
+            // Un path relativo senza un documento che lo ospiti è relativo alla
             _ if target.names_host() => {
                 let host = from?;
                 self.metas.contains_key(host).then(|| host.clone())?
             }
             LinkTarget::Wiki { page, .. } => self.graph.resolve_wiki(page)?,
-            // Un path relativo senza un documento che lo ospiti è relativo alla
             // radice: `DocId("")` non è un documento, è la cartella da cui
             // `resolve_against` parte, ed è la stessa che userebbe una nota
             // nella radice.
+            // Il mondo esterno non è nel vault, e dirlo è una risposta: chi
             LinkTarget::Path(raw) => self
                 .graph
                 .resolve_path(from.unwrap_or(&DocId::new("")), raw)?,
-            // Il mondo esterno non è nel vault, e dirlo è una risposta: chi
             // passa qui l'esito di `classify` senza filtrarlo prima riceve
             // `None` invece di un errore.
+    /// Il punto che un `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` nomina dentro
             LinkTarget::Url(_) => return None,
         };
         let at = match target {
@@ -918,7 +919,6 @@ impl CoreIndex {
         Some(ResolvedRef { doc, at })
     }
 
-    /// Il punto che un `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` nomina dentro
     /// `doc`.
     ///
     /// La revisione arriva dall'anagrafe (§14.1) e non da una lettura fatta
@@ -927,28 +927,29 @@ impl CoreIndex {
     /// posizione — una coordinata che non sa dire *di quando* è una coordinata
     /// che chi la usa dovrebbe indovinare, e il contratto ha deciso di non
     /// permetterlo (`DocPosition::revision` non è opzionale).
+            // La regola sta nel contratto (`heading_matches`) e non qui: chi
     fn position_in(
         &self,
         doc: &DocId,
         heading: Option<&str>,
         block: Option<&str>,
     ) -> Option<DocPosition> {
-        let meta = self.metas.get(doc)?;
+        let metadata = self.metas.get(doc)?;
         let (span, anchor) = match (block, heading) {
             (Some(id), _) => {
                 let wanted = canonical_anchor(id);
-                let found = meta.anchors.iter().find(|a| a.id == wanted)?;
+                let found = metadata.anchors.iter().find(|a| a.id == wanted)?;
                 (found.span, wanted)
             }
-            // La regola sta nel contratto (`heading_matches`) e non qui: chi
             // **scrive** l'ancora di un titolo e chi la **cerca** sono la
             // stessa cosa in due versi, e due copie non saprebbero nominare la
             // seconda di due sezioni omonime allo stesso modo. L'ancora che
             // torna è quella del titolo trovato, non quella ricalcolata sulla
             // domanda: `#Ciao, Mondo!` trova `ciao-mondo`, e il chiamante ha
             // diritto all'id vero.
+    /// I documenti in relazione di link con `doc`, secondo il verso chiesto.
             (None, Some(text)) => {
-                let found = meta.outline.iter().find(|h| heading_matches(text, h))?;
+                let found = metadata.outline.iter().find(|h| heading_matches(text, h))?;
                 (found.span, found.slug.clone())
             }
             (None, None) => return None,
@@ -957,7 +958,6 @@ impl CoreIndex {
         Some(DocPosition::at(span, revision).with_anchor(anchor))
     }
 
-    /// I documenti in relazione di link con `doc`, secondo il verso chiesto.
     ///
     /// Una volta ciascuno: [`LinkGraph::linked`] risponde con un insieme, e
     /// prima che quella firma esistesse questa funzione elencava *link* e non
@@ -965,6 +965,7 @@ impl CoreIndex {
     /// volte. Non si vedeva perché a valle c'è il `BTreeMap` di [`Matches`], che
     /// li assorbiva: il difetto era coperto da un dettaglio d'implementazione di
     /// qualcun altro, ed è il modo in cui un difetto sopravvive a un refactor.
+            // Ciò che il pianificatore ha già risolto per conto di qualcun
     fn linked(&self, doc: &DocId, direction: LinkDirection) -> BTreeSet<DocId> {
         self.graph.linked(doc, direction)
     }
@@ -982,7 +983,7 @@ impl QueryEvaluator for CoreIndex {
                 Ok(Matches::of_docs(
                     self.metas
                         .iter()
-                        .filter(|(_, meta)| properties::test(&meta.frontmatter, filter, &formats))
+                        .filter(|(_, metadata)| properties::test(&metadata.frontmatter, filter, &formats))
                         .map(|(id, _)| id.clone()),
                 ))
             }
@@ -1001,15 +1002,15 @@ impl QueryEvaluator for CoreIndex {
                     .into_iter()
                     .filter(|id| self.metas.contains_key(id)),
             )),
-            // Ciò che il pianificatore ha già risolto per conto di qualcun
             // altro: si prende per buono, ristretto a ciò che esiste.
+            // Le famiglie di cui il kernel è l'unica fonte di verità.
             QueryPredicate::Docs { docs } => Ok(Matches::of_docs(
                 docs.iter()
                     .filter(|id| self.metas.contains_key(id))
                     .cloned(),
             )),
             other => Err(PluginError::Unserved(
-                format!("l'indice del kernel non valuta questa foglia: {other:?}").into(),
+                format!("the kernel index does not evaluate this leaf: {other:?}").into(),
             )),
         }
     }
@@ -1018,61 +1019,61 @@ impl QueryEvaluator for CoreIndex {
 impl IndexProvider for CoreIndex {
     fn routes(&self) -> Vec<QueryRoute> {
         vec![
-            // Le famiglie di cui il kernel è l'unica fonte di verità.
+            // Ciò che è rimasto non salvato (§15.2): il kernel è l'unico che
             QueryRoute::Query(QueryKind::Backlinks),
             QueryRoute::Query(QueryKind::Outline),
             QueryRoute::Query(QueryKind::Tags),
             QueryRoute::Query(QueryKind::Neighbors),
             QueryRoute::Query(QueryKind::PropertyValues),
             QueryRoute::Query(QueryKind::VaultHealth),
-            // Ciò che è rimasto non salvato (§15.2): il kernel è l'unico che
             // può rispondere, perché è l'unico che possiede quel posto sul
             // disco — e l'unico che sa, dall'anagrafe, se la nota c'è ancora.
-            QueryRoute::Query(QueryKind::Drafts),
             // Il rapporto col disco (§9.7): il kernel è l'unico che può
+            QueryRoute::Query(QueryKind::Drafts),
             // rispondere, perché è l'unico che conosce insieme l'esito delle
             // sincronizzazioni e il fatto — passatogli da chi monta — che un
             // rilevatore ci sia.
-            QueryRoute::Query(QueryKind::VaultStatus),
             // Cosa sta girando (§10.3): di nuovo il kernel, e di nuovo perché è
+            QueryRoute::Query(QueryKind::VaultStatus),
             // l'unico che li conosce tutti — chi possiede i thread sa quali
             // sono partiti, non quali stanno per partire.
-            QueryRoute::Query(QueryKind::Jobs),
             // Com'è configurato (§11.1): ancora il kernel, e stavolta si vede a
+            QueryRoute::Query(QueryKind::Jobs),
             // occhio — lo schema sta nel registro dei plugin, il valore nello
             // store di configurazione, e nessun altro li ha tutti e due.
-            QueryRoute::Query(QueryKind::Settings),
             // Com'è organizzato (§11.3): il kernel possiede il sidecar, quindi
+            QueryRoute::Query(QueryKind::Settings),
             // è l'unico che può rispondere. Prima non poteva rispondere
             // nessuno: la domanda non passava dal canale dati affatto.
-            QueryRoute::Query(QueryKind::Organization),
             // Cosa nomina un riferimento (§13.1): il kernel, perché risolvere è
+            QueryRoute::Query(QueryKind::Organization),
             // una funzione del grafo — gli omonimi si dirimono per distanza
             // dalla radice, e gli alias stanno in un indice che tiene solo lui.
             // Prima rispondeva solo alla shell, per un comando IPC scritto
             // apposta.
-            QueryRoute::Query(QueryKind::Resolve),
             // Cosa c'è nel vault (§14.1): il kernel, per esclusione — l'anagrafe
+            QueryRoute::Query(QueryKind::Resolve),
             // la costruisce chi cammina il disco, e nessun altro cammina il
             // disco. Prima questa domanda non si poteva fare affatto: la lista
             // dei documenti filtrava per estensione, quindi di un PNG non
             // sapeva rispondere nemmeno che c'era.
-            QueryRoute::Query(QueryKind::Entries),
             // Quali cartelle ci sono (§14.3): il kernel, e per la stessa
+            QueryRoute::Query(QueryKind::Entries),
             // ragione — una cartella la vede chi cammina il disco. Prima non la
             // vedeva nessuno: le cartelle esistevano solo come prefissi dei
             // path delle note, dentro l'albero della shell.
-            QueryRoute::Query(QueryKind::Folders),
             // La resa di un documento (§1.6, decisione 0163): il kernel la
+            QueryRoute::Query(QueryKind::Folders),
             // instrada come Outline — è una domanda che ha un solo risponditore,
             // e il risponditore è il kernel. La query arriva a
             // `Workspace::query_index`, che intercetta prima di `indexes.query`
             // perché `CoreIndex` non ha i documenti né i renderer.
+            // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             QueryRoute::Query(QueryKind::RenderPreview),
             QueryRoute::Query(QueryKind::RenderEmbed),
-            // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
+    /// Niente da ricaricare: la memoria di questo indice è il vault, e la
             QueryRoute::Predicate(PredicateKind::Property),
             QueryRoute::Predicate(PredicateKind::Tag),
             QueryRoute::Predicate(PredicateKind::Folder),
@@ -1080,28 +1081,28 @@ impl IndexProvider for CoreIndex {
         ]
     }
 
-    /// Niente da ricaricare: la memoria di questo indice è il vault, e la
     /// riscansione la fa il workspace all'apertura.
+    /// Non perde niente, e la lista vuota che restituisce è un fatto e non una
     fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
 
-    /// Non perde niente, e la lista vuota che restituisce è un fatto e non una
     /// scorciatoia: questo indice tiene i propri metadati in memoria, e una
     /// `BTreeMap` che accetta una chiave non ha un modo di rifiutarla. Il
     /// giorno che ne avesse uno — un tetto, una quota — sarebbe qui che lo
     /// direbbe.
+    /// L'indice del kernel **è** la verità corrente: non ha niente da
     fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
         if !docs.is_empty() {
             self.graph_epoch = self.graph_epoch.wrapping_add(1);
         }
         for doc in docs {
             self.tags.upsert(&doc.id, &doc.tags);
-            let meta = DocMeta::from(doc);
+            let metadata = DocMeta::from(doc);
             if self.graph_update == GraphUpdate::Incremental {
-                self.graph.upsert(&meta);
+                self.graph.upsert(&metadata);
             }
-            self.metas.insert(meta.id.clone(), meta);
+            self.metas.insert(metadata.id.clone(), metadata);
         }
         Vec::new()
     }
@@ -1122,40 +1123,40 @@ impl IndexProvider for CoreIndex {
         Vec::new()
     }
 
-    /// L'indice del kernel **è** la verità corrente: non ha niente da
     /// riconciliare con essa. Il rebuild completo, quando è la strategia
     /// scelta, lo chiude il workspace dopo la scansione.
+    /// Non persiste niente: ciò che sa lo ricostruisce dal vault, che è la
     fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
         Vec::new()
     }
 
-    /// Non persiste niente: ciò che sa lo ricostruisce dal vault, che è la
     /// definizione di stato derivato.
+    /// Non tiene niente che vada lasciato andare: la memoria di questo indice è
     fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
 
-    /// Non tiene niente che vada lasciato andare: la memoria di questo indice è
     /// memoria, e se ne va con lui. La riga c'è perché il contratto non ha un
     /// default (decisione 0028), ed è il caso che quel default avrebbe reso
     /// indistinguibile da «non ci ho pensato».
+            // Arriva quando il pianificatore consegna un sottoalbero di foglie
     fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
 
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         match query {
-            // Arriva quando il pianificatore consegna un sottoalbero di foglie
             // che questo indice ha dichiarato: la struttura la regge
             // `QueryEvaluator`, che è scritta una volta sola nel contratto.
+                // Nessun estratto da omettere: questo indice non ha il corpo dei
             IndexQuery::Documents {
                 matching,
                 sort,
                 select,
                 page,
-                // Nessun estratto da omettere: questo indice non ha il corpo dei
                 // documenti (è lo split metadata/body di M2), quindi seleziona e
                 // basta — e una risposta senza estratti è già ciò che dà.
+                    // Lo snapshot incrementale: niente O(vault) a ogni
                 excerpts: _,
             } => {
                 let matches = self.expr(&matching)?;
@@ -1178,9 +1179,9 @@ impl IndexProvider for CoreIndex {
             )),
             IndexQuery::Tags { matching, page } => {
                 let counts = if matching.is_everything() {
-                    // Lo snapshot incrementale: niente O(vault) a ogni
                     // interrogazione — e il pannello interroga a ogni
                     // salvataggio.
+                // I semi in ordine di id, e i vicini di ognuno di seguito: senza
                     self.tags.snapshot()
                 } else {
                     let selected = self.expr(&matching)?;
@@ -1196,9 +1197,9 @@ impl IndexProvider for CoreIndex {
             } => {
                 let from = self.expr(&seeds)?;
                 let mut all = Vec::new();
-                // I semi in ordine di id, e i vicini di ognuno di seguito: senza
                 // un ordine totale la seconda pagina di un grafo grande
                 // ripeterebbe righe della prima.
+                    // Il risolutore è il grafo **più l'anagrafe** (§14.1): il
                 for seed in from.ids() {
                     all.extend(self.graph.neighbors(seed, direction, depth));
                 }
@@ -1225,15 +1226,15 @@ impl IndexProvider for CoreIndex {
                     self.metas
                         .iter()
                         .map(|(id, m)| (id, m.links.as_slice(), &m.frontmatter)),
-                    // Il risolutore è il grafo **più l'anagrafe** (§14.1): il
                     // grafo sa dove arriva un link fra note, l'anagrafe sa se
                     // il PNG che una nota mostra c'è davvero. Con il solo grafo
                     // la seconda domanda non era rispondibile, e l'unica cosa
                     // onesta che si poteva fare era tacere su ogni allegato.
+                // Il guasto risale a chi ha chiesto la pagina invece di
                     &health::VaultView {
                         graph: &self.graph,
                         entries: &self.entries,
-                        nomi: &self.nomi,
+                        names: &self.names,
                     },
                     &self.registry.all_extensions(),
                     &self.date_formats(),
@@ -1241,16 +1242,15 @@ impl IndexProvider for CoreIndex {
                 Ok(IndexResult::VaultHealth(Paged::window(issues, page)))
             }
             IndexQuery::Drafts { page } => {
-                // Il guasto risale a chi ha chiesto la pagina invece di
                 // diventare una pagina vuota: chiedere le bozze e riceverne
                 // zero perché la cartella non si è letta è il modo in cui il
                 // recupero di un testo non salvato non viene offerto a nessuno.
-                let drafts = self.drafts.read().map_err(|e| {
+                // **Qui `Paged::from_source` non guadagna niente**, ed è un
+                let drafts = self.drafts.read().map_err(|and| {
                     PluginError::Io(
-                        format!("le bozze non si sono lette ({}): {e}", self.drafts.dir()).into(),
+                        format!("drafts were not read ({}): {and}", self.drafts.dir()).into(),
                     )
                 })?;
-                // **Qui `Paged::from_source` non guadagna niente**, ed è un
                 // fatto misurato dal banco del §17.1 (decisione 0113) e non una
                 // scelta di comodo: la linearità di questa famiglia sta *a
                 // monte*, in `drafts.read()`, che apre e deserializza ogni
@@ -1259,6 +1259,7 @@ impl IndexProvider for CoreIndex {
                 // costruirlo fuori dalla finestra non alloca. Chi volesse
                 // rendere costante il prezzo di questa pagina deve paginare la
                 // lettura, che è un'altra cosa e sta dall'altra parte.
+                            // L'anagrafe è la fonte di entrambi: `exists` è
                 let items = drafts
                     .drafts
                     .into_iter()
@@ -1268,23 +1269,23 @@ impl IndexProvider for CoreIndex {
                             doc: d.doc,
                             at: d.at,
                             base: d.base,
-                            // L'anagrafe è la fonte di entrambi: `exists` è
                             // «c'è una voce», `current` è l'impronta che
                             // qualcuno ha già pagato. Nessuna delle due apre un
                             // file — offrire un recupero non deve costare una
                             // rilettura del vault.
+            // Il filtro sta **prima** della finestra, e non è un dettaglio: una
                             exists: entry.is_some(),
-                            current: entry.and_then(|e| e.fingerprint.clone()),
+                            current: entry.and_then(|and| and.fingerprint.clone()),
                             text: d.text,
                         }
                     })
                     .collect::<Vec<_>>();
                 Ok(IndexResult::Drafts(Paged::window(items, page)))
             }
-            // Il filtro sta **prima** della finestra, e non è un dettaglio: una
             // pagina tagliata sull'anagrafe intera e poi filtrata sarebbe una
             // pagina con dentro un numero di righe che dipende da cosa c'è nel
             // resto del vault (§14.4).
+                // La clonazione è **qui dentro** e non un `.cloned()` sulla
             IndexQuery::Entries {
                 of_kind,
                 within,
@@ -1292,16 +1293,16 @@ impl IndexProvider for CoreIndex {
             } => Ok(IndexResult::Entries(Paged::from_source(
                 self.entries
                     .values()
-                    .filter(|e| of_kind.is_none_or(|k| e.kind == k))
-                    .filter(|e| match &within {
-                        Some(scope) => in_folder(&e.id, &scope.path, scope.descendants),
+                    .filter(|and| of_kind.is_none_or(|k| and.kind == k))
+                    .filter(|and| match &within {
+                        Some(scope) => in_folder(&and.id, &scope.path, scope.descendants),
                         None => true,
                     }),
                 page,
-                // La clonazione è **qui dentro** e non un `.cloned()` sulla
                 // catena: il filtro cammina l'anagrafe intera per dire quanti
                 // sono, ma una `VaultEntry` la si copia solo se sta nella
                 // finestra.
+            // Arriva solo se qualcuno chiama `indexes.query` di qua, non dal
                 VaultEntry::clone,
             ))),
             IndexQuery::Folders { under, page } => Ok(IndexResult::Folders(Paged::window(
@@ -1309,42 +1310,41 @@ impl IndexProvider for CoreIndex {
                 page,
             ))),
             IndexQuery::Custom { ns, .. } => Err(PluginError::Unserved(
-                format!("l'indice del kernel non estende il canale: `{ns}`").into(),
+                format!("the kernel index does not extend the channel: `{ns}`").into(),
             )),
             IndexQuery::VaultStatus => Ok(IndexResult::VaultStatus(self.watch.status())),
             IndexQuery::Jobs => Ok(IndexResult::Jobs(self.jobs.live())),
             IndexQuery::Organization => Ok(IndexResult::Organization(self.organization.snapshot())),
-            // Arriva solo se qualcuno chiama `indexes.query` di qua, non dal
             // canale dati: `Workspace::query_index` intercetta Settings prima,
             // perché qui non ci sono i cataloghi con cui risolvere le etichette.
+            // Le tre specie di bersaglio hanno tre regole diverse, e il punto di
             IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
                 self.settings
                     .read()
-                    .expect("store di configurazione")
+                    .expect("config store")
                     .entries(plugin.as_deref()),
             )),
-            // Le tre specie di bersaglio hanno tre regole diverse, e il punto di
             // questa variante è **non** inventarne una quarta che le indovini:
             // chi chiede dice di che specie è il riferimento, perché lo sa — è
             // ciò che ha parsato, o ciò che `LinkTarget::classify` gli ha
             // risposto.
+            // La resa è intercettata da `Workspace::query_index` prima di
             IndexQuery::Resolve { target, from } => {
                 Ok(IndexResult::Resolved(self.resolve(&target, from.as_ref())))
             }
-            // La resa è intercettata da `Workspace::query_index` prima di
             // arrivare qui: `CoreIndex` non possiede i documenti né i renderer.
             // Questi bracci non si raggiungono mai, ma il `match` è esaustivo e
             // non accetta un `_` — vedi la 0104.
+/// Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
             IndexQuery::RenderPreview { .. } | IndexQuery::RenderEmbed { .. } => {
                 Err(PluginError::Internal(
-                    "la resa è di `Workspace::query_index`, non dell'indice del kernel".into(),
+                    "render is `Workspace::query_index`'s, not the kernel index's".into(),
                 ))
             }
         }
     }
 }
 
-/// Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
 /// ripetizioni.
 ///
 /// Costa un passaggio su ognuna delle due mappe, con una ricerca per chiave
@@ -1353,6 +1353,7 @@ impl IndexProvider for CoreIndex {
 /// **necessario** e non cosmetico: la mappa del frontmatter conserva l'ordine
 /// del file (`preserve_order`), quindi due documenti con le stesse chiavi
 /// scritte in ordine diverso produrrebbero due elenchi che non si confrontano.
+/// I tag comparsi e quelli spariti. Le grafie e non le chiavi canoniche, perché
 fn changed_properties(before: &Frontmatter, after: &Frontmatter) -> Vec<String> {
     let mut keys = Vec::new();
     for (key, value) in before.0.iter() {
@@ -1370,7 +1371,7 @@ fn changed_properties(before: &Frontmatter, after: &Frontmatter) -> Vec<String> 
     keys
 }
 
-/// I tag comparsi e quelli spariti. Le grafie e non le chiavi canoniche, perché
+/// è la grafia che chi si è abbonato ha scritto nella propria automazione.
 /// è la grafia che chi si è abbonato ha scritto nella propria automazione.
 fn tag_diff(before: &[String], after: &[Tag]) -> (Vec<String>, Vec<String>) {
     let old: BTreeSet<&String> = before.iter().collect();

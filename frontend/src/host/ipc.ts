@@ -37,7 +37,7 @@ export const api = {
   // la diagnosi nasce all'avvio del backend, prima che questo ascoltatore
   // esista — una spinta a quell'ora sarebbe persa — e la shell la chiede
   // appena il router è in piedi.
-  avvisoDiSessione: () => invoke<KernelNotice | null>("avviso_di_sessione"),
+  sessionNotice: () => invoke<KernelNotice | null>("session_notice"),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
   // `listDocuments` **non c'è più** (§14.4): restituiva l'intero vault in un
   // `string[]`, senza finestra e senza saper dire *quale cartella*. Chi vuole
@@ -271,12 +271,12 @@ export function onKernelEvent(handler: (n: KernelNotice) => void): Promise<() =>
 /// non arriva mai e la finestra resta lì senza spiegazione. Un salvataggio che
 /// va storto è un fatto normale in questa riga — è precisamente il caso che
 /// rende la bozza utile — e non deve diventare una finestra che non si chiude.
-export function allaChiusura(prima: () => Promise<void>): Promise<() => void> {
+export function onClose(first: () => Promise<void>): Promise<() => void> {
   return getCurrentWindow().onCloseRequested(async () => {
     try {
-      await prima();
+      await first();
     } catch {
-      // Muto per la ragione scritta sopra: chi chiude, chiude.
+      // Muto per la ragione scritto sopra: chi chiude, chiude.
     }
   });
 }
@@ -298,16 +298,16 @@ export function allaChiusura(prima: () => Promise<void>): Promise<() => void> {
 /// `tauri://close-requested` e chiama `destroy()` in coda al gestore, e
 /// quella catena deve continuare a funzionare — un `destroy()` diretto
 /// qui la scavalcherebbe e saltarebbe il salvataggio della bozza.
-export const finestra = {
-  minimizza: (): Promise<void> => getCurrentWindow().minimize(),
-  alternaMassimizza: (): Promise<void> => getCurrentWindow().toggleMaximize(),
-  chiudi: (): Promise<void> => getCurrentWindow().close(),
-  eMassimizzata: (): Promise<boolean> => getCurrentWindow().isMaximized(),
+export const window = {
+  minimize: (): Promise<void> => getCurrentWindow().minimize(),
+  toggleMaximize: (): Promise<void> => getCurrentWindow().toggleMaximize(),
+  close: (): Promise<void> => getCurrentWindow().close(),
+  isMaximized: (): Promise<boolean> => getCurrentWindow().isMaximized(),
   /// La titlebar deve ridisegnare l'icona max/restore quando lo stato cambia.
   /// Tauri 2 non espone un `onMaximize`/`onUnmaximize` separato: `onResized`
   /// copre sia il resize manuale sia il maximize/unmaximize. Se l'ascolto non
   /// fosse disponibile (PWA/mobile), si torna un unlisten vuoto — la titlebar
-  /// non si rompe, perde solo l'aggiornamento live dell'icona.
-  onCambio: (cb: () => void): Promise<() => void> =>
+  /// non si rompe, perde solo l'aggiornamento vivi dell'icona.
+  onResize: (cb: () => void): Promise<() => void> =>
     getCurrentWindow().onResized(() => cb()),
 };

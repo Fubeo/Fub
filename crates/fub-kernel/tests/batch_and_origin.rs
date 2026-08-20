@@ -115,7 +115,7 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
     let mut ws = Workspace::new(dir, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
-    for plugin in [AUTOMA, "test.spia"] {
+    for plugin in [AUTOMATION, "test.spia"] {
         ws.register_core_feature(plugin, plugin)
             .expect("dichiarato");
     }
@@ -124,13 +124,13 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
 }
 
 /// Un vault con `Vecchia.lnk` e `n` note che la linkano.
-fn con_backlink(dir: &Utf8PathBuf, n: usize) -> Workspace {
+fn with_backlink(dir: &Utf8PathBuf, n: usize) -> Workspace {
     let mut ws = workspace(dir);
     ws.write_document(&DocId::new("Vecchia.lnk"), "", WriteBase::Dictated)
         .unwrap();
-    for i in 0..n {
+    for the in 0..n {
         ws.write_document(
-            &DocId::new(format!("src{i}.lnk")),
+            &DocId::new(format!("src{the}.lnk")),
             "Vecchia",
             WriteBase::Dictated,
         )
@@ -144,30 +144,30 @@ fn con_backlink(dir: &Utf8PathBuf, n: usize) -> Workspace {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_rename_with_backlinks_is_one_redraw_and_not_one_per_source() {
+fn a_rename_with_backlinks_is_one_redraw_and_not_one_for_source() {
     let dir = TempDir::new("uno-non-n");
-    let mut ws = con_backlink(&dir.0, 20);
+    let mut ws = with_backlink(&dir.0, 20);
     let rx = ws.bus().subscribe();
 
     ws.rename_document(&DocId::new("Vecchia.lnk"), &DocId::new("Nuova.lnk"))
         .unwrap();
 
     let notices: Vec<Notice> = rx.try_iter().collect();
-    let per_specie = |k: EventKind| notices.iter().filter(|n| n.kind() == k).count();
+    let by_kind = |k: EventKind| notices.iter().filter(|n| n.kind() == k).count();
 
     assert_eq!(
-        per_specie(EventKind::IndexUpdated),
+        by_kind(EventKind::IndexUpdated),
         0,
         "dentro un lotto `index-updated` non esce: è l'unico evento senza \
          payload, e N copie dicono quanto ne dice una"
     );
     assert_eq!(
-        per_specie(EventKind::BatchEnded),
+        by_kind(EventKind::BatchEnded),
         1,
         "e al suo posto arriva UN terminale, non uno per sorgente"
     );
     assert_eq!(
-        per_specie(EventKind::DocumentChanged),
+        by_kind(EventKind::DocumentChanged),
         20,
         "gli eventi per-documento invece passano tutti: chi li segue non perde \
          niente, ed è la ragione per cui questa voce non chiede a nessuno di \
@@ -217,7 +217,7 @@ fn the_touched_set_has_no_repetitions_and_keeps_the_order_of_what_happened() {
     let Some(Event::BatchEnded { changed, .. }) = rx
         .try_iter()
         .map(|n| n.event)
-        .find(|e| matches!(e, Event::BatchEnded { .. }))
+        .find(|and| matches!(and, Event::BatchEnded { .. }))
     else {
         panic!("il terminale del lotto")
     };
@@ -253,7 +253,7 @@ fn a_batch_that_touched_nothing_says_nothing() {
 #[test]
 fn a_nested_batch_joins_the_one_that_is_open() {
     let dir = TempDir::new("annidato");
-    let mut ws = con_backlink(&dir.0, 3);
+    let mut ws = with_backlink(&dir.0, 3);
     let rx = ws.bus().subscribe();
 
     // Una rinomina è già un lotto: dentro un lotto esterno non deve chiuderne
@@ -266,13 +266,13 @@ fn a_nested_batch_joins_the_one_that_is_open() {
             .unwrap();
     });
 
-    let terminali: Vec<Event> = rx
+    let terminal_events: Vec<Event> = rx
         .try_iter()
         .map(|n| n.event)
-        .filter(|e| matches!(e, Event::BatchEnded { .. }))
+        .filter(|and| matches!(and, Event::BatchEnded { .. }))
         .collect();
-    assert_eq!(terminali.len(), 1, "un terminale solo: {terminali:?}");
-    let Event::BatchEnded { changed, .. } = &terminali[0] else {
+    assert_eq!(terminal_events.len(), 1, "un terminale solo: {terminal_events:?}");
+    let Event::BatchEnded { changed, .. } = &terminal_events[0] else {
         unreachable!()
     };
     assert!(
@@ -296,20 +296,20 @@ fn a_batch_does_not_roll_back_and_says_so_by_closing_anyway() {
     ws.write_document(&b, "prima", WriteBase::Dictated).unwrap();
     // Una base calcolata adesso e resa stantia da una scrittura che arriva
     // prima che il lotto la usi: è il caso di un'automazione lunga (decisione 0008).
-    let base_vecchia = ws.document_revision(&b).unwrap();
+    let base_old = ws.document_revision(&b).unwrap();
     ws.write_document(&b, "qualcun altro", WriteBase::Dictated)
         .unwrap();
     let rx = ws.bus().subscribe();
 
-    let esito = ws.batch(|ws| {
+    let outcome = ws.batch(|ws| {
         ws.write_document(&a, "dopo", WriteBase::Dictated).unwrap();
         ws.apply_edit(
             &b,
-            EditRequest::new(base_vecchia, vec![TextEdit::insert(0, "x")]),
+            EditRequest::new(base_old, vec![TextEdit::insert(0, "x")]),
         )
     });
 
-    let err = esito.unwrap_err();
+    let err = outcome.unwrap_err();
     assert!(
         err.to_string().contains("b.lnk"),
         "chi ha aperto il lotto sa cosa non è andato, dal PROPRIO valore di \
@@ -330,18 +330,18 @@ fn a_batch_does_not_roll_back_and_says_so_by_closing_anyway() {
          decisione 0008 vale dentro un lotto come fuori"
     );
 
-    let terminali: Vec<Event> = rx
+    let terminal_events: Vec<Event> = rx
         .try_iter()
         .map(|n| n.event)
-        .filter(|e| matches!(e, Event::BatchEnded { .. }))
+        .filter(|and| matches!(and, Event::BatchEnded { .. }))
         .collect();
     assert_eq!(
-        terminali.len(),
+        terminal_events.len(),
         1,
         "il lotto si chiude lo stesso: chi ridisegna deve ridisegnare proprio \
          quando qualcosa è andato storto a metà"
     );
-    let Event::BatchEnded { changed, .. } = &terminali[0] else {
+    let Event::BatchEnded { changed, .. } = &terminal_events[0] else {
         unreachable!()
     };
     assert_eq!(
@@ -357,7 +357,7 @@ fn a_batch_does_not_roll_back_and_says_so_by_closing_anyway() {
 // 4. L'origine è chi ha chiesto
 // ---------------------------------------------------------------------------
 
-const AUTOMA: &str = "test.automa";
+const AUTOMATION: &str = "test.automa";
 
 /// Un'automazione su-modifica **che scrive**: il caso di 16.2, e quello che
 /// senza l'origine si richiama da sé finché il budget del dispatch non tronca.
@@ -365,49 +365,49 @@ const AUTOMA: &str = "test.automa";
 /// Tiene conto di quante volte è stata chiamata su un evento non suo, e
 /// `guardia` decide se difendersi con l'origine o no — così il test può
 /// mostrare le due storie invece di raccontarne una.
-struct Automa {
-    guardia: bool,
-    scritture: Arc<Mutex<usize>>,
+struct Automation {
+    guard: bool,
+    writes: Arc<Mutex<usize>>,
 }
 
-impl EventHandler for Automa {
+impl EventHandler for Automation {
     fn subscribed(&self) -> EventMask {
         EventMask::of([EventKind::DocumentChanged])
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        if self.guardia && notice.origin.actor.is_plugin(AUTOMA) {
+        if self.guard && notice.origin.actor.is_plugin(AUTOMATION) {
             // Questa l'ho scritta io: non ci reagisco.
             return Ok(());
         }
         let Event::DocumentChanged { .. } = &notice.event else {
             return Ok(());
         };
-        let diario = DocId::new("diario.lnk");
-        let source = host.read_document(&diario).unwrap_or_default();
-        *self.scritture.lock().unwrap() += 1;
+        let journal = DocId::new("diario.lnk");
+        let source = host.read_document(&journal).unwrap_or_default();
+        *self.writes.lock().unwrap() += 1;
         // Scrive SEMPRE qualcosa di nuovo: è il caso che una guardia di
         // contenuto non sa fermare, perché il documento è ogni volta diverso.
-        host.write_document(&diario, &format!("{source}\nriga"), WriteBase::Dictated)
+        host.write_document(&journal, &format!("{source}\nriga"), WriteBase::Dictated)
             .map(|_| ())
     }
 }
 
-fn quante_scritture(tag: &str, guardia: bool) -> usize {
+fn count_writes(tag: &str, guard: bool) -> usize {
     let dir = TempDir::new(tag);
     let mut ws = workspace(&dir.0);
-    let scritture = Arc::new(Mutex::new(0usize));
+    let writes = Arc::new(Mutex::new(0usize));
     ws.register_event_handler(
-        AUTOMA,
-        Box::new(Automa {
-            guardia,
-            scritture: scritture.clone(),
+        AUTOMATION,
+        Box::new(Automation {
+            guard,
+            writes: writes.clone(),
         }),
     )
     .expect("registrato");
     ws.write_document(&DocId::new("innesco.lnk"), "via", WriteBase::Dictated)
         .unwrap();
-    let n = *scritture.lock().unwrap();
+    let n = *writes.lock().unwrap();
     n
 }
 
@@ -416,20 +416,20 @@ fn an_on_change_automation_recognises_its_own_writes_by_the_origin() {
     // Con la guardia: reagisce all'innesco, scrive, e il proprio evento lo
     // riconosce. Due giri in tutto — l'innesco e il `document-changed` del
     // diario, che salta.
-    let con = quante_scritture("automa-con", true);
+    let with = count_writes("automa-con", true);
     assert_eq!(
-        con, 1,
+        with, 1,
         "una scrittura sola: l'automazione ha riconosciuto la propria dall'origine"
     );
 
     // Senza: ogni scrittura del diario è un `document-changed` che la richiama,
     // e l'unica cosa che la ferma è il budget del dispatch — cioè una rete di
     // sicurezza, non una semantica.
-    let senza = quante_scritture("automa-senza", false);
+    let without = count_writes("automa-senza", false);
     assert!(
-        senza > 100,
+        without > 100,
         "senza la guardia dell'origine l'automazione si richiama da sola fino \
-         al troncamento della coda ({senza} scritture): è esattamente il buco \
+         al troncamento della coda ({without} scritture): è esattamente il buco \
          che la decisione 0012 esiste per chiudere, e un guardiano di CONTENUTO qui non \
          funzionerebbe — il diario è ogni volta diverso"
     );
@@ -440,10 +440,10 @@ fn the_actor_of_a_plugin_write_is_the_plugin_and_of_a_shell_write_is_the_user() 
     let dir = TempDir::new("attori");
     let mut ws = workspace(&dir.0);
     ws.register_event_handler(
-        AUTOMA,
-        Box::new(Automa {
-            guardia: true,
-            scritture: Arc::new(Mutex::new(0)),
+        AUTOMATION,
+        Box::new(Automation {
+            guard: true,
+            writes: Arc::new(Mutex::new(0)),
         }),
     )
     .expect("registrato");
@@ -452,22 +452,22 @@ fn the_actor_of_a_plugin_write_is_the_plugin_and_of_a_shell_write_is_the_user() 
     ws.write_document(&DocId::new("innesco.lnk"), "via", WriteBase::Dictated)
         .unwrap();
 
-    let mut per_doc: Vec<(String, Actor)> = rx
+    let mut for_doc: Vec<(String, Actor)> = rx
         .try_iter()
         .filter_map(|n| match n.event {
             Event::DocumentChanged { id, .. } => Some((id.0, n.origin.actor)),
             _ => None,
         })
         .collect();
-    per_doc.sort_by(|a, b| a.0.cmp(&b.0));
+    for_doc.sort_by(|a, b| a.0.cmp(&b.0));
 
     assert_eq!(
-        per_doc,
+        for_doc,
         vec![
             (
                 "diario.lnk".to_string(),
                 Actor::Plugin {
-                    id: AUTOMA.to_string()
+                    id: AUTOMATION.to_string()
                 }
             ),
             ("innesco.lnk".to_string(), Actor::User),
@@ -525,19 +525,19 @@ fn what_the_kernel_does_on_its_own_is_not_attributed_to_anyone_else() {
 // ---------------------------------------------------------------------------
 
 /// Registra, per ogni evento che riceve, cosa vedeva il vault in quel momento.
-struct Spia(Arc<Mutex<Vec<(String, usize)>>>);
+struct Spy(Arc<Mutex<Vec<(String, usize)>>>);
 
-impl EventHandler for Spia {
+impl EventHandler for Spy {
     fn subscribed(&self) -> EventMask {
         EventMask::all()
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        let quanti = host.list_documents(None)?.items.len();
+        let count = host.list_documents(None)?.items.len();
         self.0
             .lock()
             .unwrap()
-            .push((format!("{:?}", notice.kind()), quanti));
+            .push((format!("{:?}", notice.kind()), count));
         Ok(())
     }
 }
@@ -546,27 +546,27 @@ impl EventHandler for Spia {
 fn inside_a_batch_no_handler_sees_the_vault_halfway_through() {
     let dir = TempDir::new("mai-a-meta");
     let mut ws = workspace(&dir.0);
-    let visto = Arc::new(Mutex::new(Vec::new()));
-    ws.register_event_handler("test.spia", Box::new(Spia(visto.clone())))
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    ws.register_event_handler("test.spia", Box::new(Spy(seen.clone())))
         .expect("registrato");
 
     ws.batch(|ws| {
-        for i in 0..5 {
-            ws.write_document(&DocId::new(format!("n{i}.lnk")), "x", WriteBase::Dictated)
+        for the in 0..5 {
+            ws.write_document(&DocId::new(format!("n{the}.lnk")), "x", WriteBase::Dictated)
                 .unwrap();
         }
     });
 
-    let visto = visto.lock().unwrap();
-    assert!(!visto.is_empty(), "gli eventi sono arrivati");
+    let seen = seen.lock().unwrap();
+    assert!(!seen.is_empty(), "gli eventi sono arrivati");
     assert!(
-        visto.iter().all(|(_, quanti)| *quanti == 5),
+        seen.iter().all(|(_, count)| *count == 5),
         "ogni handler ha visto il vault COMPLETO: dentro il lotto il dispatch è \
          rimandato, perché uno stato a metà di un'operazione non è mai esistito \
-         per nessuno — {visto:?}"
+         per nessuno — {seen:?}"
     );
     assert_eq!(
-        visto.last().map(|(kind, _)| kind.as_str()),
+        seen.last().map(|(kind, _)| kind.as_str()),
         Some("BatchEnded"),
         "e il terminale arriva per ultimo, dopo ciò che il lotto ha fatto"
     );
@@ -579,9 +579,9 @@ fn a_batch_id_is_new_every_time() {
     let rx = ws.bus().subscribe();
 
     let mut ids = Vec::new();
-    for i in 0..3 {
+    for the in 0..3 {
         ws.batch(|ws| {
-            ws.write_document(&DocId::new(format!("n{i}.lnk")), "x", WriteBase::Dictated)
+            ws.write_document(&DocId::new(format!("n{the}.lnk")), "x", WriteBase::Dictated)
                 .unwrap();
         });
     }
@@ -591,9 +591,9 @@ fn a_batch_id_is_new_every_time() {
         }
     }
     assert_eq!(ids.len(), 3);
-    let unici: std::collections::BTreeSet<u64> = ids.iter().map(|BatchId(n)| *n).collect();
+    let unique: std::collections::BTreeSet<u64> = ids.iter().map(|BatchId(n)| *n).collect();
     assert_eq!(
-        unici.len(),
+        unique.len(),
         3,
         "due lotti diversi hanno id diversi: è l'unica cosa che l'identità \
          promette, e basta a correlare gli eventi col loro terminale"
@@ -611,16 +611,16 @@ fn a_batch_id_is_new_every_time() {
 /// attorno — e l'hook tace per la sua durata, o una traccia stampata farebbe
 /// sembrare rotto un banco verde.
 #[test]
-fn un_panico_dentro_un_lotto_non_lascia_il_lotto_aperto() {
+fn a_panic_inside_a_batch_does_not_leave_the_batch_open() {
     let dir = TempDir::new("panico");
     let mut ws = workspace(&dir.0);
-    let visto = Arc::new(Mutex::new(Vec::new()));
-    ws.register_event_handler("test.spia", Box::new(Spia(visto.clone())))
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    ws.register_event_handler("test.spia", Box::new(Spy(seen.clone())))
         .expect("registrato");
 
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
-    let esito = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         ws.batch(|ws| {
             ws.write_document(&DocId::new("dentro.lnk"), "x", WriteBase::Dictated)
                 .unwrap();
@@ -628,14 +628,14 @@ fn un_panico_dentro_un_lotto_non_lascia_il_lotto_aperto() {
         })
     }));
     std::panic::set_hook(hook);
-    assert!(esito.is_err(), "il misfatto deve essere successo");
+    assert!(outcome.is_err(), "il misfatto deve essere successo");
 
     // Il vault è di nuovo un vault: un'operazione qualunque arriva agli handler.
     ws.write_document(&DocId::new("dopo.lnk"), "y", WriteBase::Dictated)
         .unwrap();
-    let visto = visto.lock().unwrap();
+    let seen = seen.lock().unwrap();
     assert!(
-        !visto.is_empty(),
+        !seen.is_empty(),
         "il lotto è rimasto aperto: `dispatch_pending` trova `batch.is_some()` e \
          torna subito, quindi da qui in poi nessun handler riceve più niente e \
          nessuno dice perché — la coda del vault è morta con chi è panicato dentro"

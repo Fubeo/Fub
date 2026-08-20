@@ -10,8 +10,8 @@ import {
   taskChecked,
   topicMatches,
 } from "./mirrored";
-import { espandi } from "../i18n/strings";
-import { normalizza } from "../ui/commands";
+import { expand } from "../i18n/strings";
+import { normalize } from "../ui/commands";
 import { byteToCharIndex, charToByteIndex } from "./offsets";
 // La fixture è generata dalle regole Rust — vedi
 // `crates/fub-abi/tests/rules_mirror.rs`.
@@ -56,11 +56,11 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   // shell la usa a ogni tasto premuto — e la copia del contratto serve a chi
   // guarda il registro fermo; `null` da entrambe le parti vuol dire «questa app
   // non la sa premere», e sono le stringhe su cui le due copie divergevano.
-  accordo_canonico: (c) => normalizza(c.binding),
+  "accordo_canonico": (c) => normalize(c.binding),
   byte_to_utf16: (c) => byteToCharIndex(c.text, c.byte),
   // I due motori di sostituzione `{nome}`: l'unica coppia che il repo
   // dichiarava gemella e nessuna fixture teneva tale (difetto 0224).
-  espansione: (c) => espandi(c.template, c.args),
+  espansione: (c) => expand(c.template, c.args),
   utf16_to_byte: (c) => charToByteIndex(c.text, c.unit),
   // La maschera di un abbonamento (§10.1). `mask_name` è solo l'etichetta che
   // rende leggibile un caso fallito: la regola guarda `mask` ed `event`.
@@ -76,11 +76,11 @@ describe("mirror delle regole TS↔Rust", () => {
 
   for (const [rule, handler] of Object.entries(HANDLERS)) {
     it(`\`${rule}\` risponde come Rust su ogni caso`, () => {
-      const casi = fixture[rule];
-      expect(casi, `manca la regola ${rule} nella fixture`).toBeTruthy();
-      expect(casi.length, `nessun caso per ${rule}`).toBeGreaterThan(0);
-      for (const caso of casi) {
-        const { out, ...input } = caso;
+      const cases = fixture[rule];
+      expect(cases, `manca la regola ${rule} nella fixture`).toBeTruthy();
+      expect(cases.length, `nessun caso per ${rule}`).toBeGreaterThan(0);
+      for (const testCase of cases) {
+        const { out, ...input } = testCase;
         expect(handler(input as Record<string, never>), `${rule}(${JSON.stringify(input)})`).toEqual(
           out,
         );
@@ -92,11 +92,11 @@ describe("mirror delle regole TS↔Rust", () => {
     // Un presidio si può svuotare senza diventare rosso, potando i casi
     // difficili e lasciando quelli facili. Queste sono le tre proprietà che
     // rendono la fixture capace di distinguere due implementazioni diverse.
-    const chiavi = fixture.resolution_key.map((c) => c.out);
+    const keys = fixture.resolution_key.map((c) => c.out);
     expect(
-      new Set(chiavi).size,
+      new Set(keys).size,
       "NFC e NFD della stessa parola devono collassare sulla stessa chiave",
-    ).toBeLessThan(chiavi.length);
+    ).toBeLessThan(keys.length);
 
     expect(
       fixture.page_name.some((c) => String(c.id).startsWith(".")),
@@ -112,11 +112,11 @@ describe("mirror delle regole TS↔Rust", () => {
     // niente: una sequenza (che una copia che spezza solo sul `-` sbaglia) e una
     // scorciatoia rifiutata (che una copia che normalizza tutto accetta).
     expect(
-      fixture.accordo_canonico.some((c) => String(c.binding).includes(" ") && c.out !== null),
+      fixture["accordo_canonico"].some((c) => String(c.binding).includes(" ") && c.out !== null),
       "manca una sequenza fra i casi degli accordi",
     ).toBe(true);
     expect(
-      fixture.accordo_canonico.some((c) => c.out === null),
+      fixture["accordo_canonico"].some((c) => c.out === null),
       "manca un accordo che questa app non sa premere",
     ).toBe(true);
 
@@ -138,14 +138,14 @@ describe("mirror delle regole TS↔Rust", () => {
     // secondo la domanda che gli si pone. Chi collassasse le due tolleranze in
     // una passerebbe metà dei casi con entrambe le risposte sbagliate — o
     // rifiutandosi di aprire un vault che contiene `CON.md`, o creandone uno.
-    const perPath = new Map<string, Set<string>>();
+    const forPath = new Map<string, Set<string>>();
     for (const c of fixture.name_fault) {
-      const chiave = String(c.path);
-      if (!perPath.has(chiave)) perPath.set(chiave, new Set());
-      perPath.get(chiave)?.add(String(c.out));
+      const key = String(c.path);
+      if (!forPath.has(key)) forPath.set(key, new Set());
+      forPath.get(key)?.add(String(c.out));
     }
     expect(
-      [...perPath.values()].some((esiti) => esiti.size > 1),
+      [...forPath.values()].some((outcomes) => outcomes.size > 1),
       "manca il nome che si può leggere e non si può creare: senza, le due tolleranze non sono distinte",
     ).toBe(true);
 
@@ -173,11 +173,11 @@ describe("mirror delle regole TS↔Rust", () => {
 
     // E la NFC sui nomi, che è il difetto esatto che la 0020 trovò sulle chiavi:
     // due scritture della stessa parola devono collassare sulla stessa forma.
-    const forme = fixture.normalized_name.map((c) => c.out);
+    const normalizedForms = fixture.normalized_name.map((c) => c.out);
     expect(
-      new Set(forme).size,
+      new Set(normalizedForms).size,
       "NFC e NFD dello stesso nome devono dare la stessa forma normalizzata",
-    ).toBeLessThan(forme.length);
+    ).toBeLessThan(normalizedForms.length);
 
     // E la maschera: il rename che esce dal soggetto è il caso che una lettura
     // plausibile (guardare il solo path d'arrivo) sbaglierebbe.

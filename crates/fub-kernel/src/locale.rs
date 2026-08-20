@@ -85,7 +85,7 @@ impl SystemLocale {
     pub fn get(&self) -> Locale {
         self.inner
             .read()
-            .map(|l| l.clone())
+            .map(|the| the.clone())
             .unwrap_or_else(|_| Locale::default())
     }
 
@@ -94,9 +94,9 @@ impl SystemLocale {
     pub fn publish(&self, locale: Locale) -> bool {
         match self.inner.write() {
             Ok(mut guard) => {
-                let cambiato = *guard != locale;
+                let changed = *guard != locale;
                 *guard = locale;
-                cambiato
+                changed
             }
             Err(_) => false,
         }
@@ -122,74 +122,74 @@ pub fn locale_settings() -> Vec<SettingSpec> {
     vec![
         SettingSpec::new(
             LANGUAGE,
-            Text::key(L_LANGUAGE),
+            Text::key(THE_LANGUAGE),
             SettingKind::Text {
                 default: AS_SYSTEM.into(),
             },
         )
-        .describing(Text::key(L_LANGUAGE_DESC))
-        .grouped(Text::key(L_GROUP)),
+        .describing(Text::key(THE_LANGUAGE_DESC))
+        .grouped(Text::key(THE_GROUP)),
         SettingSpec::new(
             TIMEZONE,
-            Text::key(L_TIMEZONE),
+            Text::key(THE_TIMEZONE),
             SettingKind::Text {
                 default: AS_SYSTEM.into(),
             },
         )
-        .describing(Text::key(L_TIMEZONE_DESC))
-        .grouped(Text::key(L_GROUP)),
+        .describing(Text::key(THE_TIMEZONE_DESC))
+        .grouped(Text::key(THE_GROUP)),
         SettingSpec::new(
             FIRST_DAY,
-            Text::key(L_FIRST_DAY),
+            Text::key(THE_FIRST_DAY),
             SettingKind::Choice {
                 default: AS_SYSTEM.into(),
                 options: vec![
                     UiOption::new(AS_SYSTEM, Text::key(AS_SYSTEM_KEY)),
-                    UiOption::new("monday", Text::key(L_MONDAY)),
-                    UiOption::new("saturday", Text::key(L_SATURDAY)),
-                    UiOption::new("sunday", Text::key(L_SUNDAY)),
+                    UiOption::new("monday", Text::key(THE_MONDAY)),
+                    UiOption::new("saturday", Text::key(THE_SATURDAY)),
+                    UiOption::new("sunday", Text::key(THE_SUNDAY)),
                 ],
             },
         )
-        .describing(Text::key(L_FIRST_DAY_DESC))
-        .grouped(Text::key(L_GROUP)),
+        .describing(Text::key(THE_FIRST_DAY_DESC))
+        .grouped(Text::key(THE_GROUP)),
         SettingSpec::new(
             HOUR_CYCLE,
-            Text::key(L_HOUR_CYCLE),
+            Text::key(THE_HOUR_CYCLE),
             SettingKind::Choice {
                 default: AS_SYSTEM.into(),
                 options: vec![
                     UiOption::new(AS_SYSTEM, Text::key(AS_SYSTEM_KEY)),
-                    UiOption::new("h23", Text::key(L_H23)),
-                    UiOption::new("h12", Text::key(L_H12)),
+                    UiOption::new("h23", Text::key(THE_H23)),
+                    UiOption::new("h12", Text::key(THE_H12)),
                 ],
             },
         )
-        .describing(Text::key(L_HOUR_CYCLE_DESC))
-        .grouped(Text::key(L_GROUP)),
+        .describing(Text::key(THE_HOUR_CYCLE_DESC))
+        .grouped(Text::key(THE_GROUP)),
     ]
 }
 
 /// Le chiavi delle stringhe del locale. Nude, come vuole il contratto: a
 /// qualificarle è l'host con l'id del componente che le porta — il core.
-const L_GROUP: &str = "locale.group";
+const THE_GROUP: &str = "locale.group";
 /// «Come il sistema»: pubblica, perché la dice anche una chiave che non è del
 /// locale — `appearance.theme` — e due traduzioni della stessa scelta in due
 /// tendine vicine sono la prima cosa che si nota.
 pub const AS_SYSTEM_KEY: &str = "locale.as_system";
-const L_LANGUAGE: &str = "locale.language";
-const L_LANGUAGE_DESC: &str = "locale.language.desc";
-const L_TIMEZONE: &str = "locale.timezone";
-const L_TIMEZONE_DESC: &str = "locale.timezone.desc";
-const L_FIRST_DAY: &str = "locale.first_day";
-const L_FIRST_DAY_DESC: &str = "locale.first_day.desc";
-const L_MONDAY: &str = "locale.first_day.monday";
-const L_SATURDAY: &str = "locale.first_day.saturday";
-const L_SUNDAY: &str = "locale.first_day.sunday";
-const L_HOUR_CYCLE: &str = "locale.hour_cycle";
-const L_HOUR_CYCLE_DESC: &str = "locale.hour_cycle.desc";
-const L_H23: &str = "locale.hour_cycle.h23";
-const L_H12: &str = "locale.hour_cycle.h12";
+const THE_LANGUAGE: &str = "locale.language";
+const THE_LANGUAGE_DESC: &str = "locale.language.desc";
+const THE_TIMEZONE: &str = "locale.timezone";
+const THE_TIMEZONE_DESC: &str = "locale.timezone.desc";
+const THE_FIRST_DAY: &str = "locale.first_day";
+const THE_FIRST_DAY_DESC: &str = "locale.first_day.desc";
+const THE_MONDAY: &str = "locale.first_day.monday";
+const THE_SATURDAY: &str = "locale.first_day.saturday";
+const THE_SUNDAY: &str = "locale.first_day.sunday";
+const THE_HOUR_CYCLE: &str = "locale.hour_cycle";
+const THE_HOUR_CYCLE_DESC: &str = "locale.hour_cycle.desc";
+const THE_H23: &str = "locale.hour_cycle.h23";
+const THE_H12: &str = "locale.hour_cycle.h12";
 
 /// Le stringhe delle impostazioni del locale, nelle due lingue che questo repo
 /// scrive.
@@ -205,66 +205,66 @@ const L_H12: &str = "locale.hour_cycle.h12";
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
         StringCatalog::new("it")
-            .with(L_GROUP, "Locale")
+            .with(THE_GROUP, "Locale")
             .with(AS_SYSTEM_KEY, "Come il sistema")
-            .with(L_LANGUAGE, "Lingua")
+            .with(THE_LANGUAGE, "Lingua")
             .with(
-                L_LANGUAGE_DESC,
+                THE_LANGUAGE_DESC,
                 "Il tag BCP-47 della lingua dell'interfaccia (`it`, `it-IT`, `en-US`). \
                  Vuoto = quella del sistema.",
             )
-            .with(L_TIMEZONE, "Fuso orario")
+            .with(THE_TIMEZONE, "Fuso orario")
             .with(
-                L_TIMEZONE_DESC,
+                THE_TIMEZONE_DESC,
                 "Il nome IANA del fuso (`Europe/Rome`). Vuoto = quello del sistema. \
                  Cambiarlo qui non cambia l'orologio del sistema: cambia come Fub \
                  mostra le date, e a che ora suonano le sveglie dei componenti \
                  che ne dichiarano una a un orario di parete.",
             )
-            .with(L_FIRST_DAY, "Primo giorno della settimana")
+            .with(THE_FIRST_DAY, "Primo giorno della settimana")
             .with(
-                L_FIRST_DAY_DESC,
+                THE_FIRST_DAY_DESC,
                 "Da che giorno comincia la settimana nel calendario.",
             )
-            .with(L_MONDAY, "Lunedì")
-            .with(L_SATURDAY, "Sabato")
-            .with(L_SUNDAY, "Domenica")
-            .with(L_HOUR_CYCLE, "Orologio")
+            .with(THE_MONDAY, "Lunedì")
+            .with(THE_SATURDAY, "Sabato")
+            .with(THE_SUNDAY, "Domenica")
+            .with(THE_HOUR_CYCLE, "Orologio")
             .with(
-                L_HOUR_CYCLE_DESC,
+                THE_HOUR_CYCLE_DESC,
                 "Se mostrare le ore da 0 a 23 o da 1 a 12 con AM/PM.",
             )
-            .with(L_H23, "24 ore")
-            .with(L_H12, "12 ore"),
+            .with(THE_H23, "24 ore")
+            .with(THE_H12, "12 ore"),
         StringCatalog::new("en")
-            .with(L_GROUP, "Locale")
+            .with(THE_GROUP, "Locale")
             .with(AS_SYSTEM_KEY, "Same as system")
-            .with(L_LANGUAGE, "Language")
+            .with(THE_LANGUAGE, "Language")
             .with(
-                L_LANGUAGE_DESC,
+                THE_LANGUAGE_DESC,
                 "The BCP-47 tag of the interface language (`it`, `it-IT`, `en-US`). \
                  Empty = the system one.",
             )
-            .with(L_TIMEZONE, "Time zone")
+            .with(THE_TIMEZONE, "Time zone")
             .with(
-                L_TIMEZONE_DESC,
+                THE_TIMEZONE_DESC,
                 "The IANA name of the time zone (`Europe/Rome`). Empty = the system \
                  one. Changing it here does not change the system clock: it changes \
                  how Fub shows dates, and what time wall-clock alarms declared by \
                  components go off.",
             )
-            .with(L_FIRST_DAY, "First day of the week")
-            .with(L_FIRST_DAY_DESC, "Which day the calendar week starts on.")
-            .with(L_MONDAY, "Monday")
-            .with(L_SATURDAY, "Saturday")
-            .with(L_SUNDAY, "Sunday")
-            .with(L_HOUR_CYCLE, "Clock")
+            .with(THE_FIRST_DAY, "First day of the week")
+            .with(THE_FIRST_DAY_DESC, "Which day the calendar week starts on.")
+            .with(THE_MONDAY, "Monday")
+            .with(THE_SATURDAY, "Saturday")
+            .with(THE_SUNDAY, "Sunday")
+            .with(THE_HOUR_CYCLE, "Clock")
             .with(
-                L_HOUR_CYCLE_DESC,
+                THE_HOUR_CYCLE_DESC,
                 "Whether to show hours from 0 to 23 or from 1 to 12 with AM/PM.",
             )
-            .with(L_H23, "24-hour")
-            .with(L_H12, "12-hour"),
+            .with(THE_H23, "24-hour")
+            .with(THE_H12, "12-hour"),
     ]
 }
 
@@ -282,12 +282,12 @@ pub fn catalog() -> Vec<StringCatalog> {
 /// configurazione sbagliata a mano non deve rendere l'app muta. Che quel valore
 /// non sia stato accettato lo dice il pannello, che mostra ciò che vale.
 pub fn resolve(system: &Locale, mut setting: impl FnMut(&str) -> Option<String>) -> Locale {
-    let scelto = |chiave: &str, setting: &mut dyn FnMut(&str) -> Option<String>| {
-        setting(chiave).filter(|v| v != AS_SYSTEM)
+    let selected = |key: &str, setting: &mut dyn FnMut(&str) -> Option<String>| {
+        setting(key).filter(|v| v != AS_SYSTEM)
     };
 
-    let language = scelto(LANGUAGE, &mut setting).unwrap_or_else(|| system.language.clone());
-    let timezone = scelto(TIMEZONE, &mut setting);
+    let language = selected(LANGUAGE, &mut setting).unwrap_or_else(|| system.language.clone());
+    let timezone = selected(TIMEZONE, &mut setting);
     // L'offset segue il **fuso**: se l'utente ne ha scelto uno diverso da quello
     // del sistema, l'offset del sistema non è più il suo, e tenerlo darebbe la
     // combinazione peggiore di tutte — il nome di un fuso con l'ora di un altro.
@@ -302,10 +302,10 @@ pub fn resolve(system: &Locale, mut setting: impl FnMut(&str) -> Option<String>)
         language,
         timezone: timezone.unwrap_or_else(|| system.timezone.clone()),
         utc_offset_minutes,
-        first_day_of_week: scelto(FIRST_DAY, &mut setting)
+        first_day_of_week: selected(FIRST_DAY, &mut setting)
             .and_then(|v| weekday_from_key(&v))
             .unwrap_or(system.first_day_of_week),
-        hour_cycle: scelto(HOUR_CYCLE, &mut setting)
+        hour_cycle: selected(HOUR_CYCLE, &mut setting)
             .and_then(|v| hour_cycle_from_key(&v))
             .unwrap_or(system.hour_cycle),
     }
@@ -340,7 +340,7 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn sistema() -> Locale {
+    fn system_state() -> Locale {
         Locale {
             language: "en-US".into(),
             timezone: "America/New_York".into(),
@@ -350,8 +350,8 @@ mod tests {
         }
     }
 
-    fn store(coppie: &[(&str, &str)]) -> impl FnMut(&str) -> Option<String> {
-        let map: BTreeMap<String, String> = coppie
+    fn store(pairs: &[(&str, &str)]) -> impl FnMut(&str) -> Option<String> {
+        let map: BTreeMap<String, String> = pairs
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
@@ -360,14 +360,14 @@ mod tests {
 
     #[test]
     fn with_nobody_choosing_the_system_wins_whole() {
-        assert_eq!(resolve(&sistema(), store(&[])), sistema());
+        assert_eq!(resolve(&system_state(), store(&[])), system_state());
     }
 
     /// La ragione per cui le chiavi sono cinque e non una: scegliere la lingua
     /// senza toccare il fuso.
     #[test]
     fn the_language_moves_without_the_clock() {
-        let r = resolve(&sistema(), store(&[(LANGUAGE, "it-IT")]));
+        let r = resolve(&system_state(), store(&[(LANGUAGE, "it-IT")]));
         assert_eq!(r.language, "it-IT");
         assert_eq!(r.timezone, "America/New_York");
         assert_eq!(r.utc_offset_minutes, -300);
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn an_empty_value_means_as_the_system_and_not_empty() {
-        let r = resolve(&sistema(), store(&[(LANGUAGE, ""), (TIMEZONE, "")]));
+        let r = resolve(&system_state(), store(&[(LANGUAGE, ""), (TIMEZONE, "")]));
         assert_eq!(r.language, "en-US");
         assert_eq!(r.timezone, "America/New_York");
     }
@@ -386,21 +386,21 @@ mod tests {
     /// tenersi quello sbagliato.
     #[test]
     fn choosing_another_zone_drops_the_offset_of_this_one() {
-        let r = resolve(&sistema(), store(&[(TIMEZONE, "Europe/Rome")]));
+        let r = resolve(&system_state(), store(&[(TIMEZONE, "Europe/Rome")]));
         assert_eq!(r.timezone, "Europe/Rome");
         assert_eq!(
             r.utc_offset_minutes, 0,
-            "l'offset di New York non è quello di Roma"
+            "New York's offset is not Rome's"
         );
         // Riscegliere quello del sistema lo riprende.
-        let r = resolve(&sistema(), store(&[(TIMEZONE, "America/New_York")]));
+        let r = resolve(&system_state(), store(&[(TIMEZONE, "America/New_York")]));
         assert_eq!(r.utc_offset_minutes, -300);
     }
 
     #[test]
     fn a_value_nobody_can_read_falls_back_instead_of_failing() {
         let r = resolve(
-            &sistema(),
+            &system_state(),
             store(&[(FIRST_DAY, "martedì"), (HOUR_CYCLE, "h24")]),
         );
         assert_eq!(r.first_day_of_week, Weekday::Sunday);
@@ -411,11 +411,11 @@ mod tests {
     fn the_shell_speaks_and_everyone_sees_it() {
         let system = SystemLocale::default();
         assert_eq!(system.get(), Locale::default());
-        assert!(system.publish(sistema()));
-        assert_eq!(system.get(), sistema());
+        assert!(system.publish(system_state()));
+        assert_eq!(system.get(), system_state());
         assert!(
-            !system.publish(sistema()),
-            "ripubblicare lo stesso non è un cambio"
+            !system.publish(system_state()),
+            "republishing the same value is not a change"
         );
     }
 
@@ -428,12 +428,12 @@ mod tests {
             assert_eq!(
                 spec.scope,
                 fub_abi::settings::SettingScope::Vault,
-                "{} non viaggerebbe col vault",
+                "would not travel with the vault: {}",
                 spec.key
             );
             assert!(
                 !spec.program_writable,
-                "{} è scrivibile da un programma",
+                "is writable by a program: {}",
                 spec.key
             );
         }

@@ -173,7 +173,7 @@ pub fn splits_newline(source: &str, at: usize) -> bool {
 /// dice dove guardare. `std::fs::read_to_string` risponde «stream did not
 /// contain valid UTF-8», che è la stessa informazione meno il dove.
 pub fn decode(bytes: &[u8]) -> Result<&str, usize> {
-    std::str::from_utf8(bytes).map_err(|e| e.valid_up_to())
+    std::str::from_utf8(bytes).map_err(|and| and.valid_up_to())
 }
 
 /// `(\r\n, \n da solo, \r da solo)`. Un `\n` preceduto da `\r` conta per la
@@ -183,11 +183,11 @@ fn counts(source: &str) -> (usize, usize, usize) {
     let mut crlf = 0;
     let mut lf = 0;
     let mut cr = 0;
-    for (i, b) in bytes.iter().enumerate() {
+    for (the, b) in bytes.iter().enumerate() {
         match b {
-            b'\n' if i > 0 && bytes[i - 1] == b'\r' => crlf += 1,
+            b'\n' if the > 0 && bytes[the - 1] == b'\r' => crlf += 1,
             b'\n' => lf += 1,
-            b'\r' if bytes.get(i + 1) != Some(&b'\n') => cr += 1,
+            b'\r' if bytes.get(the + 1) != Some(&b'\n') => cr += 1,
             _ => {}
         }
     }
@@ -199,21 +199,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn il_bom_si_misura_e_si_salta_senza_toccare_il_sorgente() {
-        let con = "\u{feff}# Titolo\n";
-        let senza = "# Titolo\n";
-        assert_eq!(bom_len(con), 3);
-        assert_eq!(bom_len(senza), 0);
-        assert_eq!(strip_bom(con), senza);
-        assert_eq!(strip_bom(senza), senza);
+    fn the_bom_is_measures_and_is_skips_without_touch_the_source() {
+        let with = "\u{feff}# Titolo\n";
+        let without = "# Titolo\n";
+        assert_eq!(bom_len(with), 3);
+        assert_eq!(bom_len(without), 0);
+        assert_eq!(strip_bom(with), without);
+        assert_eq!(strip_bom(without), without);
         // La vista è traslata di `bom_len`, e il sorgente è intatto: è
         // l'invariante su cui poggiano gli span del parser.
-        assert_eq!(&con[bom_len(con)..], strip_bom(con));
-        assert_eq!(con.len(), senza.len() + 3);
+        assert_eq!(&with[bom_len(with)..], strip_bom(with));
+        assert_eq!(with.len(), without.len() + 3);
     }
 
     #[test]
-    fn un_bom_a_meta_file_non_e_un_bom() {
+    fn a_bom_a_metadata_file_not_and_a_bom() {
         // `U+FEFF` è un carattere come un altro se non sta in testa: toglierlo
         // sarebbe modificare il contenuto.
         let s = "testo\u{feff}altro";
@@ -222,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn i_terminatori_si_riconoscono_anche_quando_sono_misti() {
+    fn the_terminators_is_recognize_also_when_are_mixed() {
         assert_eq!(Newline::of("a\nb\n"), Newline::Lf);
         assert_eq!(Newline::of("a\r\nb\r\n"), Newline::Crlf);
         assert_eq!(Newline::of("a\rb\r"), Newline::Cr);
@@ -234,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn chi_genera_una_riga_usa_quella_del_file() {
+    fn who_generates_a_row_uses_that_of_the_file() {
         assert_eq!(line_break("a\nb\n"), "\n");
         assert_eq!(line_break("a\r\nb\r\n"), "\r\n");
         assert_eq!(line_break("a\rb\r"), "\r");
@@ -248,13 +248,13 @@ mod tests {
     }
 
     #[test]
-    fn il_confine_di_un_crlf_non_e_un_confine_di_carattere() {
+    fn the_boundary_of_a_crlf_not_a_character() {
         let source = "prima\r\ndopo\r\n";
-        let dentro = source.find('\n').expect("c'è un \\n");
+        let within = source.find('\n').expect("c'è un \\n");
         // Il caso ostile: per `str` è un offset perfettamente valido…
-        assert!(source.is_char_boundary(dentro));
+        assert!(source.is_char_boundary(within));
         // …e per un edit è la metà di un terminatore di riga.
-        assert!(splits_newline(source, dentro));
+        assert!(splits_newline(source, within));
         // Gli estremi e i confini veri non lo sono.
         assert!(!splits_newline(source, 0));
         assert!(!splits_newline(source, source.len()));
@@ -265,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn cio_che_non_e_utf8_dice_dove_smette_di_esserlo() {
+    fn that_that_not_and_utf8_says_where_stops_of_being_it() {
         assert_eq!(decode(b"testo normale"), Ok("testo normale"));
         // `0xFF` non compare in nessuna sequenza UTF-8 valida.
         assert_eq!(decode(b"buono\xffcattivo"), Err(5));

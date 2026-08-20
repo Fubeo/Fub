@@ -69,12 +69,12 @@ impl Vault {
     }
 }
 
-fn istanza() -> ViewInstance {
+fn instance() -> ViewInstance {
     ViewInstance::only(HISTORY_VIEW)
 }
 
 /// Le voci disegnate: `(quando, quanto)`.
-fn voci(tree: &UiNode) -> Vec<(String, Option<String>)> {
+fn entries(tree: &UiNode) -> Vec<(String, Option<String>)> {
     fn walk(node: &UiNode, out: &mut Vec<(String, Option<String>)>) {
         if let UiKind::ListItem {
             title, subtitle, ..
@@ -82,8 +82,8 @@ fn voci(tree: &UiNode) -> Vec<(String, Option<String>)> {
         {
             out.push((title.to_string(), subtitle.as_ref().map(|s| s.to_string())));
         }
-        for figlio in node.children() {
-            walk(figlio, out);
+        for child in node.children() {
+            walk(child, out);
         }
     }
     let mut out = Vec::new();
@@ -100,15 +100,15 @@ fn voci(tree: &UiNode) -> Vec<(String, Option<String>)> {
 /// primo bottone con l'istante dell'ultima versione — non si vedeva; prendendo
 /// il payload che il pannello disegna, le due metà tornano a essere della stessa
 /// riga e il banco misura un ripristino vero.
-fn ripristina(tree: &UiNode) -> Option<ActionRef> {
+fn restores(tree: &UiNode) -> Option<ActionRef> {
     fn walk(node: &UiNode, out: &mut Vec<ActionRef>) {
         if let UiKind::Button { label, action, .. } = &node.kind {
             if label == "Ripristina" {
                 out.push(action.clone());
             }
         }
-        for figlio in node.children() {
-            walk(figlio, out);
+        for child in node.children() {
+            walk(child, out);
         }
     }
     let mut out = Vec::new();
@@ -117,7 +117,7 @@ fn ripristina(tree: &UiNode) -> Option<ActionRef> {
 }
 
 /// Ogni testo dell'albero, per chiedere *cosa dice* senza legarsi alla forma.
-fn detto(tree: &UiNode) -> String {
+fn said(tree: &UiNode) -> String {
     fn walk(node: &UiNode, out: &mut Vec<String>) {
         match &node.kind {
             UiKind::Text { content } => out.push(content.to_string()),
@@ -125,8 +125,8 @@ fn detto(tree: &UiNode) -> String {
             UiKind::Section { title, .. } => out.push(title.to_string()),
             _ => {}
         }
-        for figlio in node.children() {
-            walk(figlio, out);
+        for child in node.children() {
+            walk(child, out);
         }
     }
     let mut out = Vec::new();
@@ -134,79 +134,79 @@ fn detto(tree: &UiNode) -> String {
     out.join("\n")
 }
 
-fn guarda(ws: &mut Workspace, id: &str) {
+fn watches(ws: &mut Workspace, id: &str) {
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new(id))),
     ));
 }
 
 #[test]
-fn la_view_elenca_le_versioni_senza_ricevere_lo_store() {
+fn the_view_lists_the_versions_without_receive_the_store() {
     let vault = Vault::new();
     let mut ws = vault.open();
 
     // Nessuna nota aperta: è uno stato, non un errore.
-    assert!(detto(&ws.render_view(&istanza()).unwrap()).contains("Nessuna nota"));
+    assert!(said(&ws.render_view(&instance()).unwrap()).contains("Nessuna nota"));
 
     ws.write_document(&DocId::new("Uno.md"), "primo\n", WriteBase::Dictated)
         .expect("creata");
-    guarda(&mut ws, "Uno.md");
+    watches(&mut ws, "Uno.md");
     ws.write_document(&DocId::new("Uno.md"), "secondo\n", WriteBase::Dictated)
         .expect("riscritta");
 
-    let tree = ws.render_view(&istanza()).unwrap();
-    let voci = voci(&tree);
+    let tree = ws.render_view(&instance()).unwrap();
+    let entries = entries(&tree);
     assert!(
-        voci.len() >= 2,
-        "due scritture, almeno due versioni: {voci:?}"
+        entries.len() >= 2,
+        "due scritture, almeno due versioni: {entries:?}"
     );
     // La più recente porta «adesso» invece della dimensione: ripristinarla è
     // riscrivere il file con ciò che c'è già.
-    assert_eq!(voci[0].1.as_deref(), Some("adesso"));
+    assert_eq!(entries[0].1.as_deref(), Some("adesso"));
 }
 
 #[test]
-fn lanteprima_si_ricorda_fra_due_ridisegni() {
+fn preview_is_remembers_between_two_redraws() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
         .expect("creata");
-    guarda(&mut ws, "Uno.md");
+    watches(&mut ws, "Uno.md");
     ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
         .expect("riscritta");
 
-    let tree = ws.render_view(&istanza()).unwrap();
+    let tree = ws.render_view(&instance()).unwrap();
     // La più vecchia: è quella che vale la pena guardare. Il payload è **quello
     // disegnato**, non uno ricostruito qui: un banco che se lo scrive da sé
     // passerebbe verde anche se il pannello smettesse di metterci dentro ciò che
     // ci mette, e proverebbe metà di ciò che dichiara.
-    let azione = ultima_azione(&tree);
+    let action = last_action(&tree);
     let update = ws
         .view_action(
-            &istanza(),
-            UiAction::new(azione.action.0).with_payload(azione.payload),
+            &instance(),
+            UiAction::new(action.action.0).with_payload(action.payload),
         )
         .expect("anteprima");
     let ViewUpdate::Replace { root } = update else {
         panic!("l'anteprima si disegna")
     };
-    assert!(detto(&root).contains("com'era"), "{}", detto(&root));
+    assert!(said(&root).contains("com'era"), "{}", said(&root));
 
     // E sopravvive al ridisegno, che è la ragione per cui sta nello stato di
     // vista e non nell'albero: chi la sta leggendo salva, e il pannello si
     // ridisegna sotto.
-    let tree = ws.render_view(&istanza()).unwrap();
-    assert!(detto(&tree).contains("com'era"));
+    let tree = ws.render_view(&instance()).unwrap();
+    assert!(said(&tree).contains("com'era"));
 
-    ws.view_action(&istanza(), UiAction::new("close_preview"))
+    ws.view_action(&instance(), UiAction::new("close_preview"))
         .expect("chiusa");
-    let tree = ws.render_view(&istanza()).unwrap();
-    assert!(!detto(&tree).contains("com'era"));
+    let tree = ws.render_view(&instance()).unwrap();
+    assert!(!said(&tree).contains("com'era"));
 }
 
 /// L'azione della versione più vecchia disegnata, **col payload che il pannello
 /// le ha messo addosso**.
-fn ultima_azione(tree: &UiNode) -> ActionRef {
+fn last_action(tree: &UiNode) -> ActionRef {
     fn walk(node: &UiNode, out: &mut Vec<ActionRef>) {
         if let UiKind::ListItem {
             action: Some(a), ..
@@ -214,8 +214,8 @@ fn ultima_azione(tree: &UiNode) -> ActionRef {
         {
             out.push(a.clone());
         }
-        for figlio in node.children() {
-            walk(figlio, out);
+        for child in node.children() {
+            walk(child, out);
         }
     }
     let mut out = Vec::new();
@@ -224,8 +224,8 @@ fn ultima_azione(tree: &UiNode) -> ActionRef {
 }
 
 /// L'istante della versione più vecchia disegnata.
-fn ultimo_ts(tree: &UiNode) -> u64 {
-    ultima_azione(tree)
+fn last_ts(tree: &UiNode) -> u64 {
+    last_action(tree)
         .payload
         .get("ts")
         .and_then(|v| v.as_u64())
@@ -233,12 +233,12 @@ fn ultimo_ts(tree: &UiNode) -> u64 {
 }
 
 #[test]
-fn ripristinare_passa_dal_registro_e_si_annulla() {
+fn restore_passes_from_the_record_and_is_cancels() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
         .expect("creata");
-    guarda(&mut ws, "Uno.md");
+    watches(&mut ws, "Uno.md");
     ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
         .expect("riscritta");
 
@@ -249,11 +249,11 @@ fn ripristinare_passa_dal_registro_e_si_annulla() {
         "`{VERSION_RESTORE}` non è nel registro"
     );
 
-    let tree = ws.render_view(&istanza()).unwrap();
-    let azione = ripristina(&tree).expect("il bottone c'è");
+    let tree = ws.render_view(&instance()).unwrap();
+    let action = restores(&tree).expect("il bottone c'è");
     ws.view_action(
-        &istanza(),
-        UiAction::new(azione.action.0).with_payload(azione.payload),
+        &instance(),
+        UiAction::new(action.action.0).with_payload(action.payload),
     )
     .expect("ripristino");
     assert_eq!(
@@ -276,14 +276,14 @@ fn ripristinare_passa_dal_registro_e_si_annulla() {
 /// succede in un lotto —, quindi il vecchio codice non si fermava a un errore:
 /// riportava indietro `Due.md` in silenzio.
 #[test]
-fn un_ripristino_disegnato_su_unaltra_nota_non_scrive_su_questa() {
+fn a_restore_drawn_on_another_notes_not_writes_on_this() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.write_document(&DocId::new("Uno.md"), "uno com'era\n", WriteBase::Dictated)
         .expect("creata");
     ws.write_document(&DocId::new("Due.md"), "due com'era\n", WriteBase::Dictated)
         .expect("creata");
-    guarda(&mut ws, "Uno.md");
+    watches(&mut ws, "Uno.md");
     ws.write_document(&DocId::new("Uno.md"), "uno com'è\n", WriteBase::Dictated)
         .expect("riscritta");
     ws.write_document(&DocId::new("Due.md"), "due com'è\n", WriteBase::Dictated)
@@ -291,13 +291,13 @@ fn un_ripristino_disegnato_su_unaltra_nota_non_scrive_su_questa() {
 
     // 1. Il pannello si disegna su `Uno.md`, e il bottone si porta dietro la
     //    nota su cui è stato disegnato.
-    let azione = ripristina(&ws.render_view(&istanza()).unwrap()).expect("il bottone c'è");
+    let action = restores(&ws.render_view(&instance()).unwrap()).expect("il bottone c'è");
     // 2. La nota attiva cambia. Il ridisegno arriverà, ma non è ancora arrivato.
-    guarda(&mut ws, "Due.md");
+    watches(&mut ws, "Due.md");
     // 3. Il click parte dal pannello vecchio.
     ws.view_action(
-        &istanza(),
-        UiAction::new(azione.action.0).with_payload(azione.payload),
+        &instance(),
+        UiAction::new(action.action.0).with_payload(action.payload),
     )
     .expect("un click scaduto non è un errore: è un click che non significa");
 
@@ -320,17 +320,17 @@ fn un_ripristino_disegnato_su_unaltra_nota_non_scrive_su_questa() {
 /// contenuto a cui si tornerebbe è quello che il ripristino stesso ha appena
 /// scritto.
 #[test]
-fn linverso_di_un_ripristino_e_dichiarato_dal_comando() {
+fn inverse_of_a_restore_and_declared_from_the_command() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
         .expect("creata");
-    guarda(&mut ws, "Uno.md");
+    watches(&mut ws, "Uno.md");
     ws.write_document(&DocId::new("Uno.md"), "com'è\n", WriteBase::Dictated)
         .expect("riscritta");
-    let ts = ultimo_ts(&ws.render_view(&istanza()).unwrap());
+    let ts = last_ts(&ws.render_view(&instance()).unwrap());
 
-    let esito = ws
+    let outcome = ws
         .invoke_command(
             VERSION_RESTORE,
             serde_json::json!({ "doc": "Uno.md", "ts": ts }),
@@ -345,7 +345,7 @@ fn linverso_di_un_ripristino_e_dichiarato_dal_comando() {
 
     // Si invoca **quello che il comando ha dichiarato**, non uno ricostruito
     // qui: è la promessa che si vuole provare.
-    let undo = esito
+    let undo = outcome
         .undo
         .expect("il ripristino dichiara come si torna indietro");
     let [fub_abi::command::UndoStep::Command { command, args }] = &undo.steps[..] else {

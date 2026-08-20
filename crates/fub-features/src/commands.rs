@@ -65,11 +65,11 @@ pub const SELECTION_WIKILINK: &str = "selection.wikilink";
 /// Sostituisci in tutte le note.
 pub const VAULT_REPLACE: &str = "vault.replace";
 /// Crea una nota.
-pub const NOTE_CREATE: &str = "note.create";
+pub const NOTES_CREATE: &str = "note.create";
 /// Rinomina/sposta una nota (e i wikilink che la nominano).
-pub const NOTE_RENAME: &str = "note.rename";
+pub const NOTES_RENAME: &str = "note.rename";
 /// Sposta una nota nel cestino.
-pub const NOTE_TRASH: &str = "note.trash";
+pub const NOTES_TRASH: &str = "note.trash";
 /// Ripristina una voce del cestino.
 pub const TRASH_RESTORE: &str = "trash.restore";
 /// Svuota il cestino.
@@ -77,7 +77,7 @@ pub const TRASH_EMPTY: &str = "trash.empty";
 /// Sposta N note in una cartella, un `note.rename` alla volta.
 pub const VAULT_ARCHIVE: &str = "vault.archive";
 /// Spunta (o de-spunta) un task.
-pub const NOTE_TASK_TOGGLE: &str = "note.task.toggle";
+pub const NOTES_TASK_TOGGLE: &str = "note.task.toggle";
 /// Cambia un'impostazione (§11.1).
 pub const SETTINGS_SET: &str = "settings.set";
 /// Riporta un'impostazione a ciò che valeva prima che qualcuno decidesse.
@@ -98,10 +98,10 @@ pub const SETTINGS_NS: &str = "settings.export";
 /// domanda del registro dei formati, che è del kernel e non è (ancora) una
 /// capacità: finché non lo è, questo comando dichiara la propria convenzione
 /// invece di indovinare quella di qualcun altro. Chi vuole un'altra estensione
-/// la scrive nel nome.
-const SENZA_TITOLO: &str = "Senza titolo";
-const ESTENSIONE_PREDEFINITA: &str = "md";
+const UNTITLED: &str = "Untitled";
+const DEFAULT_EXTENSION: &str = "md";
 
+/// la scrive nel nome.
 /// Un comando del core, col titolo e la descrizione presi dal catalogo.
 ///
 /// Le chiavi si **derivano dall'id** — `vault.replace` diventa
@@ -118,49 +118,49 @@ const ESTENSIONE_PREDEFINITA: &str = "md";
 /// Al suo posto c'è un presidio che vale di più, perché copre anche le chiavi
 /// costanti — `ogni_chiave_dichiarata_ha_una_voce`, in fondo a questo file:
 /// cammina sulle spec vere e pretende che ogni chiave che producono abbia una
-/// voce in **tutte** le lingue del catalogo.
-fn comando(id: &str) -> CommandSpec {
+fn command(id: &str) -> CommandSpec {
     CommandSpec::new(id, Text::key(format!("{id}.title")))
         .describing(Text::key(format!("{id}.desc")))
 }
 
-/// Un parametro, con le chiavi derivate da comando e nome.
-fn parametro(comando: &str, name: &str, kind: ParamKind) -> ParamSpec {
-    ParamSpec::new(name, Text::key(format!("{comando}.{name}.title")), kind)
-        .describing(Text::key(format!("{comando}.{name}.desc")))
+/// voce in **tutte** le lingue del catalogo.
+fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
+    ParamSpec::new(name, Text::key(format!("{command}.{name}.title")), kind)
+        .describing(Text::key(format!("{command}.{name}.desc")))
 }
 
+/// Un parametro, con le chiavi derivate da comando e nome.
 /// Un messaggio con un argomento solo: la forma di due terzi delle righe che
-/// un comando scrive.
-fn uno(key: &str, name: &str, value: &str) -> Text {
+fn one(key: &str, name: &str, value: &str) -> Text {
     Text::message(key, vec![Arg::text(name, value)])
 }
 
-/// Un messaggio su due documenti: da chi a chi.
-fn due(key: &str, doc: &str, to: &str) -> Text {
+/// un comando scrive.
+fn two(key: &str, doc: &str, to: &str) -> Text {
     Text::message(key, vec![Arg::text(A_DOC, doc), Arg::text(A_TO, to)])
 }
 
-/// Un messaggio con un conteggio solo.
-fn conto(key: &str, n: usize) -> Text {
+/// Un messaggio su due documenti: da chi a chi.
+fn count_text(key: &str, n: usize) -> Text {
     Text::message(key, vec![Arg::int(A_COUNT, n as i64)])
 }
 
-/// Un messaggio con due conteggi.
-fn conto2(key: &str, a: &str, na: usize, b: &str, nb: usize) -> Text {
+/// Un messaggio con un conteggio solo.
+fn count_pair(key: &str, a: &str, na: usize, b: &str, nb: usize) -> Text {
     Text::message(key, vec![Arg::int(a, na as i64), Arg::int(b, nb as i64)])
 }
 
+/// Un messaggio con due conteggi.
 /// Il messaggio dell'archiviazione: quante note, in che cartella, e — se ce ne
-/// sono — quelle rimaste indietro.
-fn archivio(key: &str, n: usize, folder: &str, falliti: Option<String>) -> Text {
+fn archive(key: &str, n: usize, folder: &str, failed: Option<String>) -> Text {
     let mut args = vec![Arg::int(A_COUNT, n as i64), Arg::text(A_FOLDER, folder)];
-    if let Some(f) = falliti {
+    if let Some(f) = failed {
         args.push(Arg::text(A_FAILED, f));
     }
     Text::message(key, args)
 }
 
+/// sono — quelle rimaste indietro.
 /// Le chiavi delle righe che i comandi scrivono **mentre girano**: gli errori,
 /// i riassunti di un piano, e ciò che si dice quando è andata.
 ///
@@ -171,26 +171,25 @@ fn archivio(key: &str, n: usize, folder: &str, falliti: Option<String>) -> Text 
 ///
 /// I prefissi dicono **quando** si leggono, ed è l'unica cosa che serve sapere
 /// per tradurle: `E_` mentre qualcosa non si può fare, `Y_` in simulazione
-/// (*se* lo facessi), `P_` nel riassunto di un piano, `D_` a cose fatte.
 const E_NO_ACTIVE_PANE: &str = "err.no_active_pane";
-const E_NO_OPEN_NOTE: &str = "err.no_open_note";
-const E_NOTHING_SELECTED: &str = "err.nothing_selected";
+const AND_NO_OPEN_NOTES: &str = "err.no_open_note";
+const AND_NOTHING_SELECTED: &str = "err.nothing_selected";
 const E_EMPTY_SELECTION: &str = "err.empty_selection";
 const E_DIRTY_SELECTION: &str = "err.dirty_selection";
 const E_SELECTION_OUTSIDE: &str = "err.selection_outside";
-const E_SELECTION_HAS_LINK: &str = "err.selection_has_link";
+const AND_SELECTION_HAS_LINK: &str = "err.selection_has_link";
 const E_EMPTY_FIND: &str = "err.empty_find";
 const E_EMPTY_TO: &str = "err.empty_to";
-const E_NO_NOTE_GIVEN: &str = "err.no_note_given";
-const E_NOT_IN_TRASH: &str = "err.not_in_trash";
-const E_TASK_NO_NOTE: &str = "err.task_no_note";
-const E_TASK_NO_POSITION: &str = "err.task_no_position";
-const E_TASK_WRONG_PANE: &str = "err.task_wrong_pane";
-const E_TASK_NO_CARET: &str = "err.task_no_caret";
-const E_TASK_DIRTY_BUFFER: &str = "err.task_dirty_buffer";
-const E_TASK_NOT_FOUND: &str = "err.task_not_found";
-const E_NOT_A_TOGGLE: &str = "err.not_a_toggle";
-const E_NOT_A_NUMBER: &str = "err.not_a_number";
+const AND_NO_NOTES_GIVEN: &str = "err.no_note_given";
+const AND_NOT_IN_TRASH: &str = "err.not_in_trash";
+const AND_TASK_NO_NOTES: &str = "err.task_no_note";
+const AND_TASK_NO_POSITION: &str = "err.task_no_position";
+const AND_TASK_WRONG_PANE: &str = "err.task_wrong_pane";
+const AND_TASK_NO_CARET: &str = "err.task_no_caret";
+const AND_TASK_DIRTY_BUFFER: &str = "err.task_dirty_buffer";
+const AND_TASK_NOT_FOUND: &str = "err.task_not_found";
+const AND_NOT_A_TOGGLE: &str = "err.not_a_toggle";
+const AND_NOT_A_NUMBER: &str = "err.not_a_number";
 const E_UNDECLARED_KEY: &str = "err.undeclared_key";
 const E_NOT_PROGRAM_WRITABLE: &str = "err.not_program_writable";
 const E_NOT_JSON: &str = "err.not_json";
@@ -231,17 +230,17 @@ const D_SETTINGS_EXPORT: &str = "done.settings_export";
 const D_SETTINGS_IMPORT: &str = "done.settings_import";
 const D_SETTINGS_IMPORT_PARTIAL: &str = "done.settings_import_partial";
 const D_UNDONE: &str = "done.undone";
+/// (*se* lo facessi), `P_` nel riassunto di un piano, `D_` a cose fatte.
 /// Annullato per intero, ma **l'operazione era già a metà** (§23.14): non è un
 /// guasto di adesso, è la notizia che il giorno in cui è stata fatta non tutto
-/// era riuscito — e quindi non tutto torna indietro.
 const D_UNDONE_OF_PARTIAL: &str = "done.undone_of_partial";
+/// era riuscito — e quindi non tutto torna indietro.
 /// L'annullamento **stesso** si è fermato a un passo, e i passi dopo non sono
-/// stati provati.
 const D_UNDONE_PARTIAL: &str = "done.undone_partial";
 const D_NOTHING_TO_UNDO: &str = "done.nothing_to_undo";
 const P_UNDO: &str = "plan.undo";
 
-/// Le etichette dell'annullamento: cosa si disferebbe, non cosa è successo.
+/// stati provati.
 const U_WIKILINK: &str = "undo.wikilink";
 const U_WIKILINK_MANY: &str = "undo.wikilink.many";
 const U_REPLACE: &str = "undo.replace";
@@ -252,7 +251,7 @@ const U_RESTORE: &str = "undo.restore";
 const U_ARCHIVE: &str = "undo.archive";
 const U_TASK: &str = "undo.task";
 
-/// I nomi degli argomenti.
+/// Le etichette dell'annullamento: cosa si disferebbe, non cosa è successo.
 const A_DOC: &str = "doc";
 const A_TO: &str = "to";
 const A_TEXT: &str = "text";
@@ -270,12 +269,13 @@ const A_FAILED: &str = "failed";
 const A_FOLDER: &str = "folder";
 const A_AT: &str = "at";
 const A_WHAT: &str = "what";
+/// I nomi degli argomenti.
 /// I due conti di un esito parziale (§23.14): quante cose c'erano davanti e
 /// quante sono cambiate. Stanno insieme perché una da sola non si legge —
-/// «undici» non dice niente finché non c'è «su dodici».
 const A_ATTEMPTED: &str = "attempted";
 const A_DONE: &str = "done";
 
+/// «undici» non dice niente finché non c'è «su dodici».
 /// Le stringhe dei comandi: quindici titoli, quindici descrizioni,
 /// ventisei etichette di parametro e le righe che un comando scrive quando ha
 /// finito.
@@ -284,12 +284,11 @@ const A_DONE: &str = "done";
 /// palette è **la** superficie in cui un utente legge prosa scritta da un
 /// componente, e finché queste righe erano `&str` dentro le spec, la palette
 /// era italiana per chiunque — compreso chi aveva scelto `en` nelle
-/// impostazioni e vedeva già il resto in inglese.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![catalogo_it(), catalogo_en()]
+    vec![catalog_it(), catalog_en()]
 }
 
-fn catalogo_it() -> StringCatalog {
+fn catalog_it() -> StringCatalog {
     StringCatalog::new("it")
         .with("search.open.title", "Cerca nel vault")
         .with(
@@ -489,8 +488,8 @@ fn catalogo_it() -> StringCatalog {
             "L'oggetto JSON `{{\"chiave\": valore}}`.",
         )
         .with(E_NO_ACTIVE_PANE, "Nessun pannello attivo.")
-        .with(E_NO_OPEN_NOTE, "Nessuna nota aperta nel pannello attivo.")
-        .with(E_NOTHING_SELECTED, "Niente di selezionato.")
+        .with(AND_NO_OPEN_NOTES, "Nessuna nota aperta nel pannello attivo.")
+        .with(AND_NOTHING_SELECTED, "Niente di selezionato.")
         .with(
             E_EMPTY_SELECTION,
             "La selezione è vuota: non c'è testo da trasformare.",
@@ -504,7 +503,7 @@ fn catalogo_it() -> StringCatalog {
             "La selezione non sta dentro il documento.",
         )
         .with(
-            E_SELECTION_HAS_LINK,
+            AND_SELECTION_HAS_LINK,
             "La selezione contiene già un riferimento.",
         )
         .with(
@@ -513,38 +512,38 @@ fn catalogo_it() -> StringCatalog {
         )
         .with(E_EMPTY_TO, "`to` non può essere vuoto.")
         .with(
-            E_NO_NOTE_GIVEN,
+            AND_NO_NOTES_GIVEN,
             "Nessuna nota indicata e nessuna nota aperta nel pannello attivo.",
         )
-        .with(E_NOT_IN_TRASH, "`{entry}` non è nel cestino.")
+        .with(AND_NOT_IN_TRASH, "`{entry}` non è nel cestino.")
         .with(
-            E_TASK_NO_NOTE,
+            AND_TASK_NO_NOTES,
             "Nessuna nota: né in `doc`, né nel pannello attivo.",
         )
         .with(
-            E_TASK_NO_POSITION,
+            AND_TASK_NO_POSITION,
             "Nessuna posizione in `at`, e nessun pannello attivo da cui prenderla.",
         )
         .with(
-            E_TASK_WRONG_PANE,
+            AND_TASK_WRONG_PANE,
             "`at` non c'è e il cursore non è in {doc}: dire su quale nota agire \
              senza dire dove non basta.",
         )
-        .with(E_TASK_NO_CARET, "Nessun cursore nel pannello attivo.")
+        .with(AND_TASK_NO_CARET, "Nessun cursore nel pannello attivo.")
         .with(
-            E_TASK_DIRTY_BUFFER,
+            AND_TASK_DIRTY_BUFFER,
             "Il buffer ha modifiche non salvate: salva prima di spuntare, o dì la \
              posizione in `at`.",
         )
         .with(
-            E_TASK_NOT_FOUND,
+            AND_TASK_NOT_FOUND,
             "Nessuna voce di task alla posizione {at} di {doc}.",
         )
         .with(
-            E_NOT_A_TOGGLE,
+            AND_NOT_A_TOGGLE,
             "`{value}` non è un interruttore (`true` o `false`).",
         )
-        .with(E_NOT_A_NUMBER, "`{value}` non è un numero.")
+        .with(AND_NOT_A_NUMBER, "`{value}` non è un numero.")
         .with(
             E_UNDECLARED_KEY,
             "Nessuno ha dichiarato l'impostazione `{key}`.",
@@ -612,11 +611,11 @@ fn catalogo_it() -> StringCatalog {
             D_SETTINGS_IMPORT_PARTIAL,
             "Impostazioni applicate: {count} · Saltate: {skipped} ({reasons})",
         )
+// impostazioni e vedeva già il resto in inglese.
         // --- l'annullamento (§13.3) ---------------------------------------
         //
         // Le etichette `undo.*` dicono **cosa si disferebbe**, non cosa è
         // successo: sono la frase che si legge in un menu, mesi dopo, e per
-        // questo cominciano dal verbo di ciò che tornerebbe indietro.
         .with("vault.undo.title", "Annulla l'ultima operazione")
         .with(
             "vault.undo.desc",
@@ -652,7 +651,7 @@ fn catalogo_it() -> StringCatalog {
         .with(U_TASK, "la task spuntata in {doc}")
 }
 
-fn catalogo_en() -> StringCatalog {
+fn catalog_en() -> StringCatalog {
     StringCatalog::new("en")
         .with("search.open.title", "Search the vault")
         .with(
@@ -849,8 +848,8 @@ fn catalogo_en() -> StringCatalog {
             "The JSON object `{{\"key\": value}}`.",
         )
         .with(E_NO_ACTIVE_PANE, "No active pane.")
-        .with(E_NO_OPEN_NOTE, "No note open in the active pane.")
-        .with(E_NOTHING_SELECTED, "Nothing selected.")
+        .with(AND_NO_OPEN_NOTES, "No note open in the active pane.")
+        .with(AND_NOTHING_SELECTED, "Nothing selected.")
         .with(
             E_EMPTY_SELECTION,
             "The selection is empty: there is no text to transform.",
@@ -864,7 +863,7 @@ fn catalogo_en() -> StringCatalog {
             "The selection is not inside the document.",
         )
         .with(
-            E_SELECTION_HAS_LINK,
+            AND_SELECTION_HAS_LINK,
             "The selection already contains a reference.",
         )
         .with(
@@ -873,35 +872,35 @@ fn catalogo_en() -> StringCatalog {
         )
         .with(E_EMPTY_TO, "`to` cannot be empty.")
         .with(
-            E_NO_NOTE_GIVEN,
+            AND_NO_NOTES_GIVEN,
             "No note given and no note open in the active pane.",
         )
-        .with(E_NOT_IN_TRASH, "`{entry}` is not in the trash.")
+        .with(AND_NOT_IN_TRASH, "`{entry}` is not in the trash.")
         .with(
-            E_TASK_NO_NOTE,
+            AND_TASK_NO_NOTES,
             "No note: neither in `doc`, nor in the active pane.",
         )
         .with(
-            E_TASK_NO_POSITION,
+            AND_TASK_NO_POSITION,
             "No position in `at`, and no active pane to take it from.",
         )
         .with(
-            E_TASK_WRONG_PANE,
+            AND_TASK_WRONG_PANE,
             "`at` is missing and the cursor is not in {doc}: saying which note to \
              act on without saying where is not enough.",
         )
-        .with(E_TASK_NO_CARET, "No cursor in the active pane.")
+        .with(AND_TASK_NO_CARET, "No cursor in the active pane.")
         .with(
-            E_TASK_DIRTY_BUFFER,
+            AND_TASK_DIRTY_BUFFER,
             "The buffer has unsaved changes: save before ticking, or say the \
              position in `at`.",
         )
-        .with(E_TASK_NOT_FOUND, "No task item at position {at} of {doc}.")
+        .with(AND_TASK_NOT_FOUND, "No task item at position {at} of {doc}.")
         .with(
-            E_NOT_A_TOGGLE,
+            AND_NOT_A_TOGGLE,
             "`{value}` is not a toggle (`true` or `false`).",
         )
-        .with(E_NOT_A_NUMBER, "`{value}` is not a number.")
+        .with(AND_NOT_A_NUMBER, "`{value}` is not a number.")
         .with(E_UNDECLARED_KEY, "Nobody has declared the setting `{key}`.")
         .with(
             E_NOT_PROGRAM_WRITABLE,
@@ -996,59 +995,60 @@ fn catalogo_en() -> StringCatalog {
         .with(U_TASK, "the task ticked in {doc}")
 }
 
+        // questo cominciano dal verbo di ciò che tornerebbe indietro.
 /// I comandi ufficiali. Senza stato: tutto ciò che gli serve lo chiede
-/// all'host, come farebbe un plugin.
 #[derive(Default)]
 pub struct CoreCommands;
 
 impl CoreCommands {
+/// all'host, come farebbe un plugin.
     /// Le spec, anche fuori dal trait: chi disegna una palette nei test le
-    /// legge senza montare un workspace.
     pub fn specs() -> Vec<CommandSpec> {
         vec![
+    /// legge senza montare un workspace.
             // Senza accordo, e non per distrazione: `Mod-Shift-f` è della shell,
             // che con quel tasto porta il pannello della ricerca sotto gli occhi
             // — la cosa che fa Obsidian e che le dita hanno già imparato. Questo
             // comando vuole una `query` **obbligatoria**: premere un tasto per
             // farsi aprire un modulo da compilare è il gesto sbagliato, mentre
             // dalla palette — che i parametri li sa chiedere — è esattamente il
-            // gesto giusto. Il perché sta nella 0081.
-            comando(SEARCH_OPEN)
-                .with_param(parametro(SEARCH_OPEN, "query", ParamKind::Text).required()),
-            comando(SELECTION_WIKILINK).with_scope(CommandScope::writing(CommandReach::Document)),
-            comando(VAULT_REPLACE)
-                .with_param(parametro(VAULT_REPLACE, "find", ParamKind::Text).required())
-                .with_param(parametro(VAULT_REPLACE, "replace", ParamKind::Text).required())
-                .with_param(parametro(VAULT_REPLACE, "whole_word", ParamKind::Bool))
-                .with_param(parametro(VAULT_REPLACE, "docs", ParamKind::Documents))
+            command(SEARCH_OPEN)
+                .with_param(parameter(SEARCH_OPEN, "query", ParamKind::Text).required()),
+            command(SELECTION_WIKILINK).with_scope(CommandScope::writing(CommandReach::Document)),
+            command(VAULT_REPLACE)
+                .with_param(parameter(VAULT_REPLACE, "find", ParamKind::Text).required())
+                .with_param(parameter(VAULT_REPLACE, "replace", ParamKind::Text).required())
+                .with_param(parameter(VAULT_REPLACE, "whole_word", ParamKind::Bool))
+                .with_param(parameter(VAULT_REPLACE, "docs", ParamKind::Documents))
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
+            // gesto giusto. Il perché sta nella 0081.
+            command(NOTES_CREATE)
+                .with_param(parameter(NOTES_CREATE, "name", ParamKind::Text))
             // --- strutturali (decisione 0013) ---------------------------------------
-            comando(NOTE_CREATE)
-                .with_param(parametro(NOTE_CREATE, "name", ParamKind::Text))
-                // Una nota sola, e il cestino la rende reversibile.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            comando(NOTE_RENAME)
-                .with_param(parametro(NOTE_RENAME, "doc", ParamKind::Document).required())
-                .with_param(parametro(NOTE_RENAME, "to", ParamKind::Text).required())
+            command(NOTES_RENAME)
+                .with_param(parameter(NOTES_RENAME, "doc", ParamKind::Document).required())
+                .with_param(parameter(NOTES_RENAME, "to", ParamKind::Text).required())
+                // Una nota sola, e il cestino la rende reversibile.
                 // `Documents` e non `Document`: una rinomina riscrive anche
                 // ogni nota che linkava la vecchia. Dichiarare `Document`
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
+            command(NOTES_TRASH)
+                .with_param(parameter(NOTES_TRASH, "doc", ParamKind::Document))
                 // sarebbe la bugia che il piano del dry-run smaschera.
-                .with_scope(CommandScope::writing(CommandReach::Documents)),
-            comando(NOTE_TRASH)
-                .with_param(parametro(NOTE_TRASH, "doc", ParamKind::Document))
                 // Reversibile, e non per ottimismo: la reversibilità è
-                // `trash.restore`, che sta in questo stesso registro.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            comando(TRASH_RESTORE)
-                .with_param(parametro(TRASH_RESTORE, "entry", ParamKind::Text).required())
-                .with_param(parametro(TRASH_RESTORE, "to", ParamKind::Text))
+            command(TRASH_RESTORE)
+                .with_param(parameter(TRASH_RESTORE, "entry", ParamKind::Text).required())
+                .with_param(parameter(TRASH_RESTORE, "to", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
-            comando(TRASH_EMPTY)
+            command(TRASH_EMPTY)
                 .with_scope(CommandScope::writing(CommandReach::Vault).irreversible()),
-            comando(VAULT_ARCHIVE)
-                .with_param(parametro(VAULT_ARCHIVE, "docs", ParamKind::Documents).required())
-                .with_param(parametro(VAULT_ARCHIVE, "folder", ParamKind::Text))
+            command(VAULT_ARCHIVE)
+                .with_param(parameter(VAULT_ARCHIVE, "docs", ParamKind::Documents).required())
+                .with_param(parameter(VAULT_ARCHIVE, "folder", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
+                // `trash.restore`, che sta in questo stesso registro.
             // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
             // quella la tiene l'editor, che spunta le todo delle righe
             // selezionate nel **buffer** (`editor-commands.ts`). Sono due
@@ -1056,11 +1056,11 @@ impl CoreCommands {
             // entrambi la stessa combinazione vorrebbe dire che l'accordo
             // fa due cose a seconda di chi vince la corsa. Chi la invoca
             // oggi è chi ha una posizione da dare: la palette, un altro
-            // comando, un plugin.
-            comando(NOTE_TASK_TOGGLE)
-                .with_param(parametro(NOTE_TASK_TOGGLE, "doc", ParamKind::Document))
-                .with_param(parametro(NOTE_TASK_TOGGLE, "at", ParamKind::Numbers))
+            command(NOTES_TASK_TOGGLE)
+                .with_param(parameter(NOTES_TASK_TOGGLE, "doc", ParamKind::Document))
+                .with_param(parameter(NOTES_TASK_TOGGLE, "at", ParamKind::Numbers))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
+            // comando, un plugin.
             // --- le impostazioni (§11.1) --------------------------------
             //
             // Sono comandi e non codice dell'app per la ragione della
@@ -1072,22 +1072,22 @@ impl CoreCommands {
             // Il **raggio** è `CommandReach::Settings`, che era vocabolario
             // senza clienti dalla decisione 0010: questi sono i suoi primi
             // quattro, e chi invoca sa da lì che sta per toccare la
-            // configurazione e non delle note.
-            comando(SETTINGS_SET)
-                .with_param(parametro(SETTINGS_SET, "key", ParamKind::Text).required())
-                .with_param(parametro(SETTINGS_SET, "value", ParamKind::Text).required())
+            command(SETTINGS_SET)
+                .with_param(parameter(SETTINGS_SET, "key", ParamKind::Text).required())
+                .with_param(parameter(SETTINGS_SET, "value", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
-            comando(SETTINGS_RESET)
-                .with_param(parametro(SETTINGS_RESET, "key", ParamKind::Text).required())
+            command(SETTINGS_RESET)
+                .with_param(parameter(SETTINGS_RESET, "key", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
-            comando(SETTINGS_EXPORT).with_scope(CommandScope {
+            command(SETTINGS_EXPORT).with_scope(CommandScope {
                 writes: false,
                 reach: CommandReach::Settings,
                 reversible: true,
             }),
-            comando(SETTINGS_IMPORT)
-                .with_param(parametro(SETTINGS_IMPORT, "json", ParamKind::Text).required())
+            command(SETTINGS_IMPORT)
+                .with_param(parameter(SETTINGS_IMPORT, "json", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Settings)),
+            // configurazione e non delle note.
             // --- l'annullamento (§13.3) ---------------------------------
             //
             // La scorciatoia **non** è `Mod-z`: quella è dell'editor, che
@@ -1101,7 +1101,7 @@ impl CoreCommands {
             // voce in cima alla pila, non la spec — e dichiarare il raggio
             // stretto sarebbe la bugia che il piano smaschera. Reversibile no:
             // il redo è un'altra pila, e oggi non c'è.
-            comando(VAULT_UNDO)
+            command(VAULT_UNDO)
                 .with_keybinding("Mod-Alt-z")
                 .with_scope(CommandScope::writing(CommandReach::Vault).irreversible()),
         ]
@@ -1134,13 +1134,13 @@ impl CommandProvider for CoreCommands {
             }
             SELECTION_WIKILINK => selection_wikilink(mode, host),
             VAULT_REPLACE => vault_replace(args, mode, host),
-            NOTE_CREATE => note_create(args, mode, host),
-            NOTE_RENAME => note_rename(args, mode, host),
-            NOTE_TRASH => note_trash(args, mode, host),
+            NOTES_CREATE => notes_create(args, mode, host),
+            NOTES_RENAME => notes_rename(args, mode, host),
+            NOTES_TRASH => notes_trash(args, mode, host),
             TRASH_RESTORE => trash_restore(args, mode, host),
             TRASH_EMPTY => trash_empty(mode, host),
             VAULT_ARCHIVE => vault_archive(args, mode, host),
-            NOTE_TASK_TOGGLE => note_task_toggle(args, mode, host),
+            NOTES_TASK_TOGGLE => notes_task_toggle(args, mode, host),
             VAULT_UNDO => vault_undo(mode, host),
             SETTINGS_SET => settings_set(args, mode, host),
             SETTINGS_RESET => settings_reset(args, mode, host),
@@ -1179,47 +1179,47 @@ fn selection_wikilink(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let stato = |key: &str| PluginError::BadArgs(Text::key(key));
+    let state = |key: &str| PluginError::BadArgs(Text::key(key));
     let context = host
         .active_context()
-        .ok_or_else(|| stato(E_NO_ACTIVE_PANE))?;
-    let doc = context.doc.ok_or_else(|| stato(E_NO_OPEN_NOTE))?;
+        .ok_or_else(|| state(E_NO_ACTIVE_PANE))?;
+    let doc = context.doc.ok_or_else(|| state(AND_NO_OPEN_NOTES))?;
     let selections = context
         .selections
-        .ok_or_else(|| stato(E_NOTHING_SELECTED))?;
+        .ok_or_else(|| state(AND_NOTHING_SELECTED))?;
     // La regola dello span della decisione 0007, nel posto in cui la 0093 l'ha
     // messa: senza ancoraggio le coordinate valgono per il buffer e non per il
     // file, e non ne vale **nessuna** — il buffer è uno. Scrivere lì
     // significa tagliare i byte sbagliati proprio mentre l'utente scrive.
-    let ancorate = selections
+    let anchored = selections
         .placed()
-        .ok_or_else(|| stato(E_DIRTY_SELECTION))?;
+        .ok_or_else(|| state(E_DIRTY_SELECTION))?;
 
     let source = host.read_document(&doc)?;
     // Il testo che verrà sostituito è quello del **file**, non quello del
     // buffer: sono lo stesso testo (uno span esiste solo a buffer pulito), e
     // prenderlo da qui lo rende vero per costruzione invece che per fiducia.
-    let mut avvolgere = Vec::new();
-    for selezione in ancorate.all() {
-        if selezione.is_empty() {
+    let mut wrap = Vec::new();
+    for selection in anchored.all() {
+        if selection.is_empty() {
             continue;
         }
         let selected = source
-            .get(selezione.span.start..selezione.span.end)
-            .ok_or_else(|| stato(E_SELECTION_OUTSIDE))?;
+            .get(selection.span.start..selection.span.end)
+            .ok_or_else(|| state(E_SELECTION_OUTSIDE))?;
         if selected.contains('[') || selected.contains(']') {
-            return Err(stato(E_SELECTION_HAS_LINK));
+            return Err(state(AND_SELECTION_HAS_LINK));
         }
-        avvolgere.push((selezione.span, selected));
+        wrap.push((selection.span, selected));
     }
     // Nessuna delle N ha del testo: sono tutti cursori, e un cursore non si
     // avvolge. È lo stesso rifiuto di prima, contato su tutte invece che su una.
-    let (_, primo_testo) = *avvolgere.first().ok_or_else(|| stato(E_EMPTY_SELECTION))?;
-    let quante = avvolgere.len();
+    let (_, first_text) = *wrap.first().ok_or_else(|| state(E_EMPTY_SELECTION))?;
+    let count = wrap.len();
 
     let request = EditRequest::new(
         host.document_revision(&doc)?,
-        avvolgere
+        wrap
             .iter()
             .map(|(span, selected)| TextEdit::replace(*span, format!("[[{selected}]]")))
             .collect(),
@@ -1227,19 +1227,19 @@ fn selection_wikilink(
     // Una selezione sola si racconta col testo che ha dentro; N si raccontano
     // col numero, perché elencarli non aiuterebbe nessuno a capire cosa sta per
     // succedere.
-    let racconto = |uno: &str, molte: &str| {
-        if quante == 1 {
-            Text::message(uno, vec![Arg::text(A_TEXT, primo_testo)])
+    let message = |one: &str, molte: &str| {
+        if count == 1 {
+            Text::message(one, vec![Arg::text(A_TEXT, first_text)])
         } else {
-            Text::message(molte, vec![Arg::int(A_COUNT, quante as i64)])
+            Text::message(molte, vec![Arg::int(A_COUNT, count as i64)])
         }
     };
     if mode.is_dry_run() {
-        let cosa = if quante == 1 {
+        let what = if count == 1 {
             Text::message(
                 P_WIKILINK,
                 vec![
-                    Arg::text(A_TEXT, primo_testo),
+                    Arg::text(A_TEXT, first_text),
                     Arg::text(A_DOC, doc.as_str()),
                 ],
             )
@@ -1247,14 +1247,14 @@ fn selection_wikilink(
             Text::message(
                 P_WIKILINK_MANY,
                 vec![
-                    Arg::int(A_COUNT, quante as i64),
+                    Arg::int(A_COUNT, count as i64),
                     Arg::text(A_DOC, doc.as_str()),
                 ],
             )
         };
         return Ok(
             CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
-                cosa,
+                what,
                 vec![PlannedEdit::new(doc, request)],
             ))),
         );
@@ -1262,7 +1262,7 @@ fn selection_wikilink(
 
     let report = host.apply_edit(&doc, request)?;
     let undo = Undo::of_edits(
-        racconto(U_WIKILINK, U_WIKILINK_MANY),
+        message(U_WIKILINK, U_WIKILINK_MANY),
         vec![PlannedEdit::new(doc.clone(), report.inverse())],
     );
     // Dov'è finito il testo nuovo: è il rapporto a saperlo, nelle coordinate
@@ -1276,7 +1276,7 @@ fn selection_wikilink(
         None => CommandEffect::Done,
     };
     Ok(
-        CommandOutcome::notify(racconto(D_WIKILINK, D_WIKILINK_MANY))
+        CommandOutcome::notify(message(D_WIKILINK, D_WIKILINK_MANY))
             .undoable(undo)
             .with_effect(effect),
     )
@@ -1338,7 +1338,7 @@ fn vault_replace(
         ));
     }
 
-    let summary = conto2(P_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, planned.len());
+    let summary = count_pair(P_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, planned.len());
 
     if mode.is_dry_run() {
         return Ok(CommandOutcome::done()
@@ -1349,33 +1349,33 @@ fn vault_replace(
     // il vault fra due stati senza dire quali note sono in quale. Ciò che non è
     // riuscito si nomina — un conflitto qui è la cosa che il piano esisteva per
     // rendere visibile, non un dettaglio da inghiottire.
-    let mut fatte = 0usize;
-    let mut falliti: Vec<Failure> = Vec::new();
+    let mut made = 0usize;
+    let mut failed: Vec<Failure> = Vec::new();
     // L'inverso si raccoglie **mentre si scrive**, non ricalcolandolo dopo: il
     // rapporto di ogni modifica porta le coordinate nuove e il testo tolto, e
     // `EditReport::inverse` ne fa una richiesta come le altre (decisione 0008).
     // Ricalcolarlo dopo vorrebbe dire rileggere N documenti e cercarci dentro
     // il testo sostituito — cioè indovinare quali occorrenze erano le nostre.
-    let mut indietro: Vec<PlannedEdit> = Vec::new();
-    let davanti = planned.len();
+    let mut back: Vec<PlannedEdit> = Vec::new();
+    let before = planned.len();
     for PlannedEdit { doc, edit } in planned {
         match host.apply_edit(&doc, edit) {
             Ok(report) => {
-                fatte += 1;
-                indietro.push(PlannedEdit::new(doc, report.inverse()));
+                made += 1;
+                back.push(PlannedEdit::new(doc, report.inverse()));
             }
-            Err(e) => falliti.push(Failure::of(doc, e)),
+            Err(and) => failed.push(Failure::of(doc, and)),
         }
     }
-    let notify = if falliti.is_empty() {
-        conto2(D_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, fatte)
+    let notify = if failed.is_empty() {
+        count_pair(D_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, made)
     } else {
         Text::message(
             D_REPLACE_PARTIAL,
             vec![
                 Arg::int(A_OCCURRENCES, occorrenze as i64),
-                Arg::int(A_NOTES, fatte as i64),
-                Arg::text(A_FAILED, perche(&falliti)),
+                Arg::int(A_NOTES, made as i64),
+                Arg::text(A_FAILED, why(&failed)),
             ],
         )
     };
@@ -1383,18 +1383,18 @@ fn vault_replace(
     // fino alla §23.14 era l'unica forma in cui questa notizia esisteva —
     // un'automazione che invocava `vault.replace` non aveva modo di sapere che
     // undici note su dodici erano cambiate, se non leggendo italiano.
-    let conto = Partial::of(davanti, fatte, falliti);
+    let count = Partial::of(before, made, failed);
     // Anche una sostituzione **parziale** è annullabile, e per ciò che è
     // riuscito: è il verso giusto, perché è proprio quando qualcosa è andato
     // storto che si vuole tornare indietro. Le note fallite non hanno un
     // inverso da fare — non è successo niente, su di loro.
     let undo = Undo::of_edits(
-        conto2(U_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, fatte),
-        indietro,
+        count_pair(U_REPLACE, A_OCCURRENCES, occorrenze, A_NOTES, made),
+        back,
     );
     Ok(CommandOutcome::notify(notify)
         .undoable(undo)
-        .partially(conto))
+        .partially(count))
 }
 
 // ---------------------------------------------------------------------------
@@ -1412,16 +1412,16 @@ fn vault_replace(
 /// «Progetti/Idee» è un path senza estensione, «note.2026» è un nome con un
 /// punto in mezzo — e distinguerli guardando solo l'ultimo segmento è la stessa
 /// regola che usa il vault per il cestino.
-fn con_estensione(name: &str) -> String {
-    let ultimo = name.rsplit('/').next().unwrap_or(name);
-    if ultimo.contains('.') {
+fn with_extension(name: &str) -> String {
+    let last = name.rsplit('/').next().unwrap_or(name);
+    if last.contains('.') {
         name.to_string()
     } else {
-        format!("{name}.{ESTENSIONE_PREDEFINITA}")
+        format!("{name}.{DEFAULT_EXTENSION}")
     }
 }
 
-fn piano(summary: Text, docs: Vec<DocId>) -> CommandOutcome {
+fn plan(summary: Text, docs: Vec<DocId>) -> CommandOutcome {
     let plan = docs
         .into_iter()
         .fold(CommandPlan::of_edits(summary, Vec::new()), |p, d| {
@@ -1430,37 +1430,37 @@ fn piano(summary: Text, docs: Vec<DocId>) -> CommandOutcome {
     CommandOutcome::done().with_effect(CommandEffect::Plan(plan))
 }
 
-fn note_create(
+fn notes_create(
     args: Args<'_>,
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let richiesto = args.text("name").map(str::trim).filter(|n| !n.is_empty());
-    let id = match richiesto {
-        Some(name) => DocId::new(con_estensione(name)),
+    let requested = args.text("name").map(str::trim).filter(|n| !n.is_empty());
+    let id = match requested {
+        Some(name) => DocId::new(with_extension(name)),
         // Il nome libero lo chiede all'host: la convenzione D3 è una sola, e
         // sta nel vault che è l'unico a sapere cosa è occupato.
         None => host.free_name(&DocId::new(format!(
-            "{SENZA_TITOLO}.{ESTENSIONE_PREDEFINITA}"
+            "{UNTITLED}.{DEFAULT_EXTENSION}"
         ))),
     };
 
     if mode.is_dry_run() {
-        return Ok(piano(uno(P_CREATE, A_DOC, id.as_str()), vec![id]));
+        return Ok(plan(one(P_CREATE, A_DOC, id.as_str()), vec![id]));
     }
 
     // `create_document` e non `write_document`: se il path è occupato questo
     // comando deve fallire, non sovrascrivere una nota dell'utente.
     host.create_document(&id, "")?;
-    let notify = uno(D_CREATE, A_DOC, id.as_str());
+    let notify = one(D_CREATE, A_DOC, id.as_str());
     // L'inverso di «crea» è «cestina», ed è un comando che sta in questo stesso
     // registro: l'annullamento non ha bisogno di un verbo suo (§13.3). Che sia
     // il **cestino** e non una cancellazione definitiva non è prudenza — è che
     // l'inverso di un gesto reversibile deve restare reversibile, o annullare
     // sarebbe più distruttivo di ciò che annulla.
     let undo = Undo::by_command(
-        uno(U_CREATE, A_DOC, id.as_str()),
-        NOTE_TRASH,
+        one(U_CREATE, A_DOC, id.as_str()),
+        NOTES_TRASH,
         serde_json::json!({ "doc": id.as_str() }),
     );
     Ok(CommandOutcome::notify(notify)
@@ -1468,7 +1468,7 @@ fn note_create(
         .with_effect(CommandEffect::Navigate { doc: id }))
 }
 
-fn note_rename(
+fn notes_rename(
     args: Args<'_>,
     mode: InvokeMode,
     host: &mut dyn HostApi,
@@ -1481,7 +1481,7 @@ fn note_rename(
         .map(str::trim)
         .filter(|t| !t.is_empty())
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_EMPTY_TO)))?;
-    let to = DocId::new(con_estensione(to));
+    let to = DocId::new(with_extension(to));
 
     if mode.is_dry_run() {
         // L'insieme impattato di una rinomina non è «la nota»: sono anche tutte
@@ -1490,17 +1490,17 @@ fn note_rename(
         // una nota» quando le note toccate sono quaranta è un consenso
         // strappato — quindi i backlink si chiedono all'indice.
         let mut docs = vec![doc.clone(), to.clone()];
-        if let IndexResult::Backlinks(sorgenti) = host.query_index(IndexQuery::Backlinks {
+        if let IndexResult::Backlinks(sources) = host.query_index(IndexQuery::Backlinks {
             target: doc.clone(),
             page: None,
         })? {
-            for BacklinkRef { source, .. } in sorgenti.items {
+            for BacklinkRef { source, .. } in sources.items {
                 if !docs.contains(&source) {
                     docs.push(source);
                 }
             }
         }
-        return Ok(piano(due(P_RENAME, doc.as_str(), to.as_str()), docs));
+        return Ok(plan(two(P_RENAME, doc.as_str(), to.as_str()), docs));
     }
 
     host.rename_document(&doc, &to)?;
@@ -1520,16 +1520,16 @@ fn note_rename(
     // rimedio invece del male — come tutte le altre `undo.*`, questa nomina ciò
     // che è successo.
     let undo = Undo::by_command(
-        due(U_RENAME, doc.as_str(), to.as_str()),
-        NOTE_RENAME,
+        two(U_RENAME, doc.as_str(), to.as_str()),
+        NOTES_RENAME,
         serde_json::json!({ "doc": to.as_str(), "to": doc.as_str() }),
     );
     // Nessun `Navigate`: chi guardava quella nota la segue attraverso
     // `document-renamed`, e chi ne guardava un'altra non deve essere spostato.
-    Ok(CommandOutcome::notify(due(D_RENAME, doc.as_str(), to.as_str())).undoable(undo))
+    Ok(CommandOutcome::notify(two(D_RENAME, doc.as_str(), to.as_str())).undoable(undo))
 }
 
-fn note_trash(
+fn notes_trash(
     args: Args<'_>,
     mode: InvokeMode,
     host: &mut dyn HostApi,
@@ -1537,23 +1537,23 @@ fn note_trash(
     let doc = args
         .document("doc")
         .or_else(|| host.active_context().and_then(|c| c.doc))
-        .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_NOTE_GIVEN)))?;
+        .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
 
     if mode.is_dry_run() {
-        return Ok(piano(uno(P_TRASH, A_DOC, doc.as_str()), vec![doc]));
+        return Ok(plan(one(P_TRASH, A_DOC, doc.as_str()), vec![doc]));
     }
 
-    let cestinata = host.trash_document(&doc)?;
+    let trashed = host.trash_document(&doc)?;
     // L'inverso è il ripristino, **con il path d'origine dichiarato**: senza
     // `to`, un ripristino torna al nome originale, e se nel frattempo qualcuno
     // ha occupato quel path fallisce. Dirlo esplicitamente non cambia il caso
     // normale e rende leggibile ciò che l'annullamento promette.
     let undo = Undo::by_command(
-        uno(U_TRASH, A_DOC, doc.as_str()),
+        one(U_TRASH, A_DOC, doc.as_str()),
         TRASH_RESTORE,
-        serde_json::json!({ "entry": cestinata.as_str(), "to": doc.as_str() }),
+        serde_json::json!({ "entry": trashed.as_str(), "to": doc.as_str() }),
     );
-    Ok(CommandOutcome::notify(uno(D_TRASH, A_DOC, doc.as_str())).undoable(undo))
+    Ok(CommandOutcome::notify(one(D_TRASH, A_DOC, doc.as_str())).undoable(undo))
 }
 
 fn trash_restore(
@@ -1568,36 +1568,36 @@ fn trash_restore(
         .text("to")
         .map(str::trim)
         .filter(|t| !t.is_empty())
-        .map(|t| DocId::new(con_estensione(t)));
+        .map(|t| DocId::new(with_extension(t)));
 
     if mode.is_dry_run() {
         // Dove tornerebbe lo sa il cestino, non chi invoca: si legge, così il
         // piano nomina il documento vero anche quando `to` non c'è.
-        let voce = host
+        let entry = host
             .list_trash()?
             .into_iter()
-            .find(|e| e.id == entry)
-            .ok_or_else(|| PluginError::BadArgs(uno(E_NOT_IN_TRASH, A_ENTRY, entry.as_str())))?;
-        let target = to.unwrap_or(voce.original);
+            .find(|and| and.id == entry)
+            .ok_or_else(|| PluginError::BadArgs(one(AND_NOT_IN_TRASH, A_ENTRY, entry.as_str())))?;
+        let target = to.unwrap_or(entry.original);
         let summary = Text::message(
             P_RESTORE,
             vec![
-                Arg::text(A_ENTRY, entry.as_str()),
+                Arg::text(A_ENTRY, entry.id.as_str()),
                 Arg::text(A_DOC, target.as_str()),
             ],
         );
-        return Ok(piano(summary, vec![target]));
+        return Ok(plan(summary, vec![target]));
     }
 
     let target = host.restore_document(&entry, to)?;
-    let notify = uno(D_RESTORE, A_DOC, target.as_str());
+    let notify = one(D_RESTORE, A_DOC, target.as_str());
     // E l'inverso del ripristino è di nuovo il cestino: le due voci si
     // rimandano l'una all'altra, che è ciò che rende annullabile anche
     // l'annullamento — se non fosse per la bandiera che dice che un
     // annullamento non entra in pila, sarebbe un ciclo.
     let undo = Undo::by_command(
-        uno(U_RESTORE, A_DOC, target.as_str()),
-        NOTE_TRASH,
+        one(U_RESTORE, A_DOC, target.as_str()),
+        NOTES_TRASH,
         serde_json::json!({ "doc": target.as_str() }),
     );
     Ok(CommandOutcome::notify(notify)
@@ -1619,14 +1619,14 @@ fn trash_restore(
 /// raccontarla. Dice quindi la sola cosa vera che può dire senza toccare niente.
 fn vault_undo(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
     if mode.is_dry_run() {
-        return Ok(piano(Text::key(P_UNDO), Vec::new()));
+        return Ok(plan(Text::key(P_UNDO), Vec::new()));
     }
-    let Some(fatto) = host.undo_last()? else {
+    let Some(done) = host.undo_last()? else {
         // Niente da annullare non è un errore: è la risposta normale a un vault
         // appena aperto, e chi la riceve ha una frase da mostrare.
         return Ok(CommandOutcome::notify(Text::key(D_NOTHING_TO_UNDO)));
     };
-    let cosa = Arg::text(A_WHAT, fatto.label.as_literal().unwrap_or_default());
+    let what = Arg::text(A_WHAT, done.label.as_literal().unwrap_or_default());
 
     // I due conti dicono cose diverse e **si scelgono in quest'ordine** (§23.14):
     // se l'annullamento si è fermato, quella è la notizia di adesso e va detta
@@ -1638,27 +1638,27 @@ fn vault_undo(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome
     // Il `partial` dell'esito porta **sempre** quello dell'annullamento, anche
     // quando la frase parla dell'operazione: è ciò che è successo adesso, ed è
     // l'unico dei due su cui chi automatizza può fare qualcosa.
-    let messaggio = match (&fatto.replay, &fatto.operation) {
+    let message = match (&done.replay, &done.operation) {
         (Some(replay), _) => Text::message(
             D_UNDONE_PARTIAL,
             vec![
-                cosa,
+                what,
                 Arg::int(A_DONE, replay.done as i64),
                 Arg::int(A_ATTEMPTED, replay.attempted as i64),
-                Arg::text(A_FAILED, perche(&replay.failures)),
+                Arg::text(A_FAILED, why(&replay.failures)),
             ],
         ),
-        (None, Some(operazione)) => Text::message(
+        (None, Some(operation)) => Text::message(
             D_UNDONE_OF_PARTIAL,
             vec![
-                cosa,
-                Arg::int(A_DONE, operazione.done as i64),
-                Arg::int(A_ATTEMPTED, operazione.attempted as i64),
+                what,
+                Arg::int(A_DONE, operation.done as i64),
+                Arg::int(A_ATTEMPTED, operation.attempted as i64),
             ],
         ),
-        (None, None) => Text::message(D_UNDONE, vec![cosa]),
+        (None, None) => Text::message(D_UNDONE, vec![what]),
     };
-    Ok(CommandOutcome::notify(messaggio).partially(fatto.replay))
+    Ok(CommandOutcome::notify(message).partially(done.replay))
 }
 
 /// Una chiave di impostazione che non è passata, col perché **e la sua specie**.
@@ -1670,10 +1670,10 @@ fn vault_undo(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome
 /// [`PermissionDenied`](PluginError::PermissionDenied) resta un permesso negato
 /// invece di appiattirsi in una stringa, e chi mostra l'esito può dire
 /// «l'amministratore l'ha bloccata» invece di «qualcosa è andato storto».
-fn chiave_saltata(key: &str, mut e: PluginError) -> Failure {
-    let dentro = e.message().to_string();
-    *e.message_mut() = format!("`{key}` ({dentro})").into();
-    Failure::other(e)
+fn skipped_key(key: &str, mut and: PluginError) -> Failure {
+    let within = and.message().to_string();
+    *and.message_mut() = format!("`{key}` ({within})").into();
+    Failure::other(and)
 }
 
 /// I perché dei guasti, in una riga: `«nota.md» (il documento è cambiato…)`.
@@ -1683,9 +1683,8 @@ fn chiave_saltata(key: &str, mut e: PluginError) -> Failure {
 /// scrive italiano cablato, e tradurre l'altra metà lascerebbe un messaggio
 /// mezzo in una lingua e mezzo nell'altra. Ciò che *è* traducibile viaggia
 /// intanto come dato, in [`CommandOutcome::partial`], dove chi disegna lo trova
-/// intero.
-fn perche(guasti: &[Failure]) -> String {
-    guasti
+fn why(failures: &[Failure]) -> String {
+    failures
         .iter()
         .map(|g| match &g.subject {
             Some(doc) => format!("«{doc}» ({})", g.error),
@@ -1697,27 +1696,28 @@ fn perche(guasti: &[Failure]) -> String {
 
 fn trash_empty(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
     if mode.is_dry_run() {
-        let voci = host.list_trash()?;
-        return Ok(piano(
-            conto(P_EMPTY_TRASH, voci.len()),
-            voci.into_iter().map(|e| e.id).collect(),
+        let entries = host.list_trash()?;
+        return Ok(plan(
+            count_text(P_EMPTY_TRASH, entries.len()),
+            entries.into_iter().map(|and| and.id).collect(),
         ));
     }
 
-    let quante = host.empty_trash()?;
-    Ok(CommandOutcome::notify(conto(
+    let count = host.empty_trash()?;
+    Ok(CommandOutcome::notify(count_text(
         D_EMPTY_TRASH,
-        quante as usize,
+        count as usize,
     )))
 }
 
+/// intero.
 // ---------------------------------------------------------------------------
 // vault.archive — il cliente di `run_command`
+
 // ---------------------------------------------------------------------------
+const ARCHIVE: &str = "Archivio";
 
 /// La cartella in cui archiviare, quando non è stata detta.
-const ARCHIVIO: &str = "Archivio";
-
 /// Sposta N note in una cartella **invocando `note.rename`**, non rinominando.
 ///
 /// È la forma che la decisione 0013 voleva provare: una macro non rifà ciò che un comando
@@ -1729,7 +1729,6 @@ const ARCHIVIO: &str = "Archivio";
 ///   con la chiamata — e il piano che ne esce è l'unione dei loro;
 /// - l'attore e il lotto restano quelli di chi ha chiesto: N rinomine, che sono
 ///   N riscritture di M sorgenti, sono **un** `batch-ended` e una riga sola
-///   nella storia di chi guarda gli eventi.
 fn vault_archive(
     args: Args<'_>,
     mode: InvokeMode,
@@ -1742,92 +1741,93 @@ fn vault_archive(
         .text("folder")
         .map(str::trim)
         .filter(|f| !f.is_empty())
-        .unwrap_or(ARCHIVIO)
+        .unwrap_or(ARCHIVE)
         .trim_end_matches('/')
         .to_string();
 
     let mut plans: Vec<CommandPlan> = Vec::new();
-    let mut fatte = 0usize;
-    let mut falliti: Vec<Failure> = Vec::new();
+    let mut made = 0usize;
+    let mut failed: Vec<Failure> = Vec::new();
+///   nella storia di chi guarda gli eventi.
     // I passi dell'annullamento della macro sono quelli dei comandi invocati.
     // È la terza cosa che si compone gratis passando da `run_command` — dopo il
     // piano e il lotto — e la sola che questa funzione deve **girare**: si
-    // torna indietro dall'ultima rinomina, non dalla prima.
-    let mut indietro: Vec<UndoStep> = Vec::new();
+    let mut back: Vec<UndoStep> = Vec::new();
 
     for doc in &docs {
-        let nome = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
-        let to = format!("{folder}/{nome}");
+        let name = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
+        let to = format!("{folder}/{name}");
         if to == doc.as_str() {
             continue; // già archiviata: non è un errore, è niente da fare
         }
         let args = serde_json::json!({ "doc": doc.as_str(), "to": to });
-        match host.run_command(NOTE_RENAME, args) {
+        match host.run_command(NOTES_RENAME, args) {
+    // torna indietro dall'ultima rinomina, non dalla prima.
             // In simulazione il comando invocato risponde col proprio piano —
             // non perché questa funzione glielo abbia chiesto, ma perché
-            // l'host in cui gira è già quello di una simulazione.
             Ok(CommandOutcome {
                 effect: CommandEffect::Plan(plan),
                 ..
             }) => plans.push(plan),
-            Ok(esito) => {
-                fatte += 1;
-                if let Some(undo) = esito.undo {
-                    indietro.extend(undo.steps);
+            Ok(outcome) => {
+                made += 1;
+                if let Some(undo) = outcome.undo {
+                    back.extend(undo.steps);
                 }
             }
-            Err(e) => falliti.push(Failure::of(doc.clone(), e)),
+            Err(and) => failed.push(Failure::of(doc.clone(), and)),
         }
     }
-    indietro.reverse();
+    back.reverse();
 
     if mode.is_dry_run() {
+            // l'host in cui gira è già quello di una simulazione.
         // L'unione dei piani dei passi. `docs` prima di `edits` perché è
         // l'ordine in cui le cose succederebbero, e `complete()` dell'host
+        let mut touched_docs: Vec<DocId> = Vec::new();
         // ricontrolla comunque che nessun edit nomini una nota assente.
-        let mut docs_toccati: Vec<DocId> = Vec::new();
         // La membership sta nell'insieme; l'ordine di prima comparsa lo
-        // dà comunque il Vec, che è l'ordine in cui i passi succederebbero.
-        let mut visti: HashSet<DocId> = HashSet::new();
+        let mut seen: HashSet<DocId> = HashSet::new();
         let mut edits: Vec<PlannedEdit> = Vec::new();
         for plan in plans {
             for d in plan.docs {
-                if visti.insert(d.clone()) {
-                    docs_toccati.push(d);
+                if seen.insert(d.clone()) {
+                    touched_docs.push(d);
                 }
             }
             edits.extend(plan.edits);
         }
-        let summary = archivio(P_ARCHIVE, docs.len(), &folder, None);
+        let summary = archive(P_ARCHIVE, docs.len(), &folder, None);
         let mut plan = CommandPlan::of_edits(summary, edits);
-        for d in docs_toccati {
+        for d in touched_docs {
             plan = plan.with_doc(d);
         }
         return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
     }
 
-    let notify = if falliti.is_empty() {
-        archivio(D_ARCHIVE, fatte, &folder, None)
+    let notify = if failed.is_empty() {
+        archive(D_ARCHIVE, made, &folder, None)
     } else {
-        archivio(D_ARCHIVE_PARTIAL, fatte, &folder, Some(perche(&falliti)))
+        archive(D_ARCHIVE_PARTIAL, made, &folder, Some(why(&failed)))
     };
+        // dà comunque il Vec, che è l'ordine in cui i passi succederebbero.
     // `docs.len()` e non `fatte + falliti.len()`: le note già nella cartella
     // sono state guardate e non c'era niente da fare, il che è esattamente il
     // resto che `Partial` lascia senza un campo. Contarle fuori direbbe «undici
-    // su undici» di un gesto che l'utente ha fatto su dodici note.
-    let conto = Partial::of(docs.len(), fatte, falliti);
+    let count = Partial::of(docs.len(), made, failed);
     Ok(CommandOutcome::notify(notify)
         .undoable(Undo {
-            label: archivio(U_ARCHIVE, fatte, &folder, None),
-            steps: indietro,
+            label: archive(U_ARCHIVE, made, &folder, None),
+            steps: back,
         })
-        .partially(conto))
+        .partially(count))
 }
 
+    // su undici» di un gesto che l'utente ha fatto su dodici note.
 // ---------------------------------------------------------------------------
 // note.task.toggle
-// ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
 /// Spunta il task che sta sotto una posizione: il **primo cliente one-shot** del
 /// modello parsato (§4.2, [decisione 0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)).
 ///
@@ -1853,20 +1853,20 @@ fn vault_archive(
 /// prodotto non ha ancora definito, e un toggle che li promuovesse a `[x]`
 /// deciderebbe al posto suo che «in corso» è più vicino a «fatto» che a «da
 /// fare». Toglierli è l'unica mossa reversibile: il simbolo che c'era lo sa
-/// ancora l'undo, mentre una semantica inventata non la disfa nessuno.
-fn note_task_toggle(
+fn notes_task_toggle(
     args: Args<'_>,
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let stato = |text: Text| PluginError::BadArgs(text);
+    let state = |text: Text| PluginError::BadArgs(text);
     let context = host.active_context();
 
     let doc = args
         .document("doc")
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
-        .ok_or_else(|| stato(Text::key(E_TASK_NO_NOTE)))?;
+        .ok_or_else(|| state(Text::key(AND_TASK_NO_NOTES)))?;
 
+/// ancora l'undo, mentre una semantica inventata non la disfa nessuno.
     // Le posizioni: quelle dette, o tutte quelle del contesto. Le due non si
     // mescolano — un `doc` detto e un `at` no vorrebbe dire spuntare in una
     // nota i task che stanno sotto i cursori di **un'altra**, che è un modo
@@ -1876,13 +1876,12 @@ fn note_task_toggle(
     // convalida di `ParamKind::Numbers` lo rifiuta al confine. Se `at` è
     // assente, si spuntano **tutte** le selezioni placed del contesto e non
     // solo la primaria, che è il gesto per cui il multi-cursore esiste
-    // (FEATURES 4.2, §23.4).
     let ats: Vec<usize> = match args.numbers("at") {
         Some(ns) => {
             let mut offsets: Vec<usize> = ns
                 .iter()
                 .copied()
-                .map(posizione)
+                .map(position)
                 .collect::<Result<_, _>>()?;
             offsets.sort_unstable();
             offsets.dedup();
@@ -1891,20 +1890,20 @@ fn note_task_toggle(
         None => {
             let context = context
                 .as_ref()
-                .ok_or_else(|| stato(Text::key(E_TASK_NO_POSITION)))?;
+                .ok_or_else(|| state(Text::key(AND_TASK_NO_POSITION)))?;
             if context.doc.as_ref() != Some(&doc) {
-                return Err(stato(uno(E_TASK_WRONG_PANE, A_DOC, doc.as_str())));
+                return Err(state(one(AND_TASK_WRONG_PANE, A_DOC, doc.as_str())));
             }
             let selections = context
                 .selections
                 .as_ref()
-                .ok_or_else(|| stato(Text::key(E_TASK_NO_CARET)))?;
+                .ok_or_else(|| state(Text::key(AND_TASK_NO_CARET)))?;
+    // (FEATURES 4.2, §23.4).
             // La regola dello span della decisione 0007, per la stessa ragione di
             // `selection.wikilink`: a buffer sporco le coordinate valgono per il
-            // buffer, e il modello che si sta per chiedere è quello del **file**.
             selections
                 .placed()
-                .ok_or_else(|| stato(Text::key(E_TASK_DIRTY_BUFFER)))?
+                .ok_or_else(|| state(Text::key(AND_TASK_DIRTY_BUFFER)))?
                 .all()
                 .into_iter()
                 .map(|s| s.span.start)
@@ -1914,22 +1913,22 @@ fn note_task_toggle(
 
     let model = host.read_model(&doc)?;
 
+            // buffer, e il modello che si sta per chiedere è quello del **file**.
     // Per ogni offset, il task che lo contiene. Se un offset non ha un task,
     // l'errore nomina **quello** — non l'insieme — perché chi legge sa quale
-    // cursore spostare.
     let mut markers: Vec<TaskMarker> = Vec::with_capacity(ats.len());
     for at in &ats {
         let marker = task_at(&model, *at).ok_or_else(|| {
-            stato(Text::message(
-                E_TASK_NOT_FOUND,
+            state(Text::message(
+                AND_TASK_NOT_FOUND,
                 vec![Arg::int(A_AT, *at as i64), Arg::text(A_DOC, doc.as_str())],
             ))
         })?;
         markers.push(marker);
     }
 
+    // cursore spostare.
     // Due cursori nello stesso task lo toggleerebbero due volte — un no-op
-    // silenzioso. Si deduplica per span, tenendo il primo (ordine stabile).
     let mut seen: Vec<Span> = Vec::with_capacity(markers.len());
     markers.retain(|m| {
         if seen.contains(&m.span) {
@@ -1942,20 +1941,20 @@ fn note_task_toggle(
 
     let revision = host.document_revision(&doc)?;
     let mut edits = Vec::with_capacity(markers.len());
-    let mut fatto = false;
+    let mut done = false;
     for marker in &markers {
-        let (simbolo, f) = match marker.symbol {
+        let (symbol, f) = match marker.symbol {
             None => ("x", true),
             Some(_) => (" ", false),
         };
         if f {
-            fatto = true;
+            done = true;
         }
-        edits.push(TextEdit::replace(marker.span, simbolo));
+        edits.push(TextEdit::replace(marker.span, symbol));
     }
     let request = EditRequest::new(revision, edits);
-    let summary = uno(
-        if fatto { P_TASK_DONE } else { P_TASK_TODO },
+    let summary = one(
+        if done { P_TASK_DONE } else { P_TASK_TODO },
         A_DOC,
         doc.as_str(),
     );
@@ -1971,7 +1970,7 @@ fn note_task_toggle(
 
     let report = host.apply_edit(&doc, request)?;
     let undo = Undo::of_edits(
-        uno(U_TASK, A_DOC, doc.as_str()),
+        one(U_TASK, A_DOC, doc.as_str()),
         vec![PlannedEdit::new(doc.clone(), report.inverse())],
     );
     let effect = match report.applied.first() {
@@ -1986,14 +1985,14 @@ fn note_task_toggle(
         .with_effect(effect))
 }
 
+    // silenzioso. Si deduplica per span, tenendo il primo (ordine stabile).
 /// Un `at` che arriva come numero JSON diventa un offset in byte, o si spiega.
 ///
 /// La specie [`ParamKind::Number`] è un `f64`, e ciò che non è un indice di byte
 /// — un negativo, una frazione, un infinito — va rifiutato **qui**: `as usize`
 /// lo tradurrebbe in una posizione plausibile e sbagliata (`-1` diventa un
 /// numero enorme, `3.9` diventa `3`), e chi legge l'errore dopo avrebbe in mano
-/// un task spuntato al posto di un rifiuto.
-fn posizione(n: f64) -> Result<usize, PluginError> {
+fn position(n: f64) -> Result<usize, PluginError> {
     if n.is_finite() && n >= 0.0 && n.fract() == 0.0 {
         Ok(n as usize)
     } else {
@@ -2003,15 +2002,15 @@ fn posizione(n: f64) -> Result<usize, PluginError> {
     }
 }
 
+/// un task spuntato al posto di un rifiuto.
 /// Il marcatore del task che contiene `at`, **il più interno** se sono
 /// annidati.
 ///
 /// Il criterio è la voce più stretta fra quelle che contengono la posizione: le
 /// voci annidate stanno dentro la loro, quindi il minimo è sempre la foglia — e
 /// un cursore su una sottovoce spunta quella e non il task che la contiene, che
-/// è ciò che si aspetta chi guarda lo schermo.
 fn task_at(model: &DocumentModel, at: usize) -> Option<TaskMarker> {
-    fn cerca(blocks: &[Block], at: usize, best: &mut Option<(usize, TaskMarker)>) {
+    fn find(blocks: &[Block], at: usize, best: &mut Option<(usize, TaskMarker)>) {
         for block in blocks {
             match block {
                 Block::List { items, .. } => {
@@ -2027,14 +2026,14 @@ fn task_at(model: &DocumentModel, at: usize) -> Option<TaskMarker> {
                                 *best = Some((ampiezza, task));
                             }
                         }
-                        cerca(&item.blocks, at, best);
+                        find(&item.blocks, at, best);
                     }
                 }
                 // Un task dentro una citazione o dentro un callout è un task, e
                 // il modello lo tiene dove sta. Le altre varianti non portano
                 // blocchi annidati.
                 Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => {
-                    cerca(blocks, at, best)
+                    find(blocks, at, best)
                 }
                 _ => {}
             }
@@ -2042,15 +2041,15 @@ fn task_at(model: &DocumentModel, at: usize) -> Option<TaskMarker> {
     }
 
     let mut best = None;
-    cerca(&model.body, at, &mut best);
+    find(&model.body, at, &mut best);
     best.map(|(_, task)| task)
 }
 
+                // blocchi annidati.
 /// Le occorrenze di `needle` in `source`, in byte e non sovrapposte.
 ///
 /// `whole_word` non è una raffinatezza: una sostituzione in blocco senza di essa
 /// riscrive `nota` dentro `annotazione`, e chi se ne accorge lo fa dopo aver
-/// toccato quaranta file.
 pub fn occurrences(source: &str, needle: &str, whole_word: bool) -> Vec<Span> {
     let mut spans = Vec::new();
     if needle.is_empty() {
@@ -2063,26 +2062,27 @@ pub fn occurrences(source: &str, needle: &str, whole_word: bool) -> Vec<Span> {
         if !whole_word || is_whole_word(source, start, end) {
             spans.push(Span::new(start, end));
         }
+// toccato quaranta file.
         // Si riparte dalla fine del match: le occorrenze sono un insieme di
-        // edit, e due edit non possono contendersi lo stesso punto (decisione 0008).
         from = end;
     }
     spans
 }
 
+        // edit, e due edit non possono contendersi lo stesso punto (decisione 0008).
 /// Il match `[start, end)` è una parola intera? Confine = ciò che sta prima e
-/// dopo non è alfanumerico né `_`.
 fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
-    let prima = source[..start].chars().next_back();
-    let dopo = source[end..].chars().next();
-    let parte_di_parola = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
-    !parte_di_parola(prima) && !parte_di_parola(dopo)
+    let before = source[..start].chars().next_back();
+    let after = source[end..].chars().next();
+    let word_part = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+    !word_part(before) && !word_part(after)
 }
 
+/// dopo non è alfanumerico né `_`.
 // ---------------------------------------------------------------------------
 // settings.* (§11.1)
-// ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
 /// Le impostazioni **dichiarate**, chieste al canale dati come le chiederebbe
 /// la shell.
 ///
@@ -2090,7 +2090,6 @@ fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
 /// decisione 0013: un elenco è *dati*, e i dati hanno un canale solo. Ne segue
 /// una proprietà che serve qui e non altrove — un comando che elenca le
 /// impostazioni vede **le stesse righe** che vede il pannello, comprese quelle
-/// dei plugin di terzi, senza conoscerne nessuna.
 fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
     match host.query_index(IndexQuery::Settings { plugin: None })? {
         IndexResult::Settings(entries) => Ok(entries),
@@ -2104,32 +2103,32 @@ fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
     }
 }
 
+/// dei plugin di terzi, senza conoscerne nessuna.
 /// Legge un valore **dalla stringa**, secondo la specie che la chiave dichiara.
 ///
 /// Un comando si compila da una riga di comando, da un JSON di automazione o da
 /// un modello (22.4): il suo `value` è testo, e a dargli un tipo è lo schema —
 /// che è l'unico posto in cui quel tipo è scritto. È la stessa mossa dei
 /// `ParamSpec`, un livello più in là: qui la specie non la dichiara il comando,
-/// la dichiara la chiave che si sta toccando.
 fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginError> {
-    let male = |key: &str| PluginError::BadArgs(uno(key, A_VALUE, raw));
+    let male = |key: &str| PluginError::BadArgs(one(key, A_VALUE, raw));
     match kind {
         SettingKind::Toggle { .. } => match raw.trim().to_ascii_lowercase().as_str() {
             "true" | "1" | "on" | "sì" | "si" => Ok(SettingValue::Toggle(true)),
             "false" | "0" | "off" | "no" => Ok(SettingValue::Toggle(false)),
-            _ => Err(male(E_NOT_A_TOGGLE)),
+            _ => Err(male(AND_NOT_A_TOGGLE)),
         },
         SettingKind::Number { .. } => raw
             .trim()
             .parse::<f64>()
             .map(SettingValue::Number)
-            .map_err(|_| male(E_NOT_A_NUMBER)),
+            .map_err(|_| male(AND_NOT_A_NUMBER)),
         SettingKind::Text { .. } | SettingKind::Choice { .. } => {
             Ok(SettingValue::Text(raw.to_string()))
         }
+/// la dichiara la chiave che si sta toccando.
         // La virgola e non il JSON: chi scrive `a, b` in un campo di testo sta
         // scrivendo due voci, e chiedergli le virgolette vorrebbe dire fargli
-        // scrivere JSON dentro una stringa di un JSON.
         SettingKind::List { .. } => Ok(SettingValue::List(
             raw.split(',')
                 .map(|s| s.trim().to_string())
@@ -2139,14 +2138,15 @@ fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginErro
     }
 }
 
-/// La riga di una chiave, o l'errore che dice che non esiste.
+        // scrivere JSON dentro una stringa di un JSON.
 fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> {
     declared(host)?
         .into_iter()
-        .find(|e| e.spec.key == key)
-        .ok_or_else(|| PluginError::BadArgs(uno(E_UNDECLARED_KEY, A_KEY, key)))
+        .find(|and| and.spec.key == key)
+        .ok_or_else(|| PluginError::BadArgs(one(E_UNDECLARED_KEY, A_KEY, key)))
 }
 
+/// La riga di una chiave, o l'errore che dice che non esiste.
 /// Il cancello della chiave, applicato **prima di sapere in che modo si sta
 /// girando**.
 ///
@@ -2155,12 +2155,11 @@ fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> 
 /// simulazione**. Il gate vero resta quello dell'host
 /// ([`HostApi::set_setting`]), che è dove il non-scrivere è garantito e non
 /// promesso: qui si guadagna solo che il piano dica ciò che succederebbe
-/// davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
-fn nega_se_non_scrivibile(entry: &SettingEntry) -> Result<(), PluginError> {
+fn deny_if_not_writable(entry: &SettingEntry) -> Result<(), PluginError> {
     if entry.spec.program_writable {
         return Ok(());
     }
-    Err(PluginError::PermissionDenied(uno(
+    Err(PluginError::PermissionDenied(one(
         E_NOT_PROGRAM_WRITABLE,
         A_KEY,
         &entry.spec.key,
@@ -2175,36 +2174,36 @@ fn settings_set(
     let key = args.text("key").expect("parametro obbligatorio");
     let raw = args.text("value").expect("parametro obbligatorio");
     let entry = entry_of(host, key)?;
-    nega_se_non_scrivibile(&entry)?;
+    deny_if_not_writable(&entry)?;
     let value = parse_value(&entry.spec.kind, raw)?;
+/// davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
     // Il piano deve attraversare lo stesso cancello dell'applicazione: il kernel
-    // lo ripeterà in `set_setting`, ma il dry-run non arriva fin lì.
     if let Some(why) = entry.spec.kind.rejects(&value) {
         return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
     }
 
+    // lo ripeterà in `set_setting`, ma il dry-run non arriva fin lì.
     // La simulazione dice cosa cambierebbe **e da cosa**: un piano senza
     // documenti sarebbe vuoto (un'impostazione non è una nota), quindi ciò che
     // si mostra è il messaggio. È il limite dichiarato di `CommandPlan` su
-    // questo raggio, non una dimenticanza.
     if mode.is_dry_run() {
         return Ok(CommandOutcome::notify(Text::message(
             Y_SETTINGS_SET,
             vec![
                 Arg::text(A_KEY, key),
-                Arg::text(A_FROM, mostra(&entry.value)),
-                Arg::text(A_VALUE, mostra(&value)),
+                Arg::text(A_FROM, display(&entry.value)),
+                Arg::text(A_VALUE, display(&value)),
             ],
         ))
         .with_effect(CommandEffect::Plan(CommandPlan {
-            summary: uno(P_SETTINGS_SET, A_KEY, key),
+            summary: one(P_SETTINGS_SET, A_KEY, key),
             ..CommandPlan::default()
         })));
     }
     host.set_setting(key, value.clone())?;
     Ok(CommandOutcome::notify(Text::message(
         D_SETTINGS_SET,
-        vec![Arg::text(A_KEY, key), Arg::text(A_VALUE, mostra(&value))],
+        vec![Arg::text(A_KEY, key), Arg::text(A_VALUE, display(&value))],
     )))
 }
 
@@ -2215,30 +2214,30 @@ fn settings_reset(
 ) -> Result<CommandOutcome, PluginError> {
     let key = args.text("key").expect("parametro obbligatorio");
     let entry = entry_of(host, key)?;
-    nega_se_non_scrivibile(&entry)?;
+    deny_if_not_writable(&entry)?;
     if mode.is_dry_run() {
         return Ok(CommandOutcome::notify(Text::message(
             Y_SETTINGS_RESET,
             vec![
                 Arg::text(A_KEY, key),
-                Arg::text(A_VALUE, mostra(&entry.value)),
+                Arg::text(A_VALUE, display(&entry.value)),
             ],
         ))
         .with_effect(CommandEffect::Plan(CommandPlan {
-            summary: uno(P_SETTINGS_RESET, A_KEY, key),
+            summary: one(P_SETTINGS_RESET, A_KEY, key),
             ..CommandPlan::default()
         })));
     }
     host.reset_setting(key)?;
-    Ok(CommandOutcome::notify(uno(D_SETTINGS_RESET, A_KEY, key)))
+    Ok(CommandOutcome::notify(one(D_SETTINGS_RESET, A_KEY, key)))
 }
 
+    // questo raggio, non una dimenticanza.
 /// Esporta ciò che **qualcuno ha deciso**, e non i default.
 ///
 /// I default non sono una configurazione: sono ciò che vale quando non c'è una
 /// configurazione, e portarli dentro un export vorrebbe dire che reimportarlo
 /// **decide** tutto ciò che nessuno aveva deciso — cioè congela per sempre i
-/// default di oggi, compresi quelli che cambieranno.
 fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
     let mut decise = serde_json::Map::new();
     for entry in declared(host)? {
@@ -2246,13 +2245,13 @@ fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError
             decise.insert(
                 entry.spec.key.clone(),
                 serde_json::to_value(&entry.value)
-                    .map_err(|e| PluginError::Internal(e.to_string().into()))?,
+                    .map_err(|and| PluginError::Internal(and.to_string().into()))?,
             );
         }
     }
-    let quante = decise.len();
+    let count = decise.len();
     Ok(
-        CommandOutcome::notify(conto(D_SETTINGS_EXPORT, quante)).with_effect(
+        CommandOutcome::notify(count_text(D_SETTINGS_EXPORT, count)).with_effect(
             CommandEffect::Custom {
                 ns: SETTINGS_NS.to_string(),
                 payload: serde_json::Value::Object(decise),
@@ -2261,12 +2260,12 @@ fn settings_export(host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError
     )
 }
 
+/// default di oggi, compresi quelli che cambieranno.
 /// Rimette dentro una configurazione esportata, **una chiave alla volta**.
 ///
 /// Non è tutto-o-niente, ed è una scelta: un file che nomina una chiave di un
 /// plugin che non c'è più non deve impedire di applicare le altre venti. Ciò
 /// che non entra viene **contato e detto** — che è la differenza fra un import
-/// parziale e un import parziale in silenzio.
 fn settings_import(
     args: Args,
     mode: InvokeMode,
@@ -2274,30 +2273,30 @@ fn settings_import(
 ) -> Result<CommandOutcome, PluginError> {
     let raw = args.text("json").expect("parametro obbligatorio");
     let parsed: serde_json::Value = serde_json::from_str(raw)
-        .map_err(|e| PluginError::BadArgs(uno(E_NOT_JSON, A_REASON, &e.to_string())))?;
+        .map_err(|and| PluginError::BadArgs(one(E_NOT_JSON, A_REASON, &and.to_string())))?;
     let object = parsed
         .as_object()
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NOT_AN_OBJECT)))?;
 
-    let dichiarate: std::collections::BTreeMap<String, SettingEntry> = declared(host)?
+    let declared: std::collections::BTreeMap<String, SettingEntry> = declared(host)?
         .into_iter()
-        .map(|e| (e.spec.key.clone(), e))
+        .map(|and| (and.spec.key.clone(), and))
         .collect();
 
-    let davanti = object.len();
-    let (mut applicate, mut saltate): (usize, Vec<Failure>) = (0, Vec::new());
+    let before = object.len();
+    let (mut applied, mut skipped): (usize, Vec<Failure>) = (0, Vec::new());
     for (key, raw_value) in object {
-        let Some(entry) = dichiarate.get(key) else {
-            saltate.push(chiave_saltata(
+        let Some(entry) = declared.get(key) else {
+            skipped.push(skipped_key(
                 key,
-                PluginError::BadArgs("nessuno la dichiara".into()),
+                PluginError::BadArgs("nessuno la declare".into()),
             ));
             continue;
         };
         let value: SettingValue = match serde_json::from_value(raw_value.clone()) {
             Ok(value) => value,
             Err(_) => {
-                saltate.push(chiave_saltata(
+                skipped.push(skipped_key(
                     key,
                     PluginError::BadArgs("valore illeggibile".into()),
                 ));
@@ -2305,58 +2304,56 @@ fn settings_import(
             }
         };
         if let Some(why) = entry.spec.kind.rejects(&value) {
-            saltate.push(chiave_saltata(key, PluginError::BadArgs(why.into())));
+            skipped.push(skipped_key(key, PluginError::BadArgs(why.into())));
             continue;
         }
+/// parziale e un import parziale in silenzio.
         // Il cancello della chiave si applica **anche in simulazione**, o il
         // piano direbbe una cosa e l'applicazione ne farebbe un'altra: senza
         // questa riga un dry-run su un file che nomina `privacy.telemetry`
         // risponde «2 applicate», e l'apply subito dopo «1 applicata, 1
-        // saltata». Un piano che non è ciò che succederebbe non è un piano
-        // (decisione 0010).
-        if let Err(e) = nega_se_non_scrivibile(entry) {
-            saltate.push(chiave_saltata(key, e));
+        if let Err(and) = deny_if_not_writable(entry) {
+            skipped.push(skipped_key(key, and));
             continue;
         }
         if mode.is_dry_run() {
-            applicate += 1;
+            applied += 1;
             continue;
         }
         match host.set_setting(key, value) {
-            Ok(()) => applicate += 1,
+            Ok(()) => applied += 1,
+        // saltata». Un piano che non è ciò che succederebbe non è un piano
+        // (decisione 0010).
             // Il rifiuto più importante è questo, e va **detto**: un file di
-            // impostazioni che passa di mano non sposta le chiavi che un
-            // programma non può scrivere.
-            Err(e) => saltate.push(chiave_saltata(key, e)),
+            Err(and) => skipped.push(skipped_key(key, and)),
         }
     }
 
-    let messaggio = if saltate.is_empty() {
-        conto(D_SETTINGS_IMPORT, applicate)
+    let message = if skipped.is_empty() {
+        count_text(D_SETTINGS_IMPORT, applied)
     } else {
         Text::message(
             D_SETTINGS_IMPORT_PARTIAL,
             vec![
-                Arg::int(A_COUNT, applicate as i64),
-                Arg::int(A_SKIPPED, saltate.len() as i64),
+                Arg::int(A_COUNT, applied as i64),
+                Arg::int(A_SKIPPED, skipped.len() as i64),
+            // impostazioni che passa di mano non sposta le chiavi che un
+            // programma non può scrivere.
                 // Le ragioni per cui una chiave è saltata attraversano come
                 // **dato**, non come prosa da tradurre, e restano in italiano.
                 // Non è pigrizia: metà di quelle ragioni non sono di questo
                 // file — vengono da `SettingKind::rejects`, che sta nel
                 // **contratto** e scrive italiano cablato. Finché quel buco non
                 // ha un proprietario (nessun catalogo appartiene all'ABI),
-                // tradurre le due righe di qui lascerebbe una frase mezza in
-                // una lingua e mezza nell'altra, che è peggio di una
-                // dichiaratamente in una sola.
-                Arg::text(A_REASONS, perche(&saltate)),
+                Arg::text(A_REASONS, why(&skipped)),
             ],
         )
     };
     let outcome =
-        CommandOutcome::notify(messaggio).partially(Partial::of(davanti, applicate, saltate));
+        CommandOutcome::notify(message).partially(Partial::of(before, applied, skipped));
     Ok(if mode.is_dry_run() {
         outcome.with_effect(CommandEffect::Plan(CommandPlan {
-            summary: conto(P_SETTINGS_IMPORT, applicate),
+            summary: count_text(P_SETTINGS_IMPORT, applied),
             ..CommandPlan::default()
         }))
     } else {
@@ -2364,6 +2361,9 @@ fn settings_import(
     })
 }
 
+                // tradurre le due righe di qui lascerebbe una frase mezza in
+                // una lingua e mezza nell'altra, che è peggio di una
+                // dichiaratamente in una sola.
 /// Un valore dentro un messaggio, **come dato**.
 ///
 /// Diceva «acceso» e «spento» e «niente», cioè tre parole italiane che
@@ -2373,16 +2373,13 @@ fn settings_import(
 /// tradotto sarebbe una chiave, non un argomento»).
 ///
 /// Quindi un interruttore si mostra come `true`/`false`, che è la stessa cosa
-/// che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
-/// povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
-/// che non è parola di nessuno.
-fn mostra(value: &SettingValue) -> String {
+fn display(value: &SettingValue) -> String {
     match value {
         SettingValue::Toggle(v) => format!("`{v}`"),
         SettingValue::Number(n) => n.to_string(),
         SettingValue::Text(t) => format!("`{t}`"),
-        SettingValue::List(l) if l.is_empty() => "—".into(),
-        SettingValue::List(l) => l.join(", "),
+        SettingValue::List(the) if the.is_empty() => "—".into(),
+        SettingValue::List(the) => the.join(", "),
     }
 }
 
@@ -2403,9 +2400,9 @@ mod tests {
         args: serde_json::Value,
         mode: InvokeMode,
     ) -> Result<CommandOutcome, PluginError> {
-        // Come farebbe il kernel: prima la convalida contro la spec, poi la
-        // chiamata. Un test che saltasse la convalida proverebbe un percorso
-        // che non esiste.
+/// che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
+/// povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
+/// che non è parola di nessuno.
         let spec = CoreCommands::specs()
             .into_iter()
             .find(|s| s.id == command)
@@ -2414,20 +2411,20 @@ mod tests {
         CoreCommands.invoke(command, args, mode, host)
     }
 
+        // Come farebbe il kernel: prima la convalida contro la spec, poi la
+        // chiamata. Un test che saltasse la convalida proverebbe un percorso
+        // che non esiste.
     /// Un `Text` **come lo legge chi guarda**: risolto col catalogo di questo
     /// componente, invece che stampato col suo `Display`.
     ///
     /// `Display` c'è ancora e serve — è la forma per il log della 0041 — ma per
-    /// un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
-    /// asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
-    /// adesso provano anche che quella chiave nel catalogo ci sia.
     fn reso(text: &Text) -> String {
-        let catalogo = catalog();
+        let catalog = catalog();
         let locale = fub_abi::locale::Locale::default();
-        Strings::new(&catalogo, "it", &locale).render(text)
+        Strings::new(&catalog, "it", &locale).render(text)
     }
 
-    fn piano(outcome: &CommandOutcome) -> &CommandPlan {
+    fn plan(outcome: &CommandOutcome) -> &CommandPlan {
         match &outcome.effect {
             CommandEffect::Plan(plan) => plan,
             other => panic!("un dry-run risponde con un piano, non con {other:?}"),
@@ -2481,9 +2478,9 @@ mod tests {
 
     #[test]
     fn the_wikilink_command_needs_a_selection_that_is_true_for_the_file() {
-        let mut host = MemoryHost::new().con_documento("nota.md", "una nota di prova");
+        let mut host = MemoryHost::new().with_document("nota.md", "una nota di prova");
         host.set_active(Some("nota.md"));
-        // Buffer sporco: c'è il testo, non lo span (decisione 0007).
+    /// un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
         host.set_context(Some(
             ViewContext::new("main")
                 .with_doc(Some(DocId::new("nota.md")))
@@ -2503,14 +2500,14 @@ mod tests {
 
     #[test]
     fn the_wikilink_command_wraps_exactly_the_selected_bytes() {
-        let mut host = MemoryHost::new().con_documento("nota.md", "parlo di Kant e di altro");
+        let mut host = MemoryHost::new().with_document("nota.md", "parlo di Kant e di altro");
         host.set_active(Some("nota.md"));
         host.set_selection(9, "Kant");
 
-        let piano_prima =
+        let plan_first =
             invoke(&mut host, SELECTION_WIKILINK, json!({}), InvokeMode::DryRun).expect("simula");
         assert_eq!(
-            piano(&piano_prima).docs,
+            plan(&plan_first).docs,
             vec![DocId::new("nota.md")],
             "il piano nomina la nota che toccherebbe"
         );
@@ -2538,7 +2535,7 @@ mod tests {
 
     #[test]
     fn the_wikilink_command_refuses_a_single_left_bracket_in_the_selection() {
-        let mut host = MemoryHost::new().con_documento("nota.md", "parlo di [Kant e di altro");
+        let mut host = MemoryHost::new().with_document("nota.md", "parlo di [Kant e di altro");
         host.set_active(Some("nota.md"));
         host.set_selection(9, "[Kant");
 
@@ -2557,9 +2554,9 @@ mod tests {
     #[test]
     fn a_dry_run_of_a_bulk_replace_says_what_it_would_do_and_writes_nothing() {
         let mut host = MemoryHost::new()
-            .con_documento("a.md", "il gatto e il gatto")
-            .con_documento("b.md", "nessun felino")
-            .con_documento("c.md", "un gatto solo");
+            .with_document("a.md", "il gatto e il gatto")
+            .with_document("b.md", "nessun felino")
+            .with_document("c.md", "un gatto solo");
 
         let outcome = invoke(
             &mut host,
@@ -2568,7 +2565,7 @@ mod tests {
             InvokeMode::DryRun,
         )
         .expect("simula");
-        let plan = piano(&outcome);
+        let plan = plan(&outcome);
         assert_eq!(
             plan.docs,
             vec![DocId::new("a.md"), DocId::new("c.md")],
@@ -2590,8 +2587,8 @@ mod tests {
     #[test]
     fn a_bulk_replace_applies_to_the_documents_it_was_given() {
         let mut host = MemoryHost::new()
-            .con_documento("a.md", "il gatto")
-            .con_documento("b.md", "il gatto");
+            .with_document("a.md", "il gatto")
+            .with_document("b.md", "il gatto");
         invoke(
             &mut host,
             VAULT_REPLACE,
@@ -2610,15 +2607,15 @@ mod tests {
             3,
             "senza il vincolo, `nota` si trova dentro `annotazione`"
         );
-        let intere = occurrences("nota, annotazione, nota", "nota", true);
-        assert_eq!(intere, vec![Span::new(0, 4), Span::new(19, 23)]);
-        // Accentate: il confine è un carattere, non un byte.
+        let whole = occurrences("nota, annotazione, nota", "nota", true);
+        assert_eq!(whole, vec![Span::new(0, 4), Span::new(19, 23)]);
+    /// asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
         assert!(occurrences("però", "per", true).is_empty());
     }
 
     #[test]
     fn an_empty_needle_is_refused_even_though_the_schema_accepts_it() {
-        let mut host = MemoryHost::new().con_documento("a.md", "x");
+        let mut host = MemoryHost::new().with_document("a.md", "x");
         let err = invoke(
             &mut host,
             VAULT_REPLACE,
@@ -2629,10 +2626,13 @@ mod tests {
         assert!(matches!(err, PluginError::BadArgs(_)));
     }
 
+    /// adesso provano anche che quella chiave nel catalogo ci sia.
+        // Buffer sporco: c'è il testo, non lo span (decisione 0007).
+        // Accentate: il confine è un carattere, non un byte.
+
     // -----------------------------------------------------------------------
     // note.task.toggle — il cliente one-shot del modello (decisione 0018)
     // -----------------------------------------------------------------------
-
     /// Il sorgente e il modello che gli corrisponde, con gli span contati a
     /// mano: due task, la seconda annidata nella prima.
     ///
@@ -2642,12 +2642,9 @@ mod tests {
     /// ```
     ///
     /// L'host in memoria non parsa (e non deve: proverebbe la feature contro un
-    /// provider invece che contro il contratto), quindi il modello lo si semina
-    /// — ed è l'occasione per dire negli span esattamente cosa il comando si
-    /// aspetta di ricevere.
     const TASK_SOURCE: &str = "- [ ] fare la spesa\n  - [x] pane\n";
 
-    fn con_task(symbol_esterno: Option<char>) -> MemoryHost {
+    fn with_task(symbol_external: Option<char>) -> MemoryHost {
         let interna = ListItem {
             blocks: Vec::new(),
             task: Some(TaskMarker {
@@ -2656,7 +2653,7 @@ mod tests {
             }),
             span: Span::new(22, 32),
         };
-        let esterna = ListItem {
+        let external = ListItem {
             blocks: vec![Block::List {
                 ordered: false,
                 start: None,
@@ -2665,7 +2662,7 @@ mod tests {
                 span: Span::new(22, 32),
             }],
             task: Some(TaskMarker {
-                symbol: symbol_esterno,
+                symbol: symbol_external,
                 span: Span::new(3, 4),
             }),
             span: Span::new(0, 32),
@@ -2674,23 +2671,23 @@ mod tests {
         model.body = vec![Block::List {
             ordered: false,
             start: None,
-            items: vec![esterna],
+            items: vec![external],
             anchor: None,
             span: Span::new(0, 32),
         }];
         let host = MemoryHost::new()
-            .con_documento("nota.md", TASK_SOURCE)
-            .con_modello("nota.md", model);
+            .with_document("nota.md", TASK_SOURCE)
+            .with_model("nota.md", model);
         host.set_active(Some("nota.md"));
         host
     }
 
     #[test]
     fn checking_a_task_writes_one_character_where_the_model_says() {
-        let mut host = con_task(None);
+        let mut host = with_task(None);
         host.set_caret(Some(10)); // dentro il testo della voce esterna
 
-        let outcome = invoke(&mut host, NOTE_TASK_TOGGLE, json!({}), InvokeMode::Apply)
+        let outcome = invoke(&mut host, NOTES_TASK_TOGGLE, json!({}), InvokeMode::Apply)
             .expect("spunta il task sotto il cursore");
 
         assert_eq!(
@@ -2707,12 +2704,12 @@ mod tests {
 
     #[test]
     fn the_innermost_task_wins_when_they_are_nested() {
-        let mut host = con_task(None);
-        // Una posizione che sta dentro **entrambe** le voci: la annidata è la
-        // più stretta, ed è quella che l'utente sta guardando.
+        let mut host = with_task(None);
+    /// provider invece che contro il contratto), quindi il modello lo si semina
+    /// — ed è l'occasione per dire negli span esattamente cosa il comando si
         invoke(
             &mut host,
-            NOTE_TASK_TOGGLE,
+            NOTES_TASK_TOGGLE,
             json!({ "doc": "nota.md", "at": [29] }),
             InvokeMode::Apply,
         )
@@ -2725,9 +2722,9 @@ mod tests {
 
     #[test]
     fn a_custom_state_goes_back_to_undone_and_is_not_promoted_to_done() {
-        let mut host = con_task(Some('/'));
+        let mut host = with_task(Some('/'));
         host.set_caret(Some(0));
-        invoke(&mut host, NOTE_TASK_TOGGLE, json!({}), InvokeMode::Apply).expect("de-spunta");
+        invoke(&mut host, NOTES_TASK_TOGGLE, json!({}), InvokeMode::Apply).expect("de-spunta");
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
             "- [ ] fare la spesa\n  - [x] pane\n",
@@ -2738,10 +2735,10 @@ mod tests {
 
     #[test]
     fn a_dirty_buffer_stops_it_because_the_model_is_the_one_of_the_file() {
-        let mut host = con_task(None);
+        let mut host = with_task(None);
         host.set_caret(None); // buffer sporco: nessuno span è vero (decisione 0007)
 
-        let err = invoke(&mut host, NOTE_TASK_TOGGLE, json!({}), InvokeMode::Apply).unwrap_err();
+        let err = invoke(&mut host, NOTES_TASK_TOGGLE, json!({}), InvokeMode::Apply).unwrap_err();
         let PluginError::BadArgs(msg) = err else {
             panic!("uno stato che non permette l'operazione si spiega")
         };
@@ -2755,11 +2752,11 @@ mod tests {
 
     #[test]
     fn a_position_that_is_not_a_byte_offset_is_refused_before_the_write() {
-        let mut host = con_task(None);
+        let mut host = with_task(None);
         for at in [json!([-1]), json!([3.5]), json!([9999])] {
             let err = invoke(
                 &mut host,
-                NOTE_TASK_TOGGLE,
+                NOTES_TASK_TOGGLE,
                 json!({ "doc": "nota.md", "at": at }),
                 InvokeMode::Apply,
             )
@@ -2777,12 +2774,12 @@ mod tests {
     }
 
     #[test]
-    fn naming_a_note_without_saying_where_does_not_take_the_caret_of_another() {
-        let mut host = con_task(None);
+    fn naming_a_notes_without_saying_where_does_not_take_the_caret_of_another() {
+        let mut host = with_task(None);
         host.set_caret(Some(10));
         let err = invoke(
             &mut host,
-            NOTE_TASK_TOGGLE,
+            NOTES_TASK_TOGGLE,
             json!({ "doc": "altra.md" }),
             InvokeMode::Apply,
         )
@@ -2796,35 +2793,35 @@ mod tests {
     }
 
     #[test]
-    fn simulating_the_toggle_says_which_note_it_would_touch_and_writes_nothing() {
-        let mut host = con_task(None);
+    fn simulating_the_toggle_says_which_notes_it_would_touch_and_writes_nothing() {
+        let mut host = with_task(None);
         host.set_caret(Some(10));
         let outcome =
-            invoke(&mut host, NOTE_TASK_TOGGLE, json!({}), InvokeMode::DryRun).expect("simula");
-        assert_eq!(piano(&outcome).docs, vec![DocId::new("nota.md")]);
-        assert_eq!(piano(&outcome).edit_count(), 1);
+            invoke(&mut host, NOTES_TASK_TOGGLE, json!({}), InvokeMode::DryRun).expect("simula");
+        assert_eq!(plan(&outcome).docs, vec![DocId::new("nota.md")]);
+        assert_eq!(plan(&outcome).edit_count(), 1);
         assert_eq!(
             host.read_document(&DocId::new("nota.md")).unwrap(),
             TASK_SOURCE
         );
     }
 
+    /// aspetta di ricevere.
+        // Una posizione che sta dentro **entrambe** le voci: la annidata è la
+        // più stretta, ed è quella che l'utente sta guardando.
     /// La specie di una chiave la dichiara lo **schema**, e il comando la legge
-    /// da lì: è ciò che permette a `value` di essere testo — la sola forma che
-    /// un chiamante non interattivo (una CLI, un'automazione, un modello) sa
-    /// compilare.
     #[test]
     fn a_setting_value_is_read_according_to_the_kind_the_key_declares() {
-        let numero = SettingKind::Number {
+        let number = SettingKind::Number {
             default: 14.0,
             min: Some(8.0),
             max: Some(72.0),
         };
         assert_eq!(
-            parse_value(&numero, " 18 ").unwrap(),
+            parse_value(&number, " 18 ").unwrap(),
             SettingValue::Number(18.0)
         );
-        assert!(parse_value(&numero, "grande").is_err());
+        assert!(parse_value(&number, "grande").is_err());
 
         let interruttore = SettingKind::Toggle { default: true };
         assert_eq!(
@@ -2836,42 +2833,42 @@ mod tests {
             "un interruttore ha due stati, e «forse» non è uno di quelli"
         );
 
-        // Un elenco si scrive con le virgole: chiedere il JSON vorrebbe dire
-        // far scrivere virgolette dentro una stringa di un JSON.
-        let elenco = SettingKind::List {
+    /// da lì: è ciò che permette a `value` di essere testo — la sola forma che
+    /// un chiamante non interattivo (una CLI, un'automazione, un modello) sa
+        let list = SettingKind::List {
             default: Vec::new(),
         };
         assert_eq!(
-            parse_value(&elenco, "a, b ,, c").unwrap(),
+            parse_value(&list, "a, b ,, c").unwrap(),
             SettingValue::List(vec!["a".into(), "b".into(), "c".into()])
         );
     }
 
-    /// Il comando visto **dal contratto**: il doppio in memoria applica il
-    /// cancello della chiave come lo applica il kernel, quindi ciò che qui
-    /// passa è ciò che passa nell'app.
+    /// compilare.
+        // Un elenco si scrive con le virgole: chiedere il JSON vorrebbe dire
+        // far scrivere virgolette dentro una stringa di un JSON.
     #[test]
     fn the_command_refuses_a_key_that_is_not_program_writable_and_says_which() {
         let mut host = MemoryHost::new()
-            .con_valore(
+            .with_value(
                 SettingSpec::toggle("versioning.enabled", "Versioning", true).program_writable(),
                 SettingValue::Toggle(true),
             )
-            .con_impostazione(SettingSpec::toggle(
+            .with_setting(SettingSpec::toggle(
                 "privacy.telemetry",
                 "Telemetria",
                 false,
             ));
 
-        let esito = invoke(
+        let outcome = invoke(
             &mut host,
             SETTINGS_SET,
             json!({ "key": "versioning.enabled", "value": "false" }),
             InvokeMode::Apply,
         );
-        assert!(esito.is_ok(), "{esito:?}");
+        assert!(outcome.is_ok(), "{outcome:?}");
 
-        let errore = invoke(
+        let error = invoke(
             &mut host,
             SETTINGS_SET,
             json!({ "key": "privacy.telemetry", "value": "true" }),
@@ -2879,25 +2876,25 @@ mod tests {
         )
         .expect_err("non si è dichiarata scrivibile da un programma");
         assert!(
-            matches!(errore, PluginError::PermissionDenied(_)),
-            "{errore:?}"
+            matches!(error, PluginError::PermissionDenied(_)),
+            "{error:?}"
         );
 
-        // E una chiave che nessuno dichiara è un'altra cosa ancora: un errore
-        // di chi la chiede, non un permesso che manca.
-        let errore = invoke(
+    /// Il comando visto **dal contratto**: il doppio in memoria applica il
+    /// cancello della chiave come lo applica il kernel, quindi ciò che qui
+        let error = invoke(
             &mut host,
             SETTINGS_SET,
             json!({ "key": "boh", "value": "1" }),
             InvokeMode::Apply,
         )
         .expect_err("nessuno la dichiara");
-        assert!(matches!(errore, PluginError::BadArgs(_)), "{errore:?}");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
     }
 
     #[test]
     fn an_empty_document_list_is_not_the_whole_vault() {
-        let mut host = MemoryHost::new().con_documento("a.md", "il gatto");
+        let mut host = MemoryHost::new().with_document("a.md", "il gatto");
         let outcome = invoke(
             &mut host,
             VAULT_REPLACE,
@@ -2906,7 +2903,7 @@ mod tests {
         )
         .expect("simula");
         assert!(
-            piano(&outcome).is_empty(),
+            plan(&outcome).is_empty(),
             "elenco vuoto = nessuna nota, non «tutte»: è ciò che la spec dichiara"
         );
     }

@@ -9,7 +9,7 @@ const meta = (order: Record<string, string[]> = {}): Organization => ({
   spaces: [],
 });
 
-const cartella = (path: string, folders = 0, entries = 0): VaultFolder => ({
+const folder = (path: string, folders = 0, entries = 0): VaultFolder => ({
   path,
   folders,
   entries,
@@ -21,47 +21,47 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
     // l'albero costruito dai path non poteva nemmeno essere passata qui.
     const content = {
       path: "Progetti",
-      folders: [cartella("Progetti/Zeta", 0, 2), cartella("Progetti/Archivio")],
+      folders: [folder("Progetti/Zeta", 0, 2), folder("Progetti/Archivio")],
       notes: ["Progetti/beta.md", "Progetti/Alfa.md"],
-      altreCartelle: 0,
-      altreNote: 0,
+      otherFolders: 0,
+      otherNote: 0,
     };
-    const ordinato = sortContent(content, meta());
-    expect(ordinato.folders.map((f) => f.path)).toEqual([
+    const ordered = sortContent(content, meta());
+    expect(ordered.folders.map((f) => f.path)).toEqual([
       "Progetti/Archivio",
       "Progetti/Zeta",
     ]);
-    expect(ordinato.notes).toEqual(["Progetti/Alfa.md", "Progetti/beta.md"]);
-    expect(orderedNames(ordinato)).toEqual(["Archivio", "Zeta", "Alfa.md", "beta.md"]);
+    expect(ordered.notes).toEqual(["Progetti/Alfa.md", "Progetti/beta.md"]);
+    expect(orderedNames(ordered)).toEqual(["Archivio", "Zeta", "Alfa.md", "beta.md"]);
   });
 
   it("l'ordine scelto a mano vale per i nomi che nomina, e non fa sparire gli altri", () => {
     const content = {
       path: "",
-      folders: [cartella("b"), cartella("a")],
+      folders: [folder("b"), folder("a")],
       notes: ["z.md", "k.md"],
-      altreCartelle: 0,
-      altreNote: 0,
+      otherFolders: 0,
+      otherNote: 0,
     };
-    const ordinato = sortContent(content, meta({ "": ["b", "z.md"] }));
-    expect(ordinato.folders.map((f) => f.path)).toEqual(["b", "a"]);
-    expect(ordinato.notes).toEqual(["z.md", "k.md"]);
+    const ordered = sortContent(content, meta({ "": ["b", "z.md"] }));
+    expect(ordered.folders.map((f) => f.path)).toEqual(["b", "a"]);
+    expect(ordered.notes).toEqual(["z.md", "k.md"]);
   });
 
   it("la folder note di una cartella non aperta si sa dai path che esistono", () => {
     // È la domanda che rimpiazza «carica il contenuto per guardarci dentro»:
     // i candidati sono pochi e noti, e quali esistano lo dice il kernel.
-    const candidati = folderNoteCandidates("a/Diario", ["md", "canvas"]);
-    expect(candidati).toEqual([
+    const candidates = folderNoteCandidates("a/Diario", ["md", "canvas"]);
+    expect(candidates).toEqual([
       "a/Diario/Diario.md",
       "a/Diario/Diario.canvas",
       "a/Diario/index.md",
       "a/Diario/index.canvas",
     ]);
 
-    const esistenti = new Set(["a/Diario/index.md", "a/Diario/Diario.canvas"]);
-    expect(folderNoteIn("a/Diario", ["md", "canvas"], esistenti)).toBe("a/Diario/Diario.canvas");
-    expect(folderNoteIn("a/Vuota", ["md"], esistenti)).toBeNull();
+    const existing = new Set(["a/Diario/index.md", "a/Diario/Diario.canvas"]);
+    expect(folderNoteIn("a/Diario", ["md", "canvas"], existing)).toBe("a/Diario/Diario.canvas");
+    expect(folderNoteIn("a/Vuota", ["md"], existing)).toBeNull();
     // La radice non ha una folder note: non è una cartella con un nome.
     expect(folderNoteCandidates("", ["md"])).toEqual([]);
   });

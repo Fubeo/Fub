@@ -15,7 +15,7 @@
 // si scoprivano aprendo l'app.
 //
 // Qui si monta `main.ts` — il vero punto di montaggio, non una sua imitazione —
-// sulla scocca vera (`index.html`), contro l'host finto (`host/finto.ts`). Ciò
+// sulla scocca vera (`index.html`), contro l'host finto (`host/fake.ts`). Ciò
 // che resta finto è **il di là del confine**, e il §1.3 lo ha reso un file
 // solo: è esattamente il modo in cui la
 // [decisione 0015](../../docs/decisions/0015-la-forma-della-shell.md) diceva
@@ -38,12 +38,12 @@
 // # I limiti, dichiarati qui perché nessuno li deduca
 //
 // Non è un E2E dell'**app**: il ponte Tauri, la webview e il kernel restano
-// fuori (il perché sta in `host/finto.ts`). E non è un presidio di layout: in
+// fuori (il perché sta in `host/fake.ts`). E non è un presidio di layout: in
 // `happy-dom` non c'è né CSS né misura, quindi si asserisce su *cosa* c'è e
 // mai su *dove*.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorView } from "@codemirror/view";
-import type { HostFinto } from "./host/finto";
+import type { FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
 
@@ -51,62 +51,62 @@ import { SHELL_KEYS } from "./ui/shell-keys.generated";
 // mock sono issati sopra gli import, quindi non possono chiudere su una
 // variabile normale di questo modulo. La scatola sì, perché a leggerla è la
 // factory quando il modulo viene chiesto — cioè dopo che il test l'ha riempita.
-const scatola = vi.hoisted(() => ({
-  host: null as HostFinto | null,
+const box = vi.hoisted(() => ({
+  host: null as FakeHost | null,
   /// Cosa risponde la modale di conferma del sistema. È l'unica altra cosa che
   /// la shell chiede al di là del confine (§1.3), e negli e2e è un `true`.
-  conferma: true,
+  confirm: true,
 }));
 
 // Il modulo mimato è **uno solo per tutto il file**, e delega all'host di
 // adesso a ogni chiamata. Non è un vezzo: `vi.resetModules()` svuota il
 // registro dei moduli ma **non** quello dei mock, quindi una factory che
-// restituisse `scatola.host.modulo` verrebbe eseguita una volta sola e ogni
+// restituisse `scatola.host.module` verrebbe eseguita una volta sola e ogni
 // prova dalla seconda in poi parlerebbe col vault della prima — con la shell
 // rimontata a dovere, che è il modo migliore per non accorgersene. È costato
 // due giri di misura, e sta scritto qui perché al terzo nessuno lo rifaccia.
 vi.mock("./host/ipc", () => {
-  const adesso = () => {
-    if (!scatola.host) throw new Error("l'host finto non è stato montato");
-    return scatola.host.modulo;
+  const now = () => {
+    if (!box.host) throw new Error("l'host finto non è stato montato");
+    return box.host.module;
   };
   return {
     api: new Proxy(
       {},
       {
-        get: (_t, nome: string) => (...args: unknown[]) =>
-          (adesso().api as unknown as Record<string, (...a: unknown[]) => unknown>)[nome](...args),
+        get: (_t, name: string) => (...args: unknown[]) =>
+          (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args),
       },
     ),
     onKernelEvent: (handler: (n: unknown) => void) =>
-      adesso().onKernelEvent(handler as never),
-    allaChiusura: (prima: () => Promise<void>) => adesso().allaChiusura(prima),
+      now().onKernelEvent(handler as never),
+    onClose: (first: () => Promise<void>) => now().onClose(first),
     // `finestra` è il manico della titlebar custom (§Fase 1): in test non
     // tocchiamo finestre vere, e i metodi sono tutti no-op o ritornano
     // valori neutri.
-    finestra: {
-      minimizza: async () => {},
-      alternaMassimizza: async () => {},
-      chiudi: async () => {},
-      eMassimizzata: async () => false,
-      onCambio: async () => async () => {},
+    window: {
+      minimize: async () => {},
+      toggleMaximize: async () => {},
+      close: async () => {},
+      isMaximized: async () => false,
+      onResize: async () => async () => {},
     },
   };
 });
 
 vi.mock("./host/dialog", () => ({
-  confirm: () => Promise.resolve(scatola.conferma),
+  confirm: () => Promise.resolve(box.confirm),
   pickFolder: () => Promise.resolve("/vault"),
 }));
 
-const { creaHostFinto, CESTINO_VIEW, specDiProva } = await import("./host/finto");
-const grezzo = (await import("../index.html?raw")).default;
+const { createFakeHost, TRASH_VIEW, testViewSpec } = await import("./host/fake");
+const rawHtml = (await import("../index.html?raw")).default;
 
 /// La scocca vera, rimessa in piedi come la webview la trova.
-function montaLaScocca(): void {
-  const corpo = /<body[^>]*>([\s\S]*)<\/body>/.exec(grezzo);
-  if (!corpo) throw new Error("index.html non ha un body");
-  document.body.innerHTML = corpo[1].replace(/<script[\s\S]*?<\/script>/g, "");
+function mountShell(): void {
+  const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(rawHtml);
+  if (!body) throw new Error("index.html non ha un body");
+  document.body.innerHTML = body[1].replace(/<script[\s\S]*?<\/script>/g, "");
 }
 
 /// Monta la shell su un vault finto **senza aspettare l'avvio**, con le porte
@@ -115,95 +115,96 @@ function montaLaScocca(): void {
 /// I freni vanno messi prima di importare `main.ts`, perché l'avvio parte
 /// all'import: è l'unico modo di guardare *dentro* l'apertura di un vault
 /// invece che a cose fatte. Chi non ne ha bisogno usa `avvia`.
-async function monta(
+async function mount(
   file: Record<string, string>,
-  impostazioni: SettingEntry[] = [],
-  radice: string | null | undefined = undefined,
-  freni: string[] = [],
-  avviso: KernelNotice | null = null,
-  comandi: CommandSpec[] = [],
-): Promise<{ host: HostFinto; avvio: Promise<void>; sblocca: Map<string, () => void> }> {
+  settings: SettingEntry[] = [],
+  root: string | null | undefined = undefined,
+  throttles: string[] = [],
+  notice: KernelNotice | null = null,
+  commands: CommandSpec[] = [],
+): Promise<{ host: FakeHost; startup: Promise<void>; unlock: Map<string, () => void> }> {
   vi.resetModules();
-  scatola.conferma = true;
-  const host = creaHostFinto({
+  box.confirm = true;
+  const host = createFakeHost({
     file,
-    view: [specDiProva(CESTINO_VIEW, "left_sidebar")],
-    impostazioni,
-    radice,
-    avvisoDiSessione: avviso,
-    comandi,
+    view: [testViewSpec(TRASH_VIEW, "left_sidebar")],
+    settings,
+    root,
+    sessionNotice: notice,
+    commands,
   });
-  scatola.host = host;
-  const sblocca = new Map(freni.map((p) => [p, host.frena(p)]));
-  montaLaScocca();
+  box.host = host;
+  const unlock = new Map(throttles.map((p) => [p, host.throttle(p)]));
+  mountShell();
   const main = await import("./main");
-  return { host, avvio: main.avvio, sblocca };
+  return { host, startup: main.startup, unlock };
 }
 
 /// Monta la shell su un vault finto e **aspetta che l'avvio sia finito**.
-async function avvia(
+async function start(
   file: Record<string, string>,
-  impostazioni: SettingEntry[] = [],
-  radice: string | null | undefined = undefined,
-  avviso: KernelNotice | null = null,
-  comandi: CommandSpec[] = [],
-): Promise<HostFinto> {
-  const { host, avvio } = await monta(file, impostazioni, radice, [], avviso, comandi);
-  await avvio;
-  await riposa();
+  settings: SettingEntry[] = [],
+  root: string | null | undefined = undefined,
+  notice: KernelNotice | null = null,
+  commands: CommandSpec[] = [],
+): Promise<FakeHost> {
+  const { host, startup } = await mount(file, settings, root, [], notice, commands);
+  await startup;
+  await settle();
   return host;
 }
 
+/// Monta la shell su un vault finto e **aspetta che l'avvio sia finito**.
 /// Lascia girare ciò che è stato messo in coda: la shell fa quasi tutto con
 /// delle promesse, e un gesto ne accende sempre qualcuna che il gesto non
 /// attende.
-async function riposa(giri = 6): Promise<void> {
-  for (let i = 0; i < giri; i += 1) await Promise.resolve();
+async function settle(rounds = 6): Promise<void> {
+  for (let i = 0; i < rounds; i += 1) await Promise.resolve();
   await new Promise((r) => setTimeout(r, 0));
 }
 
 /// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
 /// Serve ai due pezzi che hanno un timer loro — il debounce della ricerca e
 /// quello del salvataggio — e a nient'altro.
-async function attendi(cosa: string, cond: () => boolean, entro = 2000): Promise<void> {
-  const scadenza = Date.now() + entro;
-  while (Date.now() < scadenza) {
+async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
+  const deadline = Date.now() + within;
+  while (Date.now() < deadline) {
     if (cond()) return;
     await new Promise((r) => setTimeout(r, 10));
   }
-  throw new Error(`non è mai successo: ${cosa}`);
+  throw new Error(`non è mai successo: ${thing}`);
 }
 
-function righeDelleNote(): HTMLElement[] {
+function rowsOfNote(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.note")];
 }
 
-function riga(nome: string): HTMLElement {
-  const trovata = righeDelleNote().find((r) => r.textContent?.trim() === nome);
-  if (!trovata) {
-    const viste = righeDelleNote().map((r) => r.textContent?.trim());
-    throw new Error(`nell'albero non c'è «${nome}», ci sono: ${viste.join(", ")}`);
+function row(name: string): HTMLElement {
+  const found = rowsOfNote().find((r) => r.textContent?.trim() === name);
+  if (!found) {
+    const views = rowsOfNote().map((r) => r.textContent?.trim());
+    throw new Error(`nell'albero non c'è «${name}», ci sono: ${views.join(", ")}`);
   }
-  return trovata;
+  return found;
 }
 
 /// Apre il menu contestuale su una riga e sceglie la voce con quell'etichetta.
-async function menuContestuale(su: HTMLElement, voce: string): Promise<void> {
-  su.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+async function contextMenu(on: HTMLElement, entry: string): Promise<void> {
+  on.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   const menu = document.getElementById("context-menu");
   if (!menu) throw new Error("il menu contestuale non si è aperto");
-  const bottoni = [...menu.querySelectorAll("button")];
-  const scelto = bottoni.find((b) => b.textContent === voce);
-  if (!scelto) {
-    throw new Error(`nel menu non c'è «${voce}», ci sono: ${bottoni.map((b) => b.textContent)}`);
+  const buttons = [...menu.querySelectorAll("button")];
+  const selected = buttons.find((b) => b.textContent === entry);
+  if (!selected) {
+    throw new Error(`nel menu non c'è «${entry}», ci sono: ${buttons.map((b) => b.textContent)}`);
   }
-  scelto.click();
-  await riposa();
+  selected.click();
+  await settle();
 }
 
 /// Una riga di impostazione che è la scorciatoia di un comando **della shell**,
 /// come la manda il backend: di macchina, col dichiarato per default.
-function scorciatoia(id: keyof typeof SHELL_KEYS): SettingEntry {
+function shortcut(id: keyof typeof SHELL_KEYS): SettingEntry {
   return {
     spec: {
       key: `keys.${id}`,
@@ -221,27 +222,27 @@ function scorciatoia(id: keyof typeof SHELL_KEYS): SettingEntry {
 
 /// Apre le impostazioni sulla scheda delle scorciatoie e rende il campo della
 /// riga che porta quel titolo.
-async function campoDellaScorciatoia(titolo: string): Promise<HTMLInputElement> {
+async function shortcutField(label: string): Promise<HTMLInputElement> {
   document.querySelector<HTMLButtonElement>("#open-settings")!.click();
-  await riposa();
-  document.querySelector<HTMLButtonElement>('#settings-tabs button[data-scheda="scorciatoie"]')!
+  await settle();
+  document.querySelector<HTMLButtonElement>('#settings-tabs button[data-tab="shortcuts"]')!
     .click();
-  await riposa();
-  const righe = [...document.querySelectorAll<HTMLElement>("#settings-body .setting-row")];
-  const riga = righe.find((r) => r.querySelector("label")?.textContent === titolo);
-  if (!riga) {
-    const viste = righe.map((r) => r.querySelector("label")?.textContent);
-    throw new Error(`fra le scorciatoie non c'è «${titolo}», ci sono: ${viste.join(", ")}`);
+  await settle();
+  const rows = [...document.querySelectorAll<HTMLElement>("#settings-body .setting-row")];
+  const row = rows.find((r) => r.querySelector("label")?.textContent === label);
+  if (!row) {
+    const views = rows.map((r) => r.querySelector("label")?.textContent);
+    throw new Error(`fra le scorciatoie non c'è «${label}», ci sono: ${views.join(", ")}`);
   }
-  const campo = riga.querySelector("input");
-  if (!campo) throw new Error(`la scorciatoia «${titolo}» è di sola lettura: non ha un campo`);
-  return campo;
+  const field = row.querySelector("input");
+  if (!field) throw new Error(`la scorciatoia «${label}» è di sola lettura: non ha un field`);
+  return field;
 }
 
 /// Il testo dell'editor, letto dal DOM di CodeMirror come lo legge chi guarda.
-function testoAVideo(): string {
-  const righe = [...document.querySelectorAll(".cm-content .cm-line")];
-  return righe.map((r) => r.textContent).join("\n");
+function textToVideo(): string {
+  const rows = [...document.querySelectorAll(".cm-content .cm-line")];
+  return rows.map((r) => r.textContent).join("\n");
 }
 
 const VAULT = {
@@ -259,7 +260,7 @@ describe("apri un vault", () => {
   it("la finestra parte sul vault iniziale, con l'albero e la prima nota aperta", async () => {
     // **Le domande che nessun dato lega partono insieme.** Aprire un vault
     // costava otto andate e ritorno sull'IPC in fila — quattro caricatori di
-    // stato (`caricaLayout` ne fa due di suo) e tre elenchi del kernel — per
+    // stato (`loadLayout` ne fa due di suo) e tre elenchi del kernel — per
     // otto risposte che non si leggono a vicenda. Adesso sono due attese.
     //
     // Il conto delle chiamate non lo vedrebbe: sono le stesse otto in tutti e
@@ -267,53 +268,53 @@ describe("apri un vault", () => {
     // dell'host finto invece di sperarla: si tiene in volo la risposta di una
     // porta e si guarda chi è già partito. Rosso con la forma di prima:
     // `viewState` era chiesta una volta sola, e `listCommands` mai.
-    const { host, avvio, sblocca } = await monta(VAULT, [], undefined, [
+    const { host, startup, unlock } = await mount(VAULT, [], undefined, [
       "viewState",
       "listViews",
     ]);
-    await riposa();
-    expect(host.aPorta("viewState").map((c) => c.args[0])).toEqual([
+    await settle();
+    expect(host.atGate("viewState").map((c) => c.args[0])).toEqual([
       "layout",
       "mode",
       "expanded",
       "activeSpace",
     ]);
 
-    sblocca.get("viewState")!();
-    await riposa();
-    expect(host.aPorta("listViews")).toHaveLength(1);
-    expect(host.aPorta("listCommands")).toHaveLength(1);
+    unlock.get("viewState")!();
+    await settle();
+    expect(host.atGate("listViews")).toHaveLength(1);
+    expect(host.atGate("listCommands")).toHaveLength(1);
 
-    sblocca.get("listViews")!();
-    await avvio;
-    await riposa();
+    unlock.get("listViews")!();
+    await startup;
+    await settle();
 
     // Il vault che l'host propone all'avvio, non uno scelto da qui.
     expect(document.querySelector("#vault-path")?.textContent).toBe("/vault");
-    expect(righeDelleNote().map((r) => r.textContent?.trim())).toEqual(["Benvenuto"]);
-    expect(testoAVideo()).toContain("Il primo documento");
+    expect(rowsOfNote().map((r) => r.textContent?.trim())).toEqual(["Benvenuto"]);
+    expect(textToVideo()).toContain("Il primo documento");
 
     // **Con una finestra da uno** (§14.4): l'apertura non chiede il vault
     // intero per aprire una nota. È la specie di fatto che si vede solo da
     // questa parte del confine, e che guardando lo schermo non si vede.
-    const perLaPrimaNota = host
-      .aPorta("queryIndex")
+    const forNoteBefore = host
+      .atGate("queryIndex")
       .map((c) => c.args[0] as { kind: string; page?: { limit: number } | null })
       .filter((q) => q.kind === "entries" && q.page?.limit === 1);
-    expect(perLaPrimaNota.length).toBeGreaterThan(0);
+    expect(forNoteBefore.length).toBeGreaterThan(0);
   });
 
   it("una cartella si apre e mostra ciò che ha dentro, non prima", async () => {
-    await avvia(VAULT);
-    expect(righeDelleNote().map((r) => r.textContent?.trim())).toEqual(["Benvenuto"]);
+    await start(VAULT);
+    expect(rowsOfNote().map((r) => r.textContent?.trim())).toEqual(["Benvenuto"]);
 
-    const cartella = [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.folder")].find(
+    const folder = [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.folder")].find(
       (r) => r.textContent?.includes("note"),
     );
-    expect(cartella).toBeDefined();
-    cartella?.click();
-    await attendi("la cartella si apre", () => righeDelleNote().length === 3);
-    expect(righeDelleNote().map((r) => r.textContent?.trim()).sort()).toEqual([
+    expect(folder).toBeDefined();
+    folder?.click();
+    await waitFor("la cartella si apre", () => rowsOfNote().length === 3);
+    expect(rowsOfNote().map((r) => r.textContent?.trim()).sort()).toEqual([
       "Benvenuto",
       "Riunione",
       "Spesa",
@@ -323,22 +324,22 @@ describe("apri un vault", () => {
 
 describe("scrivi", () => {
   it("ciò che si batte arriva al disco, e discende dalla revisione che si era letta", async () => {
-    const host = await avvia(VAULT);
-    const letture = host.aPorta("readDocument");
-    const letta = letture[letture.length - 1];
-    expect(letta?.args[0]).toBe("Benvenuto.md");
+    const host = await start(VAULT);
+    const reads = host.atGate("readDocument");
+    const read = reads[reads.length - 1];
+    expect(read?.args[0]).toBe("Benvenuto.md");
 
-    battiNellEditor("Una riga nuova.");
-    await attendi("il salvataggio parte", () => host.aPorta("writeDocument").length > 0);
+    typeInEditor("Una riga nuova.");
+    await waitFor("il salvataggio parte", () => host.atGate("writeDocument").length > 0);
 
-    const scritta = host.aPorta("writeDocument")[0];
-    expect(scritta.args[0]).toBe("Benvenuto.md");
-    expect(String(scritta.args[1])).toContain("Una riga nuova.");
+    const written = host.atGate("writeDocument")[0];
+    expect(written.args[0]).toBe("Benvenuto.md");
+    expect(String(written.args[1])).toContain("Una riga nuova.");
     // **La guardia della 0092**: si scrive dichiarando da cosa si partiva, e
     // ciò da cui si partiva è la revisione che la lettura ha risposto — non un
     // `dictated` che copre in silenzio ciò che c'era.
-    expect(scritta.args[2]).toEqual({ kind: "descends_from", value: "r1" });
-    expect(host.file()["Benvenuto.md"]).toContain("Una riga nuova.");
+    expect(written.args[2]).toEqual({ kind: "descends_from", value: "r1" });
+    expect(host.files()["Benvenuto.md"]).toContain("Una riga nuova.");
   });
 });
 
@@ -356,69 +357,69 @@ describe("due salvataggi della stessa nota", () => {
     // il timer ha già fatto partire. Senza coda erano due scritture in volo con
     // la **stessa** `base` letta tutte e due prima, e la seconda si prendeva un
     // `conflict` dal kernel su un file che aveva toccato solo l'utente.
-    const host = await avvia(VAULT);
+    const host = await start(VAULT);
 
-    const sblocca = host.frena("writeDocument");
-    battiNellEditor("Prima battuta.");
-    await attendi("la prima scrittura parte", () => host.aPorta("writeDocument").length === 1);
+    const unlock = host.throttle("writeDocument");
+    typeInEditor("Prima battuta.");
+    await waitFor("la prima scrittura parte", () => host.atGate("writeDocument").length === 1);
 
     // Il gesto vero che flussa: si apre un'altra nota mentre la scrittura è
     // ancora in volo. Non si aspetta — `openDocument` è ferma dentro il flush,
     // che è ferma dentro la scrittura frenata, ed è esattamente il momento.
-    const cartella = document.querySelector<HTMLElement>("#file-list .tree-row.folder");
-    cartella?.click();
-    await attendi("la cartella si apre", () => righeDelleNote().length === 3);
-    void riga("Riunione").click();
-    await riposa();
+    const folder = document.querySelector<HTMLElement>("#file-list .tree-row.folder");
+    folder?.click();
+    await waitFor("la cartella si apre", () => rowsOfNote().length === 3);
+    void row("Riunione").click();
+    await settle();
 
     // **Il momento che conta.** Senza la coda qui le scritture sono due.
-    expect(host.aPorta("writeDocument").length).toBe(1);
+    expect(host.atGate("writeDocument").length).toBe(1);
 
-    sblocca();
-    await attendi("la nota si apre", () => host.aPorta("readDocument").length > 1);
-    await riposa();
+    unlock();
+    await waitFor("la nota si apre", () => host.atGate("readDocument").length > 1);
+    await settle();
 
     // Una scrittura sola, e nessun conflitto: il flush ha aspettato quella in
     // volo invece di affiancarle una gemella con la base di prima.
-    expect(host.aPorta("writeDocument").length).toBe(1);
-    expect(host.file()["Benvenuto.md"]).toContain("Prima battuta.");
+    expect(host.atGate("writeDocument").length).toBe(1);
+    expect(host.files()["Benvenuto.md"]).toContain("Prima battuta.");
   });
 });
 
 describe("rinomina", () => {
   it("il nome pagina cambia, cartella ed estensione restano, e la nota aperta segue", async () => {
-    const host = await avvia(VAULT);
+    const host = await start(VAULT);
 
-    await menuContestuale(riga("Benvenuto"), "Rinomina");
-    const campo = document.querySelector<HTMLInputElement>("#file-list input");
-    if (!campo) throw new Error("la riga non è diventata un campo");
-    campo.value = "Indice";
-    campo.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    await riposa();
-    await attendi("la rinomina arriva al kernel", () => host.aPorta("invokeCommand").length > 0);
-    await riposa();
+    await contextMenu(row("Benvenuto"), "Rinomina");
+    const field = document.querySelector<HTMLInputElement>("#file-list input");
+    if (!field) throw new Error("la riga non è diventata un campo");
+    field.value = "Indice";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await settle();
+    await waitFor("la rinomina arriva al kernel", () => host.atGate("invokeCommand").length > 0);
+    await settle();
 
-    const invocato = host.aPorta("invokeCommand")[0];
-    expect(invocato.args[0]).toBe("note.rename");
-    expect(invocato.args[1]).toEqual({ doc: "Benvenuto.md", to: "Indice.md" });
-    expect(Object.keys(host.file())).toContain("Indice.md");
+    const invoked = host.atGate("invokeCommand")[0];
+    expect(invoked.args[0]).toBe("note.rename");
+    expect(invoked.args[1]).toEqual({ doc: "Benvenuto.md", to: "Indice.md" });
+    expect(Object.keys(host.files())).toContain("Indice.md");
 
     // L'identità del documento aperto la migra **l'evento**, non il chiamante
     // (§13.1): il buffer che si salverà dopo deve avere il nome nuovo, o la
     // prima battuta successiva ricreerebbe la nota vecchia.
-    await attendi("l'albero si riscrive", () =>
-      righeDelleNote().some((r) => r.textContent?.trim() === "Indice"),
+    await waitFor("l'albero si riscrive", () =>
+      rowsOfNote().some((r) => r.textContent?.trim() === "Indice"),
     );
-    battiNellEditor("dopo la rinomina");
-    await attendi("il salvataggio parte", () => host.aPorta("writeDocument").length > 0);
-    const scritta = host.aPorta("writeDocument")[0];
-    expect(scritta.args[0]).toBe("Indice.md");
+    typeInEditor("dopo la rinomina");
+    await waitFor("il salvataggio parte", () => host.atGate("writeDocument").length > 0);
+    const written = host.atGate("writeDocument")[0];
+    expect(written.args[0]).toBe("Indice.md");
     // **E col nome nuovo segue anche la base.** Il path da solo non basta a
     // provarlo: senza la migrazione del buffer, la battuta dopo la rinomina ne
     // fa nascere uno nuovo — che scrive sul path giusto, ma `dictated`, cioè
     // coprendo qualunque cosa ci sia senza guardare. Misurato: togliendo la
     // migrazione, un presidio che guardasse solo il path resterebbe **verde**.
-    expect(scritta.args[2]).toEqual({ kind: "descends_from", value: "r1" });
+    expect(written.args[2]).toEqual({ kind: "descends_from", value: "r1" });
   });
 });
 
@@ -431,16 +432,16 @@ describe("chiudere la finestra col ritardo che corre", () => {
   /// I banchi non aspettano il ritardo: chiudono **mentre corre**, che è
   /// esattamente il caso, e guardano cos'è arrivato all'host.
   it("l'ultima battuta va sul disco invece di sparire", async () => {
-    const host = await avvia(VAULT);
-    battiNellEditor("l'ultima riga prima di chiudere");
+    const host = await start(VAULT);
+    typeInEditor("l'ultima riga prima di chiudere");
 
-    await host.chiudi();
+    await host.close();
 
     // Il testo battuto si aggiunge in fondo alla nota, quindi ciò che parte per
     // il disco è **tutto** il documento: si guarda dentro, non uguale.
-    const scritte = host.aPorta("writeDocument").map((c) => String(c.args[1]));
+    const writtenItems = host.atGate("writeDocument").map((c) => String(c.args[1]));
     expect(
-      scritte.join("\n--- e poi ---\n"),
+      writtenItems.join("\n--- e poi ---\n"),
       "la finestra si è chiusa mentre il ritardo del salvataggio correva: " +
         "l'ultima battuta non è arrivata al disco",
     ).toContain("l'ultima riga prima di chiudere");
@@ -456,32 +457,32 @@ describe("chiudere la finestra col ritardo che corre", () => {
   /// finestra, e chi arriva secondo non arriva. Quindi la bozza si tiene in volo
   /// e si guarda se la chiusura è già finita senza di lei.
   it("la chiusura aspetta la bozza, invece di lanciarla e andarsene", async () => {
-    const host = await avvia(VAULT);
-    battiNellEditor("la riga che il disco non vuole");
-    const ripara = host.guasta("writeDocument", "disco pieno");
-    const sblocca = host.frena("saveDraft");
+    const host = await start(VAULT);
+    typeInEditor("la riga che il disco non vuole");
+    const repair = host.fault("writeDocument", "disco pieno");
+    const unlock = host.throttle("saveDraft");
 
-    let chiusa = false;
-    const chiusura = host.chiudi().then(() => {
-      chiusa = true;
+    let closed = false;
+    const close = host.close().then(() => {
+      closed = true;
     });
-    await riposa();
+    await settle();
 
-    const bozze = host.aPorta("saveDraft").map((c) => String(c.args[1]));
+    const drafts = host.atGate("saveDraft").map((c) => String(c.args[1]));
     expect(
-      bozze.join("\n--- e poi ---\n"),
+      drafts.join("\n--- e poi ---\n"),
       "il salvataggio è fallito chiudendo e nessuno ha scritto la bozza: " +
         "l'ultima battuta non è in nessuno dei due posti",
     ).toContain("la riga che il disco non vuole");
     expect(
-      chiusa,
+      closed,
       "la finestra si è chiusa mentre la bozza era ancora in volo: la battuta " +
         "che il disco ha rifiutato corre contro la distruzione della webview",
     ).toBe(false);
 
-    sblocca();
-    await chiusura;
-    ripara();
+    unlock();
+    await close;
+    repair();
   });
 });
 
@@ -498,28 +499,28 @@ describe("le bozze di crash che smettono di arrivare sul disco", () => {
   /// sola** — il debounce ci riprova a ogni battuta, e una riga per tentativo
   /// sarebbe di nuovo il rumore che il silenzio voleva evitare.
   it("lo dicono la prima volta, e non a ogni tentativo", async () => {
-    const host = await avvia(VAULT);
-    const { avvisiRecenti } = await import("./ui/notify");
-    const cieche = () =>
-      avvisiRecenti().filter((a) => a.testo.includes("non arriva più sul disco"));
+    const host = await start(VAULT);
+    const { recentNotices } = await import("./ui/notify");
+    const blind = () =>
+      recentNotices().filter((a) => a.text.includes("non arriva più sul disco"));
     // Il vault diventa di sola lettura sotto i piedi: la nota non si salva e la
     // bozza nemmeno. Il primo guasto è ciò che porta la bozza al disco senza
     // aspettare il secondo — `scriviBuffer`, fallendo, la scrive subito.
-    const riparaDisco = host.guasta("writeDocument", "vault in sola lettura");
-    const riparaBozza = host.guasta("saveDraft", "vault in sola lettura");
+    const repairDisk = host.fault("writeDocument", "vault in sola lettura");
+    const repairDraft = host.fault("saveDraft", "vault in sola lettura");
 
-    battiNellEditor("la prima riga");
-    await attendi("la prima bozza tentata", () => host.aPorta("saveDraft").length >= 1);
+    typeInEditor("la prima riga");
+    await waitFor("la prima bozza tentata", () => host.atGate("saveDraft").length >= 1);
     expect(
-      cieche().length,
+      blind().length,
       "le bozze non arrivano più sul disco e nessuno l'ha detto: la rete di " +
         "sicurezza è spenta mentre chi scrive crede di averla",
     ).toBe(1);
 
-    battiNellEditor(" e la seconda");
-    await attendi("la seconda bozza tentata", () => host.aPorta("saveDraft").length >= 2);
+    typeInEditor(" e la seconda");
+    await waitFor("la seconda bozza tentata", () => host.atGate("saveDraft").length >= 2);
     expect(
-      cieche().length,
+      blind().length,
       "una riga di avviso per ogni bozza tentata: è il rumore che insegna a " +
         "ignorare gli avvisi",
     ).toBe(1);
@@ -529,19 +530,19 @@ describe("le bozze di crash che smettono di arrivare sul disco", () => {
     // seconda caduta è una notizia come la prima. La nota continua a non
     // salvarsi — è ciò che porta la bozza al disco — ma la bozza sì, e con lei
     // il silenzio riparte da capo.
-    riparaBozza();
-    battiNellEditor(" con la rete tornata");
-    await attendi("la bozza scritta davvero", () => host.aPorta("saveDraft").length >= 3);
-    host.guasta("saveDraft", "la share se n'è andata di nuovo");
-    battiNellEditor(" e la rete di nuovo caduta");
-    await attendi("la bozza tentata da capo", () => host.aPorta("saveDraft").length >= 4);
+    repairDraft();
+    typeInEditor(" con la rete tornata");
+    await waitFor("la bozza scritta davvero", () => host.atGate("saveDraft").length >= 3);
+    host.fault("saveDraft", "la share se n'è andata di nuovo");
+    typeInEditor(" e la rete di nuovo caduta");
+    await waitFor("la bozza tentata da capo", () => host.atGate("saveDraft").length >= 4);
     expect(
-      cieche().length,
+      blind().length,
       "la rete è caduta due volte e l'ha detto una: dopo il primo guasto il " +
         "canale resta muto per sempre",
     ).toBe(2);
 
-    riparaDisco();
+    repairDisk();
   });
 });
 
@@ -555,23 +556,23 @@ describe("le bozze e il salvataggio vanno in fila", () => {
   /// La corsa la scrive il banco, non la spera: `frena` tiene lo `save_draft`
   /// in volo finché non lo si libera, e si guarda cosa parte e in che ordine.
   it("un discard non scavalca uno save_draft in volo", async () => {
-    const host = await avvia(VAULT);
+    const host = await start(VAULT);
     // Metto in volo uno save_draft e lo tengo fermo. Parte subito, perché il
     // salvataggio fallendo lo scrive senza aspettare il debounce di un secondo.
-    const riparaDisco = host.guasta("writeDocument", "disco pieno");
-    const sbloccaBozza = host.frena("saveDraft");
-    battiNellEditor("testo che il disco rifiuta");
-    await attendi(
+    const repairDisk = host.fault("writeDocument", "disco pieno");
+    const unlockDraft = host.throttle("saveDraft");
+    typeInEditor("testo che il disco rifiuta");
+    await waitFor(
       "la bozza parte dopo il salvataggio fallito",
-      () => host.aPorta("saveDraft").length === 1,
+      () => host.atGate("saveDraft").length === 1,
     );
     // Lo save_draft è in volo, trattenuto dal freno.
 
     // Riparo il disco e batto ancora: il salvataggio riuscirebbe e, pulendo
     // il buffer, scatenerebbe il discard. Senza fila il discard partiva subito
     // — mentre lo save_draft era ancora in volo.
-    riparaDisco();
-    battiNellEditor(" e adesso il disco lo prende");
+    repairDisk();
+    typeInEditor(" e adesso il disco lo prende");
     // Sotto la fila il secondo salvataggio resta in coda dietro lo save_draft
     // in volo, e il suo discard non parte; senza fila partiva subito — mentre
     // lo save_draft era ancora in volo. `attendi` fallisce se la condizione non
@@ -579,9 +580,9 @@ describe("le bozze e il salvataggio vanno in fila", () => {
     // partire. Si ribalta l'eccezione in «non partito».
     let discardInVolo = true;
     try {
-      await attendi(
+      await waitFor(
         "il discard NON parte mentre save_draft è in volo",
-        () => host.aPorta("discardDraft").length > 0,
+        () => host.atGate("discardDraft").length > 0,
         700,
       );
     } catch {
@@ -594,17 +595,17 @@ describe("le bozze e il salvataggio vanno in fila", () => {
     ).toBe(false);
 
     // Libero lo save_draft: il discard ha il suo turno, e gli arriva DOPO.
-    sbloccaBozza();
-    await attendi(
+    unlockDraft();
+    await waitFor(
       "il discard parte dopo lo save_draft",
-      () => host.aPorta("discardDraft").length === 1,
+      () => host.atGate("discardDraft").length === 1,
     );
-    const primaBozza = host.chiamate.findIndex((c) => c.porta === "saveDraft");
-    const dopoScarto = host.chiamate.findIndex((c) => c.porta === "discardDraft");
+    const beforeDraft = host.calls.findIndex((c) => c.gate === "saveDraft");
+    const afterDiscard = host.calls.findIndex((c) => c.gate === "discardDraft");
     expect(
-      dopoScarto,
+      afterDiscard,
       "lo save_draft è arrivato al kernel dopo il discard: l'ordine non è FIFO",
-    ).toBeGreaterThan(primaBozza);
+    ).toBeGreaterThan(beforeDraft);
   });
 
   /// L'altra metà di una fila che non si avvelena: uno `save_draft` rifiutato
@@ -613,28 +614,28 @@ describe("le bozze e il salvataggio vanno in fila", () => {
   /// `Coda` prosegue comunque — ma se così non fosse, il discard successivo
   /// non partirebbe mai, ed è ciò che si guarda.
   it("uno save_draft rifiutato non avvelena la fila", async () => {
-    const host = await avvia(VAULT);
+    const host = await start(VAULT);
     // Anche la bozza viene rifiutata: save_draft rigetta.
-    const riparaDisco = host.guasta("writeDocument", "disco pieno");
-    const riparaBozza = host.guasta("saveDraft", "disco pieno");
-    battiNellEditor("testo che né il disco né la bozza accettano");
-    await attendi(
+    const repairDisk = host.fault("writeDocument", "disco pieno");
+    const repairDraft = host.fault("saveDraft", "disco pieno");
+    typeInEditor("testo che né il disco né la bozza accettano");
+    await waitFor(
       "il primo save_draft rifiutato parte",
-      () => host.aPorta("saveDraft").length === 1,
+      () => host.atGate("saveDraft").length === 1,
     );
 
     // Se il rigetto avvelenasse la coda, ciò che viene dopo non partirebbe mai.
-    riparaDisco();
-    riparaBozza();
-    battiNellEditor(" e invece tutto riparte");
+    repairDisk();
+    repairDraft();
+    typeInEditor(" e invece tutto riparte");
     // Il salvataggio riesce → pulisce il buffer → discard della bozza. Che la
     // fila sia viva dopo il rifiuto lo dice il fatto che il discard arrivi.
-    await attendi(
+    await waitFor(
       "il discard parte dopo lo save_draft rifiutato",
-      () => host.aPorta("discardDraft").length === 1,
+      () => host.atGate("discardDraft").length === 1,
     );
     expect(
-      host.aPorta("discardDraft").length,
+      host.atGate("discardDraft").length,
       "il discard non è partito: la fila si è avvelenata al save_draft rifiutato",
     ).toBe(1);
   });
@@ -651,103 +652,103 @@ describe("spostare un file col testo non ancora sul disco", () => {
   /// fossero sul disco o no: una precondizione di cui nessuno leggeva l'esito
   /// (difetto 0206).
   it("la rinomina non parte, e lo dice", async () => {
-    const host = await avvia(VAULT);
-    battiNellEditor("testo che il disco rifiuta");
-    const ripara = host.guasta("writeDocument", "disco pieno");
+    const host = await start(VAULT);
+    typeInEditor("testo che il disco rifiuta");
+    const repair = host.fault("writeDocument", "disco pieno");
 
-    await menuContestuale(riga("Benvenuto"), "Rinomina");
-    const campo = document.querySelector<HTMLInputElement>("#file-list input");
-    if (!campo) throw new Error("la riga non è diventata un campo");
-    campo.value = "Indice";
-    campo.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    await riposa(20);
+    await contextMenu(row("Benvenuto"), "Rinomina");
+    const field = document.querySelector<HTMLInputElement>("#file-list input");
+    if (!field) throw new Error("la riga non è diventata un campo");
+    field.value = "Indice";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await settle(20);
 
-    const rinomine = host.aPorta("invokeCommand").filter((c) => c.args[0] === "note.rename");
+    const renames = host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename");
     expect(
-      rinomine,
+      renames,
       "il file si è mosso mentre il testo battuto era solo in RAM: la " +
         "riscrittura dei wikilink del kernel finirà sotto il salvataggio dopo",
     ).toEqual([]);
-    expect(Object.keys(host.file())).toContain("Benvenuto.md");
+    expect(Object.keys(host.files())).toContain("Benvenuto.md");
     // E chi guarda lo sa: il rifiuto è una frase, non un gesto che non fa niente.
     expect(document.body.textContent).toContain("Benvenuto.md non è sul disco");
 
-    ripara();
+    repair();
   });
 
   /// L'altra metà: `convertToFolder` sposta il file esattamente come la
   /// rinomina — è una rinomina — e non metteva in salvo niente affatto.
   it("la conversione in cartella mette in salvo prima di muovere", async () => {
-    const host = await avvia(VAULT);
-    battiNellEditor("battuta prima di convertire");
+    const host = await start(VAULT);
+    typeInEditor("battuta prima di convertire");
 
-    await menuContestuale(riga("Benvenuto"), "Converti in cartella");
-    await riposa(20);
+    await contextMenu(row("Benvenuto"), "Converti in cartella");
+    await settle(20);
 
-    const scrittura = host.chiamate.findIndex((c) => c.porta === "writeDocument");
-    const mossa = host.chiamate.findIndex(
-      (c) => c.porta === "invokeCommand" && c.args[0] === "note.rename",
+    const writing = host.calls.findIndex((c) => c.gate === "writeDocument");
+    const moved = host.calls.findIndex(
+      (c) => c.gate === "invokeCommand" && c.args[0] === "note.rename",
     );
-    expect(mossa, "la conversione non è arrivata al kernel").toBeGreaterThan(-1);
+    expect(moved, "la conversione non è arrivata al kernel").toBeGreaterThan(-1);
     expect(
-      scrittura,
+      writing,
       "il file è stato mosso senza mettere in salvo il buffer: il testo battuto " +
         "è ancora solo in RAM mentre il kernel riscrive i wikilink",
     ).toBeGreaterThan(-1);
-    expect(scrittura).toBeLessThan(mossa);
+    expect(writing).toBeLessThan(moved);
   });
 });
 
 describe("cerca", () => {
   it("la casella trova, e il risultato apre il documento", async () => {
-    const host = await avvia(VAULT);
-    const casella = document.querySelector<HTMLInputElement>("#search-input");
-    if (!casella) throw new Error("la casella di ricerca non c'è");
+    const host = await start(VAULT);
+    const field = document.querySelector<HTMLInputElement>("#search-input");
+    if (!field) throw new Error("la casella di ricerca non c'è");
 
-    casella.value = "arance";
-    casella.dispatchEvent(new Event("input", { bubbles: true }));
-    await attendi(
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor(
       "i risultati arrivano",
       () => document.querySelectorAll("#search-results li").length > 0,
     );
 
-    const risultati = [...document.querySelectorAll<HTMLElement>("#search-results li")];
-    expect(risultati.map((r) => r.textContent)).toHaveLength(1);
-    expect(risultati[0].textContent).toContain("Spesa");
+    const results = [...document.querySelectorAll<HTMLElement>("#search-results li")];
+    expect(results.map((r) => r.textContent)).toHaveLength(1);
+    expect(results[0].textContent).toContain("Spesa");
 
-    risultati[0].click();
-    await attendi("il documento cercato si apre", () =>
-      host.aPorta("readDocument").some((c) => c.args[0] === "note/Spesa.md"),
+    results[0].click();
+    await waitFor("il documento cercato si apre", () =>
+      host.atGate("readDocument").some((c) => c.args[0] === "note/Spesa.md"),
     );
-    await riposa();
-    expect(testoAVideo()).toContain("pane, latte, arance");
+    await settle();
+    expect(textToVideo()).toContain("pane, latte, arance");
   });
 });
 
 describe("ripristina", () => {
   it("una nota cestinata torna dalla view del cestino, che la shell non conosce", async () => {
-    const host = await avvia(VAULT);
+    const host = await start(VAULT);
 
-    await menuContestuale(riga("Benvenuto"), "Elimina");
-    await attendi("la nota è nel cestino", () => host.cestino().length === 1);
-    expect(Object.keys(host.file())).not.toContain("Benvenuto.md");
+    await contextMenu(row("Benvenuto"), "Elimina");
+    await waitFor("la nota è nel cestino", () => host.trash().length === 1);
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
 
     // Il cestino è un `ViewProvider`: la shell disegna l'albero che riceve e
     // rimanda l'azione a chi l'ha disegnato, **senza sapere cosa faccia**. È il
     // percorso di un plugin, ed è il solo dei cinque gesti che non passa da una
     // riga di questo bundle.
-    await attendi("la view del cestino si disegna", () => vociDelCestino().length === 1);
-    vociDelCestino()[0].click();
-    await attendi("la nota è tornata", () => Object.keys(host.file()).includes("Benvenuto.md"));
+    await waitFor("la view del cestino si disegna", () => trashEntries().length === 1);
+    trashEntries()[0].click();
+    await waitFor("la nota è tornata", () => Object.keys(host.files()).includes("Benvenuto.md"));
 
-    const azioni = host.aPorta("viewAction");
-    const azione = azioni[azioni.length - 1];
-    expect(azione?.args[0]).toBe(CESTINO_VIEW);
-    expect(azione?.args[3]).toBe("restore");
+    const actions = host.atGate("viewAction");
+    const action = actions[actions.length - 1];
+    expect(action?.args[0]).toBe(TRASH_VIEW);
+    expect(action?.args[3]).toBe("restore");
   });
 });
 
-function vociDelCestino(): HTMLElement[] {
+function trashEntries(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>("#views-left .ui-list-item")];
 }
 
@@ -760,11 +761,11 @@ function vociDelCestino(): HTMLElement[] {
 /// Un `beforeinput` finto non basterebbe: in `happy-dom` non c'è
 /// `execCommand`, e l'evento che il browser vero traduce in una modifica qui
 /// non lo traduce nessuno.
-function battiNellEditor(testo: string): void {
-  const scocca = document.querySelector<HTMLElement>(".cm-editor");
-  const view = scocca?.parentElement ? EditorView.findFromDOM(scocca.parentElement) : null;
+function typeInEditor(text: string): void {
+  const shell = document.querySelector<HTMLElement>(".cm-editor");
+  const view = shell?.parentElement ? EditorView.findFromDOM(shell.parentElement) : null;
   if (!view) throw new Error("l'editor non è montato");
-  view.dispatch({ changes: { from: view.state.doc.length, insert: testo } });
+  view.dispatch({ changes: { from: view.state.doc.length, insert: text } });
 }
 
 describe("riconfigura una scorciatoia", () => {
@@ -775,25 +776,25 @@ describe("riconfigura una scorciatoia", () => {
     // un comando di shell esiste prima di ogni vault. Qui il gesto è quello che
     // l'utente fa — apri le impostazioni, vai alle scorciatoie, scrivi una
     // combinazione — e ciò che si asserisce è che la tastiera la onori.
-    const host = await avvia(VAULT, [scorciatoia("shell.palette")]);
+    const host = await start(VAULT, [shortcut("shell.palette")]);
 
-    const campo = await campoDellaScorciatoia("Apri la palette dei comandi");
-    expect(campo.value).toBe(SHELL_KEYS["shell.palette"]);
-    campo.value = "Mod-Alt-p";
-    campo.dispatchEvent(new Event("change", { bubbles: true }));
-    await riposa();
+    const field = await shortcutField("Apri la palette dei comandi");
+    expect(field.value).toBe(SHELL_KEYS["shell.palette"]);
+    field.value = "Mod-Alt-p";
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
 
     // È arrivata alla porta con la chiave giusta: senza questa riga il gesto
     // potrebbe scrivere la chiave di un altro comando e sembrare a posto.
-    const scritte = host.aPorta("setSetting");
-    const scritta = scritte[scritte.length - 1];
-    expect(scritta?.args[0]).toBe("keys.shell.palette");
-    expect(scritta?.args[1]).toBe("Mod-Alt-p");
+    const writtenItems = host.atGate("setSetting");
+    const written = writtenItems[writtenItems.length - 1];
+    expect(written?.args[0]).toBe("keys.shell.palette");
+    expect(written?.args[1]).toBe("Mod-Alt-p");
 
     // Il pannello intrappola il fuoco, quindi si chiude prima di premere —
     // come fa chi ha finito di configurare.
     document.querySelector<HTMLButtonElement>("#settings-close")!.click();
-    await riposa();
+    await settle();
 
     // La combinazione nuova apre la palette, premuta sul documento come da un
     // browser: è la riga che dice che il giro è chiuso — scritta, riletta, e
@@ -801,26 +802,26 @@ describe("riconfigura una scorciatoia", () => {
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, altKey: true }),
     );
-    await riposa();
+    await settle();
     expect(document.getElementById("command-palette")).not.toBeNull();
 
     // E la vecchia non è più di nessuno. La domanda si pone al **registro** e
     // non premendola, per un limite di questo banco che vale la pena scrivere:
     // `document` è uno solo per tutto il file e nessuno smonta i suoi
-    // ascoltatori, quindi ogni `avvia()` ne lascia uno addosso — premere
+    // ascoltatori, quindi ogni `start()` ne lascia uno addosso — premere
     // `Mod-Shift-p` qui farebbe rispondere la tastiera di un gesto precedente,
     // che ha un registro suo e non sa niente di questa scrittura. È un fatto
     // del banco, non della shell.
-    const registro = await import("./ui/commands");
+    const registry = await import("./ui/commands");
     expect(
-      registro.avanza(registro.allCommands(), null, {
+      registry.advance(registry.allCommands(), null, {
         key: "p",
         ctrlKey: true,
         metaKey: false,
         shiftKey: true,
         altKey: false,
       }),
-    ).toEqual({ tipo: "passa" });
+    ).toEqual({ type: "passa" });
   });
 });
 
@@ -831,8 +832,8 @@ describe("la finestra senza vault", () => {
     // vault, e una sua chiave che vivesse dentro un vault esisterebbe solo dopo
     // — cioè quando serve meno. Qui non c'è nessun vault, e l'accordo che
     // l'utente ha scelto è già quello che vale.
-    const accordo = { ...scorciatoia("shell.palette"), value: "Mod-Alt-p", source: "machine" };
-    await avvia({}, [accordo as SettingEntry], null);
+    const chord = { ...shortcut("shell.palette"), value: "Mod-Alt-p", source: "machine" };
+    await start({}, [chord as SettingEntry], null);
     expect(document.querySelector("#vault-path")?.textContent).not.toBe("/vault");
 
     // La domanda si pone al **registro** e non premendo, per il limite del banco
@@ -840,8 +841,8 @@ describe("la finestra senza vault", () => {
     // qui lo riceve anche la tastiera dei gesti precedenti. Ciò che questa riga
     // difende è l'**ordine dell'avvio** — gli accordi si rileggono prima di
     // sapere se un vault c'è — e quello si vede dal registro.
-    const registro = await import("./ui/commands");
-    const palette = registro.allCommands().find((e) => e.id === "shell.palette");
+    const registry = await import("./ui/commands");
+    const palette = registry.allCommands().find((e) => e.id === "shell.palette");
     expect(palette?.binding).toBe("Mod-Alt-p");
     expect(palette?.declared).toBe(SHELL_KEYS["shell.palette"]);
   });
@@ -854,7 +855,7 @@ describe("la finestra senza vault", () => {
     // e lo consegna al router come un evento qualunque (lo storico dei toast
     // lo mostra). Si fa rosso in due versi: senza la chiamata in `init()`
     // il registro non vede nulla, senza l'inoltro il toast non appare.
-    const avviso: KernelNotice = {
+    const notice: KernelNotice = {
       event: {
         type: "trouble",
         severity: "warning",
@@ -864,20 +865,20 @@ describe("la finestra senza vault", () => {
       },
       origin: { actor: { kind: "kernel" }, batch: null },
     };
-    const host = await avvia({}, [], null, avviso);
+    const host = await start({}, [], null, notice);
 
-    expect(host.aPorta("avvisoDiSessione").length).toBe(1);
-    const { avvisiRecenti } = await import("./ui/notify");
-    expect(avvisiRecenti().some((a) => a.testo.includes("non si può scrivere"))).toBe(true);
+    expect(host.atGate("sessionNotice").length).toBe(1);
+    const { recentNotices } = await import("./ui/notify");
+    expect(recentNotices().some((a) => a.text.includes("non si può scrivere"))).toBe(true);
 
     // E una sessione sana non dice niente: il tiraggio c'è, la risposta è
-    // vuota, e lo storico resta pulito. `avvisiRecenti` si ri-importa dopo
-    // ogni `avvia`: `vi.resetModules` ricarica i moduli, e l'istanza di prima
+    // vuota, e lo storico resta pulito. `recentNotices` si ri-importa dopo
+    // ogni `start`: `vi.resetModules` ricarica i moduli, e l'istanza di prima
     // è quella della sessione con l'avviso.
-    const sana = await avvia({}, [], null);
-    const { avvisiRecenti: recentiSani } = await import("./ui/notify");
-    expect(sana.aPorta("avvisoDiSessione").length).toBe(1);
-    expect(recentiSani().some((a) => a.testo.includes("non si può scrivere"))).toBe(false);
+    const healthy = await start({}, [], null);
+    const { recentNotices: healthyRecent } = await import("./ui/notify");
+    expect(healthy.atGate("sessionNotice").length).toBe(1);
+    expect(healthyRecent().some((a) => a.text.includes("non si può scrivere"))).toBe(false);
   });
 });
 
@@ -888,17 +889,17 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
     // caso che `renameDoc` non produce mai — chi rinomina da questa finestra
     // mette in salvo i buffer prima di chiedere — e quindi il solo modo di
     // provarlo è dall'evento.
-    const host = await avvia(VAULT);
-    battiNellEditor("testo non ancora salvato");
-    host.rinominaDaFuori("Benvenuto.md", "Fuori.md");
+    const host = await start(VAULT);
+    typeInEditor("testo non ancora salvato");
+    host.renameFromOutside("Benvenuto.md", "Fuori.md");
 
-    await attendi("il salvataggio in attesa arriva", () => host.aPorta("writeDocument").length > 0);
-    const scritta = host.aPorta("writeDocument")[0];
-    expect(scritta.args[0]).toBe("Fuori.md");
-    expect(String(scritta.args[1])).toContain("testo non ancora salvato");
+    await waitFor("il salvataggio in attesa arriva", () => host.atGate("writeDocument").length > 0);
+    const written = host.atGate("writeDocument")[0];
+    expect(written.args[0]).toBe("Fuori.md");
+    expect(String(written.args[1])).toContain("testo non ancora salvato");
     // E il path vecchio **non** rinasce: era il difetto gemello, e sarebbe
     // passato per una nota duplicata invece che per una battuta persa.
-    expect(Object.keys(host.file())).not.toContain("Benvenuto.md");
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
   });
 });
 
@@ -910,21 +911,21 @@ describe("segui un link dentro la nota", () => {
     // può saperlo se non gli si dice da dove si sta guardando. La shell si
     // fermava un passo prima, con un `if (!page) return`: nessuna domanda,
     // nessuna risposta, un click che non faceva niente e non diceva perché.
-    const host = await avvia({
+    const host = await start({
       "Benvenuto.md": "Vedi [[#Appunti]] più sotto.\n\n## Appunti\n\nEccoli.\n",
     });
     const link = document.querySelector<HTMLElement>(".cm-fub-wikilink");
     expect(link, "il live preview non ha decorato il wikilink").not.toBeNull();
     link!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, ctrlKey: true }));
-    await riposa();
+    await settle();
 
-    const chieste = host
-      .aPorta("queryIndex")
+    const requested = host
+      .atGate("queryIndex")
       .map((c) => c.args[0] as { kind: string; target?: { value: { page: string } }; from?: string | null })
       .filter((q) => q.kind === "resolve");
-    expect(chieste).toHaveLength(1);
-    expect(chieste[0]!.target?.value.page).toBe("");
-    expect(chieste[0]!.from).toBe("Benvenuto.md");
+    expect(requested).toHaveLength(1);
+    expect(requested[0]!.target?.value.page).toBe("");
+    expect(requested[0]!.from).toBe("Benvenuto.md");
   });
 });
 
@@ -949,39 +950,39 @@ describe("la palette flussa prima di un comando che scrive", () => {
   };
 
   it("un buffer sporco si salva prima che note.create parta", async () => {
-    const host = await avvia(VAULT, [], undefined, null, [specNoteCreate]);
-    battiNellEditor("testo non ancora salvato");
+    const host = await start(VAULT, [], undefined, null, [specNoteCreate]);
+    typeInEditor("testo non ancora salvato");
 
     // La palette si apre con la scorciatoia di default, come da un browser.
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
     );
-    await riposa();
+    await settle();
     expect(document.getElementById("command-palette")).not.toBeNull();
 
     const input = document.querySelector<HTMLInputElement>(".palette-input")!;
     input.value = "Nuova nota";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
-    await riposa();
+    await settle();
 
     // Il comando ha un parametro facoltativo: la palette mostra il form.
-    const campo = document.querySelector<HTMLInputElement>(".palette-form input")!;
-    campo.value = "Appunti.md";
+    const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
+    field.value = "Appunti.md";
     const form = document.querySelector<HTMLFormElement>(".palette-form")!;
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await riposa();
+    await settle();
 
-    const flush = host.chiamate.findIndex((c) => c.porta === "writeDocument");
-    const invocato = host.chiamate.findIndex(
-      (c) => c.porta === "invokeCommand" && c.args[0] === "note.create",
+    const flush = host.calls.findIndex((c) => c.gate === "writeDocument");
+    const invoked = host.calls.findIndex(
+      (c) => c.gate === "invokeCommand" && c.args[0] === "note.create",
     );
-    expect(invocato, "note.create non è arrivato al kernel").toBeGreaterThan(-1);
+    expect(invoked, "note.create non è arrivato al kernel").toBeGreaterThan(-1);
     expect(flush, "il buffer sporco non è stato salvato affatto").toBeGreaterThan(-1);
     // **Il momento che conta.** Senza il flush, `writeDocument` non c'è (il
     // debounce di 400 ms non è scaduto) e il comando parte col testo solo in
     // RAM: `flush` sarebbe -1 e questa riga rossa.
-    expect(flush, "il comando è partito prima del flush").toBeLessThan(invocato);
+    expect(flush, "il comando è partito prima del flush").toBeLessThan(invoked);
   });
 
   it("un comando di sola lettura non flussa", async () => {
@@ -998,28 +999,28 @@ describe("la palette flussa prima di un comando che scrive", () => {
       params: [{ name: "query", title: "Query", description: "", kind: { kind: "text" }, required: true }],
       scope: { writes: false, reach: "session", reversible: true },
     };
-    const host = await avvia(VAULT, [], undefined, null, [specSearchOpen]);
-    battiNellEditor("testo non ancora salvato");
+    const host = await start(VAULT, [], undefined, null, [specSearchOpen]);
+    typeInEditor("testo non ancora salvato");
 
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
     );
-    await riposa();
+    await settle();
     const input = document.querySelector<HTMLInputElement>(".palette-input")!;
     input.value = "Cerca nel vault";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
-    await riposa();
+    await settle();
 
-    const campo = document.querySelector<HTMLInputElement>(".palette-form input")!;
-    campo.value = "rust";
+    const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
+    field.value = "rust";
     const form = document.querySelector<HTMLFormElement>(".palette-form")!;
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await riposa();
+    await settle();
 
-    expect(host.aPorta("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
+    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
     expect(
-      host.aPorta("writeDocument"),
+      host.atGate("writeDocument"),
       "un comando di sola lettura non deve salvare i buffer",
     ).toHaveLength(0);
   });

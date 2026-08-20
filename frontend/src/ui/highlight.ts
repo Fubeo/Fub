@@ -17,7 +17,7 @@
 //   accentato non coinciderebbero quasi mai.
 import type { Span } from "../host/contract";
 
-export function evidenziato(snippet: string, highlights: Span[]): DocumentFragment {
+export function highlighted(snippet: string, highlights: Span[]): DocumentFragment {
   const frag = document.createDocumentFragment();
   const bytes = new TextEncoder().encode(snippet);
   const decoder = new TextDecoder();

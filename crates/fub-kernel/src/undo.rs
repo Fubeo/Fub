@@ -48,7 +48,7 @@ use fub_abi::command::{Partial, Undo};
 /// all'indietro in una sessione, e il costo si vede: senza tetto, un'automazione
 /// che gira in ciclo riempie la memoria con la storia di ciò che nessuno
 /// annullerà.
-const TETTO: usize = 100;
+const CEILING: usize = 100;
 
 /// Una voce della pila: l'annullamento, e **com'era andata l'operazione**.
 ///
@@ -105,7 +105,7 @@ impl UndoStack {
             return;
         }
         self.entries.push_back(Entry { undo, partial });
-        if self.entries.len() > TETTO {
+        if self.entries.len() > CEILING {
             // Si perde la **più vecchia**: chi annulla va all'indietro, e la
             // voce che sta per uscire dalla finestra è quella che nessuno
             // raggiungerà mai.
@@ -139,8 +139,8 @@ impl UndoStack {
 
     /// Rimette la bandiera com'era. Vedi
     /// [`begin_replay`](UndoStack::begin_replay): la chiama il guardiano.
-    pub(crate) fn end_replay(&mut self, prima: bool) {
-        self.replaying = prima;
+    pub(crate) fn end_replay(&mut self, before: bool) {
+        self.replaying = before;
     }
 
     /// Quante operazioni si può annullare all'indietro.
@@ -155,49 +155,49 @@ mod tests {
     use super::*;
     use fub_abi::text::Text;
 
-    fn voce(nome: &str) -> Undo {
+    fn entry(name: &str) -> Undo {
         Undo::by_command(
-            Text::Literal(nome.to_string()),
+            Text::Literal(name.to_string()),
             "x.y",
             serde_json::Value::Null,
         )
     }
 
     /// Mette in pila un'operazione riuscita per intero.
-    fn spingi(s: &mut UndoStack, nome: &str) {
-        s.push(voce(nome), None);
+    fn push(s: &mut UndoStack, name: &str) {
+        s.push(entry(name), None);
     }
 
     #[test]
-    fn la_pila_e_una_pila() {
+    fn the_stack_and_a_stack() {
         let mut s = UndoStack::default();
-        spingi(&mut s, "uno");
-        spingi(&mut s, "due");
+        push(&mut s, "uno");
+        push(&mut s, "due");
         assert_eq!(
-            s.pop().map(|e| e.undo.label),
+            s.pop().map(|and| and.undo.label),
             Some(Text::Literal("due".into()))
         );
         assert_eq!(
-            s.pop().map(|e| e.undo.label),
+            s.pop().map(|and| and.undo.label),
             Some(Text::Literal("uno".into()))
         );
         assert!(s.pop().is_none(), "vuota è vuota, e non è un errore");
     }
 
     #[test]
-    fn annullare_non_e_annullabile() {
+    fn undo_is_not_cancellable() {
         let mut s = UndoStack::default();
-        spingi(&mut s, "l'operazione");
-        let prima = s.begin_replay();
+        push(&mut s, "l'operazione");
+        let before = s.begin_replay();
         // I passi di un annullamento sono comandi come gli altri, e
         // dichiarerebbero il proprio inverso.
-        spingi(&mut s, "l'inverso dell'operazione");
-        s.end_replay(prima);
+        push(&mut s, "l'inverso dell'operazione");
+        s.end_replay(before);
         assert_eq!(s.len(), 1, "la pila è cresciuta durante un annullamento");
     }
 
     #[test]
-    fn un_annullamento_senza_passi_non_e_una_voce() {
+    fn a_undo_without_steps_not_and_a_entry() {
         let mut s = UndoStack::default();
         s.push(
             Undo {
@@ -224,22 +224,22 @@ mod tests {
     /// `remove(0)`, ed è il motivo per cui sta qui — presidia la proprietà che
     /// il cambio di struttura non doveva toccare, non il cambio.
     #[test]
-    fn il_tetto_perde_la_piu_vecchia() {
+    fn the_ceiling_loses_the_more_old() {
         let mut s = UndoStack::default();
-        for n in 0..TETTO + 5 {
-            spingi(&mut s, &format!("op {n}"));
+        for n in 0..CEILING + 5 {
+            push(&mut s, &format!("op {n}"));
         }
-        assert_eq!(s.len(), TETTO);
-        let mut uscite = Vec::new();
-        while let Some(e) = s.pop() {
-            uscite.push(e.undo.label);
+        assert_eq!(s.len(), CEILING);
+        let mut outputs = Vec::new();
+        while let Some(and) = s.pop() {
+            outputs.push(and.undo.label);
         }
-        let attese: Vec<Text> = (5..TETTO + 5)
+        let expected: Vec<Text> = (5..CEILING + 5)
             .rev()
             .map(|n| Text::Literal(format!("op {n}")))
             .collect();
         assert_eq!(
-            uscite, attese,
+            outputs, expected,
             "le cinque più vecchie sono uscite dalla testa, le altre escono \
              dal fondo in ordine inverso"
         );
@@ -251,9 +251,9 @@ mod tests {
     /// aveva dichiarato mancante: i due pezzi arrivano dallo stesso esito e si
     /// separano subito dopo, quindi o si appaiano qui o non si appaiano mai più.
     #[test]
-    fn una_voce_si_ricorda_che_l_operazione_era_a_meta() {
+    fn a_entry_is_remember_that_the_operation_was_a_metadata() {
         let mut s = UndoStack::default();
-        let conto = Partial::of(
+        let count = Partial::of(
             12,
             11,
             vec![fub_abi::command::Failure::of(
@@ -261,11 +261,11 @@ mod tests {
                 fub_abi::PluginError::Conflict("scritta nel frattempo".into()),
             )],
         );
-        assert!(conto.is_some(), "undici su dodici è a metà");
-        s.push(voce("l'archiviazione"), conto);
+        assert!(count.is_some(), "undici su dodici è a metà");
+        s.push(entry("l'archiviazione"), count);
 
-        let voce = s.pop().expect("c'è");
-        let partial = voce.partial.expect("il conto è arrivato fin qui");
+        let entry = s.pop().expect("c'è");
+        let partial = entry.partial.expect("il conto è arrivato fin qui");
         assert_eq!(
             (partial.attempted, partial.done, partial.failed()),
             (12, 11, 1)
@@ -277,7 +277,7 @@ mod tests {
     /// una voce che si dichiarasse a metà senza esserlo insegnerebbe a chi
     /// annulla che gli avvisi di questa app si cliccano via.
     #[test]
-    fn niente_di_mancato_niente_conto() {
+    fn nothing_of_missed_nothing_count() {
         assert!(
             Partial::of(12, 11, Vec::new()).is_none(),
             "dodici davanti e undici cambiate senza guasti è riuscita: la \

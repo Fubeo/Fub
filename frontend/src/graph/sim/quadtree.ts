@@ -5,43 +5,43 @@
 // motore non lo usa: la forza esatta a coppie è più economica sotto i ~400
 // nodi.
 //
-// La struttura è SoA come la `Struttura`: array paralleli per i nodi
+// La struttura è SoA come la `Structure`: array paralleli per i nodi
 // dell'albero (bbox implicita: centro + semi-lato) e un allocatore a
 // contatore che riusa gli slot a ogni costruzione. Il pool cresce solo quando
-// il grafo cresce: dentro il frame, `costruisci` non alloca mai — è questo il
+// il grafo cresce: dentro il frame, `build` non alloca mai — è questo il
 // contratto col motore, che ricostruisce l'albero a ogni passo.
 //
-// Le foglie tengono fino a `CAPACITA_FOGLIA` indici; oltre, splittano in 4
+// Le foglie tengono fino a `LEAF_CAPACITY` indici; oltre, splittano in 4
 // figli a metà cella. I nodi esattamente coincidenti non si separerebbero
 // mai, quindi a profondità massima la foglia trabocca in una lista
 // concatenata di overflow (difensivo: li separa la griglia di collisione).
 
-import type { Struttura } from "./tipi";
+import type { Structure } from "./types";
 
 /// Quante foglie con capacità piena servono prima di splittare. 8 è un buon
 /// compromesso fra altezza dell'albero (≈ log₄ n) e costo di visita delle
 /// foglie: sotto le 8 foglie sono più i nodi che le celle.
-export const CAPACITA_FOGLIA = 8;
+export const LEAF_CAPACITY = 8;
 
 /// Profondità massima dell'albero. Con celle che si dimezzano, 24 livelli
 /// portano il lato minimo a ~1/16M di quello iniziale: per i grafi reali non
 /// si raggiunge mai, e il limite esiste solo per fermare lo split dei nodi
 /// coincidenti (che altrimenti splittano all'infinito senza separarsi).
-export const PROFONDITA_MAX = 24;
+export const MAX_DEPTH = 24;
 
-/// Tipo della callback di `visita`: riceve la componente della distanza dal
+/// Tipo della callback di `visit`: riceve la componente della distanza dal
 /// punto di query al centro di massa (o al nodo, nelle foglie), la distanza
 /// al quadrato e la massa totale della cella. Non deve allocare.
-export type FnVisita = (dx: number, dy: number, d2: number, massa: number) => void;
+export type VisitFn = (dx: number, dy: number, d2: number, mass: number) => void;
 
-/// La forma che il motore vede: i campi pubblici del pool. `costruisci`
-/// riempie un pool e lo restituisce come `Quadtree`; `visita` e `vicino` lo
+/// La forma che il motore vede: i campi pubblici del pool. `build`
+/// riempie un pool e lo restituisce come `Quadtree`; `visit` e `nearest` lo
 /// leggono. L'interfaccia non ha metodi: la logica sta nelle funzioni
 /// module-level, il pool è solo contenitore riusabile.
 export interface Quadtree {
   /// La struttura su cui è stato costruito l'ultimo albero: serve alla
-  /// visita per leggere posizioni e masse dei nodi nelle foglie.
-  s: Struttura | null;
+  /// La `visit` per leggere posizioni e masse dei nodi nelle foglie.
+  s: Structure | null;
   // Nodi dell'albero: centro (cx, cy), semi-lato `meta` (bbox implicita),
   // centro di massa cumulato (cmx, cmy) e massa totale. Float64: le celle si
   // dimezzano fino a 2^-24 e il confronto col bordo non deve perdere bit.
@@ -50,104 +50,104 @@ export interface Quadtree {
   meta: Float64Array;
   cmx: Float64Array;
   cmy: Float64Array;
-  massa: Float64Array;
-  /// Figli: 4 slot contigui per nodo, −1 = assente. `figli[4i] ≥ 0` ⟺ interno.
-  figli: Int32Array;
-  /// Contenuto delle foglie: `CAPACITA_FOGLIA` slot per nodo.
-  contenuto: Int32Array;
-  nContenuto: Int32Array;
+  mass: Float64Array;
+  /// Figli: 4 slot contigui per nodo, −1 = assente. `children[4i] ≥ 0` ⟺ interno.
+  children: Int32Array;
+  /// Contenuto delle foglie: `LEAF_CAPACITY` slot per nodo.
+  contents: Int32Array;
+  contentCount: Int32Array;
   /// Overflow delle foglie a profondità massima: lista concatenata per nodo.
-  ovfTesta: Int32Array;
-  ovfProssimo: Int32Array;
-  /// Stack riusato dalla DFS di `vicino`.
+  overflowHead: Int32Array;
+  overflowNext: Int32Array;
+  /// Stack riusato dalla DFS di `nearest`.
   stack: Int32Array;
   /// Contatore di allocazione: a ogni costruzione riparte da 0 e gli slot
   /// vecchi vengono sovrascritti in ordine — mai azzerare tutto il pool.
-  usati: number;
+  used: number;
 }
 
 /// Il pool: implementa `Quadtree` e si riusa. I campi sono pubblici ( fanno
-/// parte dell'interfaccia); i metodi privati servono solo a `ricostruisci`.
-export class PoolQuad implements Quadtree {
-  s: Struttura | null = null;
+/// parte dell'interfaccia); i metodi privati servono solo a `rebuild`.
+export class QuadtreePool implements Quadtree {
+  s: Structure | null = null;
   cx = new Float64Array(0);
   cy = new Float64Array(0);
   meta = new Float64Array(0);
   cmx = new Float64Array(0);
   cmy = new Float64Array(0);
-  massa = new Float64Array(0);
-  figli = new Int32Array(0);
-  contenuto = new Int32Array(0);
-  nContenuto = new Int32Array(0);
-  ovfTesta = new Int32Array(0);
-  ovfProssimo = new Int32Array(0);
+  mass = new Float64Array(0);
+  children = new Int32Array(0);
+  contents = new Int32Array(0);
+  contentCount = new Int32Array(0);
+  overflowHead = new Int32Array(0);
+  overflowNext = new Int32Array(0);
   stack = new Int32Array(0);
-  usati = 0;
+  used = 0;
 
-  /// `figli` ha stride 4, quindi la capacità del pool è la sua lunghezza / 4.
+  /// `children` ha stride 4, quindi la capacità del pool è la sua lunghezza / 4.
   /// Il nome spiega la formula magica (lo stride) che l'espressione inline
   /// nasconderebbe; usata in 3+ punti in lockstep.
-  private capacita(): number {
-    return this.figli.length / 4;
+  private capacity(): number {
+    return this.children.length / 4;
   }
 
   /// Allarga tutti gli array (solo nei primi frame o quando il grafo
   /// cresce). Crescita geometrica: poche riallocazioni, nessuna dentro il
   /// frame a regime. Le copie sono esplicite per tipo — niente cast generici.
-  private assicura(richiesta: number): void {
-    if (richiesta <= this.capacita()) return;
-    const nuova = Math.max(16, this.capacita() * 2, richiesta);
-    const cx = new Float64Array(nuova);
+  private ensureCapacity(requested: number): void {
+    if (requested <= this.capacity()) return;
+    const newCapacity = Math.max(16, this.capacity() * 2, requested);
+    const cx = new Float64Array(newCapacity);
     cx.set(this.cx);
     this.cx = cx;
-    const cy = new Float64Array(nuova);
+    const cy = new Float64Array(newCapacity);
     cy.set(this.cy);
     this.cy = cy;
-    const meta = new Float64Array(nuova);
+    const meta = new Float64Array(newCapacity);
     meta.set(this.meta);
     this.meta = meta;
-    const cmx = new Float64Array(nuova);
+    const cmx = new Float64Array(newCapacity);
     cmx.set(this.cmx);
     this.cmx = cmx;
-    const cmy = new Float64Array(nuova);
+    const cmy = new Float64Array(newCapacity);
     cmy.set(this.cmy);
     this.cmy = cmy;
-    const massa = new Float64Array(nuova);
-    massa.set(this.massa);
-    this.massa = massa;
-    const figli = new Int32Array(nuova * 4);
-    figli.set(this.figli);
-    this.figli = figli;
-    const contenuto = new Int32Array(nuova * CAPACITA_FOGLIA);
-    contenuto.set(this.contenuto);
-    this.contenuto = contenuto;
-    const nContenuto = new Int32Array(nuova);
-    nContenuto.set(this.nContenuto);
-    this.nContenuto = nContenuto;
-    const ovfTesta = new Int32Array(nuova);
-    ovfTesta.set(this.ovfTesta);
-    this.ovfTesta = ovfTesta;
-    const ovfProssimo = new Int32Array(nuova);
-    ovfProssimo.set(this.ovfProssimo);
-    this.ovfProssimo = ovfProssimo;
-    const stack = new Int32Array(nuova);
+    const mass = new Float64Array(newCapacity);
+    mass.set(this.mass);
+    this.mass = mass;
+    const children = new Int32Array(newCapacity * 4);
+    children.set(this.children);
+    this.children = children;
+    const contents = new Int32Array(newCapacity * LEAF_CAPACITY);
+    contents.set(this.contents);
+    this.contents = contents;
+    const contentCount = new Int32Array(newCapacity);
+    contentCount.set(this.contentCount);
+    this.contentCount = contentCount;
+    const overflowHead = new Int32Array(newCapacity);
+    overflowHead.set(this.overflowHead);
+    this.overflowHead = overflowHead;
+    const overflowNext = new Int32Array(newCapacity);
+    overflowNext.set(this.overflowNext);
+    this.overflowNext = overflowNext;
+    const stack = new Int32Array(newCapacity);
     stack.set(this.stack);
     this.stack = stack;
   }
 
-  private nuovoNodo(): number {
-    const i = this.usati++;
-    if (i >= this.capacita()) this.assicura(i + 16);
+  private newNode(): number {
+    const i = this.used++;
+    if (i >= this.capacity()) this.ensureCapacity(i + 16);
     // Slot riusato: azzerare i puntatori è obbligatorio, il resto viene
     // scritto dal chiamante prima dell'uso.
     const b = i * 4;
-    this.figli[b] = -1;
-    this.figli[b + 1] = -1;
-    this.figli[b + 2] = -1;
-    this.figli[b + 3] = -1;
-    this.nContenuto[i] = 0;
-    this.ovfTesta[i] = -1;
-    this.massa[i] = 0;
+    this.children[b] = -1;
+    this.children[b + 1] = -1;
+    this.children[b + 2] = -1;
+    this.children[b + 3] = -1;
+    this.contentCount[i] = 0;
+    this.overflowHead[i] = -1;
+    this.mass[i] = 0;
     this.cmx[i] = 0;
     this.cmy[i] = 0;
     return i;
@@ -155,15 +155,15 @@ export class PoolQuad implements Quadtree {
 
   /// Ricostruisce l'albero sulla struttura. O(n·profondità), zero
   /// allocazioni quando la capacità del pool basta.
-  ricostruisci(s: Struttura): void {
+  rebuild(s: Structure): void {
     this.s = s;
-    this.usati = 0;
+    this.used = 0;
     const n = s.n;
     if (n === 0) return;
-    this.assicura(n * 2 + 16);
+    this.ensureCapacity(n * 2 + 16);
     // Bbox dei punti → radice quadrata centrata. L'epsilon evita s = 0 per
     // nodi tutti coincidenti (in quel caso l'albero degenera in una catena
-    // verso il basso, fermata da PROFONDITA_MAX e dall'overflow).
+    // verso il basso, fermata da MAX_DEPTH e dall'overflow).
     let minx = s.x[0];
     let maxx = s.x[0];
     let miny = s.y[0];
@@ -176,55 +176,55 @@ export class PoolQuad implements Quadtree {
       if (y < miny) miny = y;
       else if (y > maxy) maxy = y;
     }
-    const radice = this.nuovoNodo();
-    this.cx[radice] = (minx + maxx) / 2;
-    this.cy[radice] = (miny + maxy) / 2;
-    this.meta[radice] = Math.max(maxx - minx, maxy - miny) / 2 + 1e-9;
+    const root = this.newNode();
+    this.cx[root] = (minx + maxx) / 2;
+    this.cy[root] = (miny + maxy) / 2;
+    this.meta[root] = Math.max(maxx - minx, maxy - miny) / 2 + 1e-9;
     for (let i = 0; i < n; i++) {
-      this.inserisci(radice, i, s.x[i], s.y[i], s.massa[i], 0);
+      this.insert(root, i, s.x[i], s.y[i], s.mass[i], 0);
     }
   }
 
   /// Inserimento ricorsivo: aggiorna il centro di massa lungo il percorso e
   /// scende nel figlio giusto; se la foglia è piena, splitta in 4. L'indice
   /// del figlio è `bit0 = destra (x ≥ cx) | bit1 = sotto (y ≥ cy)`: la stessa
-  /// formula in inserisci e visita, così il punto di query scende sempre nel
+  /// formula in `insert` e `visit`, così il punto di query scende sempre nel
   /// figlio che contiene il nodo stesso.
-  private inserisci(i: number, j: number, x: number, y: number, m: number, prof: number): void {
-    this.massa[i] += m;
+  private insert(i: number, j: number, x: number, y: number, m: number, depth: number): void {
+    this.mass[i] += m;
     this.cmx[i] += m * x;
     this.cmy[i] += m * y;
-    if (this.figli[i * 4] >= 0) {
+    if (this.children[i * 4] >= 0) {
       const k = (x >= this.cx[i] ? 1 : 0) | (y >= this.cy[i] ? 2 : 0);
-      this.inserisci(this.figli[i * 4 + k], j, x, y, m, prof + 1);
+      this.insert(this.children[i * 4 + k], j, x, y, m, depth + 1);
       return;
     }
-    const c = i * CAPACITA_FOGLIA;
-    const nc = this.nContenuto[i];
-    if (nc < CAPACITA_FOGLIA) {
-      this.contenuto[c + nc] = j;
-      this.nContenuto[i] = nc + 1;
+    const c = i * LEAF_CAPACITY;
+    const nc = this.contentCount[i];
+    if (nc < LEAF_CAPACITY) {
+      this.contents[c + nc] = j;
+      this.contentCount[i] = nc + 1;
       return;
     }
-    if (prof >= PROFONDITA_MAX) {
+    if (depth >= MAX_DEPTH) {
       // Nodi coincidenti: la cella non li separa più. Lista di overflow —
       // difensivo, il caso normale non arriva qui.
-      this.ovfProssimo[j] = this.ovfTesta[i];
-      this.ovfTesta[i] = j;
+      this.overflowNext[j] = this.overflowHead[i];
+      this.overflowHead[i] = j;
       return;
     }
     // Split: la foglia diventa interna (massa e centro di massa restano
     // corretti: sono la somma di tutti i discendenti), i 4 figli partono
     // vuoti e ricevono il contenuto esistente più il nuovo nodo.
     const b = i * 4;
-    for (let k = 0; k < 4; k++) this.figli[b + k] = this.nuovoNodo();
+    for (let k = 0; k < 4; k++) this.children[b + k] = this.newNode();
     // Semi-lato del figlio = metà del padre; i centri sono a ±meta/2 dal
     // centro del padre, così i 4 bbox dei figli coprono esattamente i 4
-    // quadranti della cella padre (niente buchi: il pruning di `vicino`
+    // quadranti della cella padre (niente buchi: il pruning di `nearest`
     // non può perdere il nodo più vicino).
     const hsm = this.meta[i] / 2;
     for (let k = 0; k < 4; k++) {
-      const f = this.figli[b + k];
+      const f = this.children[b + k];
       this.cx[f] = this.cx[i] + (k & 1 ? hsm : -hsm);
       this.cy[f] = this.cy[i] + (k & 2 ? hsm : -hsm);
       this.meta[f] = hsm;
@@ -233,21 +233,21 @@ export class PoolQuad implements Quadtree {
     // secondo la sua posizione, non in un figlio fisso.
     const s = this.s!;
     for (let k = 0; k < nc; k++) {
-      const jj = this.contenuto[c + k];
+      const jj = this.contents[c + k];
       const xj = s.x[jj];
       const yj = s.y[jj];
       const kf = (xj >= this.cx[i] ? 1 : 0) | (yj >= this.cy[i] ? 2 : 0);
-      this.inserisci(this.figli[b + kf], jj, xj, yj, s.massa[jj], prof + 1);
+      this.insert(this.children[b + kf], jj, xj, yj, s.mass[jj], depth + 1);
     }
     const kf = (x >= this.cx[i] ? 1 : 0) | (y >= this.cy[i] ? 2 : 0);
-    this.inserisci(this.figli[b + kf], j, x, y, m, prof + 1);
+    this.insert(this.children[b + kf], j, x, y, m, depth + 1);
   }
 }
 
 /// Costruisce (o ricostruisce) l'albero della struttura dentro il pool
 /// riusato. Dopo il primo frame non alloca: è il contratto col motore.
-export function costruisci(s: Struttura, pool: PoolQuad): Quadtree {
-  pool.ricostruisci(s);
+export function build(s: Structure, pool: QuadtreePool): Quadtree {
+  pool.rebuild(s);
   return pool;
 }
 
@@ -260,35 +260,35 @@ export function costruisci(s: Struttura, pool: PoolQuad): Quadtree {
 /// riceve (dx, dy, d2, massa) per ogni nodo, tranne quello con posizione
 /// esattamente uguale a (x, y) — è il nodo su cui si sta calcolando la
 /// forza. Con theta → 0 si scende sempre: il risultato replica l'O(n²).
-export function visita(q: Quadtree, theta: number, x: number, y: number, f: FnVisita): void {
-  if (q.usati === 0 || q.s === null) return;
+export function visit(q: Quadtree, theta: number, x: number, y: number, f: VisitFn): void {
+  if (q.used === 0 || q.s === null) return;
   const t2 = theta * theta;
-  visitaNodo(q, 0, t2, x, y, f);
+  visitNode(q, 0, t2, x, y, f);
 }
 
-function visitaNodo(q: Quadtree, i: number, t2: number, x: number, y: number, f: FnVisita): void {
+function visitNode(q: Quadtree, i: number, t2: number, x: number, y: number, f: VisitFn): void {
   const s = q.s!;
-  if (q.figli[i * 4] < 0) {
+  if (q.children[i * 4] < 0) {
     // Foglia: forza esatta per ogni nodo, tranne il punto di query (la
     // posizione Float32 coincide solo con il nodo stesso; i nodi
     // coincidenti sono esclusi anche loro — li separa la collisione).
-    const c = i * CAPACITA_FOGLIA;
-    const nc = q.nContenuto[i];
+    const c = i * LEAF_CAPACITY;
+    const nc = q.contentCount[i];
     for (let k = 0; k < nc; k++) {
-      const j = q.contenuto[c + k];
+      const j = q.contents[c + k];
       if (s.x[j] === x && s.y[j] === y) continue;
       const dx = s.x[j] - x;
       const dy = s.y[j] - y;
-      f(dx, dy, dx * dx + dy * dy, s.massa[j]);
+      f(dx, dy, dx * dx + dy * dy, s.mass[j]);
     }
-    let o = q.ovfTesta[i];
+    let o = q.overflowHead[i];
     while (o >= 0) {
       if (!(s.x[o] === x && s.y[o] === y)) {
         const dx = s.x[o] - x;
         const dy = s.y[o] - y;
-        f(dx, dy, dx * dx + dy * dy, s.massa[o]);
+        f(dx, dy, dx * dx + dy * dy, s.mass[o]);
       }
-      o = q.ovfProssimo[o];
+      o = q.overflowNext[o];
     }
     return;
   }
@@ -297,10 +297,10 @@ function visitaNodo(q: Quadtree, i: number, t2: number, x: number, y: number, f:
   const kq = (x >= q.cx[i] ? 1 : 0) | (y >= q.cy[i] ? 2 : 0);
   const b = i * 4;
   for (let k = 0; k < 4; k++) {
-    const fk = q.figli[b + k];
+    const fk = q.children[b + k];
     if (fk < 0) continue;
     if (k === kq) {
-      visitaNodo(q, fk, t2, x, y, f);
+      visitNode(q, fk, t2, x, y, f);
       continue;
     }
     const dx = q.cmx[fk] - x;
@@ -308,9 +308,9 @@ function visitaNodo(q: Quadtree, i: number, t2: number, x: number, y: number, f:
     const d2 = dx * dx + dy * dy;
     const sm = q.meta[fk];
     if (sm * sm < t2 * d2) {
-      f(dx, dy, d2, q.massa[fk]);
+      f(dx, dy, d2, q.mass[fk]);
     } else {
-      visitaNodo(q, fk, t2, x, y, f);
+      visitNode(q, fk, t2, x, y, f);
     }
   }
 }
@@ -321,52 +321,52 @@ function visitaNodo(q: Quadtree, i: number, t2: number, x: number, y: number, f:
 /// con pruning per cella: una cella si salta se la sua distanza minima dal
 /// punto supera il miglior raggio trovato finora. Deterministico: stessa
 /// struttura, stessa risposta.
-export function vicino(q: Quadtree, x: number, y: number, r: number): number {
-  if (q.usati === 0 || q.s === null || r < 0) return -1;
+export function nearest(q: Quadtree, x: number, y: number, r: number): number {
+  if (q.used === 0 || q.s === null || r < 0) return -1;
   const s = q.s;
   const r2 = r * r;
-  let migliore = -1;
-  let miglioreD2 = r2;
+  let best = -1;
+  let bestD2 = r2;
   let sp = 0;
   q.stack[sp++] = 0;
   while (sp > 0) {
     const i = q.stack[--sp];
     const b = i * 4;
-    if (q.figli[b] < 0) {
-      const c = i * CAPACITA_FOGLIA;
-      const nc = q.nContenuto[i];
+    if (q.children[b] < 0) {
+      const c = i * LEAF_CAPACITY;
+      const nc = q.contentCount[i];
       for (let k = 0; k < nc; k++) {
-        const j = q.contenuto[c + k];
+        const j = q.contents[c + k];
         const dx = s.x[j] - x;
         const dy = s.y[j] - y;
         const d2 = dx * dx + dy * dy;
-        if (d2 <= miglioreD2) {
-          miglioreD2 = d2;
-          migliore = j;
+        if (d2 <= bestD2) {
+          bestD2 = d2;
+          best = j;
         }
       }
-      let o = q.ovfTesta[i];
+      let o = q.overflowHead[i];
       while (o >= 0) {
         const dx = s.x[o] - x;
         const dy = s.y[o] - y;
         const d2 = dx * dx + dy * dy;
-        if (d2 <= miglioreD2) {
-          miglioreD2 = d2;
-          migliore = o;
+        if (d2 <= bestD2) {
+          bestD2 = d2;
+          best = o;
         }
-        o = q.ovfProssimo[o];
+        o = q.overflowNext[o];
       }
     } else {
       for (let k = 3; k >= 0; k--) {
-        const fk = q.figli[b + k];
+        const fk = q.children[b + k];
         if (fk < 0) continue;
         // Distanza minima dal punto alla cella (0 se dentro).
         const ddx = Math.abs(x - q.cx[fk]) - q.meta[fk];
         const ddy = Math.abs(y - q.cy[fk]) - q.meta[fk];
         const dmin2 = (ddx > 0 ? ddx * ddx : 0) + (ddy > 0 ? ddy * ddy : 0);
-        if (dmin2 <= miglioreD2) q.stack[sp++] = fk;
+        if (dmin2 <= bestD2) q.stack[sp++] = fk;
       }
     }
   }
-  return migliore;
+  return best;
 }

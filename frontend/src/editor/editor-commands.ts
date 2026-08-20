@@ -18,7 +18,7 @@ import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { moveLineDown, moveLineUp } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
 import { taskChecked } from "../rules/mirrored";
-import { marcatoreSuccessivo, voceDiLista } from "../rules/sintassi";
+import { nextMarker, listItem } from "../rules/syntax";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
 
@@ -129,11 +129,11 @@ export const toggleWikilink = toggleWrap("[[", "]]");
 
 // La lettura di una voce di lista **non sta più qui**: sta in
 // `rules/sintassi.ts`, che è il posto unico in cui la shell riconosce sintassi
-// (§4.4, decisione 0115). Stava scritta due volte — qui per i gesti, in
+// (§4.4, decisione 0115). Stava scritto due volte — qui per i gesti, in
 // `livepreview.ts` per la casella — e le due non erano d'accordo: su
-// `> - [ ] x` la live preview disegnava una checkbox e questo file leggeva una
+// `> - [ ] x` la vivi preview disegnava una checkbox e questo file leggeva una
 // citazione, quindi `Mod-Enter` non la spuntava; su `-  [ ] x` (due spazi) la
-// live preview vedeva una todo e questo file un bullet.
+// vivi preview vedeva una todo e questo file un bullet.
 
 /// `Enter` dentro una lista: continua la voce (il testo dopo il cursore scende
 /// sulla riga nuova), rinumera le numerate a valle, e su una voce vuota toglie
@@ -144,7 +144,7 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
   const range = state.selection.main;
   if (state.selection.ranges.length !== 1 || !range.empty) return false;
   const line = state.doc.lineAt(range.head);
-  const item = voceDiLista(line.text);
+  const item = listItem(line.text);
   if (!item) return false;
   if (range.head < line.from + item.markerEnd) return false;
 
@@ -160,7 +160,7 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
     return true;
   }
 
-  const insert = `\n${marcatoreSuccessivo(item)}`;
+  const insert = `\n${nextMarker(item)}`;
   const changes: ChangeSpec[] = [{ from: range.head, insert }];
   if (item.kind === "ordered") {
     // Le voci a valle dello stesso livello scalano di uno. Le sottoliste (più
@@ -169,15 +169,15 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
     let expected = item.number! + 2;
     for (let n = line.number + 1; n <= state.doc.lines; n++) {
       const l = state.doc.line(n);
-      const it = voceDiLista(l.text);
+      const it = listItem(l.text);
       if (!it) break;
       if (it.indent.length > item.indent.length) continue;
       if (it.indent.length < item.indent.length || it.kind !== "ordered") break;
       if (it.number !== expected) {
-        const numeroDa = l.from + it.quote.length + it.indent.length;
+        const numberFrom = l.from + it.quote.length + it.indent.length;
         changes.push({
-          from: numeroDa,
-          to: numeroDa + String(it.number).length,
+          from: numberFrom,
+          to: numberFrom + String(it.number).length,
           insert: String(expected),
         });
       }
@@ -218,7 +218,7 @@ function selectedLines(state: EditorState): Line[] {
 /// una voce. Fuori dalle liste → `false`, e il Tab cade sul binding di default
 /// (l'`indentWithTab` già montato in editor.ts).
 export const indentListItem: StateCommand = ({ state, dispatch }) => {
-  const lines = selectedLines(state).filter((l) => voceDiLista(l.text) !== null);
+  const lines = selectedLines(state).filter((l) => listItem(l.text) !== null);
   if (lines.length === 0) return false;
   const unit = state.facet(indentUnit);
   dispatch(
@@ -245,7 +245,7 @@ function dedentWidth(text: string, unit: string): number {
 /// resta com'è ma la battuta conta come gestita: de-indentare una lista non
 /// deve mai degradare nel comando di indentazione generico.
 export const dedentListItem: StateCommand = ({ state, dispatch }) => {
-  const lines = selectedLines(state).filter((l) => voceDiLista(l.text) !== null);
+  const lines = selectedLines(state).filter((l) => listItem(l.text) !== null);
   if (lines.length === 0) return false;
   const unit = state.facet(indentUnit);
   const changes: ChangeSpec[] = [];
@@ -263,7 +263,7 @@ export const dedentListItem: StateCommand = ({ state, dispatch }) => {
 export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
   const changes: ChangeSpec[] = [];
   for (const l of selectedLines(state)) {
-    const item = voceDiLista(l.text);
+    const item = listItem(l.text);
     if (!item || item.kind === "quote") continue;
     if (item.symbol !== null) {
       // Il simbolo sta fra le parentesi, e `boxFrom` dice dove sono: leggerlo
@@ -309,7 +309,7 @@ function setListKind(kind: "bullet" | "ordered"): StateCommand {
   return ({ state, dispatch }) => {
     const lines = selectedLines(state).filter((l) => l.text.trim() !== "");
     if (lines.length === 0) return false;
-    const items = lines.map((l) => voceDiLista(l.text));
+    const items = lines.map((l) => listItem(l.text));
     const allSame = items.every((it) => it !== null && it.kind === kind);
     const changes: ChangeSpec[] = [];
     let n = 1;

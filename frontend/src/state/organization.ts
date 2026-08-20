@@ -26,8 +26,8 @@
 // l'explorer ne è oggi l'unico lettore, ma il primo comando che appunterà una
 // nota lo farà senza passare da un pannello.
 import { api } from "../host/ipc";
-import { organizzazione } from "../host/query";
-import { emit, metaVuota, state } from "./store";
+import { organizationQuery } from "../host/query";
+import { emit, emptyMeta, state } from "./store";
 import { errorText } from "../host/errors";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
@@ -38,7 +38,7 @@ import { t } from "../i18n/strings";
 /// tiene al sicuro quella che non è riuscito a leggere.
 export async function loadOrganization(): Promise<void> {
   try {
-    state.meta = await organizzazione();
+    state.meta = await organizationQuery();
   } catch (e) {
     // Un'organizzazione congelata è una sessione di lavoro buttata: il kernel
     // rifiuta ogni scrittura una per una — ed è giusto, perché ciò che non ha
@@ -46,13 +46,13 @@ export async function loadOrganization(): Promise<void> {
     // ogni icona e ogni riordino continuano a essere accettati, disegnati e
     // persi senza un segno (§20.4).
     notify(t("organization.unreadable", { reason: errorText(e) }), "guasto");
-    state.meta = metaVuota();
+    state.meta = emptyMeta();
   }
 }
 
 /// L'emoji accanto a una nota o a una cartella (`null` la toglie).
 export async function setIcon(path: string, icon: string | null): Promise<void> {
-  await scrivi(() => api.setIcon(path, icon), (org) => {
+  await write(() => api.setIcon(path, icon), (org) => {
     if (icon) org.icons[path] = icon;
     else delete org.icons[path];
   });
@@ -60,7 +60,7 @@ export async function setIcon(path: string, icon: string | null): Promise<void> 
 
 /// Appunta o spunta una nota.
 export async function setPinned(id: string, pinned: boolean): Promise<void> {
-  await scrivi(() => api.setPinned(id, pinned), (org) => {
+  await write(() => api.setPinned(id, pinned), (org) => {
     const i = org.pinned.indexOf(id);
     if (pinned && i === -1) org.pinned.push(id);
     if (!pinned && i !== -1) org.pinned.splice(i, 1);
@@ -69,7 +69,7 @@ export async function setPinned(id: string, pinned: boolean): Promise<void> {
 
 /// Registra o toglie una cartella dagli spazi.
 export async function setSpace(path: string, space: boolean): Promise<void> {
-  await scrivi(() => api.setSpace(path, space), (org) => {
+  await write(() => api.setSpace(path, space), (org) => {
     const i = org.spaces.indexOf(path);
     if (space && i === -1) org.spaces.push(path);
     if (!space && i !== -1) org.spaces.splice(i, 1);
@@ -78,7 +78,7 @@ export async function setSpace(path: string, space: boolean): Promise<void> {
 
 /// L'ordine scelto a mano dei figli di una cartella (vuoto = alfabetico).
 export async function setOrder(folder: string, names: string[]): Promise<void> {
-  await scrivi(() => api.setOrder(folder, names), (org) => {
+  await write(() => api.setOrder(folder, names), (org) => {
     if (names.length > 0) org.order[folder] = names;
     else delete org.order[folder];
   });
@@ -94,16 +94,16 @@ export async function setOrder(folder: string, names: string[]): Promise<void> {
 /// Rileggere l'organizzazione intera dopo ogni ritocco sarebbe l'alternativa
 /// pulita e costa un giro di IPC per click: `applica` fa localmente la stessa
 /// cosa che il kernel ha appena fatto, e sono quattro righe per quattro chiavi.
-async function scrivi(
-  scrittura: () => Promise<void>,
-  applica: (org: typeof state.meta) => void,
+async function write(
+  writing: () => Promise<void>,
+  apply: (org: typeof state.meta) => void,
 ): Promise<void> {
   try {
-    await scrittura();
+    await writing();
   } catch (e) {
     notify(t("organization.not_saved", { reason: errorText(e) }), "guasto");
     return;
   }
-  applica(state.meta);
+  apply(state.meta);
   emit("organization");
 }

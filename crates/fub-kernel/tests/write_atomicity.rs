@@ -10,7 +10,7 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::FormatProvider;
-use fub_testkit::{Banco, Montato};
+use fub_testkit::{Bench, Mounted};
 
 /// Un provider che rifiuta i sorgenti contenenti `BOOM`: il markdown vero non
 /// fallisce mai il parse, ma il contratto lo permette — e l'atomicità di
@@ -19,7 +19,7 @@ struct FallibleProvider;
 
 impl FormatProvider for FallibleProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text("fallibile", "Formato fallibile (test)", &["fal"])
+        FormatDescriptor::text("fallibile", "Fallible format (test)", &["fal"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
@@ -33,7 +33,7 @@ impl FormatProvider for FallibleProvider {
     ) -> Result<DocumentModel, FormatError> {
         let source = source.text().unwrap_or_default();
         if source.contains("BOOM") {
-            return Err(FormatError::Parse("sorgente rifiutato".into()));
+            return Err(FormatError::Parse("source rejected".into()));
         }
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.to_string();
@@ -53,10 +53,10 @@ impl FormatProvider for FallibleProvider {
     }
 }
 
-fn vault() -> Montato {
-    Banco::nuovo()
-        .con_formato(Box::new(FallibleProvider))
-        .monta()
+fn vault() -> Mounted {
+    Bench::new()
+        .with_format(Box::new(FallibleProvider))
+        .mounts()
 }
 
 #[test]
@@ -67,12 +67,12 @@ fn a_failed_parse_writes_nothing_to_disk() {
     let err = ws.write_document(&DocId::new("nuova.fal"), "BOOM", WriteBase::Dictated);
     assert!(
         err.is_err(),
-        "il parse rifiutato deve arrivare al chiamante"
+        "the rejected parse must reach the caller"
     );
 
     assert!(
         !root.join("nuova.fal").exists(),
-        "un `Err` con il file già scritto è la non-atomicità che il fix chiude"
+        "an `Err` with the file already written is the non-atomicity the fix closes"
     );
     assert!(!ws.documents().contains(&DocId::new("nuova.fal")));
 }
@@ -82,13 +82,13 @@ fn a_failed_overwrite_leaves_the_old_content_everywhere() {
     let mut ws = vault();
     ws.write_document(
         &DocId::new("nota.fal"),
-        "prima versione",
+        "first version",
         WriteBase::Dictated,
     )
     .unwrap();
 
     assert!(ws
-        .write_document(&DocId::new("nota.fal"), "seconda BOOM", WriteBase::Dictated)
+        .write_document(&DocId::new("nota.fal"), "second BOOM", WriteBase::Dictated)
         .is_err());
 
     // Disco e stato del workspace raccontano la stessa storia: quella
@@ -96,11 +96,11 @@ fn a_failed_overwrite_leaves_the_old_content_everywhere() {
     // passa dallo stesso provider che ha rifiutato la scrittura.
     assert_eq!(
         ws.read_source(&DocId::new("nota.fal")).unwrap(),
-        "prima versione"
+        "first version"
     );
     assert_eq!(
         ws.render_preview(&DocId::new("nota.fal")).unwrap().html,
-        "prima versione"
+        "first version"
     );
 }
 
@@ -115,26 +115,26 @@ fn a_failed_overwrite_leaves_the_old_content_everywhere() {
 /// tiene in vault un testo che il suo provider rifiuta: lo prova il primo caso
 /// di questo file.
 #[test]
-fn a_failed_rename_leaves_the_note_where_it_was() {
+fn a_failed_rename_leaves_the_notes_where_it_was() {
     let mut ws = vault();
     let root = ws.root().to_path_buf();
     let from = DocId::new("nota.fal");
-    let to = DocId::new("rinominata.fal");
-    ws.write_document(&from, "prima versione", WriteBase::Dictated)
+    let to = DocId::new("renamed.fal");
+    ws.write_document(&from, "first version", WriteBase::Dictated)
         .unwrap();
 
-    ws.scrivi("nota.fal", "BOOM");
+    ws.write("nota.fal", "BOOM");
 
     assert!(
         ws.rename_document(&from, &to).is_err(),
-        "il parse rifiutato deve arrivare al chiamante"
+        "the rejected parse must reach the caller"
     );
 
     assert!(
         root.join("nota.fal").exists(),
-        "un `Err` col file già spostato è la non-atomicità che questo fix chiude"
+        "an `Err` with the file already moved is the non-atomicity this fix closes"
     );
-    assert!(!root.join("rinominata.fal").exists());
+    assert!(!root.join("renamed.fal").exists());
     // E la memoria non è rimasta indietro rispetto a niente: il documento è
     // ancora quello di prima, e un secondo tentativo trova ancora il nome
     // vecchio invece di un `NotFound`.

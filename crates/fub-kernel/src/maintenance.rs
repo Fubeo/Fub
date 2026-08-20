@@ -184,8 +184,8 @@ impl fub_abi::traits::CommandProvider for Maintenance {
     ) -> Result<fub_abi::command::CommandOutcome, fub_abi::error::PluginError> {
         Err(fub_abi::error::PluginError::Internal(
             format!(
-                "`{command}` è un comando di manutenzione: lo esegue il kernel, \
-                 e questa chiamata vuol dire che non l'ha riconosciuto"
+                "`{command}` is a maintenance command: the kernel runs it, \
+                 and this call means it was not recognized"
             )
             .into(),
         ))
@@ -216,11 +216,11 @@ pub struct Diagnostics {
     pub entries: usize,
     /// Quante righe del registro non si sono lette (§15.2). Zero è la risposta
     /// normale; diverso da zero è il primo posto dove guardare.
-    pub journal_scartate: usize,
+    pub journal_pruned: usize,
     /// Quante bozze ci sono, e quante di queste sono **orfane** — cioè l'unica
     /// copia rimasta di un testo la cui nota non c'è più.
     pub drafts: usize,
-    pub drafts_orfane: usize,
+    pub drafts_orphans: usize,
     /// I problemi che il controllo di salute trova (7.2), per controllo.
     ///
     /// È il primo lettore vero di `IndexQuery::VaultHealth`: quella query
@@ -272,8 +272,8 @@ pub fn catalog() -> Vec<fub_abi::text::StringCatalog> {
             .with(
                 T_REPAIRED_PARZIALE,
                 "Raccolti {collected} spazi orfani. Restano fuori: {lost} righe del \
-                 registro illeggibili, {unread} bozze che non si sono lette, {orphans} \
-                 bozze senza la loro nota — quelle sono l'unica copia di quel testo e \
+                 registro illeggibili, {unread} drafts che non si sono lette, {orphans} \
+                 drafts senza la loro note — quelle sono l'unica copia di quel testo e \
                  non si buttano da sole.",
             )
             .with(T_CLEAR_JOURNAL_TITLE, "Svuota il registro delle modifiche")

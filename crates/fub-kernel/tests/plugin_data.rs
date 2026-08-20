@@ -11,16 +11,16 @@
 use camino::Utf8PathBuf;
 use fub_abi::error::PluginError;
 use fub_kernel::{data_root, FormatRegistry, Workspace};
-use fub_testkit::{Banco, Montato};
+use fub_testkit::{Bench, Mounted};
 
-fn vault() -> Montato {
+fn vault() -> Mounted {
     // I plugin di prova si dichiarano prima di usare un host (§7.3): un id che
     // nessuno ha dichiarato riceve un host che nega tutto.
-    Banco::nuovo()
-        .senza_formato()
-        .senza_scansione()
-        .con_plugins(["prova.plugin", "uno", "due"])
-        .monta()
+    Bench::new()
+        .without_format()
+        .without_scan()
+        .with_plugins(["prova.plugin", "uno", "due"])
+        .mounts()
 }
 
 #[test]
@@ -42,8 +42,8 @@ fn a_blob_written_by_a_plugin_lands_in_its_own_corner_of_the_vault() {
         )
         .unwrap(),
         b"contenuto",
-        "lo spazio dati di un plugin è `.fub/data/plugins/<id>/`, \
-         e le directory intermedie le crea l'host"
+        "a plugin's data space is `.fub/data/plugins/<id>/`, \
+         and intermediate directories are created by the host"
     );
 }
 
@@ -53,34 +53,34 @@ fn what_a_plugin_writes_it_can_read_back_list_and_remove() {
 
     ws.with_host("prova.plugin", |host| {
         assert_eq!(
-            host.data_read("mai-scritto").unwrap(),
+            host.data_read("never-written").unwrap(),
             None,
-            "mancare non è un errore"
+            "missing is not an error"
         );
 
-        host.data_write("indice.json", b"{}").unwrap();
-        host.data_write("doc/a.md", b"prima").unwrap();
-        host.data_write("doc/b.md", b"seconda").unwrap();
+        host.data_write("index.json", b"{}").unwrap();
+        host.data_write("doc/a.md", b"first").unwrap();
+        host.data_write("doc/b.md", b"second").unwrap();
 
         assert_eq!(
             host.data_read("doc/a.md").unwrap().as_deref(),
-            Some(&b"prima"[..])
+            Some(&b"first"[..])
         );
         assert_eq!(
             host.data_list("").unwrap(),
-            vec!["doc/a.md", "doc/b.md", "indice.json"],
-            "l'elenco è ricorsivo e ordinato: chi ricostruisce un indice ci conta"
+            vec!["doc/a.md", "doc/b.md", "index.json"],
+            "the list is recursive and sorted: anyone rebuilding an index counts on it"
         );
         assert_eq!(host.data_list("doc").unwrap(), vec!["doc/a.md", "doc/b.md"]);
         assert!(
-            host.data_list("mai-esistita").unwrap().is_empty(),
-            "un prefisso che non c'è è una lista vuota, non un errore"
+            host.data_list("never-existing").unwrap().is_empty(),
+            "a nonexistent prefix yields an empty list, not an error"
         );
 
         host.data_remove("doc/a.md").unwrap();
         assert_eq!(host.data_read("doc/a.md").unwrap(), None);
         host.data_remove("doc/a.md")
-            .expect("cancellare due volte riesce lo stesso");
+            .expect("deleting twice succeeds anyway");
     });
 }
 
@@ -89,21 +89,21 @@ fn two_plugins_do_not_see_each_others_data() {
     let mut ws = vault();
 
     ws.with_host("uno", |host| {
-        host.data_write("stato.json", b"di uno").unwrap()
+        host.data_write("state.json", b"one's data").unwrap()
     });
     ws.with_host("due", |host| {
-        host.data_write("stato.json", b"di due").unwrap()
+        host.data_write("state.json", b"two's data").unwrap()
     });
 
     ws.with_host("uno", |host| {
         assert_eq!(
-            host.data_read("stato.json").unwrap().as_deref(),
-            Some(&b"di uno"[..])
+            host.data_read("state.json").unwrap().as_deref(),
+            Some(&b"one's data"[..])
         );
         assert_eq!(
             host.data_list("").unwrap(),
-            vec!["stato.json"],
-            "lo stesso nome in due spazi diversi non è lo stesso blob"
+            vec!["state.json"],
+            "the same name in two different spaces is not the same blob"
         );
     });
 }
@@ -115,21 +115,21 @@ fn nothing_a_plugin_can_name_escapes_its_own_space() {
 
     // Ognuno di questi, senza recinto, scriverebbe fuori dallo spazio del
     // plugin — nel vault dell'utente, o oltre.
-    let tentativi = [
-        "../../../fuori.txt",
+    let attempts = [
+        "../../../outside.txt",
         "..",
         "/etc/passwd",
-        "cartella/../../fuori.txt",
-        "sotto\\cartella.txt",
-        "./nascosto",
+        "folder/../../outside.txt",
+        "back\\slash.txt",
+        "./hidden",
     ];
 
-    ws.with_host("prova.plugin", |host| {
-        for path in tentativi {
-            let esito = host.data_write(path, b"non dovrei essere qui");
+    ws.with_host("test.plugin", |host| {
+        for path in attempts {
+            let result = host.data_write(path, b"I should not be here");
             assert!(
-                matches!(esito, Err(PluginError::PermissionDenied(_))),
-                "`{path}` doveva essere rifiutato, invece: {esito:?}"
+                matches!(result, Err(PluginError::PermissionDenied(_))),
+                "`{path}` was supposed to be refused, instead: {result:?}"
             );
             assert!(matches!(
                 host.data_read(path),
@@ -138,13 +138,13 @@ fn nothing_a_plugin_can_name_escapes_its_own_space() {
         }
         // Nemmeno il blob senza nome: è una richiesta malformata, non la radice.
         assert!(matches!(
-            host.data_write("", b"niente"),
+            host.data_write("", b"nothing"),
             Err(PluginError::BadArgs(_))
         ));
     });
 
-    assert!(!root.join("fuori.txt").exists());
-    assert!(!data_root(&root).join("fuori.txt").exists());
+    assert!(!root.join("outside.txt").exists());
+    assert!(!data_root(&root).join("outside.txt").exists());
 }
 
 // Lo `storage_*` volatile è stato TOLTO dal contratto con la decisione 0013 (linea di base
@@ -163,7 +163,7 @@ fn the_clock_is_a_capability_too() {
     // sia plausibile: un plugin sandboxato non ha `SystemTime::now`.
     assert!(
         t > 1_700_000_000_000,
-        "millisecondi dall'epoca UNIX, non secondi"
+        "milliseconds from UNIX epoch, not seconds"
     );
 }
 
@@ -171,32 +171,32 @@ fn the_clock_is_a_capability_too() {
 fn a_plugin_can_look_around_the_vault_not_only_react_to_events() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    std::fs::write(root.join("Appunto.txt"), "corpo").unwrap();
-    std::fs::write(root.join("Altro.txt"), "altro").unwrap();
+    std::fs::write(root.join("Note.txt"), "body").unwrap();
+    std::fs::write(root.join("Other.txt"), "other").unwrap();
 
     let mut registry = FormatRegistry::new();
     registry
         .register(Box::new(TxtProvider))
-        .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::new(&root, registry).expect("l'apertura del vault riesce");
+        .expect("no extension conflict");
+    let mut ws = Workspace::new(&root, registry).expect("the vault opens");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     for plugin in ["prova.plugin", "uno", "due"] {
         ws.register_core_feature(plugin, plugin)
-            .expect("dichiarato");
+            .expect("declared");
     }
     ws.reindex().unwrap();
 
-    let visti = ws
+    let seen = ws
         .with_host("prova.plugin", |host| host.list_documents(None))
         .unwrap();
 
     assert_eq!(
-        visti.items.iter().map(|d| d.0.as_str()).collect::<Vec<_>>(),
-        vec!["Altro.txt", "Appunto.txt"],
-        "senza `list_documents` un plugin può leggere solo gli id che gli \
-         arrivano dagli eventi: niente risposta a `vault-opened`, niente \
-         funzionalità sull'intero vault"
+        seen.items.iter().map(|d| d.0.as_str()).collect::<Vec<_>>(),
+        vec!["Other.txt", "Note.txt"],
+        "without `list_documents` a plugin can only read the ids that arrive \
+         from events: no response to `vault-opened`, no functionality over the \
+         entire vault"
     );
 }
 
@@ -213,7 +213,7 @@ struct TxtProvider;
 
 impl FormatProvider for TxtProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text("txt", "Testo semplice (test)", &["txt"])
+        FormatDescriptor::text("txt", "Plain text (test)", &["txt"])
     }
     fn capabilities(&self) -> FormatCapabilities {
         FormatCapabilities::default()

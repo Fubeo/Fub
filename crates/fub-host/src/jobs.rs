@@ -53,7 +53,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::custodia::Custodia;
+use crate::custody::Custody;
 
 use fub_abi::command::CommandOutcome;
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
@@ -91,7 +91,7 @@ use fub_kernel::Workspace;
 ///
 /// [decisione 0024]: ../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md
 pub struct JobHost {
-    workspace: Custodia<Workspace>,
+    workspace: Custody<Workspace>,
     plugin: String,
     /// **L'identità che il job non ha** (§10.3,
     /// [decisione 0035](../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md)).
@@ -125,7 +125,7 @@ impl JobHost {
     /// dichiarato riceve un host che nega tutto dicendo perché — la stessa
     /// risposta di `Workspace::with_host`, e per la stessa ragione (il kernel
     /// non presta capacità a una stringa).
-    pub fn new(workspace: Custodia<Workspace>, plugin: impl Into<String>) -> Self {
+    pub fn new(workspace: Custody<Workspace>, plugin: impl Into<String>) -> Self {
         JobHost {
             workspace,
             plugin: plugin.into(),
@@ -161,7 +161,7 @@ impl JobHost {
     fn stopped(&self) -> Result<(), PluginError> {
         if self.cancelled.load(Ordering::Relaxed) {
             return Err(PluginError::Cancelled(
-                format!("il job di `{}` è stato annullato", self.plugin).into(),
+                format!("the job of `{}` has been cancelled", self.plugin).into(),
             ));
         }
         Ok(())
@@ -406,7 +406,7 @@ impl HostEvents for JobHost {
             return;
         };
         if let Ok(mut ws) = self.workspace.write() {
-            ws.note_job_progress(id, progress);
+            ws.notes_job_progress(id, progress);
         }
     }
 }
@@ -489,7 +489,7 @@ impl HostNetwork for JobHost {
         self.stopped()?;
         let Some(client) = client else {
             return Err(PluginError::Unserved(
-                "questo host è montato senza client di rete".into(),
+                "this host is mounted without a network client".into(),
             ));
         };
         // Lo stesso `Guard` di tutti gli altri: il cancello è uno solo, e chi

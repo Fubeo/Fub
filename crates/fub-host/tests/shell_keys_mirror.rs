@@ -27,7 +27,7 @@
 
 use std::path::PathBuf;
 
-use fub_abi::rules::tasti::{canonica, oscura};
+use fub_abi::rules::keys::{canonical, obscures};
 use fub_host::shell::SHELL_COMMANDS;
 
 const HEADER: &str = "\
@@ -54,46 +54,46 @@ fn path() -> PathBuf {
 fn render() -> String {
     let mut out = String::from(HEADER);
     out.push_str(
-        "\n/// Gli accordi suggeriti per i comandi della shell, id → accordo.\n\
+        "\n/// Suggested bindings for shell commands, id -> binding.\n\
          export const SHELL_KEYS = {\n",
     );
     for (id, chord) in SHELL_COMMANDS {
-        let accordo = match chord {
+        let binding = match chord {
             Some(c) => format!("{c:?}"),
             None => "null".into(),
         };
-        out.push_str(&format!("  {id:?}: {accordo},\n"));
+        out.push_str(&format!("  {id:?}: {binding},\n"));
     }
     out.push_str("} as const satisfies Record<string, string | null>;\n\n");
     out.push_str(
-        "/// L'id di un comando della shell: uno di quelli in tabella, e nessun altro.\n\
+        "/// Id of a shell command: one of those in the table, and no other.\n\
          export type ShellCommandId = keyof typeof SHELL_KEYS;\n",
     );
     out
 }
 
 #[test]
-fn gli_accordi_emessi_sono_quelli_della_tabella() {
-    let emesso = render();
+fn emitted_bindings_match_table() {
+    let emitted = render();
     let path = path();
 
     if std::env::var_os("UPDATE_MIRROR").is_some() {
-        std::fs::write(&path, &emesso).expect("scrive gli accordi generati");
+        std::fs::write(&path, &emitted).expect("writes generated bindings");
         return;
     }
 
-    let committato = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+    let committed = std::fs::read_to_string(&path).unwrap_or_else(|and| {
         panic!(
-            "accordi generati mancanti ({}): {e}. Rigenerali con \
+            "generated bindings missing ({}): {and}. Regenerate with \
              `UPDATE_MIRROR=1 cargo test -p fub-host --test shell_keys_mirror`.",
             path.display()
         )
     });
 
     assert_eq!(
-        emesso, committato,
-        "`frontend/src/ui/shell-keys.generated.ts` è stantio: la tabella dei \
-         comandi della shell è cambiata senza rigenerarlo.\nRigenera con \
+        emitted, committed,
+        "`frontend/src/ui/shell-keys.generated.ts` is stale: the shell \
+         command table changed without regenerating it.\nRegenerate with \
          `UPDATE_MIRROR=1 cargo test -p fub-host --test shell_keys_mirror`."
     );
 }
@@ -107,58 +107,58 @@ fn gli_accordi_emessi_sono_quelli_della_tabella() {
 /// due: di là il rosso arriva a chi tocca la shell, di qua a chi tocca il
 /// registro dei comandi, e sono due persone diverse.
 #[test]
-fn nessun_accordo_e_dichiarato_dai_due_registri() {
-    let mut per_accordo: std::collections::BTreeMap<String, Vec<String>> = Default::default();
-    let mut dal_kernel = 0usize;
-    let mut dalla_shell = 0usize;
-    let mut impremibili: Vec<(String, String)> = Vec::new();
+fn no_binding_declared_by_both_registries() {
+    let mut for_binding: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    let mut from_kernel = 0usize;
+    let mut from_shell = 0usize;
+    let mut untypeable: Vec<(String, String)> = Vec::new();
     for spec in fub_features::commands::CoreCommands::specs() {
         if let Some(k) = &spec.keybinding {
-            dal_kernel += 1;
-            match canonica(k) {
-                Some(chiave) => per_accordo.entry(chiave).or_default().push(spec.id.clone()),
-                None => impremibili.push((spec.id.clone(), k.clone())),
+            from_kernel += 1;
+            match canonical(k) {
+                Some(key) => for_binding.entry(key).or_default().push(spec.id.clone()),
+                None => untypeable.push((spec.id.clone(), k.clone())),
             }
         }
     }
     for (id, chord) in SHELL_COMMANDS {
         if chord.is_some() {
-            dalla_shell += 1;
+            from_shell += 1;
         }
         if let Some(k) = chord {
-            match canonica(k) {
-                Some(chiave) => per_accordo
-                    .entry(chiave)
+            match canonical(k) {
+                Some(key) => for_binding
+                    .entry(key)
                     .or_default()
                     .push((*id).to_string()),
-                None => impremibili.push(((*id).to_string(), (*k).to_string())),
+                None => untypeable.push(((*id).to_string(), (*k).to_string())),
             }
         }
     }
-    let contesi: Vec<_> = per_accordo
+    let contested: Vec<_> = for_binding
         .iter()
         .filter(|(_, ids)| ids.len() > 1)
         .collect();
     assert!(
-        contesi.is_empty(),
-        "un accordo è dichiarato da due comandi che questa app spedisce: {contesi:?}"
+        contested.is_empty(),
+        "a binding is declared by two commands this app dispatches: {contested:?}"
     );
 
     // Un accordo che questa app non sa premere: la shell lo ignora, e finché la
     // forma canonica era una copia che normalizzava qualunque stringa nessuno
     // dei due registri poteva accorgersene (difetto 0148).
     assert!(
-        impremibili.is_empty(),
-        "un comando che questa app spedisce dichiara un accordo che la shell \
-         non sa premere, e lo ignorerà senza dirlo a nessuno: {impremibili:?}"
+        untypeable.is_empty(),
+        "a command this app dispatches declares a binding the shell cannot \
+         press, and will ignore without telling anyone: {untypeable:?}"
     );
 
     // Il test del test: due elenchi vuoti non litigherebbero mai, e un elenco
     // vuoto **su due** basterebbe a rendere la domanda una domanda a metà — che
     // è precisamente il modo in cui `Mod-Shift-f` è passato (0081).
     assert!(
-        dal_kernel > 0 && dalla_shell > 5,
-        "{dal_kernel} + {dalla_shell}"
+        from_kernel > 0 && from_shell > 5,
+        "{from_kernel} + {from_shell}"
     );
 }
 
@@ -166,18 +166,18 @@ fn nessun_accordo_e_dichiarato_dai_due_registri() {
 /// qualcosa di peggio: la palette mostrerebbe due voci uguali e la tastiera ne
 /// eseguirebbe una sola, scelta dall'ordine di `allCommands`.
 #[test]
-fn nessun_id_sta_nei_due_registri() {
-    let del_kernel: std::collections::BTreeSet<String> =
+fn no_id_in_both_registries() {
+    let kernel_ids: std::collections::BTreeSet<String> =
         fub_features::commands::CoreCommands::specs()
             .into_iter()
             .map(|s| s.id)
             .collect();
-    let doppi: Vec<&str> = SHELL_COMMANDS
+    let duplicates: Vec<&str> = SHELL_COMMANDS
         .iter()
         .map(|(id, _)| *id)
-        .filter(|id| del_kernel.contains(*id))
+        .filter(|id| kernel_ids.contains(*id))
         .collect();
-    assert!(doppi.is_empty(), "{doppi:?}");
+    assert!(duplicates.is_empty(), "{duplicates:?}");
 }
 
 /// **Nessun accordo di questa app è irraggiungibile perché un altro lo
@@ -189,30 +189,30 @@ fn nessun_id_sta_nei_due_registri() {
 /// può vederlo da solo — la shell lo sapeva per i propri (`prefissiOscurati`) e
 /// il kernel non ne aveva copia (difetto 0148).
 #[test]
-fn nessun_accordo_delle_due_parti_ne_oscura_un_altro() {
-    let mut dichiarati: Vec<(String, String)> = fub_features::commands::CoreCommands::specs()
+fn no_binding_shadows_another() {
+    let mut declared: Vec<(String, String)> = fub_features::commands::CoreCommands::specs()
         .into_iter()
         .filter_map(|s| s.keybinding.map(|k| (s.id, k)))
         .collect();
     for (id, chord) in SHELL_COMMANDS {
         if let Some(k) = chord {
-            dichiarati.push(((*id).to_string(), (*k).to_string()));
+            declared.push(((*id).to_string(), (*k).to_string()));
         }
     }
-    let oscurati: Vec<String> = dichiarati
+    let shadowed: Vec<String> = declared
         .iter()
-        .flat_map(|(id_corto, corto)| {
-            dichiarati
+        .flat_map(|(id_short, short)| {
+            declared
                 .iter()
-                .filter(move |(_, lungo)| oscura(corto, lungo))
-                .map(move |(id_lungo, lungo)| {
-                    format!("«{corto}» ({id_corto}) copre «{lungo}» ({id_lungo})")
+                .filter(move |(_, long)| obscures(short, long))
+                .map(move |(id_long, long)| {
+                    format!("\"{short}\" ({id_short}) shadows \"{long}\" ({id_long})")
                 })
         })
         .collect();
     assert!(
-        oscurati.is_empty(),
-        "un comando che questa app spedisce non si può premere, perché un altro \
-         accordo è un suo prefisso e si esegue prima: {oscurati:?}"
+        shadowed.is_empty(),
+        "a command this app dispatches cannot be pressed because another \
+         binding is its prefix and fires first: {shadowed:?}"
     );
 }

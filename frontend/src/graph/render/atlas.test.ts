@@ -8,86 +8,86 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
-  BUCKET_RAGGI,
-  bucketDiRaggio,
-  chiaveAtlas,
-  disegnaNodo,
-  esadecimaleRgb,
-  generaAtlas,
-  leggiTinte,
+  RADIUS_BUCKETS,
+  radiusBucket,
+  atlasKey,
+  drawNode,
+  hexRgb,
+  generateAtlas,
+  readTints,
   type Atlas,
-  type Tinte,
+  type Tints,
 } from "./atlas";
 
-describe("bucketDiRaggio", () => {
-  it("sceglie il primo bucket che copre il raggio", () => {
-    expect(bucketDiRaggio(BUCKET_RAGGI, 4)).toBe(0);
-    expect(bucketDiRaggio(BUCKET_RAGGI, 6)).toBe(0); // inclusivo sul max
-    expect(bucketDiRaggio(BUCKET_RAGGI, 6.5)).toBe(1);
-    expect(bucketDiRaggio(BUCKET_RAGGI, 9)).toBe(1);
-    expect(bucketDiRaggio(BUCKET_RAGGI, 13)).toBe(2);
+describe("radiusBucket", () => {
+  it("sceglie il primo bucket che copre il radius", () => {
+    expect(radiusBucket(RADIUS_BUCKETS, 4)).toBe(0);
+    expect(radiusBucket(RADIUS_BUCKETS, 6)).toBe(0); // inclusivo sul max
+    expect(radiusBucket(RADIUS_BUCKETS, 6.5)).toBe(1);
+    expect(radiusBucket(RADIUS_BUCKETS, 9)).toBe(1);
+    expect(radiusBucket(RADIUS_BUCKETS, 13)).toBe(2);
     // oltre l'ultimo bucket: l'ultimo (nessun indice fuori range)
-    expect(bucketDiRaggio(BUCKET_RAGGI, 100)).toBe(2);
-    expect(bucketDiRaggio([], 5)).toBe(-1); // bucket vuoti → -1, gestito dal chiamante
+    expect(radiusBucket(RADIUS_BUCKETS, 100)).toBe(2);
+    expect(radiusBucket([], 5)).toBe(-1); // bucket vuoti → -1, gestito dal chiamante
   });
 });
 
-describe("chiaveAtlas", () => {
-  const t: Tinte = {
-    nodo: "#aaa",
-    attivo: "#b00",
+describe("atlasKey", () => {
+  const t: Tints = {
+    node: "#aaa",
+    active: "#b00",
     hover: "#c00",
-    testo: "#eee",
-    sfondo: "#000",
-    fonte: "aaa|b00|c00|eee|000",
+    text: "#eee",
+    background: "#000",
+    source: "aaa|b00|c00|eee|000",
   };
   it("cambia se cambia la fonte (tema)", () => {
-    expect(chiaveAtlas(t, BUCKET_RAGGI)).not.toBe(chiaveAtlas({ ...t, fonte: "xxx" }, BUCKET_RAGGI));
+    expect(atlasKey(t, RADIUS_BUCKETS)).not.toBe(atlasKey({ ...t, source: "xxx" }, RADIUS_BUCKETS));
   });
   it("cambia se cambiano i bucket", () => {
     const altri = [{ min: 0, max: 10 }];
-    expect(chiaveAtlas(t, BUCKET_RAGGI)).not.toBe(chiaveAtlas(t, altri));
+    expect(atlasKey(t, RADIUS_BUCKETS)).not.toBe(atlasKey(t, altri));
   });
 });
 
-describe("esadecimaleRgb", () => {
+describe("hexRgb", () => {
   it("parsa #rgb e #rrggbb", () => {
-    expect(esadecimaleRgb("#abc")).toEqual([170, 187, 204]);
-    expect(esadecimaleRgb("#ff8800")).toEqual([255, 136, 0]);
+    expect(hexRgb("#abc")).toEqual([170, 187, 204]);
+    expect(hexRgb("#ff8800")).toEqual([255, 136, 0]);
   });
   it("ritorna null per valori non esadecimali (es. rgb(...))", () => {
-    expect(esadecimaleRgb("rgb(1, 2, 3)")).toBeNull();
-    expect(esadecimaleRgb("")).toBeNull();
-    expect(esadecimaleRgb("#xyz")).toBeNull();
-    expect(esadecimaleRgb("#12345")).toBeNull();
+    expect(hexRgb("rgb(1, 2, 3)")).toBeNull();
+    expect(hexRgb("")).toBeNull();
+    expect(hexRgb("#xyz")).toBeNull();
+    expect(hexRgb("#12345")).toBeNull();
   });
 });
 
-describe("leggiTinte", () => {
+describe("readTints", () => {
   it("legge i token dal computed style dell'host (pattern panels/graph.ts)", () => {
     const host = document.createElement("div");
-    const stile = {
+    const style = {
       color: "#e6e6ea",
-      getPropertyValue(nome: string): string {
-        const mappa: Record<string, string> = {
+      getPropertyValue(name: string): string {
+        const map: Record<string, string> = {
           "--graph-node": "#8a8a99",
           "--graph-node-active": "#a3e635",
           "--graph-node-hover": "#98c379",
           "--text": "#e6e6ea",
           "--bg": "#000000",
         };
-        return mappa[nome] ?? "";
+        return map[name] ?? "";
       },
     } as unknown as CSSStyleDeclaration;
-    vi.spyOn(globalThis, "getComputedStyle").mockReturnValue(stile);
+    vi.spyOn(globalThis, "getComputedStyle").mockReturnValue(style);
 
-    const t = leggiTinte(host);
-    expect(t.nodo).toBe("#8a8a99");
-    expect(t.attivo).toBe("#a3e635");
+    const t = readTints(host);
+    expect(t.node).toBe("#8a8a99");
+    expect(t.active).toBe("#a3e635");
     expect(t.hover).toBe("#98c379");
-    expect(t.testo).toBe("#e6e6ea");
-    expect(t.sfondo).toBe("#000000");
-    expect(t.fonte).toBe("#8a8a99|#a3e635|#98c379|#e6e6ea|#000000");
+    expect(t.text).toBe("#e6e6ea");
+    expect(t.background).toBe("#000000");
+    expect(t.source).toBe("#8a8a99|#a3e635|#98c379|#e6e6ea|#000000");
     vi.restoreAllMocks();
   });
 
@@ -97,57 +97,57 @@ describe("leggiTinte", () => {
       color: "#e6e6ea",
       getPropertyValue: () => "",
     } as unknown as CSSStyleDeclaration);
-    const t = leggiTinte(host);
-    expect(t.nodo).toBe("#e6e6ea"); // fallback all'ink
-    expect(t.sfondo).toBe("#000000"); // fallback nero per il trail
+    const t = readTints(host);
+    expect(t.node).toBe("#e6e6ea"); // fallback all'ink
+    expect(t.background).toBe("#000000"); // fallback nero per il trail
     vi.restoreAllMocks();
   });
 });
 
-describe("generaAtlas e disegnaNodo (degradazione no-op)", () => {
-  it("generaAtlas con getContext null produce un atlas senza canvas (no lancio)", () => {
-    const t: Tinte = {
-      nodo: "#8a8a99",
-      attivo: "#a3e635",
+describe("generateAtlas e drawNode (degradazione no-op)", () => {
+  it("generateAtlas con getContext null produce un atlas senza canvas (no lancio)", () => {
+    const t: Tints = {
+      node: "#8a8a99",
+      active: "#a3e635",
       hover: "#98c379",
-      testo: "#e6e6ea",
-      sfondo: "#000",
-      fonte: "f",
+      text: "#e6e6ea",
+      background: "#000",
+      source: "f",
     };
-    const a = generaAtlas(t, BUCKET_RAGGI);
-    expect(a.canvas).toBeNull();
-    expect(a.cella).toBeGreaterThan(0);
-    expect(a.bucket).toBe(BUCKET_RAGGI);
+    const atlas = generateAtlas(t, RADIUS_BUCKETS);
+    expect(atlas.canvas).toBeNull();
+    expect(atlas.cell).toBeGreaterThan(0);
+    expect(atlas.bucket).toBe(RADIUS_BUCKETS);
     // la fonte va nella chiave: un atlas «vuoto» resta confrontabile
-    expect(a.fonte).toBe(chiaveAtlas(t, BUCKET_RAGGI));
+    expect(atlas.source).toBe(atlasKey(t, RADIUS_BUCKETS));
   });
 
-  it("disegnaNodo con ctx null o atlas senza canvas non lancia", () => {
-    const t: Tinte = { nodo: "#aaa", attivo: "#bbb", hover: "#ccc", testo: "#ddd", sfondo: "#000", fonte: "f" };
-    const a = generaAtlas(t, BUCKET_RAGGI);
-    expect(() => disegnaNodo(null, a, 0, 0, 6, "nodo")).not.toThrow();
-    const finto = {} as unknown as CanvasRenderingContext2D;
-    expect(() => disegnaNodo(finto, a, 0, 0, 6, "nodo", 0.5)).not.toThrow();
+  it("drawNode con ctx null o atlas senza canvas non lancia", () => {
+    const t: Tints = { node: "#aaa", active: "#bbb", hover: "#ccc", text: "#ddd", background: "#000", source: "f" };
+    const atlas = generateAtlas(t, RADIUS_BUCKETS);
+    expect(() => drawNode(null, atlas, 0, 0, 6, "node")).not.toThrow();
+    const fake = {} as unknown as CanvasRenderingContext2D;
+    expect(() => drawNode(fake, atlas, 0, 0, 6, "node", 0.5)).not.toThrow();
   });
 
-  it("disegnaNodo con canvas finto fa drawImage con la cella giusta", () => {
+  it("drawNode con canvas finto fa drawImage con la cella giusta", () => {
     // La scelta di sorgente (riga = ruolo, colonna = bucket) è il contratto
     // dell'atlas: un drawImage con coordinate sbagliate pescherebbe lo
     // sprite di un altro colore/raggio.
-    const a: Atlas = { canvas: {}, bucket: BUCKET_RAGGI, fonte: "f", cella: 64, celle: 3, righe: 3 } as unknown as Atlas;
+    const atlas: Atlas = { canvas: {}, bucket: RADIUS_BUCKETS, source: "f", cell: 64, cells: 3, rows: 3 } as unknown as Atlas;
     const chiamate: unknown[] = [];
-    const finto = {
+    const fake = {
       globalAlpha: 1,
       drawImage(...args: unknown[]) {
         chiamate.push(args);
       },
     } as unknown as CanvasRenderingContext2D;
     // raggio 7 → bucket 1, ruolo "hover" → riga 2: sx = 1·64, sy = 2·64
-    disegnaNodo(finto, a, 10, 20, 7, "hover");
+    drawNode(fake, atlas, 10, 20, 7, "hover");
     expect(chiamate).toHaveLength(1);
     // drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) — 9 argomenti
     const [src, sx, sy, sw, sh, dx, dy] = chiamate[0] as unknown[];
-    expect(src).toBe(a.canvas);
+    expect(src).toBe(atlas.canvas);
     expect(sx).toBe(64);
     expect(sy).toBe(128);
     expect(sw).toBe(64);
@@ -157,17 +157,17 @@ describe("generaAtlas e disegnaNodo (degradazione no-op)", () => {
     expect(dy).toBeCloseTo(20 - 25.2 / 2, 6);
   });
 
-  it("disegnaNodo con alone modula globalAlpha e rifà drawImage", () => {
-    const a: Atlas = { canvas: {}, bucket: BUCKET_RAGGI, fonte: "f", cella: 64, celle: 3, righe: 3 } as unknown as Atlas;
+  it("drawNode con alone modula globalAlpha e rifà drawImage", () => {
+    const atlas: Atlas = { canvas: {}, bucket: RADIUS_BUCKETS, source: "f", cell: 64, cells: 3, rows: 3 } as unknown as Atlas;
     const alphas: number[] = [];
     let chiamate = 0;
-    const finto = {
+    const fake = {
       drawImage() {
         chiamate++;
       },
     } as unknown as CanvasRenderingContext2D;
     // intercetta il setter di globalAlpha: registra ogni valore scritto
-    Object.defineProperty(finto, "globalAlpha", {
+    Object.defineProperty(fake, "globalAlpha", {
       configurable: true,
       enumerable: true,
       get: () => alphas[alphas.length - 1] ?? 1,
@@ -175,7 +175,7 @@ describe("generaAtlas e disegnaNodo (degradazione no-op)", () => {
         alphas.push(v);
       },
     });
-    disegnaNodo(finto, a, 0, 0, 6, "nodo", 0.42);
+    drawNode(fake, atlas, 0, 0, 6, "node", 0.42);
     expect(chiamate).toBe(2);
     expect(alphas[0]).toBeCloseTo(0.42, 10);
     expect(alphas[1]).toBe(1);

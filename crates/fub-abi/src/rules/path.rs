@@ -86,7 +86,7 @@ pub fn strip_ext(path: &str) -> String {
 /// riparando.
 pub fn split_fragment(raw: &str) -> (&str, &str) {
     match raw.find('#') {
-        Some(i) => (&raw[..i], &raw[i..]),
+        Some(hash_at) => (&raw[..hash_at], &raw[hash_at..]),
         None => (raw, ""),
     }
 }
@@ -99,17 +99,17 @@ pub fn percent_decode(s: &str) -> String {
     }
     let bytes = s.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(hi), Some(lo)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
-                out.push(hi * 16 + lo);
-                i += 3;
+    let mut offset = 0;
+    while offset < bytes.len() {
+        if bytes[offset] == b'%' && offset + 2 < bytes.len() {
+            if let (Some(hi), Some(value)) = (hex(bytes[offset + 1]), hex(bytes[offset + 2])) {
+                out.push(hi * 16 + value);
+                offset += 3;
                 continue;
             }
         }
-        out.push(bytes[i]);
-        i += 1;
+        out.push(bytes[offset]);
+        offset += 1;
     }
     // Se la decodifica produce byte che non sono UTF-8 il path non era un path:
     // meglio la stringa originale di un `�` che non aprirà mai nulla.
@@ -239,7 +239,7 @@ pub fn relative_ref(src: &DocId, to: &DocId) -> String {
 /// I segmenti della cartella che contiene `id`.
 fn parent_segments(id: &DocId) -> Vec<&str> {
     let s = id.as_str();
-    let cut = s.rfind('/').map_or(0, |i| i);
+    let cut = s.rfind('/').map_or(0, |the| the);
     s[..cut].split('/').filter(|p| !p.is_empty()).collect()
 }
 

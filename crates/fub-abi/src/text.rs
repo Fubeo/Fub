@@ -281,8 +281,8 @@ impl std::fmt::Display for Message {
             return Ok(());
         }
         f.write_str(" {")?;
-        for (i, arg) in self.args.iter().enumerate() {
-            if i > 0 {
+        for (the, arg) in self.args.iter().enumerate() {
+            if the > 0 {
                 f.write_str(", ")?;
             }
             write!(f, "{}={}", arg.name, arg.value)?;
@@ -470,7 +470,7 @@ impl<'a> Strings<'a> {
     /// lingua, il secondo sarebbe stato invisibile: non un errore, non un
     /// avviso, solo metà delle stringhe che scendono alla chiave nuda.
     pub fn template(&self, key: &str) -> Option<&'a str> {
-        let cerca = |tag: &str| -> Option<&'a str> {
+        let find = |tag: &str| -> Option<&'a str> {
             if tag.is_empty() {
                 return None;
             }
@@ -481,14 +481,14 @@ impl<'a> Strings<'a> {
                 .map(String::as_str)
         };
         if self.locale.has_language() {
-            if let Some(t) = cerca(&self.locale.language) {
+            if let Some(t) = find(&self.locale.language) {
                 return Some(t);
             }
-            if let Some(t) = cerca(self.locale.language_base()) {
+            if let Some(t) = find(self.locale.language_base()) {
                 return Some(t);
             }
         }
-        cerca(self.default_locale)
+        find(self.default_locale)
     }
 
     /// Il testo, leggibile. Un [`Text::Literal`] è già la risposta.
@@ -627,7 +627,7 @@ impl<T: Localize> Localize for Box<T> {
 mod tests {
     use super::*;
 
-    fn italiano() -> Locale {
+    fn italian() -> Locale {
         Locale {
             language: "it-IT".into(),
             ..Locale::default()
@@ -651,11 +651,11 @@ mod tests {
         let nudo = serde_json::to_value(Text::key("backlinks.empty")).unwrap();
         assert_eq!(nudo, serde_json::json!({"key": "backlinks.empty"}));
 
-        let con_argomenti = Text::message(
+        let with_args = Text::message(
             "backlinks.count",
             vec![Arg::int("n", 3), Arg::text("doc", "a/Uno.md")],
         );
-        let json = serde_json::to_value(&con_argomenti).unwrap();
+        let json = serde_json::to_value(&with_args).unwrap();
         assert_eq!(
             json,
             serde_json::json!({
@@ -667,13 +667,13 @@ mod tests {
             })
         );
         let back: Text = serde_json::from_value(json).unwrap();
-        assert_eq!(back, con_argomenti);
+        assert_eq!(back, with_args);
     }
 
     /// La scala del doc del modulo, gradino per gradino.
     #[test]
     fn the_ladder_descends_by_specificity() {
-        let cataloghi = vec![
+        let catalogs = vec![
             StringCatalog::new("it-IT").with("solo_regionale", "regionale"),
             StringCatalog::new("it")
                 .with("solo_regionale", "generico")
@@ -683,8 +683,8 @@ mod tests {
                 .with("solo_lingua", "language")
                 .with("solo_default", "default"),
         ];
-        let locale = italiano();
-        let s = Strings::new(&cataloghi, "en", &locale);
+        let locale = italian();
+        let s = Strings::new(&catalogs, "en", &locale);
         assert_eq!(s.render(&Text::key("solo_regionale")), "regionale");
         assert_eq!(s.render(&Text::key("solo_lingua")), "lingua");
         assert_eq!(s.render(&Text::key("solo_default")), "default");
@@ -696,22 +696,22 @@ mod tests {
     /// di cercare un catalogo `und` che nessuno scriverà mai.
     #[test]
     fn an_undetermined_language_goes_straight_to_the_default() {
-        let cataloghi = vec![StringCatalog::new("en").with("k", "english")];
+        let catalogs = vec![StringCatalog::new("en").with("k", "english")];
         let mut und = Locale::default();
-        let s = Strings::new(&cataloghi, "en", &und);
+        let s = Strings::new(&catalogs, "en", &und);
         assert_eq!(s.render(&Text::key("k")), "english");
         // E chi la dichiara e non ce l'ha scende comunque al default.
         und.language = "de".into();
-        let s = Strings::new(&cataloghi, "en", &und);
+        let s = Strings::new(&catalogs, "en", &und);
         assert_eq!(s.render(&Text::key("k")), "english");
     }
 
     #[test]
     fn substitution_puts_the_arguments_where_the_braces_are() {
-        let cataloghi =
-            vec![StringCatalog::new("it").with("conteggio", "{n} note in «{cartella}»")];
-        let locale = italiano();
-        let s = Strings::new(&cataloghi, "it", &locale);
+        let catalogs =
+            vec![StringCatalog::new("it").with("conteggio", "{n} note in «{folder}»")];
+        let locale = italian();
+        let s = Strings::new(&catalogs, "it", &locale);
         let t = Text::message(
             "conteggio",
             vec![Arg::int("n", 12), Arg::text("cartella", "Archivio")],
@@ -745,7 +745,7 @@ mod tests {
     /// due date — e nessun provider ha dovuto saperlo.
     #[test]
     fn a_typed_timestamp_is_formatted_by_whoever_knows_the_locale() {
-        let cataloghi = vec![StringCatalog::new("it").with("visto", "visto il {quando}")];
+        let catalogs = vec![StringCatalog::new("it").with("visto", "visto il {when}")];
         let t = Text::message("visto", vec![Arg::timestamp("quando", 1_785_241_800_000)]);
 
         let utc = Locale {
@@ -753,7 +753,7 @@ mod tests {
             ..Locale::default()
         };
         assert_eq!(
-            Strings::new(&cataloghi, "it", &utc).render(&t),
+            Strings::new(&catalogs, "it", &utc).render(&t),
             "visto il 2026-07-28 12:30"
         );
         let roma = Locale {
@@ -761,7 +761,7 @@ mod tests {
             ..utc.clone()
         };
         assert_eq!(
-            Strings::new(&cataloghi, "it", &roma).render(&t),
+            Strings::new(&catalogs, "it", &roma).render(&t),
             "visto il 2026-07-28 14:30"
         );
     }
@@ -781,24 +781,24 @@ mod tests {
     /// Risolvere è idempotente e non tocca ciò che era già un dato.
     #[test]
     fn resolving_is_idempotent() {
-        let cataloghi = vec![StringCatalog::new("it").with("k", "tradotto")];
-        let locale = italiano();
-        let s = Strings::new(&cataloghi, "it", &locale);
+        let catalogs = vec![StringCatalog::new("it").with("k", "tradotto")];
+        let locale = italian();
+        let s = Strings::new(&catalogs, "it", &locale);
         let mut t = Text::key("k");
         s.resolve(&mut t);
         assert_eq!(t, Text::Literal("tradotto".into()));
         s.resolve(&mut t);
         assert_eq!(t, Text::Literal("tradotto".into()));
 
-        let mut dato = Text::from("a/Uno.md");
-        s.resolve(&mut dato);
-        assert_eq!(dato, Text::Literal("a/Uno.md".into()));
+        let mut data_item = Text::from("a/Uno.md");
+        s.resolve(&mut data_item);
+        assert_eq!(data_item, Text::Literal("a/Uno.md".into()));
     }
 
     /// Senza cataloghi non si rompe niente: si scende al gradino di sotto.
     #[test]
     fn no_catalog_is_not_an_error() {
-        let locale = italiano();
+        let locale = italian();
         let s = Strings::none(&locale);
         let mut v = vec![Text::from("dato"), Text::key("chiave")];
         s.localize(&mut v);

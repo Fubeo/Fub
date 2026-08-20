@@ -121,16 +121,16 @@ impl std::fmt::Display for BundleError {
         match self {
             BundleError::Abi { id, declared } => write!(
                 f,
-                "`{id}` parla il contratto `{declared}`, e questo host parla \
-                 `{}`: non si monta",
+                "`{id}` speaks contract `{declared}`, but this host speaks \
+                 `{}`: will not mount",
                 fub_abi::traits::ABI_VERSION
             ),
-            BundleError::Declaration(e) => write!(f, "{e}"),
+            BundleError::Declaration(and) => write!(f, "{and}"),
             BundleError::Activation { id, error } => {
-                write!(f, "`{id}` non si è attivato: {error}")
+                write!(f, "`{id}` did not activate: {error}")
             }
             BundleError::Unknown(id) => {
-                write!(f, "`{id}` non è un bundle che questo host sa montare")
+                write!(f, "`{id}` is not a bundle this host knows how to mount")
             }
         }
     }
@@ -151,22 +151,22 @@ impl std::error::Error for BundleError {}
 /// `Internal` avrebbe cancellato una risposta giusta per rimpiazzarla con una
 /// generica — e con essa il catalogo di chi l'aveva scritta.
 impl From<BundleError> for PluginError {
-    fn from(e: BundleError) -> Self {
-        match e {
+    fn from(and: BundleError) -> Self {
+        match and {
             // Non è un difetto di nessuno: questo host non parla quel
             // contratto. È la stessa forma di «nessuno serve questa domanda».
-            BundleError::Abi { .. } => PluginError::Unserved(e.to_string().into()),
+            BundleError::Abi { .. } => PluginError::Unserved(and.to_string().into()),
             // «L'ho riacceso» e «ho scritto male l'id» devono essere due
             // risposte diverse: è la ragione per cui la variante esiste, e
             // sopravvive alla traduzione solo restando distinta qui.
-            BundleError::Unknown(_) => PluginError::NotFound(e.to_string().into()),
+            BundleError::Unknown(_) => PluginError::NotFound(and.to_string().into()),
             // La dichiarazione respinta dal kernel è un difetto di chi ha
             // scritto il bundle: id doppio, nome fuori dal namespace, requisito
             // che nessuno offre.
-            BundleError::Declaration(_) => PluginError::Internal(e.to_string().into()),
+            BundleError::Declaration(_) => PluginError::Internal(and.to_string().into()),
             // La risposta di chi non si è attivato, **preservata**: il suo
             // `kind` è più informato di qualunque cosa si possa mettere qui.
-            BundleError::Activation { .. } => e.into_activation_error(),
+            BundleError::Activation { .. } => and.into_activation_error(),
         }
     }
 }
@@ -177,7 +177,7 @@ impl BundleError {
     /// e il `kind` di chi l'ha detto è quello che vale.
     fn into_activation_error(self) -> PluginError {
         let BundleError::Activation { id, mut error } = self else {
-            unreachable!("chiamata solo sul ramo Activation")
+            unreachable!("called only on the Activation branch")
         };
         let message = error.message_mut();
         *message = format!("`{id}` non si è attivato: {message}").into();
@@ -425,7 +425,7 @@ impl BundleRegistry {
         // copia, e tutte e due le porte da cui si arriva qui lo aspettano prima
         // di bussare — chi chiude il vault ferma il pool intero
         // (`JobRunner::stop`), chi spegne un componente ferma i job **suoi**
-        // (`JobRunner::ferma_bundle`), decisione 0032 per entrambe. Se un
+        // (`JobRunner::shutdown_bundle`), decisione 0032 per entrambe. Se un
         // giorno qualcuno invertisse i due passi, o ne aprisse una terza, il
         // commiato non verrebbe chiamato e questo lo **dice**, invece di
         // aspettare in silenzio la fine di un export.
@@ -433,8 +433,8 @@ impl BundleRegistry {
             Some(plugin) => ws.with_host(id, |host| plugin.deactivate(host)).err(),
             None => Some(PluginError::Internal(
                 format!(
-                    "`{id}` ha un job ancora in volo: il suo `deactivate` non è stato \
-                 chiamato (chi spegne un bundle ferma prima i suoi job)"
+                    "`{id}` still has an in-flight job: its `deactivate` was not \
+                 called (whoever turns off a bundle stops its jobs first)"
                 )
                 .into(),
             )),
@@ -457,7 +457,7 @@ impl BundleRegistry {
         let mut errors = self.stop(ws, id);
         match ws.deactivate_plugin(id) {
             Ok(errs) => errors.extend(errs),
-            Err(e) => errors.push(PluginError::Internal(e.to_string().into())),
+            Err(and) => errors.push(PluginError::Internal(and.to_string().into())),
         }
         errors
     }

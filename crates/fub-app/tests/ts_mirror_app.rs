@@ -196,9 +196,9 @@ fn the_app_side_ts_mirror_fixture_is_in_sync_with_the_rust_types() {
         return;
     }
 
-    let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+    let committed = std::fs::read_to_string(&path).unwrap_or_else(|and| {
         panic!(
-            "fixture dei mirror dell'app mancante ({}): {e}. Rigenerala con \
+            "fixture dei mirror dell'app mancante ({}): {and}. Rigenerala con \
              `UPDATE_MIRROR=1 cargo test -p fub-app --test ts_mirror_app`.",
             path.display()
         )

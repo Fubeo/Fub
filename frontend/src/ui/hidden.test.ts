@@ -17,7 +17,7 @@
 // i **manici** di un elemento — id e classi — invece del solo id: cercare ciò
 // che non si scrive più è il modo in cui un presidio diventa verde e vuoto.
 //
-// La difesa sta nella **struttura** (`theme/struttura.css`) ed è una riga —
+// La difesa sta nella **struttura** (`theme/structure.css`) ed è una riga —
 // `[hidden] { display: none !important }` — cioè l'unico posto in cui
 // `!important` è la risposta giusta: ristabilisce una garanzia dell'UA che una
 // regola di layout revoca senza dirlo. Sta nella struttura, e non nella pelle,
@@ -32,18 +32,18 @@
 import { describe, expect, it } from "vitest";
 
 import html from "../../index.html?raw";
-import struttura from "../theme/struttura.css?raw";
-import pelle from "../theme/serie/pelle.css?raw";
+import structure from "../theme/structure.css?raw";
+import skin from "../theme/serie/skin.css?raw";
 
 /// Il CSS che il presidio attraversa: la struttura (dove sta la guardia) e la
 /// pelle (dove stanno le regole di layout che la possono revocare). La prima è
 /// della shell e non si sostituisce; la seconda sì, ma una pelle di terzi che
 /// imposti `display` non revoca la guardia — sta in un altro strato.
-const css = struttura + "\n" + pelle;
+const css = structure + "\n" + skin;
 
 /// La riga di difesa: `[hidden]` con `display: none` e `!important`. Senza
 /// `!important` non serve a niente — un selettore per id la batte comunque.
-const GUARDIA = /\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important[^}]*\}/;
+const HIDDEN_RULE = /\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important[^}]*\}/;
 
 /// Un elemento che l'HTML nasconde con l'attributo (`<div id="x" hidden>`), coi
 /// **manici** con cui il CSS lo può raggiungere: il suo id e le sue classi.
@@ -52,44 +52,44 @@ const GUARDIA = /\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important[^}]*\}/;
 /// prima bastava l'id perché era l'unico modo che la pelle avesse di nominare
 /// una superficie, e cercare solo quello adesso vorrebbe dire un presidio che
 /// non trova più niente e passa perché non guarda.
-interface Nascosto {
+interface HiddenElement {
   id: string;
-  ganci: string[];
+  hooks: string[];
 }
 
-function nascostiNellHtml(): Nascosto[] {
-  const fuori: Nascosto[] = [];
+function hiddenInHtml(): HiddenElement[] {
+  const outside: HiddenElement[] = [];
   for (const m of html.matchAll(/<[a-z]+\s([^>]*\shidden[\s>][^>]*)>/gi)) {
-    const attributi = m[1];
-    const id = /\sid="([\w-]+)"/.exec(attributi)?.[1] ?? /^id="([\w-]+)"/.exec(attributi)?.[1];
+    const attributes = m[1];
+    const id = /\sid="([\w-]+)"/.exec(attributes)?.[1] ?? /^id="([\w-]+)"/.exec(attributes)?.[1];
     if (!id) continue;
-    const classi = (/\sclass="([^"]*)"/.exec(attributi)?.[1] ?? "").split(/\s+/).filter(Boolean);
-    fuori.push({ id, ganci: [`#${id}`, ...classi.map((c) => `.${c}`)] });
+    const classes = (/\sclass="([^"]*)"/.exec(attributes)?.[1] ?? "").split(/\s+/).filter(Boolean);
+    outside.push({ id, hooks: [`#${id}`, ...classes.map((c) => `.${c}`)] });
   }
-  return fuori;
+  return outside;
 }
 
 /// I selettori su cui il CSS impone un `display` nominando *solo* quel manico
 /// (`.views-modal { display: flex }`), cioè quelli su cui l'attributo `hidden`
 /// perderebbe senza la guardia. I selettori discendenti
 /// (`.views-bottom .panel-title`) non c'entrano: riguardano i figli.
-function ganciConDisplayImposto(): string[] {
-  const colpiti: string[] = [];
-  for (const blocco of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-    const selettori = blocco[1].split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim());
-    if (!/(^|;|\s)display\s*:/.test(blocco[2])) continue;
-    for (const selettore of selettori) {
-      if (/^[#.][\w-]+$/.test(selettore)) colpiti.push(selettore);
+function hooksWithImposedDisplay(): string[] {
+  const matched: string[] = [];
+  for (const block of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const selectors = block[1].split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim());
+    if (!/(^|;|\s)display\s*:/.test(block[2])) continue;
+    for (const selector of selectors) {
+      if (/^[#.][\w-]+$/.test(selector)) matched.push(selector);
     }
   }
-  return colpiti;
+  return matched;
 }
 
 describe("l'attributo hidden", () => {
   it("è difeso da una regola che nessuna regola di layout può revocare", () => {
     expect(
-      GUARDIA.test(css),
-      "manca `[hidden] { display: none !important }` in struttura.css: " +
+      HIDDEN_RULE.test(css),
+      "manca `[hidden] { display: none !important }` in structure.css: " +
         "senza, qualunque regola d'autore che imposti `display` rende di " +
         "nuovo visibile ciò che la shell crede nascosto",
     ).toBe(true);
@@ -100,21 +100,21 @@ describe("l'attributo hidden", () => {
     // un presidio che non presidia niente è un presidio che si toglie senza
     // pensarci. Qui si nomina chi ci sta sotto: se un domani nessuno ci sta
     // più, questo test diventa rosso e la riga si può discutere sul serio.
-    const nascosti = nascostiNellHtml();
-    const conDisplay = new Set(ganciConDisplayImposto());
-    const protetti = nascosti
-      .filter((n) => n.ganci.some((g) => conDisplay.has(g)))
+    const hiddenElements = hiddenInHtml();
+    const withDisplay = new Set(hooksWithImposedDisplay());
+    const protectedElements = hiddenElements
+      .filter((n) => n.hooks.some((g) => withDisplay.has(g)))
       .map((n) => n.id);
 
-    expect(nascosti.length, "l'HTML non nasconde più niente: il glob legge ancora?").toBeGreaterThan(
+    expect(hiddenElements.length, "l'HTML non nasconde più niente: il glob legge ancora?").toBeGreaterThan(
       3,
     );
-    expect(protetti, "gli elementi che dipendono dalla guardia").toContain("views-modal");
+    expect(protectedElements, "gli elementi che dipendono dalla guardia").toContain("views-modal");
   });
 
   it("riconosce una regola che sovrascrive display quando c'è", () => {
     // La prova che il rilevatore non è sempre vuoto per una svista nella
     // regexp: `#app` ha un `display: flex` dichiarato, e va colto.
-    expect(ganciConDisplayImposto()).toContain("#app");
+    expect(hooksWithImposedDisplay()).toContain("#app");
   });
 });

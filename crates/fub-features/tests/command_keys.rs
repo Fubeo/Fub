@@ -33,7 +33,7 @@
 //! romperlo a chi scrive il codice. Qui stanno i comandi che spediamo noi, per i
 //! quali un conflitto è un difetto e non una convivenza da segnalare.
 
-use fub_abi::rules::tasti::{canonica, oscura};
+use fub_abi::rules::keys::{canonical, obscures};
 use fub_features::commands::CoreCommands;
 use serde_json::{Map, Value};
 
@@ -82,9 +82,9 @@ fn command_keys_fixture_is_in_sync_with_the_command_registry() {
         return;
     }
 
-    let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+    let committed = std::fs::read_to_string(&path).unwrap_or_else(|and| {
         panic!(
-            "fixture degli accordi mancante ({}): {e}. Rigenerala con \
+            "fixture degli accordi mancante ({}): {and}. Rigenerala con \
              `UPDATE_MIRROR=1 cargo test -p fub-features --test command_keys`.",
             path.display()
         )
@@ -108,17 +108,17 @@ fn command_keys_fixture_is_in_sync_with_the_command_registry() {
 /// aspettare che qualcuno lanci la suite di là.
 #[test]
 fn no_two_official_commands_want_the_same_chord() {
-    let mut per_accordo: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    let mut for_agreement: std::collections::BTreeMap<String, Vec<String>> = Default::default();
     let mut impremibili: Vec<(String, String)> = Vec::new();
     for spec in CoreCommands::specs() {
         if let Some(k) = &spec.keybinding {
-            match canonica(k) {
-                Some(chiave) => per_accordo.entry(chiave).or_default().push(spec.id.clone()),
+            match canonical(k) {
+                Some(key) => for_agreement.entry(key).or_default().push(spec.id.clone()),
                 None => impremibili.push((spec.id.clone(), k.clone())),
             }
         }
     }
-    let contesi: Vec<_> = per_accordo
+    let contesi: Vec<_> = for_agreement
         .iter()
         .filter(|(_, ids)| ids.len() > 1)
         .collect();
@@ -147,25 +147,25 @@ fn no_two_official_commands_want_the_same_chord() {
 /// il giorno che un comando ufficiale dichiara una sequenza, il rosso arriva a
 /// chi tocca il registro invece che all'utente che preme (difetto 0148).
 #[test]
-fn nessun_accordo_ufficiale_ne_oscura_un_altro() {
-    let dichiarati: Vec<(String, String)> = CoreCommands::specs()
+fn no_agreement_official_of_it_hides_a_other() {
+    let declared: Vec<(String, String)> = CoreCommands::specs()
         .into_iter()
         .filter_map(|s| s.keybinding.map(|k| (s.id, k)))
         .collect();
-    let oscurati: Vec<String> = dichiarati
+    let hidden: Vec<String> = declared
         .iter()
         .flat_map(|(id_corto, corto)| {
-            dichiarati
+            declared
                 .iter()
-                .filter(move |(_, lungo)| oscura(corto, lungo))
-                .map(move |(id_lungo, lungo)| {
-                    format!("«{corto}» ({id_corto}) copre «{lungo}» ({id_lungo})")
+                .filter(move |(_, long)| obscures(corto, long))
+                .map(move |(id_long, long)| {
+                    format!("«{corto}» ({id_corto}) copre «{long}» ({id_long})")
                 })
         })
         .collect();
     assert!(
-        oscurati.is_empty(),
+        hidden.is_empty(),
         "un comando ufficiale non si può premere, perché un altro accordo è un \
-         suo prefisso e si esegue prima: {oscurati:?}"
+         suo prefisso e si esegue prima: {hidden:?}"
     );
 }

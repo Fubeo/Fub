@@ -67,7 +67,7 @@ impl SyntaxTrigger {
         match self {
             SyntaxTrigger::Fence { info } => info
                 .iter()
-                .map(|i| format!("fence:{}", i.to_lowercase()))
+                .map(|the| format!("fence:{}", the.to_lowercase()))
                 .collect(),
             SyntaxTrigger::Inline { open, .. } => vec![format!("inline:{open}")],
         }

@@ -44,7 +44,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { crateDelWorkspace } from "./membri-del-workspace.mjs";
+import { crateDelWorkspace } from "./workspace-members.mjs";
 
 // Feature che possono restare fuori dal `default`, ognuna con il **comando di
 // CI** che la compila. Vuoto è lo stato giusto: ogni voce qui è una feature che
@@ -139,7 +139,7 @@ function raggiunte(feature) {
 function main() {
   const radice = path.resolve(process.argv[2] ?? ".");
   // Stesso elenco, stessa funzione: chi sono i crate lo dice `[workspace]
-  // members`. È l'altro chiamante di `membri-del-workspace.mjs`, e il verso
+  // members`. È l'altro chiamante di `workspace-members.mjs`, e il verso
   // «una cartella che nessun membro dichiara» lo eredita senza scriverlo.
   const { file, violazioni: sullElenco } = crateDelWorkspace(radice);
   const violazioni = [...sullElenco];

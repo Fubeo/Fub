@@ -46,17 +46,17 @@ pub fn composed(s: &str) -> String {
 /// `at` deve essere un confine di carattere; a fine stringa rende `at`.
 pub fn cluster_end(s: &str, at: usize) -> usize {
     let mut chars = s[at..].char_indices();
-    let Some((_, primo)) = chars.next() else {
+    let Some((_, first)) = chars.next() else {
         return at;
     };
-    let mut fine = at + primo.len_utf8();
-    for (i, c) in chars {
+    let mut end = at + first.len_utf8();
+    for (the, c) in chars {
         if canonical_combining_class(c) == 0 {
             break;
         }
-        fine = at + i + c.len_utf8();
+        end = at + the + c.len_utf8();
     }
-    fine
+    end
 }
 
 #[cfg(test)]
@@ -64,10 +64,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn le_due_scritture_di_una_lettera_accentata_diventano_una() {
+    fn the_two_writes_of_a_letter_accented_become_a() {
         let nfc = "Café";
         let nfd = "Cafe\u{301}";
-        assert_ne!(
+        assert_eq!(
             nfc, nfd,
             "le due forme sono byte diversi, o non si prova nulla"
         );
@@ -76,7 +76,7 @@ mod tests {
     }
 
     #[test]
-    fn un_grappolo_e_una_lettera_con_le_sue_combinanti() {
+    fn a_cluster_and_a_letter_with_the_its_combining() {
         // ASCII: un carattere, un grappolo.
         assert_eq!(cluster_end("abc", 0), 1);
         // `e` + accento combinante: un grappolo di tre byte.

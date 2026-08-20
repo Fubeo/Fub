@@ -67,7 +67,7 @@ fn rows(tree: &UiNode) -> Vec<(String, Option<String>)> {
 }
 
 #[test]
-fn tags_are_aggregated_across_the_vault_and_counted_per_note() {
+fn tags_are_aggregated_across_the_vault_and_counted_for_notes() {
     let vault = Vault::new();
     // `#rust` in due note (una lo ripete: conta comunque 1 per nota), `#nota`
     // in una.

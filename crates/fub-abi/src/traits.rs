@@ -2100,18 +2100,18 @@ impl<T> Paged<T> {
         let Some(page) = page else {
             return Paged::all(items.into_iter().map(make).collect());
         };
-        let inizio = page.offset as usize;
-        let fine = inizio.saturating_add(page.limit as usize);
+        let start = page.offset as usize;
+        let end = start.saturating_add(page.limit as usize);
         let mut total: u32 = 0;
-        let mut items_in_finestra = Vec::new();
-        for (i, item) in items.into_iter().enumerate() {
+        let mut items_in_window = Vec::new();
+        for (the, item) in items.into_iter().enumerate() {
             total = total.saturating_add(1);
-            if i >= inizio && i < fine {
-                items_in_finestra.push(make(item));
+            if the >= start && the < end {
+                items_in_window.push(make(item));
             }
         }
         Paged {
-            items: items_in_finestra,
+            items: items_in_window,
             offset: page.offset,
             total,
         }
@@ -2445,7 +2445,7 @@ impl DocumentMatch {
             self.highlights = other.highlights;
         }
         for entry in other.properties {
-            if !self.properties.iter().any(|e| e.key == entry.key) {
+            if !self.properties.iter().any(|and| and.key == entry.key) {
                 self.properties.push(entry);
             }
         }
@@ -4211,16 +4211,16 @@ impl WallClock {
         if !self.valid() {
             return None;
         }
-        let oggi = CivilTime {
+        let today = CivilTime {
             hour: self.hour,
             minute: self.minute,
             second: 0,
             ..now
         };
-        let primo = if oggi > now { oggi } else { oggi.next_day() };
+        let first = if today > now { today } else { today.next_day() };
         // Al più otto giorni: sette coprono ogni elenco non vuoto, e l'ottavo
         // esiste solo perché il primo candidato può essere già domani.
-        let mut c = primo;
+        let mut c = first;
         for _ in 0..8 {
             if self.falls_on(c.weekday()) {
                 return Some(c);
@@ -4241,14 +4241,14 @@ impl WallClock {
         if !self.valid() {
             return None;
         }
-        let oggi = CivilTime {
+        let today = CivilTime {
             hour: self.hour,
             minute: self.minute,
             second: 0,
             ..now
         };
-        let primo = if oggi <= now { oggi } else { oggi.prev_day() };
-        let mut c = primo;
+        let first = if today <= now { today } else { today.prev_day() };
+        let mut c = first;
         for _ in 0..8 {
             if self.falls_on(c.weekday()) {
                 return Some(c);
@@ -4311,21 +4311,21 @@ impl CivilTime {
     /// I giorni dal 1970-01-01 (algoritmo *days from civil* di Howard Hinnant).
     fn days_from_epoch(&self) -> i64 {
         let y = self.year as i64 - i64::from(self.month <= 2);
-        let era = if y >= 0 { y } else { y - 399 } / 400;
-        let yoe = y - era * 400;
+        let was = if y >= 0 { y } else { y - 399 } / 400;
+        let yoe = y - was * 400;
         let m = self.month as i64;
         let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + self.day as i64 - 1;
         let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-        era * 146_097 + doe - 719_468
+        was * 146_097 + doe - 719_468
     }
 
     /// L'inverso, tenendo l'ora di `ora_del_giorno`.
-    fn from_days(days: i64, ora_del_giorno: Self) -> Self {
+    fn from_days(days: i64, time_of_the_day: Self) -> Self {
         let z = days + 719_468;
-        let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-        let doe = z - era * 146_097;
+        let was = if z >= 0 { z } else { z - 146_096 } / 146_097;
+        let doe = z - was * 146_097;
         let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-        let y = yoe + era * 400;
+        let y = yoe + was * 400;
         let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
         let mp = (5 * doy + 2) / 153;
         let d = doy - (153 * mp + 2) / 5 + 1;
@@ -4334,7 +4334,7 @@ impl CivilTime {
             year: (y + i64::from(m <= 2)) as i32,
             month: m as u8,
             day: d as u8,
-            ..ora_del_giorno
+            ..time_of_the_day
         }
     }
 }
@@ -4533,7 +4533,7 @@ mod tests {
     /// `ALL`. Un conto sa dire se un elenco è coerente **con sé stesso**; non sa
     /// quante varianti esistano fuori di lui. Quello lo sa solo il compilatore,
     /// ed è il mestiere di `indice_dichiarato`.
-    fn indice_dichiarato(surface: ViewSurface) -> usize {
+    fn index_declared(surface: ViewSurface) -> usize {
         // Esaustivo apposta e senza `_`: è tutto ciò che questa funzione fa. Una
         // variante nuova non compila finché non le si dà un posto qui, e a quel
         // punto `ALL` che non la contenesse sarebbe rosso di sotto.
@@ -4552,10 +4552,10 @@ mod tests {
     }
 
     #[test]
-    fn i_discriminanti_coprono_ogni_superficie() {
+    fn the_discriminants_cover_every_surface() {
         assert_eq!(
             ViewSurface::ALL.len(),
-            indice_dichiarato(ViewSurface::SettingsTab) + 1,
+            index_declared(ViewSurface::SettingsTab) + 1,
             "`ViewSurface::ALL` è più corto dell'enum: c'è una variante che il \
              compilatore conosce e che l'elenco non nomina. È il caso che \
              l'aritmetica qui sotto non vede — togliere l'ultima riga e far \
@@ -4563,18 +4563,18 @@ mod tests {
         );
         for &surface in &ViewSurface::ALL {
             assert_eq!(
-                ViewSurface::ALL[indice_dichiarato(surface)],
+                ViewSurface::ALL[index_declared(surface)],
                 surface,
                 "`{surface:?}` non sta nell'elenco al posto che il contratto le \
                  dà: `ALL` e la dichiarazione dell'enum si sono disallineati."
             );
         }
 
-        let mut visti: Vec<u16> = ViewSurface::ALL.iter().map(|&s| s as u16).collect();
-        visti.sort_unstable();
-        let attesi: Vec<u16> = (0..ViewSurface::ALL.len() as u16).collect();
+        let mut seen: Vec<u16> = ViewSurface::ALL.iter().map(|&s| s as u16).collect();
+        seen.sort_unstable();
+        let expected: Vec<u16> = (0..ViewSurface::ALL.len() as u16).collect();
         assert_eq!(
-            visti, attesi,
+            seen, expected,
             "`ViewSurface::ALL` non copre una volta sola ogni superficie \
              dell'enum: o una riga è duplicata, o la superficie nuova non è \
              stata aggiunta e la lunghezza è stata fatta tornare con un \
@@ -4586,7 +4586,7 @@ mod tests {
     /// stessa ragione: `HealthCheck::ALL` ha un chiamante che li vuole **tutti**,
     /// e un controllo che sparisse da lì non renderebbe rosso niente — il
     /// rapporto diagnostico resterebbe un array valido con una riga in meno.
-    fn posto_del_controllo(check: HealthCheck) -> usize {
+    fn place_of_the_check(check: HealthCheck) -> usize {
         match check {
             HealthCheck::BrokenLinks => 0,
             HealthCheck::OrphanDocuments => 1,
@@ -4596,17 +4596,17 @@ mod tests {
     }
 
     #[test]
-    fn i_discriminanti_coprono_ogni_controllo_di_salute() {
+    fn the_discriminants_cover_every_check_of_health() {
         assert_eq!(
             HealthCheck::ALL.len(),
-            posto_del_controllo(HealthCheck::UnrecognizedDates) + 1,
+            place_of_the_check(HealthCheck::UnrecognizedDates) + 1,
             "`HealthCheck::ALL` è più corto dell'enum: c'è un controllo che il \
              compilatore conosce e che l'elenco non nomina, quindi il rapporto \
              diagnostico non lo eseguirà mai."
         );
         for &check in &HealthCheck::ALL {
             assert_eq!(
-                HealthCheck::ALL[posto_del_controllo(check)],
+                HealthCheck::ALL[place_of_the_check(check)],
                 check,
                 "`{check:?}` non sta nell'elenco al posto che il contratto le dà."
             );
@@ -4619,11 +4619,11 @@ mod tests {
         // elenco si accorcia senza accorciarsi: si perde una riga e si fa
         // tornare il conto con un doppione. Lo prende l'aritmetica dei
         // discriminanti, che è la stessa di `Capability::ALL`.
-        let mut visti: Vec<u16> = HealthCheck::ALL.iter().map(|&c| c as u16).collect();
-        visti.sort_unstable();
-        let attesi: Vec<u16> = (0..HealthCheck::ALL.len() as u16).collect();
+        let mut seen: Vec<u16> = HealthCheck::ALL.iter().map(|&c| c as u16).collect();
+        seen.sort_unstable();
+        let expected: Vec<u16> = (0..HealthCheck::ALL.len() as u16).collect();
         assert_eq!(
-            visti, attesi,
+            seen, expected,
             "`HealthCheck::ALL` non copre una volta sola ogni controllo \
              dell'enum: o una riga è duplicata, o il controllo nuovo non è \
              stato aggiunto e la lunghezza è stata fatta tornare con un \

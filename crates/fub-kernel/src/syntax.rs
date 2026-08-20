@@ -298,7 +298,7 @@ impl SyntaxRegistry {
             if let Some(fault) = crate::safety::reporting(&r.spec.id, Gate::SyntaxRule, "", || {
                 match &r.spec.trigger {
                     SyntaxTrigger::Fence { info } => {
-                        let wanted: Vec<String> = info.iter().map(|i| i.to_lowercase()).collect();
+                        let wanted: Vec<String> = info.iter().map(|the| the.to_lowercase()).collect();
                         apply_to_blocks(&mut model.body, &mut |block| {
                             fence_rule(block, r, &wanted, ctx)
                         });
@@ -457,8 +457,8 @@ fn split_text(
 ) {
     let mut rest = text;
     let mut matched = false;
-    while let Some(i) = rest.find(open) {
-        let after = i + open.len();
+    while let Some(the) = rest.find(open) {
+        let after = the + open.len();
         let Some(j) = rest[after..].find(close).map(|j| after + j) else {
             break;
         };
@@ -470,7 +470,7 @@ fn split_text(
         };
         // Un kind che la regola non ha dichiarato è come un rifiuto: `produces`
         // è un contratto, e ciò che non c'è dentro non entra nel modello.
-        let prodotto = match r.rule.apply(&m, ctx) {
+        let product = match r.rule.apply(&m, ctx) {
             Ok(Some(SyntaxProduct::Inline { custom_kind, attrs }))
                 if r.spec.produces.contains(&custom_kind) =>
             {
@@ -478,7 +478,7 @@ fn split_text(
             }
             _ => None,
         };
-        let Some((custom_kind, attrs)) = prodotto else {
+        let Some((custom_kind, attrs)) = product else {
             // Declina o fallisce: si salta l'apertura e si continua a cercare,
             // invece di fermarsi — un `$` isolato non deve spegnere la regola
             // per il resto del paragrafo.
@@ -488,8 +488,8 @@ fn split_text(
             matched = true;
             continue;
         };
-        if i > 0 {
-            out.push(Inline::Text(rest[..i].to_string()));
+        if the > 0 {
+            out.push(Inline::Text(rest[..the].to_string()));
         }
         out.push(Inline::Custom {
             custom_kind,
@@ -594,7 +594,7 @@ mod tests {
         }
     }
 
-    fn model_con(body: Vec<Block>) -> DocumentModel {
+    fn model_with(body: Vec<Block>) -> DocumentModel {
         let mut m = DocumentModel::empty(DocId::new("a.md"));
         m.body = body;
         m
@@ -610,13 +610,13 @@ mod tests {
     }
 
     #[test]
-    fn una_regola_si_innesta_su_un_provider_che_non_la_conosce() {
+    fn a_rule_is_attaches_on_a_provider_that_not_the_knows() {
         let mut reg = SyntaxRegistry::new();
         reg.register(Box::new(Mermaid {
             id: "prova:mermaid",
         }))
         .expect("si registra");
-        let mut model = model_con(vec![fence("mermaid", "graph TD;")]);
+        let mut model = model_with(vec![fence("mermaid", "graph TD;")]);
         reg.apply(&mut model, &ParseContext::obsidian("a.md"), "markdown");
         match &model.body[0] {
             Block::Custom {
@@ -630,19 +630,19 @@ mod tests {
     }
 
     #[test]
-    fn una_regola_di_un_altro_formato_non_tocca_niente() {
+    fn a_rule_of_a_other_format_not_touches_nothing() {
         let mut reg = SyntaxRegistry::new();
         reg.register(Box::new(Mermaid {
             id: "prova:mermaid",
         }))
         .unwrap();
-        let mut model = model_con(vec![fence("mermaid", "graph TD;")]);
+        let mut model = model_with(vec![fence("mermaid", "graph TD;")]);
         reg.apply(&mut model, &ParseContext::obsidian("a.md"), "org-mode");
         assert!(matches!(model.body[0], Block::CodeBlock { .. }));
     }
 
     #[test]
-    fn due_regole_sulla_stessa_sintassi_non_si_registrano_in_silenzio() {
+    fn two_rules_on_the_same_syntax_not_is_register_in_silence() {
         let mut reg = SyntaxRegistry::new();
         reg.register(Box::new(Mermaid { id: "uno:mermaid" }))
             .unwrap();
@@ -663,7 +663,7 @@ mod tests {
     }
 
     #[test]
-    fn un_id_senza_namespace_e_rifiutato() {
+    fn a_id_without_namespace_and_rejected() {
         let mut reg = SyntaxRegistry::new();
         let err = reg
             .register(Box::new(Mermaid { id: "mermaid" }))
@@ -674,7 +674,7 @@ mod tests {
     /// Dichiara di produrre una cosa e ne emette un'altra — quella del core.
     struct Bugiarda {
         produces: Vec<String>,
-        emette: &'static str,
+        emits: &'static str,
     }
 
     impl SyntaxRule for Bugiarda {
@@ -696,7 +696,7 @@ mod tests {
             _ctx: &ParseContext,
         ) -> Result<Option<SyntaxProduct>, FormatError> {
             Ok(Some(SyntaxProduct::Block {
-                custom_kind: self.emette.into(),
+                custom_kind: self.emits.into(),
                 attrs: json!({}),
                 blocks: vec![],
             }))
@@ -704,16 +704,16 @@ mod tests {
     }
 
     #[test]
-    fn un_kind_non_dichiarato_non_entra_nel_modello() {
+    fn a_kind_not_declared_not_enters_in_the_model() {
         let mut reg = SyntaxRegistry::new();
         reg.register(Box::new(Bugiarda {
             produces: vec!["terzi:onesto".into()],
             // `callout` è del core: senza il controllo su `produces`, questa
             // regola si farebbe disegnare dal provider come un callout vero.
-            emette: "callout",
+            emits: "callout",
         }))
         .expect("si registra: la bugia si vede solo quando emette");
-        let mut model = model_con(vec![fence("bugia", "x")]);
+        let mut model = model_with(vec![fence("bugia", "x")]);
         reg.apply(&mut model, &ParseContext::obsidian("a.md"), "markdown");
         assert!(
             matches!(model.body[0], Block::CodeBlock { .. }),
@@ -723,14 +723,14 @@ mod tests {
     }
 
     #[test]
-    fn un_kind_dichiarato_entra_e_prova_che_il_test_di_sopra_non_e_vuoto() {
+    fn a_kind_declared_enters_and_proof_that_the_test_of_above_not_and_empty() {
         let mut reg = SyntaxRegistry::new();
         reg.register(Box::new(Bugiarda {
             produces: vec!["terzi:onesto".into()],
-            emette: "terzi:onesto",
+            emits: "terzi:onesto",
         }))
         .unwrap();
-        let mut model = model_con(vec![fence("bugia", "x")]);
+        let mut model = model_with(vec![fence("bugia", "x")]);
         reg.apply(&mut model, &ParseContext::obsidian("a.md"), "markdown");
         assert!(
             matches!(&model.body[0], Block::Custom { custom_kind, .. } if custom_kind == "terzi:onesto")
@@ -738,12 +738,12 @@ mod tests {
     }
 
     #[test]
-    fn una_regola_che_non_produce_niente_non_si_registra() {
+    fn a_rule_that_not_produce_nothing_not_is_registers() {
         let mut reg = SyntaxRegistry::new();
         let err = reg
             .register(Box::new(Bugiarda {
                 produces: vec![],
-                emette: "terzi:onesto",
+                emits: "terzi:onesto",
             }))
             .expect_err("senza `produces` la regola non potrebbe emettere niente");
         assert_eq!(

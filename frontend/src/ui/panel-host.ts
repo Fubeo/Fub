@@ -25,11 +25,11 @@
 // una **superficie** (`placement`), che è una domanda di collocazione: la
 // sidebar, il basso, la barra di stato. Un riquadro dell'area principale è
 // un'altra cosa: ne esistono N, si dividono e si chiudono, e ognuno tiene le
-// sue tab.
+// sue linguetta.
 //
 // Dalla §3.3 le due domande **si incontrano**, e non si sono fuse. Una view
 // dell'area principale è un pannello con `placement: "main"` che `ui/views.ts`
-// registra quando un riquadro apre la sua tab, e ne registra **uno per
+// registra quando un riquadro apre la sua linguetta, e ne registra **uno per
 // riquadro**: il registro continua a rispondere «quando ridisegnarti» e non ha
 // imparato cosa sia un albero di riquadri. Ciò che è servito è una riga sola —
 // il campo `view` qui sotto — perché il kernel invecchia le view e qui i
@@ -47,7 +47,7 @@ export type EventType = KernelEvent["type"];
 /// Una maschera sulle sole specie: nessun filtro di topic, di soggetto, né di
 /// cosa è cambiato.
 ///
-/// È `EventMask::of` scritta di qua, e serve ai pannelli **nativi** — che sono
+/// È `EventMask::of` scritto di qua, e serve ai pannelli **nativi** — che sono
 /// di questa shell e guardano tutto il vault. Una view dichiarata non passa da
 /// qui: la sua maschera arriva dal provider, e può essere più stretta di così
 /// (§10.1).
@@ -80,7 +80,7 @@ export interface Panel {
   /// Tradurla oggi vorrebbe dire risolverla **al montaggio**, cioè congelarla
   /// nella lingua di quel momento: un nome che non si vede e che, il giorno che
   /// si vedesse, sarebbe già quello sbagliato. Il giorno che l'inventario avrà
-  /// una superficie, questo campo diventa una `Chiave` e la risolve chi
+  /// una superficie, questo campo diventa una `Key` e la risolve chi
   /// disegna — che è dove la 0040 mette la risoluzione anche per le view
   /// dichiarate.
   readonly title: string;
@@ -129,21 +129,21 @@ export interface Panel {
   render(notice?: KernelNotice): void | Promise<void>;
 }
 
-const registro = new Map<string, Panel>();
+const registry = new Map<string, Panel>();
 
 /// Mette un pannello nel registro. Un id già presente viene sostituito: è ciò
 /// che serve a `mountDeclaredViews`, che riparte da zero a ogni vault aperto.
 export function registerPanel(panel: Panel): void {
-  registro.set(panel.id, panel);
+  registry.set(panel.id, panel);
 }
 
 export function unregisterPanel(id: string): void {
-  registro.delete(id);
+  registry.delete(id);
 }
 
 /// L'inventario di ciò che è montato, per chi deve mostrarlo o contarlo.
 export function registeredPanels(): Panel[] {
-  return [...registro.values()];
+  return [...registry.values()];
 }
 
 /// Ridisegna un pannello, se c'è e se qualcuno lo sta guardando.
@@ -155,7 +155,7 @@ export function registeredPanels(): Panel[] {
 /// pannello stantio identico a uno vivo — il sintomo peggiore che ci sia, perché
 /// somiglia a uno che funziona.
 export async function refreshPanel(id: string, notice?: KernelNotice): Promise<void> {
-  const panel = registro.get(id);
+  const panel = registry.get(id);
   if (!panel) return;
   if (panel.visible && !panel.visible()) return;
   try {
@@ -167,7 +167,7 @@ export async function refreshPanel(id: string, notice?: KernelNotice): Promise<v
 
 /// Riconcilia tutto da zero.
 export async function refreshAllPanels(): Promise<void> {
-  await Promise.all([...registro.keys()].map((id) => refreshPanel(id)));
+  await Promise.all([...registry.keys()].map((id) => refreshPanel(id)));
 }
 
 /// Attacca il registro ai due bus. Da chiamare una volta sola, dal punto di
@@ -176,13 +176,13 @@ export async function refreshAllPanels(): Promise<void> {
 /// l'host c'è già quando i pannelli si presentano.
 export function mountPanelHost(): void {
   // L'unico ascoltatore "di tutto" della shell, ed è legittimo per la ragione
-  // scritta in `state/kernel.ts`: decide per **dato** — la maschera che ogni
+  // scritto in `state/kernel.ts`: decide per **dato** — la maschera che ogni
   // pannello ha dichiarato — e non per conoscenza privata di chi c'è.
   onAnyEvent((n) => {
     // `overflow` non passa di qui: ha una strada sua, sotto, perché non
     // ridisegna «chi è interessato» ma **tutti**.
     if (n.event.type === "overflow") return;
-    for (const panel of registro.values()) {
+    for (const panel of registry.values()) {
       // La regola è quella del contratto (`rules/mirrored.ts`, gemella di
       // `fub_abi::rules::events::mask_wants`), non un `includes` scritto qui:
       // due letture della stessa maschera sarebbero un pannello che si ridisegna
@@ -202,14 +202,14 @@ export function mountPanelHost(): void {
     // uguale, ed è la strada che non paga il giro sul registro.
     for (const id of ids) {
       void refreshPanel(id);
-      for (const panel of registro.values()) {
+      for (const panel of registry.values()) {
         if (panel.view === id && panel.id !== id) void refreshPanel(panel.id);
       }
     }
   });
   // Il documento aperto è cambiato: invecchia chi lo segue.
   on("active-doc", () => {
-    for (const panel of registro.values()) {
+    for (const panel of registry.values()) {
       if (panel.followsDoc) void refreshPanel(panel.id);
     }
   });

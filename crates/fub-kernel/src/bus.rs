@@ -81,7 +81,7 @@ mod intake {
 
     /// I due capi di un abbonamento e i due conti che ci stanno in mezzo: chi
     /// li vuole passa da qui, perché fuori non si possono costruire.
-    pub(super) fn abbonamento() -> (Outbox, Intake) {
+    pub(super) fn subscribe_internal() -> (Outbox, Intake) {
         let (tx, rx) = channel();
         let queued = Arc::new(AtomicUsize::new(0));
         let dropped = Arc::new(AtomicU64::new(0));
@@ -147,7 +147,7 @@ mod intake {
         }
 
         pub(super) fn debt(&self) -> Option<Notice> {
-            debito(&self.dropped)
+            debt(&self.dropped)
         }
     }
 
@@ -178,19 +178,19 @@ mod intake {
     impl Intake {
         /// L'**unico** posto in cui un notice esce dal canale.
         ///
-        /// `attesa` dice come aspettarlo — subito, per sempre, o fino a un
+        /// `wait_for` dice come aspettarlo — subito, per sempre, o fino a un
         /// tempo —: qualunque sia, ciò che esce è già stato sottratto dal conto.
         pub(super) fn take<E>(
             &self,
-            attesa: impl FnOnce(&Receiver<Notice>) -> Result<Notice, E>,
+            wait_for: impl FnOnce(&Receiver<Notice>) -> Result<Notice, E>,
         ) -> Result<Notice, E> {
-            let notice = attesa(&self.rx)?;
+            let notice = wait_for(&self.rx)?;
             self.queued.fetch_sub(1, Ordering::Relaxed);
             Ok(notice)
         }
 
         pub(super) fn debt(&self) -> Option<Notice> {
-            debito(&self.dropped)
+            debt(&self.dropped)
         }
 
         /// **Estingue** il debito invece di riscuoterlo, e rende quanto valeva.
@@ -199,7 +199,7 @@ mod intake {
         /// due volte — con l'altra risposta: si usa quando il bus non c'è più,
         /// e serve che stia qui dentro perché la sottrazione di questo conto è
         /// del modulo che lo possiede, non di chi ritira.
-        pub(super) fn estingui(&self) -> u64 {
+        pub(super) fn settle(&self) -> u64 {
             self.dropped.swap(0, Ordering::Relaxed)
         }
 
@@ -217,7 +217,7 @@ mod intake {
     /// emette. Che la frase sia una sola funzione e non due copie è la stessa
     /// ragione: due `Overflow` costruiti in due posti sono due verità da tenere
     /// allineate a mano.
-    fn debito(dropped: &AtomicU64) -> Option<Notice> {
+    fn debt(dropped: &AtomicU64) -> Option<Notice> {
         match dropped.swap(0, Ordering::Relaxed) {
             0 => None,
             dropped => Some(Notice::new(
@@ -253,9 +253,9 @@ impl Subscription {
                 None => self.intake.take(Receiver::recv),
             },
             // Il bus non c'è più, e il debito **si estingue invece di essere
-            // riscosso**: vedi `chiudi_il_conto`.
+            // riscosso**: vedi `close_account`.
             Err(TryRecvError::Disconnected) => {
-                self.chiudi_il_conto();
+                self.close_account();
                 self.intake.take(Receiver::recv)
             }
         }
@@ -266,7 +266,7 @@ impl Subscription {
             Ok(notice) => Ok(notice),
             Err(TryRecvError::Empty) => self.debt().ok_or(TryRecvError::Empty),
             Err(TryRecvError::Disconnected) => {
-                self.chiudi_il_conto();
+                self.close_account();
                 Err(TryRecvError::Disconnected)
             }
         }
@@ -280,7 +280,7 @@ impl Subscription {
                 None => self.intake.take(|rx| rx.recv_timeout(timeout)),
             },
             Err(TryRecvError::Disconnected) => {
-                self.chiudi_il_conto();
+                self.close_account();
                 Err(RecvTimeoutError::Disconnected)
             }
         }
@@ -315,12 +315,12 @@ impl Subscription {
     /// (stessa ragione della [0126] per la riga dell'avvelenamento).
     ///
     /// [0126]: ../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md
-    fn chiudi_il_conto(&self) {
-        let persi = self.intake.estingui();
-        if persi > 0 {
+    fn close_account(&self) {
+        let dropped = self.intake.settle();
+        if dropped > 0 {
             tracing::debug!(
                 target: "fub.kernel",
-                persi,
+                dropped,
                 "il bus si è chiuso mentre un abbonato era indietro: nessuna \
                  riconciliazione, perché non c'è più niente da rileggere"
             );
@@ -340,9 +340,9 @@ impl Subscription {
     #[cfg(test)]
     fn take_waiting<E>(
         &self,
-        attesa: impl FnOnce(&Receiver<Notice>) -> Result<Notice, E>,
+        wait_for: impl FnOnce(&Receiver<Notice>) -> Result<Notice, E>,
     ) -> Result<Notice, E> {
-        self.intake.take(attesa)
+        self.intake.take(wait_for)
     }
 }
 
@@ -358,7 +358,7 @@ impl Subscriber {
     /// Mettilo in debito di un notice senza avergliene buttato uno: è ciò che
     /// il bus fa a tutti quando si riprende da un veleno, perché una consegna
     /// interrotta a metà dell'elenco non dice quali metà.
-    fn perso_uno(&self) {
+    fn lost_one(&self) {
         self.out.dropped();
     }
 
@@ -398,7 +398,7 @@ mod roster {
         subs: Arc<Mutex<Vec<Subscriber>>>,
         /// Quante volte questo bus si è ripreso da un veleno. È **del bus** e
         /// non del processo: due vault aperti sono due elenchi.
-        denunce: Arc<AtomicU32>,
+        reports: Arc<AtomicU32>,
     }
 
     impl Roster {
@@ -406,7 +406,7 @@ mod roster {
         pub(super) fn with<T>(&self, f: impl FnOnce(&mut Vec<Subscriber>) -> T) -> T {
             let mut subs = match self.subs.lock() {
                 Ok(subs) => subs,
-                Err(veleno) => self.riprendi(veleno),
+                Err(poison) => self.recover(poison),
             };
             f(&mut subs)
         }
@@ -425,30 +425,30 @@ mod roster {
         /// avvelenamento* e non per sempre: un secondo panico è un secondo
         /// incidente, e merita la sua riga.
         #[cold]
-        fn riprendi<'a>(
+        fn recover<'a>(
             &self,
-            veleno: PoisonError<MutexGuard<'a, Vec<Subscriber>>>,
+            poison: PoisonError<MutexGuard<'a, Vec<Subscriber>>>,
         ) -> MutexGuard<'a, Vec<Subscriber>> {
-            let subs = veleno.into_inner();
+            let subs = poison.into_inner();
             self.subs.clear_poison();
-            self.denunce.fetch_add(1, Ordering::Relaxed);
+            self.reports.fetch_add(1, Ordering::Relaxed);
             tracing::error!(
                 target: "fub.kernel",
-                abbonati = subs.len(),
-                "il bus degli eventi si è avvelenato: qualcuno è morto mentre teneva \
+                subscribers = subs.len(),
+                "il bus degli eventi si è poison_busto: qualcuno è morto mentre teneva \
                  l'elenco degli abbonati. Nessun file sul disco è toccato; una consegna \
                  può essersi persa, e chi è abbonato riceve un Overflow per riconciliare."
             );
             for sub in subs.iter() {
-                sub.perso_uno();
+                sub.lost_one();
             }
             subs
         }
 
         /// Quante volte questo bus si è ripreso.
         #[cfg(test)]
-        pub(super) fn denunce(&self) -> u32 {
-            self.denunce.load(Ordering::Relaxed)
+        pub(super) fn reports(&self) -> u32 {
+            self.reports.load(Ordering::Relaxed)
         }
     }
 }
@@ -467,7 +467,7 @@ impl EventBus {
 
     /// Crea un nuovo subscriber e restituisce il capo ricevente.
     pub fn subscribe(&self) -> Subscription {
-        let (out, intake) = intake::abbonamento();
+        let (out, intake) = intake::subscribe_internal();
         self.subscribers.with(|subs| subs.push(Subscriber { out }));
         Subscription { intake }
     }
@@ -489,7 +489,7 @@ mod tests {
     use fub_abi::traits::JobId;
     use fub_abi::Event;
 
-    fn cambiato(n: usize) -> Notice {
+    fn changed(n: usize) -> Notice {
         Notice::of(Event::DocumentChanged {
             id: DocId::new(format!("nota-{n}.md")),
             changes: None,
@@ -515,33 +515,33 @@ mod tests {
     fn a_subscriber_that_never_takes_stops_growing_and_is_told() {
         let bus = EventBus::new();
         let rx = bus.subscribe();
-        let mandati = BACKLOG_CEILING * 3;
-        for n in 0..mandati {
-            bus.emit(cambiato(n));
+        let sent = BACKLOG_CEILING * 3;
+        for n in 0..sent {
+            bus.emit(changed(n));
         }
-        let arrivati: Vec<Notice> = rx.try_iter().collect();
+        let arrived: Vec<Notice> = rx.try_iter().collect();
         assert!(
-            arrivati.len() <= BACKLOG_CEILING + 1,
-            "il tetto non ha frenato: {} notice accodati su {mandati}",
-            arrivati.len()
+            arrived.len() <= BACKLOG_CEILING + 1,
+            "il tetto non ha frenato: {} notice accodati su {sent}",
+            arrived.len()
         );
         // E il troncamento non è silenzioso: chi non ritirava se lo sente dire,
         // col conto giusto.
-        let persi: u64 = arrivati
+        let dropped: u64 = arrived
             .iter()
             .filter_map(|n| match n.event {
                 Event::Overflow { dropped } => Some(dropped),
                 _ => None,
             })
             .sum();
-        let consegnati = arrivati.len() as u64
-            - arrivati
+        let delivered = arrived.len() as u64
+            - arrived
                 .iter()
                 .filter(|n| matches!(n.event, Event::Overflow { .. }))
                 .count() as u64;
         assert_eq!(
-            consegnati + persi,
-            mandati as u64,
+            delivered + dropped,
+            sent as u64,
             "il conto dei persi più quello dei consegnati deve fare il totale: \
              un evento che sparisce senza entrare in nessuno dei due conti è \
              esattamente ciò che questo tetto esiste per non fare"
@@ -553,7 +553,7 @@ mod tests {
         let bus = EventBus::new();
         let rx = bus.subscribe();
         for n in 0..BACKLOG_CEILING * 2 {
-            bus.emit(cambiato(n));
+            bus.emit(changed(n));
         }
         // Sopra il tetto, e con la coda piena di roba recuperabile: l'esito di
         // un job lo aspetta chi lo ha chiesto, e nessuna riconciliazione lo
@@ -563,9 +563,9 @@ mod tests {
             job: "export".into(),
             result: Ok(serde_json::Value::Null),
         }));
-        let arrivati: Vec<Notice> = rx.try_iter().collect();
+        let arrived: Vec<Notice> = rx.try_iter().collect();
         assert!(
-            arrivati
+            arrived
                 .iter()
                 .any(|n| matches!(&n.event, Event::JobDone { id, .. } if *id == JobId(7))),
             "l'esito del job è stato buttato col resto: chi lo aspettava aspetta per sempre"
@@ -581,11 +581,11 @@ mod tests {
         // che il ramo non bloccante avrebbe trovato vuoto — e il notice esce
         // dal ramo che aspetta. È la sequenza esatta del difetto, senza
         // scheduler e senza tempi.
-        let ricevuto = rx.take_waiting(|canale| {
-            bus.emit(cambiato(1));
-            canale.recv()
+        let received = rx.take_waiting(|channel| {
+            bus.emit(changed(1));
+            channel.recv()
         });
-        assert!(ricevuto.is_ok());
+        assert!(received.is_ok());
         assert_eq!(
             rx.queued(),
             0,
@@ -610,7 +610,7 @@ mod tests {
                 if pronto_rx.recv().is_err() {
                     return;
                 }
-                bus.emit(cambiato(n));
+                bus.emit(changed(n));
             }
         });
         for _ in 0..GIRI {
@@ -630,16 +630,16 @@ mod tests {
         let bus = EventBus::new();
         let rx = bus.subscribe();
         for n in 0..BACKLOG_CEILING {
-            bus.emit(cambiato(n));
+            bus.emit(changed(n));
         }
         // Ritirati tutti, il conto torna a zero e il subscriber non è più in
         // debito: è la metà che un booleano «ha traboccato» non avrebbe.
-        let primi: Vec<Notice> = rx.try_iter().collect();
-        assert_eq!(primi.len(), BACKLOG_CEILING);
-        bus.emit(cambiato(9999));
-        let dopo: Vec<Notice> = rx.try_iter().collect();
-        assert_eq!(dopo.len(), 1, "dopo aver ritirato, il tetto non frena più");
-        assert!(!matches!(dopo[0].event, Event::Overflow { .. }));
+        let first: Vec<Notice> = rx.try_iter().collect();
+        assert_eq!(first.len(), BACKLOG_CEILING);
+        bus.emit(changed(9999));
+        let after: Vec<Notice> = rx.try_iter().collect();
+        assert_eq!(after.len(), 1, "dopo aver ritirato, il tetto non frena più");
+        assert!(!matches!(after[0].event, Event::Overflow { .. }));
     }
 
     /// Il codice di produzione di questo file **meno** ciò che sta dentro le
@@ -660,33 +660,33 @@ mod tests {
     /// il conto guarda `bus.rs`; e un terzo modulo aggiunto qui dentro, che non
     /// verrebbe tagliato e quindi risulterebbe rosso: è il verso giusto in cui
     /// sbagliare, perché costringe a dichiararlo.
-    fn fuori_dalle_porte() -> String {
-        let sorgente = include_str!("bus.rs");
-        let (produzione, _banchi) = sorgente
+    fn outside_gates() -> String {
+        let source = include_str!("bus.rs");
+        let (production, _benches) = source
             .split_once("#[cfg(test)]\nmod tests {")
-            .expect("il taglio dei banchi: se cambia, questo conto guarda di meno e non di più");
-        let mut fuori = produzione.to_string();
-        for (apre, chiude) in [
+            .expect("the test cut: if it changes, this count looks at less, not more");
+        let mut outside = production.to_string();
+        for (opens, closes) in [
             ("mod intake {", "\nuse intake::"),
             ("mod roster {", "\nuse roster::"),
         ] {
-            let (prima, resto) = fuori
-                .split_once(apre)
-                .unwrap_or_else(|| panic!("la porta `{apre}` non c'è più"));
-            let (_dentro, dopo) = resto
-                .split_once(chiude)
-                .unwrap_or_else(|| panic!("`{apre}` finisce dove lo si importa"));
-            let potato = format!("{prima}{dopo}");
-            fuori = potato;
+            let (before, rest) = outside
+                .split_once(opens)
+                .unwrap_or_else(|| panic!("the gate `{opens}` is gone"));
+            let (_inside, after) = rest
+                .split_once(closes)
+                .unwrap_or_else(|| panic!("`{opens}` ends where it is imported"));
+            let combined = format!("{before}{after}");
+            outside = combined;
         }
-        fuori
+        outside
     }
 
     /// **Il conto che verifica che la porta dei conti abbia agganciato.**
     #[test]
-    fn i_conti_dell_abbonamento_non_si_toccano_da_fuori() {
-        let fuori = fuori_dalle_porte();
-        for vietato in [
+    fn the_subscribe_internal_counts_are_not_touched_from_outside() {
+        let outside = outside_gates();
+        for forbidden in [
             "fetch_add",
             "fetch_sub",
             "AtomicUsize",
@@ -694,20 +694,20 @@ mod tests {
             "tx.send(",
         ] {
             assert!(
-                !fuori.contains(vietato),
-                "`{vietato}` compare fuori da `mod intake`: una metà di un conto \
-                 dell'abbonamento ha di nuovo due padroni, e quella dimenticata \
-                 non si ripara più — a BACKLOG_CEILING passaggi il bus butta i \
-                 recuperabili di chi non è indietro di niente"
+                !outside.contains(forbidden),
+                "`{forbidden}` appears outside `mod intake`: half of a subscription
+                 count has two owners again, and the forgotten one can no longer
+                 be fixed — at BACKLOG_CEILING passes the bus drops recoverable
+                 events from a subscriber that is not behind at all"
             );
         }
     }
 
     /// **Il conto che verifica che la porta del lucchetto abbia agganciato.**
     #[test]
-    fn il_lucchetto_dell_elenco_non_si_prende_da_fuori() {
-        let fuori = fuori_dalle_porte();
-        for vietato in [
+    fn the_lock_of_the_list_not_is_takes_from_outside() {
+        let outside = outside_gates();
+        for forbidden in [
             "Mutex",
             ".lock()",
             "PoisonError",
@@ -715,9 +715,9 @@ mod tests {
             "into_inner",
         ] {
             assert!(
-                !fuori.contains(vietato),
-                "`{vietato}` compare fuori da `mod roster`: la domanda «e se è \
-                 avvelenato?» ha di nuovo due posti dove rispondere, e il secondo \
+                !outside.contains(forbidden),
+                "`{forbidden}` compare fuori da `mod roster`: la domanda «e se è \
+                 poison_busto?» ha di nuovo due posti dove rispondere, e il secondo \
                  non ha nessuno a cui rispondere — un bus che tace non lo scopre \
                  nessuno"
             );
@@ -732,21 +732,21 @@ mod tests {
     /// dire mandare la shell a rileggere un vault che si sta chiudendo, e ciò
     /// che ne torna sono errori a schermo sopra una chiusura riuscita.
     #[test]
-    fn un_bus_chiuso_non_chiede_di_riconciliare() {
+    fn a_bus_closed_not_asks_of_reconcile() {
         let bus = EventBus::new();
         let rx = bus.subscribe();
         // Uno sopra il tetto: il primo di troppo viene buttato e diventa debito.
         for n in 0..=BACKLOG_CEILING {
-            bus.emit(cambiato(n));
+            bus.emit(changed(n));
         }
         drop(bus);
 
-        let mut visti = Vec::new();
+        let mut seen = Vec::new();
         while let Ok(notice) = rx.try_recv() {
-            visti.push(notice);
+            seen.push(notice);
         }
         assert!(
-            !visti
+            !seen
                 .iter()
                 .any(|n| matches!(n.event, Event::Overflow { .. })),
             "l'ultimo messaggio di un bus caduto è «riconcilia», detto a chi non \
@@ -754,9 +754,9 @@ mod tests {
              e mostra i suoi errori sopra una chiusura riuscita"
         );
         assert_eq!(
-            visti.len(),
+            seen.len(),
             BACKLOG_CEILING,
-            "ciò che era in coda si ritira lo stesso: il bus caduto non porta \
+            "ciò che era in coda si ritira lo stesso: il bus caduto non gate \
              via ciò che aveva già consegnato"
         );
         assert!(
@@ -768,40 +768,40 @@ mod tests {
     /// La politica della 0126, dal comportamento: il veleno si produce come lo
     /// produce la vita — un panico mentre qualcuno tiene l'elenco.
     #[test]
-    fn un_bus_avvelenato_continua_a_consegnare_e_mette_tutti_in_debito() {
+    fn a_bus_poison_bust_continues_a_deliver_and_puts_all_in_debt() {
         let bus = EventBus::new();
         let rx = bus.subscribe();
         // L'hook dei panici tace per la durata del misfatto, o un panico voluto
         // stamperebbe la sua traccia e farebbe sembrare rotto un banco verde.
         let hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
-        let altro = bus.clone();
-        let morto = std::thread::spawn(move || altro.subscribers.with(|_| panic!("a metà")));
-        assert!(morto.join().is_err(), "il misfatto deve essere successo");
+        let other = bus.clone();
+        let dead = std::thread::spawn(move || other.subscribers.with(|_| panic!("a metà")));
+        assert!(dead.join().is_err(), "il misfatto deve essere successo");
         std::panic::set_hook(hook);
 
-        bus.emit(cambiato(1));
-        let arrivati: Vec<Notice> = rx.try_iter().collect();
+        bus.emit(changed(1));
+        let arrived: Vec<Notice> = rx.try_iter().collect();
         assert!(
-            arrivati
+            arrived
                 .iter()
                 .any(|n| matches!(n.event, Event::DocumentChanged { .. })),
-            "il bus ha smesso di consegnare: la shell resta ferma su uno stato \
+            "il bus ha smesso di consegnare: la shell resta shutdown su uno stato \
              vecchio e nessuno dice perché"
         );
         assert!(
-            arrivati
+            arrived
                 .iter()
                 .any(|n| matches!(n.event, Event::Overflow { .. })),
-            "l'abbonato non è stato messo in debito: una consegna può essersi \
+            "l'abbonato non è stato messo in debt: una consegna può essersi \
              persa in mezzo all'elenco e lui non lo saprà mai"
         );
-        assert_eq!(bus.subscribers.denunce(), 1);
-        bus.emit(cambiato(2));
+        assert_eq!(bus.subscribers.reports(), 1);
+        bus.emit(changed(2));
         assert_eq!(
-            bus.subscribers.denunce(),
+            bus.subscribers.reports(),
             1,
-            "una denuncia per avvelenamento, non una per chiamata"
+            "una denuncia per poison_busmento, non una per chiamata"
         );
     }
 }

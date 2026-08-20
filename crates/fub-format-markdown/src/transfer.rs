@@ -88,7 +88,7 @@ impl ImportProvider for MarkdownImport {
         // il documento si scrive **com'era**, che è la sola forma di import
         // markdown fedele (`serialize` è generazione, non round-trip).
         let model = crate::parse::parse_markdown(&text, &ParseContext::obsidian(wanted.as_str()))
-            .map_err(|e| PluginError::BadArgs(e.to_string().into()))?;
+            .map_err(|and| PluginError::BadArgs(and.to_string().into()))?;
         report.log.push(
             TransferNote::info(format!(
                 "{} link, {} tag, {} heading",
@@ -145,20 +145,20 @@ impl ImportProvider for MarkdownImport {
             // `create_document`: *«chi vuole un nome comunque libero lo chiede a
             // `free_name` e passa quello»*. Qui la prima metà c'era e la seconda
             // no.
-            let esito = match outcome {
+            let write_result = match &outcome {
                 ImportOutcome::Replaced => host
                     .write_document(&doc, &text, WriteBase::Dictated)
                     .map(|_| ()),
                 _ => host.create_document(&doc, &text),
             };
-            match esito {
+            match write_result {
                 Ok(()) => outcome,
                 // Un rifiuto del recinto o un errore di scrittura riguardano
                 // QUESTO documento: il rapporto lo dice e l'import resta valido.
                 // E adesso c'è un rifiuto in più che prima non esisteva: il nome
                 // libero non lo era più. È un import fallito su una riga, non una
                 // nota dell'utente sparita.
-                Err(e) => ImportOutcome::Failed(e.to_string()),
+                Err(and) => ImportOutcome::Failed(and.to_string()),
             }
         } else {
             outcome
@@ -242,17 +242,17 @@ impl ExportProvider for MarkdownExport {
                 Ok(source) => source,
                 // Un documento sparito fra la selezione e la lettura non fa
                 // fallire l'export di altri duecento.
-                Err(e) => {
+                Err(and) => {
                     report
                         .log
-                        .push(TransferNote::warning(e.to_string()).about(doc.to_string()));
+                        .push(TransferNote::warning(and.to_string()).about(doc.to_string()));
                     continue;
                 }
             };
             // Il documento diviso nelle due parti che le due destinazioni usano
             // in modi diversi: una le concatena, l'altra le copia.
-            let (testa, corpo) = match fine_del_frontmatter(&source, doc.as_str()) {
-                Some(i) => (&source[..i], &source[i..]),
+            let (head, body) = match frontmatter_end(&source, doc.as_str()) {
+                Some(the) => (&source[..the], &source[the..]),
                 None => ("", source.as_str()),
             };
 
@@ -269,7 +269,7 @@ impl ExportProvider for MarkdownExport {
                 TARGET_FILES => {
                     // Un file per nota: il frontmatter resta dov'era, cioè in
                     // testa al file, che è l'unico posto in cui è un frontmatter.
-                    let body = if frontmatter { source.as_str() } else { corpo };
+                    let body = if frontmatter { source.as_str() } else { body };
                     let h = out.open_artifact(doc.as_str(), MEDIA_TYPES[0])?;
                     out.write_artifact(h, body.as_bytes())?;
                     report.artifacts.push(out.close_artifact(h)?);
@@ -293,16 +293,16 @@ impl ExportProvider for MarkdownExport {
                     // Toglierli renderebbe `frontmatter = true` e
                     // `frontmatter = false` la stessa cosa per questa
                     // destinazione, cioè un'opzione che mente.
-                    if frontmatter && !testa.trim().is_empty() {
-                        let recinto = "`".repeat(3.max(crate::util::fila_massima(testa, '`') + 1));
-                        single.push_str(&recinto);
+                    if frontmatter && !head.trim().is_empty() {
+                        let fence = "`".repeat(3.max(crate::util::longest_run(head, '`') + 1));
+                        single.push_str(&fence);
                         single.push_str("yaml\n");
-                        single.push_str(testa.trim_end());
+                        single.push_str(head.trim_end());
                         single.push('\n');
-                        single.push_str(&recinto);
+                        single.push_str(&fence);
                         single.push_str("\n\n");
                     }
-                    single.push_str(corpo.trim_end());
+                    single.push_str(body.trim_end());
                     single.push('\n');
                 }
             }
@@ -350,7 +350,7 @@ impl ExportProvider for MarkdownExport {
 /// primo carattere che non è indentazione è ciò che tiene il gesto una patch e
 /// non una seconda lettura del file. Trovato dal round-trip sul corpus della
 /// [0061](../../../docs/decisions/0061-un-giro-che-non-passa-dal-modello.md).
-fn fine_del_frontmatter(source: &str, doc_id: &str) -> Option<usize> {
+fn frontmatter_end(source: &str, doc_id: &str) -> Option<usize> {
     let Ok(model) = crate::parse::parse_markdown(source, &ParseContext::obsidian(doc_id)) else {
         return None;
     };
@@ -359,19 +359,19 @@ fn fine_del_frontmatter(source: &str, doc_id: &str) -> Option<usize> {
     }
     match model.body.first() {
         Some(first) => {
-            let contenuto = first.span().start;
-            let riga = source[..contenuto]
+            let content = first.span().start;
+            let row = source[..content]
                 .rfind(['\n', '\r'])
-                .map(|i| i + 1)
+                .map(|the| the + 1)
                 .unwrap_or(0);
             Some(
-                if source[riga..contenuto]
+                if source[row..content]
                     .chars()
                     .all(|c| c == ' ' || c == '\t')
                 {
-                    riga
+                    row
                 } else {
-                    contenuto
+                    content
                 },
             )
         }
@@ -427,30 +427,30 @@ mod tests {
     /// sbagliato avrebbe una testa sbagliata, e nessuno la guardava.
     #[test]
     fn the_frontmatter_leaves_by_span_and_takes_nothing_of_the_body_with_it() {
-        fn diviso(src: &str) -> (&str, &str) {
-            match fine_del_frontmatter(src, "n.md") {
-                Some(i) => (&src[..i], &src[i..]),
+        fn split(src: &str) -> (&str, &str) {
+            match frontmatter_end(src, "n.md") {
+                Some(the) => (&src[..the], &src[the..]),
                 None => ("", src),
             }
         }
 
         let src = "---\ntitle: Ciao\n---\n\n# Titolo\n\nCorpo.\n";
         assert_eq!(
-            diviso(src),
+            split(src),
             ("---\ntitle: Ciao\n---\n\n", "# Titolo\n\nCorpo.\n")
         );
 
-        let senza = "# Titolo\n\nCorpo.\n";
+        let without = "# Titolo\n\nCorpo.\n";
         assert_eq!(
-            diviso(senza),
-            ("", senza),
+            split(without),
+            ("", without),
             "senza frontmatter non si taglia niente"
         );
 
-        let solo = "---\ntitle: Solo\n---\n";
+        let only = "---\ntitle: Solo\n---\n";
         assert_eq!(
-            diviso(solo),
-            (solo, ""),
+            split(only),
+            (only, ""),
             "un documento che è solo frontmatter, senza, non è niente"
         );
     }

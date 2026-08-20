@@ -1,9 +1,9 @@
 // Il presidio di **un ordine**, dentro l'ascoltatore di `document_changed`.
 //
-// Il conto degli echi (`state/salvataggio.ts`) ha due metà: una scrittura ne
+// Il conto degli echoes (`state/salvataggio.ts`) ha due metà: una scrittura ne
 // mette uno prima di partire, e l'evento con l'identità di una nostra
 // scrittura — attore `user` fuori da un lotto — lo consuma — «anche se non
-// c'è niente da dire», che è la frase scritta sul campo `Buffer.echi`. Un eco
+// c'è niente da dire», che è la frase scritto sul campo `Buffer.echoes`. Un eco
 // che nessuno consuma **non si ripara più**: resta appeso, e il prossimo
 // evento con quella stessa identità — la scrittura diretta di un'altra
 // finestra — viene scambiato per il nostro. Cioè l'avviso che doveva comparire
@@ -14,12 +14,12 @@
 // una guardia che chiedeva tutt'altro — se qualche riquadro stia mostrando quel
 // documento. Le due domande non hanno niente in comune: il conto è del buffer,
 // e un buffer esiste anche quando nessun riquadro lo mostra (fra la chiusura di
-// una tab e il `flush` che la congeda, che è proprio il momento in cui una
+// una linguetta e il `flush` che la congeda, che è proprio il momento in cui una
 // scrittura in volo produce il suo eco).
 //
 // # Perché questo presidio guarda il sorgente
 //
-// Perché è dove il difetto vive. Il conto `echi-fuori-dal-padrone`
+// Perché è dove il difetto vive. Il conto `echoes-fuori-dal-padrone`
 // (`.github/scripts/conteggi.mjs`) tiene ferme le due metà nel file che le
 // possiede, e non vede un ordine; `salvataggio.test.ts` prova la funzione, che
 // è giusta e lo era già. Ciò che è sbagliato è **quale riga viene prima**, e
@@ -30,59 +30,59 @@
 // deve essere il primo a usare un'API che nella webview non esiste.
 //
 // Zona cieca dichiarata: si guarda il **corpo dell'ascoltatore**, ritagliato
-// fra la sua apertura e la successiva `onEvent(`. Una guardia scritta dentro una
+// fra la sua apertura e la successiva `onEvent(`. Una guardia scritto dentro una
 // funzione chiamata da qui, invece che qui, non la vedrebbe — ed è il verso
-// giusto in cui sbagliare, perché quella guardia dovrebbe essere scritta apposta.
+// giusto in cui sbagliare, perché quella guardia dovrebbe essere scritto apposta.
 import { describe, expect, it } from "vitest";
 
-import sorgente from "./document.ts?raw";
-import esploratore from "./explorer.ts?raw";
+import source from "./document.ts?raw";
+import explorer from "./explorer.ts?raw";
 
 // Il presidio del ricongiungimento (in fondo a questo file) importa la
-// decisione dal modulo puro `state/bozze.ts`, che non tocca né DOM, né
-// editor, né IPC: la metà di `recuperaBozze` che muta la mappa dei buffer si
+// decisione dal modulo puro `state/drafts.ts`, che non tocca né DOM, né
+// editor, né IPC: la metà di `recoverDrafts` che muta la mappa dei buffer si
 // prova come comportamento, senza montare la shell. Gli altri presidi di
 // questo file restano sul sorgente — vedi la nota in cima — perché guardano
 // ordini di righe che nessuna funzione pura potrebbe rendere.
-import { Coda } from "../ui/corsa";
+import { Queue } from "../ui/race";
 import type { DraftInfo } from "../host/contract";
-import { ricongiungiBozze, type BufferDellaBozza } from "../state/bozze";
+import { rejoinDrafts, type DraftBuffer } from "../state/drafts";
 
 /// Il corpo dell'ascoltatore di `document_changed`, dalla sua apertura al
 /// prossimo `onEvent(`.
-function corpo(): string {
-  const apre = sorgente.indexOf('onEvent("document_changed"');
-  expect(apre, "l'ascoltatore di `document_changed` non si chiama più così").toBeGreaterThan(-1);
-  const dopo = sorgente.indexOf("onEvent(", apre + 1);
-  return sorgente.slice(apre, dopo === -1 ? sorgente.length : dopo);
+function body(): string {
+  const opens = source.indexOf('onEvent("document_changed"');
+  expect(opens, "l'ascoltatore di `document_changed` non si chiama più così").toBeGreaterThan(-1);
+  const after = source.indexOf("onEvent(", opens + 1);
+  return source.slice(opens, after === -1 ? source.length : after);
 }
 
 describe("l'ascoltatore di document_changed", () => {
   it("consuma l'eco prima di guardare se c'è un riquadro", () => {
-    const testo = corpo();
-    const consuma = testo.indexOf("avvisaSeIlBufferCopre(");
-    const guardia = testo.indexOf("paneConDoc(");
-    expect(consuma, "non consuma più l'eco").toBeGreaterThan(-1);
-    expect(guardia, "non guarda più i riquadri").toBeGreaterThan(-1);
+    const text = body();
+    const consumeCall = text.indexOf("warnIfBufferCovers(");
+    const guardCall = text.indexOf("panesWithDoc(");
+    expect(consumeCall, "non consuma più l'eco").toBeGreaterThan(-1);
+    expect(guardCall, "non guarda più i riquadri").toBeGreaterThan(-1);
     expect(
-      consuma,
-      "la guardia sui riquadri sta davanti al conto degli echi: un documento " +
+      consumeCall,
+      "la guardia sui riquadri sta davanti al conto degli echoes: un documento " +
         "con un buffer e nessun riquadro non consuma il proprio eco, e quell'eco " +
         "appeso si mangia il prossimo avviso vero — «il file è cambiato sotto di " +
         "te» detto da un plugin o dal kernel, che non comparirà",
-    ).toBeLessThan(guardia);
+    ).toBeLessThan(guardCall);
   });
 });
 
 /// Il corpo di una funzione esportata, dalla sua firma alla prima riga che
 /// chiude in colonna zero. Stessa forma — e stessa zona cieca dichiarata — del
-/// ritaglio qui sopra: una riga scritta in una funzione chiamata da lì, invece
+/// ritaglio qui sopra: una riga scritto in una funzione chiamata da lì, invece
 /// che lì, non la si vedrebbe.
-function corpoDi(nome: string): string {
-  const apre = sorgente.indexOf(`export function ${nome}(`);
-  expect(apre, `\`${nome}\` non si chiama più così`).toBeGreaterThan(-1);
-  const chiude = sorgente.indexOf("\n}\n", apre);
-  return sorgente.slice(apre, chiude === -1 ? sorgente.length : chiude);
+function bodyOf(name: string): string {
+  const opens = source.indexOf(`export function ${name}(`);
+  expect(opens, `\`${name}\` non si chiama più così`).toBeGreaterThan(-1);
+  const closes = source.indexOf("\n}\n", opens);
+  return source.slice(opens, closes === -1 ? source.length : closes);
 }
 
 // **I due ritardi si fermano insieme** (difetto 0211).
@@ -95,16 +95,16 @@ function corpoDi(nome: string): string {
 // deciso che non si scrive — e sulla strada del sì quella bozza sopravviveva
 // alla nota, per tornare al riavvio dopo come `orfana`.
 //
-// Il presidio guarda il sorgente per la ragione scritta in cima a questo file:
+// Il presidio guarda il sorgente per la ragione scritto in cima a questo file:
 // `document.ts` non si monta in un test senza DOM, editor, layout e IPC, e ciò
 // che è sbagliato qui è **quali righe ci sono**, non un valore che una
 // funzione pura potrebbe rendere.
 describe("sospendere e riprendere i ritardi", () => {
   it("ne ferma due, non uno", () => {
-    const testo = corpoDi("suspendSave");
-    expect(testo).toContain("clearTimeout(buf.timer)");
+    const text = bodyOf("suspendSave");
+    expect(text).toContain("clearTimeout(buf.timer)");
     expect(
-      testo,
+      text,
       "`suspendSave` ferma il salvataggio e lascia correre la bozza: la rete " +
         "si stende dentro la finestra in cui la shell ha appena deciso che quel " +
         "testo non tocca il disco, e su un sì sopravvive alla nota cestinata",
@@ -112,10 +112,10 @@ describe("sospendere e riprendere i ritardi", () => {
   });
 
   it("ne rimette in coda due, non uno", () => {
-    const testo = corpoDi("resumeSave");
-    expect(testo).toContain("scheduleSave(");
+    const text = bodyOf("resumeSave");
+    expect(text).toContain("scheduleSave(");
     expect(
-      testo,
+      text,
       "la ripresa riaccende il salvataggio e non la bozza: dopo un ripensamento " +
         "il buffer resta sporco senza la sua rete sotto",
     ).toContain("scheduleDraft(");
@@ -127,31 +127,31 @@ describe("sospendere e riprendere i ritardi", () => {
   // modale è aperta), e un insieme li fa nascere giusti invece di aspettarli.
   it("tiene un posto per documento, non un posto solo", () => {
     expect(
-      sorgente,
+      source,
       "il documento sospeso è tornato a essere una casella sola: due " +
         "sospensioni annidate si pestano, e la prima ripresa riaccende quello " +
         "sbagliato lasciando l'altro fermo per sempre",
     ).toContain("const sospesi = new Set<string>()");
-    expect(sorgente).not.toContain("let sospeso: string | null");
+    expect(source).not.toContain("let sospeso: string | null");
   });
 });
 
 /// Il corpo di un ascoltatore, dalla sua apertura al prossimo `onEvent(`.
 /// Stesso ritaglio — e stessa zona cieca dichiarata — di `corpo()`.
-function corpoAscoltatore(evento: string): string {
-  const apre = sorgente.indexOf(`onEvent("${evento}"`);
-  expect(apre, `l'ascoltatore di \`${evento}\` non si chiama più così`).toBeGreaterThan(-1);
-  const dopo = sorgente.indexOf("onEvent(", apre + 1);
-  return sorgente.slice(apre, dopo === -1 ? sorgente.length : dopo);
+function listenerBody(event: string): string {
+  const opens = source.indexOf(`onEvent("${event}"`);
+  expect(opens, `l'ascoltatore di \`${event}\` non si chiama più così`).toBeGreaterThan(-1);
+  const after = source.indexOf("onEvent(", opens + 1);
+  return source.slice(opens, after === -1 ? source.length : after);
 }
 
 /// Il corpo di una funzione **privata**, dalla sua firma alla prima riga che
 /// chiude in colonna zero.
-function corpoPrivatoDi(nome: string): string {
-  const apre = sorgente.indexOf(`function ${nome}(`);
-  expect(apre, `\`${nome}\` non si chiama più così`).toBeGreaterThan(-1);
-  const chiude = sorgente.indexOf("\n}\n", apre);
-  return sorgente.slice(apre, chiude === -1 ? sorgente.length : chiude);
+function privateBodyOf(name: string): string {
+  const opens = source.indexOf(`function ${name}(`);
+  expect(opens, `\`${name}\` non si chiama più così`).toBeGreaterThan(-1);
+  const closes = source.indexOf("\n}\n", opens);
+  return source.slice(opens, closes === -1 ? source.length : closes);
 }
 
 // **La finestra di migrazione di una rinomina** (difetto 0210).
@@ -171,10 +171,10 @@ function corpoPrivatoDi(nome: string): string {
 // niente).
 describe("la finestra di migrazione di una rinomina", () => {
   it("il fermo copre anche i ritardi che nascono dopo", () => {
-    for (const nome of ["scheduleSave", "scheduleDraft"]) {
+    for (const name of ["scheduleSave", "scheduleDraft"]) {
       expect(
-        corpoPrivatoDi(nome),
-        `\`${nome}\` non guarda il fermo: una battuta dentro la finestra di ` +
+        privateBodyOf(name),
+        `\`${name}\` non guarda il fermo: una battuta dentro la finestra di ` +
           "migrazione programma una scrittura col nome di prima, e la nota " +
           "rinominata ricompare al vecchio path",
       ).toContain("sospesi.has(doc)");
@@ -182,14 +182,14 @@ describe("la finestra di migrazione di una rinomina", () => {
   });
 
   it("chi rinomina tiene fermo prima di chiedere, e scioglie se la richiesta fallisce", () => {
-    const testo = corpoPrivatoDi("rinominaTenendoFermoIlBuffer");
-    const ferma = testo.indexOf("suspendSave(from)");
-    const chiede = testo.indexOf("await renameNote(");
-    expect(ferma, "non tiene più fermo il buffer").toBeGreaterThan(-1);
-    expect(chiede, "non chiede più la rinomina").toBeGreaterThan(-1);
-    expect(ferma, "chiede la rinomina prima di tenere fermo il buffer").toBeLessThan(chiede);
+    const text = privateBodyOf("renameKeepingBuffer");
+    const stopButton = text.indexOf("suspendSave(from)");
+    const renameCall = text.indexOf("await renameNote(");
+    expect(stopButton, "non tiene più fermo il buffer").toBeGreaterThan(-1);
+    expect(renameCall, "non chiede più la rinomina").toBeGreaterThan(-1);
+    expect(stopButton, "chiede la rinomina prima di tenere fermo il buffer").toBeLessThan(renameCall);
     expect(
-      testo,
+      text,
       "una rinomina che fallisce non scioglie il fermo: non arriverà nessun " +
         "evento, e quel buffer non raggiunge più il disco",
     ).toContain("resumeSave(from)");
@@ -197,7 +197,7 @@ describe("la finestra di migrazione di una rinomina", () => {
 
   it("il fermo si scioglie dove finisce la finestra", () => {
     expect(
-      corpoAscoltatore("document_renamed"),
+      listenerBody("document_renamed"),
       "l'evento che migra l'identità non scioglie il fermo preso da chi ha " +
         "chiesto la rinomina",
     ).toContain("sospesi.delete(e.from)");
@@ -208,7 +208,7 @@ describe("la finestra di migrazione di una rinomina", () => {
   // senza saperlo, e la quarta pure.
   it("si rinomina da una porta sola", () => {
     expect(
-      esploratore,
+      explorer,
       "l'esploratore torna a chiamare `renameNote` da sé: quella strada non " +
         "tiene fermo il buffer, e la finestra di migrazione si riapre",
     ).not.toContain("renameNote(");
@@ -217,7 +217,7 @@ describe("la finestra di migrazione di una rinomina", () => {
 
 // **Il ricongiungimento delle bozze orfane** (§15.2).
 //
-// Il recupero corre DOPO che `sincronizza` ha disegnato le tab ripristinate dal
+// Il recupero corre DOPO che `sincronizza` ha disegnato le linguetta ripristinate dal
 // layout, e disegnarle significa aver già letto il disco in un buffer **pulito**
 // (`leggiBuffer`). La guardia «se un buffer c'è già, salta» scambiava quella
 // copia del disco per il testo più recente della bozza: la bozza restava dov'era,
@@ -225,7 +225,7 @@ describe("la finestra di migrazione di una rinomina", () => {
 // la cancellava — il testo non salvato, l'unica copia, spariva senza che
 // nessuno l'avesse mai visto. È il caso in cui una bozza esiste per definizione:
 // un salvataggio rifiutato dal disco (pieno, sola lettura, share caduta) alla
-// chiusura della finestra, con la tab ancora nel layout al riavvio.
+// chiusura della finestra, con la linguetta ancora nel layout al riavvio.
 //
 // La condizione giusta è lo **sporco**, non l'esistenza: un buffer sporco porta
 // un'identità diversa — un testo battuto dopo, in questa sessione — e la bozza
@@ -240,50 +240,50 @@ describe("la finestra di migrazione di una rinomina", () => {
 // Gli altri presidi di questo file guardano il sorgente perché ciò che è
 // sbagliato è l'**ordine delle righe** — una cosa che nessuna funzione pura
 // potrebbe rendere. Il ricongiungimento no: la decisione sta in
-// `ricongiungiBozze` (`state/bozze.ts`), la metà di `recuperaBozze` che non
+// `rejoinDrafts` (`state/drafts.ts`), la metà di `recoverDrafts` che non
 // tocca né DOM, né editor, né IPC — riceve la mappa dei buffer e la muta —
 // ed è un
 // comportamento osservabile: quale testo finisce nel buffer, con che stato, e
 // quante bozze il conto dice rientrate. Si prova quello, come si deve.
 describe("il ricongiungimento delle bozze orfane", () => {
   /// Una bozza come la manda il kernel: il documento, il testo, e la base da
-  /// cui il buffer si era discostato — `null` quando chi l'ha scritta non la
+  /// cui il buffer si era discostato — `null` quando chi l'ha scritto non la
   /// sapeva, che è il caso di una nota mai salvata.
-  function bozza(doc: string, text: string, base: string | null = null): DraftInfo {
+  function draft(doc: string, text: string, base: string | null = null): DraftInfo {
     return { doc, at: 1, base, exists: true, current: base, text };
   }
 
   /// Un buffer come lo lascia `leggiBuffer`: il disco riletto da poco, pulito.
-  function pulito(text: string): BufferDellaBozza {
+  function clean(text: string): DraftBuffer {
     return {
       text,
       dirty: false,
-      esito: "ok",
-      echi: 0,
-      coda: new Coda(),
+      result: "ok",
+      echoes: 0,
+      queue: new Queue(),
       base: { kind: "descends_from", value: "la revisione del disco" },
     };
   }
 
   it("fa rientrare la bozza sopra la copia pulita, e conta 1", () => {
-    // La tab ripristinata dal layout ha già letto il disco in un buffer pulito:
+    // La linguetta ripristinata dal layout ha già letto il disco in un buffer pulito:
     // la bozza è più nuova di lui, e il ricongiungimento la rimette sopra —
     // testo, sporco e base sono i suoi, non quelli del disco.
-    const buffer = new Map<string, BufferDellaBozza>([
-      ["nota.md", pulito("il testo sul disco")],
+    const buffer = new Map<string, DraftBuffer>([
+      ["nota.md", clean("il testo sul disco")],
     ]);
 
-    const rientrate = ricongiungiBozze(
-      [bozza("nota.md", "il testo non salvato", "la base della bozza")],
+    const rejoined = rejoinDrafts(
+      [draft("nota.md", "il testo non salvato", "la base della bozza")],
       buffer,
     );
 
-    expect(rientrate, "una sola bozza in fila, una sola rientrata").toHaveLength(1);
-    expect(rientrate[0].doc).toBe("nota.md");
+    expect(rejoined, "una sola bozza in fila, una sola rientrata").toHaveLength(1);
+    expect(rejoined[0].doc).toBe("nota.md");
     expect(buffer.get("nota.md")).toMatchObject({
       text: "il testo non salvato",
       dirty: true,
-      esito: "ok",
+      result: "ok",
       base: { kind: "descends_from", value: "la base della bozza" },
     });
   });
@@ -292,23 +292,23 @@ describe("il ricongiungimento delle bozze orfane", () => {
     // Un buffer sporco è un'identità diversa — un testo battuto dopo, in
     // questa sessione — e sovrascriverlo la farebbe sparire: la bozza resta
     // orfana sul disco, e il conto dice che non è rientrata.
-    const buffer = new Map<string, BufferDellaBozza>([
+    const buffer = new Map<string, DraftBuffer>([
       [
         "nota.md",
         {
-          ...pulito("il testo sul disco"),
+          ...clean("il testo sul disco"),
           dirty: true,
           text: "scritto dopo, in questa sessione",
         },
       ],
     ]);
 
-    const rientrate = ricongiungiBozze(
-      [bozza("nota.md", "il testo non salvato", "la base della bozza")],
+    const rejoined = rejoinDrafts(
+      [draft("nota.md", "il testo non salvato", "la base della bozza")],
       buffer,
     );
 
-    expect(rientrate).toHaveLength(0);
+    expect(rejoined).toHaveLength(0);
     expect(buffer.get("nota.md")).toMatchObject({
       text: "scritto dopo, in questa sessione",
       dirty: true,
@@ -319,11 +319,11 @@ describe("il ricongiungimento delle bozze orfane", () => {
     // Una bozza per un documento che nessuno ha aperto: nasce il buffer, e la
     // base resta quella che la bozza portava — o, se non la sapeva, «dettata»:
     // non c'è nessuna revisione da esibire.
-    const buffer = new Map<string, BufferDellaBozza>();
+    const buffer = new Map<string, DraftBuffer>();
 
-    const rientrate = ricongiungiBozze([bozza("nuova.md", "il testo non salvato")], buffer);
+    const rejoined = rejoinDrafts([draft("nuova.md", "il testo non salvato")], buffer);
 
-    expect(rientrate).toHaveLength(1);
+    expect(rejoined).toHaveLength(1);
     expect(buffer.get("nuova.md")).toMatchObject({
       text: "il testo non salvato",
       dirty: true,
@@ -335,17 +335,17 @@ describe("il ricongiungimento delle bozze orfane", () => {
     // Il buffer sporco che il rientro produce ferma la voce successiva che
     // nomina lo stesso documento: il ricongiungimento è unico, e il testo che
     // rientra è quello più recente (la fila arriva dalla più recente).
-    const buffer = new Map<string, BufferDellaBozza>();
+    const buffer = new Map<string, DraftBuffer>();
 
-    const rientrate = ricongiungiBozze(
+    const rejoined = rejoinDrafts(
       [
-        bozza("nota.md", "il testo più recente", "base-2"),
-        bozza("nota.md", "il testo più vecchio", "base-1"),
+        draft("nota.md", "il testo più recente", "base-2"),
+        draft("nota.md", "il testo più vecchio", "base-1"),
       ],
       buffer,
     );
 
-    expect(rientrate).toHaveLength(1);
+    expect(rejoined).toHaveLength(1);
     expect(buffer.get("nota.md")).toMatchObject({ text: "il testo più recente" });
   });
 });

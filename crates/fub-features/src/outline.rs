@@ -116,7 +116,7 @@ impl ViewProvider for OutlineView {
         let Some(span) = payload_span(&action.payload) else {
             return Ok(ViewUpdate::None);
         };
-        let Some(disegnato) = action.payload.get(DOC).and_then(|v| v.as_str()) else {
+        let Some(drawn) = action.payload.get(DOC).and_then(|v| v.as_str()) else {
             return Ok(ViewUpdate::None);
         };
         // **Le due metà vengono dallo stesso istante, o non si va da nessuna
@@ -136,8 +136,8 @@ impl ViewProvider for OutlineView {
         // del numero d'ordine: qui un contatore non servirebbe, perché ciò che
         // dice se la risposta è scaduta è già un dato del dominio.
         match host.active_context().and_then(|c| c.doc) {
-            Some(attivo) if attivo.as_str() == disegnato => Ok(ViewUpdate::Reveal {
-                doc_id: attivo.as_str().to_string(),
+            Some(active) if active.as_str() == drawn => Ok(ViewUpdate::Reveal {
+                doc_id: active.as_str().to_string(),
                 span,
             }),
             _ => Ok(ViewUpdate::None),
@@ -212,7 +212,7 @@ fn section_of(headings: &[Heading], caret: usize) -> Option<usize> {
         .iter()
         .enumerate()
         .rfind(|(_, h)| h.span.start <= caret)
-        .map(|(i, _)| i)
+        .map(|(the, _)| the)
 }
 
 /// Costruisce l'albero `UiNode` dell'outline, segnando la sezione in cui sta il
@@ -229,8 +229,8 @@ pub fn build_outline_view(headings: &[Heading], caret: Option<usize>, doc: &str)
     if headings.is_empty() {
         return placeholder(EMPTY);
     }
-    let corrente = caret.and_then(|c| section_of(headings, c));
-    let (roots, _) = subtree(headings, 0, 0, corrente, doc);
+    let current = caret.and_then(|c| section_of(headings, c));
+    let (roots, _) = subtree(headings, 0, 0, current, doc);
     UiNode::column(2, vec![UiNode::new(UiKind::Tree { roots })])
 }
 
@@ -247,17 +247,17 @@ fn subtree(
     headings: &[Heading],
     at: usize,
     parent_level: u8,
-    corrente: Option<usize>,
+    current: Option<usize>,
     doc: &str,
 ) -> (Vec<UiNode>, usize) {
-    let mut nodi = Vec::new();
-    let mut i = at;
-    while let Some(h) = headings.get(i) {
+    let mut nodes = Vec::new();
+    let mut the = at;
+    while let Some(h) = headings.get(the) {
         if h.level <= parent_level {
             break;
         }
-        let (children, next) = subtree(headings, i + 1, h.level, corrente, doc);
-        nodi.push(
+        let (children, next) = subtree(headings, the + 1, h.level, current, doc);
+        nodes.push(
             UiNode::new(UiKind::TreeItem {
                 label: h.text.clone().into(),
                 // Aperto: un outline che nasce chiuso non è un outline.
@@ -266,7 +266,7 @@ fn subtree(
                     REVEAL,
                     serde_json::json!({ DOC: doc, START: h.span.start, END: h.span.end }),
                 )),
-                selected: Some(i) == corrente,
+                selected: Some(the) == current,
                 children,
             })
             // La chiave è lo slug dell'heading, che è la sua identità stabile
@@ -274,9 +274,9 @@ fn subtree(
             // sopra di lui.
             .with_key(h.slug.clone()),
         );
-        i = next;
+        the = next;
     }
-    (nodi, i)
+    (nodes, the)
 }
 
 #[cfg(test)]
@@ -297,15 +297,15 @@ mod tests {
 
     /// Le voci dell'albero, in ordine di lettura, con il loro livello di
     /// annidamento: `(profondità, etichetta, selezionata)`.
-    fn voci(tree: &UiNode) -> Vec<(usize, String, bool)> {
+    fn entries(tree: &UiNode) -> Vec<(usize, String, bool)> {
         let UiKind::Stack { children, .. } = &tree.kind else {
             panic!("l'outline è uno stack")
         };
         let UiKind::Tree { roots } = &children[0].kind else {
-            panic!("il primo figlio è l'albero")
+            panic!("the first child is the tree")
         };
-        fn scendi(nodi: &[UiNode], depth: usize, out: &mut Vec<(usize, String, bool)>) {
-            for n in nodi {
+        fn descend(nodes: &[UiNode], depth: usize, out: &mut Vec<(usize, String, bool)>) {
+            for n in nodes {
                 let UiKind::TreeItem {
                     label,
                     selected,
@@ -313,14 +313,14 @@ mod tests {
                     ..
                 } = &n.kind
                 else {
-                    panic!("una voce d'albero è un tree-item")
+                    panic!("a tree item is a tree-item")
                 };
                 out.push((depth, label.to_string(), *selected));
-                scendi(children, depth + 1, out);
+                descend(children, depth + 1, out);
             }
         }
         let mut out = Vec::new();
-        scendi(roots, 0, &mut out);
+        descend(roots, 0, &mut out);
         out
     }
 
@@ -340,18 +340,18 @@ mod tests {
             "nota.md",
         );
         assert_eq!(
-            voci(&tree),
+            entries(&tree),
             vec![
                 (0, "Titolo".to_string(), false),
                 (1, "Sezione".to_string(), false),
             ],
-            "il livello è annidamento, non spaziatura nel titolo"
+            "the level is nesting, not title indentation"
         );
         let json = serde_json::to_string(&tree).unwrap();
         assert!(json.contains(r#""start":20"#) && json.contains(r#""end":30"#));
         assert!(
             !json.contains("reveal:"),
-            "l'id non porta più dati concatenati"
+            "the id no longer carries concatenated data"
         );
     }
 
@@ -371,9 +371,9 @@ mod tests {
             "nota.md",
         );
         assert_eq!(
-            voci(&tree)
+            entries(&tree)
                 .into_iter()
-                .map(|(d, l, _)| (d, l))
+                .map(|(d, the, _)| (d, the))
                 .collect::<Vec<_>>(),
             vec![
                 (0, "Due".to_string()),
@@ -384,12 +384,12 @@ mod tests {
         );
     }
 
-    /// Le etichette selezionate, in ordine di lettura.
-    fn selezionate(tree: &UiNode) -> Vec<String> {
-        voci(tree)
+    /// Le etichette selected_labels, in ordine di lettura.
+    fn selected_labels(tree: &UiNode) -> Vec<String> {
+        entries(tree)
             .into_iter()
             .filter(|(_, _, sel)| *sel)
-            .map(|(_, l, _)| l)
+            .map(|(_, the, _)| the)
             .collect()
     }
 
@@ -399,58 +399,58 @@ mod tests {
 
         // Dentro la seconda sezione: dopo il suo heading, prima del terzo.
         assert_eq!(
-            selezionate(&build_outline_view(&headings, Some(30), "nota.md")),
+            selected_labels(&build_outline_view(&headings, Some(30), "nota.md")),
             ["Due"]
         );
         // Sull'heading stesso: la sezione è la sua.
         assert_eq!(
-            selezionate(&build_outline_view(&headings, Some(40), "nota.md")),
+            selected_labels(&build_outline_view(&headings, Some(40), "nota.md")),
             ["Tre"]
         );
         assert_eq!(
-            selezionate(&build_outline_view(&headings, Some(0), "nota.md")),
+            selected_labels(&build_outline_view(&headings, Some(0), "nota.md")),
             ["Uno"],
             "il byte 0 è l'inizio del primo heading: ci sta dentro"
         );
         // Nel preambolo, prima di ogni heading: nessuna sezione, non la prima.
-        let dopo_preambolo = [h(1, "Uno", 10, 15)];
+        let after_preambolo = [h(1, "Uno", 10, 15)];
         assert!(
-            selezionate(&build_outline_view(&dopo_preambolo, Some(3), "nota.md")).is_empty(),
+            selected_labels(&build_outline_view(&after_preambolo, Some(3), "nota.md")).is_empty(),
             "il preambolo non appartiene alla sezione che lo segue"
         );
         // Nessun cursore (o buffer sporco): nessun segno.
-        assert!(selezionate(&build_outline_view(&headings, None, "nota.md")).is_empty());
+        assert!(selected_labels(&build_outline_view(&headings, None, "nota.md")).is_empty());
     }
 
     #[test]
     fn a_dirty_buffer_marks_nothing() {
-        let host = MemoryHost::new().con_outline("nota.md", &[h(1, "Uno", 0, 5)]);
+        let host = MemoryHost::new().with_outline("nota.md", &[h(1, "Uno", 0, 5)]);
         host.set_active(Some("nota.md"));
         // Il cursore c'è, ma il buffer ha modifiche non salvate: lo span non
         // attraversa il confine, e la view non ha dove segnare.
         host.set_caret(None);
-        let istanza = ViewInstance::only(OUTLINE_VIEW);
-        let tree = OutlineView.render_view(&istanza, &host).unwrap();
-        assert!(selezionate(&tree).is_empty());
+        let instance = ViewInstance::only(OUTLINE_VIEW);
+        let tree = OutlineView.render_view(&instance, &host).unwrap();
+        assert!(selected_labels(&tree).is_empty());
 
         // Salvato: lo span torna vero, e il segno con lui.
         host.set_caret(Some(2));
-        let tree = OutlineView.render_view(&istanza, &host).unwrap();
-        assert_eq!(selezionate(&tree), ["Uno"]);
+        let tree = OutlineView.render_view(&instance, &host).unwrap();
+        assert_eq!(selected_labels(&tree), ["Uno"]);
     }
 
     #[test]
     fn render_reads_active_doc_and_queries_the_host() {
         let host =
-            MemoryHost::new().con_outline("nota.md", &[h(1, "Uno", 0, 5), h(2, "Due", 10, 15)]);
+            MemoryHost::new().with_outline("nota.md", &[h(1, "Uno", 0, 5), h(2, "Due", 10, 15)]);
         host.set_active(Some("nota.md"));
         let tree = OutlineView
             .render_view(&ViewInstance::only(OUTLINE_VIEW), &host)
             .unwrap();
         assert_eq!(
-            voci(&tree)
+            entries(&tree)
                 .into_iter()
-                .map(|(_, l, _)| l)
+                .map(|(_, the, _)| the)
                 .collect::<Vec<_>>(),
             ["Uno", "Due"]
         );
@@ -498,14 +498,14 @@ mod tests {
     /// **dall'albero disegnato**, che è l'unico modo di legare le due metà.
     #[test]
     fn the_drawn_tree_carries_the_document_it_was_drawn_from() {
-        let host = MemoryHost::new().con_outline("nota.md", &[h(1, "Uno", 10, 15)]);
+        let host = MemoryHost::new().with_outline("nota.md", &[h(1, "Uno", 10, 15)]);
         host.set_active(Some("nota.md"));
         let tree = OutlineView
             .render_view(&ViewInstance::only(OUTLINE_VIEW), &host)
             .unwrap();
-        let azione = prima_azione(&tree).expect("l'albero ha un'azione");
+        let action = first_action(&tree).expect("l'albero ha un'azione");
         assert_eq!(
-            azione.payload.get(DOC).and_then(|v| v.as_str()),
+            action.payload.get(DOC).and_then(|v| v.as_str()),
             Some("nota.md")
         );
     }
@@ -543,7 +543,7 @@ mod tests {
     }
 
     /// La prima azione che si incontra scendendo l'albero.
-    fn prima_azione(node: &UiNode) -> Option<&ActionRef> {
+    fn first_action(node: &UiNode) -> Option<&ActionRef> {
         if let UiKind::TreeItem {
             action, children, ..
         } = &node.kind
@@ -552,13 +552,13 @@ mod tests {
                 return Some(a);
             }
             for c in children {
-                if let Some(a) = prima_azione(c) {
+                if let Some(a) = first_action(c) {
                     return Some(a);
                 }
             }
         }
         for c in node.children() {
-            if let Some(a) = prima_azione(c) {
+            if let Some(a) = first_action(c) {
                 return Some(a);
             }
         }

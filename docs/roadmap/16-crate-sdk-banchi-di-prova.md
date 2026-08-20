@@ -277,8 +277,8 @@ Decidere in blocco richiederebbe di applicare regole contrastanti.
     una. La prima occorrenza si trova nello **stesso file** del codice
     descritto. L'invecchiamento non deriva dalla distanza fra testo e codice.
     Un'annotazione dedicata solo ai file `.md` salterebbe metà degli errori.
-- [x] **La quinta specie: il numero di riga.** Il file
-      [glossario.md](../glossario.md) punta al codice e a **una riga** specifica
+- [x] **La quinta specie: il numero di riga.** Il glossario di allora puntava
+      al codice e a **una riga** specifica
       (`abi/event.rs:253`). Aggiungere codice sopra la riga invalida il
       riferimento senza toccare la riga stessa. La
       [0069](../decisions/0069-cosa-sa-dire-un-abbonamento.md) ha spostato

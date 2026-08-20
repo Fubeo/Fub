@@ -55,7 +55,7 @@ impl Vault {
     }
 }
 
-fn testi(tree: &UiNode) -> Vec<String> {
+fn texts(tree: &UiNode) -> Vec<String> {
     let UiKind::Stack { children, .. } = &tree.kind else {
         panic!("il pannello è uno stack")
     };
@@ -84,7 +84,7 @@ fn the_selection_text_survives_a_dirty_buffer_where_a_span_would_not() {
             .with_selections(Some(SelectionSet::floating("parole appena scritte"))),
     ));
     assert_eq!(
-        testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
+        texts(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
         vec![
             "Parole: 4 · Caratteri: 18".to_string(),
             "Selezione — parole: 3 · caratteri: 21".to_string()
@@ -100,7 +100,7 @@ fn the_selection_text_survives_a_dirty_buffer_where_a_span_would_not() {
             .with_mode(PaneMode::Reading),
     ));
     assert_eq!(
-        testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
+        texts(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
         vec![
             "Parole: 4 · Caratteri: 18".to_string(),
             "~1 min di lettura".to_string()
@@ -127,7 +127,7 @@ fn a_write_makes_the_kernel_drop_the_selection_under_it() {
     ws.write_document(&doc, "seconda versione, più lunga\n", WriteBase::Dictated)
         .expect("riscrive");
     assert_eq!(
-        testi(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
+        texts(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
         vec!["Parole: 4 · Caratteri: 28".to_string()],
         "il sorgente sotto la selezione è cambiato: la selezione cade, e col \
          conteggio se ne va anche la riga che la mostrava"

@@ -19,11 +19,20 @@ Fuori da questa cartella trovi solo:
   architetturale, le decisioni e la struttura dei crate; poi
   [architecture/mappa-visuale.md](architecture/mappa-visuale.md), per il disegno
   d'insieme.
-- **Non capisco una parola.** [glossario.md](glossario.md): lotto, porta, ponte,
-  anagrafe, sidecar, superficie, revisione, ricongiungimento. Il lessico qui è
-  preciso e non è standard, e ogni termine ha la sua voce con il tipo Rust, il
-  file e il verbale. Le parole del **metodo** invece stanno in
-  [leggimi-prima.md](leggimi-prima.md).
+- **Non capisco una parola.** Le parole del prodotto sono definite in una riga,
+  dove si usano: **lotto** — un gruppo di modifiche che vanno insieme, e chi
+  guarda ridisegna una volta sola; **porta** — il punto di passaggio unico
+  verso l'host; **ponte** — il pezzo che porta gli eventi dal kernel a chi
+  guarda; **anagrafe** — ciò che il kernel si ricorda di ogni file per non
+  doverlo rileggere; **sidecar** — un file accanto al vault che tiene ciò che
+  riguarda il vault ma non è contenuto di nessuna nota; **superficie** —
+  l'insieme di ciò che il contratto espone e qualcuno di esterno può nominare;
+  **revisione** — l'identità del testo su cui si calcola una modifica;
+  **ricongiungimento** — riconoscere all'apertura una nota rinominata mentre
+  Fub era chiuso. Ogni termine ha il tipo Rust, il file e il verbale accanto al
+  suo primo uso in [PIANO.md](PIANO.md) e
+  [mappa-visuale.md](architecture/mappa-visuale.md) (sezione *Le parole*). Le
+  parole del **metodo** invece stanno in [leggimi-prima.md](leggimi-prima.md).
 - **Devo scrivere codice.** [architecture/](architecture/): il contratto, il
   modello dati, il protocollo UI, il confine dei plugin, la shell. Dice com'è
   fatto **adesso**.
@@ -52,8 +61,11 @@ Fuori da questa cartella trovi solo:
 
 Poi ci sono i documenti di primo livello.
 
-**Quattro** raccontano il progetto: [PIANO.md](PIANO.md),
-[FEATURES.md](FEATURES.md), [todo.md](todo.md) e [glossario.md](glossario.md).
+**Tre** raccontano il progetto: [PIANO.md](PIANO.md),
+[FEATURES.md](FEATURES.md) e [todo.md](todo.md). Il lessico delle parole del
+prodotto non ha un file suo: ogni termine è definito in una riga dove si usa
+(vedi qui sopra), e [leggimi-prima.md](leggimi-prima.md) tiene il dizionario
+del metodo.
 
 **Sei** riguardano il repo come progetto pubblico, e stanno qui per non
 disperderli:

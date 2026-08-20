@@ -23,8 +23,8 @@ import {
 } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
 import { childName, pageName, resolutionKey } from "../rules/mirrored";
-import { CARATTERE_DI_TAG } from "../rules/mirrored";
-import { tagInCorso } from "../rules/sintassi";
+import { TAG_CHARACTER } from "../rules/mirrored";
+import { tagInProgress } from "../rules/syntax";
 
 /// Le sorgenti dati dei completamenti.
 ///
@@ -43,7 +43,7 @@ import { tagInCorso } from "../rules/sintassi";
 /// Che l'ordine sia già quello giusto è una proprietà, non un dettaglio: chi
 /// disegna non deve riordinare (vedi `wikilinkSource`).
 export interface CompletionSources {
-  cercaNote(prefisso: string): Promise<string[]>;
+  searchNotes(prefix: string): Promise<string[]>;
   listTags(): Promise<{ name: string; count: number }[]>;
 }
 
@@ -57,7 +57,7 @@ export interface ContextMatch {
 
 /// C'è un wikilink `[[` aperto (senza `]]` di chiusura in mezzo) prima del
 /// cursore? Si guarda l'ULTIMO `[[`: così `vedi [[Alpha]] e [[Be` è attivo su
-/// `Be`, non sul link già chiuso. Un wikilink non attraversa le righe: un
+/// `Be`, non sul legame già chiuso. Un wikilink non attraversa le righe: un
 /// a-capo dopo il `[[` lo spegne.
 export function wikilinkContext(before: string): ContextMatch | null {
   const open = before.lastIndexOf("[[");
@@ -70,13 +70,13 @@ export function wikilinkContext(before: string): ContextMatch | null {
 /// Il cursore è su un token `#...` a inizio parola?
 ///
 /// Le regole non sono di questo file: sono quelle di `tagInCorso`, cioè le
-/// stesse classi di caratteri con cui la live preview decora e con cui il
+/// stesse classi di caratteri con cui la vivi preview decora e con cui il
 /// contratto indicizza (§4.4). Erano scritte qui una seconda volta, e diverse:
 /// il carattere prima del `#` doveva non essere `[\p{L}\p{N}_#]`, mentre la
 /// regola vera è «non alfanumerico» — quindi su `vedi.#tag` il popup si apriva
 /// e la decorazione non compariva, e su `_#tag` succedeva l'inverso.
 export function tagContext(before: string): ContextMatch | null {
-  const m = tagInCorso(before);
+  const m = tagInProgress(before);
   return m && { from: m.from, query: m.query };
 }
 
@@ -134,7 +134,7 @@ export function noteCompletions(docs: string[], alreadyClosed: boolean): Complet
 
 /// Le opzioni per il completamento tag: `label` = `#nome` (il `#` fa parte del
 /// token sostituito, quindi anche del match), `detail` = quante note lo
-/// portano. Le gerarchie arrivano già intere dal kernel (`area/lavoro`).
+/// portano. Le gerarchie arrivano già intere dal kernel (`area/job`).
 export function tagCompletions(tags: { name: string; count: number }[]): Completion[] {
   return tags.map((t) => ({
     label: `#${t.name}`,
@@ -146,12 +146,12 @@ export function tagCompletions(tags: { name: string; count: number }[]): Complet
 /// La sorgente CM6 dei wikilink. Esportata (oltre che composta in
 /// `markdownCompletions`) perché è testabile headless con un
 /// `CompletionContext` costruito su un `EditorState`.
-export function wikilinkSource(cercaNote: CompletionSources["cercaNote"]): CompletionSource {
+export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
     const line = ctx.state.doc.lineAt(ctx.pos);
     const match = wikilinkContext(ctx.state.sliceDoc(line.from, ctx.pos));
     if (!match) return null;
-    const docs = await cercaNote(match.query);
+    const docs = await searchNotes(match.query);
     const after = ctx.state.sliceDoc(ctx.pos, Math.min(ctx.state.doc.length, ctx.pos + 2));
     return {
       from: line.from + match.from,
@@ -188,7 +188,7 @@ export function tagSource(listTags: CompletionSources["listTags"]): CompletionSo
       options: tagCompletions(tags),
       // La stessa classe di `tagInCorso`, presa da lì: un `validFor` più
       // stretto chiuderebbe il popup su un carattere che il tag accetta.
-      validFor: new RegExp(`^#${CARATTERE_DI_TAG.source}*$`, "u"),
+      validFor: new RegExp(`^#${TAG_CHARACTER.source}*$`, "u"),
     };
   };
 }
@@ -199,7 +199,7 @@ export function tagSource(listTags: CompletionSources["listTags"]): CompletionSo
 /// qui completiamo note e tag, non parole qualsiasi.
 export function markdownCompletions(sources: CompletionSources): Extension {
   return autocompletion({
-    override: [wikilinkSource(sources.cercaNote), tagSource(sources.listTags)],
+    override: [wikilinkSource(sources.searchNotes), tagSource(sources.listTags)],
     activateOnTyping: true,
   });
 }

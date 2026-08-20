@@ -13,7 +13,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Runtime WASM per i plugin di terzi: proxy dei trait del contratto."
+description = "WASM runtime for third-party plugins: proxy of the contract traits."
 
 [dependencies]
 fub-abi.workspace = true

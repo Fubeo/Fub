@@ -81,14 +81,14 @@ arena_ref! {
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ArenaError {
-    #[error("{arena}: indice {index} fuori range (l'arena ha {len} nodi)")]
+    #[error("{arena}: index {index} out of range (arena has {len} nodes)")]
     OutOfRange { arena: String, index: u32, len: u32 },
     /// Un nodo che si raggiunge da sé: l'arena è un grafo, non un albero, e
     /// ricostruirla alla lettera non terminerebbe.
-    #[error("{arena}: l'indice {index} si raggiunge da sé, l'arena non è un albero")]
+    #[error("{arena}: index {index} reaches itself; the arena is not a tree")]
     Cycle { arena: String, index: u32 },
     /// Uno span più grande di quanto la piattaforma possa indicizzare (wasm32).
-    #[error("span: {value} non entra in un usize su questa piattaforma")]
+    #[error("span: {value} does not fit in a usize on this platform")]
     SpanTooWide { value: u64 },
 }
 
@@ -113,7 +113,7 @@ fn cycle(arena: &str, index: u32) -> ArenaError {
 /// un'arena con più di 4 miliardi di nodi non sarebbe esprimibile — e nemmeno
 /// costruibile, visto che ogni nodo occupa decine di byte.
 fn next_index(len: usize) -> u32 {
-    u32::try_from(len).expect("un'arena con più di 2^32 nodi non è esprimibile nel contratto")
+    u32::try_from(len).expect("an arena with more than 2^32 nodes is not expressible in the contract")
 }
 
 // ---------------------------------------------------------------------------
@@ -861,8 +861,8 @@ fn tree_push_row(tree: &mut DocumentTree, row: &model::TableRow) -> TableRow {
     }
 }
 
-fn tree_push_inline(tree: &mut DocumentTree, i: &model::Inline) -> InlineRef {
-    let node = match i {
+fn tree_push_inline(tree: &mut DocumentTree, the: &model::Inline) -> InlineRef {
+    let node = match the {
         model::Inline::Text(s) => Inline::Text(s.clone()),
         model::Inline::Emph(v) => Inline::Emph(tree_push_inlines(tree, v)),
         model::Inline::Strong(v) => Inline::Strong(tree_push_inlines(tree, v)),
@@ -902,7 +902,7 @@ fn tree_push_inline(tree: &mut DocumentTree, i: &model::Inline) -> InlineRef {
 }
 
 fn tree_push_inlines(tree: &mut DocumentTree, inlines: &[model::Inline]) -> Vec<InlineRef> {
-    inlines.iter().map(|i| tree_push_inline(tree, i)).collect()
+    inlines.iter().map(|the| tree_push_inline(tree, the)).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -1469,41 +1469,41 @@ mod tests {
 
     /// Un corpo che tocca ogni variante e annida a più livelli: se il
     /// round-trip regge qui, regge.
-    fn corpo() -> Vec<B> {
+    fn body() -> Vec<B> {
         vec![
             B::Heading {
                 level: 2,
                 inlines: vec![
-                    I::Text("Titolo con ".into()),
-                    I::Strong(vec![I::Emph(vec![I::Text("enfasi".into())])]),
+                    I::Text("Title with ".into()),
+                    I::Strong(vec![I::Emph(vec![I::Text("emphasis".into())])]),
                 ],
-                anchor: Some("titolo-con-enfasi".into()),
+                anchor: Some("title-with-emphasis".into()),
                 span: S::new(0, 30),
                 explicit_anchor: None,
             },
             B::Paragraph {
                 inlines: vec![
-                    I::Code("codice".into()),
+                    I::Code("code".into()),
                     I::Link {
-                        target: LinkTarget::wiki("Altra"),
-                        label: Some(vec![I::Text("etichetta".into())]),
+                        target: LinkTarget::wiki("Other"),
+                        label: Some(vec![I::Text("label".into())]),
                         embed: false,
                         span: S::new(31, 60),
                     },
                     I::Link {
-                        target: LinkTarget::Url("https://esempio".into()),
+                        target: LinkTarget::Url("https://example".into()),
                         label: None,
                         embed: false,
                         span: S::new(61, 80),
                     },
                     I::Link {
-                        target: LinkTarget::Path("allegati/foto.png".into()),
+                        target: LinkTarget::Path("attachments/photo.png".into()),
                         label: None,
                         embed: true,
                         span: S::new(81, 90),
                     },
                     I::TagRef {
-                        name: "tag/annidato".into(),
+                        name: "tag/nested".into(),
                         span: S::new(91, 94),
                     },
                     I::Custom {
@@ -1512,7 +1512,7 @@ mod tests {
                         span: S::new(95, 105),
                     },
                 ],
-                anchor: Some("blocco-1".into()),
+                anchor: Some("block-1".into()),
                 span: S::new(31, 105),
             },
             B::List {
@@ -1520,7 +1520,7 @@ mod tests {
                 items: vec![
                     LI {
                         blocks: vec![B::Paragraph {
-                            inlines: vec![I::Text("primo".into())],
+                            inlines: vec![I::Text("first".into())],
                             anchor: None,
                             span: S::new(106, 113),
                         }],
@@ -1533,7 +1533,7 @@ mod tests {
                     LI {
                         blocks: vec![
                             B::Paragraph {
-                                inlines: vec![I::Text("secondo".into())],
+                                inlines: vec![I::Text("second".into())],
                                 anchor: None,
                                 span: S::new(114, 123),
                             },
@@ -1554,7 +1554,7 @@ mod tests {
                     },
                     LI {
                         blocks: vec![B::Paragraph {
-                            inlines: vec![I::Text("non è una task".into())],
+                            inlines: vec![I::Text("not a task".into())],
                             anchor: None,
                             span: S::new(129, 145),
                         }],
@@ -1588,7 +1588,7 @@ mod tests {
                 rows: vec![TR {
                     cells: vec![TableCell {
                         inlines: vec![I::Link {
-                            target: LinkTarget::wiki("Nota"),
+                            target: LinkTarget::wiki("Note"),
                             label: None,
                             embed: false,
                             span: S::new(171, 179),
@@ -1597,14 +1597,14 @@ mod tests {
                     }],
                 }],
                 align: vec![ColumnAlign::Left, ColumnAlign::None],
-                anchor: Some("tabella".into()),
+                anchor: Some("table".into()),
                 span: S::new(161, 181),
             },
             B::Custom {
                 custom_kind: "callout".into(),
-                attrs: serde_json::json!({"tipo": "nota"}),
+                attrs: serde_json::json!({"type": "note"}),
                 blocks: vec![B::Paragraph {
-                    inlines: vec![I::Text("dentro il callout".into())],
+                    inlines: vec![I::Text("inside the callout".into())],
                     anchor: None,
                     span: S::new(190, 200),
                 }],
@@ -1622,53 +1622,53 @@ mod tests {
     /// mappati sul campo giusto. Con trentatré varianti, un `label` copiato al
     /// posto di un `title` è l'errore che si fa davvero — e senza un campione
     /// per variante non lo vedrebbe nessuno.
-    fn albero_ui() -> U {
-        let azione = || Some(ActionRef::with("apri", serde_json::json!({"doc": "a.md"})));
+    fn ui_tree_fixture() -> U {
+        let action = || Some(ActionRef::with("open", serde_json::json!({"doc": "a.md"})));
         U::stack(
             Axis::Column,
             6,
             vec![
                 U::heading(3, "3 backlink"),
                 U::list(vec![
-                    U::list_item("Nota", Some("contesto".into()), azione()).with_key("a.md"),
-                    U::list_item("Senza azione", None, None),
+                    U::list_item("Note", Some("context".into()), action()).with_key("a.md"),
+                    U::list_item("No action", None, None),
                 ]),
-                U::button("Fai", Intent::Danger, ActionRef::new("fai")),
+                U::button("Do", Intent::Danger, ActionRef::new("do")),
                 U::new(UiKind::Html {
-                    html: "<b>fidato</b>".into(),
+                    html: "<b>trusted</b>".into(),
                 }),
                 U::new(UiKind::WebView {
-                    url: "https://esempio".into(),
+                    url: "https://example".into(),
                     height: 200,
                 }),
                 U::new(UiKind::Section {
-                    title: "Sezione".into(),
+                    title: "Section".into(),
                     collapsed: true,
-                    children: vec![U::text("dentro")],
+                    children: vec![U::text("inside")],
                 }),
                 U::new(UiKind::Table {
                     columns: vec![
-                        TableColumn::new("Nota"),
-                        TableColumn::aligned("Parole", Align::End),
+                        TableColumn::new("Note"),
+                        TableColumn::aligned("Words", Align::End),
                     ],
                     rows: vec![U::keyed(
                         "a.md",
                         UiKind::Row {
-                            cells: vec![U::text("Nota"), U::text("42")],
-                            action: azione(),
+                            cells: vec![U::text("Note"), U::text("42")],
+                            action: action(),
                         },
                     )],
                 }),
                 U::new(UiKind::Tree {
                     roots: vec![U::new(UiKind::TreeItem {
-                        label: "cartella".into(),
+                        label: "folder".into(),
                         expanded: true,
                         action: None,
                         selected: false,
                         children: vec![U::new(UiKind::TreeItem {
-                            label: "nota".into(),
+                            label: "note".into(),
                             expanded: false,
-                            action: azione(),
+                            action: action(),
                             selected: true,
                             children: vec![],
                         })],
@@ -1678,56 +1678,56 @@ mod tests {
                     active: 1,
                     tabs: vec![
                         U::new(UiKind::Tab {
-                            label: "Uno".into(),
+                            label: "One".into(),
                             action: None,
-                            children: vec![U::text("primo")],
+                            children: vec![U::text("first")],
                         }),
                         U::new(UiKind::Tab {
-                            label: "Due".into(),
+                            label: "Two".into(),
                             action: Some(ActionRef::new("tab:2")),
-                            children: vec![U::text("secondo")],
+                            children: vec![U::text("second")],
                         }),
                     ],
                 }),
-                U::badge("bozza", Intent::Neutral),
+                U::badge("draft", Intent::Neutral),
                 U::new(UiKind::Icon {
-                    name: "cerca".into(),
+                    name: "search".into(),
                 }),
                 U::new(UiKind::Progress {
                     value: Some(0.25),
-                    label: Some("indicizzo".into()),
+                    label: Some("index".into()),
                 }),
                 U::separator(),
                 U::new(UiKind::EmptyState {
-                    title: "Niente qui".into(),
-                    detail: Some("Crea la prima nota".into()),
-                    action: azione(),
+                    title: "Nothing here".into(),
+                    detail: Some("Create the first note".into()),
+                    action: action(),
                 }),
                 U::new(UiKind::KeyValue {
                     entries: vec![KeyValueEntry {
-                        label: "Parole".into(),
+                        label: "Words".into(),
                         value: "42".into(),
                     }],
                 }),
                 U::new(UiKind::Form {
                     children: vec![
                         U::new(UiKind::TextInput {
-                            field: "titolo".into(),
-                            label: Some("Titolo".into()),
-                            value: "Nuova".into(),
-                            placeholder: Some("senza titolo".into()),
+                            field: "title".into(),
+                            label: Some("Title".into()),
+                            value: "New".into(),
+                            placeholder: Some("untitled".into()),
                             action: None,
                         }),
                         U::new(UiKind::TextArea {
-                            field: "corpo".into(),
+                            field: "body".into(),
                             label: None,
-                            value: "testo".into(),
+                            value: "text".into(),
                             rows: 4,
-                            action: azione(),
+                            action: action(),
                         }),
                         U::new(UiKind::Number {
-                            field: "peso".into(),
-                            label: Some("Peso".into()),
+                            field: "weight".into(),
+                            label: Some("Weight".into()),
                             value: Some(1.5),
                             min: Some(0.0),
                             max: Some(10.0),
@@ -1735,32 +1735,32 @@ mod tests {
                             action: None,
                         }),
                         U::new(UiKind::Checkbox {
-                            field: "fissata".into(),
-                            label: "In cima".into(),
+                            field: "pinned".into(),
+                            label: "Pinned".into(),
                             value: true,
                             action: None,
                         }),
                         U::new(UiKind::Select {
-                            field: "cartella".into(),
-                            label: Some("Cartella".into()),
-                            value: vec!["diario".into()],
+                            field: "folder".into(),
+                            label: Some("Folder".into()),
+                            value: vec!["journal".into()],
                             options: vec![
-                                UiOption::new("diario", "Diario"),
-                                UiOption::new("note", "Note"),
+                                UiOption::new("journal", "Journal"),
+                                UiOption::new("notes", "Notes"),
                             ],
                             multiple: false,
                             action: None,
                         }),
                         U::new(UiKind::Radio {
-                            field: "ordine".into(),
+                            field: "order".into(),
                             label: None,
-                            value: Some("data".into()),
-                            options: vec![UiOption::new("data", "Per data")],
+                            value: Some("date".into()),
+                            options: vec![UiOption::new("date", "by date")],
                             action: None,
                         }),
                         U::new(UiKind::Slider {
-                            field: "soglia".into(),
-                            label: Some("Soglia".into()),
+                            field: "threshold".into(),
+                            label: Some("Threshold".into()),
                             value: 0.5,
                             min: 0.0,
                             max: 1.0,
@@ -1768,39 +1768,39 @@ mod tests {
                             action: None,
                         }),
                         U::new(UiKind::DatePicker {
-                            field: "quando".into(),
+                            field: "when".into(),
                             label: None,
                             value: Some("2026-07-26".into()),
                             action: None,
                         }),
                     ],
-                    submit_label: "Salva".into(),
-                    submit: ActionRef::with("salva", serde_json::json!({"doc": "a.md"})),
+                    submit_label: "Save".into(),
+                    submit: ActionRef::with("save", serde_json::json!({"doc": "a.md"})),
                 }),
                 U::new(UiKind::Custom {
                     ns: "fub.graph".into(),
-                    payload: serde_json::json!({"nodi": 3}),
-                    fallback: vec![U::text("il grafo, a parole")],
+                    payload: serde_json::json!({"nodes": 3}),
+                    fallback: vec![U::text("the graph, in words")],
                 }),
-                U::pending(Some("carico".into())),
-                U::failed("non ce l'ho fatta", Some(ActionRef::new("riprova"))),
-                U::text("coda"),
+                U::pending(Some("payload".into())),
+                U::failed("I did not make it", Some(ActionRef::new("retry"))),
+                U::text("queue"),
             ],
         )
     }
 
     #[test]
     fn document_tree_round_trip_is_the_identity() {
-        let body = corpo();
+        let body = body();
         let tree = DocumentTree::flatten(&body);
-        assert_eq!(tree.rebuild().expect("arena valida"), body);
+        assert_eq!(tree.rebuild().expect("valid arena"), body);
     }
 
     #[test]
     fn ui_tree_round_trip_is_the_identity() {
-        let root = albero_ui();
+        let root = ui_tree_fixture();
         let tree = UiTree::flatten(&root);
-        assert_eq!(tree.rebuild().expect("arena valida"), root);
+        assert_eq!(tree.rebuild().expect("valid arena"), root);
     }
 
     #[test]
@@ -1814,9 +1814,9 @@ mod tests {
     fn every_child_is_interned_before_its_parent() {
         // Post-order: un nodo non può riferire un indice più grande del proprio,
         // ed è ciò che rende impossibile costruire un ciclo appiattendo.
-        let tree = DocumentTree::flatten(&corpo());
-        for (i, block) in tree.blocks.iter().enumerate() {
-            let figli: Vec<BlockRef> = match block {
+        let tree = DocumentTree::flatten(&body());
+        for (the, block) in tree.blocks.iter().enumerate() {
+            let children: Vec<BlockRef> = match block {
                 Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => blocks.clone(),
                 Block::List { items, .. } => items
                     .iter()
@@ -1825,10 +1825,10 @@ mod tests {
                     .collect(),
                 _ => Vec::new(),
             };
-            for f in figli {
+            for f in children {
                 assert!(
-                    f.at() < i,
-                    "il blocco {i} riferisce {f:?}, che non è ancora stato interned"
+                    f.at() < the,
+                    "block {the} references {f:?}, which has not been interned yet"
                 );
             }
         }
@@ -1836,7 +1836,7 @@ mod tests {
 
     #[test]
     fn an_index_out_of_range_is_an_error_not_a_panic() {
-        let mut tree = DocumentTree::flatten(&corpo());
+        let mut tree = DocumentTree::flatten(&body());
         tree.roots.push(BlockRef(9_999));
         assert!(matches!(
             tree.rebuild(),
@@ -1844,7 +1844,7 @@ mod tests {
         ));
 
         // Anche dentro un nodo, non solo fra le radici.
-        let mut tree = DocumentTree::flatten(&corpo());
+        let mut tree = DocumentTree::flatten(&body());
         tree.blocks.push(Block::Quote {
             blocks: vec![BlockRef(7_777)],
             anchor: None,
@@ -1858,7 +1858,7 @@ mod tests {
         ));
 
         // E negli inline, che hanno un'arena loro.
-        let mut tree = DocumentTree::flatten(&corpo());
+        let mut tree = DocumentTree::flatten(&body());
         tree.blocks.push(Block::Paragraph {
             inlines: vec![InlineRef(4_242)],
             anchor: None,
@@ -1975,7 +1975,7 @@ mod tests {
             inlines: Vec::new(),
             roots: vec![BlockRef(1)],
         };
-        let rebuilt = tree.rebuild().expect("un DAG è ricostruibile");
+        let rebuilt = tree.rebuild().expect("a DAG is reconstructible");
         assert_eq!(
             rebuilt,
             vec![B::Quote {
@@ -2008,8 +2008,8 @@ mod tests {
             end: u64::MAX,
         };
         match model::Span::try_from(enorme) {
-            Ok(s) => assert_eq!(s.end, usize::MAX, "su 64 bit u64::MAX entra in usize"),
-            Err(e) => assert_eq!(e, ArenaError::SpanTooWide { value: u64::MAX }),
+            Ok(s) => assert_eq!(s.end, usize::MAX, "on 64-bit u64::MAX fits in usize"),
+            Err(and) => assert_eq!(and, ArenaError::SpanTooWide { value: u64::MAX }),
         }
     }
 
@@ -2017,7 +2017,7 @@ mod tests {
     fn spans_survive_the_whole_round_trip() {
         // Non basta che gli span convertano: devono restare attaccati al nodo
         // giusto dopo l'appiattimento, che riordina tutto.
-        let body = corpo();
+        let body = body();
         let tree = DocumentTree::flatten(&body);
         let rebuilt = tree.rebuild().unwrap();
         let spans = |bs: &[B]| -> Vec<(usize, usize)> {
@@ -2030,37 +2030,37 @@ mod tests {
     /// suo marcatore, l'ancora di un blocco, le celle di una tabella.
     #[test]
     fn tasks_anchors_and_tables_survive_the_boundary() {
-        let tree = DocumentTree::flatten(&corpo());
+        let tree = DocumentTree::flatten(&body());
         let rebuilt = tree.rebuild().unwrap();
 
         let B::List { items, .. } = &rebuilt[2] else {
-            panic!("la terza radice è una lista");
+            panic!("the third root is a list");
         };
         assert_eq!(
             items
                 .iter()
-                .map(|i| i.task.map(|t| t.checked()))
+                .map(|the| the.task.map(|t| t.checked()))
                 .collect::<Vec<_>>(),
             vec![Some(true), Some(false), None]
         );
         assert_eq!(items[1].task.unwrap().span, S::new(116, 119));
 
-        assert_eq!(rebuilt[0].anchor(), Some("titolo-con-enfasi"));
-        assert_eq!(rebuilt[1].anchor(), Some("blocco-1"));
+        assert_eq!(rebuilt[0].anchor(), Some("title-with-emphasis"));
+        assert_eq!(rebuilt[1].anchor(), Some("block-1"));
         assert_eq!(rebuilt[3].anchor(), None);
 
         let B::Table {
             head, rows, align, ..
         } = &rebuilt[4]
         else {
-            panic!("la quinta radice è una tabella");
+            panic!("the fifth root is a table");
         };
         assert_eq!(head.as_ref().unwrap().cells.len(), 2);
         assert_eq!(align, &vec![ColumnAlign::Left, ColumnAlign::None]);
         assert_eq!(
             rows[0].cells[0].inlines,
             vec![I::Link {
-                target: LinkTarget::wiki("Nota"),
+                target: LinkTarget::wiki("Note"),
                 label: None,
                 embed: false,
                 span: S::new(171, 179),

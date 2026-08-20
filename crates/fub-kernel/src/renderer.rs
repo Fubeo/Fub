@@ -55,12 +55,12 @@ impl std::fmt::Display for RendererConflict {
             RendererConflict::UnnamespacedId(id) => {
                 write!(
                     f,
-                    "il renderer `{id}` non ha un namespace (serve `ns:nome`)"
+                    "renderer `{id}` has no namespace (requires `ns:name`)"
                 )
             }
-            RendererConflict::DuplicateId(id) => write!(f, "il renderer `{id}` è già registrato"),
+            RendererConflict::DuplicateId(id) => write!(f, "renderer `{id}` is already registered"),
             RendererConflict::NoKinds(id) => {
-                write!(f, "il renderer `{id}` non rivendica nessun custom_kind")
+                write!(f, "renderer `{id}` claims no custom_kind")
             }
             RendererConflict::Claimed {
                 kind,
@@ -68,7 +68,7 @@ impl std::fmt::Display for RendererConflict {
                 challenger,
             } => write!(
                 f,
-                "`{challenger}` rivendica `{kind}`, che è già di `{incumbent}`"
+                "`{challenger}` claims `{kind}`, which already belongs to `{incumbent}`"
             ),
         }
     }

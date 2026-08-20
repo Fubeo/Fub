@@ -17,7 +17,7 @@
 import type { CommandSpec, Organization } from "../host/contract";
 import { api } from "../host/ipc";
 import { errorText } from "../host/errors";
-import { CodaCoalescente } from "../ui/corsa";
+import { CoalescingQueue } from "../ui/race";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
 
@@ -41,7 +41,7 @@ export interface Signals {
   /// cartelle aperte) è cambiata: la sidebar si ridisegna.
   organization: [];
   /// La disposizione dei riquadri è cambiata: qualcuno ha diviso, chiuso,
-  /// aperto una tab, spostato il fuoco. **Senza payload**, come `documents`:
+  /// aperto una linguetta, spostato il fuoco. **Senza payload**, come `documents`:
   /// dice quando, e la parte che serve la legge chi disegna da `state/layout.ts`
   /// — che è la verità, non una copia che passa di qui.
   layout: [];
@@ -64,8 +64,8 @@ export function on<K extends keyof Signals>(
   signal: K,
   listener: (...args: Signals[K]) => void,
 ): void {
-  const lista = listeners.get(signal);
-  if (lista) lista.push(listener as Listener);
+  const list = listeners.get(signal);
+  if (list) list.push(listener as Listener);
   else listeners.set(signal, [listener as Listener]);
 }
 
@@ -94,7 +94,7 @@ export interface ShellState {
   /// Il documento attivo nel riquadro **col fuoco**, se c'è.
   ///
   /// È uno specchio, non la verità: la verità è `state/layout.ts`, dove ogni
-  /// riquadro ha le sue tab. Resta qui perché chi lo legge — l'esploratore che
+  /// riquadro ha le sue linguetta. Resta qui perché chi lo legge — l'esploratore che
   /// evidenzia la riga, il grafo che centra il nodo — chiede *cosa sta
   /// guardando l'utente*, che è una domanda sola anche con N riquadri; e
   /// tenerla qui evita a cinque punti di disegno di sapere cos'è un riquadro.
@@ -121,7 +121,7 @@ export interface ShellState {
   commandSpecs: CommandSpec[];
 }
 
-export function metaVuota(): Organization {
+export function emptyMeta(): Organization {
   return { icons: {}, pinned: [], order: {}, spaces: [] };
 }
 
@@ -129,7 +129,7 @@ export const state: ShellState = {
   vaultRoot: "",
   currentDoc: null,
   handledExtensions: ["md"],
-  meta: metaVuota(),
+  meta: emptyMeta(),
   activeSpace: null,
   expanded: new Set(),
   commandSpecs: [],
@@ -152,11 +152,11 @@ export const state: ShellState = {
 // stringa che la shell ha in mano, il root canonico lo conosce il backend.
 //
 // La **modalità** stava qui, e adesso non più: da quando i riquadri sono N è di
-// ciascuno, e vive dentro il layout (`state/layout.ts`) insieme alle tab. La
+// ciascuno, e vive dentro il layout (`state/layout.ts`) insieme alle linguetta. La
 // chiave vecchia si legge ancora una volta, di là, per non far ripartire in Live
 // Preview chi stava leggendo — è l'unica traccia che questa migrazione lascia.
 //
-// Le chiavi sono raccolte qui perché una chiave di persistenza scritta in due
+// Le chiavi sono raccolte qui perché una chiave di persistenza scritto in due
 // punti diverge al primo refuso. Quella del layout fa eccezione e sta col
 // layout, che è l'unico a scriverla: il criterio è *chi la possiede*, non *dove
 // sta la funzione che legge*.
@@ -165,24 +165,24 @@ const EXPANDED_KEY = "expanded";
 const ACTIVE_SPACE_KEY = "activeSpace";
 
 export async function loadExpanded(): Promise<void> {
-  const salvate = await leggiStato<string[]>(EXPANDED_KEY);
-  state.expanded = new Set(Array.isArray(salvate) ? salvate : []);
+  const saved = await readState<string[]>(EXPANDED_KEY);
+  state.expanded = new Set(Array.isArray(saved) ? saved : []);
 }
 
 export function saveExpanded(): void {
   // Nessuna cartella aperta si **dimentica** invece di scrivere una lista vuota:
   // è ciò che significa, e il file non si porta dietro una riga per ogni vault
   // che qualcuno ha aperto e richiuso.
-  scriviStato(EXPANDED_KEY, state.expanded.size > 0 ? [...state.expanded] : null);
+  writeState(EXPANDED_KEY, state.expanded.size > 0 ? [...state.expanded] : null);
 }
 
 export async function loadActiveSpace(): Promise<void> {
-  const salvato = await leggiStato<string>(ACTIVE_SPACE_KEY);
-  state.activeSpace = typeof salvato === "string" ? salvato : null;
+  const saved = await readState<string>(ACTIVE_SPACE_KEY);
+  state.activeSpace = typeof saved === "string" ? saved : null;
 }
 
 export function saveActiveSpace(): void {
-  scriviStato(ACTIVE_SPACE_KEY, state.activeSpace);
+  writeState(ACTIVE_SPACE_KEY, state.activeSpace);
 }
 
 /// Rileggere: **assente non è un errore**, ed è il caso normale del primo avvio.
@@ -190,7 +190,7 @@ export function saveActiveSpace(): void {
 /// non si è potuto leggere — si riparte dal default, che è ciò che la shell
 /// mostrava prima che qualcuno guardasse qualcosa. Perdere lo scroll è meglio di
 /// una shell che non parte.
-export async function leggiStato<T>(key: string): Promise<T | null> {
+export async function readState<T>(key: string): Promise<T | null> {
   try {
     return await api.viewState<T>(key);
   } catch {
@@ -201,10 +201,10 @@ export async function leggiStato<T>(key: string): Promise<T | null> {
 /// Le scritture di stato passano da una coda che **coalesce per chiave**: due
 /// scritture della stessa chiave accavallate sono una scrittura sola, con
 /// l'ultimo valore, e due chiavi diverse non si mettono in coda a vicenda. La
-/// forma sta in `ui/corsa.ts`, accanto a `Coda` — non qui, perché chi domani
+/// forma sta in `ui/race.ts`, accanto a `Coda` — non qui, perché chi domani
 /// avrà bisogno di «deve arrivare, ma conta solo l'ultimo valore per quella
 /// chiave» la eredita dal posto che tutti attraversano.
-const codaDegliStati = new CodaCoalescente();
+const stateQueue = new CoalescingQueue();
 
 /// Ricordare, **senza aspettare**: chi apre una cartella nell'albero non deve
 /// fermarsi per una scrittura su disco.
@@ -220,8 +220,8 @@ const codaDegliStati = new CodaCoalescente();
 /// una riga con «×14» — che è esattamente ciò per cui `raccogli` esiste (§10.3).
 /// Il tono è `info`: non si è perso lavoro dell'utente, si è persa la memoria di
 /// come aveva lasciato i pannelli.
-export function scriviStato(key: string, value: unknown): void {
-  void codaDegliStati.accodaPerChiave(key, () =>
+export function writeState(key: string, value: unknown): void {
+  void stateQueue.enqueueByKey(key, () =>
     api.setViewState(key, value).catch(() => {
       notify(t("state.not_remembered"), "info");
     })

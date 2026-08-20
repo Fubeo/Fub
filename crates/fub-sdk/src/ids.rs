@@ -50,7 +50,7 @@ const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// [0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)
 /// in poi, è tutto il punto.
 pub fn uuid_v4(host: &dyn HostEnv) -> Result<String, PluginError> {
-    let mut b: [u8; 16] = esatti(host, 16)?;
+    let mut b: [u8; 16] = exact(host, 16)?;
     b[6] = (b[6] & 0x0F) | 0x40; // versione 4
     b[8] = (b[8] & 0x3F) | 0x80; // variante RFC 9562
     Ok(format_uuid(&b))
@@ -67,11 +67,11 @@ pub fn uuid_v4(host: &dyn HostEnv) -> Result<String, PluginError> {
 /// `Internal` perché a quel punto la colpa non è più né di chi chiama né del
 /// permesso: è di un'implementazione che ha detto `Ok` rendendo meno di quanto
 /// il contratto le impone.
-fn esatti<const N: usize>(host: &dyn HostEnv, n: u32) -> Result<[u8; N], PluginError> {
+fn exact<const N: usize>(host: &dyn HostEnv, n: u32) -> Result<[u8; N], PluginError> {
     let bytes = host.random_bytes(n)?;
     bytes.try_into().map_err(|v: Vec<u8>| {
         PluginError::Internal(
-            format!("chiesti {n} byte di caso, l'host ne ha resi {}", v.len()).into(),
+            format!("asked for {n} random bytes, the host provided {}", v.len()).into(),
         )
     })
 }
@@ -88,7 +88,7 @@ fn esatti<const N: usize>(host: &dyn HostEnv, n: u32) -> Result<[u8; N], PluginE
 /// famiglia, chiamate insieme.
 pub fn uuid_v7(host: &dyn HostEnv) -> Result<String, PluginError> {
     let ms = host.now_unix_millis();
-    let rand: [u8; 10] = esatti(host, 10)?;
+    let rand: [u8; 10] = exact(host, 10)?;
     let mut b = [0u8; 16];
     // 48 bit di millisecondi, big-endian: è l'ordine che rende il confronto
     // lessicografico uguale al confronto temporale.
@@ -118,7 +118,7 @@ pub fn uuid_v7(host: &dyn HostEnv) -> Result<String, PluginError> {
 /// correggerebbe in modi opposti.
 pub fn short_id(host: &dyn HostEnv, len: usize) -> Result<String, PluginError> {
     let len32 = u32::try_from(len).map_err(|_| {
-        PluginError::BadArgs(format!("un id corto di {len} caratteri non è un id").into())
+        PluginError::BadArgs(format!("a short id of {len} characters is not valid").into())
     })?;
     let bytes = host.random_bytes(len32)?;
     Ok(bytes
@@ -131,9 +131,9 @@ pub fn short_id(host: &dyn HostEnv, len: usize) -> Result<String, PluginError> {
 fn format_uuid(b: &[u8; 16]) -> String {
     use std::fmt::Write;
     let mut s = String::with_capacity(36);
-    for (i, byte) in b.iter().enumerate() {
-        write!(s, "{byte:02x}").expect("scrivere in una String non fallisce");
-        if matches!(i, 3 | 5 | 7 | 9) {
+    for (the, byte) in b.iter().enumerate() {
+        write!(s, "{byte:02x}").expect("writing to a String never fails");
+        if matches!(the, 3 | 5 | 7 | 9) {
             s.push('-');
         }
     }
@@ -158,22 +158,22 @@ mod tests {
     fn a_v4_has_the_shape_the_rfc_asks_for() {
         let id = uuid_v4(&MemoryHost::new()).unwrap();
         assert_eq!(id.len(), 36);
-        let parti: Vec<&str> = id.split('-').collect();
+        let parts: Vec<&str> = id.split('-').collect();
         assert_eq!(
-            parti.iter().map(|p| p.len()).collect::<Vec<_>>(),
+            parts.iter().map(|p| p.len()).collect::<Vec<_>>(),
             vec![8, 4, 4, 4, 12]
         );
-        assert_eq!(&parti[2][..1], "4", "il nibble di versione");
+        assert_eq!(&parts[2][..1], "4", "the version nibble");
         assert!(
-            ['8', '9', 'a', 'b'].contains(&parti[3].chars().next().unwrap()),
-            "il nibble di variante: {id}"
+            ['8', '9', 'a', 'b'].contains(&parts[3].chars().next().unwrap()),
+            "the variant nibble: {id}"
         );
     }
 
     #[test]
     fn a_v7_carries_its_own_timestamp() {
-        let banco = MemoryHost::new();
-        let id = uuid_v7(&banco).unwrap();
+        let bench = MemoryHost::new();
+        let id = uuid_v7(&bench).unwrap();
         let ms = u64::from_str_radix(&id.replace('-', "")[..12], 16).unwrap();
         assert_eq!(ms, 1_700_000_000_000);
         assert_eq!(&id.split('-').nth(2).unwrap()[..1], "7");
@@ -183,22 +183,22 @@ mod tests {
     /// ordine, anche come stringhe.
     #[test]
     fn v7_sorts_the_way_time_does() {
-        let banco = MemoryHost::new();
-        let primo = uuid_v7(&banco).unwrap();
-        banco.avanza(1);
-        let secondo = uuid_v7(&banco).unwrap();
-        assert!(primo < secondo, "{primo} non precede {secondo}");
+        let bench = MemoryHost::new();
+        let first = uuid_v7(&bench).unwrap();
+        bench.advance(1);
+        let second = uuid_v7(&bench).unwrap();
+        assert!(first < second, "{first} does not precede {second}");
     }
 
     #[test]
     fn short_ids_stay_in_the_readable_alphabet() {
-        let banco = MemoryHost::new();
+        let bench = MemoryHost::new();
         for _ in 0..200 {
-            let id = short_id(&banco, 6).unwrap();
+            let id = short_id(&bench, 6).unwrap();
             assert_eq!(id.len(), 6);
             assert!(
                 id.bytes().all(|b| ALPHABET.contains(&b)),
-                "fuori alfabeto: {id}"
+                "out of alphabet: {id}"
             );
             assert!(!id.contains('I') && !id.contains('L') && !id.contains('O'));
         }
@@ -206,9 +206,9 @@ mod tests {
 
     #[test]
     fn a_thousand_ids_do_not_collide() {
-        let banco = MemoryHost::new();
-        let visti: HashSet<String> = (0..1000).map(|_| uuid_v4(&banco).unwrap()).collect();
-        assert_eq!(visti.len(), 1000);
+        let bench = MemoryHost::new();
+        let seen: HashSet<String> = (0..1000).map(|_| uuid_v4(&bench).unwrap()).collect();
+        assert_eq!(seen.len(), 1000);
     }
 
     /// Un host che nega l'entropia non produce un id di zeri: non produce un id.
@@ -218,12 +218,12 @@ mod tests {
     /// chi disegna deve poter mostrare a chi guarda.
     #[test]
     fn a_denied_capability_gives_no_id_instead_of_a_colliding_one() {
-        let muto = MemoryHost::new().senza_entropia();
-        for esito in [uuid_v4(&muto), uuid_v7(&muto), short_id(&muto, 6)] {
-            let err = esito.expect_err("senza entropia non nasce un'identità");
+        let muted = MemoryHost::new().without_entropy();
+        for result in [uuid_v4(&muted), uuid_v7(&muted), short_id(&muted, 6)] {
+            let err = result.expect_err("without entropy no identity is born");
             assert!(
                 matches!(err, PluginError::PermissionDenied(_)),
-                "il permesso negato deve dirsi permesso negato: {err}"
+                "a denied permission must say permission denied: {err}"
             );
         }
     }
@@ -233,22 +233,22 @@ mod tests {
     /// poteva sapere se chiedere meno sarebbe servito a qualcosa.
     #[test]
     fn asking_too_much_is_not_the_same_as_being_denied() {
-        let banco = MemoryHost::new();
-        let troppo = short_id(&banco, fub_abi::MAX_RANDOM_BYTES as usize + 1)
-            .expect_err("sopra il tetto non si tronca");
-        assert!(matches!(troppo, PluginError::BadArgs(_)), "{troppo}");
+        let bench = MemoryHost::new();
+        let too_much = short_id(&bench, fub_abi::MAX_RANDOM_BYTES as usize + 1)
+            .expect_err("above the cap it does not truncate");
+        assert!(matches!(too_much, PluginError::BadArgs(_)), "{too_much}");
 
-        let muto = MemoryHost::new().senza_entropia();
-        let negato = short_id(&muto, 6).expect_err("senza entropia non nasce un'identità");
+        let muted = MemoryHost::new().without_entropy();
+        let denied = short_id(&muted, 6).expect_err("without entropy no identity is born");
         assert!(
-            matches!(negato, PluginError::PermissionDenied(_)),
-            "{negato}"
+            matches!(denied, PluginError::PermissionDenied(_)),
+            "{denied}"
         );
 
         // Sotto il tetto e con la capacità, la richiesta grande riesce: il tetto
         // rifiuta ciò che è assurdo, non ciò che è grande.
         assert_eq!(
-            short_id(&banco, fub_abi::MAX_RANDOM_BYTES as usize)
+            short_id(&bench, fub_abi::MAX_RANDOM_BYTES as usize)
                 .unwrap()
                 .chars()
                 .count(),

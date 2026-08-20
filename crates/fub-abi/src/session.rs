@@ -214,11 +214,11 @@ impl AnchoredSelections {
     /// cui il multi-cursore esiste — e ordina perché chi ne fa degli edit deve
     /// poterli applicare senza spostarsi i propri offset sotto i piedi.
     pub fn all(&self) -> Vec<&AnchoredSelection> {
-        let mut tutte: Vec<&AnchoredSelection> = std::iter::once(&self.primary)
+        let mut all: Vec<&AnchoredSelection> = std::iter::once(&self.primary)
             .chain(&self.secondary)
             .collect();
-        tutte.sort_by_key(|s| (s.span.start, s.span.end));
-        tutte
+        all.sort_by_key(|s| (s.span.start, s.span.end));
+        all
     }
 
     /// Quante sono, primaria compresa. Mai zero.
@@ -540,47 +540,47 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<ViewContext>(&json).unwrap(),
             full,
-            "il contesto attraversa l'IPC: un tipo che non fa il giro del JSON \
-             non è un tipo del contratto"
+            "the context crosses the IPC boundary: a type that does not round-trip \
+             through JSON is not a contract type"
         );
         // Le due forme in cui la selezione è "non posizionabile" e "assente"
         // devono restare distinte anche in JSON.
-        let sporca = ctx().with_selections(Some(SelectionSet::floating("ciao")));
+        let dirty = ctx().with_selections(Some(SelectionSet::floating("ciao")));
         let round: ViewContext =
-            serde_json::from_str(&serde_json::to_string(&sporca).unwrap()).unwrap();
-        assert_eq!(round, sporca);
-        assert_ne!(round, ctx().with_selections(None));
+            serde_json::from_str(&serde_json::to_string(&dirty).unwrap()).unwrap();
+        assert_eq!(round, dirty);
+        assert_eq!(round, ctx().with_selections(None));
     }
 
     #[test]
     fn what_changed_is_computed_field_by_field() {
-        let prima = ctx();
+        let before = ctx();
         assert!(
-            prima.changes(&prima).is_empty(),
-            "un contesto identico non invecchia nessuna view"
+            before.changes(&before).is_empty(),
+            "an identical context ages no view"
         );
 
-        let dopo = prima.clone().with_doc(Some(DocId::new("Altra.md")));
-        assert_eq!(prima.changes(&dopo), ContextMask::document());
+        let after = before.clone().with_doc(Some(DocId::new("Altra.md")));
+        assert_eq!(before.changes(&after), ContextMask::document());
 
-        let dopo = prima.clone().with_selections(Some(SelectionSet::caret(10)));
+        let after = before.clone().with_selections(Some(SelectionSet::caret(10)));
         assert_eq!(
-            prima.changes(&dopo),
+            before.changes(&after),
             ContextMask(vec![ContextKind::Selection])
         );
 
         // Lo span che sparisce (il buffer è diventato sporco) È un cambio di
         // selezione: chi la segue deve sapere che non è più posizionabile.
-        let sporca = dopo
+        let dirty = after
             .clone()
             .with_selections(Some(SelectionSet::floating("")));
         assert_eq!(
-            dopo.changes(&sporca),
+            after.changes(&dirty),
             ContextMask(vec![ContextKind::Selection])
         );
 
-        let dopo = prima.clone().with_mode(PaneMode::Reading);
-        assert_eq!(prima.changes(&dopo), ContextMask(vec![ContextKind::Mode]));
+        let after = before.clone().with_mode(PaneMode::Reading);
+        assert_eq!(before.changes(&after), ContextMask(vec![ContextKind::Mode]));
     }
 
     #[test]
@@ -590,19 +590,19 @@ mod tests {
         assert_eq!(
             a.changes(&b),
             ContextMask::all(),
-            "il focus è su un altro pannello: anche i campi uguali valgono \
-             un'altra cosa"
+            "focus is on another pane: even equal fields mean something \
+             different"
         );
     }
 
     #[test]
     fn a_mask_intersects_only_what_it_declares() {
-        let segue = ContextMask::document();
-        assert!(segue.intersects(&ContextMask(vec![ContextKind::Document])));
-        assert!(!segue.intersects(&ContextMask(vec![ContextKind::Selection])));
+        let follows = ContextMask::document();
+        assert!(follows.intersects(&ContextMask(vec![ContextKind::Document])));
+        assert!(!follows.intersects(&ContextMask(vec![ContextKind::Selection])));
         assert!(
             !ContextMask::default().intersects(&ContextMask::all()),
-            "chi non dichiara nulla non si ridisegna mai per il contesto"
+            "one who declares nothing never redraws for context"
         );
     }
 

@@ -153,19 +153,19 @@ mod tests {
     #[test]
     fn every_choice_in_the_menu_is_an_order_the_parser_knows() {
         let SettingKind::Choice { options, default } = &properties_settings()[0].kind else {
-            panic!("il formato delle date è una scelta");
+            panic!("the date format is a choice");
         };
         assert_eq!(default, ONLY_ISO);
-        let dichiarabili: Vec<&str> = options
+        let decl: Vec<&str> = options
             .iter()
-            .map(|o| o.value.as_str())
+            .map(|or| or.value.as_str())
             .filter(|v| *v != ONLY_ISO)
             .collect();
-        assert_eq!(dichiarabili.len(), DateOrder::ALL.len());
-        for v in dichiarabili {
+        assert_eq!(decl.len(), DateOrder::ALL.len());
+        for v in decl {
             assert!(
                 DateOrder::from_key(v).is_some(),
-                "«{v}» è nella tendina e il parser non lo sa leggere"
+                "«{v}» is in the menu and the parser does not know how to read it"
             );
         }
     }
@@ -177,7 +177,7 @@ mod tests {
     fn the_format_travels_with_the_vault_and_no_program_writes_it() {
         for spec in properties_settings() {
             assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
-            assert!(!spec.program_writable, "{} è scrivibile", spec.key);
+            assert!(!spec.program_writable, "{} is writable", spec.key);
         }
     }
 }

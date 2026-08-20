@@ -5,8 +5,8 @@
 // la logica dell'alberatura (cosa è una cartella, cosa è una folder note, che
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
-import { cartelleDelVault, contenutoDiCartella, documentiEsistenti } from "../host/query";
-import { Corsa } from "../ui/corsa";
+import { vaultFolders, folderContent, existingDocuments } from "../host/query";
+import { Race } from "../ui/race";
 import type { VaultFolder } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import {
@@ -19,7 +19,7 @@ import {
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
 import { createNote, refreshDocuments } from "../state/vault";
 import {
-  FINESTRA_DEL_LIVELLO,
+  LEVEL_PAGE,
   childName,
   folderNoteCandidates,
   folderNoteIn,
@@ -31,19 +31,19 @@ import {
   type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
-import { attivabile } from "../ui/a11y";
+import { activatable } from "../ui/a11y";
 import { pickIcon, showContextMenu } from "../ui/menu";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import {
   flushPendingSave,
   focusEditor,
   openDocument,
-  rinominaTenendoFermoIlBuffer,
+  renameKeepingBuffer,
 } from "./document";
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
 import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
-import { onLingua, t, type Chiave } from "../i18n/strings";
+import { onLanguage, t, type Key } from "../i18n/strings";
 import { notify } from "../ui/notify";
 
 const fileListEl = $("#file-list");
@@ -63,32 +63,32 @@ let drag: { path: string; kind: "note" | "folder"; parent: string } | null = nul
 /// quelle aperte. Prima qui c'era l'elenco di tutte le note del vault e
 /// l'albero se lo costruiva la shell; adesso un vault da diecimila note ne
 /// trasferisce quante ne sono a schermo.
-interface Vista {
+interface View {
   /// Il contenuto di ogni cartella visibile, non ordinato: l'ordine dipende
   /// dall'organizzazione, che cambia senza che il kernel c'entri.
-  cartelle: Map<string, FolderContent>;
+  folders: Map<string, FolderContent>;
   /// I documenti «attesi» che esistono davvero: le folder note possibili delle
   /// cartelle disegnate, e le note appuntate. Una domanda sola per entrambe —
   /// sono la stessa domanda, «quali di questi path ci sono».
-  esistenti: Set<string>;
+  existing: Set<string>;
 }
 
-let vista: Vista = { cartelle: new Map(), esistenti: new Set() };
+let view: View = { folders: new Map(), existing: new Set() };
 /// L'impronta dell'ultima vista disegnata: gli eventi del kernel arrivano a
 /// ogni salvataggio con una risposta quasi sempre identica, e ricostruire
 /// l'albero distrugge gli `<li>` sotto il mouse.
-let ultimaFirma = "";
+let lastSignature = "";
 
 export function mountExplorer(): void {
   $("#new-note").addEventListener("click", () => void newNote());
   spaceTitleEl.addEventListener("click", openSpaceNote);
-  frecceNellAlbero();
+  treeArrows();
   wireRootDropTarget();
   // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
   // a casa dice «Note», dentro uno spazio dice il nome dello spazio. Un
   // `data-i18n` sopra glielo riscriverebbe a «Note» a ogni cambio di lingua,
   // cioè proprio quando l'utente non ha cambiato spazio.
-  onLingua(renderSpaceTitle);
+  onLanguage(renderSpaceTitle);
   renderSpaceTitle();
 
   // Una lista chiesta esplicitamente (apertura del vault, creazione, rinomina,
@@ -152,22 +152,22 @@ export function mountExplorer(): void {
 /// hanno quasi sempre firme *diverse* (una sottocartella aperta nel frattempo,
 /// una nota salvata), quindi il vecchio passava il controllo e vinceva perché
 /// arrivava dopo. Un dedup non è mai un ordinamento (decisione 0134).
-const corsa = new Corsa();
+const race = new Race();
 
-async function refreshFromKernel(forza = false): Promise<void> {
-  await corsa.ultimo(async (atteso) => {
-    const cartelle = await atteso(caricaVisibili());
-    const attesi = [
-      ...[...cartelle.values()].flatMap((c) =>
+async function refreshFromKernel(force = false): Promise<void> {
+  await race.last(async (expected) => {
+    const folders = await expected(loadVisible());
+    const expectedItems = [
+      ...[...folders.values()].flatMap((c) =>
         c.folders.flatMap((f) => folderNoteCandidates(f.path, state.handledExtensions)),
       ),
       ...state.meta.pinned,
     ];
-    const nuova: Vista = { cartelle, esistenti: await atteso(documentiEsistenti(attesi)) };
-    const firma = impronta(nuova);
-    if (!forza && firma === ultimaFirma) return;
-    ultimaFirma = firma;
-    vista = nuova;
+    const newItem: View = { folders, existing: await expected(existingDocuments(expectedItems)) };
+    const signature = signatureOf(newItem);
+    if (!force && signature === lastSignature) return;
+    lastSignature = signature;
+    view = newItem;
     renderFileList();
   });
 }
@@ -178,39 +178,39 @@ async function refreshFromKernel(forza = false): Promise<void> {
 /// Un livello per volta, e le cartelle di un livello insieme: sono domande
 /// indipendenti, e farle in fila vorrebbe dire pagare la latenza dell'IPC una
 /// volta per cartella aperta.
-async function caricaVisibili(): Promise<Map<string, FolderContent>> {
+async function loadVisible(): Promise<Map<string, FolderContent>> {
   const out = new Map<string, FolderContent>();
-  let livello = [state.activeSpace ?? ""];
-  while (livello.length > 0) {
-    const contenuti = await Promise.all(
-      livello.map((path) => contenutoDiCartella(path, FINESTRA_DEL_LIVELLO)),
+  let level = [state.activeSpace ?? ""];
+  while (level.length > 0) {
+    const contents = await Promise.all(
+      level.map((path) => folderContent(path, LEVEL_PAGE)),
     );
-    const prossimo: string[] = [];
-    contenuti.forEach((contenuto, i) => {
-      const path = livello[i]!;
-      out.set(path, { path, ...contenuto });
-      for (const sub of contenuto.folders) {
-        if (state.expanded.has(sub.path)) prossimo.push(sub.path);
+    const next: string[] = [];
+    contents.forEach((content, i) => {
+      const path = level[i]!;
+      out.set(path, { path, ...content });
+      for (const sub of content.folders) {
+        if (state.expanded.has(sub.path)) next.push(sub.path);
       }
     });
-    livello = prossimo;
+    level = next;
   }
   return out;
 }
 
 /// Cosa il kernel ha risposto, in una stringa: due viste con la stessa impronta
 /// disegnano lo stesso albero.
-function impronta(v: Vista): string {
-  const cartelle = [...v.cartelle.entries()].map(
+function signatureOf(v: View): string {
+  const folders = [...v.folders.entries()].map(
     ([path, c]) =>
       `${path}[${c.folders.map((f) => `${f.path}:${f.folders}:${f.entries}`).join(",")}][${c.notes.join(",")}]`,
   );
-  return `${cartelle.join(";")}|${[...v.esistenti].sort().join(",")}`;
+  return `${folders.join(";")}|${[...v.existing].sort().join(",")}`;
 }
 
 /// Il contenuto di una cartella nell'ordine in cui si vede, se è caricata.
-function figli(path: string): FolderContent | null {
-  const content = vista.cartelle.get(path);
+function children(path: string): FolderContent | null {
+  const content = view.folders.get(path);
   return content ? sortContent(content, state.meta) : null;
 }
 
@@ -229,15 +229,15 @@ function renderFileList(): void {
   // tornerebbe in cima al documento a ogni freccia destra — cioè la
   // navigazione da tastiera si romperebbe proprio nel momento in cui la si sta
   // usando.
-  const attiva = document.activeElement;
-  const daRimettere =
-    attiva instanceof HTMLElement && fileListEl.contains(attiva) ? attiva.dataset.path : undefined;
+  const active = document.activeElement;
+  const toRestore =
+    active instanceof HTMLElement && fileListEl.contains(active) ? active.dataset.path : undefined;
 
   fileListEl.innerHTML = "";
   renderChildren(state.activeSpace ?? "", fileListEl);
 
-  roving(daRimettere);
-  if (daRimettere !== undefined) voce(daRimettere)?.focus();
+  roving(toRestore);
+  if (toRestore !== undefined) entry(toRestore)?.focus();
 }
 
 /// Le voci dell'albero, nell'ordine in cui si vedono.
@@ -247,12 +247,12 @@ function renderFileList(): void {
 /// schermo. Se un giorno l'albero disegnasse tutto e nascondesse col CSS,
 /// questa funzione diventerebbe il posto da cui filtrare — ed è il motivo per
 /// cui è una funzione e non una `querySelectorAll` ripetuta tre volte.
-function vociAlbero(): HTMLElement[] {
+function treeEntries(): HTMLElement[] {
   return Array.from(fileListEl.querySelectorAll<HTMLElement>('li[role="treeitem"]'));
 }
 
-function voce(path: string): HTMLElement | undefined {
-  return vociAlbero().find((v) => v.dataset.path === path);
+function entry(path: string): HTMLElement | undefined {
+  return treeEntries().find((v) => v.dataset.path === path);
 }
 
 /// Accende il `tabindex` di **una** voce sola: quella che il tab troverà
@@ -262,8 +262,8 @@ function voce(path: string): HTMLElement | undefined {
 /// nota aperta, poi la prima. Senza il secondo caso, entrare nell'albero
 /// riporterebbe sempre in cima anche quando si sta lavorando su una nota in
 /// fondo.
-function roving(preferita?: string): void {
-  const targetPath = preferita ?? state.currentDoc;
+function roving(preferred?: string): void {
+  const targetPath = preferred ?? state.currentDoc;
   let targetLi: HTMLElement | null = null;
   if (targetPath) {
     try {
@@ -306,64 +306,64 @@ function roving(preferita?: string): void {
 /// qui e non nel campo — chi mette un input dentro l'albero non deve saperlo —
 /// ed è la stessa che vale per ogni contenitore che ascolta la tastiera dei
 /// propri figli: **i tasti di un campo sono del campo**.
-function frecceNellAlbero(): void {
+function treeArrows(): void {
   fileListEl.addEventListener("keydown", (e) => {
     const target = e.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.closest("input, textarea, select, [contenteditable]")) return;
-    const corrente = target.closest<HTMLElement>('li[role="treeitem"]');
-    if (!corrente) return;
+    const current = target.closest<HTMLElement>('li[role="treeitem"]');
+    if (!current) return;
 
-    const voci = vociAlbero();
-    const i = voci.indexOf(corrente);
-    const espansa = corrente.getAttribute("aria-expanded");
-    const path = corrente.dataset.path;
+    const entries = treeEntries();
+    const i = entries.indexOf(current);
+    const expanded = current.getAttribute("aria-expanded");
+    const path = current.dataset.path;
 
-    const vai = (n: HTMLElement | undefined) => {
+    const move = (n: HTMLElement | undefined) => {
       if (!n) return;
-      for (const v of voci) v.tabIndex = v === n ? 0 : -1;
+      for (const v of entries) v.tabIndex = v === n ? 0 : -1;
       n.focus();
     };
 
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
-        vai(voci[i + 1]);
+        move(entries[i + 1]);
         return;
       case "ArrowUp":
         e.preventDefault();
-        vai(voci[i - 1]);
+        move(entries[i - 1]);
         return;
       case "Home":
         e.preventDefault();
-        vai(voci[0]);
+        move(entries[0]);
         return;
       case "End":
         e.preventDefault();
-        vai(voci[voci.length - 1]);
+        move(entries[entries.length - 1]);
         return;
       case "ArrowRight":
         e.preventDefault();
         // Chiusa: si apre. Aperta: si scende dentro. È la stessa freccia con
         // due significati, e sono l'uno la continuazione dell'altro.
-        if (espansa === "false" && path !== undefined) toggleFolder(path);
-        else if (espansa === "true") vai(voci[i + 1]);
+        if (expanded === "false" && path !== undefined) toggleFolder(path);
+        else if (expanded === "true") move(entries[i + 1]);
         return;
       case "ArrowLeft": {
         e.preventDefault();
-        if (espansa === "true" && path !== undefined) {
+        if (expanded === "true" && path !== undefined) {
           toggleFolder(path);
           return;
         }
         // Altrimenti si risale al genitore, che è il `treeitem` che contiene
         // questo — non il precedente nell'elenco, che sarebbe un fratello.
-        vai(corrente.parentElement?.closest<HTMLElement>('li[role="treeitem"]') ?? undefined);
+        move(current.parentElement?.closest<HTMLElement>('li[role="treeitem"]') ?? undefined);
         return;
       }
       case "Enter":
       case " ":
         e.preventDefault();
-        corrente.querySelector<HTMLElement>(":scope > .row")?.click();
+        current.querySelector<HTMLElement>(":scope > .row")?.click();
         return;
       default:
     }
@@ -378,24 +378,24 @@ function frecceNellAlbero(): void {
 /// non è ancora arrivato non disegna figli, e li disegnerà il ridisegno che
 /// segue il caricamento.
 function renderChildren(path: string, ul: HTMLElement): void {
-  const node = figli(path);
+  const node = children(path);
   if (!node) return;
   for (const sub of node.folders) {
     const li = document.createElement("li");
-    const riga = folderRow(sub);
-    li.appendChild(riga);
-    const aperta = state.expanded.has(sub.path);
+    const row = folderRow(sub);
+    li.appendChild(row);
+    const open = state.expanded.has(sub.path);
     // Il ruolo sta sul `<li>` e non sulla riga, perché il `<li>` è ciò che
     // contiene anche il sottoalbero: un `treeitem` che non contiene il proprio
     // gruppo è un albero che, letto, risulta piatto. Il **nome** viene invece
     // dalla riga, o sarebbe la cartella più tutte le note che ci stanno dentro.
-    voceAlbero(li, riga, sub.path);
+    treeEntry(li, row, sub.path);
     // `aria-expanded` solo su ciò che ha qualcosa da aprire: una cartella vuota
     // è una foglia, e annunciarla «compressa» prometterebbe un contenuto che
     // non c'è. Che una cartella possa essere vuota è nuovo (§14.3): prima una
     // cartella nasceva dal path di una nota, quindi ne aveva sempre almeno una.
-    if (!vuota(sub)) li.setAttribute("aria-expanded", String(aperta));
-    if (aperta) {
+    if (!empty(sub)) li.setAttribute("aria-expanded", String(open));
+    if (open) {
       const nested = document.createElement("ul");
       nested.className = "tree-children";
       nested.setAttribute("role", "group");
@@ -404,13 +404,13 @@ function renderChildren(path: string, ul: HTMLElement): void {
     }
     ul.appendChild(li);
   }
-  const fnote = folderNoteOf(node, state.handledExtensions);
+  const folderNoteId = folderNoteOf(node, state.handledExtensions);
   for (const id of node.notes) {
-    if (id === fnote) continue;
+    if (id === folderNoteId) continue;
     const li = document.createElement("li");
-    const riga = noteRow(id, { draggable: true });
-    li.appendChild(riga);
-    voceAlbero(li, riga, id);
+    const row = noteRow(id, { draggable: true });
+    li.appendChild(row);
+    treeEntry(li, row, id);
     // Una nota non si espande: dichiarare `aria-expanded` su una foglia
     // annuncia «compressa» a chi non ha niente da aprire.
     if (id === state.currentDoc) li.setAttribute("aria-selected", "true");
@@ -422,16 +422,16 @@ function renderChildren(path: string, ul: HTMLElement): void {
   // attivabile perché non c'è ancora un gesto che la apra — «mostra le altre»
   // è la casella residua di questa voce — e dirlo senza saperlo fare è più
   // onesto che non dirlo.
-  const altre = node.altreCartelle + node.altreNote;
-  if (altre > 0) ul.appendChild(rigaTroncata(altre));
+  const other = node.otherFolders + node.otherNote;
+  if (other > 0) ul.appendChild(truncatedRow(other));
 }
 
 /// La riga che dice quante voci di questo livello non sono disegnate.
-function rigaTroncata(quante: number): HTMLElement {
+function truncatedRow(count: number): HTMLElement {
   const li = document.createElement("li");
   li.className = "tree-row troncata";
   li.setAttribute("role", "none");
-  li.textContent = t("explorer.altre_voci", { n: quante });
+  li.textContent = t("explorer.altre_voci", { n: count });
   return li;
 }
 
@@ -443,18 +443,18 @@ function rigaTroncata(quante: number): HTMLElement {
 /// duecento note darebbe duecento fermate del tab fra la ricerca e l'editor;
 /// con una sola, il tab entra nell'albero e le frecce ci si muovono dentro —
 /// che è come si muove chiunque abbia mai usato un elenco di file.
-function voceAlbero(li: HTMLElement, riga: HTMLElement, path: string): void {
-  const nome = riga.querySelector<HTMLElement>(".row-name");
-  if (nome) {
-    if (!nome.id) nome.id = `voce-${++contatoreVoci}`;
-    li.setAttribute("aria-labelledby", nome.id);
+function treeEntry(li: HTMLElement, row: HTMLElement, path: string): void {
+  const name = row.querySelector<HTMLElement>(".row-name");
+  if (name) {
+    if (!name.id) name.id = `voce-${++entryCount}`;
+    li.setAttribute("aria-labelledby", name.id);
   }
   li.setAttribute("role", "treeitem");
   li.dataset.path = path;
   li.tabIndex = -1;
 }
 
-let contatoreVoci = 0;
+let entryCount = 0;
 
 /// La riga di una nota, usata sia nell'albero sia tra le appuntate (dove il
 /// drag non ha senso: l'ordine delle appuntate è l'ordine in cui si appunta).
@@ -472,12 +472,12 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   row.addEventListener("click", () => void openDocument(id));
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    const appuntata = state.meta.pinned.includes(id);
+    const pinned = state.meta.pinned.includes(id);
     showContextMenu(e, [
       { label: t("explorer.rename"), run: () => startRename(row, id) },
-      { label: t("explorer.icon"), run: () => scegliIcona(e, id) },
+      { label: t("explorer.icon"), run: () => chooseIcon(e, id) },
       {
-        label: appuntata ? t("explorer.unpin") : t("explorer.pin"),
+        label: pinned ? t("explorer.unpin") : t("explorer.pin"),
         run: () => togglePin(id),
       },
       { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
@@ -491,7 +491,7 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
 /// Una cartella senza niente dentro: né sottocartelle né file, di nessuna
 /// specie. I due conti arrivano dal kernel col resto della riga (§14.3), quindi
 /// saperlo non costa una domanda in più.
-function vuota(folder: VaultFolder): boolean {
+function empty(folder: VaultFolder): boolean {
   return folder.folders === 0 && folder.entries === 0;
 }
 
@@ -506,7 +506,7 @@ function folderRow(folder: VaultFolder): HTMLElement {
   chevron.className = "chevron";
   // Niente freccia su una cartella vuota: lo spazio resta (l'allineamento dei
   // fratelli è lo stesso), ma non si promette un contenuto che non c'è.
-  if (!vuota(folder)) {
+  if (!empty(folder)) {
     chevron.textContent = state.expanded.has(folder.path) ? "▾" : "▸";
     chevron.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -524,20 +524,20 @@ function folderRow(folder: VaultFolder): HTMLElement {
   // La folder note di una cartella **non aperta** non si sa guardandoci dentro
   // — guardarci dentro è il giro che questa voce toglie. Si sa perché il
   // kernel ha già detto quali, fra i path che potrebbero esserlo, esistono.
-  const fnote = folderNoteIn(folder.path, state.handledExtensions, vista.esistenti);
-  if (fnote) row.classList.add("has-note");
+  const folderNoteId = folderNoteIn(folder.path, state.handledExtensions, view.existing);
+  if (folderNoteId) row.classList.add("has-note");
   row.addEventListener("click", () => {
-    if (fnote) {
-      void openDocument(fnote);
-      if (!state.expanded.has(folder.path) && !vuota(folder)) toggleFolder(folder.path);
-    } else if (!vuota(folder)) {
+    if (folderNoteId) {
+      void openDocument(folderNoteId);
+      if (!state.expanded.has(folder.path) && !empty(folder)) toggleFolder(folder.path);
+    } else if (!empty(folder)) {
       toggleFolder(folder.path);
     }
   });
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     showContextMenu(e, [
-      { label: t("explorer.icon"), run: () => scegliIcona(e, folder.path) },
+      { label: t("explorer.icon"), run: () => chooseIcon(e, folder.path) },
       { label: t("explorer.as_space"), run: () => addSpace(folder.path) },
     ]);
   });
@@ -576,9 +576,9 @@ function markActive(): void {
   )) {
     if (li.dataset.path !== state.currentDoc) li.removeAttribute("aria-selected");
   }
-  for (const riga of pinnedListEl.querySelectorAll<HTMLElement>(".tree-row.note")) {
-    if (riga.title === state.currentDoc) riga.setAttribute("aria-current", "true");
-    else riga.removeAttribute("aria-current");
+  for (const row of pinnedListEl.querySelectorAll<HTMLElement>(".tree-row.note")) {
+    if (row.title === state.currentDoc) row.setAttribute("aria-current", "true");
+    else row.removeAttribute("aria-current");
   }
 
   if (!state.currentDoc) return;
@@ -589,7 +589,7 @@ function markActive(): void {
     );
     if (li) li.setAttribute("aria-selected", "true");
   } catch {
-    for (const li of vociAlbero()) {
+    for (const li of treeEntries()) {
       if (li.dataset.path === state.currentDoc) li.setAttribute("aria-selected", "true");
       else li.removeAttribute("aria-selected");
     }
@@ -605,20 +605,20 @@ function markActive(): void {
 /// path scritto nel sidecar, e verificarne cinque non è una ragione per
 /// chiedere diecimila righe.
 function renderPinned(): void {
-  const pinned = state.meta.pinned.filter((id) => vista.esistenti.has(id));
+  const pinned = state.meta.pinned.filter((id) => view.existing.has(id));
   pinnedTitleEl.hidden = pinned.length === 0;
   pinnedListEl.hidden = pinned.length === 0;
   pinnedListEl.innerHTML = "";
   for (const id of pinned) {
     const li = document.createElement("li");
-    const riga = noteRow(id, { draggable: false });
-    if (id === state.currentDoc) riga.setAttribute("aria-current", "true");
+    const row = noteRow(id, { draggable: false });
+    if (id === state.currentDoc) row.setAttribute("aria-current", "true");
     // Le appuntate sono una lista piatta e non un albero: qui il bersaglio del
     // tab è la riga stessa, che è anche ciò che si clicca. Sono poche per
     // costruzione — le appunta l'utente — quindi non serve il `roving` che
     // l'albero usa per non diventare duecento fermate.
-    attivabile(riga);
-    li.appendChild(riga);
+    activatable(row);
+    li.appendChild(row);
     pinnedListEl.appendChild(li);
   }
 }
@@ -627,7 +627,7 @@ function togglePin(id: string): void {
   void setPinned(id, !state.meta.pinned.includes(id));
 }
 
-function scegliIcona(at: MouseEvent, path: string): void {
+function chooseIcon(at: MouseEvent, path: string): void {
   pickIcon(at, (icon) => {
     void setIcon(path, icon ?? null);
   });
@@ -658,7 +658,7 @@ function renderSpaceStrip(): void {
     chip.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       showContextMenu(e, [
-        { label: t("explorer.icon"), run: () => scegliIcona(e, path) },
+        { label: t("explorer.icon"), run: () => chooseIcon(e, path) },
         { label: t("explorer.not_a_space"), run: () => removeSpace(path) },
       ]);
     });
@@ -718,19 +718,19 @@ function removeSpace(path: string): void {
 async function pickNewSpace(at: MouseEvent): Promise<void> {
   // Un menu contestuale con una voce per cartella del vault non è un menu: la
   // finestra è la stessa dell'albero, e le altre si dicono invece di sparire.
-  const tutte = await cartelleDelVault(FINESTRA_DEL_LIVELLO);
-  const candidate = tutte.items.filter((f) => !state.meta.spaces.includes(f.path));
+  const folders = await vaultFolders(LEVEL_PAGE);
+  const candidate = folders.items.filter((f) => !state.meta.spaces.includes(f.path));
   if (candidate.length === 0) {
     showContextMenu(at, [{ label: t("explorer.no_folders"), run: () => {} }]);
     return;
   }
-  const altre = Math.max(0, tutte.total - tutte.items.length);
+  const other = Math.max(0, folders.total - folders.items.length);
   showContextMenu(at, [
     ...candidate.map((f) => ({
       label: `${state.meta.icons[f.path] ?? "📁"} ${f.path}`,
       run: () => addSpace(f.path),
     })),
-    ...(altre > 0 ? [{ label: t("explorer.altre_cartelle", { n: altre }), run: () => {} }] : []),
+    ...(other > 0 ? [{ label: t("explorer.altre_cartelle", { n: other }), run: () => {} }] : []),
   ]);
 }
 
@@ -740,17 +740,17 @@ async function pickNewSpace(at: MouseEvent): Promise<void> {
 /// contenuto è già in mano: non serve chiederlo di nuovo.
 function openSpaceNote(): void {
   if (state.activeSpace === null) return;
-  const node = figli(state.activeSpace);
-  const fnote = node && folderNoteOf(node, state.handledExtensions);
-  if (fnote) void openDocument(fnote);
+  const node = children(state.activeSpace);
+  const folderNoteId = node && folderNoteOf(node, state.handledExtensions);
+  if (folderNoteId) void openDocument(folderNoteId);
 }
 
 // --- crea, rinomina, converti -----------------------------------------------
 
 /// Crea una nota e la apre.
 async function newNote(): Promise<void> {
-  const creata = await createNote();
-  if (creata) await openDocument(creata);
+  const created = await createNote();
+  if (created) await openDocument(created);
   focusEditor();
 }
 
@@ -767,35 +767,35 @@ function startRename(li: HTMLElement, id: string): void {
   input.focus();
   input.select();
 
-  let chiuso = false;
-  const annulla = () => {
-    if (chiuso) return;
-    chiuso = true;
+  let closed = false;
+  const cancel = () => {
+    if (closed) return;
+    closed = true;
     renderFileList();
   };
-  const conferma = async () => {
-    if (chiuso) return;
-    chiuso = true;
-    const nuovo = input.value.trim();
-    if (!nuovo || nuovo === pageName(id)) {
+  const confirm = async () => {
+    if (closed) return;
+    closed = true;
+    const newItem = input.value.trim();
+    if (!newItem || newItem === pageName(id)) {
       renderFileList();
       return;
     }
-    await renameDoc(id, nuovo);
+    await renameDoc(id, newItem);
   };
 
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") void conferma();
-    else if (e.key === "Escape") annulla();
+    if (e.key === "Enter") void confirm();
+    else if (e.key === "Escape") cancel();
   });
-  input.addEventListener("blur", annulla);
+  input.addEventListener("blur", cancel);
 }
 
 /// La frase per ciascun guasto di un nome: la mappa è un `Record` **esaustivo**,
 /// quindi un'etichetta nuova in `NameFault` non compila finché non ha la sua
 /// chiave di catalogo. Un `` `name_fault.${tag}` `` composto a mano avrebbe
 /// compilato sempre, e la chiave mancante sarebbe comparsa a schermo.
-const MOTIVO: Record<NameFault, Chiave> = {
+const FAILURE_REASON: Record<NameFault, Key> = {
   empty: "name_fault.empty",
   traversal: "name_fault.traversal",
   machine: "name_fault.machine",
@@ -825,9 +825,9 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   // calcola `nameFault` — ma a **mandare**: è la forma che verrebbe scritta sul
   // disco (NFC, senza spazi ai bordi dei segmenti), ed è quella che il kernel
   // deve ricevere perché il nome che l'utente rivede sia quello che c'è.
-  const guasto = nameFault(to, "new");
-  if (guasto !== null) {
-    notify(t("explorer.bad_name", { nome: newPageName, motivo: t(MOTIVO[guasto]) }), "info");
+  const failure = nameFault(to, "new");
+  if (failure !== null) {
+    notify(t("explorer.bad_name", { name: newPageName, reason: t(FAILURE_REASON[failure]) }), "info");
     renderFileList();
     return;
   }
@@ -835,12 +835,12 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   // Il rename riscrive i wikilink entranti, cioè file di terzi — e fra questi
   // può esserci il documento aperto. Il buffer va messo in salvo prima, o la
   // riscrittura del kernel finirebbe sotto una copia più vecchia.
-  if (await nonInSalvo()) {
+  if (await ensureSaved()) {
     renderFileList();
     return;
   }
   try {
-    await rinominaTenendoFermoIlBuffer(from, to);
+    await renameKeepingBuffer(from, to);
   } catch (e) {
     notify(t("explorer.rename_failed", { doc: from, to, reason: errorText(e) }), "guasto");
     renderFileList();
@@ -861,10 +861,10 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
 /// Chi legge un documento — aprirne un altro, un'azione di view — continua a
 /// chiamare `flushPendingSave` e a proseguire: lì il testo non salvato resta nel
 /// suo buffer, che è sporco, e il tentativo dopo riparte da lì.
-async function nonInSalvo(): Promise<boolean> {
-  const appesi = await flushPendingSave();
-  if (appesi.length === 0) return false;
-  notify(t("document.unsaved_blocks", { doc: appesi.join(", ") }), "guasto");
+async function ensureSaved(): Promise<boolean> {
+  const pending = await flushPendingSave();
+  if (pending.length === 0) return false;
+  notify(t("document.unsaved_blocks", { doc: pending.join(", ") }), "guasto");
   return true;
 }
 
@@ -878,12 +878,12 @@ async function nonInSalvo(): Promise<boolean> {
 async function convertToFolder(id: string): Promise<void> {
   // Sposta un file esattamente come la rinomina — è una rinomina — e prima non
   // metteva in salvo niente affatto (difetto 0206).
-  if (await nonInSalvo()) return;
+  if (await ensureSaved()) return;
   const stem = pageName(id);
   const dir = parentOf(id);
   const folderPath = dir ? `${dir}/${stem}` : stem;
   try {
-    await rinominaTenendoFermoIlBuffer(id, `${folderPath}/${childName(id)}`);
+    await renameKeepingBuffer(id, `${folderPath}/${childName(id)}`);
   } catch (e) {
     notify(t("explorer.to_folder_failed", { doc: id, reason: errorText(e) }), "guasto");
     return;
@@ -918,22 +918,22 @@ function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder"): void
     clearDropMarks();
   });
   row.addEventListener("dragover", (e) => {
-    const gesto = dropGesture(row, path, kind, e);
-    if (!gesto) return;
+    const gesture = dropGesture(row, path, kind, e);
+    if (!gesture) return;
     e.preventDefault();
     clearDropMarks();
-    row.classList.add(`drop-${gesto}`);
+    row.classList.add(`drop-${gesture}`);
   });
   row.addEventListener("dragleave", () => {
     row.classList.remove("drop-before", "drop-after", "drop-into");
   });
   row.addEventListener("drop", async (e) => {
-    const gesto = dropGesture(row, path, kind, e);
+    const gesture = dropGesture(row, path, kind, e);
     clearDropMarks();
-    if (!gesto || !drag) return;
+    if (!gesture || !drag) return;
     e.preventDefault();
-    if (gesto === "into") await moveIntoFolder(drag.path, path);
-    else applyReorder(drag.parent, childName(drag.path), childName(path), gesto === "before");
+    if (gesture === "into") await moveIntoFolder(drag.path, path);
+    else applyReorder(drag.parent, childName(drag.path), childName(path), gesture === "before");
     drag = null;
   });
 }
@@ -948,14 +948,14 @@ function dropGesture(
   e: DragEvent,
 ): "before" | "after" | "into" | null {
   if (!drag || drag.path === path) return null;
-  const fratelli = drag.kind === kind && drag.parent === parentOf(path);
-  const dentro = kind === "folder" && drag.kind === "note" && drag.parent !== path;
+  const siblings = drag.kind === kind && drag.parent === parentOf(path);
+  const inside = kind === "folder" && drag.kind === "note" && drag.parent !== path;
   // `offsetY` sarebbe relativo all'elemento più interno sotto il cursore (uno
   // span, magari): la frazione va calcolata sulla riga intera.
   const box = row.getBoundingClientRect();
   const y = (e.clientY - box.top) / box.height;
-  if (dentro && (!fratelli || (y > 0.3 && y < 0.7))) return "into";
-  if (fratelli) return y < 0.5 ? "before" : "after";
+  if (inside && (!siblings || (y > 0.3 && y < 0.7))) return "into";
+  if (siblings) return y < 0.5 ? "before" : "after";
   return null;
 }
 
@@ -969,9 +969,9 @@ function clearDropMarks(): void {
 /// nell'ordine visibile, col trascinato nella posizione nuova.
 ///
 /// La cartella è quella dei due fratelli che si stanno riordinando, quindi è a
-/// schermo, quindi è caricata: `figli` la trova senza chiedere niente.
+/// schermo, quindi è caricata: `children` la trova senza chiedere niente.
 function applyReorder(parent: string, dragged: string, target: string, before: boolean): void {
-  const node = figli(parent);
+  const node = children(parent);
   if (!node) return;
   const names = orderedNames(node).filter((n) => n !== dragged);
   const at = names.indexOf(target);
@@ -984,7 +984,7 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
   if (to === id) return;
   try {
-    await rinominaTenendoFermoIlBuffer(id, to);
+    await renameKeepingBuffer(id, to);
   } catch (e) {
     notify(
       t("explorer.move_failed", {
@@ -1005,8 +1005,8 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
 /// radice (del vault, o dello spazio attivo).
 function wireRootDropTarget(): void {
   filesTitleEl.addEventListener("dragover", (e) => {
-    const radice = state.activeSpace ?? "";
-    if (drag?.kind === "note" && drag.parent !== radice) {
+    const root = state.activeSpace ?? "";
+    if (drag?.kind === "note" && drag.parent !== root) {
       e.preventDefault();
       filesTitleEl.classList.add("drop-into");
     }

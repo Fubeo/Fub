@@ -61,7 +61,7 @@ use serde_json::{json, Value};
 /// Un campione per **ogni** specie di nodo. L'esaustività la garantisce il
 /// `match` senza `_`: aggiungerne una non compila finché non è qui.
 fn ui_node_samples() -> Vec<Value> {
-    let azione = || Some(ActionRef::with("a", json!({"doc": "a.md"})));
+    let action = || Some(ActionRef::with("a", json!({"doc": "a.md"})));
     let all = [
         UiKind::Stack {
             dir: Axis::Column,
@@ -79,7 +79,7 @@ fn ui_node_samples() -> Vec<Value> {
         UiKind::ListItem {
             title: "ti".into(),
             subtitle: Some("s".into()),
-            action: azione(),
+            action: action(),
             selected: true,
         },
         UiKind::Button {
@@ -103,13 +103,13 @@ fn ui_node_samples() -> Vec<Value> {
         },
         UiKind::Row {
             cells: vec![UiNode::text("c")],
-            action: azione(),
+            action: action(),
         },
         UiKind::Tree { roots: vec![] },
         UiKind::TreeItem {
             label: "l".into(),
             expanded: true,
-            action: azione(),
+            action: action(),
             selected: false,
             children: vec![],
         },
@@ -135,7 +135,7 @@ fn ui_node_samples() -> Vec<Value> {
         UiKind::EmptyState {
             title: "vuoto".into(),
             detail: Some("d".into()),
-            action: azione(),
+            action: action(),
         },
         UiKind::KeyValue {
             entries: vec![KeyValueEntry {
@@ -264,9 +264,9 @@ fn ui_node_samples() -> Vec<Value> {
     // riconciliatore usa.
     all.iter()
         .enumerate()
-        .map(|(i, kind)| {
+        .map(|(the, kind)| {
             let node = UiNode::new(kind.clone());
-            to_value(&if i == 0 { node.with_key("k") } else { node })
+            to_value(&if the == 0 { node.with_key("k") } else { node })
         })
         .collect()
 }
@@ -293,8 +293,8 @@ fn ui_action_samples() -> Vec<Value> {
                 .with_fields(
                     all.iter()
                         .enumerate()
-                        .map(|(i, value)| FieldValue {
-                            field: format!("f{i}"),
+                        .map(|(the, value)| FieldValue {
+                            field: format!("f{the}"),
                             value: value.clone(),
                         })
                         .collect(),
@@ -441,8 +441,8 @@ fn event_samples() -> Vec<Value> {
             timer: "sync".into(),
         },
     ];
-    for e in &all {
-        match e {
+    for and in &all {
+        match and {
             Event::VaultOpened { .. }
             | Event::DocumentChanged { .. }
             | Event::DocumentRemoved { .. }
@@ -535,8 +535,8 @@ fn command_spec_samples() -> Vec<Value> {
             .describing("Un comando con un parametro per specie.")
             .with_keybinding("Mod-k")
             .with_scope(CommandScope::writing(CommandReach::Documents).irreversible()),
-        |spec, (i, kind)| {
-            spec.with_param(ParamSpec::new(format!("p{i}"), "P", kind).describing("un parametro"))
+        |spec, (the, kind)| {
+            spec.with_param(ParamSpec::new(format!("p{the}"), "P", kind).describing("un parametro"))
         },
     );
     vec![
@@ -575,8 +575,8 @@ fn command_outcome_samples() -> Vec<Value> {
             params: json!({"tag": "rust"}),
         },
     ];
-    for e in &all {
-        match e {
+    for and in &all {
+        match and {
             CommandEffect::Done
             | CommandEffect::Navigate { .. }
             | CommandEffect::Reveal { .. }
@@ -586,7 +586,7 @@ fn command_outcome_samples() -> Vec<Value> {
             | CommandEffect::OpenView { .. } => {}
         }
     }
-    let mut campioni: Vec<Value> = all
+    let mut samples: Vec<Value> = all
         .into_iter()
         .map(|effect| to_value(CommandOutcome::notify("fatto").with_effect(effect)))
         .collect();
@@ -594,28 +594,28 @@ fn command_outcome_samples() -> Vec<Value> {
     // porta davvero: senza, il mirror TS non vedrebbe mai il campo `undo` —
     // che è assente in tutti i campioni di sopra, perché il default è
     // «non annullabile».
-    let mut passi = vec![UndoStep::Edit(PlannedEdit::new(
+    let mut steps = vec![UndoStep::Edit(PlannedEdit::new(
         DocId::new("a.md"),
         EditRequest::new(Revision::of("y"), vec![TextEdit::insert(0, "x")]),
     ))];
-    passi.push(UndoStep::Command {
+    steps.push(UndoStep::Command {
         command: "note.trash".into(),
         args: json!({"doc": "a.md"}),
     });
-    for p in &passi {
+    for p in &steps {
         match p {
             UndoStep::Edit(_) | UndoStep::Command { .. } => {}
         }
     }
-    campioni.push(to_value(CommandOutcome::notify("fatto").undoable(Undo {
+    samples.push(to_value(CommandOutcome::notify("fatto").undoable(Undo {
         label: "la creazione di «a.md»".into(),
-        steps: passi,
+        steps: steps,
     })));
     // Un esito **a metà** (§23.14), con le due specie di guasto: quello che ha
     // un documento da nominare e quello che non ce l'ha. Come per `undo` qui
     // sopra, senza un campione che lo porti davvero il mirror TS non vedrebbe
     // mai il campo — il default è «non è mancato niente».
-    campioni.push(to_value(CommandOutcome::notify("fatto a metà").partially(
+    samples.push(to_value(CommandOutcome::notify("fatto a metà").partially(
         Partial::of(
             12,
             10,
@@ -628,7 +628,7 @@ fn command_outcome_samples() -> Vec<Value> {
             ],
         ),
     )));
-    campioni
+    samples
 }
 
 /// I due conti, e le due specie di guasto: quello che ha un documento da
@@ -679,7 +679,7 @@ fn to_value<T: serde::Serialize>(v: T) -> Value {
 fn index_query_samples() -> Vec<Value> {
     // Una query composta: testo AND tag negato. È la forma che il §5.3 rende
     // esprimibile, ed è quella che il mirror deve saper costruire.
-    let composta = QueryExpr {
+    let composed = QueryExpr {
         any: vec![QueryClause {
             all: vec![
                 QueryLiteral {
@@ -698,7 +698,7 @@ fn index_query_samples() -> Vec<Value> {
     };
     let all = [
         IndexQuery::Documents {
-            matching: composta,
+            matching: composed,
             sort: None,
             select: PropertySelect::None,
             page: Some(Page::first(20)),
@@ -925,7 +925,7 @@ fn index_result_samples() -> Vec<Value> {
                         ],
                     },
                 )
-                .per_machine(),
+                .for_machine(),
                 value: SettingValue::Text("scuro".into()),
                 source: SettingSource::Machine,
             },
@@ -1070,14 +1070,14 @@ fn setting_spec_samples() -> Vec<Value> {
     }
     all.into_iter()
         .enumerate()
-        .map(|(i, kind)| {
-            let spec = SettingSpec::new(format!("prova.k{i}"), "Prova", kind)
+        .map(|(the, kind)| {
+            let spec = SettingSpec::new(format!("prova.k{the}"), "Prova", kind)
                 .describing("Cosa fa, in prosa.")
                 .grouped("Prova");
             // Una scrivibile da un programma e le altre no: è la riga della
             // decisione 0010 chiusa per chiave, e il mirror deve vedere
             // entrambe le forme.
-            to_value(if i == 0 {
+            to_value(if the == 0 {
                 spec.program_writable()
             } else {
                 spec
@@ -1119,7 +1119,7 @@ fn expected() -> Value {
                         options: vec![UiOption::new("scuro", "Scuro")],
                     },
                 )
-                .per_machine(),
+                .for_machine(),
                 value: SettingValue::Text("scuro".into()),
                 source: SettingSource::Machine,
             }),
@@ -1428,9 +1428,9 @@ fn ts_mirror_fixture_is_in_sync_with_the_rust_types() {
         return;
     }
 
-    let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+    let committed = std::fs::read_to_string(&path).unwrap_or_else(|and| {
         panic!(
-            "fixture dei mirror mancante ({}): {e}. Rigenerala con \
+            "fixture dei mirror mancante ({}): {and}. Rigenerala con \
              `UPDATE_MIRROR=1 cargo test -p fub-features --test ts_mirror`.",
             path.display()
         )

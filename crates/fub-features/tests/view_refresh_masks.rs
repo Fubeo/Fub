@@ -33,7 +33,7 @@ use fub_abi::traits::ViewInstance;
 
 #[test]
 fn a_view_that_follows_the_index_follows_batches_too() {
-    let providers = fub_features::ogni_view_ufficiale()
+    let providers = fub_features::every_official_view()
         .filter_map(|f| f.view.map(|v| v()))
         .collect::<Vec<_>>();
     assert!(!providers.is_empty(), "le view ufficiali");

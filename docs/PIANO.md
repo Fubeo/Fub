@@ -209,17 +209,26 @@ di lettura, convenzioni, dove va un file nuovo — è [README.md](README.md).
   (`.github/scripts/check-doc-links.mjs`).
 
 **Il lessico**:
-- [glossario.md](glossario.md) — le parole di questo repo che non sono standard,
-  sei famiglie, una voce per termine: cos'è in due righe, il tipo Rust da
-  cercare, il file in cui vive (link vero, quindi presidiato) e il verbale che
-  l'ha deciso. Non spiega l'architettura: rimanda a chi la spiega.
+- le parole del **prodotto** non hanno un file loro: ogni termine è definito in
+  una riga accanto al suo primo uso — **lotto** (un gruppo di modifiche che
+  vanno insieme), **porta** (il punto di passaggio unico verso l'host),
+  **ponte** (il pezzo che porta gli eventi a chi guarda), **anagrafe** (ciò che
+  il kernel si ricorda di ogni file per non rileggerlo), **sidecar** (il file
+  accanto al vault che tiene ciò che riguarda il vault), **superficie**
+  (l'insieme di ciò che il contratto espone a chi lo nomina), **revisione**
+  (l'identità del testo su cui si calcola una modifica), **ricongiungimento**
+  (riconoscere all'apertura una nota rinominata a Fub chiuso) — più la sezione
+  *Le parole* in
+  [architecture/mappa-visuale.md](architecture/mappa-visuale.md). Non spiegano
+  l'architettura: rimandano a chi la spiega.
 
 **Il repo come progetto pubblico** (primo livello di `docs/`, perché la prosa sta
 in un posto solo; i nomi sono in inglese perché GitHub li cerca **per nome** — la
 ragione per esteso è in [README.md](README.md)):
 - [leggimi-prima.md](leggimi-prima.md) — il progetto in cinque righe, i crate in
   ordine di dipendenza, e il dizionario del dialetto: le parole con cui questo
-  repo organizza il proprio lavoro, quelle che il glossario non tiene.
+  repo organizza il proprio lavoro, quelle che non stanno nel lessico del
+  prodotto.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — le quattro invarianti presidiate, il
   ciclo locale, i sei job della CI, la forma dei commit, come si chiude una
   decisione.

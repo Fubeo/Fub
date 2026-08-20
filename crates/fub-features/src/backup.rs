@@ -138,19 +138,19 @@ impl ViewProvider for BackupView {
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
         match action.action.0.as_str() {
-            RUN => comando_poi_albero(host, VAULT_BACKUP, serde_json::json!({})),
+            RUN => command_then_tree(host, VAULT_BACKUP, serde_json::json!({})),
             RESTORE => {
                 let Some(id) = action.payload.get(ID).and_then(|v| v.as_str()) else {
                     return Ok(ViewUpdate::None);
                 };
-                comando_poi_albero(host, VAULT_BACKUP_RESTORE, serde_json::json!({ ID: id }))
+                command_then_tree(host, VAULT_BACKUP_RESTORE, serde_json::json!({ ID: id }))
             }
             _ => Ok(ViewUpdate::None),
         }
     }
 }
 
-fn comando_poi_albero(
+fn command_then_tree(
     host: &mut dyn HostApi,
     id: &str,
     args: serde_json::Value,
@@ -159,33 +159,33 @@ fn comando_poi_albero(
         Ok(_) => Ok(ViewUpdate::Replace {
             root: tree(host, None)?,
         }),
-        Err(e) => Ok(ViewUpdate::Replace {
+        Err(and) => Ok(ViewUpdate::Replace {
             root: tree(
                 host,
                 Some(Text::message(
                     FAILED,
-                    vec![Arg::text("reason", e.to_string())],
+                    vec![Arg::text("reason", and.to_string())],
                 )),
             )?,
         }),
     }
 }
 
-fn tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError> {
-    let store = leggi(host)?;
-    let mut figli = Vec::new();
-    if let Some(avviso) = avviso {
-        figli.push(UiNode::failed(avviso, None));
+fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError> {
+    let store = load(host)?;
+    let mut children = Vec::new();
+    if let Some(warning) = warning {
+        children.push(UiNode::failed(warning, None));
     }
-    figli.push(UiNode::button(
+    children.push(UiNode::button(
         Text::key(RUN_LABEL),
         Intent::Primary,
         ActionRef::new(RUN),
     ));
     if store.snapshots.is_empty() {
-        figli.push(UiNode::empty_state(Text::key(EMPTY)));
+        children.push(UiNode::empty_state(Text::key(EMPTY)));
     } else {
-        figli.push(UiNode::list(
+        children.push(UiNode::list(
             store
                 .snapshots
                 .iter()
@@ -221,7 +221,7 @@ fn tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError>
                 .collect(),
         ));
     }
-    Ok(UiNode::column(1, figli))
+    Ok(UiNode::column(1, children))
 }
 
 /// I comandi `vault.backup` / `vault.backup.restore`.
@@ -230,9 +230,9 @@ pub struct BackupCommands;
 impl CommandProvider for BackupCommands {
     fn commands(&self) -> Vec<CommandSpec> {
         vec![
-            comando(VAULT_BACKUP).with_scope(CommandScope::writing(CommandReach::Vault)),
-            comando(VAULT_BACKUP_RESTORE)
-                .with_param(parametro(VAULT_BACKUP_RESTORE, ID, ParamKind::Text).required())
+            command(VAULT_BACKUP).with_scope(CommandScope::writing(CommandReach::Vault)),
+            command(VAULT_BACKUP_RESTORE)
+                .with_param(parameter(VAULT_BACKUP_RESTORE, ID, ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
         ]
     }
@@ -252,18 +252,18 @@ impl CommandProvider for BackupCommands {
     }
 }
 
-fn comando(id: &str) -> CommandSpec {
+fn command(id: &str) -> CommandSpec {
     CommandSpec::new(id, Text::key(format!("{id}.title")))
         .describing(Text::key(format!("{id}.desc")))
 }
 
-fn parametro(comando: &str, name: &str, kind: ParamKind) -> ParamSpec {
-    ParamSpec::new(name, Text::key(format!("{comando}.{name}.title")), kind)
-        .describing(Text::key(format!("{comando}.{name}.desc")))
+fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
+    ParamSpec::new(name, Text::key(format!("{command}.{name}.title")), kind)
+        .describing(Text::key(format!("{command}.{name}.desc")))
 }
 
 fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
-    let id = oggi(host);
+    let id = today(host);
     let docs = host.list_documents(None)?.items;
     let n = docs.len() as i64;
     if mode.is_dry_run() {
@@ -279,16 +279,16 @@ fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
         let src = host.read_document(doc)?;
         host.data_write(&format!("{id}/{}", doc.as_str()), src.as_bytes())?;
     }
-    let mut store = leggi(host)?;
-    if let Some(esistente) = store.snapshots.iter_mut().find(|s| s.id == id) {
-        esistente.n = docs.len() as u32;
+    let mut store = load(host)?;
+    if let Some(existing) = store.snapshots.iter_mut().find(|s| s.id == id) {
+        existing.n = docs.len() as u32;
     } else {
         store.snapshots.push(Snapshot {
             id: id.clone(),
             n: docs.len() as u32,
         });
     }
-    scrivi(host, &store)?;
+    persist(host, &store)?;
     Ok(CommandOutcome::notify(Text::message(
         P_BACKUP,
         vec![Arg::int("n", n), Arg::text(ID, id)],
@@ -306,7 +306,7 @@ fn restore(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| PluginError::BadArgs(Text::message(E_MISSING, vec![Arg::text(ID, "")])))?
         .to_string();
-    let store = leggi(host)?;
+    let store = load(host)?;
     if !store.snapshots.iter().any(|s| s.id == id) {
         return Err(PluginError::BadArgs(Text::message(
             E_MISSING,
@@ -314,18 +314,18 @@ fn restore(
         )));
     }
     let files = host.data_list(&id)?;
-    let esistenti: std::collections::BTreeSet<String> = host
+    let existing: std::collections::BTreeSet<String> = host
         .list_documents(None)?
         .items
         .into_iter()
         .map(|d| d.0)
         .collect();
-    let prefisso = format!("{id}/");
-    let da_creare: Vec<(DocId, String)> = files
+    let prefix = format!("{id}/");
+    let from_create: Vec<(DocId, String)> = files
         .into_iter()
         .filter_map(|path| {
-            let rel = path.strip_prefix(&prefisso)?;
-            if esistenti.contains(rel) {
+            let rel = path.strip_prefix(&prefix)?;
+            if existing.contains(rel) {
                 return None;
             }
             Some(DocId::new(rel))
@@ -336,14 +336,14 @@ fn restore(
             String::from_utf8(bytes).ok().map(|src| (doc, src))
         })
         .collect();
-    let n = da_creare.len() as i64;
+    let n = from_create.len() as i64;
     if mode.is_dry_run() {
         return Ok(CommandOutcome::notify(Text::message(
             P_RESTORE,
             vec![Arg::int("n", n), Arg::text(ID, &id)],
         )));
     }
-    for (doc, src) in da_creare {
+    for (doc, src) in from_create {
         host.create_document(&doc, &src)?;
     }
     Ok(CommandOutcome::notify(Text::message(
@@ -352,7 +352,7 @@ fn restore(
     )))
 }
 
-fn oggi(host: &dyn ReadApi) -> String {
+fn today(host: &dyn ReadApi) -> String {
     let locale = host.user_locale();
     let civil = locale.to_civil_millis(host.now_unix_millis());
     let days = civil.div_euclid(86_400_000);
@@ -372,19 +372,19 @@ struct Snapshot {
     n: u32,
 }
 
-fn leggi(host: &dyn ReadApi) -> Result<Store, PluginError> {
+fn load(host: &dyn ReadApi) -> Result<Store, PluginError> {
     match host.data_read(MANIFEST)? {
         None => Ok(Store {
             schema_version: SCHEMA,
             snapshots: Vec::new(),
         }),
         Some(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|e| PluginError::Internal(format!("snapshots.json: {e}").into())),
+            .map_err(|and| PluginError::Internal(format!("snapshots.json: {and}").into())),
     }
 }
 
-fn scrivi(host: &mut dyn HostApi, store: &Store) -> Result<(), PluginError> {
+fn persist(host: &mut dyn HostApi, store: &Store) -> Result<(), PluginError> {
     let bytes = serde_json::to_vec_pretty(store)
-        .map_err(|e| PluginError::Internal(format!("snapshots.json: {e}").into()))?;
+        .map_err(|and| PluginError::Internal(format!("snapshots.json: {and}").into()))?;
     host.data_write(MANIFEST, &bytes)
 }

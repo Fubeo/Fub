@@ -137,7 +137,7 @@ fn clicking_a_heading_reveals_its_span_back_through_the_kernel() {
 /// Quali voci sono segnate, in ordine di lettura: dalla seduta 2 la sezione del
 /// cursore è `selected` sul nodo, e non più un sottotitolo che dice «cursore
 /// qui» — cioè uno stato travestito da testo.
-fn segnate(tree: &UiNode) -> Vec<bool> {
+fn marked(tree: &UiNode) -> Vec<bool> {
     fn walk(node: &UiNode, out: &mut Vec<bool>) {
         if let UiKind::TreeItem { selected, .. } = &node.kind {
             out.push(*selected);
@@ -162,31 +162,31 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
     let ws = vault.open();
 
     let doc = DocId::new("Nota.md");
-    let cursore = |byte: usize| {
+    let cursor = |byte: usize| {
         ViewContext::new(MAIN_PANE)
             .with_doc(Some(doc.clone()))
             .with_selections(Some(SelectionSet::caret(byte)))
     };
 
     // Il cursore è nel corpo della prima sezione.
-    let da_ridisegnare = ws.set_active_context(Some(cursore(12)));
+    let from_redraw = ws.set_active_context(Some(cursor(12)));
     assert_eq!(
-        da_ridisegnare,
+        from_redraw,
         vec![OUTLINE_VIEW.to_string()],
         "l'outline dichiara di seguire documento e selezione: è l'unica \
          registrata qui, e va ridisegnata"
     );
     assert_eq!(
-        segnate(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
+        marked(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
         vec![true, false]
     );
 
     // Il cursore scende nella seconda sezione: il segno lo segue.
     let source = std::fs::read_to_string(vault.root.join("Nota.md")).unwrap();
     let byte = source.find("altro").unwrap();
-    ws.set_active_context(Some(cursore(byte)));
+    ws.set_active_context(Some(cursor(byte)));
     assert_eq!(
-        segnate(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
+        marked(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
         vec![false, true]
     );
 
@@ -198,7 +198,7 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
             .with_selections(Some(SelectionSet::floating(""))),
     ));
     assert_eq!(
-        segnate(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
+        marked(&ws.render_view(&ViewInstance::only(OUTLINE_VIEW)).unwrap()),
         vec![false, false]
     );
 }

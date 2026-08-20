@@ -12,12 +12,12 @@
 // chiavi `locale.*` (§11.1), e a comporre le due cose è il kernel. Qui si
 // riferisce un fatto, non si applica una preferenza.
 import { api } from "../host/ipc";
-import type { Vita } from "../ui/vita";
+import type { Lifetime } from "../ui/lifetime";
 import type { HourCycle, Locale, Weekday } from "../host/contract";
 
 // I sette giorni nell'ordine di `Intl.Locale.getWeekInfo()`, che è quello di
 // ISO 8601: lunedì = 1.
-const GIORNI: Weekday[] = [
+const DAYS: Weekday[] = [
   "monday",
   "tuesday",
   "wednesday",
@@ -31,19 +31,19 @@ const GIORNI: Weekday[] = [
 // ancora e che non tutti i motori implementano (è recente). Dichiararlo qui e
 // chiamarlo dietro un controllo è ciò che permette di usarlo dove c'è senza
 // rompere dove non c'è.
-type ConWeekInfo = Intl.Locale & { getWeekInfo?: () => { firstDay: number } };
+type WithWeekInfo = Intl.Locale & { getWeekInfo?: () => { firstDay: number } };
 
 // Il primo giorno della settimana secondo il motore, o `null` se non lo sa.
 //
-// Non c'è una tabella di riserva, ed è deliberato: una tabella scritta a mano
+// Non c'è una tabella di riserva, ed è deliberato: una tabella scritto a mano
 // sarebbe un ICU in miniatura che sbaglia sui paesi che nessuno ha guardato, e
 // sbaglierebbe **in silenzio**. Quando il motore non lo sa, il kernel tiene il
 // suo default — lunedì, che è quello di ISO 8601 — e resta la chiave
 // `locale.first-day-of-week` per chi vuole decidere.
-function primoGiorno(lingua: string): Weekday | null {
+function firstDay(language: string): Weekday | null {
   try {
-    const info = (new Intl.Locale(lingua) as ConWeekInfo).getWeekInfo?.();
-    return info ? (GIORNI[info.firstDay - 1] ?? null) : null;
+    const info = (new Intl.Locale(language) as WithWeekInfo).getWeekInfo?.();
+    return info ? (DAYS[info.firstDay - 1] ?? null) : null;
   } catch {
     return null;
   }
@@ -53,12 +53,12 @@ function primoGiorno(lingua: string): Weekday | null {
 // (mezzanotte come `0` o come `12`), `h23`/`h24` due modi di scrivere le 24: la
 // differenza sta in come si stampa un'ora sola, non in quale quadrante si legge,
 // e il contratto tiene la seconda distinzione perché è quella che l'utente vede.
-function orologio(lingua: string): HourCycle {
+function clock(language: string): HourCycle {
   try {
-    const risolto = new Intl.DateTimeFormat(lingua, {
+    const resolvedCycle = new Intl.DateTimeFormat(language, {
       hour: "numeric",
     }).resolvedOptions().hourCycle;
-    return risolto === "h11" || risolto === "h12" ? "h12" : "h23";
+    return resolvedCycle === "h11" || resolvedCycle === "h12" ? "h12" : "h23";
   } catch {
     return "h23";
   }
@@ -81,8 +81,8 @@ export function systemLocale(): Locale {
     // l'ora locale. Il segno invertito è la sola cosa che c'è da ricordare, ed
     // è il genere di dettaglio che si sbaglia una volta sola e per sempre.
     utc_offset_minutes: -new Date().getTimezoneOffset(),
-    first_day_of_week: primoGiorno(language) ?? "monday",
-    hour_cycle: orologio(language),
+    first_day_of_week: firstDay(language) ?? "monday",
+    hour_cycle: clock(language),
   };
 }
 
@@ -107,12 +107,12 @@ export async function publishSystemLocale(): Promise<boolean> {
 // l'utente sta per **guardare** l'app, cioè l'unico in cui vale accorgersene.
 //
 // `onChange` scatta solo quando qualcosa è davvero cambiato: chi ridisegna
-// perché la finestra ha ripreso il focus ridisegnerebbe a ogni alt-tab.
-export function mountLocale(vita: Vita, onChange: () => void): void {
+// perché la finestra ha ripreso il focus ridisegnerebbe a ogni alt-linguetta.
+export function mountLocale(lifetime: Lifetime, onChange: () => void): void {
   void publishSystemLocale();
-  vita.ascolta(window, "focus", () => {
-    void publishSystemLocale().then((cambiato) => {
-      if (cambiato) onChange();
+  lifetime.listen(window, "focus", () => {
+    void publishSystemLocale().then((changed) => {
+      if (changed) onChange();
     });
   });
 }

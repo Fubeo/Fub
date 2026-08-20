@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn andata_e_ritorno_su_nomi_ostili() {
+    fn outbound_and_return_on_names_ostili() {
         for id in [
             "Nota.md",
             "Progetti/Ferrite.md",
@@ -184,7 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn il_documento_resta_un_componente_solo() {
+    fn the_document_remains_a_component_only() {
         // Se lo `/` restasse nudo, «dove finisce il documento» sarebbe un
         // indovinello, e `doc_of` risponderebbe `Progetti` a un dato di
         // `Progetti/Ferrite.md`.
@@ -194,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn nemmeno_il_nome_si_annida() {
+    fn nemmeno_the_name_is_annida() {
         // Un nome con uno `/` dentro non crea una sottocartella: se lo facesse,
         // `doc_of` non sarebbe più una funzione totale.
         let p = path(&doc("a.md"), "sotto/x.json");
@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn cio_che_il_plugin_tiene_per_se_non_e_di_nessun_documento() {
+    fn that_that_the_plugin_holds_for_if_not_and_of_no_document() {
         // È la metà che decide cosa il kernel migra e raccoglie: tutto ciò che
         // non sta sotto `doc/` non lo tocca. Il versioning ci conta.
         assert_eq!(doc_of("versions.json"), None);
@@ -215,7 +215,7 @@ mod tests {
     }
 
     #[test]
-    fn resta_leggibile_a_occhio() {
+    fn remains_readable_to_the_eye() {
         // È l'esempio scritto accanto a `encode`, e sta qui perché un esempio
         // in un commento è la cosa che invecchia per prima: questa riga esiste
         // per farlo invecchiare **rumorosamente**. Ciò che promette è che chi
@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn lo_spazio_e_il_prefisso_di_cio_che_ci_sta_dentro() {
+    fn the_space_and_the_prefix_of_that_that_there_is_inside() {
         let d = doc("Progetti/Ferrite.md");
         assert!(path(&d, "x").starts_with(&space(&d)));
     }

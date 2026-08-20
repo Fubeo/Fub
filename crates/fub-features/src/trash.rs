@@ -207,21 +207,21 @@ impl ViewProvider for TrashView {
             // Ripristina, e se il path è tornato occupato **chiedi** invece di
             // decidere: la domanda diventa un pezzo dell'albero.
             RESTORE => {
-                let (entry, original) = match due_id(&action.payload) {
-                    Some(due) => due,
+                let (entry, original) = match two_ids(&action.payload) {
+                    Some(two) => two,
                     None => return Ok(ViewUpdate::None),
                 };
                 match host.run_command(TRASH_RESTORE, serde_json::json!({ ENTRY: entry })) {
                     Ok(_) => Ok(ViewUpdate::Navigate { doc_id: original }),
                     Err(PluginError::AlreadyExists(_)) => {
-                        let proposta = host.free_name(&DocId::new(&original));
+                        let proposed_name = host.free_name(&DocId::new(&original));
                         host.set_view_state(
                             ASK,
                             Some(serde_json::json!({
                                 "kind": ASK_RESTORE,
                                 ENTRY: entry,
                                 ORIGINAL: original,
-                                NAME_FIELD: proposta.0,
+                                NAME_FIELD: proposed_name.0,
                             })),
                         )?;
                         Ok(ViewUpdate::Replace {
@@ -232,14 +232,14 @@ impl ViewProvider for TrashView {
                     // domanda sbagliata è il difetto che il §12.2 aveva già
                     // trovato in questo stesso punto quando stava nella shell:
                     // con un disco pieno si vedeva «esiste già».
-                    Err(e) => Ok(ViewUpdate::Replace {
+                    Err(and) => Ok(ViewUpdate::Replace {
                         root: tree(
                             host,
                             Some(Text::message(
                                 RESTORE_FAILED,
                                 vec![
-                                    Arg::text("doc", nome(&DocId::new(&original))),
-                                    Arg::text("reason", e.to_string()),
+                                    Arg::text("doc", display_name(&DocId::new(&original))),
+                                    Arg::text("reason", and.to_string()),
                                 ],
                             )),
                         )?,
@@ -256,29 +256,29 @@ impl ViewProvider for TrashView {
                     .and_then(|a| a.get(ENTRY))
                     .and_then(|v| v.as_str())
                     .map(str::to_string);
-                let nuovo = action
+                let new = action
                     .text_field(NAME_FIELD)
                     .unwrap_or_default()
                     .to_string();
                 host.set_view_state(ASK, None)?;
-                let (Some(entry), false) = (entry, nuovo.is_empty()) else {
+                let (Some(entry), false) = (entry, new.is_empty()) else {
                     return Ok(ViewUpdate::Replace {
                         root: tree(host, None)?,
                     });
                 };
                 match host.run_command(
                     TRASH_RESTORE,
-                    serde_json::json!({ ENTRY: entry, "to": nuovo }),
+                    serde_json::json!({ ENTRY: entry, "to": new }),
                 ) {
-                    Ok(_) => Ok(ViewUpdate::Navigate { doc_id: nuovo }),
-                    Err(e) => Ok(ViewUpdate::Replace {
+                    Ok(_) => Ok(ViewUpdate::Navigate { doc_id: new }),
+                    Err(and) => Ok(ViewUpdate::Replace {
                         root: tree(
                             host,
                             Some(Text::message(
                                 RESTORE_FAILED,
                                 vec![
-                                    Arg::text("doc", nome(&DocId::new(&nuovo))),
-                                    Arg::text("reason", e.to_string()),
+                                    Arg::text("doc", display_name(&DocId::new(&new))),
+                                    Arg::text("reason", and.to_string()),
                                 ],
                             )),
                         )?,
@@ -300,12 +300,12 @@ impl ViewProvider for TrashView {
             }
             EMPTY_CONFIRM => {
                 host.set_view_state(ASK, None)?;
-                let esito = host.run_command(TRASH_EMPTY, serde_json::Value::Null);
-                let avviso = esito
+                let outcome = host.run_command(TRASH_EMPTY, serde_json::Value::Null);
+                let warning = outcome
                     .err()
-                    .map(|e| Text::message(EMPTY_FAILED, vec![Arg::text("reason", e.to_string())]));
+                    .map(|and| Text::message(EMPTY_FAILED, vec![Arg::text("reason", and.to_string())]));
                 Ok(ViewUpdate::Replace {
-                    root: tree(host, avviso)?,
+                    root: tree(host, warning)?,
                 })
             }
             CANCEL => {
@@ -320,7 +320,7 @@ impl ViewProvider for TrashView {
 }
 
 /// I due id di un ripristino, dal payload del nodo che li portava.
-fn due_id(payload: &serde_json::Value) -> Option<(String, String)> {
+fn two_ids(payload: &serde_json::Value) -> Option<(String, String)> {
     let entry = payload.get(ENTRY)?.as_str()?.to_string();
     let original = payload.get(ORIGINAL)?.as_str()?.to_string();
     Some((entry, original))
@@ -330,7 +330,7 @@ fn due_id(payload: &serde_json::Value) -> Option<(String, String)> {
 ///
 /// Il path intero è nel `title` di ciò che si passa il mouse sopra; qui serve
 /// ciò che l'utente ha scritto in cima alla nota.
-fn nome(id: &DocId) -> String {
+fn display_name(id: &DocId) -> String {
     let file = id.0.rsplit('/').next().unwrap_or(&id.0);
     file.strip_suffix(".md").unwrap_or(file).to_string()
 }
@@ -341,29 +341,29 @@ fn nome(id: &DocId) -> String {
 /// guasto non deve sopravvivere alla chiusura del vault né tornare a galla alla
 /// riapertura, perché nel frattempo può essere stato riparato. Vive quanto
 /// l'albero che lo mostra, che è quanto deve.
-fn tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError> {
+fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError> {
     let entries = host.list_trash()?;
-    let mut figli = Vec::new();
+    let mut children = Vec::new();
 
-    if let Some(avviso) = avviso {
-        figli.push(UiNode::failed(avviso, None));
+    if let Some(warning) = warning {
+        children.push(UiNode::failed(warning, None));
     }
-    if let Some(domanda) = domanda(host, &entries)? {
-        figli.push(domanda);
+    if let Some(question) = question(host, &entries)? {
+        children.push(question);
     }
 
     if entries.is_empty() {
-        figli.push(UiNode::empty_state(Text::key(IS_EMPTY)));
-        return Ok(UiNode::column(1, figli));
+        children.push(UiNode::empty_state(Text::key(IS_EMPTY)));
+        return Ok(UiNode::column(1, children));
     }
 
-    figli.push(UiNode::list(entries.iter().map(riga).collect::<Vec<_>>()));
-    figli.push(UiNode::button(
+    children.push(UiNode::list(entries.iter().map(row).collect::<Vec<_>>()));
+    children.push(UiNode::button(
         Text::key(EMPTY_LABEL),
         Intent::Danger,
         ActionRef::new(EMPTY),
     ));
-    Ok(UiNode::column(1, figli))
+    Ok(UiNode::column(1, children))
 }
 
 /// Una voce del cestino: cosa era, quando è finita lì, e come tornare indietro.
@@ -371,7 +371,7 @@ fn tree(host: &dyn ReadApi, avviso: Option<Text>) -> Result<UiNode, PluginError>
 /// La chiave è l'id nel cestino — che è unico e non cambia — perché una lista
 /// che si riordina quando qualcuno cestina un'altra nota non deve spostare il
 /// fuoco da sotto le dita di chi stava per premere «Ripristina» (§2.8).
-fn riga(entry: &TrashEntry) -> UiNode {
+fn row(entry: &TrashEntry) -> UiNode {
     UiNode::keyed(
         entry.id.0.clone(),
         UiKind::Stack {
@@ -379,7 +379,7 @@ fn riga(entry: &TrashEntry) -> UiNode {
             gap: 1,
             children: vec![
                 UiNode::list_item(
-                    Text::from(nome(&entry.original)),
+                    Text::from(display_name(&entry.original)),
                     Some(Text::message(
                         DELETED_AT,
                         // I secondi del cestino diventano i millisecondi
@@ -407,12 +407,12 @@ fn riga(entry: &TrashEntry) -> UiNode {
 }
 
 /// La domanda in corso, disegnata — o niente, che è il caso normale.
-fn domanda(host: &dyn ReadApi, entries: &[TrashEntry]) -> Result<Option<UiNode>, PluginError> {
+fn question(host: &dyn ReadApi, entries: &[TrashEntry]) -> Result<Option<UiNode>, PluginError> {
     let Some(ask) = host.view_state(ASK)? else {
         return Ok(None);
     };
     let kind = ask.get("kind").and_then(|v| v.as_str()).unwrap_or_default();
-    let nodo = match kind {
+    let node = match kind {
         ASK_EMPTY => UiNode::column(
             1,
             vec![
@@ -437,7 +437,7 @@ fn domanda(host: &dyn ReadApi, entries: &[TrashEntry]) -> Result<Option<UiNode>,
                 .get(ORIGINAL)
                 .and_then(|v| v.as_str())
                 .unwrap_or_default();
-            let proposta = ask
+            let proposed_name = ask
                 .get(NAME_FIELD)
                 .and_then(|v| v.as_str())
                 .unwrap_or_default();
@@ -446,7 +446,7 @@ fn domanda(host: &dyn ReadApi, entries: &[TrashEntry]) -> Result<Option<UiNode>,
                 vec![
                     UiNode::text(Text::message(
                         EXISTS_AGAIN,
-                        vec![Arg::text("doc", nome(&DocId::new(original)))],
+                        vec![Arg::text("doc", display_name(&DocId::new(original)))],
                     )),
                     // Un `Form` e non un campo con un bottone accanto: inviare
                     // manda **tutti** i campi contenuti, ed è ciò che rende
@@ -455,7 +455,7 @@ fn domanda(host: &dyn ReadApi, entries: &[TrashEntry]) -> Result<Option<UiNode>,
                         children: vec![UiNode::new(UiKind::TextInput {
                             field: NAME_FIELD.to_string(),
                             label: None,
-                            value: proposta.to_string(),
+                            value: proposed_name.to_string(),
                             placeholder: None,
                             action: None,
                         })],
@@ -475,5 +475,5 @@ fn domanda(host: &dyn ReadApi, entries: &[TrashEntry]) -> Result<Option<UiNode>,
         // è una domanda che non si fa più.
         _ => return Ok(None),
     };
-    Ok(Some(nodo.with_key("ask")))
+    Ok(Some(node.with_key("ask")))
 }

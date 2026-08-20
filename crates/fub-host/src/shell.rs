@@ -119,7 +119,7 @@ pub fn shell_keybinding_specs() -> Vec<SettingSpec> {
                     default: chord.unwrap_or_default().to_string(),
                 },
             )
-            .per_machine()
+            .for_machine()
         })
         .collect()
 }

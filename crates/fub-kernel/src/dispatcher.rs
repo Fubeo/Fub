@@ -56,7 +56,7 @@ use fub_abi::traits::{JobId, JobSpec};
 use fub_abi::{Actor, BatchId, Event, Notice, Origin};
 
 use crate::bus::EventBus;
-use crate::veleno::Condizione;
+use crate::poison::Condition;
 
 /// Tetto di eventi drenati in un singolo drenaggio: tronca i cicli di handler
 /// che si rimbalzano eventi a vicenda senza convergere. Il troncamento NON è
@@ -76,7 +76,7 @@ struct BatchState {
     /// si fa a ogni evento, e farla su un `Vec` è un giro del lotto per
     /// evento. Il `Vec` resta l'elenco che esce; questo è solo come ci si
     /// guarda dentro.
-    toccati: std::collections::HashSet<DocId>,
+    touched: std::collections::HashSet<DocId>,
     /// Almeno un [`Event::IndexUpdated`] è stato soppresso: alla chiusura il
     /// lotto ha qualcosa da dire anche se non ha toccato documenti (una
     /// rimozione dal solo indice, un rebuild).
@@ -93,14 +93,14 @@ struct BatchState {
 /// coda vuota, cioè indistinguibile dal drenaggio normale.
 enum Drain {
     /// Si serve la coda, e ogni consegna costa un'unità di budget.
-    Aperto,
+    Open,
     /// Il budget è finito: si serve ciò che il troncamento ha **salvato**, e
     /// ciò che gli handler emettono da qui in poi si conta invece di
     /// consegnarlo.
-    Troncato,
+    Truncated,
     /// L'ultimo `Overflow` è stato consegnato: da qui non esce più niente, o il
     /// drenaggio non terminerebbe.
-    Chiuso,
+    Closed,
 }
 
 /// Una coda di eventi in attesa, col `VecDeque` **privato apposta**.
@@ -151,9 +151,9 @@ impl EventQueue {
     /// buttato, o scrive `let _ =` — cioè dichiara di saperlo.
     #[must_use]
     fn discard_all(&mut self) -> usize {
-        let quanti = self.0.len();
+        let count = self.0.len();
         self.0.clear();
-        quanti
+        count
     }
 
     /// Riempie una coda **vuota**.
@@ -164,8 +164,8 @@ impl EventQueue {
     fn fill(&mut self, notices: impl IntoIterator<Item = Notice>) {
         debug_assert!(
             self.0.is_empty(),
-            "una coda si riempie da vuota: riempirne una piena butterebbe \
-             ciò che c'era senza passare da discard_all",
+            "a queue is filled from empty: filling a full one would discard \
+             what was there without going through discard_all",
         );
         self.0.extend(notices);
     }
@@ -223,7 +223,7 @@ impl Dispatcher {
             pending: EventQueue::default(),
             salvaged: EventQueue::default(),
             tail_dropped: 0,
-            drain: Drain::Aperto,
+            drain: Drain::Open,
             dispatching: false,
             in_provider_call: false,
             pending_jobs: Vec::new(),
@@ -261,7 +261,7 @@ impl Dispatcher {
                 return;
             }
             if let Some(doc) = event.touched() {
-                if state.toccati.insert(doc.clone()) {
+                if state.touched.insert(doc.clone()) {
                     state.changed.push(doc.clone());
                 }
             }
@@ -314,7 +314,7 @@ impl Dispatcher {
         self.batch = Some(BatchState {
             id,
             changed: Vec::new(),
-            toccati: std::collections::HashSet::new(),
+            touched: std::collections::HashSet::new(),
             index_dirty: false,
         });
         true
@@ -398,7 +398,7 @@ impl Dispatcher {
             return false;
         }
         self.dispatching = true;
-        self.drain = Drain::Aperto;
+        self.drain = Drain::Open;
         self.tail_dropped = 0;
         true
     }
@@ -422,7 +422,7 @@ impl Dispatcher {
     /// `trouble`, l'esito di un job, un custom — si consegna lo stesso.
     pub(crate) fn next_to_deliver(&mut self, budget: &mut usize) -> Option<Notice> {
         match self.drain {
-            Drain::Aperto => {
+            Drain::Open => {
                 let notice = self.pending.pop_front()?;
                 if *budget > 0 {
                     *budget -= 1;
@@ -446,11 +446,11 @@ impl Dispatcher {
                         self.bus.emit(notice.clone());
                     }
                 }
-                self.drain = Drain::Troncato;
+                self.drain = Drain::Truncated;
                 self.next_of_tail()
             }
-            Drain::Troncato => self.next_of_tail(),
-            Drain::Chiuso => None,
+            Drain::Truncated => self.next_of_tail(),
+            Drain::Closed => None,
         }
     }
 
@@ -467,7 +467,7 @@ impl Dispatcher {
         if let Some(notice) = self.salvaged.pop_front() {
             return Some(notice);
         }
-        self.drain = Drain::Chiuso;
+        self.drain = Drain::Closed;
         let dropped = std::mem::take(&mut self.tail_dropped);
         if dropped == 0 {
             return None;
@@ -484,14 +484,14 @@ impl Dispatcher {
 
     pub(crate) fn end_drain(&mut self) {
         self.dispatching = false;
-        if matches!(self.drain, Drain::Chiuso) {
+        if matches!(self.drain, Drain::Closed) {
             // L'ultimissimo giro non si può raccontare: ciò che un handler
             // emette **ricevendo** l'`Overflow` di congedo si scarta senza
             // dirlo, perché dirlo vorrebbe dire un altro evento, che ne
             // produrrebbe altri. Il conto si ferma dove si è potuto dire.
             let _ = self.pending.discard_all();
         }
-        self.drain = Drain::Aperto;
+        self.drain = Drain::Open;
     }
 
     // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------
@@ -616,7 +616,7 @@ pub struct PendingJob {
 /// [`Condizione::denunce`].
 #[derive(Default)]
 pub struct JobBell {
-    queued: Condizione<u64>,
+    queued: Condition<u64>,
 }
 
 impl JobBell {
@@ -627,18 +627,18 @@ impl JobBell {
     /// preceduto). La regola sta in [`Condizione::cambia`], che è il posto in
     /// cui vale per chiunque.
     pub fn ring(&self) {
-        self.queued.cambia(|queued| *queued += 1);
+        self.queued.change(|queued| *queued += 1);
     }
 
     /// Quante volte ha suonato finora. Si legge **prima** di drenare.
     pub fn ticket(&self) -> u64 {
-        *self.queued.prendi()
+        *self.queued.acquire()
     }
 
     /// Quante volte il campanello si è ripreso da un avvelenamento. È l'unica
     /// traccia che ne resta, ed è dichiarata: vedi la testa del tipo.
-    pub fn denunce(&self) -> u32 {
-        self.queued.denunce()
+    pub fn reports(&self) -> u32 {
+        self.queued.reports()
     }
 
     /// Aspetta che suoni oltre `seen`, **o che scada `entro`**, e restituisce
@@ -650,14 +650,14 @@ impl JobBell {
     /// mio». La differenza è che l'intervallo non lo sceglie chi aspetta — lo
     /// dice la sveglia più vicina.
     pub fn wait_beyond_or(&self, seen: u64, entro: std::time::Duration) -> u64 {
-        let queued = self.queued.prendi();
-        *self.queued.aspetta_o(queued, entro, |q| *q == seen)
+        let queued = self.queued.acquire();
+        *self.queued.wait_or(queued, entro, |q| *q == seen)
     }
 
     /// Aspetta che suoni oltre `seen`, e restituisce il conto nuovo.
     pub fn wait_beyond(&self, seen: u64) -> u64 {
-        let queued = self.queued.prendi();
-        *self.queued.aspetta(queued, |q| *q == seen)
+        let queued = self.queued.acquire();
+        *self.queued.wait(queued, |q| *q == seen)
     }
 }
 
@@ -671,64 +671,63 @@ mod tests {
     ///
     /// L'hook dei panici si mette a tacere per la durata del misfatto, o un
     /// panico voluto stamperebbe la sua traccia e farebbe sembrare rotto un
-    /// banco verde.
-    fn avvelena(f: impl FnOnce()) {
-        let vecchio = std::panic::take_hook();
+    fn poison_bus(f: impl FnOnce()) {
+        let old = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
-        std::panic::set_hook(vecchio);
+        std::panic::set_hook(old);
     }
 
+    /// banco verde.
     /// **Un campanello avvelenato suona lo stesso, e chi aspetta si sveglia.**
     ///
     /// Coi sei `.expect("campanello avvelenato")` di prima questo caso non
     /// falliva un `assert`: paniava — nel thread del banco alla prima riga, e
     /// nell'app dentro il runner dei job, cioè nel thread che poi non accoda
-    /// più niente.
     #[test]
-    fn un_campanello_avvelenato_suona_lo_stesso_e_sveglia_chi_aspetta() {
+    fn a_poisoned_bell_still_rings_and_wakes_waiters() {
         let bell = Arc::new(JobBell::default());
-        avvelena(|| {
-            let _guardia = bell.queued.prendi();
-            panic!("qualcuno muore col campanello in mano");
+        poison_bus(|| {
+            let _guard = bell.queued.acquire();
+            panic!("someone dies holding the bell");
         });
 
+    /// più niente.
         // Il conto è monotòno e non è tornato indietro: ciò che il veleno può
-        // costare è un risveglio, non un job.
-        let biglietto = bell.ticket();
-        let chi_aspetta = {
+        let ticket = bell.ticket();
+        let waiter = {
             let bell = Arc::clone(&bell);
-            std::thread::spawn(move || bell.wait_beyond(biglietto))
+            std::thread::spawn(move || bell.wait_beyond(ticket))
         };
         bell.ring();
         assert_eq!(
-            chi_aspetta
+            waiter
                 .join()
-                .expect("chi aspettava è arrivato in fondo"),
-            biglietto + 1
+                .expect("the waiter reached the end"),
+            ticket + 1
         );
         assert_eq!(
-            bell.denunce(),
+            bell.reports(),
             1,
-            "un incidente vale uno, non uno per chiamata"
+            "one incident counts once, not once per call"
         );
     }
 
+        // costare è un risveglio, non un job.
     /// L'attesa a scadenza è la seconda porta, e si rompe per conto suo: il
-    /// veleno di `wait_timeout_while` porta dentro una coppia e non una guardia.
     #[test]
-    fn un_campanello_avvelenato_scade_lo_stesso() {
+    fn a_poisoned_bell_times_out_anyway() {
         let bell = JobBell::default();
-        avvelena(|| {
-            let _guardia = bell.queued.prendi();
+        poison_bus(|| {
+            let _guard = bell.queued.acquire();
             panic!("boom");
         });
-        let biglietto = bell.ticket();
+        let ticket = bell.ticket();
         assert_eq!(
-            bell.wait_beyond_or(biglietto, std::time::Duration::from_millis(1)),
-            biglietto,
-            "scaduto il tempo si torna col conto che c'era"
+            bell.wait_beyond_or(ticket, std::time::Duration::from_millis(1)),
+            ticket,
+            "when time runs out you return with the count that was there"
         );
-        assert_eq!(bell.denunce(), 1);
+        assert_eq!(bell.reports(), 1);
     }
 }

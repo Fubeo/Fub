@@ -9,22 +9,22 @@
 // lungo sta in `theme.ts`): una media query si prova solo aprendo l'app in due
 // sistemi diversi.
 import { describe, expect, it } from "vitest";
-import { temaEffettivo } from "./theme";
+import { effectiveTheme } from "./theme";
 
 describe("quale luce vale", () => {
   it("una scelta esplicita vince sul sistema, in entrambi i versi", () => {
     // Il caso per cui la chiave esiste: chi vuole il chiaro su un sistema
     // scuro, e chi vuole lo scuro su un sistema chiaro. Se «vince» valesse solo
     // in una direzione, metà degli utenti non se ne accorgerebbe.
-    expect(temaEffettivo("light", true)).toBe("light");
-    expect(temaEffettivo("dark", false)).toBe("dark");
-    expect(temaEffettivo("light", false)).toBe("light");
-    expect(temaEffettivo("dark", true)).toBe("dark");
+    expect(effectiveTheme("light", true)).toBe("light");
+    expect(effectiveTheme("dark", false)).toBe("dark");
+    expect(effectiveTheme("light", false)).toBe("light");
+    expect(effectiveTheme("dark", true)).toBe("dark");
   });
 
   it("la stringa vuota è «come il sistema», che è il default dello schema", () => {
-    expect(temaEffettivo("", true)).toBe("dark");
-    expect(temaEffettivo("", false)).toBe("light");
+    expect(effectiveTheme("", true)).toBe("dark");
+    expect(effectiveTheme("", false)).toBe("light");
   });
 
   it("qualunque altra cosa è «come il sistema», e non un terzo stato", () => {
@@ -37,9 +37,9 @@ describe("quale luce vale", () => {
     // `lime` è inclusa: è stata un fascio, ma `temaEffettivo` non l'ha mai
     // saputo — e anche ora che il fascio non c'è più, il valore ignoto cade
     // nel «come il sistema». La migrazione avviene prima, in `mountTheme`.
-    for (const strano of ["Dark", "auto", "sepia", "lime", "", null, undefined, 3, {}, []]) {
-      expect(temaEffettivo(strano, true)).toBe("dark");
-      expect(temaEffettivo(strano, false)).toBe("light");
+    for (const strange of ["Dark", "auto", "sepia", "lime", "", null, undefined, 3, {}, []]) {
+      expect(effectiveTheme(strange, true)).toBe("dark");
+      expect(effectiveTheme(strange, false)).toBe("light");
     }
   });
 });

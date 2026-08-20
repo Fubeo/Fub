@@ -57,24 +57,24 @@ impl<'a> Offsets<'a> {
         // una riga e due blocchi finiscono per sovrapporsi: l'ha trovato il
         // fuzzer del §17.1, al caso 2779.
         let bytes = source.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            match bytes[i] {
+        let mut the = 0;
+        while the < bytes.len() {
+            match bytes[the] {
                 b'\n' => {
-                    line_starts.push(i + 1);
-                    i += 1;
+                    line_starts.push(the + 1);
+                    the += 1;
                 }
                 b'\r' => {
                     // `\r\n` è **un** terminatore, non due righe vuote in mezzo.
-                    let salto = if bytes.get(i + 1) == Some(&b'\n') {
+                    let salto = if bytes.get(the + 1) == Some(&b'\n') {
                         2
                     } else {
                         1
                     };
-                    line_starts.push(i + salto);
-                    i += salto;
+                    line_starts.push(the + salto);
+                    the += salto;
                 }
-                _ => i += 1,
+                _ => the += 1,
             }
         }
         Offsets {
@@ -127,9 +127,9 @@ mod tests {
     #[test]
     fn maps_line_col_to_byte() {
         let src = "abc\ndef\n";
-        let o = Offsets::new(src);
-        assert_eq!(o.byte(1, 1), 0);
-        assert_eq!(o.byte(2, 1), 4);
-        assert_eq!(o.byte(2, 3), 6);
+        let or = Offsets::new(src);
+        assert_eq!(or.byte(1, 1), 0);
+        assert_eq!(or.byte(2, 1), 4);
+        assert_eq!(or.byte(2, 3), 6);
     }
 }

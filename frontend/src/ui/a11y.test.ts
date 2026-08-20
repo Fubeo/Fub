@@ -31,12 +31,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import html from "../../index.html?raw";
 import samples from "../__fixtures__/mirror-samples.json";
 import type { UiNode } from "../host/contract";
-import css from "../theme/serie/pelle.css?raw";
-import { nomeAccessibile, raccontaProblemi, verificaAccessibilita } from "./a11y-check";
-import { attivabile, intrappolaFuoco, nonAttivabile } from "./a11y";
+import css from "../theme/serie/skin.css?raw";
+import { accessibleName, formatIssues, checkAccessibility } from "./a11y-check";
+import { activatable, trapFocus, notActivatable } from "./a11y";
 import { mountTree } from "./node";
 
-const nodi = samples.UiNode as unknown as UiNode[];
+const nodes = samples.UiNode as unknown as UiNode[];
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -48,34 +48,34 @@ describe("il checker sa trovare i difetti che cerca", () => {
   // misura giusta: ogni regola viene fatta scattare apposta.
   it("vede un comando senza nome", () => {
     document.body.innerHTML = `<button></button>`;
-    expect(verificaAccessibilita(document).map((p) => p.regola)).toContain("comando senza nome");
+    expect(checkAccessibility(document).map((p) => p.rule)).toContain("comando senza nome");
   });
 
   it("vede un campo senza nome, e non si fa ingannare da un segnaposto", () => {
     document.body.innerHTML = `<input placeholder="Cerca…" />`;
-    expect(verificaAccessibilita(document).map((p) => p.regola)).toContain("campo senza nome");
+    expect(checkAccessibility(document).map((p) => p.rule)).toContain("campo senza nome");
   });
 
   it("vede una riga cliccabile che il tab non raggiunge", () => {
     document.body.innerHTML = `<div class="clickable">Apri</div>`;
-    expect(verificaAccessibilita(document).map((p) => p.regola)).toContain(
+    expect(checkAccessibility(document).map((p) => p.rule)).toContain(
       "cliccabile ma irraggiungibile",
     );
   });
 
   it("vede un tabindex positivo", () => {
     document.body.innerHTML = `<button tabindex="3">Vai</button>`;
-    expect(verificaAccessibilita(document).map((p) => p.regola)).toContain("tabindex positivo");
+    expect(checkAccessibility(document).map((p) => p.rule)).toContain("tabindex positivo");
   });
 
   it("vede un aria-labelledby che punta nel vuoto", () => {
     document.body.innerHTML = `<div role="dialog" aria-labelledby="non-esiste">x</div>`;
-    expect(verificaAccessibilita(document).map((p) => p.regola)).toContain("riferimento nel vuoto");
+    expect(checkAccessibility(document).map((p) => p.rule)).toContain("riferimento nel vuoto");
   });
 
   it("vede un frame senza titolo", () => {
     document.body.innerHTML = `<iframe src="https://esempio.test"></iframe>`;
-    expect(verificaAccessibilita(document).map((p) => p.regola)).toContain("frame senza titolo");
+    expect(checkAccessibility(document).map((p) => p.rule)).toContain("frame senza titolo");
   });
 
   it("e tace su ciò che è a posto", () => {
@@ -84,7 +84,7 @@ describe("il checker sa trovare i difetti che cerca", () => {
       <label for="q">Cerca</label><input id="q" />
       <div class="clickable" role="button" tabindex="0">Apri</div>
       <div role="dialog" aria-label="Impostazioni"></div>`;
-    expect(verificaAccessibilita(document)).toEqual([]);
+    expect(checkAccessibility(document)).toEqual([]);
   });
 });
 
@@ -93,13 +93,13 @@ describe("il nome accessibile", () => {
     document.body.innerHTML = `
       <span id="etichetta">Titolo vero</span>
       <button aria-labelledby="etichetta">testo interno</button>`;
-    const bottone = document.querySelector("button")!;
-    expect(nomeAccessibile(bottone)).toBe("Titolo vero");
+    const button = document.querySelector("button")!;
+    expect(accessibleName(button)).toBe("Titolo vero");
   });
 
   it("trova la `<label for>` di un campo, che è il caso che il renderer produce", () => {
     document.body.innerHTML = `<label for="c" class="ui-field-label">Titolo</label><input id="c" />`;
-    expect(nomeAccessibile(document.querySelector("input")!)).toBe("Titolo");
+    expect(accessibleName(document.querySelector("input")!)).toBe("Titolo");
   });
 
   it("non prende il contenuto di un campo per il suo nome", () => {
@@ -107,7 +107,7 @@ describe("il nome accessibile", () => {
     // sarebbe il suo nome: senza questa distinzione la regola 2 passerebbe a
     // vuoto su metà dei campi.
     document.body.innerHTML = `<input value="scritto dall'utente" />`;
-    expect(nomeAccessibile(document.querySelector("input")!)).toBe("");
+    expect(accessibleName(document.querySelector("input")!)).toBe("");
   });
 });
 
@@ -116,22 +116,22 @@ describe("i pannelli dichiarativi (§2.1) sono accessibili", () => {
     // La garanzia sta in Rust (un `match` senza `_` in `ts_mirror.rs`); qui si
     // controlla solo che la fixture sia arrivata e non sia vuota, perché un
     // presidio che gira su zero nodi passa e non dice niente.
-    expect(nodi.length).toBeGreaterThan(25);
+    expect(nodes.length).toBeGreaterThan(25);
   });
 
   it("nessuna specie di nodo disegna un comando o un campo senza nome", () => {
     // Ogni nodo nel suo contenitore: alcuni sono `<tr>` o `<td>`, che fuori da
     // una tabella il DOM riparenta — e un nodo riparentato non è più quello che
     // il renderer ha prodotto.
-    const problemi = nodi.flatMap((nodo) => {
+    const errors = nodes.flatMap((node) => {
       const host = document.createElement("div");
       document.body.appendChild(host);
-      mountTree(host, nodo, async () => {});
-      return verificaAccessibilita(host).map((p) => ({ ...p, dove: `${nodo.node}: ${p.dove}` }));
+      mountTree(host, node, async () => {});
+      return checkAccessibility(host).map((p) => ({ ...p, where: `${node.node}: ${p.where}` }));
     });
     expect(
-      problemi,
-      `il renderer dichiarativo produce nodi che chi non vede non può usare:\n${raccontaProblemi(problemi)}`,
+      errors,
+      `il renderer dichiarativo produce nodes che chi non vede non può usare:\n${formatIssues(errors)}`,
     ).toEqual([]);
   });
 
@@ -147,8 +147,8 @@ describe("i pannelli dichiarativi (§2.1) sono accessibili", () => {
       { node: "list_item", title: "Una nota", subtitle: null, selected: false, action: { action: "apri", payload: null } } as unknown as UiNode,
       async () => {},
     );
-    const voce = host.querySelector<HTMLElement>(".ui-list-item")!;
-    expect(voce.getAttribute("tabindex")).toBe("0");
+    const entry = host.querySelector<HTMLElement>(".ui-list-item")!;
+    expect(entry.getAttribute("tabindex")).toBe("0");
 
     mountTree(
       host,
@@ -161,25 +161,25 @@ describe("i pannelli dichiarativi (§2.1) sono accessibili", () => {
   it("Invio e barra attivano ciò che il click attiva", () => {
     const el = document.createElement("div");
     document.body.appendChild(el);
-    let premuto = 0;
-    el.addEventListener("click", () => (premuto += 1));
-    attivabile(el);
+    let pressed = 0;
+    el.addEventListener("click", () => (pressed += 1));
+    activatable(el);
 
     for (const key of ["Enter", " "]) {
       el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     }
-    expect(premuto, "Invio e barra devono valere quanto un click").toBe(2);
+    expect(pressed, "Invio e barra devono valere quanto un click").toBe(2);
 
     // E un tasto qualsiasi no, o scrivere dentro un pannello lo attiverebbe.
     el.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
-    expect(premuto).toBe(2);
+    expect(pressed).toBe(2);
   });
 
   it("togliere l'azione toglie anche il ruolo che l'azione aveva messo", () => {
     const el = document.createElement("div");
-    attivabile(el);
+    activatable(el);
     expect(el.getAttribute("role")).toBe("button");
-    nonAttivabile(el);
+    notActivatable(el);
     expect(el.getAttribute("role")).toBe(null);
   });
 
@@ -187,7 +187,7 @@ describe("i pannelli dichiarativi (§2.1) sono accessibili", () => {
     // Un `<button>` è già un pulsante: aggiungergli `role="button"` non aggiunge
     // niente e crea una seconda verità da tenere allineata.
     const b = document.createElement("button");
-    attivabile(b);
+    activatable(b);
     expect(b.hasAttribute("role")).toBe(false);
     expect(b.hasAttribute("tabindex")).toBe(false);
   });
@@ -198,10 +198,10 @@ describe("la scocca della shell è accessibile", () => {
     document.documentElement.innerHTML = html
       .replace(/^[\s\S]*?<body>/, "<body>")
       .replace(/<\/body>[\s\S]*$/, "</body>");
-    const problemi = verificaAccessibilita(document);
+    const errors = checkAccessibility(document);
     expect(
-      problemi,
-      `la scocca della shell ha dei buchi:\n${raccontaProblemi(problemi)}`,
+      errors,
+      `la scocca della shell ha dei buchi:\n${formatIssues(errors)}`,
     ).toEqual([]);
   });
 
@@ -223,19 +223,19 @@ describe("una modale non lascia uscire il fuoco", () => {
     document.body.innerHTML = `
       <button id="fuori">Apri</button>
       <div id="modale" tabindex="-1"><button id="dentro">Ok</button></div>`;
-    const fuori = document.querySelector<HTMLElement>("#fuori")!;
-    const modale = document.querySelector<HTMLElement>("#modale")!;
-    fuori.focus();
+    const outside = document.querySelector<HTMLElement>("#fuori")!;
+    const modal = document.querySelector<HTMLElement>("#modale")!;
+    outside.focus();
 
-    let chiusa = 0;
-    const sciogli = intrappolaFuoco(modale, () => {
-      chiusa += 1;
-      sciogli();
+    let closed = 0;
+    const releaseTrap = trapFocus(modal, () => {
+      closed += 1;
+      releaseTrap();
     });
     expect(document.activeElement?.id, "il fuoco entra nella modale").toBe("dentro");
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(chiusa).toBe(1);
+    expect(closed).toBe(1);
     expect(document.activeElement?.id, "e torna da dove era partito").toBe("fuori");
   });
 
@@ -243,8 +243,8 @@ describe("una modale non lascia uscire il fuoco", () => {
     document.body.innerHTML = `
       <button id="fuori">Apri</button>
       <div id="modale" tabindex="-1"><button id="a">A</button><button id="b">B</button></div>`;
-    const modale = document.querySelector<HTMLElement>("#modale")!;
-    const sciogli = intrappolaFuoco(modale, () => {});
+    const modal = document.querySelector<HTMLElement>("#modale")!;
+    const releaseTrap = trapFocus(modal, () => {});
 
     // Dall'ultimo elemento in avanti si torna al primo, invece di finire sulla
     // UI di sotto — che è ancora lì e non è più quella che si sta guardando.
@@ -255,7 +255,7 @@ describe("una modale non lascia uscire il fuoco", () => {
     // E indietro dal primo si va all'ultimo.
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     expect(document.activeElement?.id).toBe("b");
-    sciogli();
+    releaseTrap();
   });
 });
 
@@ -267,23 +267,23 @@ describe("due modali aperte: comanda l'ultima", () => {
   /// `document` in cattura, quindi partivano nell'ordine in cui erano stati
   /// attaccati e a vincere era la più vecchia, cioè quella dipinta sotto
   /// (difetto 0149).
-  function apriDue() {
+  function openDue() {
     document.body.innerHTML = `
       <button id="fuori">Apri</button>
       <div id="sotto" tabindex="-1"><button id="s1">S1</button><button id="s2">S2</button></div>
       <div id="sopra" tabindex="-1"><button id="p1">P1</button><button id="p2">P2</button></div>`;
-    const conti = { sotto: 0, sopra: 0 };
-    const sciogliSotto = intrappolaFuoco(document.querySelector<HTMLElement>("#sotto")!, () => {
-      conti.sotto += 1;
+    const counts = { below: 0, above: 0 };
+    const releaseBelow = trapFocus(document.querySelector<HTMLElement>("#sotto")!, () => {
+      counts.below += 1;
     });
-    const sciogliSopra = intrappolaFuoco(document.querySelector<HTMLElement>("#sopra")!, () => {
-      conti.sopra += 1;
+    const releaseAbove = trapFocus(document.querySelector<HTMLElement>("#sopra")!, () => {
+      counts.above += 1;
     });
-    return { conti, sciogliSotto, sciogliSopra };
+    return { counts, releaseBelow, releaseAbove };
   }
 
   it("il tab non passa nemmeno per la superficie di sotto", () => {
-    const { sciogliSotto, sciogliSopra } = apriDue();
+    const { releaseBelow, releaseAbove } = openDue();
     expect(document.activeElement?.id, "il fuoco entra nell'ultima aperta").toBe("p1");
 
     // Dove il fuoco è *passato*, non solo dove si è fermato: con due trappole
@@ -293,40 +293,40 @@ describe("due modali aperte: comanda l'ultima", () => {
     // superficie di sotto è un evento che qualcuno riceve: la riga che si apre,
     // il pannello che si ridisegna, il lettore di schermo che annuncia una cosa
     // che non si sta guardando.
-    const passaggi: string[] = [];
+    const focusSequence: string[] = [];
     for (const id of ["s1", "s2"]) {
       document
         .querySelector<HTMLElement>(`#${id}`)!
-        .addEventListener("focus", () => passaggi.push(id));
+        .addEventListener("focus", () => focusSequence.push(id));
     }
 
     document.querySelector<HTMLElement>("#p2")!.focus();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     expect(document.activeElement?.id, "il giro si chiude dentro quella sopra").toBe("p1");
     expect(
-      passaggi,
+      focusSequence,
       "il tab ha toccato la superficie di sotto: comanda anche chi si è aperto " +
         "prima, e il fuoco attraversa una superficie che sullo schermo sta sotto " +
         "un'altra",
     ).toEqual([]);
 
-    sciogliSopra();
-    sciogliSotto();
+    releaseAbove();
+    releaseBelow();
   });
 
   it("Escape ne chiude una sola, e quella sotto torna a comandare", () => {
-    const { conti, sciogliSotto, sciogliSopra } = apriDue();
+    const { counts, releaseBelow, releaseAbove } = openDue();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(
-      [conti.sopra, conti.sotto],
+      [counts.above, counts.below],
       "un solo Escape ha chiuso due superfici: le trappole aperte si sentono " +
         "tutte lo stesso tasto",
     ).toEqual([1, 0]);
 
     // Chi ha chiesto la chiusura è chi la esegue: qui lo fa il banco, come lo
     // farebbe il pannello che l'ha aperta.
-    sciogliSopra();
+    releaseAbove();
     document.querySelector<HTMLElement>("#s2")!.focus();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     expect(document.activeElement?.id, "chiusa quella sopra, comanda di nuovo quella sotto").toBe(
@@ -334,44 +334,44 @@ describe("due modali aperte: comanda l'ultima", () => {
     );
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(conti.sotto, "e adesso Escape è suo").toBe(1);
-    sciogliSotto();
+    expect(counts.below, "e adesso Escape è suo").toBe(1);
+    releaseBelow();
   });
 
   it("una che si chiude fuori ordine non lascia a comandare un fantasma", () => {
     // Le superfici non si chiudono per forza in ordine: quella di sotto può
     // andarsene per conto suo — un comando, un documento che sparisce — mentre
     // sopra ce n'è ancora una.
-    const { conti, sciogliSotto, sciogliSopra } = apriDue();
-    sciogliSotto();
+    const { counts, releaseBelow, releaseAbove } = openDue();
+    releaseBelow();
 
     document.querySelector<HTMLElement>("#p2")!.focus();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     expect(document.activeElement?.id, "quella rimasta comanda ancora").toBe("p1");
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(conti.sopra).toBe(1);
-    sciogliSopra();
+    expect(counts.above).toBe(1);
+    releaseAbove();
   });
 });
 
 describe("i piani di chi intrappola il fuoco", () => {
-  /// La metà dipinta della stessa regola. Il tasto lo dà `intrappolaFuoco`
+  /// La metà dipinta della stessa regola. Il tasto lo dà `trapFocus`
   /// all'ultima aperta, ma se quell'ultima è dipinta sotto un'altra superficie
   /// modale il tasto arriva dove l'occhio non è: le due superfici a tutto schermo
   /// che intrappolano il fuoco — `.modale` (palette, ricerca nella nota, quick
   /// switcher) e `.views-modal` — stanno quindi sullo **stesso** piano, e fra
   /// due dello stesso piano decide l'ordine nel DOM, che è di nuovo l'ordine di
   /// apertura (difetto 0149).
-  function pianoDi(selettore: string): string | null {
+  function layerOf(selector: string): string | null {
     // I commenti via per primi, e non dentro il selettore: una virgola dentro un
     // commento spezzerebbe l'elenco dei selettori prima di poterlo pulire.
-    const nudo = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    const blocchi = [...nudo.matchAll(/([^{}]+)\{([^}]*)\}/g)];
-    for (const blocco of blocchi.reverse()) {
-      const selettori = blocco[1].split(",").map((s) => s.trim());
-      if (!selettori.includes(selettore)) continue;
-      const z = /z-index\s*:\s*var\(\s*(--[\w-]+)\s*\)/.exec(blocco[2]);
+    const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const blocks = [...cssWithoutComments.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+    for (const block of blocks.reverse()) {
+      const selectors = block[1].split(",").map((s) => s.trim());
+      if (!selectors.includes(selector)) continue;
+      const z = /z-index\s*:\s*var\(\s*(--[\w-]+)\s*\)/.exec(block[2]);
       if (z) return z[1]!;
     }
     return null;
@@ -379,7 +379,7 @@ describe("i piani di chi intrappola il fuoco", () => {
 
   it("le superfici che intrappolano il fuoco stanno sul piano delle modali", () => {
     expect(
-      [pianoDi(".modale"), pianoDi(".views-modal")],
+      [layerOf(".modale"), layerOf(".views-modal")],
       "una superficie che intrappola il fuoco è dipinta sotto un'altra: chi " +
         "prende il tasto non è chi si vede, e chi naviga da tastiera scrive " +
         "dentro qualcosa che sullo schermo sta sotto",

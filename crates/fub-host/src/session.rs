@@ -49,7 +49,7 @@ use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates, Workspace};
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
-use crate::custodia::Custodia;
+use crate::custody::Custody;
 use crate::mount::mount;
 use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{BundleInfo, BundleRegistry};
@@ -83,7 +83,7 @@ pub trait EventSink: Send + Sync + 'static {
     /// mentire**.
     #[must_use = "un'uscita che non dice se ha consegnato è una perdita silenziosa: \
                   chi riceve resta indietro e nessuno gli dice di riconciliare"]
-    fn emit(&self, notice: &Notice) -> Consegna;
+    fn emit(&self, notice: &Notice) -> Delivery;
 }
 
 /// Cosa è successo a un notice arrivato a un'[uscita](EventSink).
@@ -94,11 +94,11 @@ pub trait EventSink: Send + Sync + 'static {
 ///
 /// [decisione 0126]: ../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Consegna {
+pub enum Delivery {
     /// È uscito.
-    Fatta,
+    Done,
     /// Non è uscito, e non uscirà: chi sta dall'altra parte ne resta in debito.
-    Persa,
+    Dropped,
 }
 
 /// Sessione di un vault aperto: il workspace condiviso, la metà leggibile del
@@ -118,7 +118,7 @@ pub struct VaultSession {
     /// il `Mutex` i lettori in ciclo stretto scavalcavano chi aspettava di
     /// scrivere, senza nessun limite: 6,4 secondi di attesa misurati per un
     /// salvataggio, contro 0,12 ms adesso. Il banco è `examples/contesa.rs`.
-    workspace: Custodia<Workspace>,
+    workspace: Custody<Workspace>,
     /// **Chi possiede i bundle** di questo vault (§9.3): i plugin montati, in
     /// ordine di montaggio. Vive quanto la sessione perché è chi chiama
     /// `Plugin::deactivate` quando si chiude — il kernel quei plugin non li ha
@@ -127,7 +127,7 @@ pub struct VaultSession {
     /// Condiviso col runner, che da qui prende il **corpo** di un job. Il lock
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
     /// chiude deve poterci passare mentre un export cammina il vault.
-    registry: Custodia<BundleRegistry>,
+    registry: Custody<BundleRegistry>,
     /// **Cosa questa apertura non ha letto** (§15.7): l'esito dell'apertura,
     /// tenuto per la vita della sessione.
     ///
@@ -141,14 +141,14 @@ pub struct VaultSession {
     /// necessariamente vuota e si riempie mentre l'indicizzazione cammina. Il
     /// campo non dice più «cosa non si è letto» ma «cosa non si è letto
     /// **finora**», e le due frasi coincidono solo da `IndexUpdated` in poi.
-    unread: Custodia<Vec<UnreadDoc>>,
+    unread: Custody<Vec<UnreadDoc>>,
     /// **Quando l'indicizzazione di questa apertura ha finito** (§15.7): la
     /// condizione su cui aspetta chi non può proseguire con una ricerca
     /// parziale — un test, e la CLI che indicizza ed esce.
     ///
     /// L'app non la usa e non deve: il verso giusto per lei è disegnare subito
     /// e aggiornare, che è tutto ciò per cui l'apertura è a fasi.
-    indicizzato: Arc<(Mutex<bool>, std::sync::Condvar)>,
+    indexed: Arc<(Mutex<bool>, std::sync::Condvar)>,
     /// **Chi esegue il lavoro lungo** (§9.3): il pool che drena la coda dei job.
     /// Va fermato **prima** di chiudere, ed è il gemello del watcher — quello
     /// smette di guardare, questo smette di lavorare.
@@ -167,10 +167,10 @@ pub struct VaultSession {
     /// proprio posto nell'ordine, e toglierla dalla mappa toglie anche quello.
     ///
     /// Zero è «aperta ma non ancora diventata corrente», che dura il tempo fra
-    /// l'inserimento e [`Host::diventa_corrente`] e perde contro chiunque:
+    /// l'inserimento e [`Host::become_current`] e perde contro chiunque:
     /// aprire un vault lo rende corrente **quando l'apertura è finita**, non a
     /// metà.
-    usato: u64,
+    used: u64,
 }
 
 impl VaultSession {
@@ -178,14 +178,14 @@ impl VaultSession {
         &self.root
     }
 
-    pub fn workspace(&self) -> &Custodia<Workspace> {
+    pub fn workspace(&self) -> &Custody<Workspace> {
         &self.workspace
     }
 
     /// Chi possiede i bundle di questo vault (§9.3): serve a chi ne monta uno a
     /// mano — un test, e a M5 il caricatore che installa un plugin a vault già
     /// aperto.
-    pub fn bundles(&self) -> &Custodia<BundleRegistry> {
+    pub fn bundles(&self) -> &Custody<BundleRegistry> {
         &self.registry
     }
 
@@ -239,7 +239,7 @@ impl VaultSession {
         // un secondo. Ciò che non si chiude non si chiude, e si dice.
         match (workspace.write(), registry.write()) {
             (Ok(mut ws), Ok(mut reg)) => errors.extend(reg.close(&mut ws)),
-            (Err(e), _) | (Ok(_), Err(e)) => errors.push(e),
+            (Err(and), _) | (Ok(_), Err(and)) => errors.push(and),
         }
         errors
     }
@@ -277,21 +277,21 @@ impl Sessions {
     /// scelto. Qui chi non è aperto non può essere corrente, e chi chiude il
     /// corrente lascia il posto al più recente di chi resta senza che nessuno
     /// scelga niente.
-    fn corrente(&self) -> Option<&Utf8PathBuf> {
+    fn current(&self) -> Option<&Utf8PathBuf> {
         self.open
             .iter()
-            .max_by_key(|(_, session)| session.usato)
+            .max_by_key(|(_, session)| session.used)
             .map(|(root, _)| root)
     }
 
     /// Questo vault è il più recente. `false` se non è aperto — ed è la
     /// risposta di chi lo chiede per un path che nessuno ha aperto.
-    fn rendi_corrente(&mut self, root: &Utf8Path) -> bool {
+    fn make_current(&mut self, root: &Utf8Path) -> bool {
         self.usi += 1;
         let usi = self.usi;
         match self.open.get_mut(root) {
             Some(session) => {
-                session.usato = usi;
+                session.used = usi;
                 true
             }
             None => false,
@@ -301,7 +301,7 @@ impl Sessions {
 
 /// Chi monta Fub e tiene aperti i vault.
 pub struct Host {
-    sessions: Custodia<Sessions>,
+    sessions: Custody<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
     /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di
@@ -313,7 +313,7 @@ pub struct Host {
     /// diagnosi nasce una volta e si consuma una volta con un `take` — e la
     /// forma di `Custodia::denuncia` serve a chi deve rispondere a ogni
     /// chiamata, non a chi risponde alla prima.
-    avviso_di_sessione: Mutex<Option<String>>,
+    session_notice: Mutex<Option<String>>,
     /// Il **livello macchina** della configurazione (§11.1), condiviso da tutti
     /// i vault che questo host apre: la configurazione della macchina è una, e N
     /// copie sarebbero N idee del tema.
@@ -362,7 +362,7 @@ impl Default for Host {
 /// dell'utente — un doppione fra le chiavi del core, o una chiave di vault
 /// arrivata nel filtro — quindi si **panica** invece di degradare in silenzio,
 /// che è la stessa scelta di `mount` davanti a un bundle di core malformato.
-fn con_lo_schema(machine: Arc<MachineSettings>) -> Arc<MachineSettings> {
+fn with_the_schema(machine: Arc<MachineSettings>) -> Arc<MachineSettings> {
     machine
         .declare(&crate::settings::core_machine_settings())
         .expect("le chiavi di macchina del core");
@@ -381,17 +381,17 @@ impl Host {
         #[cfg(not(feature = "notify-watcher"))]
         let watcher: Box<dyn WatcherFactory> = Box::new(crate::watcher::NoWatcher);
         Self {
-            sessions: Custodia::vuota("le sessioni aperte"),
+            sessions: Custody::empty("le sessioni aperte"),
             watcher,
             sink: None,
-            avviso_di_sessione: Mutex::new(None),
+            session_notice: Mutex::new(None),
             // **In memoria di default**, come `Workspace::new`, e per la stessa
             // ragione: chi non ha un'installazione — un test, un e2e headless —
             // non deve scrivere nella cartella di configurazione di chi lo
             // esegue. Un'app vera chiama `installed()` o `with_config_dir`, e se
             // se ne dimentica il difetto si vede subito (il tema non sopravvive
             // alla chiusura) invece che mai.
-            machine: con_lo_schema(MachineSettings::in_memory()),
+            machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
             vaults: VaultRegistry::in_memory(),
             job_threads: DEFAULT_JOB_THREADS,
@@ -443,7 +443,7 @@ impl Host {
         if let Some(warning) = warning {
             tracing::warn!(target: "fub.host", "stato di vista: {warning}");
         }
-        self.machine = con_lo_schema(machine);
+        self.machine = with_the_schema(machine);
         self.vaults = vaults;
         self.view_states = view_states;
         self
@@ -474,11 +474,11 @@ impl Host {
     /// l'host esistesse (`install_logging`). La chiama `fub_app::run`, l'unico
     /// che la riceve da lì; chi costruisce un host per un test non la passa e
     /// non ha nessun avviso da consegnare.
-    pub fn with_avviso_di_sessione(self, avviso: Option<String>) -> Self {
+    pub fn with_session_notice(self, warning: Option<String>) -> Self {
         *self
-            .avviso_di_sessione
+            .session_notice
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = avviso;
+            .unwrap_or_else(|and| and.into_inner()) = warning;
         self
     }
 
@@ -512,11 +512,11 @@ impl Host {
     /// chiama — se la chiamasse all'avvio si ricomprerebbe esattamente l'attesa
     /// che questa voce ha tolto.
     pub fn wait_indexed(&self, vault: Option<&str>) -> Result<(), PluginError> {
-        let condizione = self.with_session(vault, |s| Arc::clone(&s.indicizzato))?;
-        let (fatto, campana) = &*condizione;
-        let mut fatto = fatto.lock().expect("fine avvelenata");
-        while !*fatto {
-            fatto = campana.wait(fatto).expect("fine avvelenata");
+        let condition = self.with_session(vault, |s| Arc::clone(&s.indexed))?;
+        let (done, bell) = &*condition;
+        let mut done = done.lock().expect("fine avvelenata");
+        while !*done {
+            done = bell.wait(done).expect("fine avvelenata");
         }
         Ok(())
     }
@@ -545,17 +545,17 @@ impl Host {
         }
         let root = canonical(root)?;
 
-        let _fase = tracing::info_span!(target: "fub.apertura", "open").entered();
+        let _phase = tracing::info_span!(target: "fub.apertura", "open").entered();
 
-        let gia_aperta = {
+        let already_open = {
             let sessions = self.sessions.read()?;
             sessions.open.get(&root).map(info_of).transpose()?
         };
-        let info = match gia_aperta {
+        let info = match already_open {
             Some(info) => info,
-            None => self.monta(&root)?,
+            None => self.mounts(&root)?,
         };
-        self.diventa_corrente(&root)?;
+        self.become_current(&root)?;
         Ok(info)
     }
 
@@ -564,7 +564,7 @@ impl Host {
     /// mette la sessione nella mappa. **Non decide chi è corrente**: quello lo
     /// fa chi l'ha chiamata, con la stessa riga che lo fa per un vault che era
     /// già aperto.
-    fn monta(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
+    fn mounts(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
         let root = root.to_owned();
         let crate::mount::Mounted {
             workspace: mut ws,
@@ -585,26 +585,26 @@ impl Host {
         // non è una cartella o su cui non si ha permesso di scrivere: per chi
         // apre dal dialogo la prima delle tre filtra già in `Host::open`, le
         // altre arrivano qui con il perché nel messaggio.
-        .map_err(|e| PluginError::Internal(e.into()))?;
-        let registry = Custodia::new("i componenti montati", registry);
+        .map_err(|and| PluginError::Internal(and.into()))?;
+        let registry = Custody::new("i componenti montati", registry);
 
         // **I tasti che questo vault propone e che nessuno ha guardato**
         // (§23.13). Qui, e non più tardi: da questa riga in poi il vault è
         // utilizzabile — la scansione parte subito sotto — e una scorciatoia che
         // fosse attiva anche per un solo istante sarebbe un tasto premuto.
         //
-        // La regola la scrive `crate::settings::tasti_da_guardare` e la sospende
+        // La regola la scrive `crate::settings::keys_to_watch` e la sospende
         // il kernel: il criterio ha bisogno di una cosa che nel vault non c'è —
         // cosa questa macchina ha già visto — e uno store di configurazione che
         // leggesse il registro dei vault per rispondere a una lettura sarebbe il
         // kernel che conosce l'installazione.
-        let sospese = crate::settings::tasti_da_guardare(
+        let suspended = crate::settings::keys_to_watch(
             &ws.vault_keybindings(),
             &self.vaults.seen_keys(&root),
         );
-        ws.suspend_settings(sospese);
+        ws.suspend_settings(suspended);
 
-        let workspace = Custodia::new("il vault aperto", ws);
+        let workspace = Custody::new("il vault aperto", ws);
 
         // Il rilevatore si avvia **prima della scansione**: ogni cambiamento
         // caduto prima è visto dalla scansione, e ogni cambiamento caduto durante
@@ -615,7 +615,7 @@ impl Host {
         let watcher = self
             .watcher
             .start(&root, workspace.clone(), watching)
-            .map_err(|e| PluginError::Io(e.into()))?;
+            .map_err(|and| PluginError::Io(and.into()))?;
 
         // **La prima fase, e solo quella** (§15.7): si guarda cosa c'è, e da
         // qui il vault è utilizzabile. Il `?` che resta riguarda il vault
@@ -632,19 +632,19 @@ impl Host {
         // **La seconda fase nasce dopo il ponte**, e l'ordine è la sostanza:
         // `begin_index_job` emette un `JobStarted`, cioè la prima riga del
         // racconto dell'apertura.
-        let (index_job, work_totale) = {
+        let (index_job, work_total) = {
             let mut ws = workspace.write()?;
             let job = ws.begin_index_job();
-            (job, work.totale())
+            (job, work.total())
         };
-        let unread: Custodia<Vec<UnreadDoc>> = Custodia::vuota("gli scarti dell'apertura");
-        let indicizzato = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
-        let in_corso = crate::runner::InCorso {
+        let unread: Custody<Vec<UnreadDoc>> = Custody::empty("gli scarti dell'apertura");
+        let indexed = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        let in_progress = crate::runner::InProgress {
             id: index_job,
-            totale: work_totale,
+            total: work_total,
             work,
             unread: unread.clone(),
-            fine: Arc::clone(&indicizzato),
+            end: Arc::clone(&indexed),
         };
 
         // Il pool parte dopo la scansione e riceve la seconda fase dell'apertura.
@@ -652,7 +652,7 @@ impl Host {
             workspace.clone(),
             registry.clone(),
             self.job_threads,
-            Some(in_corso),
+            Some(in_progress),
         )?;
 
         let session = VaultSession {
@@ -660,14 +660,14 @@ impl Host {
             workspace,
             registry,
             unread,
-            indicizzato,
+            indexed,
             runner,
             #[cfg(feature = "versioning")]
             versions,
             watcher,
             // Aperta, non ancora corrente: lo diventa quando l'apertura è
             // finita, e a dirlo è una riga sola per tutte e due le vie.
-            usato: 0,
+            used: 0,
         };
 
         // **Chi arriva secondo lascia cadere ciò che ha montato.** Il controllo
@@ -689,9 +689,9 @@ impl Host {
         // stessa radice, ed è una decisione che va a verbale — la metà del
         // §15.7 che resta aperta, cioè la **forma** dell'apertura: la 0068 le
         // ha tolto il tutto-o-niente, non la sincronia.
-        let (info, perdente) = {
+        let (info, loser) = {
             let mut sessions = self.sessions.write()?;
-            let perdente = if sessions.open.contains_key(&root) {
+            let loser = if sessions.open.contains_key(&root) {
                 // Ha vinto l'altro: la sessione buona è la sua — riaprire un
                 // vault già aperto non lo riapre, e vale anche quando il
                 // "già" è di un istante fa.
@@ -700,14 +700,14 @@ impl Host {
                 sessions.open.insert(root.clone(), session);
                 None
             };
-            let vinta = sessions.open.get(&root).expect("appena inserita, o già lì");
-            let info = info_of(vinta)?;
-            (info, perdente)
+            let winner = sessions.open.get(&root).expect("appena inserita, o già lì");
+            let info = info_of(winner)?;
+            (info, loser)
         };
         // Chiudere sta **fuori** dal lock delle sessioni, per la stessa ragione
         // di [`close_vault`](Host::close_vault): chiudere chiama i provider.
-        if let Some(perdente) = perdente {
-            perdente.close();
+        if let Some(loser) = loser {
+            loser.close();
         }
         Ok(info)
     }
@@ -733,8 +733,8 @@ impl Host {
     /// prima: un path che non si apre non è un vault recente, è un errore — e
     /// un elenco di recenti pieno di cartelle che non aprono è peggio di un
     /// elenco vuoto.
-    fn diventa_corrente(&self, root: &Utf8Path) -> Result<(), PluginError> {
-        if !self.sessions.write()?.rendi_corrente(root) {
+    fn become_current(&self, root: &Utf8Path) -> Result<(), PluginError> {
+        if !self.sessions.write()?.make_current(root) {
             return Err(PluginError::NotFound(
                 format!("Nessun vault aperto su {root}.").into(),
             ));
@@ -742,14 +742,14 @@ impl Host {
         // Il registro sta **fuori** dal lock delle sessioni: scrive sul disco,
         // e tenerlo dentro fermerebbe ogni comando dell'host per il tempo di
         // una scrittura di comodità.
-        if let Err(e) = self
+        if let Err(and) = self
             .vaults
-            .note_opened(root, fub_kernel::time::now_unix_millis())
+            .notes_opened(root, fub_kernel::time::now_unix_millis())
         {
             // Solo log: il registro dei recenti è una comodità, non il vault,
             // e non scriversi non perde un dato dell'utente — perde al più un
             // path nell'elenco di chi è stato aperto. Pavimento e basta (0062).
-            tracing::warn!(target: "fub.host", "registro dei vault: {e}");
+            tracing::warn!(target: "fub.host", "registro dei vault: {and}");
         }
         Ok(())
     }
@@ -776,11 +776,11 @@ impl Host {
     /// registro conoscono — un alias, un path con lo slash finale — e lì la
     /// canonicalizzazione serve ancora, per intero.
     ///
-    /// Non è [`forme_della_radice`], che risponde a un'altra domanda: chi
+    /// Non è [`root_forms`], che risponde a un'altra domanda: chi
     /// **dimentica** cancella per ogni nome possibile e non può fallire, chi
     /// usa deve arrivare a *una* chiave o dire perché no.
-    fn chiave(&self, root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
-        if self.conosce(root) {
+    fn key(&self, root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
+        if self.knows(root) {
             return Ok(root.to_owned());
         }
         canonical(root)
@@ -792,11 +792,11 @@ impl Host {
     /// I due elenchi insieme e non uno solo, perché le due metà si aprono e si
     /// chiudono in momenti diversi: un vault chiuso esce dalle sessioni e resta
     /// in registro — ed è proprio allora che lo si preferisce o lo si rinomina.
-    fn conosce(&self, root: &Utf8Path) -> bool {
+    fn knows(&self, root: &Utf8Path) -> bool {
         self.sessions
             .read()
             .is_ok_and(|sessions| sessions.open.contains_key(root))
-            || self.vaults.conosce(root)
+            || self.vaults.knows(root)
     }
 
     // --- il registro dei vault (§11.1) -------------------------------------
@@ -824,18 +824,18 @@ impl Host {
     /// [`VaultEntry::root`] è canonica per contratto, quindi non si
     /// ricanonicalizza (la cartella potrebbe essere sparita, e
     /// `canonicalize` non risponde su ciò che non c'è).
-    pub fn ultimo_vault(&self) -> Option<String> {
+    pub fn last_vault(&self) -> Option<String> {
         self.vaults
-            .in_ordine_di_recenza()
+            .in_recency_order()
             .into_iter()
-            .find(|e| Utf8Path::new(&e.root).is_dir())
-            .map(|e| e.root)
+            .find(|and| Utf8Path::new(&and.root).is_dir())
+            .map(|and| and.root)
     }
 
     /// Appunta (o spunta) un vault. Il path **non** deve essere aperto: si
     /// preferisce un vault anche quando è chiuso, ed è quasi sempre allora.
     pub fn set_vault_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
-        self.vaults.set_favorite(&self.chiave(root)?, favorite)
+        self.vaults.set_favorite(&self.key(root)?, favorite)
     }
 
     /// L'icona e il nome con cui un vault compare nell'elenco: **l'aspetto
@@ -847,7 +847,7 @@ impl Host {
         icon: Option<String>,
         name: String,
     ) -> Result<(), PluginError> {
-        self.vaults.set_look(&self.chiave(root)?, icon, name)
+        self.vaults.set_look(&self.key(root)?, icon, name)
     }
 
     /// Toglie un vault dall'elenco. **Non lo cancella dal disco**: dimenticare
@@ -871,8 +871,8 @@ impl Host {
     /// di cache — e lo si dice — invece di uno scroll perso per un vault che è
     /// rimasto in elenco.
     pub fn forget_vault(&self, root: &Utf8Path) -> Result<(), PluginError> {
-        let forme = forme_della_radice(root);
-        self.vaults.forget(&forme)?;
+        let forms = root_forms(root);
+        self.vaults.forget(&forms)?;
         // **Le forme insieme, non una per volta**: sono due file diversi, quindi
         // due scritture ci vogliono per forza, ma dentro ciascuno la potatura è
         // *una* mossa. Il ciclo che stava qui ne faceva N sullo stesso file, e
@@ -881,8 +881,8 @@ impl Host {
         // canonico. Adesso quella metà non è più esprimibile: la firma prende
         // l'insieme, come `Registry::forget` qui sopra.
         self.view_states
-            .forget_vault(&forme)
-            .map_err(|e| PluginError::Io(e.into()))?;
+            .forget_vault(&forms)
+            .map_err(|and| PluginError::Io(and.into()))?;
         Ok(())
     }
 
@@ -943,7 +943,7 @@ impl Host {
             // aspettarlo tenendoglielo sarebbe aspettare sé stessi. Il permesso
             // si dichiara per primo anche perché cada per ultimo: finché vive,
             // nessun job di quel bundle riparte da dietro.
-            let _fermo = (!enabled).then(|| session.runner.ferma_bundle(id));
+            let _shutdown = (!enabled).then(|| session.runner.shutdown_bundle(id));
             let mut ws = session.workspace.write()?;
             let mut registry = session.registry.write()?;
 
@@ -1044,13 +1044,13 @@ impl Host {
     /// adotta. Da qui in poi valgono, e non gliele si chiede più — finché il
     /// file non ne cambia una.
     pub fn adopt_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
-        let mostrate: std::collections::BTreeSet<String> =
+        let shown: std::collections::BTreeSet<String> =
             self.pending_keybindings(vault)?.into_keys().collect();
         self.in_session(vault, |session| {
-            session.workspace.write()?.resume_settings(&mostrate);
+            session.workspace.write()?.resume_settings(&shown);
             Ok(())
         })?;
-        self.ricorda_i_tasti_visti(vault)
+        self.remember_seen_keys(vault)
     }
 
     /// **Tieni le mie**: le scorciatoie che il vault proponeva escono dal suo
@@ -1066,8 +1066,8 @@ impl Host {
     /// discussione, e rifiutare ciò che arriva da fuori non deve buttare ciò che
     /// era già proprio.
     pub fn discard_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
-        let mostrate: Vec<String> = self.pending_keybindings(vault)?.into_keys().collect();
-        let mancate = self.in_session(vault, |session| {
+        let shown: Vec<String> = self.pending_keybindings(vault)?.into_keys().collect();
+        let missing = self.in_session(vault, |session| {
             let mut ws = session.workspace.write()?;
             // Il `reset` **risveglia** la chiave che azzera — è la riga in
             // `SettingsStore::write` — quindi alla fine del giro non resta
@@ -1080,7 +1080,7 @@ impl Host {
             // cioè esattamente l'ambiguità che questa risposta esiste per
             // togliere — e senza nemmeno arrivare al promemoria, così la volta
             // dopo si richiede di un insieme che è già stato in parte distrutto.
-            Ok(mostrate
+            Ok(shown
                 .iter()
                 .filter_map(|key| {
                     ws.reset_setting(key)
@@ -1092,15 +1092,15 @@ impl Host {
         // Il promemoria si scrive **comunque**, e dice il vero da solo: ricorda
         // ciò che il file porta meno ciò che è rimasto sospeso, quindi le chiavi
         // che non si sono azzerate non risultano guardate.
-        self.ricorda_i_tasti_visti(vault)?;
-        if mancate.is_empty() {
+        self.remember_seen_keys(vault)?;
+        if missing.is_empty() {
             return Ok(());
         }
         Err(PluginError::Internal(
             format!(
                 "{} scorciatoie del vault non si sono azzerate — {}",
-                mancate.len(),
-                mancate.join("; ")
+                missing.len(),
+                missing.join("; ")
             )
             .into(),
         ))
@@ -1123,14 +1123,14 @@ impl Host {
         key: &str,
         value: fub_abi::settings::SettingValue,
     ) -> Result<(), PluginError> {
-        if self.solo_la_macchina(vault, key) {
+        if self.machine_only(vault, key) {
             self.machine.set(key, value)?;
-            return self.dillo_a_chi_guarda(key);
+            return self.tell_observer(key);
         }
         self.with_session(vault, |session| {
             session.workspace.write()?.set_setting(key, value)
         })??;
-        self.se_e_un_tasto_ricordalo(vault, key)
+        self.if_key_remember_it(vault, key)
     }
 
     /// Azzera un'impostazione per conto dell'utente. Stessa porta, stesso
@@ -1140,14 +1140,14 @@ impl Host {
         vault: Option<&str>,
         key: &str,
     ) -> Result<(), PluginError> {
-        if self.solo_la_macchina(vault, key) {
+        if self.machine_only(vault, key) {
             self.machine.reset(key)?;
-            return self.dillo_a_chi_guarda(key);
+            return self.tell_observer(key);
         }
         self.with_session(vault, |session| {
             session.workspace.write()?.reset_setting(key)
         })??;
-        self.se_e_un_tasto_ricordalo(vault, key)
+        self.if_key_remember_it(vault, key)
     }
 
     /// Le impostazioni **che esistono senza un vault**: le righe del livello
@@ -1195,15 +1195,15 @@ impl Host {
     /// dell'albero e non le sole etichette: il difetto si era già nascosto una
     /// volta nelle opzioni di una `Choice`, che nessuno guardava.
     pub fn machine_settings(&self) -> Vec<fub_abi::settings::SettingEntry> {
-        let mut righe = self.machine.entries();
-        let cataloghi = crate::settings::core_catalog_montato();
+        let mut rows = self.machine.entries();
+        let all_catalogs = crate::settings::core_catalog_assembled();
         let locale = self.system_locale.get();
         let strings =
-            fub_abi::text::Strings::new(&cataloghi, crate::settings::CORE_DEFAULT_LOCALE, &locale);
-        for riga in &mut righe {
-            strings.localize(riga);
+            fub_abi::text::Strings::new(&all_catalogs, crate::settings::CORE_DEFAULT_LOCALE, &locale);
+        for row in &mut rows {
+            strings.localize(row);
         }
-        righe
+        rows
     }
 
     /// **Il canale dati**, con la sola domanda che si può servire senza vault.
@@ -1249,7 +1249,7 @@ impl Host {
     /// pannelli aspettano; senza la terza, una chiave di vault scritta senza
     /// vault direbbe «non dichiarata» invece di «nessun vault aperto», che è la
     /// frase che dice cosa fare.
-    fn solo_la_macchina(&self, vault: Option<&str>, key: &str) -> bool {
+    fn machine_only(&self, vault: Option<&str>, key: &str) -> bool {
         vault.is_none() && !self.has_current_vault() && self.machine.declares(key)
     }
 
@@ -1287,17 +1287,17 @@ impl Host {
     /// consuma una volta. L'origine è `Kernel` (0012): la diagnosi non è di
     /// nessun altro — non l'ha chiesta la persona e non l'ha prodotta un
     /// plugin.
-    pub fn avviso_di_sessione(&self) -> Option<Notice> {
-        let avviso = self
-            .avviso_di_sessione
+    pub fn session_notice(&self) -> Option<Notice> {
+        let warning = self
+            .session_notice
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|and| and.into_inner())
             .take()?;
         Some(Notice::new(
             fub_abi::Event::Trouble {
                 severity: fub_abi::event::Severity::Warning,
                 subject: None,
-                error: PluginError::Io(avviso.into()),
+                error: PluginError::Io(warning.into()),
                 gate: None,
             },
             fub_abi::event::Origin::by(fub_abi::event::Actor::Kernel),
@@ -1317,19 +1317,19 @@ impl Host {
     /// no a chi ha scritto sarebbe mentire su un file che è già cambiato. Ciò
     /// che si fa è dirlo, perché l'unico modo in cui questo caso finiva era in
     /// silenzio.
-    fn dillo_a_chi_guarda(&self, key: &str) -> Result<(), PluginError> {
+    fn tell_observer(&self, key: &str) -> Result<(), PluginError> {
         if let Some(sink) = &self.sink {
-            let consegna = sink.emit(&fub_abi::Notice::new(
+            let delivers = sink.emit(&fub_abi::Notice::new(
                 fub_abi::Event::SettingChanged {
                     key: key.to_string(),
                     scope: fub_abi::settings::SettingScope::Machine,
                 },
                 fub_abi::event::Origin::by(fub_abi::event::Actor::User),
             ));
-            if consegna == Consegna::Persa {
+            if delivers == Delivery::Dropped {
                 tracing::error!(
                     target: "fub.host",
-                    chiave = key,
+                    key = key,
                     "l'impostazione è scritta ma non l'ha saputo nessuno: chi ascolta \
                      — la tastiera, il pannello — continua a rispondere al valore \
                      vecchio finché non si riapre"
@@ -1343,16 +1343,16 @@ impl Host {
     /// su un archivio» da «la finestra è aperta e basta», e la pone chi deve
     /// decidere se una domanda si può servire senza vault.
     pub fn has_current_vault(&self) -> bool {
-        self.sessions.read().is_ok_and(|s| s.corrente().is_some())
+        self.sessions.read().is_ok_and(|s| s.current().is_some())
     }
 
     /// Il promemoria costa una riscrittura del registro, quindi si paga solo
     /// quando la chiave è di quella famiglia — che è quasi mai.
-    fn se_e_un_tasto_ricordalo(&self, vault: Option<&str>, key: &str) -> Result<(), PluginError> {
+    fn if_key_remember_it(&self, vault: Option<&str>, key: &str) -> Result<(), PluginError> {
         if fub_abi::settings::command_of_keybinding_key(key).is_none() {
             return Ok(());
         }
-        self.ricorda_i_tasti_visti(vault)
+        self.remember_seen_keys(vault)
     }
 
     /// Cosa, dei tasti di questo vault, l'utente ha guardato: ciò che il file
@@ -1364,15 +1364,15 @@ impl Host {
     /// porta più niente di ciò che era in discussione. Ciò che resta escluso in
     /// entrambi i casi è la stessa cosa — le chiavi che nessuno dichiara, che
     /// non sono state mostrate e quindi non sono state approvate.
-    fn ricorda_i_tasti_visti(&self, vault: Option<&str>) -> Result<(), PluginError> {
-        let (root, visti) = self.in_session(vault, |session| {
+    fn remember_seen_keys(&self, vault: Option<&str>) -> Result<(), PluginError> {
+        let (root, seen) = self.in_session(vault, |session| {
             let ws = session.workspace.read()?;
-            let sospese = ws.suspended_settings();
-            let mut visti = ws.vault_keybindings();
-            visti.retain(|key, _| !sospese.contains(key));
-            Ok((session.root.clone(), visti))
+            let suspended = ws.suspended_settings();
+            let mut seen = ws.vault_keybindings();
+            seen.retain(|key, _| !suspended.contains(key));
+            Ok((session.root.clone(), seen))
         })?;
-        self.vaults.note_keys_seen(&root, visti)
+        self.vaults.notes_keys_seen(&root, seen)
     }
 
     /// Chiude **un** vault: flush, `close` degli indici, disattivazione di ogni
@@ -1385,7 +1385,7 @@ impl Host {
         // **Fuori dal prestito esclusivo**, perché nel ramo che non conosce il
         // nome dato questa riga chiede al disco: e il lock che ferma ogni
         // comando dell'host non attraversa una domanda al filesystem.
-        let root = self.chiave(root)?;
+        let root = self.key(root)?;
         let session = {
             let mut sessions = self.sessions.write()?;
             let Some(session) = sessions.open.remove(&root) else {
@@ -1420,7 +1420,7 @@ impl Host {
             // rispondere con un elenco vuoto vorrebbe dire «chiuso tutto».
             let mut sessions = match self.sessions.write() {
                 Ok(sessions) => sessions,
-                Err(e) => return vec![e],
+                Err(and) => return vec![and],
             };
             // Svuotare la mappa è già «non c'è più un corrente»: non c'è un
             // secondo campo da azzerare, e quindi non c'è modo di scordarselo.
@@ -1449,19 +1449,19 @@ impl Host {
         self.sessions
             .read()
             .ok()
-            .and_then(|s| s.corrente().cloned())
+            .and_then(|s| s.current().cloned())
     }
 
     /// Rende corrente un vault già aperto.
     ///
-    /// Passa da [`diventa_corrente`](Host::diventa_corrente) come `open`, e per
+    /// Passa da [`become_current`](Host::diventa_corrente) come `open`, e per
     /// la ragione che rende quella funzione una sola: **sceglierlo è usarlo**.
     /// Chi torna su un vault e poi spegne l'app deve ritrovarselo in cima ai
     /// recenti, o l'elenco racconterebbe l'ultimo *montaggio* invece
     /// dell'ultimo lavoro — e sarebbe di nuovo un ordine che dice una cosa e un
     /// corrente che ne dice un'altra.
     pub fn set_current(&self, root: &Utf8Path) -> Result<(), PluginError> {
-        self.diventa_corrente(&self.chiave(root)?)
+        self.become_current(&self.key(root)?)
     }
 
     /// Fa qualcosa con una sessione: quella nominata, o la corrente se `vault` è
@@ -1478,14 +1478,14 @@ impl Host {
         // La chiave si risolve **prima** del prestito, per la ragione di
         // [`chiave`](Host::chiave): nel ramo che non conosce il nome dato c'è
         // una domanda al disco, e il prestito delle sessioni non la attraversa.
-        let nominata = vault
-            .map(|path| self.chiave(Utf8Path::new(path)))
+        let named = vault
+            .map(|path| self.key(Utf8Path::new(path)))
             .transpose()?;
         let sessions = self.sessions.read()?;
-        let key = match nominata {
+        let key = match named {
             Some(key) => key,
             None => sessions
-                .corrente()
+                .current()
                 .cloned()
                 .ok_or_else(|| PluginError::NotFound("Nessun vault aperto.".into()))?,
         };
@@ -1512,7 +1512,7 @@ impl Host {
 
     /// Un handle clonato al workspace di un vault (o del corrente), o l'errore
     /// se non è aperto.
-    pub fn workspace(&self, vault: Option<&str>) -> Result<Custodia<Workspace>, PluginError> {
+    pub fn workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
         self.with_session(vault, |s| s.workspace.clone())
     }
 
@@ -1633,7 +1633,7 @@ impl Host {
                 .read()
                 .unwrap()
                 .set_icon(path, icon.clone())
-                .map_err(|e| PluginError::Io(e.into()))
+                .map_err(|and| PluginError::Io(and.into()))
         })?
     }
 
@@ -1649,7 +1649,7 @@ impl Host {
                 .read()
                 .unwrap()
                 .set_pinned(id, pinned)
-                .map_err(|e| PluginError::Io(e.into()))
+                .map_err(|and| PluginError::Io(and.into()))
         })?
     }
 
@@ -1665,7 +1665,7 @@ impl Host {
                 .read()
                 .unwrap()
                 .set_space(path, is_space)
-                .map_err(|e| PluginError::Io(e.into()))
+                .map_err(|and| PluginError::Io(and.into()))
         })?
     }
 
@@ -1681,7 +1681,7 @@ impl Host {
                 .read()
                 .unwrap()
                 .set_order(folder, names.clone())
-                .map_err(|e| PluginError::Io(e.into()))
+                .map_err(|and| PluginError::Io(and.into()))
         })?
     }
 }
@@ -1708,12 +1708,12 @@ fn info_of(session: &VaultSession) -> Result<VaultInfo, PluginError> {
 ///
 /// **Chi la chiama diretta è chi conia**: [`Host::open`], che una cartella l'ha
 /// già pretesa una riga sopra. Chi *usa* una radice coniata passa da
-/// [`Host::chiave`] e chi la dimentica da [`forme_della_radice`], e in nessuno
+/// [`Host::chiave`] e chi la dimentica da [`root_forms`], e in nessuno
 /// dei due casi si torna a chiedere al disco una risposta che si ha già.
 fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
     let canonical = root
         .canonicalize()
-        .map_err(|e| PluginError::Io(format!("non riesco a risolvere {root}: {e}").into()))?;
+        .map_err(|and| PluginError::Io(format!("non riesco a risolvere {root}: {and}").into()))?;
     Utf8PathBuf::from_path_buf(canonical)
         .map_err(|p| PluginError::Io(format!("path non UTF-8: {}", p.display()).into()))
 }
@@ -1730,14 +1730,14 @@ fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
 /// Non è [`Host::chiave`], che risponde alla terza domanda: chi **usa** un
 /// vault deve arrivare a *una* chiave o dire perché no, e ci arriva guardando
 /// quelle che già conosce invece di cancellare per ogni nome possibile.
-fn forme_della_radice(root: &Utf8Path) -> Vec<Utf8PathBuf> {
-    let mut forme = vec![root.to_owned()];
-    if let Ok(canonica) = canonical(root) {
-        if canonica != forme[0] {
-            forme.push(canonica);
+fn root_forms(root: &Utf8Path) -> Vec<Utf8PathBuf> {
+    let mut forms = vec![root.to_owned()];
+    if let Ok(canonical) = canonical(root) {
+        if canonical != forms[0] {
+            forms.push(canonical);
         }
     }
-    forme
+    forms
 }
 
 /// [`DocId`] da input non fidato: la stessa validazione del kernel

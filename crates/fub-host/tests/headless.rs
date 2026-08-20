@@ -25,7 +25,7 @@ use fub_abi::traits::{
 };
 use fub_abi::Notice;
 use fub_features::BACKLINKS_VIEW;
-use fub_host::{Consegna, EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
+use fub_host::{Delivery, EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
 use fub_kernel::data_root;
 
 struct Vault {
@@ -61,7 +61,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     v.put("Cucina.md", "# Cucina\n\nVedi [[Rust]] per il resto.\n");
 
     let host = headless();
-    let info = host.open(&v.root).expect("il vault si apre");
+    let info = host.open(&v.root).expect("the vault opens");
 
     // La radice torna **canonica**, e non è un dettaglio del test: è la chiave
     // delle sessioni (`session.rs::canonical`), cioè ciò per cui `/vault` e un
@@ -69,8 +69,8 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // Confrontarla col path grezzo bocciava il prodotto per una proprietà che
     // ha: su macOS un tempdir è `/var/folders/…`, che è un symlink a
     // `/private/var/…` — quindi il test passava su Linux e falliva solo lì.
-    let atteso = v.root.canonicalize_utf8().expect("il tempdir esiste");
-    assert_eq!(info.root, atteso.to_string());
+    let expected = v.root.canonicalize_utf8().expect("il tempdir esiste");
+    assert_eq!(info.root, expected.to_string());
     // L'elenco delle note **non è più** in `VaultInfo` (§14.4): si chiede al
     // canale dati, che sa dire quale cartella e quante righe.
     // E si chiede **a indicizzazione finita**: `open` torna appena si sa cosa
@@ -79,15 +79,15 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // Quale sia l'anagrafe appena aperto il vault lo presidia
     // `l_apertura_a_fasi.rs`; qui la domanda è un'altra, e chiederla presto
     // farebbe fallire questo test per il disco invece che per il montaggio.
-    host.wait_indexed(None).expect("l'indicizzazione finisce");
-    let aperto = host.workspace(None).expect("un vault è aperto");
-    let mut docs = aperto.read().unwrap().documents();
+    host.wait_indexed(None).expect("indexing finishes");
+    let open = host.workspace(None).expect("a vault is open");
+    let mut docs = open.read().unwrap().documents();
     docs.sort();
     assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
     assert_eq!(
         info.extensions,
         vec!["markdown", "md"],
-        "le estensioni le dichiara il provider markdown, non la UI"
+        "the markdown provider declares the extensions, not the UI"
     );
 
     // Le feature ufficiali si sono **dichiarate**: è la proprietà che una
@@ -135,7 +135,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     let registrations: usize = info.plugins.iter().map(|p| p.registrations.len()).sum();
     assert!(
         registrations >= 12,
-        "registrazioni troppo poche ({registrations}): qualcuno non è entrato"
+        "registrations too few ({registrations}): someone did not get in"
     );
 }
 
@@ -146,14 +146,14 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
     v.put("Cucina.md", "# Cucina\n\nVedi [[Rust]].\n");
 
     let host = headless();
-    host.open(&v.root).expect("il vault si apre");
+    host.open(&v.root).expect("the vault opens");
     // L'apertura è a fasi (§15.7): l'indice si popola dopo che `open` è
     // tornata, quindi chi vuole interrogarlo intero aspetta. Nell'app questa
     // riga non esiste — là si disegna subito e si aggiorna — ma un test che
     // chiede «cosa risponde l'indice» deve chiederlo quando l'indice ha una
     // risposta, o presidierebbe la velocità del disco.
-    host.wait_indexed(None).expect("aspetta l'indicizzazione");
-    let ws = host.workspace(None).expect("un vault è aperto");
+    host.wait_indexed(None).expect("waits for indexing");
+    let ws = host.workspace(None).expect("a vault is open");
 
     // Il canale dati: l'indice di ricerca è stato registrato PRIMA della
     // scansione, quindi ha già visto il vault.
@@ -167,7 +167,7 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
             excerpts: Excerpts::Attach,
         }) {
             Ok(IndexResult::Documents(hits)) => hits.items,
-            other => panic!("attesi documenti, trovato {other:?}"),
+            other => panic!("expected documents, found {other:?}"),
         }
     };
     assert_eq!(hits.len(), 1);
@@ -185,13 +185,13 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
     let drawn = serde_json::to_string(&tree).expect("serializza");
     assert!(
         drawn.contains("Cucina"),
-        "il backlink non è nell'albero: {drawn}"
+        "the backlink is not in the tree: {drawn}"
     );
 
     // E il registro dei comandi, che è la terza porta montata.
     assert!(
         !ws.commands().is_empty(),
-        "nessun comando: `CoreCommands` non è entrato"
+        "no commands: `CoreCommands` did not get in"
     );
 }
 
@@ -201,25 +201,25 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     v.put("Nota.md", "# Nota\n\nprima\n");
 
     let host = headless();
-    host.open(&v.root).expect("il vault si apre");
+    host.open(&v.root).expect("the vault opens");
     let id = DocId::new("Nota.md");
 
     // La prima fotografia non sta più dentro `Host::open` (0154): è
     // copy-on-first-write, e l'apertura non fotografa niente. La storia
     // nasce dalla prima scrittura, non dall'apertura.
-    host.wait_indexed(None).expect("aspetta l'indicizzazione");
+    host.wait_indexed(None).expect("waits for indexing");
     let before = host.list_versions(None, &id).expect("versioning acceso");
-    assert_eq!(before.len(), 0, "l'apertura non fotografa più");
+    assert_eq!(before.len(), 0, "the open no longer photographs");
 
     {
         let ws = host.workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
         ws.write_document(&id, "# Nota\n\ndopo\n", WriteBase::Dictated)
-            .expect("scrive");
+            .expect("writes");
     }
 
     let after = host.list_versions(None, &id).expect("versioning acceso");
-    assert_eq!(after.len(), 2, "la prima scrittura fotografa l'originale");
+    assert_eq!(after.len(), 2, "the first write photographs the original");
 
     // Rileggere e ripristinare passano dall'`HostApi` intestato al versioning,
     // non da `std::fs`: è la composizione delle due metà che prima stava
@@ -247,7 +247,7 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
 /// Rosso se la passata all'apertura tornasse: al primo `JobProgress` le
 /// versioni sarebbero già una.
 #[test]
-fn la_prima_scrittura_fotografa_l_originale() {
+fn the_first_write_photographs_the_original() {
     let v = Vault::new();
     for n in 0..50 {
         v.put(&format!("Nota{n:02}.md"), &format!("# Nota {n}\n"));
@@ -257,18 +257,18 @@ fn la_prima_scrittura_fotografa_l_originale() {
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
         .with_sink(Arc::new(Collected(seen.clone())));
-    host.open(&v.root).expect("il vault si apre");
+    host.open(&v.root).expect("the vault opens");
 
     // Il ponte ha un freno (§10.2): la consegna si aspetta, e se non arriva il
     // test fallisce sul tempo massimo invece che sul primo giro.
-    let scaduto = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::time::Instant::now() < scaduto {
-        let arrivato = seen
+    let expired = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < expired {
+        let arrived = seen
             .lock()
             .unwrap()
             .iter()
             .any(|n: &Notice| n.event.kind() == EventKind::JobProgress);
-        if arrivato {
+        if arrived {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -278,16 +278,16 @@ fn la_prima_scrittura_fotografa_l_originale() {
             .unwrap()
             .iter()
             .any(|n| n.event.kind() == EventKind::JobProgress),
-        "la prima fetta non si è mai annunciata"
+        "the first slice never announced itself"
     );
 
     for n in 0..50 {
         let id = DocId::new(format!("Nota{n:02}.md"));
-        let versioni = host.list_versions(None, &id).expect("versioning acceso");
+        let versions = host.list_versions(None, &id).expect("versioning acceso");
         assert_eq!(
-            versioni.len(),
+            versions.len(),
             0,
-            "{id}: alla prima fetta la fotografia dell'apertura non c'è più"
+            "{id}: at the first slice the open photograph is gone"
         );
     }
 
@@ -301,21 +301,21 @@ fn la_prima_scrittura_fotografa_l_originale() {
             "# Nota 0\n\ncambiata\n",
             WriteBase::Dictated,
         )
-        .expect("scrive");
+        .expect("writes");
     }
-    let versioni = host
+    let versions = host
         .list_versions(None, &DocId::new("Nota00.md"))
-        .expect("versioning acceso");
+        .expect("versioning enabled");
     assert_eq!(
-        versioni.len(),
+        versions.len(),
         2,
         "la prima scrittura fotografa l'originale"
     );
     assert_eq!(
-        host.read_version(None, &DocId::new("Nota00.md"), versioni[1].ts)
+        host.read_version(None, &DocId::new("Nota00.md"), versions[1].ts)
             .unwrap(),
         "# Nota 0\n",
-        "l'originale è in storia"
+        "the original is in history"
     );
 }
 
@@ -324,9 +324,9 @@ fn la_prima_scrittura_fotografa_l_originale() {
 struct Collected(Arc<Mutex<Vec<Notice>>>);
 
 impl EventSink for Collected {
-    fn emit(&self, notice: &Notice) -> Consegna {
+    fn emit(&self, notice: &Notice) -> Delivery {
         self.0.lock().unwrap().push(notice.clone());
-        Consegna::Fatta
+        Delivery::Done
     }
 }
 
@@ -339,8 +339,8 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
         .with_sink(Arc::new(Collected(seen.clone())));
-    host.open(&v.root).expect("il vault si apre");
-    host.wait_indexed(None).expect("aspetta l'indicizzazione");
+    host.open(&v.root).expect("the vault opens");
+    host.wait_indexed(None).expect("waits for indexing");
 
     // Il ponte ha un **freno** per costruzione (§10.2, decisione 0034): fra
     // l'evento emesso e l'evento consegnato al sink c'è un raggruppamento, e
@@ -348,14 +348,14 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     // parte di ciò che si sta provando — che quegli eventi *arrivano* — e non
     // un'attesa arbitraria: se non arrivano, il test fallisce sul tempo massimo
     // invece che sul primo giro.
-    let scaduto = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while std::time::Instant::now() < scaduto {
-        let arrivato = seen
+    let expired = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < expired {
+        let arrived = seen
             .lock()
             .unwrap()
             .iter()
             .any(|n: &Notice| n.event.kind() == EventKind::JobDone);
-        if arrivato {
+        if arrived {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -365,8 +365,8 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     // difeso: la scansione popola il vault, non lo cambia, e una shell che
     // ricevesse un `DocumentChanged` per nota leggerebbe l'apertura come un
     // temporale di modifiche.
-    let visti = seen.lock().unwrap().clone();
-    let modifiche: Vec<_> = visti
+    let seen = seen.lock().unwrap().clone();
+    let edits: Vec<_> = seen
         .iter()
         .filter(|n| {
             matches!(
@@ -376,9 +376,9 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
         })
         .collect();
     assert!(
-        modifiche.is_empty(),
-        "il ponte ha raccolto gli eventi della scansione: la shell li leggerebbe \
-         come un temporale di modifiche"
+        edits.is_empty(),
+        "the bridge collected the scan events: the shell would read them as \
+         a storm of changes"
     );
 
     // **Ciò che invece deve passare**, e prima non poteva: il racconto
@@ -388,38 +388,38 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     // un'apertura è un `JobProgress` come quello di ogni altro lavoro lungo,
     // così il centro attività la disegna senza sapere che è un'apertura.
     assert!(
-        visti
+        seen
             .iter()
             .any(|n| n.event.kind() == EventKind::JobStarted),
-        "l'indicizzazione si annuncia come un lavoro lungo qualunque"
+        "indexing announces itself like any long job"
     );
     assert!(
-        visti.iter().any(|n| n.event.kind() == EventKind::JobDone),
-        "e ne torna un esito: chi la guarda sa quando ha finito"
+        seen.iter().any(|n| n.event.kind() == EventKind::JobDone),
+        "and an outcome comes back: whoever watches knows when it is done"
     );
 
     {
         let ws = host.workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
         ws.write_document(&DocId::new("Nota.md"), "# Nota\n\nx\n", WriteBase::Dictated)
-            .expect("scrive");
+            .expect("writes");
     }
 
     // Il ponte è un thread: si aspetta il primo evento, non si dorme e basta.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while seen.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
+    while seen.is_empty() && std::time::Instant::now() < deadline {
         std::thread::yield_now();
     }
     assert!(
-        !seen.lock().unwrap().is_empty(),
-        "nessun evento è arrivato al sink dopo una scrittura"
+        !seen.is_empty(),
+        "no event reached the sink after a write"
     );
 }
 
 /// Due vault stanno aperti insieme, e il "corrente" è solo chi risponde a chi
 /// non ne nomina uno (§9.6).
 #[test]
-fn due_vault_stanno_aperti_insieme_e_il_corrente_e_una_comodita() {
+fn two_vault_are_open_together_and_the_current_and_a_convenience() {
     let a = Vault::new();
     a.put("A.md", "# A\n");
     let b = Vault::new();
@@ -427,37 +427,37 @@ fn due_vault_stanno_aperti_insieme_e_il_corrente_e_una_comodita() {
 
     let host = headless();
     host.open(&a.root).expect("primo vault");
-    let second = host.open(&b.root).expect("secondo vault");
+    let second = host.open(&b.root).expect("second vault");
     assert_eq!(
         second.root,
         b.root.canonicalize_utf8().expect("esiste").to_string()
     );
 
-    assert_eq!(host.vaults().len(), 2, "il primo non è stato chiuso");
+    assert_eq!(host.vaults().len(), 2, "the first was not closed");
     // `documents()` sono i documenti **indicizzati**, e l'indicizzazione è la
     // seconda fase (§15.7): la si aspetta per tutti e due i vault, perché ciò
     // che questo presidio prova è *quale* vault risponde, non quanto in fretta.
-    host.wait_indexed(None).expect("il corrente ha indicizzato");
+    host.wait_indexed(None).expect("il current ha indicizzato");
     host.wait_indexed(Some(a.root.as_str()))
-        .expect("e anche il primo");
-    let corrente = host.workspace(None).expect("c'è un corrente");
+        .expect("and also the first");
+    let current = host.workspace(None).expect("there is a current");
     assert_eq!(
-        corrente.read().unwrap().documents(),
+        current.read().unwrap().documents(),
         vec![DocId::new("B.md")],
-        "l'ultimo aperto è il corrente"
+        "the last opened is the current"
     );
     // E il primo si raggiunge nominandolo, senza toccare il corrente.
-    let primo = host
+    let first = host
         .workspace(Some(a.root.as_str()))
-        .expect("il primo è ancora aperto");
-    assert_eq!(primo.read().unwrap().documents(), vec![DocId::new("A.md")]);
+        .expect("the first is still open");
+    assert_eq!(first.read().unwrap().documents(), vec![DocId::new("A.md")]);
 
     // Chiuderne uno lascia l'altro, e il corrente si sposta su chi resta.
     host.close_vault(&b.root).expect("chiude il secondo");
     assert_eq!(host.vaults().len(), 1);
     assert_eq!(
         host.workspace(None)
-            .expect("il corrente è passato a chi resta")
+            .expect("the current moved to who remains")
             .read()
             .unwrap()
             .documents(),
@@ -467,7 +467,7 @@ fn due_vault_stanno_aperti_insieme_e_il_corrente_e_una_comodita() {
     host.close();
     assert!(
         host.workspace(None).is_err(),
-        "dopo `close` non c'è nessun vault aperto"
+        "after `close` no vault is open"
     );
     assert!(!host.is_watching(None));
     assert!(host.vaults().is_empty());
@@ -479,7 +479,7 @@ fn due_vault_stanno_aperti_insieme_e_il_corrente_e_una_comodita() {
 /// lock dell'indice da riprendere — e se la seconda apertura falliva non si
 /// tornava alla prima.
 #[test]
-fn riaprire_lo_stesso_vault_non_lo_rimonta() {
+fn reopen_the_same_vault_not_the_remounts() {
     let v = Vault::new();
     v.put("A.md", "# A\n");
 
@@ -494,12 +494,12 @@ fn riaprire_lo_stesso_vault_non_lo_rimonta() {
         .set_active_document(Some(DocId::new("A.md")));
 
     host.open(&v.root).expect("seconda apertura");
-    let ancora = host.workspace(None).unwrap();
+    let still = host.workspace(None).unwrap();
     assert!(
-        fub_host::Custodia::ptr_eq(&ws, &ancora),
-        "è la stessa sessione, non una nuova"
+        fub_host::Custody::ptr_eq(&ws, &still),
+        "it is the same session, not a new one"
     );
-    assert_eq!(host.vaults().len(), 1, "e non se ne è aggiunta una seconda");
+    assert_eq!(host.vaults().len(), 1, "and no second one was added");
 
     // Lo stesso vault **nominato in un altro modo** resta lo stesso vault: la
     // chiave è la forma canonica del path, non la stringa che è arrivata.
@@ -509,36 +509,36 @@ fn riaprire_lo_stesso_vault_non_lo_rimonta() {
     // sarebbe già la stessa chiave senza canonicalizzare. Qui invece le
     // componenti sono diverse davvero, ed è il caso di ogni path che arriva da
     // un dialogo, da un argomento di CLI o da un link simbolico.
-    let storto = v
+    let wrong = v
         .root
         .join("..")
         .join(v.root.file_name().expect("basename"));
-    let per_nome = host
-        .workspace(Some(storto.as_str()))
-        .expect("il vault si trova anche nominandolo storto");
+    let by_name = host
+        .workspace(Some(wrong.as_str()))
+        .expect("the vault is found even when named wrong");
     assert!(
-        fub_host::Custodia::ptr_eq(&ws, &per_nome),
-        "`{storto}` è lo stesso vault, non un secondo"
+        fub_host::Custody::ptr_eq(&ws, &by_name),
+        "`{wrong}` is the same vault, not a second one"
     );
 
     // E aprirlo così non lo apre una seconda volta — che senza la chiave
     // canonica non sarebbe nemmeno un secondo vault: sarebbe un secondo indice
     // in attesa, per sempre, del lock che tiene il primo.
-    host.open(&storto).expect("apre lo stesso vault");
-    assert_eq!(host.vaults().len(), 1, "e resta uno solo");
+    host.open(&wrong).expect("apre lo stesso vault");
+    assert_eq!(host.vaults().len(), 1, "and only one remains");
 }
 
 /// La chiusura di un vault è **l'ultimo giro sincrono**: chi è registrato riceve
 /// `VaultClosed` mentre può ancora scrivere, e gli indici ricevono `flush` e
 /// `close` (§9.5).
 #[test]
-fn chiudere_un_vault_e_lultimo_giro_in_cui_e_ancora_aperto() {
+fn close_a_vault_and_latest_round_in_which_and_again_open() {
     let v = Vault::new();
     v.put("Nota.md", "# Nota\n\nqualcosa da cercare\n");
 
-    let eventi = Arc::new(Mutex::new(Vec::new()));
-    let host = headless().with_sink(Arc::new(Registratore(eventi.clone())));
-    host.open(&v.root).expect("il vault si apre");
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let host = headless().with_sink(Arc::new(Recorder(events.clone())));
+    host.open(&v.root).expect("the vault opens");
 
     // Una scrittura **senza watcher**, cioè senza nessuno che chiami
     // `flush_indexes`: è il caso di ogni host che un watcher non ce l'ha — CLI,
@@ -549,38 +549,38 @@ fn chiudere_un_vault_e_lultimo_giro_in_cui_e_ancora_aperto() {
         .write()
         .unwrap()
         .write_document(&DocId::new("Nuova.md"), "# Nuova\n", WriteBase::Dictated)
-        .expect("scrittura");
+        .expect("write");
     assert!(
-        !manifest_dell_indice(&v.root).contains("Nuova.md"),
-        "senza flush il manifest dell'indice non sa ancora della nota: è il \
-         punto di partenza, e se cambiasse questo test proverebbe un'altra cosa"
+        !manifest_of_the_index(&v.root).contains("Nuova.md"),
+        "without flush the index manifest does not yet know of the note: this is \
+         the starting point, and if it changed this test would prove something else"
     );
 
-    let errori = host.close_vault(&v.root).expect("si chiude");
-    assert!(errori.is_empty(), "niente è andato storto: {errori:?}");
+    let errors = host.close_vault(&v.root).expect("closes");
+    assert!(errors.is_empty(), "nothing went wrong: {errors:?}");
 
-    let visti = eventi.lock().unwrap().clone();
+    let seen = events.lock().unwrap().clone();
     assert!(
-        visti.iter().any(|e| e == "vault_closed"),
-        "il gemello di `vault_opened` è passato dal ponte: {visti:?}"
+        seen.iter().any(|and| and == "vault_closed"),
+        "the twin of `vault_opened` passed through the bridge: {seen:?}"
     );
     assert!(
-        manifest_dell_indice(&v.root).contains("Nuova.md"),
-        "chiudere rende durevole ciò che l'indice aveva accettato: è il punto \
-         di consistenza che non è il watcher"
+        manifest_of_the_index(&v.root).contains("Nuova.md"),
+        "closing makes durable what the index had accepted: this is the point \
+         of consistency that is not the watcher"
     );
 
     // E la cartella dell'indice non è più di nessuno: un altro host la riapre.
-    let altro = headless();
-    altro
+    let other = headless();
+    other
         .open(&v.root)
-        .expect("l'indice del vault chiuso non tiene più niente");
-    altro.close();
+        .expect("the closed vault index holds nothing anymore");
+    other.close();
 }
 
 /// Il manifest delle impronte dell'indice di ricerca, com'è sul disco (vuoto se
 /// non c'è ancora).
-fn manifest_dell_indice(root: &Utf8Path) -> String {
+fn manifest_of_the_index(root: &Utf8Path) -> String {
     let path = data_root(root)
         .join("plugins")
         .join("fub.search")
@@ -589,99 +589,98 @@ fn manifest_dell_indice(root: &Utf8Path) -> String {
 }
 
 /// Il ponte eventi ridotto a ciò che serve a un test: il nome degli eventi
-/// passati.
-struct Registratore(Arc<Mutex<Vec<String>>>);
+struct Recorder(Arc<Mutex<Vec<String>>>);
 
-impl EventSink for Registratore {
-    fn emit(&self, notice: &Notice) -> Consegna {
-        let nome = serde_json::to_value(&notice.event)
+impl EventSink for Recorder {
+    fn emit(&self, notice: &Notice) -> Delivery {
+        let name = serde_json::to_value(&notice.event)
             .ok()
             .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
             .unwrap_or_default();
-        self.0.lock().unwrap().push(nome);
-        Consegna::Fatta
+        self.0.lock().unwrap().push(name);
+        Delivery::Done
     }
 }
 
+/// passati.
 /// Un rilevatore che si limita ad alzare la bandiera del kernel: è tutto ciò
 /// che un watcher vero fa in più di `NoWatcher`, e qui serve senza il
-/// filesystem in mezzo.
-struct FintoWatcher;
+struct FakeWatcher;
 
-struct Guarda(Arc<AtomicBool>);
+struct WatcherGuard(Arc<AtomicBool>);
 
-impl VaultWatcher for Guarda {
+impl VaultWatcher for WatcherGuard {
     fn is_watching(&self) -> bool {
         self.0.load(Ordering::Relaxed)
     }
 }
 
-impl Drop for Guarda {
+impl Drop for WatcherGuard {
     fn drop(&mut self) {
         self.0.store(false, Ordering::Relaxed);
     }
 }
 
-impl WatcherFactory for FintoWatcher {
+impl WatcherFactory for FakeWatcher {
     fn start(
         &self,
         _root: &Utf8Path,
-        _workspace: fub_host::Custodia<fub_kernel::Workspace>,
+        _workspace: fub_host::Custody<fub_kernel::Workspace>,
         watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String> {
         watching.store(true, Ordering::Relaxed);
-        Ok(Box::new(Guarda(watching)))
+        Ok(Box::new(WatcherGuard(watching)))
     }
 }
 
+/// filesystem in mezzo.
 /// `Host::is_watching` e `IndexQuery::VaultStatus` rispondono **dallo stesso
 /// bit** (§9.7).
 ///
 /// Due copie del fatto sarebbero due verità, e la seconda mentirebbe in
 /// silenzio: chi monta alzerebbe la sua all'avvio e nessuno la abbasserebbe
 /// quando il rilevatore muore. Il presidio è che l'host non scrive mai il
-/// proprio valore — legge la bandiera del kernel.
 #[test]
-fn il_rilevamento_si_chiede_dal_canale_dati_e_dallhost_ed_e_lo_stesso_bit() {
+fn the_detection_is_asks_from_the_channel_data_and_from_host_and_and_the_same_bit() {
     let v = Vault::new();
     v.put("Nota.md", "# Nota\n");
 
-    let senza = headless();
-    senza.open(&v.root).expect("il vault si apre");
-    assert!(!senza.is_watching(None));
+    let without = headless();
+    without.open(&v.root).expect("the vault opens");
+    assert!(!without.is_watching(None));
     assert!(
-        !stato(&senza).watching,
-        "senza rilevatore il canale dati dice la stessa cosa dell'host"
+        !state(&without).watching,
+        "without a watcher the data channel says the same thing as the host"
     );
-    senza.close();
+    without.close();
 
-    let con = Host::new().with_watcher(Box::new(FintoWatcher));
-    con.open(&v.root).expect("il vault si apre");
-    assert!(con.is_watching(None));
+    let with = Host::new().with_watcher(Box::new(FakeWatcher));
+    with.open(&v.root).expect("the vault opens");
+    assert!(with.is_watching(None));
     assert!(
-        stato(&con).watching,
+        state(&with).watching,
         "chi guarda ha alzato la bandiera del kernel, non una sua"
     );
 
+/// proprio valore — legge la bandiera del kernel.
     // E chi smette lo dice: chiudere il vault lascia andare il rilevatore, e la
-    // risposta cambia senza che nessuno la aggiorni a mano.
-    let ws = con.workspace(None).unwrap();
-    con.close_vault(&v.root).expect("si chiude");
+    let ws = with.workspace(None).unwrap();
+    with.close_vault(&v.root).expect("closes");
     assert!(
         !matches!(
             ws.read().unwrap().query_index(IndexQuery::VaultStatus),
             Ok(IndexResult::VaultStatus(s)) if s.watching
         ),
-        "un rilevatore distrutto continuava a rispondere `true`: era la §9.7"
+        "a destroyed watcher kept answering `true`: that was §9.7"
     );
 }
 
-fn stato(host: &Host) -> VaultStatus {
-    let ws = host.workspace(None).expect("un vault è aperto");
+fn state(host: &Host) -> VaultStatus {
+    let ws = host.workspace(None).expect("a vault is open");
     let ws = ws.read().unwrap();
     match ws.query_index(IndexQuery::VaultStatus) {
         Ok(IndexResult::VaultStatus(s)) => s,
-        other => panic!("il canale dati ha risposto fuori tema: {other:?}"),
+        other => panic!("the data channel responded off-topic: {other:?}"),
     }
 }
 
@@ -694,50 +693,50 @@ fn a_path_that_is_not_a_directory_is_refused_before_anything_is_mounted() {
     assert!(host.workspace(None).is_err());
 }
 
+    // risposta cambia senza che nessuno la aggiorni a mano.
 /// **Chi apre distingue un vault intero da uno aperto in parte** (§15.7,
 /// decisione 0068).
 ///
 /// Il markdown vero non rifiuta quasi niente, quindi la leva portatile è la
 /// lettura: dei byte che non sono UTF-8 sono ciò che resta di una nota dopo un
 /// crash a metà scrittura. Prima di questa voce il vault non si apriva affatto,
-/// e le altre due note erano irraggiungibili per colpa della terza.
 #[test]
-fn un_vault_con_una_nota_illeggibile_si_apre_e_dice_cosa_non_ha_letto() {
+fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
     let v = Vault::new();
     v.put("Rust.md", "# Rust\n");
     v.put("Cucina.md", "# Cucina\n");
     std::fs::write(v.root.join("Rotta.md"), [0xffu8, 0xfe, 0x00, 0x9f]).unwrap();
 
     let host = headless();
-    let info = host.open(&v.root).expect("il vault si apre lo stesso");
+    let info = host.open(&v.root).expect("the vault opens anyway");
 
+/// e le altre due note erano irraggiungibili per colpa della terza.
     // **Su `info` non c'è niente da asserire**, ed è la conseguenza vera
     // dell'apertura a fasi (§15.7): `open` torna appena il vault è
     // *utilizzabile*, e scoprire uno scarto vuol dire aver già provato a
     // leggere — cioè la fase dopo. Quella lista dice «cosa non si è letto
     // **finora**», quindi qui è vuota o piena a seconda di quanto ha fatto in
     // tempo a camminare l'indicizzazione: asserire il vuoto sarebbe presidiare
-    // una corsa, e su tre note la si perderebbe quasi sempre.
     let _ = &info;
 
+    // una corsa, e su tre note la si perderebbe quasi sempre.
     // L'esito **si consulta**, che è ciò che la voce chiedeva: finita
-    // l'indicizzazione, chi chiede il vault trova cosa non si è potuto leggere.
-    host.wait_indexed(None).expect("aspetta l'indicizzazione");
-    let info = host.open(&v.root).expect("riapre, cioè rilegge lo stato");
-    let non_lette: Vec<&str> = info.unread.iter().map(|u| u.doc_id.as_str()).collect();
+    host.wait_indexed(None).expect("waits for indexing");
+    let info = host.open(&v.root).expect("reopens, that is re-reads the state");
+    let not_lette: Vec<&str> = info.unread.iter().map(|u| u.doc_id.as_str()).collect();
     assert_eq!(
-        non_lette,
+        not_lette,
         ["Rotta.md"],
-        "l'esito dell'apertura è consultabile quando l'apertura ha finito"
+        "the outcome of the open is consultable when the open has finished"
     );
 
+    // l'indicizzazione, chi chiede il vault trova cosa non si è potuto leggere.
     // Ed è un fatto **della sessione**: riaprire lo stesso vault non lo rimonta
     // (§9.6), quindi la seconda risposta non può essere un silenzio che
-    // sembrerebbe dire «adesso è tutto a posto».
-    let ancora = host.open(&v.root).expect("riapre");
+    let still = host.open(&v.root).expect("reopens");
     assert_eq!(
-        ancora.unread.len(),
+        still.unread.len(),
         1,
-        "riaprire un vault già aperto non cancella ciò che quella apertura non ha letto"
+        "reopening an already open vault does not cancel what that open did not read"
     );
 }

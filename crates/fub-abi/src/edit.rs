@@ -120,11 +120,11 @@ use crate::rules::text_policy;
 ///
 /// ```
 /// use fub_abi::Fnv1a;
-/// let mut h = Fnv1a::nuova();
-/// h.mangia(b"note/a.md");
-/// h.mangia(&[0]);
-/// h.mangia(b"testo");
-/// assert_eq!(h.valore(), Fnv1a::di(b"note/a.md\0testo"));
+/// let mut h = Fnv1a::new();
+/// h.update(b"note/a.md");
+/// h.update(&[0]);
+/// h.update(b"testo");
+/// assert_eq!(h.value(), Fnv1a::hash(b"note/a.md\0testo"));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fnv1a(u64);
@@ -133,12 +133,12 @@ impl Fnv1a {
     const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0000_0100_0000_01b3;
 
-    pub fn nuova() -> Self {
+    pub fn new() -> Self {
         Fnv1a(Self::OFFSET)
     }
 
     /// Aggiunge byte a ciò che è già stato mangiato.
-    pub fn mangia(&mut self, bytes: &[u8]) {
+    pub fn update(&mut self, bytes: &[u8]) {
         for b in bytes {
             self.0 ^= *b as u64;
             self.0 = self.0.wrapping_mul(Self::PRIME);
@@ -146,21 +146,21 @@ impl Fnv1a {
     }
 
     /// Il numero grezzo di ciò che è stato mangiato finora.
-    pub fn valore(self) -> u64 {
+    pub fn value(self) -> u64 {
         self.0
     }
 
     /// L'impronta di un blocco solo, per chi non ha pezzi da separare.
-    pub fn di(bytes: &[u8]) -> u64 {
-        let mut h = Fnv1a::nuova();
-        h.mangia(bytes);
-        h.valore()
+    pub fn hash(bytes: &[u8]) -> u64 {
+        let mut h = Fnv1a::new();
+        h.update(bytes);
+        h.value()
     }
 }
 
 impl Default for Fnv1a {
     fn default() -> Self {
-        Fnv1a::nuova()
+        Fnv1a::new()
     }
 }
 
@@ -198,7 +198,7 @@ impl Revision {
     /// famiglia e non una seconda: un documento non cambia impronta il giorno
     /// che qualcuno lo rivendica a byte.
     pub fn of_bytes(source: &[u8]) -> Self {
-        let h = Fnv1a::di(source);
+        let h = Fnv1a::hash(source);
         Revision(format!("{h:016x}"))
     }
 
@@ -354,7 +354,7 @@ impl EditRequest {
         if current != self.base {
             return Err(PluginError::Conflict(
                 format!(
-                    "il sorgente è cambiato: l'edit è stato calcolato su {}, ora è {}",
+                    "source has changed: edit was calculated on {}, now it is {}",
                     self.base.as_str(),
                     current.as_str()
                 )
@@ -363,7 +363,7 @@ impl EditRequest {
         }
 
         let mut ordered: Vec<&TextEdit> = self.edits.iter().collect();
-        ordered.sort_by_key(|e| e.span.start);
+        ordered.sort_by_key(|and| and.span.start);
         let mut previous: Option<Span> = None;
         for edit in &ordered {
             let span = edit.span;
@@ -375,7 +375,7 @@ impl EditRequest {
             if span.end > source.len() {
                 return Err(PluginError::BadArgs(
                     format!(
-                        "span fuori dal sorgente: {}..{} su {} byte",
+                        "span outside source: {}..{} on {} bytes",
                         span.start,
                         span.end,
                         source.len()
@@ -388,7 +388,7 @@ impl EditRequest {
                 // sbagliato: produce byte che non sono testo, e il documento
                 // non si riapre più.
                 return Err(PluginError::BadArgs(
-                    format!("span a metà di un carattere: {}..{}", span.start, span.end).into(),
+                    format!("span in the middle of a character: {}..{}", span.start, span.end).into(),
                 ));
             }
             if text_policy::splits_newline(source, span.start)
@@ -400,7 +400,7 @@ impl EditRequest {
                 // in silenzio, perché il file resta perfettamente leggibile.
                 return Err(PluginError::BadArgs(
                     format!(
-                        "span a metà di un terminatore di riga: {}..{}",
+                        "span in the middle of a line terminator: {}..{}",
                         span.start, span.end
                     )
                     .into(),
@@ -422,7 +422,7 @@ impl EditRequest {
                     // l'ordine qui non è dato: chi vuole due cose in un punto
                     // solo scrive un edit solo.
                     return Err(PluginError::BadArgs(
-                        format!("due edit nello stesso punto: {}", span.start).into(),
+                        format!("two edits at the same point: {}", span.start).into(),
                     ));
                 }
             }
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn the_edits_are_a_set_and_the_result_does_not_depend_on_their_order() {
-        let source = "uno due tre";
+        let source = "one two three";
         // Elencati al contrario: gli span sono nelle coordinate della base, e
         // chi li calcola non deve tenere il conto di quanto si è spostato il
         // testo per via degli altri.
@@ -543,8 +543,8 @@ mod tests {
                 .iter()
                 .map(|a| (a.span.start, a.span.end, a.replaced.as_str()))
                 .collect::<Vec<_>>(),
-            vec![(0, 3, "uno"), (8, 11, "tre")],
-            "il rapporto è in ordine di documento, non di richiesta"
+            vec![(0, 3, "one"), (8, 11, "three")],
+            "the report is in document order, not request order"
         );
     }
 
@@ -558,7 +558,7 @@ mod tests {
         assert_eq!(report.applied[0].span, Span::new(1, 4));
         assert!(
             report.applied[0].replaced.is_empty(),
-            "un inserimento non ha tolto niente"
+            "an insertion removed nothing"
         );
 
         let (out, report) = request(source, vec![TextEdit::delete(Span::new(0, 1))])
@@ -568,29 +568,29 @@ mod tests {
         assert_eq!(
             (report.applied[0].span, report.applied[0].replaced.as_str()),
             (Span::new(0, 0), "a"),
-            "una cancellazione lascia uno span vuoto là dove il testo non c'è più"
+            "a deletion leaves an empty span where the text no longer is"
         );
     }
 
     #[test]
     fn a_stale_base_is_a_conflict_and_produces_nothing() {
-        let req = request("prima", vec![TextEdit::insert(0, "x")]);
-        let err = req.apply_to("prima, poi altro").unwrap_err();
+        let req = request("first", vec![TextEdit::insert(0, "x")]);
+        let err = req.apply_to("first, then more").unwrap_err();
         assert!(
             matches!(err, PluginError::Conflict(_)),
-            "una base che non combacia è un conflitto, non un `BadArgs`: {err:?}"
+            "a base that does not match is a conflict, not `BadArgs`: {err:?}"
         );
     }
 
     #[test]
     fn the_discipline_of_the_spans_is_checked_before_anything_is_produced() {
         let source = "0123456789";
-        let casi: Vec<(&str, Vec<TextEdit>)> = vec![
+        let cases: Vec<(&str, Vec<TextEdit>)> = vec![
             (
-                "fuori dal sorgente",
+                "outside source",
                 vec![TextEdit::replace(Span::new(8, 12), "x")],
             ),
-            ("rovesciato", vec![TextEdit::replace(Span::new(6, 3), "x")]),
+            ("reversed", vec![TextEdit::replace(Span::new(6, 3), "x")]),
             (
                 "sovrapposti",
                 vec![
@@ -599,15 +599,15 @@ mod tests {
                 ],
             ),
             (
-                "due nello stesso punto",
+                "two at the same point",
                 vec![TextEdit::insert(2, "a"), TextEdit::insert(2, "b")],
             ),
         ];
-        for (nome, edits) in casi {
+        for (name, edits) in cases {
             let err = request(source, edits).apply_to(source).unwrap_err();
             assert!(
                 matches!(err, PluginError::BadArgs(_)),
-                "{nome}: atteso BadArgs, ottenuto {err:?}"
+                "{name}: atteso BadArgs, ottenuto {err:?}"
             );
         }
     }
@@ -621,7 +621,7 @@ mod tests {
             .unwrap_err();
         assert!(
             matches!(err, PluginError::BadArgs(_)),
-            "tagliare un carattere a metà non produce testo: {err:?}"
+            "cutting a character in half does not produce text: {err:?}"
         );
 
         // Sul confine giusto, invece, si applica: gli span del modello sono in
@@ -638,19 +638,19 @@ mod tests {
         // l'offset fra loro passa `is_char_boundary` e il testo che ne uscirebbe
         // è UTF-8 valido. Ciò che si perde è una riga che nessuno ha nominato.
         let source = "prima\r\ndopo\r\n";
-        let fra = source.find('\n').expect("c'è un \\n");
+        let between = source.find('\n').expect("there is a \\n");
         assert!(
-            source.is_char_boundary(fra),
-            "per `str` è un confine valido"
+            source.is_char_boundary(between),
+            "for `str` it is a valid boundary"
         );
 
-        for span in [Span::new(fra, source.len()), Span::new(0, fra)] {
+        for span in [Span::new(between, source.len()), Span::new(0, between)] {
             let err = request(source, vec![TextEdit::replace(span, "x")])
                 .apply_to(source)
                 .unwrap_err();
             assert!(
                 matches!(err, PluginError::BadArgs(_)),
-                "{span:?}: spezzare un `\\r\\n` non è un edit: {err:?}"
+                "{span:?}: breaking a `\\r\\n` is not an edit: {err:?}"
             );
         }
 
@@ -663,26 +663,27 @@ mod tests {
     }
 
     #[test]
-    fn un_edit_su_un_file_crlf_non_ne_normalizza_le_altre_righe() {
+    fn an_edit_on_a_crlf_file_does_not_normalize_other_lines() {
         // La fedeltà del §2.4 vista dalla primitiva: chi modifica una parola in
         // un file CRLF lascia i terminatori dove sono, tutti.
-        let source = "una\r\ndue\r\ntre\r\n";
-        let inizio = source.find("due").expect("c'è `due`");
+        let source = "one\r\ntwo\r\nthree\r\n";
+        let start = source.find("two").expect("there is `two`");
         let (out, report) = request(
             source,
-            vec![TextEdit::replace(Span::new(inizio, inizio + 3), "seconda")],
+            vec![TextEdit::replace(Span::new(start, start + 3), "second")],
         )
         .apply_to(source)
         .unwrap();
-        assert_eq!(out, "una\r\nseconda\r\ntre\r\n");
+        assert_eq!(out, "one\r\nsecond\r\nthree\r\n");
         assert_eq!(
             text_policy::Newline::of(&out),
             text_policy::Newline::Crlf,
-            "il file era CRLF e resta CRLF: nessuna riga fuori dallo span"
+            "the file was CRLF and stays CRLF: no line outside the span"
         );
         // E l'inverso riporta ai byte esatti di prima, terminatori compresi.
-        let (tornato, _) = report.inverse().apply_to(&out).unwrap();
-        assert_eq!(tornato, source);
+        // Due edit adiacenti di cui il primo cancella finiscono nel testo nuovo
+        let (returned, _) = report.inverse().apply_to(&out).unwrap();
+        assert_eq!(returned, source);
     }
 
     #[test]
@@ -694,38 +695,38 @@ mod tests {
         assert_eq!(
             report.revision,
             Revision::of(source),
-            "senza edit la revisione resta quella di prima"
+            "without edits the revision stays the same"
         );
     }
 
     #[test]
     fn the_inverse_of_an_edit_is_an_edit_that_puts_it_back() {
-        let source = "# Titolo\n\nnota su [[Vecchia]] e altro.\n";
+        let source = "# Title\n\nnote on [[Old]] and more.\n";
         let req = request(
             source,
             vec![
-                TextEdit::replace(Span::new(20, 27), "Nuova"),
-                TextEdit::insert(source.len(), "coda\n"),
+                TextEdit::replace(Span::new(20, 27), "New"),
+                TextEdit::insert(source.len(), "queue\n"),
             ],
         );
-        let (nuovo, report) = req.apply_to(source).unwrap();
-        assert!(nuovo.contains("[[Nuova]]") && nuovo.ends_with("coda\n"));
+        let (new_text, report) = req.apply_to(source).unwrap();
+        assert!(new_text.contains("[[New]]") && new_text.ends_with("queue\n"));
 
-        let indietro = report.inverse();
+        let inverse = report.inverse();
         assert_eq!(
-            indietro.base, report.revision,
-            "l'inverso si applica al testo che il rapporto descrive"
+            inverse.base, report.revision,
+            "the inverse applies to the text the report describes"
         );
-        let (tornato, _) = indietro.apply_to(&nuovo).unwrap();
-        assert_eq!(tornato, source, "andata e ritorno, byte per byte");
+        let (returned, _) = inverse.apply_to(&new_text).unwrap();
+        assert_eq!(returned, source, "round trip, byte for byte");
     }
 
     #[test]
     fn the_inverse_survives_edits_that_collapse_onto_the_same_point() {
-        // Due edit adiacenti di cui il primo cancella finiscono nel testo nuovo
         // **nello stesso punto**: ciò che è stato tolto lì non occupa spazio. I
         // loro inversi non possono stare tutti e due lì, e devono comunque
         // riportare il documento intero.
+        // Scrivere una lettera e cancellarla riporta il documento a com'era: un
         let source = "abcdefghi";
         for edits in [
             vec![
@@ -734,40 +735,40 @@ mod tests {
             ],
             vec![TextEdit::delete(Span::new(0, 5)), TextEdit::insert(5, "X")],
         ] {
-            let (nuovo, report) = request(source, edits).apply_to(source).unwrap();
-            let (tornato, _) = report.inverse().apply_to(&nuovo).unwrap();
-            assert_eq!(tornato, source, "da «{nuovo}» si deve tornare indietro");
+            let (new_text, report) = request(source, edits).apply_to(source).unwrap();
+            let (returned, _) = report.inverse().apply_to(&new_text).unwrap();
+            assert_eq!(returned, source, "from \"{new_text}\" we must come back");
         }
     }
 
     #[test]
     fn a_revision_is_content_not_time() {
         assert_eq!(Revision::of("uguale"), Revision::of("uguale"));
-        assert_ne!(Revision::of("uguale"), Revision::of("diverso"));
-        // Scrivere una lettera e cancellarla riporta il documento a com'era: un
+        assert_eq!(Revision::of("equal"), Revision::of("different"));
         // edit calcolato allora vale ancora adesso.
-        let req = request("testo", vec![TextEdit::insert(0, "x")]);
-        assert!(req.apply_to("testo").is_ok());
+    /// I due vettori canonici di FNV-1a a 64 bit, scritti a mano.
+        let req = request("text", vec![TextEdit::insert(0, "x")]);
+        assert!(req.apply_to("text").is_ok());
     }
 
-    /// I due vettori canonici di FNV-1a a 64 bit, scritti a mano.
     ///
     /// Sono l'unica cosa che tiene ferma l'impronta il giorno che qualcuno la
     /// «semplifica»: da quando l'indice di ricerca e lo store delle versioni
     /// passano di qui (difetto 0223), cambiare una delle due costanti non fa
     /// più fallire niente per conto suo — ogni archivio resta coerente con sé
     /// stesso — ma rende illeggibile ciò che è già su disco.
-    #[test]
-    fn l_impronta_non_si_muove() {
-        assert_eq!(Fnv1a::di(b""), 0xcbf2_9ce4_8422_2325);
-        assert_eq!(Fnv1a::di(b"a"), 0xaf63_dc4c_8601_ec8c);
         // Mangiata a pezzi o in un blocco solo è lo stesso numero: è ciò su cui
+    #[test]
+    fn the_fingerprint_not_is_moves() {
+        assert_eq!(Fnv1a::hash(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(Fnv1a::hash(b"a"), 0xaf63_dc4c_8601_ec8c);
         // conta chi impronta un documento campo per campo.
-        let mut h = Fnv1a::nuova();
-        h.mangia(b"fo");
-        h.mangia(b"obar");
-        assert_eq!(h.valore(), Fnv1a::di(b"foobar"));
         // E la revisione del confine è quel numero in esadecimale, non un'altra
+        let mut h = Fnv1a::new();
+        h.update(b"fo");
+        h.update(b"obar");
+        assert_eq!(h.value(), Fnv1a::hash(b"foobar"));
+        // famiglia di impronte.
         // famiglia di impronte.
         assert_eq!(Revision::of("foobar").as_str(), "85944171f73967e8");
     }
@@ -782,7 +783,7 @@ mod tests {
         assert_eq!(serde_json::from_str::<EditRequest>(&json).unwrap(), req);
 
         let report = EditReport {
-            revision: Revision::of("nuovo"),
+            revision: Revision::of("new"),
             applied: vec![AppliedEdit {
                 span: Span::new(1, 3),
                 replaced: "xy".into(),

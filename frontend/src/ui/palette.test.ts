@@ -21,7 +21,7 @@ function spec(over: Partial<CommandSpec> = {}): CommandSpec {
 
 /// Un comando **del kernel** come lo vede la palette: la spec, più l'accordo
 /// efficace che il registro le mette accanto.
-function voce(over: Partial<CommandSpec> = {}): CommandEntry {
+function entry(over: Partial<CommandSpec> = {}): CommandEntry {
   const s = spec(over);
   return {
     id: s.id,
@@ -40,9 +40,9 @@ function param(name: string, kind: ParamKind, required = false) {
 
 describe("scelta del comando", () => {
   const specs = [
-    voce({ id: "vault.replace", title: "Sostituisci in tutte le note" }),
-    voce({ id: "search.open", title: "Cerca nel vault", description: "ricerca full-text" }),
-    voce({ id: "selection.wikilink", title: "Trasforma la selezione in wikilink" }),
+    entry({ id: "vault.replace", title: "Sostituisci in tutte le note" }),
+    entry({ id: "search.open", title: "Cerca nel vault", description: "ricerca full-text" }),
+    entry({ id: "selection.wikilink", title: "Trasforma la selezione in wikilink" }),
   ];
 
   it("cerca nel titolo, nell'id e nella descrizione", () => {
@@ -56,8 +56,8 @@ describe("scelta del comando", () => {
   });
 
   it("chi comincia col testo cercato viene prima", () => {
-    const ordinati = filterCommands(specs, "cerca");
-    expect(ordinati[0].id).toBe("search.open");
+    const sorted = filterCommands(specs, "cerca");
+    expect(sorted[0].id).toBe("search.open");
   });
 
   // Il filtro a **sottosequenza** (§18.2): è ciò che chiunque abbia usato una
@@ -71,11 +71,11 @@ describe("scelta del comando", () => {
     // «Cerca nel vault» contiene «cerca»; «Sostituisci in tutte le note» ha una
     // sottosequenza `c-e-r-c-a`? No — ma ne ha una per `snt`, e il punto è che
     // il rango di prima fa da spareggio invece di essere stato buttato.
-    const ordinati = filterCommands(
-      [voce({ id: "a", title: "Trasforma la selezione in wikilink" }), ...specs],
+    const sorted = filterCommands(
+      [entry({ id: "a", title: "Trasforma la selezione in wikilink" }), ...specs],
       "cerca",
     );
-    expect(ordinati[0]!.id).toBe("search.open");
+    expect(sorted[0]!.id).toBe("search.open");
   });
 
   it("una sottosequenza compatta batte una sparpagliata", () => {
@@ -200,9 +200,9 @@ describe("gli argomenti che la palette costruisce", () => {
     // L'altro verso, e presidia la forma nuova invece del difetto: un parametro
     // obbligatorio si manda sempre, vuoto compreso, o il comando riceve un
     // rifiuto di serde al posto della risposta che l'utente ha dato.
-    const obbligatoria = spec({ params: [param("loud", { kind: "bool" }, true)] });
-    expect(argsFromForm(obbligatoria, {})).toEqual({ loud: false });
-    expect(argsFromForm(obbligatoria, { loud: true })).toEqual({ loud: true });
+    const requiredSpec = spec({ params: [param("loud", { kind: "bool" }, true)] });
+    expect(argsFromForm(requiredSpec, {})).toEqual({ loud: false });
+    expect(argsFromForm(requiredSpec, { loud: true })).toEqual({ loud: true });
   });
 });
 

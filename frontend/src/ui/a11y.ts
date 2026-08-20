@@ -4,7 +4,7 @@
 // Stanno in un modulo loro e non sparsi nei pannelli per la ragione che rende
 // questa voce fattibile *adesso* e cara dopo: le regole di accessibilità non
 // sono decorazioni per elemento, sono **invarianti** — «ciò che si clicca si
-// raggiunge col tab», «una modale non lascia uscire il fuoco», «un campo ha un
+// raggiunge col linguetta», «una modale non lascia uscire il fuoco», «un campo ha un
 // nome». Scritte una volta e chiamate da chi disegna valgono anche per i
 // pannelli che non esistono ancora; ricopiate a mano trenta volte valgono nei
 // ventinove in cui qualcuno si è ricordato.
@@ -12,7 +12,7 @@
 // Il presidio che le tiene ferme è `ui/a11y.test.ts`, ed è la metà che la 0014
 // chiede: *una promessa senza presidio meccanico decade*, e questa decadrebbe
 // alla prima view nuova.
-import { apriVita, type Smontaggio } from "./vita";
+import { openLifetime, type Teardown } from "./lifetime";
 
 /// Un id unico nel documento, per legare due elementi (`for`, `aria-labelledby`,
 /// `aria-controls`).
@@ -20,14 +20,14 @@ import { apriVita, type Smontaggio } from "./vita";
 /// Il contatore basta e non serve nient'altro: gli id vivono quanto il
 /// documento, e la shell non li serializza da nessuna parte. Il prefisso serve
 /// solo a chi legge il DOM con l'ispettore.
-let contatore = 0;
-export function identificatore(prefisso: string): string {
-  contatore += 1;
-  return `${prefisso}-${contatore}`;
+let counter = 0;
+export function identifier(prefix: string): string {
+  counter += 1;
+  return `${prefix}-${counter}`;
 }
 
 /// Gli elementi che il browser rende già attivabili da tastiera per conto suo.
-const GIA_INTERATTIVI = new Set(["BUTTON", "A", "INPUT", "SELECT", "TEXTAREA", "SUMMARY"]);
+const NATIVE_INTERACTIVE = new Set(["BUTTON", "A", "INPUT", "SELECT", "TEXTAREA", "SUMMARY"]);
 
 /// Rende attivabile da tastiera un elemento che risponde al click.
 ///
@@ -52,12 +52,12 @@ const GIA_INTERATTIVI = new Set(["BUTTON", "A", "INPUT", "SELECT", "TEXTAREA", "
 /// - Invio **e** barra spaziatrice, perché sono i due tasti che attivano un
 ///   pulsante nativo e chi li usa non sa di essere su un `div`. La barra si
 ///   ferma qui (`preventDefault`) o farebbe scorrere il pannello sotto.
-export function attivabile(el: HTMLElement): void {
-  if (GIA_INTERATTIVI.has(el.tagName)) return;
+export function activatable(el: HTMLElement): void {
+  if (NATIVE_INTERACTIVE.has(el.tagName)) return;
   el.tabIndex = 0;
   if (!el.hasAttribute("role")) el.setAttribute("role", "button");
-  if (el.dataset.attivabile === "sì") return;
-  el.dataset.attivabile = "sì";
+  if (el.dataset.activatable === "sì") return;
+  el.dataset.activatable = "sì";
   el.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     e.preventDefault();
@@ -65,15 +65,15 @@ export function attivabile(el: HTMLElement): void {
   });
 }
 
-/// Toglie ciò che [`attivabile`] aveva messo, quando un nodo smette di avere
+/// Toglie ciò che [`activatable`] aveva messo, quando un nodo smette di avere
 /// un'azione.
 ///
 /// Serve perché il riconciliatore (§2.8) **riusa** gli elementi: la stessa riga
 /// che era cliccabile al giro scorso può non esserlo più a questo, e restare
 /// raggiungibile col tab senza fare niente è peggio che non esserlo mai stata —
 /// è un vicolo cieco in mezzo all'ordine di lettura.
-export function nonAttivabile(el: HTMLElement): void {
-  if (GIA_INTERATTIVI.has(el.tagName)) return;
+export function notActivatable(el: HTMLElement): void {
+  if (NATIVE_INTERACTIVE.has(el.tagName)) return;
   el.removeAttribute("tabindex");
   if (el.getAttribute("role") === "button") el.removeAttribute("role");
 }
@@ -90,12 +90,12 @@ export function nonAttivabile(el: HTMLElement): void {
 /// «comanda l'ultima» non si può scrivere in una superficie che le altre non le
 /// vede. Si svuota da sé — ogni trappola si toglie quando la si scioglie — e a
 /// shell ferma è vuota.
-const pila: object[] = [];
+const trapStack: object[] = [];
 
-export function fuocabili(root: HTMLElement): HTMLElement[] {
-  const selettore =
+export function focusableElements(root: HTMLElement): HTMLElement[] {
+  const selector =
     'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
-  return Array.from(root.querySelectorAll<HTMLElement>(selettore)).filter(
+  return Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(
     (el) => !el.hasAttribute("disabled") && el.offsetParent !== null,
   );
 }
@@ -115,8 +115,8 @@ export function fuocabili(root: HTMLElement): HTMLElement[] {
 /// la chiama quando la chiude. Senza, il secondo `apri()` metterebbe un secondo
 /// ascoltatore sopra il primo e a quel punto Escape chiuderebbe due volte.
 ///
-/// Lo `Smontaggio` che torna è il tipo di `ui/vita.ts`, ed è pensato per finire
-/// in una `Vita` (`vita.aggiungi(intrappolaFuoco(...))`) invece che in una
+/// Lo `Teardown` che torna è il tipo di `ui/lifetime.ts`, ed è pensato per finire
+/// in una `Lifetime` (`lifetime.aggiungi(trapFocus(...))`) invece che in una
 /// variabile che qualcuno deve ricordarsi di chiamare — è così che lo prendono
 /// il menu contestuale e il selettore di icona.
 ///
@@ -134,69 +134,69 @@ export function fuocabili(root: HTMLElement): HTMLElement[] {
 ///
 /// Che l'ultima aperta sia anche quella dipinta sopra non è un caso da sperare:
 /// una superficie che intrappola il fuoco sta sul piano `--z-modal`, ed è scritto
-/// in `theme/struttura.css` accanto ai piani.
-export function intrappolaFuoco(root: HTMLElement, chiudi: () => void): Smontaggio {
-  const vita = apriVita();
+/// in `theme/structure.css` accanto ai piani.
+export function trapFocus(root: HTMLElement, close: () => void): Teardown {
+  const lifetime = openLifetime();
   // Il segnaposto di *questa* trappola nella pila. Un oggetto vuoto basta: serve
   // solo la sua identità, e due trappole sulla stessa `root` sono due.
   const io = {};
-  pila.push(io);
-  vita.aggiungi(() => {
+  trapStack.push(io);
+  lifetime.add(() => {
     // `filter`, non `pop`: chi apre e chi chiude non sono obbligati a farlo in
     // ordine — una superficie sotto può chiudersi per conto suo (un comando, un
     // documento che sparisce) mentre sopra ce n'è un'altra, e togliere la cima
     // lascerebbe a comandare una trappola che non c'è più.
-    const dove = pila.lastIndexOf(io);
-    if (dove >= 0) pila.splice(dove, 1);
+    const where = trapStack.lastIndexOf(io);
+    if (where >= 0) trapStack.splice(where, 1);
   });
-  const precedente = document.activeElement as HTMLElement | null;
+  const previous = document.activeElement as HTMLElement | null;
   // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
   // chiudere una modale rimanda chi naviga da tastiera all'inizio del
   // documento, e deve rifare tutta la strada per tornare dov'era. Sta *prima*
   // dell'ascoltatore perché `chiudi()` disfa in ordine inverso: così a spostare
   // il fuoco è l'ultimo passo, quando la trappola non è più attaccata.
-  vita.aggiungi(() => {
-    if (precedente?.isConnected) precedente.focus();
+  lifetime.add(() => {
+    if (previous?.isConnected) previous.focus();
   });
 
-  const suTasto = (e: KeyboardEvent) => {
+  const onKey = (e: KeyboardEvent) => {
     // Aperta ma non in cima: c'è una superficie sopra questa, e il tasto è suo.
-    if (pila[pila.length - 1] !== io) return;
+    if (trapStack[trapStack.length - 1] !== io) return;
     if (e.key === "Escape") {
       e.preventDefault();
-      chiudi();
+      close();
       return;
     }
     if (e.key !== "Tab") return;
-    const dentro = fuocabili(root);
-    if (dentro.length === 0) {
+    const inside = focusableElements(root);
+    if (inside.length === 0) {
       // Una modale senza niente da mettere a fuoco esiste (un messaggio, un
       // pannello ancora vuoto): il tab non deve poterne uscire lo stesso.
       e.preventDefault();
       root.focus();
       return;
     }
-    const primo = dentro[0]!;
-    const ultimo = dentro[dentro.length - 1]!;
-    const corrente = document.activeElement;
+    const first = inside[0]!;
+    const last = inside[inside.length - 1]!;
+    const current = document.activeElement;
     // Il giro si chiude a mano solo ai due estremi: in mezzo comanda il
     // browser, che conosce l'ordine di lettura meglio di questa lista.
-    if (e.shiftKey && (corrente === primo || !root.contains(corrente))) {
+    if (e.shiftKey && (current === first || !root.contains(current))) {
       e.preventDefault();
-      ultimo.focus();
-    } else if (!e.shiftKey && (corrente === ultimo || !root.contains(corrente))) {
+      last.focus();
+    } else if (!e.shiftKey && (current === last || !root.contains(current))) {
       e.preventDefault();
-      primo.focus();
+      first.focus();
     }
   };
 
   // In **cattura**: un pannello che gestisce le frecce o Escape per conto suo
   // (la palette dei comandi) non deve poter mangiare il tasto prima che la
   // trappola lo veda.
-  vita.ascolta(document, "keydown", suTasto, { capture: true });
+  lifetime.listen(document, "keydown", onKey, { capture: true });
 
-  const dentro = fuocabili(root);
-  (dentro[0] ?? root).focus();
+  const inside = focusableElements(root);
+  (inside[0] ?? root).focus();
 
-  return () => vita.chiudi();
+  return () => lifetime.close();
 }

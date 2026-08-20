@@ -20,7 +20,7 @@ use fub_abi::model::{DocId, Span};
 use fub_abi::session::{AnchoredSelection, AnchoredSelections, SelectionSet, ViewContext};
 use fub_abi::PluginError;
 use fub_features::{
-    CoreCommands, COMMANDS_ID, NOTE_CREATE, NOTE_RENAME, NOTE_TRASH, SELECTION_WIKILINK,
+    CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_RENAME, NOTES_TRASH, SELECTION_WIKILINK,
     SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
     TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
 };
@@ -120,8 +120,8 @@ fn a_command_writes_through_the_normal_path_so_the_graph_sees_it() {
     let mut ws = vault.open();
     ws.write_document(&DocId::new("Kant.md"), "# Kant\n", WriteBase::Dictated)
         .expect("scrive");
-    let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "parlo di Kant e di altro\n", WriteBase::Dictated)
+    let notes = DocId::new("Nota.md");
+    ws.write_document(&notes, "parlo di Kant e di altro\n", WriteBase::Dictated)
         .expect("scrive");
     assert!(
         ws.backlinks(&DocId::new("Kant.md")).is_empty(),
@@ -132,7 +132,7 @@ fn a_command_writes_through_the_normal_path_so_the_graph_sees_it() {
     // pulito (quindi lo span vale anche per il file).
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
-            .with_doc(Some(nota.clone()))
+            .with_doc(Some(notes.clone()))
             .with_selections(Some(SelectionSet::anchored(Span::new(9, 13), "Kant"))),
     ));
 
@@ -145,7 +145,7 @@ fn a_command_writes_through_the_normal_path_so_the_graph_sees_it() {
         )
         .expect("applica");
     assert_eq!(
-        ws.read_source(&nota).expect("legge"),
+        ws.read_source(&notes).expect("legge"),
         "parlo di [[Kant]] e di altro\n"
     );
     assert!(
@@ -160,7 +160,7 @@ fn a_command_writes_through_the_normal_path_so_the_graph_sees_it() {
         "il riferimento creato dal comando è nel grafo: la scrittura di un \
          comando è una scrittura come le altre"
     );
-    assert_eq!(backlinks[0].source, nota);
+    assert_eq!(backlinks[0].source, notes);
 }
 
 /// Tre cursori, un comando: la prova che la lista è **onorata** e non solo
@@ -176,8 +176,8 @@ fn a_command_acts_on_every_selection_and_undoes_them_together() {
     let mut ws = vault.open();
     ws.write_document(&DocId::new("Hegel.md"), "# Hegel\n", WriteBase::Dictated)
         .expect("scrive");
-    let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "Kant, Hegel e Fichte\n", WriteBase::Dictated)
+    let notes = DocId::new("Nota.md");
+    ws.write_document(&notes, "Kant, Hegel e Fichte\n", WriteBase::Dictated)
         .expect("scrive");
 
     // La primaria è l'ultima aggiunta — come in CodeMirror, dove `main` di
@@ -186,7 +186,7 @@ fn a_command_acts_on_every_selection_and_undoes_them_together() {
     // rende gli offset ancora veri al secondo edit.
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
-            .with_doc(Some(nota.clone()))
+            .with_doc(Some(notes.clone()))
             .with_selections(Some(SelectionSet::Anchored(AnchoredSelections {
                 primary: AnchoredSelection::new(Span::new(14, 20), "Fichte"),
                 secondary: vec![
@@ -205,7 +205,7 @@ fn a_command_acts_on_every_selection_and_undoes_them_together() {
         )
         .expect("applica");
     assert_eq!(
-        ws.read_source(&nota).expect("legge"),
+        ws.read_source(&notes).expect("legge"),
         "[[Kant]], [[Hegel]] e [[Fichte]]\n",
         "tre selezioni, tre riferimenti: agire sulla sola primaria \
          lascerebbe due dei tre punti che l'utente ha scelto"
@@ -226,7 +226,7 @@ fn a_command_acts_on_every_selection_and_undoes_them_together() {
     )
     .expect("disfa");
     assert_eq!(
-        ws.read_source(&nota).expect("legge"),
+        ws.read_source(&notes).expect("legge"),
         "Kant, Hegel e Fichte\n",
         "un gesto solo si disfa con un gesto solo"
     );
@@ -240,12 +240,12 @@ fn a_command_acts_on_every_selection_and_undoes_them_together() {
 fn a_caret_among_the_selections_has_nothing_to_wrap_and_the_count_says_so() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "Kant, Hegel e altro\n", WriteBase::Dictated)
+    let notes = DocId::new("Nota.md");
+    ws.write_document(&notes, "Kant, Hegel e altro\n", WriteBase::Dictated)
         .expect("scrive");
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
-            .with_doc(Some(nota.clone()))
+            .with_doc(Some(notes.clone()))
             .with_selections(Some(SelectionSet::Anchored(AnchoredSelections {
                 primary: AnchoredSelection::new(Span::new(0, 4), "Kant"),
                 secondary: vec![
@@ -264,7 +264,7 @@ fn a_caret_among_the_selections_has_nothing_to_wrap_and_the_count_says_so() {
         )
         .expect("applica");
     assert_eq!(
-        ws.read_source(&nota).expect("legge"),
+        ws.read_source(&notes).expect("legge"),
         "[[Kant]], [[Hegel]] e altro\n"
     );
     let notify = outcome.notify.expect("il comando lo dice");
@@ -282,12 +282,12 @@ fn a_caret_among_the_selections_has_nothing_to_wrap_and_the_count_says_so() {
 fn carets_only_is_still_nothing_to_wrap() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "Kant e Hegel\n", WriteBase::Dictated)
+    let notes = DocId::new("Nota.md");
+    ws.write_document(&notes, "Kant e Hegel\n", WriteBase::Dictated)
         .expect("scrive");
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
-            .with_doc(Some(nota.clone()))
+            .with_doc(Some(notes.clone()))
             .with_selections(Some(SelectionSet::Anchored(AnchoredSelections {
                 primary: AnchoredSelection::caret(0),
                 secondary: vec![AnchoredSelection::caret(7)],
@@ -306,7 +306,7 @@ fn carets_only_is_still_nothing_to_wrap() {
         "uno stato che non permette l'operazione si spiega: {err:?}"
     );
     assert_eq!(
-        ws.read_source(&nota).expect("legge"),
+        ws.read_source(&notes).expect("legge"),
         "Kant e Hegel\n",
         "e non ha scritto niente"
     );
@@ -316,19 +316,19 @@ fn carets_only_is_still_nothing_to_wrap() {
 fn the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    let nota = DocId::new("Nota.md");
-    ws.write_document(&nota, "parlo di Kant\n", WriteBase::Dictated)
+    let notes = DocId::new("Nota.md");
+    ws.write_document(&notes, "parlo di Kant\n", WriteBase::Dictated)
         .expect("scrive");
     ws.set_active_context(Some(
         ViewContext::new(MAIN_PANE)
-            .with_doc(Some(nota.clone()))
+            .with_doc(Some(notes.clone()))
             .with_selections(Some(SelectionSet::anchored(Span::new(9, 13), "Kant"))),
     ));
 
     // Qualcun altro riscrive la nota: il kernel lascia cadere lo span, perché
     // quelle coordinate erano di un altro testo (decisione 0007).
     ws.write_document(
-        &nota,
+        &notes,
         "un testo completamente diverso\n",
         WriteBase::Dictated,
     )
@@ -347,7 +347,7 @@ fn the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so() {
         "senza uno span vero il comando non indovina un punto in cui scrivere"
     );
     assert_eq!(
-        ws.read_source(&nota).expect("legge"),
+        ws.read_source(&notes).expect("legge"),
         "un testo completamente diverso\n"
     );
 }
@@ -403,22 +403,22 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
 fn a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    for nome in ["a.md", "b.md", "c.md"] {
-        ws.write_document(&DocId::new(nome), "il gatto dorme", WriteBase::Dictated)
+    for name in ["a.md", "b.md", "c.md"] {
+        ws.write_document(&DocId::new(name), "il gatto dorme", WriteBase::Dictated)
             .expect("scrive");
     }
     let rx = ws.bus().subscribe();
 
     // Chi invoca dichiara chi è: qui un'automazione, che è il caso in cui
     // attribuire all'utente sarebbe l'errore di 16.2.
-    let automa = Actor::Plugin {
+    let automation = Actor::Plugin {
         id: "fub.automa".into(),
     };
     ws.invoke_command(
         VAULT_REPLACE,
         serde_json::json!({ "find": "gatto", "replace": "cane" }),
         InvokeMode::Apply,
-        automa.clone(),
+        automation.clone(),
     )
     .expect("applica");
 
@@ -432,12 +432,12 @@ fn a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked() {
         "tre note riscritte non sono tre aggiornamenti dell'indice: l'invocazione \
          di un comando è UNA cosa che qualcuno ha chiesto"
     );
-    let terminali: Vec<&Notice> = notices
+    let terminal_events: Vec<&Notice> = notices
         .iter()
         .filter(|n| n.kind() == EventKind::BatchEnded)
         .collect();
-    assert_eq!(terminali.len(), 1);
-    let Event::BatchEnded { changed, .. } = &terminali[0].event else {
+    assert_eq!(terminal_events.len(), 1);
+    let Event::BatchEnded { changed, .. } = &terminal_events[0].event else {
         unreachable!()
     };
     assert_eq!(
@@ -446,7 +446,7 @@ fn a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked() {
         "e il terminale nomina le tre note: chi ridisegna sa su cosa"
     );
     assert!(
-        notices.iter().all(|n| n.origin.actor == automa),
+        notices.iter().all(|n| n.origin.actor == automation),
         "ogni evento porta l'origine di chi ha INVOCATO, non del provider che ha \
          eseguito: è ciò che permette a quell'automazione di non reagire alle \
          proprie scritture invece di rincorrersi finché il budget del dispatch \
@@ -492,13 +492,13 @@ fn a_dry_run_opens_no_batch_because_it_touches_nothing() {
 /// verde — ed è per questo che il suo compagno è la sparizione dei comandi
 /// Tauri, che si vede nel diff e non in un assert.
 #[test]
-fn the_whole_life_of_a_note_goes_through_the_registry() {
+fn the_whole_life_of_a_notes_goes_through_the_registry() {
     let vault = Vault::new();
     let mut ws = vault.open();
 
     let outcome = ws
         .invoke_command(
-            NOTE_CREATE,
+            NOTES_CREATE,
             serde_json::json!({ "name": "Progetti/Idee" }),
             InvokeMode::Apply,
             Actor::User,
@@ -516,9 +516,9 @@ fn the_whole_life_of_a_note_goes_through_the_registry() {
 
     // Ricrearla sopra è rifiutato: è la differenza fra `create_document` e
     // `write_document`, vista dal comando.
-    let e = ws
+    let and = ws
         .invoke_command(
-            NOTE_CREATE,
+            NOTES_CREATE,
             serde_json::json!({ "name": "Progetti/Idee.md" }),
             InvokeMode::Apply,
             Actor::User,
@@ -527,10 +527,10 @@ fn the_whole_life_of_a_note_goes_through_the_registry() {
     // `AlreadyExists` e non `Internal` (§12.2): fino alla 0041 «il path è
     // occupato» arrivava a chi disegna come «errore interno del plugin», e
     // l'unico modo di riconoscerlo era cercare una sottostringa nella prosa.
-    assert!(matches!(e, PluginError::AlreadyExists(_)), "{e}");
+    assert!(matches!(and, PluginError::AlreadyExists(_)), "{and}");
 
     ws.invoke_command(
-        NOTE_RENAME,
+        NOTES_RENAME,
         serde_json::json!({ "doc": "Progetti/Idee.md", "to": "Progetti/Idee vecchie.md" }),
         InvokeMode::Apply,
         Actor::User,
@@ -539,7 +539,7 @@ fn the_whole_life_of_a_note_goes_through_the_registry() {
     assert_eq!(ws.documents(), vec![DocId::new("Progetti/Idee vecchie.md")]);
 
     ws.invoke_command(
-        NOTE_TRASH,
+        NOTES_TRASH,
         serde_json::json!({ "doc": "Progetti/Idee vecchie.md" }),
         InvokeMode::Apply,
         Actor::User,
@@ -547,11 +547,11 @@ fn the_whole_life_of_a_note_goes_through_the_registry() {
     .expect("cestina");
     assert!(ws.documents().is_empty());
 
-    let voce = ws.list_trash().expect("cestino")[0].id.clone();
+    let entry = ws.list_trash().expect("cestino")[0].id.clone();
     let outcome = ws
         .invoke_command(
             TRASH_RESTORE,
-            serde_json::json!({ "entry": voce.as_str() }),
+            serde_json::json!({ "entry": entry.as_str() }),
             InvokeMode::Apply,
             Actor::User,
         )
@@ -603,14 +603,14 @@ fn restoring_onto_an_occupied_path_says_exactly_that() {
     let mut ws = vault.open();
 
     ws.invoke_command(
-        NOTE_CREATE,
+        NOTES_CREATE,
         serde_json::json!({ "name": "Idee.md" }),
         InvokeMode::Apply,
         Actor::User,
     )
     .expect("crea");
     ws.invoke_command(
-        NOTE_TRASH,
+        NOTES_TRASH,
         serde_json::json!({ "doc": "Idee.md" }),
         InvokeMode::Apply,
         Actor::User,
@@ -620,32 +620,32 @@ fn restoring_onto_an_occupied_path_says_exactly_that() {
     // Il path torna occupato mentre la nota è nel cestino: è esattamente il caso
     // in cui la domanda della shell ha senso.
     ws.invoke_command(
-        NOTE_CREATE,
+        NOTES_CREATE,
         serde_json::json!({ "name": "Idee.md" }),
         InvokeMode::Apply,
         Actor::User,
     )
     .expect("ricrea sullo stesso path");
 
-    let voce = ws.list_trash().expect("cestino")[0].id.clone();
-    let e = ws
+    let entry = ws.list_trash().expect("cestino")[0].id.clone();
+    let and = ws
         .invoke_command(
             TRASH_RESTORE,
-            serde_json::json!({ "entry": voce.as_str() }),
+            serde_json::json!({ "entry": entry.as_str() }),
             InvokeMode::Apply,
             Actor::User,
         )
         .expect_err("il path originale è occupato");
     assert!(
-        matches!(e, PluginError::AlreadyExists(_)),
-        "è la variante su cui il cestino rama, e senza la domanda torna sbagliata: {e}"
+        matches!(and, PluginError::AlreadyExists(_)),
+        "è la variante su cui il cestino rama, e senza la domanda torna sbagliata: {and}"
     );
 
     // E col nome che la shell propone, passa: l'altro capo dello stesso ramo.
-    let libero = ws.free_name(&DocId::new("Idee.md"));
+    let free = ws.free_name(&DocId::new("Idee.md"));
     ws.invoke_command(
         TRASH_RESTORE,
-        serde_json::json!({ "entry": voce.as_str(), "to": libero.as_str() }),
+        serde_json::json!({ "entry": entry.as_str(), "to": free.as_str() }),
         InvokeMode::Apply,
         Actor::User,
     )
@@ -653,7 +653,7 @@ fn restoring_onto_an_occupied_path_says_exactly_that() {
 }
 
 #[test]
-fn trashing_without_an_argument_takes_the_note_the_user_is_looking_at() {
+fn trashing_without_an_argument_takes_the_notes_the_user_is_looking_at() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.write_document(&DocId::new("aperta.md"), "x", WriteBase::Dictated)
@@ -663,7 +663,7 @@ fn trashing_without_an_argument_takes_the_note_the_user_is_looking_at() {
     ));
 
     ws.invoke_command(
-        NOTE_TRASH,
+        NOTES_TRASH,
         serde_json::Value::Null,
         InvokeMode::Apply,
         Actor::User,
@@ -688,16 +688,16 @@ fn trashing_without_an_argument_takes_the_note_the_user_is_looking_at() {
 fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    let sorgente = "---\ntitolo: Spesa\n---\n\n- [ ] pane\n- [ ] latte\n";
-    ws.write_document(&DocId::new("spesa.md"), sorgente, WriteBase::Dictated)
+    let source = "---\ntitolo: Spesa\n---\n\n- [ ] pane\n- [ ] latte\n";
+    ws.write_document(&DocId::new("spesa.md"), source, WriteBase::Dictated)
         .expect("scrive");
 
     // La posizione è dentro il testo della **seconda** voce: nessuno qui conta
     // le parentesi quadre, e il frontmatter davanti sposta ogni offset.
-    let at = sorgente.find("latte").expect("c'è") as u64;
+    let at = source.find("latte").expect("c'è") as u64;
     let outcome = ws
         .invoke_command(
-            fub_features::NOTE_TASK_TOGGLE,
+            fub_features::NOTES_TASK_TOGGLE,
             serde_json::json!({ "doc": "spesa.md", "at": [at] }),
             InvokeMode::Apply,
             Actor::User,
@@ -721,7 +721,7 @@ fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
     // E il giro contrario: il modello di adesso è quello del file di adesso,
     // non quello di quando è stato indicizzato.
     ws.invoke_command(
-        fub_features::NOTE_TASK_TOGGLE,
+        fub_features::NOTES_TASK_TOGGLE,
         serde_json::json!({ "doc": "spesa.md", "at": [at] }),
         InvokeMode::Apply,
         Actor::User,
@@ -729,7 +729,7 @@ fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
     .expect("de-spunta");
     assert_eq!(
         ws.read_source(&DocId::new("spesa.md")).expect("rilegge"),
-        sorgente
+        source
     );
 }
 
@@ -747,7 +747,7 @@ fn a_position_outside_every_task_is_refused_by_the_command_not_guessed() {
 
     let err = ws
         .invoke_command(
-            fub_features::NOTE_TASK_TOGGLE,
+            fub_features::NOTES_TASK_TOGGLE,
             serde_json::json!({ "doc": "spesa.md", "at": [2] }),
             InvokeMode::Apply,
             Actor::User,
@@ -768,8 +768,8 @@ fn a_position_outside_every_task_is_refused_by_the_command_not_guessed() {
 fn two_cursors_toggle_two_tasks_without_naming_at() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    let sorgente = "- [ ] pane\n- [ ] latte\n";
-    ws.write_document(&DocId::new("spesa.md"), sorgente, WriteBase::Dictated)
+    let source = "- [ ] pane\n- [ ] latte\n";
+    ws.write_document(&DocId::new("spesa.md"), source, WriteBase::Dictated)
         .expect("scrive");
 
     // Un cursore in ciascuna voce: pane sta a offset 6, latte a offset 17.
@@ -784,7 +784,7 @@ fn two_cursors_toggle_two_tasks_without_naming_at() {
 
     let outcome = ws
         .invoke_command(
-            fub_features::NOTE_TASK_TOGGLE,
+            fub_features::NOTES_TASK_TOGGLE,
             serde_json::json!({}),
             InvokeMode::Apply,
             Actor::User,
@@ -808,8 +808,8 @@ fn two_cursors_toggle_two_tasks_without_naming_at() {
 fn one_cursor_toggles_one_task_without_naming_at() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    let sorgente = "- [ ] pane\n- [ ] latte\n";
-    ws.write_document(&DocId::new("spesa.md"), sorgente, WriteBase::Dictated)
+    let source = "- [ ] pane\n- [ ] latte\n";
+    ws.write_document(&DocId::new("spesa.md"), source, WriteBase::Dictated)
         .expect("scrive");
 
     ws.set_active_context(Some(
@@ -819,7 +819,7 @@ fn one_cursor_toggles_one_task_without_naming_at() {
     ));
 
     ws.invoke_command(
-        fub_features::NOTE_TASK_TOGGLE,
+        fub_features::NOTES_TASK_TOGGLE,
         serde_json::json!({}),
         InvokeMode::Apply,
         Actor::User,
@@ -853,7 +853,7 @@ fn the_plan_of_a_rename_names_the_notes_that_link_it() {
 
     let outcome = ws
         .invoke_command(
-            NOTE_RENAME,
+            NOTES_RENAME,
             serde_json::json!({ "doc": "bersaglio.md", "to": "nuovo.md" }),
             InvokeMode::DryRun,
             Actor::User,
@@ -882,8 +882,8 @@ fn the_plan_of_a_rename_names_the_notes_that_link_it() {
 fn archiving_n_notes_is_n_renames_one_batch_and_one_actor() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    for nome in ["a.md", "b.md", "c.md"] {
-        ws.write_document(&DocId::new(nome), "x", WriteBase::Dictated)
+    for name in ["a.md", "b.md", "c.md"] {
+        ws.write_document(&DocId::new(name), "x", WriteBase::Dictated)
             .expect("scrive");
     }
     ws.write_document(
@@ -949,8 +949,8 @@ fn archiving_n_notes_is_n_renames_one_batch_and_one_actor() {
 fn the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps() {
     let vault = Vault::new();
     let mut ws = vault.open();
-    for nome in ["a.md", "b.md"] {
-        ws.write_document(&DocId::new(nome), "x", WriteBase::Dictated)
+    for name in ["a.md", "b.md"] {
+        ws.write_document(&DocId::new(name), "x", WriteBase::Dictated)
             .expect("scrive");
     }
     ws.write_document(&DocId::new("indice.md"), "vedi [[a]]", WriteBase::Dictated)
@@ -968,11 +968,11 @@ fn the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps() {
         panic!("un dry-run risponde con un piano")
     };
 
-    for atteso in ["a.md", "b.md", "Vecchie/a.md", "Vecchie/b.md", "indice.md"] {
+    for expected in ["a.md", "b.md", "Vecchie/a.md", "Vecchie/b.md", "indice.md"] {
         assert!(
-            plan.docs.contains(&DocId::new(atteso)),
+            plan.docs.contains(&DocId::new(expected)),
             "il piano della macro contiene ciò che ogni passo avrebbe toccato — \
-             manca {atteso}: {:?}",
+             manca {expected}: {:?}",
             plan.docs
         );
     }
@@ -1005,7 +1005,7 @@ fn the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps() {
 
 /// Un vault coi comandi montati e tre chiavi dichiarate: due che un programma
 /// può scrivere, e una no.
-fn vault_con_impostazioni() -> (Vault, Workspace) {
+fn vault_with_settings() -> (Vault, Workspace) {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.register_plugin(
@@ -1031,13 +1031,13 @@ fn vault_con_impostazioni() -> (Vault, Workspace) {
     (vault, ws)
 }
 
-fn valore(ws: &Workspace, key: &str) -> fub_abi::settings::SettingValue {
+fn value(ws: &Workspace, key: &str) -> fub_abi::settings::SettingValue {
     ws.setting(key).expect("dichiarata")
 }
 
 #[test]
 fn a_command_writes_a_setting_reading_its_type_from_the_declared_schema() {
-    let (_vault, mut ws) = vault_con_impostazioni();
+    let (_vault, mut ws) = vault_with_settings();
 
     // `value` è **testo**, e a dargli un tipo è lo schema: è la forma che un
     // chiamante non interattivo (una CLI, un'automazione, un modello) sa
@@ -1055,7 +1055,7 @@ fn a_command_writes_a_setting_reading_its_type_from_the_declared_schema() {
         "un comando che cambia qualcosa lo dice"
     );
     assert_eq!(
-        valore(&ws, "versioning.enabled"),
+        value(&ws, "versioning.enabled"),
         fub_abi::settings::SettingValue::Toggle(false)
     );
 
@@ -1069,15 +1069,15 @@ fn a_command_writes_a_setting_reading_its_type_from_the_declared_schema() {
     )
     .expect("azzera");
     assert_eq!(
-        valore(&ws, "versioning.enabled"),
+        value(&ws, "versioning.enabled"),
         fub_abi::settings::SettingValue::Toggle(true)
     );
 }
 
 #[test]
 fn a_program_cannot_move_a_key_that_did_not_declare_itself_program_writable() {
-    let (_vault, mut ws) = vault_con_impostazioni();
-    let errore = ws
+    let (_vault, mut ws) = vault_with_settings();
+    let error = ws
         .invoke_command(
             SETTINGS_SET,
             serde_json::json!({ "key": "privacy.telemetry", "value": "true" }),
@@ -1086,11 +1086,11 @@ fn a_program_cannot_move_a_key_that_did_not_declare_itself_program_writable() {
         )
         .expect_err("la chiave non si è dichiarata scrivibile da un programma");
     assert!(
-        matches!(errore, PluginError::PermissionDenied(_)),
-        "è un rifiuto di permesso, non un argomento sbagliato: {errore:?}"
+        matches!(error, PluginError::PermissionDenied(_)),
+        "è un rifiuto di permesso, non un argomento sbagliato: {error:?}"
     );
     assert_eq!(
-        valore(&ws, "privacy.telemetry"),
+        value(&ws, "privacy.telemetry"),
         fub_abi::settings::SettingValue::Toggle(false),
         "e il valore è rimasto quello che era"
     );
@@ -1098,7 +1098,7 @@ fn a_program_cannot_move_a_key_that_did_not_declare_itself_program_writable() {
 
 #[test]
 fn simulating_a_setting_change_says_what_would_change_and_changes_nothing() {
-    let (_vault, mut ws) = vault_con_impostazioni();
+    let (_vault, mut ws) = vault_with_settings();
     let outcome = ws
         .invoke_command(
             SETTINGS_SET,
@@ -1109,7 +1109,7 @@ fn simulating_a_setting_change_says_what_would_change_and_changes_nothing() {
         .expect("simula");
     assert!(matches!(outcome.effect, CommandEffect::Plan(_)));
     assert_eq!(
-        valore(&ws, "versioning.enabled"),
+        value(&ws, "versioning.enabled"),
         fub_abi::settings::SettingValue::Toggle(true),
         "una simulazione che spegnesse il versioning lo lascerebbe spento: è \
          l'effetto meno ritirabile di tutti, perché sopravvive alla sessione"
@@ -1118,7 +1118,7 @@ fn simulating_a_setting_change_says_what_would_change_and_changes_nothing() {
 
 #[test]
 fn simulating_an_out_of_range_setting_refuses_the_same_value_as_apply() {
-    let (_vault, mut ws) = vault_con_impostazioni();
+    let (_vault, mut ws) = vault_with_settings();
     let invoke = |ws: &mut Workspace, mode| {
         ws.invoke_command(
             SETTINGS_SET,
@@ -1138,7 +1138,7 @@ fn simulating_an_out_of_range_setting_refuses_the_same_value_as_apply() {
         "dry-run e apply devono attraversare la stessa validazione"
     );
     assert_eq!(
-        valore(&ws, "editor.font_size"),
+        value(&ws, "editor.font_size"),
         fub_abi::settings::SettingValue::Number(12.0),
         "nessuno dei due tentativi deve scrivere"
     );
@@ -1146,7 +1146,7 @@ fn simulating_an_out_of_range_setting_refuses_the_same_value_as_apply() {
 
 #[test]
 fn export_carries_what_someone_decided_and_import_puts_it_back() {
-    let (_vault, mut ws) = vault_con_impostazioni();
+    let (_vault, mut ws) = vault_with_settings();
 
     // Niente deciso: l'export è vuoto. I default non sono una configurazione —
     // portarli dentro vorrebbe dire che reimportare **decide** tutto ciò che
@@ -1195,14 +1195,14 @@ fn export_carries_what_someone_decided_and_import_puts_it_back() {
     )
     .expect("importa");
     assert_eq!(
-        valore(&ws, "versioning.enabled"),
+        value(&ws, "versioning.enabled"),
         fub_abi::settings::SettingValue::Toggle(false)
     );
 }
 
 #[test]
 fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
-    let (_vault, mut ws) = vault_con_impostazioni();
+    let (_vault, mut ws) = vault_with_settings();
     let outcome = ws
         .invoke_command(
             SETTINGS_IMPORT,
@@ -1210,7 +1210,7 @@ fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
                 "json": r#"{
                     "versioning.enabled": false,
                     "privacy.telemetry": true,
-                    "com.acme.mai-vista": 3
+                    "com.acme.never-vista": 3
                 }"#
             }),
             InvokeMode::Apply,
@@ -1218,26 +1218,26 @@ fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
         )
         .expect("importa ciò che può");
 
-    let messaggio = outcome.notify.expect("dice com'è andata");
+    let message = outcome.notify.expect("dice com'è andata");
     assert!(
-        messaggio.to_string().contains("applicate: 1"),
-        "{messaggio}"
+        message.to_string().contains("applicate: 1"),
+        "{message}"
     );
     assert!(
-        messaggio.to_string().contains("privacy.telemetry"),
-        "{messaggio}"
+        message.to_string().contains("privacy.telemetry"),
+        "{message}"
     );
     assert!(
-        messaggio.to_string().contains("com.acme.mai-vista"),
-        "{messaggio}"
+        message.to_string().contains("com.acme.mai-vista"),
+        "{message}"
     );
     assert_eq!(
-        valore(&ws, "versioning.enabled"),
+        value(&ws, "versioning.enabled"),
         fub_abi::settings::SettingValue::Toggle(false),
         "ciò che si poteva applicare è applicato"
     );
     assert_eq!(
-        valore(&ws, "privacy.telemetry"),
+        value(&ws, "privacy.telemetry"),
         fub_abi::settings::SettingValue::Toggle(false),
         "e un file di impostazioni che passa di mano non sposta le chiavi che \
          un programma non può scrivere"
@@ -1250,10 +1250,10 @@ fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
 /// simulare dica ciò che succederebbe, e ciò che succederebbe qui è un rifiuto.
 #[test]
 fn simulating_an_import_counts_the_key_gate_too() {
-    let (_vault, mut ws) = vault_con_impostazioni();
+    let (_vault, mut ws) = vault_with_settings();
     let json = r#"{ "versioning.enabled": false, "privacy.telemetry": true }"#;
 
-    let simulato = ws
+    let simulated = ws
         .invoke_command(
             SETTINGS_IMPORT,
             serde_json::json!({ "json": json }),
@@ -1264,12 +1264,12 @@ fn simulating_an_import_counts_the_key_gate_too() {
         .notify
         .expect("dice cosa farebbe");
     assert!(
-        simulato.to_string().contains("applicate: 1")
-            && simulato.to_string().contains("privacy.telemetry"),
-        "la simulazione nomina già ciò che non entrerebbe: {simulato}"
+        simulated.to_string().contains("applicate: 1")
+            && simulated.to_string().contains("privacy.telemetry"),
+        "la simulazione nomina già ciò che non entrerebbe: {simulated}"
     );
 
-    let applicato = ws
+    let applied = ws
         .invoke_command(
             SETTINGS_IMPORT,
             serde_json::json!({ "json": json }),
@@ -1280,9 +1280,9 @@ fn simulating_an_import_counts_the_key_gate_too() {
         .notify
         .expect("dice com'è andata");
     assert!(
-        applicato.to_string().contains("applicate: 1")
-            && applicato.to_string().contains("privacy.telemetry"),
-        "e l'applicazione dice la stessa cosa: {applicato}"
+        applied.to_string().contains("applicate: 1")
+            && applied.to_string().contains("privacy.telemetry"),
+        "e l'applicazione dice la stessa cosa: {applied}"
     );
 }
 
@@ -1290,8 +1290,8 @@ fn simulating_an_import_counts_the_key_gate_too() {
 /// scrivere è un rifiuto, non un piano.
 #[test]
 fn simulating_a_write_on_a_locked_key_is_a_refusal_and_not_a_plan() {
-    let (_vault, mut ws) = vault_con_impostazioni();
-    let errore = ws
+    let (_vault, mut ws) = vault_with_settings();
+    let error = ws
         .invoke_command(
             SETTINGS_SET,
             serde_json::json!({ "key": "privacy.telemetry", "value": "true" }),
@@ -1300,7 +1300,7 @@ fn simulating_a_write_on_a_locked_key_is_a_refusal_and_not_a_plan() {
         )
         .expect_err("simulare un rifiuto è un rifiuto");
     assert!(
-        matches!(errore, PluginError::PermissionDenied(_)),
-        "{errore:?}"
+        matches!(error, PluginError::PermissionDenied(_)),
+        "{error:?}"
     );
 }

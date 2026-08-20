@@ -63,7 +63,7 @@ fn payload(tree: &UiNode) -> serde_json::Value {
     payload.clone()
 }
 
-fn nodi(p: &serde_json::Value) -> Vec<String> {
+fn nodes(p: &serde_json::Value) -> Vec<String> {
     let mut out: Vec<String> = p["nodes"]
         .as_array()
         .unwrap()
@@ -74,15 +74,15 @@ fn nodi(p: &serde_json::Value) -> Vec<String> {
     out
 }
 
-fn archi(p: &serde_json::Value) -> Vec<(String, String)> {
+fn edges(p: &serde_json::Value) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = p["edges"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|e| {
+        .map(|and| {
             (
-                e["from"].as_str().unwrap().to_string(),
-                e["to"].as_str().unwrap().to_string(),
+                and["from"].as_str().unwrap().to_string(),
+                and["to"].as_str().unwrap().to_string(),
             )
         })
         .collect();
@@ -93,15 +93,15 @@ fn archi(p: &serde_json::Value) -> Vec<(String, String)> {
 /// Gli archi **nell'ordine in cui il provider li manda** — senza `sort`, che è
 /// ciò che il test sull'ordine deterministico deve sorvegliare: gli altri helper
 /// ordinano perché presidian l'insieme, qui la proprietà è la sequenza.
-fn archi_in_ordine(p: &serde_json::Value) -> Vec<(String, String)> {
+fn edges_in_order(p: &serde_json::Value) -> Vec<(String, String)> {
     p["edges"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|e| {
+        .map(|and| {
             (
-                e["from"].as_str().unwrap().to_string(),
-                e["to"].as_str().unwrap().to_string(),
+                and["from"].as_str().unwrap().to_string(),
+                and["to"].as_str().unwrap().to_string(),
             )
         })
         .collect()
@@ -113,7 +113,7 @@ fn archi_in_ordine(p: &serde_json::Value) -> Vec<(String, String)> {
 /// un'informazione — è esattamente ciò che si va a cercare in una vista a
 /// grafo — e un grafo che mostrasse solo chi ha archi non la farebbe vedere mai.
 #[test]
-fn every_note_is_a_node_even_the_lonely_ones() {
+fn every_notes_is_a_node_even_the_lonely_ones() {
     let vault = Vault::new();
     vault.put("A.md", "vedi [[B]]\n");
     vault.put("B.md", "niente\n");
@@ -121,14 +121,14 @@ fn every_note_is_a_node_even_the_lonely_ones() {
     let ws = vault.open();
 
     let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
-    assert_eq!(nodi(&p), ["A.md", "B.md", "Sola.md"]);
+    assert_eq!(nodes(&p), ["A.md", "B.md", "Sola.md"]);
 }
 
 /// Gli archi vengono dal **grafo del kernel**, in una domanda sola su tutto il
 /// vault: è ciò per cui `IndexQuery::Neighbors` prende un'espressione invece di
 /// un documento (0004).
 #[test]
-fn edges_come_from_the_data_channel_for_the_whole_vault_at_once() {
+fn edges_as_from_the_data_channel_for_the_whole_vault_at_once() {
     let vault = Vault::new();
     vault.put("A.md", "vedi [[B]] e anche [[C]]\n");
     vault.put("B.md", "torno a [[A]]\n");
@@ -137,7 +137,7 @@ fn edges_come_from_the_data_channel_for_the_whole_vault_at_once() {
 
     let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
     assert_eq!(
-        archi(&p),
+        edges(&p),
         [
             ("A.md".to_string(), "B.md".to_string()),
             ("A.md".to_string(), "C.md".to_string()),
@@ -149,14 +149,14 @@ fn edges_come_from_the_data_channel_for_the_whole_vault_at_once() {
 /// Due link fra le stesse due note sono **un** arco: la molteplicità non disegna
 /// niente, e due segmenti sovrapposti sono solo un segmento più scuro.
 #[test]
-fn a_note_that_links_the_same_note_twice_draws_one_edge() {
+fn a_notes_that_links_the_same_notes_twice_draws_one_edge() {
     let vault = Vault::new();
     vault.put("A.md", "[[B]] e più sotto ancora [[B]]\n");
     vault.put("B.md", "niente\n");
     let ws = vault.open();
 
     let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
-    assert_eq!(archi(&p), [("A.md".to_string(), "B.md".to_string())]);
+    assert_eq!(edges(&p), [("A.md".to_string(), "B.md".to_string())]);
 }
 
 /// Un vault vuoto è un grafo vuoto, non un errore: il ripiego c'è comunque, e
@@ -168,14 +168,14 @@ fn an_empty_vault_is_an_empty_graph() {
 
     let tree = ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap();
     let p = payload(&tree);
-    assert!(nodi(&p).is_empty());
-    assert!(archi(&p).is_empty());
+    assert!(nodes(&p).is_empty());
+    assert!(edges(&p).is_empty());
 }
 
 /// Cliccare un nodo chiede al core di navigare, dalla stessa porta di ogni altra
 /// azione di view.
 #[test]
-fn clicking_a_node_asks_the_core_to_open_that_note() {
+fn clicking_a_node_asks_the_core_to_open_that_notes() {
     let vault = Vault::new();
     vault.put("A.md", "vedi [[B]]\n");
     vault.put("B.md", "niente\n");
@@ -233,8 +233,8 @@ fn a_self_link_is_not_an_edge() {
     let ws = vault.open();
 
     let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
-    assert_eq!(nodi(&p), ["A.md"]);
-    assert!(archi(&p).is_empty());
+    assert_eq!(nodes(&p), ["A.md"]);
+    assert!(edges(&p).is_empty());
 }
 
 /// L'ordine degli archi è parte del contratto, non un dettaglio: `Neighbors`
@@ -254,7 +254,7 @@ fn edges_arrive_in_a_deterministic_order() {
 
     let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
     assert_eq!(
-        archi_in_ordine(&p),
+        edges_in_order(&p),
         [
             ("A.md".to_string(), "B.md".to_string()),
             ("A.md".to_string(), "C.md".to_string()),
@@ -276,5 +276,5 @@ fn a_document_is_one_node_however_many_times_it_is_linked() {
     let ws = vault.open();
 
     let p = payload(&ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap());
-    assert_eq!(nodi(&p), ["A.md", "B.md"]);
+    assert_eq!(nodes(&p), ["A.md", "B.md"]);
 }

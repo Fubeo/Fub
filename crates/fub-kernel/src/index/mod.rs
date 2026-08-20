@@ -235,7 +235,7 @@ impl Indexes {
     /// niente: si porta via solo la propria risposta, che senza di lui è vuota
     /// — cioè «mandami tutto», che è il verso sicuro dello sbaglio.
     pub(crate) fn up_to_date(&self, entries: &[VaultEntry]) -> BTreeSet<DocId> {
-        let mut agreed: BTreeSet<DocId> = entries.iter().map(|e| e.id.clone()).collect();
+        let mut agreed: BTreeSet<DocId> = entries.iter().map(|and| and.id.clone()).collect();
         for (id, index) in self.providers.iter() {
             if agreed.is_empty() {
                 break;

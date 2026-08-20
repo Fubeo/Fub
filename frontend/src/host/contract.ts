@@ -702,7 +702,7 @@ export interface Failure {
   // soggetto non è un documento — una chiave di impostazione, un passo di
   // annullamento che è un comando — e non quando non si sa: il soggetto sta
   // comunque dentro `error`. Questo campo esiste perché **qui** ci si possa
-  // attaccare un link, e un link vuole un id, non una frase che lo nomina.
+  // attaccare un legame, e un legame vuole un id, non una frase che lo nomina.
   subject: string | null;
   // Un `PluginError` intero e non una stringa: la specie del guasto è metà
   // dell'informazione, e un `conflict` si riprova mentre un `permission_denied`
@@ -912,16 +912,16 @@ export interface Span {
 // una dipendenza mostrato all'utente — non esiste più, perché fra la casella e
 // i risultati non c'è più nessun parser di terzi.
 
-// In che verso si cammina il grafo dei link.
+// In che verso si cammina il grafo dei legame.
 export type { LinkDirection } from "./enums.generated";
 
-// Il bersaglio NON RISOLTO di un link (rispecchia fub_abi::model::LinkTarget).
+// Il bersaglio NON RISOLTO di un legame (rispecchia fub_abi::model::LinkTarget).
 // Tag ADIACENTE (`kind` + `value`): due varianti su tre portano uno scalare, e
 // col tag interno non attraverserebbero il JSON.
 //
 // Le tre specie sono tre regole di risoluzione diverse, e chi chiede dice quale
 // vuole: non c'è un'euristica che le indovini dalla stringa, perché `a/b.md` è
-// un wikilink per path *e* un link markdown relativo, e le due non risolvono
+// un wikilink per path *e* un legame markdown relativo, e le due non risolvono
 // allo stesso posto.
 export type LinkTarget =
   | { kind: "wiki"; value: { page: string; heading?: string | null; block?: string | null } }
@@ -986,17 +986,17 @@ export interface QueryExpr {
 }
 
 // Ogni documento del vault: la query da cui parte chi non ha filtri.
-export const OGNI_DOCUMENTO: QueryExpr = { any: [] };
+export const EVERY_DOCUMENT: QueryExpr = { any: [] };
 
 // Il testo che l'utente ha digitato, ovunque il provider guardi.
 //
-// `mentreSiDigita` accende `partial_last_term`: l'ultimo termine è incompleto,
+// `whileTyping` accende `partial_last_term`: l'ultimo termine è incompleto,
 // e `arch` deve trovare *architettura* prima che la parola sia finita. Lo dice
 // la **query**, non la casella appendendo un `*` da sé: se lo facesse la
 // shell, la ricerca dell'utente e quella di CLI, API locale, automazioni e
 // centro di comando LLM parlerebbero due lingue diverse, e la differenza non
-// sarebbe scritta da nessuna parte.
-export function testoCercato(text: string, mentreSiDigita = false): QueryExpr {
+// sarebbe scritto da nessuna parte.
+export function textQuery(text: string, whileTyping = false): QueryExpr {
   return {
     any: [
       {
@@ -1009,7 +1009,7 @@ export function testoCercato(text: string, mentreSiDigita = false): QueryExpr {
               mode: "terms",
               fields: [],
               tolerance: "exact",
-              partial_last_term: mentreSiDigita,
+              partial_last_term: whileTyping,
             },
           },
         ],
@@ -1032,11 +1032,11 @@ export function testoCercato(text: string, mentreSiDigita = false): QueryExpr {
 // La composizione non è un `and` generico apposta: due `QueryExpr` in AND
 // vorrebbero il prodotto delle clausole, e un combinatore che lo fa in silenzio
 // è il posto dove nasce la query che non fa ciò che sembra. Qui i letterali
-// sono due e la clausola è una, scritta.
-export function testoNelDocumento(
+// sono due e la clausola è una, scritto.
+export function textInDocument(
   docs: string[],
   text: string,
-  mentreSiDigita = false,
+  whileTyping = false,
 ): QueryExpr {
   return {
     any: [
@@ -1051,7 +1051,7 @@ export function testoNelDocumento(
               mode: "terms",
               fields: [],
               tolerance: "exact",
-              partial_last_term: mentreSiDigita,
+              partial_last_term: whileTyping,
             },
           },
         ],
@@ -1065,17 +1065,17 @@ export function testoNelDocumento(
 // È la terza configurazione della porta unica (0082): il quick switcher e
 // l'autocompletamento dei wikilink non cercano dentro le note — propongono
 // **nomi**, ed è ciò che `TextField::Name` esiste per dire. La differenza con
-// `testoCercato` non è di ranking ma di dominio: cercare `rust` ovunque trova le
+// `textQuery` non è di ranking ma di dominio: cercare `rust` ovunque trova le
 // trecento note che ne parlano, e chi ha premuto la scorciatoia per aprire la
 // nota *Rust* le voleva tutte e trecento davanti a sé come non le vorrebbe mai.
 //
-// `mentreSiDigita` qui è il caso NORMALE e non l'eccezione: queste due
+// `whileTyping` qui è il caso NORMALE e non l'eccezione: queste due
 // superfici partono a ogni battuta, e chi ha scritto `ar` sta cercando
 // *architettura* e non una nota che si chiami «ar». È il prefisso della §21.2,
 // e la ragione per cui non lo mette la casella appendendo un `*` è la stessa di
-// `testoCercato`: la dice la query, o due chiamanti diversi cercano in due
+// `textQuery`: la dice la query, o due chiamanti diversi cercano in due
 // lingue diverse.
-export function nomeCercato(text: string, mentreSiDigita = true): QueryExpr {
+export function nameQuery(text: string, whileTyping = true): QueryExpr {
   return {
     any: [
       {
@@ -1088,7 +1088,7 @@ export function nomeCercato(text: string, mentreSiDigita = true): QueryExpr {
               mode: "terms",
               fields: ["name"],
               tolerance: "exact",
-              partial_last_term: mentreSiDigita,
+              partial_last_term: whileTyping,
             },
           },
         ],
@@ -1101,7 +1101,7 @@ export function nomeCercato(text: string, mentreSiDigita = true): QueryExpr {
 // Chi la valuta la restringe a ciò che l'indice conosce, quindi la risposta è
 // l'intersezione — ed è il modo di verificare un pugno di path in UNA domanda
 // invece di chiedere l'elenco del vault per cercarli dentro.
-export function questiDocumenti(docs: string[]): QueryExpr {
+export function theseDocuments(docs: string[]): QueryExpr {
   return { any: [{ all: [{ negated: false, predicate: { kind: "docs", docs } }] }] };
 }
 
@@ -1205,8 +1205,8 @@ export interface PropertyCount {
 }
 
 // Un heading dell'outline di un documento.
-// `explicit_anchor` è l'ancora `^id` scritta dall'utente in coda al titolo,
-// com'è scritta (`null` quando lo slug è generato dal testo).
+// `explicit_anchor` è l'ancora `^id` scritto dall'utente in coda al titolo,
+// com'è scritto (`null` quando lo slug è generato dal testo).
 export interface Heading {
   level: number;
   text: string;
@@ -1330,7 +1330,7 @@ export type IndexResult =
   | { kind: "settings"; value: SettingEntry[] }
   | { kind: "organization"; value: Organization }
   // Il documento che un riferimento nomina, o nessuno. `null` non è un errore
-  // ed è metà del valore di questa risposta: link rotto, URL esterno e nota
+  // ed è metà del valore di questa risposta: legame rotto, URL esterno e nota
   // rinominata via da sotto danno tutti e tre `null`, e chi ha chiesto sa che
   // deve proporre qualcos'altro.
   | { kind: "resolved"; value: ResolvedRef | null }
@@ -1594,10 +1594,10 @@ export interface Organization {
 /// una feature ufficiale non le dà più nessuna scorciatoia. Sono raccolti qui e
 /// non sparsi nei chiamanti perché un id è un dato del contratto: se cambia,
 /// cambia in un posto.
-export const COMANDI = {
-  crea: "note.create",
-  rinomina: "note.rename",
-  cestina: "note.trash",
-  ripristina: "trash.restore",
-  svuota: "trash.empty",
+export const COMMANDS = {
+  create: "note.create",
+  rename: "note.rename",
+  trash: "note.trash",
+  restore: "trash.restore",
+  clear: "trash.empty",
 } as const;

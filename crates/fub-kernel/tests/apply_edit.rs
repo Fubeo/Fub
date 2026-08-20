@@ -113,7 +113,7 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
     let mut ws = Workspace::new(dir, registry).expect("l'apertura del vault riesce");
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
-    for plugin in [CORRETTORE, "test.vicino", "test.plugin"] {
+    for plugin in [CORRECTOR, "test.vicino", "test.plugin"] {
         ws.register_core_feature(plugin, plugin)
             .expect("dichiarato");
     }
@@ -122,7 +122,7 @@ fn workspace(dir: &Utf8PathBuf) -> Workspace {
 }
 
 /// Un vault con una nota sola, e la sua revisione corrente.
-fn con_nota(dir: &Utf8PathBuf, source: &str) -> (Workspace, DocId, Revision) {
+fn with_notes(dir: &Utf8PathBuf, source: &str) -> (Workspace, DocId, Revision) {
     let mut ws = workspace(dir);
     let id = DocId::new("nota.lnk");
     ws.write_document(&id, source, WriteBase::Dictated).unwrap();
@@ -133,7 +133,7 @@ fn con_nota(dir: &Utf8PathBuf, source: &str) -> (Workspace, DocId, Revision) {
 #[test]
 fn the_edits_are_a_set_in_the_coordinates_of_the_base() {
     let dir = TempDir::new("insieme");
-    let (mut ws, id, base) = con_nota(&dir.0, "Alfa\nBeta\nGamma");
+    let (mut ws, id, base) = with_notes(&dir.0, "Alfa\nBeta\nGamma");
 
     // Elencati al contrario, e con lunghezze diverse da ciò che sostituiscono:
     // se gli span fossero interpretati sul testo in corso di produzione, il
@@ -176,7 +176,7 @@ fn the_edits_are_a_set_in_the_coordinates_of_the_base() {
 #[test]
 fn a_stale_base_writes_nothing() {
     let dir = TempDir::new("base-vecchia");
-    let (mut ws, id, base) = con_nota(&dir.0, "Alfa\nBeta");
+    let (mut ws, id, base) = with_notes(&dir.0, "Alfa\nBeta");
 
     // Qualcun altro scrive fra il calcolo e l'applicazione: è il caso vero —
     // l'utente che digita mentre un'automazione lavora.
@@ -213,7 +213,7 @@ fn a_stale_base_writes_nothing() {
 #[test]
 fn a_revision_is_content_so_a_round_trip_of_the_text_keeps_it_valid() {
     let dir = TempDir::new("impronta");
-    let (mut ws, id, base) = con_nota(&dir.0, "Alfa");
+    let (mut ws, id, base) = with_notes(&dir.0, "Alfa");
 
     // Scritto e disfatto: il documento è di nuovo quello su cui l'edit è stato
     // calcolato, e l'edit vale ancora. Un contatore avrebbe fatto ricalcolare
@@ -233,9 +233,9 @@ fn a_revision_is_content_so_a_round_trip_of_the_text_keeps_it_valid() {
 #[test]
 fn edits_that_do_not_stand_up_are_refused_before_the_disk() {
     let dir = TempDir::new("disciplina");
-    let (mut ws, id, base) = con_nota(&dir.0, "Alfa\nBeta");
+    let (mut ws, id, base) = with_notes(&dir.0, "Alfa\nBeta");
 
-    let casi: Vec<(&str, Vec<TextEdit>)> = vec![
+    let cases: Vec<(&str, Vec<TextEdit>)> = vec![
         (
             "fuori dal sorgente",
             vec![TextEdit::replace(Span::new(5, 99), "x")],
@@ -252,23 +252,23 @@ fn edits_that_do_not_stand_up_are_refused_before_the_disk() {
             vec![TextEdit::insert(0, "x"), TextEdit::insert(0, "y")],
         ),
     ];
-    for (nome, edits) in casi {
+    for (name, edits) in cases {
         let err = ws
             .apply_edit(&id, EditRequest::new(base.clone(), edits))
             .unwrap_err();
         assert!(
             err.to_string().contains("non applicabile"),
-            "{nome}: atteso un errore di modifica, ottenuto {err}"
+            "{name}: atteso un errore di modifica, ottenuto {err}"
         );
         assert_eq!(
             ws.read_source(&id).unwrap(),
             "Alfa\nBeta",
-            "{nome}: niente di parziale sul disco"
+            "{name}: niente di parziale sul disco"
         );
         assert_eq!(
             ws.document_revision(&id).unwrap(),
             base,
-            "{nome}: e nemmeno una revisione nuova"
+            "{name}: e nemmeno una revisione nuova"
         );
     }
 }
@@ -276,7 +276,7 @@ fn edits_that_do_not_stand_up_are_refused_before_the_disk() {
 #[test]
 fn a_request_without_edits_is_not_a_write() {
     let dir = TempDir::new("vuota");
-    let (mut ws, id, base) = con_nota(&dir.0, "Alfa");
+    let (mut ws, id, base) = with_notes(&dir.0, "Alfa");
     let rx = ws.bus().subscribe();
 
     let report = ws
@@ -322,15 +322,15 @@ fn a_surgical_edit_goes_through_the_whole_write_path() {
     );
 
     // Eventi: quelli di una scrittura, una volta sola.
-    let mut cambiati = 0;
-    while let Ok(e) = rx.try_recv() {
-        if let Event::DocumentChanged { id, .. } = e.event {
+    let mut changed_count = 0;
+    while let Ok(and) = rx.try_recv() {
+        if let Event::DocumentChanged { id, .. } = and.event {
             assert_eq!(id, a);
-            cambiati += 1;
+            changed_count += 1;
         }
     }
     assert_eq!(
-        cambiati, 1,
+        changed_count, 1,
         "una modifica chirurgica è UNA scrittura, non una per edit"
     );
 }
@@ -338,15 +338,15 @@ fn a_surgical_edit_goes_through_the_whole_write_path() {
 #[test]
 fn a_failing_parse_leaves_the_document_alone() {
     let dir = TempDir::new("parse");
-    let (mut ws, id, base) = con_nota(&dir.0, "Alfa");
+    let (mut ws, id, base) = with_notes(&dir.0, "Alfa");
 
     // Un `DocId` senza provider non è parsabile: l'errore arriva prima del
     // disco, come per `write_document` (atomicità rispetto al parse).
-    let orfano = DocId::new("nota.sconosciuto");
+    let orphan = DocId::new("nota.sconosciuto");
     std::fs::write(dir.0.join("nota.sconosciuto"), "Alfa").unwrap();
     assert!(ws
         .apply_edit(
-            &orfano,
+            &orphan,
             EditRequest::new(Revision::of("Alfa"), vec![TextEdit::insert(4, " bis")],),
         )
         .is_err());
@@ -362,7 +362,7 @@ fn a_failing_parse_leaves_the_document_alone() {
 #[test]
 fn the_inverse_of_an_edit_puts_the_document_back_through_the_kernel() {
     let dir = TempDir::new("inverso");
-    let (mut ws, id, base) = con_nota(&dir.0, "Alfa\nBeta\nGamma");
+    let (mut ws, id, base) = with_notes(&dir.0, "Alfa\nBeta\nGamma");
 
     let report = ws
         .apply_edit(
@@ -389,7 +389,7 @@ fn the_inverse_of_an_edit_puts_the_document_back_through_the_kernel() {
 #[test]
 fn a_multibyte_document_is_edited_on_character_boundaries() {
     let dir = TempDir::new("utf8");
-    let (mut ws, id, base) = con_nota(&dir.0, "città\nperò");
+    let (mut ws, id, base) = with_notes(&dir.0, "città\nperò");
 
     // "città" sono 6 byte: la à ne occupa due. Tagliare a 4..5 sarebbe dentro
     // il carattere.
@@ -423,19 +423,19 @@ fn a_multibyte_document_is_edited_on_character_boundaries() {
 /// perché il testo non contiene più `TOODO`. La differenza si vede appena
 /// un'automazione fa una modifica che *non* cambia il proprio innesco — o che
 /// lo cambia e lo rimette — e allora il guardiano di contenuto non guarda niente.
-const CORRETTORE: &str = "test.correttore";
+const CORRECTOR: &str = "test.correttore";
 
-struct Correttore {
-    fatto: Arc<Mutex<Vec<String>>>,
+struct Corrector {
+    done: Arc<Mutex<Vec<String>>>,
 }
 
-impl EventHandler for Correttore {
+impl EventHandler for Corrector {
     fn subscribed(&self) -> EventMask {
         EventMask::of([EventKind::DocumentChanged])
     }
 
     fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        if notice.origin.actor.is_plugin(CORRETTORE) {
+        if notice.origin.actor.is_plugin(CORRECTOR) {
             // Questa l'ho scritta io.
             return Ok(());
         }
@@ -451,7 +451,7 @@ impl EventHandler for Correttore {
             id,
             EditRequest::new(base, vec![TextEdit::replace(Span::new(at, at + 5), "TODO")]),
         )?;
-        self.fatto
+        self.done
             .lock()
             .unwrap()
             .push(format!("{id}@{}", report.revision.as_str()));
@@ -463,11 +463,11 @@ impl EventHandler for Correttore {
 fn a_provider_patches_a_document_through_the_host_api() {
     let dir = TempDir::new("provider");
     let mut ws = workspace(&dir.0);
-    let fatto = Arc::new(Mutex::new(Vec::new()));
+    let done = Arc::new(Mutex::new(Vec::new()));
     ws.register_event_handler(
-        CORRETTORE,
-        Box::new(Correttore {
-            fatto: fatto.clone(),
+        CORRECTOR,
+        Box::new(Corrector {
+            done: done.clone(),
         }),
     )
     .expect("registrato");
@@ -481,14 +481,14 @@ fn a_provider_patches_a_document_through_the_host_api() {
         "Alfa\nTODO: sistemare\nBeta",
         "il provider ha cambiato cinque byte, non ha riscritto la nota"
     );
-    let fatto = fatto.lock().unwrap();
+    let done = done.lock().unwrap();
     assert_eq!(
-        fatto.len(),
+        done.len(),
         1,
         "e la correzione non si è richiamata da sola"
     );
     assert!(
-        fatto[0].ends_with(ws.document_revision(&id).unwrap().as_str()),
+        done[0].ends_with(ws.document_revision(&id).unwrap().as_str()),
         "la revisione che il rapporto ha dato al provider è quella del \
          documento sul disco"
     );
@@ -497,9 +497,9 @@ fn a_provider_patches_a_document_through_the_host_api() {
 /// Un handler che alla modifica di `a.lnk` scrive in `b.lnk`: è il vicino
 /// rumoroso di una riscrittura in corso — un'automazione, un sync, un altro
 /// plugin.
-struct ScriveAltrove;
+struct WritesElsewhere;
 
-impl EventHandler for ScriveAltrove {
+impl EventHandler for WritesElsewhere {
     fn subscribed(&self) -> EventMask {
         EventMask::of([EventKind::DocumentChanged])
     }
@@ -548,7 +548,7 @@ fn a_rename_and_a_neighbour_write_no_longer_race_because_the_batch_defers_the_di
         .unwrap();
     ws.write_document(&DocId::new("b.lnk"), "Vecchia", WriteBase::Dictated)
         .unwrap();
-    ws.register_event_handler("test.vicino", Box::new(ScriveAltrove))
+    ws.register_event_handler("test.vicino", Box::new(WritesElsewhere))
         .expect("registrato");
 
     ws.rename_document(&DocId::new("Vecchia.lnk"), &DocId::new("Nuova.lnk"))
@@ -571,7 +571,7 @@ fn a_rename_and_a_neighbour_write_no_longer_race_because_the_batch_defers_the_di
 #[test]
 fn a_stale_base_from_a_provider_is_a_conflict_not_an_internal_error() {
     let dir = TempDir::new("conflitto-plugin");
-    let (mut ws, id, base) = con_nota(&dir.0, "Alfa");
+    let (mut ws, id, base) = with_notes(&dir.0, "Alfa");
     ws.write_document(&id, "Alfa cambiata", WriteBase::Dictated)
         .unwrap();
 

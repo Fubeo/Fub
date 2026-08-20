@@ -1,21 +1,21 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
 import type { DocumentMatch, Span } from "../host/contract";
-import { testoCercato } from "../host/contract";
-import { documentiCheCombaciano, statoDelVault } from "../host/query";
+import { textQuery } from "../host/contract";
+import { matchingDocuments, vaultStatus } from "../host/query";
 import { pageName } from "../rules/organizer";
-import { righeDaMostrare } from "../rules/risultati";
+import { rowsToShow } from "../rules/results";
 import { $ } from "../ui/dom";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import { openDocument, revealByteOffset } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
 import { errorText } from "../host/errors";
-import { attivabile } from "../ui/a11y";
+import { activatable } from "../ui/a11y";
 import { t } from "../i18n/strings";
-import { nomeDaCercato } from "../rules/nome-cercato";
-import { ricordaRicerca } from "../state/recenti";
+import { searchedName } from "../rules/searched-name";
+import { rememberSearch } from "../state/recent";
 import { createNote } from "../state/vault";
 import { notify } from "../ui/notify";
-import { Corsa } from "../ui/corsa";
+import { Race } from "../ui/race";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -24,10 +24,10 @@ const searchResultsEl = $("#search-results");
 let searchTimer: number | undefined;
 /// Una risposta lenta di una query vecchia non deve sovrascrivere i risultati di
 /// una più recente. Il contatore scritto a mano che stava qui è diventato il
-/// tipo di `ui/corsa.ts` (decisione 0134), che questo pannello usava già in
+/// tipo di `ui/race.ts` (decisione 0134), che questo pannello usava già in
 /// tutt'e tre i modi: un giro per ricerca, il controllo anche nel ramo
 /// d'errore, e l'annullamento a mani vuote.
-const corsa = new Corsa();
+const race = new Race();
 
 export function mountSearch(): void {
   searchInputEl.addEventListener("input", scheduleSearch);
@@ -60,7 +60,7 @@ export function clearSearch(): void {
   searchInputEl.value = "";
   // I giri in volo scadono anche qui: una risposta già in volo non deve
   // ripopolare un pannello che l'utente ha appena chiuso.
-  corsa.annulla();
+  race.cancel();
   showPanel("files");
   searchResultsEl.innerHTML = "";
 }
@@ -79,7 +79,7 @@ async function runSearch(): Promise<void> {
     clearSearch();
     return;
   }
-  await corsa.ultimo(async (atteso) => {
+  await race.last(async (expected) => {
     // Ciò che l'utente digita è **testo cercato**, non una sintassi: la stringa
     // è il campo di una foglia, e non c'è più un parser di terzi che possa
     // rifiutarla a metà parola (§5.3).
@@ -95,16 +95,16 @@ async function runSearch(): Promise<void> {
     // scrittura come le altre, e passa dallo stesso `atteso` dei risultati
     // invece di essere un secondo posto in cui ricordarsi il controllo. Un
     // `try` attorno all'`atteso` ingoierebbe la scadenza insieme all'errore.
-    const esito = await atteso(
-      documentiCheCombaciano(testoCercato(query, true), { offset: 0, limit: 50 })
+    const result = await expected(
+      matchingDocuments(textQuery(query, true), { offset: 0, limit: 50 })
         .then((p) => ({ hits: p.items }))
-        .catch((e: unknown) => ({ errore: errorText(e) })),
+        .catch((e: unknown) => ({ error: errorText(e) })),
     );
-    if ("errore" in esito) {
-      showSearchResults([], esito.errore);
+    if ("error" in result) {
+      showSearchResults([], result.error);
       return;
     }
-    const hits: DocumentMatch[] = esito.hits;
+    const hits: DocumentMatch[] = result.hits;
 
     // **Zero risultati mentre il vault indicizza non è «niente trovato»** (§15.7).
     // Un vault si apre in due tempi: appena scansionato è utilizzabile, e la
@@ -115,25 +115,25 @@ async function runSearch(): Promise<void> {
     // Lo si chiede **solo quando la risposta è vuota**: è l'unico caso in cui la
     // distinzione cambia cosa si scrive, e a ogni tasto premuto su una ricerca
     // che trova non si paga niente.
-    let parziale = false;
+    let partial = false;
     if (hits.length === 0) {
       // Lo stato del vault è una **rifinitura del messaggio**: se non si riesce
       // a chiederlo, si dice «nessun risultato» come si è sempre fatto. Un
       // errore qui non deve togliere all'utente i risultati che ha.
-      parziale = await atteso(
-        statoDelVault()
+      partial = await expected(
+        vaultStatus()
           .then((s) => s.indexing === "running")
           .catch(() => false),
       );
     }
-    showSearchResults(hits, null, parziale);
+    showSearchResults(hits, null, partial);
   });
 }
 
 function showSearchResults(
   hits: DocumentMatch[],
   error: string | null,
-  indicizzando = false,
+  indexing = false,
 ): void {
   showPanel("search");
   // Il conteggio è un **argomento**, non una parola declinata: «1 risultato»
@@ -143,7 +143,7 @@ function showSearchResults(
   searchSummaryEl.textContent = error
     ? t("search.unavailable")
     : hits.length === 0
-      ? indicizzando
+      ? indexing
         ? t("search.indexing")
         : t("search.empty")
       : t("search.count", { count: hits.length });
@@ -155,25 +155,25 @@ function showSearchResults(
   // già nella pagina vuol dire chiedere al motore di rifare i conti del layout
   // qualche migliaio di volte — a ogni tasto premuto, perché questo pannello si
   // ridisegna mentre si scrive.
-  const nuove = document.createDocumentFragment();
-  for (const riga of righeDaMostrare(hits)) {
+  const newItems = document.createDocumentFragment();
+  for (const row of rowsToShow(hits)) {
     const li = document.createElement("li");
-    li.title = riga.doc;
-    if (riga.occorrenza === undefined) {
+    li.title = row.doc;
+    if (row.occurrence === undefined) {
       const title = document.createElement("span");
       title.className = "hit-title";
-      title.textContent = pageName(riga.doc);
+      title.textContent = pageName(row.doc);
 
       const snippet = document.createElement("span");
       snippet.className = "hit-snippet";
-      snippet.appendChild(highlighted(riga.snippet ?? "", riga.highlights ?? []));
+      snippet.appendChild(highlighted(row.snippet ?? "", row.highlights ?? []));
       li.append(title, snippet);
     } else {
       li.className = "hit-occurrence";
-      li.textContent = t("search.occurrence", { n: riga.occorrenza });
+      li.textContent = t("search.occurrence", { n: row.occurrence });
     }
-    apriA(li, riga.doc, riga.byteOffset);
-    nuove.appendChild(li);
+    openAt(li, row.doc, row.byteOffset);
+    newItems.appendChild(li);
   }
   // **Non l'ho trovata, creala** (§21.7): il gesto che chiude il giro in
   // omnisearch. Solo a mani davvero vuote — non mentre il vault indicizza, dove
@@ -185,11 +185,11 @@ function showSearchResults(
   // Il nome non è la query così com'è, e la ragione sta in
   // `rules/nome-cercato.ts`: `note.create` prende un **path**, quindi uno slash
   // cercato creerebbe una cartella che nessuno ha chiesto.
-  if (!error && hits.length === 0 && !indicizzando) {
-    const nome = nomeDaCercato(searchInputEl.value);
-    if (nome) nuove.appendChild(rigaCrea(nome));
+  if (!error && hits.length === 0 && !indexing) {
+    const name = searchedName(searchInputEl.value);
+    if (name) newItems.appendChild(createRow(name));
   }
-  searchResultsEl.appendChild(nuove);
+  searchResultsEl.appendChild(newItems);
 }
 
 /// La riga «crea questa nota».
@@ -201,25 +201,25 @@ function showSearchResults(
 /// si chiama come la query può esistere senza contenerla. Quando succede si
 /// mostra l'errore del kernel, che è la sola risposta onesta — inventare un
 /// `nome (2)` sarebbe creare una seconda nota a chi ne stava cercando una.
-function rigaCrea(nome: string): HTMLElement {
+function createRow(name: string): HTMLElement {
   const li = document.createElement("li");
   li.className = "hit-create";
   const title = document.createElement("span");
   title.className = "hit-title";
-  title.textContent = nome;
+  title.textContent = name;
   const desc = document.createElement("span");
   desc.className = "hit-snippet";
   desc.textContent = t("search.create");
   li.append(title, desc);
   li.addEventListener("click", () => {
-    ricordaRicerca(searchInputEl.value);
-    void createNote(nome)
+    rememberSearch(searchInputEl.value);
+    void createNote(name)
       .then((doc) => {
         if (doc) void openDocument(doc);
       })
       .catch((e: unknown) => notify(errorText(e), "guasto"));
   });
-  attivabile(li);
+  activatable(li);
   return li;
 }
 
@@ -230,20 +230,20 @@ function rigaCrea(nome: string): HTMLElement {
 /// conversione a posizione dell'editor la fa `revealByteOffset`, la stessa che
 /// usano l'outline e `ViewUpdate::Reveal`: la ricerca era l'unico cliente
 /// naturale di quel giro e non aveva le coordinate da passargli.
-function apriA(el: HTMLElement, doc: string, byteOffset?: number): void {
+function openAt(el: HTMLElement, doc: string, byteOffset?: number): void {
   el.addEventListener("click", () => {
     // La ricerca si ricorda **qui**, non a ogni tasto: questa casella interroga
     // mentre si digita, e una cronologia alimentata da lì si riempirebbe di
     // «r», «ri», «riu». Ciò che vale la pena ricordare è il testo che ha
     // prodotto un'apertura, cioè una ricerca **conclusa** (0086).
-    ricordaRicerca(searchInputEl.value);
+    rememberSearch(searchInputEl.value);
     void openDocument(doc).then(() => {
       if (byteOffset !== undefined) revealByteOffset(byteOffset);
     });
   });
-  // Un risultato di ricerca si apre col mouse e adesso anche col tab: era una
+  // Un risultato di ricerca si apre col mouse e adesso anche col linguetta: era una
   // `<li>` con un `click` sopra, cioè — per chi non usa il mouse — testo.
-  attivabile(el);
+  activatable(el);
 }
 
 /// Lo snippet con le porzioni evidenziate, come nodi DOM.

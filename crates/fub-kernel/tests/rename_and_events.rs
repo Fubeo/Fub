@@ -173,8 +173,8 @@ fn rename_moves_identity_rewrites_name_links_and_emits_renamed() {
 
     // Fra gli eventi c'è DocumentRenamed con la coppia giusta.
     let mut renamed = None;
-    while let Ok(e) = rx.try_recv() {
-        if let Event::DocumentRenamed { from, to } = e.event {
+    while let Ok(and) = rx.try_recv() {
+        if let Event::DocumentRenamed { from, to } = and.event {
             renamed = Some((from, to));
         }
     }
@@ -270,7 +270,7 @@ fn rename_to_a_contended_path_writes_the_whole_path() {
     // condivide il path senza estensione, cioè a rendere contesa la seconda
     // forma esattamente come `Altra.lnk` rende contesa la prima.
     registry
-        .register(fub_testkit::TestoDiProva::per_estensione("txt").boxed())
+        .register(fub_testkit::SampleText::by_extension("txt").boxed())
         .unwrap();
     let mut ws = Workspace::new(&dir.0, registry).expect("l'apertura del vault riesce");
     ws.reindex().unwrap();
@@ -660,13 +660,13 @@ fn rename_cannot_escape_the_vault() {
     ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
         .unwrap();
 
-    for fuori in ["../fuori.lnk", "sub/../../fuori.lnk", "a//b.lnk", "./x.lnk"] {
+    for outside in ["../fuori.lnk", "sub/../../fuori.lnk", "a//b.lnk", "./x.lnk"] {
         let err = ws
-            .rename_document(&DocId::new("Nota.lnk"), &DocId::new(fuori))
+            .rename_document(&DocId::new("Nota.lnk"), &DocId::new(outside))
             .unwrap_err();
         assert!(
             err.to_string().contains("nome non valido"),
-            "`{fuori}` doveva essere rifiutato, invece: {err}"
+            "`{outside}` doveva essere rifiutato, invece: {err}"
         );
     }
     // La nota non si è mossa e nessun file è uscito dal vault.
@@ -717,26 +717,26 @@ fn an_external_rename_migrates_identity_and_emits_renamed() {
     assert!(!ws.documents().contains(&DocId::new("Nota.lnk")));
     assert!(ws.documents().contains(&DocId::new("Spostata.lnk")));
     assert_eq!(ws.active_document(), Some(DocId::new("Spostata.lnk")));
-    let eventi: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
+    let events: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
     assert!(
-        eventi
+        events
             .iter()
-            .any(|e| matches!(e, Event::DocumentRenamed { from, to }
+            .any(|and| matches!(and, Event::DocumentRenamed { from, to }
             if from.as_str() == "Nota.lnk" && to.as_str() == "Spostata.lnk")),
-        "eventi: {eventi:?}"
+        "eventi: {events:?}"
     );
     assert!(
-        !eventi
+        !events
             .iter()
-            .any(|e| matches!(e, Event::DocumentRemoved { .. })),
-        "un rename esterno non è una rimozione: {eventi:?}"
+            .any(|and| matches!(and, Event::DocumentRemoved { .. })),
+        "un rename esterno non è una rimozione: {events:?}"
     );
 }
 
 /// Il disco è già avanti: se la destinazione non si rilegge, il nome vecchio
 /// non resta vivo (difetto 0181).
 #[test]
-fn una_rinomina_esterna_che_non_si_rilegge_non_lascia_vivo_il_nome_vecchio() {
+fn a_rename_external_that_not_is_rereads_not_leaves_live_the_name_old() {
     let dir = TempDir::new("extrename-illeggibile");
     let mut ws = workspace(&dir.0);
     ws.write_document(&DocId::new("Nota.lnk"), "", WriteBase::Dictated)
@@ -758,13 +758,13 @@ fn una_rinomina_esterna_che_non_si_rilegge_non_lascia_vivo_il_nome_vecchio() {
          vault: {:?}",
         ws.documents()
     );
-    let eventi: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
+    let events: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
     assert!(
-        eventi
+        events
             .iter()
-            .any(|e| matches!(e, Event::DocumentRemoved { id, .. } if id.as_str() == "Nota.lnk")),
+            .any(|and| matches!(and, Event::DocumentRemoved { id, .. } if id.as_str() == "Nota.lnk")),
         "e chi ascolta lo viene a sapere adesso, non alla prossima apertura: \
-         {eventi:?}"
+         {events:?}"
     );
 }
 
@@ -822,7 +822,7 @@ fn an_external_rename_into_an_ignored_folder_is_a_removal() {
 /// l'icona `"🅱️"` → `"🅰️"`, e lo spazio per-documento di `B` veniva
 /// `remove_dir_all`-ato prima di ricevere quello di `A`.
 #[test]
-fn una_rinomina_esterna_su_una_nota_viva_non_le_schiaccia_i_dati() {
+fn a_rename_external_on_a_notes_live_not_the_squashes_the_data() {
     let dir = TempDir::new("extrename-viva");
     let mut ws = workspace(&dir.0);
     let a = DocId::new("A.lnk");
@@ -837,8 +837,8 @@ fn una_rinomina_esterna_su_una_nota_viva_non_le_schiaccia_i_dati() {
         .unwrap();
     ws.set_icon("A.lnk", Some("🅰️".into())).unwrap();
     ws.set_icon("B.lnk", Some("🅱️".into())).unwrap();
-    attacca_dati(&dir.0, "A.lnk");
-    attacca_dati(&dir.0, "B.lnk");
+    attach_data(&dir.0, "A.lnk");
+    attach_data(&dir.0, "B.lnk");
 
     // `mv A.lnk B.lnk` da fuori: il file di `B` non c'è più, al suo posto c'è
     // quello di `A`.
@@ -849,7 +849,7 @@ fn una_rinomina_esterna_su_una_nota_viva_non_le_schiaccia_i_dati() {
 
     // Ciò che era di `B` è ancora di `B`, tutto e tre i canali.
     assert_eq!(
-        bozza_di(&ws, "B.lnk").as_deref(),
+        draft_of(&ws, "B.lnk").as_deref(),
         Some("il testo non salvato di B"),
         "la bozza della vittima è l'unica copia di ciò che l'utente ha scritto"
     );
@@ -859,7 +859,7 @@ fn una_rinomina_esterna_su_una_nota_viva_non_le_schiaccia_i_dati() {
         "l'organizzazione della vittima non segue un'identità che non è la sua"
     );
     assert_eq!(
-        dati_di(&dir.0, "B.lnk").as_deref(),
+        data_of(&dir.0, "B.lnk").as_deref(),
         Some("i dati di B.lnk"),
         "e nemmeno il suo spazio per-documento"
     );
@@ -873,23 +873,23 @@ fn una_rinomina_esterna_su_una_nota_viva_non_le_schiaccia_i_dati() {
 
 /// Lo spazio per-documento di un plugin, come lo scriverebbe lui. Cammina il
 /// disco e non i plugin montati, come `docdata::migrate`.
-fn spazio_dati(root: &Utf8PathBuf, doc: &str) -> Utf8PathBuf {
+fn space_data(root: &Utf8PathBuf, doc: &str) -> Utf8PathBuf {
     root.join(".fub/data/plugins/test.appiccicoso")
         .join(fub_abi::rules::doc_data::DOC_SPACE)
         .join(fub_abi::rules::doc_data::encode(doc))
 }
 
-fn attacca_dati(root: &Utf8PathBuf, doc: &str) {
-    let dir = spazio_dati(root, doc);
+fn attach_data(root: &Utf8PathBuf, doc: &str) {
+    let dir = space_data(root, doc);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("annotazione"), format!("i dati di {doc}")).unwrap();
 }
 
-fn dati_di(root: &Utf8PathBuf, doc: &str) -> Option<String> {
-    std::fs::read_to_string(spazio_dati(root, doc).join("annotazione")).ok()
+fn data_of(root: &Utf8PathBuf, doc: &str) -> Option<String> {
+    std::fs::read_to_string(space_data(root, doc).join("annotazione")).ok()
 }
 
-fn bozza_di(ws: &Workspace, doc: &str) -> Option<String> {
+fn draft_of(ws: &Workspace, doc: &str) -> Option<String> {
     ws.drafts()
         .expect("bozze")
         .drafts
@@ -911,7 +911,7 @@ struct ChainingHandler {
     /// Ha già reagito? Era una chiave dello `storage_*` dell'host finché quello
     /// esisteva; adesso è un campo — che è il punto per cui la decisione 0013 lo ha
     /// tolto, perché un handler è un oggetto vivo e la memoria ce l'ha già.
-    fatto: bool,
+    done: bool,
 }
 
 impl EventHandler for ChainingHandler {
@@ -927,8 +927,8 @@ impl EventHandler for ChainingHandler {
                 // Reagisce solo al documento "innesco", altrimenti la scrittura
                 // qui sotto rigenererebbe l'evento all'infinito (il budget del
                 // kernel tronca comunque, ma il test vuole un ciclo che converge).
-                if id.as_str() == "innesco.lnk" && !self.fatto {
-                    self.fatto = true;
+                if id.as_str() == "innesco.lnk" && !self.done {
+                    self.done = true;
                     host.emit(Event::Custom {
                         topic: "test/derivato".into(),
                         payload: serde_json::json!({ "da": id.as_str() }),
@@ -959,7 +959,7 @@ fn handlers_run_queued_not_recursive_and_can_write_documents() {
         "test.chaining",
         Box::new(ChainingHandler {
             log: log.clone(),
-            fatto: false,
+            done: false,
         }),
     )
     .expect("registrato");
@@ -1037,8 +1037,8 @@ fn dispatch_budget_stops_infinite_event_loops_loudly() {
     // Il troncamento non è silenzioso: sul bus arriva Overflow col conteggio
     // degli eventi persi — il segnale di "riconcilia da zero".
     let mut overflow = None;
-    while let Ok(e) = rx.try_recv() {
-        if let Event::Overflow { dropped } = e.event {
+    while let Ok(and) = rx.try_recv() {
+        if let Event::Overflow { dropped } = and.event {
             overflow = Some(dropped);
         }
     }
@@ -1113,11 +1113,11 @@ fn jobs_run_outside_the_kernel_and_complete_via_event() {
         .unwrap();
     let jobs = ws.take_pending_jobs();
     assert_eq!(jobs.len(), 1);
-    let in_coda = &jobs[0];
-    assert_eq!(in_coda.spec.job, "sommario");
-    assert_eq!(Some(in_coda.id), *job_id.lock().unwrap());
+    let queued = &jobs[0];
+    assert_eq!(queued.spec.job, "sommario");
+    assert_eq!(Some(queued.id), *job_id.lock().unwrap());
     assert_eq!(
-        in_coda.plugin, "test.jobs",
+        queued.plugin, "test.jobs",
         "la coda porta anche CHI lo ha chiesto: il corpo di un job è \
          `Plugin::run_job`, e chi drena deve sapere a chi chiederlo"
     );
@@ -1129,7 +1129,7 @@ fn jobs_run_outside_the_kernel_and_complete_via_event() {
 
     // 3. L'esito rientra come JobDone sul giro sincrono normale: il handler
     //    lo riconosce e scrive il documento derivato.
-    ws.complete_job(in_coda.id, in_coda.spec.job.clone(), Ok(result));
+    ws.complete_job(queued.id, queued.spec.job.clone(), Ok(result));
     assert!(ws.documents().contains(&DocId::new("sommario.lnk")));
     assert_eq!(
         ws.read_source(&DocId::new("sommario.lnk")).unwrap(),

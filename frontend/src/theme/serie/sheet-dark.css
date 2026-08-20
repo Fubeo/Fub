@@ -1,0 +1,423 @@
+/*
+ * Il foglio del tema di serie, nella luce scura: ruoli, tipografia, moto.
+ * (§29.1, generato dalla ricetta della §31.2)
+ *
+ * FILE GENERATO — non modificare a mano.
+ *
+ * La sorgente è `theme/serie/recipe.ts`, che dichiara ogni colore come
+ * *che colore è* (tinta e croma), *sopra cosa sta* e *quanto deve reggere*:
+ * la chiarezza — l'unica grandezza che il contrasto muove — la trova la
+ * generazione. Qui sotto ci sono i risultati, in esadecimale, perché i tre
+ * presidi del tema leggono i fogli **come testo** e un `oklch()` vivo
+ * sarebbe un valore che solo un browser sa dire.
+ *
+ *     npm run tema:genera       rigenera questo file
+ *     npm run tema:verifica     dice se è quello che la ricetta produce
+ *
+ * Non è cablato nell'app: lo monta il caricatore (`theme/loader.ts`), che
+ * **sostituisce** — un foglio solo alla volta, niente cascata fra due temi,
+ * niente gara di specificità. Chi decide quale luce vale è la shell
+ * (`theme/theme.ts`): per questo qui non c'è nessuna
+ * `@media (prefers-color-scheme)` e nessun selettore `[data-theme]` — il
+ * foglio montato È il tema, e `:root` basta.
+ *
+ * Le metriche della scocca e la scala dei piani stanno nella struttura
+ * (`theme/structure.css`) e qui non si ripetono; il chrome dei componenti
+ * sta nella pelle (`skin.css`), che di token non ne dichiara nessuno.
+ */
+:root {
+  /* --- la scala: ciò che i due fogli condividono ------------------------- */
+
+  /* Gli spazi. La scala è quella che la shell **già usava** (2, 4, 6, 8, 10,
+     12, 16), raccolta e chiusa: i valori dispari che erano rimasti in giro —
+     3px, 5px, 11px, 14px, 18px — erano differenze che nessuno aveva scelto, e
+     sono state tirate sul gradino accanto. I numeri che restano letterali nella
+     pelle sono quelli **strutturali** (la colonna da 240px, un bordo da 1px,
+     l'altezza massima di una lista): non sono spaziatura, e metterli in questa
+     scala vorrebbe dire che cambiarla li muove. */
+
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 16px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+
+  /* --- i raggi ----------------------------------------------------------- */
+
+  /* Erano sette valori distinti fra 2px e 10px per quattro intenzioni: il segno
+     appena smussato, il controllo, la superficie che galleggia, la pastiglia. */
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+
+  /* --- la tipografia ----------------------------------------------------- */
+
+  /* `--font-mono` esisteva già come `var(--mono, monospace)` in due regole —
+     cioè come token **mai definito**, che è il modo più silenzioso di non avere
+     un token: il ripiego funzionava, quindi nessuno se ne accorgeva. La §31.3 ha
+     portato tre voci in bundle — Inter, Literata, JetBrains Mono, tutte e tre
+     OFL-1.1 — al posto di `system-ui`, cioè di tre prodotti diversi su tre
+     piattaforme. Il sistema resta raggiungibile: ogni pila ha il ripiego di
+     piattaforma in coda, e diventerà una preferenza vera con la §31.6.
+
+     `text-xs`…`text-xl` non si muovono: sono i sei valori di prima, e restano
+     perché cambiarli è un ridisegno di ogni componente che li spende — cinquantanove
+     regole nella pelle (`grep -cF 'var(--text-' frontend/src/theme/serie/skin.css`)
+     — e quello è lavoro della §31.4, non di questa voce. La
+     scala **si allarga**: due gradini nuovi in cima (`text-2xl`, `text-3xl`),
+     che seguono un passo dichiarato (×1,2 da `text-xl`, arrotondato al pixel) al
+     posto di essere il prossimo numero che serve; e una voce nuova per la
+     lettura (`text-reading`), perché Literata non è Inter con un altro nome —
+     è disegnata per un corpo diverso. `leading-tight` era l'unica interlinea:
+     resta per chi la usa già, e accanto arrivano `leading-normal` (il paragrafo
+     di un pannello) e `leading-relaxed` (la prosa lunga, dove Literata respira).
+     `content-width` è la misura di lettura — 70 caratteri, il punto in cui una
+     riga più lunga fa perdere il segno tornando a capo. Queste ultime cinque voci
+     sono dichiarate e non ancora consumate da nessuna regola: tocca alla §31.8
+     (*la stessa nota in tre modi*) metterle sulla superficie di lettura, editor e
+     anteprima insieme — la §31.3 poteva scriverle o lasciarle implicite in una
+     regola sola, e implicite è precisamente il difetto che questa seduta cerca. */
+
+  --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Literata Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+  --text-reading: 16px;
+  --weight-medium: 600;
+  --weight-bold: 700;
+  --leading-tight: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+  --content-width: 70ch;
+  /* Il maiuscoletto dei titoli di pannello: due proprietà che vanno sempre
+     insieme, e che separate si erano già disallineate (`0.6px` in un posto,
+     `0.04em` in un altro, per la stessa riga). */
+  --tracking-caps: 0.6px;
+
+  /* --- il moto ----------------------------------------------------------- */
+
+  /* Tre durate e tre curve, e sono le stesse in entrambe le luci — un bottone e
+     una modale non sono due prodotti, e un tema chiaro non ha un altro orologio.
+     `fast` è l'hover e il colore; `med` è lo spaziale piccolo (un menu, un
+     press); `slow` è l'ingresso di una superficie che si apre. `ease` è lo
+     standard; `ease-out` decade sull'ingresso (parte veloce, atterra fermo);
+     `ease-in` accelera sul press. Non c'è una durata «live»: la scocca non
+     respira. Ogni nome nuovo lo spende la pelle, o è debito — la lezione di
+     `--duration-med`. */
+
+  --duration-fast: 120ms;
+  --duration-med: 180ms;
+  --duration-slow: 240ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.3, 0, 1, 1);
+
+  /* --- le superfici: la scala, dalla carta in su ------------------------- */
+
+  /* Sette gradini, e nessuno di essi dichiara dove sta: dichiara **quanti
+     passi** sta sopra il precedente. Una scala costruita per accumulo non può
+     essere non-monotona — quella di prima lo era, e nessuno se n'era accorto
+     perché quattro valori scelti separatamente non hanno un posto in cui
+     contraddirsi.
+
+     Il fondo è la **carta** (`--doc-bg`, più giù), che è l'estremo: il nero al
+     buio, il bianco in luce. Il corpo dell'app le sta appena sopra, la scocca
+     sopra di lui, e ciò che galleggia sopra ancora. È il verso di un editor —
+     la pagina è la superficie estrema e il resto ci galleggia — e non quello di
+     prima, dove titlebar, rail, statusbar, corpo dell'app e carta erano lo
+     stesso `#000000` e si distinguevano per un filetto.
+
+     `--bg-panel` e `--bg-active` sono nuovi. Non sono ruoli inventati: sono i
+     due posti in cui la pelle stava usando `--bg-input` per qualcosa che non è
+     un campo — la traccia di un segmentato, un banner, una pastiglia — e
+     `--bg-hover` per qualcosa che non è un hover: una riga **selezionata**, che
+     resta tale quando il puntatore se n'è andato. */
+
+  /* Il corpo dell'app: ciò che sta dietro tutto. */
+  --bg: #060607;
+  /* Titlebar, rail, statusbar. La scocca sta **sopra** la carta, non accanto. */
+  --bg-chrome: #0c0c0e;
+  /* Ciò che galleggia: pannelli, menu, popover, modali, toast. */
+  --bg-elev: #131315;
+  /* Un riquadro **dentro** un pannello: la traccia di un controllo
+     segmentato, un banner, una pastiglia, la riga di una lista. */
+  --bg-panel: #1a1b1d;
+  /* Il campo: dove si scrive. E basta. */
+  --bg-input: #222225;
+  /* La riga sotto il puntatore. È uno stato, e sta un passo sopra il campo. */
+  --bg-hover: #2a2a2e;
+  /* La riga **selezionata**, il segmento premuto. Prima non c'era e si
+     riusava l'hover, cioè si diceva «il puntatore è qui» per dire «questa è
+     quella scelta»: due cose che devono poter valere insieme. */
+  --bg-active: #313236;
+  /* Il velo del bottone fantasma: un velo sul testo, non un secondo grigio.
+     In alpha perché deve restare un velo sopra qualunque superficie, e le
+     superfici adesso sono sette. */
+  --overlay-hover: rgb(255 255 255 / 8%);
+  /* Il filetto è **il gradino dopo lo stato**, a due passi di distanza: un
+     bordo separa due superfici, quindi deve stare oltre la più lontana delle
+     due, e la scala sa già dov'è. Non gli si chiede 3:1 — un filetto non è un
+     controllo e pretenderglielo trasformerebbe l'interfaccia in un
+     wireframe — ma nemmeno lo si sceglie a mano. */
+  --border: #424247;
+
+  /* --- gli inchiostri della shell ---------------------------------------- */
+
+  /* Nessuno di questi dichiara una chiarezza. Dichiarano che colore sono, sopra
+     quali superfici finiscono, e quanto devono reggere sulla **peggiore** di
+     quelle: la chiarezza la cerca la generazione, partendo dal fondo e
+     allontanandosene finché il conto passa. È il motivo per cui la stessa riga
+     produce due valori diversi nelle due luci senza che nessuno li abbia
+     scelti. */
+
+  /* Il testo della shell. La mira non è la soglia: è il rapporto che il
+     foglio scritto a mano già dava, misurato. Al buio è più bassa di un punto
+     e non per scelta — con sette superfici la più alta è chiara abbastanza da
+     abbassare il soffitto: sopra `--bg-active` nessun colore arriva a 12,8:1. */
+  --text: #edeef1;
+  /* I sottotitoli, le didascalie, i secondi. Restano testo, quindi la mira
+     sta sopra la soglia del testo con un margine e non sul filo. */
+  --muted: #a1a1ad;
+
+  /* --- l'accento --------------------------------------------------------- */
+
+  /* I due accenti non sono una tinta e la sua sfumatura: sono due **ruoli**, e
+     il presidio del contrasto li ha separati per sempre. `--accent` è un
+     **pieno** (il fondo di un bottone) e un **segno** (un bordo, un contorno di
+     selezione); `--accent-soft` è un **inchiostro**, sta sopra le superfici, e
+     gli tocca la soglia del testo.
+
+     La tinta è una sola, e il lime è la decisione di prodotto di `bdc3203`.
+     Le due mire dell'accento sono diverse, e non per gusto: al buio l'accento è
+     la cosa più chiara dello schermo e il contrasto gli viene gratis; in luce è
+     un pieno che porta il proprio testo sopra, e spingerlo oltre lo farebbe
+     diventare un'oliva scura — cioè non più un accento. */
+
+  --accent: #a7ed4c;
+  --accent-soft: #c6ff87;
+  /* Il testo **sopra** l'accento. Era `white` cablato in due regole, ed è la
+     riga che un tema chiaro non poteva ereditare: su un accento chiaro il
+     bianco sparisce. Adesso non è più una scelta né in una luce né
+     nell'altra — è un conto fra due candidati, e vince quello che regge. */
+  --accent-contrast: #000000;
+
+  /* --- i quattro intenti ------------------------------------------------- */
+
+  /* Guasto, avviso, riuscito, informazione. Prima esisteva il solo rosso, e le
+     altre tre cose si dicevano con ciò che capitava: un avviso arrivava dal
+     kernel come `severity: warning` e la shell lo mostrava **come
+     un'informazione**, perché un tono «avviso» non c'era; e sette regole su
+     otto che volevano il rosso della shell prendevano `--doc-danger`, cioè il
+     rosso del **documento** — che è il colore con cui un wikilink rotto si
+     scrive dentro una nota, non quello con cui la shell dice che qualcosa è
+     andato storto. I due fogli raccontavano di aver già sciolto quel nodo; la
+     pelle non se n'era accorta.
+
+     Ogni intento ha tre pezzi e sempre gli stessi tre: l'inchiostro, il velo (per
+     un fondo che non copre), e il controcolore (per un pieno). Le tinte sono
+     quattro e stanno lontane fra loro: il riuscito è **più freddo** del lime
+     apposta, perché un verde uguale all'accento direbbe «primario» dove voleva
+     dire «fatto». */
+
+  --danger: #fc7b73;
+  --danger-wash: rgb(252 123 115 / 18%);
+  --danger-contrast: #000000;
+  --warning: #d49700;
+  --warning-wash: rgb(212 151 0 / 18%);
+  --warning-contrast: #000000;
+  --success: #34b77e;
+  --success-wash: rgb(52 183 126 / 18%);
+  --success-contrast: #000000;
+  --info: #56a7f5;
+  --info-wash: rgb(86 167 245 / 18%);
+  --info-contrast: #000000;
+
+  /* --- l'anello del fuoco (§12.4) ---------------------------------------- */
+
+  /* Non è l'accento, ed è un colore a parte per una ragione che il foglio
+     scritto a mano diceva sbagliata. Diceva: «deve reggere sopra l'accento
+     stesso — un pulsante primario che prende il fuoco lo mostra su fondo
+     accento». Non è vero, e la tabella delle coppie non l'ha mai verificato:
+     l'anello si disegna con `outline-offset`, cioè **un pixel fuori**
+     dall'elemento, quindi il suo fondo è la superficie intorno e mai il pieno
+     che circonda. Provato a chiedergli quel conto, non esiste nessuna
+     chiarezza che lo soddisfi: al buio allontanarsi dal fondo lo avvicina
+     all'accento, che è la cosa più chiara dello schermo. Le due pretese si
+     escludono, e una delle due era immaginaria.
+
+     È l'offset a rendere vera la frase, ed è per questo che le misure viaggiano
+     col colore invece di stare nella scocca: senza l'offset, l'anello di un
+     bottone primario sarebbe lime su lime. Sono parte della forma dell'anello,
+     e la regola che le consuma sta nella struttura. */
+
+  --focus-ring: #c6f19b;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* --- i veli e le ombre ------------------------------------------------- */
+
+  /* Il velo sotto una superficie modale, e le tre ombre. Cambiano con la luce
+     perché un'ombra nera al 45% sotto una finestra chiara è una macchia.
+     Restano letterali: **quanto** una superficie stacca è la §31.5, e qui non si
+     decide — un'ombra nera su fondo nero non solleva niente, e sarà quella voce
+     a dirlo con una tabella. */
+
+  --scrim: rgb(0 0 0 / 45%);
+  --shadow-sm: 0 6px 20px rgb(0 0 0 / 45%);
+  --shadow-md: 0 8px 28px rgb(0 0 0 / 50%);
+  --shadow-lg: 0 12px 40px rgb(0 0 0 / 55%);
+
+  /* --- il grafo ---------------------------------------------------------- */
+
+  /* Il grafo dei collegamenti disegna su canvas, cioè fuori dalla portata di
+     qualunque regola CSS: i suoi colori li legge `panels/graph.ts` da qui con
+     `getComputedStyle`. Sono token come gli altri proprio perché quella
+     superficie, non essendo raggiungibile dal foglio di stile, è quella che si
+     dimentica per prima quando si cambia tema. */
+
+  --graph-node: #a0a1ae;
+  /* Il nodo della nota aperta è l'accento, e lo dice ripetendone il valore. */
+  --graph-node-active: #a7ed4c;
+  /* Il nodo sotto il puntatore: la tinta del riuscito, che qui vuol dire «questo». */
+  --graph-node-hover: #6ed3a0;
+
+  /* --- la superficie del documento --------------------------------------- */
+
+  /* La carta e ciò che ci sta sopra. Sta qui, in un posto solo, perché le tre
+     modalità di 4.1 devono essere la stessa nota vista in tre modi — non tre
+     note diverse. Li usano `.markdown-preview` (Lettura), il tema della live
+     preview e il tema dell'editor, che prima portava i propri.
+
+     La carta è il **fondo della scala**: il nero al buio, il bianco in luce. È
+     l'unico posto in cui il nero OLED conta davvero, ed è dove è finito. */
+
+  /* La carta. Zero passi: è l'estremo da cui tutto il resto si allontana, e
+     l'unico token del foglio che non ha una tinta — il nero e il bianco non
+     ne hanno una. */
+  --doc-bg: #000000;
+  /* La riga sotto il cursore: un gradino della carta, non un colore a parte. */
+  --doc-active-line: #0c0c0e;
+  /* Il testo selezionato. È il fondo **più lontano** su cui una specie di
+     sintassi possa finire, quindi è lui a decidere quanto scure possono
+     essere le dieci: portarlo un gradino più in là abbassa il soffitto di
+     tutta la tavolozza, e si vede subito perché la generazione si rifiuta. */
+  --doc-selection: #2a2a2e;
+  /* Il suggerimento dell'editor: galleggia sulla carta come un pannello sul corpo. */
+  --doc-tooltip-bg: #131315;
+  /* Riempimenti e righe in alpha su grigio: reggono su qualunque fondo, ed è
+     il motivo per cui valgono identici nelle due luci. Sono la sola famiglia
+     di colori che i due fogli dichiarano con lo stesso valore, e
+     `struttura.test.ts` lo pretende. Stanno **prima** degli inchiostri perché
+     uno di quelli — il link — ci finisce sopra, e per misurarlo il velo va
+     composto: un fondo si dichiara prima di chi ci sta sopra. */
+  --doc-fill: rgb(135 135 135 / 16%);
+  --doc-fill-soft: rgb(135 135 135 / 10%);
+  --doc-rule: rgb(135 135 135 / 45%);
+  --doc-rule-soft: rgb(135 135 135 / 28%);
+  --doc-highlight: rgb(255 205 0 / 28%);
+  /* Il corpo della nota. Sopra tutti e tre i fondi della carta, non solo la pagina. */
+  --doc-fg: #cccdd5;
+  /* Un wikilink. Il quarto fondo è la pagina **sotto un velo**: `--doc-fill`
+     è `rgb(135 135 135 / 16%)`, cioè un velo e non un colore, e un link dentro
+     un riempimento ci finisce sopra. La tabella dei token quella coppia non
+     poteva vederla — si rifiuta, giustamente, di misurare ciò che ha un alfa,
+     perché non sa cosa c'è sotto. Qui sotto ci sta la carta, e si sa: il velo
+     si compone e il conto si fa. */
+  --doc-link: #68abfe;
+  /* I titoli, resi e in scrittura. Sono della **famiglia della sintassi**
+     perché è il parser a marcarli, e `--syn-heading` li ripete: tenerli fuori
+     vorrebbe dire un titolo che, dentro un blocco di codice, si vede più
+     chiaro o più scuro delle parole intorno.
+
+     Prima la soglia era 3:1 — «un titolo è testo grande» — ed è vero per un
+     `h1` e falso da un `h3` in giù, dove il corpo torna quello del testo. Era
+     uno dei cinque debiti che il banco della 0166 ha trovato misurando la
+     pagina vera, ed è un'assunzione che si può fare solo **prima** di
+     rendere. */
+  --doc-heading: #f77d80;
+  /* Il rosso **del documento**: un wikilink rotto. Non è `--danger`, che è il
+     rosso della shell: stessa tinta, fondi diversi, e per questo due valori. */
+  --doc-danger: #fb7a72;
+  /* I numeri di riga sono testo che qualcuno legge, non decorazione. */
+  --doc-gutter-fg: #9898a2;
+  /* Il cursore di scrittura: non è testo, ma è la cosa che si cerca con gli occhi. */
+  --doc-caret: #5c8cff;
+
+  /* --- i colori della sintassi ------------------------------------------- */
+
+  /* Dieci specie, e adesso sono **proprie**. Erano One Dark e One Light presi
+     interi, e la frase «la stessa nota in due luci» era vera perché quei due
+     pacchetti sono gemelli ufficiali — cioè per parentela, non per costruzione.
+     Misurandoli si vedeva che i gemelli non condividono nemmeno le tinte: la
+     parola chiave sta a 318° al buio e a 329° in luce, l'operatore a 206° e
+     237°, la stringa a 133° e 143°. Sono due tavolozze che si somigliano.
+
+     Qui la tinta è **una per specie** e vale in tutte e due le luci, e la
+     chiarezza è **una per luce** e vale per tutte le specie: si prende quella
+     che serve alla più difficile e si dà a tutte. Le dieci si distinguono per
+     tinta, che è come si distinguono le parole di una lingua — non per quanto
+     sono chiare. Le tinte non sono state immaginate: sono quelle dei due
+     pacchetti, misurate e portate a un valore solo.
+
+     Due specie restano fuori dalla famiglia, e si vede dalla riga che le
+     dichiara: il commento, che deve stare indietro, e l'invalido, che deve
+     saltare all'occhio. Sono le due il cui lavoro **è** stare a una chiarezza
+     diversa dalle altre.
+
+     E `SOTTO_AA` va a zero. Sette specie su dieci stavano sotto la soglia del
+     testo nella luce chiara dal giorno in cui quel tema è nato (`087a40f`), ed
+     era un debito dichiarato perché ritoccarle una alla volta avrebbe lasciato
+     una tavolozza che non era più nessuna delle due. Non se ne ritocca nessuna:
+     si chiede alla famiglia un rapporto, e la famiglia trova **una** chiarezza.
+     Era esattamente l'operazione che prenderle in coppia serviva a evitare. */
+
+  --syn-keyword: #db7cea;
+  --syn-name: #fc7979;
+  --syn-function: #66aaff;
+  --syn-literal: #d7994b;
+  --syn-type: #cda036;
+  --syn-operator: #46b7d7;
+  /* Il commento è la sola specie che resta **fuori dalla famiglia**, e per la
+     ragione per cui la famiglia esiste: le altre nove devono vedersi come una
+     tavolozza, e il commento deve vedersi **indietro**. Prendere la chiarezza
+     delle altre lo porterebbe avanti, cioè gli toglierebbe il suo lavoro. La
+     sua mira è sopra la soglia del testo e non un dito più su. */
+  --syn-comment: #9191a2;
+  --syn-string: #7dbb68;
+  /* Un titolo ha lo stesso colore reso e in scrittura, e restano due nomi
+     perché sono due domande diverse: «di che colore è un `<h1>` reso» e «di
+     che colore è il testo che il parser ha marcato come titolo». Prima erano
+     lo stesso valore ricopiato, e ricopiare è come si diverge. */
+  --syn-heading: #f77d80;
+  /* Ciò che il parser non riesce a leggere. Fuori dalla famiglia anche lui, e
+     per il verso opposto al commento: deve saltare all'occhio, quindi sta un
+     gradino **avanti** alle altre. Al buio era `#ffffff`, che non è un colore
+     scelto — è l'assenza di una scelta; adesso porta la tinta del guasto, che
+     è ciò che vuol dire. */
+  --syn-invalid: #ff9a92;
+
+  /* --- ciò che vale per tutta la pagina ---------------------------------- */
+
+  /* `color-scheme` dice al motore in che luce siamo: da qui prendono il verso
+     le barre di scorrimento e il cursore di testo. I controlli nativi che la
+     pelle veste — `<progress>`, le caselle — non lo leggono più, perché
+     `appearance: none` li ha portati dentro il tema (0166). */
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  color-scheme: dark;
+}

@@ -30,39 +30,39 @@
 // saprebbe solo *aggiungere* fogli al documento, e il punto è sostituirli. I
 // test del banco (`theme/loader.test.ts`) guardano qui dentro.
 
-export type Strato = "caratteri" | "foglio" | "pelle";
+export type Layer = "caratteri" | "foglio" | "pelle";
 
 /** L'ordine dichiarato della cascata. Un canale nuovo si aggiunge qui, non si
  *  deduce da dove capita di chiamare `monta()`. */
-const ORDINE: readonly Strato[] = ["caratteri", "foglio", "pelle"];
+const ORDER: readonly Layer[] = ["caratteri", "foglio", "pelle"];
 
 /** Monta uno strato a sostituzione: rimuove l'eventuale montato, e inserisce
  *  il nuovo nel punto che `ORDINE` gli assegna — non necessariamente in coda.
  *  Il contenuto resta testo, non parsed: al navigatore la riga
  *  `textContent = css` basta, e non c'è parsing nostro da mantenere. */
-export function monta(testo: string, strato: Strato): void {
+export function mount(text: string, layer: Layer): void {
   const head = document.head;
   for (const el of head.querySelectorAll<HTMLStyleElement>(
-    `style[data-fub="${strato}"]`,
+    `style[data-fub="${layer}"]`,
   )) {
     el.remove();
   }
   const el = document.createElement("style");
-  el.dataset.fub = strato;
-  el.textContent = testo;
+  el.dataset.fub = layer;
+  el.textContent = text;
 
-  const posizione = ORDINE.indexOf(strato);
-  const montati = head.querySelectorAll<HTMLStyleElement>("style[data-fub]");
-  const successivo = [...montati].find(
-    (esistente) => ORDINE.indexOf(esistente.dataset.fub as Strato) > posizione,
+  const position = ORDER.indexOf(layer);
+  const mounted = head.querySelectorAll<HTMLStyleElement>("style[data-fub]");
+  const next = [...mounted].find(
+    (existing) => ORDER.indexOf(existing.dataset.fub as Layer) > position,
   );
-  if (successivo) head.insertBefore(el, successivo);
+  if (next) head.insertBefore(el, next);
   else head.append(el);
 }
 
 /** Quanti elementi di uno strato sono montati. Nel banco dev'essere sempre 1
  *  dopo ogni `monta`; 0 significa «nessun tema», 2 significa che qualcuno ha
  *  ripreso ad accatastare. */
-export function conta(strato: Strato): number {
-  return document.head.querySelectorAll(`style[data-fub="${strato}"]`).length;
+export function count(layer: Layer): number {
+  return document.head.querySelectorAll(`style[data-fub="${layer}"]`).length;
 }

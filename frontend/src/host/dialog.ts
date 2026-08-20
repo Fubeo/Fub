@@ -35,6 +35,6 @@ export function confirm(message: string, opts: ConfirmOptions): Promise<boolean>
 /// qui si stringe a ciò che l'unico chiamante chiede — una cartella sola — così
 /// il resto della shell non deve conoscere le forme del plugin.
 export async function pickFolder(): Promise<string | null> {
-  const scelta = await tauriOpen({ directory: true, multiple: false });
-  return typeof scelta === "string" ? scelta : null;
+  const choice = await tauriOpen({ directory: true, multiple: false });
+  return typeof choice === "string" ? choice : null;
 }

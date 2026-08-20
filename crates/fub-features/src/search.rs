@@ -55,7 +55,7 @@ use fub_abi::model::{canonical_tag, DocId, DocumentModel, Span};
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryPredicate, TextField, TextMode, TextQuery, TextTolerance,
 };
-use fub_abi::rules::cartelle;
+use fub_abi::rules::folders;
 use fub_abi::rules::snippet::SNIPPET_CHARS;
 use fub_abi::schema::SchemaVersion;
 use fub_abi::settings::{SettingKind, SettingSpec};
@@ -108,7 +108,7 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 /// alzare il numero è la sola cosa che
 /// [`lo_schema_non_cambia_senza_che_il_numero_salga`] non lascia passare.
 #[cfg(test)]
-const IMPRONTA_DELLO_SCHEMA: &str = "doc_id:raw:stored page_name:default:stored \
+const FINGERPRINT_OF_THE_SCHEMA: &str = "doc_id:raw:stored page_name:default:stored \
 body:default:stored tags:raw tag_paths:raw folder:raw folder_exact:raw \
 headings:default";
 
@@ -296,19 +296,19 @@ struct Manifest {
 /// una copia che diverge renderebbe illeggibile un indice già scritto senza che
 /// nessun banco se ne accorga — ogni copia resta coerente con sé stessa.
 fn fingerprint(doc: &DocumentModel) -> u64 {
-    let mut h = Fnv1a::nuova();
+    let mut h = Fnv1a::new();
     // Il path intero e non il solo nome: da quando l'indice porta la cartella
     // (`folder`, v3), spostare una nota cambia ciò che è indicizzato anche a
     // contenuto identico.
-    h.mangia(doc.id.as_str().as_bytes());
-    h.mangia(&[0]);
-    h.mangia(doc.text.as_bytes());
-    h.mangia(&[0]);
+    h.update(doc.id.as_str().as_bytes());
+    h.update(&[0]);
+    h.update(doc.text.as_bytes());
+    h.update(&[0]);
     for tag in &doc.tags {
-        h.mangia(tag.name.as_bytes());
-        h.mangia(&[0x1f]);
+        h.update(tag.name.as_bytes());
+        h.update(&[0x1f]);
     }
-    h.valore()
+    h.value()
 }
 
 /// I campi dello schema, risolti una volta sola.
@@ -345,20 +345,20 @@ fn schema_fingerprint(schema: &Schema) -> String {
     schema
         .fields()
         .map(|(_, entry)| {
-            let mut riga = entry.name().to_string();
+            let mut line = entry.name().to_string();
             if let tantivy::schema::FieldType::Str(opts) = entry.field_type() {
-                riga.push(':');
-                riga.push_str(match opts.get_indexing_options() {
-                    Some(i) => i.tokenizer(),
+                line.push(':');
+                line.push_str(match opts.get_indexing_options() {
+                    Some(the) => the.tokenizer(),
                     None => "-",
                 });
                 if opts.is_stored() {
-                    riga.push_str(":stored");
+                    line.push_str(":stored");
                 }
             } else {
-                riga.push_str(":altro");
+                line.push_str(":other");
             }
-            riga
+            line
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -508,10 +508,10 @@ impl SearchIndex {
         let mut index = open_existing(dir, &schema);
         if index.is_none() {
             wipe(dir)?;
-            std::fs::create_dir_all(dir).map_err(|e| io_err(dir, e))?;
+            std::fs::create_dir_all(dir).map_err(|and| io_err(dir, and))?;
             index = Some(
                 Index::create_in_dir(dir, schema.clone())
-                    .map_err(|e| PluginError::Internal(motivo(INDEX_CREATE, e)))?,
+                    .map_err(|and| PluginError::Internal(reason(INDEX_CREATE, and)))?,
             );
         }
         let index = index.expect("appena creato se assente");
@@ -520,12 +520,12 @@ impl SearchIndex {
         // deve portare a buttare l'indice: la causa quasi certa è che un'altra
         // istanza di Fub ha già questo vault aperto, e la sua copia è viva e
         // corretta. Si rinuncia alla ricerca, non ai dati di qualcun altro.
-        let writer: IndexWriter = index.writer(WRITER_HEAP).map_err(|e| {
+        let writer: IndexWriter = index.writer(WRITER_HEAP).map_err(|and| {
             PluginError::Internal(Text::message(
                 INDEX_LOCKED,
                 vec![
                     Arg::text(PATH, dir.to_string()),
-                    Arg::text(REASON, e.to_string()),
+                    Arg::text(REASON, and.to_string()),
                 ],
             ))
         })?;
@@ -535,7 +535,7 @@ impl SearchIndex {
             // sospeso): niente thread di watch sul meta.json.
             .reload_policy(ReloadPolicy::Manual)
             .try_into()
-            .map_err(|e| PluginError::Internal(motivo(INDEX_READER, e)))?;
+            .map_err(|and| PluginError::Internal(reason(INDEX_READER, and)))?;
 
         // L'epoca dell'indice sul disco. Le impronte che le corrispondono
         // arrivano da `activate`, l'unico posto dove c'è un host per leggerle.
@@ -601,7 +601,7 @@ fn open_existing(dir: &Utf8Path, schema: &Schema) -> Option<Index> {
 
 fn wipe(dir: &Utf8Path) -> Result<(), PluginError> {
     if dir.exists() {
-        std::fs::remove_dir_all(dir).map_err(|e| io_err(dir, e))?;
+        std::fs::remove_dir_all(dir).map_err(|and| io_err(dir, and))?;
     }
     Ok(())
 }
@@ -688,7 +688,7 @@ const S_TAGS_DESC: &str = "search.boost.tags.desc";
 /// `fub:write-settings` resta il primo cancello, e nessun plugin di terzi ce
 /// l'ha finché non se lo dichiara e qualcuno glielo concede.
 pub fn settings() -> Vec<SettingSpec> {
-    let peso = |key: &str, label: &str, desc: &str, default: f32| {
+    let weight = |key: &str, label: &str, desc: &str, default: f32| {
         SettingSpec::new(
             key,
             Text::key(label),
@@ -703,10 +703,10 @@ pub fn settings() -> Vec<SettingSpec> {
         .program_writable()
     };
     vec![
-        peso(BOOST_NAME_KEY, S_NAME, S_NAME_DESC, PAGE_NAME_BOOST),
-        peso(BOOST_HEADING_KEY, S_HEADING, S_HEADING_DESC, HEADING_BOOST),
-        peso(BOOST_BODY_KEY, S_BODY, S_BODY_DESC, BODY_BOOST),
-        peso(BOOST_TAGS_KEY, S_TAGS, S_TAGS_DESC, TAGS_BOOST),
+        weight(BOOST_NAME_KEY, S_NAME, S_NAME_DESC, PAGE_NAME_BOOST),
+        weight(BOOST_HEADING_KEY, S_HEADING, S_HEADING_DESC, HEADING_BOOST),
+        weight(BOOST_BODY_KEY, S_BODY, S_BODY_DESC, BODY_BOOST),
+        weight(BOOST_TAGS_KEY, S_TAGS, S_TAGS_DESC, TAGS_BOOST),
     ]
 }
 
@@ -878,12 +878,12 @@ pub fn catalog() -> Vec<StringCatalog> {
     ]
 }
 
-fn io_err(path: &Utf8Path, e: std::io::Error) -> PluginError {
+fn io_err(path: &Utf8Path, and: std::io::Error) -> PluginError {
     PluginError::Internal(Text::message(
         IO,
         vec![
             Arg::text(PATH, path.to_string()),
-            Arg::text(REASON, e.to_string()),
+            Arg::text(REASON, and.to_string()),
         ],
     ))
 }
@@ -896,8 +896,8 @@ fn io_err(path: &Utf8Path, e: std::io::Error) -> PluginError {
 /// contiene si legge nella lingua di chi guarda, e la causa resta cercabile
 /// così com'è, che è precisamente ciò che serve per riportarla a chi la sa
 /// leggere.
-fn motivo(key: &str, e: impl std::fmt::Display) -> Text {
-    Text::message(key, vec![Arg::text(REASON, e.to_string())])
+fn reason(key: &str, and: impl std::fmt::Display) -> Text {
+    Text::message(key, vec![Arg::text(REASON, and.to_string())])
 }
 
 impl SearchIndex {
@@ -995,10 +995,10 @@ impl SearchIndex {
         };
         let opstamp = writer
             .commit()
-            .map_err(|e| PluginError::Internal(motivo(INDEX_COMMIT, e)))?;
+            .map_err(|and| PluginError::Internal(reason(INDEX_COMMIT, and)))?;
         self.reader
             .reload()
-            .map_err(|e| PluginError::Internal(motivo(INDEX_RELOAD, e)))?;
+            .map_err(|and| PluginError::Internal(reason(INDEX_RELOAD, and)))?;
         self.opstamp.store(opstamp, Ordering::Relaxed);
         self.dirty.store(false, Ordering::Release);
         Ok(())
@@ -1047,7 +1047,7 @@ impl SearchIndex {
     /// che non mente: tenerla vorrebbe dire attribuire al testo di adesso la
     /// revisione del testo di allora, e alla riapertura saltare un documento
     /// modificato.
-    fn note_source(&mut self, id: &DocId) {
+    fn notes_source(&mut self, id: &DocId) {
         match self.announced.lock().expect("mutex").remove(id) {
             Some(revision) => self.sources.insert(id.clone(), revision),
             None => self.sources.remove(id),
@@ -1091,7 +1091,7 @@ impl SearchIndex {
                 .collect(),
         };
         let raw = serde_json::to_vec(&manifest)
-            .map_err(|e| PluginError::Internal(motivo(MANIFEST_WRITE, e)))?;
+            .map_err(|and| PluginError::Internal(reason(MANIFEST_WRITE, and)))?;
         host.data_write(MANIFEST, &raw)?;
         self.manifest_at = Some(opstamp);
         Ok(())
@@ -1135,7 +1135,7 @@ impl SearchIndex {
 
         let total = searcher
             .search(&*query, &tantivy::collector::Count)
-            .map_err(|e| PluginError::Internal(motivo(COUNT, e)))?;
+            .map_err(|and| PluginError::Internal(reason(COUNT, and)))?;
         let (offset, limit) = match page {
             // Senza finestra si restituisce tutto ciò che combacia: il tetto è
             // il conteggio, non un numero inventato qui. E non è una svista da
@@ -1163,7 +1163,7 @@ impl SearchIndex {
             .order_by_score();
         let top = searcher
             .search(&*query, &collector)
-            .map_err(|e| PluginError::Internal(motivo(SEARCH, e)))?;
+            .map_err(|and| PluginError::Internal(reason(SEARCH, and)))?;
 
         // La **rilevanza** ce l'ha chi ha una foglia di testo, e solo lui:
         // evidenziare la cartella o il tag per cui una nota è stata selezionata
@@ -1190,7 +1190,7 @@ impl SearchIndex {
                         .collect::<Vec<_>>(),
                 ));
                 let mut gen = SnippetGenerator::create(&searcher, &*text_query, f.body)
-                    .map_err(|e| PluginError::Internal(motivo(SNIPPET, e)))?;
+                    .map_err(|and| PluginError::Internal(reason(SNIPPET, and)))?;
                 gen.set_max_num_chars(SNIPPET_CHARS);
                 Some(gen)
             }
@@ -1200,7 +1200,7 @@ impl SearchIndex {
         for (score, address) in top {
             let doc: TantivyDocument = searcher
                 .doc(address)
-                .map_err(|e| PluginError::Internal(motivo(DOC_READ, e)))?;
+                .map_err(|and| PluginError::Internal(reason(DOC_READ, and)))?;
             let Some(id) = doc.get_first(f.doc_id).and_then(|v| v.as_str()) else {
                 continue;
             };
@@ -1328,7 +1328,7 @@ impl SearchIndex {
                 // `within_folder`, che è la regola che quel campo l'ha
                 // prodotto — un trim diverso qui è una ricerca che non trova
                 // mai niente (difetto 0141).
-                Ok(Some(term_query(field, cartelle::normalizzata(path))))
+                Ok(Some(term_query(field, folders::normalized(path))))
             }
             QueryPredicate::Docs { docs } => {
                 if docs.is_empty() {
@@ -1402,14 +1402,14 @@ impl SearchIndex {
             TextTolerance::Typos => {}
         }
 
-        let mut per_field: Vec<(Occur, Box<dyn Query>)> = Vec::new();
-        let mut per_term: Vec<Vec<(Occur, Box<dyn Query>)>> = Vec::new();
+        let mut for_field: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+        let mut for_term: Vec<Vec<(Occur, Box<dyn Query>)>> = Vec::new();
         // I tre campi di prosa (`page_name`, `headings`, `body`) condividono
         // il tokenizer `default` dello schema (vedi `build_schema`): il testo
         // della query si tokenizza una volta sola, e i termini differiscono
         // solo per il campo a cui sono legati. I tag restano un passaggio a
         // parte — col tokenizer `raw` il termine è la stringa intera.
-        let parole = if wanted.iter().any(|(f, _)| *f != self.fields.tags) {
+        let words = if wanted.iter().any(|(f, _)| *f != self.fields.tags) {
             self.token_texts(&text.text)?
         } else {
             Vec::new()
@@ -1418,7 +1418,7 @@ impl SearchIndex {
             let terms = if field == self.fields.tags {
                 self.terms_of(field, &text.text)?
             } else {
-                parole
+                words
                     .iter()
                     .map(|p| Term::from_field_text(field, p))
                     .collect()
@@ -1447,7 +1447,7 @@ impl SearchIndex {
                         (_, true) => Box::new(PhrasePrefixQuery::new(terms)),
                         (_, false) => Box::new(PhraseQuery::new(terms)),
                     };
-                    per_field.push((Occur::Should, boosted(q, boost)));
+                    for_field.push((Occur::Should, boosted(q, boost)));
                 }
                 // I termini: ognuno deve comparire (in qualche campo), che è
                 // ciò che si aspetta chi digita due parole.
@@ -1458,25 +1458,25 @@ impl SearchIndex {
                         } else {
                             Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs))
                         };
-                        if per_term.len() <= at {
-                            per_term.push(Vec::new());
+                        if for_term.len() <= at {
+                            for_term.push(Vec::new());
                         }
-                        per_term[at].push((Occur::Should, boosted(q, boost)));
+                        for_term[at].push((Occur::Should, boosted(q, boost)));
                     }
                 }
             }
         }
 
         match text.mode {
-            TextMode::Phrase => match per_field.len() {
+            TextMode::Phrase => match for_field.len() {
                 0 => Ok(None),
-                _ => Ok(Some(Box::new(BooleanQuery::new(per_field)))),
+                _ => Ok(Some(Box::new(BooleanQuery::new(for_field)))),
             },
             TextMode::Terms => {
-                if per_term.is_empty() {
+                if for_term.is_empty() {
                     return Ok(None);
                 }
-                let all: Vec<(Occur, Box<dyn Query>)> = per_term
+                let all: Vec<(Occur, Box<dyn Query>)> = for_term
                     .into_iter()
                     .map(|alternatives| {
                         let q: Box<dyn Query> = Box::new(BooleanQuery::new(alternatives));
@@ -1501,7 +1501,7 @@ impl SearchIndex {
         let value = term.value();
         let pattern = format!("{}.*", escape_regex(value.as_str().unwrap_or_default()));
         let query = RegexQuery::from_pattern(&pattern, field)
-            .map_err(|e| PluginError::Internal(motivo(TOKENIZER, e)))?;
+            .map_err(|and| PluginError::Internal(reason(TOKENIZER, and)))?;
         Ok(Box::new(query))
     }
 
@@ -1512,13 +1512,13 @@ impl SearchIndex {
         let mut analyzer = self
             .index
             .tokenizer_for_field(self.fields.page_name)
-            .map_err(|e| PluginError::Internal(motivo(TOKENIZER, e)))?;
-        let mut parole = Vec::new();
+            .map_err(|and| PluginError::Internal(reason(TOKENIZER, and)))?;
+        let mut words = Vec::new();
         let mut stream = analyzer.token_stream(text);
         while let Some(token) = stream.next() {
-            parole.push(token.text.to_string());
+            words.push(token.text.to_string());
         }
-        Ok(parole)
+        Ok(words)
     }
 
     /// I termini di un testo secondo il tokenizer del campo. Per un campo
@@ -1528,7 +1528,7 @@ impl SearchIndex {
         let mut analyzer = self
             .index
             .tokenizer_for_field(field)
-            .map_err(|e| PluginError::Internal(motivo(TOKENIZER, e)))?;
+            .map_err(|and| PluginError::Internal(reason(TOKENIZER, and)))?;
         let mut terms = Vec::new();
         let mut stream = analyzer.token_stream(text);
         while let Some(token) = stream.next() {
@@ -1575,7 +1575,7 @@ fn head_of(text: &str, max: usize) -> String {
     // Una passata sola: se `nth(max)` non c'è, il testo è già corto.
     let cut = match text.char_indices().nth(max) {
         None => return text.to_string(),
-        Some((i, _)) => i,
+        Some((the, _)) => the,
     };
     let head = &text[..cut];
     let trimmed = match head.rfind(char::is_whitespace) {
@@ -1698,7 +1698,7 @@ impl IndexProvider for SearchIndex {
             // indicizza), e lasciarci quella vecchia vorrebbe dire farlo
             // rileggere per sempre.
             if self.fingerprints.get(&doc.id) == Some(&print) {
-                self.note_source(&doc.id);
+                self.notes_source(&doc.id);
                 continue;
             }
             // tantivy non aggiorna: si cancella il termine e si riscrive.
@@ -1724,20 +1724,20 @@ impl IndexProvider for SearchIndex {
                     continue;
                 };
                 writer.delete_term(term);
-                if let Err(e) = writer.add_document(td) {
+                if let Err(and) = writer.add_document(td) {
                     drop(guard);
                     self.forget(&doc.id);
                     lost.push(IndexLoss::new(
                         doc.id.clone(),
                         PluginError::Internal(
-                            format!("l'indice di ricerca ha rifiutato il documento: {e}").into(),
+                            format!("l'indice di ricerca ha rifiutato il documento: {and}").into(),
                         ),
                     ));
                     continue;
                 }
             }
             self.fingerprints.insert(doc.id.clone(), print);
-            self.note_source(&doc.id);
+            self.notes_source(&doc.id);
             self.dirty.store(true, Ordering::Release);
         }
         lost
@@ -1853,7 +1853,7 @@ impl IndexProvider for SearchIndex {
         };
         writer
             .wait_merging_threads()
-            .map_err(|e| PluginError::Internal(motivo(INDEX_CLOSE, e)))
+            .map_err(|and| PluginError::Internal(reason(INDEX_CLOSE, and)))
     }
 
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
@@ -2085,7 +2085,7 @@ mod tests {
         assert_eq!(
             hits[0].doc,
             DocId::new("nota/Rust.md"),
-            "il titolo pesa di più"
+            "the title weighs more"
         );
     }
 
@@ -2095,13 +2095,13 @@ mod tests {
 
     /// Un host che dichiara le quattro chiavi come le dichiara il montaggio, e
     /// dà a una di esse il valore che il test vuole provare.
-    fn host_con_peso(key: &str, valore: f64) -> MemoryHost {
+    fn host_with_weight(key: &str, value: f64) -> MemoryHost {
         let mut host = MemoryHost::new();
         for spec in settings() {
             host = if spec.key == key {
-                host.con_valore(spec, SettingValue::Number(valore))
+                host.with_value(spec, SettingValue::Number(value))
             } else {
-                host.con_impostazione(spec)
+                host.with_setting(spec)
             };
         }
         host
@@ -2110,7 +2110,7 @@ mod tests {
     /// I due documenti di `page_name_outranks_body`: uno vince per il titolo,
     /// l'altro per la ripetizione nel corpo. È la coppia giusta per provare un
     /// peso, perché l'esito dipende **solo** da quello.
-    fn titolo_contro_corpo(idx: &mut SearchIndex) {
+    fn title_contro_body(idx: &mut SearchIndex) {
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
             "nota/Rust.md",
             "appunti sparsi di programmazione",
@@ -2122,16 +2122,16 @@ mod tests {
     }
 
     #[test]
-    fn i_pesi_arrivano_dalle_impostazioni() {
+    fn the_weights_arrive_from_settings() {
         let (_g, path) = tmp();
         // Il titolo azzerato: la nota *intitolata* Rust non ha più il vantaggio
         // che le dava il default, e passa dietro a chi ripete il termine nel
         // corpo. È l'esatto rovescio di `page_name_outranks_body`, e i due test
         // insieme dicono che quella riga non è più una legge del motore.
-        let mut host = host_con_peso(BOOST_NAME_KEY, 0.0);
+        let mut host = host_with_weight(BOOST_NAME_KEY, 0.0);
         let mut idx = open(&path, &mut host);
         assert_eq!(idx.weights().name, 0.0, "letto in `activate`");
-        titolo_contro_corpo(&mut idx);
+        title_contro_body(&mut idx);
 
         let hits = search(&idx, "rust");
         assert_eq!(hits.len(), 2, "zero non esclude: la nota si trova ancora");
@@ -2143,7 +2143,7 @@ mod tests {
     }
 
     #[test]
-    fn una_chiave_mai_scritta_vale_il_suo_default() {
+    fn a_key_never_written_equals_the_its_default() {
         let (_g, path) = tmp();
         // Nessuna dichiarazione affatto: è il caso di un host che di
         // impostazioni non sa niente, e la ricerca deve partire lo stesso. Un
@@ -2154,11 +2154,11 @@ mod tests {
     }
 
     #[test]
-    fn i_pesi_si_aggiornano_a_vault_aperto() {
+    fn the_weights_are_updated_at_vault_open() {
         let (_g, path) = tmp();
-        let mut host = host_con_peso(BOOST_NAME_KEY, PAGE_NAME_BOOST as f64);
+        let mut host = host_with_weight(BOOST_NAME_KEY, PAGE_NAME_BOOST as f64);
         let mut idx = open(&path, &mut host);
-        titolo_contro_corpo(&mut idx);
+        title_contro_body(&mut idx);
         assert_eq!(
             search(&idx, "rust")[0].doc,
             DocId::new("nota/Rust.md"),
@@ -2190,9 +2190,9 @@ mod tests {
     }
 
     #[test]
-    fn una_chiave_che_non_e_un_peso_non_fa_rileggere() {
+    fn a_key_that_not_and_a_weight_not_does_reread() {
         let (_g, path) = tmp();
-        let mut host = host_con_peso(BOOST_NAME_KEY, PAGE_NAME_BOOST as f64);
+        let mut host = host_with_weight(BOOST_NAME_KEY, PAGE_NAME_BOOST as f64);
         let idx = open(&path, &mut host);
         let mut handler = idx.settings_handler();
 
@@ -2219,14 +2219,14 @@ mod tests {
     }
 
     #[test]
-    fn lo_schema_dichiara_i_default_che_il_motore_usa() {
+    fn the_schema_declares_the_default_that_the_engine_uses() {
         // La duplicazione che questa voce ha tolto: prima i pesi erano costanti
         // cablate, e il banco ne teneva una copia con un commento che chiedeva
         // di non farle divergere. Adesso i default dello schema **sono** quelle
         // costanti, e se qualcuno ne cambiasse una sola questo test è il posto
         // in cui lo scopre.
         let d = FieldWeights::default();
-        for (key, atteso) in [
+        for (key, expected) in [
             (BOOST_NAME_KEY, d.name),
             (BOOST_HEADING_KEY, d.heading),
             (BOOST_BODY_KEY, d.body),
@@ -2239,7 +2239,7 @@ mod tests {
             let SettingKind::Number { default, min, max } = spec.kind else {
                 panic!("`{key}` non è un numero");
             };
-            assert_eq!(default as f32, atteso, "`{key}`");
+            assert_eq!(default as f32, expected, "`{key}`");
             assert_eq!(min, Some(BOOST_MIN));
             assert_eq!(max, Some(BOOST_MAX));
             assert!(
@@ -2413,7 +2413,7 @@ mod tests {
         assert!(manifest.docs.contains_key("a.md"));
         assert!(
             !path.join(MANIFEST).exists(),
-            "il manifest non deve più stare accanto ai file di tantivy"
+            "the manifest must no longer live next to tantivy's files"
         );
     }
 
@@ -2429,18 +2429,18 @@ mod tests {
         }
 
         let mut idx = open(&path, &mut host);
-        assert_eq!(idx.len(), 1, "le impronte sopravvivono alla riapertura");
+        assert_eq!(idx.len(), 1, "fingerprints survive the reopen");
         // Ripassare lo stesso contenuto non produce scritture: è ciò che rende
         // rapida la riapertura di un vault non toccato.
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto stabile")));
         assert!(
             !idx.dirty.load(Ordering::Relaxed),
-            "un documento immutato non sporca l'indice"
+            "an unchanged document doesn't dirty the index"
         );
         // E nemmeno il manifest si riscrive: non c'è niente di nuovo da dire.
-        let prima = manifest_of(&host).opstamp;
+        let before = manifest_of(&host).opstamp;
         idx.flush(&mut host).unwrap();
-        assert_eq!(manifest_of(&host).opstamp, prima);
+        assert_eq!(manifest_of(&host).opstamp, before);
         assert_eq!(search(&idx, "stabile").len(), 1);
     }
 
@@ -2460,23 +2460,23 @@ mod tests {
         put_manifest(&mut host, &m);
 
         let mut idx = open(&path, &mut host);
-        assert_eq!(idx.len(), 0, "impronte di un'altra epoca: non ci si fida");
+        assert_eq!(idx.len(), 0, "fingerprints from another epoch: not trusted");
         // Il documento si reindicizza, e non si duplica: delete+add.
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "contenuto stabile")));
         assert_eq!(search(&idx, "stabile").len(), 1);
     }
 
     #[test]
-    fn lo_schema_non_cambia_senza_che_il_numero_salga() {
+    fn the_schema_not_changes_without_that_the_number_rises() {
         let (schema, _) = build_schema();
         assert_eq!(
             schema_fingerprint(&schema),
-            IMPRONTA_DELLO_SCHEMA,
-            "lo schema di tantivy è cambiato e SCHEMA_VERSION è ancora {SCHEMA_VERSION}. \
-             Chi riapre un vault indicizzato da una versione precedente non troverebbe \
-             una ricostruzione ma un indice incoerente, che è il danno che quel numero \
-             esiste per evitare. Alza SCHEMA_VERSION, aggiungi la riga di storia al suo \
-             commento, e riscrivi qui l'impronta nuova."
+            FINGERPRINT_OF_THE_SCHEMA,
+            "the tantivy schema has changed and SCHEMA_VERSION is still {SCHEMA_VERSION}. \
+             Anyone who reopens a vault indexed by a previous version would find not a \
+             rebuild but an incoherent index, which is the damage that number exists to \
+             prevent. Bump SCHEMA_VERSION, add the history line to its comment, and \
+             rewrite the new fingerprint here."
         );
     }
 
@@ -2490,7 +2490,7 @@ mod tests {
             idx.flush(&mut host).unwrap();
         }
         let mut m = manifest_of(&host);
-        m.schema_version = SCHEMA_VERSION.successiva();
+        m.schema_version = SCHEMA_VERSION.next();
         put_manifest(&mut host, &m);
 
         let idx = open(&path, &mut host);
@@ -2501,7 +2501,7 @@ mod tests {
 
     /// Una voce d'anagrafe come la costruisce il kernel: la specie, e
     /// l'impronta del **sorgente** se qualcuno ne ha già avuto i byte in mano.
-    fn voce(id: &str, source: Option<&str>) -> VaultEntry {
+    fn entry(id: &str, source: Option<&str>) -> VaultEntry {
         VaultEntry {
             id: DocId::new(id),
             kind: EntryKind::Document,
@@ -2513,42 +2513,42 @@ mod tests {
 
     /// Il giro dell'apertura come lo fa il kernel: prima si chiede cosa c'è
     /// già, poi si consegna ciò che non c'era.
-    fn giro(idx: &mut SearchIndex, vault: &[(&str, &str)]) -> Vec<String> {
+    fn round(idx: &mut SearchIndex, vault: &[(&str, &str)]) -> Vec<String> {
         let entries: Vec<VaultEntry> = vault
             .iter()
-            .map(|(id, source)| voce(id, Some(source)))
+            .map(|(id, source)| entry(id, Some(source)))
             .collect();
-        let gia = idx.up_to_date(&entries);
+        let already = idx.up_to_date(&entries);
         for (id, source) in vault {
-            if gia.iter().any(|d| d.as_str() == *id) {
+            if already.iter().any(|d| d.as_str() == *id) {
                 continue;
             }
             let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(id, source)));
         }
-        gia.iter().map(|d| d.to_string()).collect()
+        already.iter().map(|d| d.to_string()).collect()
     }
 
     #[test]
-    fn alla_prima_apertura_non_ce_niente_di_gia_a_posto() {
+    fn to_the_first_opening_not_exists_nothing_of_already_a_place() {
         let (_g, path) = tmp();
         let (idx, _host) = fresh(&path);
         assert!(
-            idx.up_to_date(&[voce("a.md", Some("contenuto"))])
+            idx.up_to_date(&[entry("a.md", Some("contenuto"))])
                 .is_empty(),
-            "un indice vuoto chiede tutto, che è il verso sicuro dello sbaglio"
+            "an empty index asks for everything, which is the safe direction to err in"
         );
     }
 
     #[test]
-    fn alla_riapertura_si_riconosce_cio_che_non_e_cambiato() {
+    fn to_the_reopening_is_recognizes_that_that_not_and_changed() {
         let (_g, path) = tmp();
         let mut host = MemoryHost::new();
         let vault = [("a.md", "il gatto"), ("b.md", "il cane")];
         {
             let mut idx = open(&path, &mut host);
             assert!(
-                giro(&mut idx, &vault).is_empty(),
-                "il primo giro non sa niente"
+                round(&mut idx, &vault).is_empty(),
+                "the first round knows nothing"
             );
             idx.flush(&mut host).unwrap();
         }
@@ -2563,18 +2563,18 @@ mod tests {
         );
 
         let mut idx = open(&path, &mut host);
-        let mut gia = giro(&mut idx, &vault);
-        gia.sort();
+        let mut already = round(&mut idx, &vault);
+        already.sort();
         assert_eq!(
-            gia,
+            already,
             ["a.md", "b.md"],
-            "e alla riapertura si risponde SENZA che nessuno abbia aperto un file"
+            "and on reopen it answers WITHOUT anyone having opened a file"
         );
-        assert_eq!(search(&idx, "gatto").len(), 1, "e l'indice è ancora quello");
+        assert_eq!(search(&idx, "gatto").len(), 1, "and the index is still the same one");
     }
 
     #[test]
-    fn una_fetta_non_annulla_le_dichiarazioni_di_quella_prima() {
+    fn a_slice_not_cancels_the_declarations_of_that_first() {
         // **Il giro dell'apertura come lo fa il kernel su un vault grande**: la
         // domanda arriva per fetta (`Workspace::plan_batch`), e fra la domanda e
         // la consegna il prestito passa di mano — dalla 0119 pianificare e
@@ -2594,8 +2594,8 @@ mod tests {
             let mut idx = open(&path, &mut host);
             for (id, source) in vault {
                 assert!(
-                    idx.up_to_date(&[voce(id, Some(source))]).is_empty(),
-                    "il primo giro non sa niente"
+                    idx.up_to_date(&[entry(id, Some(source))]).is_empty(),
+                    "the first round knows nothing"
                 );
             }
             for (id, source) in vault {
@@ -2607,40 +2607,40 @@ mod tests {
         assert_eq!(
             manifest_of(&host).sources.len(),
             2,
-            "le revisioni dei sorgenti sono due quante le fette: quella della \
-             prima non è stata annullata dalla domanda della seconda"
+            "source revisions are two as many as the slices: the first's wasn't \
+             cancelled by the second's question"
         );
 
         let idx = open(&path, &mut host);
-        let mut gia: Vec<String> = idx
+        let mut already: Vec<String> = idx
             .up_to_date(&[
-                voce("a.md", Some("il gatto")),
-                voce("b.md", Some("il cane")),
+                entry("a.md", Some("il gatto")),
+                entry("b.md", Some("il cane")),
             ])
             .iter()
             .map(|d| d.to_string())
             .collect();
-        gia.sort();
+        already.sort();
         assert_eq!(
-            gia,
+            already,
             ["a.md", "b.md"],
-            "e alla riapertura nessuno dei due va riletto"
+            "and on reopen neither needs re-reading"
         );
     }
 
     #[test]
-    fn cio_che_e_cambiato_ad_app_chiusa_non_risulta_a_posto() {
+    fn that_that_and_changed_ad_app_closed_not_results_a_place() {
         let (_g, path) = tmp();
         let mut host = MemoryHost::new();
         {
             let mut idx = open(&path, &mut host);
-            giro(&mut idx, &[("a.md", "il gatto"), ("b.md", "il cane")]);
+            round(&mut idx, &[("a.md", "il gatto"), ("b.md", "il cane")]);
             idx.flush(&mut host).unwrap();
         }
 
         let mut idx = open(&path, &mut host);
-        let gia = giro(&mut idx, &[("a.md", "il gatto"), ("b.md", "il criceto")]);
-        assert_eq!(gia, ["a.md"], "solo quello con la stessa impronta");
+        let already = round(&mut idx, &[("a.md", "il gatto"), ("b.md", "il criceto")]);
+        assert_eq!(already, ["a.md"], "only the one with the same fingerprint");
         assert_eq!(
             search(&idx, "criceto").len(),
             1,
@@ -2650,33 +2650,33 @@ mod tests {
     }
 
     #[test]
-    fn senza_impronta_dichiarata_non_si_risponde() {
+    fn without_fingerprint_declared_not_is_responds() {
         // Il kernel non calcola l'impronta di ciò che non deve leggere: chi non
         // sa di che revisione è un file non può sapere se è la sua.
         let (_g, path) = tmp();
         let mut host = MemoryHost::new();
         {
             let mut idx = open(&path, &mut host);
-            giro(&mut idx, &[("a.md", "il gatto")]);
+            round(&mut idx, &[("a.md", "il gatto")]);
             idx.flush(&mut host).unwrap();
         }
         let idx = open(&path, &mut host);
-        assert!(idx.up_to_date(&[voce("a.md", None)]).is_empty());
+        assert!(idx.up_to_date(&[entry("a.md", None)]).is_empty());
         // E ciò che non è un documento non è affar suo, per quanta impronta
         // porti: il kernel oggi manda solo documenti, ma leggerlo più stretto di
         // com'è scritto sarebbe un'assunzione, non una lettura.
-        let mut allegato = voce("a.md", Some("il gatto"));
-        allegato.kind = EntryKind::Asset;
-        assert!(idx.up_to_date(&[allegato]).is_empty());
+        let mut attachment = entry("a.md", Some("il gatto"));
+        attachment.kind = EntryKind::Asset;
+        assert!(idx.up_to_date(&[attachment]).is_empty());
     }
 
     #[test]
-    fn un_manifest_di_un_altra_epoca_si_porta_via_anche_le_impronte_dei_sorgenti() {
+    fn a_manifest_of_a_other_epoca_is_carries_via_also_the_fingerprints_of_the_sources() {
         let (_g, path) = tmp();
         let mut host = MemoryHost::new();
         {
             let mut idx = open(&path, &mut host);
-            giro(&mut idx, &[("a.md", "il gatto")]);
+            round(&mut idx, &[("a.md", "il gatto")]);
             idx.flush(&mut host).unwrap();
         }
         let mut m = manifest_of(&host);
@@ -2685,7 +2685,7 @@ mod tests {
 
         let idx = open(&path, &mut host);
         assert!(
-            idx.up_to_date(&[voce("a.md", Some("il gatto"))]).is_empty(),
+            idx.up_to_date(&[entry("a.md", Some("il gatto"))]).is_empty(),
             "il guardiano è uno solo: se il manifest è di un'altra epoca non se ne \
              crede nessuna parte — dire «ce l'ho» a sproposito farebbe SALTARE un \
              documento, cioè mentire in silenzio"
@@ -2693,7 +2693,7 @@ mod tests {
     }
 
     #[test]
-    fn una_scrittura_a_sessione_aperta_non_eredita_la_revisione_di_prima() {
+    fn a_write_a_session_open_not_inherits_the_revision_of_first() {
         // Il caso in cui la mappa mentirebbe: alla riapertura il kernel dichiara
         // le revisioni di *adesso*, poi l'utente salva, e l'indice riceve un
         // documento nuovo senza che nessuno gli abbia detto di che revisione è.
@@ -2704,12 +2704,12 @@ mod tests {
         let mut host = MemoryHost::new();
         {
             let mut idx = open(&path, &mut host);
-            giro(&mut idx, &[("a.md", "il gatto")]);
+            round(&mut idx, &[("a.md", "il gatto")]);
             idx.flush(&mut host).unwrap();
         }
         {
             let mut idx = open(&path, &mut host);
-            giro(&mut idx, &[("a.md", "il gatto")]);
+            round(&mut idx, &[("a.md", "il gatto")]);
             // Salvataggio a sessione aperta: nessuna domanda prima.
             let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "il cane")));
             idx.close(&mut host).unwrap();
@@ -2720,15 +2720,15 @@ mod tests {
         );
 
         let idx = open(&path, &mut host);
-        assert!(idx.up_to_date(&[voce("a.md", Some("il cane"))]).is_empty());
+        assert!(idx.up_to_date(&[entry("a.md", Some("il cane"))]).is_empty());
     }
 
     #[test]
-    fn un_documento_uscito_dal_vault_non_lascia_una_revisione_dietro() {
+    fn a_document_exited_from_the_vault_not_leaves_a_revision_behind() {
         let (_g, path) = tmp();
         let mut host = MemoryHost::new();
         let mut idx = open(&path, &mut host);
-        giro(&mut idx, &[("a.md", "il gatto"), ("b.md", "il cane")]);
+        round(&mut idx, &[("a.md", "il gatto"), ("b.md", "il cane")]);
 
         let _ = idx.on_documents_removed(std::slice::from_ref(&DocId::new("a.md")));
         let _ = idx.reconcile(&[DocId::new("b.md")]);
@@ -2742,7 +2742,7 @@ mod tests {
     }
 
     #[test]
-    fn una_modifica_che_non_cambia_il_modello_aggiorna_lo_stesso_la_revisione() {
+    fn a_edit_that_not_changes_the_model_updates_the_same_the_revision() {
         // Due sorgenti diversi che danno lo stesso modello: succede davvero —
         // una riga di frontmatter che nessuno indicizza, uno spazio in fondo.
         // Se la revisione non si aggiornasse, quel documento risulterebbe
@@ -2750,9 +2750,9 @@ mod tests {
         let (_g, path) = tmp();
         let mut host = MemoryHost::new();
         let mut idx = open(&path, &mut host);
-        idx.up_to_date(&[voce("a.md", Some("prima"))]);
+        idx.up_to_date(&[entry("a.md", Some("prima"))]);
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "testo identico")));
-        idx.up_to_date(&[voce("a.md", Some("dopo"))]);
+        idx.up_to_date(&[entry("a.md", Some("dopo"))]);
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "testo identico")));
         idx.flush(&mut host).unwrap();
 
@@ -2892,9 +2892,9 @@ mod tests {
     fn the_window_moves_over_the_matches_and_the_total_stays_the_total() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
-        for i in 0..5 {
+        for the in 0..5 {
             let _ = idx
-                .on_documents_indexed(std::slice::from_ref(&doc(&format!("nota{i}.md"), "gatto")));
+                .on_documents_indexed(std::slice::from_ref(&doc(&format!("nota{the}.md"), "gatto")));
         }
 
         let first = page_of(&idx, text("gatto"), Some(Page::new(0, 2)));
@@ -2923,13 +2923,13 @@ mod tests {
     }
 
     #[test]
-    fn moving_a_note_reindexes_it_even_with_the_same_content() {
+    fn moving_a_notes_reindexes_it_even_with_the_same_content() {
         // L'impronta include il path: da quando l'indice porta la cartella,
         // due note con lo stesso testo in cartelle diverse NON sono la stessa
         // cosa indicizzata.
         let a = doc("Progetti/nota.md", "identico");
         let b = doc("Archivio/nota.md", "identico");
-        assert_ne!(fingerprint(&a), fingerprint(&b));
+        assert_eq!(fingerprint(&a), fingerprint(&b));
     }
 
     /// Ciò che ha già una fonte di verità nel kernel non si duplica qui. Prima
@@ -2958,23 +2958,23 @@ mod tests {
 
     /// Quante ricerche fa ogni thread in una corsa. Abbastanza da coprire il
     /// costo di far partire i thread, abbastanza poche da non pesare sulla suite.
-    const RICERCHE: usize = 20;
+    const SEARCHES: usize = 20;
 
     /// Un vault abbastanza grande che una query costi più del lock che si sta
     /// misurando: sotto questa taglia la corsa racconterebbe il costo di
     /// `thread::spawn`, non quello della ricerca.
-    fn indice_pieno(path: &Utf8Path) -> (SearchIndex, MemoryHost) {
+    fn full_index(path: &Utf8Path) -> (SearchIndex, MemoryHost) {
         let (mut idx, mut host) = fresh(path);
-        for i in 0..200 {
-            let mut corpo = String::new();
+        for the in 0..200 {
+            let mut body = String::new();
             for s in 0..6 {
-                corpo.push_str(&format!(
+                body.push_str(&format!(
                     "## Sezione {s}\n\nUn paragrafo con parole ricorrenti come \
                      linguaggio, sistema, memoria, concorrenza e prestazione.\n\n"
                 ));
             }
             let _ = idx
-                .on_documents_indexed(std::slice::from_ref(&doc(&format!("Nota {i}.md"), &corpo)));
+                .on_documents_indexed(std::slice::from_ref(&doc(&format!("Nota {the}.md"), &body)));
         }
         // Committato **prima** di misurare: con scritture in sospeso la prima
         // query prenderebbe il lock del writer per davvero, e la corsa
@@ -2990,20 +2990,20 @@ mod tests {
     /// **il comportamento di prima** — un lock attorno all'intera `query`. Sta
     /// nello stesso binario e nella stessa corsa, come il banco della 0024, così
     /// non serve un ramo git per sapere cosa si sta guadagnando.
-    fn corsa(idx: &SearchIndex, thread: usize, in_fila: Option<&Mutex<()>>) -> f64 {
-        let inizio = std::time::Instant::now();
+    fn run(idx: &SearchIndex, thread: usize, in_queue: Option<&Mutex<()>>) -> f64 {
+        let start = std::time::Instant::now();
         std::thread::scope(|s| {
             for _ in 0..thread {
                 s.spawn(move || {
-                    for _ in 0..RICERCHE {
-                        let _fila = in_fila.map(|m| m.lock().expect("mutex"));
+                    for _ in 0..SEARCHES {
+                        let _fila = in_queue.map(|m| m.lock().expect("mutex"));
                         let hits = page_of(idx, text("concorrenza"), Some(Page::first(10)));
                         assert_eq!(hits.total, 200, "la ricerca deve trovare tutto il vault");
                     }
                 });
             }
         });
-        inizio.elapsed().as_secs_f64()
+        start.elapsed().as_secs_f64()
     }
 
     /// **La proprietà che dà il nome alla §8.4**: due ricerche possono essere in
@@ -3048,7 +3048,7 @@ mod tests {
     /// primo abitante.
     #[ignore = "misura un tempo, e in CI condivisa il tempo non è un segnale (§17.1)"]
     #[test]
-    fn due_ricerche_stanno_nell_indice_insieme() {
+    fn two_searches_are_in_the_index_together() {
         let n = std::thread::available_parallelism()
             .map_or(1, |n| n.get())
             .min(4);
@@ -3058,18 +3058,18 @@ mod tests {
         }
 
         let (_g, path) = tmp();
-        let (idx, _host) = indice_pieno(&path);
+        let (idx, _host) = full_index(&path);
 
         // Un giro a vuoto: la prima ricerca paga la cache dei segmenti, e
         // pagarla dentro una delle due colonne la falserebbe.
-        corsa(&idx, n, None);
-        let in_fila = Mutex::new(());
-        let seriale = corsa(&idx, n, Some(&in_fila));
-        let insieme = corsa(&idx, n, None);
+        run(&idx, n, None);
+        let in_queue = Mutex::new(());
+        let seriale = run(&idx, n, Some(&in_queue));
+        let together = run(&idx, n, None);
 
         assert!(
-            insieme < seriale * 0.75,
-            "{n} thread hanno impiegato {insieme:.3}s insieme contro {seriale:.3}s \
+            together < seriale * 0.75,
+            "{n} thread hanno impiegato {together:.3}s insieme contro {seriale:.3}s \
              in fila: la ricerca non scala, cioè c'è di nuovo un lock dentro \
              l'indice. È la §8.4, e il prestito condiviso del workspace non lo \
              attraversa."
@@ -3086,21 +3086,21 @@ mod tests {
     /// senza fine, che è esattamente ciò che succedeva riaprendo lo stesso vault
     /// prima che la sessione precedente cadesse.
     #[test]
-    fn un_indice_chiuso_lascia_la_cartella_a_chi_arriva_dopo() {
+    fn a_index_closed_leaves_the_folder_a_who_arrives_after() {
         let (_g, path) = tmp();
-        let (mut primo, mut host) = fresh(&path);
-        let _ = primo.on_documents_indexed(std::slice::from_ref(&doc("a.md", "ciao")));
-        primo.close(&mut host).expect("chiusura");
+        let (mut first, mut host) = fresh(&path);
+        let _ = first.on_documents_indexed(std::slice::from_ref(&doc("a.md", "ciao")));
+        first.close(&mut host).expect("chiusura");
 
-        let secondo = SearchIndex::open_dir(&path);
+        let second = SearchIndex::open_dir(&path);
         assert!(
-            secondo.is_ok(),
+            second.is_ok(),
             "la cartella è libera mentre il primo indice è ancora in vita: {:?}",
-            secondo.err()
+            second.err()
         );
         // E richiudere non è un errore: è un no-op, come cancellare un blob che
         // non c'è.
-        primo.close(&mut host).expect("chiudere due volte");
+        first.close(&mut host).expect("chiudere due volte");
     }
 
     #[test]
@@ -3114,7 +3114,7 @@ mod tests {
     /// La §21.2: `arch` trova *architettura* prima che la parola sia finita, e
     /// **solo** l'ultimo termine è un prefisso.
     #[test]
-    fn lultimo_termine_incompleto_e_un_prefisso_e_gli_altri_no() {
+    fn latest_term_incomplete_and_a_prefix_and_the_other_no() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
@@ -3170,19 +3170,19 @@ mod tests {
     /// La §21.1: un heading pesa più del corpo, e `TextField::Heading` cerca
     /// **solo** lì.
     #[test]
-    fn un_heading_pesa_piu_del_corpo_ed_e_un_campo_a_se() {
+    fn a_heading_weighs_more_of_the_body_and_and_a_field_a_if() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
         // La stessa parola: in un heading di una nota, nel corpo dell'altra.
-        let mut con_sezione = doc("sezione.md", "Concorrenza\n\nqualche riga qui");
-        con_sezione.outline = vec![fub_abi::model::Heading {
+        let mut with_section = doc("sezione.md", "Concorrenza\n\nqualche riga qui");
+        with_section.outline = vec![fub_abi::model::Heading {
             level: 2,
             text: "Concorrenza".into(),
             slug: "concorrenza".into(),
             span: Span::new(0, 14),
             explicit_anchor: None,
         }];
-        let _ = idx.on_documents_indexed(std::slice::from_ref(&con_sezione));
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&with_section));
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
             "citata.md",
             "un accenno alla concorrenza e poi si passa oltre",
@@ -3195,11 +3195,11 @@ mod tests {
         assert_eq!(hits[0].doc, DocId::new("sezione.md"));
 
         // E il campo è a sé: cercando **solo** negli heading resta una sola.
-        let solo_heading = clause(vec![lit(QueryPredicate::Text(TextQuery {
+        let only_heading = clause(vec![lit(QueryPredicate::Text(TextQuery {
             fields: vec![TextField::Heading],
             ..TextQuery::terms("concorrenza")
         }))]);
-        let ids: Vec<String> = page_of(&idx, solo_heading, None)
+        let ids: Vec<String> = page_of(&idx, only_heading, None)
             .items
             .into_iter()
             .map(|m| m.doc.0)
@@ -3210,18 +3210,18 @@ mod tests {
     /// La tolleranza è **dicibile** e non ancora onorata, e il verso del
     /// silenzio è quello sicuro: chiedere `typos` non allarga niente.
     #[test]
-    fn chiedere_la_tolleranza_non_rende_tollerante_di_nascosto() {
+    fn ask_the_tolerance_not_makes_tolerant_of_hidden() {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
         let _ =
             idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "note di architettura")));
 
-        let con_refuso = clause(vec![lit(QueryPredicate::Text(TextQuery {
+        let with_typo = clause(vec![lit(QueryPredicate::Text(TextQuery {
             tolerance: TextTolerance::Typos,
             ..TextQuery::terms("architettra")
         }))]);
         assert!(
-            page_of(&idx, con_refuso, None).items.is_empty(),
+            page_of(&idx, with_typo, None).items.is_empty(),
             "`typos` è dicibile: chi non lo onora risponde come per `exact`, e \
              restringere è il verso innocuo dello sbaglio"
         );

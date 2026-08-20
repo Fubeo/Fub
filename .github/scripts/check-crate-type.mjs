@@ -44,7 +44,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { crateDelWorkspace } from "./membri-del-workspace.mjs";
+import { crateDelWorkspace } from "./workspace-members.mjs";
 
 // Le forme che non costano un link in più a nessuno: `rlib` è ciò che un altro
 // crate Rust linka, `proc-macro` è la forma obbligata di una macro procedurale
@@ -120,7 +120,7 @@ function crateTypeDi(file) {
 function main() {
   const radice = path.resolve(process.argv[2] ?? ".");
   // Stesso elenco, stessa funzione: chi sono i crate lo dice `[workspace]
-  // members`. È il terzo chiamante di `membri-del-workspace.mjs`, e il verso
+  // members`. È il terzo chiamante di `workspace-members.mjs`, e il verso
   // «una cartella che nessun membro dichiara» lo eredita senza scriverlo.
   const { file, violazioni: sullElenco } = crateDelWorkspace(radice);
   const violazioni = [...sullElenco];

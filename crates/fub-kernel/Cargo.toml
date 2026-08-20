@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Core agnostico di Fub: vault, grafo dei link, registry dei provider, event bus. NON dipende da markdown, wasm o tauri."
+description = "Agnostic core of Fub: vault, link graph, provider registry, event bus. No dependency on markdown, wasm, or tauri."
 
 [dependencies]
 fub-abi = { workspace = true }

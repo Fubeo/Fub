@@ -41,13 +41,13 @@
 //! buttarli: si ferma e lo dice.
 
 use fub_abi::model::{
-    custom_kind, custom_kind::Carico, Block, ColumnAlign, DocumentModel, Inline, LinkTarget,
+    custom_kind, custom_kind::Payload, Block, ColumnAlign, DocumentModel, Inline, LinkTarget,
     TableRow,
 };
 use fub_abi::rules::tag::scan_tags;
 use fub_abi::FormatError;
 
-use crate::util::{disescapa, fila_massima};
+use crate::util::{longest_run, unescape_char};
 
 /// # Ciò che non si sa scrivere **risale**, non sparisce
 ///
@@ -76,9 +76,9 @@ pub fn serialize(model: &DocumentModel) -> Result<String, FormatError> {
             // al giro dopo.
             out.push('\n');
         } else {
-            let yaml = serde_yaml_ng::to_string(&model.frontmatter.0).map_err(|e| {
+            let yaml = serde_yaml_ng::to_string(&model.frontmatter.0).map_err(|and| {
                 FormatError::Serialize(format!(
-                    "il frontmatter non si è potuto scrivere in YAML: {e}"
+                    "il frontmatter non si è potuto scrivere in YAML: {and}"
                 ))
             })?;
             out.push_str(&yaml);
@@ -90,8 +90,8 @@ pub fn serialize(model: &DocumentModel) -> Result<String, FormatError> {
             out.push('\n');
         }
     }
-    for (i, block) in model.body.iter().enumerate() {
-        if i > 0 {
+    for (the, block) in model.body.iter().enumerate() {
+        if the > 0 {
             out.push('\n');
         }
         write_block(block, &mut out)?;
@@ -104,12 +104,11 @@ pub fn serialize(model: &DocumentModel) -> Result<String, FormatError> {
 /// Sta in una funzione sola perché la frase è la stessa in cinque punti, e
 /// perché è **la** frase di questo modulo: dice cosa non si è scritto e perché
 /// nessuno l'ha scritto al posto suo.
-fn non_esprimibile(cosa: &str, kind: &str) -> FormatError {
+fn unsupported(what: &str, kind: &str) -> FormatError {
     FormatError::Serialize(format!(
-        "questo formato non sa scrivere {cosa} `{kind}`: i delimitatori che lo \
-         producono appartengono alla regola che l'ha agganciato, non al provider. \
-         Scriverne solo il contenuto cancellerebbe una sintassi dal file, e \
-         scrivere niente cancellerebbe anche il contenuto."
+        "this format cannot write {what} `{kind}`: the delimiters that produce it belong to the syntax rule that hooked it, not the provider. \
+         Writing only the content would delete a syntax from the file, and \
+         writing nothing would delete the content as well."
     ))
 }
 
@@ -120,14 +119,14 @@ fn non_esprimibile(cosa: &str, kind: &str) -> FormatError {
 /// ricostruibile da nient'altro**, ed è lo stesso caso del frontmatter
 /// verbatim: il giro si ferma qui invece di produrre una sorgente amputata che
 /// sembra intera.
-fn attr_richiesto<'a>(
+fn required_attr<'a>(
     attrs: &'a serde_json::Value,
-    chiave: &str,
+    key: &str,
     kind: &str,
 ) -> Result<&'a str, FormatError> {
-    attrs.get(chiave).and_then(|v| v.as_str()).ok_or_else(|| {
+    attrs.get(key).and_then(|v| v.as_str()).ok_or_else(|| {
         FormatError::Serialize(format!(
-            "un nodo `{kind}` senza `attrs.{chiave}` non ha una sorgente da riscrivere"
+            "a `{kind}` node without `attrs.{key}` has no source to rewrite"
         ))
     })
 }
@@ -152,7 +151,7 @@ fn attr_richiesto<'a>(
 /// | blocco | usciva | cosa succedeva al giro dopo |
 /// |---|---|---|
 /// | tabella | `\| 1 \| 2 \| ^tab` | la cella in più si butta: **l'ancora sparisce** |
-/// | codice | ``` ``` ^cod ``` | il recinto non chiude più: `^cod` **entra nel codice** |
+/// | codice | ``` ``` ^cod ``` | il recinto non chiude più: `^cod` **enter nel codice** |
 /// | riga | `--- ^hr` | non è più una riga orizzontale: diventa un paragrafo |
 /// | elenco, citazione, callout | `- b ^lis`, `> citata ^cit` | l'id resta, ma indirizza il **figlio** invece del contenitore |
 ///
@@ -178,7 +177,7 @@ fn write_anchor(anchor: &Option<String>, out: &mut String) {
 /// L'ancora esplicita su **riga propria**, dopo una riga vuota: la forma con
 /// cui si indirizza un blocco che in coda non ha del testo.
 ///
-/// È la stessa forma che il parser dichiara — «l'ancora su riga propria (`^abc`
+/// È la stessa forma che il parser declare — «l'ancora su riga propria (`^abc`
 /// da solo, subito dopo un blocco) è la sola forma con cui si indirizza un
 /// contenitore» — e che rilegge da `lone_anchor`: un paragrafo di sola ancora
 /// non resta un blocco, si attacca a quello che lo precede.
@@ -187,7 +186,7 @@ fn write_anchor(anchor: &Option<String>, out: &mut String) {
 /// elenco il `^abc` è una continuazione pigra dell'ultima voce e finisce
 /// *dentro* di essa. Con la riga vuota è un blocco a sé, ed è la condizione da
 /// cui `lone_anchor` lo riconosce.
-fn write_anchor_a_capo(anchor: &Option<String>, out: &mut String) {
+fn write_standalone_anchor(anchor: &Option<String>, out: &mut String) {
     let Some(id) = anchor else {
         return;
     };
@@ -214,10 +213,10 @@ fn write_anchor_a_capo(anchor: &Option<String>, out: &mut String) {
 ///
 /// Sta in una funzione perché la regola è una: chi aggiunge il sesto
 /// contenitore la eredita chiamando questa invece di riscrivere il `for`.
-fn blocchi_in_stringa(blocks: &[Block]) -> Result<String, FormatError> {
+fn blocks_to_string(blocks: &[Block]) -> Result<String, FormatError> {
     let mut inner = String::new();
-    for (i, b) in blocks.iter().enumerate() {
-        if i > 0 {
+    for (the, b) in blocks.iter().enumerate() {
+        if the > 0 {
             inner.push('\n');
         }
         write_block(b, &mut inner)?;
@@ -274,16 +273,16 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             // **Il numero di partenza è quello del documento**, non `1`: una
             // lista che comincia da 3 riprende una lista interrotta, e
             // riportarla a 1 fa dire al file riscritto una cosa diversa da
-            // quella che il file letto diceva. `1` resta il ripiego per un
+            // quella che il file read_value diceva. `1` resta il ripiego per un
             // ordinato che arriva da un generatore senza numero.
-            let primo = start.unwrap_or(1);
-            for (i, item) in items.iter().enumerate() {
-                let marcatore = if *ordered {
-                    format!("{}. ", primo as u64 + i as u64)
+            let first = start.unwrap_or(1);
+            for (the, item) in items.iter().enumerate() {
+                let marker = if *ordered {
+                    format!("{}. ", first as u64 + the as u64)
                 } else {
                     "- ".to_string()
                 };
-                out.push_str(&marcatore);
+                out.push_str(&marker);
                 // Il marcatore si riscrive col **simbolo che aveva**: uno stato
                 // personalizzato (`[/]`, `[-]`) che tornasse `[x]` o `[ ]` sarebbe
                 // una perdita silenziosa, e la lista degli stati non è chiusa.
@@ -292,26 +291,26 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                     out.push(t.symbol.unwrap_or(' '));
                     out.push_str("] ");
                 }
-                let inner = blocchi_in_stringa(&item.blocks)?;
+                let inner = blocks_to_string(&item.blocks)?;
                 // Le righe dopo la prima si rientrano sotto il marcatore. Senza
                 // questo, un elenco annidato usciva **appiattito** — `- a` e
                 // `- b` fratelli dove `b` era figlio di `a` — e la struttura che
                 // l'utente aveva scritto spariva dal file senza che niente
                 // fallisse: la stessa specie di perdita del resto del modulo,
                 // con la forma al posto del testo.
-                let rientro = " ".repeat(marcatore.len());
-                for (n, riga) in inner.trim_end().lines().enumerate() {
+                let indent = " ".repeat(marker.len());
+                for (n, row) in inner.trim_end().lines().enumerate() {
                     if n > 0 {
                         out.push('\n');
-                        if !riga.is_empty() {
-                            out.push_str(&rientro);
+                        if !row.is_empty() {
+                            out.push_str(&indent);
                         }
                     }
-                    out.push_str(riga);
+                    out.push_str(row);
                 }
                 out.push('\n');
             }
-            write_anchor_a_capo(anchor, out);
+            write_standalone_anchor(anchor, out);
         }
         Block::Table {
             head,
@@ -328,7 +327,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                 .unwrap_or(0);
             let write_row = |row: &TableRow, out: &mut String| -> Result<(), FormatError> {
                 out.push('|');
-                for i in 0..columns {
+                for the in 0..columns {
                     // **La cella si scrive a parte per via del `|`.** In GFM la
                     // barra verticale è il delimitatore, e l'unico modo di
                     // averne una *dentro* una cella è `\|`: il testo la porta
@@ -343,20 +342,20 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                     // perché `scrivi_testo` legge lì se è a inizio riga: un
                     // buffer vuoto direbbe di sì, e un `-` in testa alla cella
                     // si prenderebbe una barra rovescia che non gli serve.
-                    let mut cella = String::from(" ");
-                    if let Some(c) = row.cells.get(i) {
-                        write_inlines(&c.inlines, &mut cella)?;
+                    let mut cell = String::from(" ");
+                    if let Some(c) = row.cells.get(the) {
+                        write_inlines(&c.inlines, &mut cell)?;
                     }
                     // La barra si escapa mentre si copia, a segmenti: una
                     // seconda stringa intera per il replace sarebbe una
                     // copia in più per ogni cella di ogni riga.
-                    let mut pezzi = cella.split('|');
-                    if let Some(primo) = pezzi.next() {
-                        out.push_str(primo);
+                    let mut pieces = cell.split('|');
+                    if let Some(first) = pieces.next() {
+                        out.push_str(first);
                     }
-                    for resto in pezzi {
+                    for piece in pieces {
                         out.push_str("\\|");
-                        out.push_str(resto);
+                        out.push_str(piece);
                     }
                     out.push_str(" |");
                 }
@@ -371,8 +370,8 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                 None => write_row(&TableRow { cells: Vec::new() }, out)?,
             }
             out.push('|');
-            for i in 0..columns {
-                out.push_str(match align.get(i).copied().unwrap_or(ColumnAlign::None) {
+            for the in 0..columns {
+                out.push_str(match align.get(the).copied().unwrap_or(ColumnAlign::None) {
                     ColumnAlign::None => " --- |",
                     ColumnAlign::Left => " :-- |",
                     ColumnAlign::Center => " :-: |",
@@ -383,7 +382,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             for r in rows {
                 write_row(r, out)?;
             }
-            write_anchor_a_capo(anchor, out);
+            write_standalone_anchor(anchor, out);
         }
         Block::CodeBlock {
             lang,
@@ -394,10 +393,10 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             // Il recinto è lungo almeno tre, e più lungo della più lunga fila di
             // backtick che il codice contiene: un blocco che ne contiene uno da
             // tre si richiuderebbe a metà, e la seconda metà tornerebbe prosa.
-            let fence = "`".repeat(3.max(fila_massima(code, '`') + 1));
+            let fence = "`".repeat(3.max(longest_run(code, '`') + 1));
             out.push_str(&fence);
-            if let Some(l) = lang {
-                out.push_str(l);
+            if let Some(the) = lang {
+                out.push_str(the);
             }
             out.push('\n');
             out.push_str(code);
@@ -406,14 +405,14 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             }
             out.push_str(&fence);
             out.push('\n');
-            write_anchor_a_capo(anchor, out);
+            write_standalone_anchor(anchor, out);
         }
         Block::Quote {
             blocks,
             anchor,
             span: _,
         } => {
-            let inner = blocchi_in_stringa(blocks)?;
+            let inner = blocks_to_string(blocks)?;
             for line in inner.trim_end().lines() {
                 // `"> "` su una riga vuota lascerebbe uno spazio in coda, che è
                 // ciò che ogni linter di questo repo toglie a mano.
@@ -421,11 +420,11 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                 out.push_str(line);
                 out.push('\n');
             }
-            write_anchor_a_capo(anchor, out);
+            write_standalone_anchor(anchor, out);
         }
         Block::ThematicBreak { anchor, span: _ } => {
             out.push_str("---\n");
-            write_anchor_a_capo(anchor, out);
+            write_standalone_anchor(anchor, out);
         }
         Block::Custom {
             custom_kind,
@@ -435,7 +434,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             span: _,
         } => {
             write_custom_block(custom_kind, attrs, blocks, out)?;
-            write_anchor_a_capo(anchor, out);
+            write_standalone_anchor(anchor, out);
         }
         Block::ReferenceDefinition {
             label,
@@ -454,7 +453,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
             out.push_str("]: ");
             // La destinazione nuda con spazi o parentesi andrebbe in frantumi
             // al ri-parse: la forma `<…>` resta la stessa destinazione.
-            scrivi_destinazione(url, out);
+            write_dest(url, out);
             if let Some(t) = title {
                 out.push_str(" \"");
                 for c in t.chars() {
@@ -466,7 +465,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                 out.push('"');
             }
             out.push('\n');
-            write_anchor_a_capo(anchor, out);
+            write_standalone_anchor(anchor, out);
         }
     }
     Ok(())
@@ -507,8 +506,8 @@ fn write_custom_block(
 ) -> Result<(), FormatError> {
     // --- la metà che è di markdown ------------------------------------------
     if kind == custom_kind::FOOTNOTE_DEFINITION {
-        let label = attr_richiesto(attrs, "label", kind)?;
-        let inner = blocchi_in_stringa(blocks)?;
+        let label = required_attr(attrs, "label", kind)?;
+        let inner = blocks_to_string(blocks)?;
         // **Una definizione su più blocchi resta su più blocchi.** Prima era
         // `inner.trim()` dentro una riga sola: i paragrafi, gli elenchi e i
         // blocchi di codice della definizione uscivano fusi in una riga, e ciò
@@ -517,13 +516,13 @@ fn write_custom_block(
         // del rientro sotto il marcatore di una voce d'elenco, e senza, la
         // seconda riga esce dalla definizione e torna un blocco del documento.
         out.push_str(&format!("[^{label}]:"));
-        for (n, riga) in inner.trim_end().lines().enumerate() {
+        for (n, row) in inner.trim_end().lines().enumerate() {
             if n > 0 {
                 out.push('\n');
             }
-            if !riga.is_empty() {
+            if !row.is_empty() {
                 out.push_str(if n == 0 { " " } else { "    " });
-                out.push_str(riga);
+                out.push_str(row);
             }
         }
         out.push('\n');
@@ -543,7 +542,7 @@ fn write_custom_block(
         } else {
             out.push_str(&format!("> [!{ty}] {title}\n"));
         }
-        let inner = blocchi_in_stringa(blocks)?;
+        let inner = blocks_to_string(blocks)?;
         for line in inner.trim_end().lines() {
             out.push_str(if line.is_empty() { ">" } else { "> " });
             out.push_str(line);
@@ -554,7 +553,7 @@ fn write_custom_block(
     if kind == custom_kind::DEFINITION_DESCRIPTION {
         // `: ` è la sintassi che la rende una descrizione. Senza, la riga
         // tornava un paragrafo qualunque e la definition list si scioglieva.
-        let inner = blocchi_in_stringa(blocks)?;
+        let inner = blocks_to_string(blocks)?;
         for line in inner.trim_end().lines() {
             out.push_str(": ");
             out.push_str(line);
@@ -564,18 +563,18 @@ fn write_custom_block(
     }
 
     // --- la metà che è del contratto ----------------------------------------
-    match custom_kind::carico(kind) {
-        Some(Carico::Sorgente(chiave)) => {
+    match custom_kind::payload(kind) {
+        Some(Payload::Source(key)) => {
             // Se il testo non c'è non si può ricostruire da nient'altro: gli
             // `attrs` sono tutto ciò che questo blocco è.
-            let sorgente = attr_richiesto(attrs, chiave, kind)?;
-            out.push_str(sorgente);
-            if !sorgente.ends_with('\n') {
+            let source = required_attr(attrs, key, kind)?;
+            out.push_str(source);
+            if !source.ends_with('\n') {
                 out.push('\n');
             }
         }
-        Some(Carico::Figli) => out.push_str(&blocchi_in_stringa(blocks)?),
-        Some(Carico::Corpo(_)) | None => return Err(non_esprimibile("il blocco", kind)),
+        Some(Payload::Children) => out.push_str(&blocks_to_string(blocks)?),
+        Some(Payload::Body(_)) | None => return Err(unsupported("the block", kind)),
     }
     Ok(())
 }
@@ -599,7 +598,7 @@ fn write_inlines(inlines: &[Inline], out: &mut String) -> Result<(), FormatError
 /// firma permettesse di scrivere.
 fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
     match inline {
-        Inline::Text(s) => scrivi_testo(s, out),
+        Inline::Text(s) => write_text(s, out),
         Inline::Emph(children) => {
             out.push('*');
             write_inlines(children, out)?;
@@ -638,7 +637,7 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
             // CommonMark. Prima era un backtick fisso: `` `a ` b` `` usciva
             // come codice `a` seguito da del testo, cioè il contenuto
             // dell'utente riscritto in qualcos'altro.
-            let fence = "`".repeat(fila_massima(s, '`') + 1);
+            let fence = "`".repeat(longest_run(s, '`') + 1);
             out.push_str(&fence);
             let padding = s.starts_with('`') || s.ends_with('`');
             if padding {
@@ -668,7 +667,7 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
             // `unwrap_or` qui riscriverebbe il richiamo di una nota **con
             // l'etichetta di un'altra**, e saltarlo lo cancellerebbe: nessuna
             // delle due è una scrittura.
-            let label = attr_richiesto(attrs, "label", custom_kind)?;
+            let label = required_attr(attrs, "label", custom_kind)?;
             out.push_str(&format!("[^{label}]"));
         }
         // Il resto lo dice il contratto, come per i blocchi: un inline che
@@ -679,11 +678,11 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
             custom_kind,
             attrs,
             span: _,
-        } => match custom_kind::carico(custom_kind) {
-            Some(Carico::Sorgente(chiave)) => {
-                out.push_str(attr_richiesto(attrs, chiave, custom_kind)?)
+        } => match custom_kind::payload(custom_kind) {
+            Some(Payload::Source(key)) => {
+                out.push_str(required_attr(attrs, key, custom_kind)?)
             }
-            _ => return Err(non_esprimibile("l'inline", custom_kind)),
+            _ => return Err(unsupported("the inline", custom_kind)),
         },
     }
     Ok(())
@@ -728,7 +727,7 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
 /// La `&` resta fuori di proposito: escaparla riscriverebbe come letterale
 /// un'entità che il documento aveva (`&amp;` → `\&amp;`), che è la stessa
 /// specie di danno con il segno cambiato.
-fn scrivi_testo(s: &str, out: &mut String) {
+fn write_text(s: &str, out: &mut String) {
     // L'insieme dei punti di tag, come vettore: `scan_tags` li torna in
     // ordine di sorgente, e la membership di un indice crescente su un vettore
     // ordinato è una ricerca binaria senza pagare l'hash di ogni domanda.
@@ -740,39 +739,39 @@ fn scrivi_testo(s: &str, out: &mut String) {
     tag.sort_unstable();
     // Nessuno ha ancora scritto su questa riga: un delimitatore di blocco qui
     // aprirebbe un blocco.
-    let mut inizio_riga = out.is_empty() || out.ends_with('\n');
+    let mut start_row = out.is_empty() || out.ends_with('\n');
     // …e finora ha scritto solo cifre, cioè il `.` che segue aprirebbe un
     // elenco numerato.
-    let mut solo_cifre = inizio_riga;
-    let mut i = 0;
-    while i < s.len() {
-        let c = s[i..].chars().next().expect("i è un confine di carattere");
-        let dopo = s[i + c.len_utf8()..].chars().next();
-        let prima = s[..i].chars().next_back();
+    let mut digits_only = start_row;
+    let mut the = 0;
+    while the < s.len() {
+        let c = s[the..].chars().next().expect("i è un confine di carattere");
+        let after = s[the + c.len_utf8()..].chars().next();
+        let before = s[..the].chars().next_back();
         let scappa = match c {
             '\\' | '[' | ']' | '*' | '`' => true,
             // In testa alla riga si escapa **sempre**: `#`, `##`, `###` sono
             // tutti heading, e la regola dei tag non prende `##` (nome vuoto).
-            '#' => inizio_riga || tag.binary_search(&i).is_ok(),
+            '#' => start_row || tag.binary_search(&the).is_ok(),
             '_' => {
-                !(prima.is_some_and(char::is_alphanumeric)
-                    && dopo.is_some_and(char::is_alphanumeric))
+                !(before.is_some_and(char::is_alphanumeric)
+                    && after.is_some_and(char::is_alphanumeric))
             }
-            '<' => dopo.is_some_and(|d| d.is_alphanumeric() || "/!?".contains(d)),
-            '~' | '=' | '%' => dopo == Some(c),
-            '$' => dopo.is_some_and(|d| !d.is_whitespace()),
-            '^' => prima.is_none_or(char::is_whitespace) && dopo.is_some_and(char::is_alphanumeric),
-            '>' | '-' | '+' | ':' | '|' => inizio_riga,
-            '.' | ')' => solo_cifre && i > 0,
+            '<' => after.is_some_and(|d| d.is_alphanumeric() || "/!?".contains(d)),
+            '~' | '=' | '%' => after == Some(c),
+            '$' => after.is_some_and(|d| !d.is_whitespace()),
+            '^' => before.is_none_or(char::is_whitespace) && after.is_some_and(char::is_alphanumeric),
+            '>' | '-' | '+' | ':' | '|' => start_row,
+            '.' | ')' => digits_only && the > 0,
             _ => false,
         };
         if scappa {
             out.push('\\');
         }
         out.push(c);
-        inizio_riga = inizio_riga && c.is_whitespace();
-        solo_cifre = solo_cifre && c.is_ascii_digit();
-        i += c.len_utf8();
+        start_row = start_row && c.is_whitespace();
+        digits_only = digits_only && c.is_ascii_digit();
+        the += c.len_utf8();
     }
 }
 
@@ -790,8 +789,8 @@ fn scrivi_testo(s: &str, out: &mut String) {
 /// Dentro le angolari si escapano `<`, `>` e `\`, cioè i tre soli caratteri che
 /// chiuderebbero o storcerebbero la parentesi. Le parentesi tonde **bilanciate**
 /// restano nude: sono legali così, ed è la forma che l'utente ha scritto.
-fn scrivi_destinazione(url: &str, out: &mut String) {
-    if destinazione_nuda(url) {
+fn write_dest(url: &str, out: &mut String) {
+    if bare_dest(url) {
         out.push_str(url);
         return;
     }
@@ -813,26 +812,26 @@ fn scrivi_destinazione(url: &str, out: &mut String) {
 /// cancellazione silenziosa. Ha ragione a leggerlo così ovunque scriva, e qui
 /// non scrive — ma un presidio che deve distinguere i due casi si guarda le
 /// eccezioni invece del file, e allora conviene non avere il braccio.
-fn destinazione_nuda(url: &str) -> bool {
+fn bare_dest(url: &str) -> bool {
     if url.is_empty() {
         return false;
     }
-    let mut profondita: i32 = 0;
+    let mut depth: i32 = 0;
     for c in url.chars() {
         if matches!(c, '<' | '>' | '\\') || c.is_whitespace() || c.is_control() {
             return false;
         }
         if c == '(' {
-            profondita += 1;
+            depth += 1;
         }
         if c == ')' {
-            profondita -= 1;
-            if profondita < 0 {
+            depth -= 1;
+            if depth < 0 {
                 return false;
             }
         }
     }
-    profondita == 0
+    depth == 0
 }
 
 fn write_link(
@@ -870,7 +869,7 @@ fn write_link(
                 write_inlines(inlines, &mut lbl)?;
                 // Dentro le due parentesi non c'è escape: l'alias è testo nudo
                 // fino a `]]` (vedi [`disescapa`]).
-                let lbl = disescapa(&lbl);
+                let lbl = unescape_char(&lbl);
                 // **L'alias si scrive perché c'è.** Il confronto col bersaglio
                 // stava qui — «se dice la stessa cosa non serve» — e toglieva
                 // dal file il `|Nota` di un `[[Nota|Nota]]` che l'utente aveva
@@ -891,7 +890,7 @@ fn write_link(
                 write_inlines(inlines, out)?;
             }
             out.push_str("](");
-            scrivi_destinazione(url, out);
+            write_dest(url, out);
             out.push(')');
         }
     }

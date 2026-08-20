@@ -21,15 +21,15 @@
 /// `serialize` dal codice di produzione, e aveva ragione a fermarsi — prendere
 /// una funzione da lì per riusarla è il primo centimetro della strada che quel
 /// presidio esiste per chiudere.
-pub fn fila_massima(s: &str, c: char) -> usize {
+pub fn longest_run(s: &str, c: char) -> usize {
     let mut max = 0;
-    let mut corrente = 0;
+    let mut current = 0;
     for ch in s.chars() {
         if ch == c {
-            corrente += 1;
-            max = max.max(corrente);
+            current += 1;
+            max = max.max(current);
         } else {
-            corrente = 0;
+            current = 0;
         }
     }
     max
@@ -47,15 +47,15 @@ pub fn fila_massima(s: &str, c: char) -> usize {
 /// cambiava ciò che si legge a schermo — e, siccome l'alias si scrive solo
 /// quando dice qualcosa di diverso dal bersaglio, faceva anche nascere un `|`
 /// dove non ce n'era: `[[#Sezione]]` usciva `[[#Sezione|\#Sezione]]`.
-pub fn disescapa(s: &str) -> String {
+pub fn unescape_char(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
         if c == '\\' {
-            let mut avanti = chars.clone();
-            if let Some(n) = avanti.next().filter(|n| n.is_ascii_punctuation()) {
+            let mut next = chars.clone();
+            if let Some(n) = next.next().filter(|n| n.is_ascii_punctuation()) {
                 out.push(n);
-                chars = avanti;
+                chars = next;
                 continue;
             }
         }
@@ -69,9 +69,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn una_fila_si_misura_anche_quando_e_zero() {
-        assert_eq!(fila_massima("", '`'), 0);
-        assert_eq!(fila_massima("a`b``c```d", '`'), 3);
-        assert_eq!(fila_massima("```", '`'), 3);
+    fn longest_run_is_zero_when_input_is_empty() {
+        assert_eq!(longest_run("", '`'), 0);
+        assert_eq!(longest_run("a`b``c```d", '`'), 3);
+        assert_eq!(longest_run("```", '`'), 3);
     }
 }

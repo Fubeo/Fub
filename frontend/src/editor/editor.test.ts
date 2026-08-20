@@ -28,7 +28,7 @@ function editor(): { ed: Editor; view: () => EditorView; parent: HTMLElement } {
     onSelectionChange: () => {},
     onOpenWikilink: () => {},
     onSearchTag: () => {},
-    completions: { cercaNote: async () => [], listTags: async () => [] },
+    completions: { searchNotes: async () => [], listTags: async () => [] },
   });
   return {
     ed,
@@ -43,8 +43,8 @@ function editor(): { ed: Editor; view: () => EditorView; parent: HTMLElement } {
 
 /// Una modifica come la fa l'utente: una transazione normale, che è ciò che la
 /// cronologia registra.
-function scrive(view: EditorView, testo: string): void {
-  view.dispatch({ changes: { from: 0, to: 0, insert: testo } });
+function writes(view: EditorView, text: string): void {
+  view.dispatch({ changes: { from: 0, to: 0, insert: text } });
 }
 
 describe("setDoc", () => {
@@ -52,7 +52,7 @@ describe("setDoc", () => {
     const { ed, view } = editor();
 
     ed.setDoc("prima nota");
-    scrive(view(), "X ");
+    writes(view(), "X ");
     expect(ed.getDoc()).toBe("X prima nota");
 
     // Cambio nota: da qui in poi la cronologia dell'altra non deve esistere
@@ -74,7 +74,7 @@ describe("setDoc", () => {
   it("una modifica dell'utente resta annullabile", () => {
     const { ed, view } = editor();
     ed.setDoc("base");
-    scrive(view(), "X");
+    writes(view(), "X");
     expect(ed.getDoc()).toBe("Xbase");
     expect(undo(view())).toBe(true);
     expect(ed.getDoc()).toBe("base");
@@ -86,14 +86,14 @@ describe("setDoc", () => {
     // nota rimetterebbe la modalità Sorgente in Live Preview.
     const { ed, view } = editor();
     ed.setLivePreview(false);
-    const senzaPreview = view().state.facet(EditorView.decorations).length;
+    const withoutPreview = view().state.facet(EditorView.decorations).length;
     ed.setDoc("altra nota");
-    expect(view().state.facet(EditorView.decorations).length).toBe(senzaPreview);
+    expect(view().state.facet(EditorView.decorations).length).toBe(withoutPreview);
   });
 });
 
 // Un vault non è fatto solo di note nate qui: ci si sincronizza una cartella
-// scritta su Windows, ci si clona un repo, ci si copia dentro l'esportazione di
+// scritto su Windows, ci si clona un repo, ci si copia dentro l'esportazione di
 // un altro programma. CodeMirror spezza su `\r\n` e ricompone su `\n`, quindi
 // aprire una di quelle note e battere **un carattere** la riscriveva tutta: un
 // diff che tocca ogni riga, cioè una cronologia che non si legge più e un
@@ -102,7 +102,7 @@ describe("un file che va a capo come Windows", () => {
   it("resta com'era anche dopo che lo si è toccato", () => {
     const { ed, view } = editor();
     ed.setDoc("uno\r\ndue\r\ntre\r\n");
-    scrive(view(), "X");
+    writes(view(), "X");
     expect(
       ed.getDoc(),
       "il file è tornato indietro tutto LF: chi ha cambiato una lettera si \
@@ -131,7 +131,7 @@ per mano nostra",
     // legge**, non solo come si riscrive. Meglio la normalizzazione di prima.
     const { ed, view } = editor();
     ed.setDoc("uno\r\ndue\ntre\r\n");
-    scrive(view(), "X");
+    writes(view(), "X");
     expect(
       ed.getDoc(),
       "un file senza una forma sola se n'è vista imporre una: le sue righe \
@@ -237,13 +237,13 @@ describe("smontare un editor", () => {
     // Due editor come due riquadri sulla stessa nota: chiuderne uno non deve
     // toccare l'altro. È la metà che un `destroy` scritto sul contenitore
     // sbagliato romperebbe, e che nessun'altra prova qui guarda.
-    const uno = editor();
-    const due = editor();
-    due.ed.setDoc("resto io");
+    const firstEditor = editor();
+    const secondEditor = editor();
+    secondEditor.ed.setDoc("resto io");
 
-    uno.ed.destroy();
+    firstEditor.ed.destroy();
 
-    expect(due.ed.getDoc()).toBe("resto io");
-    expect(EditorView.findFromDOM(due.parent)).not.toBeNull();
+    expect(secondEditor.ed.getDoc()).toBe("resto io");
+    expect(EditorView.findFromDOM(secondEditor.parent)).not.toBeNull();
   });
 });

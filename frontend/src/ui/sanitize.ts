@@ -7,7 +7,7 @@
 // e per **quel** produttore: non lo è per un tema, per un embed di terzi, per un
 // blocco custom che un plugin rende come markup (§3.2), né per il giorno che
 // qualcuno aggiunge il quarto punto d'ingresso senza sapere che quella frase era
-// scritta da un'altra parte.
+// scritto da un'altra parte.
 //
 // La regola che questa seduta fissa è quella: **l'HTML che entra nella webview
 // passa di qui, chiunque l'abbia prodotto.** Il valore non è
@@ -47,7 +47,7 @@
 /// Gli elementi che il rendering di un documento può produrre. Chiuso di
 /// proposito: ciò che non è qui non si disegna, e aggiungerne uno è una riga che
 /// si legge in review.
-const TAG_AMMESSI = new Set([
+const ALLOWED_TAGS = new Set([
   // struttura del testo
   "p", "div", "span", "br", "hr",
   "h1", "h2", "h3", "h4", "h5", "h6",
@@ -57,7 +57,7 @@ const TAG_AMMESSI = new Set([
   "em", "strong", "del", "ins", "mark", "sub", "sup", "small", "abbr", "kbd", "samp", "var",
   // tabelle
   "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col",
-  // link e media (il `src` di un'immagine passa comunque da `risorsaConsentita`)
+  // legame e media (il `src` di un'immagine passa comunque da `isAllowedResource`)
   "a", "img", "figure", "figcaption",
   // ripiegabili: `details`/`summary` è come si rende una sezione
   "details", "summary",
@@ -69,7 +69,7 @@ const TAG_AMMESSI = new Set([
 /// interi. Per tutti gli altri, cadere fuori dall'allowlist significa perdere il
 /// tag e tenere i figli — un `<section>` sconosciuto non deve far sparire il
 /// paragrafo che contiene.
-const TAG_DA_CANCELLARE = new Set(["script", "style", "template", "iframe", "object", "embed"]);
+const TAGS_TO_REMOVE = new Set(["script", "style", "template", "iframe", "object", "embed"]);
 
 /// Gli attributi ammessi, per tag. `*` vale per tutti.
 ///
@@ -78,7 +78,7 @@ const TAG_DA_CANCELLARE = new Set(["script", "style", "template", "iframe", "obj
 /// come si trascludono, `data-ui-slot` dove va una parte dichiarativa (§3.2),
 /// `id` è l'ancora di blocco. Toglierli spegnerebbe metà dell'anteprima — per
 /// questo l'`id` non si toglie ma si **trasloca**, vedi `SPAZIO_CONTENUTO`.
-const ATTR_AMMESSI: Record<string, Set<string>> = {
+const ALLOWED_ATTRIBUTES: Record<string, Set<string>> = {
   "*": new Set(["class", "id", "title", "dir", "lang"]),
   a: new Set(["href"]),
   img: new Set(["src", "alt", "width", "height"]),
@@ -93,28 +93,28 @@ const ATTR_AMMESSI: Record<string, Set<string>> = {
 /// provider markdown emette per le colonne di una tabella. Uno `style` libero è
 /// un varco (`background: url(…)` che chiama casa, `position: fixed` sopra la
 /// UI), ed è la differenza fra ammettere un attributo e ammettere *quel valore*.
-const STYLE_AMMESSO = /^text-align:\s*(left|center|right);?$/;
+const ALLOWED_STYLE = /^text-align:\s*(left|center|right);?$/;
 
-/// Gli schemi che possono comparire in un link.
+/// Gli schemi che possono comparire in un legame.
 ///
 /// `javascript:` fuori perché è codice; `data:` fuori perché è un modo di
 /// portarsi dietro un documento intero (`data:text/html,…`) e di aggirare
 /// l'origine.
-const SCHEMI_LINK = new Set(["http:", "https:", "mailto:"]);
+const LINK_SCHEMES = new Set(["http:", "https:", "mailto:"]);
 
 // ---------------------------------------------------------------------------
 // La politica: funzioni pure, e sono queste che i test guardano
 // ---------------------------------------------------------------------------
 
-export type EsitoTag = "tieni" | "scarta-tag" | "cancella";
+export type ResultTag = "tieni" | "scarta-tag" | "cancella";
 
 /// Cosa fare di un elemento. Tre esiti e non due: «non ammesso» non è una
 /// risposta sola, perché perdere un `<section>` sconosciuto e perdere uno
 /// `<script>` devono avere effetti opposti sul contenuto.
-export function esitoDelTag(tag: string): EsitoTag {
+export function resultOfTag(tag: string): ResultTag {
   const t = tag.toLowerCase();
-  if (TAG_DA_CANCELLARE.has(t)) return "cancella";
-  return TAG_AMMESSI.has(t) ? "tieni" : "scarta-tag";
+  if (TAGS_TO_REMOVE.has(t)) return "cancella";
+  return ALLOWED_TAGS.has(t) ? "tieni" : "scarta-tag";
 }
 
 /// Questo attributo può stare su questo tag?
@@ -122,12 +122,12 @@ export function esitoDelTag(tag: string): EsitoTag {
 /// I `data-*` passano tutti: sono il canale fra rendering e shell e nessuno li
 /// interpreta come markup. `on*` non è un `data-*` e non è in nessuna
 /// allowlist — che è tutto ciò che serve perché non passi.
-export function attributoConsentito(tag: string, attributo: string): boolean {
-  const nome = attributo.toLowerCase();
-  if (nome.startsWith("on")) return false;
-  if (nome.startsWith("data-")) return true;
-  if (ATTR_AMMESSI["*"].has(nome)) return true;
-  return ATTR_AMMESSI[tag.toLowerCase()]?.has(nome) ?? false;
+export function allowedAttribute(tag: string, attribute: string): boolean {
+  const name = attribute.toLowerCase();
+  if (name.startsWith("on")) return false;
+  if (name.startsWith("data-")) return true;
+  if (ALLOWED_ATTRIBUTES["*"].has(name)) return true;
+  return ALLOWED_ATTRIBUTES[tag.toLowerCase()]?.has(name) ?? false;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ export function attributoConsentito(tag: string, attributo: string): boolean {
 // Le metà sono due: l'`id` che si **scrive** e il `#frammento` che lo
 // **cerca** — `[testo](#sezione)` è come un documento rimanda a se stesso, e lo
 // risolve il browser confrontando la stringa dopo il `#` con gli `id` della
-// pagina. Prefissare solo la prima rompe ogni link interno; prefissare solo la
+// pagina. Prefissare solo la prima rompe ogni legame interno; prefissare solo la
 // seconda non ripara niente. Sono la classe di difetti in cui *si aggiorna il
 // lato che si stava guardando*.
 //
@@ -174,11 +174,11 @@ export function attributoConsentito(tag: string, attributo: string): boolean {
 ///
 /// Nessun `id` della shell comincia così, e non è una speranza: `sanitize.dom`
 /// legge `index.html` e i nomi letterali dei moduli e lo verifica.
-const SPAZIO_CONTENUTO = "fub-contenuto-";
+const CONTENT_SPACE = "fub-contenuto-";
 
 /// L'unico posto in cui un nome che viene dal contenuto diventa un nome del DOM.
-export function nelloSpazioDelContenuto(nome: string): string {
-  return SPAZIO_CONTENUTO + nome;
+export function inContentSpace(name: string): string {
+  return CONTENT_SPACE + name;
 }
 
 /// Il valore con cui un attributo ammesso entra davvero nel documento.
@@ -190,12 +190,12 @@ export function nelloSpazioDelContenuto(nome: string): string {
 /// Il `#` nudo non si tocca: è il segnaposto che il provider markdown mette sui
 /// wikilink (`href="#"` con la navigazione presa da `data-wikilink-page`), e
 /// prefissarlo lo trasformerebbe in un salto verso un blocco che non esiste.
-export function valoreDellAttributo(nome: string, valore: string): string {
-  if (nome === "id") return nelloSpazioDelContenuto(valore);
-  if (nome === "href" && valore.startsWith("#") && valore.length > 1) {
-    return `#${nelloSpazioDelContenuto(valore.slice(1))}`;
+export function attributeValue(name: string, value: string): string {
+  if (name === "id") return inContentSpace(value);
+  if (name === "href" && value.startsWith("#") && value.length > 1) {
+    return `#${inContentSpace(value.slice(1))}`;
   }
-  return valore;
+  return value;
 }
 
 /// Gli attributi che questo varco **impone**, per tag, a prescindere da ciò che
@@ -220,22 +220,22 @@ export function valoreDellAttributo(nome: string, valore: string): string {
 /// scrivesse `loading="eager"` non vince — e non vincerebbe comunque, perché
 /// `loading` non è in `ATTR_AMMESSI`: le due cose sono d'accordo di proposito,
 /// e l'ordine dice quale delle due è la regola.
-export const ATTR_IMPOSTI: Record<string, Record<string, string>> = {
+export const REQUIRED_ATTRS: Record<string, Record<string, string>> = {
   img: { loading: "lazy", decoding: "async" },
 };
 
-export function styleConsentito(valore: string): boolean {
-  return STYLE_AMMESSO.test(valore.trim());
+export function isAllowedStyle(value: string): boolean {
+  return ALLOWED_STYLE.test(value.trim());
 }
 
 /// Un `href`: **navigazione**, non caricamento. Un link esterno è legittimo — è
 /// l'utente che decide se seguirlo — quindi http/https passano.
-export function linkConsentito(valore: string): boolean {
-  const v = valore.trim();
+export function isAllowedLink(value: string): boolean {
+  const v = value.trim();
   if (v === "" || v.startsWith("#")) return true;
-  if (!haSchema(v)) return !v.startsWith("//"); // relativo sì, protocol-relative no
+  if (!hasScheme(v)) return !v.startsWith("//"); // relativo sì, protocol-relative no
   try {
-    return SCHEMI_LINK.has(new URL(v).protocol);
+    return LINK_SCHEMES.has(new URL(v).protocol);
   } catch {
     return false;
   }
@@ -245,13 +245,13 @@ export function linkConsentito(valore: string): boolean {
 /// senza che nessuno clicchi, e dice a chi la serve che quella nota è aperta —
 /// per questo il default è bloccarla (5.3, 23.2) e restano i riferimenti dentro
 /// al vault, che sono relativi.
-export function risorsaConsentita(valore: string, remotaAmmessa = false): boolean {
-  const v = valore.trim();
+export function isAllowedResource(value: string, remoteAllowed = false): boolean {
+  const v = value.trim();
   if (v === "") return false;
-  if (!haSchema(v)) return !v.startsWith("//");
-  if (!remotaAmmessa) return false;
+  if (!hasScheme(v)) return !v.startsWith("//");
+  if (!remoteAllowed) return false;
   try {
-    return SCHEMI_LINK.has(new URL(v).protocol);
+    return LINK_SCHEMES.has(new URL(v).protocol);
   } catch {
     return false;
   }
@@ -259,11 +259,11 @@ export function risorsaConsentita(valore: string, remotaAmmessa = false): boolea
 
 /// Un link che esce dall'app va aperto senza dargli in mano la finestra che lo
 /// ha aperto (`window.opener`) né il referrer.
-export function esterno(href: string): boolean {
+export function external(href: string): boolean {
   return /^https?:/i.test(href.trim());
 }
 
-function haSchema(v: string): boolean {
+function hasScheme(v: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(v);
 }
 
@@ -282,8 +282,8 @@ export function sanitizeFragment(html: string): DocumentFragment {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const out = document.createDocumentFragment();
   for (const child of Array.from(doc.body.childNodes)) {
-    const pulito = pulisci(child);
-    if (pulito) out.appendChild(pulito);
+    const clean = sanitizeNode(child);
+    if (clean) out.appendChild(clean);
   }
   return out;
 }
@@ -296,43 +296,43 @@ export function setSanitizedHtml(container: HTMLElement, html: string): void {
   container.replaceChildren(sanitizeFragment(html));
 }
 
-function pulisci(node: Node): Node | null {
+function sanitizeNode(node: Node): Node | null {
   if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent ?? "");
   if (node.nodeType !== Node.ELEMENT_NODE) return null; // commenti, CDATA, tutto il resto
 
   const el = node as Element;
   const tag = el.tagName.toLowerCase();
-  const esito = esitoDelTag(tag);
-  if (esito === "cancella") return null;
-  if (esito === "scarta-tag") return figli(el, document.createDocumentFragment());
+  const result = resultOfTag(tag);
+  if (result === "cancella") return null;
+  if (result === "scarta-tag") return children(el, document.createDocumentFragment());
 
-  const nuovo = document.createElement(tag);
+  const newItem = document.createElement(tag);
   for (const attr of Array.from(el.attributes)) {
-    const nome = attr.name.toLowerCase();
-    if (!attributoConsentito(tag, nome)) continue;
-    if (nome === "style" && !styleConsentito(attr.value)) continue;
-    if (nome === "href" && !linkConsentito(attr.value)) continue;
-    if (nome === "src" && !risorsaConsentita(attr.value)) continue;
+    const name = attr.name.toLowerCase();
+    if (!allowedAttribute(tag, name)) continue;
+    if (name === "style" && !isAllowedStyle(attr.value)) continue;
+    if (name === "href" && !isAllowedLink(attr.value)) continue;
+    if (name === "src" && !isAllowedResource(attr.value)) continue;
     // Il consenso si decide sul valore **come l'ha scritto il produttore**; la
     // traslazione nello spazio di nomi del contenuto viene dopo, ed è l'ultima
     // cosa che succede a un valore prima che sia nel documento.
-    nuovo.setAttribute(nome, valoreDellAttributo(nome, attr.value));
+    newItem.setAttribute(name, attributeValue(name, attr.value));
   }
-  for (const [nome, valore] of Object.entries(ATTR_IMPOSTI[tag] ?? {})) {
-    nuovo.setAttribute(nome, valore);
+  for (const [name, value] of Object.entries(REQUIRED_ATTRS[tag] ?? {})) {
+    newItem.setAttribute(name, value);
   }
-  if (tag === "a" && esterno(nuovo.getAttribute("href") ?? "")) {
-    nuovo.setAttribute("rel", "noopener noreferrer");
-    nuovo.setAttribute("target", "_blank");
+  if (tag === "a" && external(newItem.getAttribute("href") ?? "")) {
+    newItem.setAttribute("rel", "noopener noreferrer");
+    newItem.setAttribute("target", "_blank");
   }
-  return figli(el, nuovo);
+  return children(el, newItem);
 }
 
-/// Ripulisce i figli di `el` e li mette dentro `dentro`, che restituisce.
-function figli<T extends Node>(el: Element, dentro: T): T {
+/// Ripulisce i figli di `el` e li mette dentro `inside`, che restituisce.
+function children<T extends Node>(el: Element, inside: T): T {
   for (const child of Array.from(el.childNodes)) {
-    const pulito = pulisci(child);
-    if (pulito) dentro.appendChild(pulito);
+    const clean = sanitizeNode(child);
+    if (clean) inside.appendChild(clean);
   }
-  return dentro;
+  return inside;
 }

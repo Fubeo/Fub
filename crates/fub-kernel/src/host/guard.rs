@@ -630,13 +630,13 @@ impl Policy for Granted {
             // dichiarato `` e non `api.acme.com`», che manderebbe a cercare il
             // difetto nel posto sbagliato.
             Some(allowed) if allowed.is_empty() => Some(format!(
-                "il parametro `{}` di `{}` non è un elenco di host, e finché non lo è \
-                 non si connette a niente — `{target}` compreso",
+                "the `{}` parameter of `{}` is not a list of hosts, and until it \
+                 is one it connects to nothing — `{target}` included",
                 permission::NETWORK,
                 self.plugin
             )),
             Some(allowed) => Some(format!(
-                "`{}` ha dichiarato `{}` e non `{target}`",
+                "`{}` declared `{}` and not `{target}`",
                 self.plugin,
                 allowed.join("`, `")
             )),
@@ -645,14 +645,14 @@ impl Policy for Granted {
 
     fn denies(&self, cap: Capability) -> Option<String> {
         match self.trust {
-            None => Some(format!("`{}` non è un plugin dichiarato", self.plugin)),
-            Some(trust) if !trust.runs() => Some(format!("`{}` è revocato", self.plugin)),
+            None => Some(format!("`{}` is not a declared plugin", self.plugin)),
+            Some(trust) if !trust.runs() => Some(format!("`{}` is revoked", self.plugin)),
             Some(_) if self.allowed.contains(cap) => None,
             Some(_) => Some(format!(
-                "`{}` non ha dichiarato il permesso `{}`",
+                "`{}` has not declared the permission `{}`",
                 self.plugin,
                 cap.permission()
-                    .expect("una famiglia negata dai permessi ne ha uno")
+                    .expect("a family denied by permissions has one")
             )),
         }
     }
@@ -731,7 +731,7 @@ impl<H, P: Policy> Guard<H, P> {
 
 impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
-        self.check(Capability::VaultRead, || format!("leggere `{id}`"))?;
+        self.check(Capability::VaultRead, || format!("reading `{id}`"))?;
         self.inner.read_document(id)
     }
 
@@ -739,20 +739,20 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
         // Stesso permesso della lettura di testo, e non uno suo: vedi la firma
         // nel contratto — i byte non sono un grado di fiducia in più.
         self.check(Capability::VaultRead, || {
-            format!("leggere i byte di `{id}`")
+            format!("reading bytes of `{id}`")
         })?;
         self.inner.read_document_bytes(id)
     }
 
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
         self.check(Capability::VaultRead, || {
-            format!("leggere la revisione di `{id}`")
+            format!("reading revision of `{id}`")
         })?;
         self.inner.document_revision(id)
     }
 
     fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
-        self.check(Capability::VaultRead, || "elencare i documenti".into())?;
+        self.check(Capability::VaultRead, || "listing documents".into())?;
         self.inner.list_documents(page)
     }
 
@@ -769,7 +769,7 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
 
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
         self.check(Capability::VaultRead, || {
-            format!("leggere il modello di `{id}`")
+            format!("reading model of `{id}`")
         })?;
         self.inner.read_model(id)
     }
@@ -783,7 +783,7 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
     }
 
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
-        self.check(Capability::VaultRead, || "elencare il cestino".into())?;
+        self.check(Capability::VaultRead, || "listing trash".into())?;
         self.inner.list_trash()
     }
 }
@@ -795,55 +795,55 @@ impl<H: VaultWrite, P: Policy> VaultWrite for Guard<H, P> {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        self.check(Capability::VaultWrite, || format!("scrivere `{id}`"))?;
+        self.check(Capability::VaultWrite, || format!("writing `{id}`"))?;
         self.inner.write_document(id, source, base)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
-        self.check(Capability::VaultWrite, || format!("modificare `{id}`"))?;
+        self.check(Capability::VaultWrite, || format!("editing `{id}`"))?;
         self.inner.apply_edit(id, request)
     }
 }
 
 impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.check(Capability::VaultStructure, || format!("creare `{id}`"))?;
+        self.check(Capability::VaultStructure, || format!("creating `{id}`"))?;
         self.inner.create_document(id, source)
     }
 
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
         self.check(Capability::VaultStructure, || {
-            format!("rinominare `{from}`")
+            format!("renaming `{from}`")
         })?;
         self.inner.rename_document(from, to)
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
-        self.check(Capability::VaultStructure, || format!("cestinare `{id}`"))?;
+        self.check(Capability::VaultStructure, || format!("trashing `{id}`"))?;
         self.inner.trash_document(id)
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
         self.check(Capability::VaultStructure, || {
-            format!("ripristinare `{entry}`")
+            format!("restoring `{entry}`")
         })?;
         self.inner.restore_document(entry, to)
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
-        self.check(Capability::VaultStructure, || "svuotare il cestino".into())?;
+        self.check(Capability::VaultStructure, || "emptying trash".into())?;
         self.inner.empty_trash()
     }
 }
 
 impl<H: DataRead, P: Policy> DataRead for Guard<H, P> {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        self.check(Capability::DataRead, || format!("leggere il blob `{path}`"))?;
+        self.check(Capability::DataRead, || format!("reading blob `{path}`"))?;
         self.inner.data_read(path)
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
-        self.check(Capability::DataRead, || "elencare i blob".into())?;
+        self.check(Capability::DataRead, || "listing blobs".into())?;
         self.inner.data_list(prefix)
     }
 }
@@ -851,14 +851,14 @@ impl<H: DataRead, P: Policy> DataRead for Guard<H, P> {
 impl<H: DataWrite, P: Policy> DataWrite for Guard<H, P> {
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
         self.check(Capability::DataWrite, || {
-            format!("scrivere il blob `{path}`")
+            format!("writing blob `{path}`")
         })?;
         self.inner.data_write(path, bytes)
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
         self.check(Capability::DataWrite, || {
-            format!("cancellare il blob `{path}`")
+            format!("removing blob `{path}`")
         })?;
         self.inner.data_remove(path)
     }
@@ -867,7 +867,7 @@ impl<H: DataWrite, P: Policy> DataWrite for Guard<H, P> {
 impl<H: SettingsRead, P: Policy> SettingsRead for Guard<H, P> {
     fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
         self.check(Capability::SettingsRead, || {
-            format!("leggere l'impostazione `{key}`")
+            format!("reading setting `{key}`")
         })?;
         self.inner.setting(key)
     }
@@ -876,14 +876,14 @@ impl<H: SettingsRead, P: Policy> SettingsRead for Guard<H, P> {
 impl<H: SettingsWrite, P: Policy> SettingsWrite for Guard<H, P> {
     fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError> {
         self.check(Capability::SettingsWrite, || {
-            format!("scrivere l'impostazione `{key}`")
+            format!("writing setting `{key}`")
         })?;
         self.inner.set_setting(key, value)
     }
 
     fn reset_setting(&mut self, key: &str) -> Result<(), PluginError> {
         self.check(Capability::SettingsWrite, || {
-            format!("azzerare l'impostazione `{key}`")
+            format!("resetting setting `{key}`")
         })?;
         self.inner.reset_setting(key)
     }
@@ -892,7 +892,7 @@ impl<H: SettingsWrite, P: Policy> SettingsWrite for Guard<H, P> {
 impl<H: ViewStateRead, P: Policy> ViewStateRead for Guard<H, P> {
     fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
         self.check(Capability::ViewStateRead, || {
-            format!("rileggere lo stato di vista `{key}`")
+            format!("re-reading view state `{key}`")
         })?;
         self.inner.view_state(key)
     }
@@ -905,7 +905,7 @@ impl<H: ViewStateWrite, P: Policy> ViewStateWrite for Guard<H, P> {
         value: Option<serde_json::Value>,
     ) -> Result<(), PluginError> {
         self.check(Capability::ViewStateWrite, || {
-            format!("ricordare lo stato di vista `{key}`")
+            format!("writing view state `{key}`")
         })?;
         self.inner.set_view_state(key, value)
     }
@@ -943,12 +943,12 @@ impl<H: HostEnv, P: Policy> HostEnv for Guard<H, P> {
         // caso, non serve a niente nel secondo). Adesso il rifiuto dice anche
         // PERCHÉ, che è ciò che il `Guard` sa e nessun'altra risposta poteva
         // portare (decisione 0094).
-        self.check(Capability::Env, || format!("chiedere {n} byte di caso"))?;
+        // **Il solo metodo del `Guard` con due cancelli**, e li ha perché
+        self.check(Capability::Env, || format!("requesting {n} random bytes"))?;
         self.inner.random_bytes(n)
     }
 
     fn active_context(&self) -> Option<ViewContext> {
-        // **Il solo metodo del `Guard` con due cancelli**, e li ha perché
         // pubblica due cose dell'utente che si concedono separatamente
         // (decisione 0095). Senza `Session` non c'è contesto; con `Session` e
         // senza `SessionSelection` c'è il contesto e non il testo.
@@ -961,6 +961,7 @@ impl<H: HostEnv, P: Policy> HostEnv for Guard<H, P> {
         // ma chi la riceve sa da sé perché la riceve: **è nel proprio
         // manifest**, e un permesso che non si è dichiarato non è una sorpresa
         // che arriva a tempo d'esecuzione.
+        // Senza esito: il silenzio è il no. Un `DocumentChanged` emesso da una
         let mut context = self
             .allows(Capability::Session)
             .then(|| self.inner.active_context())
@@ -974,16 +975,16 @@ impl<H: HostEnv, P: Policy> HostEnv for Guard<H, P> {
 
 impl<H: HostEvents, P: Policy> HostEvents for Guard<H, P> {
     fn emit(&mut self, event: Event) {
-        // Senza esito: il silenzio è il no. Un `DocumentChanged` emesso da una
         // simulazione farebbe ricaricare l'editor su una modifica che non è
         // avvenuta.
+    /// Quale famiglia governa **questa** domanda, e cosa si stava facendo.
         if self.allows(Capability::Events) {
             self.inner.emit(event);
         }
     }
 
     fn spawn_job(&mut self, spec: JobSpec) -> Result<JobId, PluginError> {
-        self.check(Capability::Events, || "lanciare un job".into())?;
+        self.check(Capability::Events, || "spawning a job".into())?;
         self.inner.spawn_job(spec)
     }
 }
@@ -997,7 +998,6 @@ impl<H: HostQuery, P: Policy> HostQuery for Guard<H, P> {
 }
 
 impl<H, P: Policy> Guard<H, P> {
-    /// Quale famiglia governa **questa** domanda, e cosa si stava facendo.
     ///
     /// Il `match` è **esaustivo di proposito**, e senza un `_`: una famiglia di
     /// query nuova non compila finché qualcuno non ha detto sotto quale
@@ -1013,10 +1013,11 @@ impl<H, P: Policy> Guard<H, P> {
     /// che continua a rispondere a nomi e a non sapere niente di query: è la
     /// stessa mossa di `undo_last`, che da un metodo ricava più famiglie perché
     /// più d'una sono le cose che fa.
+        // **Due cancelli**, e non è pignoleria. Annullare è invocare — i passi
     fn query_capability(kind: &fub_abi::traits::QueryKind) -> (Capability, &'static str) {
         use fub_abi::traits::QueryKind;
         match kind {
-            QueryKind::Drafts => (Capability::Drafts, "leggere le bozze"),
+            QueryKind::Drafts => (Capability::Drafts, "reading drafts"),
             QueryKind::Documents
             | QueryKind::Backlinks
             | QueryKind::Outline
@@ -1033,7 +1034,7 @@ impl<H, P: Policy> Guard<H, P> {
             | QueryKind::Entries
             | QueryKind::Folders
             | QueryKind::RenderPreview
-            | QueryKind::RenderEmbed => (Capability::Query, "interrogare l'indice"),
+            | QueryKind::RenderEmbed => (Capability::Query, "querying the index"),
         }
     }
 }
@@ -1044,12 +1045,11 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         command: &str,
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
-        self.check(Capability::Commands, || format!("invocare `{command}`"))?;
+        self.check(Capability::Commands, || format!("invoking `{command}`"))?;
         self.inner.run_command(command, args)
     }
 
     fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
-        // **Due cancelli**, e non è pignoleria. Annullare è invocare — i passi
         // di un annullamento sono per metà comandi — ma è anche, sempre e per
         // definizione, **scrivere**: e ciò che scrive non passa dal recinto del
         // chiamante, perché a eseguirlo è il kernel. Senza il secondo un host di
@@ -1081,18 +1081,20 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // cui `match` esaustivo obbliga una famiglia nuova a dichiararsi. Così
         // il giorno che il vault avesse una terza specie di scrittura, questo
         // cancello la eredita senza che nessuno se ne debba ricordare.
-        self.check(Capability::Commands, || "annullare".into())?;
+    /// Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
+    /// posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
+        self.check(Capability::Commands, || "undoing".into())?;
         for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
-            self.check(cap, || "annullare".into())?;
+            self.check(cap, || "undoing".into())?;
         }
         self.inner.undo_last()
     }
 }
 
 impl<H: TransferRead, P: Policy> TransferRead for Guard<H, P> {
-    /// Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
-    /// posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
     /// È la differenza con `fub:network`, che di cancelli ne ha due.
+    /// **Due cancelli, e il secondo è il primo parametro di permesso che questo
+    /// repo legge.** La famiglia dice *se*, l'allowlist dice *dove*, e senza il
     fn read_source(
         &self,
         handle: SourceHandle,
@@ -1100,15 +1102,13 @@ impl<H: TransferRead, P: Policy> TransferRead for Guard<H, P> {
         len: u32,
     ) -> Result<Vec<u8>, PluginError> {
         self.check(Capability::Transfer, || {
-            "leggere la sorgente di un import".to_string()
+            "reading import source".to_string()
         })?;
         self.inner.read_source(handle, offset, len)
     }
 }
 
 impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
-    /// **Due cancelli, e il secondo è il primo parametro di permesso che questo
-    /// repo legge.** La famiglia dice *se*, l'allowlist dice *dove*, e senza il
     /// secondo il permesso prometterebbe una cosa che non fa — che è la
     /// differenza fra un recinto che perde e una frase falsa scritta dall'app.
     ///
@@ -1120,23 +1120,25 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
     /// nella richiesta apposta: due posti in cui è scritto dove si va sono due
     /// posti che possono non essere d'accordo, e chi controlla ne guarderebbe
     /// uno solo.
-    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
-        let (scheme, host) = split_url(&request.url)?;
-        self.check(Capability::Network, || format!("connettersi a `{host}`"))?;
-        if let Some(why) = self.policy.denies_host(&host) {
-            return Err(PluginError::PermissionDenied(
-                format!("connettersi a `{host}`: {why}").into(),
-            ));
-        }
         // Lo schema si guarda **dopo** i permessi, perché «non ti è concesso»
         // è una frase più utile di «l'URL è fatto male» a chi ha sbagliato
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        let (scheme, host) = split_url(&request.url)?;
+        self.check(Capability::Network, || format!("connecting to `{host}`"))?;
+        if let Some(why) = self.policy.denies_host(&host) {
+            return Err(PluginError::PermissionDenied(
+                format!("connecting to `{host}`: {why}").into(),
+            ));
+        }
         // tutte e due.
+/// Lo schema e l'host di un URL, senza tirarsi dietro un parser di URL.
+///
         if scheme != "https" && !is_loopback(&host) {
             return Err(PluginError::BadArgs(
                 format!(
-                    "`{scheme}` non è `https`: in chiaro l'allowlist promette un host \
-                     e la rete ne consegna un altro. L'anello locale fa eccezione, \
-                     perché lì non c'è rete da attraversare"
+                    "`{scheme}` is not `https`: in plaintext the allowlist promises one \
+                     host and the network delivers another. The local loop is an \
+                     exception, because there is no network to traverse"
                 )
                 .into(),
             ));
@@ -1145,8 +1147,6 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
     }
 }
 
-/// Lo schema e l'host di un URL, senza tirarsi dietro un parser di URL.
-///
 /// Fa **una** cosa e la fa stretta: quello che serve al cancello è dove si va,
 /// e dove si va sta fra `://` e il primo `/`, `?` o `#`, meno le credenziali e
 /// meno la porta. Ciò che questa funzione non sa fare — normalizzare i percorsi,
@@ -1158,25 +1158,27 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
 /// `https://api.acme.com@evil.example/` avrebbe un «host» che comincia con un
 /// nome dichiarato e finisce su una macchina di qualcun altro. È il modo più
 /// vecchio di far leggere a un umano un indirizzo e a una macchina un altro.
+    // Dopo l'ultima `@` c'è l'host: prima ci sono le credenziali.
+        // IPv6 letterale: `[::1]:8080`.
 fn split_url(url: &str) -> Result<(String, String), PluginError> {
-    let malformato = || {
-        PluginError::BadArgs(format!("`{url}` non è un URL assoluto che si possa leggere").into())
+    let malformed = || {
+        PluginError::BadArgs(format!("`{url}` is not a readable absolute URL").into())
     };
-    let (scheme, rest) = url.split_once("://").ok_or_else(malformato)?;
+    let (scheme, rest) = url.split_once("://").ok_or_else(malformed)?;
     let authority = rest
         .split(['/', '?', '#'])
         .next()
         .filter(|a| !a.is_empty())
-        .ok_or_else(malformato)?;
-    // Dopo l'ultima `@` c'è l'host: prima ci sono le credenziali.
+        .ok_or_else(malformed)?;
+/// L'host è **questa macchina**?
     let hostport = authority.rsplit('@').next().unwrap_or(authority);
     let host = match hostport.strip_prefix('[') {
-        // IPv6 letterale: `[::1]:8080`.
+///
         Some(inside) => inside.split(']').next().unwrap_or(inside),
         None => hostport.split(':').next().unwrap_or(hostport),
     };
     if host.is_empty() {
-        return Err(malformato());
+        return Err(malformed());
     }
     Ok((
         scheme.trim().to_ascii_lowercase(),
@@ -1184,8 +1186,6 @@ fn split_url(url: &str) -> Result<(String, String), PluginError> {
     ))
 }
 
-/// L'host è **questa macchina**?
-///
 /// Serve a una regola sola e vale la pena scriverla: `http` in chiaro è
 /// rifiutato ovunque tranne qui, perché un modello che gira sul computer di chi
 /// usa l'app — `http://localhost:11434` — non attraversa nessuna rete, e
@@ -1201,6 +1201,8 @@ fn split_url(url: &str) -> Result<(String, String), PluginError> {
 /// impedire. Chi è loopback lo dice [`IpAddr`](std::net::IpAddr), che quel
 /// conto lo sa fare per `127.0.0.0/8` e per `::1` insieme; `localhost` resta a
 /// parte perché è un nome, non un indirizzo.
+// ---------------------------------------------------------------------------
+    /// Una politica che nega una famiglia sola: serve a provare il cancello di
 fn is_loopback(host: &str) -> bool {
     host == "localhost"
         || host
@@ -1216,35 +1218,35 @@ impl<H: HostServices, P: Policy> HostServices for Guard<H, P> {
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
         self.check(Capability::Services, || {
-            format!("chiamare `{service}.{method}`")
+            format!("calling `{service}.{method}`")
         })?;
         self.inner.call_service(service, method, args)
     }
 }
 
-// ---------------------------------------------------------------------------
+    /// [`Capability::Env`], che `ReadOnly` **concede** — leggere che ore sono
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Una politica che nega una famiglia sola: serve a provare il cancello di
-    /// [`Capability::Env`], che `ReadOnly` **concede** — leggere che ore sono
     /// non è un effetto — e che quindi il presidio delle capacità simulate non
     /// esercita.
-    struct Nega(Capability);
+    /// Un host che concede entropia a chiunque gliela chieda: ciò che si prova
+    /// qui è il cancello, non ciò che sta dietro.
+    struct Negate(Capability);
 
-    impl Policy for Nega {
+    impl Policy for Negate {
         fn denies(&self, cap: Capability) -> Option<String> {
-            (cap == self.0).then(|| "per prova".to_string())
+            (cap == self.0).then(|| "for testing".to_string())
         }
     }
 
-    /// Un host che concede entropia a chiunque gliela chieda: ciò che si prova
-    /// qui è il cancello, non ciò che sta dietro.
-    struct Generoso;
+    /// Un host che un contesto ce l'ha, con dentro una nota e del testo
+    /// selezionato: è il solo modo di provare che il cancello della selezione
+    struct Generous;
 
-    impl HostEnv for Generoso {
+    impl HostEnv for Generous {
         fn now_unix_millis(&self) -> u64 {
             0
         }
@@ -1262,12 +1264,12 @@ mod tests {
         }
     }
 
-    /// Un host che un contesto ce l'ha, con dentro una nota e del testo
-    /// selezionato: è il solo modo di provare che il cancello della selezione
     /// taglia **un campo** e non la risposta intera.
-    struct ConContesto;
+    /// **La leva che la 0095 esiste per dare**: il vault concesso, la nota
+    /// concessa, il testo no.
+    struct WithContext;
 
-    impl HostEnv for ConContesto {
+    impl HostEnv for WithContext {
         fn now_unix_millis(&self) -> u64 {
             0
         }
@@ -1292,117 +1294,115 @@ mod tests {
         }
     }
 
-    /// **La leva che la 0095 esiste per dare**: il vault concesso, la nota
-    /// concessa, il testo no.
     ///
     /// È il caso del diario — «sai che nota guardo, non sai cosa ci sto
     /// scrivendo» — e non sarebbe stato esprimibile appoggiando la selezione a
     /// `read-vault`, che è la strada che la §23.5 raccomandava per prima:
     /// negarla lì avrebbe reso il plugin cieco sul vault, cioè avrebbe tolto
     /// all'utente proprio la scelta fine.
+    /// L'altro cancello, quello grosso: senza `Session` non c'è contesto, e con
+    /// lui se ne va anche il testo — che è dentro, e senza un contesto non ha
     #[test]
-    fn denying_the_selection_leaves_the_note_visible() {
-        let guard = Guard::new(ConContesto, Nega(Capability::SessionSelection));
+    fn denying_the_selection_leaves_the_notes_visible() {
+        let guard = Guard::new(WithContext, Negate(Capability::SessionSelection));
         let context = guard
             .active_context()
-            .expect("negare la selezione non nega il contesto");
+            .expect("denying the selection does not deny the context");
         assert_eq!(
             context.doc,
             Some(DocId::new("Diario/2026-08-04.md")),
-            "quale nota guardo resta concesso: è l'altro permesso"
+            "which note I am looking at stays granted: it is the other permission"
         );
         assert!(
             context.selections.is_none(),
-            "il testo selezionato non deve attraversare: {:?}",
+            "the selected text must not come through: {:?}",
             context.selections
         );
     }
 
-    /// L'altro cancello, quello grosso: senza `Session` non c'è contesto, e con
-    /// lui se ne va anche il testo — che è dentro, e senza un contesto non ha
     /// dove stare.
-    #[test]
-    fn denying_the_session_takes_the_selection_with_it() {
-        let guard = Guard::new(ConContesto, Nega(Capability::Session));
-        assert!(
-            guard.active_context().is_none(),
-            "senza `Session` la risposta è quella di un host senza shell"
-        );
-    }
-
     /// Il cancello dell'orologio non è più quello della sessione, ed è **tutta
     /// la voce**: prima erano la stessa famiglia, quindi negare il testo
-    /// selezionato voleva dire negare che ore sono.
     #[test]
-    fn the_clock_and_the_session_are_no_longer_the_same_gate() {
-        let senza_sessione = Guard::new(ConContesto, Nega(Capability::Session));
-        assert_eq!(
-            senza_sessione.now_unix_millis(),
-            0,
-            "l'orologio è della macchina: negare la sessione non lo tocca"
-        );
-        let senza_orologio = Guard::new(ConContesto, Nega(Capability::Env));
+    fn denying_the_session_takes_the_selection_with_it() {
+        let guard = Guard::new(WithContext, Negate(Capability::Session));
         assert!(
-            senza_orologio.active_context().is_some(),
-            "e viceversa: negare l'orologio non nega quale nota è aperta"
+            guard.active_context().is_none(),
+            "without `Session` the answer is that of a host without a shell"
         );
     }
 
+    /// selezionato voleva dire negare che ore sono.
     /// Il caso negato **dice di essere negato**, e non rende il vuoto.
     ///
+    #[test]
+    fn the_clock_and_the_session_are_no_longer_the_same_gate() {
+        let no_session = Guard::new(WithContext, Negate(Capability::Session));
+        assert_eq!(
+            no_session.now_unix_millis(),
+            0,
+            "the clock belongs to the machine: denying the session does not touch it"
+        );
+        let no_clock = Guard::new(WithContext, Negate(Capability::Env));
+        assert!(
+            no_clock.active_context().is_some(),
+            "and vice versa: denying the clock does not deny which note is open"
+        );
+    }
+
     /// Era l'unico fallback muto del `Guard` che mentiva: un `Vec` vuoto arriva
     /// a chi chiama identico al troncamento sopra il tetto, e i due si
     /// correggono in modi opposti — chiedere meno serve in un caso e non serve
     /// a niente nell'altro (§23.12, decisione 0094). Un `assert` sulla
     /// lunghezza sarebbe passato anche prima: solo la variante lo presidia.
-    #[test]
-    fn denied_entropy_says_so_instead_of_answering_empty() {
-        let guard = Guard::new(Generoso, Nega(Capability::Env));
-        let err = guard
-            .random_bytes(16)
-            .expect_err("senza `Env` non si concede entropia");
-        assert!(
-            matches!(err, PluginError::PermissionDenied(_)),
-            "il rifiuto deve nominare il permesso: {err}"
-        );
-        assert!(
-            err.message().to_string().contains("16"),
-            "e deve dire cosa si stava facendo: {err}"
-        );
-    }
-
     /// Negare un'altra famiglia non tocca questa: il cancello è per famiglia, e
     /// un `check` sulla capacità sbagliata passerebbe di qui rosso.
     #[test]
-    fn a_different_denial_leaves_entropy_alone() {
-        let guard = Guard::new(Generoso, Nega(Capability::VaultWrite));
-        assert_eq!(guard.random_bytes(4).unwrap().len(), 4);
+    fn denied_entropy_says_so_instead_of_answering_empty() {
+        let guard = Guard::new(Generous, Negate(Capability::Env));
+        let err = guard
+            .random_bytes(16)
+            .expect_err("without `Env` entropy is not granted");
+        assert!(
+            matches!(err, PluginError::PermissionDenied(_)),
+            "the refusal must name the permission: {err}"
+        );
+        assert!(
+            err.message().to_string().contains("16"),
+            "and it must say what was being done: {err}"
+        );
     }
 
     /// Un host che annulla e basta: ciò che si prova qui è il cancello, non ciò
     /// che sta dietro. Un `undo_last` arrivato fin qui è un annullamento
+    #[test]
+    fn a_different_denial_leaves_entropy_alone() {
+        let guard = Guard::new(Generous, Negate(Capability::VaultWrite));
+        assert_eq!(guard.random_bytes(4).unwrap().len(), 4);
+    }
+
     /// **eseguito**, ed è esattamente ciò che i banchi qui sotto pretendono di
     /// vedere o di non vedere.
-    struct CheAnnulla;
+    /// **Disfare chiede lo stesso permesso di fare.**
+    ///
+    struct Undoes;
 
-    impl HostCommands for CheAnnulla {
+    impl HostCommands for Undoes {
         fn run_command(
             &mut self,
             _command: &str,
             _args: serde_json::Value,
         ) -> Result<CommandOutcome, PluginError> {
-            unreachable!("nessun banco di questo modulo invoca un comando")
+            unreachable!("no bench in this module invokes a command")
         }
 
         fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
             Ok(Some(Undone::whole(fub_abi::text::Text::Literal(
-                "la rinomina".into(),
+                "the rename".into(),
             ))))
         }
     }
 
-    /// **Disfare chiede lo stesso permesso di fare.**
-    ///
     /// La voce in cima alla pila può essere l'inverso di una rinomina, di una
     /// creazione o di un cestinamento — cose che sono passate da
     /// [`Capability::VaultStructure`] — e il cancello dell'annullamento chiedeva
@@ -1410,41 +1410,41 @@ mod tests {
     /// il testo di una nota poteva disfare un trasloco che non avrebbe potuto
     /// fare. Un recinto che perde restando scritto è il difetto peggiore che un
     /// recinto possa avere, perché nessuno lo va a rileggere.
-    #[test]
-    fn annullare_non_disfa_una_famiglia_che_non_e_concessa() {
-        let mut guard = Guard::new(CheAnnulla, Nega(Capability::VaultStructure));
-        let err = guard
-            .undo_last()
-            .expect_err("senza `VaultStructure` non si disfa una rinomina");
-        assert!(
-            matches!(err, PluginError::PermissionDenied(_)),
-            "il rifiuto deve essere un rifiuto di permesso: {err}"
-        );
-        assert!(
-            err.message().to_string().contains("annullare"),
-            "e deve dire cosa si stava facendo: {err}"
-        );
-    }
-
     /// L'altra metà, che è ciò che rende il banco qui sopra una misura e non un
     /// divieto: con le famiglie della scrittura concesse l'annullamento arriva
-    /// all'host e torna con la sua voce. Una famiglia estranea negata non lo
-    /// tocca — il cancello resta quello dell'annullamento, non un no generico.
     #[test]
-    fn con_le_famiglie_concesse_l_annullamento_passa() {
-        let mut guard = Guard::new(CheAnnulla, Nega(Capability::Network));
-        let undone = guard
+    fn undo_does_not_undo_a_family_that_is_not_granted() {
+        let mut guard = Guard::new(Undoes, Negate(Capability::VaultStructure));
+        let err = guard
             .undo_last()
-            .expect("negare la rete non ha niente a che vedere con l'annullare")
-            .expect("l'host ha una voce da disfare");
-        assert_eq!(
-            undone.label,
-            fub_abi::text::Text::Literal("la rinomina".into())
+            .expect_err("without `VaultStructure` a rename is not undone");
+        assert!(
+            matches!(err, PluginError::PermissionDenied(_)),
+            "the refusal must be a permission refusal: {err}"
+        );
+        assert!(
+            err.message().to_string().contains("undoing"),
+            "and it must say what was being done: {err}"
         );
     }
 
+    /// all'host e torna con la sua voce. Una famiglia estranea negata non lo
+    /// tocca — il cancello resta quello dell'annullamento, non un no generico.
     /// L'ultima famiglia dichiarata, nominata dal **compilatore** e non da un
     /// conto.
+    #[test]
+    fn with_the_granted_families_the_undo_passes() {
+        let mut guard = Guard::new(Undoes, Negate(Capability::Network));
+        let undone = guard
+            .undo_last()
+            .expect("denying the network has nothing to do with undoing")
+            .expect("the host has an entry to undo");
+        assert_eq!(
+            undone.label,
+            fub_abi::text::Text::Literal("the rename".into())
+        );
+    }
+
     ///
     /// L'aritmetica del presidio qui sotto sa dire se `ALL` è coerente con sé
     /// stesso — niente buchi, niente doppioni — e non sa quante famiglie
@@ -1459,7 +1459,9 @@ mod tests {
     /// [§23.2](../../../../docs/decisions/0104-la-superficie-di-scrittura-si-presta.md)
     /// provando rosso il presidio gemello delle superfici, che da questo aveva
     /// copiato la forma **e il buco**.
-    fn ultima_famiglia_dichiarata(cap: Capability) -> u16 {
+    /// `ALL` è l'unico elenco scritto a mano rimasto in questo modulo, e tutto
+    /// il resto gli sta a valle: `Granted::new` ci folda sopra per calcolare i
+    fn last_declared_family(cap: Capability) -> u16 {
         match cap {
             Capability::VaultRead => 0,
             Capability::VaultWrite => 1,
@@ -1483,8 +1485,6 @@ mod tests {
         }
     }
 
-    /// `ALL` è l'unico elenco scritto a mano rimasto in questo modulo, e tutto
-    /// il resto gli sta a valle: `Granted::new` ci folda sopra per calcolare i
     /// permessi, e il presidio delle capacità simulate
     /// (`kernel/tests/invoke_command.rs`) ci ricava l'insieme che pretende di
     /// aver provato. Una famiglia che non finisse qui sparirebbe da entrambi
@@ -1502,19 +1502,19 @@ mod tests {
     /// sono contigui da zero, quindi pretendere che quelli di `ALL` siano
     /// esattamente `0..len` vieta insieme i duplicati e i buchi. Duplicare una
     /// riga è rosso; dimenticare la variante nuova è rosso — **tranne in coda**,
-    /// e per quello c'è `ultima_famiglia_dichiarata`.
-    #[test]
-    fn i_discriminanti_coprono_ogni_famiglia() {
-        assert_eq!(
-            Capability::ALL.len(),
-            ultima_famiglia_dichiarata(Capability::Transfer) as usize + 1,
-            "`Capability::ALL` è più corto dell'enum: c'è una famiglia che il \
-             compilatore conosce e che l'elenco non nomina. È il caso che \
-             l'aritmetica qui sotto non vede."
-        );
-
+    /// e per quello c'è `last_declared_family`.
         // E ognuna al **posto** che l'enum le dà. L'aritmetica qui sotto
         // ordina prima di confrontare, quindi due righe scambiate le sfuggono:
+    #[test]
+    fn the_discriminants_cover_every_family() {
+        assert_eq!(
+            Capability::ALL.len(),
+            last_declared_family(Capability::Transfer) as usize + 1,
+            "`Capability::ALL` is shorter than the enum: there is a family that \
+             the compiler knows and the list does not name. It is the case the \
+             arithmetic below does not see."
+        );
+
         // l'ha misurato la verifica del rosso della
         // [0105](../../../../docs/decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md),
         // scambiando `SettingsRead` e `SettingsWrite` e trovando il workspace
@@ -1522,42 +1522,43 @@ mod tests {
         // ce l'aveva; questo, da cui quello aveva copiato la forma, no — ed è
         // la seconda zona cieca che si scopre guardando l'originale invece del
         // ricalco.
+    /// **Ogni permesso che governa una famiglia ha un nome nell'elenco che si
+    /// mostra** (§23.17).
         for &cap in &Capability::ALL {
             assert_eq!(
-                Capability::ALL[ultima_famiglia_dichiarata(cap) as usize],
+                Capability::ALL[last_declared_family(cap) as usize],
                 cap,
-                "`{cap:?}` non sta in `ALL` al posto che le dà la dichiarazione \
-                 dell'enum: due righe si sono scambiate, e chi legge `ALL` per \
-                 sapere l'ordine dei permessi legge un ordine che non è quello."
+                "`{cap:?}` is not in `ALL` at the position the enum declaration \
+                 gives it: two lines have been swapped, and whoever reads `ALL` \
+                 to know the permission order reads an order that is not the \
+                 real one."
             );
         }
 
-        let mut visti: Vec<u16> = Capability::ALL.iter().map(|&c| c as u16).collect();
-        visti.sort_unstable();
-        let attesi: Vec<u16> = (0..Capability::ALL.len() as u16).collect();
+        let mut seen: Vec<u16> = Capability::ALL.iter().map(|&c| c as u16).collect();
+        seen.sort_unstable();
+        let expected: Vec<u16> = (0..Capability::ALL.len() as u16).collect();
         assert_eq!(
-            visti, attesi,
-            "`Capability::ALL` non copre una volta sola ogni famiglia dell'enum: \
-             o una riga è duplicata, o la famiglia nuova non è stata aggiunta e \
-             la lunghezza è stata fatta tornare con un doppione. Chi non è in \
-             `ALL` non viene concesso da `Granted::new` e non viene preteso dal \
-             presidio delle capacità simulate: sparisce da tutti e due restando \
-             verde."
+            seen, expected,
+            "`Capability::ALL` does not cover every family of the enum exactly \
+             once: either a line is duplicated, or the new family was not added \
+             and the length was made to work with a duplicate. Whatever is not \
+             in `ALL` is not granted by `Granted::new` and not expected by the \
+             simulated-capability guard: it disappears from both while staying \
+             green."
         );
         assert!(
             Capability::ALL.len() <= u32::BITS as usize,
-            "`CapabilitySet` tiene le famiglie in un `u32`. Era un `u16`, e i \
-             bit sono finiti davvero: con la 0095 le famiglie erano sedici — \
-             esattamente i bit — e la 0096 le ha portate a diciassette. Questa \
-             riga se n'è accorta prima che `1 << cap` andasse in overflow (in \
-             debug con un panic, in release **in silenzio**, cioè concedendo \
-             una famiglia a chi non l'ha dichiarata). Alla trentatreesima \
-             tocca di nuovo: allargare il tipo, non togliere l'assert."
+            "`CapabilitySet` holds families in a `u32`. It was a `u16`, and the \
+             bits really did run out: with 0095 the families were sixteen — \
+             exactly the bits — and 0096 gated them to seventeen. This line \
+             noticed before `1 << cap` overflowed (in debug with a panic, in \
+             release **silently**, that is granting a family to someone who had \
+             not declared it). At thirty-three it will happen again: widen the \
+             type, do not remove the assert."
         );
     }
 
-    /// **Ogni permesso che governa una famiglia ha un nome nell'elenco che si
-    /// mostra** (§23.17).
     ///
     /// È il presidio che rende vera la parola *tutti* del pannello dei permessi:
     /// una famiglia nuova col suo permesso nuovo, dimenticato in
@@ -1576,26 +1577,28 @@ mod tests {
     /// insieme *«può incollare»* e *«può leggere ciò che hai copiato»*, e la
     /// grana di un permesso si corregge gratis solo finché nessun manifest l'ha
     /// scritto.
+    /// Un host che risponde a qualunque domanda: ciò che si prova qui è quale
+    /// **cancello** attraversa, non cosa c'è dietro.
     #[test]
-    fn ogni_permesso_di_una_famiglia_e_nominato() {
+    fn every_family_permission_is_named() {
         for cap in Capability::ALL {
             let Some(key) = cap.permission() else {
                 continue;
             };
             assert!(
                 permission::ALL.contains(&key),
-                "la famiglia {cap:?} è governata da `{key}`, che non sta in \
-                 `permission::ALL`: nessun pannello lo mostrerebbe, e il \
-                 kernel non fabbricherebbe la chiave con cui si nega."
+                "family {cap:?} is governed by `{key}`, which is not in \
+                 `permission::ALL`: no panel would show it, and the \
+                 kernel would not fabricate the key used to deny it."
             );
         }
     }
 
-    /// Un host che risponde a qualunque domanda: ciò che si prova qui è quale
-    /// **cancello** attraversa, non cosa c'è dietro.
-    struct Indice;
+    /// **La leva che questa decisione esiste per dare, primo verso**: il vault
+    /// concesso, le bozze no.
+    struct IndexHost;
 
-    impl HostQuery for Indice {
+    impl HostQuery for IndexHost {
         fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
             match query {
                 IndexQuery::Drafts { .. } => Ok(IndexResult::Drafts(Paged::all(vec![
@@ -1605,7 +1608,7 @@ mod tests {
                         base: None,
                         exists: true,
                         current: None,
-                        text: "non l'ho ancora salvato".into(),
+                        text: "I have not saved it yet".into(),
                     },
                 ]))),
                 _ => Ok(IndexResult::Documents(Paged::all(Vec::new()))),
@@ -1613,17 +1616,17 @@ mod tests {
         }
     }
 
-    /// **La leva che questa decisione esiste per dare, primo verso**: il vault
-    /// concesso, le bozze no.
     ///
     /// Prima della 0096 questo caso non era esprimibile — `IndexQuery::Drafts`
     /// passava da `Capability::Query`, cioè dallo stesso `fub:read-vault` che
     /// governa i documenti salvati — e la frase *«puoi cercare nelle mie note,
     /// non puoi leggere ciò che sto scrivendo adesso»* non aveva una spunta con
     /// cui dirsi.
+    /// **Secondo verso, ed è quello che la forma cumulativa avrebbe reso
+    /// impossibile**: le bozze concesse, il vault no.
     #[test]
     fn denying_drafts_leaves_the_rest_of_the_index_readable() {
-        let guard = Guard::new(Indice, Nega(Capability::Drafts));
+        let guard = Guard::new(IndexHost, Negate(Capability::Drafts));
         guard
             .query_index(IndexQuery::Documents {
                 matching: Default::default(),
@@ -1632,22 +1635,20 @@ mod tests {
                 excerpts: Default::default(),
                 page: None,
             })
-            .expect("il resto dell'indice resta leggibile: è l'altro permesso");
+            .expect("the rest of the index stays readable: it is the other permission");
         let err = guard
             .query_index(IndexQuery::Drafts { page: None })
-            .expect_err("le bozze no");
+            .expect_err("drafts are denied");
         assert!(
             matches!(err, PluginError::PermissionDenied(_)),
-            "e il rifiuto deve dirlo invece di rendere un elenco vuoto: {err}"
+            "and the refusal must say so instead of returning an empty list: {err}"
         );
         assert!(
-            err.message().to_string().contains("bozze"),
-            "il rifiuto nomina cosa si stava facendo: {err}"
+            err.message().to_string().contains("drafts"),
+            "the refusal names what was being done: {err}"
         );
     }
 
-    /// **Secondo verso, ed è quello che la forma cumulativa avrebbe reso
-    /// impossibile**: le bozze concesse, il vault no.
     ///
     /// È il pannello di recupero dopo un crash — l'unico cliente che questa
     /// domanda abbia mai avuto — e chiede una cosa sola: ritrovare ciò che si
@@ -1655,14 +1656,16 @@ mod tests {
     /// chiedere l'intero vault per leggere il testo che l'utente non gli ha
     /// consegnato, che è il modo in cui i permessi smettono di significare
     /// qualcosa.
+    /// Un host che risponde `200` a chiunque: ciò che si prova qui è il
+    /// cancello, non cosa c'è dall'altra parte del filo.
     #[test]
     fn granting_drafts_alone_does_not_open_the_index() {
-        let guard = Guard::new(Indice, Nega(Capability::Query));
+        let guard = Guard::new(IndexHost, Negate(Capability::Query));
         match guard.query_index(IndexQuery::Drafts { page: None }) {
             Ok(IndexResult::Drafts(page)) => {
-                assert_eq!(page.items.len(), 1, "le bozze passano");
+                assert_eq!(page.items.len(), 1, "drafts pass through");
             }
-            altro => panic!("le bozze devono passare col loro permesso: {altro:?}"),
+            other => panic!("drafts must pass with their own permission: {other:?}"),
         }
         assert!(
             guard
@@ -1674,27 +1677,27 @@ mod tests {
                     page: None,
                 })
                 .is_err(),
-            "e non devono aprire il resto dell'indice"
+            "and they must not open the rest of the index"
         );
     }
 
-    /// Un host che risponde `200` a chiunque: ciò che si prova qui è il
-    /// cancello, non cosa c'è dall'altra parte del filo.
-    struct Filo;
+    /// **L'allowlist è vera**, ed è tutta la voce: un manifest che dichiara un
+    /// host e ne raggiunge un altro è una frase falsa scritta dall'app, non un
+    struct WithNetwork;
 
-    impl HostNetwork for Filo {
+    impl HostNetwork for WithNetwork {
         fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
             Ok(HttpResponse {
                 status: 200,
                 headers: Vec::new(),
-                body: b"ciao".to_vec(),
+                body: b"hello".to_vec(),
             })
         }
     }
 
-    fn con_rete(hosts: &[&str]) -> Granted {
-        let mut permessi = PluginPermissions::of(&[]);
-        permessi.granted.set(
+    fn with_network(hosts: &[&str]) -> Granted {
+        let mut permissions = PluginPermissions::of(&[]);
+        permissions.granted.set(
             permission::NETWORK,
             serde_json::Value::Array(
                 hosts
@@ -1703,46 +1706,46 @@ mod tests {
                     .collect(),
             ),
         );
-        Granted::new("p", &permessi, Trust::Community)
+        Granted::new("p", &permissions, Trust::Community)
     }
 
-    /// **L'allowlist è vera**, ed è tutta la voce: un manifest che dichiara un
-    /// host e ne raggiunge un altro è una frase falsa scritta dall'app, non un
     /// recinto che perde.
     ///
     /// Prima della 0097 il parametro di un permesso non lo leggeva nessuno:
     /// `fub:network` con un elenco dentro concedeva esattamente quanto
     /// `fub:network` nudo.
+    /// **Il modo in cui un'allowlist si scavalca**, e la riga che lo impedisce.
+    ///
     #[test]
     fn the_manifest_says_where_and_it_is_true() {
-        let guard = Guard::new(Filo, con_rete(&["api.acme.com"]));
+        let guard = Guard::new(WithNetwork, with_network(&["api.acme.com"]));
         guard
             .fetch(HttpRequest::get("https://api.acme.com/v1/note"))
-            .expect("l'host dichiarato passa");
+            .expect("the declared host passes");
         let err = guard
             .fetch(HttpRequest::get("https://altrove.example/raccogli"))
-            .expect_err("quello non dichiarato no");
+            .expect_err("the undeclared one does not");
         assert!(
             matches!(err, PluginError::PermissionDenied(_)),
-            "e il rifiuto nomina il permesso: {err}"
+            "and the refusal names the permission: {err}"
         );
         assert!(
             err.message().to_string().contains("api.acme.com"),
-            "dicendo cosa era stato dichiarato: {err}"
+            "saying what was declared: {err}"
         );
     }
 
-    /// **Il modo in cui un'allowlist si scavalca**, e la riga che lo impedisce.
-    ///
     /// Un host dichiarato che risponde `302` verso uno che non lo è porterebbe
     /// fuori dal recinto senza che nessuno l'abbia deciso — e un client che
     /// segue i redirect lo farebbe **in silenzio**, perché l'allowlist non ce
     /// l'ha e non deve averla. Qui il salto è una **seconda chiamata**, quindi
     /// ripassa dal cancello e il cancello lo ferma.
+    /// Le credenziali in un URL sono il modo più vecchio di far leggere a un
+    /// umano un indirizzo e a una macchina un altro.
     #[test]
     fn a_redirect_out_of_the_fence_is_a_second_call_and_is_stopped() {
-        let guard = Guard::new(Filo, con_rete(&["api.acme.com"]));
-        let risposta = HttpResponse {
+        let guard = Guard::new(WithNetwork, with_network(&["api.acme.com"]));
+        let answer = HttpResponse {
             status: 302,
             headers: vec![fub_abi::net::HttpHeader::new(
                 "Location",
@@ -1750,174 +1753,174 @@ mod tests {
             )],
             body: Vec::new(),
         };
-        let salto = risposta.redirect_to().expect("è un redirect");
+        let salto = answer.redirect_to().expect("it is a redirect");
         assert!(
             guard.fetch(HttpRequest::get(salto)).is_err(),
-            "seguire il salto è chiedere di nuovo, e la seconda domanda è \
-             quella che il recinto ferma"
-        );
-    }
-
-    /// Le credenziali in un URL sono il modo più vecchio di far leggere a un
-    /// umano un indirizzo e a una macchina un altro.
-    #[test]
-    fn credentials_do_not_borrow_an_allowed_name() {
-        let guard = Guard::new(Filo, con_rete(&["api.acme.com"]));
-        assert!(
-            guard
-                .fetch(HttpRequest::get("https://api.acme.com@evil.example/x"))
-                .is_err(),
-            "l'host è ciò che sta dopo l'ultima `@`, non ciò che si legge prima"
+            "following the jump is asking again, and the second question is \
+             the one the fence stops"
         );
     }
 
     /// Il carattere `*` è obbligatorio proprio perché *«voglio anche i
     /// sottodomini»* sia una cosa che si dice invece di una che succede — e
+    #[test]
+    fn credentials_do_not_borrow_an_allowed_name() {
+        let guard = Guard::new(WithNetwork, with_network(&["api.acme.com"]));
+        assert!(
+            guard
+                .fetch(HttpRequest::get("https://api.acme.com@evil.example/x"))
+                .is_err(),
+            "the host is what is after the last `@`, not what is read before it"
+        );
+    }
+
     /// perché una `ends_with` nuda regalerebbe a chi dichiara `acme.com` il
     /// dominio di qualcun altro.
+    /// `fub:network` senza parametro è *qualunque host*, per la regola uniforme
+    /// di `OptionMap`. Ciò che cambia non è il cancello: è la frase che
     #[test]
     fn a_wildcard_does_not_hand_over_someone_elses_domain() {
-        let guard = Guard::new(Filo, con_rete(&["*.acme.com"]));
+        let guard = Guard::new(WithNetwork, with_network(&["*.acme.com"]));
         guard
             .fetch(HttpRequest::get("https://api.acme.com/x"))
-            .expect("un sottodominio proprio passa");
+            .expect("a proper subdomain passes");
         assert!(
             guard.fetch(HttpRequest::get("https://acme.com/x")).is_err(),
-            "il dominio nudo no: `*.` chiede un livello in più"
+            "the bare domain does not: `*.` demands one level more"
         );
         assert!(
             guard
                 .fetch(HttpRequest::get("https://evil-acme.com/x"))
                 .is_err(),
-            "e un nome che ci finisce per caso meno che mai"
+            "and a name that ends up there by chance even less so"
         );
     }
 
-    /// `fub:network` senza parametro è *qualunque host*, per la regola uniforme
-    /// di `OptionMap`. Ciò che cambia non è il cancello: è la frase che
     /// l'utente legge quando gli si chiede di accettare.
-    #[test]
-    fn no_allowlist_means_anywhere_and_that_is_the_uniform_rule() {
-        let mut permessi = PluginPermissions::of(&[]);
-        permessi.granted.set(permission::NETWORK, true);
-        let guard = Guard::new(Filo, Granted::new("p", &permessi, Trust::Community));
-        guard
-            .fetch(HttpRequest::get("https://ovunque.example/x"))
-            .expect("senza elenco non c'è recinto: presente = acceso");
-    }
-
     /// Senza il permesso non si esce, e il rifiuto parla del **permesso** e non
     /// di un elenco di host che non lo riguarda.
     #[test]
-    fn without_the_permission_the_refusal_names_the_permission() {
-        let guard = Guard::new(
-            Filo,
-            Granted::new("p", &PluginPermissions::of(&[]), Trust::Community),
-        );
-        let err = guard
-            .fetch(HttpRequest::get("https://api.acme.com/x"))
-            .expect_err("nessun permesso, nessuna rete");
-        assert!(
-            err.message().to_string().contains(permission::NETWORK),
-            "chi non ha il permesso deve leggere quale gli manca: {err}"
-        );
+    fn no_allowlist_means_anywhere_and_that_is_the_uniform_rule() {
+        let mut permissions = PluginPermissions::of(&[]);
+        permissions.granted.set(permission::NETWORK, true);
+        let guard = Guard::new(WithNetwork, Granted::new("p", &permissions, Trust::Community));
+        guard
+            .fetch(HttpRequest::get("https://ovunque.example/x"))
+            .expect("no list means no fence: present = on");
     }
 
     /// In chiaro l'allowlist promette un host e la rete ne consegna un altro —
     /// tranne verso sé stessi, dove non c'è rete da attraversare e dove vive un
+    #[test]
+    fn without_the_permission_the_refusal_names_the_permission() {
+        let guard = Guard::new(
+            WithNetwork,
+            Granted::new("p", &PluginPermissions::of(&[]), Trust::Community),
+        );
+        let err = guard
+            .fetch(HttpRequest::get("https://api.acme.com/x"))
+            .expect_err("no permission, no network");
+        assert!(
+            err.message().to_string().contains(permission::NETWORK),
+            "whoever lacks the permission must read which one they are missing: {err}"
+        );
+    }
+
     /// modello che gira sulla macchina di chi usa l'app.
+    /// **Il prefisso `127.` è una famiglia di nomi, non di indirizzi.**
+    ///
     #[test]
     fn plaintext_is_refused_except_towards_this_machine() {
-        let guard = Guard::new(Filo, con_rete(&["api.acme.com", "localhost"]));
+        let guard = Guard::new(WithNetwork, with_network(&["api.acme.com", "localhost"]));
         let err = guard
             .fetch(HttpRequest::get("http://api.acme.com/x"))
-            .expect_err("`http` verso fuori no");
+            .expect_err("`http` outward is refused");
         assert!(matches!(err, PluginError::BadArgs(_)), "{err}");
         guard
             .fetch(HttpRequest::get("http://localhost:11434/api/generate"))
-            .expect("verso questa macchina sì: è dove gira un modello locale");
+            .expect("toward this machine yes: that is where a local model runs");
     }
 
-    /// **Il prefisso `127.` è una famiglia di nomi, non di indirizzi.**
-    ///
     /// `127.0.0.1.evil.example` è registrabile — la prima etichetta di un
     /// dominio può cominciare con una cifra — e con un confronto per testo si
     /// prendeva l'esenzione del loopback: `http` in chiaro verso la macchina di
     /// qualcun altro, cioè l'unica cosa che la regola esiste per impedire.
+    /// **Un parametro illeggibile non è l'assenza di un parametro.**
+    ///
     #[test]
     fn a_name_that_starts_like_a_loopback_address_is_not_this_machine() {
-        let guard = Guard::new(Filo, con_rete(&["*.evil.example", "127.0.0.1", "::1"]));
+        let guard = Guard::new(WithNetwork, with_network(&["*.evil.example", "127.0.0.1", "::1"]));
         let err = guard
             .fetch(HttpRequest::get("http://127.0.0.1.evil.example/x"))
-            .expect_err("è un nome di qualcun altro, e in chiaro non ci si va");
+            .expect_err("it is someone else's name, and in plaintext you do not go there");
         assert!(matches!(err, PluginError::BadArgs(_)), "{err}");
         guard
             .fetch(HttpRequest::get("http://127.0.0.1:11434/api/generate"))
-            .expect("l'indirizzo vero sì");
+            .expect("the real address yes");
         guard
             .fetch(HttpRequest::get("http://[::1]:11434/api/generate"))
-            .expect("e anche la sua forma IPv6");
+            .expect("and its IPv6 form too");
     }
 
-    /// **Un parametro illeggibile non è l'assenza di un parametro.**
-    ///
     /// `"fub:network": "api.acme.com"` — la stringa invece dell'elenco — è un
     /// manifest scritto male, e prima cadeva sul ramo «nessun elenco», cioè
     /// *qualunque host*: un errore di battitura che intende restringere apriva
     /// a tutto, senza che niente lo dicesse. Adesso il recinto c'è e non nomina
     /// nessuno.
+    /// **Una `DryRun` che scarica non è una simulazione.** L'effetto non è
+    /// nell'host — un `POST` crea qualcosa dall'altra parte, e perfino un `GET`
     #[test]
     fn a_malformed_allowlist_fences_everything_out() {
-        for storto in [
+        for wrong in [
             serde_json::json!("api.acme.com"),
             serde_json::json!(7),
             serde_json::json!([1, 2]),
             serde_json::json!({ "host": "api.acme.com" }),
         ] {
-            let mut permessi = PluginPermissions::of(&[]);
-            permessi.granted.set(permission::NETWORK, storto.clone());
-            let guard = Guard::new(Filo, Granted::new("p", &permessi, Trust::Community));
+            let mut permissions = PluginPermissions::of(&[]);
+            permissions.granted.set(permission::NETWORK, wrong.clone());
+            let guard = Guard::new(WithNetwork, Granted::new("p", &permissions, Trust::Community));
             let err = guard
                 .fetch(HttpRequest::get("https://api.acme.com/x"))
-                .expect_err("un parametro storto non concede niente");
+                .expect_err("a malformed parameter grants nothing");
             assert!(
                 matches!(err, PluginError::PermissionDenied(_)),
-                "e lo dice come un permesso negato ({storto}): {err}"
+                "and it says so as a denied permission ({wrong}): {err}"
             );
             assert!(
                 err.message()
                     .to_string()
-                    .contains("non è un elenco di host"),
-                "mandando a cercare il difetto nel manifest e non nell'URL \
-                 ({storto}): {err}"
+                    .contains("is not a list of hosts"),
+                "sending you to look for the flaw in the manifest and not in \
+                 the URL ({wrong}): {err}"
             );
         }
     }
 
-    /// **Una `DryRun` che scarica non è una simulazione.** L'effetto non è
-    /// nell'host — un `POST` crea qualcosa dall'altra parte, e perfino un `GET`
     /// viene contato e registrato da chi risponde — quindi è la sola specie di
     /// effetto che questo processo non può ritirare nemmeno volendo.
+    /// I due permessi sono **due chiavi diverse**, e il presidio è che nessuna
+    /// apra la porta dell'altra.
     #[test]
     fn a_simulation_does_not_reach_the_network() {
         let guard = Guard::new(
-            Filo,
+            WithNetwork,
             ReadOnly {
-                why: "una simulazione non scrive",
+                why: "a simulation does not write",
             },
         );
         assert!(
             guard
                 .fetch(HttpRequest::get("https://api.acme.com/x"))
                 .is_err(),
-            "simulare uno scaricamento sarebbe scaricare"
+            "simulating a download would be downloading"
         );
     }
 
-    /// I due permessi sono **due chiavi diverse**, e il presidio è che nessuna
-    /// apra la porta dell'altra.
     ///
     /// Senza questa riga la coppia avrebbe potuto nascere con `read-drafts`
+    /// mappato su `fub:read-vault` — cioè con un nome nuovo davanti al cancello
+    /// vecchio, che è la forma in cui un permesso sembra esserci e non c'è.
     /// mappato su `fub:read-vault` — cioè con un nome nuovo davanti al cancello
     /// vecchio, che è la forma in cui un permesso sembra esserci e non c'è.
     #[test]
@@ -1927,15 +1930,15 @@ mod tests {
             Capability::Drafts.permission(),
             Some(permission::READ_DRAFTS)
         );
-        let solo_vault = PluginPermissions::of(&[permission::READ_VAULT]);
-        let granted = Granted::new("p", &solo_vault, Trust::Community);
+        let only_vault = PluginPermissions::of(&[permission::READ_VAULT]);
+        let granted = Granted::new("p", &only_vault, Trust::Community);
         assert!(
             granted.denies(Capability::Query).is_none(),
-            "`read-vault` concede l'indice"
+            "`read-vault` grants the index"
         );
         assert!(
             granted.denies(Capability::Drafts).is_some(),
-            "ma non le bozze: erano la stessa spunta nello stesso manifest"
+            "but not drafts: they were the same checkbox in the same manifest"
         );
     }
 }

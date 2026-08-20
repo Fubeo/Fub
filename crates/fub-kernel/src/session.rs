@@ -54,7 +54,7 @@ impl Session {
     pub fn publish(&self, context: Option<ViewContext>) -> ContextMask {
         let mut guard = self.context.write().expect("session context write lock");
         let changed = match (&*guard, &context) {
-            (Some(prima), Some(dopo)) => prima.changes(dopo),
+            (Some(before), Some(after)) => before.changes(after),
             // Un contesto che appare o sparisce cambia tutto ciò che si può
             // seguire: non c'è un campo per volta da confrontare.
             (None, Some(_)) | (Some(_), None) => ContextMask::all(),

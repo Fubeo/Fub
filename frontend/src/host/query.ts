@@ -31,7 +31,7 @@ import type {
   VaultFolder,
   VaultStatus,
 } from "./contract";
-import { OGNI_DOCUMENTO, nomeCercato, questiDocumenti } from "./contract";
+import { EVERY_DOCUMENT, nameQuery, theseDocuments } from "./contract";
 
 /// Apre la risposta, o dice **cosa** è arrivato invece.
 ///
@@ -66,13 +66,13 @@ type PayloadOf = {
 /// cioè la trappola che questo repo ha già incontrato dodici volte in un giro
 /// solo. Un `unique symbol` non si scrive: si nomina. Il conto e il
 /// compilatore stanno d'accordo per costruzione, e non per attenzione.
-export const SENZA_FINESTRA = Symbol("senza-finestra");
+export const WITHOUT_PAGE = Symbol("senza-finestra");
 
 /// Quanto si vuole di una risposta: una finestra, o tutto avendolo detto.
-export type Finestra = Page | typeof SENZA_FINESTRA;
+export type PageWindow = Page | typeof WITHOUT_PAGE;
 
-function finestraDi(f: Finestra): Page | null {
-  return f === SENZA_FINESTRA ? null : f;
+function pageOf(f: PageWindow): Page | null {
+  return f === WITHOUT_PAGE ? null : f;
 }
 
 function open<K extends keyof PayloadOf>(result: IndexResult, kind: K): PayloadOf[K] {
@@ -93,9 +93,9 @@ function open<K extends keyof PayloadOf>(result: IndexResult, kind: K): PayloadO
 /// della seduta (`una_ricerca.rs`, fase 5) è la differenza fra 3 e 5 ms su un
 /// vault da duemila note, e per una superficie che parte a ogni battuta è la
 /// metà del budget spesa per del testo che nessuno disegna.
-export async function documentiCheCombaciano(
+export async function matchingDocuments(
   matching: QueryExpr,
-  finestra: Finestra,
+  window: PageWindow,
   excerpts?: Excerpts,
 ): Promise<Paged<DocumentMatch>> {
   const query: IndexQuery = {
@@ -103,7 +103,7 @@ export async function documentiCheCombaciano(
     matching,
     sort: null,
     select: { kind: "none" },
-    page: finestraDi(finestra),
+    page: pageOf(window),
     excerpts,
   };
   return open(await api.queryIndex(query), "documents");
@@ -115,7 +115,7 @@ export async function documentiCheCombaciano(
 /// cerca: nessuno legge la ventunesima riga di un elenco che si ridisegna
 /// mentre si scrive, e la finestra è ciò che tiene il giro per battuta lontano
 /// dal costo per risultato misurato dal banco.
-const QUANTI_NOMI = 20;
+const MAX_NAMES = 20;
 
 /// **Le note il cui nome combacia**, dalla più pertinente: il giro per battuta
 /// del quick switcher e dell'autocompletamento dei wikilink (§21.5).
@@ -129,15 +129,15 @@ const QUANTI_NOMI = 20;
 /// **rispettare**: un secondo ordinamento nella shell — il fuzzy di CodeMirror,
 /// un `sort` per nome — rimescolerebbe una rilevanza calcolata dove ci sono i
 /// dati per calcolarla, e le due ricerche tornerebbero due.
-export async function noteDalNome(testo: string, quante = QUANTI_NOMI): Promise<string[]> {
-  const scritto = testo.trim();
+export async function notesByName(text: string, count = MAX_NAMES): Promise<string[]> {
+  const written = text.trim();
   // La query vuota non si manda: il provider risponderebbe «nessun predicato
   // di testo», cioè tutto il vault, e sarebbe l'elenco intero rientrato dalla
   // finestra. Chi ha bisogno di mostrare qualcosa a mani vuote lo decide da sé.
-  if (!scritto) return [];
-  const page = await documentiCheCombaciano(
-    nomeCercato(scritto),
-    { offset: 0, limit: quante },
+  if (!written) return [];
+  const page = await matchingDocuments(
+    nameQuery(written),
+    { offset: 0, limit: count },
     "omit",
   );
   return page.items.map((m) => m.doc);
@@ -151,22 +151,22 @@ export async function noteDalNome(testo: string, quante = QUANTI_NOMI): Promise<
 /// note che una cartella *potrebbe* avere — e prima si faceva cercandoli dentro
 /// l'elenco intero del vault, che è il giro che il §14.4 esiste per togliere.
 ///
-/// `SENZA_FINESTRA` qui non è una rinuncia: la risposta è **già limitata
+/// `WITHOUT_PAGE` qui non è una rinuncia: la risposta è **già limitata
 /// dall'ingresso** — non può contenere più di `docs.length` righe — e una
 /// finestra su una lista che il chiamante ha in mano taglierebbe la sua
 /// domanda, non la risposta del vault.
-export async function documentiEsistenti(docs: string[]): Promise<Set<string>> {
+export async function existingDocuments(docs: string[]): Promise<Set<string>> {
   if (docs.length === 0) return new Set();
-  const page = await documentiCheCombaciano(questiDocumenti(docs), SENZA_FINESTRA);
+  const page = await matchingDocuments(theseDocuments(docs), WITHOUT_PAGE);
   return new Set(page.items.map((m) => m.doc));
 }
 
 /// I tag del vault con la loro frequenza.
-export async function tagDelVault(finestra: Finestra): Promise<TagCount[]> {
+export async function vaultTags(window: PageWindow): Promise<TagCount[]> {
   const query: IndexQuery = {
     kind: "tags",
-    matching: OGNI_DOCUMENTO,
-    page: finestraDi(finestra),
+    matching: EVERY_DOCUMENT,
+    page: pageOf(window),
   };
   return open(await api.queryIndex(query), "tags").items;
 }
@@ -186,7 +186,7 @@ export async function tagDelVault(finestra: Finestra): Promise<TagCount[]> {
 /// righe le muovono gli eventi (`job_started`, `job_progress`, `job_done`), e
 /// questa domanda serve quando quel filo si è interrotto — all'apertura del
 /// pannello, e dopo un `overflow`, che vuol dire esattamente *richiedi*.
-export async function lavoriInCorso(): Promise<JobStatus[]> {
+export async function activeJobs(): Promise<JobStatus[]> {
   return open(await api.queryIndex({ kind: "jobs" }), "jobs");
 }
 
@@ -197,7 +197,7 @@ export async function lavoriInCorso(): Promise<JobStatus[]> {
 /// leggere non è cambiare. Scriverne una invece ha una porta (`saveDraft`),
 /// perché quella è una capacità che non esiste e non deve esistere — il testo
 /// non salvato è il dato più privato di un vault.
-export async function bozzeNonSalvate(): Promise<DraftInfo[]> {
+export async function unsavedDrafts(): Promise<DraftInfo[]> {
   return open(await api.queryIndex({ kind: "drafts" }), "drafts").items;
 }
 
@@ -207,7 +207,7 @@ export async function bozzeNonSalvate(): Promise<DraftInfo[]> {
 /// È la stessa domanda che fa un plugin, e la fa dallo stesso canale: il
 /// pannello delle impostazioni non ha un comando privilegiato che una feature
 /// non avrebbe.
-export async function impostazioni(plugin?: string): Promise<SettingEntry[]> {
+export async function settings(plugin?: string): Promise<SettingEntry[]> {
   return open(await api.queryIndex({ kind: "settings", plugin: plugin ?? null }), "settings");
 }
 
@@ -217,7 +217,7 @@ export async function impostazioni(plugin?: string): Promise<SettingEntry[]> {
 /// Dal canale dati e non da un comando suo, come tutto il resto qui dentro:
 /// prima era un comando IPC che restituiva il blob intero, cioè una cosa che la
 /// shell sapeva chiedere e un provider no.
-export async function organizzazione(): Promise<Organization> {
+export async function organizationQuery(): Promise<Organization> {
   return open(await api.queryIndex({ kind: "organization" }), "organization");
 }
 
@@ -237,7 +237,7 @@ export async function organizzazione(): Promise<Organization> {
 ///
 /// Prima era `resolve_link`, un comando IPC scritto apposta — cioè la sola
 /// risposta sul vault che questa shell sapeva chiedere e un provider no.
-export async function riferimentoRisolto(
+export async function resolvedReference(
   target: LinkTarget,
   from?: string,
 ): Promise<ResolvedRef | null> {
@@ -256,11 +256,11 @@ export async function riferimentoRisolto(
 ///
 /// La finestra c'è dal primo giorno ed è la stessa `Page` di ogni altra
 /// risposta paginata. Quello che è cambiato col §2.9 è che **non si omette**:
-/// chiedere tutto è `SENZA_FINESTRA`, e passare un limite grande resta la cosa
+/// chiedere tutto è `WITHOUT_PAGE`, e passare un limite grande resta la cosa
 /// sbagliata (un tetto travestito da finestra non dice a nessuno cosa ha
 /// lasciato fuori).
-export async function vociDelVault(
-  finestra: Finestra,
+export async function vaultEntries(
+  window: PageWindow,
   of_kind?: EntryKind,
   within?: FolderScope,
 ): Promise<Paged<VaultEntry>> {
@@ -268,7 +268,7 @@ export async function vociDelVault(
     kind: "entries",
     of_kind: of_kind ?? null,
     within: within ?? null,
-    page: finestraDi(finestra),
+    page: pageOf(window),
   };
   return open(await api.queryIndex(query), "entries");
 }
@@ -277,19 +277,19 @@ export async function vociDelVault(
 ///
 /// `under` assente = ogni cartella del vault, a ogni profondità: è l'elenco da
 /// cui si sceglie (uno spazio, una destinazione). Con `{ path, descendants:
-/// false }` è **un livello solo**, cioè ciò che serve ad aprire un nodo
+/// false }` è **un level solo**, cioè ciò che serve ad aprire un nodo
 /// dell'albero senza chiedere il resto del vault.
 ///
 /// Le cartelle arrivano dal kernel e non si deducono più dai path delle note:
 /// una cartella vuota c'è, e una che è rimasta vuota non sparisce.
-export async function cartelleDelVault(
-  finestra: Finestra,
+export async function vaultFolders(
+  window: PageWindow,
   under?: FolderScope,
 ): Promise<Paged<VaultFolder>> {
   const query: IndexQuery = {
     kind: "folders",
     under: under ?? null,
-    page: finestraDi(finestra),
+    page: pageOf(window),
   };
   return open(await api.queryIndex(query), "folders");
 }
@@ -306,27 +306,27 @@ export async function cartelleDelVault(
 /// dirlo. Un livello troncato in silenzio è una cartella che sembra avere
 /// quindici note quando ne ha tremila — cioè il difetto che questa finestra
 /// esiste per non introdurre.
-export interface ContenutoDiCartella {
+export interface FolderContent {
   folders: VaultFolder[];
   notes: string[];
-  altreCartelle: number;
-  altreNote: number;
+  otherFolders: number;
+  otherNote: number;
 }
 
-export async function contenutoDiCartella(
+export async function folderContent(
   path: string,
-  finestra: Finestra,
-): Promise<ContenutoDiCartella> {
+  window: PageWindow,
+): Promise<FolderContent> {
   const scope: FolderScope = { path, descendants: false };
   const [folders, notes] = await Promise.all([
-    cartelleDelVault(finestra, scope),
-    vociDelVault(finestra, "document", scope),
+    vaultFolders(window, scope),
+    vaultEntries(window, "document", scope),
   ]);
   return {
     folders: folders.items,
     notes: notes.items.map((e) => e.id),
-    altreCartelle: Math.max(0, folders.total - folders.offset - folders.items.length),
-    altreNote: Math.max(0, notes.total - notes.offset - notes.items.length),
+    otherFolders: Math.max(0, folders.total - folders.offset - folders.items.length),
+    otherNote: Math.max(0, notes.total - notes.offset - notes.items.length),
   };
 }
 
@@ -335,6 +335,6 @@ export async function contenutoDiCartella(
 ///
 /// Passa dal canale dati e non da un comando suo perché la stessa risposta
 /// dev'essere visibile a una feature, che di comandi IPC non ne ha nessuno.
-export async function statoDelVault(): Promise<VaultStatus> {
+export async function vaultStatus(): Promise<VaultStatus> {
   return open(await api.queryIndex({ kind: "vault_status" }), "vault_status");
 }

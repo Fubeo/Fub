@@ -19,15 +19,15 @@
 // provider non ha modo di fare. Il comando che scrive, invece, è del registro
 // (`note.trash`) e lo era già.
 import { confirm } from "../host/dialog";
-import { primaNota, refreshDocuments, trashNote } from "../state/vault";
+import { beforeNota, refreshDocuments, trashNote } from "../state/vault";
 import { pageName } from "../rules/organizer";
-import { docAttivo } from "../state/layout";
+import { activeDoc } from "../state/layout";
 import {
   closeDocument,
   isOpen,
   openDocument,
   resumeSave,
-  scartaLaBozzaDi,
+  discardDraft,
   suspendSave,
 } from "./document";
 import { t } from "../i18n/strings";
@@ -69,20 +69,20 @@ export async function trashWithConfirm(id: string): Promise<void> {
   // La bozza muore col documento, come il buffer sporco qui sotto: è il gemello
   // su disco di quello, e sopravvivergli vorrebbe dire riproporre al prossimo
   // avvio — come `orfana` — la nota che l'utente ha appena buttato rispondendo
-  // di sì a una domanda (difetto 0211). Vale anche per una bozza scritta prima
+  // di sì a una domanda (difetto 0211). Vale anche per una bozza scritto prima
   // che questo gesto cominciasse: la decisione è la stessa.
-  await scartaLaBozzaDi(id);
-  const era_aperta = isOpen(id);
-  if (era_aperta) {
+  await discardDraft(id);
+  const era_open = isOpen(id);
+  if (era_open) {
     // Il buffer sporco di un documento cancellato muore col documento: non è
     // una perdita silenziosa, è l'azione che l'utente ha appena confermato.
     closeDocument(id);
   }
   refreshDocuments();
-  if (era_aperta && !docAttivo()) {
+  if (era_open && !activeDoc()) {
     // La prima nota che c'è, chiesta con una finestra da uno: prendere il primo
     // elemento di un elenco intero era chiedere il vault per aprirne una (§14.4).
-    const prima = await primaNota();
-    if (prima) await openDocument(prima);
+    const first = await beforeNota();
+    if (first) await openDocument(first);
   }
 }

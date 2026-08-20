@@ -126,7 +126,7 @@ pub fn is_attachment(path: &str, doc_extensions: &[String]) -> bool {
     match name.rsplit_once('.') {
         // Senza estensione è un documento: è la forma dei link fra note.
         None => false,
-        Some((_, ext)) => !doc_extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)),
+        Some((_, ext)) => !doc_extensions.iter().any(|and| and.eq_ignore_ascii_case(ext)),
     }
 }
 
@@ -153,7 +153,7 @@ pub fn unrecognized_dates(fm: &Frontmatter, formats: &DateFormats) -> Vec<(Strin
     for (key, value) in fm.properties(formats) {
         // Solo i testi: ciò che è già diventato una data non è un problema, e
         // un numero o un booleano non somigliano a una data in nessun formato.
-        let testi: Vec<String> = match value {
+        let texts: Vec<String> = match value {
             PropertyValue::Text(t) => vec![t],
             PropertyValue::List(items) => items
                 .into_iter()
@@ -164,9 +164,9 @@ pub fn unrecognized_dates(fm: &Frontmatter, formats: &DateFormats) -> Vec<(Strin
                 .collect(),
             _ => Vec::new(),
         };
-        for testo in testi {
-            if DateFormats::looks_like_a_date(&testo) {
-                out.push((key.clone(), testo));
+        for text in texts {
+            if DateFormats::looks_like_a_date(&text) {
+                out.push((key.clone(), text));
             }
         }
     }

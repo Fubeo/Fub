@@ -19,29 +19,29 @@
 // Non si registra in `ui/panel-host.ts` — chi si registra è il pannello che
 // `ui/views.ts` crea per il riquadro che ospita la view — e non sa **dove** sta
 // disegnando: riceve un elemento, e quell'elemento è un riquadro dell'area
-// principale, cioè una superficie con tab, che si divide e che si ricorda com'era.
+// principale, cioè una superficie con linguetta, che si divide e che si ricorda com'era.
 //
 // # Il 2.0: l'orchestratore sottile
 //
 // La fisica, il disegno e l'interazione stanno nei lotti B (`sim/*`,
-// `render/*`, `interazione.ts`); qui resta solo il binding: leggere il payload,
-// caricare la conf (`config.ts`), creare il `grafico` e il `pannello-fisica`,
+// `render/*`, `interaction.ts`); qui resta solo il binding: leggere il payload,
+// caricare la conf (`config.ts`), creare il `chart` e il `physics-panel`,
 // e collegarli agli eventi della shell (il segnale `layout` per le note aperte,
-// `onLingua` per i testi). Il dispose restituisce lo smontaggio di entrambi.
+// `onLanguage` per i testi). Il dispose restituisce lo smontaggio di entrambi.
 
-import { apriVistaIn, documenti, layout, pane, panes } from "../state/layout";
+import { openViewIn, documents, layout, pane, panes } from "../state/layout";
 import { registerCustomRenderer, type OnAction } from "../ui/custom";
 import { registerShellCommand } from "../ui/commands";
 import { $ } from "../ui/dom";
 import { on } from "../state/store";
-import { onLingua, t } from "../i18n/strings";
-import { caricaConf, salvaConf } from "../graph/config";
-import { creaGrafico } from "../graph/grafico";
-import { creaPannelloFisica, type TestiPannello } from "../graph/pannello-fisica";
+import { onLanguage, t } from "../i18n/strings";
+import { loadConfig, saveConfig } from "../graph/config";
+import { createChart } from "../graph/chart";
+import { createPhysicsPanel, type PanelCopy } from "../graph/physics-panel";
 
 /// Il namespace con cui il grafo arriva dal provider. È `fub_features::graph::GRAPH_NS`,
 /// e la costanza dei due nomi è il contratto fra le due metà del componente.
-export const NS_GRAFO = "fub:graph";
+export const GRAPH_NS = "fub:graph";
 /// L'id della `ViewSpec` che il provider dichiara (`fub_features::graph::GRAPH_VIEW`).
 ///
 /// Che questo file lo conosca **non** è la conoscenza privata che il §1.2 ha
@@ -49,11 +49,11 @@ export const NS_GRAFO = "fub:graph";
 /// Questo è un componente che conosce il proprio altro capo — la stessa cosa che
 /// fa già con lo `ns` — e i due nomi viaggiano insieme perché nominano lo stesso
 /// componente.
-export const VISTA_GRAFO = "graph";
+export const GRAPH_VIEW = "graph";
 
 /// L'azione con cui si chiede al provider di aprire una nota, e la chiave del
 /// suo payload. Gemelle di `OPEN` e `DOC` in `graph.rs`.
-const APRI = "open";
+const OPEN = "open";
 const DOC = "doc";
 
 
@@ -61,7 +61,7 @@ const DOC = "doc";
 /// e questo tipo è la sua lettura di qua: se le due divergono, il grafo si
 /// disegna vuoto invece di lanciare — un payload storto viene da un provider, e
 /// un provider può essere di terzi.
-interface DatiGrafo {
+interface GraphData {
   nodes: string[];
   edges: { from: string; to: string }[];
 }
@@ -69,21 +69,21 @@ interface DatiGrafo {
 /// Attacca la metà shell del grafo: il renderer del suo `ns` e il comando che lo
 /// apre.
 export function mountGraph(): void {
-  $("#show-graph").addEventListener("click", () => apriGrafo());
+  $("#show-graph").addEventListener("click", () => openGraph());
 
   // Il grafo come **comando** (§18.2): era un bottone nella barra, e chi non lo
   // trovava con il mouse non lo trovava. L'id e la scorciatoia sono quelli di
   // prima — chi li ha imparati li tiene — ed è cambiato cosa fa: apriva un
-  // overlay sopra tutto, adesso apre una tab nel riquadro col fuoco. Che sia un
+  // overlay sopra tutto, adesso apre una linguetta nel riquadro col fuoco. Che sia un
   // comando è la parte che la 0077 ha reso non negoziabile.
   registerShellCommand({
     id: "shell.graph",
     title: "commands.graph",
     description: "commands.graph.desc",
-    run: () => apriGrafo(),
+    run: () => openGraph(),
   });
 
-  registerCustomRenderer(NS_GRAFO, disegnaGrafo);
+  registerCustomRenderer(GRAPH_NS, renderGraph);
 }
 
 /// Apre il grafo nel riquadro col fuoco.
@@ -94,11 +94,11 @@ export function mountGraph(): void {
 /// dividere da sé — deciderebbe al posto dell'utente come vuole la finestra, e
 /// lo farebbe ogni volta.
 ///
-/// Se la tab c'è già ci si sposta sopra: lo garantisce `apriVistaIn`, e per il
-/// grafo conta più che per una nota — due tab sullo stesso grafo sarebbero due
+/// Se la linguetta c'è già ci si sposta sopra: lo garantisce `apriVistaIn`, e per il
+/// grafo conta più che per una nota — due linguetta sullo stesso grafo sarebbero due
 /// simulazioni che girano insieme.
-function apriGrafo(): void {
-  apriVistaIn(layout.focus, VISTA_GRAFO);
+function openGraph(): void {
+  openViewIn(layout.focus, GRAPH_VIEW);
 }
 
 /// I documenti aperti in un riquadro qualunque: sono i nodi che il grafo accende.
@@ -107,19 +107,19 @@ function apriGrafo(): void {
 /// uno solo vorrebbe dire scegliere fra due note che l'utente sta guardando
 /// entrambe; e la nota «attiva» sarebbe per giunta `null` proprio mentre si
 /// guarda il grafo, visto che il fuoco ce l'ha lui.
-function apertiOra(): Set<string> {
+function openDocuments(): Set<string> {
   return new Set(
     panes().flatMap((id) => {
       const p = pane(id);
-      return p ? documenti(p) : [];
+      return p ? documents(p) : [];
     }),
   );
 }
 
 /// Legge il payload del provider, con la tolleranza che si deve a un dato che
 /// viene da fuori.
-function leggiDati(payload: unknown): DatiGrafo {
-  const o = (payload ?? {}) as Partial<DatiGrafo>;
+function readData(payload: unknown): GraphData {
+  const o = (payload ?? {}) as Partial<GraphData>;
   const nodes = Array.isArray(o.nodes) ? o.nodes.filter((n) => typeof n === "string") : [];
   const edges = Array.isArray(o.edges)
     ? o.edges.filter(
@@ -132,46 +132,46 @@ function leggiDati(payload: unknown): DatiGrafo {
 
 /// Costruisce i testi del pannello nella lingua corrente. Le chiavi dei campi
 /// e dei preset sono letterali, così il compilatore verifica che ogni
-/// `t(chiave)` sia una chiave vera del catalogo — niente cast.
-function testiPannello(): TestiPannello {
+/// `t(key)` sia una chiave vera del catalogo — niente cast.
+function panelCopy(): PanelCopy {
   const presets: Record<string, string> = {
-    organica: t("graph.preset.organica"),
-    costellazione: t("graph.preset.costellazione"),
-    alveare: t("graph.preset.alveare"),
-    nebulosa: t("graph.preset.nebulosa"),
-    rigido: t("graph.preset.rigido"),
-    custom: t("graph.preset.custom"),
+    "organica": t("graph.preset.organica"),
+    "costellazione": t("graph.preset.costellazione"),
+    "alveare": t("graph.preset.alveare"),
+    "nebulosa": t("graph.preset.nebulosa"),
+    "rigido": t("graph.preset.rigido"),
+    "custom": t("graph.preset.custom"),
   };
-  const campi: Record<string, string> = {
-    repulsione: t("graph.conf.repulsione"),
-    lunghezzaBase: t("graph.conf.lunghezzaBase"),
-    rigiditaMolla: t("graph.conf.rigiditaMolla"),
-    smorzamentoMolla: t("graph.conf.smorzamentoMolla"),
-    gravita: t("graph.conf.gravita"),
-    attrito: t("graph.conf.attrito"),
-    maxVelocita: t("graph.conf.maxVelocita"),
-    pesoGrado: t("graph.conf.pesoGrado"),
-    collisioni: t("graph.conf.collisioni"),
+  const fields: Record<string, string> = {
+    repulsion: t("graph.conf.repulsione"),
+    baseLength: t("graph.conf.lunghezzaBase"),
+    springStiffness: t("graph.conf.rigiditaMolla"),
+    springDamping: t("graph.conf.smorzamentoMolla"),
+    gravity: t("graph.conf.gravita"),
+    friction: t("graph.conf.attrito"),
+    maxSpeed: t("graph.conf.maxVelocita"),
+    degreeWeight: t("graph.conf.pesoGrado"),
+    collisions: t("graph.conf.collisioni"),
     theta: t("graph.conf.theta"),
     jitter: t("graph.conf.jitter"),
-    raffreddamento: t("graph.conf.raffreddamento"),
+    cooling: t("graph.conf.raffreddamento"),
     glow: t("graph.conf.glow"),
     pulse: t("graph.conf.pulse"),
     trail: t("graph.conf.trail"),
-    griglia: t("graph.conf.griglia"),
-    curvaturaArchi: t("graph.conf.curvaturaArchi"),
-    densitaEtichette: t("graph.conf.densitaEtichette"),
+    grid: t("graph.conf.griglia"),
+    edgeCurvature: t("graph.conf.curvaturaArchi"),
+    labelDensity: t("graph.conf.densitaEtichette"),
   };
   return {
-    titolo: t("graph.conf.titolo"),
+    title: t("graph.conf.titolo"),
     preset: t("graph.conf.preset"),
-    riscalda: t("graph.conf.riscalda"),
-    sblocca: t("graph.conf.sblocca"),
-    reimposta: t("graph.conf.reimposta"),
-    apri: t("graph.conf.apri"),
-    chiudi: t("graph.conf.chiudi"),
+    warm: t("graph.conf.riscalda"),
+    unpin: t("graph.conf.sblocca"),
+    reset: t("graph.conf.reimposta"),
+    open: t("graph.conf.apri"),
+    close: t("graph.conf.chiudi"),
     presets,
-    campi,
+    fields,
   };
 }
 
@@ -179,36 +179,36 @@ function testiPannello(): TestiPannello {
 /// come spegnerlo. Sottile: la fisica, il disegno e l'interazione stanno nei
 /// lotti B; qui si legano a una conf persistente, un pannello di fisica e
 /// gli eventi della shell (layout, lingua).
-function disegnaGrafo(host: HTMLElement, payload: unknown, onAction: OnAction): () => void {
-  const dati = leggiDati(payload);
-  const conf = caricaConf();
-  const grafico = creaGrafico({ conf, dati });
-  const pannello = creaPannelloFisica({
-    conf,
-    onCambia: (c) => {
-      salvaConf(c);
-      grafico.impostaConf(c);
+function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): () => void {
+  const data = readData(payload);
+  const config = loadConfig();
+  const chart = createChart({ config, data });
+  const panel = createPhysicsPanel({
+    config,
+    onChange: (c) => {
+      saveConfig(c);
+      chart.setConfig(c);
     },
-    onRiscalda: () => grafico.riscalda(0.6),
-    onSbloccaPanni: () => grafico.sbloccaNodi(),
-    testi: testiPannello,
-    riportaFocus: () => {
+    onWarm: () => chart.warm(0.6),
+    onUnpinAll: () => chart.unpinNodes(),
+    copy: panelCopy,
+    restoreFocus: () => {
       const c = host.querySelector<HTMLCanvasElement>("canvas.graph-main");
       if (c) c.focus();
     },
   });
   // L'apertura nota: il grafico non conosce `onAction`, lo riceve qui.
-  grafico.apri = (id: string) => onAction({ action: APRI, payload: { [DOC]: id } }, []);
+  chart.open = (id: string) => onAction({ action: OPEN, payload: { [DOC]: id } }, []);
 
   // Il conto di nodi e archi: sopra il canvas, annotazione non testata.
-  const conto = document.createElement("div");
-  conto.className = "graph-count";
-  conto.textContent = t("graph.count", { note: dati.nodes.length, archi: dati.edges.length });
+  const count = document.createElement("div");
+  count.className = "graph-count";
+  count.textContent = t("graph.count", { note: data.nodes.length, archi: data.edges.length });
 
-  grafico.monta(host);
-  host.append(conto, pannello.elemento);
-  grafico.impostaAperti(apertiOra());
-  grafico.impostaEtichettaA11y(t("graph.a11y.superficie", { note: dati.nodes.length, archi: dati.edges.length }));
+  chart.mount(host);
+  host.append(count, panel.element);
+  chart.setOpenDocuments(openDocuments());
+  chart.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, archi: data.edges.length }));
 
   let disposed = false;
 
@@ -217,20 +217,20 @@ function disegnaGrafo(host: HTMLElement, payload: unknown, onAction: OnAction): 
   // commento dice perché non c'è un `off` da chiamare nel dispose.
   on("layout", () => {
     if (disposed) return;
-    grafico.impostaAperti(apertiOra());
+    chart.setOpenDocuments(openDocuments());
   });
 
-  const smontaLingua = onLingua(() => {
+  const unsubscribeLanguage = onLanguage(() => {
     if (disposed) return;
-    conto.textContent = t("graph.count", { note: dati.nodes.length, archi: dati.edges.length });
-    grafico.impostaEtichettaA11y(t("graph.a11y.superficie", { note: dati.nodes.length, archi: dati.edges.length }));
-    pannello.aggiornaLingua();
+    count.textContent = t("graph.count", { note: data.nodes.length, archi: data.edges.length });
+    chart.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, archi: data.edges.length }));
+    panel.updateLanguage();
   });
 
   return () => {
     disposed = true;
-    smontaLingua();
-    grafico.smonta();
-    pannello.distruggi();
+    unsubscribeLanguage();
+    chart.unmount();
+    panel.destroy();
   };
 }

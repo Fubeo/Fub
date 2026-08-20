@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Il primo FormatProvider nativo: markdown in stile Obsidian (comrak). L'unico crate M1 che sa che il markdown esiste."
+description = "First native FormatProvider: Obsidian-style markdown (comrak). The only M1 crate that knows markdown exists."
 
 [dependencies]
 comrak = "0.54.0"
