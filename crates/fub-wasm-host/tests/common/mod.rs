@@ -46,7 +46,7 @@ pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
 
     let root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
-        .join("examples")
+        .join("esempi")
         .join(example);
     let output = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(example);
     let copy = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(

@@ -106,7 +106,7 @@ impl host_events::Host for State {
                 severity: Severity::Failure,
                 subject: None,
                 error: PluginError::BadArgs(
-                    format!("event not emitted by a WASM component: {why}").into(),
+                    format!("evento non emesso da un componente WASM: {why}").into(),
                 ),
                 // Da quale porta il kernel stia chiamando il componente, di qui
                 // non si sa: il prestito porta le capacità, non il varco da cui
