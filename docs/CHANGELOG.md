@@ -1,4 +1,3 @@
-
 # Changelog
 
 Le modifiche degne di nota, versione per versione. Il formato è
@@ -60,8 +59,8 @@ pubblicato. Quello che segue diventerà il contenuto di `0.1.0`.
   [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) e
   [archivio/versionamento.md](archivio/versionamento.md).
 
-Milestone 1 è chiusa dal **2026-07-24**; M2 è quasi finita. Cosa entra in
-ciascuna sta in [milestones/](archivio/milestones/M2-search-graph.md).
+Milestones 1–4 sono completate; Milestone 5 (runtime WASM) è in corso.
+Cosa entra in ciascuna sta in [archivio/milestones/](archivio/milestones/README.md).
 
 ### Sicurezza
 

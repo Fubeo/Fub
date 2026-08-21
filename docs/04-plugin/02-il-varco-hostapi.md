@@ -15,20 +15,26 @@ flowchart LR
 
 ## Le capacità disponibili in `HostApi`
 
-L'interfaccia `HostApi` raggruppa diverse famiglie di funzioni:
+L'interfaccia `HostApi` raggruppa diverse famiglie di funzioni e trait:
 
-1. **Documenti del Vault**:
-   - `read_document(doc_id)`: legge il testo o il modello di una nota.
-   - `write_document(doc_id, text)`: aggiorna il contenuto di una nota (richiede il permesso di scrittura).
-2. **Canale Dati e Indici**:
-   - `query_index(query)`: esegue una ricerca strutturata (es. per tag, proprietà o testo) e riceve i risultati.
-3. **Eventi**:
-   - `emit_event(event)`: pubblica un evento personalizzato che altri componenti possono ascoltare.
-4. **Stato e Dati del Plugin**:
-   - `read_blob(key)` / `write_blob(key, data)`: salva dati persistenti riservati al plugin sotto `.fub/data/plugins/<id>/`.
-5. **Impostazioni e Ambiente**:
-   - `get_setting(key)`: legge un valore di configurazione.
-   - `now()`: ottiene l'orario corrente.
+1. **Documenti del Vault (`VaultRead`, `VaultWrite`, `VaultStructure`)**:
+   - `read_document(doc_id)`: legge la sorgente di testo UTF-8 di una nota.
+   - `read_model(doc_id)`: legge il modello strutturato ad albero (`DocumentModel`).
+   - `write_document(doc_id, text, base)`: aggiorna il contenuto di una nota (richiede il permesso `fub:write-vault`).
+   - `create_document`, `rename_document`, `trash_document`, `restore_document`, `empty_trash`.
+2. **Canale Dati e Indici (`HostQuery`)**:
+   - `query_index(query)`: esegue una ricerca strutturata (es. per tag, proprietà o full-text) e riceve i risultati.
+3. **Eventi e Job (`HostEvents`)**:
+   - `emit(event)`: pubblica un evento personalizzato che altri componenti possono ascoltare.
+   - `spawn_job(spec)`: avvia un'operazione asincrona in background.
+4. **Stato e Dati del Plugin (`DataRead`, `DataWrite`)**:
+   - `data_read(path)` / `data_write(path, data)`: storage isolato e persistente sotto `.fub/data/plugins/<id>/`.
+5. **Impostazioni e Ambiente (`SettingsRead`, `SettingsWrite`, `HostEnv`)**:
+   - `setting(key)` / `set_setting(key, value)`: lettura e scrittura configurazioni.
+   - `now_unix_millis()`: timestamp Unix corrente in millisecondi.
+   - `user_locale()`, `random_bytes(n)`, `active_context()`.
+6. **Comandi, Servizi e Rete (`HostCommands`, `HostServices`, `HostNetwork`)**:
+   - `run_command(cmd, args)`, `call_service(srv, method, args)`, `fetch(request)`.
 
 ---
 

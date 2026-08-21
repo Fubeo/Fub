@@ -30,9 +30,10 @@ Quando l'utente compie un'azione (apre un file, salva una nota, esegue una ricer
 // Esempio: chiamata dal frontend
 import { invoke } from '@tauri-apps/api/core';
 
-const risultato = await invoke('write_document', {
+const nuovaRevisione = await invoke<string>('write_document', {
     id: 'Appunti.md',
-    text: '# Titolo aggiornato'
+    source: '# Titolo aggiornato',
+    base: { kind: 'descends_from', value: 'sha256-precedente...' }
 });
 ```
 
@@ -40,13 +41,18 @@ Nel backend, il comando è gestito in [`crates/fub-app/src/lib.rs`](../../crates
 
 ```rust
 #[tauri::command]
-pub async fn write_document(
-    state: tauri::State<'_, AppState>,
+pub fn write_document(
+    host: State<Host>,
     id: String,
-    text: String
-) -> Result<(), CommandError> {
-    // Chiama il kernel tramite la custodia di fub-host
-    // ...
+    source: String,
+    base: WriteBase,
+    vault: Option<String>,
+) -> Result<String, PluginError> {
+    let ws = host.workspace(vault.as_deref())?;
+    let mut ws = ws.write()?;
+    ws.write_document(&doc_id(&id)?, &source, base)
+        .map(|r| r.0)
+        .map_err(PluginError::from)
 }
 ```
 
@@ -56,7 +62,7 @@ pub async fn write_document(
 
 Quando qualcosa cambia nel vault (per esempio un file viene salvato o modificato all'esterno da un altro programma), il backend emette un evento:
 
-- Il thread del ponte (`bridge.rs`) preleva l'evento dal kernel.
+- Il thread del ponte ([`crates/fub-host/src/bridge.rs`](../../crates/fub-host/src/bridge.rs)) preleva l'evento dal kernel.
 - Tauri trasmette l'evento alla webview attraverso il canale dedicato `fub://event`.
 - Lo store del frontend riceve il payload e aggiorna i pannelli coinvolti.
 

@@ -18,12 +18,12 @@ sequenceDiagram
 
     Utente->>Editor: Digita testo nella nota
     Note over Editor: Modifica locale immediata (0 ms di latenza percepita)
-    Editor->>Editor: Attesa timer (debounce 300 ms)
-    Editor->>IPC: invoke("write_document", { id, text })
+    Editor->>Editor: Attesa timer (debounce 400 ms)
+    Editor->>IPC: invoke("write_document", { id, source, base })
     IPC->>Host: Inoltra richiesta tramite Custodia
     Host->>Kernel: Workspace::write_document()
     Kernel->>FS: Salva il file .md su disco
-    Kernel->>Bus: Pubblica Event::DocumentSaved
+    Kernel->>Bus: Pubblica Event::DocumentChanged
     Bus->>IPC: Invia evento al Webview (fub://event)
     IPC->>Panels: Notifica aggiornamento
     Panels->>Utente: Aggiorna contatori, anteprima e grafici
@@ -34,11 +34,11 @@ sequenceDiagram
 ## Cosa succede in ciascun passo
 
 1. **La digitazione immediata**: quando l'utente preme un tasto, l'editor (basato su CodeMirror 6) mostra subito il carattere a video, senza aspettare il disco.
-2. **Il freno al salvataggio (debounce)**: per non sovraccaricare il disco scrivendo a ogni singola lettera, la shell aspetta qualche frazione di secondo (300 ms) dopo l'ultima battuta.
+2. **Il freno al salvataggio (debounce)**: per non sovraccaricare il disco scrivendo a ogni singola lettera, la shell aspetta qualche frazione di secondo (400 ms) dopo l'ultima battuta.
 3. **La chiamata IPC**: la shell invia il testo aggiornato a `fub-app` usando la funzione `invoke` di Tauri.
 4. **Il passaggio per la custodia**: `fub-host` gestisce l'accesso concorrente al vault tramite un lucchetto di lettura/scrittura (`RwLock`), garantendo che nessuna operazione entri in conflitto.
 5. **La scrittura sul disco**: il `fub-kernel` scrive fisicamente il file `.md` nella cartella del vault sul computer.
-6. **L'evento di avvenuta scrittura**: il kernel emette un evento (`Event::DocumentSaved`) sul bus di messaggi interno.
+6. **L'evento di avvenuta scrittura**: il kernel emette un evento (`Event::DocumentChanged`) sul bus di messaggi interno.
 7. **La notifica alla shell**: l'evento viene instradato verso la finestra dell'applicazione attraverso il canale `fub://event`.
 8. **L'aggiornamento dei pannelli**: i pannelli aperti (anteprima, conteggio parole, grafico dei collegamenti) si ridisegnano per mostrare i dati aggiornati.
 

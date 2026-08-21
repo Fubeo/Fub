@@ -14,7 +14,7 @@ flowchart TD
     R1 -- "Sì" --> MatchPath["Cerca corrispondenza esatta per percorso"]
     R1 -- "No" --> R2{"C'è una nota con questo nome file?<br>(es. Destinazione.md)"}
     R2 -- "Sì, una sola" --> Found["Collegamento risolto"]
-    R2 -- "Sì, più di una (omonimi)" --> Shortest["Regola del percorso più corto<br>(risolve sulla nota più vicina)"]
+    R2 -- "Sì, più di una (omonimi)" --> Shortest["Regola della radice<br>(vince la nota più vicina alla radice)"]
     R2 -- "No" --> R3{"C'è una nota con questo alias nel frontmatter?"}
     R3 -- "Sì" --> Found
     R3 -- "No" --> Unresolved["Link non risolto (fantasma)<br>Cliccando crea la nuova nota"]
@@ -27,10 +27,10 @@ flowchart TD
 ### A. Percorso relativo ed esplicito
 Se il link contiene barre `/` (come `[[Progetti/Rust/Guida]]`), la ricerca punta direttamente al file situato in quella sottocartella specifica.
 
-### B. Nome file semplice e percorso più corto (*Shortest Path*)
+### B. Nome file semplice e percorso più vicino alla radice (*Shortest Path*)
 Se il link contiene solo il nome (come `[[Appunti]]`):
 1. Fub cerca un file chiamato `Appunti.md` nel vault.
-2. Se esistono più file con lo stesso nome in cartelle diverse (es. `Lavoro/Appunti.md` e `Personale/Appunti.md`), viene scelta la nota che si trova nella cartella più vicina a quella del documento corrente.
+2. Se esistono più file con lo stesso nome in cartelle diverse (es. `Appunti.md` nella radice e `Personale/Appunti.md`), vince la nota con il minor numero di segmenti nel percorso (più vicina alla radice del vault); a parità di profondità si applica l'ordine lessicografico.
 
 ### C. Risoluzione tramite Alias nel Frontmatter
 Una nota può definire uno o più nomi alternativi (alias) nel proprio frontmatter YAML:

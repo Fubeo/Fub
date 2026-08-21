@@ -9,6 +9,7 @@ Per compilare Fub servono:
    ```bash
    sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
    ```
+   *(Su macOS e Windows sono sufficienti i toolchain di sistema richiesti da Tauri v2, come Xcode Command Line Tools o Microsoft C++ Build Tools).*
 
 ---
 
@@ -30,9 +31,13 @@ Questo comando avvia il server locale di Vite per il frontend e apre la finestra
 cargo tauri dev --config crates/fub-app/tauri.conf.json
 ```
 
-Se vuoi aprire direttamente una cartella di note specifica all'avvio:
+Se vuoi aprire direttamente un vault di prova o una cartella specifica:
 
 ```bash
+# Vault di esempio incluso nel repository:
+FUB_VAULT="$PWD/tests/fixtures/sample-vault" cargo tauri dev --config crates/fub-app/tauri.conf.json
+
+# Oppure percorso personalizzato:
 FUB_VAULT="/percorso/della/tua/cartella" cargo tauri dev --config crates/fub-app/tauri.conf.json
 ```
 
@@ -55,6 +60,9 @@ L'eseguibile pronto all'uso si troverà in `target/release/fub`.
 # Esegue tutti i test del workspace Rust
 cargo test --workspace
 
+# Esegue il linting del codice Rust
+cargo clippy --workspace --all-targets
+
 # Controlla i tipi TypeScript del frontend
 npm --prefix frontend run typecheck
 
@@ -72,3 +80,4 @@ node .github/scripts/check-tables.mjs
 ## Se vuoi il dettaglio
 
 - Guarda [`docs/00-inizia-qui/03-struttura-del-repo.md`](./03-struttura-del-repo.md) per conoscere l'albero delle cartelle.
+- Consulta [`docs/CONTRIBUTING.md`](../CONTRIBUTING.md) per le linee guida di sviluppo e contribuzione.

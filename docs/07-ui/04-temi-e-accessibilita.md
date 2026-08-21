@@ -5,11 +5,10 @@
 Fub non usa colori fissi nel codice dell'interfaccia, ma impiega **variabili CSS** (dette *design token*) che cambiano automaticamente in base alla modalità selezionata dall'utente.
 
 I file si trovano in [`frontend/src/theme/`](../../frontend/src/theme):
-- `--bg-primary`: colore di sfondo principale per l'editor.
-- `--bg-surface`: sfondo per barre laterali e pannelli.
-- `--text-normal`: colore del testo per garantire massima leggibilità.
-- `--text-muted`: colore per note secondarie e metadati.
-- `--accent`: colore primario di risalto (per pulsanti attivi e selezione).
+- **Superfici**: `--doc-bg` (carta dell'editor), `--bg` (sfondo dell'app), `--bg-chrome` (scocca e titlebar), `--bg-elev` (pannelli e modali), `--bg-panel` (riquadri), `--bg-input` (campi di input), `--border` (filetti e divisori).
+- **Stati**: `--bg-hover` (interazione puntatore), `--bg-active` (selezione attiva).
+- **Inchiostri e Testo**: `--text` (testo principale ad alto contrasto), `--muted` (testo secondario e metadati).
+- **Accenti**: `--accent` (colore d'accento per azioni primarie), `--accent-soft` (inchiostro d'accento tenue), `--accent-contrast` (testo ad alto contrasto su fondo accento).
 
 ---
 

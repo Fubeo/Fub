@@ -17,16 +17,19 @@ flowchart LR
 
 ## Componenti `UiNode` disponibili
 
-- **Contenitori**:
-  - `UiNode::Stack`: raggruppa elementi in riga (orizzontale) o colonna (verticale).
-  - `UiNode::Card`: un riquadro con bordo e sfondo per evidenziare contenuti.
-  - `UiNode::Grid` / `UiNode::Table`: visualizzazione a griglia o tabella.
+- **Struttura e Layout**:
+  - `UiNode::Stack`: raggruppa elementi in riga (orizzontale) o colonna (verticale) con spaziatura controllata (`gap`).
+  - `UiNode::Section`: gruppo ripiegabile con titolo (`collapsed`).
+  - `UiNode::Table` / `UiNode::Row`: visualizzazione a tabella tipizzata con colonne configurabili.
+  - `UiNode::Tree` / `UiNode::TreeItem`: alberi gerarchici (file explorer, outline, tag annidati).
+  - `UiNode::Tabs` / `UiNode::Tab`: interfaccia a schede.
 - **Contenuti e Controlli**:
-  - `UiNode::Text`: un'etichetta di testo con stile (titolo, sottotitolo, corpo).
-  - `UiNode::Button`: un pulsante cliccabile che invia un'azione (`Intent`) al backend.
-  - `UiNode::TextInput`: un campo di testo per l'input dell'utente.
-  - `UiNode::Checkbox` / `UiNode::Select`: caselle di spunta e menu a tendina.
-  - `UiNode::Badge`: una piccola etichetta colorata per mostrare tag o stati.
+  - `UiNode::Text` / `UiNode::Heading`: etichette e intestazioni di testo localizzabili (`Text`).
+  - `UiNode::Button`: pulsante interattivo con intento semantico (`Intent`: `Neutral`, `Primary`, `Danger`) e azione associata (`ActionRef`).
+  - `UiNode::TextInput` / `UiNode::TextArea` / `UiNode::Number`: campi di input testo e numerici.
+  - `UiNode::Checkbox` / `UiNode::Select` / `UiNode::Radio` / `UiNode::Slider` / `UiNode::DatePicker`: controlli di selezione, regolazione e date.
+  - `UiNode::Badge`: etichetta compatta per mostrare stati o contatori con rispettivo `Intent`.
+  - `UiNode::Progress` / `UiNode::Separator` / `UiNode::EmptyState`: barre di avanzamento, divisori e schermate di stato vuoto.
 
 ---
 

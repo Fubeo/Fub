@@ -4,7 +4,7 @@
 
 L'esempio [`esempi/ping-wasm`](../../esempi/ping-wasm) implementa un plugin WebAssembly minimale con due compiti:
 1. Rispondere a un'operazione di verifica ("ping") leggendo una nota (`Nota.md`) e contando i caratteri.
-2. Registrare due comandi per la palette (`demo.ping:conta` ed `demo.ping:esito-ricco`).
+2. Registrare due comandi per la palette (`demo.ping:conta` e `demo.ping:esito-ricco`).
 
 Questo plugin ha un corrispettivo nativo nel test [`crates/fub-host/tests/the_first_plugin.rs`](../../crates/fub-host/tests/the_first_plugin.rs): entrambi eseguono lo stesso compito, dimostrando che Fub tratta codice nativo e WebAssembly con le stesse identiche regole.
 

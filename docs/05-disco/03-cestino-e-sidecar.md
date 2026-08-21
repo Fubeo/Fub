@@ -5,20 +5,20 @@
 Quando elimini una nota in Fub:
 1. Il file non viene cancellato definitivamente dal disco.
 2. Viene invece **spostato nella cartella `.trash/`** situata nella radice del vault.
-3. Se presente, Fub crea accanto al file cestinato un file di supporto invisibile chiamato **sidecar** (con estensione `.fub-trash.json`).
+3. Fub memorizza i metadati d'origine del file cestinato in un file **sidecar** sotto `.fub/data/trash/<nome_file>.json` per non inquinare `.trash/` e mantenere la piena compatibilità con Obsidian.
 
 ```mermaid
 flowchart LR
     Origine["📁 Appunti/Scuola/Storia.md<br>(L'utente elimina la nota)"] --> Sposta["📦 Spostamento in .trash/"]
     Sposta --> Cestino["📁 .trash/Storia.md"]
-    Sposta --> Sidecar["📄 .trash/Storia.md.fub-trash.json<br>(Memorizza: path originale = 'Appunti/Scuola/Storia.md')"]
+    Sposta --> Sidecar["📄 .fub/data/trash/Storia.md.json<br>(Memorizza: path originale = 'Appunti/Scuola/Storia.md')"]
 ```
 
 ---
 
 ## A cosa serve il file sidecar?
 
-Un file **sidecar** (letteralmente "il carrellino laterale di una motocicletta") è un piccolo file di metadati salvato accanto a un file principale.
+Un file **sidecar** è un piccolo file di metadati associato a un elemento.
 
 Nel caso del cestino, memorizza:
 - Il percorso originale dove si trovava il file prima dell'eliminazione.
@@ -38,4 +38,4 @@ Fub usa la stessa cartella `.trash/` standard adottata da Obsidian. Ciò signifi
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-kernel/src/entries.rs`](../../crates/fub-kernel/src/entries.rs) per la logica di spostamento dei file nel cestino.
+- Guarda [`crates/fub-kernel/src/vault.rs`](../../crates/fub-kernel/src/vault.rs) per la logica di spostamento dei file nel cestino e gestione dei metadati sidecar.

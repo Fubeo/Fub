@@ -17,9 +17,10 @@ flowchart TD
 
 ## 1. `FormatProvider`
 Permette a Fub di capire un formato di file (es. Markdown):
-- `parse`: prende una stringa grezza e genera la struttura `DocumentModel`.
-- `render`: trasforma un `DocumentModel` in una stringa HTML sicura.
-- `serialize`: riconverte un `DocumentModel` modificato in testo grezzo.
+- `descriptor` / `capabilities`: dichiara estensioni gestite e sintassi supportate.
+- `parse`: riceve la sorgente `DocumentSource` e genera la struttura `DocumentModel`.
+- `render_html`: trasforma un `DocumentModel` in una stringa HTML sicura per l'anteprima.
+- `serialize`: serializza un `DocumentModel` per la generazione di nuove note o frammenti.
 
 File: [`crates/fub-abi/src/format.rs`](../../crates/fub-abi/src/format.rs)
 
@@ -27,9 +28,10 @@ File: [`crates/fub-abi/src/format.rs`](../../crates/fub-abi/src/format.rs)
 
 ## 2. `ViewProvider`
 Permette di costruire un pannello dell'interfaccia utente:
-- `surface`: dichiara in quale zona dello schermo vive la vista (es. barra laterale sinistra, pannello destro o barra inferiore).
-- `render`: riceve il contesto attuale e restituisce un albero `UiNode` con i componenti grafici.
-- `on_action`: gestisce i clic sui pulsanti o le interazioni dell'utente.
+- `views`: dichiara i descrittori delle viste offerte (`ViewSpec`), inclusa la superficie di montaggio (`surface`).
+- `interests`: specifica quali variazioni di contesto o eventi richiedono il ridisegno della vista.
+- `render_view`: riceve l'istanza e `ReadApi` (in sola lettura), restituendo un albero `UiNode` con i componenti grafici dichiarativi.
+- `on_action`: gestisce le interazioni scatenate dall'utente (`UiAction`) ricevendo `HostApi`.
 
 File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
@@ -37,9 +39,9 @@ File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
 ## 3. `IndexProvider`
 Permette di rispondere a ricerche ed estrazioni dati:
-- `handles`: verifica se questo indice sa rispondere a una certa query (es. "ricerca full-text").
-- `query`: esegue la ricerca e restituisce i risultati ordinati.
-- `reindex_all`: indicizza da zero tutti i file del vault.
+- `routes`: dichiara le rotte statiche di query supportate dall'indice.
+- `query`: esegue la ricerca e restituisce i risultati strutturati.
+- `on_documents_indexed` / `on_documents_removed`: aggiorna incrementalmente l'indice all'aggiunta o rimozione di documenti.
 
 File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
@@ -47,8 +49,17 @@ File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
 ## 4. `CommandProvider`
 Espone comandi eseguibili:
-- `commands`: restituisce l'elenco dei comandi offerti con titolo, descrizione e parametri richiesti.
-- `execute`: esegue il comando con gli argomenti forniti.
+- `commands`: restituisce l'elenco dei comandi offerti (`Vec<CommandSpec>`) con titolo, descrizione e parametri richiesti.
+- `invoke`: esegue il comando con gli argomenti forniti tramite `HostApi`.
+
+File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
+
+---
+
+## 5. `EventHandler`
+Ascolta e reagisce alle notifiche del sistema:
+- `subscribed`: restituisce la maschera degli eventi di interesse (`EventMask`).
+- `handle`: riceve la notifica dell'evento emesso sul bus.
 
 File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 

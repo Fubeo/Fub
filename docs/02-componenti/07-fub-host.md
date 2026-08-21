@@ -5,7 +5,7 @@
 [`crates/fub-host`](../../crates/fub-host) è il punto di montaggio (*composition root*) del backend. Il suo compito è:
 - Creare e inizializzare il `Workspace` quando si apre una cartella vault.
 - Registrare i provider (il parser Markdown, le feature integrate, ecc.).
-- Gestire la concorrenza tramite il wrapper [`Custodia`](../../crates/fub-host/src/custody.rs), che protegge il workspace con un `RwLock`.
+- Gestire la concorrenza tramite il wrapper [`Custody`](../../crates/fub-host/src/custody.rs), che protegge il workspace con un `RwLock`.
 - Avviare il pool di thread per i job in background (`runner.rs`).
 - Monitorare il filesystem tramite `notify` (`watcher.rs`).
 

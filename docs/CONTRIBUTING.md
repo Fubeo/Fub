@@ -107,7 +107,7 @@ Un comando della CI non sta nel ciclo locale, e la ragione sta dopo il `—`:
 
 Tutto il resto lo esegue anche la CI: se passa in locale, passa in CI. I test
 girano su Linux, macOS e Windows, e a rompersi sono quasi sempre i path e i lock
-file di `.fub/data/`. Se ciclo locale e CI divergono, `check-ciclo-locale.mjs`
+file di `.fub/data/`. Se ciclo locale e CI divergono, `check-locale-loop.mjs`
 diventa rosso.
 
 ### Il banco visivo, e la metà che resta fuori da qui
@@ -130,13 +130,13 @@ Chi tocca il tema lo lancia a mano, e guarda il foglio di contatto:
 
 ```bash
 # dentro frontend/, la prima volta: npx playwright install chromium
-npm run banco:verifica   # rosso se una scena è cambiata
-npm run banco:aggiorna   # riscrive le baseline, quando il cambiamento è voluto
-npm run banco            # il banco a mano, su http://localhost:1431
+npm run bench:verify     # rosso se una scena è cambiata
+npm run bench:update     # riscrive le baseline, quando il cambiamento è voluto
+npm run bench            # il banco a mano, su http://localhost:1431
 ```
 
 Il foglio di contatto — le due luci affiancate, scena per scena — esce in
-`frontend/banco/.uscita/foglio-di-contatto.html` a ogni corsa. È il cancello
+`frontend/bench/.output/foglio-di-contatto.html` a ogni corsa. È il cancello
 umano di ogni tappa della seduta, ed è scritto qui perché non resti l'abitudine
 di una persona sola.
 
@@ -144,30 +144,30 @@ di una persona sola.
 
 Dalla [§31.2](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) i colori dei due
 fogli non si scelgono: si **ricavano**. La sorgente è
-`frontend/src/theme/serie/ricetta.ts` — dichiara di ogni ruolo la tinta, il
+`frontend/src/theme/serie/recipe.ts` — dichiara di ogni ruolo la tinta, il
 croma, sopra cosa sta e quanto contrasto vuole reggere — e i due
-`foglio-*.css` sono un derivato, con scritto in testa che lo sono.
+`sheet-*.css` sono un derivato, con scritto in testa che lo sono.
 
-Dalla [§31.4](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) la **pelle** è il
-terzo. Si scrive un componente per volta in `serie/pelle/`, e
-`serie/pelle.css` è il file che i pezzi compongono nell'ordine che
-`serie/pelle/ordine.ts` dichiara — perché in CSS l'ordine di due regole della
+Dalla [§31.4](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) la **skin** è il
+terzo. Si scrive un componente per volta in `serie/skin/`, e
+`serie/skin.css` è il file che i pezzi compongono nell'ordine che
+`serie/skin/order.ts` dichiara — perché in CSS l'ordine di due regole della
 stessa specificità decide chi vince, e montare per ordine alfabetico vorrebbe
 dire che rinominare un file cambia ciò che si vede. Dentro il derivato, un
 filetto per pezzo dice da dove viene ciò che segue: quando un presidio o il
-browser puntano dentro `pelle.css`, è così che si risale al pezzo da toccare.
+browser puntano dentro `skin.css`, è così che si risale al pezzo da toccare.
 
 ```bash
 # dentro frontend/
-npm run tema:genera      # riscrive i due fogli e la pelle dalle loro sorgenti
-npm run tema:verifica    # dice se su disco c'è ciò che le sorgenti producono
+npm run theme:generate   # riscrive i due fogli e la skin dalle loro sorgenti
+npm run theme:verify     # dice se su disco c'è ciò che le sorgenti producono
 ```
 
 Nessuno dei due sta nel ciclo locale, e non è una dimenticanza: la verifica la
 fa già `npm test`, che confronta i tre file **byte per byte** con ciò che le
-sorgenti producono (`src/theme/ricetta.test.ts`, `src/theme/pelle.test.ts`).
-`tema:verifica` è la stessa domanda fatta senza avviare vitest, e serve a chi
-sta lavorando sulla sorgente; `tema:genera` è un gesto, non un verdetto.
+sorgenti producono (`src/theme/recipe.test.ts`, `src/theme/skin.test.ts`).
+`theme:verify` è la stessa domanda fatta senza avviare vitest, e serve a chi
+sta lavorando sulla sorgente; `theme:generate` è un gesto, non un verdetto.
 
 Un esadecimale ritoccato a mano in un foglio — o una regola scritta dentro la
 pelle montata — sparisce alla prima rigenerazione, e fino ad allora dice il
@@ -180,7 +180,7 @@ Alzare il conteggio serve a cercare bug a mano, non a presidiare:
 
 ```bash
 FUB_FUZZ_CASI=5000000 cargo test --release -p fub-format-markdown \
-  --test il_corpus -- nessuna_mutazione
+  --test the_corpus -- no_corpus_mutation
 FUB_FUZZ_TRASFERIMENTO=1000000 cargo test --release -p fub-format-markdown \
   --test transfer_e2e -- no_mutation_of
 FUB_FUZZ_NOMI=100000 cargo test --release -p fub-format-markdown \

@@ -26,7 +26,24 @@ flowchart LR
 
 ---
 
+## Funzionalità principali
+
+- **Navigazione e collegamenti**: supporto a `[[wikilink]]`, tag, backlink e vista a grafo.
+- **Ricerca full-text istantanea**: motore di ricerca integrato basato su `tantivy`.
+- **Interfaccia ed editor**: editor moderno basato su CodeMirror 6 con anteprima e pannelli estendibili.
+- **Nessun vincolo di piattaforma (*no vendor lock-in*)**: i file rimangono testo puro modificabile con qualsiasi altro strumento.
+
+---
+
+## Marchi e compatibilità
+
+Obsidian è un marchio del rispettivo titolare. Fub non è affiliato né approvato da Obsidian: supporta il formato dei file e la struttura delle cartelle per garantire la piena interoperabilità dei tuoi dati.
+
+---
+
 ## Se vuoi il dettaglio
 
 - Scopri come avviare Fub sul tuo computer in [`docs/00-inizia-qui/02-come-si-avvia.md`](./02-come-si-avvia.md).
-- Guarda la spiegazione dei concetti base in [`docs/01-concetti/`](../01-concetti).
+- Guarda la spiegazione dei concetti base in [`docs/01-concetti/01-il-vault.md`](../01-concetti/01-il-vault.md).
+- Consulta l'indice generale della documentazione in [`docs/README.md`](../README.md).
+
