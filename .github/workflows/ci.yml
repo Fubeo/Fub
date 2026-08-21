@@ -267,7 +267,7 @@ jobs:
       # in lettere: se si spegnesse lui, il controllo direbbe verde senza aver
       # guardato.
       - name: Il lettore dei numeri sa leggere l'italiano
-        run: node .github/scripts/check-prose.mjs --autoprova
+        run: node .github/scripts/check-prose.mjs --self-test
       - name: I numeri e le garanzie che la prosa afferma sui sorgenti
         run: node .github/scripts/check-prose.mjs
       # E la terza specie, che non è né un link né un numero: una tabella che al
@@ -297,7 +297,7 @@ jobs:
       # del workflow, il recinto e l'elenco delle eccezioni del documento: se
       # si spegnesse lui, il controllo direbbe verde senza aver guardato.
       - name: Il ciclo locale di CONTRIBUTING.md sa leggere i comandi della CI
-        run: node .github/scripts/check-locale-loop.mjs --autoprova
+        run: node .github/scripts/check-locale-loop.mjs --self-test
       - name: Ogni comando della CI sta nel ciclo locale di CONTRIBUTING.md, o fra le sue eccezioni
         run: node .github/scripts/check-locale-loop.mjs
 

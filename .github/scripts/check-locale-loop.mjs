@@ -35,7 +35,7 @@
 // su un sottoinsieme di pacchetti o su un solo test è coperta dalla corsa su
 // tutto il workspace); per `node .github/scripts/X.mjs` anche le opzioni che
 // cominciano per `-` (un'opzione seleziona un sottoinsieme della verifica,
-// come `--autoprova`). Non si tolgono mai `--features`,
+// come `--self-test`). Non si tolgono mai `--features`,
 // `--no-default-features`, `--target`, `--release`: cambiano ciò che si
 // compila, e la copertura non vale più — è il caso §16.3, per costruzione.
 // Un'unica conoscenza di cargo, e sta qui apposta: `cargo test <resto>` copre
@@ -60,7 +60,7 @@
 //
 // Uso:
 //   node .github/scripts/check-ciclo-locale.mjs [radice]
-//   node .github/scripts/check-ciclo-locale.mjs --autoprova
+//   node .github/scripts/check-ciclo-locale.mjs --self-test
 // Exit code 1 se la CI lancia un comando senza posto nel ciclo né fra le
 // eccezioni, se il ciclo elenca un comando che la CI non lancia, se
 // un'eccezione è scaduta o doppia, se un `run:` è in una forma che non si sa
@@ -349,7 +349,7 @@ export function differenze(ci, ciclo, scripts) {
 // gli alias): senza i secondi questo sarebbe un conto che chiama difetto una
 // cosa voluta.
 //
-// Gira con `--autoprova`, e in CI prima del controllo vero.
+// Gira con `--self-test`, e in CI prima del controllo vero.
 
 function autoprova() {
   const casi = [];
