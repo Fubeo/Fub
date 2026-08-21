@@ -16,7 +16,7 @@
 // dell'editor.
 import type { EmbedContent, RenderedDocument } from "../host/contract";
 import { api } from "../host/ipc";
-import { mountTree } from "../ui/node";
+import { mountTree, unmountTree } from "../ui/node";
 import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
 import { notify } from "../ui/notify";
@@ -60,6 +60,12 @@ function runOf(previewEl: HTMLElement): Race {
   return newItem;
 }
 
+function unmountSlots(container: HTMLElement): void {
+  for (const slot of container.querySelectorAll<HTMLElement>("[data-ui-slot]")) {
+    unmountTree(slot);
+  }
+}
+
 /// Svuota una superficie di lettura.
 export function clearPreview(previewEl: HTMLElement): void {
   // **Questa riga è il difetto 0031.** Svuotare non basta: la resa chiesta un
@@ -67,6 +73,7 @@ export function clearPreview(previewEl: HTMLElement): void {
   // riempire un'anteprima che nessuno guarda più — quella del documento di
   // prima, dentro un riquadro che intanto mostra altro.
   races.get(previewEl)?.cancel();
+  unmountSlots(previewEl);
   previewEl.innerHTML = "";
 }
 
@@ -105,6 +112,7 @@ export async function updatePreview(previewEl: HTMLElement, id: string): Promise
 /// webview — anche se qui a produrlo è il nostro provider, perché la regola vale
 /// per chi lo produce oggi e per chi lo produrrà.
 function mountRendered(container: HTMLElement, rendered: RenderedDocument): void {
+  unmountSlots(container);
   setSanitizedHtml(container, rendered.html);
   wireWikilinks(container);
   mountParts(container, rendered);
@@ -133,6 +141,20 @@ function mountParts(container: HTMLElement, rendered: RenderedDocument): void {
 
 /// Navigazione dei wikilink dentro un frammento reso.
 function wireWikilinks(container: HTMLElement): void {
+  container.querySelectorAll<HTMLAnchorElement>("a[href^=\"#\"]").forEach((a) => {
+    if (a.classList.contains("wikilink")) return;
+    a.addEventListener("click", (e) => {
+      const fragment = a.getAttribute("href")?.slice(1);
+      if (!fragment) return;
+      const target = Array.from(container.querySelectorAll<HTMLElement>("[id]")).find(
+        (element) => element.id === fragment,
+      );
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ block: "start" });
+    });
+  });
+
   container.querySelectorAll<HTMLAnchorElement>("a.wikilink").forEach((a) => {
     a.addEventListener("click", async (e) => {
       e.preventDefault();
@@ -203,7 +225,7 @@ async function hydrateEmbeds(
       // deve portare anche lei, o due embed della stessa pagina con due ancore
       // diverse si scambierebbero la risposta.
       const block = slot.dataset.embedBlock ?? null;
-      const key = `${page} ${heading ?? ""} ${block ?? ""}`;
+      const key = JSON.stringify([page, heading, block]);
       let requestedContent = memo.get(key);
       if (!requestedContent) {
         requestedContent = api
