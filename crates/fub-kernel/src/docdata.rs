@@ -123,34 +123,21 @@ pub(crate) fn migrate_data(
 /// da fare. È la stessa finestra che c'è già fra la rinomina del documento e
 /// questa migrazione.
 ///
-/// # Cosa c'è sulla destinazione, e chi lo dice se non si toglie
+/// # La collisione: vince la destinazione, ciò che resta si nomina
 ///
-/// Il ragionamento qui sopra dice perché una **cartella** già lì si può
-/// togliere; non dice niente di ciò che cartella non è, e il codice non
-/// guardava (difetto 0167). Un file con quel nome — messo lì da un plugin che
-/// scrive nel proprio spazio dati senza sapere che quel componente è nostro,
-/// o rimasto da una convenzione di prima — non è lo spazio orfano di nessuna
-/// nota: di quello non si sa niente, e ciò di cui non si sa niente non si
-/// toglie. La domanda è la stessa che [`collect`] pone già a ogni voce che
-/// visita, e per la stessa ragione scritta là: «`remove_dir_all` su un file
-/// fallirebbe in silenzio invece di dire che quel file non era da toccare».
+/// Due spazi per-documento sono dati arbitrari del plugin: non esiste una
+/// fusione sicura dei file, e `remove_dir_all` sulla destinazione
+/// schiaccerebbe dati che non sono ricostruibili. Se la destinazione è un'altra
+/// cartella, la migrazione si rifiuta **prima** di muovere la sorgente: la
+/// destinazione resta la scelta viva e l'errore nomina entrambi i path, così il
+/// chiamante lo espone in `doc_data_warnings`. Il sorgente resta intatto invece
+/// di finire in `.in-progress`, dove la raccolta lo perderebbe senza contesto.
 ///
-/// Si pone **prima** di muovere la sorgente, perché la risposta decide se
-/// c'è una migrazione possibile: con un ostacolo che non si può togliere il
-/// secondo `rename` fallisce comunque, e averla spostata di lato per allora
-/// vuol dire lasciare i dati in `.in-corso`, cioè in un posto che la prossima
-/// raccolta spazza. Non muovendola restano dov'erano — che dopo la rinomina
-/// del documento è una chiave morta e la raccolta prenderà lo stesso, ma è la
-/// perdita che c'era già e non una in più, e nel frattempo chi legge
-/// l'avviso ha un path da andare a guardare.
-///
-/// E l'esito della rimozione **risale**, dov'era un `let _ =`. La cancellazione
-/// di una cartella non è atomica: può togliere tre file su quattro e fermarsi,
-/// e allora la destinazione è già mezza distrutta. Ingoiando l'errore la
-/// migrazione tirava dritto fino al `rename`, che falliva a sua volta, e
-/// l'avviso che arrivava all'utente nominava il `rename` — «esiste già» —
-/// mentre il fatto era che non si era riusciti a sgomberare, e che qualcosa
-/// nel frattempo era stato tolto.
+/// L'unica cartella che si può sgomberare è quella che `same_file` riconosce
+/// come la sorgente stessa su un filesystem insensibile al caso. In ogni altro
+/// caso una cartella occupata è una collisione reale, non un residuo che il
+/// codice può indovinare. Un file sulla destinazione resta ugualmente
+/// intatto e viene nominato nell'errore.
 ///
 fn move_space(
     storage: &dyn VaultStorage,
@@ -161,11 +148,17 @@ fn move_space(
     // Sul filesystem insensibile al caso questo `stat` può rispondere con la
     // **sorgente**, che è una cartella e passa: è il caso di sopra, e a
     let to_clear = match storage.stat(destination) {
-        Ok(stat) if stat.is_dir() => true,
+        Ok(stat) if stat.is_dir() && storage.same_file(source, destination) => true,
+        Ok(stat) if stat.is_dir() => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{destination} already contains another document space; source {source} is preserved"),
+            ))
+        }
         Ok(_) => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("{destination} already exists and is not a folder: it is not the space of a note, and is not removed"),
+                format!("{destination} already exists and is not a folder: it is not removed"),
             ))
         }
         Err(and) if and.kind() == std::io::ErrorKind::NotFound => false,
@@ -310,6 +303,9 @@ mod tests {
         fn stat(&self, path: &Utf8Path) -> io::Result<Stat> {
             self.0.stat(&Self::lower(path))
         }
+        fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
+            Self::lower(a) == Self::lower(b)
+        }
         fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
             self.0.remove_empty_dir(&Self::lower(dir))
         }
@@ -344,10 +340,10 @@ mod tests {
         );
     }
 
-    /// «già occupata» era la sorgente stessa, vista con l'altro nome.
-    /// E il caso per cui la pulizia della destinazione esiste resta chiuso: una
+    /// Una collisione reale non inventa una fusione fra spazi arbitrari: la
+    /// destinazione vince, la sorgente resta intatta e l'errore nomina entrambe.
     #[test]
-    fn a_remnant_on_the_destination_is_removed_and_does_not_block_the_move() {
+    fn a_destination_collision_keeps_both_document_spaces_and_names_them() {
         let storage = MemStorage::new();
         let root = Utf8PathBuf::from("/vault/.fub/data/plugins/test");
         let roots = vec![root.clone()];
@@ -362,15 +358,17 @@ mod tests {
 
         let errors = migrate_data(&storage, &roots, &from, &to);
 
-        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(errors.len(), 1, "the collision is named: {errors:?}");
+        assert!(errors[0].contains("a.md") && errors[0].contains("b.md"));
         assert_eq!(
             annotation(&storage, &root, "b.md").as_deref(),
-            Some(&b"data of a"[..]),
-            "the remnant gave way"
+            Some(&b"a remnant"[..]),
+            "the destination wins without being overwritten"
         );
-        assert!(
-            annotation(&storage, &root, "a.md").is_none(),
-            "and the old name no longer names anything"
+        assert_eq!(
+            annotation(&storage, &root, "a.md").as_deref(),
+            Some(&b"data of a"[..]),
+            "the source remains available under its named old path"
         );
     }
 

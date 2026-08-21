@@ -94,6 +94,9 @@ const surfaces = EditorView.theme({
   },
   ".cm-content": {
     caretColor: "var(--doc-caret)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-base)",
+    lineHeight: "var(--leading-normal)",
   },
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "var(--doc-caret)",

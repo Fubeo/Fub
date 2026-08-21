@@ -217,6 +217,19 @@ fn a_family_not_served_is_does_name() {
     );
 }
 
+/// Il secondo backend non linka `host-data-read`: il rifiuto previsto la nomina.
+#[test]
+fn a_host_data_family_not_served_is_named() {
+    let wasm = common::ping("con-dati");
+    let error = WasmBundle::from_file(&wasm, Trust::Community)
+        .expect_err("host-data-read non servita non si carica");
+    let said = error.to_string();
+    assert!(
+        said.contains("host-data-read"),
+        "il rifiuto nomina la famiglia host-data-read: {said}"
+    );
+}
+
 /// Il tipo del prestito deve poter attraversare i thread: un job gira sul pool.
 /// Se un giorno smettesse, questo test non compilerebbe più.
 #[test]

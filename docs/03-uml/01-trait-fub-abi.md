@@ -98,3 +98,4 @@ Riceve e reagisce alle notifiche del bus eventi del sistema (`handle`) per le ca
 
 - Guarda il file [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs) per l'elenco completo delle definizioni in Rust.
 - Guarda [`docs/06-contratto/01-i-trait-in-rust.md`](../06-contratto/01-i-trait-in-rust.md) per approfondire come questi trait vengono implementati.
+- Guarda [`docs/03-uml/05-mappa-visuale.md`](./05-mappa-visuale.md) per la mappa visuale complessiva dell'architettura e dei flussi dati.

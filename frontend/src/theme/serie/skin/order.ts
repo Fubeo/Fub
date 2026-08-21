@@ -51,6 +51,7 @@ export const ORDER = [
   "settings",
   "chrome",
   "motion",
+  "tooltip",
 ] as const;
 
 export type SkinPart = (typeof ORDER)[number];

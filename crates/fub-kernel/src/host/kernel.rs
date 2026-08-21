@@ -51,7 +51,20 @@ impl KernelHost<'_> {
         if rel.is_empty() {
             return Err(PluginError::BadArgs("nome del blob vuoto".into()));
         }
-        self.ws.plugin_data_path(self.plugin, rel)
+        let canonical = self.ws.plugin_data_root(self.plugin);
+        let legacy = self.ws.plugin_cache_root(self.plugin);
+        if self.ws.storage().exists(&canonical) || !self.ws.storage().exists(&legacy) {
+            self.ws.plugin_data_path(self.plugin, rel)
+        } else {
+            self.ws.plugin_cache_path(self.plugin, rel)
+        }
+    }
+
+    fn cache_blob(&self, rel: &str) -> Result<Utf8PathBuf, PluginError> {
+        if rel.is_empty() {
+            return Err(PluginError::BadArgs("nome della cache vuoto".into()));
+        }
+        self.ws.plugin_cache_path(self.plugin, rel)
     }
 
     /// Il secondo cancello della scrittura di un'impostazione (§11.1): il primo
@@ -201,23 +214,36 @@ impl VaultStructure for KernelHost<'_> {
 }
 
 impl DataRead for KernelHost<'_> {
-    fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        let path = self.data_blob(path)?;
+    fn data_read(&self, rel: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        let path = self.data_blob(rel)?;
         match self.ws.storage().read(&path) {
             Ok(bytes) => Ok(Some(bytes)),
-            // Mancare non è un errore: chi legge uno store vuoto lo scopre così.
             Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(and) => Err(PluginError::Io(format!("{path}: {and}").into())),
         }
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
-        let root = self.ws.plugin_data_root(self.plugin);
-        let dir = self.ws.plugin_data_path(self.plugin, prefix)?;
+        let canonical = self.ws.plugin_data_root(self.plugin);
+        let legacy = self.ws.plugin_cache_root(self.plugin);
+        let (root, dir) = if self.ws.storage().exists(&canonical) || !self.ws.storage().exists(&legacy) {
+            (canonical, self.ws.plugin_data_path(self.plugin, prefix)?)
+        } else {
+            (legacy, self.ws.plugin_cache_path(self.plugin, prefix)?)
+        };
         let mut out = Vec::new();
         collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out);
         out.sort_unstable();
         Ok(out)
+    }
+
+    fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        let path = self.cache_blob(path)?;
+        match self.ws.storage().read(&path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(and) => Err(PluginError::Io(format!("{path}: {and}").into())),
+        }
     }
 }
 
@@ -237,14 +263,22 @@ impl DataWrite for KernelHost<'_> {
             .map_err(|and| PluginError::Io(format!("{path}: {and}").into()))
     }
 
-    fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
-        let path = self.data_blob(path)?;
+    fn data_remove(&mut self, rel: &str) -> Result<(), PluginError> {
+        let path = self.data_blob(rel)?;
         match self.ws.storage().remove(&path) {
             Ok(()) => Ok(()),
-            // Idempotente: cancellare ciò che non c'è è già il risultato voluto.
             Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(and) => Err(PluginError::Io(format!("{path}: {and}").into())),
         }
+    }
+
+    fn cache_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
+        let path = self.cache_blob(path)?;
+        self.ws
+            .storage()
+            .write(&path, bytes)
+            .map(|_| ())
+            .map_err(|and| PluginError::Io(format!("{path}: {and}").into()))
     }
 }
 

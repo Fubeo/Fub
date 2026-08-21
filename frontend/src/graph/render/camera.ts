@@ -123,6 +123,7 @@ export interface CameraState {
   /// Imposta i bersagli; con `jump` la corrente salta subito lì (il fit
   /// iniziale non deve essere inseguito dal primo frame).
   set(c: Camera, jump?: boolean): void;
+  setReducedMotion(reduced: boolean): void;
   zoom(factor: number, x: number, y: number): void;
   pan(dx: number, dy: number): void;
   centerOn(worldX: number, worldY: number, scale: number, v: Viewport): void;
@@ -131,14 +132,22 @@ export interface CameraState {
   ready(): boolean;
 }
 
-export function createCameraState(): CameraState {
+export function createCameraState(reducedMotion = false): CameraState {
   let st = createMotionState();
+  let reduced = reducedMotion;
   const current = (): Camera => ({ scale: st.scale, tx: st.tx, ty: st.ty });
+  const arrive = (): void => {
+    st = { ...st, scale: st.targetScale, tx: st.targetTx, ty: st.targetTy, vx: 0, vy: 0 };
+  };
   return {
     state: current,
+    setReducedMotion(value) {
+      reduced = value;
+      if (reduced) arrive();
+    },
     set(c, jump = false) {
-      if (jump) {
-        st = { ...st, scale: c.scale, tx: c.tx, ty: c.ty, targetScale: c.scale, targetTx: c.tx, targetTy: c.ty };
+      if (jump || reduced) {
+        st = { ...st, scale: c.scale, tx: c.tx, ty: c.ty, targetScale: c.scale, targetTx: c.tx, targetTy: c.ty, vx: reduced ? 0 : st.vx, vy: reduced ? 0 : st.vy };
       } else {
         st = { ...st, targetScale: c.scale, targetTx: c.tx, targetTy: c.ty };
       }
@@ -151,6 +160,7 @@ export function createCameraState(): CameraState {
       const base: Camera = { scale: st.targetScale, tx: st.targetTx, ty: st.targetTy };
       const z = zoomAtPoint(base, factor, { x, y });
       st = { ...st, targetScale: z.scale, targetTx: z.tx, targetTy: z.ty };
+      if (reduced) arrive();
     },
     pan(dx, dy) {
       // Il pan muove insieme corrente e bersaglio e deposita la velocità
@@ -162,8 +172,8 @@ export function createCameraState(): CameraState {
         ty: st.ty + dy,
         targetTx: st.targetTx + dx,
         targetTy: st.targetTy + dy,
-        vx: st.vx + dx,
-        vy: st.vy + dy,
+        vx: reduced ? 0 : st.vx + dx,
+        vy: reduced ? 0 : st.vy + dy,
       };
     },
     centerOn(worldX, worldY, scale, v) {
@@ -172,13 +182,15 @@ export function createCameraState(): CameraState {
       // (`set` con `jump`).
       const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
       st = { ...st, targetScale: s, targetTx: v.w / 2 - worldX * s, targetTy: v.h / 2 - worldY * s };
+      if (reduced) arrive();
     },
     fit(b, v) {
       const f = fit(b, v);
       st = { ...st, targetScale: f.scale, targetTx: f.tx, targetTy: f.ty };
     },
     step(dt) {
-      st = stepCamera(st, dt);
+      if (reduced) arrive();
+      else st = stepCamera(st, dt);
       return current();
     },
     ready() {

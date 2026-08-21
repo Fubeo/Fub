@@ -14,6 +14,7 @@ use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::options::permission;
+use fub_abi::rules::folders;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
@@ -119,12 +120,11 @@ pub enum Capability {
     Services,
     /// **Parlare con qualcosa che non sta sul disco** (§23.3).
     ///
-    /// È la sola famiglia il cui permesso non dice solo *se* ma anche **dove**:
-    /// `fub:network` porta come parametro una allowlist di host, e questa è la
-    /// prima e per ora l'unica in cui quel parametro viene **letto** — vedi
-    /// [`Policy::denies_host`]. Il resto della casella del §7.1 (i prefissi di
-    /// path di `read-vault`) resta suo: un host non è un path, e i due filtri
-    /// non condividono una riga.
+    /// È una famiglia il cui permesso dice non solo *se* ma anche **dove**:
+    /// `fub:network` porta una allowlist di host, confrontata da
+    /// [`Policy::denies_host`]. Le allowlist di prefissi del vault e del
+    /// contesto usano invece [`Policy::denies_path`]: host e path hanno domini
+    /// e semantiche distinti.
     Network,
     /// Leggere le impostazioni dichiarate (§11.1).
     SettingsRead,
@@ -296,23 +296,19 @@ pub trait Policy: Send + Sync {
     /// sola lettura**».
     fn denies(&self, cap: Capability) -> Option<String>;
 
-    /// La ragione per cui **questo host** è fuori dal recinto, o `None` se ci
-    /// sta dentro.
+    /// La ragione per cui questo documento è fuori dal recinto di path, o `None`.
     ///
-    /// È la seconda domanda che una politica sa fare, e ne ha una sola perché
-    /// una sola serve: [`Capability::Network`] è l'unica famiglia il cui
-    /// permesso porta un parametro **che si onora**. Chiedere alla politica
-    /// *«questo bersaglio, per questa famiglia»* in generale sarebbe la firma
-    /// preparata senza chiamante che questo repo rifiuta da otto verbali; e
-    /// sarebbe anche sbagliata, perché l'altro parametro che esiste — i
-    /// prefissi di path di `read-vault`, la casella del §7.1 — **non è la
-    /// stessa domanda**: un path si confronta per prefisso dentro una radice
-    /// che è dell'utente, un host si confronta per nome dentro uno spazio che
-    /// non è di nessuno.
+    /// È deliberatamente distinta da [`Policy::denies_host`]: i path si
+    /// confrontano per segmento dentro la radice del vault, non per nome.
+    /// Il parametro identifica la porta (lettura, scrittura, sessione o bozza).
+    fn denies_path(&self, _cap: Capability, _path: &str) -> Option<String> {
+        None
+    }
+
+    /// La ragione per cui questo host è fuori dal recinto, o `None`.
     ///
-    /// Il default è `None` — *nessun recinto* — e non è una svista: una
-    /// politica che non sa niente di host non deve inventarsi un no. Chi il
-    /// recinto ce l'ha è [`Granted`], che è l'unica che legge un manifest.
+    /// Gli host si confrontano per nome nello spazio pubblico; non condividono
+    /// la semantica dei prefissi di path.
     fn denies_host(&self, _host: &str) -> Option<String> {
         None
     }
@@ -327,6 +323,12 @@ pub trait Policy: Send + Sync {
 impl<A: Policy, B: Policy> Policy for (A, B) {
     fn denies(&self, cap: Capability) -> Option<String> {
         self.0.denies(cap).or_else(|| self.1.denies(cap))
+    }
+
+    fn denies_path(&self, cap: Capability, path: &str) -> Option<String> {
+        self.0
+            .denies_path(cap, path)
+            .or_else(|| self.1.denies_path(cap, path))
     }
 
     fn denies_host(&self, host: &str) -> Option<String> {
@@ -465,6 +467,14 @@ pub struct Granted {
     /// Un `Arc` perché [`Granted`] si clona a ogni prestito, e l'elenco è dello
     /// stesso manifest per tutta la vita del montaggio.
     network: Option<Arc<[Box<str>]>>,
+    /// Prefissi di documento per le letture, o `None` senza parametro.
+    read_paths: Option<Arc<[Box<str>]>>,
+    /// Prefissi di documento per le scritture, o `None` senza parametro.
+    write_paths: Option<Arc<[Box<str>]>>,
+    /// Prefissi di documento per le bozze e il contesto di sessione.
+    draft_paths: Option<Arc<[Box<str>]>>,
+    session_paths: Option<Arc<[Box<str>]>>,
+    selection_paths: Option<Arc<[Box<str>]>>,
     /// `None` = il plugin non è dichiarato affatto, che è un no diverso da
     /// «non ha quel permesso» e va detto diverso.
     trust: Option<Trust>,
@@ -550,10 +560,20 @@ impl Granted {
             // Un parametro che non è un elenco: recinto che non nomina nessuno.
             Some(_) => Some(Arc::from([])),
         };
+        let read_paths = path_allowlist(permissions, permission::READ_VAULT);
+        let write_paths = path_allowlist(permissions, permission::WRITE_VAULT);
+        let draft_paths = path_allowlist(permissions, permission::READ_DRAFTS);
+        let session_paths = path_allowlist(permissions, permission::READ_SESSION);
+        let selection_paths = path_allowlist(permissions, permission::READ_SELECTION);
         Granted {
             plugin: Arc::from(plugin),
             allowed,
             network,
+            read_paths,
+            write_paths,
+            draft_paths,
+            session_paths,
+            selection_paths,
             trust: Some(trust),
         }
     }
@@ -568,6 +588,11 @@ impl Granted {
             plugin: Arc::from(plugin),
             allowed: CapabilitySet::default(),
             network: None,
+            read_paths: None,
+            write_paths: None,
+            draft_paths: None,
+            session_paths: None,
+            selection_paths: None,
             trust: None,
         }
     }
@@ -591,6 +616,23 @@ fn normalized_host(host: &str) -> Box<str> {
         .trim_end_matches('.')
         .to_ascii_lowercase()
         .into_boxed_str()
+}
+
+/// Legge un elenco di prefissi: assente o vuoto significa vault intero.
+fn path_allowlist(permissions: &PluginPermissions, key: &str) -> Option<Arc<[Box<str>]>> {
+    match permissions.granted.get(key) {
+        None | Some(serde_json::Value::Bool(_)) | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::Array(items)) if items.is_empty() => None,
+        Some(serde_json::Value::Array(items)) if items.iter().all(|v| v.as_str().is_some()) =>
+            Some(Arc::from(
+                items
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|path| folders::normalized(path).to_owned().into_boxed_str())
+                    .collect::<Vec<_>>(),
+            )),
+        Some(_) => Some(Arc::from([])),
+    }
 }
 
 impl Granted {
@@ -618,20 +660,38 @@ impl Granted {
 }
 
 impl Policy for Granted {
+    fn denies_path(&self, cap: Capability, path: &str) -> Option<String> {
+        let allowed = match cap {
+            Capability::VaultRead => &self.read_paths,
+            Capability::Query => return None,
+            Capability::VaultWrite | Capability::VaultStructure => &self.write_paths,
+            Capability::Drafts => &self.draft_paths,
+            Capability::Session => &self.session_paths,
+            Capability::SessionSelection => &self.selection_paths,
+            _ => return None,
+        };
+        match allowed {
+            None => None,
+            Some(prefixes) if prefixes.iter().any(|prefix| folders::contains(prefix, path)) => None,
+            Some(prefixes) if prefixes.is_empty() => Some(format!(
+                "the path parameter of `{}` is not a list of folders, and until it is one it reads nothing — `{path}` included",
+                cap.permission().unwrap_or("the capability")
+            )),
+            Some(prefixes) => Some(format!(
+                "`{}` does not allow `{path}` (allowed prefixes: `{}`)",
+                self.plugin,
+                prefixes.join("`, `")
+            )),
+        }
+    }
+
     fn denies_host(&self, host: &str) -> Option<String> {
         let target = normalized_host(host);
         match &self.network {
-            // Nessun parametro: `fub:network` acceso e basta, cioè qualunque
-            // host. Vedi il campo per perché la regola non si ribalta qui.
             None => None,
             Some(allowed) if allowed.iter().any(|p| Granted::covers(p, &target)) => None,
-            // Un recinto che non nomina nessuno: il parametro c'era e non era
-            // un elenco di host. Il rifiuto lo dice invece di far leggere «ha
-            // dichiarato `` e non `api.acme.com`», che manderebbe a cercare il
-            // difetto nel posto sbagliato.
             Some(allowed) if allowed.is_empty() => Some(format!(
-                "the `{}` parameter of `{}` is not a list of hosts, and until it \
-                 is one it connects to nothing — `{target}` included",
+                "the `{}` parameter of `{}` is not a list of hosts, and until it is one it connects to nothing — `{target}` included",
                 permission::NETWORK,
                 self.plugin
             )),
@@ -727,40 +787,60 @@ impl<H, P: Policy> Guard<H, P> {
     fn allows(&self, cap: Capability) -> bool {
         self.policy.denies(cap).is_none()
     }
+
+    fn check_path(
+        &self,
+        cap: Capability,
+        path: &str,
+        what: impl FnOnce() -> String,
+    ) -> Result<(), PluginError> {
+        let action = what();
+        self.check(cap, || action.clone())?;
+        if let Some(why) = self.policy.denies_path(cap, path) {
+            return Err(PluginError::PermissionDenied(format!("{action}: {why}").into()));
+        }
+        Ok(())
+    }
+
+    fn allows_path(&self, cap: Capability, path: &str) -> bool {
+        self.allows(cap) && self.policy.denies_path(cap, path).is_none()
+    }
 }
 
 impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
-        self.check(Capability::VaultRead, || format!("reading `{id}`"))?;
+        self.check_path(Capability::VaultRead, id.as_str(), || format!("reading `{id}`"))?;
         self.inner.read_document(id)
     }
 
     fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
         // Stesso permesso della lettura di testo, e non uno suo: vedi la firma
         // nel contratto — i byte non sono un grado di fiducia in più.
-        self.check(Capability::VaultRead, || {
-            format!("reading bytes of `{id}`")
-        })?;
+        self.check_path(Capability::VaultRead, id.as_str(), || format!("reading bytes of `{id}`"))?;
         self.inner.read_document_bytes(id)
     }
 
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
-        self.check(Capability::VaultRead, || {
-            format!("reading revision of `{id}`")
-        })?;
+        self.check_path(Capability::VaultRead, id.as_str(), || format!("reading revision of `{id}`"))?;
         self.inner.document_revision(id)
     }
 
     fn list_documents(&self, page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
         self.check(Capability::VaultRead, || "listing documents".into())?;
-        self.inner.list_documents(page)
+        let mut page = self.inner.list_documents(page)?;
+        let before = page.items.len();
+        page.items.retain(|id| self.policy.denies_path(Capability::VaultRead, id.as_str()).is_none());
+        if page.items.len() != before {
+            page.total = page.items.len() as u32;
+        }
+        Ok(page)
     }
 
     fn free_name(&self, id: &DocId) -> DocId {
         // Senza esito: la risposta nulla è l'id che è stato passato — «nessun
         // nome è noto come libero». Chi lo usa per creare riceve comunque un
         // rifiuto da `create_document`, che un esito ce l'ha.
-        if self.allows(Capability::VaultRead) {
+        if self.allows_path(Capability::VaultRead, id.as_str()) {
             self.inner.free_name(id)
         } else {
             id.clone()
@@ -768,23 +848,27 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
     }
 
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
-        self.check(Capability::VaultRead, || {
-            format!("reading model of `{id}`")
-        })?;
+        self.check_path(Capability::VaultRead, id.as_str(), || format!("reading model of `{id}`"))?;
         self.inner.read_model(id)
     }
 
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
         // Senza esito: `None` qui significa già «nessuno lo rivendica», ed è la
         // risposta nulla più vicina al vero che questa firma sappia dare.
-        self.allows(Capability::VaultRead)
+        self.allows_path(Capability::VaultRead, id.as_str())
             .then(|| self.inner.format_of(id))
             .flatten()
     }
 
     fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
         self.check(Capability::VaultRead, || "listing trash".into())?;
-        self.inner.list_trash()
+        let entries = self
+            .inner
+            .list_trash()?
+            .into_iter()
+            .filter(|entry| self.policy.denies_path(Capability::VaultRead, entry.original.as_str()).is_none())
+            .collect();
+        Ok(entries)
     }
 }
 
@@ -795,41 +879,48 @@ impl<H: VaultWrite, P: Policy> VaultWrite for Guard<H, P> {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        self.check(Capability::VaultWrite, || format!("writing `{id}`"))?;
+        self.check_path(Capability::VaultWrite, id.as_str(), || format!("writing `{id}`"))?;
         self.inner.write_document(id, source, base)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
-        self.check(Capability::VaultWrite, || format!("editing `{id}`"))?;
+        self.check_path(Capability::VaultWrite, id.as_str(), || format!("editing `{id}`"))?;
         self.inner.apply_edit(id, request)
     }
 }
 
 impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.check(Capability::VaultStructure, || format!("creating `{id}`"))?;
+        self.check_path(Capability::VaultStructure, id.as_str(), || format!("creating `{id}`"))?;
         self.inner.create_document(id, source)
     }
 
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
-        self.check(Capability::VaultStructure, || {
+        self.check_path(Capability::VaultStructure, from.as_str(), || {
             format!("renaming `{from}`")
+        })?;
+        self.check_path(Capability::VaultStructure, to.as_str(), || {
+            format!("renaming to `{to}`")
         })?;
         self.inner.rename_document(from, to)
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
-        self.check(Capability::VaultStructure, || format!("trashing `{id}`"))?;
+        self.check_path(Capability::VaultStructure, id.as_str(), || format!("trashing `{id}`"))?;
         self.inner.trash_document(id)
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        self.check(Capability::VaultStructure, || {
+        self.check_path(Capability::VaultStructure, entry.as_str(), || {
             format!("restoring `{entry}`")
         })?;
+        if let Some(to) = &to {
+            self.check_path(Capability::VaultStructure, to.as_str(), || {
+                format!("restoring to `{to}`")
+            })?;
+        }
         self.inner.restore_document(entry, to)
     }
-
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
         self.check(Capability::VaultStructure, || "emptying trash".into())?;
         self.inner.empty_trash()
@@ -846,6 +937,11 @@ impl<H: DataRead, P: Policy> DataRead for Guard<H, P> {
         self.check(Capability::DataRead, || "listing blobs".into())?;
         self.inner.data_list(prefix)
     }
+
+    fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        self.check(Capability::DataRead, || format!("reading cache blob `{path}`"))?;
+        self.inner.cache_read(path)
+    }
 }
 
 impl<H: DataWrite, P: Policy> DataWrite for Guard<H, P> {
@@ -861,6 +957,13 @@ impl<H: DataWrite, P: Policy> DataWrite for Guard<H, P> {
             format!("removing blob `{path}`")
         })?;
         self.inner.data_remove(path)
+    }
+
+    fn cache_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
+        self.check(Capability::DataWrite, || {
+            format!("writing cache blob `{path}`")
+        })?;
+        self.inner.cache_write(path, bytes)
     }
 }
 
@@ -966,7 +1069,16 @@ impl<H: HostEnv, P: Policy> HostEnv for Guard<H, P> {
             .allows(Capability::Session)
             .then(|| self.inner.active_context())
             .flatten()?;
-        if !self.allows(Capability::SessionSelection) {
+        if context
+            .doc
+            .as_ref()
+            .is_some_and(|doc| self.policy.denies_path(Capability::Session, doc.as_str()).is_some())
+        {
+            return None;
+        }
+        if context.doc.as_ref().is_none_or(|doc| {
+            !self.allows_path(Capability::SessionSelection, doc.as_str())
+        }) {
             context.selections = None;
         }
         Some(context)
@@ -993,7 +1105,20 @@ impl<H: HostQuery, P: Policy> HostQuery for Guard<H, P> {
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         let (cap, what) = Guard::<H, P>::query_capability(&query.kind());
         self.check(cap, || what.into())?;
-        self.inner.query_index(query)
+        let result = self.inner.query_index(query)?;
+        if cap == Capability::Drafts {
+            if let IndexResult::Drafts(mut page) = result {
+                let before = page.items.len();
+                page.items.retain(|draft| {
+                    self.policy.denies_path(Capability::Drafts, draft.doc.as_str()).is_none()
+                });
+                if page.items.len() != before {
+                    page.total = page.items.len() as u32;
+                }
+                return Ok(IndexResult::Drafts(page));
+            }
+        }
+        Ok(result)
     }
 }
 
@@ -1144,6 +1269,31 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
             ));
         }
         self.inner.fetch(request)
+    }
+
+    fn fetch_cancelled(
+        &self,
+        request: HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<HttpResponse, PluginError> {
+        let (scheme, host) = split_url(&request.url)?;
+        self.check(Capability::Network, || format!("connecting to `{host}`"))?;
+        if let Some(why) = self.policy.denies_host(&host) {
+            return Err(PluginError::PermissionDenied(
+                format!("connecting to `{host}`: {why}").into(),
+            ));
+        }
+        if scheme != "https" && !is_loopback(&host) {
+            return Err(PluginError::BadArgs(
+                format!(
+                    "`{scheme}` is not `https`: in plaintext the allowlist promises one \
+                     host and the network delivers another. The local loop is an \
+                     exception, because there is no network to traverse"
+                )
+                .into(),
+            ));
+        }
+        self.inner.fetch_cancelled(request, cancelled)
     }
 }
 
@@ -1357,6 +1507,28 @@ mod tests {
     /// lunghezza sarebbe passato anche prima: solo la variante lo presidia.
     /// Negare un'altra famiglia non tocca questa: il cancello è per famiglia, e
     /// un `check` sulla capacità sbagliata passerebbe di qui rosso.
+    #[test]
+    fn session_context_honors_its_document_prefix() {
+        let permissions = PluginPermissions {
+            granted: [
+                (permission::READ_SESSION, serde_json::json!(["Diario"])),
+                (permission::READ_SELECTION, serde_json::json!(["Diario"])),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let guard = Guard::new(WithContext, Granted::new("p", &permissions, Trust::Community));
+        assert!(guard.active_context().is_some());
+
+        let permissions = PluginPermissions {
+            granted: [(permission::READ_SESSION, serde_json::json!(["Progetti"]))]
+                .into_iter()
+                .collect(),
+        };
+        let guard = Guard::new(WithContext, Granted::new("p", &permissions, Trust::Community));
+        assert!(guard.active_context().is_none());
+    }
+
     #[test]
     fn denied_entropy_says_so_instead_of_answering_empty() {
         let guard = Guard::new(Generous, Negate(Capability::Env));
@@ -1596,6 +1768,48 @@ mod tests {
 
     /// **La leva che questa decisione esiste per dare, primo verso**: il vault
     /// concesso, le bozze no.
+    struct ScopedDrafts;
+
+    impl HostQuery for ScopedDrafts {
+        fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+            match query {
+                IndexQuery::Drafts { .. } => Ok(IndexResult::Drafts(Paged::all(vec![
+                    fub_abi::traits::DraftInfo {
+                        doc: DocId::new("Progetti/2026.md"),
+                        at: 0,
+                        base: None,
+                        exists: true,
+                        current: None,
+                        text: "inside".into(),
+                    },
+                    fub_abi::traits::DraftInfo {
+                        doc: DocId::new("Altro/2026.md"),
+                        at: 0,
+                        base: None,
+                        exists: true,
+                        current: None,
+                        text: "outside".into(),
+                    },
+                ]))),
+                _ => Ok(IndexResult::Documents(Paged::all(Vec::new()))),
+            }
+        }
+    }
+
+    #[test]
+    fn draft_results_are_filtered_one_item_at_a_time() {
+        let granted = with_paths(permission::READ_DRAFTS, &["Progetti"]);
+        let guard = Guard::new(ScopedDrafts, granted);
+        let IndexResult::Drafts(page) = guard
+            .query_index(IndexQuery::Drafts { page: None })
+            .expect("drafts are granted")
+        else {
+            panic!("expected draft result");
+        };
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].doc, DocId::new("Progetti/2026.md"));
+    }
+
     struct IndexHost;
 
     impl HostQuery for IndexHost {
@@ -1681,8 +1895,60 @@ mod tests {
         );
     }
 
-    /// **L'allowlist è vera**, ed è tutta la voce: un manifest che dichiara un
-    /// host e ne raggiunge un altro è una frase falsa scritta dall'app, non un
+    fn with_paths(key: &str, paths: &[&str]) -> Granted {
+        let mut permissions = PluginPermissions::of(&[]);
+        permissions.granted.set(
+            key,
+            serde_json::Value::Array(
+                paths
+                    .iter()
+                    .map(|path| serde_json::Value::String((*path).into()))
+                    .collect(),
+            ),
+        );
+        Granted::new("p", &permissions, Trust::Community)
+    }
+
+    #[test]
+    fn permission_prefixes_are_folder_scoped_on_every_document_port() {
+        let granted = with_paths(permission::READ_VAULT, &["Progetti/"]);
+        assert!(granted
+            .denies_path(Capability::VaultRead, "Progetti/Alpha.md")
+            .is_none());
+        assert!(granted
+            .denies_path(Capability::VaultRead, "Altro/Alpha.md")
+            .is_some());
+        assert!(granted
+            .denies_path(Capability::VaultRead, "Progetti-vecchi/Alpha.md")
+            .is_some());
+        assert!(granted
+            .denies_path(Capability::Query, "Altro/Alpha.md")
+            .is_none(), "Query is aggregate and must not apply vault path prefixes");
+    }
+
+    #[test]
+    fn a_missing_path_parameter_keeps_the_vault_unrestricted() {
+        let granted = Granted::new("p", &PluginPermissions::of(&[permission::READ_VAULT]), Trust::Community);
+        assert!(granted
+            .denies_path(Capability::VaultRead, "Altro/Alpha.md")
+            .is_none());
+    }
+
+    #[test]
+    fn session_and_selection_paths_are_independent() {
+        let session = with_paths(permission::READ_SESSION, &["Progetti"]);
+        assert!(session
+            .denies_path(Capability::Session, "Progetti/Alpha.md")
+            .is_none());
+        assert!(session
+            .denies_path(Capability::Session, "Altro/Alpha.md")
+            .is_some());
+        let selection = with_paths(permission::READ_SELECTION, &["Progetti"]);
+        assert!(selection
+            .denies_path(Capability::SessionSelection, "Altro/Alpha.md")
+            .is_some());
+    }
+
     struct WithNetwork;
 
     impl HostNetwork for WithNetwork {

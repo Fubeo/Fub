@@ -2,18 +2,18 @@
 
 Le modifiche degne di nota, versione per versione. Il formato è
 [Keep a Changelog](https://keepachangelog.com/it-IT/1.1.0/) e la numerazione
-segue [archivio/versionamento.md](archivio/versionamento.md).
+segue [versionamento.md](versionamento.md).
 
 **Cosa ci va e cosa no.** Qui sta ciò che cambia per **chi usa Fub o ci scrive
 sopra**: una funzionalità che compare, un comportamento che cambia, una firma
 del contratto che si muove. Non ci va il lavoro interno — quello sta nel `git
-log`, e il *perché* di ogni scelta sta nei [verbali](archivio/decisions/README.md), che
+log`, e il *perché* di ogni scelta sta nei [verbali](decisions/README.md), che
 sono l'unico posto in cui è scritto per esteso. Un changelog che riassume i
 verbali diventa il secondo posto che invecchia.
 
 **Le voci si scrivono al rilascio**, non a ogni commit: fino ad allora la
 sezione «Non rilasciato» resta alla grana della milestone, e lo stato preciso di
-cosa è aperto sta in [archivio/todo.md](archivio/todo.md), che è l'unico posto dove si aggiorna.
+cosa è aperto sta in [todo.md](todo.md), che è l'unico posto dove si aggiorna.
 
 ## [Non rilasciato]
 
@@ -31,7 +31,7 @@ pubblicato. Quello che segue diventerà il contenuto di `0.1.0`.
   [06-contratto/01-i-trait-in-rust.md](06-contratto/01-i-trait-in-rust.md).
 - **Ricerca full-text** incrementale e persistente su tantivy, dichiarata *la*
   ricerca dell'applicazione dalla
-  [decisione 0025](archivio/decisions/0025-la-ricerca-predefinita.md).
+  [decisione 0025](decisions/0025-la-ricerca-predefinita.md).
 - **CRUD del vault con rete di sicurezza** — creazione, «crea nota» da un link
   non risolto, rename, cestino e versioning con snapshot.
 - **Organizzazione della sidebar** — albero, icone, folder notes, spazi, note
@@ -57,10 +57,10 @@ pubblicato. Quello che segue diventerà il contenuto di `0.1.0`.
 - **Governance del repo** — licenza doppia MIT / Apache-2.0, questo changelog,
   [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
   [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) e
-  [archivio/versionamento.md](archivio/versionamento.md).
+  [versionamento.md](versionamento.md).
 
 Milestones 1–4 sono completate; Milestone 5 (runtime WASM) è in corso.
-Cosa entra in ciascuna sta in [archivio/milestones/](archivio/milestones/README.md).
+Cosa entra in ciascuna sta in [milestones/](milestones/README.md).
 
 ### Sicurezza
 

@@ -27,6 +27,8 @@
 //! lo supera riceve un `Io` che lo dice, e il numero resta alzabile senza
 //! rompere nessuno.
 
+use std::io::{self, Read};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use fub_abi::net::{HttpHeader, HttpRequest, HttpResponse};
@@ -41,6 +43,8 @@ use fub_abi::PluginError;
 /// che non finisce mai. Nessuno dei due attraversa il confine.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(60);
+/// Finestra massima fra due controlli della cancellazione durante il body.
+const CANCEL_POLL: Duration = Duration::from_millis(50);
 
 /// Quanti byte di risposta si accettano.
 ///
@@ -60,6 +64,40 @@ const MAX_BODY: u64 = 16 * 1024 * 1024;
 /// una stretta di mano TLS per ogni chiamata.
 pub struct UreqNetwork {
     agent: ureq::Agent,
+    cancellable_agent: ureq::Agent,
+}
+
+/// Reader che chiude il trasferimento al primo controllo dopo l'annullamento.
+/// Il timeout di ricezione breve è solo per rendere il controllo periodico; il
+/// tetto complessivo resta [`TOTAL_TIMEOUT`].
+struct CancellationReader<'a, R> {
+    inner: R,
+    cancelled: &'a AtomicBool,
+}
+
+fn is_timeout(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::TimedOut
+        || error
+            .get_ref()
+            .and_then(|source| source.downcast_ref::<ureq::Error>())
+            .is_some_and(|error| matches!(error, ureq::Error::Timeout(_)))
+}
+
+impl<R: Read> Read for CancellationReader<'_, R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        loop {
+            if self.cancelled.load(Ordering::Relaxed) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "network request cancelled",
+                ));
+            }
+            match self.inner.read(buffer) {
+                Err(error) if is_timeout(&error) => continue,
+                result => return result,
+            }
+        }
+    }
 }
 
 impl Default for UreqNetwork {
@@ -73,24 +111,20 @@ impl UreqNetwork {
         let config = ureq::Agent::config_builder()
             .timeout_connect(Some(CONNECT_TIMEOUT))
             .timeout_global(Some(TOTAL_TIMEOUT))
-            // **La riga che vale quanto una decisione.** Vedi la testa del
-            // modulo: seguire un redirect è uscire dal recinto senza che
-            // nessuno l'abbia deciso.
             .max_redirects(0)
-            // Con zero redirect, `ureq` di suo renderebbe un errore invece
-            // della risposta `3xx`: qui la vogliamo, perché è ciò che permette
-            // a chi ha chiesto di decidere se seguirla.
             .max_redirects_will_error(false)
-            // **Di chi ci si fida.** La decisione
-            // [0097](../../../docs/decisions/0097-il-filo-verso-fuori.md) la
-            // prende in `Cargo.toml` e la argomenta là: con il verificatore
-            // della piattaforma, Fub si fida di ciò di cui si fida la macchina
-            // — la CA aziendale installata, il certificato interno, il proxy
-            // dell'amministratore. Ma `ureq` di suo parte da
-            // `RootCerts::WebPki`, cioè dalle radici di Mozilla imbarcate:
-            // pagare gli otto pacchetti del verificatore e non nominarlo qui
-            // significava compilarlo e non usarlo mai. Una dipendenza tirata
-            // dentro non è una configurazione.
+            .tls_config(
+                ureq::tls::TlsConfig::builder()
+                    .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+                    .build(),
+            )
+            .build();
+        let cancellable_config = ureq::Agent::config_builder()
+            .timeout_connect(Some(CONNECT_TIMEOUT))
+            .timeout_global(Some(TOTAL_TIMEOUT))
+            .timeout_recv_body(Some(CANCEL_POLL))
+            .max_redirects(0)
+            .max_redirects_will_error(false)
             .tls_config(
                 ureq::tls::TlsConfig::builder()
                     .root_certs(ureq::tls::RootCerts::PlatformVerifier)
@@ -99,74 +133,86 @@ impl UreqNetwork {
             .build();
         UreqNetwork {
             agent: ureq::Agent::new_with_config(config),
+            cancellable_agent: ureq::Agent::new_with_config(cancellable_config),
         }
     }
 }
 
-impl HostNetwork for UreqNetwork {
-    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+impl UreqNetwork {
+    fn fetch_with(
+        &self,
+        request: HttpRequest,
+        cancelled: Option<&AtomicBool>,
+    ) -> Result<HttpResponse, PluginError> {
         let io = |and: ureq::Error| PluginError::Io(format!("{}: {and}", request.url).into());
-
         let mut builder = ureq::http::Request::builder()
             .method(request.method.as_str())
             .uri(&request.url);
         for header in &request.headers {
             builder = builder.header(&header.name, &header.value);
         }
-        // Il corpo cambia il **tipo** della richiesta, quindi i due rami sono
-        // due chiamate e non un `if` dentro una: `none` non è un corpo vuoto.
+        let agent = cancelled
+            .map(|_| &self.cancellable_agent)
+            .unwrap_or(&self.agent);
         let mut response = match &request.body {
             Some(body) => {
                 let req = builder
                     .body(&body[..])
                     .map_err(|and| PluginError::BadArgs(format!("{}: {and}", request.url).into()))?;
-                self.agent.run(req).map_err(io)?
+                agent.run(req).map_err(io)?
             }
             None => {
                 let req = builder
                     .body(())
                     .map_err(|and| PluginError::BadArgs(format!("{}: {and}", request.url).into()))?;
-                self.agent.run(req).map_err(io)?
+                agent.run(req).map_err(io)?
             }
         };
-
         let status = response.status().as_u16();
         let headers = response
             .headers()
             .iter()
-            .filter_map(|(name, value)| {
-                // Un header il cui valore non è testo è un header che non si
-                // può rappresentare in questo contratto. Si scarta **lui** e
-                // non la risposta: chi cerca `content-type` non deve perdere un
-                // PDF perché il server ha mandato un byte storto in un header
-                // che non gli interessa.
-                value
-                    .to_str()
-                    .ok()
-                    .map(|v| HttpHeader::new(name.as_str(), v))
-            })
+            .filter_map(|(name, value)| value.to_str().ok().map(|v| HttpHeader::new(name.as_str(), v)))
             .collect();
-        let body = response
-            .body_mut()
-            .with_config()
-            .limit(MAX_BODY)
-            .read_to_vec()
-            .map_err(|and| {
-                PluginError::Io(
-                    format!(
-                        "{}: the response body could not be read \
-                         (host ceiling is {MAX_BODY} bytes): {and}",
-                        request.url
-                    )
-                    .into(),
-                )
-            })?;
+        let body = match cancelled {
+            Some(flag) => {
+                let mut reader = CancellationReader {
+                    inner: response.body_mut().with_config().limit(MAX_BODY).reader(),
+                    cancelled: flag,
+                };
+                let mut body = Vec::new();
+                reader.read_to_end(&mut body).map_err(|and| {
+                    PluginError::Io(format!("{}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}", request.url).into())
+                })?;
+                body
+            }
+            None => response.body_mut().with_config().limit(MAX_BODY).read_to_vec().map_err(|and| {
+                PluginError::Io(format!("{}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}", request.url).into())
+            })?,
+        };
+        Ok(HttpResponse { status, headers, body })
+    }
+}
 
-        Ok(HttpResponse {
-            status,
-            headers,
-            body,
-        })
+impl HostNetwork for UreqNetwork {
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.fetch_with(request, None)
+    }
+
+    fn fetch_cancelled(
+        &self,
+        request: HttpRequest,
+        cancelled: &AtomicBool,
+    ) -> Result<HttpResponse, PluginError> {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(PluginError::Cancelled("the network request was cancelled".into()));
+        }
+        match self.fetch_with(request, Some(cancelled)) {
+            Err(_) if cancelled.load(Ordering::Relaxed) => Err(PluginError::Cancelled(
+                "the network request was cancelled".into(),
+            )),
+            result => result,
+        }
     }
 }
 
@@ -229,5 +275,32 @@ mod tests {
             matches!(err, PluginError::Io(_)),
             "a transport fault is I/O, not a caller defect: {err}"
         );
+    }
+    /// Una risposta già in trasferimento vede l'annullamento prima di leggere
+    /// il chunk successivo: il reader restituisce `Interrupted` senza attendere
+    /// il tetto globale.
+    #[test]
+    fn cancellation_stops_an_inflight_body() {
+        struct CancelAfterFirst<'a>(&'a AtomicBool);
+
+        impl Read for CancelAfterFirst<'_> {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                self.0.store(true, Ordering::Relaxed);
+                buffer[0] = b'x';
+                Ok(1)
+            }
+        }
+
+        let cancelled = AtomicBool::new(false);
+        let mut reader = CancellationReader {
+            inner: CancelAfterFirst(&cancelled),
+            cancelled: &cancelled,
+        };
+        let started = std::time::Instant::now();
+        let mut byte = [0; 1];
+        assert_eq!(reader.read(&mut byte).expect("first body chunk"), 1);
+        let error = reader.read(&mut byte).expect_err("cancelled reader");
+        assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 }

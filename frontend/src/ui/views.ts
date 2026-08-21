@@ -49,6 +49,7 @@ import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
 import { notify } from "./notify";
 import { t } from "../i18n/strings";
 import { iconEl } from "./icons";
+import { setTooltip } from "./tooltip";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -534,7 +535,7 @@ function buildInspector(): void {
     tab.dataset.viewId = viewId;
     tab.setAttribute("aria-selected", "false");
     tab.setAttribute("aria-controls", panel.id || viewId);
-    tab.title = name;
+    setTooltip(tab, name);
     // L'icona: se la view ne dichiara una la si usa, altrimenti il fallback.
     const svg = iconEl(icon) ?? iconEl("outline");
     if (svg) tab.append(svg);

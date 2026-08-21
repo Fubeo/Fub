@@ -5,6 +5,7 @@ import { matchingDocuments, vaultStatus } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { rowsToShow } from "../rules/results";
 import { $ } from "../ui/dom";
+import { setTooltip } from "../ui/tooltip";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import { openDocument, revealByteOffset } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
@@ -158,7 +159,7 @@ function showSearchResults(
   const newItems = document.createDocumentFragment();
   for (const row of rowsToShow(hits)) {
     const li = document.createElement("li");
-    li.title = row.doc;
+    setTooltip(li, row.doc);
     if (row.occurrence === undefined) {
       const title = document.createElement("span");
       title.className = "hit-title";

@@ -34,6 +34,7 @@ import { notify } from "../ui/notify";
 import type { Tone } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
+import { setTooltip } from "../ui/tooltip";
 
 /// Una riga del centro attività. È `JobStatus` senza i campi che una riga non
 /// disegna: chi arriva da un evento non conosce né il plugin né l'istante, e
@@ -228,7 +229,7 @@ function row(job: JobRow): HTMLLIElement {
   const text = document.createElement("span");
   text.className = "activity-label";
   text.textContent = labelOf(job);
-  text.title = `${job.job} · ${job.id}`;
+  setTooltip(text, `${job.job} · ${job.id}`);
 
   // Una barra **indeterminata** quando il totale non c'è: un `progress` senza
   // valore è l'attesa che non sa quanto dura, ed è ciò che il contratto dice
@@ -242,7 +243,7 @@ function row(job: JobRow): HTMLLIElement {
   const stopButton = document.createElement("button");
   stopButton.className = "link-button";
   stopButton.textContent = t("app.cancel");
-  stopButton.title = t("activity.stop");
+  setTooltip(stopButton, t("activity.stop"));
   stopButton.addEventListener("click", () => void cancel(job));
 
   el.append(text, bar, stopButton);

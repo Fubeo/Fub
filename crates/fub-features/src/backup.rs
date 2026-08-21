@@ -2,7 +2,7 @@
 //!
 //! Non è un backup fuori dal vault: `HostApi` non scrive oltre il recinto, e
 //! `permission::EXTERNAL_FS` oggi non ha un consumatore. I byte stanno in
-//! `.fub/data/plugins/fub.backup/<data>/…`, che il vault non indicizza. Ripristino
+//! `.fub/plugins/fub.backup/<data>/…`, che il vault non indicizza. Ripristino
 //! = `create_document` delle note che nel vault non ci sono più.
 
 use fub_abi::command::{

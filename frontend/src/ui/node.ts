@@ -46,6 +46,7 @@ import { activatable, identifier, notActivatable } from "./a11y";
 import { t } from "../i18n/strings";
 import { errorText } from "../host/errors";
 import { notify } from "./notify";
+import { setTooltip } from "./tooltip";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -585,7 +586,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // contratto non porta un titolo per questo nodo, quindi il meglio che si
       // possa dire è l'indirizzo: è poco, ed è comunque l'unica cosa vera che
       // la shell sappia. Un titolo vero è roba del contratto, non di qui.
-      el.title = node.url;
+      el.setAttribute("aria-label", node.url);
       return el;
     }
     case "section": {
@@ -700,7 +701,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       const el = document.createElement("span");
       el.className = "ui-icon";
       el.dataset.icon = node.name;
-      el.title = node.name;
+      setTooltip(el, node.name);
       return el;
     }
     case "progress": {

@@ -70,7 +70,7 @@
      l'accento stanno a 2,6:1 e a 1,5:1. Chi è selezionato lo dice il
      contorno — che è un segno non testuale e gli basta il 3:1 — e il fondo
      torna a essere quello che il token nomina. */
-  background: var(--bg-hover);
+  background: var(--bg-active);
 }
 
 .ui-tab-bar {
@@ -104,7 +104,7 @@
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-pill);
   font-size: var(--text-xs);
-  background: var(--bg-input);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
 }
 .ui-badge.intent-primary {

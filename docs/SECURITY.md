@@ -43,7 +43,7 @@ Chi segnala viene citato nell'advisory, salvo richiesta contraria.
 
 Non c'è ancora nessun rilascio: non esiste una versione vecchia da patchare, e
 l'unica linea presidiata è `main`. Quando il primo rilascio arriverà, questa
-tabella e [archivio/versionamento.md](archivio/versionamento.md) diranno insieme quali versioni
+tabella e [versionamento.md](versionamento.md) diranno insieme quali versioni
 ricevono correzioni.
 
 ## Il perimetro
@@ -96,7 +96,7 @@ server che riceve dati.
 | SBOM SPDX 2.3 come artefatto di build | stesso job | la domanda «cosa c'è dentro questa build», che a valle si fa una volta sola e sempre troppo tardi |
 | Content-Security-Policy della webview | [`crates/fub-app/tauri.conf.json`](../crates/fub-app/tauri.conf.json) | script remoti, iframe, oggetti e form: nessuno dei quattro è permesso |
 | Nessun client HTTP nell'albero del workspace | i `Cargo.toml` dei nove crate | l'app non parla con la rete: la capacità `fub:network` esiste nel modello dei permessi ([`crates/fub-abi/src/options.rs:349`](../crates/fub-abi/src/options.rs)) ma nessun provider oggi la chiede |
-| Elenco chiuso delle capacità, diviso in famiglie negabili | [decisione 0013](archivio/decisions/0013-elenco-delle-capacita.md), [0021](archivio/decisions/0021-il-confine.md), [04-plugin/03-i-permessi.md](04-plugin/03-i-permessi.md) | la forma che avrà l'applicazione a M5: al confine WIT una famiglia negata non è un rifiuto a runtime, è l'assenza della funzione |
+| Elenco chiuso delle capacità, diviso in famiglie negabili | [decisione 0013](decisions/0013-elenco-delle-capacita.md), [0021](decisions/0021-il-confine.md), [04-plugin/03-i-permessi.md](04-plugin/03-i-permessi.md) | la forma che avrà l'applicazione a M5: al confine WIT una famiglia negata non è un rifiuto a runtime, è l'assenza della funzione |
 | Contratto congelato e additivo | [06-contratto/03-il-contratto-wit.md](06-contratto/03-il-contratto-wit.md) | un host più nuovo non rompe un plugin più vecchio, e la rottura deliberata si vede in review |
 
 ## Cosa manca, detto qui

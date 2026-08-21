@@ -84,11 +84,17 @@ impl VaultRead for ReadHost<'_> {
 }
 
 impl DataRead for ReadHost<'_> {
-    fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        if path.is_empty() {
+    fn data_read(&self, rel: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        if rel.is_empty() {
             return Err(PluginError::BadArgs("empty blob name".into()));
         }
-        let path = self.ws.plugin_data_path(self.plugin, path)?;
+        let canonical = self.ws.plugin_data_root(self.plugin);
+        let legacy = self.ws.plugin_cache_root(self.plugin);
+        let path = if self.ws.storage().exists(&canonical) || !self.ws.storage().exists(&legacy) {
+            self.ws.plugin_data_path(self.plugin, rel)?
+        } else {
+            self.ws.plugin_cache_path(self.plugin, rel)?
+        };
         match self.ws.storage().read(&path) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -97,12 +103,29 @@ impl DataRead for ReadHost<'_> {
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
-        let root = self.ws.plugin_data_root(self.plugin);
-        let dir = self.ws.plugin_data_path(self.plugin, prefix)?;
+        let canonical = self.ws.plugin_data_root(self.plugin);
+        let legacy = self.ws.plugin_cache_root(self.plugin);
+        let (root, dir) = if self.ws.storage().exists(&canonical) || !self.ws.storage().exists(&legacy) {
+            (canonical, self.ws.plugin_data_path(self.plugin, prefix)?)
+        } else {
+            (legacy, self.ws.plugin_cache_path(self.plugin, prefix)?)
+        };
         let mut out = Vec::new();
         collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out);
         out.sort_unstable();
         Ok(out)
+    }
+
+    fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("empty cache blob name".into()));
+        }
+        let path = self.ws.plugin_cache_path(self.plugin, path)?;
+        match self.ws.storage().read(&path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(and) => Err(PluginError::Internal(format!("{path}: {and}").into())),
+        }
     }
 }
 

@@ -31,6 +31,7 @@ import type { Painter, DrawState } from "./render/painter";
 import { createPainter } from "./render/painter";
 import type { Interaction, InteractionOptions } from "./interaction";
 import { createInteraction, nodeAt } from "./interaction";
+import { onReducedMotionChange, reducedMotion } from "../theme/reduced-motion";
 
 /// L'alpha sotto cui il disegno è statico: il pittore non traccia trail né
 /// pulse sotto questa soglia (sono le sue `TRAIL_THRESHOLD`/`PULSE_THRESHOLD`), quindi
@@ -131,6 +132,8 @@ export function createChart(options: ChartOptions = {}): Chart {
   let canvas: HTMLCanvasElement | null = null;
   let rafId: number | null = null;
   let unmounted = false;
+  let reduced = reducedMotion();
+  let unsubscribeReducedMotion: (() => void) | null = null;
 
   const openDocuments = new Set<string>();
   const engineState: EngineState = { alpha: 1, quietSince: 0 };
@@ -298,6 +301,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       alpha: engineState.alpha,
       tier,
       elapsedMs,
+      reducedMotion: reduced,
     };
     painter.redraw(state);
 
@@ -308,7 +312,12 @@ export function createChart(options: ChartOptions = {}): Chart {
     if (unmounted || host) return;
     host = h;
     s = createStructure(data, physics, seedOf(data));
-    cameraState = createCameraState();
+    cameraState = createCameraState(reduced);
+    unsubscribeReducedMotion = onReducedMotionChange((value) => {
+      reduced = value;
+      cameraState?.setReducedMotion(value);
+      requestRedraw();
+    });
     painter = painterFactory(host, liveGraphics);
     // Il pittore crea i canvas; il principale è quello che riceve i pointer.
     // Lo si cerca per nome: il pittore non lo espone (e non deve, è un dettaglio
@@ -348,6 +357,8 @@ export function createChart(options: ChartOptions = {}): Chart {
     rafId = null;
     if (resizeObserver) resizeObserver.disconnect();
     resizeObserver = null;
+    unsubscribeReducedMotion?.();
+    unsubscribeReducedMotion = null;
     if (canvas) {
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerleave", onLeave);

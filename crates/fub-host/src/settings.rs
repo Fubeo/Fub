@@ -117,6 +117,13 @@ pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 /// per la stessa idea si sarebbero pagate al primo componente che ne legge una
 /// aspettandosi l'altra.
 pub const APPEARANCE_THEME: &str = "appearance.theme";
+/// La cartella del vault in cui la shell deposita e cerca gli allegati.
+///
+/// È un dato del vault: viaggia con le note e resta leggibile anche quando il
+/// vault viene aperto da un'altra macchina.
+pub const ATTACHMENT_FOLDER: &str = fub_kernel::settings::ATTACHMENT_FOLDER;
+/// Il valore predefinito resta una cartella vera dentro il vault.
+pub const DEFAULT_ATTACHMENT_FOLDER: &str = "attachments";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -170,6 +177,17 @@ pub fn core_settings() -> Vec<SettingSpec> {
     )
     .describing(Text::key(C_PLUGINS_DISABLED_DESC))
     .grouped(Text::key(C_GROUP_COMPONENTS))];
+    settings.push(
+        SettingSpec::new(
+            ATTACHMENT_FOLDER,
+            Text::key(C_ATTACHMENT_FOLDER),
+            SettingKind::Text {
+                default: DEFAULT_ATTACHMENT_FOLDER.into(),
+            },
+        )
+        .describing(Text::key(C_ATTACHMENT_FOLDER_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
     // **Non** `program_writable`, ed è la riga che conta: un componente che
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
     // tutto ciò che gli sta accanto — compreso ciò che lo controlla. Chi
@@ -324,6 +342,10 @@ fn log_verbose_spec() -> SettingSpec {
 /// accanto alle impostazioni che descrivono, in `fub_kernel::locale`, e
 /// arrivano al montaggio come secondo catalogo della stessa lingua.
 const C_GROUP_COMPONENTS: &str = "core.group.components";
+const C_GROUP_FILES: &str = "core.group.files";
+const C_ATTACHMENT_FOLDER: &str = "core.attachment_folder";
+const C_ATTACHMENT_FOLDER_DESC: &str = "core.attachment_folder.desc";
+
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_DIAGNOSTICS: &str = "core.group.diagnostics";
 const C_GROUP_PRIVACY: &str = "core.group.privacy";
@@ -406,6 +428,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
     // che le fa coincidere con lo schema senza che nessuno le riconfronti.
     let mut it = StringCatalog::new("it")
         .with(C_GROUP_COMPONENTS, "Componenti")
+        .with(C_GROUP_FILES, "File")
+        .with(C_ATTACHMENT_FOLDER, "Cartella degli allegati")
+        .with(
+            C_ATTACHMENT_FOLDER_DESC,
+            "La cartella del vault in cui cercare e depositare gli allegati.",
+        )
         .with(C_GROUP_APPEARANCE, "Aspetto")
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Ricerche e note recenti")
@@ -455,6 +483,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
 
     let mut en = StringCatalog::new("en")
         .with(C_GROUP_COMPONENTS, "Components")
+        .with(C_GROUP_FILES, "Files")
+        .with(C_ATTACHMENT_FOLDER, "Attachment folder")
+        .with(
+            C_ATTACHMENT_FOLDER_DESC,
+            "The vault folder where attachments are found and deposited.",
+        )
         .with(C_GROUP_APPEARANCE, "Appearance")
         .with(C_PLUGINS_DISABLED, "Disabled components")
         .with(
@@ -689,5 +723,18 @@ mod tests {
     fn a_vault_without_keys_not_asks_nothing() {
         assert!(keys_to_watch(&BTreeMap::new(), &BTreeMap::new()).is_empty());
         assert!(keys_to_watch(&BTreeMap::new(), &map(&[("keys.a", "Mod-a")])).is_empty());
+    }
+
+    #[test]
+    fn attachment_folder_is_a_vault_text_setting_with_a_real_default() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == ATTACHMENT_FOLDER)
+            .expect("il core dichiara la cartella degli allegati");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
+        let SettingKind::Text { default } = spec.kind else {
+            panic!("la cartella degli allegati è testo");
+        };
+        assert_eq!(default, DEFAULT_ATTACHMENT_FOLDER);
     }
 }

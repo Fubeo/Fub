@@ -87,6 +87,7 @@ import { clearPreview, updatePreview } from "./preview";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
+import { setTooltip } from "../ui/tooltip";
 
 export interface DocumentDeps {
   /// Click su un `#tag` nella vivi preview. Iniettato invece che importato:
@@ -734,7 +735,7 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
       // Il `title` di una tab di documento è il **path intero**, perché due note
       // omonime in cartelle diverse sono il caso in cui il nome non basta. Una
       // view non ha un path: il suo titolo è già tutto ciò che c'è da sapere.
-      tab.title = t0.k === "doc" ? t0.doc : nameTab(t0);
+      setTooltip(tab, t0.k === "doc" ? t0.doc : nameTab(t0));
 
       const name = document.createElement("span");
       name.className = "tab-name";
@@ -748,7 +749,7 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
       const close = document.createElement("span");
       close.className = "tab-close";
       close.textContent = "×";
-      close.title = t("app.close");
+      setTooltip(close, t("app.close"));
       close.addEventListener("mousedown", (e) => {
         // `stopPropagation` o il click attiverebbe la tab che si sta chiudendo,
         // caricando un documento un istante prima di toglierlo.

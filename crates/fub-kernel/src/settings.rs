@@ -77,6 +77,11 @@ use serde::{Deserialize, Serialize};
 use crate::storage::{do_not_overwrite, update_atomic, Durable, VaultStorage};
 use crate::poison::Shelter;
 use fub_abi::schema::SchemaVersion;
+/// La cartella in cui la shell deposita e cerca gli allegati del vault.
+///
+/// La chiave è dichiarata dal bundle core (`fub-host`) ma il kernel la legge
+/// quando risolve un wikilink a un allegato.
+pub const ATTACHMENT_FOLDER: &str = "files.attachment-folder";
 
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
 /// giorno**, perché il file che non ce l'ha è quello che poi non si sa da che

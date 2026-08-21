@@ -18,7 +18,7 @@
 //! comandi: uno che lavora davvero, e uno che restituisce l'esito nella sua
 //! forma più profonda.
 
-#[cfg(not(feature = "con-rete"))]
+#[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]
 wit_bindgen::generate!({
     path: ["../../crates/fub-abi/wit/fub", "wit"],
     world: "esempio:ping/ping",
@@ -32,6 +32,14 @@ wit_bindgen::generate!({
 wit_bindgen::generate!({
     path: ["../../crates/fub-abi/wit/fub", "wit"],
     world: "esempio:ping/ping-con-rete",
+    generate_all,
+});
+
+// Il mondo che chiede i dati persistiti: il linker WASM non serve questa famiglia.
+#[cfg(feature = "con-dati")]
+wit_bindgen::generate!({
+    path: ["../../crates/fub-abi/wit/fub", "wit"],
+    world: "esempio:ping/ping-con-dati",
     generate_all,
 });
 
@@ -123,7 +131,15 @@ impl Guest for Componente {
         Self::ping(job)
     }
 
-    #[cfg(not(feature = "con-rete"))]
+    /// Tiene viva l'import di `host-data-read`: il componente esiste per farsi
+    /// rifiutare al caricamento, non per eseguire questa chiamata.
+    #[cfg(feature = "con-dati")]
+    fn run_job(job: String, payload: String) -> Result<String, PluginError> {
+        let _ = fub::abi::host_data_read::data_read(&payload)?;
+        Self::ping(job)
+    }
+
+    #[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]
     fn run_job(job: String, _payload: String) -> Result<String, PluginError> {
         Self::ping(job)
     }
@@ -133,15 +149,15 @@ impl Guest for Componente {
 // I comandi
 // ---------------------------------------------------------------------------
 //
-// Solo nel mondo `ping`: `ping-con-rete` esiste per farsi rifiutare al
-// caricamento, e non arriva mai a un comando.
+// Solo nel mondo `ping`: `ping-con-rete` e `ping-con-dati` esistono per farsi
+// rifiutare al caricamento, e non arrivano mai a un comando.
 
 /// La nota su cui lavorano i due comandi. La stessa del job: un esempio con un
 /// documento solo è un esempio in cui si vede cosa attraversa.
-#[cfg(not(feature = "con-rete"))]
+#[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]
 const NOTA: &str = "Nota.md";
 
-#[cfg(not(feature = "con-rete"))]
+#[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]
 mod comandi {
     use super::{Componente, NOTA};
     use crate::exports::fub::abi::command::{

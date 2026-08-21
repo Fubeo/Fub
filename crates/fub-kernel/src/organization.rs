@@ -225,7 +225,21 @@ impl OrganizationStore {
     /// è, per quella cartella.
     pub fn migrate(&self, from: &str, to: &str) -> Result<bool, String> {
         let mut changed = false;
-        self.update(|org| changed = migrate(org, from, to))?;
+        let mut icon_collision = false;
+        self.update(|org| {
+            icon_collision = from != to
+                && org.icons.contains_key(from)
+                && org.icons.contains_key(to);
+            changed = migrate(org, from, to);
+        })?;
+        if icon_collision {
+            // Due icone non hanno una fusione sensata: vince quella già
+            // assegnata alla destinazione, mentre la sorgente resta nominata
+            // dalla sua chiave e l'evento arriva a chi può mostrarlo.
+            self.warn(format!(
+                "collisione di icone durante la rinomina {from} → {to}: l'icona della destinazione resta, quella della sorgente è rimasta sotto il nome vecchio"
+            ));
+        }
         Ok(changed)
     }
 
@@ -390,8 +404,15 @@ fn merge_entries(
 /// [`senza_doppioni`], che passa dopo **ogni** mutazione.
 fn migrate(org: &mut Organization, from: &str, to: &str) -> bool {
     let mut changed = false;
-    if let Some(icon) = org.icons.remove(from) {
-        org.icons.insert(to.to_string(), icon);
+    if let Some(icon) = org.icons.get(from).cloned() {
+        // L'icona è un valore singolo: su collisione non si inventa una
+        // composizione e non si sovrascrive quella della destinazione. La
+        // sorgente resta sotto la chiave vecchia, che nomina ciò che è rimasto
+        // indietro; `OrganizationStore::migrate` emette l'avviso.
+        if !org.icons.contains_key(to) || from == to {
+            org.icons.remove(from);
+            org.icons.insert(to.to_string(), icon);
+        }
         changed = true;
     }
     for p in org.pinned.iter_mut() {
@@ -649,6 +670,26 @@ mod tests {
         assert!(!org.icons.contains_key("a.md"));
         assert_eq!(org.pinned, ["c.md"]);
         assert_eq!(org.order[""], ["c.md", "b.md"]);
+    }
+
+    /// La politica di collisione dell'organizzazione non inventa una fusione
+    /// per due icone: la destinazione vince, la sorgente resta nominata e
+    /// l'avviso dice esplicitamente che non è stata sovrascritta. Pin e ordine
+    /// invece sono insiemi ordinati e si fondono con la deduplicazione abituale.
+    #[test]
+    fn an_icon_collision_keeps_the_destination_and_names_the_source() {
+        let store = OrganizationStore::in_memory();
+        store.set_icon("a.md", Some("🅰️".into())).unwrap();
+        store.set_icon("b.md", Some("🅱️".into())).unwrap();
+
+        assert!(store.migrate("a.md", "b.md").unwrap());
+
+        let org = store.snapshot();
+        assert_eq!(org.icons.get("b.md").map(String::as_str), Some("🅱️"));
+        assert_eq!(org.icons.get("a.md").map(String::as_str), Some("🅰️"));
+        let warnings = store.take_warnings();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("a.md") && warnings[0].contains("b.md"));
     }
 
     #[test]

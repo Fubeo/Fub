@@ -297,6 +297,10 @@ impl DataRead for JobHost {
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
         self.read_result(|h| h.data_list(prefix))
     }
+
+    fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        self.read_result(|h| h.cache_read(path))
+    }
 }
 
 impl DataWrite for JobHost {
@@ -306,6 +310,10 @@ impl DataWrite for JobHost {
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
         self.write_result(|h| h.data_remove(path))
+    }
+
+    fn cache_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
+        self.write_result(|h| h.cache_write(path, bytes))
     }
 }
 
@@ -477,9 +485,9 @@ impl HostNetwork for JobHost {
     /// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md) presa
     /// sul serio: questa è la cosa più lunga che un job possa fare, quindi è
     /// quella in cui *la cancellazione toglie le altre capacità* conta di più.
-    /// Fermare la richiesta **già partita** è un'altra domanda e non ha una
-    /// risposta qui: chi annulla non aspetta la rete, aspetta il tetto di tempo
-    /// dell'host — e questa riga è il posto dove si vede.
+    /// Fermare la richiesta **già partita** è parte della stessa domanda: il
+    /// token arriva al transport e il suo reader chiude la connessione al primo
+    /// controllo, senza aspettare il tetto globale dell'host.
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
         self.stopped()?;
         let (client, granted) = {
@@ -494,7 +502,7 @@ impl HostNetwork for JobHost {
         };
         // Lo stesso `Guard` di tutti gli altri: il cancello è uno solo, e chi
         // gira dentro un job non ne attraversa uno più largo.
-        Guard::new(client.as_ref(), granted).fetch(request)
+        Guard::new(client.as_ref(), granted).fetch_cancelled(request, self.cancelled.as_ref())
     }
 }
 

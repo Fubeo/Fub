@@ -1,0 +1,320 @@
+# 15. Il disco: storage, durabilità, politiche
+
+Una **seduta** (gruppo di compiti) della [roadmap infrastrutturale](../todo.md).
+Tratta il supporto di archiviazione e le politiche dei file ospitati.
+
+[← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
+[i verbali delle decisioni chiuse](../decisions/README.md)
+
+---
+
+### Stato della Seduta
+Questa seduta è chiusa. Comprende cinque voci sul supporto di archiviazione e
+due sulle politiche dei dati. Le politiche costituivano una singola domanda
+analizzata da due lati.
+
+- **Voce 15.5:** Chiusa con la [0058](../decisions/0058-un-nome-che-nasce.md).
+  Valuta i nomi nuovi e quelli esistenti con regole diverse. I byte del file
+  fungono da sorgente per uno `Span` (porzione di testo). `text_policy` rileva i
+  testi nel formato originale. Il catalogo (§2.4) richiede fedeltà al testo di
+  partenza.
+- **Voce 15.4 (P0):** Chiusa con la
+  [0048](../decisions/0048-una-radice-sola.md). Un vault (archivio di note) usa
+  una sola radice principale (`.fub/`). I dati derivati finiscono in
+  `.fub/data/`. La mappa delle allocazioni si trova in
+  [architecture/on-disk-layout.md](../architecture/on-disk-layout.md). Sceglie
+  la seconda radice per i plugin (estensioni) tra le tre forme disponibili.
+  Questo approccio è aggiuntivo. Permette l'implementazione dopo M3. Scegliere
+  fra le tre opzioni scadeva col blocco del codice (freeze). Il parametro su
+  `data_write` dopo il blocco sarebbe diventato obsoleto.
+- **Voci Restanti (P2):** La **versione di schema** (15.3) richiede subito un
+  campo dedicato. Senza questo campo, il sistema dovrà dedurre i formati in
+  futuro. Bisogna anticipare la versione a ogni formato che nasce.
+
+### Lessico
+Questa seduta distingue due assi concettuali. Evita il termine generico
+*durability*.
+- **Durabilità (15.2):** Indica `fsync` e la scrittura atomica (scrittura sicura
+  e indivisibile).
+- **Classe (15.4):** Indica il valore del dato (essenziale o eliminabile).
+
+### Decisioni di Architettura
+- **Voce 15.1:** Chiusa con la
+  [0064](../decisions/0064-il-supporto-sta-sotto.md). Il kernel (motore
+  centrale) accede ai byte del vault da un unico posto. Usa il
+  `trait VaultStorage`. L'implementazione predefinita è `FsStorage`.
+  `MemStorage` assicura la correttezza dell'interfaccia. Gestisce il vault, il
+  cestino con i suoi sidecar (file di metadati) e lo spazio dei plugin. Il
+  `trait` risiede all'interno del kernel. Questa posizione mantiene il contratto
+  invariato. Separa i due assi strategici ([leva.md](leva.md)).
+- **Atomicità (15.2):** L'atomicità si sposta dentro il `trait`. Evita di essere
+  scritta due volte. Questo chiude la prima metà della voce 15.2 tramite la
+  [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md). L'altra metà
+  riguarda il **recovery** (recupero dopo un crash).
+- **Aggiornamento di File (15.2):** La
+  [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md) chiude
+  l'unica riga rimasta sulla durabilità. L'aggiornamento dei tre file di sistema
+  differisce dalla scrittura standard. `update_atomic` esegue la rilettura sotto
+  lock prima della composizione. Il lock richiede quattro righe di codice.
+  Innalza l'MSRV (versione minima di Rust) a 1.89 per usare
+  `std::fs::File::lock`. Questa stabilità premia chi compila il codice.
+- **Recovery (15.2):** La
+  [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md) chiude la prima
+  delle tre caselle sul recovery. Il registro delle mutazioni risiede in
+  `.fub/`. La profondità del percorso dichiara la classe del dato. Conserva
+  l'inverso delle operazioni. Applica la regola della
+  [0045](../decisions/0045-l-undo-ha-due-pile.md). È la terza volta di fila che
+  si chiude in questo modo.
+- **Buffer di Crash (15.2):** La
+  [0088](../decisions/0088-cio-che-non-e-ancora-successo.md) chiude le due
+  caselle restanti (il buffer di crash e i comandi di manutenzione). La
+  rilettura ha prodotto due esiti diversi. La specifica del buffer esisteva già
+  in `journal.rs`. Il registro conserva le operazioni passate. Il buffer
+  memorizza esclusivamente le operazioni future.
+- **Comandi di Manutenzione (15.2):** Riformulati per risolvere dipendenze
+  impossibili. `vault_health` era diventato una query (interrogazione).
+  Costituisce una terza forma. Ha richiesto una domanda per la correzione. Uno
+  dei quattro comandi nutre ora il rapporto diagnostico (adesso ne ha uno).
+
+### Apertura del Vault (Voce 15.7)
+Il sistema apre il vault e segnala i documenti illeggibili.
+- **Prima Metà:** Chiusa dalla
+  [0068](../decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md).
+  L'apertura ignora i documenti danneggiati. I file problematici finiscono negli
+  scarti di un'`Apertura`. Equivale alla `Lettura` della
+  [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md). Utilizza i
+  nomi dei file.
+- **Seconda Metà (Forma):** Chiusa dalla
+  [0070](../decisions/0070-un-vault-si-apre-in-due-tempi.md). Taglia l'apertura
+  in due tempi. La **scansione** separa le operazioni sincrone da quelle
+  differite. Verifica la capacità del vault di elencare i documenti esistenti.
+  La fase 2 attiva un **job** (lavoro asincrono), che si racconta e si ferma dai
+  pezzi che c'erano già (0032, 0035). `VaultStatus` mostra il completamento
+  dell'indice. Le due metà possiedono una stretta dipendenza. Il banco delle
+  prestazioni del §17.1 valuterà il limite di 512 documenti.
+
+### Politica di Esclusione (Voce 15.6)
+Chiusa dalla [0110](../decisions/0110-la-struttura-non-e-una-preferenza.md).
+Completa la 0058 sul fronte dei file. Esistono due specie di esclusioni invece
+di una lista:
+- **Struttura:** Include `.fub/` e `.trash/`. Evita di indicizzare l'indice o
+  riesumare il cestino.
+- **Preferenza:** Include `node_modules/` e i dotfile (file con il punto
+  iniziale). L'utente regola queste opzioni. Mantenere le due tipologie divise
+  rivela i file temporanei nascosti dal punto iniziale.
+
+**Risultato finale:** Costituisce la quinta voce di fila chiusa per pezzi.
+Aggiunge un terzo criterio: il taglio tra un prerequisito e l'utilizzatore
+([decisions/README.md](../decisions/README.md)).
+
+---
+
+### 15.2 Durabilità e recovery
+
+*ex §2.5 · kernel · **P2** — **chiusa** con la
+[0088](../decisions/0088-cio-che-non-e-ancora-successo.md), in quattro tempi: la
+scrittura ([0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)),
+l'aggiornamento
+([0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md)), il journal
+([0067](../decisions/0067-il-registro-di-cio-che-e-successo.md)) e infine il
+buffer di crash con i comandi di manutenzione*
+
+- [x] **Scrittura atomica vera:** Chiusa dalla
+      [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md).
+  - La promessa sta nella firma di `VaultStorage::write`: o ci sono questi byte,
+    o ci sono quelli di prima.
+  - `FsStorage` la mantiene con un file temporaneo nascosto, `sync_all`, rename
+    e fsync della cartella.
+  - In due casi l'inode non è solo nostro e si scrive sul posto: su un symlink
+    (collegamento simbolico) e su un file con più di un nome. Lì la rename
+    farebbe un danno certo e muto invece di uno raro e rumoroso.
+  - Il test `write_atomicity` guarda un'altra cosa — l'ordine fra analisi e
+    scrittura — e non è stato toccato.
+  - I presidi di questa riga stanno in `kernel/tests/la_durabilita.rs`, e solo
+    su `FsStorage`.
+- [x] **Salita di `.fub/` sul supporto:** Le tre righe `workspace.json`
+      (`organization.rs`), `settings.json` (`settings.rs`) ed `entries.json`
+      (`entries.rs`) usano la 0065. Chiudono la casella della
+      [0064](../decisions/0064-il-supporto-sta-sotto.md). I tre file mantengono
+      l'atomicità di `write_atomic`. Il vault e i tre store condividono un unico
+      supporto dentro il workspace (spazio di lavoro).
+- [x] **Aggiornamenti concorrenti:** Chiusa dalla
+      [0066](../decisions/0066-un-aggiornamento-non-e-una-scrittura.md). Risolve
+      il conflitto tra due processi. `update_atomic` fonde i dati rileggendoli
+      sotto lock. La rilettura protegge i dati. Il lock applica la sicurezza
+      best-effort sul file adiacente. Richiede l'MSRV a 1.89
+      (`std::fs::File::lock`). Il sidecar usa la scrittura per chiave
+      ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)). Previene la
+      perdita silenziosa dei dati autorevoli (criterio della
+      [seduta 20](20-quando-qualcosa-va-storto.md)). Uno dei tre file protegge i
+      preferiti in `vaults.json`.
+- [x] **Buffer di crash / autosave recovery:** Chiuso dalla
+      [0088](../decisions/0088-cio-che-non-e-ancora-successo.md). Le bozze
+      popolano `.fub/drafts/`. Il sistema dedica un file a ogni documento.
+      Registrano i testi delle operazioni future. Costituiscono l'unica copia
+      esistente dei testi non salvati. Ricevono una profondità di livello uno
+      (classe autorevole, [0048](../decisions/0048-una-radice-sola.md)).
+      Utilizza file separati per evitare conflitti negli aggiornamenti
+      condivisi. Garantisce la scrittura atomica. La shell (interfaccia utente)
+      decreta l'esistenza della bozza. Il kernel decide il metodo di
+      conservazione. Usa due porte IPC. `IndexQuery::Drafts` fornisce i fatti
+      (`base`, `current`, `exists`). Mantiene la neutralità. L'utente sceglie
+      quale versione adottare. Una bozza orfana costituisce l'unica copia
+      rimasta.
+- [x] **Journal delle mutazioni:** Chiuso dalla
+      [0067](../decisions/0067-il-registro-di-cio-che-e-successo.md). Il kernel
+      registra le mutazioni in `.fub/journal.jsonl`. Ogni riga include la
+      versione dello schema. Il file resiste agli aggiornamenti. Conserva
+      l'inverso delle modifiche
+      ([0008](../decisions/0008-modifica-chirurgica.md)). La riscrittura
+      integrale costituisce l'unica variante priva di inverso. La
+      [0045](../decisions/0045-l-undo-ha-due-pile.md) documenta questa
+      eccezione. Dedotta l'inversione per le quattro mutazioni strutturali. La
+      profondità definisce la classe autorevole
+      ([0048](../decisions/0048-una-radice-sola.md)). Richiede l'ottava
+      operazione sul supporto (`append`), argomentata contro la frase in testa a
+      `storage.rs`. Conserva diecimila record. Il taglio rispetta i confini del
+      lotto. I futuri utilizzatori gestiranno i rollback (17.3, 16.3, 23.3, e la
+      transazione atomica per operazione batch del 22.4). Il lotto
+      ([0011](../decisions/0011-il-lotto.md)) segna i confini delle transazioni.
+- [x] **Comandi di manutenzione:** Chiusi dalla
+      [0088](../decisions/0088-cio-che-non-e-ancora-successo.md). Casella
+      riformulata. `vault_health` usa `IndexQuery` per restituire
+      `Paged<HealthIssue>`. Una interrogazione costituisce una lettura
+      ([0013](../decisions/0013-elenco-delle-capacita.md)). Serve il rapporto
+      diagnostico (adesso ne ha uno). Le altre tre mutazioni costituiscono
+      comandi del registro ([0009](../decisions/0009-registro-dei-comandi.md)).
+      L'esecuzione dipende dai permessi
+      ([0086](../decisions/0086-una-cronologia-e-la-sua-porta.md)). Le
+      `CommandSpec` operano dalla porta comune. I tre comandi risiedono nella
+      palette. La CLI (27.1) li raggiunge. `vault.repair` documenta le proprie
+      limitazioni e dice ciò che non ripara, o avrebbe avuto lo stesso corpo di
+      `vault.rebuild-index` con un altro nome.
+
+### 15.3 Una versione di schema su ogni formato persistito
+
+*ex §2.12 · kernel · **P2** — **chiusa** dalla
+[0106](../decisions/0106-un-formato-si-presenta.md): i formati versionati sono
+**dieci** e non nove. L'undicesimo corrisponde al sidecar del cestino. Un
+presidio verifica l'elenco delle dichiarazioni.*
+
+- [x] **Precedenti esistenti:** `SearchIndex` (`search.rs`) implementa la
+      ricostruzione automatica per i formati derivati. Lo store del versioning
+      (`versioning.rs`) verifica il manifest dei file autorevoli. Questi due
+      formati forniscono i modelli. Uno dei due serve per l'imitazione.
+- [x] **Versionamento JSON:** Il sidecar del cestino in `vault.rs` utilizza un
+      `serde_json::to_string` senza campo di versione. Inizialmente erano due
+      file. `.fub/workspace.json` include la versione dal §11.3
+      ([0038](../decisions/0038-il-kernel-possiede-il-sidecar.md)). Il modello
+      dispone di tre esempi e uno solo da raggiungere. Divenuti quattro con
+      `.fub/data/entries.json`
+      ([0046](../decisions/0046-l-anagrafe-del-vault.md)). I formati necessitano
+      del numero di versione iniziale. Questa scelta previene le deduzioni
+      basate sul contenuto. Gli allegati, i canvas (lavagne) e i database
+      mantengono le loro strutture native. Rappresentano dati autorevoli. La
+      mancata lettura impedisce il recupero dei dati.
+
+*Sblocca:* 27.4 (upgrade migration test), 24.2 (vault repair, checksum
+verification). La rilevazione di corruzione (2.1) analizza l'integrità dei byte.
+Il numero di schema identifica la struttura del formato.
+
+### 15.4 I dati persistiti non hanno né una mappa né una classe
+
+*ex §2.29 · kernel · **P0** — **chiusa** con la
+[0048](../decisions/0048-una-radice-sola.md); resta una casella, che è additiva*
+
+- [x] **Mappa e Documentazione:** Riguarda i quattro posti governati da quattro
+      discipline diverse. Il documento
+      [architecture/on-disk-layout.md](../architecture/on-disk-layout.md)
+      definisce le regole di archiviazione. Descrive scrittori, classi, versioni
+      (§15.3) e atomicità (§15.2). Mostra le tre righe di eccezioni che
+      contraddicono la regola. Gli snapshot (fotografie di stato) del versioning
+      occupano la radice dei derivati. Il sidecar del cestino opera senza
+      classe. L'atomicità garantita da `data_write` copre gli accessi tramite la
+      [0065](../decisions/0065-una-scrittura-o-c-e-o-non-c-e.md). Quella terza
+      riga scompare tramite la 0065. Erano quattro posti in aumento a otto. I
+      primi tre giunti con la
+      [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md). Un quarto
+      aggiunto dalla [0046](../decisions/0046-l-anagrafe-del-vault.md). Il
+      documento unifica la conoscenza sparuta nei moduli.
+- [x] **Unificazione Radici:** Le due radici si unificano. Adesso la radice è
+      una sola (`.fub/`), una basta. I derivati occupano `.fub/data/`. La
+      struttura gerarchica preserva le deduzioni basate sul percorso. Il rename
+      (rinomina) all'apertura scompare insieme al vecchio nome del progetto. La
+      cartella `.trash/` appartiene all'utente. Gestisce il cestino condiviso
+      con Obsidian.
+- [x] **Distinzione Durabilità e Classe:** Il termine "durabilità" indica fsync
+      e la scrittura atomica (**§15.2**). La classe definisce il valore del dato
+      (eliminabile o autorevole). Costituiscono due assi indipendenti.
+- [x] **Classe da Percorso:** La struttura del percorso determina la classe del
+      file. Il layout impiega `data_*` per i dati autorevoli. Usa `cache_*` per
+      i derivati tra le tre forme valutate. Con `data_write(path, bytes, class)`
+      la stessa chiave si sarebbe potuta dichiarare derivata a una scrittura e
+      autorevole a quella dopo. La scelta della seconda radice separa la
+      dichiarazione dalla scrittura fisica. Le due radici trasformano l'errore
+      di classificazione in un errore logico (percorso errato) invece di un
+      parametro errato.
+- [x] **Implementazione su HostApi:** `cache_read`/`cache_write` e le compagne
+      `data_list`/`data_remove` sono implementate sull'HostApi **nativo**; lo
+      spazio autorevole dei plugin è `.fub/plugins/<id>/`. La capacità è quindi
+      disponibile agli otto inquilini in-process e segue la regola di rename della
+      0048.
+- [ ] **Confine WASM dei dati:** il secondo backend (`fub-wasm-host`) non linka
+      `host-data-read`/`host-data-write`. Un componente che le importa è rifiutato
+      al caricamento, e il rifiuto nomina la famiglia; il presidio è
+      `a_host_data_family_not_served_is_named`. Entrerà in uso prima di M5: non è
+      un gap senza nome.
+
+*Sblocca:* 18.1-18.2 (cosa si sincronizza e cosa si salva), 24.2 (rebuild,
+repair, diagnostic bundle), 2.2 e 3.1 (vault portabile, relocation), 28
+(portable mode, config nella cartella vault o fuori).
+
+### 15.6 La politica di esclusione è una costante di compilazione
+
+*ex §2.16 · kernel · **P2** — **chiusa dalla
+[0110](../decisions/0110-la-struttura-non-e-una-preferenza.md)**: esistono due
+politiche di esclusione, non una. La politica configurabile dall'utente
+(`files.excluded-folders`, `files.show-hidden`, per-vault). La politica
+immodificabile di struttura (`.fub/`, `.trash/`, file temporanei). Restano due
+caselle. Leggere il `.gitignore`. Modificare l'elenco delle cartelle escluse
+dall'app.*
+
+- [x] **Sostituzione di `IGNORED_DIRS`:** `vault.rs` definiva `IGNORED_DIRS`
+      come `&[&str]`. Il codice accorpava due esclusioni incompatibili nella
+      stessa specie — la cartella di Fub e `node_modules`. Il sistema isola
+      l'opzione `e_struttura` e le due chiavi per-vault (specifiche per
+      archivio, [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)). I
+      vault non configurati funzionano con le regole precedenti.
+- [x] **Composizione Filtri:** `IgnorePolicy` unifica le cinque opzioni ospitate
+      su uno stesso albero. Combina l'ignore configurabile, `.gitignore` (3.1),
+      file nascosti (3.2), ricerca (9.1), sync (18.1) e contesto AI (23.2).
+      Impedisce che l'esclusione significhi cinque cose diverse. I filtri
+      operano per sottrazione. Preservano la definizione della struttura. Un
+      file come sorgente mantiene una sintassi propria. La casella sul
+      `.gitignore` rimane attiva.
+- [x] **Gestione Symlink:** `std::fs` ignora i symlink (collegamenti simbolici).
+      La [0058](../decisions/0058-un-nome-che-nasce.md) usa `file_type()` per
+      determinare le tipologie. Il tracciamento richiederebbe l'identità del
+      nodo (`dev`+`ino`). `VaultStorage` esclude questa funzionalità di
+      proposito (§15.1). Questa limitazione previene l'ingresso in anelli
+      infiniti. Il presidio crea anelli fisici sul filesystem. Testa il blocco
+      del programma.
+- [x] **Visibilità File Nascosti:** L'altra metà della questione riguarda
+      `files.show-hidden`. Rileva i dotfile esistenti.
+      [`NameFault::Hidden`](../decisions/0058-un-nome-che-nasce.md) blocca la
+      creazione di nuovi file nascosti. L'asimmetria è adesso scritta in
+      `path_policy`: preserva la rintracciabilità delle note future. La politica
+      risiede sul vault. I plugin ricevono la stessa visione dell'utente.
+- [ ] **Modifica Preferenze Liste:** Casella residua. `files.excluded-folders`
+      adotta `SettingKind::List`. L'interfaccia utente (shell) disegna queste
+      liste in sola lettura. Il comando dedicato alla scrittura risulta assente.
+      La chiave esclude volontariamente l'accesso in scrittura programmatica
+      (`program_writable`). Questa scelta intenzionale (non è una svista da due
+      righe) previene le modifiche non volute (la perdita di note). Richiede un
+      gesto dell'utente sulla shell. Vale per ogni `List` che nascerà, non solo
+      per questa.
+- [x] **Rilevazione Temporanei:** Costituisce il gemello del §15.5 e della
+      [0058](../decisions/0058-un-nome-che-nasce.md). Regola l'accesso ai file
+      (quali file e non quali nomi). Disattiva il ramo del vault per oscurare i
+      file temporanei. Previene la loro identificazione tramite il punto
+      iniziale.

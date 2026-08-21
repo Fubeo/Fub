@@ -38,6 +38,7 @@ import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/p
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
 import { THEME_KEY } from "../theme/theme";
+import { setTooltip } from "../ui/tooltip";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
 /// una chiave che ha composto invece di leggerla da un elenco.
@@ -311,7 +312,7 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
     const resetButton = document.createElement("button");
     resetButton.className = "link-button";
     resetButton.textContent = t("settings.reset");
-    resetButton.title = t("settings.reset.hint");
+    setTooltip(resetButton, t("settings.reset.hint"));
     resetButton.addEventListener("click", () => {
       void write(() => api.resetSetting(entry.spec.key));
     });
@@ -554,7 +555,7 @@ async function drawSuggestedKeys(): Promise<HTMLElement[]> {
   adoptButton.addEventListener("click", () => void write(() => api.adoptKeybindings()));
   const discardButton = document.createElement("button");
   discardButton.textContent = t("settings.vault_keys.discard");
-  discardButton.title = t("settings.vault_keys.discard.hint");
+  setTooltip(discardButton, t("settings.vault_keys.discard.hint"));
   discardButton.addEventListener("click", () => void write(() => api.discardKeybindings()));
   actions.append(adoptButton, discardButton);
   box.append(actions);
@@ -764,7 +765,7 @@ function renderVaultRow(vault: KnownVault): HTMLElement {
   const favoriteButton = document.createElement("button");
   favoriteButton.className = "link-button";
   favoriteButton.textContent = vault.favorite ? "★" : "☆";
-  favoriteButton.title = t(vault.favorite ? "settings.unfavourite" : "settings.favourite");
+  setTooltip(favoriteButton, t(vault.favorite ? "settings.unfavourite" : "settings.favourite"));
   favoriteButton.addEventListener("click", () => {
     void writeVault(() => api.setVaultFavorite(vault.root, !vault.favorite));
   });
@@ -772,7 +773,7 @@ function renderVaultRow(vault: KnownVault): HTMLElement {
   const forget = document.createElement("button");
   forget.className = "link-button";
   forget.textContent = t("settings.forget");
-  forget.title = t("settings.forget.hint");
+  setTooltip(forget, t("settings.forget.hint"));
   forget.addEventListener("click", () => {
     void writeVault(() => api.forgetVault(vault.root));
   });

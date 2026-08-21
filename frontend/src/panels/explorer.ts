@@ -45,6 +45,7 @@ import { errorText } from "../host/errors";
 import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
 import { onLanguage, t, type Key } from "../i18n/strings";
 import { notify } from "../ui/notify";
+import { setTooltip } from "../ui/tooltip";
 
 const fileListEl = $("#file-list");
 const filesTitleEl = $("#files-title");
@@ -461,7 +462,8 @@ let entryCount = 0;
 function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   const row = document.createElement("div");
   row.className = "tree-row note";
-  row.title = id;
+  row.dataset.path = id;
+  setTooltip(row, id);
   const icon = state.meta.icons[id];
   if (icon) row.appendChild(rowIcon(icon));
   const name = document.createElement("span");
@@ -500,7 +502,7 @@ function empty(folder: VaultFolder): boolean {
 function folderRow(folder: VaultFolder): HTMLElement {
   const row = document.createElement("div");
   row.className = "tree-row folder";
-  row.title = folder.path;
+  setTooltip(row, folder.path);
 
   const chevron = document.createElement("span");
   chevron.className = "chevron";
@@ -577,7 +579,7 @@ function markActive(): void {
     if (li.dataset.path !== state.currentDoc) li.removeAttribute("aria-selected");
   }
   for (const row of pinnedListEl.querySelectorAll<HTMLElement>(".tree-row.note")) {
-    if (row.title === state.currentDoc) row.setAttribute("aria-current", "true");
+    if (row.dataset.path === state.currentDoc) row.setAttribute("aria-current", "true");
     else row.removeAttribute("aria-current");
   }
 
@@ -644,7 +646,7 @@ function renderSpaceStrip(): void {
   home.className = "space-chip";
   home.setAttribute("aria-pressed", String(state.activeSpace === null));
   home.textContent = "🏠";
-  home.title = t("explorer.whole_vault");
+  setTooltip(home, t("explorer.whole_vault"));
   home.addEventListener("click", () => selectSpace(null));
   spaceStripEl.appendChild(home);
 
@@ -653,7 +655,7 @@ function renderSpaceStrip(): void {
     chip.className = "space-chip";
     chip.setAttribute("aria-pressed", String(state.activeSpace === path));
     chip.textContent = state.meta.icons[path] ?? "🗂️";
-    chip.title = childName(path);
+    setTooltip(chip, childName(path));
     chip.addEventListener("click", () => selectSpace(path));
     chip.addEventListener("contextmenu", (e) => {
       e.preventDefault();
@@ -671,7 +673,7 @@ function renderSpaceStrip(): void {
   // `aria-pressed` non entra nel gruppo di quelli che si escludono a vicenda —
   // che è ciò che è, e ciò che va detto.
   add.textContent = "+";
-  add.title = t("explorer.new_space");
+  setTooltip(add, t("explorer.new_space"));
   add.addEventListener("click", (e) => void pickNewSpace(e));
   spaceStripEl.appendChild(add);
 }

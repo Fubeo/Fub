@@ -57,6 +57,7 @@ import {
 import { createNote } from "../state/vault";
 import { activatable, trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
+import { setTooltip } from "../ui/tooltip";
 import { openDocument } from "./document";
 
 const OVERLAY_ID = "quick-switcher";
@@ -268,7 +269,7 @@ export function openQuickSwitcher(): void {
         const empty = list.querySelector(".palette-empty");
         if (empty) {
           empty.textContent = t("search.unavailable");
-          (empty as HTMLElement).title = result.error;
+          setTooltip(empty as HTMLElement, result.error);
         }
         return;
       }

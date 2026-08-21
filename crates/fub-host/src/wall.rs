@@ -182,13 +182,17 @@ pub(crate) fn verdict(
             // Due modi di meritare una suonata, e il primo non passa dalla
             // finestra: era l'occorrenza in calendario.
             let wait_for = position.wait_for == Some(pass);
+            let occurrence = zone.instant(pass);
+            let on_time = occurrence.is_some_and(|q| q == time);
             let recovery = position.last.is_some()
                 && timer.catch_up_seconds > 0
-                && zone.instant(pass).is_some_and(|q| {
+                && occurrence.is_some_and(|q| {
                     let delay = time.as_second() - q.as_second();
                     delay >= 0 && delay as u64 <= timer.catch_up_seconds
                 });
-            outcome.ring = wait_for || recovery;
+            // Dopo un riavvio `wait_for` non è disponibile: l'istante esatto
+            // resta comunque una suonata in calendario, anche con finestra zero.
+            outcome.ring = wait_for || on_time || recovery;
         }
     }
 
@@ -417,5 +421,28 @@ mod tests {
         assert_eq!(v.between, None);
         assert!(!v.ring);
         assert_eq!(v.position.last, None);
+    }
+
+    #[test]
+    fn restart_at_scheduled_instant_rings_with_no_recovery_window() {
+        let timer = WallClock::daily(9, 0)
+            .anchored("UTC")
+            .catching_up(0);
+        let zone = Zone::of(&timer, "").expect("zone");
+        let yesterday = CivilTime {
+            year: 2026,
+            month: 1,
+            day: 14,
+            hour: 9,
+            minute: 0,
+            second: 0,
+        };
+        let v = verdict(
+            &timer,
+            &zone,
+            ts("2026-01-15T09:00:00Z"),
+            Position { last: Some(yesterday), wait_for: None },
+        );
+        assert!(v.ring, "the exact scheduled instant is not a recovery");
     }
 }

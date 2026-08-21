@@ -460,7 +460,7 @@ pub fn mount(
 /// non si apre, il vault si apre lo stesso senza ricerca: la verità è il vault,
 /// l'indice è stato derivato e non deve mai impedire di leggere le note.
 ///
-/// Vive nel proprio spazio dati (`.fub/data/plugins/fub.search/`), che è il
+/// Vive nel proprio spazio autorevole (`.fub/plugins/fub.search/`), che è il
 /// kernel ad assegnargli: la registrazione lo attiva, e l'attivazione è il
 /// momento in cui ritrova da `data_*` le impronte di ciò che ha già visto.
         // I due esiti sono diversi e vanno detti diversi (decisione 0019): un

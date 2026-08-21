@@ -4,7 +4,7 @@
 //! versioning aveva trovato: un `EventHandler` scritto come lo scriverebbe un
 //! plugin non poteva tenere uno store su disco. Chiudendolo si è aperto un
 //! confine di sicurezza — un plugin nomina blob, e i blob devono restare dentro
-//! `.fub/data/plugins/<id>/`. Qui si verifica proprio quello: che ci restino,
+//! `.fub/plugins/<id>/` per i dati autorevoli e `.fub/data/plugins/<id>/` per la cache. Qui si verifica proprio quello: che ci restino,
 //! che ogni plugin veda solo i propri, e che ogni tentativo di uscirne sia un
 //! `PermissionDenied` e non un file scritto altrove.
 
@@ -34,7 +34,7 @@ fn a_blob_written_by_a_plugin_lands_in_its_own_corner_of_the_vault() {
 
     assert_eq!(
         std::fs::read(
-            data_root(&root)
+            root.join(".fub")
                 .join("plugins")
                 .join("prova.plugin")
                 .join("cartella")
@@ -42,7 +42,7 @@ fn a_blob_written_by_a_plugin_lands_in_its_own_corner_of_the_vault() {
         )
         .unwrap(),
         b"contenuto",
-        "a plugin's data space is `.fub/data/plugins/<id>/`, \
+        "authoritative plugin data lives in `.fub/plugins/<id>/`, \
          and intermediate directories are created by the host"
     );
 }
@@ -82,6 +82,96 @@ fn what_a_plugin_writes_it_can_read_back_list_and_remove() {
         host.data_remove("doc/a.md")
             .expect("deleting twice succeeds anyway");
     });
+}
+
+#[test]
+fn cache_blobs_use_the_derived_root_without_mixing_authoritative_data() {
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
+
+    ws.with_host("prova.plugin", |host| {
+        host.data_write("authoritative.json", b"keep").unwrap();
+        host.cache_write("index.json", b"rebuildable").unwrap();
+        assert_eq!(host.data_read("authoritative.json").unwrap().as_deref(), Some(&b"keep"[..]));
+        assert_eq!(host.cache_read("index.json").unwrap().as_deref(), Some(&b"rebuildable"[..]));
+        assert_eq!(
+            host.data_read("index.json").unwrap(),
+            None,
+            "cache blobs are not authoritative data when the canonical root exists"
+        );
+        assert_eq!(host.cache_read("authoritative.json").unwrap(), None);
+    });
+
+    assert!(root.join(".fub/plugins/prova.plugin/authoritative.json").exists());
+    assert!(root.join(".fub/data/plugins/prova.plugin/index.json").exists());
+}
+
+#[test]
+fn removing_canonical_data_does_not_reveal_a_cache_copy() {
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
+    let cache = data_root(&root).join("plugins/prova.plugin/shared.json");
+
+    ws.with_host("prova.plugin", |host| {
+        host.data_write("shared.json", b"authoritative").unwrap();
+        host.cache_write("shared.json", b"derived").unwrap();
+        assert_eq!(host.data_read("shared.json").unwrap().as_deref(), Some(&b"authoritative"[..]));
+        host.data_remove("shared.json").unwrap();
+        assert_eq!(
+            host.data_read("shared.json").unwrap(),
+            None,
+            "removing visible data does not fall back to the cache tree"
+        );
+        assert_eq!(host.cache_read("shared.json").unwrap().as_deref(), Some(&b"derived"[..]));
+    });
+
+    assert!(cache.exists(), "the cache copy remains available only through cache_*");
+}
+
+#[test]
+fn kernel_cache_rejects_an_empty_path() {
+    let mut ws = vault();
+
+    ws.with_host("prova.plugin", |host| {
+        assert!(matches!(
+            host.cache_read(""),
+            Err(PluginError::BadArgs(_))
+        ));
+        assert!(matches!(
+            host.cache_write("", b"nothing"),
+            Err(PluginError::BadArgs(_))
+        ));
+    });
+}
+
+#[test]
+fn an_old_plugin_data_root_remains_readable_without_migration() {
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
+    let legacy = data_root(&root).join("plugins/prova.plugin/old.json");
+    std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+    std::fs::write(&legacy, b"legacy").unwrap();
+
+    ws.with_host("prova.plugin", |host| {
+        assert_eq!(host.data_read("old.json").unwrap().as_deref(), Some(&b"legacy"[..]));
+        assert!(host.data_list("").unwrap().contains(&"old.json".to_string()));
+        host.data_write("new.json", b"new").unwrap();
+    });
+
+    assert_eq!(
+        std::fs::read(&legacy).unwrap(),
+        b"legacy",
+        "legacy-only roots remain authoritative until a migration creates the canonical root"
+    );
+    assert_eq!(
+        std::fs::read(data_root(&root).join("plugins/prova.plugin/new.json")).unwrap(),
+        b"new",
+        "writes stay on the selected legacy tree while the canonical root is absent"
+    );
+    assert!(
+        !root.join(".fub/plugins/prova.plugin").exists(),
+        "the fallback must not create a second canonical tree"
+    );
 }
 
 #[test]

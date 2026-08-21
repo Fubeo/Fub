@@ -235,12 +235,51 @@ pub(crate) fn resolve_entry_in(
     source: &DocId,
     target: &LinkTarget,
 ) -> Option<DocId> {
+    resolve_entry_in_folder(entries, names, source, target, None)
+}
+
+/// Come [`resolve_entry_in`], ma con la cartella degli allegati dichiarata dal
+/// vault. Un wikilink nudo a un allegato preferisce quella cartella; il ripiego
+/// per nome resta per i vault che non hanno la chiave o che non contengono la
+/// cartella nominata.
+fn resolve_entry_in_folder(
+    entries: &BTreeMap<DocId, VaultEntry>,
+    names: &EntryNames,
+    source: &DocId,
+    target: &LinkTarget,
+    attachment_folder: Option<&str>,
+) -> Option<DocId> {
     let raw = match target {
         // nome: `![[foto.png]]` è il modo in cui si incorpora un allegato.
-        // Il mondo esterno non è nel vault.
-        LinkTarget::Wiki { page, .. } => return names.named(page),
+        // Se il vault dichiara una cartella, quella è la prima candidata.
+        LinkTarget::Wiki { page, .. } => {
+            if !page.contains('/') {
+                let folder = attachment_folder
+                    .map(|folder| fub_abi::rules::folders::normalized(folder))
+                    .filter(|folder| !folder.is_empty());
+                if let Some(folder) = folder {
+                    let candidate = DocId::new(format!("{folder}/{page}"));
+                    if entries
+                        .get(&candidate)
+                        .is_some_and(|entry| entry.kind == EntryKind::Asset)
+                    {
+                        return Some(candidate);
+                    }
+                    if let Some(candidate) = names.by_path_key(
+                        &fub_abi::rules::path::resolution_key(candidate.as_str()),
+                    ) {
+                        if entries
+                            .get(&candidate)
+                            .is_some_and(|entry| entry.kind == EntryKind::Asset)
+                        {
+                            return Some(candidate);
+                        }
+                    }
+                }
+            }
+            return names.named(page);
+        }
         LinkTarget::Path(raw) => raw,
-    // Ripiego, e non è pignoleria: macOS scrive i nomi dei file in NFD e i
         LinkTarget::Url(_) => return None,
     };
     let path = fub_abi::rules::path::resolve_against(source, raw)?;
@@ -662,7 +701,6 @@ impl CoreIndex {
         self.tags.clear();
         self.graph_epoch = 0;
     }
-
     /// è la strada che l'anagrafe apre, e l'unica differenza con
     /// [`on_documents_indexed`](IndexProvider::on_documents_indexed) è che qui il
     /// modello non c'è — non è stato parsato, perché il file non è stato letto.
@@ -704,7 +742,19 @@ impl CoreIndex {
     /// qualunque specie (§14.1).
     /// Mette (o aggiorna) una voce dell'anagrafe.
     pub(crate) fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId> {
-        resolve_entry_in(&self.entries, &self.names, source, target)
+        let folder = self
+            .settings
+            .read()
+            .ok()
+            .and_then(|settings| settings.effective(crate::settings::ATTACHMENT_FOLDER).ok())
+            .and_then(|(value, _)| value.as_text().map(str::to_owned));
+        resolve_entry_in_folder(
+            &self.entries,
+            &self.names,
+            source,
+            target,
+            folder.as_deref(),
+        )
     }
 
     /// **Cosa cambia** se questo modello sostituisce quello che c'è (§22.2,
@@ -897,15 +947,15 @@ impl CoreIndex {
                 let host = from?;
                 self.metas.contains_key(host).then(|| host.clone())?
             }
-            LinkTarget::Wiki { page, .. } => self.graph.resolve_wiki(page)?,
-            // radice: `DocId("")` non è un documento, è la cartella da cui
-            // `resolve_against` parte, ed è la stessa che userebbe una nota
-            // nella radice.
-            // Il mondo esterno non è nel vault, e dirlo è una risposta: chi
+            LinkTarget::Wiki { page, .. } => self
+                .graph
+                .resolve_wiki(page)
+                .or_else(|| self.resolve_entry(from.unwrap_or(&DocId::new("")), target))?,
+            // radice: `DocId("")` è la cartella da cui `resolve_against` parte.
             LinkTarget::Path(raw) => self
                 .graph
-                .resolve_path(from.unwrap_or(&DocId::new("")), raw)?,
-            // passa qui l'esito di `classify` senza filtrarlo prima riceve
+                .resolve_path(from.unwrap_or(&DocId::new("")), raw)
+                .or_else(|| self.resolve_entry(from.unwrap_or(&DocId::new("")), target))?,
             // `None` invece di un errore.
     // Il punto che un `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` nomina dentro
             LinkTarget::Url(_) => return None,
@@ -1379,4 +1429,64 @@ fn tag_diff(before: &[String], after: &[Tag]) -> (Vec<String>, Vec<String>) {
     let added: Vec<String> = new.difference(&old).map(|t| (*t).clone()).collect();
     let removed: Vec<String> = old.difference(&new).map(|t| (*t).clone()).collect();
     (added, removed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn asset(path: &str) -> VaultEntry {
+        VaultEntry {
+            id: DocId::new(path),
+            kind: EntryKind::Asset,
+            size: 1,
+            mtime: 1,
+            fingerprint: None,
+        }
+    }
+
+    #[test]
+    fn a_bare_attachment_link_prefers_the_declared_folder() {
+        let entries = BTreeMap::from([
+            (DocId::new("attachments/photo.png"), asset("attachments/photo.png")),
+            (DocId::new("other/photo.png"), asset("other/photo.png")),
+        ]);
+        let names = EntryNames::of(&entries);
+        let source = DocId::new("note.md");
+
+        let target = LinkTarget::Wiki {
+            page: "photo.png".into(),
+            heading: None,
+            block: None,
+        };
+        assert_eq!(
+            resolve_entry_in_folder(
+                &entries,
+                &names,
+                &source,
+                &target,
+                Some("attachments"),
+            ),
+            Some(DocId::new("attachments/photo.png"))
+        );
+    }
+
+    #[test]
+    fn changing_the_declared_folder_changes_existing_link_resolution() {
+        let entries = BTreeMap::from([
+            (DocId::new("attachments/photo.png"), asset("attachments/photo.png")),
+            (DocId::new("media/photo.png"), asset("media/photo.png")),
+        ]);
+        let names = EntryNames::of(&entries);
+        let source = DocId::new("note.md");
+        let target = LinkTarget::wiki("photo.png");
+        assert_eq!(
+            resolve_entry_in_folder(&entries, &names, &source, &target, Some("attachments")),
+            Some(DocId::new("attachments/photo.png"))
+        );
+        assert_eq!(
+            resolve_entry_in_folder(&entries, &names, &source, &target, Some("media")),
+            Some(DocId::new("media/photo.png"))
+        );
+    }
 }

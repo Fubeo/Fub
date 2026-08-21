@@ -40,6 +40,7 @@ import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
 import type { Teardown } from "../ui/lifetime";
+import { setTooltip } from "../ui/tooltip";
 
 /// Il catalogo italiano. È anche la **forma** del catalogo: le altre lingue
 /// devono avere le sue chiavi, tutte, o non compilano.
@@ -1074,7 +1075,7 @@ export function t(key: Key, args: Record<string, string | number> = {}): string 
 /// dentro un attributo, che è la forma che si finisce per dover parsare.
 const ATTRIBUTES = [
   ["data-i18n", "testo"],
-  ["data-i18n-title", "title"],
+  ["data-i18n-title", "tooltip"],
   ["data-i18n-placeholder", "placeholder"],
   ["data-i18n-label", "aria-label"],
 ] as const;
@@ -1090,6 +1091,7 @@ export function applyStrings(root: ParentNode = document): void {
       const key = el.getAttribute(attribute) as Key;
       const text = t(key);
       if (where === "testo") el.textContent = text;
+      else if (where === "tooltip") setTooltip(el, text);
       else el.setAttribute(where, text);
     }
   }

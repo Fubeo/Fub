@@ -130,4 +130,19 @@ describe("camera", () => {
     expect(cs.state().tx).toBeCloseTo(400 - 160, 3);
     expect(cs.state().ty).toBeCloseTo(300 - 160, 3);
   });
+
+  it("createCameraState: moto ridotto arriva subito e non conserva inerzia", () => {
+    const cs = createCameraState(true);
+    cs.zoom(2, 400, 300);
+    expect(cs.state().scale).toBe(2);
+    expect(cs.ready()).toBe(true);
+    const beforePan = cs.state();
+    cs.pan(30, -10);
+    expect(cs.state()).toMatchObject({ tx: beforePan.tx + 30, ty: beforePan.ty - 10 });
+    expect(cs.ready()).toBe(true);
+    cs.setReducedMotion(false);
+    cs.zoom(2, 400, 300);
+    expect(cs.state().scale).toBe(2);
+    expect(cs.ready()).toBe(false);
+  });
 });

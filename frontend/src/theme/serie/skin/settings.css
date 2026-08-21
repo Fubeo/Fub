@@ -102,7 +102,7 @@
   padding: var(--space-4);
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
-  background: var(--bg-input);
+  background: var(--bg-panel);
 }
 
 /* La prima riga proposta non porta il filo sopra: dentro il riquadro il bordo

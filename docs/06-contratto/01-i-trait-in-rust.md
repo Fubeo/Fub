@@ -54,14 +54,21 @@ Espone comandi eseguibili:
 
 File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
----
-
 ## 5. `EventHandler`
+
 Ascolta e reagisce alle notifiche del sistema:
 - `subscribed`: restituisce la maschera degli eventi di interesse (`EventMask`).
 - `handle`: riceve la notifica dell'evento emesso sul bus.
 
 File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
+
+---
+
+## 6. Tratti ausiliari, `Gate` e Paginazione
+
+- **Struttura del Vault (`VaultStructure`)**: copre **cinque** operazioni strutturali [conta: capacita-strutturali] sul filesystem del vault (`create_document`, `rename_document`, `trash_document`, `restore_document`, `empty_trash`).
+- **Porte verso i provider (`Gate`)**: l'enum `Gate` in [`crates/fub-abi/src/gate.rs`](../../crates/fub-abi/src/gate.rs) definisce le **tredici** porte [conta: porte-verso-un-terzo] attraverso cui il kernel invoca i provider registrati.
+- **Canale dati e paginazione (`IndexQuery`)**: tra le query per gli indici, le varianti che supportano la finestra paginata sono **nove** [conta: famiglie-paginate].
 
 ---
 

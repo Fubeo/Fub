@@ -48,7 +48,7 @@
 //! # Lo store, e chi comanda fra store e indice
 //!
 //! Path relativi allo spazio dati che l'host assegna al plugin
-//! (`.fub/data/plugins/fub.versioning/`):
+//! (`.fub/plugins/fub.versioning/`):
 //!
 //! ```text
 //! versions.json                    indice: doc_id → versioni + tombstone

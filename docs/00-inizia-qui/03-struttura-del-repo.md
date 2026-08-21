@@ -35,7 +35,7 @@ Fub/
 - **Vuoi creare una nuova interfaccia o un nuovo tipo di documento?** → [`crates/fub-abi/`](../../crates/fub-abi)
 - **Vuoi vedere o sviluppare un plugin WASM?** → [`docs/04-plugin/`](../04-plugin/01-nativo-vs-wasm.md) e [`esempi/ping-wasm/`](../../esempi/ping-wasm)
 - **Vuoi conoscere la struttura dei file e di `.fub/` su disco?** → [`docs/05-disco/`](../05-disco/01-note-utente.md)
-- **Vuoi consultare l'archivio decisionale (ADR) o la roadmap?** → [`docs/archivio/`](../archivio/decisions/README.md)
+- **Vuoi consultare le decisioni architetturali (ADR) o la roadmap?** → [`docs/decisions/`](../decisions/README.md)
 - **Vuoi contribuire al codice e conoscere le regole di qualità?** → [`docs/CONTRIBUTING.md`](../CONTRIBUTING.md)
 
 ---
