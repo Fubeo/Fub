@@ -277,14 +277,36 @@ fn trailing_anchor(source: &str, span: Span, acc: &mut Acc) -> Option<FoundAncho
 /// Toglie il marcatore dell'ancora dal contenuto: `^abc` è indirizzo, e
 /// mostrarlo a schermo o indicizzarlo come parola sarebbe un difetto visibile.
 fn strip_marker(inlines: &mut Vec<Inline>, text: &mut String, written: &str) {
-    if let Some(Inline::Text(s)) = inlines.last_mut() {
-        if let Some(rest) = s.trim_end().strip_suffix(written) {
-            *s = rest.trim_end().to_string();
-            if s.is_empty() {
-                inlines.pop();
+    fn strip_last(inlines: &mut Vec<Inline>, written: &str) {
+        let Some(last) = inlines.last_mut() else {
+            return;
+        };
+        match last {
+            Inline::Text(s) => {
+                if let Some(rest) = s.trim_end().strip_suffix(written) {
+                    *s = rest.trim_end().to_string();
+                    if s.is_empty() {
+                        inlines.pop();
+                    }
+                }
             }
+            Inline::Emph(children)
+            | Inline::Strong(children)
+            | Inline::Superscript(children)
+            | Inline::Strikethrough(children) => {
+                strip_last(children, written);
+                if children.is_empty() {
+                    inlines.pop();
+                }
+            }
+            Inline::Link { label: Some(children), .. } => {
+                strip_last(children, written);
+            }
+            _ => {}
         }
     }
+
+    strip_last(inlines, written);
     if let Some(rest) = text.trim_end().strip_suffix(written) {
         *text = rest.trim_end().to_string();
     }
@@ -319,6 +341,10 @@ fn convert_block<'a>(
                 Some(raw) => canonical_anchor(raw),
                 None => acc.slugs.next_slug(text.trim()),
             };
+            if explicit_anchor.is_some() {
+                // Anche un id scritto dall'utente occupa lo slug per i titoli successivi.
+                let _ = acc.slugs.next_slug(&slug);
+            }
             acc.outline.push(Heading {
                 level: h.level,
                 text: text.trim().to_string(),
@@ -1112,12 +1138,21 @@ fn find_embeds(text: &str) -> Vec<(Span, String)> {
             continue;
         }
         if text[the..].starts_with("![[") && !is_escaped(text, the) {
-            if let Some(rel) = text[the + 3..].find("]]") {
-                let inner = text[the + 3..the + 3 + rel].to_string();
-                let end = the + 3 + rel + 2;
-                res.push((Span::new(the + 1, end), inner));
-                the = end;
-                continue;
+            let rest = &text[the + 3..];
+            if let Some(rel) = rest.find("]]") {
+                let line_end = rest
+                    .find('\n')
+                    .into_iter()
+                    .chain(rest.find('\r'))
+                    .min()
+                    .unwrap_or(rest.len());
+                if rel < line_end {
+                    let inner = rest[..rel].to_string();
+                    let end = the + 3 + rel + 2;
+                    res.push((Span::new(the + 1, end), inner));
+                    the = end;
+                    continue;
+                }
             }
         }
         the += 1;
@@ -1356,10 +1391,10 @@ fn entity(s: &str, is: usize, out: &mut String) -> Option<usize> {
             && ((is_hex && (1..=6).contains(&num_digits))
                 || (!is_hex && (1..=7).contains(&num_digits)))
         {
-            // La stessa soglia di comrak: 0, i surrogati (0xE000 compreso) e
-            // oltre U+10FFFF non sono caratteri, e un riferimento che li
+            // La stessa soglia di comrak: 0, i surrogati
+            // e oltre U+10FFFF non sono caratteri, e un riferimento che li
             // nomina non può restare senza risposta.
-            let cp = if cp == 0 || (0xD800..=0xE000).contains(&cp) || cp >= 0x110000 {
+            let cp = if cp == 0 || (0xD800..=0xDFFF).contains(&cp) || cp >= 0x110000 {
                 0xFFFD
             } else {
                 cp
@@ -1421,11 +1456,9 @@ fn under_escape(source: &str, slice: &str, base: usize, idx: usize) -> bool {
 /// indistinguibili per chiunque, riscrittura compresa.
 fn parse_frontmatter(raw: &str) -> Result<Frontmatter, String> {
     // `raw` include i delimitatori `---`; li togliamo prima di parsare lo YAML.
-    let inner = raw
-        .trim()
-        .trim_start_matches("---")
-        .trim_end_matches("---")
-        .trim();
+    let inner = raw.trim();
+    let inner = inner.strip_prefix("---").unwrap_or(inner);
+    let inner = inner.strip_suffix("---").unwrap_or(inner).trim();
     if inner.is_empty() {
         return Ok(Frontmatter::default());
     }
@@ -1582,7 +1615,7 @@ fn walk_definitions<'a>(
                 // se quella riga fosse la prima del paragrafo — il vero
                 // prefisso di riga è `prefixes[k]`.
             // Gli altri contenitori (footnote, definition list, html…) non
-                let k = row.saturating_sub(row_zero);
+                let k = row.saturating_sub(row_zero) + n;
                 prefixes.get(k).copied().unwrap_or(0) as isize
             };
             shift_descendants(node, n, &delta);
@@ -1596,7 +1629,7 @@ fn walk_definitions<'a>(
         }
         NodeValue::List(_) => {
             for item in node.children() {
-                let width = marker_width(source, item);
+                let width = marker_width(source, offsets, item);
                 containers.push(Container::ListItem(width));
                 for child in item.children() {
                     walk_definitions(child, source, offsets, defs, containers);
@@ -1729,10 +1762,10 @@ fn row_prefixes(
         row_start = end;
 // Quanti byte della riga appartengono ai contenitori (e all'indentazione del
 // paragrafo): per una riga pigra (citazione che non si apre) il contenuto
-        while row_start < source.len() && matches!(source.as_bytes()[row_start], b'\n' | b'\r')
-        {
+        if row_start < source.len() {
+            let was_cr = source.as_bytes()[row_start] == b'\r';
             row_start += 1;
-            if source.as_bytes().get(row_start) == Some(&b'\n') {
+            if was_cr && source.as_bytes().get(row_start) == Some(&b'\n') {
                 row_start += 1;
             }
         }
@@ -1799,24 +1832,13 @@ fn row_prefix(row: &str, containers: &[Container]) -> usize {
 }
 
 /// Una definizione grezza, con la sua estensione consumata (incluso il
-fn marker_width(source: &str, item: &AstNode<'_>) -> usize {
+fn marker_width(source: &str, offsets: &Offsets<'_>, item: &AstNode<'_>) -> usize {
     let sp = item.data.borrow().sourcepos.start;
-    let mut start = 0;
-    let b = source.as_bytes();
-    for _ in 1..sp.line {
-        while start < b.len() && !matches!(b[start], b'\n' | b'\r') {
-            start += 1;
-        }
-        if start < b.len() {
-            start += 1;
-            if b.get(start) == Some(&b'\n') {
-                start += 1;
-            }
-        }
-    }
+    let start = offsets.byte(sp.line, 1);
     let row = &source[start..];
     let rb = row.as_bytes();
-    let mut the = sp.column.saturating_sub(1);
+    let marker_start = offsets.byte(sp.line, sp.column).saturating_sub(start);
+    let mut the = marker_start;
     if matches!(rb.get(the), Some(b'-' | b'+' | b'*')) {
         the += 1;
     } else {
@@ -1838,7 +1860,7 @@ fn marker_width(source: &str, item: &AstNode<'_>) -> usize {
     if spaces == 0 {
         2
     } else {
-        (the - sp.column.saturating_sub(1)) + spaces
+        (the - marker_start) + spaces
     }
 }
 
@@ -2102,7 +2124,11 @@ fn title_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
     while the < b.len() {
         match b[the] {
             b'\\' => {
-                the += 2;
+                if let Some(c) = slice[the + 1..].chars().next() {
+                    the += 1 + c.len_utf8();
+                } else {
+                    the += 1;
+                }
             }
             c if c == close => return Some((the + 1, &slice[pos + 1..the])),
             b'(' if close == b')' => return None,
@@ -2116,8 +2142,9 @@ fn title_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
 fn spnl_at(slice: &str, mut pos: usize) -> usize {
     pos = spaces_at(slice, pos);
     if eol_at(slice, pos) {
+        let was_cr = slice.as_bytes().get(pos) == Some(&b'\r');
         pos += 1;
-        if slice.as_bytes().get(pos) == Some(&b'\n') {
+        if was_cr && slice.as_bytes().get(pos) == Some(&b'\n') {
             pos += 1;
         }
         pos = spaces_at(slice, pos);
@@ -2132,9 +2159,9 @@ fn spaces_at(slice: &str, mut pos: usize) -> usize {
     pos
 }
 
-/// Fine riga o fine della fetta (l'EOF conta, come in comrak).
+/// Fine riga nella fetta.
 fn eol_at(slice: &str, pos: usize) -> bool {
-    matches!(slice.as_bytes().get(pos), None | Some(b'\n') | Some(b'\r'))
+    pos >= slice.len() || matches!(slice.as_bytes()[pos], b'\n' | b'\r')
 }
 
 /// Inserisce le definizioni nell'albero: il contenitore più profondo che

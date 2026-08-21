@@ -9,7 +9,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::format::{FormatProvider, ParseContext};
-use fub_abi::model::{Block, DocId, DocumentModel, Frontmatter, Inline, Span};
+use fub_abi::model::{custom_kind, Block, DocId, DocumentModel, Frontmatter, Inline, Span};
 use fub_abi::traits::IndexQuery;
 use fub_abi::transfer::{
     ConflictPolicy, ExportArtifact, ExportReport, ExportRequest, ExportSelection, ImportMode,
@@ -1155,7 +1155,17 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
         cut += 1;
 
         // La proiezione leggibile, che è quella che si legge quando diventa rossa.
-        let before = structure(&model(&source, a.path.as_str()));
+        // Il frontmatter illeggibile è metadata come quello proiettato: il suo
+        // blocco verbatim non appartiene al corpo atteso dopo l'export.
+        let mut expected = model(&source, a.path.as_str());
+        if matches!(
+            expected.body.first(),
+            Some(Block::Custom { custom_kind, .. })
+                if custom_kind == custom_kind::FRONTMATTER_UNPARSED
+        ) {
+            expected.body.remove(0);
+        }
+        let before = structure(&expected);
         projected.extend(before.iter().cloned());
         assert_eq!(
             structure(&model(outside, a.path.as_str())),
@@ -1173,7 +1183,6 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
         let delta = source.len() - outside.len();
         let mut rimesso = model(outside, a.path.as_str());
         shift_spans(&mut rimesso, delta);
-        let mut expected = model(&source, a.path.as_str());
         expected.frontmatter = Frontmatter::default();
         // E la sua **presenza**, che dal 0213 è un campo a sé: una mappa vuota
         // non distingue «non c'era» da «c'era e non aveva chiavi», e l'export
@@ -1198,7 +1207,15 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
     // precisamente il difetto per cui esiste il cappello.
     let with_frontmatter = notes
         .iter()
-        .filter(|(p, s)| !model(s, p).frontmatter.is_empty())
+        .filter(|(p, s)| {
+            let parsed = model(s, p);
+            parsed.frontmatter_present
+                || matches!(
+                    parsed.body.first(),
+                    Some(Block::Custom { custom_kind, .. })
+                        if custom_kind == custom_kind::FRONTMATTER_UNPARSED
+                )
+        })
         .count();
     assert_eq!(
         cut, with_frontmatter,

@@ -35,34 +35,6 @@ pub fn longest_run(s: &str, c: char) -> usize {
     max
 }
 
-/// Il testo riportato a **come si legge**: `\*` → `*`.
-///
-/// La regola è quella di CommonMark: una barra rovescia escapa un segno di
-/// punteggiatura ASCII, e davanti a qualunque altra cosa è un carattere. La
-/// applica in linea anche il decoder dei segmenti di `parse`
-/// (`decodifica_segmento`), che però deve consumare i byte mentre cammina e
-/// non può riusarla; qui la chiede `serialize`, dentro un `[[…]]`: fra la
-/// barra verticale e le due parentesi chiuse **non c'è escape**, l'alias è
-/// testo nudo fino a `]]`. Scriverlo escapato non lo proteggeva da niente e
-/// cambiava ciò che si legge a schermo — e, siccome l'alias si scrive solo
-/// quando dice qualcosa di diverso dal bersaglio, faceva anche nascere un `|`
-/// dove non ce n'era: `[[#Sezione]]` usciva `[[#Sezione|\#Sezione]]`.
-pub fn unescape_char(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            let mut next = chars.clone();
-            if let Some(n) = next.next().filter(|n| n.is_ascii_punctuation()) {
-                out.push(n);
-                chars = next;
-                continue;
-            }
-        }
-        out.push(c);
-    }
-    out
-}
 
 #[cfg(test)]
 mod tests {
