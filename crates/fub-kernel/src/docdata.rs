@@ -157,7 +157,7 @@ fn move_space(
     source: &Utf8Path,
     destination: &Utf8Path,
 ) -> std::io::Result<()> {
-/// [`collect`]: crate::docdata::collect
+// [`collect`]: crate::docdata::collect
     // Sul filesystem insensibile al caso questo `stat` può rispondere con la
     // **sorgente**, che è una cartella e passa: è il caso di sopra, e a
     let to_clear = match storage.stat(destination) {
@@ -216,7 +216,7 @@ pub(crate) fn collect(
             let Some(name) = entry.path.file_name() else {
                 continue;
             };
-/// e chi ha chiamato decide.
+// e chi ha chiamato decide.
             // Un nome che il supporto non sa rendere in UTF-8 non l'ha scritto
             // questa convenzione, e non arriva fin qui: `VaultStorage::list` lo
             // rifiuta prima, perché un path non nominabile dal contratto non è

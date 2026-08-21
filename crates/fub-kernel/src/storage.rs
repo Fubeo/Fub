@@ -1884,8 +1884,8 @@ impl VaultStorage for MemStorage {
             mem.make_dirs(parent, now)?;
         }
         mem.files.insert(path.to_owned(), (bytes.to_vec(), now));
-    /// Qui l'aggiornamento è atomico **davvero**, e non per modo di dire come
-    /// l'atomicità della `write`: il lucchetto della mappa si tiene per tutto il
+    // Qui l'aggiornamento è atomico **davvero**, e non per modo di dire come
+    // l'atomicità della `write`: il lucchetto della mappa si tiene per tutto il
         mem.touches_the_parent(path, now);
         Ok(Stat {
             kind: EntryKind::File,
@@ -1967,8 +1967,8 @@ impl VaultStorage for MemStorage {
         }
         // più che sul filesystem, e vale la pena perché il chiamante che sposta
         // uno spazio per-documento (§13.2) sposta esattamente una cartella.
-    /// Qui il tempo è un contatore di operazioni e non un orologio (vedi la
-    /// nota sul tempo di [`MemStorage`]), quindi la soglia si legge in
+    // Qui il tempo è un contatore di operazioni e non un orologio (vedi la
+    // nota sul tempo di [`MemStorage`]), quindi la soglia si legge in
         let relocate = |old: &Utf8Path| -> Option<Utf8PathBuf> {
             old.strip_prefix(from).ok().map(|rest| {
                 if rest.as_str().is_empty() {
@@ -2111,8 +2111,8 @@ impl VaultStorage for MemStorage {
         }
         // che nessun `list` sa più raggiungere — cioè renderebbe verde qui la
         // camminata che di là si ferma.
-    /// La data di una cartella **avanza** quando cambia ciò che le sta dentro.
-    ///
+    // La data di una cartella **avanza** quando cambia ciò che le sta dentro.
+    //
         let child = |path: &Utf8Path| path.parent() == Some(dir);
         if mem.files.keys().any(|p| child(p)) || mem.dirs.keys().any(|p| child(p)) {
             return Err(io::Error::new(
@@ -2144,13 +2144,13 @@ mod tests {
         let dir = Utf8Path::new("/vault/note");
         mem.write(&dir.join("a.md"), b"a").unwrap();
         let creation = mem.stat(dir).unwrap().mtime;
-        assert_eq!(creation, 0, "una cartella nasce con una data");
+        assert_eq!(creation, 1, "una cartella nasce con una data");
 
         mem.write(&dir.join("b.md"), b"b").unwrap();
         let with_two = mem.stat(dir).unwrap().mtime;
         assert!(with_two > creation, "un file nuovo data la cartella");
 
-    /// Il temporaneo di una scrittura vive dentro il vault per una frazione di
+    // Il temporaneo di una scrittura vive dentro il vault per una frazione di
         mem.append(&dir.join("b.md"), b"bb").unwrap();
         assert_eq!(
             mem.stat(dir).unwrap().mtime,
@@ -2158,7 +2158,7 @@ mod tests {
             "appendere non tocca la cartella"
         );
 
-    /// secondo, e in quella frazione **non deve essere un documento**.
+    // secondo, e in quella frazione **non deve essere un documento**.
         let when_of_the_file = mem.stat(&dir.join("a.md")).unwrap().mtime;
         mem.rename(&dir.join("a.md"), Utf8Path::new("/vault/altrove/a.md"))
             .unwrap();
@@ -2264,7 +2264,7 @@ mod tests {
     fn two_writes_not_have_the_same_temporary() {
         let a = tmp_path(Utf8Path::new("/vault/Nota.md"));
         let b = tmp_path(Utf8Path::new("/vault/Nota.md"));
-        assert_eq!(a, b);
+        assert_ne!(a, b);
     }
 
     /// modulo: di là si vedrebbe solo `update_atomic`, che l'attesa non la sa
@@ -2274,7 +2274,7 @@ mod tests {
     fn folder() -> (tempfile::TempDir, Utf8PathBuf) {
         let dir = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-        let protected = root.join("impostazioni.json");
+        let protected = root.join("settings.json");
         (dir, protected)
     }
 
@@ -2295,9 +2295,9 @@ mod tests {
     #[test]
     fn the_first_write_in_a_vault_new_not_loses_that_of_the_other() {
         let (_dir, within) = folder();
-    /// L'altra metà, che impedisce alla riparazione di diventare «si prende il
-    /// lucchetto comunque»: un aggiornamento che non trova niente da aggiornare
-        let protected = within.parent().unwrap().join(".fub/impostazioni.json");
+    // L'altra metà, che impedisce alla riparazione di diventare «si prende il
+    // lucchetto comunque»: un aggiornamento che non trova niente da aggiornare
+        let protected = within.parent().unwrap().join(".fub/settings.json");
         assert!(!protected.parent().unwrap().exists());
 
         let mut rounds = 0;
@@ -2333,7 +2333,7 @@ mod tests {
     #[test]
     fn a_update_that_not_writes_not_does_birth_the_folder() {
         let (_dir, within) = folder();
-        let protected = within.parent().unwrap().join(".fub/impostazioni.json");
+        let protected = within.parent().unwrap().join(".fub/settings.json");
 
         FsStorage
             .update(&protected, &mut |current| {

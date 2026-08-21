@@ -349,7 +349,7 @@ impl EntryStore {
         let mut written = None;
         let mut known = self.known.write().map_err(|and| and.to_string())?;
         known.update(|| {
-    /// lucchetto, e quelli non si buttano.
+    // lucchetto, e quelli non si buttano.
             // La coda che c'è adesso, e la tabella che ne esce. `None` per un
             // file che non c'è o che non è una coda nostra (v3, rotto): in
             // quel caso non c'è un diff da fare, c'è una fotografia da
@@ -772,7 +772,7 @@ mod tests {
         // È la differenza con l'organizzazione (§11.3), che un file rotto lo
                 (DocId::new("read.md"), entry(3, 1_000)),
         // protegge: quello è autorevole, questo si rifà camminando il vault.
-    /// **Una scrittura che non è avvenuta non si ricorda.**
+    // **Una scrittura che non è avvenuta non si ricorda.**
                 (DocId::new("changed.md"), entry(4, 1_100)),
             ]))
             .expect("the second closes second, and it read nothing");
@@ -815,9 +815,9 @@ mod tests {
 
     #[test]
     fn an_unreadable_table_is_not_a_warning_and_does_not_block_anything() {
-    ///
-    /// Il guasto non si aspetta, si inietta, e qui non serve nemmeno un
-    /// supporto finto: `.fub/data` è un **file** invece che una cartella, cioè
+    //
+    // Il guasto non si aspetta, si inietta, e qui non serve nemmeno un
+    // supporto finto: `.fub/data` è un **file** invece che una cartella, cioè
         let (_tmp, root) = tempdir();
         let path = data_root(&root).join(FILE);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -961,8 +961,8 @@ mod tests {
              write did not rewrite the table"
         );
 
-    /// che rende sicuro l'append senza atomicità — un crash a metà aggiunta
-    /// lascia una riga rotta, non una tabella persa.
+    // che rende sicuro l'append senza atomicità — un crash a metà aggiunta
+    // lascia una riga rotta, non una tabella persa.
         let reread = EntryStore::open(root, storage as Arc<dyn VaultStorage>);
         assert!(
             reread

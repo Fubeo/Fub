@@ -253,7 +253,7 @@ pub(crate) fn resolve_entry_in(
     // la stessa regola con cui il grafo indicizza), e si paga solo quando il
     // confronto esatto ha già detto di no — cioè su un riferimento che sta per
     // essere dichiarato rotto.
-/// **I nomi dell'anagrafe**, dalla chiave di risoluzione ai file che la portano.
+// **I nomi dell'anagrafe**, dalla chiave di risoluzione ai file che la portano.
     names.by_path_key(&fub_abi::rules::path::resolution_key(id.as_str()))
 }
 
@@ -781,7 +781,7 @@ impl CoreIndex {
         // dell'osservazione: fra questa riga e l'anagrafe scritta su disco ci
         // sta una sessione intera, e una soglia presa là dichiarerebbe pulito
         // tutto ciò che si è visto qui.
-    /// Se di questa voce **non ci si può fidare fino alla prossima apertura**:
+    // Se di questa voce **non ci si può fidare fino alla prossima apertura**:
         if entry.mtime < crate::time::now_unix_millis() {
             self.observed_in_the_own_instant.remove(&entry.id);
         } else {
@@ -907,7 +907,7 @@ impl CoreIndex {
                 .resolve_path(from.unwrap_or(&DocId::new("")), raw)?,
             // passa qui l'esito di `classify` senza filtrarlo prima riceve
             // `None` invece di un errore.
-    /// Il punto che un `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` nomina dentro
+    // Il punto che un `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` nomina dentro
             LinkTarget::Url(_) => return None,
         };
         let at = match target {
@@ -947,7 +947,7 @@ impl CoreIndex {
             // torna è quella del titolo trovato, non quella ricalcolata sulla
             // domanda: `#Ciao, Mondo!` trova `ciao-mondo`, e il chiamante ha
             // diritto all'id vero.
-    /// I documenti in relazione di link con `doc`, secondo il verso chiesto.
+    // I documenti in relazione di link con `doc`, secondo il verso chiesto.
             (None, Some(text)) => {
                 let found = metadata.outline.iter().find(|h| heading_matches(text, h))?;
                 (found.span, found.slug.clone())
@@ -1073,7 +1073,7 @@ impl IndexProvider for CoreIndex {
             QueryRoute::Query(QueryKind::RenderEmbed),
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
-    /// Niente da ricaricare: la memoria di questo indice è il vault, e la
+    // Niente da ricaricare: la memoria di questo indice è il vault, e la
             QueryRoute::Predicate(PredicateKind::Property),
             QueryRoute::Predicate(PredicateKind::Tag),
             QueryRoute::Predicate(PredicateKind::Folder),
@@ -1335,7 +1335,7 @@ impl IndexProvider for CoreIndex {
             // arrivare qui: `CoreIndex` non possiede i documenti né i renderer.
             // Questi bracci non si raggiungono mai, ma il `match` è esaustivo e
             // non accetta un `_` — vedi la 0104.
-/// Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
+// Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
             IndexQuery::RenderPreview { .. } | IndexQuery::RenderEmbed { .. } => {
                 Err(PluginError::Internal(
                     "render is `Workspace::query_index`'s, not the kernel index's".into(),

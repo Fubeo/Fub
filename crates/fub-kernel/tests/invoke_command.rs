@@ -257,8 +257,8 @@ impl CommandProvider for TriesEverything {
         // da chi risponde. Che questo montaggio non abbia un client di rete non
         // c'entra — come sopra, il cancello risponde prima, e un `Unserved` qui
         // sarebbe già la prova che il controllo è arrivato dopo.
-/// Un comando che restituisce un piano **incompleto**: tocca due note e ne
-/// nomina una. È l'errore che rende un consenso strappato.
+// Un comando che restituisce un piano **incompleto**: tocca due note e ne
+// nomina una. È l'errore che rende un consenso strappato.
         annotate(
             Capability::Network,
             "fetch",
@@ -465,12 +465,12 @@ fn a_dry_run_cannot_write_even_if_the_command_tries() {
         .clone()
         .expect("the host refused");
     assert!(
-        message.contains("simulation"),
+        message.contains("simulazione"),
         "and the refusal says why, so the command writer reads it in their own \
          tests: {message}"
     );
 
-/// Il varco della decisione 0010 copre **ogni** famiglia che una politica di
+// Il varco della decisione 0010 copre **ogni** famiglia che una politica di
     ws.invoke_command(
         "test.write",
         serde_json::Value::Null,
@@ -492,7 +492,7 @@ fn declaring_yourself_read_only_is_binding() {
     ws.register_command_provider(
         "test",
         Box::new(AlwaysWrites {
-/// sola lettura nega — e l'elenco delle famiglie non è scritto qui dentro: si
+// sola lettura nega — e l'elenco delle famiglie non è scritto qui dentro: si
             declares_writes: false,
             refused: refused.clone(),
         }),
@@ -513,7 +513,7 @@ fn declaring_yourself_read_only_is_binding() {
          ray declaration is not a decoration"
     );
     let message = refused.lock().unwrap().clone().expect("refused");
-    assert!(message.contains("read only"), "{message}");
+    assert!(message.contains("sola lettura"), "{message}");
 }
 
 /// calcola.
@@ -630,7 +630,7 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
         .filter_map(|(c, q, and)| Some((c, q, and.as_ref()?)))
     {
         assert!(
-            message.contains("permission denied") && message.contains("simulation"),
+            message.contains("permission denied") && message.contains("simulazione"),
             "{cap:?}/{which}: the refusal says why — {message}"
         );
     }
@@ -711,7 +711,7 @@ fn a_plan_calculated_now_refuses_to_apply_over_someone_elses_write() {
         .expect("the plan names a.md");
     let err = ws.apply_edit(&doc, plan_on_a.edit).unwrap_err();
     assert!(
-        err.to_string().contains("changed"),
+        err.to_string().contains("cambiato"),
         "a plan carries the revision on which it was calculated: applying it \
          after a third-party write fails instead of overwriting it ({err})"
     );

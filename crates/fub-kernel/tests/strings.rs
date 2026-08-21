@@ -102,7 +102,7 @@ impl ViewProvider for KeyView {
                 UiNode::new(UiKind::Section {
                     title: Text::message(
                         WITH_ARGOMENTI,
-                        vec![Arg::int("n", 3), Arg::text("dove", "Archivio")],
+                        vec![Arg::int("n", 3), Arg::text("where", "Archivio")],
                     ),
                     collapsed: false,
                     // In fondo a un contenitore: la risoluzione deve scendere
@@ -151,7 +151,7 @@ impl CommandProvider for KeyCommands {
     ) -> Result<CommandOutcome, PluginError> {
         Ok(CommandOutcome::notify(Text::message(
             WITH_ARGOMENTI,
-            vec![Arg::int("n", 7), Arg::text("dove", "Bozze")],
+            vec![Arg::int("n", 7), Arg::text("where", "Bozze")],
         )))
     }
 }

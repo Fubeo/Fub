@@ -311,7 +311,7 @@ mod tests {
         let scans = |q: &str| wanted(&text_query(q, TextMode::Terms, false)).len();
         assert_eq!(scans("Rust rust"), 1, "one pass, not two");
         assert_eq!(scans("rust RUST Rust rUsT"), 1);
-    /// macchina condivisa un tempo non è un segnale, un numero di passate sì.
+    // macchina condivisa un tempo non è un segnale, un numero di passate sì.
         // E il caso vero: chi scrive due parole di cui una ripetuta col
         assert_eq!(scans("Rust async rust"), 2);
     }
@@ -345,7 +345,7 @@ mod tests {
             let n = wanted(&text_query(&format!("{a} {b}"), TextMode::Terms, false));
             assert_eq!(n.len(), 2, "`{a}` and `{b}` are two texts to search: {n:?}");
         };
-    /// chi fonde di troppo tanto quanto a chi fonde di meno.
+    // chi fonde di troppo tanto quanto a chi fonde di meno.
         // Prefisso e termine intero: `arch` sta dentro `architettura`, e chi ha
         two("arch", "architettura");
         // cercato tutti e due vuole tutti e due.
@@ -419,7 +419,7 @@ mod tests {
             spans.windows(2).all(|w| w[0].end <= w[1].start),
             "two occurrences of the same term do not overlap: {spans:?}"
         );
-    /// sovrapposti non sono uguali, quindi passerebbero interi.
+    // sovrapposti non sono uguali, quindi passerebbero interi.
         let ruler = "|-----|";
         let dashes = locate(ruler, &["--".to_string()]);
         assert_eq!(dashes, vec![Span::new(1, 3), Span::new(3, 5)]);
@@ -461,7 +461,7 @@ mod tests {
     fn accent_encoding_does_not_hide_a_word() {
         let composed_text = "Il caffè è pronto";
         let decomposed_text = "Il caffe\u{300} e\u{300} pronto";
-        assert_eq!(composed_text, decomposed_text, "otherwise the two forms prove nothing");
+        assert_ne!(composed_text, decomposed_text, "otherwise the two forms prove nothing");
 
         for (haystack, needle) in [
             (composed_text, "caffè"),
@@ -471,7 +471,7 @@ mod tests {
         ] {
             let spans = locate(haystack, &[needle.to_string()]);
             assert_eq!(spans.len(), 1, "`{needle}` is not found in `{haystack}`");
-    /// sta qui perché `prefix_len_ci` è privata, e privata resta.
+    // sta qui perché `prefix_len_ci` è privata, e privata resta.
             // Lo span è in byte del **sorgente**: la fetta che ritaglia è la
             let slice = &haystack[spans[0].start..spans[0].end];
             assert_eq!(
@@ -517,7 +517,7 @@ mod tests {
             spans.iter().any(|s| s.start == rare),
             "the rare term occurrence is among the first {MAX_PER_DOC} positions"
         );
-    /// tetto applicato male lo perderebbe.
+    // tetto applicato male lo perderebbe.
         assert!(spans.windows(2).all(|w| w[0].start < w[1].start));
     }
 }

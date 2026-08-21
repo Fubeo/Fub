@@ -172,6 +172,6 @@ fn an_unreadable_sidecar_is_not_overwritten() {
     let and = ws
         .set_icon("Nota.md", Some("📌".into()))
         .expect_err("does not write what it did not read");
-    assert!(and.contains("does not overwrite it"), "{and}");
+    assert!(and.contains("non lo sovrascrive"), "{and}");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
 }

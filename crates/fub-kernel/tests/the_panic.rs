@@ -717,7 +717,7 @@ fn every_carries_declares_where_and_tested() {
     for carries in Gate::ALL {
         let test = match carries {
             Gate::Command => Test::Here,
-            Gate::ViewRender => Test::Elsewhere("crates/fub-host/tests/concorrenza.rs"),
+            Gate::ViewRender => Test::Elsewhere("crates/fub-host/tests/concurrency.rs"),
             Gate::ViewAction => Test::Here,
             Gate::Service => Test::Here,
             Gate::Event => Test::Here,
@@ -728,7 +728,7 @@ fn every_carries_declares_where_and_tested() {
             Gate::FormatParse => Test::Here,
             Gate::SyntaxRule => Test::Here,
             Gate::CustomRender => Test::Here,
-            Gate::Job => Test::Elsewhere("crates/fub-host/tests/il_runner.rs"),
+            Gate::Job => Test::Elsewhere("crates/fub-host/tests/the_runner.rs"),
         };
         if let Test::Elsewhere(file) = test {
             assert!(

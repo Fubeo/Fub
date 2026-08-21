@@ -335,9 +335,10 @@ fn a_destination_live_not_is_overwrites() {
     };
     assert_eq!(of("b.txt"), Some("bozza di b"), "la bozza di b resta di b");
     assert_eq!(
-        of("b.txt"),
+        of("a.txt"),
         Some("bozza di a"),
-        "e quella di a non ci si è scritta sopra"
+        "la destinazione viva non mangia la bozza di a: a è sparita dal disco \
+         e la bozza resta orfana sul suo nome"
     );
 }
 

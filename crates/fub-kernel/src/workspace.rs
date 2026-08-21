@@ -666,7 +666,7 @@ impl Workspace {
         // scrivono tutti nella stessa cartella, e due supporti per la stessa
         // cartella sarebbero due idee di cosa c'è dentro — il giorno in cui uno
         // dei due cifra, un dato su due resta in chiaro (§15.1, 0065).
-    /// Come [`with_machine_settings`](Workspace::with_machine_settings), col
+    // Come [`with_machine_settings`](Workspace::with_machine_settings), col
         Workspace::on(root, registry, Arc::new(crate::storage::FsStorage), machine)
     }
 
@@ -745,7 +745,7 @@ impl Workspace {
             entry_store: EntryStore::open(root, Arc::clone(&storage)),
             // col root: ciò che è successo a queste note viaggia con queste
             // note.
-    /// Aggancia lo stato di vista della macchina (§11.2).
+    // Aggancia lo stato di vista della macchina (§11.2).
             journal: Journal::open(root, storage),
             drafts,
             doc_data_warnings: Vec::new(),
@@ -1004,7 +1004,7 @@ impl Workspace {
         // al primo job di qualcun altro. È la stessa mossa con cui `stop` sveglia
         // i dormienti: la campana non annuncia un job, annuncia che c'è da
         // ricontare.
-    /// Registra chi **offre** i servizi che il suo manifest dichiara (§7.5).
+    // Registra chi **offre** i servizi che il suo manifest dichiara (§7.5).
         self.dispatch.bell().ring();
         Ok(())
     }
@@ -1096,7 +1096,7 @@ impl Workspace {
             // la pila dei servizi da svuotare, il dispatch da drenare — è già
             // scritto per girare sul ramo dell'errore, e catturare più in alto
             // lo salterebbe.
-    /// Dichiara una **feature ufficiale** di questo repo: [`Trust::Core`] e i
+    // Dichiara una **feature ufficiale** di questo repo: [`Trust::Core`] e i
             crate::safety::calling(
                 &owner,
                 Gate::Service,
@@ -1252,7 +1252,7 @@ impl Workspace {
 
         // sta mostrando il passato. Non lo ha chiesto un documento né un plugin
         // — è il kernel che dichiara di aver cambiato forma (decisione 0012).
-    /// **Chiude il vault**: l'ultimo giro sincrono, un punto di consistenza per
+    // **Chiude il vault**: l'ultimo giro sincrono, un punto di consistenza per
         if removed_indexes {
             self.as_actor(Actor::Kernel, |ws| {
                 ws.emit_event(Event::IndexUpdated);
@@ -1401,7 +1401,7 @@ impl Workspace {
         // [`finish_index`](Workspace::finish_index) teneva già è lo stesso letto
         // in una funzione più lunga: **l'anagrafe per ultima**, quando non c'è
         // più nessuno che possa scrivere dopo di lei.
-    /// Il vault è già stato chiuso?
+    // Il vault è già stato chiuso?
         self.store_entries();
 
         errors
@@ -1519,7 +1519,7 @@ impl Workspace {
         // Anche questa è una "chiamata di provider" ai fini della consegna:
     pub fn with_host<R>(&mut self, plugin: &str, f: impl FnOnce(&mut dyn HostApi) -> R) -> R {
         // ciò che `f` emette arriva agli handler quando `f` è tornata.
-    /// Presta un [`ReadApi`] intestato a un plugin, per la durata di una
+    // Presta un [`ReadApi`] intestato a un plugin, per la durata di una
         let result = self.with_provider_call(|ws| {
             let mut host = ws.host_for(plugin, InvokeMode::Apply);
             f(&mut host)
@@ -1543,7 +1543,7 @@ impl Workspace {
         // Niente `with_provider_call` e niente drenaggio: da qui non si emette
     pub fn with_read_host<R>(&self, plugin: &str, f: impl FnOnce(&dyn ReadApi) -> R) -> R {
         // e non si scrive, quindi non c'è nessuna coda che possa crescere.
-    /// L'host di **lettura** intestato a un plugin, con la stessa politica di
+    // L'host di **lettura** intestato a un plugin, con la stessa politica di
         let host = self.read_host_for(plugin);
         f(&host)
     }
@@ -1603,7 +1603,7 @@ impl Workspace {
         mode: InvokeMode,
         instance: Option<&'a str>,
     ) -> Guard<KernelHost<'a>, Granted> {
-    /// Mette il gancio **prima della scrittura** (0154): l'id del plugin a cui
+    // Mette il gancio **prima della scrittura** (0154): l'id del plugin a cui
         let granted = self.providers.plugins.granted(plugin);
         Guard::new(
             KernelHost {
@@ -1655,7 +1655,7 @@ impl Workspace {
         // `acme:tasks` deve essere `acme`. Le rotte del contratto invece non
         // sono nomi di nessuno — chi le rivendica non le nomina, le serve — e il
         // loro conflitto lo vede la tabella delle rotte.
-    /// Registra un indice **sostituendo** chi rivendicava le stesse famiglie di
+    // Registra un indice **sostituendo** chi rivendicava le stesse famiglie di
         let namespaces = plugins::custom_namespaces(&index.routes());
         self.providers
             .plugins
@@ -1687,7 +1687,7 @@ impl Workspace {
         // c'era, non il suo namespace. E il permesso si chiede **prima** di
         // togliere la riga di chi c'era, o un rifiuto lascerebbe la rotta ancora
         // servita e l'inventario a dire che non è di nessuno.
-    /// La registrazione **è** l'attivazione: l'indice riceve subito un
+    // La registrazione **è** l'attivazione: l'indice riceve subito un
         self.providers
             .plugins
             .admit_replacing(&plugin, RegistrationKind::Index, &namespaces)?;
@@ -1712,7 +1712,7 @@ impl Workspace {
     ) -> std::result::Result<(), RegistryError> {
         // qui non alias niente. `activate` è una chiamata a un provider come
         // le altre: il dispatch resta rimandato a chiamata tornata.
-    /// Guarda cosa c'è nel vault, ricostruisce il grafo e allinea gli indici
+    // Guarda cosa c'è nel vault, ricostruisce il grafo e allinea gli indici
         let activated = self.with_provider_call(|ws| {
             let mut host = ws.host_for(&id, InvokeMode::Apply);
             index.activate(&mut host)
@@ -1776,7 +1776,7 @@ impl Workspace {
         // nessuno di aprire una nota. Chi ha chiesto *espressamente* di
         // raccogliere — `vault.repair` — la riceve invece, perché è la sola
         // cosa che aveva chiesto.
-    /// Toglie i temporanei di scrittura che la camminata ha trovato rimasti
+    // Toglie i temporanei di scrittura che la camminata ha trovato rimasti
         if let Err(and) = self.collect_doc_data() {
             tracing::warn!(target: "fub.kernel", "spazi per-documento non raccolti: {and}");
         }
@@ -2006,7 +2006,7 @@ impl Workspace {
         // `entry_store` e `indexes` sono `Sync` — e li aspetta prima di
         // restituire. Gli handle si raccolgono **tutti** prima di joinare:
         // `map(spawn).map(join)` è pigro, e joinerebbe un thread alla volta.
-    /// Il lavoro di un pezzo di fetta: lettura, impronta, domanda agli indici,
+    // Il lavoro di un pezzo di fetta: lettura, impronta, domanda agli indici,
         let n = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1)
@@ -2095,7 +2095,7 @@ impl Workspace {
         //
         // Per fetta di chunk: ogni thread chiede per le proprie voci, e il
         // risultato è lo stesso — la domanda è per documento.
-    /// L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
+    // L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
         let already = indexes.up_to_date(&out.read);
 
         for entry in &out.read {
@@ -2197,7 +2197,7 @@ impl Workspace {
         // porta nessuna notizia a nessuno — a M5 sarebbe una serializzazione
         // per dire niente. Lo ha trovato il banco contando le chiamate: nessun
         // altro presidio le conta.
-    /// Fotografia di ciò che il grafo legge. Costa O(documenti) di **copia**
+    // Fotografia di ciò che il grafo legge. Costa O(documenti) di **copia**
         if models.is_empty() {
             return;
         }
@@ -2247,7 +2247,7 @@ impl Workspace {
         self.indexes.core.rebuild_graph();
         let opening = self.close_indexing(work);
         // indice è stato derivato, il vault è la verità (M4: notifica).
-    /// Come [`finish_index`], col grafo già costruito fuori dal prestito
+    // Come [`finish_index`], col grafo già costruito fuori dal prestito
         {
             let _phase = tracing::info_span!(target: "fub.apertura", "flush_indexes").entered();
             let _ = self.flush_indexes();
@@ -2337,7 +2337,7 @@ impl Workspace {
             // vera: chi disegna un albero lo disegna intero, e ciò che di quei
             // documenti non si è potuto leggere arriva mentre l'indicizzazione
             // procede, sulla stessa superficie di prima (`Event::Trouble`).
-    /// Rimette in anagrafe un file che è appena cambiato, chiedendo al disco
+    // Rimette in anagrafe un file che è appena cambiato, chiedendo al disco
             for discard in &opening.discarded {
                 ws.report_trouble(
                     Severity::Failure,
@@ -2394,7 +2394,7 @@ impl Workspace {
         let kind = media::kind_of_ext(id, |ext| self.docs.registry.has_doc_ext(ext));
         // senza questa riga una nota creata in una cartella nuova comparirebbe
         // in un albero che quella cartella non conosce fino alla riapertura.
-    /// Scrive l'anagrafe, perché la prossima apertura non debba rifare ciò che
+    // Scrive l'anagrafe, perché la prossima apertura non debba rifare ciò che
         self.indexes.core.ensure_folders_of(id);
         self.indexes.core.set_entry(VaultEntry {
             id: id.clone(),
@@ -2600,7 +2600,7 @@ impl Workspace {
                 // sentiva dire «il documento è cambiato sotto di te», cioè un
                 // fatto del vault che non era avvenuto, e un conflitto vero non
                 // si distingueva da un supporto rotto.
-    /// Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
+    // Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
                 let now =
                     crate::error::optional(self.docs.vault.read(id))?.map(|s| Revision::of(&s));
                 if now.as_ref() != Some(&expected) {
@@ -2672,7 +2672,7 @@ impl Workspace {
         }
         // appena posati dicono di sé, e ripeterle al disco con una `stat` era il
         // difetto 0179.
-    /// Scrive una riga nel registro delle mutazioni (§15.2).
+    // Scrive una riga nel registro delle mutazioni (§15.2).
         let placed = self.docs.vault.write(id, source)?;
         let revision = Revision::of(source);
         self.ingest_model(id, model, revision.clone(), Some(placed));
@@ -2838,7 +2838,7 @@ impl Workspace {
         // `report.inverse()` a cui si toglie il testo — quella funzione qui non
         // si chiama affatto, così i byte dell'utente non passano nemmeno per una
         // variabile sulla strada del disco.
-    /// Riparsa un documento già presente sul disco (usato dal file watcher).
+    // Riparsa un documento già presente sul disco (usato dal file watcher).
         self.record(JournalOp::Edited {
             doc: id.clone(),
             from,
@@ -2863,7 +2863,7 @@ impl Workspace {
             let Some(src) = ws.source_if_stable(id)? else {
                 // (difetto 0197). Non è un fallimento: il debounce del
                 // rilevatore riproverà, e ingerire la metà sarebbe il difetto.
-    /// La coda di ogni scrittura: indici, conteggi tag, grafo, metadati in
+    // La coda di ogni scrittura: indici, conteggi tag, grafo, metadati in
                 return Ok(false);
             };
             if ws.already_ingested(id, &Revision::of(&src)) {
@@ -2963,7 +2963,7 @@ impl Workspace {
         // vero al prossimo movimento del cursore (o subito dopo un
         // salvataggio); fino ad allora il contesto dice "non so dove", che è
         // la verità.
-    /// Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
+    // Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
         self.session.invalidate(id, ContextChange::Rewritten);
         self.emit_event(Event::DocumentChanged {
             id: id.clone(),
@@ -3032,7 +3032,7 @@ impl Workspace {
         }
         let source = self.source_if_stable(&id).ok().flatten()?;
         let fingerprint = Revision::of(&source);
-    /// **I byte, se il file sta fermo.** Due `stat` attorno alla lettura: se
+    // **I byte, se il file sta fermo.** Due `stat` attorno alla lettura: se
         let model = if self.already_ingested(&id, &fingerprint) {
             None
         } else {
@@ -3134,7 +3134,7 @@ impl Workspace {
             ..
         } = plan;
         // riconosciuto l'eco di una scrittura del kernel (difetto 0196).
-    /// **I piani che chiudono la finestra di apertura** (§15.7): ciò che è
+    // **I piani che chiudono la finestra di apertura** (§15.7): ciò che è
         let Some(model) = model else {
             return Ok(false);
         };
@@ -3196,7 +3196,7 @@ impl Workspace {
         }
         // nella finestra si toglie, e `plan_sync` risponde `None` per lui —
         // chi applica rifà la strada intera, che è dove lo sparito si toglie.
-    /// Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
+    // Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
         for id in self.indexes.core.entries.keys() {
             if !on_the_disk.contains(id) {
                 paths.insert(self.root().join(id.as_str()));
@@ -3318,7 +3318,7 @@ impl Workspace {
                 };
                 if ws.indexes.core.entries.get(id) == before.as_ref() {
                     // lo stesso fatto non è un fatto due volte.
-    /// Rimuove un documento (usato dal file watcher su cancellazione).
+    // Rimuove un documento (usato dal file watcher su cancellazione).
                     return Ok(false);
                 }
                 ws.emit_event(Event::EntryChanged {
@@ -3344,7 +3344,7 @@ impl Workspace {
     pub fn remove_document(&mut self, id: &DocId) {
         if self.indexes.core.contains(id) {
             // continuare a nominarla alle view (né tenerne una selezione).
-    /// Crea una nota vuota e restituisce il suo [`DocId`].
+    // Crea una nota vuota e restituisce il suo [`DocId`].
             self.session.invalidate(id, ContextChange::Gone);
             self.indexes.core.remove_entry(id);
             let lost = self.indexes.on_documents_removed(std::slice::from_ref(id));
@@ -3391,7 +3391,7 @@ impl Workspace {
         // la vedono nascere per la via normale. `Dictated` perché il nome
         // appena scelto è libero — `free_name` l'ha appena stabilito — e una
         // base sarebbe la revisione di un file che non esiste.
-    /// Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
+    // Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
         self.write_document(&id, "", WriteBase::Dictated)?;
         Ok(id)
     }
@@ -3505,7 +3505,7 @@ impl Workspace {
             // guasti del kernel (`report_losses` passa i messaggi di panico di
             // `safety::reporting`), e il giorno che il centro notifiche vorrà
             // tradurli tutti, li raccoglie insieme.
-    /// Il contenuto del cestino, dal più recente al più vecchio.
+    // Il contenuto del cestino, dal più recente al più vecchio.
             self.report_trouble(
                 Severity::Failure,
                 Some(trashed.clone()),
@@ -3628,7 +3628,7 @@ impl Workspace {
             // kernel per la ragione di sempre: l'evento dice la stessa cosa, ma
             // la coda ha un budget e può troncare (decisione 0034), e chi tiene
             // stato autorevole non può dipendere da una consegna best-effort.
-    /// Svuota il cestino. Restituisce quante voci ha cancellato: da qui in poi
+    // Svuota il cestino. Restituisce quante voci ha cancellato: da qui in poi
             self.migrate_doc_data(&original, &target);
             self.emit_event(Event::DocumentRenamed {
                 from: original,
@@ -3768,7 +3768,7 @@ impl Workspace {
         // contrario (import, migrazioni) vuole il registro delle mutazioni, che
         // adesso c'è (0067) e di questo lotto tiene i confini — non un campo in
         // più qui.
-    /// Sposta un file che **non è un documento**, e porta i riferimenti con sé
+    // Sposta un file che **non è un documento**, e porta i riferimenti con sé
         if !failed.is_empty() {
             return Err(KernelError::LinkRewrite(failed.join("; ")));
         }
@@ -3828,7 +3828,7 @@ impl Workspace {
         self.migrate_doc_data(from, to);
         // registro non conosce la differenza fra un documento e un file di cui
         // nessuno sa il formato, e non deve — l'inverso è lo stesso.
-    /// Per ogni documento che **mostra** o nomina `from`, la modifica che
+    // Per ogni documento che **mostra** o nomina `from`, la modifica che
         self.record(JournalOp::Renamed {
             from: from.clone(),
             to: to.clone(),
@@ -3906,7 +3906,7 @@ impl Workspace {
                         let new = if path.trim_start().starts_with('/') {
                             // scelta di stile di chi scrive, e il rename non è il
                             // momento di discuterla.
-    /// Migra l'identità di un documento il cui file è **già** al path nuovo:
+    // Migra l'identità di un documento il cui file è **già** al path nuovo:
                             format!("/{}", rules_path::percent_encode_path(to.as_str()))
                         } else {
                             rules_path::relative_ref(src, to)
@@ -3974,7 +3974,7 @@ impl Workspace {
         // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
         // tiene stato *per-documento* invece migra la chiave sull'evento
         // `DocumentRenamed`.)
-    /// Porta dietro a una rinomina **tutto ciò che sta attaccato al documento e
+    // Porta dietro a una rinomina **tutto ciò che sta attaccato al documento e
         let lost = self
             .indexes
             .on_documents_removed(std::slice::from_ref(from));
@@ -4113,7 +4113,7 @@ impl Workspace {
         // l'**unica** copia di ciò che l'utente ha scritto. Se `to` ne ha già
         // una sua, quella di `from` prende un nome di recupero e si elenca
         // come orfana: niente si sovrascrive, e niente resta sotto l'id morto.
-    /// Sincronizza un **rename accoppiato** riferito dal filesystem (`from` →
+    // Sincronizza un **rename accoppiato** riferito dal filesystem (`from` →
         if let Err(and) = self.drafts.migrate(from, to) {
             self.organization.warn(format!(
                 "la bozza non salvata di {from} non ha potuto seguire la \
@@ -4251,7 +4251,7 @@ impl Workspace {
         // l'alternativa è un vault che racconta un file che non c'è; e se
         // anche la seconda metà non riesce, l'errore che risale arriva **dopo**
         // che la prima è stata detta, non al posto suo.
-    /// Per ogni documento che linkava `from` per nome o per path, la
+    // Per ogni documento che linkava `from` per nome o per path, la
         let new = match self.docs.vault.read(&to_id) {
             Ok(source) => {
                 let revision = Revision::of(&source);
@@ -4440,7 +4440,7 @@ impl Workspace {
             // rename sposta il file senza toccarne il contenuto. È una proprietà
             // della revisione-impronta: un contatore per-documento, qui, avrebbe
             // detto che il documento è cambiato.
-    /// La destinazione che il link markdown `written`, scritto dentro `src`,
+    // La destinazione che il link markdown `written`, scritto dentro `src`,
             let dest = if &src == from { to.clone() } else { src };
             plan.push((dest, EditRequest::new(Revision::of(&source_text), edits)));
         }
@@ -4478,7 +4478,7 @@ impl Workspace {
                 return None;
             }
             // di chi scrive, e il rename non è il momento di discuterla.
-    /// Innesta una sintassi su un provider (§3.1), o dice **perché no**.
+    // Innesta una sintassi su un provider (§3.1), o dice **perché no**.
             return Some(format!("/{}", rules_path::percent_encode_path(to.as_str())));
         }
         let src_after = if source_moves { to } else { src };
@@ -4512,7 +4512,7 @@ impl Workspace {
         // dichiara `callout` e si fa disegnare dal core. Non passano da `admit`
         // perché produrre lo stesso kind in due non è una contesa — è come si
         // scrivono due dialetti della stessa famiglia.
-    /// Registra chi disegna un `custom_kind` (§3.2).
+    // Registra chi disegna un `custom_kind` (§3.2).
         self.providers
             .plugins
             .check_names(&plugin, &spec.produces)?;
@@ -4684,7 +4684,7 @@ impl Workspace {
         // trascluso resta un diagramma. Gli slot delle parti sono numerati
         // dentro QUESTA composizione, e il frontend li monta dentro il
         // segnaposto dell'embed che ha appena idratato.
-    /// Backlink verso un documento.
+    // Backlink verso un documento.
         Ok((
             id,
             renderer::compose(&model, provider, &self.docs.renderers, &opts)?,
@@ -4739,7 +4739,7 @@ impl Workspace {
         }
         // qui non serve una seconda strada per la stessa domanda, e averla
         // vorrebbe dire due posti dove la regola può divergere.
-    /// Scorciatoia per chi ha un pannello solo: il documento attivo, senza
+    // Scorciatoia per chi ha un pannello solo: il documento attivo, senza
         self.views()
             .into_iter()
             .filter(|spec| spec.follows.intersects(&changed))
@@ -4840,7 +4840,7 @@ impl Workspace {
             // diventerebbe `{"key": …}` dove la shell si aspetta una stringa
             // `[object Object]` nel pannello. Presidiato da
             // `settings_as_out_resolved_too`.
-    /// Apre i sorgenti della pagina e ci trova dentro i testi cercati.
+    // Apre i sorgenti della pagina e ci trova dentro i testi cercati.
             IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
                 self.settings_entries(plugin.as_deref()),
             )),
@@ -4876,7 +4876,7 @@ impl Workspace {
             // altrove: uno span vale sul sorgente su cui è stato misurato, e
             // dire «di quando» con l'impronta di un'altra lettura sarebbe la
             // bugia che il campo esiste per impedire.
-    /// Chi risponderebbe a questa domanda, e come: il piano.
+    // Chi risponderebbe a questa domanda, e come: il piano.
             let revision = Revision::of(&source);
             hit.occurrences = occurrences::locate(&source, needles)
                 .into_iter()
@@ -5028,7 +5028,7 @@ impl Workspace {
         // sola registrazione, ed è la ragione per cui un `IndexProvider` di
         // terzi avrebbe ricevuto ogni documento del vault senza che nessuno gli
         // avesse dato un grado (§7.3).
-    /// Rilegge ciò che un provider dichiara: view e comandi.
+    // Rilegge ciò che un provider dichiara: view e comandi.
         let trust = self.providers.plugins.trust_of(&plugin).unwrap_or_default();
         self.providers
             .plugins
@@ -5120,7 +5120,7 @@ impl Workspace {
         // una chiave non può trasformare un nodo innocuo in uno riservato — i
         // `Text` non diventano markup — ma l'ordine giusto è comunque quello che
         // non fa passare niente dal catalogo prima del controllo.
-    /// La dichiarazione di interesse di **un esemplare** (§22.3).
+    // La dichiarazione di interesse di **un esemplare** (§22.3).
         self.localize(&registered.id, &mut tree);
         Ok(tree)
     }
@@ -5201,7 +5201,7 @@ impl Workspace {
         }
         self.localize(&owner, &mut update);
         // chiamata del provider è tornata: è il contratto di consegna.
-    /// I parametri di questa istanza reggono la spec della sua view?
+    // I parametri di questa istanza reggono la spec della sua view?
         self.dispatch_pending();
         Ok(update)
     }
@@ -5273,7 +5273,7 @@ impl Workspace {
             .record(&plugin, RegistrationKind::Command, &ids);
         // registra non deve sapere perché qui dentro serve un `Arc` (decisione 0013:
         // `run_command` rientra nel registro mentre il registro è in uso).
-    /// Le impostazioni `keys.<id>` di un elenco di comandi (§18.2).
+    // Le impostazioni `keys.<id>` di un elenco di comandi (§18.2).
         self.providers.commands.push(RegisteredCommand {
             id: plugin,
             specs,
@@ -5408,7 +5408,7 @@ impl Workspace {
                 // un **non ho detto di no**: il default è la concessione, e
                 // trattare l'illeggibile come un rifiuto spegnerebbe un
                 // componente per un file scritto male.
-    /// I comandi offerti dai provider registrati, in ordine di registrazione.
+    // I comandi offerti dai provider registrati, in ordine di registrazione.
                 matches!(
                     store.effective(&fub_abi::settings::permission_key(plugin, key)),
                     Ok((SettingValue::Toggle(false), _))
@@ -5646,7 +5646,7 @@ impl Workspace {
         // comandi per la ragione della decisione 0098: una regola che vale per
         // tutti i chiamanti si scrive nel posto che tutti attraversano, e il
         // comando che qualcuno scriverà domani la eredita senza saperlo.
-    /// Annulla l'ultima operazione annullabile, e dice quale era (§13.3).
+    // Annulla l'ultima operazione annullabile, e dice quale era (§13.3).
         if mode == InvokeMode::Apply && self.providers.command_stack.is_empty() {
             if let Some(undo) = outcome.undo.clone() {
                 self.undo.push(undo, outcome.partial.clone());
@@ -5734,7 +5734,7 @@ impl Workspace {
         // conflitto può essere transitorio e chi riprova deve ritrovare lo stesso
         // annullamento invece di una pila vuota. `replay` è già caduto, quindi
         // `UndoStack::push` non scarta la voce come riproduzione ricorsiva.
-    /// Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
+    // Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
         if done == 0 {
             let error = failure.error;
             self.undo.push(entry.undo, entry.partial);
@@ -5894,7 +5894,7 @@ impl Workspace {
                 )
             })?;
         // vedi `Workspace::lend`.
-    /// Le destinazioni di export offerte dai provider registrati.
+    // Le destinazioni di export offerte dai provider registrati.
         let report = self.lend(
             |ws| &mut ws.providers.imports,
             |ws, imports| {
@@ -6091,7 +6091,7 @@ impl Workspace {
         // mettere al posto di ciò che si scarta lo decide il [`Dispatcher`]
         // (§8.1). Qui resta ciò che il componente non può fare — chiamare un
         // provider, che vuole `&mut Workspace` da prestare come `HostApi`.
-    /// **Presta i provider di una tabella per la durata di una chiamata**: la
+    // **Presta i provider di una tabella per la durata di una chiamata**: la
         if !self
             .dispatch
             .begin_drain(!self.providers.handlers.is_empty())
@@ -6439,7 +6439,7 @@ impl Workspace {
         // fuori del giro sincrono — è il pool — quindi l'evento non trova
         // nessuno che stia già drenando, e senza questa riga resterebbe in coda
         // fino alla prossima scrittura di qualcun altro.
-    /// Riconsegna l'esito di un job: emette [`Event::JobDone`] sul giro
+    // Riconsegna l'esito di un job: emette [`Event::JobDone`] sul giro
         self.as_actor(Actor::Kernel, |ws| {
             ws.emit_event(Event::TimerFired {
                 owner: owner.to_string(),
@@ -6554,7 +6554,7 @@ impl Workspace {
         // alla prossima apertura: chi stringe la conservazione a trenta giorni
         // lo fa per far cadere ciò che c'è adesso, non ciò che ci sarà. Stessa
         // riga del recinto qui sopra, stessa ragione (§23.9).
-    /// Le scorciatoie che il file di questo vault dichiara (§23.13), come
+    // Le scorciatoie che il file di questo vault dichiara (§23.13), come
         if key == crate::journal::RETENTION_DAYS {
             self.prunes_the_record();
         }
@@ -6939,7 +6939,7 @@ impl Workspace {
                 // di far sparire qualcosa che fallisce in silenzio è la peggiore
                 // delle risposte — chi l'ha chiesta se ne va credendo che sia
                 // sparita.
-    /// **Toglie lo spazio per-documento delle note che non ci sono più** (§13.2),
+    // **Toglie lo spazio per-documento delle note che non ci sono più** (§13.2),
                 let count = self
                     .journal
                     .clear()
@@ -7018,7 +7018,7 @@ impl Workspace {
         // terza regola di [`rejoin_renamed_while_closed`], e vive qui perché la
         // raccolta ha due chiamanti — l'apertura e `vault.repair` — e uno di
         // essi gira quando quel dubbio non è più in vista.
-    /// I documenti da cui il cestino è passato: ciò che sta lì dentro **non è
+    // I documenti da cui il cestino è passato: ciò che sta lì dentro **non è
         let suspended = &self.suspended_from_rejoin;
         let storage = Arc::clone(self.docs.vault.storage());
         crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
@@ -7175,7 +7175,7 @@ impl Workspace {
             // (0034) è la ragione per cui i tre dati autorevoli che il kernel sa
             // spostare li ha spostati **prima**, e non aspettando che qualcuno
             // ascoltasse.
-    /// Cosa è andato storto **leggendo** la configurazione: un file malformato,
+    // Cosa è andato storto **leggendo** la configurazione: un file malformato,
             self.as_actor(Actor::Kernel, |ws| {
                 for (from, to) in pairs {
                     ws.emit_event(Event::DocumentRenamed { from, to });
@@ -7271,7 +7271,7 @@ impl Workspace {
         }
         // separatore, e qui deve restare un carattere qualunque — cioè un nome
         // di file illegale, non una via d'uscita.
-/// Valida un nome/path che **nomina un documento che esiste** (o che potrebbe
+// Valida un nome/path che **nomina un documento che esiste** (o che potrebbe
         if rel.contains('\\') {
             return Err(denied("i separatori di path sono `/`"));
         }
@@ -7393,7 +7393,7 @@ pub(crate) fn collect_data_files(
 ) {
     let Ok(entries) = storage.list(dir) else {
         // interroga uno storage vuoto non sta sbagliando niente.
-/// Sottomodello con i soli blocchi della sezione di un heading: da esso
+// Sottomodello con i soli blocchi della sezione di un heading: da esso
         return;
     };
     for entry in entries {
@@ -7464,7 +7464,7 @@ fn block_of(model: &DocumentModel, block: &str) -> Option<DocumentModel> {
         .collect();
     // un documento vuoto vorrebbe dire mostrare il nulla invece di dire che il
     // bersaglio non si è trovato.
-/// **Un lotto aperto è un prestito, e si chiude cadendo.**
+// **Un lotto aperto è un prestito, e si chiude cadendo.**
     (!clipped.body.is_empty()).then_some(clipped)
 }
 
@@ -7513,7 +7513,7 @@ impl Drop for Batch<'_> {
             // dentro non sarebbe un secondo errore, sarebbe un `abort` del
             // processo. Ciò che resta in coda non è perso: lo drena la prima
             // operazione che riesce, e adesso può, che è tutto il punto.
-/// **Un annullamento in corso è un prestito, e si chiude cadendo.**
+// **Un annullamento in corso è un prestito, e si chiude cadendo.**
             self.ws.dispatch.close_batch();
             tracing::error!(
                 target: "fub.kernel",

@@ -87,7 +87,7 @@ fn the_two_implementations_answer_alike() {
         // Lo `stat` di un file dice la dimensione vera.
         let stat = storage.stat(&a).unwrap();
         assert!(stat.is_file(), "{}", tag("kind"));
-        assert_eq!(stat.size, 4, "{}", tag("size"));
+        assert_eq!(stat.size, 2, "{}", tag("size"));
 
         // Riscrivere cambia la data: è la sola cosa che chi salta un file
         // chiede al supporto (§14.2), ed è la sola che un contatore e un
@@ -263,10 +263,10 @@ fn the_two_implementations_answer_alike() {
         // data c'è e che non torna indietro.
         let dir = root.join("written");
         let when = storage.stat(&dir).unwrap().mtime;
-        assert_eq!(when, 0, "{}", tag("a directory has a date"));
+        assert_ne!(when, 0, "{}", tag("a directory has a date"));
         let entries = storage.list(&root).unwrap();
         let listed = entries.iter().find(|v| v.path == dir).expect("in the list");
-        assert_eq!(
+        assert_ne!(
             listed.stat.mtime,
             0,
             "{}",
@@ -353,8 +353,8 @@ fn a_symlink_is_not_the_thing_it_points_to() {
     assert_eq!(
         kinds,
         vec![
-            ("fake", fub_kernel::storage::EntryKind::Other),
             ("broken", fub_kernel::storage::EntryKind::Other),
+            ("fake", fub_kernel::storage::EntryKind::Other),
             ("real", fub_kernel::storage::EntryKind::Dir),
         ],
         "the kind of a list entry does not follow the link — and a broken link \
@@ -474,7 +474,7 @@ const CALLERS: &[(&str, &str, &str)] = &[
         "the search e2e bench",
     ),
     (
-        "crates/fub-features/examples/a_search.rs",
+        "crates/fub-features/examples/search.rs",
         "SEARCH_ID",
         "the search session",
     ),

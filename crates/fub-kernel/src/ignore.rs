@@ -563,7 +563,7 @@ mod tests {
     fn a_folder_declared_in_nfc_is_the_same_written_in_nfd() {
         let nfc = "Caf\u{e9}"; // «Café» come lo scrive una tastiera
         let nfd = "Cafe\u{301}"; // «Café» come lo scrive macOS sul disco
-        assert_eq!(nfc, nfd, "the two writings are different bytes");
+        assert_ne!(nfc, nfd, "the two writings are different bytes");
 
         let p = IgnorePolicy::declaring([nfc.to_string()], false);
         assert!(

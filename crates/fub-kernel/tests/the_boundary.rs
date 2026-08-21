@@ -223,17 +223,17 @@ fn a_revoked_plugin_gets_nothing_at_all_not_even_reading() {
     // Permessi pieni **e** revocato: `Trust::Revoked` non è un grado di fiducia
     // più basso, è l'assenza del permesso di essere eseguiti.
     ws.register_plugin(
-        PluginManifest::new("terzi.revocato", "Revocato").granting(PluginPermissions::core()),
+        PluginManifest::new("com.example.revoked", "Revocato").granting(PluginPermissions::core()),
         Trust::Revoked,
     )
     .expect("dichiarato");
 
-    ws.with_host("terzi.revocato", |host| {
+    ws.with_host("com.example.revoked", |host| {
         let err = host
             .list_documents(None)
             .expect_err("un revocato non legge nemmeno");
         assert!(
-            matches!(&err, PluginError::PermissionDenied(msg) if msg.to_string().contains("revocato")),
+            matches!(&err, PluginError::PermissionDenied(msg) if msg.to_string().contains("revoked")),
             "{err:?}"
         );
     });
@@ -461,12 +461,12 @@ fn the_capabilities_that_cannot_say_no_give_the_null_answer() {
     // non hanno un permesso che li governi: sono ciò che l'host sa e il guest
     // no, non una risorsa del vault. Chi li perde è chi non gira affatto.
     ws.register_plugin(
-        PluginManifest::new("terzi.revocato", "Revocato").granting(PluginPermissions::core()),
+        PluginManifest::new("com.example.revoked", "Revocato").granting(PluginPermissions::core()),
         Trust::Revoked,
     )
     .expect("dichiarato");
 
-    ws.with_host("terzi.revocato", |host| {
+    ws.with_host("com.example.revoked", |host| {
         // Cinque capacità del contratto non restituiscono un `Result`. Negarle
         // non ha un canale, e la risposta nulla è ciò che resta: il nome che è
         // stato passato, nessun formato, il tempo a zero. È una proprietà di

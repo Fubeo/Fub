@@ -418,7 +418,7 @@ fn a_provider_that_declared_nothing_is_never_asked() {
         "before, it was consulted first and responded `BadArgs`: the try-based \
          dispatch ran every query on every index"
     );
-/// caduta in avanti da provocare, e la spia muta non vede passare niente.
+// caduta in avanti da provocare, e la spia muta non vede passare niente.
     // Due, e non una: dalla §21.9 una domanda testuale si fa in **due tempi** —
     // si seleziona senza estratti, e gli estratti si richiedono per le sole
     // righe che sono sopravvissute alla finestra. Chi risponde li vede
@@ -461,7 +461,7 @@ fn with_no_provider_a_search_says_so_instead_of_pretending() {
         page: Some(Page::first(5)),
         excerpts: Excerpts::Attach,
     });
-/// «qualcosa è andato storto».
+// «qualcosa è andato storto».
     // Zero risultati e "nessun indice sa cercare nel testo" sono due cose
     // diverse: la prima è una risposta, la seconda una mancanza, e confonderle
     assert!(matches!(r, Err(PluginError::Unserved(_))), "{r:?}");
@@ -513,7 +513,7 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
     assert!(matches!(err, fub_kernel::RegistryError::Route(_)), "{err}");
     ws.reindex().unwrap();
 
-/// registrato **in silenzio**, adesso il secondo non si registra e lo dice.
+// registrato **in silenzio**, adesso il secondo non si registra e lo dice.
     let r = ws.query_index(IndexQuery::Tags {
         matching: QueryExpr::all(),
         page: None,
@@ -626,13 +626,13 @@ impl IndexProvider for SegmentIndex {
             _ => Excerpts::Omit,
         };
         if !excerpts.wanted() {
-/// con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
+// con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
             return Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(
                 doc,
             )
             .with_score(1.0)])));
         }
-/// la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
+// la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
         let mut first = DocumentMatch::of(doc.clone()).with_score(1.0);
         first.snippet = Some("…alpha…".into());
         first.occurrences = vec![DocPosition::at(Span::new(3, 7), rev.clone())];

@@ -723,7 +723,7 @@ mod tests {
         );
         assert!(rows[1].contains("ERROR"), "{:?}", rows[1]);
         assert!(
-            rows[1].ends_with("fub.test anche questa passa campo=7"),
+            rows[1].ends_with("fub.test anche questa passa field=7"),
             "il campo strutturato segue il messaggio: {:?}",
             rows[1]
         );
