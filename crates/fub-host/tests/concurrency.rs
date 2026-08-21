@@ -429,7 +429,7 @@ fn a_view_that_panics_while_drawing_does_not_poison_the_vault() {
     let error = outcome.expect_err("a panicking view does not yield a tree");
     assert!(
         error.to_string().contains("fub.esplode")
-            && error.to_string().contains("panicked"),
+            && error.to_string().contains("è andato in panico"),
         "the error must name who exploded: {error}"
     );
 

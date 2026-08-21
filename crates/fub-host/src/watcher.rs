@@ -594,7 +594,7 @@ mod notify_watcher {
                     // Ciò che un lotto vero fa qui è `ExternalSync::batch`: il
                     // workspace in scrittura e gli indici resi durevoli. Quanto
                     // duri non conta, conta che stia ancora durando.
-        /// **L'anello che si chiudeva.** Questi sono gli eventi che inotify
+        // **L'anello che si chiudeva.** Questi sono gli eventi che inotify
                     std::thread::sleep(Duration::from_millis(300));
                     batch_done.store(true, Ordering::SeqCst);
                 },
@@ -665,7 +665,7 @@ mod notify_watcher {
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
                 EventKind::Remove(RemoveKind::File),
                 // rilettura in più di un indice che drifta.
-        /// **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
+        // **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
                 EventKind::Any,
                 EventKind::Other,
             ] {

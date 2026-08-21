@@ -413,7 +413,7 @@ fn a_job_that_panics_costs_the_job_and_not_the_pool() {
     assert_eq!(job, "esplodi");
     let error = result.expect_err("a panicking job does not yield a result");
     assert!(
-        error.to_string().contains(SPY) && error.to_string().contains("went into a panic"),
+        error.to_string().contains(SPY) && error.to_string().contains("è andato in panico"),
         "the outcome names who exploded: {error}"
     );
 

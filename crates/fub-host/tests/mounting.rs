@@ -73,10 +73,10 @@ impl Plugin for Spy {
     fn deactivate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
         let host_live = host.data_write("addio", b"1").is_ok();
         let provider_live = host
-            .run_command(&format!("{}.saluta", self.id), serde_json::json!({}))
+            .run_command(&format!("{}.greet", self.id), serde_json::json!({}))
             .is_ok();
         self.journal.lock().unwrap().push(format!(
-            "{}: smetto (host={host_live}, provider={provider_live})",
+            "{}: stopping (host={host_live}, provider={provider_live})",
             self.id
         ));
         Ok(())
@@ -292,10 +292,10 @@ fn who_stops_has_again_the_host_and_the_own_provider() {
 
     let bundle = BundleSpy::new("test.one", &journal);
     registry.mount(&bundle, &mut ws).expect("mounts");
-    assert_eq!(registry.ids(), vec!["test.uno"]);
+    assert_eq!(registry.ids(), vec!["test.one"]);
     assert!(
         registry
-            .body("test.uno")
+            .body("test.one")
             .is_some_and(|p| p.manifest().id == "test.one"),
         "the registry OWNS the plugin: that is where the job runner will find the \
          code to execute"
@@ -425,7 +425,7 @@ fn warnings_from_organization_are_forwarded_to_the_mount() {
         .set_icon("Nota.md", Some("📌".into()))
         .expect_err("cannot write to what has not been read");
     assert!(
-        refuse.contains("does not overwrite it"),
+        refuse.contains("non lo sovrascrive"),
         "the sidecar was supposed to be unreadable, and this test proves \
          nothing more if it is not: {refuse}"
     );

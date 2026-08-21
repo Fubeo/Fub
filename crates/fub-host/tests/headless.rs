@@ -662,7 +662,7 @@ fn the_detection_is_asks_from_the_channel_data_and_from_host_and_and_the_same_bi
         "chi guarda ha alzato la bandiera del kernel, non una sua"
     );
 
-/// proprio valore — legge la bandiera del kernel.
+// proprio valore — legge la bandiera del kernel.
     // E chi smette lo dice: chiudere il vault lascia andare il rilevatore, e la
     let ws = with.workspace(None).unwrap();
     with.close_vault(&v.root).expect("closes");
@@ -710,7 +710,7 @@ fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
     let host = headless();
     let info = host.open(&v.root).expect("the vault opens anyway");
 
-/// e le altre due note erano irraggiungibili per colpa della terza.
+// e le altre due note erano irraggiungibili per colpa della terza.
     // **Su `info` non c'è niente da asserire**, ed è la conseguenza vera
     // dell'apertura a fasi (§15.7): `open` torna appena il vault è
     // *utilizzabile*, e scoprire uno scarto vuol dire aver già provato a

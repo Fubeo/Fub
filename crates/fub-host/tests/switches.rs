@@ -256,16 +256,16 @@ fn granted(host: &Host, plugin: &str, permission: &str) -> bool {
 #[test]
 fn the_permissions_are_the_same_of_here_and_of_the() {
     let permissions_ts =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/ui/permessi.ts");
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/ui/permissions.ts");
     let source = std::fs::read_to_string(&permissions_ts)
         .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", permissions_ts.display()));
 
     let list = source
-        .split_once("export const PERMESSI = [")
+        .split_once("export const PERMISSIONS = [")
         .and_then(|(_, rest)| rest.split_once("] as const;"))
         .map(|(inside, _)| inside)
         .expect(
-            "in `ui/permessi.ts` there is no longer an `export const PERMESSI = [ … ] as const;`: \
+            "in `ui/permissions.ts` there is no longer an `export const PERMISSIONS = [ … ] as const;`: \
              or the list is called something else, or this guard is reading emptiness",
         );
     let from_the_shell: Vec<String> = list
@@ -626,11 +626,11 @@ fn the_key_of_the_theme_and_the_same_of_here_and_of_the() {
     let declared = source
         .lines()
         .find_map(|row| {
-            row.strip_prefix("export const CHIAVE_TEMA = \"")?
+            row.strip_prefix("export const THEME_KEY = \"")?
                 .strip_suffix("\";")
         })
         .expect(
-            "in `theme/theme.ts` there is no longer a line `export const CHIAVE_TEMA = \"…\";`: \
+            "in `theme/theme.ts` there is no longer a line `export const THEME_KEY = \"…\";`: \
              or the key is called something else, or this guard is reading emptiness",
         )
         .to_string();
@@ -664,19 +664,19 @@ fn the_key_of_the_theme_and_the_same_of_here_and_of_the() {
 #[test]
 fn the_key_of_the_memory_and_the_same_of_here_and_of_the() {
     let recent_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../frontend/src/state/recenti.ts");
+        .join("../../frontend/src/state/recent.ts");
     let source = std::fs::read_to_string(&recent_ts)
         .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", recent_ts.display()));
 
     let declared = source
         .lines()
         .find_map(|row| {
-            row.strip_prefix("export const CHIAVE_CRONOLOGIA = \"")?
+            row.strip_prefix("export const HISTORY_KEY = \"")?
                 .strip_suffix("\";")
         })
         .expect(
-            "in `state/recenti.ts` there is no longer a line \
-             `export const CHIAVE_CRONOLOGIA = \"…\";`: or the key is called something \
+            "in `state/recent.ts` there is no longer a line \
+             `export const HISTORY_KEY = \"…\";`: or the key is called something \
              else, or this guard is reading emptiness",
         )
         .to_string();

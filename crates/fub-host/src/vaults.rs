@@ -516,7 +516,7 @@ mod tests {
         // Il secondo gesto lo eredita: la data non sta nel corpo di `set_look`
         // ma nel punto in cui una voce nasce.
         let mut keys = BTreeMap::new();
-        keys.insert("mod+k".to_string(), "vault.cerca".to_string());
+        keys.insert("mod+k".to_string(), "search.open".to_string());
         reg.notes_keys_seen(Utf8Path::new("/terza"), keys).unwrap();
         let third = reg
             .list()
@@ -625,19 +625,20 @@ mod tests {
         let seen =
             |key: &str, command: &str| BTreeMap::from([(key.to_string(), command.to_string())]);
         before
-            .notes_keys_seen(Utf8Path::new("/diario"), seen("mod+k", "vault.cerca"))
+            .notes_keys_seen(Utf8Path::new("/diario"), seen("mod+k", "search.open"))
             .unwrap();
         second
-            .notes_keys_seen(Utf8Path::new("/lavoro"), seen("mod+j", "vault.salta"))
+            .notes_keys_seen(Utf8Path::new("/lavoro"), seen("mod+j", "shell.switcher"))
             .unwrap();
 
         let (third, warning) = VaultRegistry::open(&path);
         assert!(warning.is_none(), "{warning:?}");
-        let seen: Vec<(String, Vec<String>)> = third
+        let mut seen: Vec<(String, Vec<String>)> = third
             .list()
             .into_iter()
             .map(|and| (and.root, and.keys_seen.into_keys().collect()))
             .collect();
+        seen.sort_by(|a, b| a.0.cmp(&b.0));
         assert_eq!(
             seen,
             vec![
