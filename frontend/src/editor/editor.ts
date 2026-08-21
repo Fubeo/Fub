@@ -280,7 +280,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       // sposterebbe il cursore in fondo a ogni battuta dell'altro riquadro.
       let prefixLength = 0;
       const minimum = Math.min(current.length, normalizedText.length);
-      while (prefixLength < minimum && current[prefixLength] === text[prefixLength]) prefixLength++;
+      while (prefixLength < minimum && current[prefixLength] === normalizedText[prefixLength]) prefixLength++;
       let queue = 0;
       while (
         queue < minimum - prefixLength &&
@@ -337,10 +337,10 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       view.dispatch({ effects: theme.reconfigure(editorTheme(next)) });
     },
     revealByteOffset(byteOffset: number) {
-      const pos = Math.min(
-        byteToCharIndex(view.state.doc.toString(), byteOffset),
-        view.state.doc.length,
-      );
+      const text = rendered();
+      const renderedPos = byteToCharIndex(text, byteOffset);
+      const crlfBefore = text.slice(0, renderedPos + 1).match(/\r\n/g)?.length ?? 0;
+      const pos = Math.min(view.state.doc.length, renderedPos - crlfBefore);
       view.dispatch({
         selection: { anchor: pos },
         effects: EditorView.scrollIntoView(pos, { y: "start" }),

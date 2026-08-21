@@ -127,6 +127,7 @@ interface Pane {
   /// Cosa c'è **adesso** in questo riquadro. Una linguetta e non un path: dalla §3.3
   /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
   shown: Tab | null;
+  loadGeneration: number;
 }
 
 /// Il testo di un documento aperto, con lo stato del suo salvataggio.
@@ -306,7 +307,10 @@ export function mountDocument(d: DocumentDeps): void {
       // rinomina che nessuno qui ha chiesto: un'altra applicazione, un `mv` da
       // terminale, un sync. È il caso in cui l'utente non ha fatto niente di
       // strano ed è quello in cui si perde la sua battuta.
-      if (buf.dirty) scheduleSave(e.to);
+      if (buf.dirty) {
+        scheduleSave(e.to);
+        scheduleDraft(e.to);
+      }
     }
     rename(e.from, e.to);
   });
@@ -455,6 +459,11 @@ async function resolveDiscardingMine(): Promise<void> {
   await reloadIfClean(doc);
   await redrawReading(doc);
   drawSave();
+  for (const paneId of panesWithDoc(doc)) {
+    const r = panes.get(paneId);
+    const p = paneState(paneId);
+    if (r && p) drawTab(r, p.tabs, p.active);
+  }
 }
 
 /// Divide il riquadro col fuoco e ci porta dentro **lo stesso documento**.
@@ -473,12 +482,14 @@ function splitPane(dir: "row" | "col"): void {
 
 async function closeCurrentPane(): Promise<void> {
   const id = layout.focus;
-  const state = paneState(id);
-  const own = state ? documents(state) : [];
+  const tabs = paneState(id)?.tabs ?? [];
   if (!closePane(id)) return;
-  // Il riquadro non c'è più: i suoi documenti possono essere rimasti senza
-  // nessuno che li guardi, e allora il buffer va messo in salvo e dimenticato.
-  for (const doc of own) await dismissIfUnwatched(doc);
+  // Il riquadro non c'è più: le sue linguette possono essere rimaste senza
+  // nessuno che le guardi, e allora si smonta una view o si mette in salvo un buffer.
+  for (const tab of tabs) {
+    if (tab.k === "view") unmountViewFromPane(tab.view, id);
+    else await dismissIfUnwatched(tab.doc);
+  }
 }
 
 async function closeCurrentTab(): Promise<void> {
@@ -509,12 +520,14 @@ async function releaseTab(paneId: string, tab: Tab | null): Promise<void> {
 async function dismissIfUnwatched(doc: string): Promise<void> {
   if (panesWithDoc(doc).length > 0) return;
   await flushDoc(doc);
+  if (buffers.get(doc)?.dirty) await writeDraft(doc);
   forget(doc);
 }
 
 function forget(doc: string): void {
   const buf = buffers.get(doc);
   if (buf?.timer !== undefined) window.clearTimeout(buf.timer);
+  if (buf?.draftTimer !== undefined) window.clearTimeout(buf.draftTimer);
   buffers.delete(doc);
 }
 
@@ -594,6 +607,7 @@ function buildStructure(): void {
       // sta sopra. Finché qui c'era il solo `remove()`, ogni divisione chiusa ne
       // lasciava indietro uno vivo — e la mappa era l'unico riferimento che lo
       // teneva, quindi spariva anche il modo di accorgersene.
+      if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);
       r.editor.destroy();
       r.root.remove();
       panes.delete(id);
@@ -691,7 +705,17 @@ function renderPane(id: string): Pane {
   // correggersi al primo cambio (§12.4).
   if (theme) editor.setTheme(theme);
 
-  const r: Pane = { id, root, tabsEl, editorEl, previewEl, viewEl, editor, shown: null };
+  const r: Pane = {
+    id,
+    root,
+    tabsEl,
+    editorEl,
+    previewEl,
+    viewEl,
+    editor,
+    shown: null,
+    loadGeneration: 0,
+  };
   panes.set(id, r);
   return r;
 }
@@ -773,6 +797,7 @@ function docTitle(doc: string): string {
 /// il ramo che le distingue sta **qui e basta**: da `render` in giù nessuno sa
 /// che esistano due specie, e chi cambia tab non deve dire quale.
 async function show(r: Pane, tab: Tab | null): Promise<void> {
+  const generation = ++r.loadGeneration;
   const changed = !r.shown || !tab || !sameTab(r.shown, tab);
   // Una view che se ne va porta con sé il suo pannello: senza, resterebbe
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
@@ -798,7 +823,9 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     clearPreview(r.previewEl);
     return;
   }
-  r.editor.setDoc(await readBuffer(tab.doc));
+  const text = await readBuffer(tab.doc);
+  if (generation !== r.loadGeneration || r.shown !== tab) return;
+  r.editor.setDoc(text);
   await redrawReading(tab.doc);
 }
 
@@ -899,6 +926,7 @@ export async function recoverDrafts(): Promise<number> {
   // battuta, riscritta sopra il testo vecchio che si vede, coprirebbe il
   // recupero senza che nessuno l'abbia mai visto.
   for (const b of rejoined) {
+    scheduleSave(b.doc);
     notify(`${b.doc}: ${t(CASE_KEY[caseOf(b)])}`, "info");
     for (const paneId of panesWithDoc(b.doc)) {
       const r = panes.get(paneId);
@@ -942,7 +970,7 @@ export async function openDocument(id: string): Promise<void> {
     // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
     // selezione sarebbe quello del documento precedente.
     await publishContext();
-    focusEditor();
+    if (activePane().mode !== "reading") focusEditor();
   });
 }
 
@@ -1185,7 +1213,7 @@ const STATE_KEY = {
 function scheduleSave(doc: string): void {
   if (suspended.has(doc)) return;
   const buf = buffers.get(doc);
-  if (!buf) return;
+  if (!buf || buf.result === "conflitto") return;
   window.clearTimeout(buf.timer);
   buf.timer = window.setTimeout(() => void saveDoc(doc), 400);
 }
@@ -1512,7 +1540,13 @@ function warnIfBufferCovers(id: string, source: Origin): void {
 async function reloadIfClean(id: string): Promise<void> {
   const buf = buffers.get(id);
   if (buf?.dirty) return;
-  const { text: source, revision } = await api.readDocument(id);
+  let source: string;
+  let revision: string;
+  try {
+    ({ text: source, revision } = await api.readDocument(id));
+  } catch {
+    return;
+  }
   const current = buffers.get(id);
   if (!current || current.dirty) return;
   // La base segue il testo, e si aggiorna **prima** dell'uscita anticipata: un
@@ -1540,6 +1574,12 @@ export async function reloadCurrent(): Promise<void> {
   if (buf) buf.dirty = false;
   await reloadIfClean(doc);
   await redrawReading(doc);
+  drawSave();
+  for (const paneId of panesWithDoc(doc)) {
+    const r = panes.get(paneId);
+    const p = paneState(paneId);
+    if (r && p) drawTab(r, p.tabs, p.active);
+  }
 }
 
 // --- contesto di sessione (decisione 0007) ----------------------------------
@@ -1651,7 +1691,30 @@ export async function setMode(next: PaneMode): Promise<void> {
 
 /// Porta la vista su un offset in byte UTF-8 del documento attivo.
 export function revealByteOffset(byteOffset: number): void {
-  panes.get(layout.focus)?.editor.revealByteOffset(byteOffset);
+  const pane = panes.get(layout.focus);
+  if (!pane) return;
+  if (activePane().mode !== "reading") {
+    pane.editor.revealByteOffset(byteOffset);
+    return;
+  }
+
+  const encoder = new TextEncoder();
+  const walker = document.createTreeWalker(pane.previewEl, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  let current: Node | null;
+  while ((current = walker.nextNode())) {
+    const text = current.textContent ?? "";
+    const end = offset + encoder.encode(text).length;
+    if (byteOffset <= end) {
+      const element = current.parentElement?.closest<HTMLElement>(
+        "h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,table,section,div",
+      );
+      element?.scrollIntoView({ block: "start" });
+      return;
+    }
+    offset = end;
+  }
+  pane.previewEl.lastElementChild?.scrollIntoView({ block: "start" });
 }
 
 export function focusEditor(): void {

@@ -289,8 +289,10 @@ describe("autoPairDecision", () => {
     expect(decide("nota|", "]")).toBeNull();
   });
 
-  it("== si chiude, si scavalca, e non allunga corse esistenti", () => {
-    expect(decide("=|", "=")).toEqual({ action: "insert", text: "===", cursor: 1 });
+  it("== evita Setext, si chiude a metà riga, scavalca, e non allunga corse esistenti", () => {
+    expect(decide("=|", "=")).toBeNull();
+    expect(decide("  =|", "=")).toBeNull();
+    expect(decide("x=|", "=")).toEqual({ action: "insert", text: "===", cursor: 1 });
     expect(decide("==evid|==", "=")).toEqual({ action: "skip" });
     expect(decide("x|", "=")).toBeNull();
     expect(decide("==|", "=")).toBeNull();
