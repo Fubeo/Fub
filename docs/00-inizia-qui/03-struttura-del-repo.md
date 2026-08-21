@@ -21,6 +21,7 @@ Fub/
 │   └── src/host/       # Chiamate IPC verso il backend Rust
 ├── esempi/             # Plugin di esempio (es. ping-wasm, ciclo-wasm)
 ├── tools/              # Strumenti di verifica del contratto (es. varco-wasm)
+├── tests/              # Test di integrazione e fixture di prova (es. sample-vault)
 ├── docs/               # Tutta la documentazione del progetto
 └── .github/            # Script di automazione e workflow per la CI
 ```
@@ -32,10 +33,14 @@ Fub/
 - **Vuoi cambiare l'aspetto visivo o l'editor?** → [`frontend/`](../../frontend)
 - **Vuoi capire come vengono salvati i file?** → [`crates/fub-kernel/`](../../crates/fub-kernel)
 - **Vuoi creare una nuova interfaccia o un nuovo tipo di documento?** → [`crates/fub-abi/`](../../crates/fub-abi)
-- **Vuoi vedere come funziona un plugin WASM?** → [`esempi/ping-wasm/`](../../esempi/ping-wasm)
+- **Vuoi vedere o sviluppare un plugin WASM?** → [`docs/04-plugin/`](../04-plugin/01-nativo-vs-wasm.md) e [`esempi/ping-wasm/`](../../esempi/ping-wasm)
+- **Vuoi conoscere la struttura dei file e di `.fub/` su disco?** → [`docs/05-disco/`](../05-disco/01-note-utente.md)
+- **Vuoi consultare l'archivio decisionale (ADR) o la roadmap?** → [`docs/archivio/`](../archivio/decisions/README.md)
+- **Vuoi contribuire al codice e conoscere le regole di qualità?** → [`docs/CONTRIBUTING.md`](../CONTRIBUTING.md)
 
 ---
 
 ## Se vuoi il dettaglio
 
-- Guarda le schede dettagliate dei singoli moduli in [`docs/02-componenti/`](../02-componenti).
+- Guarda le schede dettagliate dei singoli moduli in [`docs/02-componenti/`](../02-componenti/01-panoramica.md).
+- Approfondisci i concetti di base in [`docs/01-concetti/`](../01-concetti/01-il-vault.md).

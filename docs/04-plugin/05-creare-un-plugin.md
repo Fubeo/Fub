@@ -44,22 +44,34 @@ opt-level = "s"
 
 ---
 
-## 3. Scrivere il codice del plugin (`src/lib.rs`)
+## 3. Definire il world WIT del plugin (`wit/mio-plugin.wit`)
 
-Nel file `src/lib.rs`, usa la macro `wit_bindgen::generate!` per generare le strutture a partire dai file WIT di Fub, e implementa il trait `Guest`:
+Invece di esportare `fub:abi/plugin-world` (che costringerebbe ad implementare tutte le 11 interfacce del contratto), ogni plugin dichiara un proprio `world` locale contenente solo le interfacce esportate e importate effettivamente:
+
+```wit
+package mio-namespace:mio-plugin@0.1.0;
+
+world mio-plugin {
+    export fub:abi/plugin@0.1.1;
+}
+```
+
+---
+
+## 4. Scrivere il codice del plugin (`src/lib.rs`)
+
+Nel file `src/lib.rs`, usa la macro `wit_bindgen::generate!` per generare i binding a partire dai file WIT, e implementa il trait `Guest`:
 
 ```rust
-// Collega le definizioni di interfaccia WIT di Fub
+// Genera i tipi per il world definito nel plugin
 wit_bindgen::generate!({
     path: ["percorso/verso/fub-abi/wit/fub", "wit"],
-    world: "fub:abi/plugin-world",
+    world: "mio-plugin",
     generate_all,
 });
 
 use exports::fub::abi::plugin::{Guest, PluginManifest, PluginPermissions};
-use exports::fub::abi::command::{CommandSpec, CommandScope, CommandReach, CommandOutcome};
 use fub::abi::errors::PluginError;
-use fub::abi::text::Text;
 
 struct MioPlugin;
 
@@ -98,7 +110,7 @@ export!(MioPlugin);
 
 ---
 
-## 4. Compilare il file `.wasm`
+## 5. Compilare il file `.wasm`
 
 Esegui la compilazione specificando il target WebAssembly Component Model:
 
@@ -111,7 +123,7 @@ Il file generato si troverà in:
 
 ---
 
-## 5. Installare e provare il plugin
+## 6. Installare e provare il plugin
 
 1. Apri la cartella del tuo vault in Fub.
 2. Posiziona il file `.wasm` compilato dentro `.fub/plugins/mio_plugin.wasm`.
@@ -121,5 +133,6 @@ Il file generato si troverà in:
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/04-plugin/04-esempio-ping.md`](04-esempio-ping.md) per l'analisi del codice di riferimento di `ping-wasm`.
+- Guarda [`docs/04-plugin/04-esempio-ping.md`](./04-esempio-ping.md) per l'analisi del codice di riferimento di `ping-wasm`.
 - Guarda [`docs/06-contratto/03-il-contratto-wit.md`](../06-contratto/03-il-contratto-wit.md) per tutte le interfacce disponibili nel file `abi.wit`.
+

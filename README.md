@@ -47,7 +47,7 @@ distingue un provider nativo da uno WASM.
 **Invarianti chiave (verificate in CI/test):** `fub-kernel` e `fub-abi` non
 dipendono da `comrak`, `tauri` o `wasmtime`; `fub-host` non dipende da
 `tauri`, perché chi monta deve poter essere preso da una CLI, da un'API locale o
-da un e2e headless senza portarsi dietro un webview.
+da un e2e headless senza portarsi dietro una webview.
 
 ## Documentazione
 
@@ -60,7 +60,7 @@ Tutta in **[`docs/`](docs/)**, e si entra da
 
 ## Cosa c'è già
 
-Milestone 1 è chiusa dal 24/07/2026 e M2 è quasi finita:
+Milestone 1, 2, 3 e 4 sono completate; Milestone 5 (runtime WASM) è in corso:
 
 - Vault compatibile Obsidian (`.md` + frontmatter YAML, `[[wikilink]]`, `#tag`,
   callout, embed `![[...]]`).
@@ -70,10 +70,12 @@ Milestone 1 è chiusa dal 24/07/2026 e M2 è quasi finita:
   (nome / alias / path, shortest-path fra omonimi), backlink, event bus,
   file watcher debounced.
 - Ricerca full-text incrementale su tantivy, CRUD con cestino e versioning,
-  organizzazione del vault, otto feature ufficiali montate come provider.
+  organizzazione del vault, feature ufficiali montate come provider.
 - Frontend: file explorer, editor CodeMirror 6, anteprima live, navigazione
   `[[wikilink]]`, graph view, e i pannelli resi via il protocollo di **UI
   dichiarativa**.
+- Contratto WIT congelato (`fub:abi@0.1.1`), conformità dei trait e runtime
+  WASM (`fub-wasm-host`) basato su Wasmtime.
 
 Lo stato preciso — cosa è aperto, con che priorità — sta in
 [docs/archivio/todo.md](docs/archivio/todo.md), che è l'unico posto dove si aggiorna.
@@ -106,19 +108,8 @@ cargo clippy --workspace --all-targets
 
 ## Roadmap
 
-- **M2** — ricerca full-text (tantivy), graph view, outline, tag panel, "crea
-  nota" per i link non risolti. La ricerca è **built-in e di classe
-  *omnisearch*** ([decisione 0025](docs/archivio/decisions/0025-la-ricerca-predefinita.md)).
-  Ciò che le manca — refusi perdonati, prefisso mentre si digita, ricerca dentro
-  la nota aperta — sta nella
-  [seduta 21](docs/archivio/roadmap/21-la-ricerca-predefinita.md), con tre voci di
-  **firma** che scadono col freeze di M4.
-- **M3** — live preview *in-editor* alla Obsidian (decorazioni CodeMirror sugli
-  `Span` del modello), command palette, settings via form dichiarativi.
-- **M4** — congelamento della superficie dei trait + contratto WIT (`wit/`),
-  primo "plugin" nativo che passa per il path `Plugin`/`HostApi`.
-- **M5** — runtime WASM (wasmtime, component model): plugin di terzi in
-  `wasm32-wasip2` che implementano gli stessi trait via proxy.
+- **M1–M4** — completate (vault Obsidian, ricerca omnisearch su tantivy, graph view, live preview in-editor, freeze del contratto WIT `fub:abi@0.1.1`).
+- **M5** — runtime WASM (`fub-wasm-host`, wasmtime, component model): plugin di terzi in `wasm32-wasip2` che implementano gli stessi trait via proxy.
 - **Futuro** — autocompletamento AI come plugin core con backend locale + cloud
   intercambiabili.
 

@@ -10,7 +10,7 @@ Il modulo di versionamento (situato in [`crates/fub-features/src/versioning.rs`]
 
 ```mermaid
 flowchart LR
-    Salva["📝 Salvataggio nota"] --> Evento["📢 Evento: DocumentChanged / DocumentSaved"]
+    Salva["📝 Salvataggio nota"] --> Evento["📢 Evento: DocumentChanged"]
     Evento --> Versioning["🧩 Plugin Versioning (fub.versioning)"]
     Versioning --> Snapshot["💾 Scrittura snapshot (.fub/data/plugins/fub.versioning/)"]
 ```

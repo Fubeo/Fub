@@ -21,7 +21,7 @@ Il suo compito è triplice:
 
 ## File chiave del modulo
 
-- [`crates/fub-format-markdown/src/lib.rs`](../../crates/fub-format-markdown/src/lib.rs): esporta il `MarkdownFormatProvider`.
+- [`crates/fub-format-markdown/src/lib.rs`](../../crates/fub-format-markdown/src/lib.rs): esporta il `MarkdownProvider`.
 - [`crates/fub-format-markdown/src/parse.rs`](../../crates/fub-format-markdown/src/parse.rs): converte i nodi dell'albero di comrak nei nodi del modello Fub (`Block` e `Inline`).
 - [`crates/fub-format-markdown/src/render.rs`](../../crates/fub-format-markdown/src/render.rs): genera l'HTML da visualizzare nell'anteprima live.
 - [`crates/fub-format-markdown/src/serialize.rs`](../../crates/fub-format-markdown/src/serialize.rs): riscrittura del modello in testo Markdown.

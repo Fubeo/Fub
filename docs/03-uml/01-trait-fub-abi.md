@@ -11,47 +11,50 @@ classDiagram
     class Plugin {
         +manifest() PluginManifest
         +activate(host) Result
-        +deactivate() Result
-        +on_job(job_id, host)
+        +deactivate(host) Result
+        +run_job(job, payload, host) Result
     }
 
     class FormatProvider {
-        +parse(source) DocumentModel
-        +render(model) String
-        +serialize(model) String
+        +descriptor() FormatDescriptor
+        +capabilities() FormatCapabilities
+        +parse(source, ctx) Result
+        +render_html(model, opts) Result
+        +serialize(model) Result
     }
 
     class ViewProvider {
-        +surface() ViewSurface
-        +render(context, host) UiNode
-        +on_action(action, host) Result
+        +views() Vec~ViewSpec~
+        +interests(instance) ViewInterests
+        +render_view(instance, read_api) Result
+        +on_action(instance, action, host) Result
     }
 
     class IndexProvider {
-        +handles(query) bool
-        +query(query, host) QueryResult
-        +reindex_all(host)
+        +routes() Vec~QueryRoute~
+        +query(query) Result
+        +on_documents_indexed(docs) Vec~IndexLoss~
     }
 
     class CommandProvider {
-        +commands() Vec~CommandDeclaration~
-        +execute(command_id, args, host) Result
+        +commands() Vec~CommandSpec~
+        +invoke(command, args, host) Result
     }
 
     class EventHandler {
-        +on_event(event, host)
+        +subscribed() EventMask
+        +handle(notice, host) Result
     }
 
     class HostApi {
         +read_document(doc_id)
-        +write_document(doc_id, text)
+        +write_document(doc_id, text, base)
         +query_index(query)
-        +emit_event(event)
-        +get_setting(key)
+        +emit(event)
+        +setting(key)
     }
 
     Plugin ..> HostApi : usa
-    FormatProvider ..> HostApi : usa
     ViewProvider ..> HostApi : usa
     IndexProvider ..> HostApi : usa
     CommandProvider ..> HostApi : usa
@@ -63,27 +66,31 @@ classDiagram
 ## I trait spiegati uno per uno
 
 ### 1. `Plugin`
-Rappresenta il ciclo di vita di un modulo. Dice al sistema chi è il plugin (`manifest`), cosa fare quando viene avviato (`activate`) o spento (`deactivate`), e come gestire operazioni in background (`on_job`).
+Rappresenta il ciclo di vita di un modulo. Dice al sistema chi è il plugin (`manifest`), cosa fare quando viene avviato (`activate`) o spento (`deactivate`), e come gestire operazioni asincrone in background (`run_job`).
 - File sorgente: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
 ### 2. `FormatProvider`
-Insegna a Fub a comprendere un formato di file (per esempio il Markdown). Trasforma il testo grezzo in una struttura ad albero (`DocumentModel`), converte il modello in HTML per l'anteprima (`render`), e lo risalva su disco (`serialize`).
+Insegna a Fub a comprendere un formato di file (per esempio il Markdown). Trasforma il testo grezzo in una struttura ad albero (`DocumentModel`), converte il modello in HTML per l'anteprima (`render_html`), e lo risalva su disco (`serialize`). È una funzione pura su CPU e non compie I/O diretto (non riceve né dipende da `HostApi`).
 - File sorgente: [`crates/fub-abi/src/format.rs`](../../crates/fub-abi/src/format.rs)
 
 ### 3. `ViewProvider`
-Disegna un pannello dell'interfaccia utente (come l'albero dei file, il grafico dei link o la ricerca) restituendo un albero di componenti grafici (`UiNode`), senza dover scrivere codice HTML direttamente.
+Disegna un pannello dell'interfaccia utente (come l'albero dei file, il grafico dei link o la ricerca) tramite `render_view` (operazione pura in sola lettura via `ReadApi`), restituendo un albero di componenti grafici dichiarativi (`UiNode`) senza dover scrivere codice HTML direttamente. Gestisce le interazioni dell'utente tramite `on_action`.
 - File sorgente: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
 ### 4. `IndexProvider`
-Risponde a interrogazioni sui dati del vault (per esempio "trova tutte le note con il tag `#scuola`" o "cerca la parola *algoritmo*").
+Risponde a interrogazioni sui dati del vault (per esempio "trova tutte le note con il tag `#scuola`" o "cerca la parola *algoritmo*") dichiarando le proprie rotte (`routes`) ed eseguendo le query.
 - File sorgente: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
 ### 5. `CommandProvider`
-Aggiunge comandi eseguibili dall'utente (per esempio tramite la tastiera o un menu dei comandi).
+Aggiunge comandi eseguibili dall'utente (`commands`) ed eseguiti tramite `invoke` (per esempio tramite la tastiera o un menu dei comandi).
 - File sorgente: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
-### 6. `HostApi`
-È il punto di accesso unico attraverso cui tutti i provider interagiscono con il resto del programma: leggere un file, fare una ricerca, registrare un log o inviare una notifica.
+### 6. `EventHandler`
+Riceve e reagisce alle notifiche del bus eventi del sistema (`handle`) per le categorie sottoscritte (`subscribed`).
+- File sorgente: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
+
+### 7. `HostApi`
+È il punto di accesso unico attraverso cui i provider interagiscono con il resto del programma: leggere un file, fare una ricerca, registrare un log o inviare una notifica.
 
 ---
 

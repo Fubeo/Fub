@@ -22,7 +22,8 @@ Questo modulo **non compie alcuna operazione di input/output** (non legge file s
 
 ## File chiave del modulo
 
-- [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs): contiene le definizioni dei trait principali (`Plugin`, `FormatProvider`, `ViewProvider`, `IndexProvider`, `HostApi`).
+- [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs): contiene le definizioni dei trait principali (`Plugin`, `ViewProvider`, `IndexProvider`, `CommandProvider`, `EventHandler`, `HostApi`).
+- [`crates/fub-abi/src/format.rs`](../../crates/fub-abi/src/format.rs): definisce il trait `FormatProvider` per l'analisi e il rendering dei formati documento.
 - [`crates/fub-abi/src/model.rs`](../../crates/fub-abi/src/model.rs): il modello unificato del documento ad albero.
 - [`crates/fub-abi/src/event.rs`](../../crates/fub-abi/src/event.rs): tipi di evento emessi dal sistema.
 - [`crates/fub-abi/src/schema.rs`](../../crates/fub-abi/src/schema.rs): definizione del tipo `SchemaVersion` per i formati persistenti su disco.

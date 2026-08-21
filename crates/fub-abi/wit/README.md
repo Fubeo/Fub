@@ -19,4 +19,5 @@ own crate to read a file that was theirs anyway.
 - why this tree exists, what it governs, and how to update it →
   [docs/06-contratto/03-il-contratto-wit.md](../../../docs/06-contratto/03-il-contratto-wit.md);
 - the frozen baseline and the additivity promise →
-  [docs/06-contratto/03-il-contratto-wit.md](../../../docs/06-contratto/03-il-contratto-wit.md).
+  [docs/06-contratto/03-il-contratto-wit.md#la-regola-del-freeze-crescere-solo-per-aggiunta](../../../docs/06-contratto/03-il-contratto-wit.md#la-regola-del-freeze-crescere-solo-per-aggiunta).
+

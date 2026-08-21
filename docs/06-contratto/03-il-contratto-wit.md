@@ -22,10 +22,10 @@ Ecco come una funzione del contratto appare nel file `abi.wit`:
 // Estratto da crates/fub-abi/wit/fub/abi.wit
 interface host-vault-read {
     /// Legge il contenuto di una nota nel vault
-    read-document: func(path: string) -> result<string, plugin-error>;
+    read-document: func(id: doc-id) -> result<string, plugin-error>;
 
     /// Restituisce la versione di revisione del documento
-    document-revision: func(path: string) -> result<u64, plugin-error>;
+    document-revision: func(id: doc-id) -> result<revision, plugin-error>;
 }
 ```
 
