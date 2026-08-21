@@ -308,6 +308,7 @@ function update(
       else el.removeAttribute("aria-selected");
       if (next.children.length > 0) el.setAttribute("aria-expanded", String(next.expanded));
       else el.removeAttribute("aria-expanded");
+      childrenContainer(el).hidden = !next.expanded;
       children(childrenContainer(el), next.children, onAction);
       return true;
     }
@@ -335,9 +336,19 @@ function update(
     }
     case "table": {
       if (prev.node !== "table") return false;
+      const sameColumns = prev.columns.length === next.columns.length;
+      if (sameColumns) {
+        const headers = el.querySelectorAll<HTMLTableCellElement>(":scope > thead > tr > th");
+        next.columns.forEach((col, i) => {
+          const th = headers[i];
+          if (!th) return;
+          th.textContent = col.title;
+          th.style.textAlign = col.align === "start" ? "left" : col.align === "end" ? "right" : "center";
+        });
+      }
       const body = childrenContainer(el);
       children(body, next.rows, onAction);
-      return prev.columns.length === next.columns.length;
+      return sameColumns;
     }
     case "row":
       if (prev.node !== "row") return false;
@@ -1199,6 +1210,7 @@ function value(el: HTMLElement, read: () => UiValue): void {
 interface Link {
   action: ActionRef;
   onAction: Port;
+  when?: (e: Event) => boolean;
 }
 
 /// L'azione in vigore per ogni evento di ogni elemento. `null` = l'elemento ha
@@ -1208,9 +1220,9 @@ const links = new WeakMap<HTMLElement, Map<string, Link | null>>();
 /// **L'unica porta da cui si registra un ascoltatore d'azione.**
 ///
 /// Chiamarla due volte sullo stesso elemento e sullo stesso evento non
-/// accumula: la seconda aggiorna l'azione e basta. È ciò che rende sicuro
-/// richiamarla dal riconciliatore con la stessa disinvoltura con cui la chiama
-/// il disegno.
+/// accumula: la seconda aggiorna l'azione e il predicato. È ciò che rende
+/// sicuro richiamarla dal riconciliatore con la stessa disinvoltura con cui la
+/// chiama il disegno.
 function listen(
   el: HTMLElement,
   event: string,
@@ -1224,11 +1236,12 @@ function listen(
     links.set(el, bindings);
   }
   const registered = bindings.has(event);
-  bindings.set(event, action ? { action, onAction } : null);
+  bindings.set(event, action ? { action, onAction, when } : null);
   if (registered) return;
   el.addEventListener(event, (e) => {
-    if (!links.get(el)?.get(event)) return;
-    if (when && !when(e)) return;
+    const link = links.get(el)?.get(event);
+    if (!link) return;
+    if (link.when && !link.when(e)) return;
     e.preventDefault();
     void dispatchAction(el, event);
   });
@@ -1333,10 +1346,10 @@ function rootOf(el: HTMLElement): HTMLElement | null {
 /// fuoco di chi stava navigando le schede.
 ///
 /// I due pezzi della riparazione non si separano. La posizione della linguetta
-/// vive quanto il bottone e si può catturare; **l'azione no**, e passa da
-/// `ascolta` per la ragione della 0118: una chiusura che cattura `tab`
-/// manderebbe l'azione del giro in cui è nata, e finché i bottoni si
-/// ricostruivano quella chiusura era fresca per caso.
+/// vive nel `data-index` del bottone e si aggiorna quando il bottone viene
+/// riusato; **l'azione no**, e passa da `ascolta` per la ragione della 0118:
+/// una chiusura che cattura `tab` manderebbe l'azione del giro in cui è nata, e
+/// finché i bottoni si ricostruivano quella chiusura era fresca per caso.
 function tabHeaders(el: HTMLElement, tabs: UiNode[], onAction: Port): void {
   const bar = el.querySelector<HTMLElement>(":scope > .ui-tab-bar");
   if (!bar) return;
@@ -1354,6 +1367,7 @@ function tabHeaders(el: HTMLElement, tabs: UiNode[], onAction: Port): void {
     if (tab.node !== "tab") return;
     const button = existing[i] ?? newItemTab(bar, el, i);
     usedElements.add(button);
+    button.dataset.index = String(i);
     button.textContent = tab.label;
     const panel = panels[i];
     if (panel) {
@@ -1371,13 +1385,14 @@ function tabHeaders(el: HTMLElement, tabs: UiNode[], onAction: Port): void {
   markActiveTab(el);
 }
 
-/// Una linguetta nuova, con l'unica cosa che è sua per sempre: **quale scheda
-/// mostra**, cioè la sua posizione, che non cambia per la vita del bottone.
+/// Una linguetta nuova, con l'indice iniziale della scheda che mostra; il
+/// `data-index` viene poi aggiornato se il bottone viene riusato.
 function newItemTab(bar: HTMLElement, group: HTMLElement, index: number): HTMLElement {
   const button = document.createElement("button");
   button.className = "ui-tab-button";
   button.setAttribute("role", "tab");
-  button.addEventListener("click", () => showTab(group, index));
+  button.dataset.index = String(index);
+  button.addEventListener("click", () => showTab(group, Number(button.dataset.index ?? "0")));
   bar.appendChild(button);
   return button;
 }

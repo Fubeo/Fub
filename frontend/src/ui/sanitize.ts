@@ -264,7 +264,12 @@ export function external(href: string): boolean {
 }
 
 function hasScheme(v: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(v);
+  const compact = v.replace(/[\s\x00-\x1F]/g, "");
+  const colon = compact.indexOf(":");
+  if (colon < 1) return false;
+  const name = compact.slice(0, colon);
+  if (name.includes("/") || name.includes(".")) return false;
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*$/.test(name);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +325,10 @@ function sanitizeNode(node: Node): Node | null {
   }
   for (const [name, value] of Object.entries(REQUIRED_ATTRS[tag] ?? {})) {
     newItem.setAttribute(name, value);
+  }
+  if (tag === "input") {
+    newItem.setAttribute("type", "checkbox");
+    newItem.setAttribute("disabled", "");
   }
   if (tag === "a" && external(newItem.getAttribute("href") ?? "")) {
     newItem.setAttribute("rel", "noopener noreferrer");
