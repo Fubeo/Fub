@@ -20,14 +20,14 @@
 //! tutti i documenti: quel costo è O(N) per definizione — è il prezzo onesto di
 //! un indice, e nasconderebbe qualunque altra cosa in un conto di allocazioni.
 //! Dentro la passata l'indice si scrive **una volta sola**
-//! (`la__before_fotografia__does_not_riscrive_l_indice.rs`), e ciò che resta per ogni
+//! (`the_before_snapshot_writes_the_index_a_time_single`), e ciò che resta per ogni
 //! nota è esattamente il piano. Ma il piano è lo stesso codice —
 //! `Inner::apply` — su cui passa ogni salvataggio a vault aperto: la passata
 //! è il posto dove lo si vede da solo, non un caso a parte.
 //!
 //! # Chi è stato rosso e chi no
 //!
-//! **Rosso**: `una_passata__does_not_paga_il_vault_a_ogni_fotografia`. Con il
+//! **Rosso**: `a_pass_does_not_pays_the_vault_a_every_snapshot`. Con il
 //! `docs.clone()` di prima, raddoppiare le note quadruplicava il conto —
 //! 68 210 allocazioni su 200 note contro 262 978 su 400, cioè **3,86x** per il
 //! doppio del lavoro. Con il piano che nomina le chiavi toccate sono 5 407 e
@@ -125,7 +125,7 @@ fn pass_on(count: usize) -> u64 {
 /// termine che questo banco cerca è l'unico che ha un'altra classe, e fra 2,0 e
 /// 3,7 non c'è niente da discutere.
 #[test]
-fn a_pass__does_not_pays_the_vault_a_every_snapshot() {
+fn a_pass_does_not_pays_the_vault_a_every_snapshot() {
     let few = pass_on(200);
     let doubles = pass_on(400);
 
@@ -147,7 +147,7 @@ fn a_pass__does_not_pays_the_vault_a_every_snapshot() {
 /// se ne accorga fino alla prossima apertura, dove uno store riaperto da un
 /// indice mutilato avrebbe perso ogni altra storia.
 #[test]
-fn a_save_writes__a_index_that_names_all() {
+fn a_save_writes_a_index_that_names_all() {
     let mut host = vault(50);
     let store = VersionStore::open(&mut host).expect("apertura");
     let handler = VersioningHandler::new(store.clone());
@@ -201,7 +201,7 @@ fn a_save_writes__a_index_that_names_all() {
 /// deve restare una versione che sul disco nessuno nomina — o il prossimo
 /// salvataggio pianificherebbe da una base che non esiste.
 #[test]
-fn a_index_rejected__does_not_leaves_in_memory__a_version_that__does_not_exists() {
+fn a_index_rejected_does_not_leaves_in_memory_a_version_that_does_not_exists() {
     let mut host = vault(20);
     let store = VersionStore::open(&mut host).expect("apertura");
     let handler = VersioningHandler::new(store.clone());

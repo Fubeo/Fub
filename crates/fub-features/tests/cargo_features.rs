@@ -4,7 +4,7 @@
 //! feature omonima, con tantivy dietro `search`. Il guadagno è misurabile — il
 //! grafo delle dipendenze di questo crate passa da 120 crate a 26 se si compila
 //! il solo pannello struttura — ma il rischio che introduce è di forma: due
-//! elenchi di cosa esiste, uno nel `Cargo.toml` e uno in `src/inventario.rs`,
+//! elenchi di cosa esiste, uno nel `Cargo.toml` e uno in `src/inventory.rs`,
 //! che nessuno confronta.
 //!
 //! # Cosa questo presidio **non** guarda
@@ -124,7 +124,7 @@ fn every_row_of_the_inventory_has_the_its_cargo_feature() {
 /// senza dirlo a nessuno. Spegnere resta una scelta di chi compila, riga di
 /// comando alla mano.
 #[test]
-fn every_cargo_feature__and_on__of_default() {
+fn every_cargo_feature_and_on_of_default() {
     let (declared, default) = declared();
     assert_eq!(
         declared, default,
@@ -154,7 +154,7 @@ fn every_cargo_feature__and_on__of_default() {
     feature = "commands",
     feature = "blocks"
 ))]
-fn with__all_the_feature_the_two_lists_coincide() {
+fn with_all_the_feature_the_two_lists_coincide() {
     let (declared, _) = declared();
     assert_eq!(
         declared,

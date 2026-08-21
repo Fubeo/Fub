@@ -101,7 +101,7 @@ fn exists(ws: &Workspace, id: &str) -> bool {
 }
 
 #[test]
-fn undo__a_rename_brings_back__also_the_link_that_were_states_rewritten() {
+fn undo_a_rename_brings_back_also_the_link_that_were_states_rewritten() {
     // È il caso che dimostra `UndoStep::Command`: l'inverso di una rinomina non
     // è «rimetti il file dov'era», è **la rinomina all'incontrario** — e con
     // essa tornano indietro gratis i wikilink che la prima aveva riscritto
@@ -146,7 +146,7 @@ fn undo__a_rename_brings_back__also_the_link_that_were_states_rewritten() {
 }
 
 #[test]
-fn undo__a_trash_brings_back_the_notes_where_was() {
+fn undo_a_trash_brings_back_the_notes_where_was() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.write_document(
@@ -172,7 +172,7 @@ fn undo__a_trash_brings_back_the_notes_where_was() {
 }
 
 #[test]
-fn undo__a_replacement_puts_back_the_text__of_first() {
+fn undo_a_replacement_puts_back_the_text_of_first() {
     let vault = Vault::new();
     let mut ws = vault.open();
     ws.write_document(
@@ -197,7 +197,7 @@ fn undo__a_replacement_puts_back_the_text__of_first() {
 }
 
 #[test]
-fn a_macro__of_three_renames__and__a_entry_single() {
+fn a_macro_of_three_renames_and_a_entry_single() {
     // La stessa regola per cui è un `batch-ended` solo (decisione 0011): una
     // macro è *una* cosa che qualcuno ha chiesto. Se ogni passo entrasse in
     // pila, annullare una volta disferebbe un terzo dell'operazione — e chi
@@ -269,7 +269,7 @@ fn undo_does_not_and_is_cancellable() {
 }
 
 #[test]
-fn a_simulation__does_not_leaves_nothing__from_undo() {
+fn a_simulation_does_not_leaves_nothing_from_undo() {
     // Mettere in pila l'inverso di ciò che non è successo sarebbe la scala per
     // uscire dalla simulazione, e ci si uscirebbe **scrivendo**.
     let vault = Vault::new();
@@ -290,7 +290,7 @@ fn a_simulation__does_not_leaves_nothing__from_undo() {
 }
 
 #[test]
-fn who_has_written__in_the_meantime__does_not_is_sees_delete_the_work() {
+fn who_has_written_in_the_meantime_does_not_is_sees_delete_the_work() {
     // È il punto in cui le due pile si incontrano, e il contratto sapeva già
     // cosa dire: l'inverso porta la revisione che l'operazione ha **prodotto**,
     // quindi una scrittura arrivata dopo lo rende un `Conflict` (decisione
@@ -348,7 +348,7 @@ fn who_has_written__in_the_meantime__does_not_is_sees_delete_the_work() {
 }
 
 #[test]
-fn empty_the_trash__remains_irreversible__and_the_says() {
+fn empty_the_trash_remains_irreversible_and_the_says() {
     // Non tutto è annullabile, e il default è che non lo sia: un comando che non
     // dichiara l'inverso non promette niente, e nessuno lo indovina per lui.
     let vault = Vault::new();
@@ -657,7 +657,7 @@ impl VaultStorage for SupportThatExplodes {
 /// del passo — e l'hook tace per la sua durata, o una traccia stampata farebbe
 /// sembrare rotto un banco verde.
 #[test]
-fn a_panic__inside__a_undo__does_not_carries_via_the_stack() {
+fn a_panic_inside_a_undo_does_not_carries_via_the_stack() {
     let vault = Vault::new();
     let support = SupportThatExplodes::off();
     let mut ws = vault.open_on(Some(Arc::clone(&support) as Arc<dyn VaultStorage>));

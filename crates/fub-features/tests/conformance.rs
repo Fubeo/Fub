@@ -56,6 +56,7 @@
 //! l'invariante resta vero dove è provato, e dove non lo è si legge invece di
 //! scoprirsi.
 
+use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{ViewProvider, ViewSurface};
 use fub_sdk::testing::{conformance, MemoryHost};
 
@@ -196,11 +197,12 @@ fn the_dogfooding_declares_fin_where_arrives() {
 }
 
 #[test]
-fn the_view_official_is_draw__also__with__a_document_open() {
+fn the_view_official_is_draw_also_with_a_document_open() {
     // A host vuoto ogni view cade nel proprio segnaposto, che è il ramo più
     // corto: la conformità va provata anche sul ramo che disegna qualcosa.
     let host = MemoryHost::new()
         .with_document("nota.md", "# Titolo\n\nun corpo con #tag e [[Altra]].\n")
+        .with_model("nota.md", DocumentModel::empty(DocId::new("nota.md")))
         .with_backlink("nota.md", &["Altra.md"])
         .with_tags(&[("tag", 1)]);
     host.set_active(Some("nota.md"));

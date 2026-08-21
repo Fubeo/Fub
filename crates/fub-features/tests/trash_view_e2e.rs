@@ -108,19 +108,24 @@ fn said(tree: &UiNode) -> String {
 }
 
 /// L'azione del primo bottone con questa etichetta, o `None`.
+///
+/// Il parametro è `wanted` e non `label`: dentro il `match` sul `Button`
+/// quella parola è il campo del nodo, e se le due condividono il nome il
+/// confronto `label == label` è sempre vero e si prende il primo bottone
+/// dell'albero qualunque etichetta si chieda.
 fn button(tree: &UiNode, label: &str) -> Option<ActionRef> {
-    fn walk(node: &UiNode, label: &str, out: &mut Option<ActionRef>) {
+    fn walk(node: &UiNode, wanted: &str, out: &mut Option<ActionRef>) {
         if out.is_some() {
             return;
         }
         if let UiKind::Button { label, action, .. } = &node.kind {
-            if label == label {
+            if label == wanted {
                 *out = Some(action.clone());
                 return;
             }
         }
         for child in node.children() {
-            walk(child, label, out);
+            walk(child, wanted, out);
         }
     }
     let mut out = None;
@@ -212,7 +217,9 @@ fn a_new_occupied_path_becomes_a_question_in_the_tree_not_a_window() {
     );
     // E il nome proposto è nel campo, modificabile: proporre non è decidere.
     let proposed = field(&root).expect("il campo con il nome proposto");
-    assert_eq!(proposed, "Uno.md", "il nome proposto è libero");
+    // `free_name` propone il primo candidato libero: con «Uno.md» occupato è
+    // «Uno 1.md», e il test allinea la sua attesa a quella produzione.
+    assert_eq!(proposed, "Uno 1.md", "il nome proposto è libero");
     assert!(vault.root.join("Uno.md").exists(), "niente è stato scritto");
 
     // Si risponde, e la nota torna col nome scelto.

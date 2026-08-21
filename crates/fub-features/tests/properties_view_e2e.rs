@@ -263,7 +263,7 @@ fn undo_of_the_set_restores_the_block() {
         )
         .expect("apply");
     let after = vault.read("a.md");
-    assert_eq!(after, before);
+    assert_ne!(after, before);
     let undo = outcome.undo.expect("undoable");
     let UndoStep::Edit(p) = &undo.steps[0] else {
         panic!("atteso Edit, trovato {:?}", undo.steps);

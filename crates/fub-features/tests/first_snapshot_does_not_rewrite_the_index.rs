@@ -16,7 +16,7 @@
 //!
 //! # Chi è stato rosso e chi no
 //!
-//! **Rosso**: `la__before_fotografia_scrive_l_indice__a_volta_sola`. Con la forma
+//! **Rosso**: `the_before_snapshot_writes_the_index_a_time_single`. Con la forma
 //! precedente — l'indice scritto dentro ogni `Inner::apply` — falliva con
 //! `volte = 200` invece di `1`, e i byte passati per `versions.json` erano
 //! 2 687 519 invece di 26 711 su un vault di 200 note.
@@ -54,7 +54,7 @@ fn large_vault() -> MemoryHost {
 }
 
 #[test]
-fn the__before_snapshot_writes_the_index__a_time_single() {
+fn the_before_snapshot_writes_the_index_a_time_single() {
     let mut host = large_vault();
     let store = VersionStore::open(&mut host).expect("apertura");
     let handler = VersioningHandler::new(store.clone());

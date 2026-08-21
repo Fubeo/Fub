@@ -60,13 +60,14 @@ use std::collections::BTreeSet;
 ///
 /// - `lib.rs` è la radice: i `pub use` che rimontano le feature sono il suo
 ///   mestiere.
-/// - `inventario.rs` è l'aggregatore. Importa tutti e otto i moduli **per
-///   definizione**: è l'elenco di cosa esiste
+/// - `inventory.rs` è la **tavola di montaggio**, non una feature che parla a
+///   un'altra: è l'elenco di cosa esiste
 ///   ([0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md)), e un
-///   elenco che non nomina ciò che elenca non è un elenco. È l'unico file che
-///   può, ed è anche il solo posto da cui uno split lo farebbe comunque —
-///   diventerebbe il crate che dipende da tutti gli altri.
-const ROOT: &[&str] = &["lib.rs", "inventario.rs"];
+///   elenco che non nomina ciò che elenca non è un elenco. Importa tutti gli
+///   altri moduli **per definizione** — è l'unico file che può, ed è anche il
+///   solo posto da cui uno split lo farebbe comunque: diventerebbe il crate
+///   che dipende da tutti gli altri.
+const ROOT: &[&str] = &["lib.rs", "inventory.rs"];
 
 /// Toglie da un sorgente Rust tutto ciò che non è codice: commenti di riga
 /// (compresi `///` e `//!`), commenti a blocco annidati, e il contenuto delle

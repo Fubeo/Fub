@@ -253,14 +253,14 @@ struct GanttRule;
 impl SyntaxRule for GanttRule {
     fn spec(&self) -> SyntaxRuleSpec {
         SyntaxRuleSpec {
-            id: "terzi:ganttino".into(),
+            id: "com.example.third:ganttino".into(),
             format: "markdown".into(),
             trigger: SyntaxTrigger::Fence {
                 info: vec!["ganttino".into()],
             },
             order: 0,
             option: None,
-            produces: vec!["terzi:gantt".into()],
+            produces: vec!["com.example.third:gantt".into()],
         }
     }
     fn apply(
@@ -269,7 +269,7 @@ impl SyntaxRule for GanttRule {
         _ctx: &ParseContext,
     ) -> Result<Option<SyntaxProduct>, FormatError> {
         Ok(Some(SyntaxProduct::Block {
-            custom_kind: "terzi:gantt".into(),
+            custom_kind: "com.example.third:gantt".into(),
             attrs: json!({ "righe": m.text.lines().count() }),
             blocks: vec![],
         }))
@@ -286,8 +286,8 @@ struct GanttRenderer {
 impl CustomRenderer for GanttRenderer {
     fn spec(&self) -> CustomRendererSpec {
         CustomRendererSpec {
-            id: "terzi:ganttino".into(),
-            kinds: vec!["terzi:gantt".into()],
+            id: "com.example.third:ganttino".into(),
+            kinds: vec!["com.example.third:gantt".into()],
         }
     }
     fn render(
@@ -320,22 +320,22 @@ fn a_syntax_of_third_party_traverses_all_and_three_the_sides() {
     let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     // Un plugin di terzi, dichiarato come tale: il grado di fiducia sta nella
     // dichiarazione, non su ogni cosa che registra (§7.3).
-    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
         .expect("dichiarato");
 
     // Lato 1: la sintassi si innesta sul provider markdown, che non la conosce
     // e non viene toccato.
-    ws.register_syntax_rule("terzi", Box::new(GanttRule))
+    ws.register_syntax_rule("com.example.third", Box::new(GanttRule))
         .expect("innesto");
     // Lato 2: il renderer si registra per il kind che la regola produce.
-    ws.register_custom_renderer("terzi", Box::new(GanttRenderer { hostile: false }))
+    ws.register_custom_renderer("com.example.third", Box::new(GanttRenderer { hostile: false }))
         .expect("renderer");
     ws.reindex().expect("reindex");
 
     // Lato 3: arriva alla shell come albero, senza una riga nel bundle.
     let out = preview(&ws, "g.md");
     assert_eq!(out.parts.len(), 1, "html: {}", out.html);
-    assert_eq!(out.parts[0].kind, "terzi:gantt");
+    assert_eq!(out.parts[0].kind, "com.example.third:gantt");
     assert!(matches!(&out.parts[0].node.kind, UiKind::Text { content } if content == "2 righe"));
 }
 
@@ -346,11 +346,11 @@ fn from_a_renderer_not_trusted_the_content_active_not_passes() {
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
     let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
-    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
         .expect("dichiarato");
-    ws.register_syntax_rule("terzi", Box::new(GanttRule))
+    ws.register_syntax_rule("com.example.third", Box::new(GanttRule))
         .unwrap();
-    ws.register_custom_renderer("terzi", Box::new(GanttRenderer { hostile: true }))
+    ws.register_custom_renderer("com.example.third", Box::new(GanttRenderer { hostile: true }))
         .unwrap();
     ws.reindex().unwrap();
 
@@ -361,7 +361,7 @@ fn from_a_renderer_not_trusted_the_content_active_not_passes() {
     assert!(out.parts.is_empty(), "parts: {:?}", out.parts);
     assert!(!out.html.contains("script"), "html: {}", out.html);
     assert!(
-        out.html.contains("block-terzi:gantt") || out.html.contains("block-"),
+        out.html.contains("block-com.example.third:gantt") || out.html.contains("block-"),
         "html: {}",
         out.html
     );
@@ -376,14 +376,14 @@ struct ConventionRule;
 impl SyntaxRule for ConventionRule {
     fn spec(&self) -> SyntaxRuleSpec {
         SyntaxRuleSpec {
-            id: "terzi:convenzione".into(),
+            id: "com.example.third:convenzione".into(),
             format: "markdown".into(),
             trigger: SyntaxTrigger::Fence {
                 info: vec!["convenzione".into()],
             },
             order: 0,
             option: None,
-            produces: vec!["terzi:convenzione".into()],
+            produces: vec!["com.example.third:convenzione".into()],
         }
     }
     fn apply(
@@ -392,7 +392,7 @@ impl SyntaxRule for ConventionRule {
         _ctx: &ParseContext,
     ) -> Result<Option<SyntaxProduct>, FormatError> {
         Ok(Some(SyntaxProduct::Block {
-            custom_kind: "terzi:convenzione".into(),
+            custom_kind: "com.example.third:convenzione".into(),
             attrs: json!({ "source": "GIRO-DEI-BYTE", "text": "TESTO-SBAGLIATO" }),
             blocks: vec![],
         }))
@@ -402,7 +402,7 @@ impl SyntaxRule for ConventionRule {
 /// **Un `kind` di terzi degradato mostra i byte sotto la chiave che la
 /// convenzione declare — `source` — e sotto nessun'altra.**
 ///
-/// È il banco che la §25.7 dichiarava mancante: un `terzi:*` che passa dalla
+/// È il banco che la §25.7 dichiarava mancante: un `com.example.third:*` che passa dalla
 /// degradazione generica invece che dal proprio renderer. Un plugin che non
 /// registra un `CustomRenderer` (o il cui renderer torna `Fallback` o pania —
 /// `fub-kernel/src/renderer.rs` li tratta tutti e tre allo stesso modo) vede
@@ -422,13 +422,13 @@ fn a_kind_of_third_party_degraded_show_the_byte_of_the_key_convenzionale() {
     let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     // Un plugin di terzi, dichiarato come tale: il grado di fiducia sta nella
     // dichiarazione, non su ogni cosa che registra (§7.3).
-    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
         .expect("dichiarato");
-    ws.register_syntax_rule("terzi", Box::new(ConventionRule))
+    ws.register_syntax_rule("com.example.third", Box::new(ConventionRule))
         .expect("innesto");
     ws.reindex().expect("reindex");
 
-    // Il renderer non c'è: `compose` non trova nessuno per `terzi:convenzione`
+    // Il renderer non c'è: `compose` non trova nessuno per `com.example.third:convenzione`
     // e il blocco finisce nella corsa che il provider rende genericamente.
     let out = preview(&ws, "c.md");
     assert!(out.parts.is_empty(), "parts: {:?}", out.parts);
@@ -461,14 +461,14 @@ fn two_rules_on_the_same_syntax_not_is_register_in_silence() {
     impl SyntaxRule for Concurrent {
         fn spec(&self) -> SyntaxRuleSpec {
             SyntaxRuleSpec {
-                id: "terzi:mermaid".into(),
+                id: "com.example.third:mermaid".into(),
                 format: "markdown".into(),
                 trigger: SyntaxTrigger::Fence {
                     info: vec!["mermaid".into()],
                 },
                 order: 0,
                 option: None,
-                produces: vec!["terzi:mermaid".into()],
+                produces: vec!["com.example.third:mermaid".into()],
             }
         }
         fn apply(
@@ -482,10 +482,10 @@ fn two_rules_on_the_same_syntax_not_is_register_in_silence() {
     // Il concorrente è un terzo, e nomina dentro il proprio namespace: la
     // regola del §7.4 è soddisfatta, e ciò che lo shutdown è l'altro conflitto —
     // quello sul **trigger**, che è ciò che questo test vuole vedere.
-    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
         .expect("dichiarato");
     let err = ws
-        .register_syntax_rule("terzi", Box::new(Concurrent))
+        .register_syntax_rule("com.example.third", Box::new(Concurrent))
         .expect_err("la seconda rivendica `mermaid`");
     // Il valore non è nel rifiuto: è nel fatto che ci sia un `Err` da leggere.
     assert!(err.to_string().contains("fence:mermaid"), "{err}");
@@ -537,18 +537,18 @@ fn a_plugin_revoked_not_registers_nothing() {
     // Dichiararsi si può — per dire che qualcuno è revocato bisogna sapere che
     // esiste. Registrare no: una regola e un renderer sono codice che gira a
     // ogni parse e a ogni anteprima, e non passa da nessun guard.
-    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Revoked)
+    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Revoked)
         .expect("dichiararsi si può");
 
     let err = ws
-        .register_syntax_rule("terzi", Box::new(GanttRule))
+        .register_syntax_rule("com.example.third", Box::new(GanttRule))
         .expect_err("un revocato non innesta niente");
-    assert!(err.to_string().contains("revocato"), "{err}");
+    assert!(err.to_string().contains("è revocato"), "{err}");
 
     let err = ws
-        .register_custom_renderer("terzi", Box::new(GanttRenderer { hostile: false }))
+        .register_custom_renderer("com.example.third", Box::new(GanttRenderer { hostile: false }))
         .expect_err("un revocato non disegna niente");
-    assert!(err.to_string().contains("revocato"), "{err}");
+    assert!(err.to_string().contains("è revocato"), "{err}");
 
     // E il registro non è rimasto sporco: niente kind prodotto, niente parte.
     assert!(ws.undrawn_kinds().is_empty());
@@ -557,20 +557,20 @@ fn a_plugin_revoked_not_registers_nothing() {
     assert!(preview(&ws, "g.md").parts.is_empty());
 }
 
-/// Il gemello del `GanttinoRule` che declare `terzi:gantt` e prova a emettere
+/// Il gemello del `GanttinoRule` che declare `com.example.third:gantt` e prova a emettere
 /// `callout`, che è del core.
 struct GanttBuggy;
 
 impl SyntaxRule for GanttBuggy {
     fn spec(&self) -> SyntaxRuleSpec {
         SyntaxRuleSpec {
-            id: "terzi:bugiardo".into(),
+            id: "com.example.third:bugiardo".into(),
             format: "markdown".into(),
             trigger: SyntaxTrigger::Fence {
                 info: vec!["ganttino".into()],
             },
             order: 0,
-            produces: vec!["terzi:gantt".into()],
+            produces: vec!["com.example.third:gantt".into()],
             option: None,
         }
     }
@@ -594,7 +594,7 @@ fn a_third_not_is_does_pass_for_the_core() {
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
     let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
-    ws.register_plugin(PluginManifest::new("terzi", "Terzi"), Trust::Community)
+    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
         .unwrap();
 
     // Dichiarare di produrre un kind del core si shutdown alla registrazione: è la
@@ -603,7 +603,7 @@ fn a_third_not_is_does_pass_for_the_core() {
     impl SyntaxRule for DeclaresCore {
         fn spec(&self) -> SyntaxRuleSpec {
             SyntaxRuleSpec {
-                id: "terzi:declare".into(),
+                id: "com.example.third:declare".into(),
                 format: "markdown".into(),
                 trigger: SyntaxTrigger::Fence {
                     info: vec!["altro".into()],
@@ -622,13 +622,13 @@ fn a_third_not_is_does_pass_for_the_core() {
         }
     }
     let err = ws
-        .register_syntax_rule("terzi", Box::new(DeclaresCore))
-        .expect_err("`callout` non è un nome di `terzi`");
+        .register_syntax_rule("com.example.third", Box::new(DeclaresCore))
+        .expect_err("`callout` non è un nome di `com.example.third`");
     assert!(err.to_string().contains("callout"), "{err}");
 
     // E chi declare il proprio e emette quello del core viene scartato dove
     // emette: `produces` è un contratto, non una nota.
-    ws.register_syntax_rule("terzi", Box::new(GanttBuggy))
+    ws.register_syntax_rule("com.example.third", Box::new(GanttBuggy))
         .expect("dichiara solo roba sua, quindi si registra");
     ws.reindex().unwrap();
     let model = ws.read_model(&DocId::new("b.md")).expect("modello");
@@ -638,7 +638,7 @@ fn a_third_not_is_does_pass_for_the_core() {
         model.body[0]
     );
     // E il conto non si è sporcato di un kind che nessuno emetterà mai.
-    assert_eq!(ws.undrawn_kinds(), vec!["terzi:gantt".to_string()]);
+    assert_eq!(ws.undrawn_kinds(), vec!["com.example.third:gantt".to_string()]);
 }
 
 #[test]

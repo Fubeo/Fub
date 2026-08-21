@@ -45,11 +45,11 @@
 //!
 //! # I due presidi, e cos'è rosso
 //!
-//! - `senza_finestra_escono__all_i_risultati` tiene ferma la metà che un tetto
+//! - `unpaged_searches_return_all_results` tiene ferma la metà che un tetto
 //!   inventato romperebbe **in silenzio**: chi chiede tutto riceve tutto.
 //!   *Provato in rosso* rimettendo un tetto al posto di `total`
 //!   (`None => (0usize, 100.min(total))`): cento righe invece di duemila.
-//! - `una_finestra__does_not_paga_il_vault` dice da cosa dipende il costo: da quante
+//! - `a_window_does_not_pays_the_vault` dice da cosa dipende il costo: da quante
 //!   righe si restituiscono, non da quante note ci sono. *Provato in rosso*
 //!   spostando la finestra **dopo** la materializzazione — il collector prende
 //!   `total` e le righe si troncano alla fine, che è il modo in cui si pagina
@@ -167,7 +167,7 @@ fn unpaged_searches_return_all_results() {
 /// chiesto, e il conto non sa nemmeno dire quanto valga quell'argomento —
 /// quello che sa dire è quante righe sono uscite.
 #[test]
-fn a_window__does_not_pays_the_vault() {
+fn a_window_does_not_pays_the_vault() {
     let (_g1, mille) = index(1000);
     let (_g2, duemila) = index(2000);
 

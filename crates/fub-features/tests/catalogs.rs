@@ -141,7 +141,7 @@ fn components() -> Vec<Component> {
 }
 
 #[test]
-fn every_language__says_the_same_things() {
+fn every_language_says_the_same_things() {
     let mut holes = Vec::new();
     for c in components() {
         assert!(
@@ -176,7 +176,7 @@ fn every_language__says_the_same_things() {
 }
 
 #[test]
-fn every_key_declared_has__a_entry() {
+fn every_key_declared_has_a_entry() {
     let mut holes_v = Vec::new();
     for c in components() {
         for k in &c.keys {
@@ -207,7 +207,7 @@ fn no_hardcoded_prose_in_what_is_declared() {
 }
 
 #[test]
-fn the_settings__of_the_core_speak__also_their() {
+fn the_settings_of_the_core_speak_also_their() {
     // Le impostazioni non sono di un componente di questo crate — le dichiarano
     // `fub-host` e `fub-kernel` — ma passano dalla stessa strada, e la
     // stessa strada vuole lo stesso presidio. Qui si guarda quelle del kernel,

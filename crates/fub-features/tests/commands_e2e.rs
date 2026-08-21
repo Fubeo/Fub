@@ -1210,7 +1210,7 @@ fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
                 "json": r#"{
                     "versioning.enabled": false,
                     "privacy.telemetry": true,
-                    "com.acme.never-vista": 3
+                    "com.acme.never-seen": 3
                 }"#
             }),
             InvokeMode::Apply,
@@ -1228,7 +1228,7 @@ fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
         "{message}"
     );
     assert!(
-        message.to_string().contains("com.acme.mai-vista"),
+        message.to_string().contains("com.acme.never-seen"),
         "{message}"
     );
     assert_eq!(

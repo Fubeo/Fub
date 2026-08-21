@@ -306,7 +306,7 @@ mod tests {
         assert!(json.contains(r#""key":"count_heading""#), "{json}");
         assert!(json.contains(r#""value":2"#), "{json}");
         assert!(json.contains(r#""doc":"a/Uno.md""#));
-        assert!(json.contains(r#""doc":"Two.md""#));
+        assert!(json.contains(r#""doc":"Due.md""#));
     }
 
     #[test]
