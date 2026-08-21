@@ -133,7 +133,7 @@ export const COUNTS = [
       "is said by these two, and it is the direction a test cannot see, because " +
       "a format no one included is a format no test knows about.",
     command:
-      "grep -cE '^\\| [^|]+ \\| \\[`crates/[^`]+:[0-9]+`\\]' docs/versionamento.md",
+      "grep -cE '^\\| [^|]+ \\| \\[`crates/[^`]+:[0-9]+`\\]' docs/archivio/versionamento.md",
   },
   {
     name: "file-con-superficie-ipc",
@@ -598,7 +598,7 @@ export const COUNTS = [
       "would enter it wrongly.",
     command:
       "grep -EiH '(\\*\\*[^*]*buco dichiarato|^#+[^#]*buco dichiarato)'" +
-      " docs/decisions/0*.md | grep -vi 'buco dichiarato della'" +
+      " docs/archivio/decisions/0*.md | grep -vi 'buco dichiarato della'" +
       " | cut -d: -f1 | sort -u | wc -l",
   },
   {
@@ -619,7 +619,7 @@ export const COUNTS = [
       "The decision records of the closed decisions. It is the count that `todo.md` " +
       "already wrote with its command beside it — the only one with a source " +
       "before this register, and it said «fifty-seven» when they were fifty-nine.",
-    command: "ls docs/decisions/0*.md | wc -l",
+    command: "ls docs/archivio/decisions/0*.md | wc -l",
   },
   {
     name: "voci-aperte",
@@ -632,7 +632,7 @@ export const COUNTS = [
       "finds nothing, and zero open entries is exactly what this count was " +
       "born to be able to say — without it, on the day the table empties, the " +
       "register would say «did not count» instead of «zero».",
-    command: "grep -c '^| \\*\\*§' docs/todo.md || true",
+    command: "grep -c '^| \\*\\*§' docs/archivio/todo.md || true",
   },
   {
     name: "difetti-aperti",
@@ -652,7 +652,7 @@ export const COUNTS = [
       "the ids all came from `issues.md`, it stopped at 0099, and the first " +
       "new block would have skipped it, making the guard count fewer rows " +
       "than there are — lying downward exactly while the table grows.",
-    command: "grep -c '^| [0-9][0-9][0-9][0-9] |' docs/todo.md || true",
+    command: "grep -c '^| [0-9][0-9][0-9][0-9] |' docs/archivio/todo.md || true",
   },
 ];
 

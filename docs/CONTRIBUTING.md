@@ -11,13 +11,15 @@ linka.
 
 | Voglio… | Leggo |
 |---|---|
-| capire l'idea architetturale e le decisioni | [PIANO.md](PIANO.md) |
-| capire una parola che non conosco | [PIANO.md](PIANO.md) e [architecture/mappa-visuale.md](architecture/mappa-visuale.md) (*Le parole*): ogni termine è definito in una riga dove si usa |
-| vedere tutto in un colpo d'occhio | [architecture/mappa-visuale.md](architecture/mappa-visuale.md) |
-| toccare un trait del contratto | [architecture/traits.md](architecture/traits.md) e [architecture/wit.md](architecture/wit.md) |
-| aggiungere un pannello o una vista | [architecture/ui-protocol.md](architecture/ui-protocol.md) e [architecture/shell.md](architecture/shell.md) |
-| sapere perché una cosa è così | [decisions/](decisions/README.md) |
-| sapere cosa manca, e le priorità | [todo.md](todo.md) |
+| capire l'idea iniziale e come avviare Fub | [00-inizia-qui/01-cos-e-fub.md](00-inizia-qui/01-cos-e-fub.md) |
+| capire i concetti chiave con analogie semplici | [01-per-studenti/01-il-vault.md](01-per-studenti/01-il-vault.md) |
+| consultare la scheda di un componente specifico | [02-componenti/01-panoramica.md](02-componenti/01-panoramica.md) |
+| vedere i diagrammi UML e il grafo delle dipendenze | [03-uml/01-trait-fub-abi.md](03-uml/01-trait-fub-abi.md) |
+| comprendere o creare un plugin | [04-plugin/01-nativo-vs-wasm.md](04-plugin/01-nativo-vs-wasm.md) |
+| toccare un trait del contratto o il modello dati | [06-contratto/01-i-trait-in-rust.md](06-contratto/01-i-trait-in-rust.md) |
+| aggiungere o modificare un pannello o la UI | [07-ui/01-la-shell-e-il-frontend.md](07-ui/01-la-shell-e-il-frontend.md) |
+| consultare i verbali delle decisioni storiche | [archivio/decisions/README.md](archivio/decisions/README.md) |
+| consultare lo stato dei lavori aperti | [archivio/todo.md](archivio/todo.md) |
 
 Le decisioni storiche hanno un verbale. Leggilo prima di riaprire una
 discussione.
@@ -31,9 +33,9 @@ Non sono consigli. Ognuna ha un presidio (un test automatico) che diventa
 |---|---|---|
 | `fub-abi` e `fub-kernel` non conoscono `comrak`, `tauri`, `wasmtime`; `fub-host` non conosce `tauri` | Il core è agnostico al formato. Chi assembla deve potersi avviare senza interfaccia webview. | [`crates/fub-abi/tests/dependency_invariant.rs`](../crates/fub-abi/tests/dependency_invariant.rs) |
 | `fub-abi` e `crates/fub-abi/wit/fub/abi.wit` si rispecchiano | Il contratto WIT è il confine per `M5`. Se divergono, il confine si spezza. | [`crates/fub-abi/tests/wit_conformance.rs`](../crates/fub-abi/tests/wit_conformance.rs) |
-| il contratto cresce **solo per aggiunta** rispetto a `wit/frozen/` | Garantisce il freeze di `M4`. Senza presidio, la promessa decade in silenzio (vedi [architecture/wit-congelato.md](architecture/wit-congelato.md)). | [`crates/fub-abi/tests/wit_additivity.rs`](../crates/fub-abi/tests/wit_additivity.rs) |
+| il contratto cresce **solo per aggiunta** rispetto a `wit/frozen/` | Garantisce il freeze di `M4`. Senza presidio, la promessa decade in silenzio. | [`crates/fub-abi/tests/wit_additivity.rs`](../crates/fub-abi/tests/wit_additivity.rs) |
 | i link fra documenti e codice non marciscono | Un documento che cita `traits.rs` deve fallire se si sposta. | [`.github/scripts/check-doc-links.mjs`](../.github/scripts/check-doc-links.mjs) |
-| il diagramma dei componenti dice le dipendenze che dicono i `Cargo.toml` | Un disegno non compilato mente. Un crate nuovo deve apparire nel diagramma. | [`il_diagramma_dice_le_dipendenze_vere`](../crates/fub-abi/tests/dependency_invariant.rs) |
+| il diagramma dei componenti dice le dipendenze che dicono i `Cargo.toml` | Un disegno non compilato mente. Un crate nuovo deve apparire nel diagramma. | [`the_diagram_declares_the_real_dependencies`](../crates/fub-abi/tests/dependency_invariant.rs) |
 
 La **terza** si può rompere apposta: si tocca `0.1.0.wit` in un commit che lo
 dichiara, e in review si vede.
@@ -54,23 +56,23 @@ cargo test --workspace
 npx tsc --noEmit      # `vite build` traspila senza controllare i tipi
 npm test
 npm run build
-npm run banco:a11y    # il contrasto della pagina vera, nelle due luci (§31.1)
+npm run bench:a11y    # il contrasto della pagina vera, nelle due luci (§31.1)
 
 # shell (dalla radice, come la CI)
-node .github/scripts/check-ascoltatori.mjs
-node .github/scripts/check-corse.mjs
-node .github/scripts/check-npm-copie.mjs
+node .github/scripts/check-listeners.mjs
+node .github/scripts/check-races.mjs
+node .github/scripts/check-npm-copies.mjs
 
 # documenti
 node .github/scripts/check-doc-links.mjs
-node .github/scripts/check-prosa.mjs
-node .github/scripts/check-tabelle.mjs
+node .github/scripts/check-prose.mjs
+node .github/scripts/check-tables.mjs
 
 # invarianti
-node .github/scripts/check-cargo-versioni.mjs
+node .github/scripts/check-cargo-versions.mjs
 node .github/scripts/check-cargo-feature-default.mjs
 node .github/scripts/check-crate-type.mjs
-node .github/scripts/check-profilo-dev.mjs
+node .github/scripts/check-dev-profile.mjs
 
 # le feature ufficiali si spengono davvero (§16.3)
 cargo build -p fub-features --no-default-features
@@ -78,7 +80,7 @@ cargo build -p fub-features --no-default-features --features outline
 cargo build -p fub-host --no-default-features --features outline,notify-watcher
 
 # presidio del ciclo stesso
-node .github/scripts/check-ciclo-locale.mjs
+node .github/scripts/check-locale-loop.mjs
 
 # supply chain (serve `cargo install cargo-deny`)
 cargo deny check
@@ -110,13 +112,13 @@ diventa rosso.
 
 ### Il banco visivo, e la metà che resta fuori da qui
 
-Il banco del [§31.1](roadmap/31-da-dove-viene-cio-che-si-vede.md) fotografa la
+Il banco del [§31.1](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) fotografa la
 shell vera in tutte e due le luci e confronta con le baseline in repo. Del banco,
 qui sopra c'è solo il contrasto reso: il **confronto a pixel** non sta né nel
 ciclo né in CI, e non è una dimenticanza.
 
 Un browser pinnato garantisce lo stesso motore: prima della
-[§31.3](roadmap/31-da-dove-viene-cio-che-si-vede.md#313-la-voce-del-tema-i-caratteri)
+[§31.3](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md#313-la-voce-del-tema-i-caratteri)
 non garantiva anche gli stessi caratteri, perché la scala che la shell
 chiedeva si risolveva nel carattere di sistema. La 0168 ha portato i tre
 caratteri in bundle, ma il cancello resta **locale** lo stesso: le baseline in
@@ -140,13 +142,13 @@ di una persona sola.
 
 ### Tre file del tema sono generati
 
-Dalla [§31.2](roadmap/31-da-dove-viene-cio-che-si-vede.md) i colori dei due
+Dalla [§31.2](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) i colori dei due
 fogli non si scelgono: si **ricavano**. La sorgente è
 `frontend/src/theme/serie/ricetta.ts` — dichiara di ogni ruolo la tinta, il
 croma, sopra cosa sta e quanto contrasto vuole reggere — e i due
 `foglio-*.css` sono un derivato, con scritto in testa che lo sono.
 
-Dalla [§31.4](roadmap/31-da-dove-viene-cio-che-si-vede.md) la **pelle** è il
+Dalla [§31.4](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) la **pelle** è il
 terzo. Si scrive un componente per volta in `serie/pelle/`, e
 `serie/pelle.css` è il file che i pezzi compongono nell'ordine che
 `serie/pelle/ordine.ts` dichiara — perché in CSS l'ordine di due regole della
@@ -187,7 +189,7 @@ FUB_FUZZ_NOMI=100000 cargo test --release -p fub-format-markdown \
 
 Queste variabili non configurano Fub: vivono solo dentro `#[test]`. Di quelle
 che l'app legge davvero parla la [decisione
-0036](decisions/0036-le-impostazioni-e-i-tre-stati.md).
+0036](archivio/decisions/0036-le-impostazioni-e-i-tre-stati.md).
 
 ## Cosa presidia la CI
 
@@ -228,8 +230,8 @@ Non c'è un `CODEOWNERS`, perché c'è **un solo** manutentore.
 [README.md](README.md) spiega dove metterlo.
 
 - I nomi sono minuscoli e in italiano.
-- I numeri (verbali, voci aperte) vivono in `todo.md` e
-  [decisions/README.md](decisions/README.md).
+- I numeri (verbali, voci aperte) vivono in [archivio/todo.md](archivio/todo.md) e
+  [archivio/decisions/README.md](archivio/decisions/README.md).
 
 ## Chiudere una decisione
 
@@ -245,12 +247,12 @@ Se un verbale nomina file o tipi che a `HEAD` non esistono più, **non** si
 corregge al presente: si mette un avviso in cima che dice che è invecchiato.
 (Chiude il difetto 0127.)
 
-I dettagli sono in [decisions/README.md](decisions/README.md).
+I dettagli sono in [archivio/decisions/README.md](archivio/decisions/README.md).
 
 ## Il resto
 
 - Vulnerabilità: [SECURITY.md](SECURITY.md).
 - Condotta: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-- Versioni: [versionamento.md](versionamento.md).
+- Versioni: [archivio/versionamento.md](archivio/versionamento.md).
 - Licenza: `MIT OR Apache-2.0` ([LICENSE-MIT](../LICENSE-MIT),
   [LICENSE-APACHE](../LICENSE-APACHE)).

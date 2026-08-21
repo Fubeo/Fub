@@ -178,7 +178,7 @@ export function comandiDiCi(testo) {
 export function cicloLocale(testo) {
   const righe = testo.split("\n");
   let i = 0;
-  while (i < righe.length && !/^## The local loop\s*$/.test(righe[i].trim())) i++;
+  while (i < righe.length && !/^## (The local loop|Il ciclo locale)\s*$/.test(righe[i].trim())) i++;
   if (i >= righe.length) return null;
   i++;
   while (i < righe.length && !RE_RECINTO.test(righe[i])) i++;
@@ -206,7 +206,7 @@ export function cicloLocale(testo) {
   i++;
   while (i < righe.length && righe[i].trim() === "") i++;
   const eccezioni = [];
-  if (/^### Exceptions to the loop\s*$/.test((righe[i] ?? "").trim())) {
+  if (/^### (Exceptions to the loop|Le eccezioni al ciclo)\s*$/.test((righe[i] ?? "").trim())) {
     i++;
     // La prosa introduttiva (e le righe vuote) si salta finché non arriva la
     // prima voce; dopo la prima voce, l'elenco finisce alla prima riga che
