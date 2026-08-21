@@ -16,8 +16,15 @@
 /// scrivere `innerHTML` o `setAttribute` senza allocare un nodo per ogni
 /// icona — e i test la possono confrontare senza un browser.
 ///
-/// I nomi sono minuscoli e fissi: sono il contratto fra chi chiede un'icona
-/// e chi la disegna, e chi ne aggiunge una la dichiara qui dentro.
+/// Questi valori sono il costrutto del set: ogni icona usa la stessa griglia,
+/// lo stesso tratto e gli stessi angoli, senza eccezioni disegnate nel chiamante.
+export const ICON_GRID = 24;
+export const ICON_SIZE = 16;
+export const ICON_STROKE_WIDTH = 1.6;
+export const ICON_FILL = "none";
+export const ICON_STROKE = "currentColor";
+export const ICON_LINECAP = "round";
+export const ICON_LINEJOIN = "round";
 const SVG: Record<string, string> = {
   // --- la rail e l'inspector: le view della shell -------------------------
   notes: '<path d="M4 5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M13 3v5h5"/>',
@@ -57,7 +64,7 @@ const SVG: Record<string, string> = {
 export function icon(name: string): string {
   const body = SVG[name];
   if (!body) return "";
-  return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
+  return `<svg viewBox="0 0 ${ICON_GRID} ${ICON_GRID}" width="${ICON_SIZE}" height="${ICON_SIZE}" fill="${ICON_FILL}" stroke="${ICON_STROKE}" stroke-width="${ICON_STROKE_WIDTH}" stroke-linecap="${ICON_LINECAP}" stroke-linejoin="${ICON_LINEJOIN}" aria-hidden="true" focusable="false">${body}</svg>`;
 }
 
 /// L'elemento SVG di un'icona, per chi vuole attaccarci un ascoltore o

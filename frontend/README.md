@@ -12,7 +12,7 @@ Questo file è un cartello, non un documento — e la ragione è che un secondo
 posto in cui si racconta com'è fatto il frontend è un secondo posto che
 invecchia. Era già successo: fino alla riorganizzazione della documentazione
 queste righe promettevano `src/editor.ts`, `src/ui.ts` e `src/api.ts`, spariti
-con la [decisione 0015](../docs/archivio/decisions/0015-la-forma-della-shell.md) e mai
+con la [decisione 0015](../docs/decisions/0015-la-forma-della-shell.md) e mai
 scollegati di qui.
 
 Comandi: `npm install`, poi `npm run dev` (porta 1420) oppure `npm run build`

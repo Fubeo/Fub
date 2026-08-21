@@ -45,6 +45,7 @@ import { mountStrings, t } from "./i18n/strings";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
 import { mountTheme } from "./theme/theme";
+import { reducedMotion } from "./theme/reduced-motion";
 import {
   flushPendingSave,
   flushBeforeClose,
@@ -98,13 +99,32 @@ const paletteHost = {
 /// tre file.
 const pageWindowLifetime = openLifetime();
 
+/// Porta accanto ai bottoni della titlebar l'accordo efficace del comando.
+function refreshTitlebarShortcuts(): void {
+  const targets: Array<[string, string]> = [
+    ["shell.palette", "open-palette-key"],
+    ["shell.panel.search", "command-search-key"],
+    ["shell.mode.live", "mode-live-key"],
+    ["shell.mode.reading", "mode-reading-key"],
+  ];
+  for (const [id, elementId] of targets) {
+    const key = document.getElementById(elementId);
+    if (!(key instanceof HTMLElement)) continue;
+    const binding = allCommands().find((entry) => entry.id === id)?.binding ?? null;
+    key.textContent = binding ?? "";
+    key.hidden = binding === null;
+  }
+}
+
 async function init(): Promise<void> {
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
-  // giusta invece di correggersi mezzo secondo dopo. Va prima di
+  // giusta invece di correggersi mezzo secondo dopo. La preferenza di moto si
+  // legge nello stesso punto di avvio, prima che un grafo possa montarsi. Va prima di
   // `mountDocument` anche per una ragione meno cosmetica: l'editor nasce col
   // tema che trova sulla radice, e nascere col tema sbagliato vorrebbe dire
   // riconfigurarlo subito dopo.
+  reducedMotion();
   mountTheme(pageWindowLifetime, setEditorTheme);
 
   // Le stringhe accanto al tema, e per la stessa ragione (§12.4): sono le due
@@ -232,10 +252,11 @@ async function init(): Promise<void> {
       if (entry) startCommand(entry, paletteHost);
     },
   });
+  refreshTitlebarShortcuts();
 
   // Il trigger di ricerca nella titlebar: fa focus su `#search-input`, che è
   // la ricerca onesta — già lì, già cablata — e non una palette travestita.
-  // Il title dice che la palette è Mod-Shift-P, per chi cerca un comando.
+  // Il suggerimento mostra l'accordo di `shell.panel.search`, per chi cerca un comando.
   $("#command-search").addEventListener("click", () => {
     showPanel("search");
     $("#search-input").focus();
@@ -284,6 +305,7 @@ async function init(): Promise<void> {
   // troverebbe la sua combinazione muta esattamente nella schermata in cui
   // serve. Con un vault aperto la riga dopo la rifà, e costa una domanda.
   await loadKeyOverrides();
+  refreshTitlebarShortcuts();
 
   const initial = await api.initialVault();
   // Chi apre un vault ripristina anche la sua disposizione (§1.2): è là dentro

@@ -109,7 +109,7 @@
 .ui-list-item {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-sm);
-  background: var(--bg-input);
+  background: var(--bg-panel);
   margin-bottom: var(--space-3);
 }
 .ui-list-item.clickable {
@@ -197,4 +197,90 @@
   color: var(--muted);
   font-size: var(--text-sm);
   padding: var(--space-2) var(--space-4);
+}
+
+/* La nota ha un solo vocabolario tipografico in Sorgente, Live e Lettura.
+   CodeMirror porta il corpo del codice; Live prende la misura e il respiro
+   della prosa, mentre Lettura li applica al documento reso. */
+.pane[data-mode="source"] .cm-content {
+  max-width: none;
+}
+.pane[data-mode="live_preview"] .cm-content {
+  max-width: var(--content-width);
+  margin-inline: auto;
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+}
+.pane-preview {
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+  hyphens: auto;
+  max-width: 100%;
+}
+.markdown-preview {
+  width: min(100%, var(--content-width));
+  margin-inline: auto;
+}
+.markdown-preview h1 {
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+}
+.markdown-preview h2,
+.markdown-preview h3 {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+}
+.markdown-preview p,
+.markdown-preview li {
+  line-height: var(--leading-relaxed);
+}
+
+/* Il renderer distingue le tipo di callout nell'attributo, quindi la pelle
+   veste le specie senza riscrivere il modello. */
+.markdown-preview .callout[data-callout="warning"],
+.markdown-preview .callout[data-callout="caution"],
+.markdown-preview .callout[data-callout="attention"] {
+  border-left-color: var(--doc-danger);
+}
+.markdown-preview .callout[data-callout="tip"],
+.markdown-preview .callout[data-callout="success"] {
+  border-left-color: var(--doc-link);
+}
+.markdown-preview .callout[data-callout="info"],
+.markdown-preview .callout[data-callout="note"] {
+  border-left-color: var(--doc-heading);
+}
+.markdown-preview .block-footnote-definition {
+  border-top: 1px solid var(--doc-rule-soft);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.markdown-preview .footnote-ref {
+  color: var(--doc-link);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
+.markdown-preview .block-frontmatter-unparsed {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-md);
+  background: var(--doc-fill-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.markdown-preview img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+.markdown-preview .embed[data-embed-url],
+.markdown-preview .embed[data-embed-path] {
+  min-height: var(--text-3xl);
 }

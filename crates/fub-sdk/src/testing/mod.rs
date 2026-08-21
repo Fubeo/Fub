@@ -67,6 +67,8 @@ fn fence_data(path: &str) -> Result<(), PluginError> {
 #[derive(Default)]
 pub struct MemoryHost {
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
+    /// Blob derivati della cache, separati dai dati autorevoli.
+    cache_blobs: Mutex<BTreeMap<String, Vec<u8>>>,
     /// Le sorgenti di import aperte (decisione 0102): chiave → byte.
     ///
     /// In memoria come tutto il resto, ma dietro un handle come quelle vere, ed
@@ -936,6 +938,15 @@ impl DataRead for MemoryHost {
             .cloned()
             .collect())
     }
+
+    fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        fence_data(path)?;
+        let blob = self.cache_blobs.lock().unwrap().get(path).cloned();
+        if let Some(bytes) = &blob {
+            self.record_read(path, bytes.len());
+        }
+        Ok(blob)
+    }
 }
 
 impl DataWrite for MemoryHost {
@@ -963,6 +974,24 @@ impl DataWrite for MemoryHost {
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
         fence_data(path)?;
         self.blobs.lock().unwrap().remove(path);
+        Ok(())
+    }
+
+    fn cache_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
+        fence_data(path)?;
+        if self.writes_negate.lock().unwrap().contains(path) {
+            return Err(PluginError::Io(
+                format!("scrittura cache negata su `{path}`").into(),
+            ));
+        }
+        self.cache_blobs
+            .lock()
+            .unwrap()
+            .insert(path.to_string(), bytes.to_vec());
+        let mut writes = self.writes.lock().unwrap();
+        let count = writes.entry(path.to_string()).or_insert((0, 0));
+        count.0 += 1;
+        count.1 += bytes.len();
         Ok(())
     }
 }

@@ -40,6 +40,7 @@ import { rowsToShow } from "../rules/results";
 import { activatable, trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { Race } from "../ui/race";
+import { setTooltip } from "../ui/tooltip";
 import { state } from "../state/store";
 import { highlighted } from "../ui/highlight";
 import { revealByteOffset } from "./document";
@@ -138,7 +139,7 @@ export function openInDocumentSearch(): void {
         // Il motivo in chiaro: «ricerca non disponibile» dice che non si può
         // cercare, non perché — e il perché qui è quasi sempre un vault senza
         // indice full-text.
-        summary.title = result.error;
+        setTooltip(summary, result.error);
         return;
       }
       // Nessuno stato «sto ancora indicizzando» come nel pannello del vault: chi

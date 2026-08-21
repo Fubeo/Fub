@@ -16,7 +16,13 @@ Benvenuto nella documentazione di Fub. La documentazione è organizzata in carte
 | 💾 [**`05-disco/`**](05-disco/01-note-utente.md) | Formato note Markdown, cartella `.fub/` (autorevole vs derivata) e cestino |
 | 📜 [**`06-contratto/`**](06-contratto/01-i-trait-in-rust.md) | Trait Rust in `fub-abi`, modello dati del documento e contratto WIT per WASM |
 | 🖥️ [**`07-ui/`**](07-ui/01-la-shell-e-il-frontend.md) | Shell frontend TypeScript, protocollo dichiarativo `UiNode`, IPC e temi |
-| 📦 [**`archivio/`**](archivio/decisions/README.md) | Registro storico delle decisioni architetturali, roadmap, milestone e piano |
+| 🏛️ [**`decisions/`**](decisions/README.md) | Registro delle decisioni architetturali (*ADR*), inclusi i **dieci** buchi dichiarati [conta: buchi-dichiarati] |
+| 🎯 [**`milestones/`**](milestones/README.md) | Obiettivi di prodotto e traguardi delle release |
+| 🗺️ [**`roadmap/`**](roadmap/README.md) | Sedute di progettazione e traguardi di contratto |
+| 📝 [**`features/`**](features/01-principi-fondanti.md) | Capitolato funzionale e specifiche complete delle funzionalità di prodotto |
+| 🔬 [**`microfeatures/`**](microfeatures/vault-ed-esploratore.md) | Scomposizione granulare dei gesti atomici di interazione utente |
+| 📋 [**`todo.md`**](todo.md) | Registro delle attività aperte, stato di avanzamento e difetti misurati |
+| 🏷️ [**`versionamento.md`**](versionamento.md) | Disciplina SemVer e versioni degli schemi persistenti su disco |
 
 ---
 

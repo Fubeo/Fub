@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::error::{FormatError, PluginError};
+use fub_abi::edit::Revision;
 use fub_abi::event::{Event, Notice};
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -431,7 +432,7 @@ fn a_index_that_not_says_nothing_receives_all() {
 fn the_vault_not_and_only_documents() {
     let f = Fixture::new();
     f.write("nota.txt", "una nota");
-    // I byte non contano: la specie viene dal nome, e nessuno li apre.
+    // La specie viene dal nome; la fase di apertura calcola l'impronta dai byte.
     f.write("img/foto.png", "PNG!");
     f.write("archivio.dat", "dati");
     let ws = f.open(false);
@@ -453,22 +454,72 @@ fn the_vault_not_and_only_documents() {
     // risposta diversa alla domanda di prima.
     assert_eq!(ws.documents(), [DocId::new("nota.txt")]);
 
-    // La dimensione e la data ci sono per tutti; l'impronta solo per chi è stato
-    // letto — cioè per i documenti, che qualcuno ha dovuto parsare comunque.
+    // La dimensione e la data ci sono per tutti; l'impronta degli allegati si
+    // calcola nella seconda fase, sulla stessa sorgente di byte dei documenti.
     let png = all
         .iter()
         .find(|and| and.id.as_str() == "img/foto.png")
         .unwrap();
     assert_eq!(png.size, 4);
     assert!(png.mtime > 0, "la data c'è, e in millisecondi");
-    assert!(
-        png.fingerprint.is_none(),
-        "nessuno legge i byte di un allegato per riempire una tabella"
+    assert_eq!(
+        png.fingerprint,
+        Some(Revision::of_bytes(b"PNG!")),
+        "l'impronta dell'allegato si calcola e si persiste"
     );
     let notes = all.iter().find(|and| and.id.as_str() == "nota.txt").unwrap();
     assert!(
         notes.fingerprint.is_some(),
         "l'impronta si calcola dove i byte sono già in mano"
+    );
+}
+
+#[test]
+fn an_attachment_fingerprint_persists_and_updates_after_rename() {
+    let f = Fixture::new();
+    f.write("foto.png", "PNG!");
+    beyond_the_millisecondo();
+
+    let first = f.open(false);
+    let first_entry = entries(&first, Some(EntryKind::Asset), None);
+    assert_eq!(
+        first_entry[0].fingerprint,
+        Some(Revision::of_bytes(b"PNG!")),
+        "un allegato aggiunto riceve l'impronta nel giro di apertura"
+    );
+    drop(first);
+
+    let persisted = f.open(false);
+    assert_eq!(
+        entries(&persisted, Some(EntryKind::Asset), None)[0].fingerprint,
+        Some(Revision::of_bytes(b"PNG!")),
+        "l'impronta resta disponibile dopo la riapertura"
+    );
+    drop(persisted);
+
+    beyond_the_millisecondo();
+    f.write("foto.png", "JPG!");
+    let changed = f.open(false);
+    let changed_entry = entries(&changed, Some(EntryKind::Asset), None);
+    assert_eq!(
+        changed_entry[0].fingerprint,
+        Some(Revision::of_bytes(b"JPG!")),
+        "l'impronta cambia quando cambiano i byte"
+    );
+    drop(changed);
+
+    beyond_the_millisecondo();
+    let from = f.root.join("foto.png");
+    let to = f.root.join("img/foto.png");
+    std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+    std::fs::rename(from, &to).unwrap();
+    let renamed = f.open(false);
+    let renamed_entry = entries(&renamed, Some(EntryKind::Asset), None);
+    assert_eq!(renamed_entry[0].id, DocId::new("img/foto.png"));
+    assert_eq!(
+        renamed_entry[0].fingerprint,
+        Some(Revision::of_bytes(b"JPG!")),
+        "una rinomina ad app chiusa conserva l'impronta dei byte"
     );
 }
 

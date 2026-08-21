@@ -247,6 +247,22 @@ export const SCENE = [
     // lo stesso — e quella che dice se la shell vuota è una finestra o un buco.
     prepare: async () => {},
   },
+  {
+    id: "nota-tre-modi",
+    title: "La stessa nota in Sorgente, Live e Lettura",
+    query: "",
+    prepare: async (page) => {
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      await page.click('#mode-switch button[data-mode="source"]');
+      await runCommand(page, "Dividi il riquadro a destra");
+      await page.click('#mode-switch button[data-mode="live_preview"]');
+      await runCommand(page, "Dividi il riquadro a destra");
+      await page.click('#mode-switch button[data-mode="reading"]');
+      await page.waitForSelector('.pane[data-mode="source"] .cm-content');
+      await page.waitForSelector('.pane[data-mode="live_preview"] .cm-content');
+      await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
+    },
+  },
 
   // -------------------------------------------------------------------------
   // I tre cataloghi (`bench/catalog.html`).
@@ -273,6 +289,16 @@ export const SCENE = [
     prepare: async () => {},
   },
 ];
+
+/// Esegue un comando della shell dalla palette, senza dipendere da una scorciatoia
+/// che il vault o l'utente potrebbero aver riconfigurato.
+async function runCommand(page, title) {
+  await page.click("#open-palette");
+  await page.fill(".palette-input", title);
+  await page.waitForSelector(".palette-list li:not(.palette-empty)");
+  await page.click(".palette-list li:not(.palette-empty)");
+  await page.waitForSelector("#command-palette", { state: "detached" });
+}
 
 /// Apre una nota dall'albero. Sta in una funzione perché due scene la fanno, e
 /// perché il modo di aprirla è una cosa che può cambiare: cambierà qui.

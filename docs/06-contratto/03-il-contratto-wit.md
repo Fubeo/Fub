@@ -4,7 +4,7 @@
 
 **WIT** (*WebAssembly Interface Types*) è un linguaggio di specifica standard per definire tipi di dato e interfacce di funzioni che devono essere scambiate tra un programma principale (l'host) e un modulo WebAssembly (il guest).
 
-In Fub, il contratto WIT si trova in [`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit) ed è l'equivalente esatto delle strutture Rust in `crates/fub-abi/src/`.
+In Fub, il contratto WIT si trova in [`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit), comprende **diciassette** interfacce [conta: wit-interfacce-host] `host-*` ed è l'equivalente esatto delle strutture Rust in `crates/fub-abi/src/`.
 
 ```mermaid
 flowchart LR

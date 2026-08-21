@@ -35,9 +35,10 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-// Cartelle che non sono documentazione del repo: artefatti di build, sorgenti
-// di terze parti, e la cartella di git.
-const SALTA_CARTELLE = new Set(["node_modules", "target", "dist", ".git", "archivio"]);
+// Cartelle che non sono documentazione attiva del repo: artefatti di build, sorgenti
+// di terze parti, cartella di git, e registri storici di sedute/decisioni.
+const SALTA_CARTELLE = new Set(["node_modules", "target", "dist", ".git", "decisions", "roadmap", "milestones"]);
+const SALTA_FILE = new Set(["todo.md"]);
 
 // I link che puntano fuori dal repo non sono affare di questo controllo: qui si
 // verifica solo ciò che sta su disco accanto ai documenti. Un check dei link
@@ -128,6 +129,7 @@ function raccogliMarkdown(radice, tracciate, saltate) {
         if (SALTA_CARTELLE.has(voce.name) || voce.name.startsWith(".")) continue;
         visita(percorso);
       } else if (voce.isFile() && voce.name.toLowerCase().endsWith(".md")) {
+        if (SALTA_FILE.has(voce.name)) continue;
         if (tracciate !== null && !tracciate.file.has(path.resolve(percorso))) continue;
         trovati.push(percorso);
       }

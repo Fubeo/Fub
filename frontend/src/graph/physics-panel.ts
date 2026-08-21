@@ -15,6 +15,7 @@
 import type { PhysicsConfig, GraphicsConfig, GraphConfig } from "./sim/types";
 import { defaultGraphicsConfig, organicConfig } from "./sim/types";
 import { applyPreset as physicsPreset } from "./config";
+import { icon } from "../ui/icons";
 
 export interface PanelCopy {
   title: string;
@@ -92,12 +93,6 @@ const GRAPHICS_TOGGLES = ["glow", "pulse", "trail", "grid"] as const;
 
 const PRESET_NAMES = ["organica", "costellazione", "alveare", "nebulosa", "rigido", "custom"] as const;
 
-/// L'ingranaggio: un SVG inline piccolo. Niente emoji (vietate dalle regole),
-/// niente immagine esterna (una dipendenza di troppo per un'icona).
-const GEAR_SVG =
-  '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
-  '<path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9.4 4-1.5-.3a7.6 7.6 0 0 0-.5-1.3l.9-1.3a.6.6 0 0 0-.1-.8l-1.4-1.4a.6.6 0 0 0-.8-.1l-1.3.9a7.6 7.6 0 0 0-1.3-.5L14.7 5a.6.6 0 0 0-.6-.5h-2a.6.6 0 0 0-.6.5l-.3 1.5a7.6 7.6 0 0 0-1.3.5l-1.3-.9a.6.6 0 0 0-.8.1L6.4 7.7a.6.6 0 0 0-.1.8l.9 1.3a7.6 7.6 0 0 0-.5 1.3L5.2 11.6a.6.6 0 0 0-.5.6v2a.6.6 0 0 0 .5.6l1.5.3a7.6 7.6 0 0 0 .5 1.3l-.9 1.3a.6.6 0 0 0 .1.8l1.4 1.4a.6.6 0 0 0 .8.1l1.3-.9a7.6 7.6 0 0 0 1.3.5l.3 1.5a.6.6 0 0 0 .6.5h2a.6.6 0 0 0 .6-.5l.3-1.5a7.6 7.6 0 0 0 1.3-.5l1.3.9a.6.6 0 0 0 .8-.1l1.4-1.4a.6.6 0 0 0 .1-.8l-.9-1.3a7.6 7.6 0 0 0 .5-1.3l1.5-.3a.6.6 0 0 0 .5-.6v-2a.6.6 0 0 0-.6-.6z"/>' +
-  "</svg>";
 
 export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   const { config } = o;
@@ -109,7 +104,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   gear.className = "graph-panel-toggle";
   gear.setAttribute("aria-haspopup", "true");
   gear.setAttribute("aria-expanded", "false");
-  gear.innerHTML = GEAR_SVG;
+  gear.innerHTML = icon("settings");
   root.append(gear);
 
   const popover = document.createElement("div");

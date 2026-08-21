@@ -18,8 +18,8 @@ linka.
 | comprendere o creare un plugin | [04-plugin/01-nativo-vs-wasm.md](04-plugin/01-nativo-vs-wasm.md) |
 | toccare un trait del contratto o il modello dati | [06-contratto/01-i-trait-in-rust.md](06-contratto/01-i-trait-in-rust.md) |
 | aggiungere o modificare un pannello o la UI | [07-ui/01-la-shell-e-il-frontend.md](07-ui/01-la-shell-e-il-frontend.md) |
-| consultare i verbali delle decisioni storiche | [archivio/decisions/README.md](archivio/decisions/README.md) |
-| consultare lo stato dei lavori aperti | [archivio/todo.md](archivio/todo.md) |
+| consultare i verbali delle decisioni storiche | [decisions/README.md](decisions/README.md) |
+| consultare lo stato dei lavori aperti | [todo.md](todo.md) |
 
 Le decisioni storiche hanno un verbale. Leggilo prima di riaprire una
 discussione.
@@ -112,13 +112,13 @@ diventa rosso.
 
 ### Il banco visivo, e la metà che resta fuori da qui
 
-Il banco del [§31.1](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) fotografa la
+Il banco del [§31.1](roadmap/31-da-dove-viene-cio-che-si-vede.md) fotografa la
 shell vera in tutte e due le luci e confronta con le baseline in repo. Del banco,
 qui sopra c'è solo il contrasto reso: il **confronto a pixel** non sta né nel
 ciclo né in CI, e non è una dimenticanza.
 
 Un browser pinnato garantisce lo stesso motore: prima della
-[§31.3](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md#313-la-voce-del-tema-i-caratteri)
+[§31.3](roadmap/31-da-dove-viene-cio-che-si-vede.md#313-la-voce-del-tema-i-caratteri)
 non garantiva anche gli stessi caratteri, perché la scala che la shell
 chiedeva si risolveva nel carattere di sistema. La 0168 ha portato i tre
 caratteri in bundle, ma il cancello resta **locale** lo stesso: le baseline in
@@ -142,13 +142,13 @@ di una persona sola.
 
 ### Tre file del tema sono generati
 
-Dalla [§31.2](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) i colori dei due
+Dalla [§31.2](roadmap/31-da-dove-viene-cio-che-si-vede.md) i colori dei due
 fogli non si scelgono: si **ricavano**. La sorgente è
 `frontend/src/theme/serie/recipe.ts` — dichiara di ogni ruolo la tinta, il
 croma, sopra cosa sta e quanto contrasto vuole reggere — e i due
 `sheet-*.css` sono un derivato, con scritto in testa che lo sono.
 
-Dalla [§31.4](archivio/roadmap/31-da-dove-viene-cio-che-si-vede.md) la **skin** è il
+Dalla [§31.4](roadmap/31-da-dove-viene-cio-che-si-vede.md) la **skin** è il
 terzo. Si scrive un componente per volta in `serie/skin/`, e
 `serie/skin.css` è il file che i pezzi compongono nell'ordine che
 `serie/skin/order.ts` dichiara — perché in CSS l'ordine di due regole della
@@ -189,7 +189,7 @@ FUB_FUZZ_NOMI=100000 cargo test --release -p fub-format-markdown \
 
 Queste variabili non configurano Fub: vivono solo dentro `#[test]`. Di quelle
 che l'app legge davvero parla la [decisione
-0036](archivio/decisions/0036-le-impostazioni-e-i-tre-stati.md).
+0036](decisions/0036-le-impostazioni-e-i-tre-stati.md).
 
 ## Cosa presidia la CI
 
@@ -230,8 +230,8 @@ Non c'è un `CODEOWNERS`, perché c'è **un solo** manutentore.
 [README.md](README.md) spiega dove metterlo.
 
 - I nomi sono minuscoli e in italiano.
-- I numeri (verbali, voci aperte) vivono in [archivio/todo.md](archivio/todo.md) e
-  [archivio/decisions/README.md](archivio/decisions/README.md).
+- I numeri (verbali, voci aperte) vivono in [todo.md](todo.md) e
+  [decisions/README.md](decisions/README.md).
 
 ## Chiudere una decisione
 
@@ -247,12 +247,12 @@ Se un verbale nomina file o tipi che a `HEAD` non esistono più, **non** si
 corregge al presente: si mette un avviso in cima che dice che è invecchiato.
 (Chiude il difetto 0127.)
 
-I dettagli sono in [archivio/decisions/README.md](archivio/decisions/README.md).
+I dettagli sono in [decisions/README.md](decisions/README.md).
 
 ## Il resto
 
 - Vulnerabilità: [SECURITY.md](SECURITY.md).
 - Condotta: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-- Versioni: [archivio/versionamento.md](archivio/versionamento.md).
+- Versioni: [versionamento.md](versionamento.md).
 - Licenza: `MIT OR Apache-2.0` ([LICENSE-MIT](../LICENSE-MIT),
   [LICENSE-APACHE](../LICENSE-APACHE)).

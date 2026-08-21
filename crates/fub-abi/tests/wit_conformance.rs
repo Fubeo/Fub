@@ -5239,6 +5239,20 @@ fn conform(source: &str) -> Result<(), String> {
         &["prefix"],
     );
     contract.method(
+        "host-data-read",
+        "cache-read",
+        <dyn HostApi>::cache_read
+            as fn(&'static dyn HostApi, &'static str) -> Result<Option<Vec<u8>>, PluginError>,
+        &["path"],
+    );
+    contract.method(
+        "host-data-write",
+        "cache-write",
+        <dyn HostApi>::cache_write
+            as fn(Host, &'static str, &'static [u8]) -> Result<(), PluginError>,
+        &["path", "bytes"],
+    );
+    contract.method(
         "host-settings-read",
         "setting",
         <dyn HostApi>::setting

@@ -56,7 +56,7 @@ Tutta in **[`docs/`](docs/)**, e si entra da
 - [Guida iniziale](docs/00-inizia-qui/01-cos-e-fub.md) e [Concetti fondamentali](docs/01-concetti/01-il-vault.md).
 - [Mappa dei componenti](docs/02-componenti/01-panoramica.md) e [Diagrammi UML](docs/03-uml/01-trait-fub-abi.md).
 - [Guida ai plugin](docs/04-plugin/01-nativo-vs-wasm.md) e [Formato su disco](docs/05-disco/01-note-utente.md).
-- [Archivio storico decisioni e roadmap](docs/archivio/decisions/README.md).
+- [Decisioni architetturali (ADR)](docs/decisions/README.md) e [Milestone](docs/milestones/README.md).
 
 ## Cosa c'è già
 
@@ -78,7 +78,7 @@ Milestone 1, 2, 3 e 4 sono completate; Milestone 5 (runtime WASM) è in corso:
   WASM (`fub-wasm-host`) basato su Wasmtime.
 
 Lo stato preciso — cosa è aperto, con che priorità — sta in
-[docs/archivio/todo.md](docs/archivio/todo.md), che è l'unico posto dove si aggiorna.
+[docs/todo.md](docs/todo.md), che è l'unico posto dove si aggiorna.
 
 ## Come si avvia
 
@@ -131,7 +131,7 @@ doppia licenza, senza condizioni aggiuntive.
 - [docs/SECURITY.md](docs/SECURITY.md) — come si segnala una vulnerabilità (in
   privato, non con una issue) e cos'è dentro il perimetro.
 - [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
-- [docs/archivio/versionamento.md](docs/archivio/versionamento.md) — i tre numeri di versione e
+- [docs/versionamento.md](docs/versionamento.md) — i tre numeri di versione e
   cosa promette ciascuno.
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — cosa cambia, versione per versione.
 

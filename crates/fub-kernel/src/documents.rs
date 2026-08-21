@@ -38,10 +38,11 @@ use crate::error::{KernelError, Result};
 use crate::registry::FormatRegistry;
 use crate::renderer::RendererRegistry;
 use crate::syntax::SyntaxRegistry;
-use crate::vault::{data_root, TrashEntry, Vault};
+use crate::vault::{data_root, FUB_DIR, TrashEntry, Vault};
 
 /// Radice dello storage persistente dei plugin, dentro il vault: ogni plugin
-/// ha `<vault>/.fub/data/plugins/<id>/` e non vede nient'altro.
+/// ha `<vault>/.fub/plugins/<id>/` per i dati autorevoli e non vede nient'altro;
+/// la cache derivata vive in `<vault>/.fub/data/plugins/<id>/`.
 ///
 /// Sta nel vault e non nella cartella di configurazione dell'utente perché i
 /// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
@@ -289,8 +290,17 @@ impl DocumentStore {
 
     // --- storage persistente dei plugin ------------------------------------
 
-    /// La radice dello spazio dati di un plugin.
+    /// La radice autorevole dello spazio dati di un plugin.
     pub(crate) fn plugin_data_root(&self, plugin: &str) -> Utf8PathBuf {
+        self.vault
+            .root()
+            .join(FUB_DIR)
+            .join(PLUGIN_DATA_DIR)
+            .join(plugin)
+    }
+
+    /// La radice derivata dello spazio cache di un plugin.
+    pub(crate) fn plugin_cache_root(&self, plugin: &str) -> Utf8PathBuf {
         data_root(self.vault.root())
             .join(PLUGIN_DATA_DIR)
             .join(plugin)
@@ -304,18 +314,26 @@ impl DocumentStore {
     /// non può accorgersi di niente, ed è esattamente chi ha più bisogno che
     /// qualcun altro se ne accorga per lui.
     pub(crate) fn plugin_data_roots(&self) -> Vec<Utf8PathBuf> {
-        let plugins = data_root(self.vault.root()).join(PLUGIN_DATA_DIR);
-        // In ordine — lo dà `VaultStorage::list` — perché gli errori che ne
-        // escono finiscono in un messaggio, e un messaggio che cambia ordine a
-        // ogni giro non si confronta.
-        self.vault
-            .storage()
-            .list(&plugins)
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|and| and.stat.is_dir())
-            .map(|and| and.path)
-            .collect()
+        let mut roots = Vec::new();
+        for plugins in [
+            self.vault.root().join(FUB_DIR).join(PLUGIN_DATA_DIR),
+            data_root(self.vault.root()).join(PLUGIN_DATA_DIR),
+        ] {
+            // In ordine — lo dà `VaultStorage::list` — perché gli errori che ne
+            // escono finiscono in un messaggio, e un messaggio che cambia ordine a
+            // ogni giro non si confronta. Le due radici restano entrambe leggibili
+            // durante il passaggio additivo del layout.
+            roots.extend(
+                self.vault
+                    .storage()
+                    .list(&plugins)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|and| and.stat.is_dir())
+                    .map(|and| and.path),
+            );
+        }
+        roots
     }
 }
 

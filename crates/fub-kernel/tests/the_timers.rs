@@ -373,3 +373,46 @@ fn midnight() -> CivilTime {
         second: 0,
     }
 }
+
+/// Il cursore del timer è un dato autorevole del vault: resta dopo la
+/// ricostruzione del workspace e vive nella radice dati del plugin.
+#[test]
+fn a_timer_cursor_survives_workspace_reopen() {
+    let (dir, ws, _log) = vault(vec![]);
+    let cursor = CivilTime {
+        year: 2026,
+        month: 1,
+        day: 15,
+        hour: 9,
+        minute: 0,
+        second: 0,
+    };
+    ws.set_timer_cursor(ACME, "digest", cursor)
+        .expect("cursor write");
+    assert_eq!(
+        ws.timer_cursors(ACME)
+            .expect("cursor read")
+            .get("digest")
+            .copied(),
+        Some(cursor)
+    );
+    drop(ws);
+
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let reopened = Workspace::new(&root, FormatRegistry::new()).expect("reopen");
+    assert_eq!(
+        reopened
+            .timer_cursors(ACME)
+            .expect("cursor survives")
+            .get("digest")
+            .copied(),
+        Some(cursor)
+    );
+    assert!(
+        reopened
+            .plugin_data_dir(ACME)
+            .expect("plugin root")
+            .ends_with(".fub/plugins/com.acme.tasks"),
+        "cursor follows the authoritative plugin root"
+    );
+}

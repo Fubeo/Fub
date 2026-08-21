@@ -33,6 +33,7 @@ export interface DrawState {
   alpha: number;
   tier: Tier;
   elapsedMs: number;
+  reducedMotion: boolean;
 }
 
 export interface Painter {
@@ -59,6 +60,12 @@ const PULSE_THRESHOLD = 0.02;
 
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
+}
+
+export function pulseOpacity(id: string, elapsedMs: number, alpha: number, enabled: boolean): number | undefined {
+  if (!enabled || alpha <= PULSE_THRESHOLD) return undefined;
+  const phase = ((fnv1a(id) % 1000) / 1000) * Math.PI * 2;
+  return 0.5 + 0.5 * Math.sin((elapsedMs / 1000) * Math.PI * 2 * 1.2 + phase);
 }
 
 /// Gradini di spaziatura della griglia: la spaziatura **mondo** salta su una
@@ -228,7 +235,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   function redraw(state: DrawState): void {
     previousState = state;
     if (!ctx) return;
-    const { s, camera: c, openDocuments, hovered, dragged, focused, alpha, tier, elapsedMs } = state;
+    const { s, camera: c, openDocuments, hovered, dragged, focused, alpha, tier, elapsedMs, reducedMotion } = state;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Trail: finché la simulazione è calda il canvas si sporca di
@@ -312,13 +319,9 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       if (sx < -rS - CULL_MARGIN || sx > W + rS + CULL_MARGIN || sy < -rS - CULL_MARGIN || sy > H + rS + CULL_MARGIN) continue;
       const isOpen = openDocuments.has(s.id[i]);
       const role: TintRole = dragged === i ? "active" : hovered === i ? "hover" : isOpen ? "active" : "node";
-      let alone: number | undefined;
       // L'alone pulsante dei nodi aperti: fase dall'hash dell'id, così i
       // vicini non pulsano in sincrono (sembra vivo, non un semaforo).
-      if (isOpen && config.pulse && alpha > PULSE_THRESHOLD) {
-        const phase = ((fnv1a(s.id[i]) % 1000) / 1000) * Math.PI * 2;
-        alone = 0.5 + 0.5 * Math.sin((elapsedMs / 1000) * Math.PI * 2 * 1.2 + phase);
-      }
+      const alone = pulseOpacity(s.id[i], elapsedMs, alpha, !reducedMotion && isOpen && config.pulse);
       drawNode(ctx, atlas, sx, sy, s.radius[i], role, alone);
       if (i === focus) {
         ctx.beginPath();

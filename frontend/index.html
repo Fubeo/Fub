@@ -36,11 +36,11 @@
             type="button"
             data-i18n="command-search.placeholder"
             data-i18n-title="command-search.hint"
-            title="Cerca nel vault. Palette: Mod-Shift-P"
             class="titlebar-btn titlebar-btn--wide"
           >
             Cerca nel vault…
           </button>
+            <kbd id="command-search-key" class="titlebar-shortcut" aria-hidden="true">Mod-Shift-F</kbd>
           <span id="vault-path" class="muted" data-tauri-drag-region></span>
         </div>
         <!-- #titlebar-right: mode switch, palette, impostazioni, controlli. -->
@@ -63,7 +63,6 @@
               class="segmented-option"
               data-i18n="mode.source"
               data-i18n-title="mode.source.hint"
-              title="Solo sorgente, nessuna resa inline"
               aria-pressed="false"
             >
               Sorgente
@@ -73,37 +72,36 @@
               class="segmented-option"
               data-i18n="mode.live"
               data-i18n-title="mode.live.hint"
-              title="Sorgente con resa inline"
               aria-pressed="true"
             >
               Live
             </button>
+            <kbd id="mode-live-key" class="titlebar-shortcut" aria-hidden="true">Mod-Shift-L</kbd>
             <button
               data-mode="reading"
               class="segmented-option"
               data-i18n="mode.reading"
               data-i18n-title="mode.reading.hint"
-              title="Sola lettura, senza editor"
               aria-pressed="false"
             >
               Lettura
             </button>
+            <kbd id="mode-reading-key" class="titlebar-shortcut" aria-hidden="true">Mod-E</kbd>
           </span>
           <button
             id="open-palette"
             type="button"
             data-i18n-title="commands.palette"
             data-i18n-label="commands.palette"
-            title="Apri la palette dei comandi"
             class="titlebar-btn titlebar-btn--icon"
             aria-label="Apri la palette dei comandi"
           ></button>
+            <kbd id="open-palette-key" class="titlebar-shortcut" aria-hidden="true">Mod-Shift-P</kbd>
           <button
             id="open-settings"
             type="button"
             data-i18n-title="app.settings.hint"
             data-i18n-label="app.settings"
-            title="Le impostazioni di questo vault"
             class="titlebar-btn titlebar-btn--icon"
             aria-label="Impostazioni"
           ></button>
@@ -163,7 +161,6 @@
                 class="link-button"
                 data-i18n="explorer.new"
                 data-i18n-title="explorer.new.hint"
-                title="Crea una nota nuova"
               >
                 + Nuova
               </button>
@@ -263,7 +260,6 @@
           aria-expanded="false"
           aria-controls="activity-panel"
           data-i18n-title="activity.hint"
-          title="I lavori in corso"
         >
           Attività
         </button>
@@ -273,7 +269,6 @@
           aria-expanded="false"
           aria-controls="notify-panel"
           data-i18n-title="notices.hint"
-          title="Gli avvisi recenti"
         >
           Avvisi
         </button>
@@ -293,7 +288,6 @@
             class="link-button"
             data-i18n="app.close"
             data-i18n-title="app.close"
-            title="Chiudi"
           >
             Chiudi
           </button>
@@ -321,7 +315,6 @@
             class="link-button"
             data-i18n="notices.clear"
             data-i18n-title="notices.clear.hint"
-            title="Dimentica gli avvisi"
           >
             Pulisci
           </button>
@@ -330,7 +323,6 @@
             class="link-button"
             data-i18n="app.close"
             data-i18n-title="app.close"
-            title="Chiudi"
           >
             Chiudi
           </button>
@@ -404,7 +396,6 @@
             class="link-button"
             data-i18n="app.close"
             data-i18n-title="app.close"
-            title="Chiudi"
           >
             Chiudi
           </button>

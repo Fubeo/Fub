@@ -52,10 +52,10 @@ use fub_abi::error::{FormatError, PluginError};
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
-use fub_abi::model::{DocId, DocumentModel, Link, LinkTarget, Span};
+use fub_abi::model::{DocId, DocumentModel, Frontmatter, Link, LinkTarget, Span, Tag};
 use fub_abi::traits::{
-    HealthCheck, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Page, QueryRoute,
-    VaultEntry,
+    HealthCheck, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, LinkDirection, Page,
+    QueryRoute, VaultEntry,
 };
 use fub_abi::FormatProvider;
 use fub_kernel::{FormatRegistry, Workspace};
@@ -135,6 +135,22 @@ impl FormatProvider for Parser {
         self.parse.fetch_add(1, Ordering::Relaxed);
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = source.text().unwrap_or_default().to_string();
+        model.links.push(Link {
+            target: LinkTarget::wiki(NOTE_ZERO),
+            embed: false,
+            span: Span::EMPTY,
+            context: Some("bench link".to_string()),
+        });
+        model.tags.push(Tag {
+            name: format!("bench/{}", ctx.doc_id),
+            span: Span::EMPTY,
+        });
+        let mut fields = serde_json::Map::new();
+        fields.insert(
+            "bench".to_string(),
+            serde_json::Value::String(ctx.doc_id.clone()),
+        );
+        model.frontmatter = Frontmatter(fields);
         Ok(model)
     }
 
@@ -233,8 +249,8 @@ fn seed(root: &Utf8Path, count: usize) -> (Mounted, Parser, Batches) {
         .mounts();
     for the in 0..count {
         bench.write(
-            &format!("Note {the}.md"),
-            &format!("# Note {the}\n\nA body with [[Note 0]] and #bench, long enough\nto cost a real parse.\n"),
+            &note_path(the),
+            &format!("# Note {the}\n\nA body with [[{NOTE_ZERO}]] and #bench, long enough\nto cost a real parse.\n"),
         );
     }
     bench
@@ -270,6 +286,11 @@ fn folder() -> (tempfile::TempDir, Utf8PathBuf) {
 /// che è privato: qui il numero si riscrive, e se i due divergono sono gli
 /// `assert_eq!` di sotto a dirlo, con dentro il conto che si aspettavano.
 const BATCH_SIZE: usize = 512;
+const NOTE_ZERO: &str = "Folder 0/Note 0.md";
+
+fn note_path(index: usize) -> String {
+    format!("Folder {index}/Note {index}.md")
+}
 
 // ---------------------------------------------------------------------------
 // 1. L'apertura, contata in attraversamenti del confine
@@ -427,6 +448,129 @@ fn first_twenty_entries(ws: &Workspace) -> usize {
 }
 
 // ---------------------------------------------------------------------------
+// 4. Le famiglie paginabili, una riga di allocazioni ciascuna
+// ---------------------------------------------------------------------------
+
+/// Le otto famiglie che costruiscono una pagina (`VaultHealth` ha già il proprio
+/// banco di risoluzione qui sotto). Ogni riga misura la stessa domanda su trecento
+/// e seicento note: il banco riporta il numero, senza imporre una soglia comune a
+/// famiglie che hanno costi diversi per costruzione (in particolare `Folders`).
+/// Rimisura: `cargo test -p fub-kernel --test the_bench every_paged_index_family_has_an_allocation_row -- --nocapture`.
+const PAGED_FAMILIES: [&str; 8] = [
+    "Documents",
+    "Backlinks",
+    "Tags",
+    "Neighbors",
+    "PropertyValues",
+    "Drafts",
+    "Entries",
+    "Folders",
+];
+
+fn query_paged_family(ws: &Workspace, family: &str) -> usize {
+    let page = Some(Page::first(20));
+    let items = match family {
+        "Documents" => match ws
+            .query_index(IndexQuery::Documents {
+                matching: Default::default(),
+                sort: None,
+                select: Default::default(),
+                page,
+                excerpts: Default::default(),
+            })
+            .expect("the documents index responds")
+        {
+            IndexResult::Documents(paged) => paged.items.len(),
+            other => panic!("expected documents, got {other:?}"),
+        },
+        "Backlinks" => match ws
+            .query_index(IndexQuery::Backlinks {
+                target: DocId::new(NOTE_ZERO),
+                page,
+            })
+            .expect("the backlinks index responds")
+        {
+            IndexResult::Backlinks(paged) => paged.items.len(),
+            other => panic!("expected backlinks, got {other:?}"),
+        },
+        "Tags" => match ws
+            .query_index(IndexQuery::Tags {
+                matching: Default::default(),
+                page,
+            })
+            .expect("the tags index responds")
+        {
+            IndexResult::Tags(paged) => paged.items.len(),
+            other => panic!("expected tags, got {other:?}"),
+        },
+        "Neighbors" => match ws
+            .query_index(IndexQuery::Neighbors {
+                seeds: Default::default(),
+                direction: LinkDirection::Inbound,
+                depth: 1,
+                page,
+            })
+            .expect("the graph index responds")
+        {
+            IndexResult::Neighbors(paged) => paged.items.len(),
+            other => panic!("expected neighbors, got {other:?}"),
+        },
+        "PropertyValues" => match ws
+            .query_index(IndexQuery::PropertyValues {
+                key: "bench".to_string(),
+                matching: Default::default(),
+                page,
+            })
+            .expect("the property index responds")
+        {
+            IndexResult::PropertyValues(paged) => paged.items.len(),
+            other => panic!("expected property values, got {other:?}"),
+        },
+        "Drafts" => match ws
+            .query_index(IndexQuery::Drafts { page })
+            .expect("the drafts index responds")
+        {
+            IndexResult::Drafts(paged) => paged.items.len(),
+            other => panic!("expected drafts, got {other:?}"),
+        },
+        "Entries" => first_twenty_entries(ws),
+        "Folders" => match ws
+            .query_index(IndexQuery::Folders { under: None, page })
+            .expect("the folders index responds")
+        {
+            IndexResult::Folders(paged) => paged.items.len(),
+            other => panic!("expected folders, got {other:?}"),
+        },
+        other => panic!("unknown paged family {other}"),
+    };
+    assert_eq!(items, 20, "{family} must construct the requested page");
+    items
+}
+
+#[test]
+fn every_paged_index_family_has_an_allocation_row() {
+    let mut rows = Vec::new();
+    for count in [300usize, 600] {
+        let (_dir, root) = folder();
+        let (mut bench, _parser, _batches) = seed(&root, count);
+        bench.reindex().expect("opening");
+        for the in 0..count {
+            bench
+                .save_draft(&DocId::new(note_path(the)), "unsaved bench text", None)
+                .expect("the draft saves");
+        }
+        for family in PAGED_FAMILIES {
+            let _ = query_paged_family(&bench, family);
+            let allocations = count_allocations(|| query_paged_family(&bench, family));
+            rows.push((family, count, allocations));
+        }
+    }
+    eprintln!("IndexQuery family | notes | allocations");
+    for (family, count, allocations) in rows {
+        eprintln!("{family} | {count} | {allocations}");
+    }
+}
+
 // 4. Risolvere un riferimento, contato in allocazioni
 // ---------------------------------------------------------------------------
 

@@ -114,7 +114,6 @@ describe("il testo fermo di index.html", () => {
     // un'altra è la stessa divergenza, meno visibile: nessuno rilegge i
     // `title`.
     for (const [attribute, where] of [
-      ["data-i18n-title", "title"],
       ["data-i18n-placeholder", "placeholder"],
       ["data-i18n-label", "aria-label"],
     ] as const) {
@@ -289,7 +288,8 @@ describe("il testo fermo si riempie", () => {
 
     const button = root.querySelector("button")!;
     expect(button.textContent).toBe("Chiudi");
-    expect(button.getAttribute("title")).toBe("Chiudi");
+    expect(button.getAttribute("title")).toBeNull();
+    expect(button.getAttribute("data-i18n-title")).toBe("app.close");
 
     const field = root.querySelector("input")!;
     expect(field.getAttribute("placeholder")).toBe("Cerca nel vault…");

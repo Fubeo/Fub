@@ -28,6 +28,7 @@ import fonts from "../src/theme/serie/fonts.css?raw";
 import { mount as mount } from "../src/theme/loader";
 import { contrast } from "../src/theme/contrast";
 import { mountTree } from "../src/ui/node";
+import { COMPONENTS } from "../src/theme/serie/anatomia";
 import { SAMPLES } from "./samples";
 
 const params = new URLSearchParams(window.location.search);
@@ -75,8 +76,26 @@ function section(title: string): HTMLElement {
 // Componenti.
 // ---------------------------------------------------------------------------
 
+/** La scena legge la tabella chiusa: ogni specie e ogni stato ha una foto. */
+function anatomy(): void {
+  const grid = section("Shell anatomy");
+  for (const component of COMPONENTS) {
+    for (const state of component.states) {
+      const cell = el("div", "cella");
+      cell.append(el("span", "didascalia", `${component.name} · ${state.label}`));
+      const proof = el("div", component.hooks.join(" "));
+      proof.dataset.component = component.name;
+      proof.dataset.state = state.name;
+      proof.textContent = component.name;
+      cell.append(proof);
+      grid.append(cell);
+    }
+  }
+}
+
 function components(): void {
   header("Components");
+  anatomy();
   for (const sample of SAMPLES) {
     const grid = section(sample.title);
     for (const state of sample.states) {

@@ -31,6 +31,8 @@ senza-permessi = []
 # Il mondo che chiede anche la rete (vedi `wit/ping.wit`): esiste perché il
 # rifiuto dell'host abbia davanti un componente vero.
 con-rete = []
+# Il mondo che chiede i dati persistiti: il backend WASM lo rifiuta al caricamento.
+con-dati = []
 
 [dependencies]
 wit-bindgen = "0.60"

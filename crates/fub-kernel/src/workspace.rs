@@ -67,7 +67,8 @@ use fub_abi::settings::{
 };
 use fub_abi::text::{Localize, Strings, Text};
 use fub_abi::traits::{
-    BacklinkRef, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler, HostApi,
+    BacklinkRef, CivilTime, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler,
+    HostApi,
     IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobSpec,
     LinkDirection, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider, TimerSpec,
     VaultEntry, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
@@ -638,6 +639,44 @@ pub struct Workspace {
     /// Crea un workspace su una radice con un registry di provider già
     last_removed: Option<(DocId, Revision)>,
 }
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+struct StoredCivilTime {
+    year: i32,
+    month: u8,
+    day: u8,
+    hour: u8,
+    minute: u8,
+    second: u8,
+}
+
+impl From<StoredCivilTime> for CivilTime {
+    fn from(value: StoredCivilTime) -> Self {
+        CivilTime {
+            year: value.year,
+            month: value.month,
+            day: value.day,
+            hour: value.hour,
+            minute: value.minute,
+            second: value.second,
+        }
+    }
+}
+
+impl From<CivilTime> for StoredCivilTime {
+    fn from(value: CivilTime) -> Self {
+        StoredCivilTime {
+            year: value.year,
+            month: value.month,
+            day: value.day,
+            hour: value.hour,
+            minute: value.minute,
+            second: value.second,
+        }
+    }
+}
+
+const TIMER_CURSORS_FILE: &str = "timers.json";
 
 impl Workspace {
     /// popolato, e **senza livello macchina**: le impostazioni di macchina
@@ -1486,7 +1525,7 @@ impl Workspace {
 
     ///
     /// `plugin` è l'identità di chi lo offre: determina lo spazio dello storage
-    /// persistente che l'`HostApi` gli concede (`.fub/data/plugins/<id>/`) e
+    /// persistente che l'`HostApi` gli concede (`.fub/plugins/<id>/`, con cache in `.fub/data/plugins/<id>/`) e
     /// **i permessi con cui girerà**. Un handler non nomina niente di suo, e
     /// quindi non ha id da far collidere: l'unico nome in gioco è quello del
     /// plugin.
@@ -1860,6 +1899,13 @@ impl Workspace {
         // **Gli indici si svuotano qui**, cioè all'inizio della prima fase e
         let mut documents: Vec<VaultEntry> = Vec::new();
         let mut known_entries: Vec<Option<StoredEntry>> = Vec::new();
+        let mut assets: Vec<VaultEntry> = Vec::new();
+        for (entry, _) in entries
+            .iter()
+            .filter(|(and, _)| and.kind == EntryKind::Asset)
+        {
+            assets.push(entry.clone());
+        }
         for (entry, known) in entries
             .iter()
             .filter(|(and, _)| and.kind == EntryKind::Document)
@@ -1919,6 +1965,9 @@ impl Workspace {
                 to_index.push(entry);
             }
         }
+        // Gli allegati non hanno metadati da ripristinare: la seconda fase ne
+        // legge i byte e aggiorna la stessa impronta dei documenti.
+        to_index.extend(assets);
 
         // dichiara di esistere (decisione 0012).
         //
@@ -2069,16 +2118,27 @@ impl Workspace {
                     // Ciò che non si è potuto leggere o parsare: si raccoglie
         let mut sources: BTreeMap<DocId, DocumentSource> = BTreeMap::new();
         for mut entry in entries {
+            if entry.kind == EntryKind::Asset {
+                if entry.fingerprint.is_none() {
+                    match docs.vault.read_bytes(&entry.id) {
+                        Ok(bytes) => {
+                            entry.fingerprint = Some(Revision::of_bytes(&bytes));
+                        }
+                        Err(why) => {
+                            discarded_idx.insert(entry.id.clone());
+                            out.discarded.push((entry.id.clone(), why));
+                        }
+                    }
+                }
+                out.read.push(entry);
+                continue;
+            }
             if entry.fingerprint.is_none() {
                 match docs.source_from_disk(&entry.id) {
                     Ok(source) => {
                         entry.fingerprint = Some(Revision::of_bytes(source.bytes()));
                         sources.insert(entry.id.clone(), source);
                     }
-                    // e non si solleva. I guasti si emettono in
-                    // `finish_index`, perché `report_trouble` vuole `&mut
-                    // self` e qui il prestito è già preso.
-        // **La domanda agli indici è per fetta**, come lo è l'alimentazione. Un
                     Err(why) => {
                         discarded_idx.insert(entry.id.clone());
                         out.discarded.push((entry.id.clone(), why));
@@ -2096,10 +2156,19 @@ impl Workspace {
         // Per fetta di chunk: ogni thread chiede per le proprie voci, e il
         // risultato è lo stesso — la domanda è per documento.
     // L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
-        let already = indexes.up_to_date(&out.read);
+        let documents: Vec<VaultEntry> = out
+            .read
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::Document)
+            .cloned()
+            .collect();
+        let already = indexes.up_to_date(&documents);
 
         for entry in &out.read {
             if discarded_idx.contains(&entry.id) {
+                continue;
+            }
+            if entry.kind == EntryKind::Asset {
                 continue;
             }
             let remembered = store
@@ -5761,7 +5830,7 @@ impl Workspace {
     /// [`import`](Workspace::import).
     ///
     /// Come per gli altri provider, `id` è un nome semplice e determina lo
-    /// spazio dati (`.fub/data/plugins/<id>/`).
+    /// spazio dati autorevole (`.fub/plugins/<id>/`), con cache derivata in `.fub/data/plugins/<id>/`.
     /// Registra un [`ExportProvider`] per conto di un plugin dichiarato.
     pub fn register_import_provider(
         &mut self,
@@ -7095,11 +7164,9 @@ impl Workspace {
     ///   conclusione falsa.
     /// - **Il cestino**: una nota cestinata non è sparita, è recuperabile, e
     ///   spostarne i dati su un omonimo li toglierebbe a chi la ripristina.
-    /// - **Gli allegati**, che un'impronta non ce l'hanno affatto — la calcola
-    ///   solo chi legge, e nessuno legge un PNG. È la casella residua del §14.1,
-    ///   e questa funzione è il primo posto che ne dice a cosa servirebbe: il
-    ///   giorno che c'è, gli allegati si ricongiungono di qui senza una riga in
-    ///   più.
+    /// - **Gli allegati**: la seconda fase calcola la stessa impronta dei
+    ///   documenti direttamente dai byte, così una rinomina ad app chiusa può
+    ///   ricongiungersi qui senza una riga di codice dedicata.
     /// - **Un'anagrafe che non si è potuta leggere** (versione ignota, file
     ///   rotto): niente ieri, niente spariti, nessuna rinomina da vedere. Il
     ///   ricongiungimento è una capacità di un **derivato**, e perso il derivato
@@ -7241,6 +7308,11 @@ impl Workspace {
         self.docs.plugin_data_root(plugin)
     }
 
+    /// La radice derivata della cache di un plugin.
+    pub(crate) fn plugin_cache_root(&self, plugin: &str) -> Utf8PathBuf {
+        self.docs.plugin_cache_root(plugin)
+    }
+
     /// dati di un plugin sta **dentro** il vault, e ci si scrive con lo stesso
     /// supporto con cui si scrivono i documenti.
     /// Traduce un path relativo dello spazio di un plugin in un path assoluto,
@@ -7283,6 +7355,61 @@ impl Workspace {
         }
         Ok(path)
     }
+
+    /// Traduce un path relativo nello spazio derivato della cache.
+    pub(crate) fn plugin_cache_path(
+        &self,
+        plugin: &str,
+        rel: &str,
+    ) -> std::result::Result<Utf8PathBuf, PluginError> {
+        let data_path = self.plugin_data_path(plugin, rel)?;
+        let relative = data_path
+            .strip_prefix(self.plugin_data_root(plugin))
+            .map_err(|_| PluginError::Internal("cache path outside plugin root".into()))?;
+        Ok(self.plugin_cache_root(plugin).join(relative))
+    }
+    /// Legge i cursori dei timer del plugin dal dato autorevole del vault.
+    ///
+    /// Il file vive nello spazio dati del plugin (`.fub/plugins/<id>/`), la
+    /// stessa radice centralizzata da `plugin_data_path`; non è una cache.
+    pub fn timer_cursors(
+        &self,
+        owner: &str,
+    ) -> std::result::Result<BTreeMap<String, CivilTime>, PluginError> {
+        let path = self.plugin_data_path(owner, TIMER_CURSORS_FILE)?;
+        let bytes = match self.storage().read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+            Err(error) => return Err(PluginError::Io(format!("{path}: {error}").into())),
+        };
+        let stored: BTreeMap<String, StoredCivilTime> = serde_json::from_slice(&bytes)
+            .map_err(|error| PluginError::Internal(format!("timer cursors at {path}: {error}").into()))?;
+        Ok(stored.into_iter().map(|(id, time)| (id, time.into())).collect())
+    }
+
+    /// Aggiorna atomicamente il cursore di un timer.
+    pub fn set_timer_cursor(
+        &self,
+        owner: &str,
+        timer: &str,
+        cursor: CivilTime,
+    ) -> std::result::Result<(), PluginError> {
+        let path = self.plugin_data_path(owner, TIMER_CURSORS_FILE)?;
+        self.storage()
+            .update(&path, &mut |existing| {
+                let mut stored: BTreeMap<String, StoredCivilTime> = existing
+                    .map(|bytes| serde_json::from_slice(bytes))
+                    .transpose()
+                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
+                    .unwrap_or_default();
+                stored.insert(timer.to_owned(), cursor.into());
+                serde_json::to_vec_pretty(&stored)
+                    .map(Some)
+                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+            })
+            .map_err(|error| PluginError::Io(format!("{path}: {error}").into()))
+    }
+
 }
 
 /// esistere): normalizza i separatori `\` → `/`, toglie spazi e slash iniziali, e

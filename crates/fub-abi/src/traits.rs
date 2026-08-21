@@ -680,8 +680,9 @@ pub trait VaultStructure: VaultRead {
 // --- storage persistente per-plugin -----------------------------------------
 //
 // Blob nominati con path relativi dentro uno spazio che l'host assegna e
-// impone (`.fub/data/plugins/<id>/`): il plugin non conosce la radice del
-// vault, non compone path assoluti e non può uscire dal proprio recinto.
+// impone (`.fub/plugins/<id>/` per dati autorevoli, `.fub/data/plugins/<id>/`
+// per cache): il plugin non conosce la radice del vault, non compone path
+// assoluti e non può uscire dal proprio recinto.
 // È l'alternativa a un'API filesystem scoped, ed è stata scelta perché il
 // recinto qui è una proprietà della firma, non una convenzione da
 // rispettare — vedi docs/architecture/plugin-boundary.md.
@@ -693,19 +694,23 @@ pub trait VaultStructure: VaultRead {
 
 /// Rileggere i propri blob persistenti.
 pub trait DataRead: Send + Sync {
-    /// Legge un blob. Assente → `Ok(None)` (mancare non è un errore).
+    /// Legge un blob autorevole. Assente → `Ok(None)` (mancare non è un errore).
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError>;
-    /// I blob sotto un prefisso, path relativi allo spazio del plugin e
+    /// I blob autorevoli sotto un prefisso, path relativi allo spazio del plugin e
     /// ordinati. Prefisso inesistente → lista vuota.
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError>;
+    /// Legge un blob derivato dalla cache. Assente → `Ok(None)`.
+    fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError>;
 }
 
 /// Scrivere e cancellare i propri blob persistenti.
 pub trait DataWrite: DataRead {
-    /// Scrive un blob, creando le directory intermedie.
+    /// Scrive un blob autorevole, creando le directory intermedie.
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError>;
-    /// Cancella un blob. Idempotente: cancellare ciò che non c'è riesce.
+    /// Cancella un blob autorevole. Idempotente: cancellare ciò che non c'è riesce.
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError>;
+    /// Scrive un blob derivato nella cache, creando le directory intermedie.
+    fn cache_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError>;
 }
 
 // --- le impostazioni (§11.1) -----------------------------------------------
@@ -1190,6 +1195,29 @@ pub trait HostNetwork: Send + Sync {
         &self,
         request: crate::net::HttpRequest,
     ) -> Result<crate::net::HttpResponse, PluginError>;
+
+    /// Esegue una richiesta legata alla bandiera del job. Il default conserva
+    /// il contratto per gli host che non hanno un trasporto interrompibile; un
+    /// trasporto che può fermare la connessione deve controllare la bandiera
+    /// durante la lettura del corpo.
+    fn fetch_cancelled(
+        &self,
+        request: crate::net::HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<crate::net::HttpResponse, PluginError> {
+        if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(PluginError::Cancelled(
+                "the network request was cancelled".into(),
+            ));
+        }
+        let response = self.fetch(request)?;
+        if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(PluginError::Cancelled(
+                "the network request was cancelled".into(),
+            ));
+        }
+        Ok(response)
+    }
 }
 
 /// Un prestito è ancora il filo: serve a chi ha un `Arc<dyn HostNetwork>` e
@@ -1200,6 +1228,14 @@ impl<T: HostNetwork + ?Sized> HostNetwork for &T {
         request: crate::net::HttpRequest,
     ) -> Result<crate::net::HttpResponse, PluginError> {
         (**self).fetch(request)
+    }
+
+    fn fetch_cancelled(
+        &self,
+        request: crate::net::HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<crate::net::HttpResponse, PluginError> {
+        (**self).fetch_cancelled(request, cancelled)
     }
 }
 

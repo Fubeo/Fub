@@ -2,7 +2,8 @@
    la griglia lascia tutto lo spazio all'anteprima — e la modalità viaggia nel
    contesto di sessione, quindi le view che la seguono lo sanno. */
 /* **Il segmented control**: un gruppo di opzioni che si escludono, dentro una
-   cornice sola. L'accesa la dice un indicatore d'accento, non il riempimento.
+   cornice sola. L'accesa la dice il fondo attivo e la sottolineatura d'accento;
+   il fondo del gruppo resta il gradino del pannello.
 
    Ce n'erano tre — le modalità del pannello, le schede delle impostazioni, il
    commutatore del tema — e ognuna riscriveva la stessa cornice e lo stesso
@@ -21,7 +22,7 @@
   align-items: stretch;
   gap: 0;
   padding: var(--space-1);
-  background: var(--bg-input);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
@@ -64,7 +65,7 @@
 .segmented-option[aria-pressed="true"],
 .segmented-option[aria-selected="true"],
 .segmented-option[aria-checked="true"] {
-  background: transparent;
+  background: var(--bg-active);
   color: var(--text);
   box-shadow: inset 0 -2px 0 var(--accent);
 }

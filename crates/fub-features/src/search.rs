@@ -10,7 +10,7 @@
 //!    quindi non può perdere aggiornamenti; ciò che resta fuori dalla sua vista
 //!    — cancellazioni ad app chiusa — lo chiude [`IndexProvider::reconcile`].
 //! 2. **Riparte in fretta.** L'indice vive su disco nello spazio dati del
-//!    proprio plugin (`.fub/data/plugins/fub.search/`). Alla riapertura
+//!    proprio plugin (`.fub/plugins/fub.search/`). Alla riapertura
 //!    ogni documento ripassa da `on_documents_indexed`, ma l'impronta del
 //!    contenuto (vedi [`fingerprint`]) fa saltare gli immutati: su un vault non
 //!    toccato la riapertura non scrive nulla.

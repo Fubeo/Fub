@@ -24,6 +24,7 @@ import { iconEl } from "../ui/icons";
 import { showPanel } from "./sidebar";
 import { t, onLanguage } from "../i18n/strings";
 import type { Teardown } from "../ui/lifetime";
+import { setTooltip } from "../ui/tooltip";
 
 /// Le tre icone shell, nell'ordine canonico. Il grafo è uno di loro, e
 // conserva il suo id `#show-graph` — `mountGraph` ascolta quell'id, e non
@@ -66,7 +67,7 @@ function updateLabel(): void {
   for (const btn of shell.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
     const key = btn.dataset.label;
     const hint = btn.dataset.hint;
-    if (key) btn.setAttribute("title", t(key as never));
+    if (key) setTooltip(btn, t(key as never));
     if (hint) btn.setAttribute("aria-label", t(hint as never));
   }
 }
@@ -98,7 +99,7 @@ export function syncRail(): void {
     btn.dataset.panel = viewId;
     btn.dataset.label = name;
     btn.dataset.hint = name;
-    btn.setAttribute("title", name);
+    setTooltip(btn, name);
     btn.setAttribute("aria-label", name);
     btn.setAttribute("aria-pressed", "false");
     btn.addEventListener("click", () => showPanel(viewId));
@@ -120,7 +121,7 @@ function createRailButton(
   btn.className = "rail-btn";
   btn.dataset.label = label;
   btn.dataset.hint = hint;
-  btn.setAttribute("title", t(label as never));
+  setTooltip(btn, t(label as never));
   btn.setAttribute("aria-label", t(hint as never));
   const svg = iconEl(icon) ?? iconEl("outline");
   if (svg) btn.append(svg);
