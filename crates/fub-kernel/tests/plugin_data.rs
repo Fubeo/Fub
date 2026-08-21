@@ -104,6 +104,67 @@ fn cache_blobs_use_the_derived_root_without_mixing_authoritative_data() {
 
     assert!(root.join(".fub/plugins/prova.plugin/authoritative.json").exists());
     assert!(root.join(".fub/data/plugins/prova.plugin/index.json").exists());
+    assert!(
+        root.join(".fub/data/plugins/prova.plugin/.fub-cache-root").exists(),
+        "a cache write marks the derived root so data_* cannot mistake it for legacy data"
+    );
+}
+
+#[test]
+fn a_cache_write_on_a_plugin_without_data_is_not_authoritative() {
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
+
+    ws.with_host("prova.plugin", |host| {
+        host.cache_write("index.json", b"rebuildable").unwrap();
+        assert_eq!(
+            host.cache_read("index.json").unwrap().as_deref(),
+            Some(&b"rebuildable"[..])
+        );
+        assert_eq!(
+            host.data_read("index.json").unwrap(),
+            None,
+            "cache-first must not make `.fub/data/plugins/<id>/` look like leftover data"
+        );
+        assert!(
+            host.data_list("").unwrap().is_empty(),
+            "a plugin that has only cache has no authoritative blobs"
+        );
+    });
+
+    assert!(
+        !root.join(".fub/plugins/prova.plugin").exists(),
+        "cache-first does not invent a canonical tree"
+    );
+    assert!(root.join(".fub/data/plugins/prova.plugin/index.json").exists());
+    assert!(root.join(".fub/data/plugins/prova.plugin/.fub-cache-root").exists());
+}
+
+#[test]
+fn a_cache_write_migrates_legacy_data_before_creating_cache() {
+    let mut ws = vault();
+    let root = ws.root().to_path_buf();
+    let legacy = data_root(&root).join("plugins/prova.plugin/old.json");
+    std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+    std::fs::write(&legacy, b"legacy").unwrap();
+
+    ws.with_host("prova.plugin", |host| {
+        host.cache_write("index.json", b"rebuildable").unwrap();
+        assert_eq!(
+            host.data_read("old.json").unwrap().as_deref(),
+            Some(&b"legacy"[..]),
+            "legacy bytes move to the canonical root before cache is written"
+        );
+        assert_eq!(host.data_read("index.json").unwrap(), None);
+        assert_eq!(host.cache_read("index.json").unwrap().as_deref(), Some(&b"rebuildable"[..]));
+    });
+
+    assert_eq!(
+        std::fs::read(root.join(".fub/plugins/prova.plugin/old.json")).unwrap(),
+        b"legacy"
+    );
+    assert!(!legacy.exists(), "the old tree is no longer a second source");
+    assert!(root.join(".fub/data/plugins/prova.plugin/.fub-cache-root").exists());
 }
 
 #[test]

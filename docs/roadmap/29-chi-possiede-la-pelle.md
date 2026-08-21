@@ -4,8 +4,9 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md). La pelle della
 shell — i token, il chrome dei componenti, le animazioni — smette di essere
 della shell e diventa un **fascio sostituibile**, di cui il tema di serie è il
 primo esemplare: un tema di terzi non si sovrappone, **prende il posto**. Sei
-voci, tutte aperte, e la prima si può fare domani senza decidere nessuna delle
-altre cinque.
+voci, una chiusa: la prima l'ha chiusa la
+[0169](../decisions/0169-i-tre-strati-e-il-caricatore-che-sostituisce.md), e le
+altre cinque restano.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -107,26 +108,27 @@ solo.
 
 ### 29.1 I tre strati, e il caricatore che sostituisce
 
-*shell · **P1***
+*shell · **P1** — **chiusa** dalla
+[0169](../decisions/0169-i-tre-strati-e-il-caricatore-che-sostituisce.md)*
 
 Lo split vero del foglio visivo, con il caricatore che lo monta. È l'unica
 voce che si può decidere da sola, ed è la precondizione di tutte le altre: fin
 ché il foglio di serie è un file cablato, non c'è niente da sostituire.
 
-- [ ] **Spezzare `tokens.css` e `style.css` nei tre strati**: struttura alla
+- [x] **Spezzare `tokens.css` e `style.css` nei tre strati**: struttura alla
       shell; foglio (ruoli, tipografia, moto) e pelle (chrome) nel fascio del
       tema di serie. La domanda aperta, decisa qui: dove sta il confine fra
       foglio e struttura — la proposta è che scala di spazi e raggi vadano al
       foglio **con pavimento** (la densità compatta/rilassata è già una casella
       di 6.2), le metriche della scocca no.
-- [ ] **Dark e light di serie come primi due temi dello stesso caricatore**:
+- [x] **Dark e light di serie come primi due temi dello stesso caricatore**:
       `theme/theme.ts` resta il risolutore — scrive sempre un tema concreto,
       niente `prefers-color-scheme` nel CSS, come il commento di `tokens.css`
       già impone — ma smette di essere il proprietario dei valori.
-- [ ] **Il caricatore a sostituzione**: monta un foglio togliendo l'altro,
+- [x] **Il caricatore a sostituzione**: monta un foglio togliendo l'altro,
       stessa cosa per la pelle. Nessuna API pubblica: a questa altezza il
       caricatore serve solo alla shell e al tema di serie.
-- [ ] **Il banco**: montare due temi di fila e contare i fogli attivi — deve
+- [x] **Il banco**: montare due temi di fila e contare i fogli attivi — deve
       uscire **uno**. È il presidio della sostituzione, ed è anche il conto
       che la §29.2 aspetta: quante classi è servito toccare per rimettere in
       piedi la pelle di serie da zero.

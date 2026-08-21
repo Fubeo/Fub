@@ -677,6 +677,10 @@ impl From<CivilTime> for StoredCivilTime {
 }
 
 const TIMER_CURSORS_FILE: &str = "timers.json";
+/// Marca `.fub/data/plugins/<id>/` come cache. Senza di esso quella cartella
+/// è l'albero autorevole *legacy*: `cache_write` la crea, e data_* non deve
+/// scambiarla per dati.
+const PLUGIN_CACHE_MARK: &str = ".fub-cache-root";
 
 impl Workspace {
     /// popolato, e **senza livello macchina**: le impostazioni di macchina
@@ -7368,6 +7372,56 @@ impl Workspace {
             .map_err(|_| PluginError::Internal("cache path outside plugin root".into()))?;
         Ok(self.plugin_cache_root(plugin).join(relative))
     }
+
+    fn plugin_cache_mark_path(&self, plugin: &str) -> Utf8PathBuf {
+        self.plugin_cache_root(plugin).join(PLUGIN_CACHE_MARK)
+    }
+
+    /// `.fub/data/plugins/<id>/` esiste e **non** è cache: è l'albero vecchio.
+    pub(crate) fn plugin_legacy_is_authoritative(&self, plugin: &str) -> bool {
+        let cache = self.plugin_cache_root(plugin);
+        self.storage().exists(&cache)
+            && !self.storage().exists(&self.plugin_cache_mark_path(plugin))
+    }
+
+    pub(crate) fn plugin_authoritative_uses_canonical(&self, plugin: &str) -> bool {
+        self.storage().exists(&self.plugin_data_root(plugin))
+            || !self.plugin_legacy_is_authoritative(plugin)
+    }
+
+    pub(crate) fn plugin_authoritative_path(
+        &self,
+        plugin: &str,
+        rel: &str,
+    ) -> std::result::Result<Utf8PathBuf, PluginError> {
+        if self.plugin_authoritative_uses_canonical(plugin) {
+            self.plugin_data_path(plugin, rel)
+        } else {
+            self.plugin_cache_path(plugin, rel)
+        }
+    }
+
+    /// Prima di `cache_write`: se il vecchio albero è ancora autorevole, lo
+    /// sposta in `.fub/plugins/<id>/`. Poi posa il marcatore, così un plugin
+    /// nuovo che scrive solo cache non rende quei blob visibili a `data_read`.
+    pub(crate) fn prepare_plugin_cache_write(
+        &self,
+        plugin: &str,
+    ) -> std::result::Result<(), PluginError> {
+        if self.plugin_legacy_is_authoritative(plugin) {
+            let from = self.plugin_cache_root(plugin);
+            let to = self.plugin_data_root(plugin);
+            self.storage().rename(&from, &to).map_err(|and| {
+                PluginError::Io(format!("migrazione `{from}` → `{to}`: {and}").into())
+            })?;
+        }
+        let mark = self.plugin_cache_mark_path(plugin);
+        self.storage()
+            .write_derived(&mark, b"cache\n")
+            .map(|_| ())
+            .map_err(|and| PluginError::Io(format!("{mark}: {and}").into()))
+    }
+
     /// Legge i cursori dei timer del plugin dal dato autorevole del vault.
     ///
     /// Il file vive nello spazio dati del plugin (`.fub/plugins/<id>/`), la
@@ -7527,7 +7581,11 @@ pub(crate) fn collect_data_files(
         if entry.stat.is_dir() {
             collect_data_files(storage, root, &entry.path, out);
         } else if let Some(rel) = entry.path.strip_prefix(root).ok().map(Utf8Path::as_str) {
-            out.push(rel.replace('\\', "/"));
+            let rel = rel.replace('\\', "/");
+            if rel == PLUGIN_CACHE_MARK || rel.ends_with("/.fub-cache-root") {
+                continue;
+            }
+            out.push(rel);
         }
     }
 }

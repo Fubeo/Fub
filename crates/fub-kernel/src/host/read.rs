@@ -88,13 +88,7 @@ impl DataRead for ReadHost<'_> {
         if rel.is_empty() {
             return Err(PluginError::BadArgs("empty blob name".into()));
         }
-        let canonical = self.ws.plugin_data_root(self.plugin);
-        let legacy = self.ws.plugin_cache_root(self.plugin);
-        let path = if self.ws.storage().exists(&canonical) || !self.ws.storage().exists(&legacy) {
-            self.ws.plugin_data_path(self.plugin, rel)?
-        } else {
-            self.ws.plugin_cache_path(self.plugin, rel)?
-        };
+        let path = self.ws.plugin_authoritative_path(self.plugin, rel)?;
         match self.ws.storage().read(&path) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(and) if and.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -104,11 +98,13 @@ impl DataRead for ReadHost<'_> {
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
         let canonical = self.ws.plugin_data_root(self.plugin);
-        let legacy = self.ws.plugin_cache_root(self.plugin);
-        let (root, dir) = if self.ws.storage().exists(&canonical) || !self.ws.storage().exists(&legacy) {
+        let (root, dir) = if self.ws.plugin_authoritative_uses_canonical(self.plugin) {
             (canonical, self.ws.plugin_data_path(self.plugin, prefix)?)
         } else {
-            (legacy, self.ws.plugin_cache_path(self.plugin, prefix)?)
+            (
+                self.ws.plugin_cache_root(self.plugin),
+                self.ws.plugin_cache_path(self.plugin, prefix)?,
+            )
         };
         let mut out = Vec::new();
         collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out);

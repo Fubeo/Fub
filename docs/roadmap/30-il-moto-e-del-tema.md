@@ -5,7 +5,7 @@ fatto dei tre strati un fascio sostituibile — struttura, foglio, pelle — e h
 collocato il moto al suo posto: il foglio porta «tipografia e moto», la pelle
 porta «bordi, hover, effetti, keyframes — e le animazioni». Questa seduta non
 apre un'altra strada: cerna le decisioni che quel collocamento chiede, e le
-scrive come promesse vincolanti. Sette decisioni, due voci aperte, e nessun file
+scrive come promesse vincolanti. Sette decisioni, una voce aperta, e nessun file
 di codice cambia — è la seduta di ideazione che la roadmap userà per le tappe
 successive.
 
@@ -196,11 +196,12 @@ superficie che **può** permettersi moto continuo, perché è l'unica su canvas
 separato con loop che si spegne da solo quando quieto (`SOGLIA_ATTIVO`,
 `grafico.ts:39`). Dove si scrive non si balla (§30.6).
 
-- [ ] **§30.9 La lettura del moto ridotto nel loop del grafo**: il buco è
-      dichiarato, la forma — `matchMedia` riusato da `theme.ts` — è la
-      proposta. Resta aperta perché tocca il loop rAF: è l'unica superficie
-      dove il cancello della shell non arriva gratis, e la decisione di
-      implementazione la vuole davanti il loop vero, non qui.
+- [x] **§30.9 La lettura del moto ridotto nel loop del grafo**: **chiusa**
+      dalla
+      [0172](../decisions/0172-la-lettura-del-moto-ridotto-nel-grafo.md).
+      `theme/reduced-motion.ts` è l'unico punto che nomina
+      `prefers-reduced-motion`; i grafici si iscrivono, in moto ridotto camera
+      e pulse arrivano secchi.
 
 ### 30.6 Dove non si balla
 

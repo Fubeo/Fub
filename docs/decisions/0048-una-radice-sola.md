@@ -205,6 +205,11 @@ della costante non dice quanti livelli ha dentro.
 
 - **Le capacità native ci sono; resta il linker WASM**, scritto nella casella
   aperta della seduta 15 (§15.4), da usare prima di M5.
+- **Una `cache_write` su un plugin senza dati non rende i blob autorevoli**:
+  `.fub/data/plugins/<id>/` porta un marcatore `.fub-cache-root`. Senza di esso
+  quella cartella è l'albero *legacy* e, prima di scrivere cache, si sposta
+  intera in `.fub/plugins/<id>/`. Presidio:
+  `a_cache_write_on_a_plugin_without_data_is_not_authoritative`.
 - **Gli snapshot del versioning restano sotto la radice dei derivati**, e
   restano autorevoli. È la prima riga delle eccezioni in
   [on-disk-layout.md](../architecture/on-disk-layout.md), e si chiude con la

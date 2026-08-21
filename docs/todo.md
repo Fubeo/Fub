@@ -69,9 +69,9 @@ Sono uscite 169 voci:
   contro l'architettura che lo porta, e chiede da dove venga ciascuna delle cose
   che si vedono (nove, quattro chiuse).
 
-Centocinquantanove voci sono chiuse. I loro verbali stanno in
+Centosessantadue voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **tredici** [conta: voci-aperte]. Questo file è
+Le voci ancora aperte sono **dieci** [conta: voci-aperte]. Questo file è
 il loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -193,11 +193,11 @@ Si cercano le voci ponendo domande in questo ordine:
 | **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | **chiusa** — una voce sola, e il soggetto non era il prodotto ma **il ciclo di chi lo scrive**: la [0145](decisions/0145-gli-eseguibili-restano-a-calare-e-quanto-pesa-un-link.md) l'ha chiusa fuori dalle tre forme che proponeva, perché il costo non era il *numero* degli eseguibili ma il *peso* di ognuno | — | — |
 | **29** | [Chi possiede la pelle della shell](roadmap/29-chi-possiede-la-pelle.md) | la stessa domanda di proprietà vista da sei lati: che cosa si sostituisce, con quale contratto, attraverso quali cancelli, su quale strada di montaggio, con quale gesto dell'utente, e dove vive | 5 | 0 |
 | **30** | [Il moto è del tema](roadmap/30-il-moto-e-del-tema.md) | il collocamento della 29, cernito: scala del ritmo, montaggio con classi di coreografia, cambio di luce in dissolvenza, gesti per provenienza, grafo e moto ridotto, dove non si balla, presidi | 1 | 0 |
-| **31** | [Da dove viene ciò che si vede](roadmap/31-da-dove-viene-cio-che-si-vede.md) | la stessa domanda su nove cose che si vedono — un colore, una voce di carattere, un bottone, una distanza, una preferenza, una soglia, la superficie di scrittura, un nome di classe, una consegna — e nove volte la stessa risposta di oggi: *da una scelta fatta una volta e mai più derivabile* | 5 | 1 |
+| **31** | [Da dove viene ciò che si vede](roadmap/31-da-dove-viene-cio-che-si-vede.md) | la stessa domanda su nove cose che si vedono — un colore, una voce di carattere, un bottone, una distanza, una preferenza, una soglia, la superficie di scrittura, un nome di classe, una consegna — e nove volte la stessa risposta di oggi: *da una scelta fatta una volta e mai più derivabile* | 4 | 1 |
 
 ## Le voci
 
-Le voci aperte sono **tredici** [conta: voci-aperte].
+Le voci aperte sono **dieci** [conta: voci-aperte].
 
 È la [seduta 31](roadmap/31-da-dove-viene-cio-che-si-vede.md) (2026-08-19), e
 la sua domanda cade **dentro** l'architettura che le due precedenti hanno
@@ -216,7 +216,8 @@ conta gli elementi montati in un DOM finto — nessuno guarda, e
 `frontend/banco/` non esiste. Nessuna scade col freeze, perché nessuna sta nel
 WIT; tutte scadono con M3, perché il vocabolario degli hook si congela lì
 (§29.2). La [0170](decisions/0170-una-componente-un-anatomia.md) lo ha chiuso;
-restano aperte §31.5–§31.9.
+la [0171](decisions/0171-la-stessa-nota-in-tre-modi.md) ha chiuso la §31.8 e
+il residuo della §31.3. Restano aperte §31.5–§31.7 e §31.9.
 
 Prima di lei, la [seduta 30](roadmap/30-il-moto-e-del-tema.md) (2026-08-17): il
 moto della GUI, che la 29 aveva collocato — il ritmo nel foglio, le animazioni
@@ -412,7 +413,7 @@ e lascia una casella che aspetta una **condizione**, valutata dal
 una voce: una voce aperta è lavoro ancora da **decidere**. Le due somme restano
 separate perché contano cose separate.
 
-Le caselle residue oggi sono **quindici**, e stanno in quindici posti:
+Le caselle residue oggi sono **sedici**, e stanno in tredici posti:
 
 - [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) — una: i workspace salvati
   con un nome. La casa è decisa, il formato aspetta di vedere assetti veri.
@@ -510,18 +511,15 @@ nessuno è tornato a prendere la casella.
 
 | § | Voce | Seduta | Strato | |
 | --- | --- | --- | --- | --- |
-| **§29.1** | I tre strati, e il caricatore che sostituisce | 29 | shell · P1 | |
 | **§29.2** | Il contratto del tema: ruoli obbligatori e vocabolario degli hook | 29 | contratto · P1 | |
 | **§29.3** | I cancelli al montaggio: contrasto, moto, sanificazione | 29 | shell · P1 | |
 | **§29.4** | Un tema è un bundle senza provider | 29 | kernel · P1 | |
 | **§29.5** | La scheda, l'anteprima, e la via di fuga | 29 | shell · P1 | |
 | **§29.6** | Dove vive un tema, e come entra | 29 | kernel · P2 | |
 | **§30.8** | Arricchimento progressivo View Transitions | 30 | shell · P2 | |
-| **§30.9** | La lettura del moto ridotto nel loop del grafo | 30 | kernel · P1 | |
 | **§31.5** | Quanto è lontana una superficie | 31 | pelle · P1 | |
 | **§31.6** | Cosa è del tema e cosa della persona | 31 | shell · kernel · P1 | |
 | **§31.7** | Il contrasto ha più di una soglia | 31 | foglio · struttura · P1 | |
-| **§31.8** | La stessa nota in tre modi | 31 | pelle · editor · P1 | |
 | **§31.9** | Cosa si consegna a chi scriverà un tema | 31 | presidi · docs · P1 | |
 
 ## I difetti misurati
@@ -694,14 +692,6 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 
 ## Gli allegati
 
-- [§31.3](roadmap/31-da-dove-viene-cio-che-si-vede.md#313-la-voce-del-tema-i-caratteri)
-  — una: `--font-reading`, `--text-2xl`, `--text-3xl`, `--text-reading`,
-  `--leading-normal`, `--leading-relaxed` e `--content-width` sono dichiarati e
-  visibili nel campionario del banco (`banco/catalogo.html?catalogo=campionario`),
-  ma nessuna superficie vera li consuma ancora: la lettura, l'editor e
-  l'anteprima usano tuttora `--font-ui`/`--text-md`. È lavoro della §31.8 (*la
-  stessa nota in tre modi*), che li vuole tutti e tre allineati insieme e non
-  uno alla volta.
 - [Le voci a leva più alta](roadmap/leva.md)
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
