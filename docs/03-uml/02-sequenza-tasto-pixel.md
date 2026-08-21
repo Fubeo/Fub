@@ -1,9 +1,5 @@
 # Sequenza tasto → pixel
 
-Per chi è: studenti che vogliono seguire il viaggio di una modifica dal momento in cui si preme un tasto nell'editor fino a quando il testo è salvato e visibile sullo schermo.
-
----
-
 ## Il viaggio di una modifica
 
 Quando scrivi una lettera nell'editor di Fub, si attiva una catena di passaggi coordinati tra l'interfaccia grafica (la **shell** in TypeScript) e il motore centrale (il **kernel** in Rust).

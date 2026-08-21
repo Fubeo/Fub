@@ -1,9 +1,5 @@
 # La cartella `.fub/`: stato, indici e metadati
 
-Per chi è: studenti che vogliono capire cosa contengono i file di servizio creati automaticamente da Fub nella cartella `.fub/`.
-
----
-
 ## Due categorie di file: Autorevoli vs Derivati
 
 All'interno di ogni vault aperto, Fub crea una cartella nascosta chiamata `.fub/`. I file al suo interno si dividono rigorosamente in due categorie:

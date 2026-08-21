@@ -1,9 +1,5 @@
 # Il varco `HostApi`
 
-Per chi è: studenti che vogliono capire come un plugin può richiedere servizi a Fub (leggere un file, fare una query o registrare dati).
-
----
-
 ## La porta unica verso il mondo
 
 Un plugin non può accedere liberamente alle risorse del computer (non può aprire file a caso o aprire connessioni socket dirette). Tutto ciò che desidera fare deve passare attraverso l'interfaccia **`HostApi`**, fornita da Fub ad ogni chiamata.

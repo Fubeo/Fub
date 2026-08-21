@@ -1,9 +1,5 @@
 # Panoramica dei componenti
 
-Per chi è: studenti che vogliono una visione d'insieme su come è suddiviso il codice sorgente di Fub tra i vari moduli (detti *crate* in Rust) e il frontend.
-
----
-
 ## La suddivisione in moduli
 
 Fub è organizzato come un **workspace multi-crate**, cioè un progetto suddiviso in diversi pacchetti indipendenti, ciascuno con un compito ben preciso e confini stabiliti.

@@ -1,9 +1,5 @@
 # I trait principali in Rust (`fub-abi`)
 
-Per chi è: studenti e sviluppatori che vogliono comprendere nel dettaglio come sono strutturate le interfacce in Rust in [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs).
-
----
-
 ## Il ruolo dei Trait
 
 In Rust, un **trait** definisce un insieme di metodi che un tipo di dato deve implementare. In Fub, i trait rappresentano i punti di estensione del sistema.

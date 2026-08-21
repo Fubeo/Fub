@@ -1,9 +1,5 @@
 # Il Protocollo `UiNode`: Interfaccia Dichiarativa
 
-Per chi è: studenti che vogliono capire come un plugin in Rust o WebAssembly può disegnare componenti grafici senza scrivere codice HTML/CSS.
-
----
-
 ## Che cos'è una UI Dichiarativa?
 
 Invece di manipolare direttamente gli elementi del DOM della pagina web, il backend descrive ciò che vuole mostrare restituendo un albero di dati chiamato **`UiNode`** (definito in [`crates/fub-abi/src/ui.rs`](../../crates/fub-abi/src/ui.rs)).

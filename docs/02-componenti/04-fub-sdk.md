@@ -1,9 +1,5 @@
 # `fub-sdk` — Kit di sviluppo per plugin
 
-Per chi è: sviluppatori e studenti che vogliono creare una nuova estensione per Fub.
-
----
-
 ## A cosa serve
 
 [`crates/fub-sdk`](../../crates/fub-sdk) raccoglie funzioni e strutture di supporto che rendono facile e veloce scrivere un plugin per Fub.

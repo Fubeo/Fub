@@ -1,9 +1,5 @@
 # Come si avvia Fub
 
-Per chi è: studenti e sviluppatori che vogliono compilare, eseguire e testare Fub sul proprio computer.
-
----
-
 ## Prerequisiti
 
 Per compilare Fub servono:

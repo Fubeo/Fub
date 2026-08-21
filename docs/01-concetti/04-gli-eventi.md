@@ -1,14 +1,10 @@
-# Gli Eventi: l'altoparlante della scuola
+# Gli Eventi: il sistema di messaggistica
 
-Per chi è: studenti delle superiori che vogliono capire come i diversi componenti di Fub si tengono aggiornati quando qualcosa cambia.
+## L'analogia: l'annuncio pubblico
 
----
-
-## L'analogia: la campanella o l'annuncio scolastico
-
-A scuola, quando suona la campanella:
-- La segreteria non va di persona in ogni singola classe ad avvisare ogni singolo studente.
-- La campanella suona per tutti: ogni professore e ogni studente ascolta il segnale e compie la sua azione (chiudere il quaderno, cambiare aula, fare l'intervallo).
+Pensa a una stazione ferroviaria quando un treno è in arrivo:
+- La centrale non cerca ogni singolo passeggero per avvisarlo di persona.
+- Trasmette un annuncio all'altoparlante: tutti ascoltano contemporaneamente e solo chi è interessato a quel treno si sposta al binario.
 
 In Fub, il sistema di comunicazione si basa su questo stesso principio ed è chiamato **Event Bus** (il bus degli eventi, situato in [`crates/fub-kernel/src/bus.rs`](../../crates/fub-kernel/src/bus.rs)):
 

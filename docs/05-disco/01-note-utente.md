@@ -1,9 +1,5 @@
 # I file dell'utente: Note, Formato e Convenzioni
 
-Per chi è: studenti e sviluppatori che vogliono comprendere come sono strutturati i file `.md` all'interno di un vault Fub.
-
----
-
 ## Struttura di una nota tipica
 
 Un file di note in Fub è un file di testo normale con estensione `.md` codificato in **UTF-8**. Segue lo standard GitHub Flavored Markdown (GFM) arricchito con le convenzioni più diffuse (come quelle di Obsidian).

@@ -1,9 +1,5 @@
 # Il Vault: una cartella di note sul tuo disco
 
-Per chi è: studenti delle superiori che vogliono capire come Fub organizza i file delle note.
-
----
-
 ## L'analogia: la cartellina con i fogli
 
 Immagina di avere una cartellina trasparente con tanti fogli a quadretti. Su ogni foglio scrivi una lezione diversa, e su un foglio puoi scrivere una freccia che rimanda a un altro foglio (come `[[Geografia - I Fiumi]]`).

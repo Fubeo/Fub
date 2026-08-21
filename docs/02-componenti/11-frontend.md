@@ -1,9 +1,5 @@
 # `frontend` — L'interfaccia utente
 
-Per chi è: studenti interessati allo sviluppo web che vogliono scoprire come è costruita la GUI di Fub con TypeScript, Vite e CodeMirror 6.
-
----
-
 ## A cosa serve
 
 La cartella [`frontend`](../../frontend) contiene tutta l'interfaccia utente (la **shell**) eseguita all'interno della webview di Tauri.

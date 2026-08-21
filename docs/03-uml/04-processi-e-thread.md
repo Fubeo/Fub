@@ -1,9 +1,5 @@
 # Processi e thread a runtime
 
-Per chi è: studenti che vogliono capire come è organizzata la memoria, quali processi sono in esecuzione e quanti thread lavorano mentre Fub è aperto.
-
----
-
 ## Struttura dell'esecuzione
 
 Fub gira come **un unico processo** di sistema operativo, all'interno del quale convivono l'interfaccia grafica (la webview di Tauri) e i vari thread di lavoro in Rust.

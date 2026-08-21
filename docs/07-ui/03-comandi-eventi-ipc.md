@@ -1,9 +1,5 @@
 # Comunicazione IPC: Comandi ed Eventi
 
-Per chi è: studenti che vogliono capire come viaggiano i messaggi tra l'interfaccia grafica in TypeScript e il backend in Rust.
-
----
-
 ## Il doppio canale IPC
 
 La comunicazione tra il frontend (webview) e il backend (Rust) avviene attraverso due direzioni ben distinte:

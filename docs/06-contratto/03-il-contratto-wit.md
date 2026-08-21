@@ -1,9 +1,5 @@
 # Il Contratto WIT e WebAssembly Interface Types
 
-Per chi è: studenti che vogliono capire come i tipi di Fub vengono descritti in modo agnostico per funzionare con WebAssembly.
-
----
-
 ## Cos'è WIT?
 
 **WIT** (*WebAssembly Interface Types*) è un linguaggio di specifica standard per definire tipi di dato e interfacce di funzioni che devono essere scambiate tra un programma principale (l'host) e un modulo WebAssembly (il guest).

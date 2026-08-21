@@ -1,12 +1,8 @@
 # Il Kernel: il bibliotecario del programma
 
-Per chi è: studenti delle superiori che vogliono capire cosa fa il motore centrale di Fub.
-
----
-
 ## L'analogia: il bibliotecario
 
-Pensa a una biblioteca scolastica.
+Pensa a una grande biblioteca.
 - Il bibliotecario sa esattamente dove si trova ogni libro, chi lo ha preso in prestito e quanti libri parlano di scienze.
 - Tuttavia, il bibliotecario **non legge tutti i libri riga per riga** e **non dipinge le pareti della biblioteca**.
 

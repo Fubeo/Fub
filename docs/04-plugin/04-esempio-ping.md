@@ -1,9 +1,5 @@
 # Walkthrough: Il plugin `ping-wasm`
 
-Per chi è: studenti che vogliono analizzare un plugin WebAssembly reale, riga per riga.
-
----
-
 ## 1. L'Idea
 
 L'esempio [`esempi/ping-wasm`](../../esempi/ping-wasm) implementa un plugin WebAssembly minimale con due compiti:

@@ -1,9 +1,5 @@
 # Componenti e dipendenze del workspace
 
-Per chi è: studenti che vogliono vedere come sono collegati tra loro i diversi moduli di Fub e verificare quali librerie possono importarsi a vicenda.
-
----
-
 ## Il grafo delle dipendenze
 
 Il diagramma seguente mostra tutti i crate Rust presenti nel workspace e le relazioni tra di essi.

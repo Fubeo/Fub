@@ -1,9 +1,5 @@
 # Il Cestino `.trash/` e i file sidecar
 
-Per chi è: studenti che vogliono capire come Fub gestisce l'eliminazione e il ripristino sicuro delle note.
-
----
-
 ## Come funziona il cestino
 
 Quando elimini una nota in Fub:

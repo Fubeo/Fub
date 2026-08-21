@@ -1,9 +1,5 @@
 # Plugin nativi vs Plugin WebAssembly
 
-Per chi è: studenti che vogliono capire la differenza tra un plugin integrato nel codice (nativo) e un plugin esterno compilato in WebAssembly (WASM).
-
----
-
 ## Le due modalità di estensione
 
 In Fub esistono due modi per implementare un plugin:

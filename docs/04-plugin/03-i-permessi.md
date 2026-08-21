@@ -1,9 +1,5 @@
 # Permessi e sicurezza dei plugin
 
-Per chi è: studenti che vogliono capire come Fub protegge i dati dell'utente controllando cosa può o non può fare ogni plugin.
-
----
-
 ## Il principio del minimo privilegio
 
 Ogni plugin deve dichiarare nel proprio **manifest** (la sua carta d'identità) esattamente quali permessi richiede per funzionare. Se tenta di compiere un'azione non dichiarata, l'operazione viene bloccata immediatamente.
