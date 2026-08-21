@@ -581,7 +581,7 @@ fn declared_divergences() -> Vec<(&'static str, Reason, fn(&DocumentModel, &str)
             |d, _| d.body.first().map(Block::anchor) == Some(Some("")),
         ),
         (
-            "l'alt di un'immagine non enter nel testo indicizzato",
+            "l'alt di un'immagine non entra nel testo indicizzato",
             Reason::RepresentedButUnreachable,
             // La negazione da sola è vera su ogni documento che non dice
             // «didascalia», cioè su tutti tranne uno: la divergenza è che la parola
@@ -589,7 +589,7 @@ fn declared_divergences() -> Vec<(&'static str, Reason, fn(&DocumentModel, &str)
             |d, src| src.contains("didascalia") && !d.text.contains("didascalia"),
         ),
         (
-            "la sintassi grezza di un embed enter nel testo indicizzato",
+            "la sintassi grezza di un embed entra nel testo indicizzato",
             Reason::RepresentedButUnreachable,
             |d, _| d.text.contains("![["),
         ),
@@ -1323,7 +1323,7 @@ fn corpus_for_the_shell() -> Value {
         let mut task = Vec::new();
         model_tasks(&model, case.source, &mut task);
         cases.push(json!({
-            "nome": case.name,
+            "name": case.name,
             "source": case.source,
             "tag": tags,
             "wikilink": model_wikilinks(&model, case.source),
@@ -1335,7 +1335,7 @@ fn corpus_for_the_shell() -> Value {
 
 fn fixture_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../frontend/src/__fixtures__/corpus-sintassi.json")
+        .join("../../frontend/src/__fixtures__/corpus-syntax.json")
 }
 
 #[test]
@@ -1353,7 +1353,7 @@ fn the_corpus_fixture_matches_the_model_one() {
     let committed = std::fs::read_to_string(&path).unwrap_or_else(|and| {
         panic!(
             "fixture del corpus mancante ({}): {and}. Rigenerala con \
-             `UPDATE_MIRROR=1 cargo test -p fub-format-markdown --test corpus_della_shell`.",
+             `UPDATE_MIRROR=1 cargo test -p fub-format-markdown --test the_corpus`.",
             path.display()
         )
     });
@@ -1363,7 +1363,7 @@ fn the_corpus_fixture_matches_the_model_one() {
         committed, expected,
         "la fixture del corpus è stantia: il modello dice qualcosa di diverso \
          di queste sorgenti. Rigenerala con `UPDATE_MIRROR=1 cargo test -p \
-         fub-format-markdown --test corpus_della_shell`, poi guarda se \
+         fub-format-markdown --test the_corpus`, poi guarda se \
          `frontend/src/editor/corpus.test.ts` è ancora d'accordo — se non lo è, \
          le due passate hanno cominciato a dire due cose diverse."
     );

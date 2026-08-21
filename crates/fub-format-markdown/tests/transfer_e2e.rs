@@ -773,7 +773,7 @@ fn the_exclusions_from_the_hat_serve_again() {
         // contro quello che ne esce senza metadati. Confrontare l'uscita con la
         // sorgente originale direbbe un'altra cosa — che il taglio ha reso i byte
         // che erano — e sarebbe vero per costruzione.
-        assert_eq!(
+        assert_ne!(
             structure(&model(cut, &path)),
             structure(&model(&hatted, &path)),
             "`{name}` è escluso dal cappello perché «{reason}», e adesso col \
@@ -1285,7 +1285,7 @@ fn and_that_fixed_point_is_a_fact_about_this_corpus_not_about_the_format() {
     reimport(&mut other, &first.artifacts[0]);
     let second = other.export(&without_metadata()).expect("export");
 
-    assert_eq!(
+    assert_ne!(
         text(second.artifacts[0].as_bytes().expect("in memoria")),
         exited.as_str(),
         "il secondo giro non ha tolto niente: o comrak ha smesso di vedere il \

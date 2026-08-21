@@ -474,7 +474,7 @@ fn render_link(
         // peggio remota — è una decisione della shell (13.1 per gli allegati,
         // 5.3 e 23 per il contenuto remoto), non del provider che ha letto il
         // file. Chi disegna sa dove sta il vault; questo codice no.
-/// Ciò che si legge di un wikilink **senza alias**: l'interno intero, non la
+// Ciò che si legge di un wikilink **senza alias**: l'interno intero, non la
         LinkTarget::Url(url) if embed => {
             write!(out, "<div class=\"embed\"{}>", attr("data-embed-url", url)).unwrap();
             render_link_label(label, url, opts, out);

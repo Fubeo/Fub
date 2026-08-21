@@ -1606,7 +1606,7 @@ fn walk_definitions<'a>(
         }
         _ => {
             // aggiungono marcatori di riga propri; i figli si visitano uguale.
-/// Gli span dei paragrafi dell'albero vero, **prima** che la correzione dei
+// Gli span dei paragrafi dell'albero vero, **prima** che la correzione dei
             for child in node.children() {
                 walk_definitions(child, source, offsets, defs, containers);
             }
@@ -1650,8 +1650,8 @@ fn shadow_source(source: &str, footnotes: bool) -> String {
             shadow.push(c);
         }
     }
-/// Il giro sull'ombra: legge le definizioni dei paragrafi che nessun paragrafo
-/// vero copre — sono quelli che comrak ha staccato perché di **sola**
+// Il giro sull'ombra: legge le definizioni dei paragrafi che nessun paragrafo
+// vero copre — sono quelli che comrak ha staccato perché di **sola**
     String::from_utf8(shadow).expect("shadow is a permutation of the source")
 }
 
@@ -1670,9 +1670,9 @@ fn walk_shadow<'a>(
     let value = node.data.borrow().value.clone();
     if matches!(value, NodeValue::Paragraph) {
         let span = span_of(node, offsets);
-/// Quante righe hanno consumato le definizioni: il numero di terminatori nella
-/// fetta consumata (`\r\n` è **un** terminatore).
-/// I prefissi di riga del paragrafo: per ogni riga della fetta, quanti byte di
+// Quante righe hanno consumato le definizioni: il numero di terminatori nella
+// fetta consumata (`\r\n` è **un** terminatore).
+// I prefissi di riga del paragrafo: per ogni riga della fetta, quanti byte di
         let idx = real_spans.partition_point(|r| r.end <= span.start);
         if real_spans.get(idx).is_some_and(|r| contains_span(*r, span)) {
             return;
@@ -1727,8 +1727,8 @@ fn row_prefixes(
         let end = row_start + row.len();
         prefixes.push(row_prefix(&source[row_start..end], containers));
         row_start = end;
-/// Quanti byte della riga appartengono ai contenitori (e all'indentazione del
-/// paragrafo): per una riga pigra (citazione che non si apre) il contenuto
+// Quanti byte della riga appartengono ai contenitori (e all'indentazione del
+// paragrafo): per una riga pigra (citazione che non si apre) il contenuto
         while row_start < source.len() && matches!(source.as_bytes()[row_start], b'\n' | b'\r')
         {
             row_start += 1;
