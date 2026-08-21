@@ -33,13 +33,13 @@ Fub/
 
 ## Dove cercare cosa
 
-- **Vuoi cambiare l'aspetto visivo o l'editor?** → [`frontend/`](file:///home/fubeo/Files/Progetti/Fub/frontend)
-- **Vuoi capire come vengono salvati i file?** → [`crates/fub-kernel/`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-kernel)
-- **Vuoi creare una nuova interfaccia o un nuovo tipo di documento?** → [`crates/fub-abi/`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi)
-- **Vuoi vedere come funziona un plugin WASM?** → [`esempi/ping-wasm/`](file:///home/fubeo/Files/Progetti/Fub/esempi/ping-wasm)
+- **Vuoi cambiare l'aspetto visivo o l'editor?** → [`frontend/`](../../frontend)
+- **Vuoi capire come vengono salvati i file?** → [`crates/fub-kernel/`](../../crates/fub-kernel)
+- **Vuoi creare una nuova interfaccia o un nuovo tipo di documento?** → [`crates/fub-abi/`](../../crates/fub-abi)
+- **Vuoi vedere come funziona un plugin WASM?** → [`esempi/ping-wasm/`](../../esempi/ping-wasm)
 
 ---
 
 ## Se vuoi il dettaglio
 
-- Guarda le schede dettagliate dei singoli moduli in [`docs/02-componenti/`](file:///home/fubeo/Files/Progetti/Fub/docs/02-componenti/).
+- Guarda le schede dettagliate dei singoli moduli in [`docs/02-componenti/`](../02-componenti).

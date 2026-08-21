@@ -19,7 +19,7 @@ flowchart TD
 
 ## I permessi dichiarabili
 
-I permessi disponibili sono definiti in [`crates/fub-abi/src/options.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/options.rs) e includono:
+I permessi disponibili sono definiti in [`crates/fub-abi/src/options.rs`](../../crates/fub-abi/src/options.rs) e includono:
 
 - `READ_VAULT`: permette di leggere i file e la struttura delle note.
 - `WRITE_DOCUMENT`: permette di creare o modificare documenti nel vault.
@@ -32,7 +32,7 @@ I permessi disponibili sono definiti in [`crates/fub-abi/src/options.rs`](file:/
 
 ## Come il kernel applica i permessi
 
-Nel modulo [`crates/fub-kernel/src/host/guard.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-kernel/src/host/guard.rs), ogni metodo esposto tramite `HostApi` viene controllato dalla funzione di guardia prima di toccare il disco o lo stato:
+Nel modulo [`crates/fub-kernel/src/host/guard.rs`](../../crates/fub-kernel/src/host/guard.rs), ogni metodo esposto tramite `HostApi` viene controllato dalla funzione di guardia prima di toccare il disco o lo stato:
 
 ```rust
 // Esempio concettuale del controllo di guardia
@@ -47,5 +47,5 @@ Questo meccanismo protegge l'utente da plugin di terze parti dannosi o con bug, 
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-kernel/src/host/guard.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-kernel/src/host/guard.rs) per l'implementazione del controllo di sicurezza.
-- Guarda [`docs/04-plugin/04-esempio-ping.md`](file:///home/fubeo/Files/Progetti/Fub/docs/04-plugin/04-esempio-ping.md) per vedere come un plugin dichiara i propri permessi nel codice.
+- Guarda [`crates/fub-kernel/src/host/guard.rs`](../../crates/fub-kernel/src/host/guard.rs) per l'implementazione del controllo di sicurezza.
+- Guarda [`docs/04-plugin/04-esempio-ping.md`](./04-esempio-ping.md) per vedere come un plugin dichiara i propri permessi nel codice.

@@ -75,4 +75,4 @@ node .github/scripts/check-tables.mjs
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/00-inizia-qui/03-struttura-del-repo.md`](file:///home/fubeo/Files/Progetti/Fub/docs/00-inizia-qui/03-struttura-del-repo.md) per conoscere l'albero delle cartelle.
+- Guarda [`docs/00-inizia-qui/03-struttura-del-repo.md`](./03-struttura-del-repo.md) per conoscere l'albero delle cartelle.

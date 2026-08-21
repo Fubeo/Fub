@@ -32,5 +32,5 @@ flowchart LR
 
 ## Se vuoi il dettaglio
 
-- Scopri come avviare Fub sul tuo computer in [`docs/00-inizia-qui/02-come-si-avvia.md`](file:///home/fubeo/Files/Progetti/Fub/docs/00-inizia-qui/02-come-si-avvia.md).
-- Guarda la spiegazione dei concetti base in [`docs/01-per-studenti/`](file:///home/fubeo/Files/Progetti/Fub/docs/01-per-studenti/).
+- Scopri come avviare Fub sul tuo computer in [`docs/00-inizia-qui/02-come-si-avvia.md`](./02-come-si-avvia.md).
+- Guarda la spiegazione dei concetti base in [`docs/01-per-studenti/`](../01-per-studenti).

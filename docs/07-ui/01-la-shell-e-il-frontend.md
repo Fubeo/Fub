@@ -6,7 +6,7 @@ Per chi è: studenti che vogliono capire come è organizzata la webview di Fub s
 
 ## Architettura del Frontend
 
-L'interfaccia utente di Fub (la **shell**) si trova nella cartella [`frontend/`](file:///home/fubeo/Files/Progetti/Fub/frontend). Non usa framework pesanti, ma un'architettura modulare in TypeScript puro con rendering reattivo:
+L'interfaccia utente di Fub (la **shell**) si trova nella cartella [`frontend/`](../../frontend). Non usa framework pesanti, ma un'architettura modulare in TypeScript puro con rendering reattivo:
 
 ```mermaid
 flowchart TD
@@ -44,5 +44,5 @@ Lo stato dell'interfaccia (quale nota è aperta, quali schede sono attive) è ce
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/07-ui/02-il-protocollo-ui-node.md`](file:///home/fubeo/Files/Progetti/Fub/docs/07-ui/02-il-protocollo-ui-node.md) per scoprire come il backend costruisce l'interfaccia grafica.
-- Guarda [`docs/07-ui/03-comandi-eventi-ipc.md`](file:///home/fubeo/Files/Progetti/Fub/docs/07-ui/03-comandi-eventi-ipc.md) per il funzionamento della comunicazione IPC.
+- Guarda [`docs/07-ui/02-il-protocollo-ui-node.md`](./02-il-protocollo-ui-node.md) per scoprire come il backend costruisce l'interfaccia grafica.
+- Guarda [`docs/07-ui/03-comandi-eventi-ipc.md`](./03-comandi-eventi-ipc.md) per il funzionamento della comunicazione IPC.

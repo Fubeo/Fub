@@ -52,5 +52,5 @@ Fub rispetta scrupolosamente i file dell'utente:
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-format-markdown/src/parse.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-format-markdown/src/parse.rs) per vedere come il parser analizza i wikilink e il frontmatter.
-- Guarda [`docs/05-disco/02-cartella-fub.md`](file:///home/fubeo/Files/Progetti/Fub/docs/05-disco/02-cartella-fub.md) per scoprire come Fub gestisce i propri file ausiliari.
+- Guarda [`crates/fub-format-markdown/src/parse.rs`](../../crates/fub-format-markdown/src/parse.rs) per vedere come il parser analizza i wikilink e il frontmatter.
+- Guarda [`docs/05-disco/02-cartella-fub.md`](./02-cartella-fub.md) per scoprire come Fub gestisce i propri file ausiliari.

@@ -6,11 +6,11 @@ Per chi è: studenti che vogliono analizzare un plugin WebAssembly reale, riga p
 
 ## 1. L'Idea
 
-L'esempio [`esempi/ping-wasm`](file:///home/fubeo/Files/Progetti/Fub/esempi/ping-wasm) implementa un plugin WebAssembly minimale con due compiti:
+L'esempio [`esempi/ping-wasm`](../../esempi/ping-wasm) implementa un plugin WebAssembly minimale con due compiti:
 1. Rispondere a un'operazione di verifica ("ping") leggendo una nota (`Nota.md`) e contando i caratteri.
 2. Registrare due comandi per la palette (`demo.ping:conta` ed `demo.ping:esito-ricco`).
 
-Questo plugin ha un corrispettivo nativo nel test [`crates/fub-host/tests/the_first_plugin.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-host/tests/the_first_plugin.rs): entrambi eseguono lo stesso compito, dimostrando che Fub tratta codice nativo e WebAssembly con le stesse identiche regole.
+Questo plugin ha un corrispettivo nativo nel test [`crates/fub-host/tests/the_first_plugin.rs`](../../crates/fub-host/tests/the_first_plugin.rs): entrambi eseguono lo stesso compito, dimostrando che Fub tratta codice nativo e WebAssembly con le stesse identiche regole.
 
 ---
 
@@ -67,7 +67,7 @@ fn conta() -> Result<CommandOutcome, PluginError> {
 
 ## 3. Il Contratto WIT
 
-Il plugin non include il codice Rust di Fub, ma compila a partire dalle definizioni di interfaccia scritte in WebAssembly Interface Types ([`crates/fub-abi/wit/fub/abi.wit`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/wit/fub/abi.wit)).
+Il plugin non include il codice Rust di Fub, ma compila a partire dalle definizioni di interfaccia scritte in WebAssembly Interface Types ([`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit)).
 
 Questo garantisce che:
 1. Il binario `.wasm` sia leggero e indipendente dal compilatore Rust interno di Fub.
@@ -86,5 +86,5 @@ cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
 
 ## Se vuoi il dettaglio
 
-- Esplora il codice completo in [`esempi/ping-wasm/src/lib.rs`](file:///home/fubeo/Files/Progetti/Fub/esempi/ping-wasm/src/lib.rs).
-- Guarda [`crates/fub-wasm-host/src/component.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-wasm-host/src/component.rs) per vedere come Fub carica questo file `.wasm`.
+- Esplora il codice completo in [`esempi/ping-wasm/src/lib.rs`](../../esempi/ping-wasm/src/lib.rs).
+- Guarda [`crates/fub-wasm-host/src/component.rs`](../../crates/fub-wasm-host/src/component.rs) per vedere come Fub carica questo file `.wasm`.

@@ -10,7 +10,7 @@ Pensa a una biblioteca scolastica.
 - Il bibliotecario sa esattamente dove si trova ogni libro, chi lo ha preso in prestito e quanti libri parlano di scienze.
 - Tuttavia, il bibliotecario **non legge tutti i libri riga per riga** e **non dipinge le pareti della biblioteca**.
 
-In Fub, [`fub-kernel`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-kernel) è esattamente il bibliotecario:
+In Fub, [`fub-kernel`](../../crates/fub-kernel) è esattamente il bibliotecario:
 1. Sa quali file ci sono nella cartella (`DocumentStore`).
 2. Mantiene una mappa di tutti i collegamenti tra le note (`LinkGraph`), così quando apri una pagina sa subito quali altre pagine la citano.
 3. Se chiedi "dammi tutte le note con il tag `#esame`", chiede agli indici specializzati e ti restituisce l'elenco.
@@ -36,4 +36,4 @@ Se un giorno volessimo supportare file scritti in un altro formato (per esempio 
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/02-componenti/03-fub-kernel.md`](file:///home/fubeo/Files/Progetti/Fub/docs/02-componenti/03-fub-kernel.md) per scoprire i moduli interni di `fub-kernel`.
+- Guarda [`docs/02-componenti/03-fub-kernel.md`](../02-componenti/03-fub-kernel.md) per scoprire i moduli interni di `fub-kernel`.

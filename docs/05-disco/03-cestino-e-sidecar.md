@@ -42,4 +42,4 @@ Fub usa la stessa cartella `.trash/` standard adottata da Obsidian. Ciò signifi
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-kernel/src/entries.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-kernel/src/entries.rs) per la logica di spostamento dei file nel cestino.
+- Guarda [`crates/fub-kernel/src/entries.rs`](../../crates/fub-kernel/src/entries.rs) per la logica di spostamento dei file nel cestino.

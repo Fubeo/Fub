@@ -10,7 +10,7 @@ A scuola, quando suona la campanella:
 - La segreteria non va di persona in ogni singola classe ad avvisare ogni singolo studente.
 - La campanella suona per tutti: ogni professore e ogni studente ascolta il segnale e compie la sua azione (chiudere il quaderno, cambiare aula, fare l'intervallo).
 
-In Fub, il sistema di comunicazione si basa su questo stesso principio ed è chiamato **Event Bus** (il bus degli eventi, situato in [`crates/fub-kernel/src/bus.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-kernel/src/bus.rs)):
+In Fub, il sistema di comunicazione si basa su questo stesso principio ed è chiamato **Event Bus** (il bus degli eventi, situato in [`crates/fub-kernel/src/bus.rs`](../../crates/fub-kernel/src/bus.rs)):
 
 ```mermaid
 flowchart TD
@@ -32,5 +32,5 @@ flowchart TD
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/03-uml/02-sequenza-tasto-pixel.md`](file:///home/fubeo/Files/Progetti/Fub/docs/03-uml/02-sequenza-tasto-pixel.md) per vedere come un evento attraversa tutto il sistema.
-- Guarda [`crates/fub-abi/src/event.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/event.rs) per l'elenco di tutti gli eventi previsti dal contratto.
+- Guarda [`docs/03-uml/02-sequenza-tasto-pixel.md`](../03-uml/02-sequenza-tasto-pixel.md) per vedere come un evento attraversa tutto il sistema.
+- Guarda [`crates/fub-abi/src/event.rs`](../../crates/fub-abi/src/event.rs) per l'elenco di tutti gli eventi previsti dal contratto.

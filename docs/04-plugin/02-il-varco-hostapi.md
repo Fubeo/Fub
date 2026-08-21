@@ -45,5 +45,5 @@ L'interfaccia `HostApi` raggruppa diverse famiglie di funzioni:
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-abi/src/traits.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/traits.rs) per la definizione completa del trait `HostApi`.
-- Guarda [`docs/04-plugin/03-i-permessi.md`](file:///home/fubeo/Files/Progetti/Fub/docs/04-plugin/03-i-permessi.md) per scoprire come funzionano i permessi.
+- Guarda [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs) per la definizione completa del trait `HostApi`.
+- Guarda [`docs/04-plugin/03-i-permessi.md`](./03-i-permessi.md) per scoprire come funzionano i permessi.

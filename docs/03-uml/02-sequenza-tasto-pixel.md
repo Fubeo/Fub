@@ -50,6 +50,6 @@ sequenceDiagram
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-app/src/lib.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-app/src/lib.rs) per i comandi IPC registrati.
-- Guarda [`crates/fub-kernel/src/workspace.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-kernel/src/workspace.rs) per la funzione di scrittura dei documenti.
-- Guarda [`docs/07-ui/03-comandi-eventi-ipc.md`](file:///home/fubeo/Files/Progetti/Fub/docs/07-ui/03-comandi-eventi-ipc.md) per capire come funziona lo scambio di messaggi IPC.
+- Guarda [`crates/fub-app/src/lib.rs`](../../crates/fub-app/src/lib.rs) per i comandi IPC registrati.
+- Guarda [`crates/fub-kernel/src/workspace.rs`](../../crates/fub-kernel/src/workspace.rs) per la funzione di scrittura dei documenti.
+- Guarda [`docs/07-ui/03-comandi-eventi-ipc.md`](../07-ui/03-comandi-eventi-ipc.md) per capire come funziona lo scambio di messaggi IPC.

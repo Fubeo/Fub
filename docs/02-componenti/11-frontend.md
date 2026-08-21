@@ -6,7 +6,7 @@ Per chi è: studenti interessati allo sviluppo web che vogliono scoprire come è
 
 ## A cosa serve
 
-La cartella [`frontend`](file:///home/fubeo/Files/Progetti/Fub/frontend) contiene tutta l'interfaccia utente (la **shell**) eseguita all'interno della webview di Tauri.
+La cartella [`frontend`](../../frontend) contiene tutta l'interfaccia utente (la **shell**) eseguita all'interno della webview di Tauri.
 
 Si occupa di:
 - Mostrare l'albero dei file e cartelle del vault.
@@ -18,11 +18,11 @@ Si occupa di:
 
 ## Struttura delle cartelle
 
-- [`frontend/src/editor/`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/editor): configurazione di CodeMirror, estensioni di sintassi e rendering dell'anteprima.
-- [`frontend/src/panels/`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/panels): i vari pannelli della finestra (es. explorer, search, graph, trash, settings).
-- [`frontend/src/ui/`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/ui): interprete del protocollo `UiNode` (trasforma le descrizioni del backend in componenti del DOM).
-- [`frontend/src/state/`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/state): gestione dello stato reattivo, cronologia di salvataggio e ricezione eventi da Tauri.
-- [`frontend/src/host/`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/host): wrapper tipizzati per le chiamate IPC verso Rust.
+- [`frontend/src/editor/`](../../frontend/src/editor): configurazione di CodeMirror, estensioni di sintassi e rendering dell'anteprima.
+- [`frontend/src/panels/`](../../frontend/src/panels): i vari pannelli della finestra (es. explorer, search, graph, trash, settings).
+- [`frontend/src/ui/`](../../frontend/src/ui): interprete del protocollo `UiNode` (trasforma le descrizioni del backend in componenti del DOM).
+- [`frontend/src/state/`](../../frontend/src/state): gestione dello stato reattivo, cronologia di salvataggio e ricezione eventi da Tauri.
+- [`frontend/src/host/`](../../frontend/src/host): wrapper tipizzati per le chiamate IPC verso Rust.
 
 ---
 
@@ -40,5 +40,5 @@ npm run build     # Compila l'applicazione per la produzione
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/07-ui/01-la-shell-e-il-frontend.md`](file:///home/fubeo/Files/Progetti/Fub/docs/07-ui/01-la-shell-e-il-frontend.md) per l'architettura dettagliata della shell.
-- Guarda [`docs/07-ui/02-il-protocollo-ui-node.md`](file:///home/fubeo/Files/Progetti/Fub/docs/07-ui/02-il-protocollo-ui-node.md) per capire come il backend controlla l'interfaccia grafica.
+- Guarda [`docs/07-ui/01-la-shell-e-il-frontend.md`](../07-ui/01-la-shell-e-il-frontend.md) per l'architettura dettagliata della shell.
+- Guarda [`docs/07-ui/02-il-protocollo-ui-node.md`](../07-ui/02-il-protocollo-ui-node.md) per capire come il backend controlla l'interfaccia grafica.

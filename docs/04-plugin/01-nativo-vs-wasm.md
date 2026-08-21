@@ -47,5 +47,5 @@ La caratteristica più importante dell'architettura di Fub è che **il kernel no
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/04-plugin/02-il-varco-hostapi.md`](file:///home/fubeo/Files/Progetti/Fub/docs/04-plugin/02-il-varco-hostapi.md) per capire come i plugin comunicano con il sistema.
-- Guarda [`docs/04-plugin/03-i-permessi.md`](file:///home/fubeo/Files/Progetti/Fub/docs/04-plugin/03-i-permessi.md) per il sistema di permessi e sicurezza.
+- Guarda [`docs/04-plugin/02-il-varco-hostapi.md`](./02-il-varco-hostapi.md) per capire come i plugin comunicano con il sistema.
+- Guarda [`docs/04-plugin/03-i-permessi.md`](./03-i-permessi.md) per il sistema di permessi e sicurezza.

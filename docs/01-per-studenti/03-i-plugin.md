@@ -10,7 +10,7 @@ Quando colleghi una chiavetta USB, un mouse o una tastiera al tuo computer, non 
 
 In Fub, un **plugin** è proprio un accessorio modulare:
 - Tutte le funzioni aggiuntive (come il motore di ricerca veloce `tantivy`, la mappa grafica dei collegamenti o il cestino) sono scritte come plugin.
-- Si collegano al programma attraverso un insieme di regole fisse chiamate **trait** (definiti nel modulo [`crates/fub-abi`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi)).
+- Si collegano al programma attraverso un insieme di regole fisse chiamate **trait** (definiti nel modulo [`crates/fub-abi`](../../crates/fub-abi)).
 
 ```mermaid
 flowchart TD
@@ -37,5 +37,5 @@ Fub permette a chiunque di scrivere estensioni usando lo standard WebAssembly (W
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/04-plugin/01-nativo-vs-wasm.md`](file:///home/fubeo/Files/Progetti/Fub/docs/04-plugin/01-nativo-vs-wasm.md) per capire la differenza tra plugin interni e WebAssembly.
-- Guarda [`docs/04-plugin/04-esempio-ping.md`](file:///home/fubeo/Files/Progetti/Fub/docs/04-plugin/04-esempio-ping.md) per un esempio pratico.
+- Guarda [`docs/04-plugin/01-nativo-vs-wasm.md`](../04-plugin/01-nativo-vs-wasm.md) per capire la differenza tra plugin interni e WebAssembly.
+- Guarda [`docs/04-plugin/04-esempio-ping.md`](../04-plugin/04-esempio-ping.md) per un esempio pratico.

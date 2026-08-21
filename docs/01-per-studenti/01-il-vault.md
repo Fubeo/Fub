@@ -38,5 +38,5 @@ flowchart TB
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/05-disco/01-note-utente.md`](file:///home/fubeo/Files/Progetti/Fub/docs/05-disco/01-note-utente.md) per scoprire i dettagli tecnici del formato delle note.
-- Guarda [`docs/05-disco/02-la-cartella-fub.md`](file:///home/fubeo/Files/Progetti/Fub/docs/05-disco/02-la-cartella-fub.md) per la struttura della cartella `.fub/`.
+- Guarda [`docs/05-disco/01-note-utente.md`](../05-disco/01-note-utente.md) per scoprire i dettagli tecnici del formato delle note.
+- Guarda [`docs/05-disco/02-cartella-fub.md`](../05-disco/02-cartella-fub.md) per la struttura della cartella `.fub/`.

@@ -72,5 +72,5 @@ flowchart TD
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-abi/tests/dependency_invariant.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/tests/dependency_invariant.rs) per il test automatico che verifica la fedeltà di questo diagramma.
-- Guarda la cartella [`docs/02-componenti/`](file:///home/fubeo/Files/Progetti/Fub/docs/02-componenti/) per la spiegazione dettagliata di ciascun crate.
+- Guarda [`crates/fub-abi/tests/dependency_invariant.rs`](../../crates/fub-abi/tests/dependency_invariant.rs) per il test automatico che verifica la fedeltà di questo diagramma.
+- Guarda la cartella [`docs/02-componenti/`](../02-componenti) per la spiegazione dettagliata di ciascun crate.
