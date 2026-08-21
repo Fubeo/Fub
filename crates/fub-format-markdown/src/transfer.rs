@@ -14,6 +14,7 @@
 
 use fub_abi::edit::WriteBase;
 use fub_abi::format::ParseContext;
+use fub_abi::model::{custom_kind, Block};
 use fub_abi::traits::ReadApi;
 use fub_abi::transfer::{
     ArtifactSink, ConflictPolicy, ExportProvider, ExportReport, ExportRequest, ExportTarget,
@@ -354,10 +355,21 @@ fn frontmatter_end(source: &str, doc_id: &str) -> Option<usize> {
     let Ok(model) = crate::parse::parse_markdown(source, &ParseContext::obsidian(doc_id)) else {
         return None;
     };
-    if !model.frontmatter_present {
+    let unparsed_frontmatter = !model.frontmatter_present
+        && matches!(
+            model.body.first(),
+            Some(Block::Custom { custom_kind, .. })
+                if custom_kind == custom_kind::FRONTMATTER_UNPARSED
+        );
+    if !model.frontmatter_present && !unparsed_frontmatter {
         return None;
     }
-    match model.body.first() {
+    let first_body = if unparsed_frontmatter {
+        model.body.get(1)
+    } else {
+        model.body.first()
+    };
+    match first_body {
         Some(first) => {
             let content = first.span().start;
             let row = source[..content]
@@ -453,5 +465,15 @@ mod tests {
             (only, ""),
             "un documento che è solo frontmatter, senza, non è niente"
         );
+
+        let invalid = "---\ntitle: [\n---\n\n# Titolo\n";
+        assert_eq!(
+            split(invalid),
+            ("---\ntitle: [\n---\n\n", "# Titolo\n"),
+            "anche il frontmatter non proiettato si separa dal corpo"
+        );
+
+        let invalid_only = "---\ntitle: [\n---\n";
+        assert_eq!(split(invalid_only), (invalid_only, ""));
     }
 }

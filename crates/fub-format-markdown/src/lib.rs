@@ -573,12 +573,15 @@ mod tests {
             "il wikilink dentro l'etichetta esce come quello fuori: {html}"
         );
 
-        // E il verso opposto, che tiene il banco una misura e non un divieto:
-        // senza l'opzione, nessuno dei due porta l'`href`.
+        // Anche senza opzioni, entrambi i wikilink restano navigabili da tastiera.
         let html = MarkdownProvider::new()
             .render_html(&doc, &RenderOptions::default())
             .unwrap();
-        assert!(!html.contains("href=\"#\""), "html: {html}");
+        assert_eq!(
+            html.matches("class=\"wikilink\" data-wikilink-page=\"Nota\" href=\"#\"").count(),
+            2,
+            "il fallback href vale anche senza opzioni: {html}"
+        );
     }
 
     #[test]

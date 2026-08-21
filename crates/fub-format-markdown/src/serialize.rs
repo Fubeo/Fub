@@ -47,7 +47,7 @@ use fub_abi::model::{
 use fub_abi::rules::tag::scan_tags;
 use fub_abi::FormatError;
 
-use crate::util::{longest_run, unescape_char};
+use crate::util::longest_run;
 
 /// # Ciò che non si sa scrivere **risale**, non sparisce
 ///
@@ -324,7 +324,8 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                 .chain(rows.iter())
                 .map(|r| r.cells.len())
                 .max()
-                .unwrap_or(0);
+                .unwrap_or(0)
+                .max(1);
             let write_row = |row: &TableRow, out: &mut String| -> Result<(), FormatError> {
                 out.push('|');
                 for the in 0..columns {
@@ -346,6 +347,7 @@ fn write_block(block: &Block, out: &mut String) -> Result<(), FormatError> {
                     if let Some(c) = row.cells.get(the) {
                         write_inlines(&c.inlines, &mut cell)?;
                     }
+                    normalize_table_cell_breaks(&mut cell);
                     // La barra si escapa mentre si copia, a segmenti: una
                     // seconda stringa intera per il replace sarebbe una
                     // copia in più per ogni cella di ogni riga.
@@ -554,8 +556,18 @@ fn write_custom_block(
         // `: ` è la sintassi che la rende una descrizione. Senza, la riga
         // tornava un paragrafo qualunque e la definition list si scioglieva.
         let inner = blocks_to_string(blocks)?;
-        for line in inner.trim_end().lines() {
-            out.push_str(": ");
+        for (n, line) in inner.trim_end().lines().enumerate() {
+            if n > 0 {
+                out.push('\n');
+            }
+            if n == 0 {
+                out.push(':');
+                if !line.is_empty() {
+                    out.push(' ');
+                }
+            } else if !line.is_empty() {
+                out.push_str("    ");
+            }
             out.push_str(line);
             out.push('\n');
         }
@@ -586,6 +598,24 @@ fn write_inlines(inlines: &[Inline], out: &mut String) -> Result<(), FormatError
         write_inline(inline, out)?;
     }
     Ok(())
+}
+
+/// GFM non consente a un a-capo grezzo dentro una cella: il duro diventa
+/// `<br />`, il morbido uno spazio. Il passaggio dopo `write_inlines` copre
+/// anche i break annidati in enfasi o link senza duplicare il serializer.
+fn normalize_table_cell_breaks(cell: &mut String) {
+    let mut normalized = String::with_capacity(cell.len());
+    let mut start = 0;
+    while let Some(relative) = cell[start..].find('\n') {
+        let end = start + relative;
+        let hard_break = end >= 2 && cell.as_bytes()[end - 2] == b' ' && cell.as_bytes()[end - 1] == b' ';
+        let text_end = if hard_break { end - 2 } else { end };
+        normalized.push_str(&cell[start..text_end]);
+        normalized.push_str(if hard_break { "<br />" } else { " " });
+        start = end + 1;
+    }
+    normalized.push_str(&cell[start..]);
+    *cell = normalized;
 }
 
 /// **Torna un `Result`, e prima non lo faceva.**
@@ -834,6 +864,28 @@ fn bare_dest(url: &str) -> bool {
     depth == 0
 }
 
+/// Riporta gli escape dell'etichetta al testo letto, ma conserva quelli dei
+/// delimitatori `]` e `|`, necessari per non chiudere o separare il wikilink.
+fn unescape_wikilink_alias(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            let mut next = chars.clone();
+            if let Some(n) = next
+                .next()
+                .filter(|n| n.is_ascii_punctuation() && !matches!(n, ']' | '|'))
+            {
+                out.push(n);
+                chars = next;
+                continue;
+            }
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn write_link(
     target: &LinkTarget,
     label: Option<&[Inline]>,
@@ -869,7 +921,7 @@ fn write_link(
                 write_inlines(inlines, &mut lbl)?;
                 // Dentro le due parentesi non c'è escape: l'alias è testo nudo
                 // fino a `]]` (vedi [`disescapa`]).
-                let lbl = unescape_char(&lbl);
+                let lbl = unescape_wikilink_alias(&lbl);
                 // **L'alias si scrive perché c'è.** Il confronto col bersaglio
                 // stava qui — «se dice la stessa cosa non serve» — e toglieva
                 // dal file il `|Nota` di un `[[Nota|Nota]]` che l'utente aveva

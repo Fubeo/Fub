@@ -6,7 +6,6 @@ use fub_abi::format::RenderOptions;
 use fub_abi::model::{
     custom_kind, Block, ColumnAlign, DocumentModel, Inline, LinkTarget, TableRow,
 };
-use fub_abi::options::render_option;
 use fub_abi::rules::loads;
 
 use fub_abi::html::{attr, escape};
@@ -359,11 +358,11 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
 /// §25.7, e oggi nessun plugin lo paga. «Sostituire il campione con niente»
 /// è ciò che la riga vecchia rifiutava: non è niente, è la **chiave
 /// dichiarata** in `rules::loads`, e chi la segue rende come prima.
-/// La classe CSS di un `Custom`: il prefisso del lato che lo rende — `block` o
 fn text_content<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str> {
     loads::text_payload(kind, attrs)
 }
 
+/// La classe CSS di un `Custom`: il prefisso del lato che lo rende — `block` o
 /// `inline` — e poi il `custom_kind` **intero**, namespace compreso.
 ///
 /// **Sta in una funzione sola perché i due lati la componevano diversa**, e la
@@ -385,11 +384,11 @@ fn text_content<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str>
 /// della shell è scritto (`frontend/src/theme/serie/pelle.css`). Il `:` in un nome di
 /// classe è lecito in HTML; in un selettore CSS si scrive `\:`, ed è la stessa
 /// forma che i blocchi emettono già da prima di questa riga.
-/// Le coordinate di un wikilink come data-attribute, col prefisso di chi le
 fn css_class(side: &str, custom_kind: &str) -> String {
     format!("{side}-{custom_kind}")
 }
 
+/// Le coordinate di un wikilink come data-attribute, col prefisso di chi le
 /// riceve: `data-wikilink-*` per un riferimento, `data-embed-*` per il
 /// segnaposto di una transclusion.
 ///
@@ -404,7 +403,6 @@ fn css_class(side: &str, custom_kind: &str) -> String {
 /// Un campo assente **non si scrive**: un `data-embed-heading=""` non dice «non
 /// c'è heading», dice «l'heading è quello che si chiama nulla», e chi legge
 /// l'attributo con un `?? null` riceve la stringa vuota.
-                // Transclusion: `render_html` è una funzione pura per-documento
 fn wiki_attrs(
     prefix: &str,
     page: &str,
@@ -435,11 +433,11 @@ fn render_link(
             block,
         } => {
             if embed {
+                // Transclusion: `render_html` è una funzione pura per-documento
                 // e NON può leggere altri documenti (niente HostApi qui). Si
                 // emette un placeholder; il frontend chiama `render_embed` del
                 // kernel e innesta il contenuto (profondità e cicli a suo
                 // carico). Vedi docs/architecture/ui-protocol.md.
-            // Le stesse tre coordinate, con l'altro prefisso: il **blocco** il
                 write!(
                     out,
                     "<div class=\"embed\"{}>",
@@ -450,31 +448,29 @@ fn render_link(
                 out.push_str("</div>");
                 return;
             }
+            // Le stesse tre coordinate, con l'altro prefisso: il **blocco** il
             // parser lo legge dalla 0003, e fino alla 0049 si fermava qui —
             // `[[Nota#^blocco]]` arrivava alla shell come un link alla nota e
             // basta. Adesso c'è una risposta in cui metterlo
             // (`resolved-ref.at`), e questo è il primo centimetro del giro.
             // Wikilink come data-attribute: il frontend risolve la navigazione.
-        // Un riferimento incorporato che non è un wikilink è, quasi sempre,
             write!(
                 out,
                 "<a class=\"wikilink\"{}",
                 wiki_attrs("wikilink", page, heading, block)
             )
             .unwrap();
-            if opts.enabled(render_option::WIKILINKS_AS_DATA_ATTRS) {
-                out.push_str(" href=\"#\"");
-            }
+            out.push_str(" href=\"#\"");
             out.push('>');
             render_link_label(label, &inner(target, page), opts, out);
             out.push_str("</a>");
         }
+        // Un riferimento incorporato che non è un wikilink è, quasi sempre,
         // un'immagine. Anche qui si emette il **segnaposto** del protocollo di
         // transclusion e non un `<img>`: caricare una risorsa — del vault o
         // peggio remota — è una decisione della shell (13.1 per gli allegati,
         // 5.3 e 23 per il contenuto remoto), non del provider che ha letto il
         // file. Chi disegna sa dove sta il vault; questo codice no.
-// Ciò che si legge di un wikilink **senza alias**: l'interno intero, non la
         LinkTarget::Url(url) if embed => {
             write!(out, "<div class=\"embed\"{}>", attr("data-embed-url", url)).unwrap();
             render_link_label(label, url, opts, out);
@@ -503,6 +499,7 @@ fn render_link(
     }
 }
 
+/// Ciò che si legge di un wikilink **senza alias**: l'interno intero, non la
 /// sola pagina.
 ///
 /// `label: None` vuol dire «l'autore non ha scritto un alias», e allora ciò che
@@ -510,11 +507,11 @@ fn render_link(
 /// Finché il parser sintetizzava l'etichetta dal bersaglio la differenza non si
 /// vedeva mai da qui; adesso che non la sintetizza più, il ripiego sulla sola
 /// `page` mangerebbe l'heading a schermo.
-/// L'etichetta di un link, **con le opzioni di chi ha chiesto la resa**.
 fn inner(target: &LinkTarget, page: &str) -> String {
     target.wiki_inner().unwrap_or_else(|| page.to_string())
 }
 
+/// L'etichetta di un link, **con le opzioni di chi ha chiesto la resa**.
 ///
 /// Un'etichetta non è testo piatto: è una fetta di inline come le altre, e può
 /// contenere un wikilink (`[vai a [[Nota]]](url)`, l'`alt` di un'immagine). Qui
@@ -529,7 +526,6 @@ fn inner(target: &LinkTarget, page: &str) -> String {
 /// La riparazione è passare le `opts` che il chiamante ha già in mano, come fa
 /// ogni altro ramo della resa: così **un'opzione nuova la ereditano tutti e sei
 /// i siti** che rendono un'etichetta, e ogni inline annidato la vede a qualunque
-/// profondità, senza che nessuno debba ricordarsene di nuovo.
 /// profondità, senza che nessuno debba ricordarsene di nuovo.
 fn render_link_label(
     label: Option<&[Inline]>,

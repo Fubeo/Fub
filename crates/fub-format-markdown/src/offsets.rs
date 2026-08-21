@@ -1,7 +1,8 @@
 //! Conversione (riga, colonna) → offset in byte.
 //!
-//! comrak riporta le posizioni sorgente come riga/colonna 1-based (colonne in
-//! byte). Il nostro modello usa `Span` in byte: questa tabella fa il ponte.
+//! comrak riporta le posizioni sorgente come riga/colonna 1-based; le colonne
+//! espandono i tab a tab-stop. Il nostro modello usa `Span` in byte: questa
+//! tabella fa il ponte.
 //!
 //! # Il BOM, e perché la prima riga non comincia sempre a zero (§15.5)
 //!
@@ -112,7 +113,14 @@ impl<'a> Offsets<'a> {
             return len;
         }
         let start = self.line_starts[line - 1];
-        let mut at = (start + column.saturating_sub(1)).min(len);
+        let target = column.saturating_sub(1);
+        let mut visual = 0;
+        let mut at = start;
+        while at < len && visual < target {
+            let byte = self.source.as_bytes()[at];
+            visual += if byte == b'\t' { 4 - (visual % 4) } else { 1 };
+            at += 1;
+        }
         while !self.source.is_char_boundary(at) {
             at -= 1;
         }
@@ -131,5 +139,14 @@ mod tests {
         assert_eq!(or.byte(1, 1), 0);
         assert_eq!(or.byte(2, 1), 4);
         assert_eq!(or.byte(2, 3), 6);
+    }
+
+    #[test]
+    fn expands_tabs_to_comrak_tab_stops() {
+        let or = Offsets::new("\tfoo\n");
+        assert_eq!(or.byte(1, 1), 0);
+        assert_eq!(or.byte(1, 2), 1);
+        assert_eq!(or.byte(1, 5), 1);
+        assert_eq!(or.byte(1, 6), 2);
     }
 }
