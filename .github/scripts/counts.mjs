@@ -14,7 +14,7 @@
 // How to add an entry:
 //
 //   1. choose a `name`, which is what will be written in prose between
-//      `[count: …]`;
+//      `[conta: …]`;
 //   2. `command` must print **exactly one number**, and run from any folder
 //      (it is executed from the repo root);
 //   3. `reason` says what that number asserts, not how it is counted — the how
@@ -28,7 +28,7 @@
 
 export const COUNTS = [
   {
-    name: "hostapi-methods",
+    name: "hostapi-metodi",
     reason:
       "The functions that a plugin can call on the host: the surface of `HostApi` " +
       "as seen from the other side of the boundary. It is the number of decision " +
@@ -43,7 +43,7 @@ export const COUNTS = [
       " crates/fub-abi/wit/fub/abi.wit",
   },
   {
-    name: "wit-host-interfaces",
+    name: "wit-interfacce-host",
     reason:
       "The `host-*` interfaces of the contract: into how many families that " +
       "surface is divided. It grows only when a family of capabilities is born, " +
@@ -52,7 +52,7 @@ export const COUNTS = [
     command: "grep -cE '^[[:space:]]*interface host-' crates/fub-abi/wit/fub/abi.wit",
   },
   {
-    name: "guard-families",
+    name: "guard-famiglie",
     reason:
       "The capability families on which a policy answers yes or no: the cases of " +
       "`Capability` in `guard.rs`. The number is written three times in that file, " +
@@ -62,7 +62,7 @@ export const COUNTS = [
       " | grep -cE '^    [A-Z]'",
   },
   {
-    name: "structural-capabilities",
+    name: "capacita-strutturali",
     reason:
       "The methods of `VaultStructure`, that is, how many structural operations " +
       "the gate of decision 0010 covers. Two documents said «all six» and then " +
@@ -74,7 +74,7 @@ export const COUNTS = [
       " | grep -cE '^[[:space:]]+(default |const |async |unsafe )*fn '",
   },
   {
-    name: "view-surfaces",
+    name: "superfici-di-vista",
     reason:
       "The surfaces a view can stand on: the cases of `ViewSurface`. Decision " +
       "0104 gave the list a guard that forbids holes and duplicates, and the " +
@@ -87,7 +87,7 @@ export const COUNTS = [
       " | grep -cE '^    [A-Z]'",
   },
   {
-    name: "third-party-gates",
+    name: "porte-verso-un-terzo",
     reason:
       "The gates through which one enters third-party code: the cases of `Gate` in " +
       "`gate.rs` (contract). Decision 0032 declared them «eight, and that's all» " +
@@ -99,7 +99,7 @@ export const COUNTS = [
       " | grep -cE '^    [A-Z]'",
   },
   {
-    name: "schemas-on-disk",
+    name: "schemi-su-disco",
     reason:
       "The independent schema versions: how many on-disk formats Fub versions " +
       "separately. It is the number whose error does not cancel out, because the " +
@@ -112,7 +112,7 @@ export const COUNTS = [
       "has not done anything wrong, and it is the count that let itself be " +
       "eluded. The type is crossed instead of remembered, " +
       "and this count also serves to say that the gate has **hooked**: a site " +
-      "still using `u32` is not counted and diverges from `schemas-in-table`. " +
+      "still using `u32` is not counted and diverges from `schemi-in-tabella`. " +
       "Still **out**: a version written on the fly inside the record " +
       "(`v: SchemaVersion::new(1)`, without a constant naming it): it is of the " +
       "right type and nobody counts it — the type makes writing `v: 1` " +
@@ -123,20 +123,21 @@ export const COUNTS = [
       " crates/*/src | wc -l",
   },
   {
-    name: "schemas-in-table",
+    name: "schemi-in-tabella",
     reason:
-      "The rows of the schema table in `docs/versioning.md`. It lives " +
-      "beside `schemas-on-disk` and says the other half: that counts the formats " +
+      "The rows of the schema table in `docs/versionamento.md`. It lives " +
+      "beside `schemi-su-disco` and says the other half: that counts the formats " +
       "the code versions, this the formats the document lists. That they are the " +
       "**same** — row by row and number by number — is verified by " +
       "`crates/fub-app/tests/schemas_on_disk.rs`; that they are **as many** " +
       "is said by these two, and it is the direction a test cannot see, because " +
       "a format no one included is a format no test knows about.",
     command:
-      "grep -cE '^\\| [^|]+ \\| \\[`crates/[^`]+:[0-9]+`\\]' docs/versioning.md",
+      "grep -cE '^\\| [^|]+ \\| \\[`crates/[^`]+:[0-9]+`\\]' docs/versionamento.md",
   },
   {
-    name: "files-with-ipc-surface",
+    name: "file-con-superficie-ipc",
+    aliases: ["files-with-ipc-surface"],
     reason:
       "In how many files of `crates/fub-app/src` there is a `#[tauri::command]` " +
       "or a `generate_handler!`. It must be **one**: `lean_ipc.rs` judges " +
@@ -154,7 +155,7 @@ export const COUNTS = [
       "grep -rlE '#\\[(tauri::)?command[](]|generate_handler!' crates/fub-app/src | wc -l",
   },
   {
-    name: "kernel-catalogs",
+    name: "cataloghi-del-kernel",
     reason:
       "How many `fub-kernel` families declare a string catalog, i.e. how many " +
       "`pub fn catalog()` there are in `crates/fub-kernel/src`. The core bundle " +
@@ -171,7 +172,7 @@ export const COUNTS = [
     command: "grep -rhE '^[[:space:]]*pub fn catalog\\(\\)' crates/fub-kernel/src | wc -l",
   },
   {
-    name: "kernel-families",
+    name: "famiglie-del-kernel",
     reason:
       "The kernel families the mounting knows: the variants of " +
       "`Family` in `crates/fub-kernel/src/families.rs`. It lives in the same " +
@@ -189,11 +190,11 @@ export const COUNTS = [
       " | grep -cE '^    [A-Z]'",
   },
   {
-    name: "kernel-settings",
+    name: "impostazioni-del-kernel",
     reason:
       "How many `fub-kernel` families declare settings, i.e. how many " +
       "`pub fn *_settings()` there are in `crates/fub-kernel/src`. It lives " +
-      "beside `kernel-catalogs` and guards the other half: a family that the " +
+      "beside `cataloghi-del-kernel` and guards the other half: a family that the " +
       "core bundle does not mount is not red anywhere — its keys disappear from " +
       "the panel and whoever reads them silently takes the default, which is " +
       "precisely the right behavior for a vault that declared nothing. " +
@@ -204,10 +205,10 @@ export const COUNTS = [
       "green, because the list of the `i_catalogs.rs` bench is written by hand " +
       "and sees a missing key, never a family nobody mounted.",
     command:
-      "grep -rhE '^[[:space:]]*pub fn [a-z_]*settings\\(\\)' crates/fub-kernel/src | wc -l",
+      "grep -rhE '^[[:space:]]*pub fn [a-z_]*settings\\(\\)' crates/fub-kernel/src | grep -v 'all_settings' | wc -l",
   },
   {
-    name: "durability-on-every-platform",
+    name: "durabilita-su-ogni-piattaforma",
     reason:
       "How many tests of `crates/fub-kernel/tests/durability.rs` **really run " +
       "on every platform**, i.e. how many remain where the platform does not " +
@@ -238,7 +239,7 @@ export const COUNTS = [
       " END{print fuori?0:n+0}' crates/fub-kernel/tests/durability.rs",
   },
   {
-    name: "paginated-families",
+    name: "famiglie-paginate",
     reason:
       "The data-channel queries that ask for a window. The bench of §17.1 " +
       "(decision 0113) measured that the window can be applied in three ways — " +
@@ -258,7 +259,7 @@ export const COUNTS = [
       " | grep -cE '^[[:space:]]+page: Option<Page>,?$'",
   },
   {
-    name: "documents-tails-in-kernel",
+    name: "code-delle-documents-nel-kernel",
     reason:
       "From how many places in `crates/fub-kernel/src` is `properties::finish` " +
       "called, i.e. how many times the kernel mounts by hand the tail of a " +
@@ -276,7 +277,7 @@ export const COUNTS = [
     command: "grep -rhoE 'properties::finish\\(' crates/fub-kernel/src | wc -l",
   },
   {
-    name: "workspace-crates",
+    name: "crate-del-workspace",
     reason:
       "The crates that inherit the version from the root `Cargo.toml`. " +
       "This used to declare that and count the **folders** of `crates/`: a crate " +
@@ -303,14 +304,14 @@ export const COUNTS = [
       " grep -qE '^version\\.workspace *= *true' \"$m\" && echo \"$m\"; done | wc -l",
   },
   {
-    name: "wit-lines",
+    name: "wit-righe",
     reason:
       "How long the WIT contract is. It serves the measure that decision " +
       "0053 makes — how much of the contract is prose — and alone it says nothing.",
     command: "wc -l < crates/fub-abi/wit/fub/abi.wit",
   },
   {
-    name: "wit-comments",
+    name: "wit-commenti",
     reason:
       "And how much of that length is comment: the other half of the above " +
       "measure, and the reason the contract reads well.",
@@ -327,7 +328,7 @@ export const COUNTS = [
     command: "grep -c '^pub fn ' crates/fub-sdk/src/testing/conformance.rs",
   },
   {
-    name: "shell-diagnostics",
+    name: "diagnostica-shell",
     reason:
       "The `console.warn`/`console.error` left in the shell: what goes wrong and " +
       "that decision 0052 wants to become an event instead of a line " +
@@ -345,7 +346,7 @@ export const COUNTS = [
       " {n+=gsub(/console\\.(warn|error)[[:space:]]*\\(/,\"\")} END{print n+0}'",
   },
   {
-    name: "feature-modules",
+    name: "moduli-di-feature",
     reason:
       "The feature modules of `fub-features`: the files of `src/` that are not " +
       "the root nor the aggregator. It is the number on which §16.3 stands when " +
@@ -363,7 +364,7 @@ export const COUNTS = [
       " | grep -vE '/(lib|inventory)\\.rs$' | wc -l",
   },
   {
-    name: "declarable-permissions",
+    name: "permessi-dichiarabili",
     reason:
       "The permissions a manifest can declare, i.e. how many rows the list the " +
       "user reads when deciding what to trust can have at most (§23.17). " +
@@ -378,7 +379,7 @@ export const COUNTS = [
       " | grep -cE '^        [A-Z_]+,'",
   },
   {
-    name: "draining-queues",
+    name: "code-che-si-svuotano",
     reason:
       "The places from which a dispatcher event queue empties in bulk, " +
       "i.e. where an event can disappear without reaching anyone. Each of the " +
@@ -400,7 +401,7 @@ export const COUNTS = [
       " crates/fub-kernel/src/dispatcher.rs | wc -l",
   },
   {
-    name: "shell-gestures",
+    name: "gesti-della-shell",
     reason:
       "The gestures the shell e2e walks end to end (§17.2): one `it` " +
       "per gesture in `frontend/src/shell.e2e.test.ts`. It is the discipline of " +
@@ -422,7 +423,7 @@ export const COUNTS = [
       " END{print fuori?0:n+0}' frontend/src/shell.e2e.test.ts",
   },
   {
-    name: "windowless-queries",
+    name: "finestre-aperte",
     reason:
       "The data-channel queries the shell asks **without a window**, i.e. " +
       "asking for the whole vault: how many surfaces are allowed to grow " +
@@ -433,20 +434,20 @@ export const COUNTS = [
       "Before this count the line that promised it was written in a " +
       "comment of `host/query.ts` and the count did not exist: a guard " +
       "promised and never written, worse than no comment. The anchor is " +
-      "`UNPAGED` in **argument** position — after a parenthesis or " +
+      "`WITHOUT_PAGE` in **argument** position — after a parenthesis or " +
       "a comma — so the `import` and the line that compares it stay out. " +
       "The count holds because the value is a `unique symbol`: the constant " +
       "cannot be rewritten by hand, so there is no way to open a window without " +
       "naming it. Declared blind zone: an argument wrapped onto its own line " +
-      "(`f(\\n  UNPAGED,\\n)`) has no comma on the same line and " +
+      "(`f(\\n  WITHOUT_PAGE,\\n)`) has no comma on the same line and " +
       "escapes — `prettier` does not break a call that short, but if it did " +
       "the count would go down instead of up, i.e. it would be seen.",
     command:
-      "find frontend/src -name '*.ts' | xargs grep -ohE '[(,] ?UNPAGED'" +
+      "find frontend/src -name '*.ts' | xargs grep -ohE '[(,] ?WITHOUT_PAGE'" +
       " | wc -l",
   },
   {
-    name: "saving-states",
+    name: "stati-salvataggio",
     reason:
       "The states the bar can say of a document: the cases of " +
       "`SaveState` in `frontend/src/state/saving.ts`. The comment " +
@@ -466,7 +467,7 @@ export const COUNTS = [
       " frontend/src/state/saving.ts | grep -oE '\"[a-z_]+\"' | wc -l",
   },
   {
-    name: "underchange-outcomes",
+    name: "esiti-cambio-sotto",
     reason:
       "The responses of `UnderChange`, i.e. in how many ways the shell can say " +
       "who rewrote a file under a buffer. It lives next to " +
@@ -479,7 +480,7 @@ export const COUNTS = [
       " frontend/src/state/saving.ts | grep -oE '\"[a-z_]+\"' | wc -l",
   },
   {
-    name: "echoes-outside-the-owner",
+    name: "echoes-fuori-dal-padrone",
     reason:
       "The lines of `frontend/src` that move the echo counter **outside " +
       "who owns it**, i.e. outside `state/saving.ts`. It must be **zero**. " +
@@ -500,7 +501,7 @@ export const COUNTS = [
       " {n+=gsub(/echoes[[:space:]]*(\\+=|-=|\\+\\+|--)/,\"\")} END{print n+0}'",
   },
   {
-    name: "emits-outside-the-bridge",
+    name: "uscite-fuori-dal-ponte",
     reason:
       "The lines of `crates/fub-host/src` that deliver to an `EventSink` **outside " +
       "the bridge**, i.e. outside `bridge.rs`. The bridge is the place where an " +
@@ -522,7 +523,7 @@ export const COUNTS = [
       " {n+=gsub(/sink\\.emit\\(/,\"\")} END{print n+0}'",
   },
   {
-    name: "kernel-bare-locks",
+    name: "lucchetti-nudi-del-kernel",
     reason:
       "The files of `crates/fub-kernel/src` holding a `Mutex`/`RwLock` in " +
       "**production** outside the two poison doors (`bus.rs` of 0126 and " +
@@ -555,11 +556,12 @@ export const COUNTS = [
       " !c&&/(Mutex|RwLock)(<|::)/{print FILENAME; c=1}' {} + | wc -l",
   },
   {
-    name: "locks-outside-the-count",
+    name: "lucchetti-fuori-dal-conto",
+    aliases: ["lucchetti-outside-dal-conto"],
     reason:
       "The same files, widened to the three crates the 0120 count does not " +
       "cross: `fub-kernel`, `fub-features` and `fub-sdk`. It lives in the same " +
-      "sentence as `kernel-bare-locks` and closes it from the other end — that " +
+      "sentence as `lucchetti-nudi-del-kernel` and closes it from the other end — that " +
       "one says how big the kernel blind zone is, this how big all of it is. It " +
       "exists because `crates/fub-host/tests/one_lock_only.rs` declares " +
       "the blind zone and did not give **any** number: a blind zone without a " +
@@ -572,12 +574,12 @@ export const COUNTS = [
     command:
       "find crates/fub-kernel/src crates/fub-features/src crates/fub-sdk/src" +
       " -name '*.rs' ! -name 'bus.rs' ! -name 'poison.rs' -exec awk" +
-      " 'FNR==1{c=0;t=0} /^#\\[cfg\\(test\\)\\]$/{t=1} t{t}" +
+      " 'FNR==1{c=0;t=0} /^#\\[cfg\\(test\\)\\]$/{t=1} t{next}" +
       " /^[[:space:]]*\\/\\//{next} !c&&/(Mutex|RwLock)(<|::)/{print FILENAME;" +
       " c=1}' {} + | wc -l",
   },
   {
-    name: "declared-gaps",
+    name: "buchi-dichiarati",
     reason:
       "The records that declare a gap of their own: a fact about the shape of " +
       "the contract that cannot be closed from here, written instead of left " +
@@ -588,19 +590,19 @@ export const COUNTS = [
       "six. The anchor is the **emphasis**: a record that declares one writes it " +
       "in bold or in a title, while whoever cites another one's names it " +
       "in passing in the middle of a sentence — and the only emphatic citation " +
-      "form that exists, «il gap dichiarato **della** 0064» (in the old naming), is " +
+      "form that exists, «il buco dichiarato **della** 0064» is " +
       "removed by name. **Files** are counted, not lines, because a record that " +
       "declares one also names it three times. Declared blind spot: a " +
       "record that declared a gap without emphasizing it would not enter the " +
       "count, and one that cited another's in bold without saying «of» " +
       "would enter it wrongly.",
     command:
-      "grep -EiH '(\\*\\*[^*]*declared gap|^#+[^#]*declared gap)'" +
-      " docs/decisions/0*.md | grep -vi 'declared gap of the'" +
+      "grep -EiH '(\\*\\*[^*]*buco dichiarato|^#+[^#]*buco dichiarato)'" +
+      " docs/decisions/0*.md | grep -vi 'buco dichiarato della'" +
       " | cut -d: -f1 | sort -u | wc -l",
   },
   {
-    name: "bench-scenes",
+    name: "scene-del-banco",
     reason:
       "The scenes of the visual bench (§31.1): the `id:` lines of the closed list in " +
       "`frontend/bench/scene.mjs`. This number is cited in prose — the roadmap, " +
@@ -612,7 +614,7 @@ export const COUNTS = [
     command: "grep -c '^    id: ' frontend/bench/scene.mjs",
   },
   {
-    name: "decision-records",
+    name: "verbali",
     reason:
       "The decision records of the closed decisions. It is the count that `todo.md` " +
       "already wrote with its command beside it — the only one with a source " +
@@ -620,7 +622,7 @@ export const COUNTS = [
     command: "ls docs/decisions/0*.md | wc -l",
   },
   {
-    name: "open-entries",
+    name: "voci-aperte",
     reason:
       "The still-open entries of the infrastructure plan: the rows of the table " +
       "in `todo.md`. The plan declares that «if an entry is in this table it " +
@@ -633,7 +635,7 @@ export const COUNTS = [
     command: "grep -c '^| \\*\\*§' docs/todo.md || true",
   },
   {
-    name: "open-bugs",
+    name: "difetti-aperti",
     reason:
       "The measured defects still open: the rows of the «Measured defects» table " +
       "of `todo.md`. It is the **third species** of work that file " +
@@ -655,8 +657,8 @@ export const COUNTS = [
 ];
 
 // The pattern of a count annotation in prose:
-//   "[count: <name>]"
-export const RE_ANNOTATION = /\[count:\s*([a-z0-9-]+)\s*\]/;
+//   "[conta: <name>]"
+export const RE_ANNOTATION = /\[conta:\s*([a-z0-9-]+)\s*\]/;
 
 // The commands that are bare grep patterns (everything else starts with
 // `node `, `awk `, `sed `, `wc `, `ls `, `find `, or `grep `).

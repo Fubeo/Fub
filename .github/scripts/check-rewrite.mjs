@@ -64,17 +64,20 @@ import { spawnSync } from "node:child_process";
 // ---------------------------------------------------------------------------
 
 /**
- * Every number from zero to ninety-nine as English writes it.
+ * Every number from zero to ninety-nine as English writes it, plus the
+ * Italian words for the same range (and the hundreds, «centosessantotto»).
  *
- * It serves because half the numbers of this repo are not made of digits:
- * «**eighty-seven** defects», «**one hundred forty-two** records», «the
- * families are **seven**». A list generated instead of written by hand,
- * because a hand-written list would have the same three lines of delay the
- * glossary already had.
+ * It serves because half the numbers of this repo are not made of words:
+ * «**eighty-seven** defects», «the families are **seven**» — and since the
+ * rewrite, in Italian: «le **diciannove** famiglie», «**centosessantotto**
+ * verbali». A list is generated instead of written by hand, because a
+ * hand-written list would have the same three lines of delay the glossary
+ * already had.
  *
- * The list stops at ninety-nine: the prose of this repo writes counts in
- * words up to a hundred, and beyond that the digits win (the records are
- * counted as digits in the register).
+ * The English list stops at ninety-nine: the prose of this repo writes
+ * English counts in words up to a hundred, and beyond that the digits win
+ * (the records are counted as digits in the register). Italian is a single
+ * word up to the hundreds, so it is listed to nine hundred ninety-nine.
  */
 function numbersInWords() {
   const ones = [
@@ -109,6 +112,45 @@ function numbersInWords() {
   for (let n = 21; n < 100; n++) {
     if (n % 10 === 0) continue;
     all.add(upTo99[n].replace("-", " "));
+  }
+
+  // And the Italian ones, since the rewrite: the counts are written in
+  // Italian, as single words up to the hundreds («ventuno», «quattordici»,
+  // «centosessantotto»).
+  const itOnes = [
+    "zero", "uno", "due", "tre", "quattro", "cinque",
+    "sei", "sette", "otto", "nove",
+  ];
+  const itTeens = [
+    "dieci", "undici", "dodici", "tredici", "quattordici",
+    "quindici", "sedici", "diciassette", "diciotto", "diciannove",
+  ];
+  const itTens = [
+    null, null, "venti", "trenta", "quaranta", "cinquanta",
+    "sessanta", "settanta", "ottanta", "novanta",
+  ];
+  const itHundreds = [
+    "cento", "duecento", "trecento", "quattrocento", "cinquecento",
+    "seicento", "settecento", "ottocento", "novecento",
+  ];
+  const itWord = (n) => {
+    if (n < 10) return itOnes[n];
+    if (n < 20) return itTeens[n - 10];
+    const d = Math.floor(n / 10);
+    const u = n % 10;
+    if (u === 0) return itTens[d];
+    const base = u === 1 || u === 8 ? itTens[d].slice(0, -1) : itTens[d];
+    return base + itOnes[u];
+  };
+  for (let n = 0; n < 100; n++) {
+    all.add(itWord(n));
+    if (n > 20 && n % 10 === 3) all.add(itWord(n).replace(/tre$/, "tré"));
+  }
+  all.add("una");
+  for (let h = 1; h <= 9; h++) {
+    const c = itHundreds[h - 1];
+    all.add(c);
+    for (let rest = 1; rest <= 99; rest++) all.add(c + itWord(rest));
   }
   return all;
 }
@@ -174,7 +216,7 @@ const SPECIES = [
     name: "count marker",
     extract(text) {
       const out = new Set();
-      for (const m of text.matchAll(/\[count:\s*[a-z0-9-]+\]/g)) out.add(m[0]);
+      for (const m of text.matchAll(/\[conta:\s*[a-z0-9-]+\]/g)) out.add(m[0]);
       return out;
     },
   },

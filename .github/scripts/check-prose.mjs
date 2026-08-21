@@ -27,7 +27,7 @@
 // The shape. A number that asserts something about the sources is written
 // next to how it is derived:
 //
-//     the **fourteen** capability families [count: guard-families]
+//     le **diciannove** famiglie di capacità [conta: guard-famiglie]
 //
 // The command lives in `counts.mjs`, once, with its reason beside it; the
 // prose cites it by name as often as it wants. Same shape as the
@@ -70,16 +70,17 @@ import path from "node:path";
 import { COUNTS } from "./counts.mjs";
 
 // The annotation, and the tail of the line where the number is looked for.
-const RE_ANNOTATION = /\[count:\s*([a-z0-9-]+)\s*\]/g;
+const RE_ANNOTATION = /\[conta:\s*([a-z0-9-]+)\s*\]/g;
 
 // ---------------------------------------------------------------------------
-// The numbers written in English
+// The numbers written in words
 // ---------------------------------------------------------------------------
 //
 // Why: these documents write numbers **in words**. «The fourteen families»,
-// «a third crate for eight functions», «thirty-four today». A guard that
-// could only read `14` would not watch prose — it would watch the tables,
-// which are the part that ages the least.
+// «a third crate for eight functions», «thirty-four today» — and since the
+// rewrite, in Italian: «le diciannove famiglie», «centosessantotto verbali».
+// A guard that could only read `14` would not watch prose — it would watch
+// the tables, which are the part that ages the least.
 
 const ONES = [
   "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
@@ -93,7 +94,28 @@ const TENS = [
   "sixty", "seventy", "eighty", "ninety",
 ];
 
-/** Word → value, from zero to ninety-nine, hyphens included. */
+// The Italian numbers: single words, «uno», «quattordici», «ventuno»,
+// «centosessantotto». `una` is the feminine of `uno` — the prose writes
+// «n'è **una**» — and the accent of «ventitré» is accepted both with and
+// without, since the sources write the compounds without it.
+const IT_ONES = [
+  "zero", "uno", "due", "tre", "quattro", "cinque",
+  "sei", "sette", "otto", "nove",
+];
+const IT_TEENS = [
+  "dieci", "undici", "dodici", "tredici", "quattordici",
+  "quindici", "sedici", "diciassette", "diciotto", "diciannove",
+];
+const IT_TENS = [
+  null, null, "venti", "trenta", "quaranta", "cinquanta",
+  "sessanta", "settanta", "ottanta", "novanta",
+];
+const IT_HUNDREDS = [
+  "cento", "duecento", "trecento", "quattrocento", "cinquecento",
+  "seicento", "settecento", "ottocento", "novecento",
+];
+
+/** Word → value: English 0-99 (hyphens included), Italian 0-999. */
 function numberTable() {
   const table = new Map();
   ONES.forEach((n, i) => table.set(n, i));
@@ -107,6 +129,31 @@ function numberTable() {
       // unhyphenated form is accepted too, in case prose writes it that way.
       table.set(`${tens}-${ONES[u]}`, d * 10 + u);
       table.set(`${tens} ${ONES[u]}`, d * 10 + u);
+    }
+  }
+
+  // Italian: the tens lose their final vowel before `uno`/`otto`
+  // («ventuno», «ventotto»), and the compounds ending in `tre` take the
+  // accent in print («ventitré») — accepted both ways here.
+  const itWord = (n) => {
+    if (n < 10) return IT_ONES[n];
+    if (n < 20) return IT_TEENS[n - 10];
+    const d = Math.floor(n / 10);
+    const u = n % 10;
+    if (u === 0) return IT_TENS[d];
+    const base = u === 1 || u === 8 ? IT_TENS[d].slice(0, -1) : IT_TENS[d];
+    return base + IT_ONES[u];
+  };
+  table.set("una", 1); // the feminine of «uno»
+  for (let n = 0; n < 100; n += 1) {
+    table.set(itWord(n), n);
+    if (n > 20 && n % 10 === 3) table.set(itWord(n).replace(/tre$/, "tré"), n);
+  }
+  for (let h = 1; h <= 9; h += 1) {
+    const c = IT_HUNDREDS[h - 1];
+    table.set(c, h * 100);
+    for (let rest = 1; rest <= 99; rest += 1) {
+      table.set(c + itWord(rest), h * 100 + rest);
     }
   }
 
@@ -132,7 +179,7 @@ function numberBefore(text) {
   for (const m of clean.matchAll(/\d[\d  ]*\d|\d/g)) {
     last = { value: Number(m[0].replace(/[^\d]/g, "")), written: m[0], end: m.index + m[0].length };
   }
-  for (const m of clean.matchAll(/[A-Za-z]+(?:-[A-Za-z]+)?/g)) {
+  for (const m of clean.matchAll(/[A-Za-zÀ-ÿ]+(?:-[A-Za-zÀ-ÿ]+)?/g)) {
     const value = NUMBERS.get(m[0].toLowerCase());
     if (value === undefined) continue;
     const end = m.index + m[0].length;
@@ -198,14 +245,32 @@ const RE_GUARANTEE = /guard|verif|the test|the tests/i;
 // cited in passing — those live in sentences that do not say «guard».
 const RE_TEST_NAME = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
 
+// The prose writes the Italian name of the tests; the sources declare the
+// English ones. A guarantee that says «il test
+// `il_diagramma_dice_le_dipendenze_vere`» names the `fn` the sources call
+// `the_diagram_declares_the_real_dependencies` — the sentence is true, only
+// the spelling changed with the rename. The map is the memory of it: the
+// cited name resolves before being looked up, and a resolved name is a real
+// `fn` like any other.
+const TEST_NAME_ALIASES = new Map([
+  [
+    "il_diagramma_dice_le_dipendenze_vere",
+    "the_diagram_declares_the_real_dependencies",
+  ],
+  [
+    "il_banco_di_prova_non_entra_in_nessuna_libreria",
+    "the_test_bench_enters_no_library",
+  ],
+]);
+
 /** All the `fn`s declared in the sources, as a set of names. */
 function sourceFunctions(files) {
   const names = new Set();
-  for (const path of files) {
-    if (!/\.(rs|ts|tsx)$/.test(path)) continue;
+  for (const file of files) {
+    if (!/\.(rs|ts|tsx)$/.test(file)) continue;
     let text;
     try {
-      text = fs.readFileSync(path, "utf8");
+      text = fs.readFileSync(file, "utf8");
     } catch {
       continue;
     }
@@ -213,7 +278,7 @@ function sourceFunctions(files) {
     // prose says «the guard is `wit_conformance`» meaning
     // `crates/fub-abi/tests/wit_conformance.rs`, and it is right. A test
     // file is a name that exists exactly as much as a function.
-    names.add(path.basename(path).replace(/\.(rs|ts|tsx)$/, ""));
+    names.add(path.basename(file).replace(/\.(rs|ts|tsx)$/, ""));
     for (const m of text.matchAll(/\bfn\s+([a-z_][A-Za-z0-9_]*)/g)) names.add(m[1]);
     for (const m of text.matchAll(/\b(?:function|it|test)\s*\(?\s*["'`]?([a-z_][A-Za-z0-9_]*)/g)) {
       names.add(m[1]);
@@ -232,12 +297,16 @@ function sourceFunctions(files) {
  * real `fn`.
  */
 function emptyGuarantees(line, functions) {
-  if (!RE_GUARANTEE.test(line)) return [];
+  // A link destination is not prose: the word «guarda» in the file name of a
+  // decision record must not turn the line that cites it into a guarantee.
+  // The sentence that says something is guarded says it outside the `](…)`.
+  const prose = line.replace(/\]\([^)\s]+/g, "");
+  if (!RE_GUARANTEE.test(prose)) return [];
   const missing = [];
   for (const m of line.matchAll(/`([^`]+)`/g)) {
-    const name = m[1];
+    const name = TEST_NAME_ALIASES.get(m[1]) ?? m[1];
     if (!RE_TEST_NAME.test(name) || functions.has(name)) continue;
-    missing.push(name);
+    missing.push(m[1]);
   }
   return missing;
 }
@@ -280,6 +349,15 @@ function selfTest() {
     // the case is here to remind that the annotation goes after the number
     // and not at the end of the sentence.
     ["six ", 6],
+    // And the Italian reader, since the rewrite: the prose writes the
+    // counts in Italian, as single words up to the hundreds.
+    ["le diciannove famiglie ", 19],
+    ["**uno** solo ", 1],
+    ["n'è **una** ", 1],
+    ["**quattordici** permessi ", 14],
+    ["**ventuno** gesti ", 21],
+    ["**centosessantotto** verbali ", 168],
+    ["**duecentotre** ", 203],
   ];
 
   let red = 0;
@@ -307,8 +385,12 @@ function main() {
     process.exit(1);
   }
 
-  // First the counts, once each: the same entry is cited from several places.
+  // First the counts, once each: the same entry is cited from several
+  // places. `byName` also resolves the aliases — the old spellings that a
+  // couple of files still write — to the canonical entry, so an alias
+  // citation counts and compares like the name it is.
   const values = new Map();
+  const byName = new Map();
   for (const entry of COUNTS) {
     const result = count(entry, root);
     if (result.error) {
@@ -316,6 +398,8 @@ function main() {
       continue;
     }
     values.set(entry.name, result.value);
+    byName.set(entry.name, entry);
+    for (const alias of entry.aliases ?? []) byName.set(alias, entry);
   }
 
   // Then the prose.
@@ -358,7 +442,7 @@ function main() {
     // a record can cite an annotation to show its shape, or write the number
     // of back then. Guarding it would mean asking a dated document to stay
     // true, which is the opposite of what it is.
-    if (record || !text.includes("[count:")) continue;
+    if (record || !text.includes("[conta:")) continue;
 
     lines.forEach((line, i) => {
       RE_ANNOTATION.lastIndex = 0;
@@ -368,24 +452,22 @@ function main() {
         total += 1;
         const where = `${relative}:${i + 1}`;
 
-        if (!values.has(name)) {
-          const registered = citations.has(name);
-          problems.push(
-            `${where}  [count: ${name}] — ` +
-              (registered ? "the entry is in the register but did not count" : "no entry with this name in the register"),
-          );
+        const entry = byName.get(name);
+        if (entry === undefined || !values.has(entry.name)) {
+          problems.push(`${where}  [conta: ${name}] — no entry with this name in the register`);
           continue;
         }
-        citations.set(name, citations.get(name) + 1);
+        const canonical = entry.name;
+        citations.set(canonical, citations.get(canonical) + 1);
 
         const number = numberBefore(line.slice(0, m.index));
         if (number === null) {
-          problems.push(`${where}  [count: ${name}] — no number before the annotation`);
+          problems.push(`${where}  [conta: ${name}] — no number before the annotation`);
           continue;
         }
-        if (number.value !== values.get(name)) {
+        if (number.value !== values.get(canonical)) {
           problems.push(
-            `${where}  says «${number.written}», but ${name} counts ${values.get(name)}`,
+            `${where}  says «${number.written}», but ${canonical} counts ${values.get(canonical)}`,
           );
         }
       }
