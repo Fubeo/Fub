@@ -354,7 +354,7 @@ impl EditRequest {
         if current != self.base {
             return Err(PluginError::Conflict(
                 format!(
-                    "source has changed: edit was calculated on {}, now it is {}",
+                    "il sorgente è cambiato: l'edit è stato calcolato su {}, ora è {}",
                     self.base.as_str(),
                     current.as_str()
                 )
@@ -375,7 +375,7 @@ impl EditRequest {
             if span.end > source.len() {
                 return Err(PluginError::BadArgs(
                     format!(
-                        "span outside source: {}..{} on {} bytes",
+                        "span fuori dal sorgente: {}..{} su {} byte",
                         span.start,
                         span.end,
                         source.len()
@@ -388,7 +388,7 @@ impl EditRequest {
                 // sbagliato: produce byte che non sono testo, e il documento
                 // non si riapre più.
                 return Err(PluginError::BadArgs(
-                    format!("span in the middle of a character: {}..{}", span.start, span.end).into(),
+                    format!("span a metà di un carattere: {}..{}", span.start, span.end).into(),
                 ));
             }
             if text_policy::splits_newline(source, span.start)
@@ -400,7 +400,7 @@ impl EditRequest {
                 // in silenzio, perché il file resta perfettamente leggibile.
                 return Err(PluginError::BadArgs(
                     format!(
-                        "span in the middle of a line terminator: {}..{}",
+                        "span a metà di un terminatore di riga: {}..{}",
                         span.start, span.end
                     )
                     .into(),
@@ -422,7 +422,7 @@ impl EditRequest {
                     // l'ordine qui non è dato: chi vuole due cose in un punto
                     // solo scrive un edit solo.
                     return Err(PluginError::BadArgs(
-                        format!("two edits at the same point: {}", span.start).into(),
+                        format!("due edit nello stesso punto: {}", span.start).into(),
                     ));
                 }
             }
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn the_edits_are_a_set_and_the_result_does_not_depend_on_their_order() {
-        let source = "one two three";
+        let source = "uno due tre";
         // Elencati al contrario: gli span sono nelle coordinate della base, e
         // chi li calcola non deve tenere il conto di quanto si è spostato il
         // testo per via degli altri.
@@ -543,8 +543,8 @@ mod tests {
                 .iter()
                 .map(|a| (a.span.start, a.span.end, a.replaced.as_str()))
                 .collect::<Vec<_>>(),
-            vec![(0, 3, "one"), (8, 11, "three")],
-            "the report is in document order, not request order"
+            vec![(0, 3, "uno"), (8, 11, "tre")],
+            "il rapporto è in ordine di documento, non di richiesta"
         );
     }
 
@@ -701,24 +701,24 @@ mod tests {
 
     #[test]
     fn the_inverse_of_an_edit_is_an_edit_that_puts_it_back() {
-        let source = "# Title\n\nnote on [[Old]] and more.\n";
+        let source = "# Titolo\n\nnota su [[Vecchia]] e altro.\n";
         let req = request(
             source,
             vec![
-                TextEdit::replace(Span::new(20, 27), "New"),
-                TextEdit::insert(source.len(), "queue\n"),
+                TextEdit::replace(Span::new(20, 27), "Nuova"),
+                TextEdit::insert(source.len(), "coda\n"),
             ],
         );
-        let (new_text, report) = req.apply_to(source).unwrap();
-        assert!(new_text.contains("[[New]]") && new_text.ends_with("queue\n"));
+        let (nuovo, report) = req.apply_to(source).unwrap();
+        assert!(nuovo.contains("[[Nuova]]") && nuovo.ends_with("coda\n"));
 
-        let inverse = report.inverse();
+        let indietro = report.inverse();
         assert_eq!(
-            inverse.base, report.revision,
-            "the inverse applies to the text the report describes"
+            indietro.base, report.revision,
+            "l'inverso si applica al testo che il rapporto descrive"
         );
-        let (returned, _) = inverse.apply_to(&new_text).unwrap();
-        assert_eq!(returned, source, "round trip, byte for byte");
+        let (tornato, _) = indietro.apply_to(&nuovo).unwrap();
+        assert_eq!(tornato, source, "andata e ritorno, byte per byte");
     }
 
     #[test]
@@ -744,11 +744,11 @@ mod tests {
     #[test]
     fn a_revision_is_content_not_time() {
         assert_eq!(Revision::of("uguale"), Revision::of("uguale"));
-        assert_eq!(Revision::of("equal"), Revision::of("different"));
+        assert_ne!(Revision::of("uguale"), Revision::of("diverso"));
+        // Scrivere una lettera e cancellarla riporta il documento a com'era: un
         // edit calcolato allora vale ancora adesso.
-    /// I due vettori canonici di FNV-1a a 64 bit, scritti a mano.
-        let req = request("text", vec![TextEdit::insert(0, "x")]);
-        assert!(req.apply_to("text").is_ok());
+        let req = request("testo", vec![TextEdit::insert(0, "x")]);
+        assert!(req.apply_to("testo").is_ok());
     }
 
     ///

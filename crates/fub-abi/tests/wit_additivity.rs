@@ -911,7 +911,7 @@ fn additions_at_the_end_pass() {
         (
             "un tipo nuovo",
             Box::new(|c: &mut Contract| {
-/// blocca il lavoro che il §1 del piano deve poter fare.
+// blocca il lavoro che il §1 del piano deve poter fare.
                 // Un tipo che il contratto NON ha (il §13.1 lo prevede): il
                 // segnaposto precedente era `property-value`, che nel frattempo
                 c.types

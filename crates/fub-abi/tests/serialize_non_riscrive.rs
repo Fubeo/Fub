@@ -188,6 +188,16 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         1,
         Reason::TheFormatThatImplementsIt,
     ),
+    (
+        // La riga del journal dell'anagrafe, non un documento: `serialize`
+        // compone i record `Record { v, mutation }` del formato di storage
+        // del kernel, uno per riga, e la scrittura è l'append della coda o
+        // lo snapshot della compattazione — serde, come gli altri tre.
+        "crates/fub-kernel/src/entries.rs",
+        "serialize",
+        1,
+        Reason::AnotherSerialize,
+    ),
 ];
 
 /// L'allowlist per chiave, col rifiuto dei doppioni: due righe per lo stesso
@@ -343,7 +353,7 @@ fn forms(line: &str) -> Vec<String> {
 
         let before = &line[..the];
         let after = &line[the + NEEDLE.len()..];
-/// percorso più lungo.
+// percorso più lungo.
         // Confini di identificatore: `deserialize` e `serialize_with` non sono
         if before.chars().next_back().is_some_and(is_ident)
             || after.chars().next().is_some_and(is_ident)
@@ -584,7 +594,7 @@ mod tests {\n\
     assert_eq!(
         citations(fake),
         BTreeMap::from([
-    /// Il doc, che cita `.serialize(` per spiegarsi.\n\
+    // Il doc, che cita `.serialize(` per spiegarsi.\n\
             // Il `use`: passa dal `::`, ed è il modo in cui una chiamata libera
             ("traits::serialize".to_string(), 1),
             // arriva senza nominare nessuno.

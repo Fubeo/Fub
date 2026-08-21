@@ -193,7 +193,7 @@ fn every_form_of_divergence_turns_red() {
     ];
 
     for (what, mutated) in mutations {
-        assert_eq!(base, mutated, "mutation «{what}» changed nothing");
+        assert_ne!(base, mutated, "mutation «{what}» changed nothing");
         assert!(
             diff(&base, &mutated).is_some(),
             "«{what}» did not make the comparison red"

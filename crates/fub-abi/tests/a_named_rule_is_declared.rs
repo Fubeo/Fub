@@ -40,7 +40,7 @@
 //! Le famiglie sono i **meccanismi incompatibili** che i sorgenti già usano, e
 //! il criterio per stare nell'una o nell'altra è scritto in due posti che questo
 //! banco non ha aggiunto: `crates/fub-kernel/src/occurrences.rs`, sopra
-//! `prefix_len_ci` («*gli offset sono il prodotto di questa funzione*», per cui
+//! `prefix_len_there` («*gli offset sono il prodotto di questa funzione*», per cui
 //! si confronta carattere per carattere), e `crates/fub-features/src/tags.rs`,
 //! sopra `matches_case_insensitive` («*la corsia veloce vale solo dove è
 //! dimostrabilmente la stessa risposta*», cioè su nomi tutti ASCII).
@@ -188,7 +188,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-features/src/tags.rs::contiene_a_meno_del_caso",
+            "crates/fub-features/src/tags.rs::matches_case_insensitive",
             (
                 Family::ContextualCase,
                 "ha due corsie e la lenta è questa: la ragione è scritta per intero sopra la \
@@ -336,7 +336,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-abi/src/rules/tasti.rs::accordi",
+            "crates/fub-abi/src/rules/keys.rs::chords",
             (
                 Family::ContextualCase,
                 "l'identità qui non è un nome ma un **gesto**: `Mod-Shift-G` e `mod-shift-g` \
@@ -348,7 +348,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- CasoPerCarattere: il caso in cui l'offset è il prodotto --------
         (
-            "crates/fub-kernel/src/occurrences.rs::prefix_len_ci",
+            "crates/fub-kernel/src/occurrences.rs::prefix_len_there",
             (
                 Family::PerCharacterCase,
                 "la ragione è scritta sopra la funzione ed è l'asse di questa famiglia: «gli \
@@ -363,7 +363,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             (
                 Family::PerCharacterCase,
                 "piega carattere per carattere perché sta già iterando i caratteri per tenere \
-                 solo gli alfanumerici: non ha un offset da difendere come `prefix_len_ci`, ha \
+                 solo gli alfanumerici: non ha un offset da difendere come `prefix_len_there`, ha \
                  un filtro. Proprio per quel filtro compone **prima** di iterare: una `Mn` non è \
                  alfanumerica, e senza `composed` l'accento non divergeva, spariva.",
             ),
@@ -464,7 +464,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-features/src/queries.rs::id_libero",
+            "crates/fub-features/src/queries.rs::free_id",
             (
                 Family::AsciiCase,
                 "non confronta due nomi: ne **fabbrica** uno. Piega in ASCII perché l'alfabeto \
@@ -508,7 +508,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- ConfineDiCartella ---------------------------------------------
         (
-            "crates/fub-abi/src/rules/cartelle.rs::normalizzata",
+            "crates/fub-abi/src/rules/folders.rs::normalized",
             (
                 Family::FolderBoundary,
                 "è **la** regola: gli slash ai due capi sono cortesia e non componenti, e il \

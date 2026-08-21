@@ -67,7 +67,7 @@ mod tests {
     fn the_two_writes_of_a_letter_accented_become_a() {
         let nfc = "Café";
         let nfd = "Cafe\u{301}";
-        assert_eq!(
+        assert_ne!(
             nfc, nfd,
             "le due forme sono byte diversi, o non si prova nulla"
         );

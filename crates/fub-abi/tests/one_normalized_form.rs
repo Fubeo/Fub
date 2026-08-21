@@ -59,7 +59,7 @@ fn pairs() -> Vec<(&'static str, &'static str)> {
 #[test]
 fn the_two_spellings_are_different_bytes_or_this_bench_proves_nothing() {
     for (nfc, nfd) in pairs() {
-        assert_eq!(
+        assert_ne!(
             nfc, nfd,
             "`{nfc}` and its decomposed form are the same byte sequence: the pair does not \
              mette alla prova nessuna regola"
@@ -129,7 +129,7 @@ fn the_form_on_which_is_judges_and_that_composed() {
 /// **La gemella che legge trova il titolo nei due versi, e su tutti e due i
 #[test]
 fn two_titles_different_not_end_on_the_same_id() {
-    assert_eq!(
+    assert_ne!(
         heading_slug("Cafe\u{301}"),
         heading_slug("Cafe"),
         "`Café` e `Cafe` sono due titoli, e due titoli non condividono un id"
@@ -157,7 +157,7 @@ fn the_slug_branch_hooks_too() {
     // il ramo di `resolution_key` dice no, e a rispondere resta solo lo slug.
     // il ramo di `resolution_key` dice no, e a rispondere resta solo lo slug.
     let nfd = heading("Cafe\u{301} Nero");
-    assert_eq!(
+    assert_ne!(
         resolution_key("café-nero"),
         resolution_key(&nfd.text),
         "the second branch must not be able to respond, or the first is not tested"

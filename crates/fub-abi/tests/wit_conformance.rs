@@ -630,7 +630,7 @@ fn sig_from(all: Vec<String>, result: String) -> RustSig {
             has_host = true;
             continue;
         }
-        assert_eq!(ty, SELF, "un provider non può comparire fra i parametri");
+        assert_ne!(ty, SELF, "un provider non può comparire fra i parametri");
         params.push(ty);
     }
     RustSig {
@@ -5711,7 +5711,7 @@ fn wit_conformance_actually_fails_on_drift() {
     ];
 
     for (what, mutated, needle) in cases {
-        assert_eq!(&base, mutated, "la mutazione «{what}» non ha toccato nulla");
+        assert_ne!(&base, mutated, "la mutazione «{what}» non ha toccato nulla");
         let report = conform(mutated).expect_err(&format!(
             "«{what}» non ha fatto fallire il test di conformità"
         ));

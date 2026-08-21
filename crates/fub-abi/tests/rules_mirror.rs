@@ -692,7 +692,7 @@ fn rules_fixture_is_in_sync_with_the_rust_rules() {
     let path = fixture_path();
 
     // rules_mirror`. Fuori da quel caso il test non scrive mai nulla.
-/// Il test del test: una fixture di casi che non distinguono niente non
+// Il test del test: una fixture di casi che non distinguono niente non
     if std::env::var_os("UPDATE_MIRROR").is_some() {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).expect("creates the fixture folder");

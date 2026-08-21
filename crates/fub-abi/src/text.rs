@@ -714,7 +714,7 @@ mod tests {
         let s = Strings::new(&catalogs, "it", &locale);
         let t = Text::message(
             "conteggio",
-            vec![Arg::int("n", 12), Arg::text("cartella", "Archivio")],
+            vec![Arg::int("n", 12), Arg::text("folder", "Archivio")],
         );
         assert_eq!(s.render(&t), "12 note in «Archivio»");
     }
@@ -746,7 +746,7 @@ mod tests {
     #[test]
     fn a_typed_timestamp_is_formatted_by_whoever_knows_the_locale() {
         let catalogs = vec![StringCatalog::new("it").with("visto", "visto il {when}")];
-        let t = Text::message("visto", vec![Arg::timestamp("quando", 1_785_241_800_000)]);
+        let t = Text::message("visto", vec![Arg::timestamp("when", 1_785_241_800_000)]);
 
         let utc = Locale {
             language: "it".into(),

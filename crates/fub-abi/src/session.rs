@@ -549,7 +549,7 @@ mod tests {
         let round: ViewContext =
             serde_json::from_str(&serde_json::to_string(&dirty).unwrap()).unwrap();
         assert_eq!(round, dirty);
-        assert_eq!(round, ctx().with_selections(None));
+        assert_ne!(round, ctx().with_selections(None));
     }
 
     #[test]
