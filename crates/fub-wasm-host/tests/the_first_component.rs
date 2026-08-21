@@ -141,7 +141,7 @@ fn a_component_wasm_is_mounts_lives_and_is_unmounts() {
     // `acceso` è la traccia che l'attivazione ha lasciato dentro il componente:
     // il diario del plugin nativo, nell'unica forma che attraversa un confine.
     assert!(
-        value["activated"].as_u64().unwrap() > 0,
+        value["acceso"].as_u64().unwrap() > 0,
         "`activate` è stato chiamato e l'orologio ha risposto: {value}"
     );
 

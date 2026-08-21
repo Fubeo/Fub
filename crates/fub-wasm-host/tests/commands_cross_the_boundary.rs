@@ -43,7 +43,7 @@ use fub_wasm_host::WasmBundle;
 
 const ID: &str = "demo.ping";
 const COUNT: &str = "demo.ping:conta";
-const RICH: &str = "demo.ping:status-rich";
+const RICH: &str = "demo.ping:esito-ricco";
 
 /// Il contenuto della nota, e la sua lunghezza: il comando `conta` risponde
 /// **questo** numero, e un numero scritto qui accanto al testo è ciò che rende

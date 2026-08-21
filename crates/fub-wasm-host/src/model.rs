@@ -473,7 +473,8 @@ fn reference(len: usize) -> Result<u32, PluginError> {
 fn too_deep() -> PluginError {
     PluginError::Internal(
         format!(
-            "the document tree exceeds the {MAX_DEPTH} nesting levels that the host translates"
+            "l'albero del documento supera i {MAX_DEPTH} livelli di annidamento \
+             che l'host traduce"
         )
         .into(),
     )

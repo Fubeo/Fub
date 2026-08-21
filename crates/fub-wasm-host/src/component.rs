@@ -63,21 +63,21 @@ const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
     /// Il file non si legge.
-    #[error("the component cannot be read: {0}")]
+    #[error("il componente non si legge: {0}")]
     Read(#[from] std::io::Error),
     /// Il file non è un componente valido, o non si compila.
-    #[error("the component fails to compile: {0}")]
+    #[error("il componente non si compila: {0}")]
     Compilation(String),
     /// Il componente importa una famiglia del contratto che questo host non
     /// serve. **Nominarla è metà del messaggio**: «manca una capacità» manda a
     /// cercare, «manca `fub:abi/host-net`» manda a leggere il §20.3.
-    #[error("the component imports families that this host does not serve: {0}")]
+    #[error("il componente importa famiglie che questo host non serve: {0}")]
     UnservedFamilies(String),
     /// Il componente non esporta `fub:abi/plugin`, cioè non è un plugin.
-    #[error("the component does not export `fub:abi/plugin`: not a plugin ({0})")]
+    #[error("il componente non esporta `fub:abi/plugin`: non è un plugin ({0})")]
     NotAPlugin(String),
     /// L'istanziazione è fallita, o il `manifest` non risponde.
-    #[error("the component cannot be instantiated: {0}")]
+    #[error("il componente non si istanzia: {0}")]
     Instantiation(String),
 }
 
@@ -315,10 +315,10 @@ fn call<R>(
 fn failure(and: wasmtime::Error) -> PluginError {
     if and.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt) {
         return PluginError::Internal(
-            "the component did not respond within the allotted time and was stopped".into(),
+            "il componente non ha risposto entro il tempo concesso ed è stato fermato".into(),
         );
     }
-    PluginError::Internal(format!("the component crashed: {and:#}").into())
+    PluginError::Internal(format!("il componente è caduto: {and:#}").into())
 }
 
 // ---------------------------------------------------------------------------
@@ -460,7 +460,7 @@ impl CommandProvider for WasmCommandProvider {
             // qualcun altro lo fabbrichi la risposta sia una frase e non un
             // panico dentro il kernel.
             let commands = the.commands.as_ref().ok_or_else(|| {
-                PluginError::Internal("the component does not export `fub:abi/command`".into())
+                PluginError::Internal("il componente non esporta `fub:abi/command`".into())
             })?;
             let outcome = commands
                 .call_invoke(store, command, &args, mode)
@@ -568,7 +568,7 @@ impl WasmBundle {
         crate::limits::renew(&mut *store);
         let specs = commands
             .call_commands(&mut *store)
-            .map_err(|and| format!("commands not declared: the component crashed: {and:#}"))?;
+            .map_err(|and| format!("comandi non dichiarati: il componente è caduto: {and:#}"))?;
         Ok(specs.into_iter().map(tr::from_command_spec).collect())
     }
 }
@@ -644,7 +644,7 @@ impl Bundle for WasmBundle {
         if !specs.is_empty() {
             let provider = WasmCommandProvider { inner, specs };
             if let Err(and) = ws.register_command_provider(&self.manifest.id, Box::new(provider)) {
-                warnings.push(format!("commands not registered: {and}"));
+                warnings.push(format!("comandi non registrati: {and}"));
             }
         }
         warnings

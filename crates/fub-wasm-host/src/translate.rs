@@ -60,7 +60,7 @@ use crate::contract::fub::abi::{
 /// dalla parte sbagliata.
 pub(crate) fn from_json(s: &str) -> Result<serde_json::Value, PluginError> {
     serde_json::from_str(s)
-        .map_err(|and| PluginError::BadArgs(format!("invalid json: {and}").into()))
+        .map_err(|and| PluginError::BadArgs(format!("json non valido: {and}").into()))
 }
 
 /// Il verso opposto. Non può fallire: `serde_json::Value` è per costruzione
@@ -418,7 +418,7 @@ fn from_span(s: w_model::Span) -> Result<fub_abi::model::Span, PluginError> {
     fn narrow(v: u64, which: &str) -> Result<usize, PluginError> {
         usize::try_from(v).map_err(|_| {
             PluginError::BadArgs(
-                format!("the span has a {which} that this machine cannot address: {v}").into(),
+                format!("lo span ha un{which} che questa macchina non indirizza: {v}").into(),
             )
         })
     }
