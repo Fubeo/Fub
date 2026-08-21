@@ -746,7 +746,7 @@ mod tests {
         // NFC il vault avrebbe due file che per il grafo sono uno.
         let nfd = "Cafe\u{0301}.md";
         let nfc = "Café.md";
-        assert_eq!(nfd, nfc);
+        assert_ne!(nfd, nfc);
         assert_eq!(normalized(nfd), nfc);
         assert_eq!(normalized(nfc), nfc);
         // E la chiave di risoluzione li vedeva già uguali: è la ragione per cui

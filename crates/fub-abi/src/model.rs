@@ -1581,7 +1581,7 @@ mod tests {
             // sfuggire al conto chiamandosi in un modo invece che in un altro;
             // e se un giorno l'estrattore smettesse di riconoscere la forma,
             // il conto `>= 12` qui sotto è il rosso che se ne accorge.
-    /// **Ogni `custom_kind` del core declare cosa porta, e viceversa.**
+    // **Ogni `custom_kind` del core declare cosa porta, e viceversa.**
             let Some((name, value)) = rest.split_once(": &str = ") else {
                 continue;
             };
@@ -1664,7 +1664,7 @@ mod tests {
         );
         // `payload` nomina `SyntaxRuleSpec::produces`: nessuno dei quattro è un
         // kind, e nessuno dei quattro deve comparire.
-    /// La regola che distingue "risorsa del vault" da "mondo esterno", con i
+    // La regola che distingue "risorsa del vault" da "mondo esterno", con i
         for name in ["Source", "Body", "Children", "produces"] {
             assert!(
                 !read.iter().any(|(n, v)| n == name || v == name),
@@ -1735,7 +1735,7 @@ mod tests {
             LinkTarget::wiki("Nota")
         );
         // `^`, e `Nota#` non nomina niente.
-    /// **Il giro fra i due versi della stessa regola.**
+    // **Il giro fra i due versi della stessa regola.**
         assert_eq!(
             parse_wikilink_inner("Nota#^blk").target,
             LinkTarget::Wiki {
@@ -1831,7 +1831,7 @@ mod tests {
     fn an_anchor_is_a_key_and_a_heading_slug_is_generated() {
         assert_eq!(canonical_anchor("  Blocco-1 "), "blocco-1");
         assert!(valid_anchor("abc123") && valid_anchor("a-b_c"));
-    /// Due titoli omonimi non possono portare lo stesso id, e un documento che
+    // Due titoli omonimi non possono portare lo stesso id, e un documento che
         assert!(!valid_anchor("") && !valid_anchor("10 = 1024") && !valid_anchor("a.b"));
 
         assert_eq!(heading_slug("Ciao Mondo!"), "ciao-mondo");
@@ -1873,7 +1873,7 @@ mod tests {
         );
         // resta una forma che `heading_slug` sa produrre — cioè scrivibile in
         // un link.
-    /// La gemella che legge: chi cerca un frammento trova esattamente il
+    // La gemella che legge: chi cerca un frammento trova esattamente il
         assert_eq!(heading_slugs(["...", "???"]), ["", "1"]);
         assert_eq!(heading_slug("1"), "1");
     }
@@ -1899,7 +1899,7 @@ mod tests {
         // Il titolo com'è scritto, punteggiatura compresa, resta una strada.
         assert_eq!(find("Note 1"), Some(2));
         assert_eq!(find("note-1"), Some(2));
-    /// **Il difetto 0093 era falso sulla conseguenza, e questo lo tiene fermo.**
+    // **Il difetto 0093 era falso sulla conseguenza, e questo lo tiene fermo.**
         assert_eq!(find("Ciao, Mondo!"), Some(1));
         assert_eq!(find("ciao-mondo"), Some(1));
         assert_eq!(find("Sezione che non c'è"), None);
@@ -1925,9 +1925,9 @@ mod tests {
     fn nfd_and_nfc_is_meet_on_the_text_and_not_on_the_slug() {
         let nfc = "Café";
         let nfd = "Cafe\u{301}";
-        assert_eq!(
+        assert_ne!(
             nfc, nfd,
-            "the two forms are different bytes, or nothing is proved"
+            "le due forme sono byte diversi, o non si prova niente"
         );
 
         // sta in `crates/fub-abi/tests/una_sola_forma_normalizzata.rs`.
@@ -1947,10 +1947,10 @@ mod tests {
             explicit_anchor: None,
         };
         let written_nfd = second(nfd);
-        assert_eq!(
+        assert_ne!(
             heading_slug(nfc),
             written_nfd.slug,
-            "the first branch must not be able to respond, or the second is not tested"
+            "il primo ramo non deve poter rispondere, o il secondo non è provato"
         );
         assert!(
             heading_matches(nfc, &written_nfd),
@@ -2061,7 +2061,7 @@ mod tests {
             fm.property("annidata", &DateFormats::ISO),
             Some(PropertyValue::Unknown(_))
         ));
-    /// Il parser di date dice di **no** più spesso di quanto dica di sì: ogni
+    // Il parser di date dice di **no** più spesso di quanto dica di sì: ogni
         assert_eq!(fm.property("mai-scritta", &DateFormats::ISO), None);
         assert_eq!(fm.properties(&DateFormats::ISO).len(), 10);
     }
@@ -2135,7 +2135,7 @@ mod tests {
             Some((2026, 7, 5))
         );
         // che nessun parser può dedurre e che solo il vault può dire.
-    /// Un formato dichiarato non è un parser tollerante: l'insieme si allarga
+    // Un formato dichiarato non è un parser tollerante: l'insieme si allarga
         assert_eq!(
             read("07/05/2026", &DateFormats::declaring(DateOrder::Mdy)),
             Some((2026, 7, 5))
@@ -2174,7 +2174,7 @@ mod tests {
             // sull'anno il vincolo delle quattro cifre.
             // Cifre non ASCII, testo attaccato, e la data con la coda.
             "5/007/2026",
-    /// Il rilevatore è lo stesso parser con tutti gli ordini insieme, e dice di
+    // Il rilevatore è lo stesso parser con tutti gli ordini insieme, e dice di
             "٠٥/٠٧/٢٠٢٦",
             "05/07/2026 e poi",
             "2026-07-05T10:30 fine",

@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn a_sequence_stays_a_sequence() {
         assert_eq!(canonical("Mod-k  d").as_deref(), Some("mod-k d"));
-        assert_eq!(canonical("Mod-k d"), canonical("Mod-k-d"));
+        assert_ne!(canonical("Mod-k d"), canonical("Mod-k-d"));
     }
 
     #[test]
