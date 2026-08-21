@@ -5,7 +5,7 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md). La [seduta
 [30](30-il-moto-e-del-tema.md) le ha dato il ritmo: l'architettura che porta un
 tema è in piedi, e regge. Questa seduta guarda **ciò che ci sta dentro** — il
 tema di serie, primo e unico esemplare — e pone una domanda sola: *da dove
-viene, ciascuna delle cose che si vedono?* Nove voci, quattro chiuse. La prima non
+viene, ciascuna delle cose che si vedono?* Nove voci, cinque chiuse. La prima non
 decideva nessuna delle altre otto: ha costruito l'occhio con cui si guardano, e
 la seconda è la prima cosa che quell'occhio ha visto.
 
@@ -289,11 +289,9 @@ tre presidi sanno leggere.
 ### 31.3 La voce del tema: i caratteri
 
 *foglio · **P1** — **chiusa** dalla
-[0168](../decisions/0168-tre-voci-in-bundle-un-canale-in-piu.md); resta una
-casella: `--font-reading`, `--text-2xl`, `--text-3xl`, `--text-reading`,
-`--leading-normal`, `--leading-relaxed` e `--content-width` sono dichiarati e
-visibili nel campionario del banco, ma nessuna regola vera li consuma
-ancora — li consuma la §31.8*
+[0168](../decisions/0168-tre-voci-in-bundle-un-canale-in-piu.md); la casella
+dei token tipografici l'ha chiusa la
+[0171](../decisions/0171-la-stessa-nota-in-tre-modi.md) (§31.8)*
 
 `--font-ui` è `system-ui` con quattro ripieghi, e vuol dire tre prodotti
 diversi su tre piattaforme: metriche verticali che non coincidono, allineamenti
@@ -524,7 +522,8 @@ tabella, due lettori»* — consegnato prima che il caricatore esista.
 
 ### 31.8 La stessa nota in tre modi
 
-*pelle · editor · **P1***
+*pelle · editor · **P1** — **chiusa** dalla
+[0171](../decisions/0171-la-stessa-nota-in-tre-modi.md)*
 
 È la superficie che si guarda per ore, ed è la meno disegnata: la Lettura non ha
 misura né passo verticale, la Sorgente porta una tavolozza nata per il fondo
@@ -534,17 +533,17 @@ colori**, perché `editor/theme.ts` legge i token, e falsa su tutto il resto:
 corpo, interlinea, misura e passo non coincidono, e passando da una modalità
 all'altra il testo si sposta.
 
-- [ ] **La misura, il corpo e il passo vengono da un posto solo**, e li usano
+- [x] **La misura, il corpo e il passo vengono da un posto solo**, e li usano
       tutte e tre le superfici: è la stessa mossa già fatta per i colori quando
       `oneDark` è uscito da `editor/theme.ts`, applicata al ritmo verticale.
-- [ ] **Il documento prende ciò che gli manca**: callout per specie, note a piè
+- [x] **Il documento prende ciò che gli manca**: callout per specie, note a piè
       di pagina, blocco delle proprietà, immagini, tabelle, sillabazione nella
       lingua della nota. Sono superfici che il modello sa già dire e che la
       pelle veste a metà.
-- [ ] **La prova è una foto sola**: la stessa nota nelle tre modalità,
+- [x] **La prova è una foto sola**: la stessa nota nelle tre modalità,
       affiancate, in due luci. Una modalità che ha perso un colore o un passo si
       vede lì, e non altrove.
-- [ ] **Il pavimento resta la scrittura**: sessanta fotogrammi al secondo su una
+- [x] **Il pavimento resta la scrittura**: sessanta fotogrammi al secondo su una
       nota da diecimila parole ([interview_2](../personas/interview_2.md)), e il
       moto che si ferma alla soglia dell'editor — che la
       [seduta 30](30-il-moto-e-del-tema.md) ha già deciso e che qui si misura,
@@ -596,10 +595,12 @@ vocabolario resta a fine M3, l'inventario dei bundle e il disco restano kernel.
    ([0170](../decisions/0170-una-componente-un-anatomia.md)). Aveva bisogno di
    colore e caratteri già fermi, o il catalogo mostrava tre variabili insieme.
 4. **La §31.5 e la [seduta 30](30-il-moto-e-del-tema.md), in parallelo alla
-   §31.8.** Profondità e moto lavorano sulla scocca e hanno bisogno dei
-   componenti; il documento non li tocca e può correre accanto. È qui che la 30
-   si realizza: le classi di coreografia che la sua §30.2 ha deciso nascono col
-   nome del vocabolario della §31.4, e non due volte.
+   ~~§31.8~~.** La §31.8 è fatta
+   ([0171](../decisions/0171-la-stessa-nota-in-tre-modi.md)). Profondità e moto
+   lavorano sulla scocca e hanno bisogno dei componenti; il documento non li
+   toccava e ha corso accanto. È qui che la 30 si realizza: le classi di
+   coreografia che la sua §30.2 ha deciso nascono col nome del vocabolario della
+   §31.4, e non due volte.
 5. **La §31.6 e la §31.7.** Le due che aggiungono una tavolozza o uno strato: si
    fanno per ultime perché sono la prova che la ricetta della §31.2 vale anche
    per chi non l'ha scritta.
@@ -614,8 +615,9 @@ e la §31.7 sono le più separabili: valgono identiche anche fatte dopo M3.
 
 - **Non è l'architettura dei temi** (29): non tocca i tre strati, il caricatore,
   la sostituzione, il risolutore. Li usa, ed è la prima cosa che li usa davvero.
-- **Non è il moto** (30): quella seduta ha già deciso, e qui si realizza. Le sue
-  due voci aperte — [§30.8](30-il-moto-e-del-tema.md) e §30.9 — restano sue.
+- **Non è il moto** (30): quella seduta ha già deciso, e qui si realizza. La sua
+  voce aperta — [§30.8](30-il-moto-e-del-tema.md) — resta sua. La §30.9 l'ha
+  chiusa la [0172](../decisions/0172-la-lettura-del-moto-ridotto-nel-grafo.md).
 - **Non è il montaggio dei temi di terzi**
   ([§29.4](29-chi-possiede-la-pelle.md)) né il disco
   ([§29.6](29-chi-possiede-la-pelle.md)): sono kernel, e questa seduta consegna

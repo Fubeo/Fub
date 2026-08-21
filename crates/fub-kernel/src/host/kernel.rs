@@ -51,13 +51,7 @@ impl KernelHost<'_> {
         if rel.is_empty() {
             return Err(PluginError::BadArgs("nome del blob vuoto".into()));
         }
-        let canonical = self.ws.plugin_data_root(self.plugin);
-        let legacy = self.ws.plugin_cache_root(self.plugin);
-        if self.ws.storage().exists(&canonical) || !self.ws.storage().exists(&legacy) {
-            self.ws.plugin_data_path(self.plugin, rel)
-        } else {
-            self.ws.plugin_cache_path(self.plugin, rel)
-        }
+        self.ws.plugin_authoritative_path(self.plugin, rel)
     }
 
     fn cache_blob(&self, rel: &str) -> Result<Utf8PathBuf, PluginError> {
@@ -225,11 +219,13 @@ impl DataRead for KernelHost<'_> {
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
         let canonical = self.ws.plugin_data_root(self.plugin);
-        let legacy = self.ws.plugin_cache_root(self.plugin);
-        let (root, dir) = if self.ws.storage().exists(&canonical) || !self.ws.storage().exists(&legacy) {
+        let (root, dir) = if self.ws.plugin_authoritative_uses_canonical(self.plugin) {
             (canonical, self.ws.plugin_data_path(self.plugin, prefix)?)
         } else {
-            (legacy, self.ws.plugin_cache_path(self.plugin, prefix)?)
+            (
+                self.ws.plugin_cache_root(self.plugin),
+                self.ws.plugin_cache_path(self.plugin, prefix)?,
+            )
         };
         let mut out = Vec::new();
         collect_data_files(self.ws.storage().as_ref(), &root, &dir, &mut out);
@@ -274,6 +270,7 @@ impl DataWrite for KernelHost<'_> {
 
     fn cache_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
         let path = self.cache_blob(path)?;
+        self.ws.prepare_plugin_cache_write(self.plugin)?;
         self.ws
             .storage()
             .write(&path, bytes)
