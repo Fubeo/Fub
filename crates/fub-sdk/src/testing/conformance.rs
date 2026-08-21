@@ -2,10 +2,10 @@
 //! eseguibili da chi implementa il contratto.
 //!
 //! È la differenza fra «il contratto è documentato» e «il contratto è
-//! verificabile da chi lo implementa». Sono ventitré funzioni
-//! [count: conformance-functions], ed è quel numero che [decision 0054] una
-//! volta scrisse come «otto» quando erano già quattordici: d'ora in poi conta
-//! la guardia del §16.8, non chi scrive la frase.
+//! verificabile da chi lo implementa». Sono ventitré funzioni [conta: conformance-functions],
+//! ed è quel numero che [decision 0054] una volta scrisse come «otto» quando
+//! erano già quattordici: d'ora in poi conta la guardia del §16.8, non chi
+//! scrive la frase.
 //!
 //! [decision 0054]: https://github.com/Fubeo/Fub/blob/main/docs/decisions/0054-the-provider-side-bench.md
 //!

@@ -1258,13 +1258,21 @@ impl HostQuery for MemoryHost {
                     })
                     .collect(),
             )),
+            // La salute del vault: un doppio senza grafo né indici non ha
+            // nessun problema da segnalare, e l'elenco vuoto è la verità — non
+            // un finto successo. La paginazione la applica come il kernel su
+            // una risposta già in memoria (`Paged::window`).
+            IndexQuery::VaultHealth { page, .. } => Ok(IndexResult::VaultHealth(Paged::window(
+                Vec::new(),
+                page,
+            ))),
             // Il doppio non ha né indice né grafo né frontmatter: per tutto il
             // resto non c'è nessuno che serva la domanda, ed è quella la
             // risposta — non un `BadArgs`, che direbbe che la domanda è
             // malposta.
             _ => Err(PluginError::Unserved(
-                "MemoryHost serve solo backlink, outline, tag, archi e impostazioni \
-                 seminati a mano, più i documenti che ha in memoria"
+                "MemoryHost serve solo backlink, outline, tag, archi, impostazioni e \
+                 salute del vault seminati a mano, più i documenti che ha in memoria"
                     .into(),
             )),
         }
@@ -1382,7 +1390,7 @@ mod tests {
         let first = host.random_bytes(16).unwrap();
         let second = host.random_bytes(16).unwrap();
         assert_eq!(first.len(), 16);
-        assert_eq!(first, second);
+        assert_ne!(first, second);
     }
 
     /// Il doppio risponde per **estensione**, che è la stessa chiave del
