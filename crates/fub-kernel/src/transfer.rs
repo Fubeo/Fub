@@ -537,7 +537,7 @@ mod tests {
         let a = sources.open(Box::new(MemorySource(b"mia".to_vec())));
         sources.close(a);
         let b = sources.open(Box::new(MemorySource(b"tua".to_vec())));
-        assert_eq!(
+        assert_ne!(
             a, b,
             "a recycled key would give whoever kept an old handle someone \
              else's source instead of the BadArgs it deserves"

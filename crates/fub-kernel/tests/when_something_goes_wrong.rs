@@ -382,7 +382,7 @@ fn the_final_stretch_says_how_many_it_threw_away() {
          of what did not reach it: {last}"
     );
     assert_eq!(
-        last, "overflow:0",
+        last, "overflow:1",
         "a count of zero would mean nothing was lost, but the ping-pong was \
          still emitting"
     );

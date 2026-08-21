@@ -479,8 +479,8 @@ fn load(
 fn notice_pruned(path: &Utf8Path, pruned: Vec<String>) -> Option<String> {
     (!pruned.is_empty()).then(|| {
         format!(
-            "{path} names {} positions that are not in this vault, and Fub \
-             leaves them behind: {}",
+            "{path} nomina {} posizioni che non stanno in questo vault, e Fub \
+             le lascia indietro: {}",
             pruned.len(),
             pruned.join(", ")
         )
@@ -782,7 +782,7 @@ mod tests {
         let and = store
             .set_icon("a.md", Some("📌".into()))
             .expect_err("nothing is written to what has not been read");
-        assert!(and.contains("does not overwrite"), "{and}");
+        assert!(and.contains("non lo sovrascrive"), "{and}");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
     }
 

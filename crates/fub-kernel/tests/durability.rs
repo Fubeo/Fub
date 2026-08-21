@@ -264,7 +264,7 @@ fn rewrite_a_notes_of_it_replaces_the_file() {
     let before = std::fs::metadata(&notes).unwrap().ino();
 
     FsStorage.write(&notes, b"seconda").unwrap();
-    assert_eq!(
+    assert_ne!(
         std::fs::metadata(&notes).unwrap().ino(),
         before,
         "l'atomicità si compra con una rename, e una rename cambia inode"

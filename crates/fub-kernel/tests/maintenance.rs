@@ -74,14 +74,14 @@ fn drafts(ws: &Workspace) -> Vec<fub_abi::traits::DraftInfo> {
 #[test]
 fn a_draft_survives_to_the_closing() {
     let (_dir, root, mut ws) = vault();
-    notes(&root, "Idea.md", "sul disco");
+    notes(&root, "Idea.md", "on disk");
     ws.reindex().expect("reindex");
 
     let doc = DocId::new("Idea.md");
     ws.save_draft(
         &doc,
         "quello che stavo scrivendo",
-        Some(Revision::of("sul disco")),
+        Some(Revision::of("on disk")),
     )
     .expect("bozza scritta");
     drop(ws);
@@ -120,7 +120,7 @@ fn the_draft_says_if_the_file_and_changed_under() {
 
     let found = drafts(&ws);
     assert_eq!(found[0].base.as_ref(), Some(&base));
-    assert_eq!(
+    assert_ne!(
         found[0].current, found[0].base,
         "i due fatti divergono, ed è ciò che permette di accorgersene"
     );

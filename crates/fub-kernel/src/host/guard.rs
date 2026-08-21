@@ -645,11 +645,11 @@ impl Policy for Granted {
 
     fn denies(&self, cap: Capability) -> Option<String> {
         match self.trust {
-            None => Some(format!("`{}` is not a declared plugin", self.plugin)),
-            Some(trust) if !trust.runs() => Some(format!("`{}` is revoked", self.plugin)),
+            None => Some(format!("`{}` non è un plugin dichiarato", self.plugin)),
+            Some(trust) if !trust.runs() => Some(format!("`{}` è revocato", self.plugin)),
             Some(_) if self.allowed.contains(cap) => None,
             Some(_) => Some(format!(
-                "`{}` has not declared the permission `{}`",
+                "`{}` non ha dichiarato il permesso `{}`",
                 self.plugin,
                 cap.permission()
                     .expect("a family denied by permissions has one")
@@ -977,7 +977,7 @@ impl<H: HostEvents, P: Policy> HostEvents for Guard<H, P> {
     fn emit(&mut self, event: Event) {
         // simulazione farebbe ricaricare l'editor su una modifica che non è
         // avvenuta.
-    /// Quale famiglia governa **questa** domanda, e cosa si stava facendo.
+    // Quale famiglia governa **questa** domanda, e cosa si stava facendo.
         if self.allows(Capability::Events) {
             self.inner.emit(event);
         }
@@ -1081,8 +1081,8 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // cui `match` esaustivo obbliga una famiglia nuova a dichiararsi. Così
         // il giorno che il vault avesse una terza specie di scrittura, questo
         // cancello la eredita senza che nessuno se ne debba ricordare.
-    /// Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
-    /// posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
+    // Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
+    // posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
         self.check(Capability::Commands, || "undoing".into())?;
         for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
             self.check(cap, || "undoing".into())?;
@@ -1131,8 +1131,8 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
             ));
         }
         // tutte e due.
-/// Lo schema e l'host di un URL, senza tirarsi dietro un parser di URL.
-///
+// Lo schema e l'host di un URL, senza tirarsi dietro un parser di URL.
+//
         if scheme != "https" && !is_loopback(&host) {
             return Err(PluginError::BadArgs(
                 format!(
@@ -1170,10 +1170,10 @@ fn split_url(url: &str) -> Result<(String, String), PluginError> {
         .next()
         .filter(|a| !a.is_empty())
         .ok_or_else(malformed)?;
-/// L'host è **questa macchina**?
+// L'host è **questa macchina**?
     let hostport = authority.rsplit('@').next().unwrap_or(authority);
     let host = match hostport.strip_prefix('[') {
-///
+//
         Some(inside) => inside.split(']').next().unwrap_or(inside),
         None => hostport.split(':').next().unwrap_or(hostport),
     };
@@ -1522,8 +1522,8 @@ mod tests {
         // ce l'aveva; questo, da cui quello aveva copiato la forma, no — ed è
         // la seconda zona cieca che si scopre guardando l'originale invece del
         // ricalco.
-    /// **Ogni permesso che governa una famiglia ha un nome nell'elenco che si
-    /// mostra** (§23.17).
+    // **Ogni permesso che governa una famiglia ha un nome nell'elenco che si
+    // mostra** (§23.17).
         for &cap in &Capability::ALL {
             assert_eq!(
                 Capability::ALL[last_declared_family(cap) as usize],

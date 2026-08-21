@@ -264,7 +264,7 @@ impl Fixture {
             .expect("no extension conflict");
         let mut ws = Workspace::on(&self.root, registry, storage, MachineSettings::in_memory())
             .expect("the vault opens");
-    /// I file dentro `.trash/`, per nome e ordinati.
+    // I file dentro `.trash/`, per nome e ordinati.
     // L'indice deve saperlo, o la nota resta cercabile: un risultato che apre
         ws.register_core_feature("test.spy", "test.spy")
             .expect("declared");
@@ -373,8 +373,8 @@ fn the_trash_sidecar_carries_its_schema_version() {
     let json: serde_json::Value = serde_json::from_str(&sidecar).expect("it is JSON");
     assert_eq!(json["v"], 1, "the sidecar declares its schema");
     assert_eq!(json["original"], "projects/Note.txt");
-/// Un sidecar scritto prima che il timbro esistesse resta buono.
-///
+// Un sidecar scritto prima che il timbro esistesse resta buono.
+//
     assert_eq!(
         json["file"]["size"], 11,
         "the stamp of the trashed file: {json}"
@@ -458,8 +458,8 @@ fn the_deletion_date_is_not_the_notes_last_write() {
     );
     // Con la data presa dall'mtime le due si invertivano, perché «di recente»
     // voleva dire *scritta* di recente.
-/// L'altra metà, che è la migrazione: **una voce che il campo non ce l'ha
-/// degrada a ciò che si vedeva prima**.
+// L'altra metà, che è la migrazione: **una voce che il campo non ce l'ha
+// degrada a ciò che si vedeva prima**.
     fx.put(".trash/Other.txt", "trashed by Obsidian an hour ago");
     age(&fx, ".trash/Other.txt", before - 3600);
     let entries = ws.list_trash().unwrap();
@@ -497,7 +497,7 @@ fn an_entry_without_the_date_in_the_sidecar_is_still_dated_from_disk() {
         ".fub/data/trash/Idea.txt.json",
         r#"{"v":1,"original":"projects/Idea.txt"}"#,
     );
-/// 0004 — un sidecar rimasto indietro **non parla per l'omonima**.
+// 0004 — un sidecar rimasto indietro **non parla per l'omonima**.
     fx.put(".trash/Other.txt", "trashed by Obsidian");
     age(&fx, ".trash/Other.txt", NEW_YEAR_2020);
 
@@ -507,7 +507,7 @@ fn an_entry_without_the_date_in_the_sidecar_is_still_dated_from_disk() {
     for entry in &entries {
         assert_eq!(entry.deleted_at, NEW_YEAR_2020, "{}", entry.id);
     }
-///
+//
     let idea = entries.iter().find(|v| v.id.as_str().ends_with("Idea.txt"));
     assert_eq!(idea.expect("exists").original, DocId::new("projects/Idea.txt"));
 }
@@ -640,7 +640,7 @@ fn a_restore_target_cannot_escape_the_vault() {
     let err = ws
         .restore_from_trash(&trashed, Some(DocId::new("../outside.txt")))
         .unwrap_err();
-    assert!(err.to_string().contains("invalid name"), "{err}");
+    assert!(err.to_string().contains("nome non valido"), "{err}");
     assert!(
         fx.exists(".trash/Idea.txt"),
         "the trash entry did not move"
@@ -754,7 +754,7 @@ fn a_notes_deleted_from_a_deep_folder_comes_back_to_it() {
 
     // È il chiamante a risolvere il conflitto scegliendo un nome: il kernel non
     // inventa nomi al posto dell'utente.
-/// Una guardia applicativa non protegge ciò che arriva mentre il ripristino
+// Una guardia applicativa non protegge ciò che arriva mentre il ripristino
     assert_eq!(brought_back, DocId::new("notes/2026/Idea.txt"));
     assert_eq!(fx.read("notes/2026/Idea.txt"), "an idea");
 }
@@ -784,8 +784,8 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
         "intact"
     );
 
-/// legge e parsa la voce. Il supporto posa un concorrente al momento esatto
-/// della mossa: deve restare intatto, e la voce deve restare nel cestino.
+// legge e parsa la voce. Il supporto posa un concorrente al momento esatto
+// della mossa: deve restare intatto, e la voce deve restare nel cestino.
     let brought_back = ws
         .restore_from_trash(&trashed, Some(DocId::new("Idea (restored).txt")))
         .unwrap();
@@ -875,8 +875,8 @@ fn an_attachment_comes_back_from_the_trash_like_a_notes() {
         !fx.exists(".trash/photo.png"),
         "the trash let it go"
     );
-/// 0157 (ripreso) — una voce senza sidecar al censimento non e ancora
-/// distruttibile.
+// 0157 (ripreso) — una voce senza sidecar al censimento non e ancora
+// distruttibile.
     let store = entries_of_kind(&ws, EntryKind::Asset);
     assert_eq!(
         store
@@ -989,9 +989,9 @@ fn deleting_a_notes_the_workspace_never_saw_is_an_error_not_a_shrug() {
 #[test]
 fn the_trash_lists_the_most_recent_first() {
     let fx = Fixture::new();
-/// 0208 — **una nota cestinata non lascia la bozza dietro di sé.**
-///
-/// La bozza è indicizzata per `DocId`, e cestinare cambia il `DocId`: il testo
+// 0208 — **una nota cestinata non lascia la bozza dietro di sé.**
+//
+// La bozza è indicizzata per `DocId`, e cestinare cambia il `DocId`: il testo
     fx.put(".trash/One.2026-07-24T10-00-00.txt", "first");
     fx.put(".trash/Two.txt", "second");
     let ws = fx.workspace();

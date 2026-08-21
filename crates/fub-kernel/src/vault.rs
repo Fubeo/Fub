@@ -509,8 +509,8 @@ impl Vault {
                 source: std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!(
-                        "the file is not UTF-8: the first invalid byte is at {at} \
-                         (0x{:02X}), out of {} bytes total",
+                        "il file non è UTF-8: il primo byte non valido è a {at} \
+                         (0x{:02X}), su {} byte in tutto",
                         bytes.get(at).copied().unwrap_or(0),
                         bytes.len()
                     ),
@@ -960,7 +960,7 @@ impl Vault {
             })?;
         }
         // resta intatta; non si esegue più uno sweep globale del deposito.
-/// Come una voce lascia il cestino: distrutta, o restituita al vault.
+// Come una voce lascia il cestino: distrutta, o restituita al vault.
         let _ = self.storage.remove_empty_dir(&self.trash_metadata_dir());
         tracing::info!(target: "fub.kernel", "trash emptied: {count} entries destroyed");
         Ok(count)
@@ -995,7 +995,7 @@ mod tests {
         // Fuori dal vault non è "ignorato": è di qualcun altro, e a dirlo è
         assert!(v.is_ignored("/vault/note/.bozza.md".into()));
         // `doc_id_for_path`.
-    /// **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
+    // **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
         assert!(!v.is_ignored("/altrove/.trash/Idea.md".into()));
     }
 
@@ -1068,7 +1068,7 @@ mod tests {
             "the lock companion of a root-level file was a document, \
              and it never goes away"
         );
-    /// La metà che impedisce alla riparazione di diventare «tutto ciò che
+    // La metà che impedisce alla riparazione di diventare «tutto ciò che
         assert!(v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
     }
 
@@ -1101,7 +1101,7 @@ mod tests {
         assert!(v.is_ignored("/vault/build/out.md".into()));
         assert!(!v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
         // non la rivela.
-    /// **La prima metà della 0176, dalle due porte.** `build/` è la forma che
+    // **La prima metà della 0176, dalle due porte.** `build/` è la forma che
         assert!(v.is_ignored("/vault/.fub/settings.json".into()));
     }
 
@@ -1167,7 +1167,7 @@ mod tests {
         );
         assert!(!v.is_ignored("/vault/archivio".into()));
         // path del file dentro, e il path della cartella stessa.
-    /// **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
+    // **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
         assert!(v.is_ignored("/vault/note/archivio/vecchia.md".into()));
         assert!(v.is_ignored("/vault/note/archivio".into()));
     }

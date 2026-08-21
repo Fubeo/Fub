@@ -240,7 +240,7 @@ fn randomness_crosses_the_boundary_and_never_repeats() {
     assert_eq!(first.len(), 16);
     ws.render_view(&ViewInstance::only("spia")).expect("render");
     let second = spy.random.lock().unwrap().clone();
-    assert_eq!(first, second, "two calls gave the same bytes");
+    assert_ne!(first, second, "two calls gave the same bytes");
     assert!(
         first.iter().any(|b| *b != 0),
         "all-zero bytes: the entropy did not arrive"

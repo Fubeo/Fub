@@ -124,7 +124,7 @@ fn nothing_a_plugin_can_name_escapes_its_own_space() {
         "./hidden",
     ];
 
-    ws.with_host("test.plugin", |host| {
+    ws.with_host("prova.plugin", |host| {
         for path in attempts {
             let result = host.data_write(path, b"I should not be here");
             assert!(
@@ -191,9 +191,11 @@ fn a_plugin_can_look_around_the_vault_not_only_react_to_events() {
         .with_host("prova.plugin", |host| host.list_documents(None))
         .unwrap();
 
+    let mut names: Vec<&str> = seen.items.iter().map(|d| d.0.as_str()).collect();
+    names.sort();
     assert_eq!(
-        seen.items.iter().map(|d| d.0.as_str()).collect::<Vec<_>>(),
-        vec!["Other.txt", "Note.txt"],
+        names,
+        vec!["Note.txt", "Other.txt"],
         "without `list_documents` a plugin can only read the ids that arrive \
          from events: no response to `vault-opened`, no functionality over the \
          entire vault"

@@ -47,7 +47,8 @@ impl ViewProvider for Counter {
     }
 
     fn views(&self) -> Vec<ViewSpec> {
-    /// una volta sola.
+        *self.views.lock().unwrap() += 1;
+    // una volta sola.
         let mut all = vec![Counter::spec("prova.view")];
         if *self.second.lock().unwrap() {
             all.push(Counter::spec("prova.altra"));
@@ -76,7 +77,7 @@ impl ViewProvider for Counter {
 impl CommandProvider for Counter {
     fn commands(&self) -> Vec<CommandSpec> {
         *self.commands.lock().unwrap() += 1;
-        vec![CommandSpec::new("prova.comando", "Command")]
+        vec![CommandSpec::new("prova.command", "Command")]
     }
 
     fn invoke(
@@ -178,7 +179,7 @@ fn specs_are_queried_only_once() {
             .expect("action");
         assert_eq!(ws.commands().len(), 1);
         ws.invoke_command(
-            "prova.comando",
+            "prova.command",
             serde_json::Value::Null,
             InvokeMode::Apply,
             fub_abi::Actor::User,
@@ -203,7 +204,7 @@ fn a_provider_that_changes_its_mind_declares_it() {
     ws.register_view_provider("prova", Box::new(provider))
         .expect("registered");
 
-/// registrazione», ed è ciò che impedisce alla verità di stare in due posti.
+// registrazione», ed è ciò che impedisce alla verità di stare in due posti.
     assert_eq!(
         ws.views().len(),
         1,

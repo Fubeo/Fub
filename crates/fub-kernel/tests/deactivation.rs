@@ -656,7 +656,7 @@ fn a_job_requested_during_closing_is_refused_immediately() {
     );
     for result in results.iter() {
         assert!(
-            matches!(result, PluginError::Cancelled(msg) if msg.to_string().contains("is closing")),
+            matches!(result, PluginError::Cancelled(msg) if msg.to_string().contains("si sta chiudendo")),
             "the refusal is a cancellation that says why: {result:?}"
         );
     }

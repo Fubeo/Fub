@@ -211,7 +211,7 @@ fn a_surgical_edit_leaves_a_footprint_not_the_bytes() {
             &id,
             EditRequest::new(
                 base,
-                vec![TextEdit::replace(fub_abi::model::Span::new(3, 8), "dog")],
+                vec![TextEdit::replace(fub_abi::model::Span::new(4, 7), "dog")],
             ),
         )
         .unwrap();
@@ -228,7 +228,7 @@ fn a_surgical_edit_leaves_a_footprint_not_the_bytes() {
     assert_eq!(footprint.len(), 1, "one footprint per applied edit");
     assert_eq!(
         footprint[0].span,
-        fub_abi::model::Span::new(3, 7),
+        fub_abi::model::Span::new(4, 7),
         "where, in the coordinates of the **new** text: \"dog\" is between 3 and 7"
     );
     assert_eq!(
@@ -761,7 +761,7 @@ fn pruning_does_not_promise_a_lock_that_append_does_not_take() {
         "impl Journal {",
         "pub(crate) fn prune(&self, days: u64) {",
     ));
-    for sentence in ["append", "does not go through the lock", "0067"] {
+    for sentence in ["append", "non passa dal lucchetto", "0067"] {
         assert!(
             pruning.contains(sentence),
             "the comment of `Journal::prune` no longer names \"{sentence}\": without \

@@ -687,7 +687,7 @@ mod tests {
         };
         assert_eq!(text("dopo.md"), Some("il testo che non esiste altrove"));
         assert_eq!(
-            text("prima~recupero.md"),
+            text("prima~recovery.md"),
             Some("il testo che si sposta"),
             "and the one that could not land on the destination takes a \
              recovery name — the document extension preserved — which decodes \
@@ -716,7 +716,7 @@ mod tests {
         )
         .unwrap();
         d.save(
-            &doc("prima~recupero.md"),
+            &doc("prima~recovery.md"),
             "un recupero che c'era già",
             None,
             3,
@@ -742,11 +742,11 @@ mod tests {
             Some("la destinazione che ha già una bozza")
         );
         assert_eq!(
-            text("prima~recupero.md"),
+            text("prima~recovery.md"),
             Some("un recupero che c'era già")
         );
         assert_eq!(
-            text("prima~recupero-2.md"),
+            text("prima~recovery-2.md"),
             Some("il testo che si sposta"),
             "the free recovery name is the second in the family"
         );

@@ -692,7 +692,7 @@ mod tests {
             panic!("someone dies holding the bell");
         });
 
-    /// più niente.
+    // più niente.
         // Il conto è monotòno e non è tornato indietro: ciò che il veleno può
         let ticket = bell.ticket();
         let waiter = {

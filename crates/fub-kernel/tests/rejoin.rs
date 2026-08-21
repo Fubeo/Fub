@@ -255,7 +255,7 @@ fn a_rename_that_finds_a_draft_to_the_destination_not_buries_the_source() {
         "la bozza che era già lì non si è sovrascritta"
     );
     assert_eq!(
-        draft_of(&ws, "a~recupero.txt").as_deref(),
+        draft_of(&ws, "a~recovery.txt").as_deref(),
         Some("il testo non salvato di a"),
         "e quella che non è potuta atterrare è comparsa nel recupero — con \
          l'estensione del documento conservata — col testo e la base intatti"
@@ -275,11 +275,11 @@ fn a_rename_that_finds_a_draft_to_the_destination_not_buries_the_source() {
             let orphan = page
                 .items
                 .iter()
-                .find(|d| d.doc == DocId::new("a~recupero.txt"))
+                .find(|d| d.doc == DocId::new("a~recovery.txt"))
                 .expect("la bozza di recupero è nell'elenco");
             assert!(
                 !orphan.exists,
-                "il documento `a~recupero.txt` non esiste: la bozza si offre \
+                "il documento `a~recovery.txt` non esiste: la bozza si offre \
                  come orfana"
             );
             assert_eq!(

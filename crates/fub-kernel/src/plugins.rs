@@ -195,16 +195,16 @@ impl std::fmt::Display for RegistryError {
         match self {
             RegistryError::UnknownPlugin(id) => write!(
                 f,
-                "`{id}` is not a declared plugin: anything that registers must first \
-                 declare itself (register_plugin), or its capabilities have no owner"
+                "`{id}` non è un plugin dichiarato: chi registra qualcosa si dichiara prima \
+                 (register_plugin), o le sue capacità non hanno un proprietario"
             ),
             RegistryError::DuplicatePlugin(id) => {
-                write!(f, "a plugin with id `{id}` is already declared")
+                write!(f, "un plugin con id `{id}` è già dichiarato")
             }
             RegistryError::Revoked(id) => write!(
                 f,
-                "`{id}` is revoked and registers nothing: revocation is not one fewer \
-                 permission, it is the absence of the permission to be executed"
+                "`{id}` è revocato e non registra niente: la revoca non è un permesso \
+                 in meno, è l'assenza del permesso di essere eseguito"
             ),
             RegistryError::Namespace(fault) => write!(f, "{fault}"),
             RegistryError::Timer { plugin, timer } if timer.is_empty() => write!(
