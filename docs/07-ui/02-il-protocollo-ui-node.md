@@ -6,7 +6,7 @@ Per chi è: studenti che vogliono capire come un plugin in Rust o WebAssembly pu
 
 ## Che cos'è una UI Dichiarativa?
 
-Invece di manipolare direttamente gli elementi del DOM della pagina web, il backend descrive ciò che vuole mostrare restituendo un albero di dati chiamato **`UiNode`** (definito in [`crates/fub-abi/src/ui.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/ui.rs)).
+Invece di manipolare direttamente gli elementi del DOM della pagina web, il backend descrive ciò che vuole mostrare restituendo un albero di dati chiamato **`UiNode`** (definito in [`crates/fub-abi/src/ui.rs`](../../crates/fub-abi/src/ui.rs)).
 
 La shell nel frontend riceve questo albero e si occupa di disegnarlo a schermo usando componenti stilizzati e coerenti.
 
@@ -44,5 +44,5 @@ flowchart LR
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-abi/src/ui.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/ui.rs) per la definizione Rust dei nodi.
-- Guarda [`frontend/src/ui/node.ts`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/ui/node.ts) per vedere come la webview converte i nodi in elementi visivi.
+- Guarda [`crates/fub-abi/src/ui.rs`](../../crates/fub-abi/src/ui.rs) per la definizione Rust dei nodi.
+- Guarda [`frontend/src/ui/node.ts`](../../frontend/src/ui/node.ts) per vedere come la webview converte i nodi in elementi visivi.

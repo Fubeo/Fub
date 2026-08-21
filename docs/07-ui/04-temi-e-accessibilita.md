@@ -8,7 +8,7 @@ Per chi è: studenti interessati all'accessibilità visiva e al design system di
 
 Fub non usa colori fissi nel codice dell'interfaccia, ma impiega **variabili CSS** (dette *design token*) che cambiano automaticamente in base alla modalità selezionata dall'utente.
 
-I file si trovano in [`frontend/src/theme/`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/theme):
+I file si trovano in [`frontend/src/theme/`](../../frontend/src/theme):
 - `--bg-primary`: colore di sfondo principale per l'editor.
 - `--bg-surface`: sfondo per barre laterali e pannelli.
 - `--text-normal`: colore del testo per garantire massima leggibilità.
@@ -43,5 +43,5 @@ Tutte le combinazioni di colore tra testo e sfondo sono verificate automaticamen
 
 ## Se vuoi il dettaglio
 
-- Guarda [`frontend/src/theme/`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/theme) per esplorare le definizioni dei token di stile.
-- Guarda [`frontend/bench/a11y.mjs`](file:///home/fubeo/Files/Progetti/Fub/frontend/bench/a11y.mjs) per il banco di prova automatico del contrasto dei colori.
+- Guarda [`frontend/src/theme/`](../../frontend/src/theme) per esplorare le definizioni dei token di stile.
+- Guarda [`frontend/bench/a11y.mjs`](../../frontend/bench/a11y.mjs) per il banco di prova automatico del contrasto dei colori.

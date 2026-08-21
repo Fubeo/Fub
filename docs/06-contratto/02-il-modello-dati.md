@@ -6,7 +6,7 @@ Per chi è: studenti che vogliono capire come una nota viene trasformata in una 
 
 ## Dalla stringa all'albero
 
-Quando una nota viene aperta, il testo non rimane una semplice sequenza di caratteri, ma viene trasformato in una struttura dati tipizzata chiamata **`DocumentModel`** (definita in [`crates/fub-abi/src/model.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/model.rs)).
+Quando una nota viene aperta, il testo non rimane una semplice sequenza di caratteri, ma viene trasformato in una struttura dati tipizzata chiamata **`DocumentModel`** (definita in [`crates/fub-abi/src/model.rs`](../../crates/fub-abi/src/model.rs)).
 
 ```mermaid
 flowchart TD
@@ -54,4 +54,4 @@ Questo consente all'editor di evidenziare o modificare chirurgicamente una parol
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-abi/src/model.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/model.rs) per la definizione completa dei tipi `Block`, `Inline` e `Span`.
+- Guarda [`crates/fub-abi/src/model.rs`](../../crates/fub-abi/src/model.rs) per la definizione completa dei tipi `Block`, `Inline` e `Span`.

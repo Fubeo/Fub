@@ -40,7 +40,7 @@ const risultato = await invoke('write_document', {
 });
 ```
 
-Nel backend, il comando è gestito in [`crates/fub-app/src/lib.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-app/src/lib.rs):
+Nel backend, il comando è gestito in [`crates/fub-app/src/lib.rs`](../../crates/fub-app/src/lib.rs):
 
 ```rust
 #[tauri::command]
@@ -68,5 +68,5 @@ Quando qualcosa cambia nel vault (per esempio un file viene salvato o modificato
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-app/src/lib.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-app/src/lib.rs) per tutti i comandi IPC disponibili.
-- Guarda [`frontend/src/host/`](file:///home/fubeo/Files/Progetti/Fub/frontend/src/host) per i wrapper TypeScript che chiamano questi comandi.
+- Guarda [`crates/fub-app/src/lib.rs`](../../crates/fub-app/src/lib.rs) per tutti i comandi IPC disponibili.
+- Guarda [`frontend/src/host/`](../../frontend/src/host) per i wrapper TypeScript che chiamano questi comandi.

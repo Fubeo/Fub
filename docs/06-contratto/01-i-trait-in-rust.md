@@ -1,6 +1,6 @@
 # I trait principali in Rust (`fub-abi`)
 
-Per chi è: studenti e sviluppatori che vogliono comprendere nel dettaglio come sono strutturate le interfacce in Rust in [`crates/fub-abi/src/traits.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/traits.rs).
+Per chi è: studenti e sviluppatori che vogliono comprendere nel dettaglio come sono strutturate le interfacce in Rust in [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs).
 
 ---
 
@@ -25,7 +25,7 @@ Permette a Fub di capire un formato di file (es. Markdown):
 - `render`: trasforma un `DocumentModel` in una stringa HTML sicura.
 - `serialize`: riconverte un `DocumentModel` modificato in testo grezzo.
 
-File: [`crates/fub-abi/src/format.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/format.rs)
+File: [`crates/fub-abi/src/format.rs`](../../crates/fub-abi/src/format.rs)
 
 ---
 
@@ -35,7 +35,7 @@ Permette di costruire un pannello dell'interfaccia utente:
 - `render`: riceve il contesto attuale e restituisce un albero `UiNode` con i componenti grafici.
 - `on_action`: gestisce i clic sui pulsanti o le interazioni dell'utente.
 
-File: [`crates/fub-abi/src/traits.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/traits.rs)
+File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
 ---
 
@@ -45,7 +45,7 @@ Permette di rispondere a ricerche ed estrazioni dati:
 - `query`: esegue la ricerca e restituisce i risultati ordinati.
 - `reindex_all`: indicizza da zero tutti i file del vault.
 
-File: [`crates/fub-abi/src/traits.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/traits.rs)
+File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
 ---
 
@@ -54,11 +54,11 @@ Espone comandi eseguibili:
 - `commands`: restituisce l'elenco dei comandi offerti con titolo, descrizione e parametri richiesti.
 - `execute`: esegue il comando con gli argomenti forniti.
 
-File: [`crates/fub-abi/src/traits.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/src/traits.rs)
+File: [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs)
 
 ---
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/06-contratto/02-il-modello-dati.md`](file:///home/fubeo/Files/Progetti/Fub/docs/06-contratto/02-il-modello-dati.md) per scoprire come è rappresentata una nota in memoria.
-- Guarda [`docs/06-contratto/03-il-contratto-wit.md`](file:///home/fubeo/Files/Progetti/Fub/docs/06-contratto/03-il-contratto-wit.md) per la versione WebAssembly (WIT).
+- Guarda [`docs/06-contratto/02-il-modello-dati.md`](./02-il-modello-dati.md) per scoprire come è rappresentata una nota in memoria.
+- Guarda [`docs/06-contratto/03-il-contratto-wit.md`](./03-il-contratto-wit.md) per la versione WebAssembly (WIT).

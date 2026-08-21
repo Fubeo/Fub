@@ -8,7 +8,7 @@ Per chi è: studenti che vogliono capire come i tipi di Fub vengono descritti in
 
 **WIT** (*WebAssembly Interface Types*) è un linguaggio di specifica standard per definire tipi di dato e interfacce di funzioni che devono essere scambiate tra un programma principale (l'host) e un modulo WebAssembly (il guest).
 
-In Fub, il contratto WIT si trova in [`crates/fub-abi/wit/fub/abi.wit`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/wit/fub/abi.wit) ed è l'equivalente esatto delle strutture Rust in `crates/fub-abi/src/`.
+In Fub, il contratto WIT si trova in [`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit) ed è l'equivalente esatto delle strutture Rust in `crates/fub-abi/src/`.
 
 ```mermaid
 flowchart LR
@@ -43,11 +43,11 @@ A partire dalla Milestone 4 (congelamento del contratto), il file `abi.wit` adot
 - I tipi e le funzioni esistenti **non possono essere rimossi o modificati** (romperebbero i plugin già compilati).
 - Il contratto può crescere **solo per aggiunta** di nuove interfacce opzionali.
 
-Questa promessa è garantita da un test automatico dedicato: [`crates/fub-abi/tests/wit_additivity.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/tests/wit_additivity.rs).
+Questa promessa è garantita da un test automatico dedicato: [`crates/fub-abi/tests/wit_additivity.rs`](../../crates/fub-abi/tests/wit_additivity.rs).
 
 ---
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-abi/wit/fub/abi.wit`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/wit/fub/abi.wit) per leggere l'intero contratto WIT.
-- Guarda [`crates/fub-abi/tests/wit_conformance.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-abi/tests/wit_conformance.rs) per il test che verifica la corrispondenza 1:1 tra Rust e WIT.
+- Guarda [`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit) per leggere l'intero contratto WIT.
+- Guarda [`crates/fub-abi/tests/wit_conformance.rs`](../../crates/fub-abi/tests/wit_conformance.rs) per il test che verifica la corrispondenza 1:1 tra Rust e WIT.

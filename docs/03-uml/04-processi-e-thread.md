@@ -60,6 +60,6 @@ flowchart TB
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-host/src/session.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-host/src/session.rs) per la struttura `VaultSession`.
-- Guarda [`crates/fub-host/src/custodia.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-host/src/custodia.rs) per il meccanismo di protezione concorrente.
-- Guarda [`crates/fub-host/src/bridge.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-host/src/bridge.rs) per il funzionamento del ponte eventi.
+- Guarda [`crates/fub-host/src/session.rs`](../../crates/fub-host/src/session.rs) per la struttura `VaultSession`.
+- Guarda [`crates/fub-host/src/custody.rs`](../../crates/fub-host/src/custody.rs) per i dettagli sulla gestione della concorrenza protetta.
+- Guarda [`crates/fub-host/src/bridge.rs`](../../crates/fub-host/src/bridge.rs) per il funzionamento del ponte eventi.

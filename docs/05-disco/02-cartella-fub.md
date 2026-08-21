@@ -49,5 +49,5 @@ Tutto ciò che sta sotto `.fub/data/` è **derivato**:
 
 ## Se vuoi il dettaglio
 
-- Guarda [`crates/fub-kernel/src/organization.rs`](file:///home/fubeo/Files/Progetti/Fub/crates/fub-kernel/src/organization.rs) per la gestione dei file di configurazione.
-- Guarda [`docs/05-disco/03-cestino-e-sidecar.md`](file:///home/fubeo/Files/Progetti/Fub/docs/05-disco/03-cestino-e-sidecar.md) per scoprire come vengono gestite le note eliminate.
+- Guarda [`crates/fub-kernel/src/organization.rs`](../../crates/fub-kernel/src/organization.rs) per la gestione dei file di configurazione.
+- Guarda [`docs/05-disco/03-cestino-e-sidecar.md`](./03-cestino-e-sidecar.md) per scoprire come vengono gestite le note eliminate.
