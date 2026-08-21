@@ -561,7 +561,7 @@ fn the_glue_does_not_bypass_the_mounter() {
 // ---------------------------------------------------------------------------
 
 /// Il documento che contiene il grafo, relativo alla radice del repo.
-const DIAGRAM_DOC: &str = "docs/architecture/visual-map.md";
+const DIAGRAM_DOC: &str = "docs/03-uml/03-componenti-e-dipendenze.md";
 
 /// Il commento Mermaid che marca *quale* blocco è il grafo delle dipendenze.
 /// Serve perché quel documento ne contiene più d'uno, e il primo è disposto a
@@ -701,7 +701,7 @@ fn the_diagram_declares_the_real_dependencies() {
     let doc = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../",
-        "docs/architecture/mappa-visuale.md"
+        "docs/03-uml/03-componenti-e-dipendenze.md"
     );
     let source =
         std::fs::read_to_string(doc).unwrap_or_else(|and| panic!("{DIAGRAM_DOC} non si legge: {and}"));
