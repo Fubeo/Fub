@@ -22,6 +22,7 @@ import {
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
+import { syntaxTree } from "@codemirror/language";
 import { childName, pageName, resolutionKey } from "../rules/mirrored";
 import { TAG_CHARACTER } from "../rules/mirrored";
 import { tagInProgress } from "../rules/syntax";
@@ -64,7 +65,8 @@ export function wikilinkContext(before: string): ContextMatch | null {
   if (open === -1) return null;
   const query = before.slice(open + 2);
   if (query.includes("]]") || query.includes("\n")) return null;
-  return { from: open + 2, query };
+  const separator = query.search(/[|#]/);
+  return { from: open + 2, query: separator === -1 ? query : query.slice(0, separator) };
 }
 
 /// Il cursore è su un token `#...` a inizio parola?
@@ -113,7 +115,11 @@ function pathWithoutExtension(doc: string): string {
 ///
 /// I `docs` arrivano **ordinati** da chi li ha cercati, e questa funzione
 /// preserva l'ordine: è un `map`, non un `sort`.
-export function noteCompletions(docs: string[], alreadyClosed: boolean): Completion[] {
+export function noteCompletions(
+  docs: string[],
+  alreadyClosed: boolean,
+  preservePath = false,
+): Completion[] {
   const seen = new Map<string, number>();
   for (const doc of docs) {
     const key = resolutionKey(pageName(doc));
@@ -122,7 +128,7 @@ export function noteCompletions(docs: string[], alreadyClosed: boolean): Complet
   return docs.map((doc) => {
     const name = pageName(doc);
     const ambiguous = (seen.get(resolutionKey(name)) ?? 0) > 1;
-    const insert = ambiguous ? pathWithoutExtension(doc) : name;
+    const insert = preservePath || ambiguous ? pathWithoutExtension(doc) : name;
     return {
       label: name,
       detail: doc,
@@ -149,13 +155,33 @@ export function tagCompletions(tags: { name: string; count: number }[]): Complet
 export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
     const line = ctx.state.doc.lineAt(ctx.pos);
+    const node = syntaxTree(ctx.state).resolve(ctx.pos, -1);
+    if (node.name === "CodeBlock" || node.name === "FencedCode" || node.name === "InlineCode") {
+      return null;
+    }
+    let parent = node.parent;
+    while (parent) {
+      if (parent.name === "CodeBlock" || parent.name === "FencedCode" || parent.name === "InlineCode") {
+        return null;
+      }
+      parent = parent.parent;
+    }
     const match = wikilinkContext(ctx.state.sliceDoc(line.from, ctx.pos));
     if (!match) return null;
+    const cursorOffset = ctx.pos - line.from;
+    const afterCursor = line.text.slice(cursorOffset);
+    const suffix = afterCursor.search(/(?:[|#]|\]\])/);
+    const to = suffix === -1 ? line.to : ctx.pos + suffix;
+    const after = line.text.slice(to - line.from);
     const docs = await searchNotes(match.query);
-    const after = ctx.state.sliceDoc(ctx.pos, Math.min(ctx.state.doc.length, ctx.pos + 2));
     return {
       from: line.from + match.from,
-      options: noteCompletions(docs, after === "]]"),
+      to: line.from + to,
+      options: noteCompletions(
+        docs,
+        after.startsWith("]]") || after.startsWith("|") || after.startsWith("#"),
+        match.query.includes("/"),
+      ),
       // **Due righe che erano una, e sono la §21.5.**
       //
       // Prima c'era `validFor: /^[^\[\]\n]*$/`, e non era un dettaglio: era la
@@ -183,8 +209,16 @@ export function tagSource(listTags: CompletionSources["listTags"]): CompletionSo
     const match = tagContext(ctx.state.sliceDoc(line.from, ctx.pos));
     if (!match) return null;
     const tags = await listTags();
+    let to = ctx.pos - line.from;
+    while (to < line.text.length) {
+      const cp = line.text.codePointAt(to)!;
+      const character = String.fromCodePoint(cp);
+      if (!TAG_CHARACTER.test(character)) break;
+      to += character.length;
+    }
     return {
       from: line.from + match.from,
+      to: line.from + to,
       options: tagCompletions(tags),
       // La stessa classe di `tagInCorso`, presa da lì: un `validFor` più
       // stretto chiuderebbe il popup su un carattere che il tag accetta.

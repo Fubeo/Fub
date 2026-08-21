@@ -68,9 +68,10 @@ const syntaxStyle = HighlightStyle.define([
   },
   { tag: [t.meta, t.comment], color: "var(--syn-comment)" },
   { tag: t.strong, fontWeight: "bold" },
+  { tag: t.monospace, color: "var(--doc-fg)", backgroundColor: "var(--doc-fill)" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: t.link, color: "var(--syn-comment)", textDecoration: "underline" },
+  { tag: t.link, color: "var(--doc-link)", textDecoration: "underline" },
   // Il titolo ha un colore anche mentre lo si scrive: è la riga per cui esiste
   // `--doc-heading`, ed è la differenza più visibile fra Sorgente e Lettura se
   // una delle due la perde.

@@ -112,8 +112,9 @@ export function activeLinesOf(state: EditorState): Set<number> {
   const active = new Set<number>();
   for (const r of state.selection.ranges) {
     const from = state.doc.lineAt(r.from).number;
-    const a = state.doc.lineAt(r.to).number;
-    for (let n = from; n <= a; n++) active.add(n);
+    const line = state.doc.lineAt(r.to);
+    const to = r.to > r.from && r.to === line.from ? line.number - 1 : line.number;
+    for (let n = from; n <= to; n++) active.add(n);
   }
   return active;
 }
@@ -131,6 +132,7 @@ const DECLARED_INLINE = inlineDelimiters();
 // è una **terza** grafia dello stesso nome.
 const ATTR_WIKILINK = "data-fub-target";
 const ATTR_TAG = "data-fub-tag";
+const ATTR_HREF = "data-fub-href";
 
 /// La funzione pura al centro del modulo: dallo stato (albero Lezer + testo)
 /// e dalle righe attive produce la lista ordinata degli intervalli da
@@ -205,7 +207,7 @@ export function computeDecorations(
         // Lo spazio dopo i `#` (e quello prima dei `#` di chiusura) fa parte
         // del marcatore percepito: nasconderlo evita il testo che "salta".
         let textFrom = marks[0].to;
-        if (doc.sliceString(textFrom, textFrom + 1) === " ") textFrom++;
+        while (/[ \t]/.test(doc.sliceString(textFrom, textFrom + 1))) textFrom++;
         let textEnd = node.to;
         const close = marks.length > 1 ? marks[marks.length - 1] : null;
         if (close) {
@@ -287,7 +289,9 @@ export function computeDecorations(
           if (marks.length < 2 || !node.node.getChildren("URL").length) return;
           const textFrom = marks[0].to;
           const textEnd = marks[1].from;
-          if (textFrom < textEnd) out.push({ from: textFrom, to: textEnd, kind: "link" });
+          const url = node.node.getChildren("URL")[0];
+          const href = url ? doc.sliceString(url.from, url.to) : "";
+          if (textFrom < textEnd) out.push({ from: textFrom, to: textEnd, kind: "link", data: href });
           const singleRow = doc.lineAt(node.from).number === doc.lineAt(node.to).number;
           if (singleRow && !active(node.from)) {
             out.push({ from: node.from, to: textFrom, kind: "hide" });
@@ -328,8 +332,9 @@ export function computeDecorations(
         out.push({ from: innerFrom, to: innerA, kind: "wikilink", data });
       } else {
         // Un solo hide copre `![[` (o `[[`) e, se c'è l'alias, anche `Pagina|`.
-        const showFrom =
-          w.alias === null ? innerFrom : innerFrom + w.target.length + 1;
+        let showFrom = innerFrom + w.target.length + 1;
+        if (w.alias === null) showFrom = innerFrom;
+        while (showFrom < innerA && /[ \t]/.test(doc.sliceString(showFrom, showFrom + 1))) showFrom++;
         out.push({ from: rangeStart, to: showFrom, kind: "hide" });
         out.push({ from: showFrom, to: innerA, kind: "wikilink", data });
         out.push({ from: innerA, to: rangeEnd, kind: "hide" });
@@ -346,10 +351,12 @@ export function computeDecorations(
         out.push({ from: rangeStart, to: row.from + t.contentFrom, kind: "hide" });
         out.push({ from: row.from + t.contentTo, to: rangeEnd, kind: "hide" });
       }
+      const className = t.name.slice(t.name.lastIndexOf(":") + 1);
       out.push({
         from: row.from + t.contentFrom,
         to: row.from + t.contentTo,
         kind: "highlight",
+        data: className === "highlight" ? undefined : className,
       });
     }
 
@@ -367,11 +374,12 @@ export function computeDecorations(
     // Checkbox a inizio voce: fuori dalla riga attiva il `[ ]`/`[x]` diventa
     // un widget; il barrato leggero sulla voce fatta resta sempre.
     const entry = listItem(text);
-    if (entry && entry.symbol !== null) {
+    if (entry && entry.symbol !== null && entry.boxFrom >= 0) {
+      const boxFrom = row.from + entry.boxFrom;
       const paragraphEnd = row.from + entry.boxTo; // subito dopo `]`
       const checked = taskChecked(entry.symbol);
       if (!rowActive) {
-        out.push({ from: paragraphEnd - 3, to: paragraphEnd, kind: "checkbox", data: checked ? "x" : " " });
+        out.push({ from: boxFrom, to: paragraphEnd, kind: "checkbox", data: checked ? "x" : " " });
       }
       if (checked && paragraphEnd + 1 < row.to) {
         out.push({ from: paragraphEnd + 1, to: row.to, kind: "done" });
@@ -450,6 +458,15 @@ function inDecoration(d: LiveDeco): Decoration {
       return quoteLine;
     // Il payload viaggia nel DOM come data-attribute: il gestore del click
     // lo rilegge da lì, senza mappe posizione→dato da tenere sincronizzate.
+    case "link":
+      return Decoration.mark({
+        class: "cm-fub-link",
+        attributes: { [ATTR_HREF]: d.data ?? "" },
+      });
+    case "highlight":
+      return d.data
+        ? Decoration.mark({ class: `cm-fub-${d.data}` })
+        : marksMap[d.kind]!;
     case "wikilink":
       return Decoration.mark({
         class: "cm-fub-wikilink",
@@ -475,9 +492,9 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
   if (target instanceof HTMLInputElement && target.classList.contains("cm-fub-checkbox")) {
     const pos = view.posAtDOM(target);
     const threeChars = view.state.doc.sliceString(pos, pos + 3);
-    if (/^\[[ xX]\]$/.test(threeChars)) {
+    if (/^\[[^\]\n]\]$/.test(threeChars)) {
       view.dispatch({
-        changes: { from: pos + 1, to: pos + 2, insert: threeChars[1] === " " ? "x" : " " },
+        changes: { from: pos + 1, to: pos + 2, insert: taskChecked(threeChars[1]) ? " " : "x" },
       });
       e.preventDefault();
       return true;
@@ -495,8 +512,20 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
     return true;
   }
 
+  const link = target.closest<HTMLElement>(".cm-fub-link");
+  if (link && (e.ctrlKey || e.metaKey)) {
+    const href = link.getAttribute(ATTR_HREF);
+    if (href) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      e.preventDefault();
+      return true;
+    }
+  }
+
   const tag = target.closest<HTMLElement>(".cm-fub-tag");
   if (tag && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+    const pos = view.posAtDOM(tag);
+    if (activeLinesOf(view.state).has(view.state.doc.lineAt(pos).number)) return false;
     cb.searchTag(tag.getAttribute(ATTR_TAG) ?? "");
     e.preventDefault();
     return true;
@@ -541,9 +570,8 @@ const theme = EditorView.baseTheme({
     cursor: "pointer",
     textDecoration: "underline",
     textUnderlineOffset: "2px",
+    color: "var(--doc-link)",
   },
-  "&light .cm-fub-link, &light .cm-fub-wikilink": { color: "var(--doc-link, #2f6bd8)" },
-  "&dark .cm-fub-link, &dark .cm-fub-wikilink": { color: "var(--doc-link, #82aaff)" },
   ".cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.35))" },
   "&dark .cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.28))" },
   ".cm-fub-tag": {
@@ -574,8 +602,12 @@ export function livePreview(callbacks: LivePreviewCallbacks): Extension {
     const active = activeLinesOf(view.state);
     const decorations: Range<Decoration>[] = [];
     const atomicRanges: Range<Decoration>[] = [];
+    const rendered = new Set<string>();
     for (const r of view.visibleRanges) {
       for (const d of computeDecorations(view.state, active, r.from, r.to)) {
+        const key = `${d.from}:${d.to}:${d.kind}:${d.data ?? ""}`;
+        if (rendered.has(key)) continue;
+        rendered.add(key);
         const deco = inDecoration(d);
         if (d.kind === "quote-line" || d.kind === "codeblock-line") {
           decorations.push(deco.range(d.from));

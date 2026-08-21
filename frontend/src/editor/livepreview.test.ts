@@ -31,7 +31,7 @@ function ofKind(ds: LiveDeco[], kind: LiveDecoKind): LiveDeco[] {
 describe("activeLinesOf", () => {
   it("una selezione multi-riga tocca tutte le righe che attraversa", () => {
     const s = state("a\nb\nc", { anchor: 0, head: 4 });
-    expect([...activeLinesOf(s)].sort()).toEqual([1, 2, 3]);
+    expect([...activeLinesOf(s)].sort()).toEqual([1, 2]);
   });
 });
 
@@ -126,7 +126,12 @@ describe("link markdown", () => {
       [5, 6],
       [11, 25],
     ]);
-    expect(ofKind(ds, "link")).toContainEqual({ from: 6, to: 11, kind: "link" });
+    expect(ofKind(ds, "link")).toContainEqual({
+      from: 6,
+      to: 11,
+      kind: "link",
+      data: "https://x.y",
+    });
   });
 
   it("sulla riga attiva niente hide, il mark resta", () => {

@@ -69,6 +69,7 @@ export async function renameNote(from: string, to: string): Promise<void> {
 /// Sposta una nota nel cestino.
 export async function trashNote(id: string): Promise<void> {
   await api.invokeCommand(COMMANDS.trash, { doc: id });
+  refreshDocuments();
 }
 
 // Ripristinare dal cestino, svuotarlo e proporre un nome libero non stanno più

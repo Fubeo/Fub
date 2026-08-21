@@ -76,15 +76,50 @@ function toggleWrap(open: string, close: string = open): StateCommand {
       state.update(
         state.changeByRange((range) => {
           let { from, to } = range;
+          let hadWord = from !== to;
           if (from === to) {
-            const word = state.wordAt(range.head);
-            if (!word) {
+            if (
+              from >= open.length &&
+              state.sliceDoc(from - open.length, from) === open &&
+              state.sliceDoc(from, from + close.length) === close
+            ) {
               return {
-                changes: { from, insert: open + close },
-                range: EditorSelection.cursor(from + open.length),
+                changes: [
+                  { from: from - open.length, to: from },
+                  { from, to: from + close.length },
+                ],
+                range: EditorSelection.cursor(from - open.length),
               };
             }
-            ({ from, to } = word);
+            const word = state.wordAt(range.head);
+            if (word) {
+              ({ from, to } = word);
+              hadWord = true;
+            }
+          }
+          if (open === "[[" && close === "]]") {
+            const line = state.doc.lineAt(from);
+            const lineText = line.text;
+            const localFrom = from - line.from;
+            const localTo = to - line.from;
+            const wikilinks = /\[\[[^\]\n]*\|[^\]\n]*\]\]/g;
+            let match: RegExpExecArray | null;
+            while ((match = wikilinks.exec(lineText))) {
+              const start = match.index;
+              const end = start + match[0].length;
+              const pipe = match[0].indexOf("|");
+              if (localFrom >= start + pipe + 1 && localTo <= end - 2) {
+                from = line.from + start;
+                to = line.from + end;
+                break;
+              }
+            }
+          }
+          if (from === to && !hadWord) {
+            return {
+              changes: { from, insert: open + close },
+              range: EditorSelection.cursor(from + open.length),
+            };
           }
           if (wrappedInside(state.sliceDoc(from, to), open, close)) {
             return {
@@ -141,58 +176,62 @@ export const toggleWikilink = toggleWrap("[[", "]]");
 /// o col cursore ancora dentro il marcatore — restituisce `false`: lì l'Enter
 /// di default fa già la cosa giusta.
 export const smartListEnter: StateCommand = ({ state, dispatch }) => {
-  const range = state.selection.main;
-  if (state.selection.ranges.length !== 1 || !range.empty) return false;
-  const line = state.doc.lineAt(range.head);
-  const item = listItem(line.text);
-  if (!item) return false;
-  if (range.head < line.from + item.markerEnd) return false;
+  const contexts = state.selection.ranges.map((range) => {
+    if (!range.empty) return null;
+    const line = state.doc.lineAt(range.head);
+    const item = listItem(line.text);
+    if (!item || range.head < line.from + item.markerEnd) return null;
+    return { line, item };
+  });
+  if (contexts.some((context) => context === null)) return false;
 
-  if (item.content.trim() === "") {
-    dispatch(
-      state.update({
-        changes: { from: line.from, to: line.to },
-        selection: { anchor: line.from },
-        scrollIntoView: true,
-        userEvent: "delete",
-      }),
-    );
-    return true;
-  }
-
-  const insert = `\n${nextMarker(item)}`;
-  const changes: ChangeSpec[] = [{ from: range.head, insert }];
-  if (item.kind === "ordered") {
-    // Le voci a valle dello stesso livello scalano di uno. Le sottoliste (più
-    // indentate) si scavalcano senza toccarle; qualsiasi altra cosa — riga
-    // vuota, testo, un livello più esterno, un puntato — chiude la lista.
-    let expected = item.number! + 2;
-    for (let n = line.number + 1; n <= state.doc.lines; n++) {
-      const l = state.doc.line(n);
-      const it = listItem(l.text);
-      if (!it) break;
-      if (it.indent.length > item.indent.length) continue;
-      if (it.indent.length < item.indent.length || it.kind !== "ordered") break;
-      if (it.number !== expected) {
-        const numberFrom = l.from + it.quote.length + it.indent.length;
-        changes.push({
-          from: numberFrom,
-          to: numberFrom + String(it.number).length,
-          insert: String(expected),
-        });
-      }
-      expected += 1;
-    }
-  }
+  let rangeIndex = 0;
   dispatch(
-    state.update({
-      changes,
-      selection: { anchor: range.head + insert.length },
-      scrollIntoView: true,
-      userEvent: "input",
-    }),
+    state.update(
+      state.changeByRange((range) => {
+        const { line, item } = contexts[rangeIndex++]!;
+        if (item.content.trim() === "") {
+          const start = line.from + item.quote.length;
+          return {
+            changes: { from: start, to: line.to },
+            range: EditorSelection.cursor(start),
+          };
+        }
+
+        const insert = `${state.lineBreak}${nextMarker(item)}`;
+        const changes: ChangeSpec[] = [{ from: range.head, insert }];
+        if (item.kind === "ordered") {
+          // Le voci a valle dello stesso livello scalano di uno. Le sottoliste (più
+          // indentate) si scavalcano senza toccarle; qualsiasi altra cosa — riga
+          // vuota, testo, un livello più esterno, un puntato — chiude la lista.
+          let expected = item.number! + 2;
+          for (let n = line.number + 1; n <= state.doc.lines; n++) {
+            const l = state.doc.line(n);
+            const it = listItem(l.text);
+            if (!it) break;
+            if (it.quote !== item.quote) break;
+            if (it.indent.length > item.indent.length) continue;
+            if (it.indent.length < item.indent.length || it.kind !== "ordered") break;
+            if (it.number !== expected) {
+              const numberFrom = l.from + it.quote.length + it.indent.length;
+              changes.push({
+                from: numberFrom,
+                to: numberFrom + String(it.number).length,
+                insert: String(expected),
+              });
+            }
+            expected += 1;
+          }
+        }
+        return {
+          changes,
+          range: EditorSelection.cursor(range.head + insert.length),
+        };
+      }),
+      { scrollIntoView: true, userEvent: "input" },
+    ),
   );
-  return true;
+  return contexts.length > 0;
 };
 
 /// Le righe toccate dalla selezione, una volta sola ciascuna. Un capolinea
@@ -218,12 +257,14 @@ function selectedLines(state: EditorState): Line[] {
 /// una voce. Fuori dalle liste → `false`, e il Tab cade sul binding di default
 /// (l'`indentWithTab` già montato in editor.ts).
 export const indentListItem: StateCommand = ({ state, dispatch }) => {
-  const lines = selectedLines(state).filter((l) => listItem(l.text) !== null);
+  const lines = selectedLines(state)
+    .map((l) => ({ line: l, item: listItem(l.text) }))
+    .filter((entry): entry is { line: Line; item: NonNullable<ReturnType<typeof listItem>> } => entry.item !== null);
   if (lines.length === 0) return false;
   const unit = state.facet(indentUnit);
   dispatch(
     state.update({
-      changes: lines.map((l) => ({ from: l.from, insert: unit })),
+      changes: lines.map(({ line, item }) => ({ from: line.from + item.quote.length, insert: unit })),
       scrollIntoView: true,
       userEvent: "input.indent",
     }),
@@ -245,13 +286,15 @@ function dedentWidth(text: string, unit: string): number {
 /// resta com'è ma la battuta conta come gestita: de-indentare una lista non
 /// deve mai degradare nel comando di indentazione generico.
 export const dedentListItem: StateCommand = ({ state, dispatch }) => {
-  const lines = selectedLines(state).filter((l) => listItem(l.text) !== null);
+  const lines = selectedLines(state)
+    .map((l) => ({ line: l, item: listItem(l.text) }))
+    .filter((entry): entry is { line: Line; item: NonNullable<ReturnType<typeof listItem>> } => entry.item !== null);
   if (lines.length === 0) return false;
   const unit = state.facet(indentUnit);
   const changes: ChangeSpec[] = [];
-  for (const l of lines) {
-    const width = dedentWidth(l.text, unit);
-    if (width > 0) changes.push({ from: l.from, to: l.from + width });
+  for (const { line, item } of lines) {
+    const width = dedentWidth(line.text.slice(item.quote.length), unit);
+    if (width > 0) changes.push({ from: line.from + item.quote.length, to: line.from + item.quote.length + width });
   }
   dispatch(state.update({ changes, scrollIntoView: true, userEvent: "delete.dedent" }));
   return true;
@@ -284,12 +327,23 @@ export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
 /// selezione). Il cursore scende sulla copia, così ripetere il comando
 /// accumula copie invece di raddoppiare sempre l'originale.
 export const duplicateLines: StateCommand = ({ state, dispatch }) => {
+  const seen = new Set<string>();
   dispatch(
     state.update(
       state.changeByRange((range) => {
         const first = state.doc.lineAt(range.from);
-        const last = state.doc.lineAt(range.to);
-        const copy = `\n${state.sliceDoc(first.from, last.to)}`;
+        const nextLine = range.to < state.doc.length ? state.doc.lineAt(range.to) : null;
+        let toLine = nextLine?.number ?? first.number;
+        if (!range.empty && nextLine && range.to === nextLine.from) toLine -= 1;
+        const last = state.doc.line(toLine);
+        const copy = `${state.lineBreak}${state.sliceDoc(first.from, last.to)}`;
+        const key = `${first.number}:${last.number}`;
+        if (seen.has(key)) {
+          return {
+            range: EditorSelection.range(range.anchor + copy.length, range.head + copy.length),
+          };
+        }
+        seen.add(key);
         return {
           changes: { from: last.to, insert: copy },
           range: EditorSelection.range(range.anchor + copy.length, range.head + copy.length),
@@ -375,6 +429,9 @@ export function autoPairDecision(
     case "=":
       if (next(1) === "=" && (prev(1) === "=" || next(2) === "==")) return { action: "skip" };
       // `==` → chiudi con `==`, ma senza allungare corse di `=` già più lunghe.
+      const line = state.doc.lineAt(from);
+      const beforeMarker = state.sliceDoc(line.from, Math.max(line.from, from - 1));
+      if (prev(1) === "=" && beforeMarker.trim() === "") return null;
       if (prev(1) === "=" && prev(2) !== "==" && next(1) !== "=") {
         return { action: "insert", text: "===", cursor: 1 };
       }
@@ -395,6 +452,7 @@ export function autoPairDecision(
 // sopra. `from + text.length` per lo skip = subito oltre il carattere gemello
 // già presente (le battute qui sono sempre singole).
 const autoPair = EditorView.inputHandler.of((view, from, to, text) => {
+  if (view.state.selection.ranges.length > 1) return false;
   const decision = autoPairDecision(view.state, from, to, text);
   if (decision === null) return false;
   view.dispatch(

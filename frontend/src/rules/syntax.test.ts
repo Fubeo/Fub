@@ -106,12 +106,12 @@ describe("i wikilink", () => {
 });
 
 describe("il tag che si sta scrivendo", () => {
-  it("segue la regola del contratto, non una più stretta", () => {
+  it("segue la regola del contratto, inclusi gli heading ATX", () => {
     // Le tre righe su cui `completions.ts` e `livepreview.ts` rispondevano
     // diverso, e su cui una delle due rispondeva diverso dal modello.
     expect(tagInProgress("vedi.#ta")).toEqual({ from: 5, query: "ta" });
     expect(tagInProgress("_#ta")).toEqual({ from: 1, query: "ta" });
-    expect(tagInProgress("##do")).toEqual({ from: 1, query: "do" });
+    expect(tagInProgress("##do")).toBeNull();
     expect(tagInProgress("a#b")).toBeNull();
   });
 

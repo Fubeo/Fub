@@ -115,6 +115,12 @@ export interface SyntaxSpan {
 /// I tratti si cercano riga per riga perché un delimitatore inline non
 /// attraversa un fine riga: è la stessa regola per cui i replace della vivi
 /// preview non lo attraversano mai.
+function isEscaped(row: string, at: number): boolean {
+  let backslashes = 0;
+  for (let j = at - 1; j >= 0 && row[j] === "\\"; j -= 1) backslashes += 1;
+  return backslashes % 2 === 1;
+}
+
 export function spans(row: string, declared = inlineDelimiters()): SyntaxSpan[] {
   const out: SyntaxSpan[] = [];
   for (const d of declared) {
@@ -123,8 +129,15 @@ export function spans(row: string, declared = inlineDelimiters()): SyntaxSpan[] 
     while (i < row.length) {
       const opens = row.indexOf(d.open, i);
       if (opens === -1) break;
+      if (isEscaped(row, opens)) {
+        i = opens + d.open.length;
+        continue;
+      }
       const from = opens + d.open.length;
-      const closes = row.indexOf(d.close, from);
+      let closes = row.indexOf(d.close, from);
+      while (closes !== -1 && isEscaped(row, closes)) {
+        closes = row.indexOf(d.close, closes + d.close.length);
+      }
       if (closes === -1) break;
       if (closes === from) {
         // Contenuto vuoto: si riparte **dopo** l'apertura, non dopo il match,
@@ -178,7 +191,7 @@ export function parseWikilinkInner(inner: string): InternalWikilink {
 
   const hash = withoutBlock.indexOf("#");
   const page = (hash === -1 ? withoutBlock : withoutBlock.slice(0, hash)).trim();
-  const heading = hash === -1 ? null : withoutBlock.slice(hash + 1).trim();
+  const heading = hash === -1 ? null : withoutBlock.slice(hash + 1).trim() || null;
 
   return { page, heading, block, alias: alias === "" ? null : alias };
 }
@@ -244,10 +257,23 @@ export { scanTags };
 export function tagInProgress(first: string): { from: number; query: string } | null {
   const rowStart = first.lastIndexOf("\n") + 1;
   let i = first.length;
-  while (i > rowStart && TAG_CHARACTER.test(first[i - 1])) i -= 1;
+  while (i > rowStart) {
+    const lowSurrogate = first.charCodeAt(i - 1);
+    const start =
+      lowSurrogate >= 0xdc00 && lowSurrogate <= 0xdfff && i - 2 >= rowStart ? i - 2 : i - 1;
+    if (!TAG_CHARACTER.test(first.slice(start, i))) break;
+    i = start;
+  }
   if (i === rowStart || first[i - 1] !== "#") return null;
   const hash = i - 1;
-  if (hash > rowStart && ALPHANUMERIC.test(first[hash - 1])) return null;
+  if (hash > rowStart) {
+    const beforeLowSurrogate = first.charCodeAt(hash - 1);
+    const previousIndex =
+      beforeLowSurrogate >= 0xdc00 && beforeLowSurrogate <= 0xdfff && hash >= rowStart + 2
+        ? hash - 2
+        : hash - 1;
+    if (first[hash - 1] === "#" || ALPHANUMERIC.test(first.slice(previousIndex, hash))) return null;
+  }
   return { from: hash, query: first.slice(i) };
 }
 
@@ -301,7 +327,7 @@ const RE_ORDERED = /^(\s*)(\d{1,9})([.)])( {1,4}|\t)/;
 // il simbolo lo interpreta `taskChecked`, che è la regola del contratto, e
 // restringerlo qui vorrebbe dire che `- [/] in corso` è una task nel modello e
 // non lo è nell'editor.
-const RE_BOX = /^\[([^\]\n])\](?=[ \t]|$)/;
+const RE_BOX = /^\[([^\]\r\n])\](?=[ \t]|$)/u;
 
 /// La riga è una voce di lista, una todo o una citazione?
 ///
@@ -335,8 +361,8 @@ export function listItem(row: string): ListEntry | null {
       number: null,
       symbol: box.symbol,
       markerEnd: quote.length + end,
-      boxFrom: quote.length + box.end - 3,
-      boxTo: quote.length + box.end,
+      boxFrom: box.symbol === null ? -1 : quote.length + box.end - 3,
+      boxTo: box.symbol === null ? -1 : quote.length + box.end,
       content: rest.slice(end),
     };
   }
@@ -354,8 +380,8 @@ export function listItem(row: string): ListEntry | null {
       number: Number(mo[2]),
       symbol: box.symbol,
       markerEnd: quote.length + end,
-      boxFrom: quote.length + box.end - 3,
-      boxTo: quote.length + box.end,
+      boxFrom: box.symbol === null ? -1 : quote.length + box.end - 3,
+      boxTo: box.symbol === null ? -1 : quote.length + box.end,
       content: rest.slice(end),
     };
   }
