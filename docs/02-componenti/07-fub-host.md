@@ -1,9 +1,5 @@
 # `fub-host` — L'assemblatore di sistema
 
-Per chi è: studenti che vogliono capire come vengono uniti e coordinati i vari pezzi del backend prima di collegarli all'interfaccia grafica.
-
----
-
 ## A cosa serve
 
 [`crates/fub-host`](../../crates/fub-host) è il punto di montaggio (*composition root*) del backend. Il suo compito è:

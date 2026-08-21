@@ -1,9 +1,5 @@
 # Esempi e strumenti di supporto
 
-Per chi è: studenti che vogliono vedere esempi pratici di plugin compilati o strumenti per collaudare il varco WebAssembly.
-
----
-
 ## Gli esempi pratici (`esempi/`)
 
 Nella cartella [`esempi/`](../../esempi) trovi diversi progetti che mostrano come scrivere plugin WebAssembly compatibili con Fub:

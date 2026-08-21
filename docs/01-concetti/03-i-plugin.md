@@ -1,9 +1,5 @@
 # I Plugin: mattoncini Lego intercambiabili
 
-Per chi è: studenti delle superiori che vogliono capire come si può aggiungere una nuova funzionalità a Fub senza modificare il programma base.
-
----
-
 ## L'analogia: la presa USB o i mattoncini Lego
 
 Quando colleghi una chiavetta USB, un mouse o una tastiera al tuo computer, non devi aprire il case e saldare nuovi fili alla scheda madre: il computer ha una **porta standard** (USB) e ogni accessorio sa come parlarci.

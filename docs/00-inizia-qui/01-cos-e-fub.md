@@ -1,9 +1,5 @@
 # Cos'è Fub
 
-Per chi è: chiunque si avvicini al progetto per la prima volta.
-
----
-
 ## In poche parole
 
 **Fub** è un'applicazione desktop per prendere appunti in formato Markdown.
@@ -33,4 +29,4 @@ flowchart LR
 ## Se vuoi il dettaglio
 
 - Scopri come avviare Fub sul tuo computer in [`docs/00-inizia-qui/02-come-si-avvia.md`](./02-come-si-avvia.md).
-- Guarda la spiegazione dei concetti base in [`docs/01-per-studenti/`](../01-per-studenti).
+- Guarda la spiegazione dei concetti base in [`docs/01-concetti/`](../01-concetti).

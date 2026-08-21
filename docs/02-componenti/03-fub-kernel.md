@@ -1,9 +1,5 @@
 # `fub-kernel` — Il motore centrale
 
-Per chi è: studenti che vogliono scoprire come Fub gestisce lo stato di un vault, i file delle note e gli eventi.
-
----
-
 ## A cosa serve
 
 [`crates/fub-kernel`](../../crates/fub-kernel) è il cuore del programma. Si occupa di:
@@ -37,4 +33,4 @@ Il kernel è **agnostico rispetto al formato**: non sa cosa sia la sintassi Mark
 
 ## Se vuoi il dettaglio
 
-- Guarda [`docs/01-per-studenti/02-il-kernel.md`](../01-per-studenti/02-il-kernel.md) per una spiegazione intuitiva con analogie.
+- Guarda [`docs/01-concetti/02-il-kernel.md`](../01-concetti/02-il-kernel.md) per una spiegazione intuitiva con analogie.

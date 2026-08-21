@@ -1,9 +1,5 @@
 # `fub-wasm-host` — L'ambiente per plugin WebAssembly
 
-Per chi è: studenti che vogliono capire come Fub esegue codice di terze parti in modo sicuro e isolato usando WebAssembly.
-
----
-
 ## A cosa serve
 
 [`crates/fub-wasm-host`](../../crates/fub-wasm-host) è il modulo (in sviluppo attivo per la Milestone 5) che consente di caricare ed eseguire plugin compilati in formato WebAssembly (`.wasm`).

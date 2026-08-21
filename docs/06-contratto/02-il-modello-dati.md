@@ -1,9 +1,5 @@
 # Il Modello del Documento (`DocumentModel`)
 
-Per chi è: studenti che vogliono capire come una nota viene trasformata in una struttura ad albero in memoria.
-
----
-
 ## Dalla stringa all'albero
 
 Quando una nota viene aperta, il testo non rimane una semplice sequenza di caratteri, ma viene trasformato in una struttura dati tipizzata chiamata **`DocumentModel`** (definita in [`crates/fub-abi/src/model.rs`](../../crates/fub-abi/src/model.rs)).

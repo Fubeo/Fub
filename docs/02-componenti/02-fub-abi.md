@@ -1,9 +1,5 @@
 # `fub-abi` — Il contratto comune
 
-Per chi è: studenti che vogliono capire come è definito il linguaggio comune con cui comunicano tutti i componenti di Fub.
-
----
-
 ## A cosa serve
 
 [`crates/fub-abi`](../../crates/fub-abi) è la libreria fondamentale di Fub. Definisce:

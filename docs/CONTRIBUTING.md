@@ -12,7 +12,7 @@ linka.
 | Voglio… | Leggo |
 |---|---|
 | capire l'idea iniziale e come avviare Fub | [00-inizia-qui/01-cos-e-fub.md](00-inizia-qui/01-cos-e-fub.md) |
-| capire i concetti chiave con analogie semplici | [01-per-studenti/01-il-vault.md](01-per-studenti/01-il-vault.md) |
+| capire i concetti chiave con analogie semplici | [01-concetti/01-il-vault.md](01-concetti/01-il-vault.md) |
 | consultare la scheda di un componente specifico | [02-componenti/01-panoramica.md](02-componenti/01-panoramica.md) |
 | vedere i diagrammi UML e il grafo delle dipendenze | [03-uml/01-trait-fub-abi.md](03-uml/01-trait-fub-abi.md) |
 | comprendere o creare un plugin | [04-plugin/01-nativo-vs-wasm.md](04-plugin/01-nativo-vs-wasm.md) |

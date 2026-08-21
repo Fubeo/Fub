@@ -1,9 +1,5 @@
 # Struttura del repository
 
-Per chi è: studenti che aprono il progetto per la prima volta e vogliono orientarsi tra le cartelle.
-
----
-
 ## Albero delle cartelle
 
 ```

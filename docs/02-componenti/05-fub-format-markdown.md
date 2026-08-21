@@ -1,9 +1,5 @@
 # `fub-format-markdown` — Il provider Markdown nativo
 
-Per chi è: studenti che vogliono capire come Fub legge, analizza e mostra i file scritti in Markdown.
-
----
-
 ## A cosa serve
 
 [`crates/fub-format-markdown`](../../crates/fub-format-markdown) è il modulo che implementa il trait `FormatProvider` per i file con estensione `.md`.

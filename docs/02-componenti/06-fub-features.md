@@ -1,9 +1,5 @@
 # `fub-features` — Le funzionalità ufficiali
 
-Per chi è: studenti che vogliono capire come sono costruite le funzioni avanzate di Fub (ricerca, collegamenti, cronologia, cestino).
-
----
-
 ## A cosa serve
 
 [`crates/fub-features`](../../crates/fub-features) raccoglie le estensioni integrate nel programma. Ognuna è scritta esattamente come se fosse un plugin esterno, usando i trait di `fub-abi`.

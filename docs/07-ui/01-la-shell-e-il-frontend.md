@@ -1,9 +1,5 @@
 # La Shell e l'interfaccia frontend
 
-Per chi è: studenti che vogliono capire come è organizzata la webview di Fub scritta in TypeScript e Vite.
-
----
-
 ## Architettura del Frontend
 
 L'interfaccia utente di Fub (la **shell**) si trova nella cartella [`frontend/`](../../frontend). Non usa framework pesanti, ma un'architettura modulare in TypeScript puro con rendering reattivo:

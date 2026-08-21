@@ -1,9 +1,5 @@
 # Trait del contratto `fub-abi`
 
-Per chi è: studenti e sviluppatori che vogliono capire quali interfacce definiscono le capacità estendibili di Fub.
-
----
-
 ## Panoramica
 
 In Fub, tutto ciò che non è il nucleo di base (il motore dei file) è un **provider**, cioè un componente che implementa uno o più **trait** (interfacce) definiti nel crate [`crates/fub-abi`](../../crates/fub-abi/src/traits.rs).

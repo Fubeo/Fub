@@ -53,7 +53,7 @@ da un e2e headless senza portarsi dietro un webview.
 
 Tutta in **[`docs/`](docs/)**, e si entra da
 **[docs/README.md](docs/README.md)**:
-- [Guida iniziale](docs/00-inizia-qui/01-cos-e-fub.md) e [Architettura per studenti](docs/01-per-studenti/01-il-vault.md).
+- [Guida iniziale](docs/00-inizia-qui/01-cos-e-fub.md) e [Concetti fondamentali](docs/01-concetti/01-il-vault.md).
 - [Mappa dei componenti](docs/02-componenti/01-panoramica.md) e [Diagrammi UML](docs/03-uml/01-trait-fub-abi.md).
 - [Guida ai plugin](docs/04-plugin/01-nativo-vs-wasm.md) e [Formato su disco](docs/05-disco/01-note-utente.md).
 - [Archivio storico decisioni e roadmap](docs/archivio/decisions/README.md).

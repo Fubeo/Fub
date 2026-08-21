@@ -1,9 +1,5 @@
 # `fub-testkit` — Strumenti per i test del lato host
 
-Per chi è: sviluppatori e studenti che vogliono capire come vengono collaudate in modo automatico le funzioni di Fub senza avviare la finestra grafica.
-
----
-
 ## A cosa serve
 
 [`crates/fub-testkit`](../../crates/fub-testkit) è una libreria di supporto per i test di integrazione (*end-to-end*).

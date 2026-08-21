@@ -1,9 +1,5 @@
 # Temi, Design Token e Accessibilità
 
-Per chi è: studenti interessati all'accessibilità visiva e al design system di Fub.
-
----
-
 ## I Design Token e le Variabili CSS
 
 Fub non usa colori fissi nel codice dell'interfaccia, ma impiega **variabili CSS** (dette *design token*) che cambiano automaticamente in base alla modalità selezionata dall'utente.

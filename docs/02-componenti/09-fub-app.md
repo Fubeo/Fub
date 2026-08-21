@@ -1,9 +1,5 @@
 # `fub-app` — L'applicazione desktop (Colla Tauri)
 
-Per chi è: studenti che vogliono capire come l'interfaccia grafica web comunica con il backend Rust dell'applicazione desktop.
-
----
-
 ## A cosa serve
 
 [`crates/fub-app`](../../crates/fub-app) è il punto di ingresso dell'applicazione desktop basata sul framework **Tauri v2**.
