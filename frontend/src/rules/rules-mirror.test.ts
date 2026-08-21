@@ -185,7 +185,7 @@ describe("mirror delle regole TS↔Rust", () => {
       fixture.mask_wants.some(
         (c) =>
           (c.event as { type: string }).type === "document_renamed" &&
-          c.mask_name === "stretta" &&
+          c.mask_name === "narrow" &&
           c.out,
       ),
       "manca il rename che esce dal soggetto e deve arrivare comunque",

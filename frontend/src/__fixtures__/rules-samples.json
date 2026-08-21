@@ -25,30 +25,30 @@
       "out": ".gitignore"
     },
     {
-      "id": "senza-ext",
-      "out": "senza-ext"
+      "id": "no-ext",
+      "out": "no-ext"
     },
     {
-      "id": "dir.con.punti/nota.md",
-      "out": "nota"
+      "id": "dir.with.dots/note.md",
+      "out": "note"
     },
     {
-      "id": "finisce-con-punto.",
-      "out": "finisce-con-punto"
+      "id": "ends-with-dot.",
+      "out": "ends-with-dot"
     },
     {
-      "id": "Nota Lunga.md",
-      "out": "Nota Lunga"
+      "id": "Long Note.md",
+      "out": "Long Note"
     }
   ],
   "name_fault": [
     {
-      "path": "../fuori.md",
+      "path": "../outside.md",
       "naming": "existing",
       "out": "traversal"
     },
     {
-      "path": "../fuori.md",
+      "path": "../outside.md",
       "naming": "new",
       "out": "traversal"
     },
@@ -63,12 +63,12 @@
       "out": "traversal"
     },
     {
-      "path": "./nota.md",
+      "path": "./note.md",
       "naming": "existing",
       "out": "traversal"
     },
     {
-      "path": "./nota.md",
+      "path": "./note.md",
       "naming": "new",
       "out": "traversal"
     },
@@ -83,12 +83,12 @@
       "out": "traversal"
     },
     {
-      "path": "/assoluto.md",
+      "path": "/absolute.md",
       "naming": "existing",
       "out": "traversal"
     },
     {
-      "path": "/assoluto.md",
+      "path": "/absolute.md",
       "naming": "new",
       "out": "traversal"
     },
@@ -113,22 +113,22 @@
       "out": "empty"
     },
     {
-      "path": "C:/Users/x/segreto.md",
+      "path": "C:/Users/x/secret.md",
       "naming": "existing",
       "out": "traversal"
     },
     {
-      "path": "C:/Users/x/segreto.md",
+      "path": "C:/Users/x/secret.md",
       "naming": "new",
       "out": "reserved"
     },
     {
-      "path": "c:nota.md",
+      "path": "c:note.md",
       "naming": "existing",
       "out": "traversal"
     },
     {
-      "path": "c:nota.md",
+      "path": "c:note.md",
       "naming": "new",
       "out": "reserved"
     },
@@ -143,54 +143,54 @@
       "out": "reserved"
     },
     {
-      "path": "note/C:/dentro.md",
+      "path": "note/C:/inside.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "note/C:/dentro.md",
+      "path": "note/C:/inside.md",
       "naming": "new",
       "out": "reserved"
     },
     {
-      "path": "CC:/dentro.md",
+      "path": "CC:/inside.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "CC:/dentro.md",
+      "path": "CC:/inside.md",
       "naming": "new",
       "out": "reserved"
     },
     {
-      "path": "Progetti/Alpha.md",
+      "path": "Projects/Alpha.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "Progetti/Alpha.md",
+      "path": "Projects/Alpha.md",
       "naming": "new",
       "out": null
     },
     {
-      "path": "nota (1).md",
+      "path": "note (1).md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "nota (1).md",
+      "path": "note (1).md",
       "naming": "new",
       "out": null
     },
     {
-      "path": "Città è però — «così».md",
+      "path": "City is though — \"like\".md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "Città è però — «così».md",
+      "path": "City is though — \"like\".md",
       "naming": "new",
-      "out": null
+      "out": "reserved"
     },
     {
       "path": "漢字のノート.md",
@@ -203,12 +203,12 @@
       "out": null
     },
     {
-      "path": "nota..md",
+      "path": "note..md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "nota..md",
+      "path": "note..md",
       "naming": "new",
       "out": null
     },
@@ -243,12 +243,12 @@
       "out": "device"
     },
     {
-      "path": "Progetti/COM1.md",
+      "path": "Projects/COM1.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "Progetti/COM1.md",
+      "path": "Projects/COM1.md",
       "naming": "new",
       "out": "device"
     },
@@ -263,12 +263,12 @@
       "out": "device"
     },
     {
-      "path": "nota?.md",
+      "path": "note?.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "nota?.md",
+      "path": "note?.md",
       "naming": "new",
       "out": "reserved"
     },
@@ -293,12 +293,12 @@
       "out": "reserved"
     },
     {
-      "path": "\"citata\".md",
+      "path": "\"quoted\".md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "\"citata\".md",
+      "path": "\"quoted\".md",
       "naming": "new",
       "out": "reserved"
     },
@@ -333,42 +333,42 @@
       "out": "reserved"
     },
     {
-      "path": "nota\u0000.md",
+      "path": "note\u0000.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "nota\u0000.md",
+      "path": "note\u0000.md",
       "naming": "new",
       "out": "control"
     },
     {
-      "path": "nota\n.md",
+      "path": "note\n.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "nota\n.md",
+      "path": "note\n.md",
       "naming": "new",
       "out": "control"
     },
     {
-      "path": "nota.",
+      "path": "note.",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "nota.",
+      "path": "note.",
       "naming": "new",
       "out": "trailing-dot"
     },
     {
-      "path": "cartella./nota.md",
+      "path": "folder./note.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "cartella./nota.md",
+      "path": "folder./note.md",
       "naming": "new",
       "out": "trailing-dot"
     },
@@ -383,22 +383,22 @@
       "out": "hidden"
     },
     {
-      "path": "Progetti/.nascosta.md",
+      "path": "Projects/.hidden.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "Progetti/.nascosta.md",
+      "path": "Projects/.hidden.md",
       "naming": "new",
       "out": "hidden"
     },
     {
-      "path": ".fub/roba.md",
+      "path": ".fub/stuff.md",
       "naming": "existing",
       "out": "machine"
     },
     {
-      "path": ".fub/roba.md",
+      "path": ".fub/stuff.md",
       "naming": "new",
       "out": "machine"
     },
@@ -423,62 +423,62 @@
       "out": "machine"
     },
     {
-      "path": ".trash/Nota.2026-07-24T15-30-00.md",
+      "path": ".trash/Note.2026-07-24T15-30-00.md",
       "naming": "existing",
       "out": "machine"
     },
     {
-      "path": ".trash/Nota.2026-07-24T15-30-00.md",
+      "path": ".trash/Note.2026-07-24T15-30-00.md",
       "naming": "new",
       "out": "machine"
     },
     {
-      "path": "Progetti/.fub/nota.md",
+      "path": "Projects/.fub/note.md",
       "naming": "existing",
       "out": "machine"
     },
     {
-      "path": "Progetti/.fub/nota.md",
+      "path": "Projects/.fub/note.md",
       "naming": "new",
       "out": "machine"
     },
     {
-      "path": ".fubbo/nota.md",
+      "path": ".fubbo/note.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": ".fubbo/nota.md",
+      "path": ".fubbo/note.md",
       "naming": "new",
       "out": "hidden"
     },
     {
-      "path": "fub/nota.md",
+      "path": "fub/note.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "fub/nota.md",
+      "path": "fub/note.md",
       "naming": "new",
       "out": null
     },
     {
-      "path": "Progetti/trash/nota.md",
+      "path": "Projects/trash/note.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "Progetti/trash/nota.md",
+      "path": "Projects/trash/note.md",
       "naming": "new",
       "out": null
     },
     {
-      "path": "CONtratto.md",
+      "path": "CONtract.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "CONtratto.md",
+      "path": "CONtract.md",
       "naming": "new",
       "out": null
     },
@@ -503,12 +503,12 @@
       "out": null
     },
     {
-      "path": "NULLO.md",
+      "path": "NULL.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "NULLO.md",
+      "path": "NULL.md",
       "naming": "new",
       "out": null
     },
@@ -543,12 +543,12 @@
       "out": "too-long"
     },
     {
-      "path": " .nota.md",
+      "path": " .note.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": " .nota.md",
+      "path": " .note.md",
       "naming": "new",
       "out": "hidden"
     },
@@ -573,42 +573,42 @@
       "out": "device"
     },
     {
-      "path": "Progetti/ .nascosta.md",
+      "path": "Projects/ .hidden.md",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "Progetti/ .nascosta.md",
+      "path": "Projects/ .hidden.md",
       "naming": "new",
       "out": "hidden"
     },
     {
-      "path": "nota.md ",
+      "path": "note.md ",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "nota.md ",
+      "path": "note.md ",
       "naming": "new",
       "out": null
     },
     {
-      "path": " nota.md ",
+      "path": " note.md ",
       "naming": "existing",
       "out": null
     },
     {
-      "path": " nota.md ",
+      "path": " note.md ",
       "naming": "new",
       "out": null
     },
     {
-      "path": "nota. ",
+      "path": "note. ",
       "naming": "existing",
       "out": null
     },
     {
-      "path": "nota. ",
+      "path": "note. ",
       "naming": "new",
       "out": "trailing-dot"
     },
@@ -633,16 +633,16 @@
       "out": "Café.md"
     },
     {
-      "path": "  nota.md  ",
-      "out": "nota.md"
+      "path": "  note.md  ",
+      "out": "note.md"
     },
     {
-      "path": "cartella / nota.md",
-      "out": "cartella/nota.md"
+      "path": "folder / note.md",
+      "out": "folder/note.md"
     },
     {
-      "path": "nota. ",
-      "out": "nota."
+      "path": "note. ",
+      "out": "note."
     },
     {
       "path": "ÅNGSTRÖM.md",
@@ -653,8 +653,8 @@
       "out": "Ången.md"
     },
     {
-      "path": "Progetti/Città.md",
-      "out": "Progetti/Città.md"
+      "path": "Projects/City.md",
+      "out": "Projects/City.md"
     },
     {
       "path": "già.md",
@@ -675,16 +675,16 @@
       "out": "café"
     },
     {
-      "s": "  spazi attorno  ",
-      "out": "spazi attorno"
+      "s": "  spaces around  ",
+      "out": "spaces around"
     },
     {
-      "s": "MAIUSCOLO",
-      "out": "maiuscolo"
+      "s": "UPPERCASE",
+      "out": "uppercase"
     },
     {
-      "s": "Progetti/Alpha.md",
-      "out": "progetti/alpha.md"
+      "s": "Projects/Alpha.md",
+      "out": "projects/alpha.md"
     },
     {
       "s": "ÅNGSTRÖM",
@@ -766,7 +766,7 @@
     },
     {
       "prefix": "",
-      "topic": "chiunque:qualunque",
+      "topic": "anyone:anything",
       "out": true
     },
     {
@@ -787,47 +787,47 @@
   ],
   "folder_contains": [
     {
-      "folder": "Progetti",
-      "id": "Progetti/Alpha.md",
+      "folder": "Projects",
+      "id": "Projects/Alpha.md",
       "out": true
     },
     {
-      "folder": "Progetti",
-      "id": "Progetti/2026/Alpha.md",
+      "folder": "Projects",
+      "id": "Projects/2026/Alpha.md",
       "out": true
     },
     {
-      "folder": "Progetti/",
-      "id": "Progetti/Alpha.md",
+      "folder": "Projects/",
+      "id": "Projects/Alpha.md",
       "out": true
     },
     {
-      "folder": "/Progetti",
-      "id": "Progetti/Alpha.md",
+      "folder": "/Projects",
+      "id": "Projects/Alpha.md",
       "out": true
     },
     {
-      "folder": "/Progetti/",
-      "id": "Progetti/Alpha.md",
+      "folder": "/Projects/",
+      "id": "Projects/Alpha.md",
       "out": true
     },
     {
-      "folder": "/Progetti/2026/",
-      "id": "Progetti/2027/Alpha.md",
+      "folder": "/Projects/2026/",
+      "id": "Projects/2027/Alpha.md",
       "out": false
     },
     {
-      "folder": "Progetti",
-      "id": "Progetti-vecchi/Alpha.md",
+      "folder": "Projects",
+      "id": "Projects-old/Alpha.md",
       "out": false
     },
     {
-      "folder": "Progetti",
-      "id": "Progetti",
+      "folder": "Projects",
+      "id": "Projects",
       "out": false
     },
     {
-      "folder": "Progetti",
+      "folder": "Projects",
       "id": "Alpha.md",
       "out": false
     },
@@ -838,23 +838,23 @@
     },
     {
       "folder": "/",
-      "id": "Progetti/Alpha.md",
+      "id": "Projects/Alpha.md",
       "out": true
     },
     {
-      "folder": "Progetti/2026",
-      "id": "Progetti/2026/Alpha.md",
+      "folder": "Projects/2026",
+      "id": "Projects/2026/Alpha.md",
       "out": true
     },
     {
-      "folder": "Progetti/2026",
-      "id": "Progetti/2027/Alpha.md",
+      "folder": "Projects/2026",
+      "id": "Projects/2027/Alpha.md",
       "out": false
     }
   ],
   "mask_wants": [
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -870,24 +870,24 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": null
       },
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -903,24 +903,24 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Altro/Beta.md",
+        "id": "Other/Beta.md",
         "changes": null
       },
       "out": false
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -936,24 +936,24 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Diario/oggi.md",
+        "id": "Diary/today.md",
         "changes": null
       },
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -969,24 +969,24 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "document_renamed",
-        "from": "Progetti/Alpha.md",
-        "to": "Altro/Alpha.md"
+        "from": "Projects/Alpha.md",
+        "to": "Other/Alpha.md"
       },
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1002,24 +1002,24 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "document_renamed",
-        "from": "Altro/Alpha.md",
-        "to": "Altro/Gamma.md"
+        "from": "Other/Alpha.md",
+        "to": "Other/Gamma.md"
       },
       "out": false
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1035,11 +1035,11 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
@@ -1048,14 +1048,14 @@
         "type": "batch_ended",
         "batch": "1",
         "changed": [
-          "Altro/a.md",
-          "Progetti/b.md"
+          "Other/a.md",
+          "Projects/b.md"
         ]
       },
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1071,11 +1071,11 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
@@ -1084,13 +1084,13 @@
         "type": "batch_ended",
         "batch": "2",
         "changed": [
-          "Altro/a.md"
+          "Other/a.md"
         ]
       },
       "out": false
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1106,11 +1106,11 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
@@ -1123,7 +1123,7 @@
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1139,11 +1139,11 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
@@ -1156,7 +1156,7 @@
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1172,24 +1172,24 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "custom",
-        "topic": "com.altro.note:done",
+        "topic": "com.other.notes:done",
         "payload": {}
       },
       "out": false
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1205,11 +1205,11 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
@@ -1221,7 +1221,7 @@
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1237,11 +1237,11 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
@@ -1253,7 +1253,7 @@
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1269,11 +1269,11 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
@@ -1284,7 +1284,7 @@
       "out": false
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1300,18 +1300,18 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [
             "tags",
@@ -1319,7 +1319,7 @@
           ],
           "properties": [],
           "tags_added": [
-            "urgente"
+            "urgent"
           ],
           "tags_removed": []
         }
@@ -1327,7 +1327,7 @@
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1343,24 +1343,24 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [
             "frontmatter"
           ],
           "properties": [
-            "scadenza"
+            "deadline"
           ],
           "tags_added": [],
           "tags_removed": []
@@ -1369,7 +1369,7 @@
       "out": true
     },
     {
-      "mask_name": "stretta",
+      "mask_name": "narrow",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1385,18 +1385,18 @@
         "subjects": [
           {
             "kind": "document",
-            "id": "Diario/oggi.md"
+            "id": "Diary/today.md"
           },
           {
             "kind": "folder",
-            "path": "Progetti"
+            "path": "Projects"
           }
         ],
         "changes": []
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [],
           "properties": [],
@@ -1407,7 +1407,7 @@
       "out": true
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1419,13 +1419,13 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": null
       },
       "out": true
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1437,13 +1437,13 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Altro/Beta.md",
+        "id": "Other/Beta.md",
         "changes": null
       },
       "out": true
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1455,13 +1455,13 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Diario/oggi.md",
+        "id": "Diary/today.md",
         "changes": null
       },
       "out": true
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1473,13 +1473,13 @@
       },
       "event": {
         "type": "document_renamed",
-        "from": "Progetti/Alpha.md",
-        "to": "Altro/Alpha.md"
+        "from": "Projects/Alpha.md",
+        "to": "Other/Alpha.md"
       },
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1491,13 +1491,13 @@
       },
       "event": {
         "type": "document_renamed",
-        "from": "Altro/Alpha.md",
-        "to": "Altro/Gamma.md"
+        "from": "Other/Alpha.md",
+        "to": "Other/Gamma.md"
       },
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1511,14 +1511,14 @@
         "type": "batch_ended",
         "batch": "1",
         "changed": [
-          "Altro/a.md",
-          "Progetti/b.md"
+          "Other/a.md",
+          "Projects/b.md"
         ]
       },
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1532,13 +1532,13 @@
         "type": "batch_ended",
         "batch": "2",
         "changed": [
-          "Altro/a.md"
+          "Other/a.md"
         ]
       },
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1556,7 +1556,7 @@
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1574,7 +1574,7 @@
       "out": true
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1586,13 +1586,13 @@
       },
       "event": {
         "type": "custom",
-        "topic": "com.altro.note:done",
+        "topic": "com.other.notes:done",
         "payload": {}
       },
       "out": true
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1609,7 +1609,7 @@
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1626,7 +1626,7 @@
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1642,7 +1642,7 @@
       "out": false
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1654,7 +1654,7 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [
             "tags",
@@ -1662,7 +1662,7 @@
           ],
           "properties": [],
           "tags_added": [
-            "urgente"
+            "urgent"
           ],
           "tags_removed": []
         }
@@ -1670,7 +1670,7 @@
       "out": true
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1682,13 +1682,13 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [
             "frontmatter"
           ],
           "properties": [
-            "scadenza"
+            "deadline"
           ],
           "tags_added": [],
           "tags_removed": []
@@ -1697,7 +1697,7 @@
       "out": true
     },
     {
-      "mask_name": "larga",
+      "mask_name": "wide",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1709,7 +1709,7 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [],
           "properties": [],
@@ -1720,7 +1720,7 @@
       "out": true
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1734,13 +1734,13 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": null
       },
       "out": true
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1754,13 +1754,13 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Altro/Beta.md",
+        "id": "Other/Beta.md",
         "changes": null
       },
       "out": true
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1774,13 +1774,13 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Diario/oggi.md",
+        "id": "Diary/today.md",
         "changes": null
       },
       "out": true
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1794,13 +1794,13 @@
       },
       "event": {
         "type": "document_renamed",
-        "from": "Progetti/Alpha.md",
-        "to": "Altro/Alpha.md"
+        "from": "Projects/Alpha.md",
+        "to": "Other/Alpha.md"
       },
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1814,13 +1814,13 @@
       },
       "event": {
         "type": "document_renamed",
-        "from": "Altro/Alpha.md",
-        "to": "Altro/Gamma.md"
+        "from": "Other/Alpha.md",
+        "to": "Other/Gamma.md"
       },
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1836,14 +1836,14 @@
         "type": "batch_ended",
         "batch": "1",
         "changed": [
-          "Altro/a.md",
-          "Progetti/b.md"
+          "Other/a.md",
+          "Projects/b.md"
         ]
       },
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1859,13 +1859,13 @@
         "type": "batch_ended",
         "batch": "2",
         "changed": [
-          "Altro/a.md"
+          "Other/a.md"
         ]
       },
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1885,7 +1885,7 @@
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1905,7 +1905,7 @@
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1919,13 +1919,13 @@
       },
       "event": {
         "type": "custom",
-        "topic": "com.altro.note:done",
+        "topic": "com.other.notes:done",
         "payload": {}
       },
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1944,7 +1944,7 @@
       "out": true
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1963,7 +1963,7 @@
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1981,7 +1981,7 @@
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -1995,7 +1995,7 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [
             "tags",
@@ -2003,7 +2003,7 @@
           ],
           "properties": [],
           "tags_added": [
-            "urgente"
+            "urgent"
           ],
           "tags_removed": []
         }
@@ -2011,7 +2011,7 @@
       "out": true
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -2025,13 +2025,13 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [
             "frontmatter"
           ],
           "properties": [
-            "scadenza"
+            "deadline"
           ],
           "tags_added": [],
           "tags_removed": []
@@ -2040,7 +2040,7 @@
       "out": false
     },
     {
-      "mask_name": "sui_tag",
+      "mask_name": "on_tags",
       "mask": {
         "kinds": [
           "document_changed",
@@ -2054,7 +2054,7 @@
       },
       "event": {
         "type": "document_changed",
-        "id": "Progetti/Alpha.md",
+        "id": "Projects/Alpha.md",
         "changes": {
           "aspects": [],
           "properties": [],
@@ -2067,76 +2067,76 @@
   ],
   "scan_tags": [
     {
-      "text": "ciao #progetto e #area/lavoro",
+      "text": "hello #project and #area/work",
       "out": [
         {
-          "name": "progetto",
-          "from": 5,
+          "name": "project",
+          "from": 6,
           "to": 14
         },
         {
-          "name": "area/lavoro",
-          "from": 17,
+          "name": "area/work",
+          "from": 19,
           "to": 29
         }
       ]
     },
     {
-      "text": "issue #123 e colore #fff ok",
+      "text": "issue #123 and color #fff ok",
       "out": [
         {
           "name": "fff",
-          "from": 20,
-          "to": 24
+          "from": 21,
+          "to": 25
         }
       ]
     },
     {
-      "text": "a#b non e' un tag",
+      "text": "a#b is not a tag",
       "out": []
     },
     {
-      "text": "vedi.#tag e (#altro) e \"#terzo\"",
+      "text": "see.#tag and (#other) and \"#third\"",
       "out": [
         {
           "name": "tag",
-          "from": 5,
-          "to": 9
+          "from": 4,
+          "to": 8
         },
         {
-          "name": "altro",
-          "from": 13,
-          "to": 19
-        },
-        {
-          "name": "terzo",
-          "from": 24,
-          "to": 30
-        }
-      ]
-    },
-    {
-      "text": "_#dopo-un-underscore",
-      "out": [
-        {
-          "name": "dopo-un-underscore",
-          "from": 1,
+          "name": "other",
+          "from": 14,
           "to": 20
+        },
+        {
+          "name": "third",
+          "from": 27,
+          "to": 33
         }
       ]
     },
     {
-      "text": "##doppio",
+      "text": "_#after-an-underscore",
       "out": [
         {
-          "name": "doppio",
+          "name": "after-an-underscore",
+          "from": 1,
+          "to": 21
+        }
+      ]
+    },
+    {
+      "text": "##double",
+      "out": [
+        {
+          "name": "double",
           "from": 1,
           "to": 8
         }
       ]
     },
     {
-      "text": "#Café contro #Café",
+      "text": "#Café vs #Café",
       "out": [
         {
           "name": "Café",
@@ -2145,13 +2145,13 @@
         },
         {
           "name": "Cafe",
-          "from": 13,
-          "to": 18
+          "from": 9,
+          "to": 14
         }
       ]
     },
     {
-      "text": "#١٢٣ non e' #123",
+      "text": "#١٢٣ is not #123",
       "out": [
         {
           "name": "١٢٣",
@@ -2161,16 +2161,16 @@
       ]
     },
     {
-      "text": "coda #",
+      "text": "trailing #",
       "out": []
     },
     {
-      "text": "emoji 🌍 poi #dopo-emoji",
+      "text": "emoji 🌍 then #after-emoji",
       "out": [
         {
-          "name": "dopo-emoji",
-          "from": 13,
-          "to": 24
+          "name": "after-emoji",
+          "from": 14,
+          "to": 26
         }
       ]
     },
@@ -2239,249 +2239,249 @@
   ],
   "byte_to_utf16": [
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 0,
       "out": 0
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 1,
       "out": 1
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 2,
       "out": 2
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 3,
       "out": 3
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 4,
       "out": 4
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 5,
       "out": 5
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 6,
       "out": 6
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 7,
       "out": 7
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 8,
       "out": 8
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 9,
       "out": 9
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 10,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 11,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "byte": 12,
       "out": 10
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "byte": 0,
       "out": 0
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "byte": 1,
       "out": 1
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "byte": 2,
       "out": 2
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "byte": 3,
       "out": 3
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "byte": 4,
       "out": 4
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "byte": 5,
       "out": 5
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "byte": 6,
-      "out": 5
-    },
-    {
-      "text": "città è però",
-      "byte": 7,
       "out": 6
     },
     {
-      "text": "città è però",
-      "byte": 8,
-      "out": 7
-    },
-    {
-      "text": "città è però",
-      "byte": 9,
-      "out": 7
-    },
-    {
-      "text": "città è però",
-      "byte": 10,
-      "out": 8
-    },
-    {
-      "text": "città è però",
-      "byte": 11,
-      "out": 9
-    },
-    {
-      "text": "città è però",
-      "byte": 12,
-      "out": 10
-    },
-    {
-      "text": "città è però",
-      "byte": 13,
-      "out": 11
-    },
-    {
-      "text": "città è però",
-      "byte": 14,
-      "out": 12
-    },
-    {
-      "text": "città è però",
-      "byte": 15,
-      "out": 12
-    },
-    {
-      "text": "città è però",
-      "byte": 16,
-      "out": 12
-    },
-    {
-      "text": "città è però",
-      "byte": 17,
-      "out": 12
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "byte": 0,
-      "out": 0
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "byte": 1,
-      "out": 1
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "byte": 2,
-      "out": 2
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "byte": 3,
-      "out": 3
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "byte": 4,
-      "out": 4
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "byte": 5,
-      "out": 5
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "byte": 6,
-      "out": 7
-    },
-    {
-      "text": "ciao 🌍 mondo",
+      "text": "city is though",
       "byte": 7,
       "out": 7
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "city is though",
       "byte": 8,
-      "out": 7
+      "out": 8
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "city is though",
       "byte": 9,
-      "out": 7
+      "out": 9
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "city is though",
+      "byte": 10,
+      "out": 10
+    },
+    {
+      "text": "city is though",
+      "byte": 11,
+      "out": 11
+    },
+    {
+      "text": "city is though",
+      "byte": 12,
+      "out": 12
+    },
+    {
+      "text": "city is though",
+      "byte": 13,
+      "out": 13
+    },
+    {
+      "text": "city is though",
+      "byte": 14,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "byte": 15,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "byte": 16,
+      "out": 14
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 0,
+      "out": 0
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 1,
+      "out": 1
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 2,
+      "out": 2
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 3,
+      "out": 3
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 4,
+      "out": 4
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 5,
+      "out": 5
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 6,
+      "out": 6
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 7,
+      "out": 8
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 8,
+      "out": 8
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 9,
+      "out": 8
+    },
+    {
+      "text": "hello 🌍 world",
       "byte": 10,
       "out": 8
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "byte": 11,
       "out": 9
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "byte": 12,
       "out": 10
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "byte": 13,
       "out": 11
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "byte": 14,
       "out": 12
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "byte": 15,
       "out": 13
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "byte": 16,
-      "out": 13
+      "out": 14
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "byte": 17,
-      "out": 13
+      "out": 14
+    },
+    {
+      "text": "hello 🌍 world",
+      "byte": 18,
+      "out": 14
     },
     {
       "text": "漢字とかな",
@@ -2666,18 +2666,18 @@
   ],
   "expansion": [
     {
-      "template": "ciao {nome}",
+      "template": "hello {name}",
       "args": {
-        "nome": "mondo"
+        "name": "world"
       },
-      "out": "ciao mondo"
+      "out": "hello world"
     },
     {
-      "template": "{n} e ancora {n}",
+      "template": "{n} and again {n}",
       "args": {
-        "n": "uno"
+        "n": "one"
       },
-      "out": "uno e ancora uno"
+      "out": "one and again one"
     },
     {
       "template": "{{a}}",
@@ -2692,19 +2692,19 @@
       "out": "{A}"
     },
     {
-      "template": "<{ignoto}>",
+      "template": "<{unknown}>",
       "args": {},
-      "out": "<{ignoto}>"
+      "out": "<{unknown}>"
     },
     {
-      "template": "aperta { e basta",
+      "template": "open { and that's it",
       "args": {},
-      "out": "aperta { e basta"
+      "out": "open { and that's it"
     },
     {
-      "template": "chiusa } e basta",
+      "template": "close } and that's it",
       "args": {},
-      "out": "chiusa } e basta"
+      "out": "close } and that's it"
     },
     {
       "template": "{}",
@@ -2733,11 +2733,11 @@
       "out": "1"
     },
     {
-      "template": "{ spaziato }",
+      "template": "{ spaced }",
       "args": {
-        "spaziato": "no"
+        "spaced": "no"
       },
-      "out": "{ spaziato }"
+      "out": "{ spaced }"
     },
     {
       "template": "{a{b}",
@@ -2752,396 +2752,426 @@
       "out": "{constructor}"
     },
     {
-      "template": "niente",
+      "template": "nothing",
       "args": {},
-      "out": "niente"
+      "out": "nothing"
     }
   ],
   "utf16_to_byte": [
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 0,
       "out": 0
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 1,
       "out": 1
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 2,
       "out": 2
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 3,
       "out": 3
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 4,
       "out": 4
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 5,
       "out": 5
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 6,
       "out": 6
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 7,
       "out": 7
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 8,
       "out": 8
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 9,
       "out": 9
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 10,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 11,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 12,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 13,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 14,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 15,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 16,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 17,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 18,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 19,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 20,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 21,
       "out": 10
     },
     {
-      "text": "ascii puro",
+      "text": "pure ascii",
       "unit": 22,
       "out": 10
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "unit": 0,
       "out": 0
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "unit": 1,
       "out": 1
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "unit": 2,
       "out": 2
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "unit": 3,
       "out": 3
     },
     {
-      "text": "città è però",
+      "text": "city is though",
       "unit": 4,
       "out": 4
     },
     {
-      "text": "città è però",
-      "unit": 5,
-      "out": 6
-    },
-    {
-      "text": "città è però",
-      "unit": 6,
-      "out": 7
-    },
-    {
-      "text": "città è però",
-      "unit": 7,
-      "out": 9
-    },
-    {
-      "text": "città è però",
-      "unit": 8,
-      "out": 10
-    },
-    {
-      "text": "città è però",
-      "unit": 9,
-      "out": 11
-    },
-    {
-      "text": "città è però",
-      "unit": 10,
-      "out": 12
-    },
-    {
-      "text": "città è però",
-      "unit": 11,
-      "out": 13
-    },
-    {
-      "text": "città è però",
-      "unit": 12,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 13,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 14,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 15,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 16,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 17,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 18,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 19,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 20,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 21,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 22,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 23,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 24,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 25,
-      "out": 15
-    },
-    {
-      "text": "città è però",
-      "unit": 26,
-      "out": 15
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "unit": 0,
-      "out": 0
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "unit": 1,
-      "out": 1
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "unit": 2,
-      "out": 2
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "unit": 3,
-      "out": 3
-    },
-    {
-      "text": "ciao 🌍 mondo",
-      "unit": 4,
-      "out": 4
-    },
-    {
-      "text": "ciao 🌍 mondo",
+      "text": "city is though",
       "unit": 5,
       "out": 5
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "city is though",
       "unit": 6,
-      "out": 9
+      "out": 6
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "city is though",
       "unit": 7,
+      "out": 7
+    },
+    {
+      "text": "city is though",
+      "unit": 8,
+      "out": 8
+    },
+    {
+      "text": "city is though",
+      "unit": 9,
       "out": 9
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "city is though",
+      "unit": 10,
+      "out": 10
+    },
+    {
+      "text": "city is though",
+      "unit": 11,
+      "out": 11
+    },
+    {
+      "text": "city is though",
+      "unit": 12,
+      "out": 12
+    },
+    {
+      "text": "city is though",
+      "unit": 13,
+      "out": 13
+    },
+    {
+      "text": "city is though",
+      "unit": 14,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 15,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 16,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 17,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 18,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 19,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 20,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 21,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 22,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 23,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 24,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 25,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 26,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 27,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 28,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 29,
+      "out": 14
+    },
+    {
+      "text": "city is though",
+      "unit": 30,
+      "out": 14
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 0,
+      "out": 0
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 1,
+      "out": 1
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 2,
+      "out": 2
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 3,
+      "out": 3
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 4,
+      "out": 4
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 5,
+      "out": 5
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 6,
+      "out": 6
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 7,
+      "out": 10
+    },
+    {
+      "text": "hello 🌍 world",
       "unit": 8,
       "out": 10
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 9,
       "out": 11
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 10,
       "out": 12
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 11,
       "out": 13
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 12,
       "out": 14
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 13,
       "out": 15
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 14,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 15,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 16,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 17,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 18,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 19,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 20,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 21,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 22,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 23,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 24,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 25,
-      "out": 15
+      "out": 16
     },
     {
-      "text": "ciao 🌍 mondo",
+      "text": "hello 🌍 world",
       "unit": 26,
-      "out": 15
+      "out": 16
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 27,
+      "out": 16
+    },
+    {
+      "text": "hello 🌍 world",
+      "unit": 28,
+      "out": 16
     },
     {
       "text": "漢字とかな",
