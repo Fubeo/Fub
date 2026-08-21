@@ -53,12 +53,12 @@
 //! Due asserzioni, nessuna delle due con un numero magico dentro: sono rapporti
 //! fra grandezze misurate nello stesso giro.
 //!
-//! `la_foglia__without_contesto_costa_piu__of_the_contesti` è la premessa della riga
+//! `the_leaf_without_context_costs_more_of_the_contexts` è la premessa della riga
 //! 0137 scritta al rovescio: la domanda **senza** i contesti costa più di quella
 //! **con** i contesti. Diventa rosso il giorno in cui la strada di `Documents`
 //! dimagrisce — cioè il giorno in cui lo scambio va fatto.
 //!
-//! `il_dry_run_spende_sulla_domanda__does_not_intorno` dice che il piano non costa
+//! `the_dry_run_spends_on_the_question_does_not_around` dice che il piano non costa
 //! molto più della domanda che pone: sta entro una volta e mezza, e oggi ci sta
 //! con 217 453 byte contro 167 012, cioè 1,30. *Provato in rosso* applicando lo
 //! scambio per davvero dentro `note_rename`: il dry-run è passato a **672 535**
@@ -235,7 +235,7 @@ fn for_the_backlink(ws: &Workspace) -> usize {
 /// `Documents` smette di materializzare tre copie del `DocId` per riga, che è
 /// esattamente il giorno in cui lo scambio che la 0137 chiedeva va fatto.
 #[test]
-fn the_leaf__without_context_costs_more__of_the_contexts() {
+fn the_leaf_without_context_costs_more_of_the_contexts() {
     let v = Vault::new();
     let mut ws = vault_that_links(&v);
     // Un giro a vuoto: la prima invocazione paga le inizializzazioni pigre.
@@ -263,7 +263,7 @@ fn the_leaf__without_context_costs_more__of_the_contexts() {
 /// quasi il doppio dei backlink, e il piano che la contenesse sfonderebbe il
 /// tetto. Il rapporto è fra due misure dello stesso giro, non un numero inciso.
 #[test]
-fn the_dry_run_spends_on_the_question__does_not_around() {
+fn the_dry_run_spends_on_the_question_does_not_around() {
     let v = Vault::new();
     let mut ws = vault_that_links(&v);
     let _ = plan(&mut ws);

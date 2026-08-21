@@ -7,7 +7,7 @@ rust-version.workspace = true
 description = "Official features as native trait implementations: backlink, search, graph, preview orchestration."
 
 # Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
-# (`src/inventario.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
+# (`src/inventory.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
 # quindi non è mai il documento a dire cosa esiste. Il default è **tutto**, cioè
 # l'app che spediamo: spegnere è una scelta di chi compila, non un difetto da
 # ricordarsi di correggere.

@@ -88,7 +88,7 @@ const NONE: &str = "zqxjk";
 /// *Provato in rosso* sul codice vecchio (`t.name.to_lowercase().contains(..)`):
 /// la differenza veniva 500, cioè esattamente una `String` per tag in più.
 #[test]
-fn a_keystroke__does_not_allocates__for_tag() {
+fn a_keystroke_does_not_allocates_for_tag() {
     let small = tags(500, |the| format!("progetto/Rust-{the}"));
     let large = tags(1000, |the| format!("progetto/Rust-{the}"));
 
@@ -117,7 +117,7 @@ fn a_keystroke__does_not_allocates__for_tag() {
 /// test non chiede di ripararla — fissa che il costo è quello che crediamo, così
 /// chi un giorno lo cambia (in meglio o in peggio) se ne accorge qui.
 #[test]
-fn outside_from_ascii_is_pays__still__a_string__for_tag() {
+fn outside_from_ascii_is_pays_still_a_string_for_tag() {
     let small = tags(500, |the| format!("progetto/Città-{the}"));
     let large = tags(1000, |the| format!("progetto/Città-{the}"));
 

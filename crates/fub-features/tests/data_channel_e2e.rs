@@ -148,7 +148,7 @@ fn page(
 /// kernel non indicizza il corpo), il frontmatter lo sa solo il kernel. Nessuno
 /// dei due può rispondere da solo, e la risposta non è né l'una né l'altra.
 #[test]
-fn the_notes__of__a_kind_that_speak__of_something() {
+fn the_notes_of_a_kind_that_speak_of_something() {
     let (_g, ws) = vault();
 
     let join = clause(vec![
@@ -195,7 +195,7 @@ fn the_notes__of__a_kind_that_speak__of_something() {
 /// sta in Archivio» è una clausola sola con un letterale negato, e il
 /// complemento si prende sull'universo del vault.
 #[test]
-fn a_leaf_denied_removes__from_what_is_the_other_has_selected() {
+fn a_leaf_denied_removes_from_what_is_the_other_has_selected() {
     let (_g, ws) = vault();
     let q = clause(vec![
         lit(text("rust")),
@@ -241,7 +241,7 @@ fn the_union_of_two_clauses_from_different_owners() {
 /// di essere ricomposta a mano. È ciò che tiene vero il filtro dentro tantivy
 /// (decisione 0005) adesso che l'ambito è una foglia come le altre.
 #[test]
-fn a_clause_all__of__a_engine_there_goes_whole() {
+fn a_clause_all_of_a_engine_there_goes_whole() {
     let (_g, ws) = vault();
     let q = IndexQuery::Documents {
         matching: clause(vec![
@@ -297,7 +297,7 @@ fn a_clause_all__of__a_engine_there_goes_whole() {
 /// quello che si è chiesto: un elenco di risultati è una **collezione**, non
 /// una lista di titoli, e le due cose erano due varianti separate.
 #[test]
-fn a_row_carries_relevance_extracted__and_columns_together() {
+fn a_row_carries_relevance_extracted_and_columns_together() {
     let (_g, ws) = vault();
     let page = page(
         &ws,
@@ -351,7 +351,7 @@ fn a_row_carries_relevance_extracted__and_columns_together() {
 /// di chi le calcola»). Con un linguaggio non servono: il sottoinsieme è una
 /// query, e i tag li conta chi li ha in cache.
 #[test]
-fn the_tag__of__a_result_are_the_its_facets() {
+fn the_tag_of_a_result_are_the_its_facets() {
     let (_g, ws) = vault();
 
     let all = match ws.query_index(IndexQuery::Tags {
@@ -391,7 +391,7 @@ fn the_tag__of__a_result_are_the_its_facets() {
 /// Il grafo intero in **una** domanda, che è ciò che rende inutile un comando
 /// bespoke sull'IPC (§5.4): semi = tutto il vault, un passo, verso uscente.
 #[test]
-fn the_graph_whole__and__a_question_single() {
+fn the_graph_whole_and_a_question_single() {
     let (_g, ws) = vault();
     // Ferrite → Cucina, così c'è almeno un arco da trovare.
     ws.read_source(&DocId::new("Progetti/Ferrite.md"))
@@ -455,9 +455,9 @@ fn what_nobody_needs_says_so() {
 /// `Neighbors`; `Tags` si salvava per una guardia propria e `Documents` perché
 /// il routing manda la foglia al suo proprietario.
 #[test]
-fn a_clause_empty_beside_a__a_leaf_foreign__remains_every_document() {
+fn a_clause_empty_beside_a_a_leaf_foreign_remains_every_document() {
     let (_g, ws) = vault();
-    let all__and__a_leaf_foreign = QueryExpr {
+    let all_and_a_leaf_foreign = QueryExpr {
         any: vec![
             QueryClause { all: vec![] },
             QueryClause {
@@ -466,13 +466,13 @@ fn a_clause_empty_beside_a__a_leaf_foreign__remains_every_document() {
         ],
     };
     assert!(
-        all__and__a_leaf_foreign.is_everything(),
+        all_and_a_leaf_foreign.is_everything(),
         "una clausola vuota in OR è l'identità: l'espressione seleziona tutto"
     );
 
     let values = ws.query_index(IndexQuery::PropertyValues {
         key: "tipo".into(),
-        matching: all__and__a_leaf_foreign.clone(),
+        matching: all_and_a_leaf_foreign.clone(),
         page: None,
     });
     let answer = values.expect("le faccette di tutto");
@@ -485,7 +485,7 @@ fn a_clause_empty_beside_a__a_leaf_foreign__remains_every_document() {
     );
 
     let nearby = ws.query_index(IndexQuery::Neighbors {
-        seeds: all__and__a_leaf_foreign.clone(),
+        seeds: all_and_a_leaf_foreign.clone(),
         direction: LinkDirection::Outbound,
         depth: 1,
         page: None,
@@ -495,12 +495,12 @@ fn a_clause_empty_beside_a__a_leaf_foreign__remains_every_document() {
     // Le altre due passavano già, e devono continuare a passare per la stessa
     // ragione delle prime due e non per la propria.
     let tag = ws.query_index(IndexQuery::Tags {
-        matching: all__and__a_leaf_foreign.clone(),
+        matching: all_and_a_leaf_foreign.clone(),
         page: None,
     });
     assert!(tag.is_ok(), "i tag di tutto: {tag:?}");
     assert_eq!(
-        ids(&ws, all__and__a_leaf_foreign).len(),
+        ids(&ws, all_and_a_leaf_foreign).len(),
         4,
         "e i documenti sono il vault intero, non i soli che parlano di rust"
     );
@@ -509,7 +509,7 @@ fn a_clause_empty_beside_a__a_leaf_foreign__remains_every_document() {
 /// La frase esatta è un modo della foglia, non delle virgolette dentro una
 /// stringa che qualcun altro parsa.
 #[test]
-fn the_phrase_exact__and__a_way__does_not__a_syntax() {
+fn the_phrase_exact_and_a_way_does_not_a_syntax() {
     let (_g, ws) = vault();
     let phrase = |t: &str| {
         clause(vec![lit(QueryPredicate::Text(TextQuery {
@@ -566,7 +566,7 @@ fn vault_on_equal_terms() -> (tempfile::TempDir, Workspace) {
 /// del contratto, due pagine della stessa domanda potrebbero ripetere e saltare
 /// righe.
 #[test]
-fn a_equal_relevance_sorts_the_contract__does_not_the_engine() {
+fn a_equal_relevance_sorts_the_contract_does_not_the_engine() {
     let (_g, ws) = vault_on_equal_terms();
     let query = || clause(vec![lit(text("parola"))]);
 
@@ -603,7 +603,7 @@ fn a_equal_relevance_sorts_the_contract__does_not_the_engine() {
 /// ha appiattito tutto sull'ordine dei `DocId`: chi ha cercato si aspetta i
 /// risultati migliori in cima, e la parità è solo ciò che si rompe *dopo*.
 #[test]
-fn without_key__of_ordering_commands_the_relevance() {
+fn without_key_of_ordering_commands_the_relevance() {
     let (_g, ws) = vault();
     let items = page(
         &ws,
@@ -640,7 +640,7 @@ fn without_key__of_ordering_commands_the_relevance() {
 /// no. Il presidio guarda proprio quella simmetria — la strada è
 /// `query_index`, che è ciò che una feature ha e nient'altro.
 #[test]
-fn what_names__a_reference_the__says_the_channel_data() {
+fn what_names_a_reference_the_says_the_channel_data() {
     let (_g, ws) = vault();
     let resolves = |target: LinkTarget, from: Option<&str>| -> Option<String> {
         match ws
@@ -703,7 +703,7 @@ fn what_names__a_reference_the__says_the_channel_data() {
 
 /// Un vault fatto per le **posizioni**: una parola che compare più volte nella
 /// stessa nota, un heading, un'ancora di blocco, e una nota che li nomina.
-fn vault__with_points() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
+fn vault_with_points() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
     let write = |rel: &str, body: &str| {
@@ -744,8 +744,8 @@ fn vault__with_points() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
 /// c'è nessuna coordinata. Qui si verifica la cosa che quella distanza rendeva
 /// inesprimibile — non difficile: **inesprimibile**.
 #[test]
-fn a_result_knows_say_a_that_point__of_the_document_is() {
-    let (_g, ws, root) = vault__with_points();
+fn a_result_knows_say_a_that_point_of_the_document_is() {
+    let (_g, ws, root) = vault_with_points();
     let source = std::fs::read_to_string(root.join("Note/Doppia.md")).expect("il sorgente");
 
     let hits = documents(&ws, clause(vec![lit(text("gatto"))]));
@@ -798,8 +798,8 @@ fn a_result_knows_say_a_that_point__of_the_document_is() {
 /// Le occorrenze si calcolano solo per chi ha cercato del **testo**: una
 /// selezione che non ha niente da localizzare non paga nessuna lettura.
 #[test]
-fn a_selection__without_text__does_not_carries_coordinate() {
-    let (_g, ws, _root) = vault__with_points();
+fn a_selection_without_text_does_not_carries_coordinate() {
+    let (_g, ws, _root) = vault_with_points();
     let hits = documents(
         &ws,
         clause(vec![lit(QueryPredicate::Folder {
@@ -820,8 +820,8 @@ fn a_selection__without_text__does_not_carries_coordinate() {
 /// La §21.10: `[[Nota#^blocco]]` e `[[Nota#Sezione]]` sanno dire **dove
 /// dentro**, e un punto che non c'è più non impedisce di aprire.
 #[test]
-fn a_reference_a__a_point_knows_say_where_points() {
-    let (_g, ws, root) = vault__with_points();
+fn a_reference_a_a_point_knows_say_where_points() {
+    let (_g, ws, root) = vault_with_points();
     let source = std::fs::read_to_string(root.join("Note/Doppia.md")).expect("il sorgente");
 
     let resolves = |target: LinkTarget| match ws
@@ -888,8 +888,8 @@ fn a_reference_a__a_point_knows_say_where_points() {
 /// riceveva `None` — cioè «link rotto» — e la shell, che è l'unica ad averci
 /// provato, si fermava un passo prima con un `if` che sapeva solo tacere.
 #[test]
-fn a_reference__without_page_names_who_the_hosts() {
-    let (_g, ws, _root) = vault__with_points();
+fn a_reference_without_page_names_who_the_hosts() {
+    let (_g, ws, _root) = vault_with_points();
     let resolves = |target: LinkTarget, from: Option<&str>| match ws
         .query_index(IndexQuery::Resolve {
             target,
@@ -938,7 +938,7 @@ fn a_reference__without_page_names_who_the_hosts() {
 
 /// Un vault con **due sezioni omonime** nella stessa nota: è lo stato in cui
 /// un id generato e un frammento cercato si scoprono d'accordo o no.
-fn vault__with_same_named() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
+fn vault_with_same_named() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
     std::fs::create_dir_all(root.join("Note")).unwrap();
@@ -968,8 +968,8 @@ fn vault__with_same_named() -> (tempfile::TempDir, Workspace, Utf8PathBuf) {
 ///
 /// Il presidio si prova rosso cambiando **uno solo** dei due lati.
 #[test]
-fn who_generates__a_id__and_who_resolves__a_fragment_name_the__same_point() {
-    let (_g, ws, root) = vault__with_same_named();
+fn who_generates_a_id_and_who_resolves_a_fragment_name_the_same_point() {
+    let (_g, ws, root) = vault_with_same_named();
     let source = std::fs::read_to_string(root.join("Note/Omonime.md")).expect("il sorgente");
 
     let resolves = |heading: &str| match ws

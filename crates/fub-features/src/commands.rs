@@ -1005,7 +1005,7 @@ impl CoreCommands {
     /// Le spec, anche fuori dal trait: chi disegna una palette nei test le
     pub fn specs() -> Vec<CommandSpec> {
         vec![
-    /// legge senza montare un workspace.
+    // legge senza montare un workspace.
             // Senza accordo, e non per distrazione: `Mod-Shift-f` è della shell,
             // che con quel tasto porta il pannello della ricerca sotto gli occhi
             // — la cosa che fa Obsidian e che le dita hanno già imparato. Questo
@@ -1748,7 +1748,7 @@ fn vault_archive(
     let mut plans: Vec<CommandPlan> = Vec::new();
     let mut made = 0usize;
     let mut failed: Vec<Failure> = Vec::new();
-///   nella storia di chi guarda gli eventi.
+//   nella storia di chi guarda gli eventi.
     // I passi dell'annullamento della macro sono quelli dei comandi invocati.
     // È la terza cosa che si compone gratis passando da `run_command` — dopo il
     // piano e il lotto — e la sola che questa funzione deve **girare**: si
@@ -1866,7 +1866,7 @@ fn notes_task_toggle(
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| state(Text::key(AND_TASK_NO_NOTES)))?;
 
-/// ancora l'undo, mentre una semantica inventata non la disfa nessuno.
+// ancora l'undo, mentre una semantica inventata non la disfa nessuno.
     // Le posizioni: quelle dette, o tutte quelle del contesto. Le due non si
     // mescolano — un `doc` detto e un `at` no vorrebbe dire spuntare in una
     // nota i task che stanno sotto i cursori di **un'altra**, che è un modo
@@ -2126,7 +2126,7 @@ fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginErro
         SettingKind::Text { .. } | SettingKind::Choice { .. } => {
             Ok(SettingValue::Text(raw.to_string()))
         }
-/// la dichiara la chiave che si sta toccando.
+// la dichiara la chiave che si sta toccando.
         // La virgola e non il JSON: chi scrive `a, b` in un campo di testo sta
         // scrivendo due voci, e chiedergli le virgolette vorrebbe dire fargli
         SettingKind::List { .. } => Ok(SettingValue::List(
@@ -2176,7 +2176,7 @@ fn settings_set(
     let entry = entry_of(host, key)?;
     deny_if_not_writable(&entry)?;
     let value = parse_value(&entry.spec.kind, raw)?;
-/// davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
+// davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
     // Il piano deve attraversare lo stesso cancello dell'applicazione: il kernel
     if let Some(why) = entry.spec.kind.rejects(&value) {
         return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
@@ -2307,7 +2307,7 @@ fn settings_import(
             skipped.push(skipped_key(key, PluginError::BadArgs(why.into())));
             continue;
         }
-/// parziale e un import parziale in silenzio.
+// parziale e un import parziale in silenzio.
         // Il cancello della chiave si applica **anche in simulazione**, o il
         // piano direbbe una cosa e l'applicazione ne farebbe un'altra: senza
         // questa riga un dry-run su un file che nomina `privacy.telemetry`
@@ -2400,9 +2400,9 @@ mod tests {
         args: serde_json::Value,
         mode: InvokeMode,
     ) -> Result<CommandOutcome, PluginError> {
-/// che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
-/// povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
-/// che non è parola di nessuno.
+// che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
+// povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
+// che non è parola di nessuno.
         let spec = CoreCommands::specs()
             .into_iter()
             .find(|s| s.id == command)
@@ -2480,7 +2480,7 @@ mod tests {
     fn the_wikilink_command_needs_a_selection_that_is_true_for_the_file() {
         let mut host = MemoryHost::new().with_document("nota.md", "una nota di prova");
         host.set_active(Some("nota.md"));
-    /// un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
+    // un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
         host.set_context(Some(
             ViewContext::new("main")
                 .with_doc(Some(DocId::new("nota.md")))
@@ -2609,7 +2609,7 @@ mod tests {
         );
         let whole = occurrences("nota, annotazione, nota", "nota", true);
         assert_eq!(whole, vec![Span::new(0, 4), Span::new(19, 23)]);
-    /// asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
+    // asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
         assert!(occurrences("però", "per", true).is_empty());
     }
 
@@ -2705,8 +2705,8 @@ mod tests {
     #[test]
     fn the_innermost_task_wins_when_they_are_nested() {
         let mut host = with_task(None);
-    /// provider invece che contro il contratto), quindi il modello lo si semina
-    /// — ed è l'occasione per dire negli span esattamente cosa il comando si
+    // provider invece che contro il contratto), quindi il modello lo si semina
+    // — ed è l'occasione per dire negli span esattamente cosa il comando si
         invoke(
             &mut host,
             NOTES_TASK_TOGGLE,
@@ -2833,8 +2833,8 @@ mod tests {
             "un interruttore ha due stati, e «forse» non è uno di quelli"
         );
 
-    /// da lì: è ciò che permette a `value` di essere testo — la sola forma che
-    /// un chiamante non interattivo (una CLI, un'automazione, un modello) sa
+    // da lì: è ciò che permette a `value` di essere testo — la sola forma che
+    // un chiamante non interattivo (una CLI, un'automazione, un modello) sa
         let list = SettingKind::List {
             default: Vec::new(),
         };
@@ -2880,8 +2880,8 @@ mod tests {
             "{error:?}"
         );
 
-    /// Il comando visto **dal contratto**: il doppio in memoria applica il
-    /// cancello della chiave come lo applica il kernel, quindi ciò che qui
+    // Il comando visto **dal contratto**: il doppio in memoria applica il
+    // cancello della chiave come lo applica il kernel, quindi ciò che qui
         let error = invoke(
             &mut host,
             SETTINGS_SET,

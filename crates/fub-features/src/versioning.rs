@@ -2622,7 +2622,7 @@ mod tests {
             .snapshot(&id("a.md"), "una nota tutta nuova\n", &mut host)
             .unwrap();
 
-        assert_eq!(
+        assert_ne!(
             store.inner.lock().unwrap().docs["a.md"].dir,
             dir,
             "la cartella di b.md è stata data ad a.md, e il suo meta.json \

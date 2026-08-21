@@ -248,7 +248,7 @@ fn absent_and_occupied_have_the_same_face_here_and_there() {
 /// forma: la cartella, la piattezza, l'estensione in coda, e che il giro di
 /// andata e ritorno riporti lo stesso id dai due lati.
 #[test]
-fn the_id__of_the_trash_has_the_same_form__of_here__and__of_the() {
+fn the_id_of_the_trash_has_the_same_form_of_here_and_of_the() {
     on_the_two_host(None, |host| {
         let id = DocId::new("Progetti/Idea.md");
         host.create_document(&id, "il testo").expect("si scrive");
@@ -287,7 +287,7 @@ fn the_id__of_the_trash_has_the_same_form__of_here__and__of_the() {
 /// glielo dà il supporto, quindi qui i due arrivano allo stesso fatto per due
 /// strade, e la prova è che ne escano con la stessa faccia.
 #[test]
-fn a_support_that__says__of_no__and__a_io__of_here__and__of_the() {
+fn a_support_that_says_of_no_and_a_io_of_here_and_of_the() {
     // Il kernel non ha una manopola: l'unico modo di fargli sentire un
     // rifiuto è dargli un supporto che rifiuta (§15.1).
     let dir = tempfile::tempdir().expect("tempdir");
@@ -342,7 +342,7 @@ fn a_support_that__says__of_no__and__a_io__of_here__and__of_the() {
 /// confronta è la **relazione**: che quella resa dalla scrittura sia quella che
 /// il documento ha adesso, e che sia una base che la scrittura dopo accetta.
 #[test]
-fn the_writes_leave_the__same_vault__of_here__and__of_the() {
+fn the_writes_leave_the_same_vault_of_here_and_of_the() {
     on_the_two_host(None, |host| {
         let mut journal: Vec<(String, String)> = Vec::new();
         let id = DocId::new("Nota.md");
@@ -579,7 +579,7 @@ fn the_writes_leave_the__same_vault__of_here__and__of_the() {
 /// `nota.txt` e `senzapunto` non hanno un provider che li parsi, e una scrittura
 /// che nessuno può rileggere non è una scrittura.
 #[test]
-fn every_name__and_every_format_is_judge__equal__of_here__and__of_the() {
+fn every_name_and_every_format_is_judge_equal_of_here_and_of_the() {
     on_the_two_host(None, |host| {
         let mut journal: Vec<(String, String)> = Vec::new();
         let source = DocId::new("Nota.md");

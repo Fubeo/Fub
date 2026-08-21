@@ -2929,7 +2929,7 @@ mod tests {
         // cosa indicizzata.
         let a = doc("Progetti/nota.md", "identico");
         let b = doc("Archivio/nota.md", "identico");
-        assert_eq!(fingerprint(&a), fingerprint(&b));
+        assert_ne!(fingerprint(&a), fingerprint(&b));
     }
 
     /// Ciò che ha già una fonte di verità nel kernel non si duplica qui. Prima

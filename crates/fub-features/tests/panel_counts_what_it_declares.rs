@@ -34,13 +34,13 @@
 //!
 //! # Cos'è rosso
 //!
-//! `il_render__and__a_fotografia_sola` conta le chiamate ad `active_context` — il
+//! `the_render_and_a_snapshot_single` conta le chiamate ad `active_context` — il
 //! contatore è di [`MemoryHost`], accanto a quello delle letture del vault, e
 //! nasce qui perché una copia buttata non lascia nessun'altra traccia: lo stato
 //! dopo è identico allo stato prima. *Provato in rosso* rimettendo la forma
 //! vecchia: 2 letture del contesto contro 1.
 //!
-//! `segue_esattamente_i_tre_pezzi__of_contesto_che_usa` è rosso in tutti e due i
+//! `follows_exactly_the_three_context_pieces_it_uses` è rosso in tutti e due i
 //! versi: se il pannello dichiarasse meno di quel che usa (una parte cambia il
 //! disegno ma non è nella maschera) e se dichiarasse più di quel che usa (una
 //! parte è nella maschera e cambiarla non cambia niente, cioè il pannello si
@@ -89,7 +89,7 @@ fn draws(host: &MemoryHost) -> Vec<String> {
 /// diceva che fossero lo stesso contesto — fra le due la shell può avere
 /// pubblicato un altro pane.
 #[test]
-fn the_render__and__a_snapshot_single() {
+fn the_render_and_a_snapshot_single() {
     let host = host();
     host.set_active(Some(NOTE_DOC));
     host.set_selections(&[(0, "una nota")]);

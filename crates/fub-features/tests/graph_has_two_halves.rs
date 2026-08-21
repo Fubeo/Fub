@@ -45,7 +45,7 @@ fn the_two_ends_is_agree_on_the_namespace() {
 
 /// L'id della view che il provider dichiara è quello che il comando apre.
 #[test]
-fn the_two_ends_is_agree_on_the_id__of_the_view() {
+fn the_two_ends_is_agree_on_the_id_of_the_view() {
     let shell = metadata_shell();
     assert!(
         shell.contains(&format!("\"{GRAPH_VIEW}\"")),
@@ -57,7 +57,7 @@ fn the_two_ends_is_agree_on_the_id__of_the_view() {
 /// E il `ns` è **dichiarato una volta sola** di qua: due letterali uguali in due
 /// punti del provider sarebbero lo stesso difetto un piano più giù.
 #[test]
-fn the_namespace__does_not__and_written_two_times__in_the_provider() {
+fn the_namespace_does_not_and_written_two_times_in_the_provider() {
     let provider = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/graph.rs"))
         .expect("il provider del grafo");
     // Una volta nella costante, e le altre occorrenze sono prosa fra apici
@@ -110,7 +110,7 @@ fn the_keys_of_the_action_is_agree_between_the_two_ends() {
 /// lo consuma — se uno dei due cambia e l'altro no, il grafo si disegna vuoto o
 /// legge `undefined`, e questo test lo dice.
 #[test]
-fn the_keys__of_the_payload_is_agree_between_the_two_ends() {
+fn the_keys_of_the_payload_is_agree_between_the_two_ends() {
     let shell = metadata_shell();
     let provider = metadata_provider();
     // (letterale nel provider, accesso nella shell)
