@@ -37,7 +37,7 @@ import path from "node:path";
 
 // Cartelle che non sono documentazione del repo: artefatti di build, sorgenti
 // di terze parti, e la cartella di git.
-const SALTA_CARTELLE = new Set(["node_modules", "target", "dist", ".git"]);
+const SALTA_CARTELLE = new Set(["node_modules", "target", "dist", ".git", "archivio"]);
 
 // I link che puntano fuori dal repo non sono affare di questo controllo: qui si
 // verifica solo ciò che sta su disco accanto ai documenti. Un check dei link
@@ -69,16 +69,19 @@ function documentazioneTracciata(radice) {
   if (esito.error || esito.status !== 0) return null;
 
   const cartelle = new Set();
+  const file = new Set();
   for (const relativo of esito.stdout.split("\0")) {
     if (!relativo) continue;
-    let cartella = path.dirname(path.resolve(radice, relativo));
+    const absFile = path.resolve(radice, relativo);
+    file.add(absFile);
+    let cartella = path.dirname(absFile);
     while (cartella.startsWith(radice)) {
       cartelle.add(cartella);
       if (cartella === radice) break;
       cartella = path.dirname(cartella);
     }
   }
-  return cartelle;
+  return { cartelle, file };
 }
 
 /**
@@ -111,7 +114,7 @@ function raccogliMarkdown(radice, tracciate, saltate) {
     // alla prima indicizzazione, mentre `.fub/` compare alla prima cosa che
     // Fub scrive su quel vault, che è prima.
     if (voci.some((v) => v.isDirectory() && v.name === ".fub")) {
-      if (tracciate === null || !tracciate.has(path.resolve(cartella))) {
+      if (tracciate === null || !tracciate.cartelle.has(path.resolve(cartella))) {
         saltate.push(cartella);
         return;
       }
@@ -125,6 +128,7 @@ function raccogliMarkdown(radice, tracciate, saltate) {
         if (SALTA_CARTELLE.has(voce.name) || voce.name.startsWith(".")) continue;
         visita(percorso);
       } else if (voce.isFile() && voce.name.toLowerCase().endsWith(".md")) {
+        if (tracciate !== null && !tracciate.file.has(path.resolve(percorso))) continue;
         trovati.push(percorso);
       }
     }

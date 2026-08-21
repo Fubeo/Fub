@@ -36,7 +36,7 @@
 
 /// La tabella che questo test giudica: `## 3. Le versioni degli schemi su
 /// disco`, in `docs/versionamento.md`.
-const DOC: &str = include_str!("../../../docs/versionamento.md");
+const DOC: &str = include_str!("../../../docs/archivio/versionamento.md");
 
 /// I sorgenti che la tabella cita. Un formato nuovo aggiunge una riga là e una
 /// riga qui, e finché non fa tutt'e due il test lo dice per nome.

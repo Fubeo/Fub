@@ -3,18 +3,18 @@
 
 Le modifiche degne di nota, versione per versione. Il formato è
 [Keep a Changelog](https://keepachangelog.com/it-IT/1.1.0/) e la numerazione
-segue [versionamento.md](versionamento.md).
+segue [archivio/versionamento.md](archivio/versionamento.md).
 
 **Cosa ci va e cosa no.** Qui sta ciò che cambia per **chi usa Fub o ci scrive
 sopra**: una funzionalità che compare, un comportamento che cambia, una firma
 del contratto che si muove. Non ci va il lavoro interno — quello sta nel `git
-log`, e il *perché* di ogni scelta sta nei [verbali](decisions/README.md), che
+log`, e il *perché* di ogni scelta sta nei [verbali](archivio/decisions/README.md), che
 sono l'unico posto in cui è scritto per esteso. Un changelog che riassume i
 verbali diventa il secondo posto che invecchia.
 
 **Le voci si scrivono al rilascio**, non a ogni commit: fino ad allora la
 sezione «Non rilasciato» resta alla grana della milestone, e lo stato preciso di
-cosa è aperto sta in [todo.md](todo.md), che è l'unico posto dove si aggiorna.
+cosa è aperto sta in [archivio/todo.md](archivio/todo.md), che è l'unico posto dove si aggiorna.
 
 ## [Non rilasciato]
 
@@ -28,18 +28,18 @@ pubblicato. Quello che segue diventerà il contenuto di `0.1.0`.
   path con la regola dello shortest-path fra omonimi.
 - **Core agnostico rispetto al formato** — il modello comune del documento e il
   contratto dei trait, di cui il markdown (comrak) è il primo provider e non un
-  caso speciale. Vedi [architecture/data-model.md](architecture/data-model.md) e
-  [architecture/traits.md](architecture/traits.md).
+  caso speciale. Vedi [06-contratto/02-il-modello-dati.md](06-contratto/02-il-modello-dati.md) e
+  [06-contratto/01-i-trait-in-rust.md](06-contratto/01-i-trait-in-rust.md).
 - **Ricerca full-text** incrementale e persistente su tantivy, dichiarata *la*
   ricerca dell'applicazione dalla
-  [decisione 0025](decisions/0025-la-ricerca-predefinita.md).
+  [decisione 0025](archivio/decisions/0025-la-ricerca-predefinita.md).
 - **CRUD del vault con rete di sicurezza** — creazione, «crea nota» da un link
   non risolto, rename, cestino e versioning con snapshot.
 - **Organizzazione della sidebar** — albero, icone, folder notes, spazi, note
   appuntate, ordinamento drag & drop, cartella come radice.
 - **Shell** — file explorer, editor CodeMirror 6, anteprima live, navigazione
   dei `[[wikilink]]`, graph view su Canvas, e i pannelli resi attraverso il
-  protocollo di [UI dichiarativa](architecture/ui-protocol.md).
+  protocollo di [UI dichiarativa](07-ui/02-il-protocollo-ui-node.md).
 - **Registro dei comandi** con palette, impostazioni dichiarate nel manifest,
   localizzazione dei testi e degli errori, job lunghi con progresso e
   cancellazione.
@@ -51,17 +51,17 @@ pubblicato. Quello che segue diventerà il contenuto di `0.1.0`.
   parsa non fa più fallire l'apertura: il vault si apre e dichiara cosa non ha
   letto.
 - **Contratto WIT** vivo accanto al crate che rispecchia, con le linee di base
-  congelate [`0.1.0`](architecture/wit-congelato.md) e `0.1.1`.
+  congelate [`0.1.0`](06-contratto/03-il-contratto-wit.md) e `0.1.1`.
 - **Presidi in CI** — invarianti di dipendenza, conformità `abi` ↔ WIT,
   additività del contratto, supply chain con SBOM, link interni dei documenti.
   L'elenco per esteso sta in [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Governance del repo** — licenza doppia MIT / Apache-2.0, questo changelog,
   [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
   [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) e
-  [versionamento.md](versionamento.md).
+  [archivio/versionamento.md](archivio/versionamento.md).
 
 Milestone 1 è chiusa dal **2026-07-24**; M2 è quasi finita. Cosa entra in
-ciascuna sta in [milestones/](milestones/M2-search-graph.md).
+ciascuna sta in [milestones/](archivio/milestones/M2-search-graph.md).
 
 ### Sicurezza
 

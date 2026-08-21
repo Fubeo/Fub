@@ -52,9 +52,11 @@ da un e2e headless senza portarsi dietro un webview.
 ## Documentazione
 
 Tutta in **[`docs/`](docs/)**, e si entra da
-**[docs/README.md](docs/README.md)**. Le due scorciatoie usate più spesso: la
-[mappa visuale dell'architettura](docs/architecture/mappa-visuale.md) e i
-[verbali delle decisioni](docs/decisions/README.md).
+**[docs/README.md](docs/README.md)**:
+- [Guida iniziale](docs/00-inizia-qui/01-cos-e-fub.md) e [Architettura per studenti](docs/01-per-studenti/01-il-vault.md).
+- [Mappa dei componenti](docs/02-componenti/01-panoramica.md) e [Diagrammi UML](docs/03-uml/01-trait-fub-abi.md).
+- [Guida ai plugin](docs/04-plugin/01-nativo-vs-wasm.md) e [Formato su disco](docs/05-disco/01-note-utente.md).
+- [Archivio storico decisioni e roadmap](docs/archivio/decisions/README.md).
 
 ## Cosa c'è già
 
@@ -74,7 +76,7 @@ Milestone 1 è chiusa dal 24/07/2026 e M2 è quasi finita:
   dichiarativa**.
 
 Lo stato preciso — cosa è aperto, con che priorità — sta in
-[docs/todo.md](docs/todo.md), che è l'unico posto dove si aggiorna.
+[docs/archivio/todo.md](docs/archivio/todo.md), che è l'unico posto dove si aggiorna.
 
 ## Come si avvia
 
@@ -106,10 +108,10 @@ cargo clippy --workspace --all-targets
 
 - **M2** — ricerca full-text (tantivy), graph view, outline, tag panel, "crea
   nota" per i link non risolti. La ricerca è **built-in e di classe
-  *omnisearch*** ([decisione 0025](docs/decisions/0025-la-ricerca-predefinita.md)).
+  *omnisearch*** ([decisione 0025](docs/archivio/decisions/0025-la-ricerca-predefinita.md)).
   Ciò che le manca — refusi perdonati, prefisso mentre si digita, ricerca dentro
   la nota aperta — sta nella
-  [seduta 21](docs/roadmap/21-la-ricerca-predefinita.md), con tre voci di
+  [seduta 21](docs/archivio/roadmap/21-la-ricerca-predefinita.md), con tre voci di
   **firma** che scadono col freeze di M4.
 - **M3** — live preview *in-editor* alla Obsidian (decorazioni CodeMirror sugli
   `Span` del modello), command palette, settings via form dichiarativi.
@@ -138,7 +140,7 @@ doppia licenza, senza condizioni aggiuntive.
 - [docs/SECURITY.md](docs/SECURITY.md) — come si segnala una vulnerabilità (in
   privato, non con una issue) e cos'è dentro il perimetro.
 - [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
-- [docs/versionamento.md](docs/versionamento.md) — i tre numeri di versione e
+- [docs/archivio/versionamento.md](docs/archivio/versionamento.md) — i tre numeri di versione e
   cosa promette ciascuno.
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — cosa cambia, versione per versione.
 

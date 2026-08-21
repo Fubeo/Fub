@@ -426,7 +426,7 @@ function main() {
     // not a loophole: it is the only rule under which a record can tell a
     // name that changed, or cite one to say it did not exist — which is
     // exactly what two of them do, and it is the work this guard continues.
-    const record = /docs[\\/]decisions[\\/]/.test(file);
+    const record = /[\\/]decisions[\\/]/.test(file);
     if (/\.md$/.test(file) && !record) {
       lines.forEach((line, i) => {
         for (const name of emptyGuarantees(line, functions)) {
