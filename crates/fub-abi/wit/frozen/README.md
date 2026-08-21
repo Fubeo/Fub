@@ -8,4 +8,4 @@ It is not an archive: it is the baseline against which
 which M4's freeze rests — post-freeze the contract grows only by addition.
 
 **The rule in prose, with the lifecycle of the folder, lives in `docs/`:**
-[docs/architecture/frozen-wit.md](../../../../docs/architecture/frozen-wit.md).
+[docs/06-contratto/03-il-contratto-wit.md](../../../../docs/06-contratto/03-il-contratto-wit.md).
