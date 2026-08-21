@@ -276,12 +276,12 @@ impl<T> Custody<T> {
         {
             tracing::error!(
                 target: "fub.host",
-                "{}: a panic interrupted a mutation halfway while holding the lock. \
-                 What remains in memory is not a state anyone wrote — a half-fed index, \
-                 a batch that nobody will close — and reusing it would give wrong answers \
-                 instead of missing ones. From here on every call that reaches this point \
-                 answers no instead of panicking: the data on disk is untouched, restart \
-                 Fub. The panic that caused it was reported where it happened.",
+                "{}: un panico ha interrotto una modifica a metà mentre teneva il lucchetto. \
+                 Ciò che ne resta in memoria non è uno stato che qualcuno abbia scritto — un \
+                 indice alimentato a metà, un lotto che nessuno chiuderà — e riusarlo darebbe \
+                 risposte sbagliate invece che mancanti. Da qui in poi ogni chiamata che passa \
+                 di qui risponde di no invece di paniare: i dati sul disco non sono toccati, \
+                 riavvia Fub. Il panico che lo ha causato è stato riportato dove è successo.",
                 self.inside.name,
             );
         }
@@ -289,9 +289,9 @@ impl<T> Custody<T> {
         // diagnosi ripetuta a ogni chiamata è rumore che copre la prima.
         PluginError::Internal(
             format!(
-                "{}: unrecoverable state — a panic interrupted a mutation halfway, and what \
-                 remains in memory is not trustworthy. The files on disk are untouched: \
-                 restart Fub.",
+                "{}: stato irrecuperabile — un panico ha interrotto una modifica a metà, e ciò \
+                 che resta in memoria non è credibile. I file sul disco non sono toccati: \
+                 riavvia Fub.",
                 self.inside.name
             )
             .into(),
@@ -311,11 +311,11 @@ impl<T> Inner<T> {
         if self.slow_count.fetch_add(1, Ordering::Relaxed) == 0 {
             tracing::warn!(
                 target: "fub.host",
-                "{}: a mutation held the exclusive borrow for {} ms. While it held it, \
-                 every read and every save on this vault was blocked waiting: on screen it \
-                 looks like a frozen app, but it is not — it is a single slow operation. \
-                 If it repeats, move the caller into a job, which takes and releases the \
-                 borrow at each capacity instead of holding it for the entire job duration.",
+                "{}: una modifica ha tenuto il prestito esclusivo per {} ms. Finché lo teneva, \
+                 ogni lettura e ogni salvataggio su questo vault erano fermi ad aspettarla: \
+                 sullo schermo è un'app che non risponde, e non lo è — è una singola operazione \
+                 lenta. Se si ripete, chi la fa va spostato in un job, che il prestito lo prende \
+                 e lo rilascia a ogni capacità invece di tenerlo per tutta la durata del lavoro.",
                 self.name,
                 duration.as_millis(),
             );
@@ -443,8 +443,8 @@ mod tests {
         };
         let phrase = phrase.to_string();
         assert!(phrase.contains("the test vault"), "{phrase}");
-        assert!(phrase.contains("disk"), "what was NOT lost: {phrase}");
-        assert!(phrase.contains("restart"), "what must be done: {phrase}");
+        assert!(phrase.contains("disco"), "what was NOT lost: {phrase}");
+        assert!(phrase.contains("riavvia"), "what must be done: {phrase}");
     }
 
     #[test]

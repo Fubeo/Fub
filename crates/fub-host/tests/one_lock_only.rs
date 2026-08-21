@@ -138,7 +138,7 @@ const SOURCES: &[(&str, &str)] = &[
 /// passato in fondo a `SORGENTI`. Era la forma peggiore delle due: non un
 /// numero invecchiato ma una **ragione che non è mai stata vera**, e che
 /// leggendola faceva sembrare guardato un file che nessuno guardava.
-const THE_CARRIES: &[&str] = &["custodia.rs"];
+const THE_CARRIES: &[&str] = &["custody.rs"];
 
 /// Le righe di **codice** di un sorgente: la prosa si salta sempre, i banchi
 /// solo quando la domanda li riguarda.

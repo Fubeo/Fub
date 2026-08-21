@@ -70,7 +70,7 @@ const HEADER: &str = "\
 ";
 
 fn path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/rules/sintassi.generated.ts")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/rules/syntax.generated.ts")
 }
 
 /// Le forme dichiarate da un montaggio vero, per un `.md`.
@@ -105,7 +105,7 @@ fn trigger_ts(t: &SyntaxTrigger) -> String {
 
 fn render() -> String {
     let mut out = String::from(HEADER);
-    out.push_str("\nexport const SINTASSI_MARKDOWN = [\n");
+    out.push_str("\nexport const MARKDOWN_SYNTAX = [\n");
     for f in forms() {
         let trigger = match &f.trigger {
             Some(t) => trigger_ts(t),
@@ -140,7 +140,7 @@ fn emitted_declaration_matches_mount() {
 
     assert_eq!(
         emitted, committed,
-        "`frontend/src/rules/sintassi.generated.ts` is stale: the syntax \
+        "`frontend/src/rules/syntax.generated.ts` is stale: the syntax \
          declared by the mount changed without regenerating it.\nRegenerate \
          with `UPDATE_MIRROR=1 cargo test -p fub-host --test syntax_declared`."
     );
@@ -177,7 +177,7 @@ fn syntax_forms_without_declared_trigger_belong_to_provider() {
         "the syntax forms the markdown provider knows as grammar have \
          changed. If one gained a declared trigger, the shell can now \
          GENERATE it instead of rewriting it: remove it from here and \
-         remove its regex from `frontend/src/rules/sintassi.ts`. If a new \
+         remove its regex from `frontend/src/rules/syntax.ts`. If a new \
          one appeared without a trigger, the shell will have to rewrite it \
          by hand — which is the multiplier from section 4.4, and needs a \
          decision rather than an immediate fix"

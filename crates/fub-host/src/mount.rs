@@ -441,7 +441,7 @@ pub fn mount(
 
     // di poter fare. Oggi è vuoto; il giorno che non lo è, è un blocco che
     // l'utente legge crudo.
-/// L'indice di ricerca. Va registrato **prima** di `reindex`: è lì che riceve il
+// L'indice di ricerca. Va registrato **prima** di `reindex`: è lì che riceve il
     for kind in ws.undrawn_kinds() {
         tracing::warn!(target: "fub.host", "`{kind}` has no renderer: will degrade to generic rendering");
     }
@@ -487,7 +487,7 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
                     Ok(()) => Vec::new(),
                     // di un peso cambiato. Va detto, e non è lo stesso avviso
                     // di una ricerca che non risponde.
-/// Il versioning è una feature ufficiale scritta come la scriverebbe un plugin:
+// Il versioning è una feature ufficiale scritta come la scriverebbe un plugin:
                     Err(and) => vec![format!(
                         "search index: field weights will not update while vault \
                          is open: {and}"
@@ -560,7 +560,7 @@ fn register_versioning(
     // assente, non un pannello vuoto e un comando che risponde «disattivato».
     // È la spegnibilità totale (D7) ottenuta togliendo la registrazione, che è
     // l'unico modo in cui è vera anche per chi guarda la palette.
-/// Un pannello che passa per il protocollo di view come dovrà fare un plugin:
+// Un pannello che passa per il protocollo di view come dovrà fare un plugin:
     if let Some(build) = view {
         warnings.extend(register_view(ws, VERSIONING_ID, build()));
     }

@@ -246,12 +246,37 @@ mod tests {
         unsafe { std::env::remove_var("FUB_CONFIG_DIR") };
     }
 
+    /// Una variabile di soli spazi non è una scelta: `config_dir` la ignora e
+    /// cade sulla convenzione del sistema. L'ambiente reale di chi esegue il
+    /// banco non deve decidere il risultato, quindi la convenzione si forza a
+    /// valori noti — e si rimette a posto sotto il mutex.
     #[test]
     fn empty_variable_does_not_count_as_a_choice() {
         let _guard = ENV.lock().unwrap_or_else(|and| and.into_inner());
         unsafe { std::env::set_var("FUB_CONFIG_DIR", "   ") };
-        assert_eq!(config_dir(), Some(Utf8PathBuf::from("   ")));
+        #[cfg(target_os = "windows")]
+        let expected = {
+            unsafe { std::env::set_var("APPDATA", "C:\\fub-test") };
+            Utf8PathBuf::from("C:\\fub-test\\fub")
+        };
+        #[cfg(target_os = "macos")]
+        let expected = {
+            unsafe { std::env::set_var("HOME", "/tmp/fub-test") };
+            Utf8PathBuf::from("/tmp/fub-test/Library/Application Support/fub")
+        };
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        let expected = {
+            unsafe { std::env::set_var("XDG_CONFIG_HOME", "/tmp/fub-test") };
+            Utf8PathBuf::from("/tmp/fub-test/fub")
+        };
+        assert_eq!(config_dir(), Some(expected));
         unsafe { std::env::remove_var("FUB_CONFIG_DIR") };
+        #[cfg(target_os = "windows")]
+        unsafe { std::env::remove_var("APPDATA") };
+        #[cfg(target_os = "macos")]
+        unsafe { std::env::remove_var("HOME") };
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
     }
 
     /// **Un log che non si apre ripiega su `stderr`, e la ragione esiste.**

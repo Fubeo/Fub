@@ -180,7 +180,7 @@ fn who_reads_enters_while_the_batch_reads_the_disk() {
     // E il lotto ha fatto il suo lavoro: il modello nuovo è dentro.
     assert_eq!(
         entry(&bench.ws.read().unwrap(), &DocId::new("nota.md")).fingerprint,
-        Some(Revision::of("dopo\n")),
+        Some(Revision::of("after\n")),
         "the batch read and parsed, but applied nothing"
     );
 }
