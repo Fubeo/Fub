@@ -8,6 +8,8 @@
 // descrivono lo stato corrente e non possono avere una zona cieca.
 // I tre passaggi sono indipendenti e girano sempre tutti: un rosso in `todo.md`
 // non deve nascondere un secondo link rotto nella roadmap o nelle milestone.
+// Il motore resta separato apposta: ampliare la copertura non cambia le regole
+// con cui un singolo documento viene giudicato.
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
