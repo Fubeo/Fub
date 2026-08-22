@@ -1,10 +1,7 @@
 name: Repair CI once
 
 on:
-  workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/repair-ci-once.yml
+  pull_request:
 
 permissions:
   contents: write
@@ -15,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1.89
         with:
@@ -92,4 +90,4 @@ jobs:
           git add -A
           git diff --cached --check
           git commit -m "fix(ci): riallinea MSRV, guard, formato e baseline"
-          git push origin HEAD:main
+          git push origin HEAD:${{ github.head_ref }}
