@@ -53,7 +53,7 @@ jobs:
           hits = list(pattern.finditer(s))
           assert len(hits) == 1, f'expected one iframe construction, got {len(hits)}'
           m = hits[0]
-          replacement = m.group(0) + f'\n{m.group(1)}{m.group(2)}.title = "Contenuto web del plugin";'
+          replacement = m.group(0) + f'\n{m.group(1)}{m.group(2)}.title = node.url;'
           node.write_text(s[:m.start()] + replacement + s[m.end():])
 
       - name: Repair dependency lock and formatting
