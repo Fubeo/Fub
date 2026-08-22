@@ -1,0 +1,54 @@
+name: docs counts fix one-shot
+
+on:
+  push:
+    branches: ["docs/link-check-active"]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-counts:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/link-check-active
+      - name: Riallinea i conteggi derivati dai sorgenti
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path('docs/03-uml/05-mappa-visuale.md'): [
+                  ('**4 209** [conta: wit-righe]', '**4 213** [conta: wit-righe]'),
+                  ('**quaranta** [conta: hostapi-metodi]', '**quarantadue** [conta: hostapi-metodi]'),
+              ],
+              Path('docs/04-plugin/02-il-varco-hostapi.md'): [
+                  ('raggruppa **quaranta** metodi [conta: hostapi-metodi]', 'raggruppa **quarantadue** metodi [conta: hostapi-metodi]'),
+              ],
+              Path('docs/milestones/M4-wit-hardening.md'): [
+                  ('2255 righe [conta: wit-commenti]', '2257 righe [conta: wit-commenti]'),
+                  ('su 4209 [conta: wit-righe]', 'su 4213 [conta: wit-righe]'),
+              ],
+              Path('docs/roadmap/31-da-dove-viene-cio-che-si-vede.md'): [
+                  ('**venti** [conta: scene-del-banco], e in due luci fanno quaranta baseline', '**ventuno** [conta: scene-del-banco], e in due luci fanno quarantadue baseline'),
+              ],
+          }
+
+          for path, pairs in replacements.items():
+              text = path.read_text()
+              for old, new in pairs:
+                  count = text.count(old)
+                  assert count == 1, f'{path}: attesa 1 occorrenza di {old!r}, trovate {count}'
+                  text = text.replace(old, new)
+              path.write_text(text)
+          PY
+          rm .github/workflows/docs-counts-fix-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs .github/workflows/docs-counts-fix-once.yml
+          git commit -m "docs: riallinea i conteggi derivati dai sorgenti"
+          git push origin HEAD:docs/link-check-active
