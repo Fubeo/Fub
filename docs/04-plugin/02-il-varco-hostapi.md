@@ -15,7 +15,7 @@ flowchart LR
 
 ## Le capacità disponibili in `HostApi`
 
-L'interfaccia `HostApi` raggruppa **quaranta** metodi [conta: hostapi-metodi] suddivisi in diverse famiglie:
+L'interfaccia `HostApi` raggruppa **quarantadue** metodi [conta: hostapi-metodi] suddivisi in diverse famiglie:
 
 1. **Documenti del Vault (`VaultRead`, `VaultWrite`, `VaultStructure`)**:
    - `read_document(doc_id)`: legge la sorgente di testo UTF-8 di una nota.

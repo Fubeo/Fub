@@ -190,7 +190,7 @@ solo, e fotografa. Nessuna riga di produzione cambia — è la stessa mossa con 
 | (c) foto senza baseline in repo | niente PNG versionati | un diff che non ha un termine di paragone non è un diff: è una foto |
 
 **Cosa ha visto, prima ancora di scattare.** Le scene del banco sono
-**venti** [conta: scene-del-banco], e in due luci fanno quaranta baseline; tre
+**ventuno** [conta: scene-del-banco], e in due luci fanno quarantadue baseline; tre
 di quelle scene non stavano ferme. Due delle tre erano difetti veri: la `<progress>` era
 rimasta un widget del **sistema operativo** — non segue `--accent`, si dipinge
 diverso su ogni macchina, e da indeterminata si anima anche con

@@ -697,7 +697,7 @@ legge questo crate, in Rust o nella copia WIT.
 
 **Cosa c'è dentro.** Ventitré moduli più tredici di regole, circa 23 600 righe
 di Rust, e lo stesso contratto una seconda volta in
-**4 209** [conta: wit-righe] righe di WIT. Solo tipi e trait: zero
+**4 213** [conta: wit-righe] righe di WIT. Solo tipi e trait: zero
 implementazioni vere, zero I/O.
 
 | Modulo | Cosa dichiara |
@@ -742,7 +742,7 @@ esclusivo perché scrive.
 un unico oggetto. Ciò che non è lì, non si può fare. È la somma di sedici
 famiglie — sette di sola lettura più nove che mutano — e al confine WIT le
 stesse famiglie diventano **diciassette** [conta: wit-interfacce-host]
-interfacce con **quaranta** [conta: hostapi-metodi] funzioni in tutto.
+interfacce con **quarantadue** [conta: hostapi-metodi] funzioni in tutto.
 
 La **negazione** non sta qui: sta nel kernel. Il contratto dice cosa si può
 fare, il kernel dice a chi. I nomi che una politica sa negare sono
