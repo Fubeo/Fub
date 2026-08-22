@@ -1,0 +1,95 @@
+name: Repair CI once
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/repair-ci-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@1.89
+        with:
+          components: rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Apply deterministic repairs
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          checker = Path('.github/scripts/check-cargo-versions.mjs')
+          s = checker.read_text()
+          old = 'import { workspaceCrates } from "./workspace-members.mjs";'
+          new = 'import { crateDelWorkspace } from "./workspace-members.mjs";'
+          assert old in s and new not in s
+          s = s.replace(old, new)
+          old = 'const { files, violations: onTheList } = workspaceCrates(root);'
+          new = 'const { file: files, violazioni: onTheList } = crateDelWorkspace(root);'
+          assert old in s
+          checker.write_text(s.replace(old, new))
+
+          cargo = Path('Cargo.toml')
+          s = cargo.read_text()
+          old = 'wasmtime = { version = "47", default-features = false, features = ['
+          new = 'wasmtime = { version = "40", default-features = false, features = ['
+          assert old in s and new not in s
+          cargo.write_text(s.replace(old, new))
+
+          node = Path('frontend/src/ui/node.ts')
+          s = node.read_text()
+          pattern = re.compile(r'(?m)^(\s*)const\s+(\w+)\s*=\s*document\.createElement\("iframe"\);\s*$')
+          hits = list(pattern.finditer(s))
+          assert len(hits) == 1, f'expected one iframe construction, got {len(hits)}'
+          m = hits[0]
+          replacement = m.group(0) + f'\n{m.group(1)}{m.group(2)}.title = "Contenuto web del plugin";'
+          node.write_text(s[:m.start()] + replacement + s[m.end():])
+
+      - name: Repair dependency lock and formatting
+        run: |
+          cargo update -p wasmtime --precise 40.0.4
+          cargo fmt --all
+          node .github/scripts/check-cargo-versions.mjs
+
+      - name: Install frontend and browser
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Generate the missing visual baselines
+        working-directory: frontend
+        run: npm run bench:update
+
+      - name: Verify repaired frontend
+        working-directory: frontend
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Verify repaired Rust workspace
+        run: cargo build --workspace
+
+      - name: Commit repairs and remove this one-shot workflow
+        run: |
+          rm .github/workflows/repair-ci-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(ci): riallinea MSRV, guard, formato e baseline"
+          git push origin HEAD:main
