@@ -68,9 +68,42 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: Generate the missing visual baselines
+      - name: Generate only the missing visual baselines
         working-directory: frontend
-        run: npm run bench:update
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdir, writeFile } from "node:fs/promises";
+          import { join } from "node:path";
+          import { SCENE, LIGHTS, sceneUrl, photoFilename } from "./bench/scene.mjs";
+          import {
+            openStage,
+            openPage,
+            prepareScene,
+            stillShot,
+            BASELINE,
+          } from "./bench/stage.mjs";
+
+          const scene = SCENE.find((candidate) => candidate.id === "nota-tre-modi");
+          if (!scene) throw new Error("missing nota-tre-modi scene");
+          await mkdir(BASELINE, { recursive: true });
+          const stage = await openStage();
+          try {
+            for (const light of LIGHTS) {
+              const page = await openPage(stage.browser, light);
+              try {
+                await prepareScene(page, scene, light, stage.base, sceneUrl);
+                const shot = await stillShot(page);
+                const name = photoFilename(scene, light);
+                await writeFile(join(BASELINE, name), shot);
+                console.log(`generated ${name}`);
+              } finally {
+                await page.context().close();
+              }
+            }
+          } finally {
+            await stage.close();
+          }
+          NODE
 
       - name: Verify repaired frontend
         working-directory: frontend
