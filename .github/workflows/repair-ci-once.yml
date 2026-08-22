@@ -124,6 +124,12 @@ jobs:
           npm test
           npm run build
 
+      - name: Install Rust system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+
       - name: Verify repaired Rust workspace
         run: cargo build --workspace
 
