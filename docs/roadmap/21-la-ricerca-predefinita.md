@@ -108,7 +108,7 @@ difettava della formula *«per adesso mi bastano gli id»*.
 
 Adesso il contratto supporta l'omissione (`Excerpts`). La query dalla porta del
 workspace scende da 22,3 a 3,4 ms. La seduta possiede il proprio banco:
-[`una_ricerca.rs`](../../crates/fub-features/examples/una_ricerca.rs). Questo
+[`una_ricerca.rs`](../../crates/fub-features/examples/search.rs). Questo
 funge da precondizione per la §21.1 e la §21.2. Un motore tollerante espande i
 termini. Un prefisso apre un intervallo nel dizionario. Le due operazioni
 moltiplicano il lavoro. Adesso la base di moltiplicazione è definita.
@@ -196,7 +196,7 @@ caselle restano per il racconto; la voce non è più in [todo.md](../todo.md)*
       confine del kernel).~~ Il vincolo ha prevalso. La
       [0083](../decisions/0083-le-due-superfici-che-restavano.md) ha
       **misurato** la scelta (fase 5 di
-      [`una_ricerca.rs`](../../crates/fub-features/examples/una_ricerca.rs)).
+      [`una_ricerca.rs`](../../crates/fub-features/examples/search.rs)).
       Risultati: ~3 ms per battuta nel caso peggiore (la prima lettera).
       Ottimizzazione: metà del budget preservato tramite `Excerpts::Omit`. I
       nomi proposti non disegnano estratti. Nota finale: sul lato kernel
